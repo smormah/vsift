@@ -1,6 +1,6 @@
 # Known limits register
 
-Date: 2026-10-04 (P14 PR 7, a failed open removes its own registration and a session that never published says so: L-131 added, L-127 gains its third case; P14 PR 7, the cold grader's three classifications: L-118 updated; P14 PR 7, a short range's cut final segment: L-130 added and L-124 closed and deleted; P14 PR 7, a source that does not fit the root is refused before the copy and the code stays `STORAGE_IO`: L-127 gains its second case, L-061 updated; P14 PR 7, a link as the source keeps its published code and gains a remediation: L-127 rewritten as one entry for the CLI answers whose code only loosely describes the case; P14 PR 7, the dedupe window is stated as it is: L-063 updated; P14 PR 7, the flaky kill test: a provider a killed host leaves suspended, L-129 added and L-055 narrowed; P14 PR 7, session-root creation on Windows is repaired by a DACL read-back and narrowed (#206): L-123 closed and deleted, L-005 updated; P14 PR 7, the admission test no longer fails on its own bound: L-060 states the missing bound and L-123 narrows to #206; P14 PR 7, a named pipe with no writer is refused at once: L-127 narrowed; P14 PR 7b: the FFmpeg finding re-read with a test that sees release-branch cherry-picks, L-122 narrowed from 35 records to one tie by elimination and L-132 added (L-129 to L-131 are P14 PR 7's); 2026-10-03: P14 PR 4: the robustness campaigns, L-122, L-123, L-124, L-127 and L-128 added (L-121, L-125 and L-126 were taken meanwhile by other pull requests); P14 PR 7, a missing shared library is named: L-110 closed; P14 PR 7: a session root VSift did not create now explains itself, L-126 added; P14 PR 7, the realistic cold-agent settings: L-125 added, L-118 re-read; P14 PR 5: L-068 rescheduled to R1 and L-004 re-read, by the maintainer's decision E option 4; 2026-10-02: P14 PR 3, the journeys on the published binary: L-113 to L-116 added, L-035, L-042 and L-099 updated; the README's graphics: L-121 added; P14 PR 6: the trial harness's clean-install and cold-agent modes, hold-outs and usage capture, L-117 to L-120 added; the README front page: L-102 closed, the v0.1.0 release page edited; P14 PR 2: the published-artifact qualification, L-109 to L-112 added; P14 PR 1: the evidence ledger, the claims registry and their checks, L-101 to L-103 added; P14 PR 8, the stable path and `latest`: L-105, L-107 and L-108 added, L-102 narrowed to the published v0.1.0 page, L-103 updated for the delta record, L-097 updated; P14 plan, PR 0: L-042 re-read, the checkpoints' source-built binary noted, L-098 updated with Smart App Control read Off on the maintainer's machine; 2026-10-01: P13 PR 12: the 0.1.0 pre-release was published, so L-036 and L-096 are closed and deleted, L-037 and L-043 re-read at the packet's close, L-097 and L-098 updated, L-100 added; P13 PR 11: documentation and the qualification record, L-098 and L-099 added, L-035, L-036, L-037, L-042 and L-096 updated for the passing power-loss run and the closing sweep; P13 PR 7 follow-up: the power-loss campaign's first run and its verifier fix, L-037 updated; P13 PR 10: attestation and publish wiring, L-036 updated, L-096 and L-097 added; 2026-09-30: P13 PR 7: kill tests of the managed store, directory flushes and its power-loss campaign, L-037 narrowed; the compact re-run #222 met its target: L-085 closed, L-095 added for the review tier's A-09 blurred re-run (#224), L-007 updated; P13 PR 9: npm packages and their qualification, L-091 to L-093 added and L-036 updated; P13 PR 6: managed lifecycle, L-037 narrowed and L-087 measured, L-090 added; P13 PR 4: managed installation; P13 PR 8: release archives, L-089 added and L-036 updated; P00-P13 complete; P12 closed on its final trial round with the compact tier below target, L-085; SEC-T01's adversarial evidence deferred as technical debt, L-068; P13 PR 2b closed L-073 and rewrote L-016 and L-017).
+Date: 2026-10-04 (P14 PR 9a, the claims check reads the text of the README's graphics: L-121 narrowed to the roadmap's rung; L-004, L-035 and L-038 brought up to date, L-114 names the macOS wording; P14 PR 7, a failed open removes its own registration and a session that never published says so: L-131 added, L-127 gains its third case; P14 PR 7, the cold grader's three classifications: L-118 updated; P14 PR 7, a short range's cut final segment: L-130 added and L-124 closed and deleted; P14 PR 7, a source that does not fit the root is refused before the copy and the code stays `STORAGE_IO`: L-127 gains its second case, L-061 updated; P14 PR 7, a link as the source keeps its published code and gains a remediation: L-127 rewritten as one entry for the CLI answers whose code only loosely describes the case; P14 PR 7, the dedupe window is stated as it is: L-063 updated; P14 PR 7, the flaky kill test: a provider a killed host leaves suspended, L-129 added and L-055 narrowed; P14 PR 7, session-root creation on Windows is repaired by a DACL read-back and narrowed (#206): L-123 closed and deleted, L-005 updated; P14 PR 7, the admission test no longer fails on its own bound: L-060 states the missing bound and L-123 narrows to #206; P14 PR 7, a named pipe with no writer is refused at once: L-127 narrowed; P14 PR 7b: the FFmpeg finding re-read with a test that sees release-branch cherry-picks, L-122 narrowed from 35 records to one tie by elimination and L-132 added (L-129 to L-131 are P14 PR 7's); 2026-10-03: P14 PR 4: the robustness campaigns, L-122, L-123, L-124, L-127 and L-128 added (L-121, L-125 and L-126 were taken meanwhile by other pull requests); P14 PR 7, a missing shared library is named: L-110 closed; P14 PR 7: a session root VSift did not create now explains itself, L-126 added; P14 PR 7, the realistic cold-agent settings: L-125 added, L-118 re-read; P14 PR 5: L-068 rescheduled to R1 and L-004 re-read, by the maintainer's decision E option 4; 2026-10-02: P14 PR 3, the journeys on the published binary: L-113 to L-116 added, L-035, L-042 and L-099 updated; the README's graphics: L-121 added; P14 PR 6: the trial harness's clean-install and cold-agent modes, hold-outs and usage capture, L-117 to L-120 added; the README front page: L-102 closed, the v0.1.0 release page edited; P14 PR 2: the published-artifact qualification, L-109 to L-112 added; P14 PR 1: the evidence ledger, the claims registry and their checks, L-101 to L-103 added; P14 PR 8, the stable path and `latest`: L-105, L-107 and L-108 added, L-102 narrowed to the published v0.1.0 page, L-103 updated for the delta record, L-097 updated; P14 plan, PR 0: L-042 re-read, the checkpoints' source-built binary noted, L-098 updated with Smart App Control read Off on the maintainer's machine; 2026-10-01: P13 PR 12: the 0.1.0 pre-release was published, so L-036 and L-096 are closed and deleted, L-037 and L-043 re-read at the packet's close, L-097 and L-098 updated, L-100 added; P13 PR 11: documentation and the qualification record, L-098 and L-099 added, L-035, L-036, L-037, L-042 and L-096 updated for the passing power-loss run and the closing sweep; P13 PR 7 follow-up: the power-loss campaign's first run and its verifier fix, L-037 updated; P13 PR 10: attestation and publish wiring, L-036 updated, L-096 and L-097 added; 2026-09-30: P13 PR 7: kill tests of the managed store, directory flushes and its power-loss campaign, L-037 narrowed; the compact re-run #222 met its target: L-085 closed, L-095 added for the review tier's A-09 blurred re-run (#224), L-007 updated; P13 PR 9: npm packages and their qualification, L-091 to L-093 added and L-036 updated; P13 PR 6: managed lifecycle, L-037 narrowed and L-087 measured, L-090 added; P13 PR 4: managed installation; P13 PR 8: release archives, L-089 added and L-036 updated; P00-P13 complete; P12 closed on its final trial round with the compact tier below target, L-085; SEC-T01's adversarial evidence deferred as technical debt, L-068; P13 PR 2b closed L-073 and rewrote L-016 and L-017).
 Status: current-state register. Every entry below is **pending maintainer review**.
 
 ## Purpose and how to use it
@@ -154,7 +154,7 @@ Each entry has these fields:
 | [L-118](#l-118) | The cold grader reads command text and matches free text mechanically | process/CI | medium | P14 | [#17](https://github.com/smormah/vsift/issues/17) | accepted residual |
 | [L-119](#l-119) | There are two hold-out scenarios, one run per client each, written by the same authors | process/CI | medium | P14 | [#17](https://github.com/smormah/vsift/issues/17) | accepted residual |
 | [L-120](#l-120) | Usage figures and the usage-limit reading are the clients', and the harness's parsers have not met a real stream | process/CI | low | P14 | [#17](https://github.com/smormah/vsift/issues/17) | accepted residual |
-| [L-121](#l-121) | Text drawn inside the README's SVG graphics is public text the claims check cannot read | process/CI | low | unscheduled | none | open |
+| [L-121](#l-121) | The README's roadmap graphic states the current rung and goes stale when a rung moves; the claims check cannot see that | process/CI | low | unscheduled | none | open |
 | [L-122](#l-122) | One recorded FFmpeg vulnerability (CVE-2026-38350, libswscale) is tied to its fix only by elimination, and the reading proves the source of the shipped build, not its behaviour | security | medium | P14 | [#272](https://github.com/smormah/vsift/issues/272) | open |
 | [L-125](#l-125) | The realistic cold setting cannot be fenced to the workspace, so Claude Code runs it only on an isolated machine; the two clients' cold baselines are not the same test | process/CI | medium | P14 | [#17](https://github.com/smormah/vsift/issues/17) | accepted residual |
 | [L-126](#l-126) | A session root VSift did not create is refused with `INTEGRITY_FAILURE`, which says stored data is damaged; only the remediation says what happened | contract/UX | low | unscheduled | none | accepted residual |
@@ -252,8 +252,12 @@ Counts: 1 high, 34 medium, 82 low (117 entries).
   filesystem and network access. VSift bounds their arguments, protocols, time,
   output, threads and (for FFmpeg) each allocation at 64 MiB, but a malicious decoder
   can allocate several buffers under that cap, and whisper.cpp's memory is bounded only
-  by the operating system (an abnormal exit is `RESOURCE_LIMIT`). Dangerous
-  decompression-bomb media has not been run.
+  by the operating system (an abnormal exit is `RESOURCE_LIMIT`). P14's malicious-media
+  campaign (RQ-10, 2026-10-02, the published 0.1.0 in a disposable container) ran 96
+  generated inputs, among them decompression-bomb and resource-abuse variants: 93 ended
+  inside their bounds with a typed answer and three CLI cases did not
+  ([L-127](#l-127), fixed in P14 PR 7). The variants hit bounds, not memory-safety bugs,
+  so they say nothing about an exploited decoder.
 - **Evidence:** [ADR 0012](../decisions/0012-p04-source-media-profile.md) "Limits and
   consequences"; [threat model](security-threat-model.md) process isolation profile and
   residuals (P04, P07 3b, P08); [baseline review](baseline-review.md) B-09.
@@ -273,8 +277,9 @@ Counts: 1 high, 34 medium, 82 low (117 entries).
   contains a hostile decoder is unproven and deferred as technical debt
   ([L-068](#l-068)). The [worker-host runbook](../operations/worker-host.md) gives an
   isolated deployment example with the same controls.
-- **Next step:** [L-068](#l-068) moved to R1 (maintainer decision, 2026-10-03); P14 malicious-decoder and
-  decompression-bomb qualification in a disposable environment.
+- **Next step:** [L-068](#l-068) moved to R1 (maintainer decision, 2026-10-03). P14's
+  decompression-bomb run is done (RQ-10) and repeats on the release candidate; containment of an
+  exploited decoder is R1's work.
 - **Owner:** P14. **Issue:** [#17](https://github.com/smormah/vsift/issues/17).
   **Status:** deferred. **Review:** pending.
 
@@ -1659,10 +1664,14 @@ platform has the release matrix's rules met yet.**
   (tools installed by its own `setup install`), Windows (the repository's pinned builds) and
   macOS 15 arm64 (Homebrew's tools, [L-114](#l-114)): all passed, with P11's durable stage
   blocked ([L-113](#l-113)). That is evidence for 0.1.0 only (the candidate and the stable
-  repeat it), on hosted virtual machines, with a synthetic corpus. The matrix rules (ADR 0024
-  decision F) also need the clean installs, the extracted archives and the guide's walks
-  (RQ-01, RQ-02, RQ-04). Linux desktop and other distributions, network filesystems and
-  Windows or macOS worker use are unqualified.
+  repeat it), on hosted virtual machines, with a synthetic corpus. The other matrix rules (ADR
+  0024 decision F) ran for 0.1.0 too, in P14 PR 2: the clean installs with four package
+  managers, the three archives and the walks of the install, upgrade and uninstall steps
+  (RQ-01, RQ-02 and RQ-04 `passed` for 0.1.0, on hosted images that are not clean machines,
+  [L-112](#l-112)). RQ-05 is `running` for 0.1.0 because one stage cannot run on a hosted
+  runner ([L-113](#l-113)), and every cell statement needs it, so no cell can earn its word
+  yet. Linux desktop and other distributions, network filesystems and Windows or macOS
+  worker use are unqualified.
 - **Evidence:** [resource profiles](support-and-resource-profiles.md);
   [P09 record](p09-evidence-navigation.md) residuals;
   [P07 ASR record](p07-asr-qualification.md); [P06 source review](p06-provisioning-source-review.md);
@@ -1670,7 +1679,8 @@ platform has the release matrix's rules met yet.**
 - **Impact:** no platform may be called "supported" yet; only "qualification target".
 - **Why:** P14 owns the release matrix.
 - **Mitigation:** cross-platform Quality CI on every PR; the weekly `P14 journeys` run.
-- **Next step:** the candidate's own runs (P14 PR 11) and the matrix decision (PR 9).
+- **Next step:** the matrix is written ([`support-and-resource-profiles.md`](support-and-resource-profiles.md),
+  P14 PR 9a); the candidate's own runs (P14 PR 11) decide which cells may earn their word.
 - **Owner:** P14. **Issue:** [#17](https://github.com/smormah/vsift/issues/17).
   **Status:** deferred. **Review:** pending.
 
@@ -1739,13 +1749,16 @@ platform has the release matrix's rules met yet.**
   weighted admission, contained inputs, strict Linux attestation, request records,
   the two-stage shutdown, the `p11_*` single-host checkpoint, the
   [operator runbook](../operations/worker-host.md) and the
-  [qualification record](p11-worker-host.md). The packet completes when it merges.
-  What it does not give: public support (P14 qualifies the release matrix), adversarial
-  containment evidence for the strict profile ([L-068](#l-068)), and a run of the
-  runbook's systemd unit and container example exactly as written: they are adapted
-  from the CI container job and the tested flags, and an operator confirms on the host
-  that a batch starts with `isolation` `strict_linux`. The single-host checkpoint ran on
-  one Windows 11 machine; Linux and macOS run the contract tests in CI.
+  [qualification record](p11-worker-host.md). P14 then walked the runbook's container
+  example and systemd unit as printed with the published 0.1.0 on a hosted Ubuntu 24.04
+  runner (RQ-12: 18 steps matched after ten errors in the runbook were fixed) and ran the
+  load ladder to 8 jobs, a 100-request batch and a soak in the container (RQ-09). What the
+  worker host still does not give: public support (the matrix keeps it a qualification
+  target), adversarial containment evidence for the strict profile ([L-068](#l-068)), a
+  real disk with its own write barriers (the runs used an ext4 volume in a file), another
+  distribution or host, and a run on the release candidate. An operator confirms on the host
+  that a batch starts with `isolation` `strict_linux`. The P11 checkpoint ran on one Windows
+  11 machine; Linux and macOS run the contract tests in CI.
 - **Evidence:** the [P11 qualification record](p11-worker-host.md); ADR 0021
   implementation notes; P11 row of the [work packets](implementation-work-packets.md).
 - **Impact:** a worker deployment follows reviewed guidance, but its hardening is the
@@ -1753,7 +1766,8 @@ platform has the release matrix's rules met yet.**
 - **Why:** support is claimed only after release qualification (ADR 0005).
 - **Mitigation:** strict mode fails closed off an attested host; the runbook's
   readiness rule refuses work before `started` says what is in force.
-- **Next step:** P11 merge; P14 release qualification.
+- **Next step:** the candidate's re-runs of the load campaign and the runbook walk (RQ-09,
+  RQ-12; P14 PR 11).
 - **Owner:** P11, P14. **Issue:** [#14](https://github.com/smormah/vsift/issues/14),
   [#17](https://github.com/smormah/vsift/issues/17). **Status:** deferred.
   **Review:** pending.
@@ -2968,8 +2982,9 @@ worker request has never run on the qualified profile.**
 - **Why:** reviewing and pinning a macOS toolchain is its own work (ADR 0007), outside R0.
 - **Mitigation:** the versions are recorded in every run; the claim is worded as what the
   hosted run proves with the user's tools; no managed install is offered there.
-- **Next step:** P14 PR 9 decides the matrix wording; a reviewed macOS build would need its
-  own review and catalogue entry.
+- **Next step:** P14 PR 9a proposed the matrix wording (statement CL-203 of the claims registry,
+  "supported on hosted-runner evidence only"; ADR 0024's PR 9a note), which the maintainer decides; a
+  reviewed macOS build would need its own review and catalogue entry.
 - **Owner:** P14 (PR 9). **Issue:** [#17](https://github.com/smormah/vsift/issues/17).
   **Status:** deferred. **Review:** pending.
 
@@ -3161,25 +3176,23 @@ that week.**
 
 ### L-121
 
-**Text drawn inside the README's SVG graphics is public text the claims check cannot read.**
+**The README's roadmap graphic states the current rung and goes stale when a rung moves; the claims check cannot see that.**
 
-- **What:** the README shows eight hand-made SVG graphics (`docs/assets/readme/`): a hero, an
-  animated terminal, the evidence timeline, the pipeline, a before-and-after panel, the
-  architecture and the roadmap, and the logo. Their words are public, but
-  `vsift-governance public-claims` reads only the listed Markdown documents, so a controlled word
-  or a banned phrase inside an SVG passes the Governance job. The roadmap graphic also states the
-  current rung (P14 "now", `0.2.0-rc.N` and `0.2.0` planned), so it goes stale when a rung moves.
-- **Evidence:** [`docs/assets/readme/README.md`](../assets/readme/README.md) (the hand check and
-  when to redraw); `docs/planning/public-claims.json` (`documents`).
-- **Impact:** a careless edit to a graphic could claim more than the ladder allows, and the
-  roadmap could show an old step as current; neither would fail CI.
-- **Why:** the check reads plain text and the graphics are XML whose words are split across
-  elements; teaching it SVG was not worth it for one README change.
-- **Mitigation:** every word in the graphics was checked by hand against the controlled words
-  and banned phrases when they were made (2026-10-02); the asset notes give the grep to repeat.
-- **Next step:** add `docs/assets/readme/*.svg` to the scanned documents, reading the text
-  content of `<text>` elements; redraw the roadmap with P14 PRs 10 and 13.
-- **Owner:** unscheduled (P14 PR 9 is the natural home). **Issue:** none. **Status:** open.
+- **What:** the README shows eight hand-made SVG graphics (`docs/assets/readme/`). Since P14 PR 9a
+  `vsift-governance public-claims` reads the words each of them shows (the text, title and
+  description elements, not the attributes), so a controlled word or a banned phrase in a graphic
+  fails the Governance job like one in a document. What it cannot see is that the roadmap graphic
+  names the current rung (P14 "now", `0.2.0-rc.N` and `0.2.0` planned): after a rung moves its
+  words are still allowed and no longer true.
+- **Evidence:** [`docs/assets/readme/README.md`](../assets/readme/README.md) (when to redraw);
+  `docs/planning/public-claims.json` (`documents`); the scan's tests in
+  `tools/vsift-governance/src/public_claims/`.
+- **Impact:** the roadmap could show an old step as current after PR 10 or PR 13; nothing would fail CI.
+- **Why:** a check cannot judge whether a drawn step is current.
+- **Mitigation:** the asset notes say to redraw it when a rung moves; the PR that moves the rung
+  lists the roadmap graphic in its checklist (`memory/TODO.md`).
+- **Next step:** redraw `roadmap.svg` with P14 PR 10 (the candidate) and PR 13 (the release).
+- **Owner:** unscheduled (P14 PRs 10 and 13 in practice). **Issue:** none. **Status:** open.
   **Review:** pending.
 
 ### L-122

@@ -18,6 +18,7 @@
 //! the words (known limit L-101).
 
 mod check;
+mod register;
 mod schema;
 mod text;
 

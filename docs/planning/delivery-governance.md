@@ -48,7 +48,12 @@ P14 PR 8's `vsift-release candidate-delta` computes and the stable plan writes a
 check for the accepted candidate and refuses a stable plan when it fails (RQ-20). These checks prove that recorded evidence exists and that banned words are
 absent; they do not fetch a run or judge a sentence (known limits L-101 and L-103). A pull
 request that changes a quoted public sentence updates the registry with it; one that changes an
-item's status updates the ledger.
+item's status updates the ledger. Since P14 PR 9a every claim also lists the known-limits entries
+its wording leans on (`limits`), and a claim above the `now` rung that is in use fails
+`public-claims` while any of those entries is `pending` or `rejected`: the maintainer's one-pass
+review of the register ([`register-review-sheet.md`](register-review-sheet.md)) therefore gates the
+release wording, and the registry scans every public document it lists (the worker runbook, the
+launcher's messages and the support matrix since PR 9a).
 
 The [R1 industrial capability expansion](r1-industrial-capability-expansion.md)
 reserves R-15..R-20 and P15..P20 without activating them. P15 must create a separate

@@ -1,17 +1,29 @@
 # Running VSift as a worker host
 
 Status: operator runbook for the P11 worker host
-([ADR 0021](../decisions/0021-worker-and-batch-host.md)), 2026-09-28. The Linux strict
-worker profile is a **qualification target**, not a supported platform: public support
-begins after P14 ([support profiles](../planning/support-and-resource-profiles.md)).
-For P11 the strict profile's isolation (SEC-T01) rests on non-adversarial evidence the
-maintainer accepted: the kernel attestation and the hardened container controls of the
-CI job; adversarial containment evidence is technical debt
-([known limit L-068](../planning/known-limits.md#l-068)), moved to R1 by the maintainer's
-decision of 2026-10-03. **R0 makes no claim that the strict profile contains a hostile
-decoder or provider:** the worker host is a qualification target, and the limits are the
-host's. What was tested, and how, is in the
+([ADR 0021](../decisions/0021-worker-and-batch-host.md)), 2026-09-28; walked step by step by
+P14 on a hosted runner (2026-10-02) and updated 2026-10-04 (P14 PR 9a). The worker host on
+Ubuntu 24.04 is a **qualification target**, not a claim of support: public support begins
+after P14, and the [support matrix](../planning/support-and-resource-profiles.md) says what
+each machine has shown. For P11 the strict profile's isolation (SEC-T01) rests on
+non-adversarial evidence the maintainer accepted: the kernel attestation and the hardened
+container controls of the repository's CI; adversarial containment evidence is technical
+debt ([known limit L-068](../planning/known-limits.md#l-068)), moved to R1 by the
+maintainer's decision of 2026-10-03. **R0 makes no claim that the strict profile contains a
+hostile decoder or provider:** the isolation limits (CPU, memory, processes, filesystem,
+network) are the host's, and VSift enforces none of them.
+What was tested, and how, is in the
 [P11 qualification record](../planning/p11-worker-host.md).
+
+**What the P14 campaigns ran against this runbook** (the published 0.1.0 on a hosted Ubuntu
+24.04 runner, 2026-10-02 and 2026-10-03; [plan](../planning/p14-qualification.md), sections
+18.3 and 18.5). The walk (RQ-12) followed sections 1 to 10 as printed: 18 steps matched after ten
+errors in this runbook were fixed. The load campaign (RQ-09) ran the container of section 10 at 1, 2,
+4 and 8 concurrent jobs, a batch of 100 requests, a cancel of a 30-minute recognition and a soak of
+1,000 mixed requests with SIGTERM drains and SIGKILLs, and every gate held. Both are results for 0.1.0
+on one distribution and one hosted kernel, with an ext4 volume in a file standing in for a disk with
+write barriers; neither shows other distributions or hosts, a real disk, or the containment of
+anything hostile.
 
 VSift has no daemon, no HTTP listener and no queue. A worker host is an external
 supervisor (your queue consumer, a systemd unit, a container orchestrator) that
@@ -53,7 +65,7 @@ filesystems are unqualified.
 A workspace is **one trust domain**. Any request delivered to it may target any of its
 sessions by id and writes into its one bundle root, so give each tenant or trust
 domain its own workspace, input root, bundle root and worker account. VSift has no
-multi-tenant host (SEC-19, SEC-T03).
+host that keeps tenants apart from each other (SEC-19, SEC-T03).
 
 ## 2. One-time setup
 
@@ -155,7 +167,8 @@ vsift --host-isolation strict-linux --session-root /var/lib/vsift/workspace \
 
 The supervisor writes the batch file and the unit runs it; the unit has no network,
 so the supervisor that talks to the queue runs outside it. This is an example to
-adapt, not a qualified artifact: confirm on the host that the batch's `started` event
+adapt, not an artifact VSift ships or checks on your host (the P14 walk ran it as written
+on a hosted runner): confirm on the host that the batch's `started` event
 says `"isolation":"strict_linux"` before taking work.
 
 ```ini
@@ -288,10 +301,10 @@ After a crash of VSift, the worker or the host, redeliver every unacknowledged
 message: interrupted requests continue from their first unfinished step, a speech
 recognition resumes from its chunk checkpoints, and ended requests replay. The owner
 lock of a request is an OS lock released when its process dies, so a `BUSY` after a
-restart means another live process holds it. In a durable workspace on the qualified
-profile every acknowledged result survives an OS crash or power loss (the P10 crash
-campaign, rerun with worker requests); an ephemeral workspace survives process crashes
-only. Losing the disk or the host loses the workspace (L-057): copy retained bundles to
+restart means another live process holds it. In a durable workspace on the one profile
+where durability was tested (Ubuntu 24.04, local ext4 with write barriers) every
+acknowledged result survives an OS crash or power loss (the P10 crash campaign, rerun with
+worker requests); an ephemeral workspace survives process crashes only. Losing the disk or the host loses the workspace (L-057): copy retained bundles to
 replicated storage if they must outlive the host.
 
 A stopped batch (exit 6) leaves every started request resumable; its interrupted
@@ -349,8 +362,8 @@ recording that must be redone with it is a new request.
 
 ## 10. Isolated Linux deployment (container)
 
-The same hardening the repository's `strict-worker-boundary` CI job applies to the
-process supervisor's qualification (read-only root, no network, CPU, memory, swap and
+The same hardening the repository's container-boundary CI job applies to the
+process supervisor's tests (read-only root, no network, CPU, memory, swap and
 PID limits, all capabilities dropped, no new privileges, an unprivileged user), as a
 worker invocation:
 
@@ -393,10 +406,12 @@ docker run --rm --init \
 
 ## 11. Guarantee matrix
 
-What each profile guarantees today. "Tested" means on the named machine in the
-qualification record; nothing here is supported before P14.
+What each profile gives today. "Tested" means on the named machine in the
+qualification record; nothing here is a promise, and the
+[support matrix](../planning/support-and-resource-profiles.md) says which machines have
+shown what.
 
-| Guarantee | Linux strict worker (Ubuntu 24.04, ext4) | Linux, other | Windows 11 desktop (native) | macOS desktop |
+| Guarantee | Linux, strict-linux profile (Ubuntu 24.04, ext4) | Linux, other | Windows 11 desktop (native) | macOS desktop |
 | --- | --- | --- | --- | --- |
 | `job run`, `job batch`, replay, continuation | yes (CI tests on Ubuntu) | yes, unqualified | yes (all P11 tests and the `p11_*` checkpoint) | yes (CI tests) |
 | Durable workspace (`os_crash_durable`) | yes: P10 crash campaign, rerun with requests | no: `MISSING_CAPABILITY` | no: `MISSING_CAPABILITY` | no: `MISSING_CAPABILITY` |

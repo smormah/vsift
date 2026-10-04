@@ -415,3 +415,165 @@ fn a_registered_statement_that_no_document_uses_is_stale() -> Outcome {
     );
     Ok(())
 }
+
+#[test]
+fn the_words_of_a_graphic_are_held_to_the_same_rules_as_a_document() -> Outcome {
+    let mut registry = registry_value();
+    registry["documents"] = json!(["README.md", "docs/assets/roadmap.svg"]);
+    let registry: ClaimsRegistry = serde_json::from_value(registry)?;
+    let graphic = |body: &str| {
+        format!(
+            "<svg xmlns=\"http://www.w3.org/2000/svg\"><style>.stable{{fill:red}}</style>\
+             <rect fill=\"supported\"/><text x=\"1\">{body}</text></svg>"
+        )
+    };
+    let found = |body: &str| -> Result<Vec<String>, Box<dyn Error>> {
+        let repository = repository(README).with("docs/assets/roadmap.svg", &graphic(body));
+        Ok(check_registry(
+            &registry,
+            &ledger(&baseline_value())?,
+            &repository,
+        ))
+    };
+    let flagged = found("Windows 11 is supported")?;
+    assert!(
+        flagged.iter().any(|message| message.contains(
+            "docs/assets/roadmap.svg: \"supported\" is used outside a registered statement"
+        )),
+        "{flagged:#?}"
+    );
+    let banned = found("VSift is production ready")?;
+    assert!(
+        banned.iter().any(|message| message
+            .contains("docs/assets/roadmap.svg: banned phrase \"production ready\"")),
+        "{banned:#?}"
+    );
+    // A style rule, an attribute and the roadmap's own plain words pass.
+    let clean = found("Done, now and next")?;
+    assert!(clean.is_empty(), "{clean:#?}");
+    Ok(())
+}
+
+const LIMITS_REGISTER: &str = "# Known limits\n\n## Security\n\n\
+### L-004\n\n- **Owner:** P14. **Review:** pending.\n\n\
+### L-007\n\n- **Owner:** x. **Status:** accepted residual.\n  **Review:**\n  accepted (2026-10-05).\n\n\
+### L-008\n\n- **Review:** rejected (2026-10-05): fix it.\n\n\
+### L-009\n\n- **Review:** rescheduled to R1 (2026-10-05).\n";
+
+/// The messages for a registry whose repository also holds the known-limits register.
+fn found_with_register(registry: &Value, readme: &str) -> Result<Vec<String>, Box<dyn Error>> {
+    let registry: ClaimsRegistry = serde_json::from_value(registry.clone())?;
+    let repository = repository(readme).with("docs/planning/known-limits.md", LIMITS_REGISTER);
+    Ok(check_registry(
+        &registry,
+        &ledger(&baseline_value())?,
+        &repository,
+    ))
+}
+
+/// The baseline registry at the last rung, with CL-003 (the matrix cell) leaning on `limits`.
+fn leaning_registry(limits: &Value) -> Value {
+    let mut registry = registry_value();
+    registry["current_rung"] = json!("after_p14");
+    // RQ-02 is passed in the baseline ledger, so the evidence is not what fails.
+    registry["statements"][3]["requires"] = json!(["RQ-02"]);
+    registry["statements"][3]["limits"] = limits.clone();
+    registry
+}
+
+const IN_USE: &str = "VSift is not a stable or supported release. The managed install is \
+                      **qualified** on Ubuntu 24.04 only. VSift is a release candidate under \
+                      qualification. Windows 11 is supported.\n";
+
+#[test]
+fn a_claim_above_now_in_use_waits_for_the_review_of_the_limits_it_leans_on() -> Outcome {
+    let pending = found_with_register(&leaning_registry(&json!(["L-004"])), IN_USE)?;
+    assert!(
+        pending.iter().any(|message| message
+            .contains("CL-003 is in use but leans on L-004, whose review is pending")),
+        "{pending:#?}"
+    );
+    let rejected = found_with_register(&leaning_registry(&json!(["L-008"])), IN_USE)?;
+    assert!(
+        rejected.iter().any(|message| message.contains(
+            "CL-003 is in use but leans on L-008, whose review is rejected (the limit must be fixed)"
+        )),
+        "{rejected:#?}"
+    );
+    // One pending limit among reviewed ones is still named alone.
+    let mixed = found_with_register(
+        &leaning_registry(&json!(["L-007", "L-004", "L-009"])),
+        IN_USE,
+    )?;
+    assert_eq!(
+        mixed
+            .iter()
+            .filter(|message| message.contains("leans on"))
+            .count(),
+        1,
+        "{mixed:#?}"
+    );
+    Ok(())
+}
+
+#[test]
+fn an_accepted_or_rescheduled_review_lets_the_claim_lean_even_when_it_wraps() -> Outcome {
+    // L-007's review wraps onto the next line; L-009 is rescheduled.
+    let found = found_with_register(&leaning_registry(&json!(["L-007", "L-009"])), IN_USE)?;
+    assert!(found.is_empty(), "{found:#?}");
+    Ok(())
+}
+
+#[test]
+fn a_claim_that_is_not_in_use_may_lean_on_a_pending_limit() -> Outcome {
+    // CL-003 is above the current rung (now) and not used: it waits, whatever it leans on.
+    let mut registry = registry_value();
+    registry["statements"][3]["limits"] = json!(["L-004"]);
+    let found = found_with_register(&registry, README)?;
+    assert!(found.is_empty(), "{found:#?}");
+    Ok(())
+}
+
+#[test]
+fn the_pre_release_wording_of_the_now_rung_is_not_held_by_the_review() -> Outcome {
+    // CL-001 is a `now` claim in use; the review sheet came after it was published.
+    let mut registry = registry_value();
+    registry["statements"][1]["limits"] = json!(["L-004", "L-008"]);
+    let found = found_with_register(&registry, README)?;
+    assert!(found.is_empty(), "{found:#?}");
+    Ok(())
+}
+
+#[test]
+fn the_limits_a_claim_lists_are_real_entries_listed_once() -> Outcome {
+    let missing = found_with_register(&leaning_registry(&json!(["L-999"])), IN_USE)?;
+    assert!(
+        missing.iter().any(|message| message
+            .contains("CL-003: leans on L-999, which the known-limits register does not hold")),
+        "{missing:#?}"
+    );
+    let malformed = found_with_register(&leaning_registry(&json!(["L-4x"])), IN_USE)?;
+    assert!(
+        malformed
+            .iter()
+            .any(|message| message
+                .contains("CL-003: limit \"L-4x\" is not a register entry identifier")),
+        "{malformed:#?}"
+    );
+    let repeated = found_with_register(&leaning_registry(&json!(["L-007", "L-007"])), IN_USE)?;
+    assert!(
+        repeated
+            .iter()
+            .any(|message| message.contains("CL-003: limit L-007 is listed twice")),
+        "{repeated:#?}"
+    );
+    // Without the register file the check says so instead of passing quietly.
+    let found = messages(&leaning_registry(&json!(["L-007"])), IN_USE)?;
+    assert!(
+        found.iter().any(|message| message.contains(
+            "statements list the limits they lean on, but the register could not be read"
+        )),
+        "{found:#?}"
+    );
+    Ok(())
+}

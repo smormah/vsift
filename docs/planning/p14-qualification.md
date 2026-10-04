@@ -173,7 +173,9 @@ stable, unless fixed, mitigated, or accepted by the maintainer with a register e
 | #246 staged publishing | Deferred by the maintainer (2026-10-02) |
 
 **The register.** All 101 entries at PR 6 (the 94 of PR 1, L-105, L-107 and L-108 of PR 8, and L-117 to L-120 of PR 6; PRs 2 and 3 add L-109 to L-116) read `Review: pending`. Before the stable, the maintainer
-reviews the thirty a public claim leans on, and PR 9 prepares them as one sheet: L-004,
+reviews the thirty a public claim leans on, and PR 9a prepared them as one sheet,
+[`register-review-sheet.md`](register-review-sheet.md) (2026-10-04, with seven later entries the claims
+also lean on and the readings below): L-004,
 L-007, L-008, L-020, L-021, L-022, L-028, L-029, L-030, L-035, L-037, L-038, L-042, L-043,
 L-044, L-056, L-057, L-058, L-068, L-072, L-075, L-076, L-082, L-083, L-084, L-095, L-097,
 L-098, L-099 and L-100. The P11 and P13 readings listed in `memory/TODO.md` are put to the
@@ -299,6 +301,12 @@ sandbox (GPT-6-Astra, GPT-6-Sol) qualified if the gates hold; Codex on Windows n
 supported; Haiku 4.5 and GPT-6-Luna below the line (L-082, L-084); other clients untested.
 Minimum runtimes: Node.js 22, Bun 1.2.
 
+**Built in PR 9a (2026-10-04).** The matrix lives in
+[`support-and-resource-profiles.md`](support-and-resource-profiles.md) (sections 1 to 5), read against
+the evidence ledger and scanned by the claims check; the table above stays as the plan's draft. Two
+facts the draft left open are now written down there: the hosted Windows evidence runs on Windows
+Server 2025, not Windows 11, and RQ-05 cannot be `passed` as its rule is written (section 21).
+
 ## 9. Public claims
 
 A claims registry (`docs/planning/public-claims.json`, PR 1) lists every claim the README,
@@ -332,8 +340,13 @@ the current rung, a claim whose evidence is not `passed`, a statement used in a 
 not registered for, and a stale entry. The later rungs' statements are listed already, unused.
 Scanned since PR 8: `release.md` and the four release-notes templates
 (`tools/vsift-release/notes/`, which no longer say "Supported machines"; the published v0.1.0 page
-was edited to the same wording on 2026-10-02, L-102 closed). Not yet scanned, each with its owner pull request: the launcher's refusal
-messages and the worker runbook (PR 9). It reads plain text: it cannot see meaning (L-101).
+was edited to the same wording on 2026-10-02, L-102 closed). **Scanned since PR 9a (2026-10-04):** the
+launcher's refusal messages (reworded to name the machines the release is built for), the worker
+runbook, the support matrix and the eight README graphics (the check now reads the text, title and
+description of an SVG; a stale roadmap step is what it cannot see, L-121); no document is listed as
+unscanned. Each claim also lists the known-limits entries it leans on, and
+a claim above the `now` rung that is in use fails while one is pending or rejected (section 21). It reads
+plain text: it cannot see meaning (L-101).
 
 ## 10. What the maintainer does, and the fallback
 
@@ -426,7 +439,7 @@ counts as qualification evidence.
 | Whether hosted-runner minutes are free for the account | Unknown; the supervisor has asked. The repository is public and GitHub documents standard runners as free for public repositories (not re-checked for this account) | Section 5 lists runner-hours either way; a cost would change the soak and fuzz budgets, not the gates |
 | Whether any test compares a build with the published 0.1.0 schemas | **Settled in PR 2 (2026-10-02): none did.** `published_compatibility` and `published_v0_1_0_records` do now (section 15.3) | Done |
 | Whether the real-tool checkpoints can run an installed binary through `assert_cmd`'s environment override | **Settled by PR 3 (2026-10-02): no.** `assert_cmd` 2.2.2 reads `CARGO_BIN_EXE_vsift` when a test runs, but `cargo test` sets that variable itself and replaces any value from outside (a nonexistent path changed nothing) | A repository-owned variable, `VSIFT_E2E_BINARY`, read by one test module (section 17) |
-| Whether Homebrew's FFmpeg and whisper.cpp suit the macOS journeys, and which versions they install | **Settled by PR 3 (2026-10-02): they suit them.** On the image `macos15` 20260907.0337.1: `ffmpeg 9.0.1_1` and `whisper-cpp 1.9.2` (the formula name on that image's tap; a newer tap names it `whisper.cpp`, version 1.9.4 on the public API); every checkpoint passed and the T-04 gates held | Versions are recorded in every run; L-114 holds the limit; PR 9 words the macOS cell |
+| Whether Homebrew's FFmpeg and whisper.cpp suit the macOS journeys, and which versions they install | **Settled by PR 3 (2026-10-02): they suit them.** On the image `macos15` 20260907.0337.1: `ffmpeg 9.0.1_1` and `whisper-cpp 1.9.2` (the formula name on that image's tap; a newer tap names it `whisper.cpp`, version 1.9.4 on the public API); every checkpoint passed and the T-04 gates held | Versions are recorded in every run; L-114 holds the limit; PR 9a proposed the wording (section 21) |
 | Whether the automated safety stop on authoring a hostile provider fixture recurs | **It recurred (2026-10-03, PR 5).** The session stopped at the stand-in's attempt code, and the maintainer chose the narrowing the same day | Decision E's option 4, in ADR 0024's amendment of 2026-10-03: no strict-worker claim in R0, RQ-14 `waived`, #188 and L-068 in R1, where the maintainer writes or reviews the fixture (option A) or chooses a third-party suite or review (B, C); nothing is authored automatically for R0 |
 | Tokens spent per agent run | Not recorded in P12; **recorded by the harness since PR 6** (`reported_usage`, where the client reports it) but never yet measured | The budget in section 7 is an estimate; batch 1's pilots are the first measurement, and the maintainer can read them before saying go for batches 2 and 3 |
 | Whether the clients' real streams carry what the parsers read (Claude Code's `result` event with `usage` and `total_cost_usd`, Codex's `turn.completed` usage) and say "usage limit" in the words the detector expects | Unknown: the parsers and their tests were written from the event shapes the earlier parsers already read, not from recorded streams (no raw log of P12 is in the repository) | The pilots; a client that exits non-zero without one tool call is graded invalid whatever it said (an allowance stop and an outage look alike), and an unrecognised figure leaves `reported_usage` absent, never a wrong number (L-120) |
@@ -642,7 +655,7 @@ the macOS minutes cost most.
 journeys passed on all three systems with that system's tools (rule 3 of decision F for
 Ubuntu 24.04 with managed tools, Windows with pinned tools, macOS 15 with Homebrew's); rules 1, 2
 and 4 (clean installs from the registry, the extracted archive, the guide's walks) are PR 2's
-runs, and macOS's "supported for what the hosted run proves" wording is PR 9's to choose with
+runs, and macOS's wording was proposed in PR 9a (section 21) with
 L-114 in view.
 
 ## 18. PR 4: the robustness campaigns (RQ-07 to RQ-10, RQ-12 and RQ-13), run on 0.1.0
@@ -1053,3 +1066,24 @@ skill.
 | --- | --- |
 | On Windows, run `vsift` from PowerShell or Git Bash, never through `cmd.exe`: the `vsift.cmd` file npm writes makes `cmd.exe` read the command line a second time. | #257, [L-109](known-limits.md#l-109) (P14 PR 7) |
 | In `references/commands.md` the `STORAGE_IO` row says to go to REPORT with the code and not to work around it, and the `RESOURCE_LIMIT` row says to use a smaller range or fewer frames. Since P14 PR 7 three `STORAGE_IO` answers of the CLI carry a remediation that says what happened: a link named as the source (name the file itself), a source with no room (report it to the user, who frees space or asks an operator; the agent does not choose a folder) and an id with no published session (check it with `session list`). The row could say to read `error.remediation` first. A worker request that finds a workspace full answers `RESOURCE_LIMIT`, which the other row would read as a request that is too large. | #265, #266, #277, [L-127](known-limits.md#l-127) (P14 PR 7) |
+
+## 21. PR 9a: the matrix, the documents, the claims and the register sheet (2026-10-04)
+
+The first half of PR 9 (the second, 9b, is the R0 user guide and its two CI checks); an increment, and PR 9 is complete
+only when both are merged. The decisions, the proposals and what is weaker than it sounds are in
+[ADR 0024](../decisions/0024-r0-qualification-and-release-candidate.md)'s PR 9a note; the matrix itself is
+[`support-and-resource-profiles.md`](support-and-resource-profiles.md); the maintainer's review is
+[`register-review-sheet.md`](register-review-sheet.md). No product code, release workflow or setting changed, and nothing was
+published; the one shipped file that changed is the npm launcher's refusal message.
+
+| Item | Result |
+| --- | --- |
+| The matrix | Written against the ledger: for 0.1.0 on hosted runners, rules 1, 2 and 4 of decision F passed on all three systems (RQ-01, RQ-02, RQ-04) and both journeys of rule 3 ran (RQ-05, `running`); no cell may use the word "supported" yet, and the registry holds each cell's wording (CL-201 to CL-209) for the rung that allows it |
+| The macOS wording | Proposed, not decided: CL-203, "supported on hosted-runner evidence only", beside what it covers and does not (ADR note, decision 1) |
+| What blocks every cell | RQ-05's pass rule ("every stage passed") cannot be met while P11's durable stage is blocked on hosted runners ([L-113](known-limits.md#l-113), #258): the register sheet gives three ways out and recommends recording that RQ-09 and RQ-12 cover it, which changes a pass rule and is the maintainer's |
+| Documents | `install.md`, `SECURITY.md` (a supported-versions table), the worker runbook, the skill guide, the README (facts and links only) and the launcher's message brought to the matrix; no controlled word outside a registered statement, no banned phrase |
+| Claims | The registry scans the runbook, the launcher, the matrix and the eight README graphics (an SVG is read for its text, title and description); `unscanned_documents` is empty; each claim lists the register entries it leans on (`limits`) and a claim above the `now` rung in use fails while one is pending or rejected. Rung `now` is unchanged |
+| Register | Thirty entries, seven later ones and nine readings on one sheet with proposals; L-004, L-035 and L-038 corrected, L-114 names the wording, L-121 narrowed to the roadmap's rung. **Every review is still `pending`** |
+
+**Hosted minutes.** None: everything ran locally (Windows 11). **Not done here:** the guide (9b); a rung change; any ledger
+status change (RQ-18 becomes `passed` on the candidate's commit, when the Governance job runs there).

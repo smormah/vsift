@@ -21,7 +21,18 @@ These documents do not certify that the planned mitigations have shipped.
 
 ## Supported versions
 
-VSift has published a 0.x pre-release (0.1.0, 2026-10-01) and no stable release. Until a stable release, security fixes are applied to the default branch only, and a pre-release is not a supported version. A supported-version table will be introduced with the first stable release.
+VSift has published a 0.x pre-release (0.1.0, 2026-10-01) and no stable release. Until a stable release, security fixes are applied to the default branch only, and a pre-release is not a supported version.
+
+The table says which versions receive security fixes from the day the R0 release, `0.2.0`, is published. Until then it describes a policy, not a release, and it changes nothing about `0.1.0`. It is about security fixes, not about platforms: which machines VSift has been shown to work on is in the [support matrix](docs/planning/support-and-resource-profiles.md).
+
+| Version | What it is | Security fixes |
+| --- | --- | --- |
+| The newest `0.2.x` | The R0 release line, published under npm's `latest` tag | Yes. A fix is released as a new patch version of the line (`0.2.1` and so on) with a security advisory. Only the newest patch of the line is fixed. |
+| `0.2.0-rc.N` | A release candidate, published under `next` and never announced | No. The release replaces it. |
+| `0.1.0` | The first pre-release, published under `next` | No. Move to the newest release. |
+| The default branch | Source for building from the repository | Fixes land here first. |
+
+Fixes are made as soon as practical and without a promised delay (see [Reporting a vulnerability](#reporting-a-vulnerability)). Software the project does not control, such as FFmpeg, whisper.cpp and your operating system, is patched by its publishers; the [known-limits register](docs/planning/known-limits.md) records what is known about the builds VSift reviews.
 
 ## Reporting a vulnerability
 

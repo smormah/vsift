@@ -32,9 +32,10 @@ mono: `ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`. Animations sto
 
 **Rules for any edit.**
 
-- The words in these files are public text, but the claims check does not read SVG (L-121). Hold
-  them to the claims ladder by hand, then repeat this check, which must print nothing but the
-  CSS keyframe percentages:
+- The words in these files are public text, and since P14 PR 9a the claims check reads them (the
+  text, title and description elements; `public-claims` fails on a controlled word or a banned
+  phrase, like a document). It cannot see a stale roadmap (L-121). Repeating this hand check as well
+  costs nothing, and must print nothing but the CSS keyframe percentages:
 
   ```console
   grep -o -i -E "support|stable|qualified|qualif(y|ies)|certified|guarantee|production|strict|hostile|tenant|publisher|signed|filesystem|managed install|codex|any model|any coding|any llm|100%" docs/assets/readme/*.svg | sort | uniq -c

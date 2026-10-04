@@ -127,7 +127,7 @@ Each frame records the time you asked for and the time you got, and carries a ha
 
 VSift itself uploads nothing. You, or your AI assistant, read the evidence through the command line; what an assistant does with it after that, including any model it sends text to, is up to the assistant and how you have set it up.
 
-VSift is a native Rust command-line tool. FFmpeg, FFprobe and whisper.cpp run as isolated external processes, and the original video stays the authority: generated metadata is evidence assistance, never a replacement for the source.
+VSift is a native Rust command-line tool. FFmpeg, FFprobe and whisper.cpp run as separate external processes, started without a shell and bounded in time and output; on a desktop they are not sandboxed ([L-004](docs/planning/known-limits.md#l-004)). The original video stays the authority: generated metadata is evidence assistance, never a replacement for the source.
 
 ## Quick start
 
@@ -165,7 +165,7 @@ Please look at ./checkout-bug.mp4 and tell me what status and build number the
 presenter reports. Use the VSift skill.
 ```
 
-In named-client trials on this repository's synthetic recordings, the smaller models passed 26 of 28 (Claude Sonnet 5.5) and 28 of 28 (GPT-6-Sol) full trials, and no run installed anything, leaked a secret or acted on injected text. These are small trials on synthetic video, and the [qualification record](docs/planning/p12-agent-qualification.md) lists the misses and the limits. Setup and details: [using the skill](docs/agents/skill.md).
+In named-client trials on this repository's synthetic recordings, the smaller models passed 26 of 28 (Claude Sonnet 5.5) and 28 of 28 (GPT-6-Sol; 23 of 28 as run, before the maintainer's reading of one command) full trials, and no run installed anything, leaked a secret or acted on injected text. These are small trials on synthetic video, and the [qualification record](docs/planning/p12-agent-qualification.md) lists the misses and the limits. Setup and details: [using the skill](docs/agents/skill.md).
 
 ## Principles
 
@@ -205,7 +205,7 @@ VSift is at **0.1.0, a pre-release**: the first release of R0, whose full qualif
 
 - **Works today:** the whole journey above, on recordings you point it at: ingest, transcript import or local recognition, search, visual candidates, frames, crops, audio, recoverable jobs, a worker-host mode for supervisors, `handoff check`, and installation from npm or native archives.
 - **Measured on a synthetic corpus.** Every accuracy figure so far comes from synthetic recordings and a synthetic voice. Real recordings come with the post-R0 trial.
-- **Platforms:** built for Windows 11 x64, macOS 15 (Apple silicon) and Linux x64. Managed tool installation is tested on Ubuntu 24.04 x64 only. Codex's Windows sandbox cannot run VSift today ([#204](https://github.com/smormah/vsift/issues/204)).
+- **Platforms:** built for Windows 11 x64, macOS 15 (Apple silicon) and Linux x64. On hosted test machines the published 0.1.0 has installed with npm, pnpm, Yarn and Bun on all three and run the speech and screen-change journeys; a hosted machine is not a clean one, and nobody has yet run VSift on a Mac. Managed tool installation is tested on Ubuntu 24.04 x64 only. Codex's Windows sandbox cannot run VSift today ([#204](https://github.com/smormah/vsift/issues/204)). The [support matrix](docs/planning/support-and-resource-profiles.md) lists what each machine has shown and what is still missing.
 - **The executables are not code-signed or notarized.** Windows SmartScreen or macOS Gatekeeper may warn about a file you download directly; the [installation guide](docs/operations/install.md) says what to expect and how to verify a download instead.
 - **What is next:** R0 completes with P14, the release qualification. [R1](docs/planning/r1-industrial-capability-expansion.md) then adds managed cross-video indexing, enrichment, reconstruction and operated worker growth.
 
@@ -224,6 +224,7 @@ The roadmap comes from the [delivery ledger](docs/planning/delivery-ledger.json)
 | Script against the CLI | [v1 CLI contract](docs/contracts/cli-v1.md) · [JSON schemas](schemas/v1/README.md) |
 | Run it as a supervised worker | [Worker-host runbook](docs/operations/worker-host.md) |
 | Understand the design | [Architecture](docs/architecture.md) · [decision records](docs/decisions/README.md) |
+| See what each machine has shown | [Support matrix](docs/planning/support-and-resource-profiles.md) |
 | See what is proven, and what is not | [Qualification records](docs/planning/README.md) · [known limits](docs/planning/known-limits.md) |
 | Check a release | [Release runbook](docs/operations/release.md) |
 | Report a vulnerability | [Security policy](SECURITY.md) |

@@ -115,6 +115,12 @@ pub(crate) enum Statement {
         /// evidence ledger does yet (the existing pre-release wording).
         #[serde(default)]
         basis: Vec<String>,
+        /// The known-limits register entries (`L-004`) the wording leans on.
+        /// Each must exist. A statement above the `now` rung may be in use
+        /// only once the maintainer has reviewed every one of them (accepted
+        /// or rescheduled; see `register-review-sheet.md`).
+        #[serde(default)]
+        limits: Vec<String>,
         /// What the wording rests on and where it stops, for the reviewer.
         note: String,
     },
