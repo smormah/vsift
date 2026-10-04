@@ -304,7 +304,7 @@
         "requirements": ["R-07", "R-09"],
         "threats": ["SEC-04", "SEC-07", "SEC-08", "SEC-09"],
         "verification": ["S-04", "S-05", "S-12", "X-04", "X-05"],
-        "limits": ["L-123"]
+        "limits": ["L-060"]
       },
       "proves": "The locking and admission claims hold on three kernels: zero failures in at least 200 repetitions per system of lock stress (Windows added), weighted admission, engine worker and batch; any failure is captured and filed first (governance rule 14).",
       "does_not_prove": "Every interleaving. Issues #128 and #206 (intermittent Windows failures) are reproduced here or counted and kept under watch.",
