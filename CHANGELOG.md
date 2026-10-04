@@ -8,6 +8,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- **The R0 user guide and its two CI checks** (P14 PR 9b, the second half of PR 9; documentation, test tooling and one
+  read-only workflow; **nothing published**, no product code or setting changed). [`docs/guide/`](docs/guide/index.md)
+  teaches by task: a first investigation, the recipes (investigate a recording, use an existing transcript, keep and share
+  evidence, let your agent investigate, clean up and uninstall), the concepts, how to cite evidence, troubleshooting by
+  failure code, a FAQ and the limits in plain words, written for people with a video, not only for testers. The command
+  and JSON reference pages are **generated** from `vsift --help` and `schemas/v1`. New workflow `Guide` (read-only, no
+  secret) runs `tools/guide/`: the generated pages must equal the binary's and the schemas' (and the guide must name the
+  release it was checked against, give every v1 failure code a troubleshooting row with the contract's exit status, and
+  keep its links and anchors), and every marked example is **run against the real binary** on the repository's synthetic
+  recordings, failing when the page shows something other than what the command prints; values that differ on every run
+  (identifiers, times, digests, sizes, what a speech recogniser decides) are compared by kind. The guide's pages are in the
+  public-claims registry (two generated phrases of the JSON reference are registered as CL-010 and CL-011).
 - **The support matrix, the documents, the claims and the register review sheet** (P14 PR 9a, the first half of PR 9;
   the R0 user guide and its CI checks are PR 9b; **nothing published**, no product code, workflow or setting changed).
   [`support-and-resource-profiles.md`](docs/planning/support-and-resource-profiles.md) states decision F's four rules,

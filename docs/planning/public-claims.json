@@ -22,7 +22,21 @@
     "docs/assets/readme/pipeline.svg",
     "docs/assets/readme/before-after.svg",
     "docs/assets/readme/architecture.svg",
-    "docs/assets/readme/roadmap.svg"
+    "docs/assets/readme/roadmap.svg",
+    "docs/guide/index.md",
+    "docs/guide/first-investigation.md",
+    "docs/guide/investigate-a-recording.md",
+    "docs/guide/use-an-existing-transcript.md",
+    "docs/guide/keep-and-share-evidence.md",
+    "docs/guide/let-your-agent-investigate.md",
+    "docs/guide/clean-up-and-uninstall.md",
+    "docs/guide/concepts.md",
+    "docs/guide/evidence-and-citations.md",
+    "docs/guide/troubleshooting.md",
+    "docs/guide/faq.md",
+    "docs/guide/limits.md",
+    "docs/guide/reference/commands.md",
+    "docs/guide/reference/json.md"
   ],
   "unscanned_documents": [],
   "controlled_words": ["supported", "stable", "qualified", "qualify", "qualifies", "certified", "guaranteed"],
@@ -317,6 +331,26 @@
       "basis": ["docs/planning/p12-agent-qualification.md"],
       "limits": ["L-072", "L-075", "L-076"],
       "note": "Introduces the model table; the same limits as CL-001."
+    },
+    {
+      "kind": "claim",
+      "id": "CL-010",
+      "rung": "now",
+      "documents": ["docs/guide/reference/json.md"],
+      "text": "for a durable session on the qualified profile",
+      "basis": ["docs/planning/p10-durable-publication.md"],
+      "limits": ["L-008", "L-056", "L-058"],
+      "note": "Generated from the description of ingest-data.schema.json (P10, P11): the durable publication guarantee is shown on Ubuntu 24.04 with local ext4 only (the P10 campaign); the reference page repeats the schema's own words, and the page that uses them is regenerated, not edited. Reword the schema to retire this entry."
+    },
+    {
+      "kind": "claim",
+      "id": "CL-011",
+      "rung": "now",
+      "documents": ["docs/guide/reference/json.md"],
+      "text": "only where os crash durability is qualified",
+      "basis": ["docs/planning/p10-durable-publication.md"],
+      "limits": ["L-008", "L-056", "L-058"],
+      "note": "Generated from the description of workspace-data.schema.json (P11): a durable workspace is accepted only on the profile the P10 campaign covered. Same reason as CL-010."
     },
     {
       "kind": "claim",

@@ -1,0 +1,116 @@
+name: Guide
+
+# P14 PR 9b (docs/planning/user-guide-spec.md rules 3 and 4): the user guide is held to the code.
+#
+# - "Reference pages and promises" builds the CLI, regenerates the two reference pages (the command
+#   reference from `vsift --help`, the JSON reference from schemas/v1) and fails if the committed pages
+#   differ; it also holds the hand-written pages to what they promise (the version they were checked
+#   against, a troubleshooting row with the contract's exit status for every failure code, every
+#   relative link and anchor, every page in the public-claims registry).
+# - "Examples" runs the marked commands of every guide page against the freshly built binary on the
+#   synthetic practice recordings of this repository, with the reviewed tools installed by the binary's
+#   own `setup install` (the Ubuntu 24.04 route a user has), and fails if what a page shows is not
+#   what the command prints. Values that change on every run (identifiers, times, digests, file sizes)
+#   are compared by kind.
+#
+# Read-only: no secret, no token, no publishing. The examples job downloads the three reviewed tool
+# artifacts from their publishers over HTTPS, each checked by size and SHA-256 (the same transfer as
+# `P13 managed smoke`), and sends only VSift's neutral user agent.
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/guide.yml
+      - docs/guide/**
+      - docs/contracts/cli-v1.md
+      - docs/planning/public-claims.json
+      - schemas/**
+      - tools/guide/**
+      - crates/**
+      - fixtures/corpus/**
+      - Cargo.toml
+      - Cargo.lock
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/guide.yml
+      - docs/guide/**
+      - docs/contracts/cli-v1.md
+      - docs/planning/public-claims.json
+      - schemas/**
+      - tools/guide/**
+      - crates/**
+      - fixtures/corpus/**
+      - Cargo.toml
+      - Cargo.lock
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: guide-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  reference:
+    name: Reference pages and promises
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up the pinned Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22.23.3"
+          package-manager-cache: false
+
+      - name: Test the guide tools
+        run: node --test "tools/guide/test/*.test.cjs"
+
+      - name: Build the command-line tool
+        run: cargo build --locked -p vsift-cli
+
+      - name: The generated pages are current and the guide keeps its promises
+        run: node tools/guide/generate-reference.cjs --binary target/debug/vsift --check
+
+  examples:
+    name: Examples against the real binary (Ubuntu 24.04)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up the pinned Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22.23.3"
+          package-manager-cache: false
+
+      - name: Build the command-line tool
+        run: cargo build --locked -p vsift-cli
+
+      # A development build resolves no publisher host unless it is told to (P13 PR 4's network guard,
+      # `crates/vsift-infrastructure/src/publisher_artifact_transfer.rs`); this variable is that opt-in, and
+      # only the managed install uses it. Building the release profile instead would take much longer
+      # for the same output.
+      - name: Run the examples of every guide page
+        env:
+          VSIFT_DEV_PUBLISHER_NETWORK: allow
+        run: >-
+          node tools/guide/check-examples.cjs
+          --binary target/debug/vsift
+          --install-managed
+          --require-speech

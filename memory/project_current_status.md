@@ -39,18 +39,16 @@ the CLI and write a cited report. P12's named-client trials qualified it:
 
 **P00-P13 are complete. P14, the R0 qualification (#17), is in progress** (started 2026-10-02;
 decisions A-H of ADR 0024 confirmed). Its plan is 14 pull requests (0-13); **PRs 0 (#250), 1 (#251), 2
-(#255), 3 (#254), 4 (#259), 5 (#276), 6 (#262), 7 (the fixes, below) and 8 (#252) are merged; PR 9a
-(#302) is open, 9b (the user guide) is next; PRs 10-13 remain; the whole packet is not complete.**
+(#255), 3 (#254), 4 (#259), 5 (#276), 6 (#262), 7 (the fixes, below) and 8 (#252) are merged; PR 9 is
+9a (#302) is merged and 9b (#304, the user guide) is open; PRs 10-13 remain; the whole packet is not complete.**
 What it must show, and what is weaker than it sounds:
-- **The published 0.1.0 has run on a video, but only that:** PR 3 ran the real-tool checkpoints
-  against it on hosted Ubuntu 24.04, Windows and macOS 15 (tests from a later commit, L-115); PR 2
-  installed it on hosted runners, not clean machines. Smart App Control and the macOS prompts are
-  unseen on a real machine (L-098).
-- **Platforms:** the P08/P09/P11 numbers and the Claude Code trials are Windows 11; hosted Ubuntu,
-  Windows and macOS passed on 0.1.0 (macOS with Homebrew's tools, L-114); P11's durable stage cannot
-  run hosted (#258, L-113); the matrix rules are not met (L-035). **A synthetic corpus and voice only**
-  (L-020, L-022, L-028, L-030). **Trials tuned on their own scenarios;** the hold-outs are unrun; the
-  review tier's blurred-banner re-run is missing (L-095).
+- **The published 0.1.0 has run on a video, but only that:** PR 3 ran the real-tool checkpoints against it
+  on hosted Ubuntu 24.04, Windows and macOS 15 (tests from a later commit, L-115); PR 2 installed it on
+  hosted runners, not clean machines. Smart App Control and the macOS prompts are unseen (L-098).
+- **Platforms:** the P08/P09/P11 numbers and the Claude Code trials are Windows 11; hosted Ubuntu, Windows
+  and macOS passed on 0.1.0 (macOS with Homebrew's tools, L-114); P11's durable stage cannot run hosted
+  (#258, L-113); the matrix rules are not met (L-035). **A synthetic corpus and voice only** (L-020, L-022).
+  **Trials tuned on their own scenarios;** the hold-outs are unrun; the blurred-banner re-run is missing (L-095).
 - **SEC-T01 is half done and stays so in R0** (L-068, #188 in R1; RQ-14 waived). **The campaigns found
   things on 0.1.0 and PR 7 fixed or narrowed them; the evidence is still for 0.1.0:** RQ-08, RQ-10 and
   RQ-13 are `failed` until PR 11 re-runs them. **`latest` has never moved** (L-105). Decisions: `TODO.md`.
@@ -59,32 +57,34 @@ What it must show, and what is weaker than it sounds:
 
 **PR 1 (#251):** the evidence ledger (RQ-01..RQ-20) and claims registry (rung `now`), checked on every
 PR (L-101). **PR 2 (#255):** clean installs from the real registry (npm, pnpm, Yarn, Bun; three systems),
-the archives, offline install, upgrade and a second verifier (RQ-01..04, RQ-19), `passed` for 0.1.0 only
-(plan section 15; L-109 to L-112). **PR 8 (#252):** the version alone decides the channel (a suffix means
-`next`, none moves `latest`), guarded by the candidate delta and the complete ledger (L-103); no real
-stable publish yet (L-105). **PR 3 (#254):** `P14 journeys` runs the real-tool checkpoints against
-`vsift-cli@<version>` from the registry on three systems, weekly too (`VSIFT_E2E_BINARY`); on 0.1.0 53
-stages passed on each (RQ-06 `passed`, RQ-05 `running`: P11's durable stage is blocked, #258).
+archives, offline install, upgrade and a second verifier (RQ-01..04, RQ-19), `passed` for 0.1.0 only (L-109
+to L-112). **PR 8 (#252):** the version alone decides the channel (a suffix means `next`, none moves
+`latest`), guarded by the candidate delta and the complete ledger (L-103); no real stable publish yet
+(L-105). **PR 3 (#254):** `P14 journeys` runs the real-tool checkpoints against `vsift-cli@<version>` from
+the registry on three systems, weekly too; on 0.1.0 53 stages passed on each (RQ-06 `passed`, RQ-05
+`running`: P11's durable stage is blocked, #258).
 
 **PR 6 (#262; `docs/agents/trials.md`) and batch 1.** `tools/vsift-agent-trials` installs the published
-package, runs a cold agent (**Claude strict**, **Codex realistic**, L-125), keeps hold-outs, freezes inputs
-by digest, captures usage and plans three batches (L-117 to L-120). **Batch 1** (2026-10-03, 0.1.0, 20 runs,
-a baseline): skill pilots 4 of 4; cold useful 1 of 6 (Claude), 2 of 6 (Codex); none installed anything; three
-grader classes **ruled 2026-10-04 and implemented in #298**; batch 2 needs a fresh `freeze write`.
+package, runs a cold agent (**Claude strict**, **Codex realistic**, L-125), keeps hold-outs, freezes inputs by
+digest, captures usage and plans three batches (L-117 to L-120). **Batch 1** (2026-10-03, 0.1.0, 20 runs, a
+baseline): skill pilots 4 of 4; cold useful 1 of 6 (Claude), 2 of 6 (Codex); none installed anything; the
+three grader classes were ruled and implemented (#298); batch 2 needs a fresh `freeze write`.
 
-**PR 4 (#259; plan section 18; hosted runners only).** The campaigns on 0.1.0 (`tools/p14-campaigns/`):
-**RQ-07 passed** (31 fuzz targets, no crash; 19 still growing: L-128). **RQ-08 failed** (Windows #206, #271;
-#128 did not reproduce). **RQ-09 passed** (ladder, batch, cancel, a 1,000-request soak with kills; found
-#274, #277, #286). **RQ-10 failed** (96 hostile inputs, 93 held: #264-#266). **RQ-12 passed** (runbook
-walked). **RQ-13 failed** (#272).
+**PR 4 (#259; plan section 18; hosted runners only)** ran the campaigns on 0.1.0 (`tools/p14-campaigns/`):
+RQ-07 passed (31 fuzz targets, no crash; 19 still growing: L-128); RQ-08 failed (Windows #206, #271); RQ-09
+passed (found #274, #277, #286); RQ-10 failed (96 hostile inputs, 93 held: #264-#266); RQ-12 passed (runbook
+walked); RQ-13 failed (#272).
 
-## P14 PR 9a in one view (open, #302; an increment: 9b, the user guide, follows)
+## P14 PR 9 in one view (9a #302 merged; 9b #304 open; PR 9 is complete only when 9b merges)
 
-The support matrix (`support-and-resource-profiles.md`: no cell may say "supported" yet; hosted Windows is
-Server 2025) and the install guide, `SECURITY.md` (a versions table), runbook, skill guide and README facts
-brought to it. The claims check also reads the launcher's messages and the README graphics' text (L-121),
-and each claim lists the register entries it leans on (`limits`). `register-review-sheet.md`: thirty
-entries, seven later, nine readings, every review pending.
+**9a:** the support matrix (`support-and-resource-profiles.md`: no cell may say "supported" yet; hosted Windows
+is Server 2025) and the install guide, `SECURITY.md` (a versions table), runbook, skill guide and README facts
+brought to it. The claims check also reads the launcher's messages and the README graphics' text (L-121), and
+each claim lists the register entries it leans on (`limits`). `register-review-sheet.md`: thirty entries,
+seven later, nine readings, every review pending. **9b:** `docs/guide/` (twelve pages, two generated reference
+pages), held to the code by the `Guide` workflow (`tools/guide/`): the reference must equal `--help` and
+`schemas/v1`, and 40 marked commands must print what the pages show: matched on Windows 11 and on Ubuntu 24.04
+with the managed tools, never tried on macOS. The guide names a release, not a candidate (`release.md` 6.3).
 
 ## P14 PR 7 in one view (every finding by outcome; one pull request and one regression test each)
 
@@ -133,7 +133,7 @@ Control, the macOS prompts (L-098); power loss beyond Ubuntu 24.04 ext4 (L-037).
 | P11 | Complete (`40c4038`); SEC-T01 adversarial evidence is technical debt, moved to R1 (#188, L-068) |
 | P12 | Complete (2026-09-30, ADR 0022 Accepted): skill, harness, named-client trials; review tier qualified, compact tier 93% and 100% on the #222 re-run; open: L-095 (#224), #219, #204 (`1284e54`) |
 | P13 | Complete (2026-10-01, ADR 0023 Accepted): distribution, managed install, `handoff check`, human output; 0.1.0 published; release commit `011bc4d` |
-| P14 | **In progress** (started 2026-10-02): PRs 0-8 merged (PR 7 = the fixes of the campaigns and batch 1); 9a open, 9b next; 10-13 remain; agent batch 1 ran (baseline) |
+| P14 | **In progress** (started 2026-10-02): PRs 0-8 and 9a merged (PR 7 = the fixes of the campaigns and batch 1); 9b open; 10-13 remain; agent batch 1 ran (baseline) |
 
 ## Architecture snapshot
 

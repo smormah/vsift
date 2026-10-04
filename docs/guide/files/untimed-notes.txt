@@ -1,0 +1,4 @@
+Meeting notes (typed afterwards, with no times)
+
+- The build failed at ten past three.
+- Order 1017 needs a retry.

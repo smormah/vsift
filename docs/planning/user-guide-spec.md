@@ -1,8 +1,8 @@
 # User guide: specification
 
-Status: accepted into P14 scope by the maintainer on 2026-10-02. The R0 part is built in P14 PR 9;
-everything later is built by the packet that ships the feature. This page is the plan for the
-guide, not the guide.
+Status: accepted into P14 scope by the maintainer on 2026-10-02. The R0 part is built in P14 PR 9b
+(the second half of PR 9); everything later is built by the packet that ships the feature. This
+page is the plan for the guide, not the guide: the guide is [`docs/guide/`](../guide/index.md).
 
 ## Why
 
@@ -10,8 +10,8 @@ Today VSift has a thorough installation guide, an agent skill guide, a CLI contr
 reference) and a worker-host runbook. What it does not have is a place that teaches a person how
 to *do things*: investigate a first recording, read what comes back, understand the words, and
 fix the usual problems. That gap hurts newcomers most, and it widens with every feature R1 adds.
-The guide is also the page a future website would publish, so it is written to be moved without
-rework.
+The guide is plain Markdown with relative links, so it can be moved or published elsewhere
+without rework.
 
 ## Who reads it
 
@@ -60,7 +60,7 @@ leaves room for it and the guide says nothing about it.
    `implementation-work-packets.md`. P15 onward each list their guide pages in their own plan.
 6. **Portable Markdown.** Plain Markdown, relative links, no GitHub-only syntax beyond what a
    static site generator also reads, images as files in `docs/assets/`. Choosing a documentation
-   site tool and publishing the site waits for the website.
+   tool and publishing the guide anywhere else is not part of P14.
 7. **Versioned when it matters.** While only one release line exists the guide describes the
    latest release and says which version it was checked against. A versioned guide arrives with
    the first release whose behaviour differs from its predecessor.
@@ -76,7 +76,23 @@ and generated reference) and the registry entries ship with it. Evidence is reco
 (documents and capabilities agree) and the walked guides of RQ-01 to RQ-04; this adds no evidence
 item and no requirement.
 
+**What PR 9b built (2026-10-04).** All the pages of the table above, the generated reference
+included, in the pull request; plus `files/` (the practice transcript and two small files the
+examples use). The two checks are `tools/guide/generate-reference.cjs` (`--write` and `--check`)
+and `tools/guide/check-examples.cjs`, run by the `Guide` workflow; they are described in
+[`development.md`](../development.md#the-user-guide-and-its-checks). Where the pages differ from
+this plan:
+
+- The `limits.md` page lists the entries of the register that matter to a user; the register
+  stays the full record.
+- The guide names a **release** (`0.2.0`), not a candidate, so that the stable commit needs no
+  change to it (release process 6.8).
+- Rule 3's "published or just-built binary" is the just-built one: the guide is checked against
+  the source, and its first page says what the published pre-release lacks.
+- Nothing in the guide is generated from the contract: the contract stays the exact reference
+  and the guide links to it.
+
 ## Not in P14
 
-A documentation site, its tool or hosting; versioned guides; translations; R1 and later pages;
+A documentation site tool or hosting; versioned guides; translations; R1 and later pages;
 video or animated walkthroughs beyond the README's; any page promoting the project.

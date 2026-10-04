@@ -549,12 +549,12 @@ The maintainer asked whether VSift needs a user guide and decided it does, in R0
 R1 and later. The specification is [user-guide-spec.md](user-guide-spec.md): a guide organised by
 what the reader wants to do (tutorials, how-to recipes, concepts, a generated reference, help
 pages), written only for features that exist, held to the claims ladder, with real and checked
-examples and a reference generated from `vsift --help` and the v1 schemas. P14 PR 9 builds the
-R0 guide (the tutorial, concepts, troubleshooting and the generated reference first) and its two
-CI checks; the guide's pages join the public-claims registry's scanned documents. It adds no
+examples and a reference generated from `vsift --help` and the v1 schemas. P14 PR 9b built the
+R0 guide (`docs/guide/`, section 22) and its two CI checks; the guide's pages are in the
+public-claims registry's scanned documents. It adds no
 evidence item and no requirement: its evidence is RQ-18 and the walked guides of RQ-01 to RQ-04.
-Every later packet ships its own pages (the definition of done in the work packets says so). A
-documentation site and its tool wait for the website.
+Every later packet ships its own pages (the definition of done in the work packets says so).
+Choosing a documentation tool and publishing the guide anywhere else are not part of P14.
 
 ## 17. RQ-05 and RQ-06 against the published 0.1.0 (P14 PR 3, 2026-10-02)
 
@@ -1087,3 +1087,29 @@ published; the one shipped file that changed is the npm launcher's refusal messa
 
 **Hosted minutes.** None: everything ran locally (Windows 11). **Not done here:** the guide (9b); a rung change; any ledger
 status change (RQ-18 becomes `passed` on the candidate's commit, when the Governance job runs there).
+## 22. PR 9b: the R0 user guide and its two checks (2026-10-04)
+
+The second half of PR 9, with section 21 it completes PR 9 once both are merged. No product code, release workflow or
+setting changed, and nothing was published. The decisions and what is weaker than it sounds are in
+[ADR 0024](../decisions/0024-r0-qualification-and-release-candidate.md)'s PR 9b note; the plan is
+[`user-guide-spec.md`](user-guide-spec.md).
+
+| Item | Result |
+| --- | --- |
+| The guide | [`docs/guide/`](../guide/index.md): twelve written pages (the first investigation, five recipes, concepts, evidence and citations, troubleshooting, FAQ, limits, the first page) and two generated reference pages; three small practice files in `files/`. |
+| The generated pages | `reference/commands.md` (every command's `--help`) and `reference/json.md` (every v1 schema); `generate-reference.cjs --check` fails when either is out of date. |
+| The promises it holds | The release the guide names is the binary's, one troubleshooting row per v1 failure code with the contract's exit status, every relative link and anchor, every page in the claims registry. |
+| The examples | 40 commands on six pages, run against the real binary on the synthetic recordings, each page in its own sandbox; Windows 11, FFmpeg 9.0 (gyan.dev full build), whisper.cpp 1.9.2 and the `base` model: all 40 match. On Ubuntu 24.04 with the managed tools (BtbN FFmpeg, whisper.cpp 1.9.2 and the `base` model, installed by the binary's own `setup install`) the `Guide` workflow's examples job matched all 40 as well, speech recognition ready, with no mask or page changed for the system (run 37229607086, 2026-10-04, the job took 7 minutes). |
+| Claims | The pages are scanned documents; CL-010 and CL-011 register two phrases of the schemas that the generated JSON reference repeats. |
+
+**Not done here, and why.** The examples have not run on macOS or on a Mac-like tool set (the guide's commands are the
+same, the tools are Homebrew's, L-114). The first `Guide` run failed before any example, not on a difference: a
+development build refuses to resolve publisher hosts, so the managed install failed as `offline`; the examples job now
+sets the variable that allows it for that step. The workflow is not a required check on `main`. A tutorial walk by a person who has never seen VSift
+(RQ-04's "guide walked" is about the install guides) is not recorded; the cold-agent baseline is not about this guide.
+Wording changes the skill might take from what the guide taught are listed in section 20.2, not made.
+
+**Hosted minutes.** None for the work itself. Each `Guide` run builds the command-line tool twice (once per job) and, in
+the examples job, installs the three reviewed artifacts with the binary's own `setup install` (about three minutes with
+the plan, in run 37229607086) and runs the examples (about three more, most of it speech recognition); the reference job
+took one minute.

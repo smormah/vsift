@@ -1184,3 +1184,49 @@ published; the one shipped file that changed is the npm launcher's refusal messa
 candidate, and the staleness rule means none will count for it. The claims check proves that a sentence has recorded
 evidence and a reviewed register, and that banned words are absent; it still cannot see that a sentence is true. SVG
 scanning reads the words a graphic shows, not that its roadmap is current. The review sheet's proposals are recommendations, not decisions.
+
+## Implementation note, 2026-10-04 (P14 PR 9b: the R0 user guide and its two checks)
+
+The second half of PR 9, and with PR 9a (above) it completes PR 9 once both are merged. Documentation, test tooling and
+one read-only workflow; **nothing published**, no product code, release workflow or setting changed.
+
+- **The guide.** [`docs/guide/`](../guide/index.md) follows [`user-guide-spec.md`](../planning/user-guide-spec.md): a
+  first investigation (the tutorial), five recipes (investigate a recording, use an existing transcript, keep and share
+  evidence, let your agent investigate, clean up and uninstall), the concepts, how to cite evidence, troubleshooting by
+  failure code, a FAQ and the limits in plain words, and two **generated** reference pages (`vsift --help`, the v1
+  schemas). A page that mentions a limit points to the limits page, which links each limit to its entry in the [known-limits register](../planning/known-limits.md).
+- **The two checks** (`tools/guide/`, plain Node.js 22 with no dependency; workflow `Guide`, read-only, no secret):
+  `generate-reference.cjs --check` fails when a generated page differs from what the binary and the schemas give, and
+  holds the hand-written pages to what they promise (the release they name, one troubleshooting row per v1 failure code
+  with the exit status the contract gives it, every relative link and anchor, every page in the claims registry);
+  `check-examples.cjs` runs every marked example against the real binary on the repository's synthetic recordings, one
+  sandbox per page, and fails when the page shows something other than what the command prints. Identifiers, times,
+  digests, file sizes, file paths and, for the speech examples, what a recogniser decides are compared by kind; every
+  other word and number must match.
+- **The claims ladder applies.** The guide's pages are scanned documents of `public-claims.json`. Two phrases that
+  `schemas/v1` itself carries and the generated JSON reference repeats are registered as CL-010 and CL-011 (the
+  durable-profile wording of P10 and P11) rather than reworded by hand; rewording the schemas retires them.
+
+**Decisions taken inside this ADR, for the maintainer to confirm or overrule:**
+
+1. **The guide names a release, not a candidate.** `0.2.0-rc.1` and `0.2.0` are the same release to both checks,
+   because the stable commit may differ from its accepted candidate only in version-string files and the shipped README
+   files ([release.md](../operations/release.md) 6.8): a guide that named `0.2.0-rc.1` could not become `0.2.0`
+   without a change the delta check refuses, and the `Guide` workflow would fail the stable pull request. The first
+   bump to a new release (0.1.0 to 0.2.0-rc.1) updates the guide; `-rc.2` and the stable do not (release.md 6.3 says so).
+2. **The guide is checked against the source, not the published bytes.** The workspace version is still 0.1.0, but
+   `main` has the fixes of PR 7. The guide's first page says so and lists what the pre-release you install today lacks.
+3. **The `Guide` workflow is not a required check on `main`.** It runs on every pull request that touches the guide, the
+   contract, the schemas, the crates or the corpus. Adding it to the ruleset is the maintainer's setting.
+4. **The pages describe what exists** (rule 1 of the specification): R1 features have no page, and the guide says
+   nothing about any plan beyond the release.
+
+**What is weaker than it sounds.** The examples prove that what a page shows is what the command prints, on synthetic
+recordings and a synthetic voice, not that the prose around them is true; only marked blocks run, and the prose is
+checked by reading and by the claims check. Speech output is compared by shape, not by words, because a recogniser may
+hear a clip a little differently on another processor. The local runs are on Windows 11 with the maintainer's FFmpeg
+and whisper.cpp; the `Guide` workflow runs them on Ubuntu 24.04 with the managed tools, where all 40 matched on its
+first run that reached them (the run before it failed on a development build's refusal to download, now allowed for that
+step). Nothing has run them on macOS. A difference the masks do not cover is a finding to fix where it appears, by
+widening a mask or eliding a line, never by changing what a page claims. The generated pages are
+long (the JSON reference is about 150 KB) because they are complete, not because anyone should read them through.
