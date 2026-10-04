@@ -234,6 +234,11 @@ Prefer a review-tier model when the report must be right first time.
 
 **Other limits.**
 
+- **A client counts only on the system it was trialled on** (the rule of the
+  [support matrix](../planning/support-and-resource-profiles.md)): Claude Code on the project's
+  Windows 11 machine, and Codex in a Linux container. No agent trial has run on macOS or on a
+  hosted runner, every trial so far used synthetic videos and a synthetic voice, and the P12
+  trials ran a source-built binary, not the published package.
 - **Codex on Windows:** its sandbox cannot run VSift today
   ([L-076](../planning/known-limits.md#l-076), #204). The Codex trials ran in a Linux
   container.
@@ -245,17 +250,26 @@ Prefer a review-tier model when the report must be right first time.
 - **The review tier's blurred-banner re-run.** A-09 on Claude Opus 5.5 and GPT-6-Astra
   after the #224 fix; the maintainer starts it
   ([L-095](../planning/known-limits.md#l-095)).
-- **A named-agent run from a clean installation** (P14, the release qualification; ADR
-  0023 decision H10). No agent has yet used the published pre-release. The harness for it is
-  built (P14 PR 6): VSift is installed from the real npm registry into a fresh folder, a
-  skill trial copies the skill from the **installed package** (checked equal to the
-  repository's, which is where the grader reads the command table), and it includes a
-  cold-agent variant (the CLI on `PATH`, no skill, no docs; maintainer decision
-  2026-10-02), graded with safety as a hard gate and usefulness reported apart. Two
-  hold-out scenarios (one per transcript path) were written for it and nothing was tuned on
-  them. **No batch has run**: each waits for the maintainer's go
-  ([the P14 batches](trials.md#the-p14-batches)). No trial has yet tested an agent using the
-  CLI from its own help alone.
+- **A named-agent run from a clean installation of the release candidate** (P14, the
+  release qualification; ADR 0023 decision H10). The harness for it is built (P14 PR 6):
+  VSift is installed from the real npm registry into a fresh folder, a skill trial copies the
+  skill from the **installed package** (checked equal to the repository's, which is where the
+  grader reads the command table), and it includes a cold-agent variant (the CLI on `PATH`,
+  no skill, no docs; maintainer decision 2026-10-02), graded with safety as a hard gate and
+  usefulness reported apart. Two hold-out scenarios (one per transcript path) were written for
+  it and nothing was tuned on them. **Batch 1 ran on 2026-10-03 against the published 0.1.0, as
+  a baseline** (20 runs; the reading is in
+  [`p14-agent-trials/batch-1-reading.md`](../planning/p14-agent-trials/batch-1-reading.md)):
+  the four skill pilots (A-08 and A-09, on each client) passed fully, and no cold run
+  installed anything or accepted a setup plan. The cold agent, which has only the CLI's own
+  help, reached the key facts in 1 of 6 compact runs with Claude Code (a setting that lets it
+  run `vsift` alone) and 2 of 6 with Codex (a container with ordinary read-only helpers); the
+  two settings are different tests, and the cold target is 80% on the candidate's final round.
+  A baseline measures; it is not a result for the candidate, and no counted set, hold-out or
+  blurred-banner re-run has run. Batches 2 and 3 wait for the maintainer's go
+  ([the P14 batches](trials.md#the-p14-batches)). Since the baseline `vsift --help` has a
+  "typical investigation" section (P14 PR 7), which the cold agent reads and the skill does not
+  need.
 - **Open readings and limits:** Sonnet's "previous value" slip (#219), Codex on Windows
   (#204, L-076) and L-078 to L-084 in the register.
 

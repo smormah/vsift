@@ -4,17 +4,24 @@
 //! `qualified` and kin) appears in a scanned document only inside a statement
 //! the registry lists; a listed claim in use is allowed at the current rung and
 //! every evidence item it needs is `passed`; banned phrases are absent unless
-//! their lifting evidence is `passed`; no registry entry is stale or
-//! misplaced. What it does not prove: that a sentence is true. A claim with
+//! their lifting evidence is `passed`; a claim above the `now` rung that is in
+//! use leans only on known-limits entries the maintainer has reviewed; no
+//! registry entry is stale or misplaced. What it does not prove: that a
+//! sentence is true. A claim with
 //! recorded evidence can still be worded wrongly, and a wrongly worded
 //! sentence that avoids every controlled word and banned phrase passes. The
 //! reviewer still reads the words.
 
-use std::{collections::BTreeSet, ops::Range};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    ops::Range,
+    path::Path,
+};
 
 use super::{
+    register::{REGISTER_PATH, Review, is_entry_id, reviews},
     schema::{BannedPhrases, ClaimsRegistry, Rung, SCHEMA_VERSION, Statement},
-    text::{contains, find_all, plain_text, snippet, word_count},
+    text::{contains, find_all, plain_text, snippet, svg_text, word_count},
 };
 use crate::{
     release_evidence::{EvidenceLedger, Status},
@@ -42,7 +49,8 @@ pub(crate) fn check_registry(
     }
     check_document_lists(&mut messages, registry, repository);
     check_vocabulary(&mut messages, registry, ledger);
-    check_statements(&mut messages, registry, ledger, repository);
+    let register = load_register(&mut messages, registry, repository);
+    check_statements(&mut messages, registry, ledger, repository, &register);
 
     let documents = read_documents(&mut messages, registry, repository);
     let controlled = normalised(&registry.controlled_words);
@@ -64,8 +72,33 @@ pub(crate) fn check_registry(
             &mut used,
         );
     }
-    check_use(&mut messages, registry, ledger, &used);
+    check_use(&mut messages, registry, ledger, &register, &used);
     messages
+}
+
+/// The register's reviews, read only when some claim lists a limit it leans
+/// on. Empty when nothing leans on it, or when it could not be read (and then
+/// a message says so).
+fn load_register(
+    messages: &mut Vec<String>,
+    registry: &ClaimsRegistry,
+    repository: &dyn Repository,
+) -> BTreeMap<String, Review> {
+    let leans = registry.statements.iter().any(
+        |statement| matches!(statement, Statement::Claim { limits, .. } if !limits.is_empty()),
+    );
+    if !leans {
+        return BTreeMap::new();
+    }
+    match repository.read_text(REGISTER_PATH) {
+        Ok(text) => reviews(&text),
+        Err(error) => {
+            messages.push(format!(
+                "statements list the limits they lean on, but the register could not be read: {error}"
+            ));
+            BTreeMap::new()
+        }
+    }
 }
 
 /// The plain form of each text.
@@ -156,6 +189,7 @@ fn check_statements(
     registry: &ClaimsRegistry,
     ledger: &EvidenceLedger,
     repository: &dyn Repository,
+    register: &BTreeMap<String, Review>,
 ) {
     let mut ids = BTreeSet::new();
     for statement in &registry.statements {
@@ -188,8 +222,24 @@ fn check_statements(
                 rung,
                 requires,
                 basis,
+                limits,
                 ..
             } => {
+                let mut leaned_on = BTreeSet::new();
+                for limit in limits {
+                    if !is_entry_id(limit) {
+                        messages.push(format!(
+                            "{id}: limit {limit:?} is not a register entry identifier (L- and digits)"
+                        ));
+                    } else if !leaned_on.insert(limit.as_str()) {
+                        messages.push(format!("{id}: limit {limit} is listed twice"));
+                    } else if !register.is_empty() && !register.contains_key(limit) {
+                        messages.push(format!(
+                            "{id}: leans on {limit}, which the known-limits register does not hold \
+                             (remove it from the statement's limits)"
+                        ));
+                    }
+                }
                 for item in requires {
                     if status_of(ledger, item).is_none() {
                         messages.push(format!(
@@ -243,9 +293,17 @@ fn read_documents<'a>(
     let mut documents = Vec::new();
     for path in &registry.documents {
         match repository.read_text(path) {
-            Ok(markdown) => documents.push(Document {
+            Ok(source) => documents.push(Document {
                 path,
-                text: plain_text(&markdown),
+                // A graphic is read for the words it shows (L-121).
+                text: if Path::new(path)
+                    .extension()
+                    .is_some_and(|extension| extension.eq_ignore_ascii_case("svg"))
+                {
+                    plain_text(&svg_text(&source))
+                } else {
+                    plain_text(&source)
+                },
             }),
             Err(error) => messages.push(format!("scanned document could not be read: {error}")),
         }
@@ -346,13 +404,18 @@ fn check_use(
     messages: &mut Vec<String>,
     registry: &ClaimsRegistry,
     ledger: &EvidenceLedger,
+    register: &BTreeMap<String, Review>,
     used: &[bool],
 ) {
     for (index, statement) in registry.statements.iter().enumerate() {
         let in_use = used.get(index).copied().unwrap_or(false);
         match statement {
             Statement::Claim {
-                id, rung, requires, ..
+                id,
+                rung,
+                requires,
+                limits,
+                ..
             } => {
                 if in_use {
                     if *rung > registry.current_rung {
@@ -361,6 +424,23 @@ fn check_use(
                             rung.label(),
                             registry.current_rung.label()
                         ));
+                    }
+                    // The pre-release wording of the `now` rung was published
+                    // before the maintainer's review sheet existed; every
+                    // statement above it waits for that review.
+                    if *rung > Rung::Now {
+                        for limit in limits {
+                            if let Some(review) = register
+                                .get(limit)
+                                .filter(|review| !review.lets_a_claim_lean())
+                            {
+                                messages.push(format!(
+                                    "{id} is in use but leans on {limit}, whose review is {}: \
+                                     the maintainer reviews it first (register-review-sheet.md)",
+                                    review.describe()
+                                ));
+                            }
+                        }
                     }
                     for item in requires {
                         match status_of(ledger, item) {

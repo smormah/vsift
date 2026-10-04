@@ -8,6 +8,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- **The support matrix, the documents, the claims and the register review sheet** (P14 PR 9a, the first half of PR 9;
+  the R0 user guide and its CI checks are PR 9b; **nothing published**, no product code, workflow or setting changed).
+  [`support-and-resource-profiles.md`](docs/planning/support-and-resource-profiles.md) states decision F's four rules,
+  what each machine has shown for the published 0.1.0 on hosted runners and what it still needs, the words each cell may
+  use at each rung and what is never claimed; the **macOS wording** (statement CL-203, "supported on hosted-runner
+  evidence only") is a proposal for the maintainer. `docs/operations/install.md`, `SECURITY.md` (a supported-versions
+  table: only the newest `0.2.x` once published), the worker runbook and the skill guide are brought to the matrix and to
+  what P14 has run; the README gets facts and links only (its design is unchanged). The **claims check** now scans the
+  runbook, the launcher's messages, the matrix and the text of the README's eight SVG graphics, and each claim lists the
+  known limits it leans on: a claim above the `now` rung that is in use fails while one is pending or rejected. The
+  [register review sheet](docs/planning/register-review-sheet.md) puts the thirty entries the claims lean on, seven later
+  ones and the nine P11 and P13 readings on one page, each with a proposal; every review stays pending.
 - **P14 PR 3: the journeys on the published binary** (test support, a driver script and two
   workflows; no product code, release workflow or setting changed, **nothing published**).
   The real-tool checkpoints (`p06` to `p11`, `p13`) can now drive an installed `vsift` instead of
@@ -197,6 +209,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- **The npm launcher's refusal message (P14 PR 9a).** When no native package matches the machine (exit 127) it now
+  says "This release is built for:" and lists the three packages, where it said "The supported targets are:". A
+  message that ships in the package cannot follow the public-claims ladder, so it names the machines and claims
+  nothing about them. Exit codes and everything else are unchanged; a test pins the wording.
 - **SEC-T01 (P14 PR 5): the claim is narrowed, by the maintainer's decision of 2026-10-03; the
   hostile stand-in provider was not written** (decision E, option 4; documents and the evidence
   ledger only, no code, nothing published). The automated safety check stopped the session that

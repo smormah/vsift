@@ -1123,3 +1123,64 @@ are accepted records and are not edited: **this note supersedes them on this poi
 (`PROC_THREAD_ATTRIBUTE_JOB_LIST`) or the host inside a kill-on-close job, which needs `unsafe` (forbidden) or a
 reviewed dependency and so an ADR, which the maintainer decides for R1. The kill test now ends a stray under its own
 private folder, prints what it ended and fails when a provider that is not suspended outlives its host.
+
+## Implementation note, 2026-10-04 (P14 PR 9a: the matrix, the documents, the claims and the register sheet)
+
+Delivered from "What P14 delivers" item 7 and the "Documentation" and "Governance" rows of the planned
+changes. PR 9 is delivered in **two pull requests**: **9a** (this note: the matrix, the documents, the claims
+and the register sheet) is an increment; **9b** (the R0 user guide in `docs/guide/` with its two CI checks) follows,
+and PR 9 is complete only when both are merged. No product code, release workflow or setting changed; nothing was
+published; the one shipped file that changed is the npm launcher's refusal message (below).
+
+- **The matrix.** [`support-and-resource-profiles.md`](../planning/support-and-resource-profiles.md) now carries decision
+  F's rules, the evidence each cell has shown for 0.1.0 and what it still needs, the words each cell may use by rung
+  (the registry's statements CL-201 to CL-209), the agent clients, and what is never claimed. It is scanned by the
+  claims check, as are the worker runbook, the launcher and the eight README graphics (the check reads the text, title
+  and description of an SVG, closing most of L-121). No document is listed as unscanned.
+- **Documents.** `install.md` (what has been run against its steps since P14 PR 2, the matrix, the upgrade and uninstall
+  walks), `SECURITY.md` (the supported-versions table), the worker runbook (the walked evidence, no controlled words
+  or banned phrases, headings and fenced blocks unchanged because the walk and the fuzz seeds read them), the skill guide
+  (batch 1, the matrix rule for clients; the skill itself is frozen and untouched) and, in the README, only facts and
+  links: the Platforms bullet, "isolated external processes" reworded because L-004 says nothing sandboxes them on a
+  desktop, GPT-6-Sol's 28 of 28 given with its "23 of 28 as run", and a matrix row in the documentation table. Its
+  design and graphics are untouched.
+- **The register review sheet.** [`register-review-sheet.md`](../planning/register-review-sheet.md): the thirty
+  entries, seven later ones the matrix and install guide also cite (L-109, L-111 to L-115, L-122) and the nine readings,
+  each with a proposed disposition. Three entries were stale and were corrected so the maintainer reviews current text
+  (L-004, L-035, L-038). **Every review stays `pending`**: it is the maintainer's.
+- **Enforcement (new).** Each claim lists the register entries its wording leans on (`limits`), and a claim above the
+  `now` rung that is in use fails `public-claims` while one is pending or rejected. Today no such claim is in use. The
+  rule is held by tests (`public_claims/check/tests.rs`, `register.rs`); `now`-rung wording published before the sheet
+  existed is not held by it.
+
+**Decisions taken inside this ADR, for the maintainer to confirm or overrule:**
+
+1. **The macOS wording (decision F left it to PR 9).** Proposed, registered as CL-203: "macOS 15 on Apple silicon is
+   supported on hosted-runner evidence only", always beside what it covers (the command line, a supplied transcript and
+   local speech recognition with the user's own Homebrew tools, from any of the five install routes), and what it does
+   not (no managed install, no agent trial, Homebrew's builds not reviewed, Gatekeeper untried, no Mac in the project's
+   hands). It replaces the plan's "supported for what the hosted run proves", which reads as a general statement to
+   someone skimming. Alternatives: keep the plan's words; call the cell a qualification target and say nothing more
+   (the fallback if the candidate's runs of RQ-01, RQ-02, RQ-04 or RQ-05 fail on macOS, and always available); or word
+   it "checked on hosted runners only" and keep the word out. Recommended: the registered wording.
+2. **The supported-versions table (SECURITY.md).** Policy, not evidence: from 0.2.0 only the newest `0.2.x` receives
+   fixes, as new patch versions with an advisory; candidates and 0.1.0 do not; the default branch gets fixes first. No
+   response time is promised. It is written now so that it is reviewed before it matters, and says it changes nothing
+   about 0.1.0.
+3. **The launcher's message.** "The supported targets are:" became "This release is built for:" in both refusals (exit
+   127), because a message that ships in the package cannot follow the claims ladder; a test pins that it names the three
+   packages and uses no controlled word. The launcher is in the scope of RQ-01, RQ-02, RQ-04, RQ-05 and RQ-19 (it was
+   already stale for the candidate by the PR 7 changes).
+4. **RQ-05 cannot be `passed` as written, and every cell statement needs it.** Its rule is "every stage passed"; P11's
+   durable stage is blocked on every hosted system ([L-113](../planning/known-limits.md#l-113)). The register sheet puts
+   three ways out; the recommendation is to record that the published binary's durable worker request is covered by the
+   load campaign and the runbook walk (RQ-09, RQ-12: a durable workspace on an ext4 volume with write barriers,
+   `os_crash_durable` publication), and to word the rule per system. It changes a pass rule, so it is the maintainer's.
+5. **The hosted Windows evidence is Windows Server 2025, not Windows 11.** The matrix says so beside CL-201; the Windows 11
+   evidence is the project's development machine (P08, P09 and P11 numbers, the Claude Code trials on a source-built
+   binary) and the Smart App Control try-out (RQ-17) when it is made.
+
+**What is weaker than it sounds.** The matrix is a reading of results for 0.1.0 on hosted runners; none is a result for the
+candidate, and the staleness rule means none will count for it. The claims check proves that a sentence has recorded
+evidence and a reviewed register, and that banned words are absent; it still cannot see that a sentence is true. SVG
+scanning reads the words a graphic shows, not that its roadmap is current. The review sheet's proposals are recommendations, not decisions.

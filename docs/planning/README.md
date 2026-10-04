@@ -50,6 +50,8 @@ Read these documents together:
     [public-claims registry](public-claims.json) (P14 PR 1).
 13. [User guide specification](user-guide-spec.md): the structure, rules and delivery of the
     guide for people using VSift (2026-10-02; the R0 part is built in P14 PR 9).
+14. [Register review sheet](register-review-sheet.md): the known limits the public claims lean
+    on, and the P11 and P13 readings, on one page for the maintainer's review (P14 PR 9a).
 
 The source code describes what exists. Accepted ADRs and the machine-checked delivery
 ledger describe approved direction. Existing ADRs remain intact. A reviewed design

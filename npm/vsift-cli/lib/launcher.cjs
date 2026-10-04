@@ -49,20 +49,25 @@ class LauncherFailure extends Error {
   }
 }
 
-function supportedTargets() {
+// The refusal messages name the machines the release is built for and make no
+// claim about how well each one works: the support matrix (P14 PR 9,
+// docs/planning/support-and-resource-profiles.md) is where a machine earns its
+// status, and a message that ships in a package cannot change its wording
+// with the claims ladder (ADR 0024 decision G).
+function builtTargets() {
   return Object.values(TARGETS)
     .map((target) => `  ${target.packageName} (${target.label})`)
     .join('\n');
 }
 
-/** The target for `platform` and `arch`, or a failure naming the supported ones. */
+/** The target for `platform` and `arch`, or a failure naming the machines this release is built for. */
 function selectTarget(platform, arch) {
   const target = TARGETS[`${platform} ${arch}`];
   if (target === undefined) {
     throw new LauncherFailure(
       EXIT_NOT_INSTALLED,
-      `VSift has no native build for this platform (${platform} ${arch}). The supported targets are:\n` +
-        `${supportedTargets()}\nSee ${INSTALL_GUIDE}`,
+      `VSift has no native build for this platform (${platform} ${arch}). This release is built for:\n` +
+        `${builtTargets()}\nSee ${INSTALL_GUIDE}`,
     );
   }
   return target;
@@ -115,8 +120,8 @@ function findPlatformPackage(target, version, resolve) {
       `The native package ${target.packageName}@${version} is not installed.\n` +
         'It is an optional dependency of vsift-cli. It is missing when optional dependencies were omitted ' +
         '(for example --omit=optional or --no-optional) or the lockfile was made on another platform.\n' +
-        `Reinstall vsift-cli@${version} with optional dependencies included. The supported targets are:\n` +
-        `${supportedTargets()}\nSee ${INSTALL_GUIDE}`,
+        `Reinstall vsift-cli@${version} with optional dependencies included. This release is built for:\n` +
+        `${builtTargets()}\nSee ${INSTALL_GUIDE}`,
     );
   }
   const manifest = readJson(manifestPath, `The manifest of ${target.packageName}`);

@@ -1,20 +1,115 @@
-# R0 qualification and resource profiles
+# Support matrix and resource profiles
 
-Status: accepted starting targets under ADR 0005; public support begins only after P14.
-Date: 2026-09-10.
+Status: **matrix updated 2026-10-04 (P14 PR 9a)**; resource profiles from 2026-09-10, extended by
+later packets. The matrix is [ADR 0024](../decisions/0024-r0-qualification-and-release-candidate.md)
+decision F (confirmed by the maintainer on 2026-10-02) read against the evidence recorded in the
+[evidence ledger](p14-evidence-ledger.json) and the [P14 plan](p14-qualification.md). Public
+support begins only after P14 ([ADR 0005](../decisions/0005-r0-scope-and-qualification-profiles.md)):
+until then every machine below is an **R0 target**, and the public documents say so.
 
-## Qualification targets
+## 1. What a cell means
 
-| Profile | Target | Filesystem | Required qualification |
+A cell earns the word "supported" when, **for the R0 release's own bytes**, all four rules hold:
+
+1. **Clean installs.** The packages install from the real npm registry on a scrubbed hosted
+   image with npm, pnpm, Yarn and Bun (evidence item RQ-01).
+2. **The archive.** The extracted native archive runs (RQ-02).
+3. **The journeys.** The installed binary completes the supplied-transcript journey and the
+   local-speech journey with that system's documented tools (RQ-05).
+4. **The guide was walked.** The install guide's install, upgrade and uninstall steps were
+   walked (RQ-04).
+
+Four further rules come with it:
+
+- **A named agent client counts only on the system it was trialled on.** A model that was not
+  trialled is untested, whatever it can do.
+- **Anything short of the rules is a qualification target.** A machine outside the table is
+  unsupported and fails clearly: the npm launcher exits 127 and names the machines it is built for.
+- **The word "supported" is a statement about evidence, not a service promise.** Nobody is on call,
+  and every number was measured on a synthetic corpus and on hosted hardware unless the text says
+  otherwise.
+- **Evidence belongs to a version and a commit.** A run of 0.1.0 shows what 0.1.0 did; the release
+  candidate and the release each repeat it on their own bytes, or carry it only where nothing in its
+  scope changed (the ledger's staleness rule, [`delivery-governance.md`](delivery-governance.md)).
+
+The exact sentences each cell may use, and the evidence items that must be `passed` before it may
+use them, are in the [public-claims registry](public-claims.json): statements CL-201 to CL-209 for the
+release rung, none of them in use today. The Governance job refuses a controlled word outside a
+registered statement, a statement above the current rung and a statement whose evidence is not
+`passed` (`cargo run --locked -p vsift-governance -- public-claims`). That proves recorded evidence
+and absent banned words, not that a sentence is true ([L-101](known-limits.md#l-101)).
+
+## 2. The matrix today
+
+Results are for the **published 0.1.0** on hosted runners and are dated in the
+[P14 plan](p14-qualification.md) (sections 15, 17 and 18). They are the "before" picture: nothing
+below is a result for the release candidate.
+
+| Machine | Install paths | Tools | Shown for 0.1.0 | Still to show for the release's bytes |
+| --- | --- | --- | --- | --- |
+| **Windows 11 x64** (target: 25H2, `x86_64-pc-windows-msvc`, local NTFS) | npm, pnpm, Yarn, Bun; the archive | Your own FFmpeg, FFprobe and whisper.cpp; no managed install | Rules 1, 2 and 4 passed (RQ-01, RQ-02, RQ-04) and both journeys of rule 3 ran, on a hosted **Windows Server 2025** image with the repository's pinned tool builds. The P08, P09 and P11 numbers and the Claude Code trials (on a source-built binary) come from the maintainer's Windows 11 machine | The same on the candidate and the release; RQ-05 as a whole (see below); the clean-install agent round with Claude Code (RQ-15); the Smart App Control try-out (RQ-17) |
+| **Ubuntu 24.04 x64** (`x86_64-unknown-linux-gnu`, glibc 2.35 or later, OpenSSL 3; local ext4 for durable sessions) | The same | Managed (`setup install`, or offline with `--artifact-dir`) or your own | Rules 1, 2 and 4 passed; the offline install with the real reviewed files (RQ-03) and the managed install from the publishers (RQ-06) passed; both journeys ran with the managed tools | RQ-05 as a whole; the two fault campaigns on the candidate (RQ-11); the clean-install agent round with Codex in a Linux container (RQ-15) |
+| **macOS 15 on Apple silicon** (`aarch64-apple-darwin`, local APFS) | The same | Your own only; no managed install | Rules 1, 2 and 4 passed, and both journeys ran, on a hosted macOS 15 image with **Homebrew's** FFmpeg 9.0.1 and whisper-cpp 1.9.2, which VSift does not review ([L-114](known-limits.md#l-114)) | RQ-05 as a whole. No agent trial; the Gatekeeper try-out is untried (no Mac is available to the project) |
+| **Worker host, Ubuntu 24.04 x64** (local ext4 with write barriers) | The same | The reviewed tools | The load ladder, a 100-request batch and a mixed soak (RQ-09) and the runbook walked step by step (RQ-12) passed for 0.1.0, in the hardened container and under systemd | A **qualification target**, not claimed: no evidence shows that the strict profile contains an exploited decoder or provider (RQ-14 waived, [L-068](known-limits.md#l-068)) |
+| Another Linux on x64 | The same | Your own | Nothing | Not a target: the binary may run, and nobody has tried |
+| Linux on Arm, Intel Macs, Windows on Arm, Windows 10, Alpine and other musl Linux | None | None | Nothing | Unsupported: the launcher says so and exits 127 |
+
+**RQ-05, in one paragraph.** Its pass rule is "every stage passed". For 0.1.0 all 53 stages that can run on a
+hosted runner passed on all three systems, and one stage, P11's durable workspace, was blocked everywhere:
+off Ubuntu by design (the durable profile exists only there) and on the hosted Ubuntu runner because its disk
+is mounted without write barriers ([#258](https://github.com/smormah/vsift/issues/258),
+[L-113](known-limits.md#l-113)). The item is therefore `running`, not `passed`, and the claims that need it
+stay unusable until the maintainer records what covers that stage or the stage runs on a disk that has
+barriers. Nothing here hides that: it is the reason no cell can earn its word yet.
+
+**What the hosted evidence is not.** Hosted runners are shared virtual machines that carry a Rust
+toolchain and other developer tools, so a "clean install" job proves there is no hidden dependency on them,
+not that a person's machine works ([L-112](known-limits.md#l-112)). Windows 11 is not a hosted image. No macOS
+machine has been used by a person. Windows Smart App Control and macOS Gatekeeper have never been seen
+blocking or warning on a VSift file ([L-098](known-limits.md#l-098)); the install guide's section 4 is written from
+the vendors' documentation. All evidence is for a synthetic corpus: real recordings are untried
+([L-020](known-limits.md#l-020), [L-022](known-limits.md#l-022), [L-028](known-limits.md#l-028)).
+
+## 3. The words each cell may use, by rung
+
+The registry's three rungs ([ADR 0024](../decisions/0024-r0-qualification-and-release-candidate.md)
+decision G) decide what a public document may say. The rung is `now` today; the maintainer moves it.
+
+| Machine | `now` (0.1.0 pre-release, today) | `candidate` (0.2.0-rc.N) | `after_p14` (0.2.0 published, ledger complete) |
 | --- | --- | --- | --- |
-| Desktop Windows | Windows 11 25H2 x64, `x86_64-pc-windows-msvc` | Local NTFS | CLI, setup, ephemeral sessions, native provider lifecycle, cancellation and process-crash recovery |
-| Desktop macOS | macOS 15 arm64, `aarch64-apple-darwin` | Local APFS | Same ephemeral desktop behavior; report available process/resource confinement |
-| Strict worker Linux | Ubuntu 24.04 LTS x86-64, `x86_64-unknown-linux-gnu` | Local ext4 | Headless job/batch, cgroup-v2/container limits, durable recovery and shutdown after P10/P11 fault qualification (P11 record: [p11-worker-host.md](p11-worker-host.md); deployment: [worker-host runbook](../operations/worker-host.md)) |
+| Windows 11 x64 | R0 target | No cell gets the word; the document says "release candidate under qualification" | CL-201, which needs RQ-01, RQ-02, RQ-04, RQ-05, RQ-15 and RQ-17 passed; carries "Smart App Control untried" if the try-out was waived |
+| Ubuntu 24.04 x64 | R0 target | The same | CL-202, which needs RQ-01 to RQ-06, RQ-11 and RQ-15; durable sessions are a separate statement, CL-207 (RQ-11) |
+| macOS 15 on Apple silicon | R0 target | The same | CL-203, which needs RQ-01, RQ-02, RQ-04 and RQ-05; stays a qualification target if the hosted run does not pass. **The wording is not decided**: it is proposed in the PR 9a note of ADR 0024, for the maintainer |
+| Worker host | Qualification target | Qualification target | Not claimed (CL-208 stays unused: RQ-14 is waived, not passed) |
 
-Windows and macOS worker use may be qualified later, but R0 makes no strict-worker
-claim for them. Linux desktop use and other distributions may work without an R0
-guarantee. Network filesystems are explicitly unqualified. The release matrix records
-exact OS updates, Rust target, FFmpeg/whisper.cpp build, filesystem and host controls.
+**Agent clients.** The skill was trialled with **Claude Code on Windows 11** (Claude Opus 5.5 in the review
+tier, Claude Sonnet 5.5 in the compact tier) and **Codex in a Linux container** (GPT-6-Astra, GPT-6-Sol): the
+results and their limits are in [the skill guide](../agents/skill.md). Codex on Windows is not supported
+([#204](https://github.com/smormah/vsift/issues/204), [L-076](known-limits.md#l-076)); Claude Haiku 4.5 and
+GPT-6-Luna are below the line ([L-082](known-limits.md#l-082), [L-084](known-limits.md#l-084)); the skill has
+not been trialled on macOS; any other client or model is untested. The statements CL-204 and CL-205 name the
+two clients and need RQ-15, the clean-install round, which has not run on a candidate.
+
+**Runtimes.** Installing through a package manager needs Node.js 22 or later, or Bun 1.2 or later, to run the
+launcher; the native archive needs neither.
+
+## 4. Not claimed, whatever the cell
+
+No document may say, until the evidence exists: readiness for production use on real recordings; that the
+worker's strict profile contains an exploited decoder or a malicious provider (R0 makes no such claim:
+decision E, option 4, 2026-10-03); isolation between tenants; trust in the publisher of an unsigned
+executable; durability beyond Ubuntu 24.04 with local ext4, or after the loss of a disk or a host;
+managed installation beyond Ubuntu 24.04 x64; Codex on Windows; any model or client that was not trialled; a
+citation validity of 100% for the compact tier. The registry's banned phrases (BAN-01 to BAN-09) hold these
+mechanically in every scanned document.
+
+## 5. Targets and filesystems
+
+Windows and macOS worker use may be shown later; R0 makes no worker claim for them, and a durable
+workspace is refused there with `MISSING_CAPABILITY`. Linux desktop use and other distributions may work
+without any R0 evidence. Network filesystems are explicitly outside every claim. The release matrix records
+exact operating-system updates, Rust target, FFmpeg and whisper.cpp builds, filesystem and host controls for
+each run.
 
 ## Execution profiles
 
@@ -95,7 +190,7 @@ The initial candidate is a pinned CPU whisper.cpp runtime with the multilingual 
 model. P07 measures word error rate, critical identifiers/numbers, latency and memory
 against F08 and the wider corpus. It becomes the default only if the recorded gates
 pass. Imported transcripts avoid the model entirely. GPU and larger model profiles
-remain optional, explicit and independently qualified.
+remain optional, explicit and independently measured.
 
 Reviewed profiles (P07 increment 3c, decision D6), chosen by the identity of the
 registered model file:
@@ -106,20 +201,20 @@ registered model file:
 | `base_q5_1` (optional) | `ggml-base-q5_1.bin`, 59,707,625 B | reported only | RTF 0.409; 250 MiB; WER 4.06% clean, 46.2% F08; load 177 ms |
 
 `base` is the measured default (maintainer decision, 2026-09-25): speech with
-background noise is qualified on critical terms only, and a noise word-error gate
-waits for the noisy-speech fixture set of issue #150. See the
+background noise is gated on critical terms only, and a noise word-error gate
+waits for the noisy-speech fixture set of issue #150 ([L-020](known-limits.md#l-020)). See the
 [qualification record](p07-asr-qualification.md). A run's recognizer threads are the
 machine's parallelism, at most 8, and count against CPU admission; the gates are
 measured at 4.
 
-## Evidence required to claim support
+## What each part of the evidence shows
 
 P03's [filesystem feasibility record](p03-storage-feasibility.md) records native API
 experiments and missing OS/storage crash evidence. [ADR 0010](../decisions/0010-storage-qualification-gate.md)
-accepts ephemeral desktop qualification as the P03 target. PR #42 (`3eef9b7`)
-qualifies process-crash-consistent internal publication through native
+accepts ephemeral desktop evidence as the P03 target. PR #42 (`3eef9b7`)
+shows process-crash-consistent internal publication through native
 tests on each protected OS; it does not expose a user command or claim OS-crash
-durability. Since P10 PR 4 the **durable profile** is qualified: Ubuntu 24.04
+durability. Since P10 PR 4 the **durable profile** is shown on one system: Ubuntu 24.04
 (`/etc/os-release`) with the session root on local ext4 mounts that keep write
 barriers (`/proc/self/mountinfo`), and nothing else. There a durable session,
 requested through the engine API (`IngestRequest::durability`; the command line
@@ -129,37 +224,44 @@ has made it survive an OS crash or power loss, as the
 [P10 durable-publication record](p10-durable-publication.md) shows. Every other
 profile, and every ephemeral session, reports `process_crash_consistent`, and a
 durable request there fails with `MISSING_CAPABILITY` before anything changes.
-Storage that ignores flushes and the loss of the disk or host stay outside the
-guarantee (known limits L-056 and L-057). P11 delivered the worker host and its
-[qualification record](p11-worker-host.md); the strict worker profile still needs P14
-and the adversarial SEC-T01 evidence deferred as technical debt (L-068, moved to R1 by the
-maintainer on 2026-10-03: R0 claims no containment of a hostile provider).
+Storage that ignores flushes ([L-056](known-limits.md#l-056)), the loss of the disk or
+host ([L-057](known-limits.md#l-057)) and an Ubuntu 24.04 user space on a kernel the
+campaign did not run ([L-058](known-limits.md#l-058)) stay outside what was shown. P11
+delivered the worker host and its [qualification record](p11-worker-host.md); the
+adversarial half of SEC-T01 is not produced in R0 ([L-068](known-limits.md#l-068), moved to R1
+by the maintainer on 2026-10-03), so R0 makes no claim that the worker's strict profile
+contains an exploited decoder or a malicious provider.
 
-- Fresh-machine installation without Rust, upgrade, rollback and uninstall.
+What the release as a whole must show, each part with its evidence item in the
+[P14 plan](p14-qualification.md):
+
+- Fresh-machine installation without Rust, upgrade, rollback and uninstall (RQ-01 to RQ-04).
 - All deterministic PR checks plus platform process/filesystem conformance tests.
-- Crash injection and source-preservation proof on the named filesystem.
-- Resource overload, cancellation, descendant cleanup and handle-leak tests.
+- Crash injection and source-preservation proof on the named filesystem (RQ-11).
+- Resource overload, cancellation, descendant cleanup and handle-leak tests (RQ-08, RQ-09).
 - End-to-end fixture corpus accuracy, compact-agent evaluation, and the complete
-  video-to-grounded-handoff lifecycle through named Codex and Claude Code clients.
-- Release artifact provenance, inventory, notices and unresolved finding review.
+  video-to-grounded-handoff lifecycle through named Codex and Claude Code clients
+  (RQ-05, RQ-15, RQ-16).
+- Release artifact provenance, inventory, notices and unresolved finding review (RQ-13, RQ-19).
 
-Until those results exist, documentation must say “qualification target” rather than
-“supported platform” or “production ready.”
+Until the rules of section 1 are met for a machine, documentation says "qualification
+target" for it, and no document claims readiness for production use.
 
-P02 adds a PR qualification job for the strict-worker process boundary. It runs the
+P02 adds a PR check of the worker process boundary. It runs the
 process contract inside a read-only, networkless Ubuntu 24.04 container with explicit
 CPU, memory, swap and PID limits and no added capabilities. The test verifies that a
 new process group remains inside the worker cgroup, induces observable CPU throttling,
 reaches the PID ceiling and confirms that a bounded over-limit allocation cannot
-complete successfully. That proves the supervisor's strict-mode attestation and
-fail-closed split; it is not the full P11 worker or P14 release qualification.
+complete successfully. That proves the supervisor's attestation and
+fail-closed split; it is not the full P11 worker or P14 release evidence.
 
 P04's internal desktop media profile is fixed in [ADR 0012](../decisions/0012-p04-source-media-profile.md)
 and the [qualification record](p04-media-qualification.md): 20 GiB/600 s source
 staging, four-hour/32-stream/16-megapixel probe, 15- or 30-second provider deadlines,
 bounded stdout/stderr and a ten-second mono PCM maximum. The native Windows/NTFS
-real-media run is development evidence only; P14 owns supported-platform and strict
-malicious-decoder qualification.
+real-media run is development evidence only; the matrix above is where P14 states
+what each system has shown, and the media-bound abuse runs are RQ-10 (whose result for 0.1.0
+and the fixes that followed are in the plan, section 18).
 
 ## R1 profile planning
 

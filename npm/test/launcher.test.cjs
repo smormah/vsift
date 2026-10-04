@@ -116,15 +116,22 @@ test('the manifest lists every target as an exact-version optional dependency', 
   assert.deepEqual(manifest.bin, { vsift: 'bin/vsift.cjs' });
 });
 
-test('an unsupported platform names every supported target', () => {
+test('an unsupported platform names every machine the release is built for, and claims nothing about them', () => {
   for (const [platform, arch] of [['linux', 'arm64'], ['darwin', 'x64'], ['win32', 'arm64'], ['freebsd', 'x64']]) {
     assertFailure(
       () => launcher.selectTarget(platform, arch),
       launcher.EXIT_NOT_INSTALLED,
       `${platform} ${arch}`,
+      'This release is built for:',
       '@vsift/win32-x64',
       '@vsift/darwin-arm64',
       '@vsift/linux-x64',
+    );
+    // The message ships in the package, so it cannot follow the claims ladder (ADR 0024 decision G):
+    // it names the targets and uses none of the words the public-claims registry controls.
+    assert.throws(
+      () => launcher.selectTarget(platform, arch),
+      (error) => !/\b(supported|stable|qualified|certified|guaranteed)\b/i.test(error.message),
     );
   }
 });

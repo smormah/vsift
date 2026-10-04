@@ -1,32 +1,42 @@
 # Installing VSift
 
-Status: user guide, 2026-10-01 (P13 PR 11, updated by PR 12 for the published pre-release;
-[ADR 0023](../decisions/0023-r0-distribution-managed-installation-and-handoff-check.md)).
+Status: user guide, updated 2026-10-04 (P14 PR 9a; written by P13 PR 11 and PR 12 for the
+published pre-release; [ADR 0023](../decisions/0023-r0-distribution-managed-installation-and-handoff-check.md)).
 **VSift 0.1.0 is a pre-release, published on 2026-10-01.** It is available as the npm
 packages under the dist-tag `next`, with npm provenance, and as native archives on a GitHub
 pre-release, each carrying a Sigstore build-provenance attestation. It is not a stable
 release, and no platform is "supported" yet (section 1). A plain `npm install vsift-cli`
 installs the empty `0.0.0` placeholder, which stays `latest` until a stable release, so
-always ask for `vsift-cli@next`. The steps below were qualified on hosted runners against a
-local registry; the one install from the real registry so far was npm on a Windows 11
-development machine, and no coding agent has used the published package (the record is
-[`p13-distribution.md`](../planning/p13-distribution.md), "First publish"). Building from
+always ask for `vsift-cli@next`. **What has been run against these steps.** In P13 they ran on
+hosted runners against a local registry. Since 2026-10-02 (P14) the published 0.1.0 has also
+been installed from the real registry with npm, pnpm, Yarn and Bun on hosted Windows, macOS and
+Ubuntu runners, its three archives have been downloaded, checked, extracted and run, the offline
+install of the managed tools has been run with the real files, the upgrade and uninstall steps
+(sections 7 and 8) have been walked, and the same bytes have run the supplied-transcript and
+local-speech journeys on all three systems. Those are results for 0.1.0 only (the release
+candidate and the release repeat them on their own bytes), on hosted virtual machines, which
+carry developer tools a clean machine lacks ([L-112](../planning/known-limits.md#l-112)). No
+person has run them on a Mac, and nobody has seen Smart App Control or Gatekeeper react to a
+VSift file (section 4). The records are the [P14 plan](../planning/p14-qualification.md)
+(sections 15 to 18) and [`p13-distribution.md`](../planning/p13-distribution.md). Building from
 source ([`development.md`](../development.md)) also works.
 
 ## 1. What is and is not supported
 
-| Machine | Status | Notes |
-| --- | --- | --- |
-| Windows 11 x64 | R0 target | npm package `@vsift/win32-x64`. Bring your own FFmpeg, FFprobe and whisper.cpp (section 5.2) |
-| macOS 15 on Apple silicon | R0 target | `@vsift/darwin-arm64`. Bring your own tools (section 5.2). No media, speech or evidence check has run on macOS yet ([L-035](../planning/known-limits.md#l-035)) |
-| Ubuntu 24.04 on x64 | R0 target, and the only machine where VSift installs its own tools | `@vsift/linux-x64`; needs glibc 2.35 or later and OpenSSL 3 (`libssl.so.3`), which Ubuntu 22.04 and 24.04 have. The managed whisper.cpp build also needs the OpenMP runtime `libgomp.so.1` (Ubuntu package `libgomp1`, which a minimal container image lacks; section 5.1) |
-| Another Linux on x64 with glibc 2.35 or later and OpenSSL 3 | not a target | The binary is built on Ubuntu 22.04 and may run; it has not been tested |
-| Linux on Arm, Intel Macs, Windows on Arm, Windows 10, Alpine and other musl Linux | not supported | The launcher says so and exits 127 (section 10) |
+| Machine | Status today | What has been shown (0.1.0, hosted runners) | Notes |
+| --- | --- | --- | --- |
+| Windows 11 x64 | R0 target | Installs with all four package managers, the archive runs and both journeys ran, on a hosted Windows Server 2025 image; the project's Windows 11 development machine ran the agent trials | npm package `@vsift/win32-x64`. Bring your own FFmpeg, FFprobe and whisper.cpp (section 5.2). Smart App Control is untried (section 4) |
+| macOS 15 on Apple silicon | R0 target | The same checks passed on a hosted macOS 15 image with Homebrew's tools, which VSift does not review ([L-114](../planning/known-limits.md#l-114)); no person has run VSift on a Mac | `@vsift/darwin-arm64`. Bring your own tools (section 5.2). Gatekeeper is untried (section 4) |
+| Ubuntu 24.04 on x64 | R0 target, and the only machine where VSift installs its own tools | The same checks passed, with the managed tools installed by the binary itself, also offline from the real files | `@vsift/linux-x64`; needs glibc 2.35 or later and OpenSSL 3 (`libssl.so.3`), which Ubuntu 22.04 and 24.04 have. The managed whisper.cpp build also needs the OpenMP runtime `libgomp.so.1` (Ubuntu package `libgomp1`, which a minimal container image lacks; section 5.1) |
+| Another Linux on x64 with glibc 2.35 or later and OpenSSL 3 | not a target | Nothing | The binary is built on Ubuntu 22.04 and may run; it has not been tested |
+| Linux on Arm, Intel Macs, Windows on Arm, Windows 10, Alpine and other musl Linux | not supported | Nothing | The launcher says so and exits 127 (section 10) |
 
 - **"R0 target" means a target VSift was built and tested for**, not yet a supported
-  platform: the release matrix that earns the word "supported" is the next packet's work
-  ([L-035](../planning/known-limits.md#l-035)). What was run where is in
-  [`p13-distribution.md`](../planning/p13-distribution.md).
+  platform: the support matrix, [`support-and-resource-profiles.md`](../planning/support-and-resource-profiles.md),
+  states the four rules a machine must meet before it earns the word "supported", what each
+  machine has shown and what is still missing ([L-035](../planning/known-limits.md#l-035)).
+  What was run where is in [`p13-distribution.md`](../planning/p13-distribution.md) and the P14
+  plan.
 - **Managed installation** (`vsift setup install`, section 5.1) is qualified on Ubuntu
   24.04 x64 only (ADR 0023 decision E). On Windows and macOS you install FFmpeg,
   FFprobe, whisper.cpp and the speech model yourself and tell VSift where they are
@@ -34,7 +44,7 @@ source ([`development.md`](../development.md)) also works.
 - **A pre-release** has no stability promise beyond the versioned JSON contracts
   ([`cli-v1.md`](../contracts/cli-v1.md)). The readable text that commands print without
   `--json` is for people and may change. A stable release waits for the release
-  qualification of the next packet.
+  qualification of P14, which is in progress.
 - **Not signed.** The Windows and macOS executables carry no Authenticode signature and
   no Apple notarization. Section 4 says what that means for you and how to check a
   download instead.
@@ -419,8 +429,18 @@ folder.
 - **Sessions, configuration and managed tools** are kept. Going back to an older VSift is
   not supported: it may refuse a session a newer one wrote
   ([L-044](../planning/known-limits.md#l-044)).
+- **What was run.** P14 ran the npm upgrade on hosted runners with sessions, a retained bundle and a
+  registered configuration in place: the configuration came back byte for byte, an earlier session read
+  as before and a new session worked. Only 0.1.0 is published, so the upgrade was 0.1.0 over 0.1.0 and
+  0.1.0 to a locally built newer version, not a published newer release over 0.1.0
+  ([L-111](../planning/known-limits.md#l-111)); only npm was upgraded, and no pnpm, Yarn or Bun upgrade
+  was run.
 
 ## 8. Uninstall
+
+P14 walked this section on hosted Windows, macOS and Ubuntu runners after the upgrade run above: the
+managed tools removed, the package gone, VSift's own folders exactly the ones step 3 names, and
+deleting them left no trace; the evidence bundle, the registered tools and the source videos stayed.
 
 1. **Managed tools first, if you used them** (you need the `vsift` command for this):
    `vsift setup remove ffmpeg_ffprobe`, `vsift setup remove whisper_cli`, `vsift setup
@@ -505,7 +525,8 @@ If the launcher cannot run vsift it prints one message on stderr, starting with
 | 127 | No platform package for this machine: optional dependencies were omitted (`--omit=optional`, `--no-optional`), the lockfile was made without it, or the machine is not supported | Reinstall `vsift-cli` with optional dependencies included, on one of the machines in section 1 |
 | 126 | The platform package is refused or cannot start: another version, an executable that does not match its recorded digest (damaged or replaced), a damaged launcher package, or a start error (on Linux, glibc or OpenSSL 3 missing; on Windows, an executable path of 260 characters or more) | Reinstall `vsift-cli`; on Windows with a very long install path, install in a folder with a shorter path ([L-094](../planning/known-limits.md#l-094)) |
 
-The message names the package it expected, the version and the supported targets. The
+The message names the package it expected, the version and the three machines the release is
+built for (section 1). The
 digest check finds a damaged or mismatched package; it is not a defence against someone
 who can already write to the install folder ([L-093](../planning/known-limits.md#l-093)).
 
