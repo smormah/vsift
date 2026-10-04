@@ -1325,3 +1325,27 @@ Control and macOS prompts try-out, and the `latest` dist-tag) has not started an
 start automatically. The readings each pull request's note flagged for the maintainer remain
 open and none blocks completion (listed in the record), as do the debts carried out of P12
 and P11 (L-095, SEC-T01).
+
+## Note, 2026-10-04 (P14 PR 7b: refreshing a pinned artifact, #272)
+
+Status: **Accepted**; this note changes no accepted decision. It states the rule for refreshing a catalogue
+entry (the managed installation of section 3 and decision E), which the provisioning review
+([`p06-provisioning-source-review.md`](../planning/p06-provisioning-source-review.md), 2026-10-04 section)
+already implied and the first refresh candidate made concrete.
+
+- **A pin is a retained build.** The FFmpeg publisher keeps the last build of each month for two years and
+  only the last 14 daily builds. A catalogue entry pins a month-end build and sets `stop_new_plans_at` from
+  that build's retention (the pinned 2026-08-31 build: about 2028-08-31, stop date 2028-08-01). A daily build
+  is never pinned: every release that names it stops being installable about two weeks later
+  (`DOWNLOAD_FAILED`), and no honest stop date is that short. The offline route, `--artifact-dir`, helps only
+  someone who kept the file.
+- **There is still no mirror.** [ADR 0014](0014-progressive-dependency-setup.md)'s direct-origin rule (the
+  2026-09-13 clarification: VSift does not host, mirror or proxy provider binaries) stands: a copy kept by the
+  project would redistribute an LGPL-3 build, which needs its own decision (a superseding ADR) and is not
+  taken here.
+- **A refresh is a new catalogue revision with the review repeated for the new bytes** (provenance, digest,
+  size, inventory, configuration, the two archive bounds, licence text, hosted smoke) and the scan reading's
+  method for the new snapshot. The first candidate (`n9.0.2-22-g46d8f462ee`, a daily build) passed every hosted
+  check and is **not accepted**; the catalogue stays at `ubuntu-24.04-x86_64-2026-09-22-r2`
+  ([L-132](../planning/known-limits.md#l-132)). The archive bounds in the installer (the tar stream cap and
+  `MAX_XZ_ARCHIVE_BYTES`) are reviewed numbers: a larger build raises them by a recorded decision, not silently.

@@ -292,3 +292,98 @@ seconds for inference, and 16-kHz mono audio. The exact build prefixes are
 All values participate in plan acceptance. This is a reviewed decision derived
 from the hosted observations, not a production smoke result; D-06 stays open
 until the Rust transaction executes and cleans up this policy before activation.
+
+## 2026-10-04 refresh candidate: n9.0.2-22 (reviewed, **not accepted**)
+
+P14 PR 7b ([#272](https://github.com/smormah/vsift/issues/272); the reading is the addendum of
+[`p14-scan-reading-2026-10-02.md`](p14-scan-reading-2026-10-02.md)). The maintainer decided on
+2026-10-04 to refresh the reviewed FFmpeg. This section is the review of the newest build of the
+catalogue's variant, in the form of the review above; it does **not** change the catalogue, which
+still pins the 2026-08-31 build, and it is not a pin. Why the pin does not move yet is under
+"Retention" below.
+
+| Item | Shipped pin (catalogue revision `ubuntu-24.04-x86_64-2026-09-22-r2`) | Refresh candidate |
+| --- | --- | --- |
+| Release | [`autobuild-2026-08-31-13-27`](https://github.com/BtbN/FFmpeg-Builds/releases/tag/autobuild-2026-08-31-13-27), month-end | [`autobuild-2026-10-03-18-14`](https://github.com/BtbN/FFmpeg-Builds/releases/tag/autobuild-2026-10-03-18-14), a daily build published 2026-10-03T18:14:54Z |
+| Asset | `ffmpeg-n9.0.1-11-ge47273f4d9-linux64-lgpl-9.0.tar.xz` | `ffmpeg-n9.0.2-22-g46d8f462ee-linux64-lgpl-9.0.tar.xz` |
+| Bytes | 113,372,924 | 137,945,828 |
+| SHA-256 | `204fc02692b11249c3e688ad18538ce2939129a1fc6abc32a6b2638a024496cf` | `e1097ccc18f89e6723c0e3f31737c11636063f49b22902adaaa68ba414b7ff0e` |
+| Build scripts (BtbN) | `8267213e26c1031621e6e1210fe3aa4867214f6a` | `9acad4a9ef1583096af7836cc1e9c8cbcb4d3950` (65 commits later) |
+| FFmpeg source | `e47273f4d9227152dcbf543cebaf9e2430ddbcc4` (n9.0.1 plus 11) | `46d8f462eeb87ee1f704d8c44a0ee24fca471ad1` (n9.0.2 plus 22; 95 commits later) |
+| Entries / expanded bytes | 73 / 370,667,773 | 73 / 450,447,717 (66 regular files, 7 directories, no links) |
+| `bin/ffmpeg` | 116,038,416 bytes, `ed57193f…4ea20fc` | 142,612,616 bytes, `d37bafb28c3b738bcaf3aee2a5383820e58f218cae034487ebb4b3cfa6c41e47` |
+| `bin/ffprobe` | 115,829,520 bytes, `0e3357be…74137b7` | 142,383,176 bytes, `466152cc3d23806e44e77fecdfa42a32c145bb5892dcc63c5504d131c7e35992` |
+| `LICENSE.txt` | 7,651 bytes, `da7eabb7…4464768` | the same bytes (the LGPL version 3 text) |
+
+The archive was downloaded on 2026-10-04 over HTTPS by the repository's own bounded downloader into an
+ignored folder of a worktree (size capped at the publisher's, redirects HTTPS only), its SHA-256
+calculated independently and equal to the digest GitHub shows for the release asset, read through
+the archive index and the three selected files (nothing was extracted to disk or run), then deleted.
+
+- **Two reviewed bounds refuse it.** The tar stream cap in the catalogue (400,000,000 bytes) is below
+  the expanded size, and the XZ compressed-size cap `MAX_XZ_ARCHIVE_BYTES` (128 MiB, 134,217,728) is below
+  the archive. A pin of this build needs both raised (the evidence branch used 500,000,000 and 150 MiB,
+  157,286,400), each a reviewed decision on a bound that exists to stop a decompression bomb. If the
+  archive, the selected payload and the runtime copy exist at once, the installer's peak disk use for
+  this component rises from about 580 MB to about 710 MB (arithmetic from the sizes, not a measurement);
+  `install.md` advises 1 GB free, which would then be closer to the line.
+- **The recipe changed, not only the version.** BtbN's build scripts moved by 65 commits between the two
+  releases. The recorded configuration (`ffmpeg -L`'s `configuration` line, captured by the hosted
+  smoke) differs from the shipped build's by exactly three components, `--enable-librsvg`,
+  `--enable-lcms2` and `--enable-vapoursynth` (and the `--extra-version` date), which accounts for
+  the 22 percent growth: librsvg brings the GLib, Cairo and Pango libraries and a Rust runtime into a
+  static binary. VSift reaches none of them (it forces `-f mov` or `-f matroska`, allows only the `file`
+  protocol and builds its own filter graphs), but it is more third-party code in a binary whose
+  compiled-component licence and source inventory is already not claimed. Accepting this build needs that
+  inventory reviewed again for the three, which this review did not do.
+- **The upstream difference.** 95 commits, listed with their reachability in the addendum above: 17 touch
+  code VSift runs for a supported stream. None of the 47 records of the scan reading is fixed only here.
+
+**Hosted evidence on the candidate** (branch `p14-pr7b-ffmpeg-candidate-evidence`, commit `f4695c3`:
+the pins, the bounds, the version strings and the catalogue revision `…-2026-10-04-r3`; **not part of
+the pull request and never to be merged**; run on Ubuntu 24.04 runners with no repository secret):
+
+| Workflow and run | Result |
+| --- | --- |
+| `P06 Ubuntu candidate smoke`, [37164086257](https://github.com/smormah/vsift/actions/runs/37164086257) | Passed. The five guardrail tests; the production layout checks (whisper.cpp archive 4.40 s, FFmpeg archive **120.80 s**, model 28.62 s); FFmpeg and FFprobe report `n9.0.2-22-g46d8f462ee-20261003`; F01 media operations and model-backed inference passed in **1.70 s**; largest child peak RSS across the smoke **293,188 KiB** (the shipped build: 290,820 and 291,688 KiB in the two runs above). Tone audio only, as before. |
+| `P13 managed smoke`, [37164083942](https://github.com/smormah/vsift/actions/runs/37164083942) | Passed, three jobs, from the source build of the branch. The pinned smoke before activation (layout, banners, media fixture, speech fixture and recheck in 4.8 s, and the banner-mismatch negative control); the real `setup plan`, `setup install`, `setup check` and a rerun (`[ok] FFmpeg … [managed version]`; warm `setup check` 0.72 s, first `frame get` 0.37 s, warm 0.24 s, as in L-087); the install end to end with the two kills and the local-ASR journey (61.5 s) |
+| `P07 local ASR`, [37164090634](https://github.com/smormah/vsift/actions/runs/37164090634) | See [`p14-qualification.md`](p14-qualification.md) section 19. |
+
+**Retention.** BtbN's README (read 2026-10-04): the last build of each month is kept for two years and the last
+14 daily builds are kept. This candidate is a daily build: it will be deleted when 14 newer daily builds exist,
+about 2026-10-17. A catalogue that pins it stops being installable then, for every VSift release that names it
+(`setup install` fails closed at the download with `DOWNLOAD_FAILED`; nothing activates; installed tools keep
+working), and the catalogue's `stop_new_plans_at` (2028-08-01) would still say it is good until 2028, which
+would be false. A clock short enough to be true would make every test that plans an install fail on that day.
+So the rule is the one of 2026-09-13, stated again: **pin a month-end build only.**
+
+**Procedure for a re-pin** (a new catalogue revision). The intended next pin is **the last build of October 2026
+(2026-10-31, kept two years)** once it exists. When: **before the candidate cut, if the cut can wait for it** (a
+catalogue change is a change under `crates` and makes every evidence item scoped to it stale, so a re-pin after
+the cut means a second candidate); if the candidate is cut before 2026-11-01 it ships the shipped pin and the
+re-pin waits until **after the stable**, not between the two. What blocks it: the build existing and being on
+a line the reading covers (a new upstream line is a new review); the maintainer accepting the raised bounds
+and the compiled-component inventory; the hosted smokes and the pull request's CI passing; the reading for it.
+The reasoning, and what existing installs do, are in the addendum's "The next pin" in
+[`p14-scan-reading-2026-10-02.md`](p14-scan-reading-2026-10-02.md#the-next-pin-and-what-existing-installs-do).
+
+1. Choose the build: the last release of the month, variant `linux64-lgpl` of the newest release branch (or the line the
+   catalogue then follows); read the scan reading's method for it (`tools/p14-campaigns/ffmpeg-ancestry.cjs`)
+   and record the numbers beside the previous ones.
+2. Download it with the bounded downloader; record bytes, SHA-256 (equal to the publisher's digest), the
+   inventory (entries, expanded bytes, links), the three selected files and the build scripts' commit;
+   compare the recorded `configuration` line with the shipped build's.
+3. Raise the two bounds only as far as the new archive needs, with a note here; update the catalogue (the
+   literals, the revision, the stop date from the new retention), `p06_ffmpeg_archive.rs`, the two Python
+   smoke pins, the version strings of the snapshot tests and the non-frozen schema examples. The frozen
+   0.1.0 examples, the corpus and the agent-trial container stay as they are. The evidence branch's single
+   commit (`f4695c3`) is the template for exactly these edits.
+4. Run the same hosted workflows on the branch (`P13 managed smoke`, `P06 Ubuntu` and `P06 Windows candidate
+   smoke`, `P07 local ASR`), then `P14 journeys` and the campaigns on the release candidate that carries it.
+5. Record the retention (the month-end date and the two-year end) and the new stop date.
+6. Say in the release notes that the new pin reaches new installs only: an installed FFmpeg that verifies is
+   not replaced (`setup remove ffmpeg_ffprobe`, then an install, replaces it).
+
+This candidate is **not accepted**: the maintainer has not accepted it into the catalogue, the retention
+rule forbids pinning it, two bounds and the compiled-component inventory are open, and the candidate-time
+reading of RQ-13 is not done.

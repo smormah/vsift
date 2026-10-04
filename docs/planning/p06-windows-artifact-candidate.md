@@ -156,3 +156,35 @@ tone sentinel. It also did not measure peak resources, inspect all CPU variants,
 test Windows 11, grant an installer trust anchor, validate notice handling or
 complete the D/E2E gates. The runner's unprivileged checkout is not a sandbox
 claim for arbitrary third-party executables.
+
+## 2026-10-04 refresh candidate: n9.0.2-22 (reviewed, **not accepted**)
+
+P14 PR 7b ([#272](https://github.com/smormah/vsift/issues/272)). The repository's Windows jobs
+(`tools/p06_windows_candidate_smoke.py`, which `tools/p07_local_asr_tools.py` and the P07, P14
+published-artifact and P14 local-upgrade jobs reuse) pin the **same** 2026-08-31 snapshot as the Ubuntu
+catalogue, so a refresh moves both; the Windows build is a pin of the test jobs only (Windows has no
+managed install: ADR 0023 decision E). The candidate is the Windows twin of the Ubuntu one, from the same
+release; the full review, the retention rule and the re-pin procedure are in
+[`p06-ubuntu-artifact-candidate.md`](p06-ubuntu-artifact-candidate.md#2026-10-04-refresh-candidate-n902-22-reviewed-not-accepted).
+
+| Item | Shipped pin | Refresh candidate |
+| --- | --- | --- |
+| Asset | `ffmpeg-n9.0.1-11-ge47273f4d9-win64-lgpl-9.0.zip` of `autobuild-2026-08-31-13-27` | `ffmpeg-n9.0.2-22-g46d8f462ee-win64-lgpl-9.0.zip` of `autobuild-2026-10-03-18-14` |
+| Bytes | 147,007,942 | 171,472,879 |
+| SHA-256 | `2484854ad6988d34560f4e6ea7a6ecb9dde0af7c229d2591815d056b04ec4f56` | `3fc85bae9f9643a03d15c2d2de12fb017dcd9fdabe819bfb1a94f54fea108714` |
+| Entries / expanded bytes | 48 / 358,125,718 | 48 / 418,427,542 |
+| `bin/ffmpeg.exe` | 114,400,768 bytes | 134,499,840 bytes, `c15ef2e38620f3efb81355c2b25afe054e93a69ce7300a35e640508e92954aa8` |
+| `bin/ffprobe.exe` | 114,198,528 bytes | 134,300,160 bytes, `46a86ca9eb512c2989354ebe68eb1562fcb73b16d8041d54d54b5f4b244f958c` |
+| `LICENSE.txt` | 7,651 bytes, `da7eabb7…4464768` | the same bytes |
+
+The archive was downloaded and read like the Ubuntu one (bounded, HTTPS, SHA-256 equal to the
+publisher's digest, index and three files read, nothing run), then deleted. The hosted compatibility smoke on
+the candidate (branch `p14-pr7b-ffmpeg-candidate-evidence`, commit `f4695c3`, never to be merged)
+**passed**: [`P06 Windows candidate smoke` run 37164088495](https://github.com/smormah/vsift/actions/runs/37164088495)
+on Windows Server 2025 (image `windows-2025-vs2026` 20260925.250.1): archive and model hashes verified,
+FFmpeg and FFprobe reporting `n9.0.2-22-g46d8f462ee-20261003`, FFprobe reading F01, FFmpeg extracting 16 kHz
+mono audio, whisper.cpp loading its model and transcribing the tone. `P07 local ASR` ran the Windows
+adapter and checkpoint on the candidate too ([`p14-qualification.md`](p14-qualification.md) section 19). It
+is a tone-audio compatibility smoke, not a real-speech or Windows 11 qualification, and the candidate is
+**not accepted**, for the reasons given for Ubuntu (a daily build kept about two weeks, three added
+libraries in the recipe).

@@ -150,7 +150,7 @@ disposition of every finding:
 | --- | --- |
 | Cargo | `cargo deny check` (advisories, licences, bans, sources) for the workspace and the fuzz crate; the lockfile at the commit |
 | GitHub | Open CodeQL, Dependabot and secret-scanning alerts by severity; the pinned actions' own advisories |
-| Native tools | The reviewed FFmpeg build (BtbN, 9.0.1, the 2026-08-31 snapshot), whisper.cpp v1.9.2 and the `base` model: advisories for those versions from their publishers and public databases |
+| Native tools | The reviewed FFmpeg build (BtbN, 9.0.1, the 2026-08-31 snapshot), whisper.cpp v1.9.2 and the `base` model: advisories for those versions from their publishers and public databases; FFmpeg's fixes are read by ancestry **and** by release-branch cherry-pick (section 19) |
 | Runtime and build | The Linux build's glibc and OpenSSL 3 requirement; the Ubuntu image digests used by the strict container and the Codex image; Node.js 24.21.0 and npm 11.19.0 in the publish job |
 | Inventory | The SBOM (Rust graph only) against the catalogue's three artifacts and the notices |
 
@@ -934,8 +934,9 @@ disposable machine. The hosted runner is `ubuntu-24.04` with 4 CPUs.
 
 [`p14-scan-reading-2026-10-02.md`](p14-scan-reading-2026-10-02.md) holds the reading in full: Cargo,
 GitHub alerts, the pinned actions, whisper.cpp, FFmpeg, the runtime and the SBOM. One finding stands
-([#272](https://github.com/smormah/vsift/issues/272), [L-122](known-limits.md#l-122)). It is a dated
-reading of 0.1.0; the candidate and the stable each need their own within seven days.
+([#272](https://github.com/smormah/vsift/issues/272), [L-122](known-limits.md#l-122)); the FFmpeg part was
+re-read on 2026-10-04 with a test that sees release-branch cherry-picks, which narrowed it to one tie by
+elimination (section 19). It is a dated reading of 0.1.0; the candidate and the stable each need their own within seven days.
 
 
 ### 18.7 Hosted minutes, and what is weaker than it sounds
@@ -960,3 +961,65 @@ under one. GitHub documents hosted runners as free for public repositories (not 
   the candidate after the fixes (the staleness rule makes the ledger say so), RQ-13 needs a fresh reading
   within seven days of the candidate and again before the stable, and the ledger's commits for RQ-07,
   RQ-08, RQ-09 and RQ-12 are re-pointed to this pull request's merge commit.
+
+## 19. PR 7b: the FFmpeg finding re-read, and the refresh candidate (RQ-13, #272), 2026-10-04
+
+The maintainer decided on 2026-10-04 to refresh the reviewed FFmpeg. The work found that the finding's premise
+was a limit of the first reading's test, and that the refresh cannot be pinned yet. This section is the
+qualification record; the reading is the addendum of
+[`p14-scan-reading-2026-10-02.md`](p14-scan-reading-2026-10-02.md) and the candidate's review is in the two
+[P06 candidate records](p06-ubuntu-artifact-candidate.md#2026-10-04-refresh-candidate-n902-22-reviewed-not-accepted).
+
+### 19.1 What was found
+
+- **The reading's counts were wrong in one direction.** The first reading counted a fix as missing unless its
+  `master` hash was an ancestor of the snapshot. A release branch takes fixes as cherry-picks. With the
+  trailer matched as well, the shipped snapshot has the fix for **all 17** records counted as "fixed on master
+  only" and for **17 of the 18** without a reference (46 of the 47 records in all); one is not reachable
+  (CVE-2026-38347) and one of the 46, CVE-2026-38350 (High, `libswscale`), is tied to its fix by elimination only
+  ([L-122](known-limits.md#l-122)). All 28 cherry-picks that stand in for a master fix carry the same patch text. The refresh candidate changes none of
+  the 47.
+- **Section 6's FFmpeg row** therefore reads: the reviewed build's records are read by ancestry **and** by
+  cherry-pick trailer, by the method and tool of the addendum (`tools/p14-campaigns/ffmpeg-ancestry.cjs`).
+- **The pin cannot move now.** The newest build of the catalogue's variant is a daily build that its publisher
+  deletes after 14 more dailies (about 2026-10-17); a pin must be a month-end build (the next is 2026-10-31);
+  the candidate also needs two reviewed bounds raised and adds three libraries to the recipe
+  ([L-132](known-limits.md#l-132)). The catalogue is **unchanged** by this pull request.
+- **The next pin** is the 2026-10-31 month-end build, once it exists: before the candidate cut if the cut can
+  wait for it (a catalogue change makes every crates-scoped evidence item stale), otherwise after the stable,
+  not between the two; it reaches new installs only. The blockers and the behaviour of existing installs and of
+  a vanished asset are in the addendum's "The next pin".
+
+### 19.2 The candidate on hosted runners
+
+The candidate (`n9.0.2-22-g46d8f462ee`, `autobuild-2026-10-03-18-14`) was pinned on a branch that is not part of
+the pull request (`p14-pr7b-ffmpeg-candidate-evidence`, commit `f4695c3`) and run by dispatch; every run is read-only,
+without a secret, on hosted runners.
+
+| Workflow, run | Result |
+| --- | --- |
+| `P13 managed smoke` [37164083942](https://github.com/smormah/vsift/actions/runs/37164083942) | Passed, three jobs (about 8 job-minutes): the pinned smoke before activation, the real `setup plan`, `install`, `check` and rerun, and the install end to end (two kills, the local-ASR journey, remove and reinstall). The version line the managed tools print: `n9.0.2-22-g46d8f462ee-20261003`. |
+| `P06 Ubuntu candidate smoke` [37164086257](https://github.com/smormah/vsift/actions/runs/37164086257) | Passed (4 min): the layout checks through the production extractor with the raised bounds (FFmpeg archive 120.8 s), F01 media operations and inference in 1.70 s, peak child RSS 293,188 KiB. |
+| `P06 Windows candidate smoke` [37164088495](https://github.com/smormah/vsift/actions/runs/37164088495) | Passed (24 s), Windows Server 2025. |
+| `P07 local ASR` [37164090634](https://github.com/smormah/vsift/actions/runs/37164090634) | Passed on Ubuntu 24.04 (12 min) and Windows (16 min): the adapter over the speech clips, the CLI checkpoint, and the T-04 gates for both profiles. **Base:** clean word error rate 3.25 percent and F08 61.53 percent on both systems, real-time factor 0.248 (Ubuntu) and 0.262 (Windows), peak 318 and 336 MiB. **Base q5_1:** 4.06 percent and 46.15 percent, factor 0.301 and 0.336, peak 234 and 249 MiB. Word error rates are identical on the two systems and equal to the numbers recorded for the shipped build in [`p07-asr-qualification.md`](p07-asr-qualification.md) (3.25 and 4.06 percent clean; F08 61.53 and 46.15), so the audio the new FFmpeg extracts did not change what the recogniser hears on these clips. |
+
+Not run: the visual checkpoints (P08, frames and candidates) on the candidate, because no existing dispatchable
+workflow stages the candidate for them (`P14 journeys` installs a published version and its own catalogue;
+`P14 local upgrade` stages the Windows pin but starts from a published binary and runs no frame decode), and a
+downloaded binary may run only in the repository's hosted harnesses; macOS uses the user's Homebrew FFmpeg and is out
+of scope; the hostile-media and load campaigns (P14 PR 4) test **published** versions from the registry, so their
+re-run on a refreshed build happens on the release candidate (P14 PR 11).
+
+### 19.3 What is weaker than it sounds
+
+- **It is a reading of source, not a test of the binary.** A cherry-pick trailer and an equal patch show the fix is
+  in what the build was made from. No reproducer was run, and one tie is by elimination.
+- **A hosted tone-and-speech smoke is not a qualification of the candidate.** The visual path was not
+  exercised on it, the speech is synthetic (L-020, L-022) and the results are one run on each system.
+- **The candidate is not the pin.** Everything here transfers to a month-end build only by repeating it on that
+  build; the evidence branch makes that cheap (the pins, two bounds, the version strings) but it is not a
+  qualification of a build that does not exist yet.
+- **The reading is the packet owner's** and uses the National Vulnerability Database, which is neither complete nor
+  timely; records published before 2026-06-01 were not read.
+
+Hosted use: about 41 job-minutes (the four runs above).

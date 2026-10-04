@@ -514,9 +514,11 @@ repetitions per system found a Windows race in session-root creation (#206 repro
 weighted-admission child that was never granted a reservation (#271, 2 of 200), both L-123; the process
 supervisor (#128) did not fail in 3,000 repetitions per system. **SEC-21:** 31 fuzz targets ran an hour each
 (3.68 billion runs) with no crash; three stored-record kinds still have no target (L-128). **R-SEC03:** the
-first scan reading found the reviewed FFmpeg snapshot lacking 17 upstream fixes (#272, L-122); the Cargo,
-alert, action and whisper.cpp readings were clean. The residuals above are unchanged by these results; the
-three media cases and the FFmpeg snapshot are open findings.
+first scan reading flagged the reviewed FFmpeg snapshot as lacking 17 upstream fixes (#272); its re-read on
+2026-10-04, with a test that sees release-branch cherry-picks, found the snapshot has the fixes for 46 of the 47
+recorded vulnerabilities (one of them, a libswscale record, by elimination only) and one not reachable (L-122,
+and the refresh in L-132); the Cargo, alert, action and whisper.cpp readings were clean. The residuals above are
+unchanged by these results; the three media cases and that one FFmpeg tie are open findings.
 
 Since 2026-09-26 (issue #148, SEC-08) an operation that calls a provider many times
 over one session's source copy (local speech recognition and, since P08 PR 4, visual

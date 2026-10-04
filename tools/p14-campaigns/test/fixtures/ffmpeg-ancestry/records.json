@@ -1,0 +1,73 @@
+{
+  "vulnerabilities": [
+    {
+      "cve": {
+        "id": "CVE-2000-0001",
+        "published": "2026-07-23T01:00:00.000",
+        "references": [
+          {
+            "url": "https://code.ffmpeg.org/FFmpeg/FFmpeg/commit/a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1"
+          },
+          {
+            "url": "https://code.ffmpeg.org/FFmpeg/FFmpeg/pulls/1"
+          }
+        ]
+      }
+    },
+    {
+      "cve": {
+        "id": "CVE-2000-0002",
+        "published": "2026-09-01T01:00:00.000",
+        "references": [
+          {
+            "url": "https://git.ffmpeg.org/gitweb/ffmpeg.git/commit/a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2"
+          }
+        ]
+      }
+    },
+    {
+      "cve": {
+        "id": "CVE-2000-0003",
+        "published": "2026-08-06T01:00:00.000",
+        "references": [
+          {
+            "url": "https://github.com/FFmpeg/FFmpeg/commit/a3a3a3a3a3a3"
+          }
+        ]
+      }
+    },
+    {
+      "cve": {
+        "id": "CVE-2000-0004",
+        "published": "2026-08-28T01:00:00.000",
+        "references": [
+          {
+            "url": "https://code.ffmpeg.org/FFmpeg/FFmpeg/issues/2"
+          }
+        ]
+      }
+    },
+    {
+      "cve": {
+        "id": "CVE-2000-0005",
+        "published": "2026-09-23T01:00:00.000",
+        "references": [
+          {
+            "url": "https://code.ffmpeg.org/FFmpeg/FFmpeg/commit/a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5"
+          }
+        ]
+      }
+    },
+    {
+      "cve": {
+        "id": "CVE-2000-0006",
+        "published": "2026-06-18T01:00:00.000",
+        "references": [
+          {
+            "url": "https://github.com/FFmpeg/FFmpeg/commit/a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6"
+          }
+        ]
+      }
+    }
+  ]
+}
