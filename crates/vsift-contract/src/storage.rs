@@ -66,9 +66,35 @@ pub fn non_private_folder_summary(folder: PrivateFolder) -> String {
 /// can act on it without parsing free text. It never contains a path.
 pub const UNOWNED_SESSION_ROOT_REMEDIATION: &str = "The VSift session_root folder holds no VSift ownership marker, so VSift did not create it and did not use it. Nothing was changed: VSift never adopts a folder it did not create. It is the disposable-session folder: the directory given with --session-root, or VSift-sessions under LOCALAPPDATA on Windows, Library/Caches on macOS, or the XDG cache directory on Linux. Name a --session-root path that does not exist yet and VSift creates it, private to you; or, if that folder holds nothing you need, delete it yourself and retry.";
 
+/// Remediation when a source (or a supplied transcript) is itself a symbolic
+/// link (#265).
+///
+/// The code stays `STORAGE_IO`, the one 0.1.0 gave and, within v1, the only one
+/// it may give (changing a published failure code is not additive; known limit
+/// L-127), so this text says what happened: the link is not followed, and no
+/// storage failed. The first sentence is stable and the text names no path.
+pub const SOURCE_IS_LINK_REMEDIATION: &str = "The path you gave is a link, and VSift does not follow links. Nothing was read or copied, and no storage failed (the code is the closest published one). Name the file the link points to and run the command again with that path.";
+
 #[cfg(test)]
 mod tests {
-    use super::{PrivateFolder, UNOWNED_SESSION_ROOT_REMEDIATION, non_private_folder_summary};
+    use super::{
+        PrivateFolder, SOURCE_IS_LINK_REMEDIATION, UNOWNED_SESSION_ROOT_REMEDIATION,
+        non_private_folder_summary,
+    };
+
+    #[test]
+    fn the_link_remediation_is_stable_bounded_and_pathless() {
+        let text = SOURCE_IS_LINK_REMEDIATION;
+        assert!(
+            text.starts_with("The path you gave is a link, and VSift does not follow links."),
+            "{text}"
+        );
+        assert!(text.contains("Name the file the link points to"));
+        assert!(text.contains("no storage failed"), "{text}");
+        assert!(!text.contains("corrupt"), "{text}");
+        assert!(text.len() <= 1024, "{} bytes", text.len());
+        assert!(!text.contains('\\') && !text.contains(":/"), "{text}");
+    }
 
     #[test]
     fn the_unowned_root_remediation_is_stable_bounded_and_pathless() {

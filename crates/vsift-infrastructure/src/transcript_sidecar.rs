@@ -56,6 +56,7 @@ pub fn read_supplied_transcript(
 ) -> Result<SuppliedTranscript, SuppliedTranscriptError> {
     let (file, metadata) = open_source(path).map_err(|error| match error {
         SourceError::NotRegularFile => SuppliedTranscriptError::NotRegularFile,
+        SourceError::SymbolicLink => SuppliedTranscriptError::SymbolicLink,
         SourceError::Io(_) => SuppliedTranscriptError::Io,
         _ => SuppliedTranscriptError::InvalidPath,
     })?;

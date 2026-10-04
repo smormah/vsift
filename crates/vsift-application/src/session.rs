@@ -157,6 +157,12 @@ pub enum OpenSessionError {
     InvalidSource,
     /// Source input could not be read.
     SourceIo,
+    /// The selected source's own final path component is a symbolic link (or
+    /// another reparse-point link). The link is not followed and the caller
+    /// names the file itself (#265). The published code stays `STORAGE_IO`, the
+    /// one 0.1.0 gave, with a remediation that says what happened (known limit
+    /// L-127: changing a published failure code is not additive within v1).
+    SourceIsLink,
     /// The clock could not represent the bounded lifetime.
     InvalidClock,
     /// Storage or coordination rejected the operation.
@@ -178,6 +184,9 @@ impl fmt::Display for OpenSessionError {
         match self {
             Self::InvalidSource => formatter.write_str("selected source is invalid"),
             Self::SourceIo => formatter.write_str("selected source could not be read"),
+            Self::SourceIsLink => {
+                formatter.write_str("selected source is a link, which is not followed")
+            }
             Self::InvalidClock => {
                 formatter.write_str("session clock is outside the supported range")
             }

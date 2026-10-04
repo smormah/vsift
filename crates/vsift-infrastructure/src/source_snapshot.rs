@@ -545,6 +545,7 @@ pub(crate) fn open_session_error(error: SourceError) -> OpenSessionError {
         SourceError::Storage(storage) => OpenSessionError::Storage(storage),
         SourceError::Cancelled => OpenSessionError::Cancelled,
         SourceError::Io(_) => OpenSessionError::SourceIo,
+        SourceError::SymbolicLink => OpenSessionError::SourceIsLink,
         SourceError::InvalidPath
         | SourceError::NotRegularFile
         | SourceError::TooLarge
@@ -575,12 +576,33 @@ pub(crate) fn open_source(path: &Path) -> Result<(File, cap_std::fs::Metadata), 
     }
     let directory = Dir::open_ambient_dir(canonical_parent, cap_std::ambient_authority())
         .map_err(SourceError::Io)?;
+    // A link is classified from the directory entry before anything is opened,
+    // as the worker's input root does: opening it without following fails with
+    // a platform-specific error that would otherwise reach the caller as a
+    // storage failure (#265). The open below still follows nothing, so a name
+    // swapped for a link in between is not followed either.
+    if directory
+        .symlink_metadata(Path::new(name))
+        .is_ok_and(|entry| entry.file_type().is_symlink())
+    {
+        return Err(SourceError::SymbolicLink);
+    }
     let mut options = OpenOptions::new();
     options.read(true).follow(FollowSymlinks::No);
-    never_wait_for_a_writer(&mut options);
+    never_wait_for_a_writer(&mut options)?;
     let file = directory
         .open_with(Path::new(name), &options)
-        .map_err(SourceError::Io)?;
+        .map_err(|error| {
+            // The swap case: whatever made the open fail, a link is a link.
+            if directory
+                .symlink_metadata(Path::new(name))
+                .is_ok_and(|entry| entry.file_type().is_symlink())
+            {
+                SourceError::SymbolicLink
+            } else {
+                SourceError::Io(error)
+            }
+        })?;
     let metadata = file.metadata().map_err(SourceError::Io)?;
     if !metadata.is_file() {
         return Err(SourceError::NotRegularFile);
@@ -597,15 +619,32 @@ pub(crate) fn open_source(path: &Path) -> Result<(File, cap_std::fs::Metadata), 
 /// pipe returns at once, the handle is then found not to be a regular file
 /// and is dropped; a regular file ignores the flag, so every later read of an
 /// accepted source is unchanged. Windows has no such open.
+///
+/// # Errors
+///
+/// An I/O failure, never a silent no-op: if the platform's flag cannot be
+/// expressed the open would wait for a writer, which is the hang this exists to
+/// prevent, so it is refused instead.
 #[cfg(unix)]
-fn never_wait_for_a_writer(options: &mut OpenOptions) {
+fn never_wait_for_a_writer(options: &mut OpenOptions) -> Result<(), SourceError> {
     use cap_std::fs::OpenOptionsExt as _;
-    let non_blocking = i32::try_from(rustix::fs::OFlags::NONBLOCK.bits()).unwrap_or(0);
+    let non_blocking = i32::try_from(rustix::fs::OFlags::NONBLOCK.bits()).map_err(|_| {
+        SourceError::Io(std::io::Error::other(
+            "the non-blocking open flag does not fit the platform's flag type",
+        ))
+    })?;
     options.custom_flags(non_blocking);
+    Ok(())
 }
 
 #[cfg(not(unix))]
-fn never_wait_for_a_writer(_options: &mut OpenOptions) {}
+#[allow(
+    clippy::unnecessary_wraps,
+    reason = "the Unix implementation can fail to express the flag"
+)]
+fn never_wait_for_a_writer(_options: &mut OpenOptions) -> Result<(), SourceError> {
+    Ok(())
+}
 
 /// Whether a path is on a local drive (Windows) or not a network path
 /// (`//host`, elsewhere).
@@ -764,6 +803,12 @@ pub enum SourceError {
     InvalidPath,
     /// Selection did not resolve to a regular file.
     NotRegularFile,
+    /// The selected path's own final component is a link. The link is not
+    /// followed (the folders on the way are resolved as the operating system
+    /// resolves them, so a link there is), so the source is refused as what it
+    /// is and not as a failed disk (#265). It is reported as the published
+    /// `STORAGE_IO` code with a remediation (known limit L-127).
+    SymbolicLink,
     /// Selected source exceeds the profile maximum.
     TooLarge,
     /// Source read exceeded the stage deadline.
@@ -789,6 +834,7 @@ impl fmt::Display for SourceError {
         match self {
             Self::InvalidPath => formatter.write_str("source path is invalid"),
             Self::NotRegularFile => formatter.write_str("source is not a regular file"),
+            Self::SymbolicLink => formatter.write_str("source is a link, which is not followed"),
             Self::TooLarge => formatter.write_str("source exceeds the byte limit"),
             Self::Deadline => formatter.write_str("source read exceeded the deadline"),
             Self::UnsupportedContainer => {

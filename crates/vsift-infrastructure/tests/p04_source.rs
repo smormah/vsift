@@ -197,3 +197,122 @@ async fn a_cancelled_copy_stops_and_leaves_no_partial_file() -> TestResult {
     staged.verify()?;
     Ok(())
 }
+
+/// Makes `link` a symbolic link to `target`.
+///
+/// `Ok(false)` is an **explicit skip** and only ever happens on Windows, for an
+/// account that does not hold the privilege to create links (error 1314), and
+/// never when `CI` is set: the test prints why it checked nothing, and a hosted
+/// run, where links can always be made, fails instead of skipping. Every other
+/// failure is an error.
+fn make_link(target: &std::path::Path, link: &std::path::Path) -> Result<bool, Box<dyn Error>> {
+    #[cfg(unix)]
+    let made = std::os::unix::fs::symlink(target, link);
+    #[cfg(windows)]
+    let made = std::os::windows::fs::symlink_file(target, link);
+    match made {
+        Ok(()) => Ok(true),
+        Err(error)
+            if cfg!(windows)
+                && error.raw_os_error() == Some(1314)
+                && env::var_os("CI").is_none() =>
+        {
+            eprintln!(
+                "SKIPPED: this account may not create symbolic links ({error}); the test checks nothing here"
+            );
+            Ok(false)
+        }
+        Err(error) => Err(error.into()),
+    }
+}
+
+/// #265: a link named as the source is refused as a link and never followed,
+/// whether it points at a file or at nothing; the file behind it is not read,
+/// and nothing is staged.
+#[tokio::test]
+async fn a_link_is_refused_as_a_source_and_never_followed() -> TestResult {
+    let root = OwnedRoot::create()?;
+    let (store, session_id) = workspace(&root).await?;
+    let target = root.0.join("target.mp4");
+    fs::write(&target, b"\0\0\0\x18ftypisomtarget")?;
+    let link = root.0.join("link.mp4");
+    let dangling = root.0.join("dangling.mp4");
+    if !make_link(&target, &link)? || !make_link(&root.0.join("missing.mp4"), &dangling)? {
+        return Ok(());
+    }
+
+    for (index, source) in [&link, &dangling].into_iter().enumerate() {
+        let result = SourceSnapshot::stage(
+            &store,
+            &session_id,
+            &OperationId::parse(format!("op_abcdef012345678{index}"))?,
+            source,
+        );
+        assert!(
+            matches!(result, Err(SourceError::SymbolicLink)),
+            "{source:?}: {:?}",
+            result.err()
+        );
+    }
+    let artifacts = root
+        .0
+        .join("workspace/sessions")
+        .join(session_id.as_str())
+        .join("artifacts");
+    assert_eq!(fs::read_dir(artifacts)?.count(), 0, "nothing was staged");
+
+    // The file itself is still accepted: only the link is refused.
+    let staged = SourceSnapshot::stage(
+        &store,
+        &session_id,
+        &OperationId::parse("op_abcdef0123456789")?,
+        &target,
+    )?;
+    staged.verify()?;
+    Ok(())
+}
+
+/// #264 and #265, what a source can be: a device file is opened and found not to
+/// be a regular file (`NotRegularFile`, `INVALID_SOURCE`); a UNIX socket cannot
+/// be opened at all, so it is an I/O failure (`STORAGE_IO`, an answer that
+/// describes it only loosely, known limit L-127). This pins both, so a change in
+/// either is a decision and not an accident.
+#[cfg(unix)]
+#[tokio::test]
+async fn a_device_is_not_a_regular_file_and_a_socket_cannot_be_opened() -> TestResult {
+    let root = OwnedRoot::create()?;
+    let (store, session_id) = workspace(&root).await?;
+    let device = SourceSnapshot::stage(
+        &store,
+        &session_id,
+        &OperationId::parse("op_abcdef0123456789")?,
+        std::path::Path::new("/dev/null"),
+    );
+    assert!(
+        matches!(device, Err(SourceError::NotRegularFile)),
+        "{:?}",
+        device.err()
+    );
+
+    // A short path: a socket's address is limited to about a hundred bytes.
+    let socket_path = PathBuf::from(format!(
+        "/tmp/vsift-p04-{}-{}.sock",
+        std::process::id(),
+        NEXT_ROOT.fetch_add(1, Ordering::Relaxed)
+    ));
+    let listener = std::os::unix::net::UnixListener::bind(&socket_path)?;
+    let socket = SourceSnapshot::stage(
+        &store,
+        &session_id,
+        &OperationId::parse("op_abcdef0123456780")?,
+        &socket_path,
+    );
+    drop(listener);
+    let _ = fs::remove_file(&socket_path);
+    assert!(
+        matches!(socket, Err(SourceError::Io(_))),
+        "{:?}",
+        socket.err()
+    );
+    Ok(())
+}

@@ -42,6 +42,9 @@ pub enum SuppliedTranscriptError {
     NotRegularFile,
     /// The file could not be read.
     Io,
+    /// The transcript's own final path component is a symbolic link, which is
+    /// not followed (#265). Reported as the code 0.1.0 gave (`STORAGE_IO`).
+    SymbolicLink,
 }
 
 impl fmt::Display for SuppliedTranscriptError {
@@ -53,6 +56,9 @@ impl fmt::Display for SuppliedTranscriptError {
                 formatter.write_str("supplied transcript is not a regular file")
             }
             Self::Io => formatter.write_str("supplied transcript could not be read"),
+            Self::SymbolicLink => {
+                formatter.write_str("supplied transcript is a link, which is not followed")
+            }
         }
     }
 }
