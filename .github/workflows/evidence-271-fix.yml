@@ -1,0 +1,72 @@
+name: Evidence 271 fix (temporary, this branch only)
+
+# Validates the #271 fix: the admission test run many times at once on a
+# hosted Windows runner, as the reproduction did (72 of 400 failed before).
+# Temporary: it triggers only on a push to the branch below, reads the
+# repository, publishes nothing, uses no secret, and is deleted with the
+# branch. Never run on the maintainer's machine.
+
+on:
+  push:
+    branches:
+      - p14-pr7-evidence-271-fix
+
+permissions:
+  contents: read
+
+concurrency:
+  group: evidence-271-fix-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: never
+
+jobs:
+  admission-windows:
+    name: "#271 fix, windows-2025"
+    runs-on: windows-2025
+    timeout-minutes: 90
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build the test binary
+        shell: pwsh
+        run: |
+          cargo test -p vsift-infrastructure --test weighted_admission --no-run --locked --message-format=json > build.json
+          if ($LASTEXITCODE -ne 0) { throw "build failed" }
+
+      - name: Run the admission test many times at once
+        shell: pwsh
+        env:
+          RUNS: "400"
+          PARALLEL: "8"
+          BUDGET_MINUTES: "60"
+        run: |
+          $ErrorActionPreference = 'Continue'
+          $exe = Get-Content build.json | ForEach-Object { if ($_.StartsWith('{')) { $_ | ConvertFrom-Json } } |
+            Where-Object { $_.executable -and $_.target.name -eq 'weighted_admission' } |
+            Select-Object -Last 1 -ExpandProperty executable
+          Write-Host "test binary: $exe"
+          $name = 'weighted_admission_never_exceeds_root_capacity'
+          $stopAt = (Get-Date).AddMinutes([int]$env:BUDGET_MINUTES)
+          $ran = 0; $failed = 0; $skipped = 0
+          1..([int]$env:RUNS) | ForEach-Object -Parallel {
+            if ((Get-Date) -gt $using:stopAt) { return [pscustomobject]@{ Run = $_; Code = -1; Text = ''; Skipped = $true } }
+            $sw = [System.Diagnostics.Stopwatch]::StartNew()
+            $text = & $using:exe --exact $using:name --nocapture 2>&1 | Out-String
+            [pscustomobject]@{ Run = $_; Code = $LASTEXITCODE; Text = $text; Skipped = $false; Seconds = $sw.Elapsed.TotalSeconds }
+          } -ThrottleLimit ([int]$env:PARALLEL) | ForEach-Object {
+            if ($_.Skipped) { $skipped++; return }
+            $ran++
+            if ($_.Code -ne 0) {
+              $failed++
+              Write-Host "::group::run $($_.Run) FAILED (exit $($_.Code))"
+              Write-Host $_.Text
+              Write-Host "::endgroup::"
+            }
+            if ($_.Seconds -gt 10) { Write-Host "run $($_.Run) took $([int]$_.Seconds) s (a child waited for its first grant)" }
+          }
+          Write-Host "RESULT ran=$ran failed=$failed skipped=$skipped"
