@@ -47,6 +47,40 @@ fn parse_stdout(output: &std::process::Output) -> Result<Value, Box<dyn std::err
     Ok(serde_json::from_slice(&output.stdout)?)
 }
 
+/// P14 PR 7: both `-h` and `--help` carry the worked example (the supplied
+/// transcript path included) and the operator-only note, and every command's help
+/// says the two global options are for operators. `command::tests` parses every
+/// command the example names.
+#[test]
+fn help_carries_the_typical_investigation_and_the_operator_note()
+-> Result<(), Box<dyn std::error::Error>> {
+    for flag in ["-h", "--help"] {
+        let help = run(&[flag])?;
+        assert!(help.status.success(), "{flag}");
+        let text = String::from_utf8(help.stdout)?;
+        for needle in [
+            "A typical investigation",
+            "vsift setup check --json",
+            "vsift ingest <video> --json",
+            "--transcript <file>",
+            "--transcript-offset <microseconds>",
+            "vsift transcript retranscribe <session> --json",
+            "vsift handoff check --json",
+            "are for operators who run VSift as a service",
+            "plan is theirs to accept",
+            "For operators who run a worker host; an agent leaves it out.",
+        ] {
+            assert!(text.contains(needle), "{flag}: missing {needle}");
+        }
+    }
+    let ingest = String::from_utf8(run(&["ingest", "--help"])?.stdout)?;
+    assert!(
+        ingest.contains("--session-root") && ingest.contains("an agent leaves it out"),
+        "the subcommand help says it too"
+    );
+    Ok(())
+}
+
 #[test]
 fn help_and_version_publish_the_r0_namespace() -> Result<(), Box<dyn std::error::Error>> {
     let help = run(&["--help"])?;
