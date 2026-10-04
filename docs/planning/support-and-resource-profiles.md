@@ -1,6 +1,6 @@
 # Support matrix and resource profiles
 
-Status: **matrix updated 2026-10-04 (P14 PR 9a)**; resource profiles from 2026-09-10, extended by
+Status: **matrix updated 2026-10-04 (P14 PR 9a; the macOS wording and the RQ-05 rule decided the same day, PR 9c)**; resource profiles from 2026-09-10, extended by
 later packets. The matrix is [ADR 0024](../decisions/0024-r0-qualification-and-release-candidate.md)
 decision F (confirmed by the maintainer on 2026-10-02) read against the evidence recorded in the
 [evidence ledger](p14-evidence-ledger.json) and the [P14 plan](p14-qualification.md). Public
@@ -54,13 +54,23 @@ below is a result for the release candidate.
 | Another Linux on x64 | The same | Your own | Nothing | Not a target: the binary may run, and nobody has tried |
 | Linux on Arm, Intel Macs, Windows on Arm, Windows 10, Alpine and other musl Linux | None | None | Nothing | Unsupported: the launcher says so and exits 127 |
 
-**RQ-05, in one paragraph.** Its pass rule is "every stage passed". For 0.1.0 all 53 stages that can run on a
-hosted runner passed on all three systems, and one stage, P11's durable workspace, was blocked everywhere:
-off Ubuntu by design (the durable profile exists only there) and on the hosted Ubuntu runner because its disk
-is mounted without write barriers ([#258](https://github.com/smormah/vsift/issues/258),
-[L-113](known-limits.md#l-113)). The item is therefore `running`, not `passed`, and the claims that need it
-stay unusable until the maintainer records what covers that stage or the stage runs on a disk that has
-barriers. Nothing here hides that: it is the reason no cell can earn its word yet.
+**RQ-05, in one paragraph.** Its pass rule is per system (the maintainer's decision of 2026-10-04): on
+each system every stage that can run there must pass; the P07 speech-recognition gates must hold on each
+operating system; and P11's durable-workspace stage, which only the qualified profile (Ubuntu 24.04 with local
+ext4 and write barriers) can run, must pass there and, everywhere else, must show the refusal (the durable
+profile refused with `MISSING_CAPABILITY` and nothing created). For 0.1.0, 53 stages passed on all three
+systems and that stage was `blocked` on all three: on Windows and macOS because the durable profile exists
+only on Ubuntu, with the refusal it must give checked and holding; on the hosted Ubuntu runner because its
+disk is mounted without write barriers ([#258](https://github.com/smormah/vsift/issues/258),
+[L-113](known-limits.md#l-113)). What covers the Ubuntu case is recorded, not assumed: RQ-09 and RQ-12 ran
+the published 0.1.0 with durable workspaces on an ext4 volume with write barriers (durable publication, a
+100-request batch, 1,000 mixed requests with kills and redelivery, the runbook walked), but they do not re-run
+that one stage's script, so they cover the durable path, not that stage check for check. The item stays
+`running` for one other reason: the speech-recognition gates on Ubuntu and Windows are recorded only from the
+weekly `P07 local ASR` workflow on source at other commits, not at the 0.1.0 commit, and the ledger counts
+only the journeys' own runs as evidence for 0.1.0. That is a gap in what was recorded, not a failure. The
+rule is no longer unsatisfiable. Even so, no cell may use its word until RQ-05 and the other items are
+`passed` for the release candidate's own bytes: every item is stale for it.
 
 **What the hosted evidence is not.** Hosted runners are shared virtual machines that carry a Rust
 toolchain and other developer tools, so a "clean install" job proves there is no hidden dependency on them,
@@ -79,7 +89,7 @@ decision G) decide what a public document may say. The rung is `now` today; the 
 | --- | --- | --- | --- |
 | Windows 11 x64 | R0 target | No cell gets the word; the document says "release candidate under qualification" | CL-201, which needs RQ-01, RQ-02, RQ-04, RQ-05, RQ-15 and RQ-17 passed; carries "Smart App Control untried" if the try-out was waived |
 | Ubuntu 24.04 x64 | R0 target | The same | CL-202, which needs RQ-01 to RQ-06, RQ-11 and RQ-15; durable sessions are a separate statement, CL-207 (RQ-11) |
-| macOS 15 on Apple silicon | R0 target | The same | CL-203, which needs RQ-01, RQ-02, RQ-04 and RQ-05; stays a qualification target if the hosted run does not pass. **The wording is not decided**: it is proposed in the PR 9a note of ADR 0024, for the maintainer |
+| macOS 15 on Apple silicon | R0 target | The same | CL-203, which needs RQ-01, RQ-02, RQ-04 and RQ-05; stays a qualification target if the hosted run does not pass. **The wording was accepted by the maintainer on 2026-10-04** as proposed (ADR 0024, PR 9a note) |
 | Worker host | Qualification target | Qualification target | Not claimed (CL-208 stays unused: RQ-14 is waived, not passed) |
 
 **Agent clients.** The skill was trialled with **Claude Code on Windows 11** (Claude Opus 5.5 in the review
