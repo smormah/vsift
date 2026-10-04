@@ -87,11 +87,26 @@ pub const SOURCE_IS_LINK_REMEDIATION: &str = "The path you gave is a link, and V
 /// It never contains a path or a size.
 pub const SOURCE_NO_ROOM_REMEDIATION: &str = "The folder that holds VSift's sessions does not have room for a copy of this video. Nothing was committed, nothing is damaged and the video itself is fine (the code is the closest published one). Report this to the user: freeing space on that drive, or an operator naming a folder on a drive with more room with --session-root, fixes it; do not choose a folder yourself. Then run the command again. The folder is the --session-root directory, or VSift-sessions under LOCALAPPDATA on Windows, Library/Caches on macOS, or the XDG cache directory on Linux.";
 
+/// Remediation when no published session has the given id (#277): it was never
+/// opened, is still being opened by another command, its opening was
+/// interrupted (a crash) and left only a registration, it was cleaned already,
+/// or its folder is gone.
+///
+/// The code is **the one the lookup always gave** (`STORAGE_IO`, or
+/// `INVALID_ARGUMENT`, or `INTEGRITY_FAILURE` for a cleaned session whose lock
+/// files remain): changing a published failure code is not additive within v1
+/// (known limit L-127), so this text is what says it is a missing session and
+/// not a diagnosis of the storage. It does not claim the storage is sound: a
+/// published session whose folder was lost to real damage looks the same, which
+/// is why it says when it would be damage. The first sentence is stable and the
+/// text names neither a path nor an id.
+pub const SESSION_NOT_PUBLISHED_REMEDIATION: &str = "No published session has this id, or its folder is gone. The id may be mistyped, the session may have expired or been cleaned, or its opening may not have finished: a command still running, or one that was interrupted, leaves a registration with no session behind it (session list shows it as initializing), which session clean removes once it is a day old. This is a missing session, not a diagnosis of the storage: the code (storage or integrity) is the closest published one. Treat it as damage only if session list still shows the session as indexed, or you know the session was open and you did not delete or move its folder. Check the id with session list, or open a new session with ingest.";
+
 #[cfg(test)]
 mod tests {
     use super::{
-        PrivateFolder, SOURCE_IS_LINK_REMEDIATION, SOURCE_NO_ROOM_REMEDIATION,
-        UNOWNED_SESSION_ROOT_REMEDIATION, non_private_folder_summary,
+        PrivateFolder, SESSION_NOT_PUBLISHED_REMEDIATION, SOURCE_IS_LINK_REMEDIATION,
+        SOURCE_NO_ROOM_REMEDIATION, UNOWNED_SESSION_ROOT_REMEDIATION, non_private_folder_summary,
     };
 
     #[test]
@@ -124,6 +139,24 @@ mod tests {
             !text.contains("corrupt") && !text.contains("integrity"),
             "{text}"
         );
+        assert!(text.len() <= 1024, "{} bytes", text.len());
+        assert!(!text.contains('\\') && !text.contains(":/"), "{text}");
+    }
+
+    #[test]
+    fn the_not_published_remediation_is_stable_bounded_and_does_not_claim_the_storage_is_sound() {
+        let text = SESSION_NOT_PUBLISHED_REMEDIATION;
+        assert!(
+            text.starts_with("No published session has this id, or its folder is gone."),
+            "{text}"
+        );
+        assert!(text.contains("not a diagnosis of the storage"), "{text}");
+        assert!(text.contains("closest published one"), "{text}");
+        assert!(
+            !text.contains("Nothing is wrong with the storage"),
+            "it must not claim the storage is sound: {text}"
+        );
+        assert!(text.contains("session list") && text.contains("session clean"));
         assert!(text.len() <= 1024, "{} bytes", text.len());
         assert!(!text.contains('\\') && !text.contains(":/"), "{text}");
     }

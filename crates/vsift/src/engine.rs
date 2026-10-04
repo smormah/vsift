@@ -103,11 +103,19 @@ pub struct EnginePorts {
     speech_recognizer: Option<HostAsr>,
     visual_window_budget: NonZeroUsize,
     session_root_wait: Duration,
+    failed_open_removal_wait: Duration,
 }
 
 /// The longest [`EnginePorts::with_session_root_wait`] accepts, so no host
 /// can make an operation wait unboundedly for a stalled creator.
 pub const MAX_SESSION_ROOT_WAIT: Duration = Duration::from_secs(60);
+
+/// How long a failed open waits for a busy root to remove its own registration
+/// (#277) unless a host changes it.
+const DEFAULT_FAILED_OPEN_REMOVAL_WAIT: Duration = Duration::from_secs(5);
+
+/// The longest [`EnginePorts::with_failed_open_removal_wait`] accepts.
+const MAX_FAILED_OPEN_REMOVAL_WAIT: Duration = Duration::from_secs(60);
 
 /// [`MAX_WINDOWS_PER_EXTENSION`] as the default window budget.
 const DEFAULT_VISUAL_WINDOW_BUDGET: NonZeroUsize =
@@ -131,7 +139,22 @@ impl EnginePorts {
             speech_recognizer: None,
             visual_window_budget: DEFAULT_VISUAL_WINDOW_BUDGET,
             session_root_wait: PROVISIONING_WAIT,
+            failed_open_removal_wait: DEFAULT_FAILED_OPEN_REMOVAL_WAIT,
         }
+    }
+
+    /// Changes how long an `ingest` whose open failed waits for a busy session
+    /// root to let it remove the registration it made (#277); the default is
+    /// five seconds and the most is one minute.
+    ///
+    /// The wait only happens on that failure path, after the open has already
+    /// failed, and never changes the failure the caller receives: if the
+    /// registration still cannot be removed it is left for `session clean`, as
+    /// before. A test of that path shortens it.
+    #[must_use]
+    pub fn with_failed_open_removal_wait(mut self, wait: Duration) -> Self {
+        self.failed_open_removal_wait = wait.min(MAX_FAILED_OPEN_REMOVAL_WAIT);
+        self
     }
 
     /// Changes how long an operation waits for another process that is
@@ -244,6 +267,11 @@ impl Engine {
 
     pub(crate) fn now_unix_seconds(&self) -> Result<u64, EngineError> {
         Ok(self.ports.clock.now_unix_seconds()?)
+    }
+
+    /// How long a failed open waits for a busy root to remove its registration.
+    pub(crate) const fn failed_open_removal_wait(&self) -> Duration {
+        self.ports.failed_open_removal_wait
     }
 
     pub(crate) fn new_session_id(&self) -> Result<SessionId, EngineError> {
@@ -386,5 +414,22 @@ mod tests {
         assert_eq!(longer.session_root_wait, Duration::from_secs(30));
         let clamped = EnginePorts::system().with_session_root_wait(Duration::from_secs(3_600));
         assert_eq!(clamped.session_root_wait, MAX_SESSION_ROOT_WAIT);
+    }
+
+    /// #277: the wait for a busy root to let a failed open remove its own
+    /// registration is five seconds unless a host changes it, and never more
+    /// than a minute.
+    #[test]
+    fn the_failed_open_removal_wait_is_injectable_and_bounded() {
+        assert_eq!(
+            EnginePorts::system().failed_open_removal_wait,
+            Duration::from_secs(5)
+        );
+        let shorter =
+            EnginePorts::system().with_failed_open_removal_wait(Duration::from_millis(50));
+        assert_eq!(shorter.failed_open_removal_wait, Duration::from_millis(50));
+        let clamped =
+            EnginePorts::system().with_failed_open_removal_wait(Duration::from_secs(3_600));
+        assert_eq!(clamped.failed_open_removal_wait, Duration::from_secs(60));
     }
 }

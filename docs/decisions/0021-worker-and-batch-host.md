@@ -599,6 +599,39 @@ container job. The profile stays a qualification target, and the adversarial evi
 
 Section 4 and the PR 3 notes say a known operation id is answered from its record, that "records expire with the session they name", that "the oldest ended ones are pruned first" and that a retry which records a new id leaves one key opening one session. The text above is kept as written; this note supersedes the unconditional reading of it. What the code does (`worker_requests.rs`, `make_room` and `prune_if_orphaned`): a record is removed only when the workspace already holds 4,096 records and a request with a **new** operation id arrives, and then **every** record whose session no longer exists and that no process holds is removed at once (a record that names no session counts as gone); "oldest ended first" was never implemented ([L-063](../planning/known-limits.md#l-063)). So the replay and the `IDEMPOTENCY_CONFLICT` of the table hold **while the record is held, which is while its session exists or while fewer than 4,096 records are held**, and not for the session's retention; after the record is pruned the same id and request runs again (a new session, `replayed: false`) and the same id with another request is accepted. The P14 soak met both (189 of 12,000 lines). `cli-v1.md` and the runbook now say so. A small ended-request stub kept beyond the session is the R1 option (L-063); it is a decision for the maintainer.
 
+## Note, 2026-10-04 (P14 PR 7, #277): a failed open removes the registration it made
+
+Two sentences of section 2's *Ingest* step (PR 3 notes) are superseded; the text above is kept
+as it was written. It says the copy's admission is taken before the session is registered, "so a
+busy root is retried without leaving a registration per try", and that a retry which records a new
+session id leaves "the abandoned registration" to "normal cleanup".
+
+1. **Opens in one workspace contend on the root's initialization lock, and a refusal can come after
+   the registration.** Registering a session and creating its first generation each hold the
+   root-wide initialization lock for a moment, and both only try it. Two requests of a batch that
+   open at the same instant therefore meet `BUSY`: at registration, which leaves nothing, or at the
+   initialization that follows it, which left a registration with no session. The step is retried as
+   section 5 says, and each retry opens a new session. In one local measurement (Windows 11, a debug
+   build, in process, 20 requests at `--concurrency 4`) between one request in five and one in four was
+   retried (21 and 28 percent; [L-131](../planning/known-limits.md#l-131)); more admission slots did not change it, because
+   admission is not what is refused. This stays as it is.
+2. **The abandoned registration is no longer left for a cleanup a day later.** An ingest whose open
+   fails after it registered its session removes the registration, and the session folder it began,
+   at once. It uses the store routine `session clean` uses (`abandon_unpublished_open`), under a
+   narrower rule: only the registration whose marker names this very operation, only a session that
+   was never published, the same exclusive lifetime lock and the same bounded, owned-tree-checked
+   removal, and no deletion by path. A busy root is waited for, for up to five seconds and only on
+   this failure path (the root's lock is held for tens of milliseconds by every other opener). If the
+   removal still fails the request reports its original failure, unchanged, and the registration is
+   left for `session clean` as before. A retried ingest therefore still opens a new session per try,
+   but the failed tries leave nothing, and one key still ends with one session. The same change gives
+   a session that names no published session (registered but never published, or closed and cleaned)
+   a typed "not published" answer with a remediation that says it is a missing session and not a
+   diagnosis of the storage, for `session status`, `renew` and `close`. **Its published code
+   stays what the lookup gave** (`STORAGE_IO`, `INVALID_ARGUMENT` or, for a cleaned session,
+   `INTEGRITY_FAILURE`): changing a published failure code is not additive within v1 (known limit
+   [L-127](../planning/known-limits.md#l-127)).
+
 ## Consequences
 
 - The worker request and result are public v1 contracts before any command uses them,

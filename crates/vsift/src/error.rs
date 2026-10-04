@@ -221,6 +221,20 @@ pub enum EngineError {
     },
     /// No session of the root holds a job with that identity.
     JobNotFound,
+    /// No published session has this identity: it was never opened, is still
+    /// opening, its opening was interrupted (an abandoned registration,
+    /// collected by `session clean` once it is a day old; a failed opening removes
+    /// its own at once), or it was cleaned already (#277). Nothing is wrong with
+    /// the storage.
+    ///
+    /// The payload is the storage error the same lookup returned before this
+    /// variant existed (`Io` for an id with no session folder and no lock files,
+    /// `StateConflict` for a folder without its first generation,
+    /// `IntegrityFailure` for a cleaned session whose lock files remain). The
+    /// published code is that error's, unchanged: changing a published failure
+    /// code is not additive within v1 (known limit L-127), so the remediation is
+    /// what says it is a missing session and not a diagnosis of the storage.
+    SessionNotPublished(SessionStorageError),
     /// A job record or key violated an invariant; an internal fault.
     JobInvariant,
     /// A durable session was required in a worker workspace whose policy is
@@ -362,6 +376,8 @@ impl EngineError {
                 OpenSessionError::TranscriptInvalid(_) => FailureCode::Internal,
                 OpenSessionError::Cancelled => FailureCode::Cancelled,
             },
+            // The code the lookup answered before the typed error existed (L-127).
+            Self::SessionNotPublished(storage) => storage_failure_code(*storage),
             Self::TranscriptRejected(rejected) => transcript_failure_code(*rejected),
             Self::TranscriptSource(
                 TranscriptSourceError::InvalidPath | TranscriptSourceError::NotRegularFile,
@@ -814,6 +830,9 @@ impl fmt::Display for EngineError {
                 formatter.write_str("the job's session is closed or expired")
             }
             Self::JobNotFound => formatter.write_str("no session holds a job with that identity"),
+            Self::SessionNotPublished(_) => {
+                formatter.write_str("no published session has this identity")
+            }
             Self::JobInvariant => formatter.write_str("a job record violated an invariant"),
             Self::WorkspaceNotDurable => {
                 formatter.write_str("the worker workspace's policy is not durable")
@@ -900,6 +919,7 @@ impl Error for EngineError {
             | Self::JobInterrupted { .. }
             | Self::JobSessionNotOpen { .. }
             | Self::JobNotFound
+            | Self::SessionNotPublished(_)
             | Self::JobInvariant
             | Self::WorkspaceNotDurable
             | Self::AdmissionExceedsCapacity { .. }

@@ -1,15 +1,18 @@
 //! Disposable-session operations: open, inspect, renew, close, retain, clean,
 //! and validate retained bundles.
 
-use std::path::{Path, PathBuf};
+use std::{
+    path::{Path, PathBuf},
+    time::{Duration, Instant},
+};
 
 use vsift_application::{
     ForegroundSessionPort, OpenSession, OpenSessionError, OpenSessionOutcome, OpenSessionRequest,
     SessionStorageError, TranscriptImportRequest,
 };
 use vsift_domain::{
-    DurabilityRequirement, SessionId, SessionLifetime, SessionPhase, SourceId, StorageGeneration,
-    TranscriptRevision, WorkspacePolicy,
+    DurabilityRequirement, OperationId, SessionId, SessionLifetime, SessionPhase, SourceId,
+    StorageGeneration, TranscriptRevision, WorkspacePolicy,
 };
 use vsift_infrastructure::{
     BundleSourcePolicy, BundleStatus, CleanOutcome, ContainedFile, ContainedSourceStore,
@@ -560,8 +563,12 @@ impl Engine {
             }
             None => None,
         };
-        let (session, transcript) = match contained {
-            None => open_session(store, open, import.as_ref(), &request.cancellation).await?,
+        let registered = (
+            open.session_id.clone(),
+            open.initialize_operation_id.clone(),
+        );
+        let opened = match contained {
+            None => open_session(store, open, import.as_ref(), &request.cancellation).await,
             Some((file, admission)) => {
                 open_session(
                     ContainedSourceStore::new(store, file, admission),
@@ -569,7 +576,17 @@ impl Engine {
                     import.as_ref(),
                     &request.cancellation,
                 )
-                .await?
+                .await
+            }
+        };
+        let (session, transcript) = match opened {
+            Ok(opened) => opened,
+            Err(error) => {
+                // The failed open's registration, and the session folder it
+                // began, are removed now rather than left for a day (#277).
+                self.abandon_failed_open(&root, &registered.0, &registered.1)
+                    .await;
+                return Err(error);
             }
         };
         Ok(IngestOutcome {
@@ -577,6 +594,57 @@ impl Engine {
             transcript,
             free_space,
         })
+    }
+
+    /// Removes the registration, and the session folder it began, that one open
+    /// that failed before publishing its first generation created (#277).
+    ///
+    /// A failed open used to leave both for `session clean` to collect a day
+    /// later. Under load that is routine: a worker request that finds the
+    /// root's initialization lock busy after it registered opens a new session
+    /// for its retry and left the failed attempt's registration behind (9 of 40
+    /// rounds of twenty requests at concurrency four on a hosted runner listed
+    /// one extra `initializing` session). The store removes only a session that
+    /// was never published and whose registration names **this** operation
+    /// ([`FilesystemSessionStore::abandon_unpublished_open`]), through the
+    /// routine `session clean` uses.
+    ///
+    /// **Nothing is tried when no registration exists**: a failure that came
+    /// before it was made (the root's initialization lock was busy when the
+    /// registration asked for it, a guarantee the root cannot give, a clock) has
+    /// nothing to remove, and asking a busy root again would only wait.
+    ///
+    /// **A busy root is waited for, for a bounded time**, not given up on after a
+    /// few tries: the root's lock is held for tens of milliseconds by every
+    /// other opener (measured: five consecutive refusals were common in a batch
+    /// of two requests at a time on Windows, and a fixed eight tries then gave up
+    /// on a slow runner). The wait is five seconds
+    /// ([`crate::EnginePorts::with_failed_open_removal_wait`]) and applies only to this
+    /// failure path, so a request that did not fail never waits for it, and the
+    /// engine is asynchronous, so no thread is blocked. If the removal still
+    /// fails, or the root cannot be reopened, the registration is left for
+    /// `session clean` exactly as before, and the caller keeps its original
+    /// failure: this never reports and never masks.
+    async fn abandon_failed_open(
+        &self,
+        root: &Path,
+        session_id: &SessionId,
+        operation_id: &OperationId,
+    ) {
+        let Ok(Some(store)) = self.open_session_store(root, SessionRootProvisioning::ExistingOnly)
+        else {
+            return;
+        };
+        if !matches!(store.is_registered(session_id), Ok(true)) {
+            return;
+        }
+        let Ok(now) = self.now_unix_seconds() else {
+            return;
+        };
+        let _outcome = retry_while_transient(self.failed_open_removal_wait(), || {
+            store.abandon_unpublished_open(session_id, operation_id, now)
+        })
+        .await;
     }
 
     /// Lists one bounded page of the session index.
@@ -627,7 +695,7 @@ impl Engine {
     pub fn session_status(&self, session_id: &SessionId) -> Result<SessionSnapshot, EngineError> {
         let (store, now) = self.existing_store()?;
         let store = store.ok_or(EngineError::SessionRoot(SessionRootError::Missing))?;
-        let status = store.session_status(session_id)?;
+        let status = published_status(&store, session_id)?;
         Ok(SessionSnapshot::observe(&status, now))
     }
 
@@ -639,14 +707,14 @@ impl Engine {
     pub fn renew_session(&self, session_id: &SessionId) -> Result<SessionSnapshot, EngineError> {
         let (store, now) = self.existing_store()?;
         let store = store.ok_or(EngineError::SessionRoot(SessionRootError::Missing))?;
-        let current = store.session_status(session_id)?;
+        let current = published_status(&store, session_id)?;
         store.renew_session(
             session_id,
             &self.new_operation_id()?,
             current.generation(),
             now,
         )?;
-        let status = store.session_status(session_id)?;
+        let status = published_status(&store, session_id)?;
         Ok(SessionSnapshot::observe(&status, now))
     }
 
@@ -658,9 +726,9 @@ impl Engine {
     pub fn close_session(&self, session_id: &SessionId) -> Result<SessionSnapshot, EngineError> {
         let (store, now) = self.existing_store()?;
         let store = store.ok_or(EngineError::SessionRoot(SessionRootError::Missing))?;
-        let current = store.session_status(session_id)?;
+        let current = published_status(&store, session_id)?;
         store.close_session(session_id, &self.new_operation_id()?, current.generation())?;
-        let status = store.session_status(session_id)?;
+        let status = published_status(&store, session_id)?;
         Ok(SessionSnapshot::observe(&status, now))
     }
 
@@ -709,23 +777,29 @@ impl Engine {
         };
         let page = first_occupied_page(&store, request.cursor)?;
         let dry_run = request.mode == CleanMode::DryRun;
+        // A registration that was removed after the page listed it (another
+        // cleanup, or a failed open removing its own) is not an entry: there is
+        // nothing left to report and nothing went wrong.
         let entries = page
             .session_ids()
             .iter()
-            .map(
+            .filter_map(
                 |session_id| match store.clean_session(session_id, now, dry_run) {
-                    Ok(outcome) => CleanEntry::Examined {
+                    Ok(CleanOutcome::Gone) => None,
+                    Ok(outcome) => Some(CleanEntry::Examined {
                         session_id: session_id.clone(),
                         decision: match outcome {
-                            CleanOutcome::Ineligible => CleanDecision::Ineligible,
                             CleanOutcome::Eligible => CleanDecision::Eligible,
                             CleanOutcome::Removed => CleanDecision::Removed,
+                            CleanOutcome::Ineligible | CleanOutcome::Gone => {
+                                CleanDecision::Ineligible
+                            }
                         },
-                    },
-                    Err(error) => CleanEntry::Skipped {
+                    }),
+                    Err(error) => Some(CleanEntry::Skipped {
                         session_id: session_id.clone(),
                         error: EngineError::Storage(error),
-                    },
+                    }),
                 },
             )
             .collect();
@@ -761,6 +835,75 @@ impl Engine {
         let store = self.open_session_store(&root, SessionRootProvisioning::ExistingOnly)?;
         Ok((store, now))
     }
+}
+
+/// Reads a session's committed status, naming a session that is not
+/// published as that and not as a failing disk (#277).
+///
+/// A session id with no published session (never opened, still opening, its
+/// opening was interrupted and left only its registration, or cleaned
+/// already) answered `STORAGE_IO`, `INVALID_ARGUMENT` or `INTEGRITY_FAILURE`
+/// with no remediation, depending on what the lookup met first: the first
+/// sends an agent to retry or to look at its storage, the last tells it stored
+/// data is damaged. It is now [`EngineError::SessionNotPublished`], which
+/// **keeps the code the lookup gave** (changing a published failure code is not
+/// additive within v1, known limit L-127) and carries a remediation that says
+/// it is a missing session and not a diagnosis of the storage. A failure that
+/// is not that, including a real I/O error or damage to a session folder that
+/// exists, is unchanged.
+pub(crate) fn published_status(
+    store: &FilesystemSessionStore,
+    session_id: &SessionId,
+) -> Result<SessionStatus, EngineError> {
+    match store.session_status(session_id) {
+        Ok(status) => Ok(status),
+        // A cleaned session leaves its lock files, so the read finds the
+        // folder missing as damage, not as absence.
+        Err(
+            error @ (SessionStorageError::Io
+            | SessionStorageError::StateConflict
+            | SessionStorageError::IntegrityFailure),
+        ) => match store.indexed_session_status(session_id) {
+            Ok(None) => Err(EngineError::SessionNotPublished(error)),
+            Ok(Some(status)) => Ok(status),
+            Err(_) => Err(error.into()),
+        },
+        Err(other) => Err(other.into()),
+    }
+}
+
+/// Runs `attempt` again while it reports a refusal that goes away by itself,
+/// for at most `limit` (the first attempt always runs), pausing 5 ms and then
+/// twice as long after each, up to 100 ms; any other outcome, success included,
+/// ends it at once.
+///
+/// `Busy` is such a refusal everywhere. On Windows so is `AccessDenied`: a file
+/// that another handle (a scanner, a child process, a remover) still holds open
+/// refuses to be deleted until it lets go.
+async fn retry_while_transient<T, F>(
+    limit: Duration,
+    mut attempt: F,
+) -> Result<T, SessionStorageError>
+where
+    F: FnMut() -> Result<T, SessionStorageError>,
+{
+    let started = Instant::now();
+    let mut pause = Duration::from_millis(5);
+    loop {
+        match attempt() {
+            Err(error) if is_transient(error) && started.elapsed() < limit => {
+                tokio::time::sleep(pause).await;
+                pause = (pause * 2).min(Duration::from_millis(100));
+            }
+            outcome => return outcome,
+        }
+    }
+}
+
+/// Whether a refusal goes away by itself (see [`retry_while_transient`]).
+const fn is_transient(error: SessionStorageError) -> bool {
+    matches!(error, SessionStorageError::Busy)
+        || (cfg!(windows) && matches!(error, SessionStorageError::AccessDenied))
 }
 
 /// Registers, stages and activates one session through `port`, importing
@@ -859,5 +1002,109 @@ fn first_occupied_page(
         bucket = page
             .next_bucket()
             .ok_or(EngineError::SessionIndexInconsistent)?;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{cell::Cell, time::Duration};
+
+    use vsift_application::SessionStorageError;
+
+    use super::retry_while_transient;
+
+    const LONG: Duration = Duration::from_secs(30);
+
+    /// The busy path: a removal that meets a busy root is tried again and
+    /// succeeds when the root frees up.
+    #[tokio::test]
+    async fn a_busy_attempt_is_retried_until_it_succeeds() {
+        let calls = Cell::new(0_u32);
+
+        let outcome = retry_while_transient(LONG, || {
+            calls.set(calls.get() + 1);
+            if calls.get() < 4 {
+                Err(SessionStorageError::Busy)
+            } else {
+                Ok("removed")
+            }
+        })
+        .await;
+
+        assert_eq!(outcome, Ok("removed"));
+        assert_eq!(calls.get(), 4);
+    }
+
+    /// The bound is a time: a root that stays busy is asked until the limit and
+    /// then the last answer is returned for the caller to ignore. The first
+    /// attempt always runs, even with no time at all.
+    #[tokio::test]
+    async fn a_root_that_stays_busy_is_asked_until_the_limit_and_no_longer() {
+        let calls = Cell::new(0_u32);
+        let started = std::time::Instant::now();
+
+        let outcome: Result<(), SessionStorageError> =
+            retry_while_transient(Duration::from_millis(60), || {
+                calls.set(calls.get() + 1);
+                Err(SessionStorageError::Busy)
+            })
+            .await;
+
+        assert_eq!(outcome, Err(SessionStorageError::Busy));
+        assert!(calls.get() >= 2, "{} attempts", calls.get());
+        assert!(started.elapsed() >= Duration::from_millis(60));
+        assert!(
+            started.elapsed() < Duration::from_secs(5),
+            "{:?}",
+            started.elapsed()
+        );
+
+        let once: Cell<u32> = Cell::new(0);
+        let none: Result<(), SessionStorageError> = retry_while_transient(Duration::ZERO, || {
+            once.set(once.get() + 1);
+            Err(SessionStorageError::Busy)
+        })
+        .await;
+        assert_eq!(none, Err(SessionStorageError::Busy));
+        assert_eq!(once.get(), 1);
+    }
+
+    /// Any other failure, like success, is final at once: no retry of an
+    /// integrity failure or an I/O error.
+    #[tokio::test]
+    async fn any_other_outcome_is_final_at_once() {
+        for failure in [
+            SessionStorageError::Io,
+            SessionStorageError::IntegrityFailure,
+            SessionStorageError::StateConflict,
+        ] {
+            let calls = Cell::new(0_u32);
+
+            let outcome: Result<(), SessionStorageError> = retry_while_transient(LONG, || {
+                calls.set(calls.get() + 1);
+                Err(failure)
+            })
+            .await;
+
+            assert_eq!(outcome, Err(failure));
+            assert_eq!(calls.get(), 1, "{failure:?}");
+        }
+    }
+
+    /// A file another handle still holds open refuses to be deleted on Windows
+    /// until it lets go, so `AccessDenied` is tried again there and only there.
+    #[tokio::test]
+    async fn access_denied_is_transient_on_windows_only() {
+        let calls = Cell::new(0_u32);
+
+        let outcome: Result<(), SessionStorageError> =
+            retry_while_transient(Duration::from_millis(40), || {
+                calls.set(calls.get() + 1);
+                Err(SessionStorageError::AccessDenied)
+            })
+            .await;
+
+        assert_eq!(outcome, Err(SessionStorageError::AccessDenied));
+        assert_eq!(calls.get() > 1, cfg!(windows), "{} attempts", calls.get());
     }
 }

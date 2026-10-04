@@ -13,6 +13,8 @@
 //! recoverable jobs with their chunk checkpoints (`jobs`, `job_records`) and
 //! worker request records (`worker_requests`).
 
+#[cfg(test)]
+mod abandon_tests;
 mod bundle;
 mod chain;
 mod cleanup;
@@ -385,6 +387,10 @@ pub enum CleanOutcome {
     Eligible,
     /// A claimed owned session was quarantined and removed.
     Removed,
+    /// The registration was gone by the time cleanup claimed it: another
+    /// cleanup, or a failed open removing its own registration (#277), got
+    /// there first. There is nothing left to examine and nothing went wrong.
+    Gone,
 }
 
 /// Stable held registration while a source is staged and activated.
