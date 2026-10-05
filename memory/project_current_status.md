@@ -40,19 +40,20 @@ the CLI and write a cited report. P12's named-client trials qualified it:
 **P00-P13 are complete. P14, the R0 qualification (#17), is in progress** (started 2026-10-02;
 decisions A-H of ADR 0024 confirmed). Its plan is 14 pull requests (0-13); **PRs 0-10 are merged and the candidate
 `0.2.0-rc.1` is published (2026-10-05: `v0.2.0-rc.1` at `d5792ce31db1`, npm `next` on all four packages, `latest`
-untouched). PR 11, its qualification, is in progress: 11b (the try-out sheet and the batch 2 and 3 checklist, prepared,
-nothing run) is open and 11a (the hosted evidence) is running; PRs 12-13 remain; the packet is not complete.** What it
+untouched). PR 11, its qualification, is in progress: 11b (the try-out sheet and the batch checklist) is merged, 11a (the
+hosted evidence, this change) and 11c (#313, `install.md`) are open; PRs 12-13 remain; the packet is not complete.** What it
 must show, and what is weaker than it sounds:
-- **The published 0.1.0 has run on a video, but only that:** PR 3 ran the real-tool checkpoints against it
-  on hosted Ubuntu 24.04, Windows and macOS 15 (tests from a later commit, L-115); PR 2 installed it on
-  hosted runners, not clean machines. Smart App Control and the macOS prompts are unseen (L-098).
-- **Platforms:** the P08/P09/P11 numbers and the Claude Code trials are Windows 11; hosted Ubuntu, Windows
-  and macOS passed on 0.1.0 (macOS with Homebrew's tools, L-114); P11's durable stage cannot run hosted
-  (#258, L-113); the matrix rules are not met (L-035). **A synthetic corpus and voice only** (L-020, L-022).
-  **Trials tuned on their own scenarios;** the hold-outs are unrun; the blurred-banner re-run is missing (L-095).
-- **SEC-T01 is half done and stays so in R0** (L-068, #188 in R1; RQ-14 waived). **The campaigns found
-  things on 0.1.0 and PR 7 fixed or narrowed them; the evidence is still for 0.1.0:** RQ-08, RQ-10 and
-  RQ-13 are `failed` until PR 11 re-runs them. **`latest` has never moved** (L-105). Decisions: `TODO.md`.
+- **The candidate has now run on hosted runners** (plan 24.2): clean installs, archives, the offline install, the upgrade of
+  the published 0.1.0 to it, the journeys on three systems (macOS with Homebrew's tools, L-114; P11's durable stage cannot run
+  hosted, L-113), fuzzing, load, the runbook and the scan reading **passed**; **not clean machines** (L-112). Smart App Control
+  and the macOS prompts are unseen (L-098). **A synthetic corpus and voice only** (L-020, L-022); the hold-outs and the
+  blurred-banner re-run are in batch 2, which finished on the maintainer's machine (its reading is another pull request, L-095).
+- **Open on the candidate:** the stress run found **two rare Windows failures, #312 and #314** (L-135; a reader answered
+  `IntegrityFailure` once in 140,721 reads while generations were published may be a product defect: RQ-08 is `failed`, an
+  investigation is running, a fix means `rc.2`). **Accepted by the maintainer on 2026-10-05:**
+  a source over the limit and larger than the free space answers `STORAGE_IO` where 0.1.0 said `INVALID_SOURCE` (L-134, RQ-10
+  waived) and the FFmpeg residual CVE-2026-38350 (L-122, RQ-13 passed). **SEC-T01 stays half done in R0** (L-068; RQ-14
+  waived). **`latest` has never moved** (L-105). Decisions: `TODO.md`.
 
 ## P14 PRs 1 to 6 and 8 in one view
 
@@ -132,7 +133,7 @@ Control, the macOS prompts (L-098); power loss beyond Ubuntu 24.04 ext4 (L-037).
 | P11 | Complete (`40c4038`); SEC-T01 adversarial evidence is technical debt, moved to R1 (#188, L-068) |
 | P12 | Complete (2026-09-30, ADR 0022 Accepted): skill, harness, named-client trials; review tier qualified, compact tier 93% and 100% on the #222 re-run; open: L-095 (#224), #219, #204 (`1284e54`) |
 | P13 | Complete (2026-10-01, ADR 0023 Accepted): distribution, managed install, `handoff check`, human output; 0.1.0 published; release commit `011bc4d` |
-| P14 | **In progress** (started 2026-10-02): PRs 0-10 merged (PR 7 = the fixes of the campaigns and batch 1; the candidate `0.2.0-rc.1` is published); 11 in progress (11b prepared sheets open, 11a hosted evidence running); 12-13 remain; agent batch 1 ran (baseline) |
+| P14 | **In progress** (started 2026-10-02): PRs 0-10 merged (PR 7 = the fixes of the campaigns and batch 1; the candidate `0.2.0-rc.1` is published); 11 in progress (11b sheets merged; 11a hosted evidence and 11c `install.md` open; batch 2 finished on the maintainer's machine, its reading is another pull request); 12-13 remain; agent batch 1 ran (baseline) |
 
 ## Architecture snapshot
 

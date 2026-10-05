@@ -1201,3 +1201,179 @@ Prepared and **not run**; nothing here is evidence yet.
 | --- | --- |
 | [`rq-17-tryout-sheet.md`](rq-17-tryout-sheet.md) | RQ-17: the Smart App Control try-out (npm, a browser download of the archive, a command-line download of it), a true clean-machine install of `vsift-cli@next`, the guide's first investigation on the practice recording and the `setup` flows, on the second Windows 11 machine (LOKI), step by step for a person at its console, each with the expected output and a place to write what was seen. Decision H: an observation blocks the stable only until it is recorded. Decision C's trigger is stated; the sheet decides nothing. macOS is untried (no Mac) |
 | [`p14-batch-2-3-checklist.md`](p14-batch-2-3-checklist.md) | RQ-15 and RQ-16: batch 2 (34 runs, the counted set with the skill) and batch 3 (18 runs, the cold final round): what runs, the commands, `campaign.json`'s keys, the committed freeze files, `-AllowGraderChange` for batch 3, the preconditions (Docker Desktop, the machine awake, a clean checkout) and the cost and time from batch 1's measurements. Each batch starts only on the maintainer's explicit go |
+
+### 24.2 PR 11a (an increment): the hosted evidence on the candidate (2026-10-05)
+
+Everything ran on hosted runners and was read-only; nothing ran on the maintainer's machine, and no code, tool, workflow, schema or
+setting changed on `main`. What tests the **published packages** was dispatched from `main` at the candidate's commit with
+`version=0.2.0-rc.1`; what tests **source** (`Fuzz`, `P14 stress`, `P07 local ASR`, `P14 compatibility`, the two fault campaigns) was
+dispatched at the tag, so each ran the candidate's own bytes, with the same parameters as for 0.1.0 (section 18) so that the figures
+compare. The ledger now records the candidate's own entry for each item below, with 0.1.0's moved to `prior`. **If a second candidate
+(`0.2.0-rc.2`) is cut, every entry below becomes `prior` evidence and the staleness rule applies to all of it again**: what a fix
+leaves untouched in an item's scope may be carried, everything else is run again.
+
+| Item | Run | Result | Findings |
+| --- | --- | --- | --- |
+| RQ-19 | `P14 verify release` [37328341759](https://github.com/smormah/vsift/actions/runs/37328341759) | **passed**: 20 checks (four packages at `next` 0.2.0-rc.1 and `latest` 0.0.0, provenance names run 37323324151 at the tag's commit, `npm audit signatures`, 10 of 10 files and 4 of 4 tarballs attested, ten files whose digests equal GitHub's, a pre-release that is not the latest release) | none |
+| RQ-01 to RQ-04 | `P14 published artifacts` [37328348087](https://github.com/smormah/vsift/actions/runs/37328348087) (23 jobs, 34 job-minutes) and `P14 compatibility` [37330686129](https://github.com/smormah/vsift/actions/runs/37330686129) | **passed**: twelve clean installs, three archives, the offline install, and **three upgrades of the published 0.1.0 to the published 0.2.0-rc.1** over the real registry (configuration byte for byte, sessions and a bundle read as before, uninstall walked); the frozen 0.1.0 examples and its stored records read by the candidate | none new; the Windows `vsift.cmd` shim re-reads arguments again (36 of 39 hostile cases, #257, L-109: observed, not a pass), and the minimal Ubuntu image still lacks `libgomp1` (#256, fixed in the message and the guide) |
+| RQ-06 | `P13 managed smoke` [37328360989](https://github.com/smormah/vsift/actions/runs/37328360989) | **passed**: three jobs with the published binary as the one under test | none |
+| RQ-05 | `P14 journeys` [37328354601](https://github.com/smormah/vsift/actions/runs/37328354601) (125 job-minutes), `P07 local ASR` [37330691632](https://github.com/smormah/vsift/actions/runs/37330691632), with RQ-09 and RQ-12 below | **passed** under the per-system rule (section 21): 54 stages passed on each of Ubuntu 24.04, Windows and macOS 15, none skipped; the durable stage refused as `MISSING_CAPABILITY` with nothing created on all three; the P07 gates held on Ubuntu, Windows (their own run) and macOS (in the journeys run) | none |
+| RQ-07 | `Fuzz` [37330740720](https://github.com/smormah/vsift/actions/runs/37330740720) | **passed**: 31 targets, 3,601 s each, 2.88 billion runs, no crash, timeout or out-of-memory | none; 15 targets still finding coverage at the end ([L-128](known-limits.md#l-128)) |
+| RQ-08 | `P14 stress` [37330746176](https://github.com/smormah/vsift/actions/runs/37330746176) (24 jobs, 1,191 job-minutes) | **failed**: 22 of 24 jobs clean; one repetition failed in each of two Windows jobs (a root-creation test under CPU load, 1 of 1,500; a lock-suite test, 1 of 200). **No waiver**: the findings are under investigation, because the second may be a product defect | [#312](https://github.com/smormah/vsift/issues/312), [#314](https://github.com/smormah/vsift/issues/314) (new; [L-135](known-limits.md#l-135)) |
+| RQ-09 | `P14 load` [37330716117](https://github.com/smormah/vsift/actions/runs/37330716117) | **passed**: every gate held | none (#274 is fixed on the published bytes: F02, F04 and F05 now recognise) |
+| RQ-10 | `P14 malicious media` [37330709659](https://github.com/smormah/vsift/actions/runs/37330709659); supplementary [37361623352](https://github.com/smormah/vsift/actions/runs/37361623352) | the run **failed** its own judge (93 of 96 inputs inside their bounds, one new answer) and the item is **waived** for R0 by the maintainer's decision of 2026-10-05 (below) | [#310](https://github.com/smormah/vsift/issues/310), [L-134](known-limits.md#l-134); #265 and #266 as before (L-127); #264 now passes |
+| RQ-11 | `P13 managed power loss` [37361388844](https://github.com/smormah/vsift/actions/runs/37361388844) and `P10 durability campaign` [37361383864](https://github.com/smormah/vsift/actions/runs/37361383864), both at the tag | **passed**: both campaigns met their acceptance numbers (the P10 campaign's hosted verdict job never got a runner, so its own script was run by hand over the run's artifacts: below) | none; the runs are marked failed on GitHub only for that job ([#316](https://github.com/smormah/vsift/issues/316)) |
+| RQ-12 | `P14 runbook walk` [37330704044](https://github.com/smormah/vsift/actions/runs/37330704044) | **passed**: 18 steps, all matched, none diverged | none |
+| RQ-13 | `P14 scan reading` [37330697823](https://github.com/smormah/vsift/actions/runs/37330697823) and [`p14-scan-reading-2026-10-05.md`](p14-scan-reading-2026-10-05.md) | **passed**, with one residual the maintainer accepted on 2026-10-05 and the ledger names (below) | [#272](https://github.com/smormah/vsift/issues/272) ([L-122](known-limits.md#l-122), accepted) |
+| RQ-18 | `CI` [37278869623](https://github.com/smormah/vsift/actions/runs/37278869623) at the candidate's commit | **passed**: the Governance job at the claims rung `candidate` and the other nine jobs | none |
+
+**What was not run.** `P14 local upgrade`: the real upgrade of 0.1.0 to the published candidate is what it stood in for (L-111). A longer
+fuzz run for the 15 targets still growing (L-128's next step): not now, the maintainer's call. Nothing for RQ-15 to RQ-17: the agent
+batches run on the maintainer's machine and the try-outs are theirs. **Batch 2 (RQ-15) finished on the maintainer's machine on 2026-10-05; its
+records and reading go in a separate pull request (`p14-agent-trials/batch-2/`), and none of its results is claimed here.**
+
+**What each shows, and does not show.** The published-artifact runs (RQ-01 to RQ-04, RQ-19) ran minutes after the publish on hosted
+images that carry developer tools a clean machine lacks ([L-112](known-limits.md#l-112)); the archive jobs never saw a browser
+download, Smart App Control or Gatekeeper (RQ-17); the upgrade is npm only (no pnpm, Yarn or Bun upgrade, no downgrade). The journeys
+ran tests compiled from the tag against the installed native executable, not through the npm launcher or an archive, with Homebrew's
+unreviewed tools on macOS ([L-114](known-limits.md#l-114), [L-115](known-limits.md#l-115)); the durable stage's own script has still not
+run on a disk with write barriers (RQ-09 and RQ-12 ran the durable path there, not that script). The load and walk runs used one
+published version, one distribution and an ext4 volume that is a file; the soak was 1,000 requests (11 minutes), not the 8 hours of
+verification section 5, and the two 12,000-request soaks of 0.1.0 were not repeated. The fuzz hour is a floor and ran on shared CPUs
+that were slower than on 0.1.0 (2.88 billion runs against 3.68 billion). The power-loss campaign's managed store used stand-in
+versions of the tools ([L-037](known-limits.md#l-037)). Everything is on a synthetic corpus and voice.
+
+**RQ-10 in detail** ([#310](https://github.com/smormah/vsift/issues/310), opened before anything was repeated). The judge expects
+`INVALID_SOURCE`, `RESOURCE_LIMIT` or `DEADLINE_EXCEEDED`. Three CLI cases answered otherwise:
+
+| Case | Answer on the candidate | On 0.1.0 | What it is |
+| --- | --- | --- | --- |
+| `sparse-30gib` (a sparse 30 GiB file, over the 20 GiB limit) | `STORAGE_IO` in 0.1 s, nothing copied | `INVALID_SOURCE` | **New, the reason the run is red.** The check added for #266 (a refusal before the copy when the source and a 16 MiB margin do not fit) runs before the source-size limit, and the runner's disk is smaller than the file; with enough room the limit answers as before. **A change of code in a corner case of a published command**, typed and bounded ([L-134](known-limits.md#l-134)) |
+| `sparse-no-room` (a sparse 600 MiB file, a 256 MiB root) | `INTEGRITY_FAILURE` after 5.2 s | the same | A defect of the **case**, not of the product: it passes the tmpfs mount point itself as the session root, a folder VSift did not create, which `install.md` section 12 says is refused after a wait of up to five seconds (#261). Nothing was written (a 7 MiB peak). So the campaign tested the no-room path of `ingest` on neither version. The worker request in the same case answers `RESOURCE_LIMIT` at once |
+| `symlink-to-canary` | `STORAGE_IO` | the same | #265: the answer kept, the remediation says what happened; an accepted residual until v2 ([L-127](known-limits.md#l-127)) |
+
+The named pipe (#264) now answers `INVALID_SOURCE` at once for `ingest` and for the worker request. The largest memory peak, 1,024 MiB
+of the 1,024 MiB limit, was the 512 MiB free-space box (`mp4-free-512mib`, which completed: file cache, no out-of-memory kill); on 0.1.0
+it was 809 MiB.
+
+**The supplementary run, with its exact scope.** The campaign tools are frozen with the candidate, so the case could not be corrected
+on `main`. On the maintainer's instruction the corrected case was run **for evidence only, from a scratch branch that is never merged**
+(`p14-pr11-evidence-media-corrected-case`, commit `bf378a36bfb6e4a9ad160049c87ea425c96e7ae3`: the tag's tool with two lines changed in
+`tools/p14-campaigns`, the small-filesystem case's session root a folder VSift creates and `sparse-30gib` allowed to answer `STORAGE_IO`),
+against the same published packages (run [37361623352](https://github.com/smormah/vsift/actions/runs/37361623352), succeeded). It is a
+**different revision of the tool** from the candidate's frozen one and does not turn the first run green. What it shows: `sparse-no-room`
+`ingest` answers `STORAGE_IO` in 0.1 s (the check of #266 refuses before the copy on the published bytes) and its worker request
+`RESOURCE_LIMIT`; `sparse-30gib` answers `STORAGE_IO` in 0.1 s; the pipe passes; the only finding left is the link (#265); largest
+memory peak 898 MiB.
+
+**The maintainer's decision on RQ-10 (2026-10-05).** `0.2.0-rc.1` stays (no second candidate), and RQ-10 is **waived for R0** through the
+ledger's waiver mechanism (as RQ-14 was): the decision's text is in the ledger entry and in [ADR 0024](../decisions/0024-r0-qualification-and-release-candidate.md)'s
+PR 11a note. Two residuals are accepted: the over-the-limit-and-larger-than-the-disk answer (`STORAGE_IO` where 0.1.0 said
+`INVALID_SOURCE`), **a known deviation from the rule that published failure codes do not change within v1**, accepted because the answer
+is typed, bounded and stores nothing, with the rule that a later release should run the source-size limit first; and the link's
+`STORAGE_IO` (#265). L-127 and L-126 say so plainly; L-134 is the entry. The first run stays in the ledger as failed evidence.
+
+**RQ-08 in detail** (opened before anything was repeated; nothing was rerun). The ledger records the run as **failed** with
+[#312](https://github.com/smormah/vsift/issues/312) and [#314](https://github.com/smormah/vsift/issues/314), and **no waiver**: the
+maintainer asked for an investigation first, because a reader answered "damaged" while generations were published may be a product
+defect that justifies a second candidate.
+
+| Suite | Repetitions per system | Windows | Ubuntu | macOS |
+| --- | ---: | --- | --- | --- |
+| locks (`--lib`, `p05_lifecycle`; #66) | 200 | **1 failed** (#314) | 0 | 0 |
+| admission (`weighted_admission`, `storage_coordination`; #271) | 200 | 0 | 0 | 0 |
+| engine (`engine_worker`, `engine_batch`, `engine_jobs`, `engine_lifecycle`) | 200 | 0 | 0 | 0 |
+| delivery (`external_delivery_stress`; each repetition is a randomised run) | 100 | 0 | 0 | 0 |
+| supervisor (#128) | 1,500 | 0 | 0 | 0 |
+| supervisor, CPUs busy (#128) | 1,500 | 0 | 0 | 0 |
+| roots (`session_root_provisioning`; #206) | 1,500 | 0 | 0 | 0 |
+| roots, CPUs busy (#206) | 1,500 | **1 failed** (#312) | 0 | 0 |
+
+- **#312**: `concurrent_processes_create_one_root_and_every_one_adopts_it` failed once in 1,500 CPU-loaded repetitions (8.3 s against a
+  3 s median) with `session root is still being created by another process`: a creator that did not finish inside the documented wait
+  ([L-126](known-limits.md#l-126)). It is **not #206's message** (`session storage root permissions are not private`), which did not
+  reproduce: plain root creation 0 of 1,500 on Windows, 7 on 0.1.0. The creator may have been starved by the burners (8 on 4 CPUs), or the
+  wait and the protocol may have a gap on Windows under load. Not known.
+- **#314**: `filesystem_session_store::p10_tests::readers_never_report_damage_while_generations_are_published` failed once in 200
+  repetitions of the lock suite: `1 of 140721 reads failed` with `[IntegrityFailure]`. A reader was told stored data is damaged while another
+  thread published generations. It is a different test and area from every known intermittent failure (#128, #206, #253, #268, #271), it
+  did not fail in 200 repetitions on Windows with 0.1.0 or on Ubuntu and macOS now, and its cause is not known: a test that holds the invariant
+  "a reader never reports damage while a generation is published" failed on it.
+- **Against 0.1.0**: #206's message did not reproduce (7 of 1,500 plain and 2 of 1,500 loaded before), weighted admission on Windows was
+  clean (2 of 200 before: #271), and **#128 did not reproduce again** (0 of 3,000 per system, plain and loaded). The delivery suite ran 100
+  repetitions, below the rule's 200, because each starts hundreds of processes; the rule (zero failures in at least 200 repetitions per
+  system) is met by every other suite and not met by the two repetitions above. 6,700 repetitions per system, 20,100 in all; no hung
+  repetition anywhere.
+- **Not shown:** every interleaving; a quiet machine (hosted runners are shared and loaded); the failure rates as a user's chance of
+  failure.
+
+**RQ-13 in detail.** The reading is the new record, [`p14-scan-reading-2026-10-05.md`](p14-scan-reading-2026-10-05.md): cargo deny,
+the alert store (0 in any state), the ten pinned actions, whisper.cpp, Node.js and npm, the SBOM and, for FFmpeg, the ancestry tool
+over all 58 records. Nothing changed since 2026-10-04 and nothing new was found. **The residual and the decision (2026-10-05):**
+CVE-2026-38350 (High, `libswscale`) is tied to its fix by elimination only ([#272](https://github.com/smormah/vsift/issues/272),
+[L-122](known-limits.md#l-122)). The maintainer **accepted** it with L-122 as the register entry and will not contact the FFmpeg project's
+maintainers. Section 6's rule reads "no open high or critical finding affecting a supported path ... unless fixed, mitigated, or accepted
+by the maintainer with a register entry", which is met, so RQ-13 is recorded **`passed`** (a waiver would say the rule was not met) with the
+residual named in its entry and in its `does_not_prove`. #272 stays open for the maintainer to close.
+
+**RQ-11 in detail.** `P13 managed power loss` passed on the candidate with the same figures as on 0.1.0's code: 1,812 power-loss points
+and 134 acknowledged commands, **0** lost points, lost acknowledgements, damaged points, fsck or mount failures or torn points; the negative
+control lost 72 points and 36 acknowledgements, as it must. The **P10 durability campaign** (run 37361383864, all eight layer jobs succeeded,
+311 job-minutes): layer A 11,094 replay points and 400 acknowledged commands with **0** lost, damaged, torn, fsck or mount failures, and its negative
+control lost 840 points and 53 acknowledgements as it must; layer B 320 kills over four shards, every one during an operation, 0 failed
+cycles; layer C 60 rounds, 180 injected write errors, all 180 typed `STORAGE_IO` and none acknowledged. These equal the earlier reruns of the
+campaign (11,043 points, 320 kills, 180 of 180, the control losing 53 of 80). **The run is marked failed on GitHub because its `Acceptance`
+job, the verdict, was cancelled three times (an original attempt and two re-runs, the last at 21:10 UTC) with "The job was not acquired by Runner of type hosted even after multiple attempts"** (hosted
+runners were scarce that evening: [#316](https://github.com/smormah/vsift/issues/316), opened before the re-run). The campaign's own
+script, `tools/p10-crash-campaign/scripts/acceptance.sh` at the tag, was therefore **run by hand over the eight layer artifacts of that run** and
+printed "All acceptance criteria met". The ledger records RQ-11 `passed` on that basis, with this scope written in the entry; if the hosted job
+runs later its summary replaces the by-hand reading, and a maintainer who wants only the hosted verdict can set the item back to `running`.
+
+**Fuzz, per target** (`Fuzz` run 37330740720; the last column is where in the run the final new coverage appeared; a high figure means
+the target had not stopped finding paths):
+
+| Target | Runs | Runs per second | Peak memory (MB) | Coverage | Corpus | Last new coverage found at |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `bundle_manifest` | 12,265,120 | 3,406 | 445 | 5810 | 3219 | 100 % of the runs |
+| `chunk_checkpoint` | 131,068,471 | 36,397 | 643 | 2414 | 2399 | 90.1 % of the runs |
+| `crop_rect` | 181,590,470 | 50,427 | 541 | 154 | 95 | 0.1 % of the runs |
+| `evidence_record` | 120,613,090 | 33,494 | 738 | 3824 | 4369 | 99.9 % of the runs |
+| `ffprobe_metadata` | 94,534,409 | 26,252 | 727 | 2723 | 2670 | 81.8 % of the runs |
+| `frame_listing` | 98,955,864 | 27,480 | 512 | 562 | 665 | 84.1 % of the runs |
+| `frame_showinfo` | 81,653,863 | 22,675 | 549 | 595 | 782 | 34.3 % of the runs |
+| `gzip_tar_inventory` | 8,035,312 | 2,231 | 423 | 1458 | 569 | 84.4 % of the runs |
+| `handoff_check` | 405,091 | 112 | 452 | 6113 | 1218 | 97.9 % of the runs |
+| `host_attestation` | 152,500,575 | 42,349 | 559 | 473 | 549 | 36 % of the runs |
+| `identifiers` | 108,184,161 | 30,042 | 619 | 974 | 418 | 69.5 % of the runs |
+| `input_path` | 113,564,616 | 31,536 | 613 | 509 | 565 | 39.5 % of the runs |
+| `job_batch_file` | 27,326,665 | 7,588 | 580 | 2932 | 5372 | 99.6 % of the runs |
+| `job_batch_line` | 145,484,508 | 40,401 | 789 | 2908 | 3413 | 99.5 % of the runs |
+| `job_record` | 211,185,665 | 58,646 | 749 | 2874 | 3212 | 98.5 % of the runs |
+| `job_request` | 102,828,202 | 28,555 | 743 | 3239 | 3945 | 97.6 % of the runs |
+| `mountinfo` | 66,717,922 | 18,527 | 551 | 397 | 550 | 80.3 % of the runs |
+| `os_release` | 170,928,818 | 47,467 | 691 | 353 | 621 | 99 % of the runs |
+| `png_sequence` | 152,919,001 | 42,465 | 510 | 395 | 126 | 51.6 % of the runs |
+| `request_record` | 90,603,587 | 25,160 | 734 | 4518 | 4204 | 99.3 % of the runs |
+| `search_query` | 8,271,691 | 2,297 | 587 | 648 | 988 | 89.9 % of the runs |
+| `setup_plan` | 99,342,705 | 27,587 | 944 | 4194 | 5183 | 97.1 % of the runs |
+| `tar_inventory` | 48,925,142 | 13,586 | 561 | 826 | 241 | 89.5 % of the runs |
+| `transcript_cursor` | 191,307,799 | 53,126 | 528 | 240 | 175 | 1 % of the runs |
+| `transcript_record` | 108,888,515 | 30,238 | 678 | 5826 | 5643 | 99.7 % of the runs |
+| `transcript_srt` | 70,222,466 | 19,500 | 667 | 1031 | 1270 | 31 % of the runs |
+| `transcript_webvtt` | 39,989,137 | 11,105 | 673 | 1375 | 2375 | 89.6 % of the runs |
+| `visual_index_record` | 108,736,208 | 30,196 | 751 | 3309 | 3605 | 95.3 % of the runs |
+| `visual_samples` | 18,310,151 | 5,084 | 444 | 865 | 727 | 69.7 % of the runs |
+| `whisper_full_json` | 112,310,365 | 31,188 | 658 | 2338 | 2652 | 95.4 % of the runs |
+| `xz_tar_inventory` | 2,251,989 | 625 | 361 | 3135 | 235 | 90 % of the runs |
+
+**Hosted minutes.** About 3,700 job-minutes (about 62 runner-hours) in fifteen runs: the fuzz run 1,951, the stress run 1,191, the P10 campaign 311,
+`P14 journeys` 125 (macOS 87), the published-artifact run 34, `P07 local ASR` 29, `P14 load` 23, and the other eight together 36 (the
+verification, managed smoke, compatibility, scan reading, runbook walk, malicious media, the corrected-case run and the power-loss campaign). GitHub documents hosted runners as free for
+public repositories (not re-checked for this account).
+
+**What blocks `release-evidence --complete-for 0.2.0-rc.1` after this pull request** (ledger status in brackets): **RQ-08** (`failed`: #312
+and #314 under investigation; a fix means a second candidate, an acceptance a recorded decision);
+**RQ-15** and **RQ-16** (`planned`: the agent batches 2 and 3; batch 2 finished on the maintainer's machine, its records and reading are a separate
+pull request); **RQ-17** (`planned`: the try-outs on the clean Windows machine). Passed for the candidate: RQ-01 to RQ-07, RQ-09, RQ-11,
+RQ-12, RQ-13 (with its accepted residual), RQ-18 and RQ-19; RQ-10 and RQ-14 are `waived` (decisions of 2026-10-05 and 2026-10-03); RQ-20 is the
+check itself.
