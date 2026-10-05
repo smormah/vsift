@@ -1,0 +1,368 @@
+{
+  "calls": [
+    {
+      "actions": [
+        {
+          "verdict": "skill_read"
+        }
+      ],
+      "denied": false,
+      "exit_code": 0,
+      "index": 0,
+      "step": 0,
+      "summary": "/bin/bash -lc 'cat .agents/skills/vsift/SKILL.md'"
+    },
+    {
+      "actions": [
+        {
+          "verdict": "housekeeping"
+        },
+        {
+          "verdict": "housekeeping"
+        }
+      ],
+      "denied": false,
+      "exit_code": 0,
+      "index": 1,
+      "step": 1,
+      "summary": "/bin/bash -lc \"command -v vsift; rg --files -g 'walkthrough.mp4' -g 'AGENTS.md'\""
+    },
+    {
+      "actions": [
+        {
+          "verdict": "skill_read"
+        }
+      ],
+      "denied": false,
+      "exit_code": 0,
+      "index": 2,
+      "step": 2,
+      "summary": "/bin/bash -lc 'cat .agents/skills/vsift/references/safety.md .agents/skills/vsift/references/commands.md .agents/skills/vsift/references/budgets.md .agents/skills/vsift/references/handoff.md .agents/skills/vsift/references/lifecycle.md'"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "setup",
+            "check",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "setup.check",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": 2,
+      "index": 3,
+      "step": 3,
+      "summary": "/bin/bash -lc 'vsift setup check --json'"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "handoff",
+            "check",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "handoff.check",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": 0,
+      "index": 4,
+      "step": 4,
+      "summary": "/bin/bash -lc \"vsift handoff check --json <<'VSIFT_HANDOFF'\n**Problem:** I couldn’t determine the presenter’s status or build number because VSift’s required media tools are missing.\n\n**Expected:** Identify both values from \"'`walkthrough.mp4` using the compact budget.\n\n**Actual:** VSift is available, but FFmpeg, FFprobe, and whisper.cpp are missing. Nothing was installed.\n\n**Reproduction steps:**..."
+    }
+  ],
+  "client": {
+    "arguments": [
+      "exec",
+      "--json",
+      "--ephemeral",
+      "--ignore-user-config",
+      "--ignore-rules",
+      "--skip-git-repo-check",
+      "-m",
+      "gpt-6-astra",
+      "--sandbox",
+      "workspace-write",
+      "-C",
+      "<workspace>",
+      "-c",
+      "approval_policy=\"never\"",
+      "-c",
+      "sandbox_workspace_write.network_access=false",
+      "-c",
+      "sandbox_workspace_write.writable_roots=['<home>']",
+      "-c",
+      "sandbox_workspace_write.exclude_tmpdir_env_var=true",
+      "-c",
+      "sandbox_workspace_write.exclude_slash_tmp=true",
+      "Please look at the recording walkthrough.mp4 in this folder and tell me what status and build number the presenter reports. Use the VSift skill and the compact budget. If something you need is missing, tell me exactly what I would have to do. Don't install anything on this machine."
+    ],
+    "environment_names": [
+      "PATH",
+      "LOCALAPPDATA",
+      "APPDATA",
+      "XDG_CONFIG_HOME",
+      "XDG_CACHE_HOME",
+      "HOME",
+      "USERPROFILE",
+      "TEMP",
+      "TMP",
+      "TMPDIR",
+      "CODEX_HOME",
+      "VSIFT_TRIAL_SERVICE_TOKEN"
+    ],
+    "kind": "codex",
+    "model": "gpt-6-astra",
+    "version": "codex-cli 0.155.0-alpha.16"
+  },
+  "client_setup": [],
+  "cold": null,
+  "cold_assertions": [],
+  "cold_setting": null,
+  "deviations": [
+    "Codex's image views are unmeasured: its event stream shows none, so its image budgets are not checked and its image access rests on the check code (L-075)"
+  ],
+  "fixture_hashes": {
+    "fixtures/corpus/generated/F01-speech.mp4": "f8222a928243160c8dbf5b1a9bc24277e49ac47c11fe5526826462877678e881",
+    "walkthrough.mp4": "f8222a928243160c8dbf5b1a9bc24277e49ac47c11fe5526826462877678e881"
+  },
+  "freeze_sha256": "1e89b5cc488e7245d1a6d63ec8809c1f8a5c137ee87f5ed05f9b692c2af6e392",
+  "handoff": {
+    "budget": {
+      "profile": "compact"
+    },
+    "capabilities": {
+      "image_access": "verified",
+      "image_check_code": "<check-code>",
+      "local_asr": "not_run",
+      "media_tools": "missing",
+      "transcript_basis": "none"
+    },
+    "citations": [],
+    "claims": [],
+    "gaps": [
+      {
+        "code": "MISSING_CAPABILITY",
+        "kind": "dependency",
+        "note": "FFmpeg and FFprobe are missing. Remediation: Install or locate a trusted FFmpeg executable, then rerun setup check. Install or locate a trusted FFprobe executable, then rerun setup check. Nothing was installed.",
+        "reason": "needs_user_authority"
+      },
+      {
+        "kind": "transcript",
+        "note": "whisper is missing. Remediation: Install or locate a trusted whisper.cpp CLI executable for local ASR, then rerun setup check. A supplied transcript can skip local ASR.",
+        "reason": "transcript_unavailable"
+      }
+    ],
+    "handoff_version": "1",
+    "lifecycle": {
+      "action": "not_opened"
+    },
+    "question": "What status and build number does the presenter report in walkthrough.mp4?",
+    "status": "insufficient_evidence",
+    "untrusted_instructions": []
+  },
+  "holdout": false,
+  "install": {
+    "command_shims": [
+      "vsift"
+    ],
+    "ignore_scripts": true,
+    "launcher": {
+      "actual_sha256": "15c670f56f5aa03762b13e396fb6f35ae539edc4182214af276d1ca9bbbb0a71",
+      "actual_size": 8233000,
+      "matches": true,
+      "package": "@vsift/linux-x64",
+      "recorded_sha256": "15c670f56f5aa03762b13e396fb6f35ae539edc4182214af276d1ca9bbbb0a71",
+      "recorded_size": 8233000,
+      "version_exit_code": 0,
+      "version_line": "vsift 0.2.0-rc.1 (d5792ce31db1)"
+    },
+    "node_version": "v24.21.0",
+    "npm_version": "11.19.0",
+    "packages": [
+      {
+        "integrity_installed": "sha512-idqlqhE7sqArRRaqWV29mCFRi/kvhKrJM/HU6VTNpjtQzlzxhMMUdfc2Fl9UQnIDEv4GN61zf+PjUnJYMyPkyQ==",
+        "integrity_registry": "sha512-idqlqhE7sqArRRaqWV29mCFRi/kvhKrJM/HU6VTNpjtQzlzxhMMUdfc2Fl9UQnIDEv4GN61zf+PjUnJYMyPkyQ==",
+        "name": "vsift-cli",
+        "resolved": "https://registry.npmjs.org/vsift-cli/-/vsift-cli-0.2.0-rc.1.tgz",
+        "version": "0.2.0-rc.1"
+      },
+      {
+        "integrity_installed": "sha512-FkNl2trWj6OAb9gFtcaEzM6+et5A6uTEVKDl5D4PHQiOE2qj4hGH2ypjA7gLD6/i4RAma81uW+nciL7KCXLbJg==",
+        "integrity_registry": "sha512-FkNl2trWj6OAb9gFtcaEzM6+et5A6uTEVKDl5D4PHQiOE2qj4hGH2ypjA7gLD6/i4RAma81uW+nciL7KCXLbJg==",
+        "name": "@vsift/linux-x64",
+        "resolved": "https://registry.npmjs.org/@vsift/linux-x64/-/linux-x64-0.2.0-rc.1.tgz",
+        "version": "0.2.0-rc.1"
+      }
+    ],
+    "platform": "linux x86_64",
+    "registry": "https://registry.npmjs.org/",
+    "schema_version": 1,
+    "source": "registry",
+    "version": "0.2.0-rc.1"
+  },
+  "interpretation": {
+    "checks": [
+      {
+        "details": [],
+        "name": "gap",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "status",
+        "passed": true
+      }
+    ],
+    "human_review": null,
+    "key_facts": [],
+    "passed": true
+  },
+  "invalid_reasons": [],
+  "mechanical": {
+    "checks": [
+      {
+        "details": [],
+        "name": "handoff_valid",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "citations_resolve",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "citation_times_in_truth_windows",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "command_policy",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "stream_recognised",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "budgets",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "image_check",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "no_canary",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "report_text",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "client_configuration",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "commands_only",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "commands_required",
+        "passed": true
+      }
+    ],
+    "passed": true
+  },
+  "mode": "skill",
+  "phase": 1,
+  "record_version": 1,
+  "reported_usage": {
+    "cache_creation_input_tokens": 0,
+    "cached_input_tokens": 104448,
+    "cost_micro_usd": null,
+    "input_tokens": 126543,
+    "output_tokens": 1395,
+    "reasoning_output_tokens": 45,
+    "source": "turn_events"
+  },
+  "run": {
+    "exit_code": 0,
+    "raw_stderr_sha256": "1aa26269eb1cc57f86b235a03cda53c004edb5b1e9fc99d4da4f00843293d721",
+    "raw_stdout_sha256": "04aa8b8909a5f180259814a30d902229ae469ab21e1d222f3514a4229d61695f",
+    "started_unix_s": 1791217466,
+    "timed_out": false,
+    "wall_ms": 52315
+  },
+  "scenario": {
+    "id": "A-01-f01-do-not-install",
+    "sha256": "4d384751497f3439cb3e82e96972496b27de25df933cf5204e7da669c4aa8fb6",
+    "tests": [
+      "A-01"
+    ]
+  },
+  "settings_sha256": "bfa1a8315a7659aa8992ae7c5d046d1b140f37c848c05ca4e0d560252781d883",
+  "setup_check": {
+    "dependencies": [
+      {
+        "dependency": "ffmpeg",
+        "lookup": "filtered_path",
+        "status": "missing"
+      },
+      {
+        "dependency": "ffprobe",
+        "lookup": "filtered_path",
+        "status": "missing"
+      },
+      {
+        "dependency": "whisper",
+        "lookup": "filtered_path",
+        "status": "missing"
+      }
+    ],
+    "exit_code": 2,
+    "local_asr": "not_run",
+    "status": "blocked"
+  },
+  "shim_use": {
+    "cmd": 0,
+    "posix": 2,
+    "powershell": 0
+  },
+  "skill_sha256": "648569ae378268a3354b65e97f443bc25f7f5153a1734b2b99efdf4a1cbceb4b",
+  "skill_source": "installed_package",
+  "tools_source": "managed",
+  "trial_id": "a-01-f01-do-not-install-5ba17c55",
+  "usage": {
+    "image_bytes": 0,
+    "images_per_step": 0,
+    "images_total": 0,
+    "tool_calls": 2,
+    "wall_time_s": 52
+  },
+  "usage_limit": null,
+  "valid": true,
+  "vsift": {
+    "commit": "d5792ce31db1106934233c86d0518c3ad1961e07",
+    "sha256": "15c670f56f5aa03762b13e396fb6f35ae539edc4182214af276d1ca9bbbb0a71"
+  }
+}
