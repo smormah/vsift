@@ -8,8 +8,8 @@
 //!
 //! 1. that the version is stable (no pre-release suffix);
 //! 2. the **accepted candidate**: the stable commit differs from the highest
-//!    `v<X.Y.Z>-rc.<N>` tag only in version strings and the launcher's README
-//!    (see the `candidate` module);
+//!    `v<X.Y.Z>-rc.<N>` tag only in version strings, the launcher's README, the
+//!    installation guide and the work record (see the `candidate` module);
 //! 3. that this candidate is **published** on npm, for all four packages;
 //! 4. that **`latest` moves forward**: on every package it is now a stable
 //!    version below this one (or already this one, with the same bytes, which

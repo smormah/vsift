@@ -1,37 +1,68 @@
 //! The candidate-to-stable delta check (P14 PR 8, ADR 0024 decisions A and
-//! B).
+//! B; the allowed lists were settled in PR 10b, before the first candidate).
 //!
 //! A stable version is published from a tag, by the same workflow as a
 //! release candidate, but only after a candidate of it (`v<X.Y.Z>-rc.<N>`)
 //! was cut, published and qualified. The stable commit must then be the
-//! candidate plus nothing but the stable's own version strings and the
-//! documents that ship inside the artifacts, so the qualification of the
-//! candidate is the qualification of the stable's code. This module is the
-//! mechanical form of that rule (the "candidate rule" of decision B): it
+//! candidate plus nothing but the stable's own version strings, the
+//! documents the release publishes and the work record, so the qualification
+//! of the candidate is the qualification of the stable's code. This module is
+//! the mechanical form of that rule (the "candidate rule" of decision B): it
 //! compares the two commits path by path and refuses every other difference.
 //!
 //! - The **accepted candidate** is the highest-numbered `v<X.Y.Z>-rc.<N>` tag
 //!   of the stable's own version. Only the maintainer can create a `v*` tag
 //!   (the tag ruleset); taking the highest number means a stable can never be
 //!   built on an older candidate than the last one cut.
-//! - Every file that differs must be one of two kinds, both named below and
-//!   nothing else: a **version-string file**, whose stable content must equal
-//!   the candidate's with the candidate's version text replaced by the
-//!   stable's (so a manifest or lockfile may change that and nothing else);
-//!   or a **shipped document**, which may change freely because it is text
-//!   that travels inside the packages and nothing else reads it as code.
+//! - Every file that differs must be of one of three kinds, all named below
+//!   and nothing else: a **version-string file**, whose stable content must
+//!   equal the candidate's with the candidate's version text replaced by the
+//!   stable's (so a manifest or lockfile may change that and nothing else); a
+//!   **shipped document**, which may change freely because it is text that
+//!   the release itself publishes and nothing reads it as code; or a **work
+//!   record**, which may be edited or added (never deleted) because it ships
+//!   in no archive or package and the repository's own rules change it in
+//!   every pull request.
 //! - The edit must be an ordinary file edit (`M`, mode `100644` before and
-//!   after): an added, deleted, renamed, re-moded or linked path is refused.
+//!   after), or for a work record also the addition of an ordinary file: a
+//!   deleted, renamed, re-moded or linked path is refused.
 //! - The candidate must be an ancestor of the stable commit.
 //!
-//! The lists are deliberately short. The skill (`skills/vsift/`) is *not* a
-//! shipped document here: its bytes are what the named-client trials
-//! qualified (their digest is frozen in every trial record), so changing it
-//! after the candidate would ship an unqualified skill. The release notes
-//! and the platform packages' README are generated from this repository's
-//! code, which is frozen at the candidate cut too. Adding a path is a
-//! reviewed change to the constants below, in the same pull request as a
-//! mutation test and the documentation.
+//! The lists are deliberately short, and every entry has a reason (also in
+//! `release.md` section 6.8, which a test holds to these constants):
+//!
+//! - **Version strings** are the one thing a stable differs in by definition.
+//!   `CHANGELOG.md` was a version-string file until PR 10b: it moved to the
+//!   work record because every pull request adds to it, so its stable
+//!   content could never equal the candidate's with a heading renamed.
+//! - **Shipped documents** are the launcher package's README (it ships in
+//!   the npm package, and its install line differs between a candidate and a
+//!   stable release; allowed since PR 8) and the installation guide (the
+//!   release notes link to it at the release's own tag, so the guide at the
+//!   stable's tag must tell a reader to install `vsift-cli`, not
+//!   `vsift-cli@next`; added in PR 10b).
+//! - **The work record** is the changelog, the handoff files in `memory/`,
+//!   the decision records, the history, the planning and qualification
+//!   records (they hold the evidence ledger the stable plan's evidence guard
+//!   reads *at the stable commit*: the candidate's evidence is recorded after
+//!   the candidate is cut) and the guide's hand-written pages. Three things
+//!   inside it stay protected: the delivery ledger (it fixes the packet's
+//!   objective and changes only in the completion follow-up, PR 13) and the
+//!   guide's generated reference pages and practice files (a check reruns
+//!   the binary against them).
+//!
+//! Everything else is refused: the crates, the schemas, the fixtures, the
+//! skill (its bytes are what the named-client trials qualified, their digest
+//! is frozen in every trial record, and the freeze is committed and checked
+//! in every pull request), the trial harness and every other tool, every
+//! workflow, the launcher's code and the rest of the package, the other
+//! documents and the build inputs.
+//! The release notes are generated from templates in `tools/vsift-release`,
+//! which is code and frozen at the cut with it, and the platform packages'
+//! README is generated from that code too. Adding a path is a reviewed change
+//! to the constants below, in the same pull request as a mutation test and
+//! the documentation, and it must be made **before** the candidate is cut: the
+//! lists are code, and code is frozen at the cut.
 //!
 //! Git is run with explicit arguments, never through a shell, against the
 //! repository in the working directory, and never touches the network: the
@@ -47,21 +78,96 @@ use crate::publish::{ReleaseKind, ReleaseVersion, is_full_commit};
 
 /// Files whose stable content must equal the candidate's with the candidate's
 /// version text replaced by the stable's, byte for byte: the workspace and
-/// fuzz manifests and lockfiles, the launcher's manifest (its version and the
-/// three exact optional dependencies) and the changelog's headings.
-pub(crate) const VERSION_STRING_FILES: [&str; 6] = [
+/// fuzz manifests and lockfiles and the launcher's manifest (its version and
+/// the three exact optional dependencies).
+pub(crate) const VERSION_STRING_FILES: [&str; 5] = [
     "Cargo.toml",
     "Cargo.lock",
     "fuzz/Cargo.toml",
     "fuzz/Cargo.lock",
     "npm/vsift-cli/package.json",
-    "CHANGELOG.md",
 ];
 
-/// Documents that ship inside the artifacts and may change freely between the
-/// candidate and the stable: the launcher package's README, whose install
-/// instructions differ between a release candidate and a stable release.
-pub(crate) const SHIPPED_DOCUMENT_FILES: [&str; 1] = ["npm/vsift-cli/README.md"];
+/// Documents the release publishes, which may change freely between the
+/// candidate and the stable: the launcher package's README, and the
+/// installation guide that the release notes link to at the release's tag.
+pub(crate) const SHIPPED_DOCUMENT_FILES: [&str; 2] =
+    ["npm/vsift-cli/README.md", "docs/operations/install.md"];
+
+/// Work-record files that are not under a record directory.
+pub(crate) const WORK_RECORD_FILES: [&str; 1] = ["CHANGELOG.md"];
+
+/// Work-record directories: every path below one is a work record unless it
+/// is protected by [`WORK_RECORD_PROTECTED`]. Each ends with `/`, so that
+/// `memory-old/x.md` is not below `memory/`.
+pub(crate) const WORK_RECORD_DIRECTORIES: [&str; 5] = [
+    "memory/",
+    "docs/decisions/",
+    "docs/history/",
+    "docs/planning/",
+    "docs/guide/",
+];
+
+/// Paths inside a work-record directory that stay refused, each an exact file
+/// or (ending with `/`) a directory: the delivery ledger fixes the packet's
+/// objective and changes only in the completion follow-up (P14 PR 13); the
+/// guide's two generated reference pages and its practice files are what the
+/// `Guide` workflow's checks regenerate and run the binary against.
+pub(crate) const WORK_RECORD_PROTECTED: [&str; 3] = [
+    "docs/planning/delivery-ledger.json",
+    "docs/guide/reference/",
+    "docs/guide/files/",
+];
+
+/// The allowed lists as a value, so that a test can break a copy of them and
+/// require the check to notice (the release seam's broken-copy rule).
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Rules<'a> {
+    /// See [`VERSION_STRING_FILES`].
+    pub version_string_files: &'a [&'a str],
+    /// See [`SHIPPED_DOCUMENT_FILES`].
+    pub shipped_document_files: &'a [&'a str],
+    /// See [`WORK_RECORD_FILES`].
+    pub work_record_files: &'a [&'a str],
+    /// See [`WORK_RECORD_DIRECTORIES`].
+    pub work_record_directories: &'a [&'a str],
+    /// See [`WORK_RECORD_PROTECTED`].
+    pub work_record_protected: &'a [&'a str],
+}
+
+/// The rules the check applies.
+pub(crate) const RULES: Rules<'static> = Rules {
+    version_string_files: &VERSION_STRING_FILES,
+    shipped_document_files: &SHIPPED_DOCUMENT_FILES,
+    work_record_files: &WORK_RECORD_FILES,
+    work_record_directories: &WORK_RECORD_DIRECTORIES,
+    work_record_protected: &WORK_RECORD_PROTECTED,
+};
+
+impl Rules<'_> {
+    /// Whether `path` is protected inside the work record: an exact file, or
+    /// a file below a protected directory.
+    fn is_protected(&self, path: &str) -> bool {
+        self.work_record_protected.iter().any(|protected| {
+            if protected.ends_with('/') {
+                path.starts_with(protected)
+            } else {
+                path == *protected
+            }
+        })
+    }
+
+    /// Whether `path` is a work record: a listed file, or a file below a
+    /// record directory, and not protected.
+    fn is_work_record(&self, path: &str) -> bool {
+        (self.work_record_files.contains(&path)
+            || self
+                .work_record_directories
+                .iter()
+                .any(|directory| path.starts_with(directory)))
+            && !self.is_protected(path)
+    }
+}
 
 /// The largest file read to compare a version-string file.
 const MAXIMUM_BLOB_BYTES: usize = 16 * 1024 * 1024;
@@ -93,8 +199,12 @@ pub(crate) struct Change {
 pub(crate) enum ChangeClass {
     /// Only the version text differs.
     VersionString,
-    /// A document that ships inside the artifacts.
+    /// A document the release publishes: the launcher's README, or the
+    /// installation guide the release notes link to.
     ShippedDocument,
+    /// The changelog, a handoff file or a decision, history or planning
+    /// record: text that ships in no archive or package.
+    WorkRecord,
 }
 
 /// One changed path and the verdict on it: why it is allowed, or why it is
@@ -158,12 +268,13 @@ impl CandidateReport {
                 .count()
         };
         format!(
-            "against `{}` (commit `{}`): {} version-string and {} shipped-document files differ, \
-             nothing else",
+            "against `{}` (commit `{}`): {} version-string, {} shipped-document and {} \
+             work-record files differ, nothing else",
             self.candidate_tag,
             short(&self.candidate_commit),
             count(ChangeClass::VersionString),
             count(ChangeClass::ShippedDocument),
+            count(ChangeClass::WorkRecord),
         )
     }
 
@@ -183,6 +294,9 @@ impl CandidateReport {
                 Ok(ChangeClass::ShippedDocument) => {
                     writeln!(text, "- `{}`: shipped document", change.path)
                 }
+                Ok(ChangeClass::WorkRecord) => {
+                    writeln!(text, "- `{}`: work record", change.path)
+                }
                 Err(reason) => writeln!(text, "- `{}` {reason}: REFUSED", change.path),
             };
         }
@@ -193,7 +307,8 @@ impl CandidateReport {
         if violations.is_empty() {
             let _ = writeln!(
                 text,
-                "\nThe differences are limited to version strings and the launcher's README."
+                "\nThe differences are limited to version strings, the launcher's README, the \
+                 installation guide and the work record."
             );
         } else {
             let _ = writeln!(text, "\nNot allowed:");
@@ -348,9 +463,27 @@ pub(crate) fn replace_all(haystack: &[u8], from: &[u8], to: &[u8]) -> Vec<u8> {
     result
 }
 
-/// Judges every change. `read_object` returns the bytes of a git object; it
-/// is called only for version-string files.
+/// Judges every change. `read_object` returns the bytes of an object of the
+/// history; it is called only for version-string files.
 pub(crate) fn evaluate(
+    changes: &[Change],
+    candidate_version: &str,
+    stable_version: &str,
+    read_object: &mut dyn FnMut(&str) -> Result<Vec<u8>, String>,
+) -> Vec<ChangedPath> {
+    evaluate_with(
+        &RULES,
+        changes,
+        candidate_version,
+        stable_version,
+        read_object,
+    )
+}
+
+/// [`evaluate`] under the given rules: the check itself always uses
+/// [`RULES`]; tests pass a broken copy to see that the check notices.
+pub(crate) fn evaluate_with(
+    rules: &Rules<'_>,
     changes: &[Change],
     candidate_version: &str,
     stable_version: &str,
@@ -360,27 +493,74 @@ pub(crate) fn evaluate(
         .iter()
         .map(|change| ChangedPath {
             path: printable(&change.path),
-            verdict: classify(change, candidate_version, stable_version, read_object),
+            verdict: classify(
+                rules,
+                change,
+                candidate_version,
+                stable_version,
+                read_object,
+            ),
         })
         .collect()
 }
 
+/// Whether `path` is a plain relative path of the repository: no empty, `.`
+/// or `..` component, no backslash and no leading slash. A tree does not hold
+/// such names, and the allowed lists compare text, so a path that only looks
+/// like a listed one is refused rather than matched.
+fn is_plain_path(path: &str) -> bool {
+    !path.is_empty()
+        && !path.starts_with('/')
+        && !path.contains('\\')
+        && path
+            .split('/')
+            .all(|component| !component.is_empty() && component != "." && component != "..")
+}
+
 fn classify(
+    rules: &Rules<'_>,
     change: &Change,
     candidate_version: &str,
     stable_version: &str,
     read_object: &mut dyn FnMut(&str) -> Result<Vec<u8>, String>,
 ) -> Result<ChangeClass, String> {
+    let path = change.path.as_str();
+    if !is_plain_path(path) {
+        return Err(String::from(
+            "is not a plain relative path of the repository",
+        ));
+    }
     let ordinary_edit =
         change.status == 'M' && change.old_mode == "100644" && change.new_mode == "100644";
-    let path = change.path.as_str();
-    let version_file = VERSION_STRING_FILES.contains(&path);
-    let document = SHIPPED_DOCUMENT_FILES.contains(&path);
-    if !version_file && !document {
+    let ordinary_addition =
+        change.status == 'A' && change.old_mode == "000000" && change.new_mode == "100644";
+    if rules.is_protected(path) {
         return Err(String::from(
-            "may not differ between the candidate and the stable release: only version strings \
-             and the launcher's README may",
+            "is protected inside the work record: the delivery ledger, a generated reference \
+             page or a practice file of the guide",
         ));
+    }
+    let version_file = rules.version_string_files.contains(&path);
+    let document = rules.shipped_document_files.contains(&path);
+    let record = rules.is_work_record(path);
+    if !version_file && !document && !record {
+        return Err(String::from(
+            "may not differ between the candidate and the stable release: only version strings, \
+             the launcher's README, the installation guide and the work record may",
+        ));
+    }
+    if record {
+        return if ordinary_edit || ordinary_addition {
+            Ok(ChangeClass::WorkRecord)
+        } else {
+            Err(format!(
+                "is {} ({} to {}); a work record may be edited or added as an ordinary file, \
+                 nothing else",
+                describe_status(change.status),
+                change.old_mode,
+                change.new_mode
+            ))
+        };
     }
     if !ordinary_edit {
         return Err(format!(
@@ -628,8 +808,9 @@ mod tests {
 
     use super::{
         CandidateObservation, CandidateReport, Change, ChangeClass, ChangedPath, CheckRecord,
-        SHIPPED_DOCUMENT_FILES, VERSION_STRING_FILES, candidate_tags, evaluate, github_output,
-        observe, parse_raw_diff, printable, release_delta, replace_all,
+        RULES, Rules, SHIPPED_DOCUMENT_FILES, VERSION_STRING_FILES, WORK_RECORD_DIRECTORIES,
+        WORK_RECORD_FILES, WORK_RECORD_PROTECTED, candidate_tags, evaluate, evaluate_with,
+        github_output, observe, parse_raw_diff, printable, release_delta, replace_all,
     };
     use crate::publish::ReleaseVersion;
 
@@ -678,7 +859,7 @@ mod tests {
     }
 
     #[test]
-    fn the_allowed_files_are_exactly_these() {
+    fn the_allowed_lists_are_exactly_these() {
         // Changing a list is a reviewed decision (release.md section 6.8):
         // this test makes the edit visible in the diff of the test too.
         assert_eq!(
@@ -689,16 +870,59 @@ mod tests {
                 "fuzz/Cargo.toml",
                 "fuzz/Cargo.lock",
                 "npm/vsift-cli/package.json",
-                "CHANGELOG.md",
             ]
         );
-        assert_eq!(SHIPPED_DOCUMENT_FILES, ["npm/vsift-cli/README.md"]);
-        // The skill's bytes are what the agent trials qualified.
-        for path in VERSION_STRING_FILES.iter().chain(&SHIPPED_DOCUMENT_FILES) {
-            assert!(!path.starts_with("skills/"), "{path}");
-            assert!(!path.starts_with("crates/"), "{path}");
-            assert!(!path.starts_with("tools/"), "{path}");
-            assert!(!path.starts_with(".github/"), "{path}");
+        assert_eq!(
+            SHIPPED_DOCUMENT_FILES,
+            ["npm/vsift-cli/README.md", "docs/operations/install.md"]
+        );
+        assert_eq!(WORK_RECORD_FILES, ["CHANGELOG.md"]);
+        assert_eq!(
+            WORK_RECORD_DIRECTORIES,
+            [
+                "memory/",
+                "docs/decisions/",
+                "docs/history/",
+                "docs/planning/",
+                "docs/guide/",
+            ]
+        );
+        assert_eq!(
+            WORK_RECORD_PROTECTED,
+            [
+                "docs/planning/delivery-ledger.json",
+                "docs/guide/reference/",
+                "docs/guide/files/",
+            ]
+        );
+    }
+
+    /// Whatever the lists say, a directory entry must end with `/` (or
+    /// `memory-old/x.md` would be below `memory/`) and a protected entry must
+    /// lie inside a record directory (or it protects nothing).
+    #[test]
+    fn the_lists_are_well_formed() {
+        for directory in WORK_RECORD_DIRECTORIES {
+            assert!(directory.ends_with('/'), "{directory}");
+            assert!(!directory.starts_with('/') && !directory.contains(".."));
+        }
+        for protected in WORK_RECORD_PROTECTED {
+            assert!(
+                WORK_RECORD_DIRECTORIES
+                    .iter()
+                    .any(|directory| protected.starts_with(directory)),
+                "{protected} is not inside a work-record directory"
+            );
+        }
+        for path in VERSION_STRING_FILES
+            .iter()
+            .chain(&SHIPPED_DOCUMENT_FILES)
+            .chain(&WORK_RECORD_FILES)
+        {
+            assert!(
+                !path.ends_with('/') && !path.contains('\\') && !path.contains(".."),
+                "{path}"
+            );
         }
     }
 
@@ -733,39 +957,399 @@ mod tests {
 
     #[test]
     fn a_shipped_document_may_change_freely() {
-        assert_eq!(
-            verdicts(
-                &[modified("npm/vsift-cli/README.md")],
-                "old\n",
-                "entirely new\n"
-            ),
-            [Ok(ChangeClass::ShippedDocument)]
-        );
+        for path in SHIPPED_DOCUMENT_FILES {
+            assert_eq!(
+                verdicts(&[modified(path)], "old\n", "entirely new\n"),
+                [Ok(ChangeClass::ShippedDocument)],
+                "{path}"
+            );
+        }
+    }
+
+    /// One path of every kind the check must keep refusing between the
+    /// candidate and the stable release: what ships, what runs, what a trial
+    /// is bound to, what a check regenerates, and the names that only look like
+    /// an allowed one. Each entry is `(what it is, a path)`.
+    const FORBIDDEN: &[(&str, &str)] = &[
+        ("the crates", "crates/vsift-cli/src/main.rs"),
+        (
+            "the managed catalogue",
+            "crates/vsift-infrastructure/src/managed_catalogue.rs",
+        ),
+        ("a crate manifest", "crates/vsift-cli/Cargo.toml"),
+        ("the toolchain pin", "rust-toolchain.toml"),
+        ("the dependency policy", "deny.toml"),
+        ("the formatter's configuration", "rustfmt.toml"),
+        ("the line-ending rules", ".gitattributes"),
+        ("the schemas", "schemas/v1/setup-plan.schema.json"),
+        (
+            "a frozen example",
+            "schemas/v1/frozen/v0.1.0/examples/search.json",
+        ),
+        ("the fixtures", "fixtures/corpus/manifest.json"),
+        ("the fuzz targets", "fuzz/fuzz_targets/xz_tar_inventory.rs"),
+        ("the skill", "skills/vsift/SKILL.md"),
+        (
+            "the skill's commands",
+            "skills/vsift/references/commands.md",
+        ),
+        (
+            "the skill's handoff schema",
+            "skills/vsift/handoff.schema.json",
+        ),
+        (
+            "a trial scenario",
+            "tools/vsift-agent-trials/scenarios/a-08-f05-local-asr.json",
+        ),
+        ("the grader", "tools/vsift-agent-trials/src/grade.rs"),
+        (
+            "the trial settings",
+            "tools/vsift-agent-trials/claude-trial-settings.json",
+        ),
+        ("the release tool", "tools/vsift-release/src/publish.rs"),
+        ("the release notes", "tools/vsift-release/notes/stable.md"),
+        ("the governance tool", "tools/vsift-governance/src/main.rs"),
+        ("a qualification tool", "tools/p14-campaigns/load.cjs"),
+        ("a qualification tool", "tools/p14-published/lib/verify.cjs"),
+        ("the guide's checks", "tools/guide/check-examples.cjs"),
+        ("a script", "tools/p14_journeys.py"),
+        ("the Release workflow", ".github/workflows/release.yml"),
+        (
+            "a qualification workflow",
+            ".github/workflows/p14-stress.yml",
+        ),
+        ("the CI workflow", ".github/workflows/ci.yml"),
+        ("Dependabot's configuration", ".github/dependabot.yml"),
+        ("the launcher", "npm/vsift-cli/lib/launcher.cjs"),
+        ("the launcher's entry point", "npm/vsift-cli/bin/vsift.cjs"),
+        ("the launcher's tests", "npm/test/launcher.test.cjs"),
+        ("the package qualification", "npm/qualification/qualify.cjs"),
+        ("a licence", "LICENSE"),
+        ("another licence", "LICENSE-MIT"),
+        ("the front page", "README.md"),
+        ("the security policy", "SECURITY.md"),
+        ("the contributor guide", "CONTRIBUTING.md"),
+        ("the release runbook", "docs/operations/release.md"),
+        ("the worker runbook", "docs/operations/worker-host.md"),
+        ("the CLI contract", "docs/contracts/cli-v1.md"),
+        ("the skill guide", "docs/agents/skill.md"),
+        ("the trial runbook", "docs/agents/trials.md"),
+        ("the development guide", "docs/development.md"),
+        ("the architecture page", "docs/architecture.md"),
+        ("a README graphic", "docs/assets/readme/roadmap.svg"),
+        (
+            "the guide's generated command reference",
+            "docs/guide/reference/commands.md",
+        ),
+        (
+            "the guide's generated JSON reference",
+            "docs/guide/reference/json.md",
+        ),
+        (
+            "a practice file of the guide",
+            "docs/guide/files/F04-speech.srt",
+        ),
+        ("the delivery ledger", "docs/planning/delivery-ledger.json"),
+        ("a sibling of memory/", "memory-old/TODO.md"),
+        ("a sibling of docs/planning/", "docs/planning-old/x.md"),
+        ("a sibling of docs/guide/", "docs/guide-old/index.md"),
+        ("a file named like a record directory", "docs/planning"),
+    ];
+
+    /// The paths of [`FORBIDDEN`] that `rules` would let through when each is
+    /// edited from the candidate to the stable release (for a version-string
+    /// file, by its version text alone).
+    fn leaks(rules: &Rules<'_>) -> Vec<&'static str> {
+        FORBIDDEN
+            .iter()
+            .filter(|(_, path)| {
+                evaluate_with(
+                    rules,
+                    &[modified(path)],
+                    CANDIDATE,
+                    STABLE,
+                    &mut reader("v = 0.2.0-rc.1\n", "v = 0.2.0\n"),
+                )[0]
+                .verdict
+                .is_ok()
+            })
+            .map(|(_, path)| *path)
+            .collect()
     }
 
     #[test]
-    fn every_other_path_is_refused_with_its_name() {
-        for path in [
-            "crates/vsift-cli/src/main.rs",
-            "skills/vsift/SKILL.md",
-            ".github/workflows/release.yml",
-            "tools/vsift-release/src/publish.rs",
-            "npm/vsift-cli/lib/launcher.cjs",
-            "npm/vsift-cli/bin/vsift.cjs",
-            "docs/operations/install.md",
-            "README.md",
-            "memory/TODO.md",
-            "LICENSE",
-            "deny.toml",
-            "rust-toolchain.toml",
-        ] {
+    fn every_forbidden_area_is_refused_with_its_name() {
+        assert_eq!(leaks(&RULES), Vec::<&str>::new());
+        for &(what, path) in FORBIDDEN {
             let changed = evaluate(&[modified(path)], CANDIDATE, STABLE, &mut reader("a", "b"));
-            assert_eq!(changed.len(), 1);
+            assert_eq!(changed.len(), 1, "{what}");
             assert!(
-                matches!(&changed[0].verdict, Err(reason) if reason.contains("may not differ")),
-                "{path}: {changed:?}"
+                matches!(&changed[0].verdict, Err(reason)
+                    if reason.contains("may not differ") || reason.contains("protected")),
+                "{what} ({path}): {changed:?}"
             );
             assert_eq!(changed[0].path, path);
+        }
+    }
+
+    /// A copy of the rules that is wrong in one way, what is wrong, and the
+    /// forbidden path that copy lets through.
+    type BrokenCopy = (&'static str, Rules<'static>, &'static str);
+
+    /// A leaked copy of `list` with `extra` added: a test only, so that a
+    /// broken copy can be a plain value.
+    fn plus(list: &[&'static str], extra: &[&'static str]) -> &'static [&'static str] {
+        Box::leak(
+            list.iter()
+                .chain(extra)
+                .copied()
+                .collect::<Vec<_>>()
+                .into_boxed_slice(),
+        )
+    }
+
+    /// Record directories that reach too far, or not far enough.
+    fn directory_copies() -> Vec<BrokenCopy> {
+        let mut copies: Vec<BrokenCopy> = [
+            (
+                "a record directory that covers the crates",
+                "crates/",
+                "crates/vsift-cli/src/main.rs",
+            ),
+            (
+                "a record directory that covers the tools",
+                "tools/",
+                "tools/vsift-release/src/publish.rs",
+            ),
+            (
+                "a record directory that covers the workflows",
+                ".github/",
+                ".github/workflows/release.yml",
+            ),
+            (
+                "a record directory that covers every document",
+                "docs/",
+                "docs/operations/release.md",
+            ),
+            (
+                "a record directory that covers the launcher",
+                "npm/vsift-cli/",
+                "npm/vsift-cli/lib/launcher.cjs",
+            ),
+            (
+                "an empty record directory, which is every path",
+                "",
+                "schemas/v1/setup-plan.schema.json",
+            ),
+        ]
+        .into_iter()
+        .map(|(what, extra, named)| {
+            let rules = Rules {
+                work_record_directories: plus(&WORK_RECORD_DIRECTORIES, &[extra]),
+                ..RULES
+            };
+            (what, rules, named)
+        })
+        .collect();
+        copies.push((
+            "a record directory without its trailing slash",
+            Rules {
+                work_record_directories: &["memory", "docs/planning"],
+                ..RULES
+            },
+            "memory-old/TODO.md",
+        ));
+        copies
+    }
+
+    /// File lists that name a path they must not.
+    fn file_list_copies() -> Vec<BrokenCopy> {
+        let skill = &["skills/vsift/SKILL.md"];
+        vec![
+            (
+                "the skill listed as a work record",
+                Rules {
+                    work_record_files: plus(&WORK_RECORD_FILES, skill),
+                    ..RULES
+                },
+                "skills/vsift/SKILL.md",
+            ),
+            (
+                "the skill listed as a shipped document",
+                Rules {
+                    shipped_document_files: plus(&SHIPPED_DOCUMENT_FILES, skill),
+                    ..RULES
+                },
+                "skills/vsift/SKILL.md",
+            ),
+            (
+                "the launcher's code listed as a shipped document",
+                Rules {
+                    shipped_document_files: plus(
+                        &SHIPPED_DOCUMENT_FILES,
+                        &["npm/vsift-cli/lib/launcher.cjs"],
+                    ),
+                    ..RULES
+                },
+                "npm/vsift-cli/lib/launcher.cjs",
+            ),
+            (
+                "the Release workflow listed as a version-string file",
+                Rules {
+                    version_string_files: plus(
+                        &VERSION_STRING_FILES,
+                        &[".github/workflows/release.yml"],
+                    ),
+                    ..RULES
+                },
+                ".github/workflows/release.yml",
+            ),
+            (
+                "a crate's manifest listed as a version-string file",
+                Rules {
+                    version_string_files: plus(
+                        &VERSION_STRING_FILES,
+                        &["crates/vsift-cli/Cargo.toml"],
+                    ),
+                    ..RULES
+                },
+                "crates/vsift-cli/Cargo.toml",
+            ),
+        ]
+    }
+
+    /// Protection that is missing or does not reach its files.
+    fn protection_copies() -> Vec<BrokenCopy> {
+        vec![
+            (
+                "an emptied protected list",
+                Rules {
+                    work_record_protected: &[],
+                    ..RULES
+                },
+                "docs/planning/delivery-ledger.json",
+            ),
+            (
+                "a protected directory without its trailing slash",
+                Rules {
+                    work_record_protected: &[
+                        "docs/planning/delivery-ledger.json",
+                        "docs/guide/reference",
+                    ],
+                    ..RULES
+                },
+                "docs/guide/reference/commands.md",
+            ),
+        ]
+    }
+
+    /// The broken-copy rule of the release seam: each copy of the lists above
+    /// is wrong in one way that a careless edit could produce, and `leaks`,
+    /// which the test of the real lists relies on, has to see it.
+    #[test]
+    fn a_broken_copy_of_the_lists_is_noticed() {
+        let copies = directory_copies()
+            .into_iter()
+            .chain(file_list_copies())
+            .chain(protection_copies());
+        for (what, rules, named) in copies {
+            let found = leaks(&rules);
+            assert!(
+                found.contains(&named),
+                "a copy with {what} was not noticed: it refuses {named}; leaks {found:?}"
+            );
+        }
+    }
+
+    /// A path that only looks like an allowed one is refused, not matched.
+    #[test]
+    fn a_path_that_is_not_plain_is_refused() {
+        for path in [
+            "docs/planning/../../crates/vsift-cli/src/main.rs",
+            "memory/./TODO.md",
+            "docs//planning/x.md",
+            "memory\\TODO.md",
+            "/memory/TODO.md",
+            "",
+        ] {
+            let changed = evaluate(&[modified(path)], CANDIDATE, STABLE, &mut reader("a", "b"));
+            assert!(
+                matches!(&changed[0].verdict, Err(reason) if reason.contains("not a plain")),
+                "{path:?}: {changed:?}"
+            );
+        }
+    }
+
+    /// The other half of the rule: every allowed kind is accepted, so the
+    /// stable release can be built (an over-strict list would stop it at the
+    /// last step).
+    #[test]
+    fn every_allowed_kind_is_accepted() {
+        let mut changes = Vec::new();
+        for path in WORK_RECORD_FILES {
+            changes.push(modified(path));
+        }
+        for path in [
+            "memory/TODO.md",
+            "memory/project_current_status.md",
+            "docs/planning/p14-evidence-ledger.json",
+            "docs/planning/known-limits.md",
+            "docs/planning/p14-qualification.md",
+            "docs/planning/public-claims.json",
+            "docs/decisions/0024-r0-qualification-and-release-candidate.md",
+            "docs/history/2026-09-09-to-23-delivery-log.md",
+            "docs/guide/index.md",
+            "docs/guide/faq.md",
+        ] {
+            changes.push(modified(path));
+        }
+        // New records: a trial batch's files and a new reading.
+        for path in [
+            "docs/planning/p14-agent-trials/batch-2/records/run-0001.json",
+            "docs/planning/p14-agent-trials/batch-2/SUMMARY.md",
+            "docs/planning/p14-scan-reading-2026-10-12.md",
+        ] {
+            changes.push(change(path, 'A', "000000", "100644"));
+        }
+        let classes: Vec<_> = evaluate(&changes, CANDIDATE, STABLE, &mut reader("a", "b"))
+            .into_iter()
+            .map(|changed| (changed.path, changed.verdict))
+            .collect();
+        for (path, verdict) in &classes {
+            assert!(
+                matches!(verdict, Ok(ChangeClass::WorkRecord)),
+                "{path}: {verdict:?}"
+            );
+        }
+        assert_eq!(classes.len(), changes.len());
+    }
+
+    #[test]
+    fn a_work_record_may_be_edited_or_added_and_nothing_else() {
+        for (status, old_mode, new_mode, word) in [
+            ('D', "100644", "000000", "deleted"),
+            ('T', "100644", "120000", "changed in type"),
+            ('M', "100644", "100755", "modified"),
+            ('M', "100644", "120000", "modified"),
+            ('A', "000000", "100755", "added"),
+            ('A', "000000", "120000", "added"),
+            ('A', "000000", "160000", "added"),
+        ] {
+            for path in [
+                "CHANGELOG.md",
+                "memory/TODO.md",
+                "docs/planning/known-limits.md",
+            ] {
+                let result = verdicts(
+                    &[change(path, status, old_mode, new_mode)],
+                    "0.2.0-rc.1",
+                    "0.2.0",
+                );
+                assert!(
+                    matches!(&result[..], [Err(reason)] if reason.contains(word) && reason.contains("work record")),
+                    "{path} {status} {old_mode} {new_mode}: {result:?}"
+                );
+            }
         }
     }
 
@@ -779,7 +1363,11 @@ mod tests {
             ('M', "100644", "120000", "modified"),
             ('M', "160000", "160000", "modified"),
         ] {
-            for path in ["Cargo.toml", "npm/vsift-cli/README.md"] {
+            for path in [
+                "Cargo.toml",
+                "npm/vsift-cli/README.md",
+                "docs/operations/install.md",
+            ] {
                 let result = verdicts(
                     &[change(path, status, old_mode, new_mode)],
                     "0.2.0-rc.1",
@@ -791,6 +1379,36 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// `release.md` section 6.8 is where the maintainer reads the lists, so
+    /// it has to name every entry of them.
+    #[test]
+    fn the_runbook_names_every_allowed_path() -> Result<(), Box<dyn Error>> {
+        let manual = fs::read_to_string(
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/operations/release.md"),
+        )?;
+        let start = manual
+            .find("### 6.8")
+            .ok_or("release.md has no section 6.8")?;
+        let end = manual[start..]
+            .find("### 6.9")
+            .map(|offset| start + offset)
+            .ok_or("release.md has no section 6.9")?;
+        let section = &manual[start..end];
+        for path in VERSION_STRING_FILES
+            .iter()
+            .chain(&SHIPPED_DOCUMENT_FILES)
+            .chain(&WORK_RECORD_FILES)
+            .chain(&WORK_RECORD_DIRECTORIES)
+            .chain(&WORK_RECORD_PROTECTED)
+        {
+            assert!(
+                section.contains(&format!("`{path}`")),
+                "release.md section 6.8 does not name `{path}`"
+            );
+        }
+        Ok(())
     }
 
     #[test]
@@ -1032,6 +1650,13 @@ mod tests {
             )?;
             self.write("npm/vsift-cli/README.md", "install vsift-cli@next\n")?;
             self.write("crates/vsift-cli/src/main.rs", "fn main() {}\n")?;
+            self.write("docs/operations/install.md", "ask for vsift-cli@next\n")?;
+            self.write("CHANGELOG.md", "## [0.2.0-rc.1]\n")?;
+            self.write("memory/TODO.md", "now\n")?;
+            self.write("docs/planning/p14-evidence-ledger.json", "{}\n")?;
+            self.write("docs/planning/delivery-ledger.json", "{}\n")?;
+            self.write("docs/guide/index.md", "guide\n")?;
+            self.write("docs/guide/reference/commands.md", "generated\n")?;
             Ok(())
         }
 
@@ -1063,14 +1688,28 @@ mod tests {
     }
 
     #[test]
-    fn a_stable_that_adds_only_versions_and_the_readme_to_the_candidate_passes()
+    fn a_stable_that_adds_only_what_the_rules_allow_to_the_candidate_passes()
     -> Result<(), Box<dyn Error>> {
         let repository = Repository::new("clean")?;
         repository.base(CANDIDATE)?;
         let candidate = repository.commit("candidate")?;
         repository.git(&["tag", "v0.2.0-rc.1"])?;
         repository.bump(STABLE)?;
+        // The documents the release publishes, and the work record: edits
+        // that are more than a heading renamed, and a new file.
         repository.write("npm/vsift-cli/README.md", "install vsift-cli\n")?;
+        repository.write("docs/operations/install.md", "install vsift-cli\n")?;
+        repository.write("CHANGELOG.md", "## [Unreleased]\n\n## [0.2.0-rc.1]\n")?;
+        repository.write("memory/TODO.md", "the evidence is recorded\n")?;
+        repository.write(
+            "docs/planning/p14-evidence-ledger.json",
+            "{\"items\": []}\n",
+        )?;
+        repository.write(
+            "docs/planning/p14-agent-trials/batch-2/SUMMARY.md",
+            "gates\n",
+        )?;
+        repository.write("docs/guide/index.md", "a better page\n")?;
         let stable = repository.commit("stable")?;
 
         let version = ReleaseVersion::parse(STABLE)?;
@@ -1087,7 +1726,13 @@ mod tests {
         assert_eq!(
             paths,
             [
+                "CHANGELOG.md",
                 "Cargo.toml",
+                "docs/guide/index.md",
+                "docs/operations/install.md",
+                "docs/planning/p14-agent-trials/batch-2/SUMMARY.md",
+                "docs/planning/p14-evidence-ledger.json",
+                "memory/TODO.md",
                 "npm/vsift-cli/README.md",
                 "npm/vsift-cli/package.json"
             ]
@@ -1095,9 +1740,12 @@ mod tests {
         assert!(
             report
                 .summary()
-                .contains("2 version-string and 1 shipped-document")
+                .contains("2 version-string, 2 shipped-document and 5 work-record files differ"),
+            "{}",
+            report.summary()
         );
         assert!(report.markdown().contains("limited to version strings"));
+        assert!(report.markdown().contains("`memory/TODO.md`: work record"));
         Ok(())
     }
 
@@ -1112,6 +1760,10 @@ mod tests {
             ("deleted", 2),
             ("manifest", 3),
             ("workflow", 4),
+            ("delivery-ledger", 5),
+            ("record-deleted", 6),
+            ("generated-reference", 7),
+            ("dependency", 8),
         ] {
             let repository = Repository::new(&format!("refused-{name}"))?;
             repository.base(CANDIDATE)?;
@@ -1126,7 +1778,13 @@ mod tests {
                     "Cargo.toml",
                     "[workspace.package]\nversion = \"0.2.0\"\nedition = \"2024\"\n",
                 )?,
-                _ => repository.write(".github/workflows/release.yml", "name: Release\n")?,
+                4 => repository.write(".github/workflows/release.yml", "name: Release\n")?,
+                5 => repository.write("docs/planning/delivery-ledger.json", "[]\n")?,
+                6 => fs::remove_file(repository.path.join("memory/TODO.md"))?,
+                7 => repository.write("docs/guide/reference/commands.md", "edited by hand\n")?,
+                _ => {
+                    repository.write("Cargo.lock", "a dependency moved\n")?;
+                }
             }
             let stable = repository.commit("stable")?;
             let report = checked(observe(&repository.path, &stable, &version))?;

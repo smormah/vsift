@@ -42,8 +42,9 @@ pub(crate) struct EvidenceLedger {
 }
 
 /// The recorded outcome of comparing the stable commit with the accepted
-/// release candidate: they may differ only in version strings and in
-/// documents that ship inside the artifacts (ADR 0024 decision A).
+/// release candidate: they may differ only in version strings, in documents
+/// that ship inside the artifacts and in the work record (ADR 0024 decision A;
+/// the work record was added in P14 PR 10b).
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct ReleaseDelta {
@@ -67,7 +68,7 @@ pub(crate) struct ReleaseDelta {
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum DeltaVerdict {
-    /// Only version strings and shipped documents differ.
+    /// Only version strings, shipped documents and the work record differ.
     Allowed,
     /// Something else differs; the stable may not carry candidate evidence.
     Rejected,

@@ -30,7 +30,9 @@
 //!
 //! ADR 0024 decision A says the stable commit may differ from the accepted
 //! candidate only in version strings and in documents that ship inside the
-//! artifacts, and that a mechanical check enforces it. That check is release
+//! artifacts (since P14 PR 10b also the work record, which no artifact holds
+//! and which must change when the candidate's evidence is recorded), and that
+//! a mechanical check enforces it. That check is release
 //! tooling (PR 8). It is not built here. This module only *consumes* its
 //! result: `release_delta`, a record of the candidate and stable versions and
 //! commits, the check that ran and its verdict. Until PR 8 writes one, a stable
@@ -130,9 +132,9 @@ fn check_stable(
     } else {
         messages.push(String::from(
             "the stable-over-candidate delta is not recorded (release_delta is null): \
-             ADR 0024 decision A requires the check that only version strings and shipped \
-             documents differ, which P14 PR 8 builds, before a stable release may carry \
-             candidate evidence",
+             ADR 0024 decision A requires the check that only version strings, shipped \
+             documents and the work record differ, which P14 PR 8 builds, before a stable \
+             release may carry candidate evidence",
         ));
         None
     };
@@ -177,7 +179,7 @@ fn accepted_delta<'a>(
     if delta.verdict != DeltaVerdict::Allowed {
         messages.push(format!(
             "release_delta: the check of {} found that the stable release differs from {} in \
-             more than version strings and shipped documents",
+             more than version strings, shipped documents and the work record",
             delta.date, delta.candidate_version
         ));
         accepted = false;
