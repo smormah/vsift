@@ -657,7 +657,8 @@ files npm wrote (`command_shims`). A call through `cmd.exe` is a note in the gra
 the batch summary, not a failure: it should be impossible, so seeing it means a rule or the harness changed.
 The `cmd.exe` shim is therefore **not exercised by any agent trial**. P14 PR 7 (#257) kept it that way: `install.md`,
 `SECURITY.md` and the launcher's README warn about it, and L-109 is an accepted residual; a sentence in the skill telling
-an agent on Windows to avoid `cmd.exe` is a candidate for the next freeze, not made while the skill is frozen.
+an agent on Windows to avoid `cmd.exe` was added in PR 10a (2026-10-05), before the candidate's freeze, and no batch can
+test it.
 
 **Codex.** `codex-trial.ps1 build -Published -PublishedVersion <exact>` builds two more images
 (`agent-published`, `harness-published`) whose Dockerfile stages run `vsift-agent-trials install` against

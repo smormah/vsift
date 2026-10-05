@@ -221,6 +221,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- **The skill's wording, before the release candidate's freeze (P14 PR 10a, 2026-10-05; three small changes in
+  `skills/vsift/references/`, a guide and records; nothing published, no product behaviour changed).** On Windows the
+  skill now tells an agent to run `vsift` from PowerShell or Git Bash, never through `cmd.exe`, because npm's `vsift.cmd`
+  shim makes `cmd.exe` read the command line a second time ([L-109](docs/planning/known-limits.md#l-109)). Its failure table
+  gives `STORAGE_IO` its own row, which tells the agent to read the remediation first and say in its own words what it says
+  (a link instead of the file, a drive with no room and an id that names no published session are not damage; the
+  remediation carries the fix, [L-127](docs/planning/known-limits.md#l-127)), and its `RESOURCE_LIMIT` row no longer sends
+  the agent to a smaller request when the session has no room. `handoff.md` no longer says that a gap's 600-character note
+  holds every remediation whole (two of them are longer). The test guard `skill_contract` skips `.cmd` and `.exe` file
+  names. The agent batches cannot test the Windows sentence (they never reach the shim); plan section 20.2 and ADR 0024's
+  PR 10a note have each change, why and whether it is a must or a nice to have.
 - **The maintainer's decisions on PR 9a's three open items (P14 PR 9c, 2026-10-04; documents, claim notes and the evidence
   ledger's text only; no ledger status changed, nothing published).** The macOS wording (CL-203, "supported on
   hosted-runner evidence only") and the supported-versions policy of `SECURITY.md` were accepted as proposed. RQ-05's pass

@@ -26,6 +26,11 @@ Run every command from the folder you started in: it holds the user's files, and
 paths the user gives are relative to it. Never `cd` anywhere first, and never into
 this skill's folder, which holds only instructions.
 
+On Windows, run `vsift` from PowerShell or Git Bash, never through `cmd.exe` (`cmd /c`, a
+batch file): the `vsift.cmd` file that npm writes makes `cmd.exe` read the command line a
+second time, so text you took from the evidence, such as a search query, could be run as a
+command.
+
 If you are unsure of a command's flags, read its help, which runs nothing and is
 `free`: `vsift --help` lists the commands, `vsift <namespace> <operation> --help`
 (for example `vsift session retain --help`) shows one command's flags. Read the help
@@ -177,10 +182,11 @@ On failure read `error.code`, `error.retryable`, `error.retry_after_ms` and
 | `MISSING_CAPABILITY` | Quote the remediation to the user; continue on another path (transcript-only or visual-only) or go to REPORT with the gap. Never install. |
 | `CANCELLED` | For a transcription, follow resume.md. |
 | `DEADLINE_EXCEEDED` | Retry once with a smaller range; otherwise report the gap. |
-| `RESOURCE_LIMIT` | Use a smaller range or fewer frames; report the gap. |
+| `RESOURCE_LIMIT` | Use a smaller range or fewer frames, unless the remediation says there is no room (a session full of evidence): a smaller request cannot help then. Report the gap. |
 | `IDEMPOTENCY_CONFLICT` | You reused an operation id for another request; use a new id. |
 | `INVALID_SOURCE` | The video (or part of it) cannot be read; report it. |
-| `INTEGRITY_FAILURE`, `STORAGE_IO`, `INTERNAL`, `UNSUPPORTED_SCHEMA` | Go to REPORT with the code; do not work around it. |
+| `STORAGE_IO` | Go to REPORT with the code; do not work around it. Read `error.remediation` first: it often says what really happened (a link was given instead of the file, the drive has no room, the id names no published session), so do not call it damage unless it does. Put that in the gap's note in your own words and briefly: a note holds 600 characters, less than some remediations. |
+| `INTEGRITY_FAILURE`, `INTERNAL`, `UNSUPPORTED_SCHEMA` | Go to REPORT with the code; do not work around it. |
 
 A gap caused by a failure may carry its code in `gaps[].code`.
 

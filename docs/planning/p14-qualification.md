@@ -1060,13 +1060,37 @@ cause exists.
 
 The skill (`skills/vsift`) is frozen while a trial batch runs and again at the candidate cut, so a wording change
 that a later finding suggests is **not made then**: it is listed here, one line each with its source, and the
-maintainer decides which go in before the batch-2 freeze (`freeze write`). Nothing below has been changed in the
-skill.
+maintainer decides which go in before the batch-2 freeze (`freeze write`). **Made in P14 PR 10a (2026-10-05), before
+the candidate's freeze: both rows below, in `references/commands.md` and `references/handoff.md`; the record is the
+paragraph after the table.**
 
 | Candidate wording | Source |
 | --- | --- |
 | On Windows, run `vsift` from PowerShell or Git Bash, never through `cmd.exe`: the `vsift.cmd` file npm writes makes `cmd.exe` read the command line a second time. | #257, [L-109](known-limits.md#l-109) (P14 PR 7) |
 | In `references/commands.md` the `STORAGE_IO` row says to go to REPORT with the code and not to work around it, and the `RESOURCE_LIMIT` row says to use a smaller range or fewer frames. Since P14 PR 7 three `STORAGE_IO` answers of the CLI carry a remediation that says what happened: a link named as the source (name the file itself), a source with no room (report it to the user, who frees space or asks an operator; the agent does not choose a folder) and an id with no published session (check it with `session list`). The row could say to read `error.remediation` first. A worker request that finds a workspace full answers `RESOURCE_LIMIT`, which the other row would read as a request that is too large. | #265, #266, #277, [L-127](known-limits.md#l-127) (P14 PR 7) |
+
+**What PR 10a did with them (2026-10-05).** The skill had been qualified by P12 and by the batch-1 pilots, so each word was
+weighed against what it could change in an agent's behaviour. **Must (a safety statement):** the Windows sentence, in
+`commands.md` beside the rules on where and how to run a command: on Windows run `vsift` from PowerShell or Git Bash, never
+through `cmd.exe` (`cmd /c`, a batch file), because the `vsift.cmd` shim makes `cmd.exe` read the command line a second
+time and text taken from the evidence could run as a command ([L-109](known-limits.md#l-109)). No agent trial reaches the
+shim (Claude Code goes through Git Bash, Codex runs on Linux), so the batches cannot test the sentence. **Recommended (the
+maintainer's rule of 2026-10-04 is that the remediation carries the fix, L-127, which only works if the agent passes it on):**
+the `STORAGE_IO` row is split from the other three rows and says to read `error.remediation` first, because it often says
+what really happened (a link instead of the file, a drive with no room, an id that names no published session), so the agent
+does not call it damage unless the remediation does, and to put that in the gap's note in the agent's own words. **Not "quote it whole":** the handoff schema's
+note holds 600 characters, and two of the three remediations are 553 and 697 characters, so an agent that quoted one with a
+sentence of context would fail `vsift handoff check`; `handoff.md` no longer says that a note holds every remediation whole.
+**Nice to have:** the `RESOURCE_LIMIT` row keeps "a smaller range or fewer frames" and adds "unless the remediation says
+there is no room (a session full of evidence)", because a smaller request cannot help then. **The premise of the second row,
+corrected:** since PR 7 an `ingest` with no room answers `STORAGE_IO`, not `RESOURCE_LIMIT` (L-127 kept the published code);
+`RESOURCE_LIMIT` with no room reaches an agent only as the session's evidence budget, and a full worker workspace is a
+command the skill never runs. **Considered and not made:** a `session list` hint for an id that names no published session
+(the skill already ends such a run in REPORT, with a `session_expired` lifecycle gap, and the remediation names `session
+list` itself); the L-130 caveat that the end of a short retranscribed range is where the audio ends, not where speech stopped
+(an agent cites the segment times it is given and claims nothing about where speech stopped); and the number "380
+characters" in the handoff schema's own description of the note, a comment on a limit of 600 that would change an embedded
+file for no behaviour. The skill's text is now what the freeze records (PR 10b).
 
 ## 21. PR 9a: the matrix, the documents, the claims and the register sheet (2026-10-04)
 
