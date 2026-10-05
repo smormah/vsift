@@ -17,6 +17,15 @@ the release candidate would be published later and that `@next` installed 0.1.0 
 2026-10-05, so the guide now says so, and its upgrade section says that the published 0.1.0 has been upgraded to the published
 0.2.0-rc.1 over the real registry on hosted runners (npm only). The guide is one of the few documents the stable commit may change.
 
+**Work record only (P14 PR 11a); nothing shipped changes.** The hosted evidence on the published `0.2.0-rc.1` is recorded in the
+evidence ledger and in [`docs/planning/p14-qualification.md`](docs/planning/p14-qualification.md) section 24.2: the second verification
+of the publish, clean installs, archives, the offline install, the upgrade of the published 0.1.0 to the candidate, the journeys on three
+systems, long fuzzing, the load and soak, the runbook walk, the scan reading and the two fault campaigns passed; the stress run found two
+rare Windows failures that are open (#312, #314, [L-135](docs/planning/known-limits.md#l-135)); the malicious-media run found one
+corner case (a source over the limit and larger than the free space answers `STORAGE_IO`, where 0.1.0 said `INVALID_SOURCE`: #310,
+[L-134](docs/planning/known-limits.md#l-134)), which the maintainer accepted for R0 and recorded as a waiver. The scan reading of the
+day is [`p14-scan-reading-2026-10-05.md`](docs/planning/p14-scan-reading-2026-10-05.md). The P10 durability campaign met its acceptance numbers (its hosted verdict job never got a runner: #316).
+
 ## [0.2.0-rc.1] - 2026-10-05
 
 **This is a release candidate, under qualification.** It is the candidate for `0.2.0`, the release that ships R0

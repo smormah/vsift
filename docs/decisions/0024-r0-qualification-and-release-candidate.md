@@ -1428,3 +1428,65 @@ workflow or a setting: from the tag to the stable merge only the work record may
 machine, and its reading of `VerifiedAndReputablePolicyState` (0 Off, 1 On, 2 Evaluation) is the community's, confirmed only for 0
 on the maintainer's machine; the Settings page is the authority. The checklist's cost for the review tier is an extrapolation, not a
 measurement. Neither document can show that an agent or a person succeeds: only their runs can.
+
+## Implementation note, 2026-10-05 (P14 PR 11a: the hosted evidence on the candidate)
+
+The first and largest part of PR 11, **an increment**: PR 11 is complete only when RQ-08, RQ-11, RQ-15, RQ-16 and RQ-17 are
+`passed`, `waived` or `not_applicable` for `0.2.0-rc.1` and `release-evidence --complete-for 0.2.0-rc.1` passes. Everything ran on
+hosted runners and was read-only; no code, tool, workflow, schema or setting changed on `main`, and nothing was published or tagged. The
+runs, what each shows and does not show, the three findings and the per-target and per-suite figures are
+[`p14-qualification.md`](../planning/p14-qualification.md) section 24.2; the ledger records the candidate's own entry for each item
+with 0.1.0's moved to `prior`. **If a second candidate is cut, all of it becomes `prior` evidence and the staleness rule applies again.**
+
+**Decided by the maintainer on 2026-10-05 (recorded here; the ledger and the register carry the same text):**
+
+1. **RQ-10 is waived for R0, and `0.2.0-rc.1` stays.** The `P14 malicious media` run on the published candidate failed its own judge on
+   one new answer: an `ingest` of a source that is both over the 20 GiB limit and larger than the free space answers `STORAGE_IO`, because
+   the free-space check added for #266 runs before the size-limit check, where 0.1.0 answered `INVALID_SOURCE` (#310, L-134). **This is a
+   known deviation from the rule that published failure codes do not change within v1** (L-126, L-127): a changed code is not additive. It is
+   accepted because the answer is typed, bounded, fast and stores nothing, and it concerns only a source over the limit *and* larger than what
+   is free; **a later release should run the source-size limit first**. The link's `STORAGE_IO` (#265) is accepted as before. The first run
+   stays in the ledger as failed evidence; the waiver is the decision's text, as RQ-14's was (decision E).
+2. **The campaign's own no-room case was a defect of the case**: it passes the tmpfs mount point as the session root, a folder VSift did not
+   create, so it never reached #266's check on either version. A corrected case was run **for evidence only from a scratch branch that is
+   never merged** (`p14-pr11-evidence-media-corrected-case`, commit `bf378a36bfb6e4a9ad160049c87ea425c96e7ae3`, two lines of
+   `tools/p14-campaigns`; run 37361623352): on the published bytes the no-room `ingest` answers `STORAGE_IO` in 0.1 s. It is recorded as
+   supplementary evidence with that exact scope (a different revision of a tool than the candidate's frozen one).
+3. **RQ-13 is `passed` with the residual named.** The one open record, CVE-2026-38350 (High, `libswscale`, tied to its fix by elimination
+   only, #272, L-122), is accepted with L-122 as the register entry, and the FFmpeg project's maintainers are not contacted. The plan's
+   rule (section 6) is "no open high or critical finding affecting a supported path ... unless fixed, mitigated, or accepted by the maintainer
+   with a register entry", which this meets; a waiver would say the rule was not met. The residual is in the entry's evidence and its
+   `does_not_prove`; #272 stays open.
+4. **RQ-11 was dispatched** (the P10 durability campaign and `P13 managed power loss`, at the tag). Both met their acceptance numbers,
+   with 0.1.0's figures. The P10 run is marked failed on GitHub only because its verdict job (`Acceptance`) never got a hosted runner, three times
+   (#316); see the first decision below.
+5. **RQ-08 is recorded `failed` with no waiver.** One repetition failed in each of two Windows jobs (#312: a root creation under CPU load
+   gave up waiting for its peer; #314: a reader was answered `IntegrityFailure` once in 140,721 reads while generations were published). An
+   investigation of #314 and #312 was started on the same day, because a reader told "damaged" while a generation is published may be a
+   product defect that justifies a second candidate; the maintainer decides after it. Nothing was rerun, and the issues are not commented
+   here.
+6. **The installation guide was corrected** in its own pull request (PR 11c): it still said `@next` installs 0.1.0 until the candidate is
+   published. The PowerShell execution-policy note waits for the clean-machine try-out to observe it.
+
+**Decisions taken inside this ADR, for the maintainer to confirm or overrule:**
+
+1. **RQ-11 is recorded `passed` although the P10 campaign's hosted `Acceptance` job never ran** (cancelled three times, the last re-run at 21:10 UTC, with "The job was not
+   acquired by Runner of type hosted even after multiple attempts", #316): the campaign's own script, `acceptance.sh` at the tag, was run by
+   hand over the eight layer artifacts of the run and printed "All acceptance criteria met", and the entry says so. Overrule it by setting
+   the item back to `running` until the hosted job has run.
+2. **RQ-05 is recorded `passed`** under the per-system rule of 2026-10-04: 54 stages on each of three systems with none skipped; the durable
+   stage's refusal check holding on Windows, macOS and the hosted Ubuntu runner; the durable path on Ubuntu with write barriers by RQ-09 and
+   RQ-12 of the same version; the P07 gates by their own run (Ubuntu, Windows) and by the journeys run (macOS).
+3. **RQ-18 is recorded `passed`** on the Governance job of the CI run at the candidate's own commit (plan section 21 said it would be), with the
+   limit that the check reads RQ-19's status and not its version (L-133, now closed for the candidate).
+4. **`P14 local upgrade` was not run**: the real upgrade of the published 0.1.0 to the published candidate is what it stood in for.
+5. **The `Review` lines of L-122 and L-134 read `accepted (2026-10-05)`** and record the decisions above, not the register's own one-pass
+   review, which is separate and still pending for every other entry.
+6. **L-135 is new** (the two Windows failures, open), L-128 and L-111 are updated for the candidate's runs, and L-127 and L-126 say that one
+   answer deviated from their rule.
+
+**What is weaker than it sounds.** Every run is on shared hosted images and a synthetic corpus. The failed and waived items are a measure
+of what the campaigns can see, not a proof that nothing else is wrong: the fuzz hour is a floor, 15 of 31 targets were still finding
+coverage, the stress failures are single repetitions whose causes are not known, and the waiver of RQ-10 rests on a reading of the code and
+a corrected case from another revision of the tool. A pass of RQ-05 or RQ-18 is a statement about recorded evidence and the checks that
+read it, not about a person's machine (RQ-17) or an agent's behaviour (RQ-15, RQ-16).

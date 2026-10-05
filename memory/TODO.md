@@ -4,18 +4,19 @@ Current-state handoff, rewritten in every change; history: git, `CHANGELOG.md`, 
 
 ## Now
 
-**P00-P13 are complete. P14 (R0 qualification, #17) is in progress: decisions A-H confirmed
-2026-10-02.** The plan is 14 pull requests (0-13). **PRs 0-10 are merged (agent-trial batch 1 ran on 2026-10-03),
-and the candidate `0.2.0-rc.1` is published (2026-10-05: tag `v0.2.0-rc.1` at `d5792ce31db1`, npm `next` on all four
-packages, a GitHub pre-release with ten files; `latest` is still the empty `0.0.0`).** **PR 11, its qualification,
-is in progress and not complete: 11b (the prepared try-out sheet and batch checklist, nothing run) is open; 11a (the
-hosted evidence) is running.** The packet is not complete. Plan: `docs/planning/p14-qualification.md` (sections 15-24);
-ADR 0024 stays Proposed.
-**Evidence:** `p14-evidence-ledger.json`, still **for 0.1.0 only** until 11a merges, so stale for the candidate:
-`passed` RQ-01 to RQ-04, RQ-06, RQ-07, RQ-09, RQ-12, RQ-19; **`failed`: RQ-08, RQ-10, RQ-13**; RQ-05 `running`
-(L-113; plan section 21); RQ-14 `waived`; 6 `planned`.
-**Public text:** `public-claims.json`, rung `candidate` (CL-101 and CL-102 are in use; both need RQ-19, passed for
-0.1.0 only, L-133); a claim above the rung fails while a register entry it leans on (`limits`) is pending.
+**P00-P13 are complete. P14 (R0 qualification, #17) is in progress** (decisions A-H, 2026-10-02). Plan: 14 pull
+requests (0-13). **PRs 0-10 are merged (agent-trial batch 1 ran on 2026-10-03), and the candidate `0.2.0-rc.1` is
+published** (2026-10-05: tag `v0.2.0-rc.1` at `d5792ce31db1`, npm `next` on all four packages, a pre-release with ten
+files; `latest` is still the empty `0.0.0`). **PR 11, its qualification, is in progress and not complete:** 11b merged
+(#311: the try-out sheet and the batch checklist, nothing run); **11a (this change) records the hosted evidence; 11c
+(#313) corrects `install.md`.** The packet is not complete. Plan: `docs/planning/p14-qualification.md` (15-24); ADR 0024 Proposed.
+**Evidence for `0.2.0-rc.1`** (`p14-evidence-ledger.json`, plan 24.2; **a second candidate turns all of it into `prior`**):
+`passed` RQ-01 to RQ-07, RQ-09, RQ-11, RQ-12, RQ-13 (the residual of L-122 accepted 2026-10-05), RQ-18, RQ-19; `waived` RQ-10
+(2026-10-05: L-134, #310) and RQ-14; **`failed` RQ-08** (#312, #314: under investigation, no waiver); `planned` RQ-15 and RQ-16 (batch 2 finished on the
+maintainer's machine; its records and reading are a separate pull request, not claimed here) and RQ-17 (the try-outs). RQ-11's P10 verdict job never got a
+runner (#316): its script was run by hand over the artifacts, the entry says so.
+**Public text:** `public-claims.json`, rung `candidate` (CL-101 and CL-102 are in use; both need RQ-19, now passed for
+the candidate, L-133); a claim above the rung fails while a register entry it leans on (`limits`) is pending.
 **Decided 2026-10-02 (ADR 0024):** **A** R0 is `0.2.0` on `latest`. **B** `0.2.0-rc.N` under `next`, never announced.
 **C** no signing unless try-outs show a block. **D** 84 agent runs in three batches, each on the go. **E** SEC-T01
 narrowed. **F** "supported" per cell by fixed rules; managed install Ubuntu-only. **G** a claims ladder; nothing
@@ -49,33 +50,36 @@ grader questions are ruled (#298). **README graphics:** redraw `roadmap.svg` wit
 
 ## The remaining P14 pull requests (0-10 merged)
 
-**11** the candidate's qualification, in parts: **11b** (open) `rq-17-tryout-sheet.md` and `p14-batch-2-3-checklist.md`,
-prepared and not run; **11a** the hosted evidence (the four runs of 2026-10-05 and the campaigns on the candidate: the
-ledger, plan section 24); then the agent batches (the maintainer's go), the try-outs and the register pass. **12**
-stable `0.2.0`; **13** ledger follow-up, P14 `complete`, handoff. **From the tag to the stable merge only the work
-record changes** (`release.md` 6.8: no Dependabot, workflow or tool change). **After the stable tag, within seven days:**
+**11** the candidate's qualification, in parts: **11b** merged; **11a** the hosted evidence (ledger, plan 24.2); **11c** the
+`install.md` fix (#313); still to come: the agent batches (batch 2's records, then batch 3 on the maintainer's go), the
+try-outs (`rq-17-tryout-sheet.md`; the execution-policy note for `install.md` only after they observe it),
+**the investigation of #314 and #312, which may end in a second candidate (`rc.2`)**, and the register pass. **12** stable
+`0.2.0`; **13** ledger follow-up, P14 `complete`, handoff. **From the tag to the stable merge only the work record and
+`install.md` change** (`release.md` 6.8: no Dependabot, workflow or tool change). **After the stable tag, within seven days:**
 register the two stable checks in `STABLE_CHECKS` (`tools/p14-published/lib/verify.cjs`).
 
 ## What the maintainer owes, and when
 
-- **Now:** review 11b; **the go for batches 2 and 3**, one batch at a time on the candidate (the checklist: batch 3
-  needs `-AllowGraderChange`; Claude Code 2.1.284 and Docker; state the reserve rule first; L-095); **the Smart App
-  Control try-out** on the second Windows 11 machine (the sheet; no macOS try-out). **Dependabot:** #192, #193, #194
-  wait until after the stable. **The FFmpeg re-pin** (#272, L-132) is planned for after the stable.
+- **Now:** **the go for batch 3** after batch 2 (the checklist: `-AllowGraderChange`; Claude Code 2.1.284 and Docker; state
+  the reserve rule first; L-095); **the Smart App Control try-out** on the second Windows 11 machine (the sheet; no macOS
+  try-out); **the call on #314/#312** (fix and `rc.2`, or accept). **Dependabot:** #192, #193, #194 wait until after the
+  stable. **The FFmpeg re-pin** (#272, L-132) is planned for after the stable; #272 itself stays open for the maintainer to close.
 - **PR 9:** one pass over `register-review-sheet.md` (thirty entries, seven later, nine readings: every review is
   `pending`), and whether `Guide` becomes a required check. **PR 12:** the stable publish (`release.md` 6.7).
 
 ## Open decisions and readings (maintainer)
 
 - **R1 options:** a stub per ended request (L-063); close the Windows window (L-129, an ADR); a bounded wait
-  for the initialization lock (L-131). **At v2:** revisit the codes L-127 keeps. **#204** Codex on Windows
+  for the initialization lock (L-131). **After 0.2.0:** run the source-size limit before the free-space check (L-127, L-134);
+  **at v2:** revisit the codes L-127 keeps. **#204** Codex on Windows
   (L-076); the grader's `untrusted_listed` reading (F12-E01) and #219: settled before the trial freeze.
   **Readings** (none blocks): L-062, L-067, L-069, L-017, L-088, L-090, `tokio`, `durable_worker`, MSRV.
 
 ## Tracked issues and gates
 
-- **Open:** #17 (P14), #219, #224 (L-095), #188 (SEC-T01, R1), #232, #246 (deferred), #258, #263, #272; #128
-  (watch: not reproduced in 3,000 per system); flaky tests #253 (Windows kill test, mitigated) and #268 (macOS
+- **Open:** #17 (P14), #219, #224 (L-095), #188 (SEC-T01, R1), #232, #246 (deferred), #258, #263, #272 (residual
+  accepted, L-122), #310 (accepted, L-134), **#312 and #314** (Windows stress, L-135: an investigation is running,
+  nothing is rerun); #128 (watch: not reproduced in 3,000 per system, twice); flaky tests #253 (Windows kill test, mitigated) and #268 (macOS
   SIGTERM test): comment with the run link, rerun the job; #170-#178 (register); #159, #150, #147.
 - **Opt-in real-tool paths** (`--ignored`) run a Cargo-built binary unless `VSIFT_E2E_BINARY` names an installed
   one (L-042); a failed run is a finding: issue first, then rerun. A stage that tests a fix newer than the published
