@@ -944,9 +944,10 @@ For the person doing it once, in order. It is 6.3 and 6.4 with the real commands
 differs. It takes about an hour, most of it waiting for builds and the registry. **A candidate is never announced** and moves
 `next` only: `latest` stays the empty `0.0.0` placeholder on all four packages at every step. Times are the maintainer's.
 
-**What you are about to do cannot be undone.** A version published to npm can never be published again, even if it is removed;
-a tag you push is a record that the ruleset keeps from moving once anything was published from it. If a step below fails
-before `npm publish` has run, nothing is lost and you can repeat it. After it, only the "If something fails" list applies.
+**What you are about to do cannot be undone.** A version published to npm can never be published again, even if it is removed,
+and a tag may be moved (you can bypass the ruleset) only until anything is published from it. If a step below fails before
+`npm publish` has run, nothing is lost and you can repeat it. After it, only the "If something fails" list applies. The commands
+are written for Git Bash (or any POSIX shell); `gh` and `npm` commands work in PowerShell too, and `^{commit}` needs quotes there.
 
 **0. Before you start (about ten minutes, nothing here changes anything).**
 
@@ -1005,7 +1006,7 @@ before `npm publish` has run, nothing is lost and you can repeat it. After it, o
    npm view @vsift/linux-x64 dist-tags
    ```
 
-   Expect `{ latest: '0.0.0', next: '0.1.0' }` four times. Remember it: step 5 compares.
+   Expect `{ latest: '0.0.0', next: '0.1.0' }` four times. Remember it: step 4 compares.
 
 **1. Tag the commit** (you are the only person the ruleset lets create a `v*` tag):
 
@@ -1036,7 +1037,9 @@ top to bottom. Expect:
   is enforced" (a dispatch on the tag is the rehearsal of a publish);
 - the table "What this publication does to the dist-tags": for each of the four packages `next` from `0.1.0` to `0.2.0-rc.1`
   and `latest` staying `0.0.0`;
-- the guard **Registry**: passed ("this version is not `latest` and is not on npm with other bytes on any package");
+- two guards, both **passed**: **Pre-release version** ("`0.2.0-rc.1` has a pre-release suffix, so it is published under `next` and
+  `latest` is not touched") and **Registry** ("this version is not `latest` and is not on npm with other bytes on any package");
+  the run of pull request #308 showed exactly this plan, with "report-only" in place of "enforced";
 - four `npm publish ... --tag next --provenance --ignore-scripts` commands in the order `@vsift/darwin-arm64`,
   `@vsift/win32-x64`, `@vsift/linux-x64`, `vsift-cli`, and a GitHub release created as a draft **pre-release not marked latest**
   with ten assets.
@@ -1102,7 +1105,7 @@ gh workflow run p13-managed-smoke.yml --repo smormah/vsift --ref main -f publish
 `P14 verify release` (RQ-19) takes a few minutes and must be all green: the provenance of four packages, `npm audit
 signatures`, `gh attestation verify` of ten files and four tarballs, the checksums, and the release's flags. The others are
 the evidence of P14 PR 11 (RQ-01 to RQ-06): their results go into the ledger there, and **a failed run is a finding: open an
-issue before re-running** (governance rule 14). Do not wait for them to start the hour of step 4 over.
+issue before re-running** (governance rule 14). You do not have to wait for the other three before you finish step 4.
 
 **6. Afterwards.** Tell the supervisor: the run ids of the dry run and the publish, the four `npm view` answers, the output of
 `npm audit signatures`, and anything that failed or was re-run. Nothing is announced. **Batches 2 and 3 of the agent trials
