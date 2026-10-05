@@ -1,0 +1,693 @@
+{
+  "calls": [
+    {
+      "actions": [
+        {
+          "verdict": "skill_read"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 0,
+      "step": 1,
+      "summary": "Skill vsift"
+    },
+    {
+      "actions": [
+        {
+          "verdict": "skill_read"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 1,
+      "step": 3,
+      "summary": "Read <workspace>\\.claude\\skills\\vsift\\references\\safety.md"
+    },
+    {
+      "actions": [
+        {
+          "verdict": "skill_read"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 2,
+      "step": 4,
+      "summary": "Read <workspace>\\.claude\\skills\\vsift\\references\\commands.md"
+    },
+    {
+      "actions": [
+        {
+          "verdict": "skill_read"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 3,
+      "step": 5,
+      "summary": "Read <workspace>\\.claude\\skills\\vsift\\references\\lifecycle.md"
+    },
+    {
+      "actions": [
+        {
+          "verdict": "skill_read"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 4,
+      "step": 6,
+      "summary": "Read <workspace>\\.claude\\skills\\vsift\\references\\handoff.md"
+    },
+    {
+      "actions": [
+        {
+          "image_check": true,
+          "path": "<workspace>/.claude/skills/vsift/assets/image-check.png",
+          "verdict": "image_open"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 5,
+      "step": 7,
+      "summary": "Read <workspace>\\.claude\\skills\\vsift\\assets\\image-check.png"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "setup",
+            "check",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "setup.check",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 6,
+      "step": 9,
+      "summary": "vsift setup check --json"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "ingest",
+            "--help"
+          ],
+          "class": "free",
+          "machine_output": false,
+          "operation": "help",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 7,
+      "step": 10,
+      "summary": "vsift ingest --help"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "ingest",
+            "walkthrough.mp4",
+            "--transcript",
+            "walkthrough.srt",
+            "--transcript-offset",
+            "500000",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "ingest",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 8,
+      "step": 12,
+      "summary": "vsift ingest walkthrough.mp4 --transcript walkthrough.srt --transcript-offset 500000 --json"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "search",
+            "ses_f0f389aaf1122648fd5d4d25c13832f8",
+            "--query",
+            "dialog",
+            "--limit",
+            "20",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "search",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 9,
+      "step": 14,
+      "summary": "vsift search ses_f0f389aaf1122648fd5d4d25c13832f8 --query \"dialog\" --limit 20 --json"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "transcript",
+            "get",
+            "ses_f0f389aaf1122648fd5d4d25c13832f8",
+            "--from",
+            "0",
+            "--to",
+            "12000000",
+            "--limit",
+            "20",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "transcript.get",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 10,
+      "step": 15,
+      "summary": "vsift transcript get ses_f0f389aaf1122648fd5d4d25c13832f8 --from 0 --to 12000000 --limit 20 --json"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "candidates",
+            "ses_f0f389aaf1122648fd5d4d25c13832f8",
+            "--from",
+            "0",
+            "--to",
+            "12000000",
+            "--limit",
+            "20",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "candidates",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 11,
+      "step": 16,
+      "summary": "vsift candidates ses_f0f389aaf1122648fd5d4d25c13832f8 --from 0 --to 12000000 --limit 20 --json"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "frame",
+            "get",
+            "ses_f0f389aaf1122648fd5d4d25c13832f8",
+            "--candidate",
+            "vcd_2231c2739bc7314d43fe4c13251ed7b1",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "frame.get",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 12,
+      "step": 17,
+      "summary": "vsift frame get ses_f0f389aaf1122648fd5d4d25c13832f8 --candidate vcd_2231c2739bc7314d43fe4c13251ed7b1 --json"
+    },
+    {
+      "actions": [
+        {
+          "image_check": false,
+          "path": "<session-root>/sessions/ses_f0f389aaf1122648fd5d4d25c13832f8/artifacts/artifact-17e6b3a40b171f8313dc5ef8d1c7fd205849b82f7a19b8c55d9d6bfd36588e4f.png",
+          "verdict": "image_open"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 13,
+      "step": 18,
+      "summary": "Read <session-root>\\sessions\\ses_f0f389aaf1122648fd5d4d25c13832f8\\artifacts\\artifact-17e6b3a40b171f8313dc5ef8d1c7fd205849b82f7a19b8c55d9d6bfd36588e4f.png"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "session",
+            "retain",
+            "ses_f0f389aaf1122648fd5d4d25c13832f8",
+            "--output",
+            "evidence-bundle-phase-1",
+            "--json"
+          ],
+          "class": "explicit",
+          "machine_output": true,
+          "operation": "session.retain",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 14,
+      "step": 21,
+      "summary": "vsift session retain ses_f0f389aaf1122648fd5d4d25c13832f8 --output evidence-bundle-phase-1 --json"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "bundle",
+            "validate",
+            "evidence-bundle-phase-1",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "bundle.validate",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 15,
+      "step": 22,
+      "summary": "vsift bundle validate evidence-bundle-phase-1 --json"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "handoff",
+            "check",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "handoff.check",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 16,
+      "step": 23,
+      "summary": "vsift handoff check --json <<'VSIFT_HANDOFF'\n## Problem\n\nThe question is which dialog the recording shows and what its sidecar transcript says about its own timing. The dialog on screen at 00:05.000 is labelled `DIALOG R-17` [c1: e2], and the sidecar's spoken line for 00:05.000-00:09.000 names the same dialog [c2: e1]. The sidecar's first cue says it is aligned with an explicit 500 ms offset [c3: ..."
+    }
+  ],
+  "client": {
+    "arguments": [
+      "-p",
+      "This recording, walkthrough.mp4, is a short screen capture of a dialog check. Its sidecar transcript, walkthrough.srt, has cue times that are early by the offset 500000 microseconds. Tell me which dialog is shown and what the sidecar says about its own timing. Use the VSift skill and the compact budget. When you have written the handoff, keep the evidence: I authorise you to retain the session to ...",
+      "--output-format",
+      "stream-json",
+      "--verbose",
+      "--model",
+      "claude-opus-5-5",
+      "--max-turns",
+      "60",
+      "--setting-sources",
+      "project",
+      "--permission-mode",
+      "dontAsk",
+      "--no-session-persistence",
+      "--strict-mcp-config"
+    ],
+    "environment_names": [
+      "PATH",
+      "SystemRoot",
+      "windir",
+      "SystemDrive",
+      "ComSpec",
+      "PATHEXT",
+      "OS",
+      "PROCESSOR_ARCHITECTURE",
+      "NUMBER_OF_PROCESSORS",
+      "ProgramData",
+      "CLAUDE_CODE_GIT_BASH_PATH",
+      "LOCALAPPDATA",
+      "APPDATA",
+      "XDG_CONFIG_HOME",
+      "XDG_CACHE_HOME",
+      "HOME",
+      "USERPROFILE",
+      "TEMP",
+      "TMP",
+      "TMPDIR",
+      "CLAUDE_CONFIG_DIR",
+      "DISABLE_AUTOUPDATER",
+      "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"
+    ],
+    "kind": "claude_code",
+    "model": "claude-opus-5-5",
+    "version": "2.1.284 (Claude Code)"
+  },
+  "client_setup": [
+    "marked the trial workspace as trusted in the client home"
+  ],
+  "cold": null,
+  "cold_assertions": [],
+  "cold_setting": null,
+  "deviations": [],
+  "fixture_hashes": {
+    "fixtures/corpus/generated/F10.mp4": "d7ccece71288c5ff35d7b16c871a93a8ed48bbb7380617899575069b4d6545f4",
+    "fixtures/corpus/transcripts/F10.srt": "2a4ee37d826754eac43da03e7cc63f718b16aed4d3ce163c380ebd8ab9630847",
+    "walkthrough.mp4": "d7ccece71288c5ff35d7b16c871a93a8ed48bbb7380617899575069b4d6545f4",
+    "walkthrough.srt": "2a4ee37d826754eac43da03e7cc63f718b16aed4d3ce163c380ebd8ab9630847"
+  },
+  "freeze_sha256": "1e89b5cc488e7245d1a6d63ec8809c1f8a5c137ee87f5ed05f9b692c2af6e392",
+  "handoff": {
+    "budget": {
+      "profile": "compact"
+    },
+    "capabilities": {
+      "image_access": "verified",
+      "image_check_code": "<check-code>",
+      "local_asr": "not_run",
+      "media_tools": "available",
+      "transcript_basis": "supplied_transcript"
+    },
+    "citations": [
+      {
+        "end_us": 9000000,
+        "id": "e1",
+        "revision_id": "trv_f75c9a319dbee7d01c4832592653d082",
+        "segment_id": "tsg_93bd08982c5f6fbad2467db5a72064c8",
+        "start_us": 5000000,
+        "type": "transcript_segment"
+      },
+      {
+        "actual_us": 5000000,
+        "candidate_id": "vcd_2231c2739bc7314d43fe4c13251ed7b1",
+        "delta_us": 0,
+        "evidence_id": "evd_1def266c16539698e0562b866386f578",
+        "id": "e2",
+        "pixels_inspected": true,
+        "requested_us": 5000000,
+        "type": "frame"
+      },
+      {
+        "end_us": 4000000,
+        "id": "e3",
+        "revision_id": "trv_f75c9a319dbee7d01c4832592653d082",
+        "segment_id": "tsg_d2002a547cbb41c5e37bd49a8a137dc5",
+        "start_us": 1000000,
+        "type": "transcript_segment"
+      }
+    ],
+    "claims": [
+      {
+        "certainty": "high",
+        "citations": [
+          "e2"
+        ],
+        "id": "c1",
+        "kind": "observed",
+        "section": "actual",
+        "statement": "At 00:05.000 the screen headed IMPORTED TRANSCRIPT ALIGNMENT shows the dialog label DIALOG R-17.",
+        "support": "supported"
+      },
+      {
+        "certainty": "high",
+        "citations": [
+          "e1"
+        ],
+        "id": "c2",
+        "kind": "observed",
+        "section": "actual",
+        "statement": "The sidecar segment at 00:05.000-00:09.000 says Dialog R-17 is displayed now.",
+        "support": "supported"
+      },
+      {
+        "certainty": "high",
+        "citations": [
+          "e3"
+        ],
+        "id": "c3",
+        "kind": "observed",
+        "section": "context",
+        "statement": "The sidecar's first cue states it is aligned with an explicit 500 millisecond offset.",
+        "support": "supported"
+      },
+      {
+        "certainty": "medium",
+        "citations": [
+          "e1",
+          "e2"
+        ],
+        "id": "c4",
+        "kind": "inferred",
+        "section": "context",
+        "statement": "With the user-stated offset of +500000 microseconds, the Dialog R-17 cue starts at 00:05.000, the same time as the frame showing DIALOG R-17.",
+        "support": "supported"
+      }
+    ],
+    "gaps": [
+      {
+        "kind": "visual",
+        "note": "Only the frame at 00:05.000 was opened; candidates at 00:00.000, 00:09.000 and 00:10.000 were not inspected.",
+        "reason": "not_inspected"
+      },
+      {
+        "kind": "audio",
+        "note": "Spoken audio was not checked; whisper is missing and the investigation relies on the supplied sidecar.",
+        "reason": "not_audible_to_agent"
+      }
+    ],
+    "handoff_version": "1",
+    "lifecycle": {
+      "action": "retained",
+      "mode": "retained",
+      "policy": "user_stated"
+    },
+    "question": "Which dialog does walkthrough.mp4 show, and what does the sidecar transcript say about its own timing?",
+    "status": "complete",
+    "untrusted_instructions": []
+  },
+  "holdout": true,
+  "install": {
+    "command_shims": [
+      "vsift",
+      "vsift.cmd",
+      "vsift.ps1"
+    ],
+    "ignore_scripts": true,
+    "launcher": {
+      "actual_sha256": "0695976ed633ebcf196b4c5dcd734ca21c4f3b2b79869052c776785bea8771a0",
+      "actual_size": 9870848,
+      "matches": true,
+      "package": "@vsift/win32-x64",
+      "recorded_sha256": "0695976ed633ebcf196b4c5dcd734ca21c4f3b2b79869052c776785bea8771a0",
+      "recorded_size": 9870848,
+      "version_exit_code": 0,
+      "version_line": "vsift 0.2.0-rc.1 (d5792ce31db1)"
+    },
+    "node_version": "v22.16.0",
+    "npm_version": "11.4.2",
+    "packages": [
+      {
+        "integrity_installed": "sha512-idqlqhE7sqArRRaqWV29mCFRi/kvhKrJM/HU6VTNpjtQzlzxhMMUdfc2Fl9UQnIDEv4GN61zf+PjUnJYMyPkyQ==",
+        "integrity_registry": "sha512-idqlqhE7sqArRRaqWV29mCFRi/kvhKrJM/HU6VTNpjtQzlzxhMMUdfc2Fl9UQnIDEv4GN61zf+PjUnJYMyPkyQ==",
+        "name": "vsift-cli",
+        "resolved": "https://registry.npmjs.org/vsift-cli/-/vsift-cli-0.2.0-rc.1.tgz",
+        "version": "0.2.0-rc.1"
+      },
+      {
+        "integrity_installed": "sha512-8sC7cxFqadbUdJcmByco4Epkvbcayy82TS9msLlxepzNEKK4bFVYeDjEJX2iZFAWTCn7Hcduv4JVJKL5eA3mIA==",
+        "integrity_registry": "sha512-8sC7cxFqadbUdJcmByco4Epkvbcayy82TS9msLlxepzNEKK4bFVYeDjEJX2iZFAWTCn7Hcduv4JVJKL5eA3mIA==",
+        "name": "@vsift/win32-x64",
+        "resolved": "https://registry.npmjs.org/@vsift/win32-x64/-/win32-x64-0.2.0-rc.1.tgz",
+        "version": "0.2.0-rc.1"
+      }
+    ],
+    "platform": "windows x86_64",
+    "registry": "https://registry.npmjs.org/",
+    "schema_version": 1,
+    "source": "registry",
+    "version": "0.2.0-rc.1"
+  },
+  "interpretation": {
+    "checks": [],
+    "human_review": null,
+    "key_facts": [
+      {
+        "claims": [
+          "c1",
+          "c2",
+          "c4"
+        ],
+        "event": "F10-E01",
+        "satisfied": true,
+        "term": "dialog R-17"
+      },
+      {
+        "claims": [
+          "c3"
+        ],
+        "event": "F10-E01",
+        "satisfied": true,
+        "term": "500 millisecond offset"
+      }
+    ],
+    "passed": true
+  },
+  "invalid_reasons": [],
+  "mechanical": {
+    "checks": [
+      {
+        "details": [],
+        "name": "handoff_valid",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "citations_resolve",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "citation_times_in_truth_windows",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "command_policy",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "stream_recognised",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "budgets",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "image_check",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "no_canary",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "report_text",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "client_configuration",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "commands_required",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "commands_forbidden",
+        "passed": true
+      }
+    ],
+    "passed": true
+  },
+  "mode": "skill",
+  "phase": 1,
+  "record_version": 1,
+  "reported_usage": {
+    "cache_creation_input_tokens": 36094,
+    "cached_input_tokens": 513453,
+    "cost_micro_usd": 526987,
+    "input_tokens": 26,
+    "output_tokens": 6772,
+    "reasoning_output_tokens": 0,
+    "source": "result_event"
+  },
+  "run": {
+    "exit_code": 0,
+    "raw_stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "raw_stdout_sha256": "dc0bce557954ba11b1ea3834e0891b440091105eb0358120fea02ac421ead2b5",
+    "started_unix_s": 1791214744,
+    "timed_out": false,
+    "wall_ms": 85715
+  },
+  "scenario": {
+    "id": "H-01-f10-supplied-sidecar",
+    "sha256": "7e933ed702a5e3b4faedb12179821ba89d9fe2066063f863afde41bdf9b81ad9",
+    "tests": [
+      "A-09"
+    ]
+  },
+  "settings_sha256": "bfa1a8315a7659aa8992ae7c5d046d1b140f37c848c05ca4e0d560252781d883",
+  "setup_check": {
+    "dependencies": [
+      {
+        "dependency": "ffmpeg",
+        "lookup": "configured_user_path",
+        "status": "available"
+      },
+      {
+        "dependency": "ffprobe",
+        "lookup": "configured_user_path",
+        "status": "available"
+      },
+      {
+        "dependency": "whisper",
+        "lookup": "filtered_path",
+        "status": "missing"
+      }
+    ],
+    "exit_code": 0,
+    "local_asr": "not_run",
+    "status": "degraded"
+  },
+  "shim_use": {
+    "cmd": 0,
+    "posix": 10,
+    "powershell": 0
+  },
+  "skill_sha256": "648569ae378268a3354b65e97f443bc25f7f5153a1734b2b99efdf4a1cbceb4b",
+  "skill_source": "installed_package",
+  "tools_source": "registered",
+  "trial_id": "h-01-f10-supplied-sidecar-38328cc8",
+  "usage": {
+    "image_bytes": 22215,
+    "images_per_step": 1,
+    "images_total": 2,
+    "tool_calls": 12,
+    "wall_time_s": 85
+  },
+  "usage_limit": null,
+  "valid": true,
+  "vsift": {
+    "commit": "d5792ce31db1106934233c86d0518c3ad1961e07",
+    "sha256": "0695976ed633ebcf196b4c5dcd734ca21c4f3b2b79869052c776785bea8771a0"
+  }
+}
