@@ -864,8 +864,27 @@ fn map_committed_io(error: io::Error) -> SessionStorageError {
     if is_storage_failure(&error) {
         map_storage_io(error)
     } else {
+        #[cfg(test)]
+        report_io_error_read_as_damage(&error);
         SessionStorageError::IntegrityFailure
     }
+}
+
+/// Under test, writes the I/O error that [`map_committed_io`] reports as
+/// damage to the test's captured output.
+///
+/// `IntegrityFailure` is a unit variant, so a read that failed on a rare I/O
+/// error answers only `[IntegrityFailure]`: the one hosted Windows failure of
+/// #314 could not be told from damage, or from a sharing violation, afterwards.
+/// The harness shows captured output only for a failing test, and worker
+/// threads inherit the capture of the test that spawned them.
+#[cfg(test)]
+fn report_io_error_read_as_damage(error: &io::Error) {
+    eprintln!(
+        "session storage I/O error reported as damage: {:?}, OS error {:?}: {error}",
+        error.kind(),
+        error.raw_os_error()
+    );
 }
 
 /// Whether `error` is a failure of the storage rather than of the stored
