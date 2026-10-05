@@ -40,8 +40,9 @@ the CLI and write a cited report. P12's named-client trials qualified it:
 **P00-P13 are complete. P14, the R0 qualification (#17), is in progress** (started 2026-10-02;
 decisions A-H of ADR 0024 confirmed). Its plan is 14 pull requests (0-13); **PRs 0 (#250), 1 (#251), 2 (#255),
 3 (#254), 4 (#259), 5 (#276), 6 (#262), 7 (the fixes, below), 8 (#252) and 9 (#302, #304, #306) are merged; PR 10
-(the candidate) has begun with 10a, the skill's wording, open; 10b, 10c and PRs 11-13 remain; the packet is not complete.**
-What it must show, and what is weaker than it sounds:
+(the candidate `0.2.0-rc.1`) is **prepared, not published**: 10a (#307, the skill's wording) and 10b with 10c (the
+bump, the changelog, rung `candidate`, the committed freeze, the allowed lists and the steps, `release.md` 6.10) are open;
+PRs 11-13 remain; the packet is not complete.** What it must show, and what is weaker than it sounds:
 - **The published 0.1.0 has run on a video, but only that:** PR 3 ran the real-tool checkpoints against it
   on hosted Ubuntu 24.04, Windows and macOS 15 (tests from a later commit, L-115); PR 2 installed it on
   hosted runners, not clean machines. Smart App Control and the macOS prompts are unseen (L-098).
@@ -55,7 +56,7 @@ What it must show, and what is weaker than it sounds:
 
 ## P14 PRs 1 to 6 and 8 in one view
 
-**PR 1 (#251):** the evidence ledger (RQ-01..RQ-20) and claims registry (rung `now`), checked on every
+**PR 1 (#251):** the evidence ledger (RQ-01..RQ-20) and claims registry (rung `now`, `candidate` since PR 10b), checked on every
 PR (L-101). **PR 2 (#255):** clean installs from the real registry (npm, pnpm, Yarn, Bun; three systems),
 archives, offline install, upgrade and a second verifier (RQ-01..04, RQ-19), `passed` for 0.1.0 only (L-109
 to L-112). **PR 8 (#252):** the version alone decides the channel (a suffix means `next`, none moves
@@ -75,34 +76,32 @@ RQ-07 passed (31 fuzz targets, no crash; 19 still growing: L-128); RQ-08 failed 
 passed (found #274, #277, #286); RQ-10 failed (96 hostile inputs, 93 held: #264-#266); RQ-12 passed (runbook
 walked); RQ-13 failed (#272).
 
-## P14 PR 9 in one view (9a #302 and 9b #304 merged; 9c records the decisions of 2026-10-04)
+## P14 PRs 9 and 10 in one view
 
-**9a:** the support matrix (`support-and-resource-profiles.md`: no cell may say "supported" yet) and the install
-guide, `SECURITY.md` (a versions table), runbook, skill guide and README facts brought to it. The claims check
-also reads the launcher's messages and the README graphics' text (L-121), and each claim lists the register
-entries it leans on (`limits`). `register-review-sheet.md`: thirty entries, seven later, nine readings, all pending. **Decided 2026-10-04 (9c):** the macOS wording and the versions
-policy as proposed; RQ-05's rule is per system, and RQ-05 is still `running` for 0.1.0 (plan section 21). **9b:**
-`docs/guide/` (twelve pages, two generated reference pages), held to the code by the `Guide` workflow
-(`tools/guide/`): the reference must equal `--help` and `schemas/v1`, and 40 marked commands must print what the
-pages show: matched on Windows 11 and Ubuntu 24.04 (managed tools), never on macOS. It names a release, not a candidate.
+**PR 9 (#302, #304, #306).** The support matrix (`support-and-resource-profiles.md`: no cell may say "supported"
+yet), the install guide, `SECURITY.md`, the runbook, the skill guide and the README facts brought to it; the claims
+check reads the launcher's messages and the README graphics' text (L-121) and each claim lists the register entries it
+leans on (`limits`); `register-review-sheet.md` (every review `pending`). **Decided 2026-10-04:** the macOS wording,
+the versions policy and RQ-05's per-system rule (still `running`, plan section 21). `docs/guide/`
+(twelve pages, two generated) is held to the code by the `Guide` workflow (`tools/guide/`): 40 marked commands print what
+the pages show. **PR 10 (prepared 2026-10-05, nothing published).** `0.2.0-rc.1` is the version everywhere, the guide's
+marker is the release `0.2.0`, rung `candidate`, the freeze of batches 2 and 3 is committed (a test holds it). The allowed
+lists of the candidate-to-stable check were too narrow for the repository's own rules (the changelog, handoff files and
+ledger change in every PR): a work record and `install.md` are now allowed, and from the tag to the stable merge nothing
+else may merge, so Dependabot waits (#195 merged first; #192, #193, #194 after the stable; ADR 0024's PR 10b note).
 
 ## P14 PR 7 in one view (every finding by outcome; one pull request and one regression test each)
 
 **Rule of 2026-10-04: a published failure code stays (v1 is additive, L-126); the remediation carries the fix (L-127).**
-- **Fixed:** #264 `ingest` of a pipe with no writer no longer waits (#290); #274 a range cut mid-speech keeps
-  its last segment (#289, L-130, ADR 0017 note); #277 a failed open removes its registration (waiting up to
-  5 s for a busy root) and an id with no published session says so (#293, L-131); #268 a shutdown that
-  cancels a step carries the remediation (#288); #256 a missing shared library is named (#280); #261 a
-  foreign session root explains itself (#279, L-126); #273, #282, #283, #285 tool fixes (#275, #287).
-- **Answer fixed, code kept (L-127):** #265 a link says links are not followed (#295); #266 no room is refused
-  before the copy, best effort on Unix (#291, L-061); #277's not-published answer; the code is `STORAGE_IO`.
-- **Narrowed or mitigated, not proven gone:** #206 a new session root's DACL is read back and repeated (#301):
-  the cause is a hypothesis (L-005; L-123 closed); #253 the kill test ends its own strays (#300; L-129).
-- **Test or documents only:** #271 the admission test (#294, L-060); #286 the dedupe window is stated (#299,
-  L-063: an R1 stub is the maintainer's call); #257 the `vsift.cmd` shim is documented (#281, L-109).
-- **PR 7b, #272 (not fixed):** the first scan reading missed release-branch cherry-picks; 46 of 47 records
-  are fixed in the shipped FFmpeg (L-122). The refresh candidate is a daily build and cannot be pinned; the
-  next month-end build is 2026-10-31 (L-132). RQ-13 stays `failed`.
+- **Fixed:** #264 a pipe no longer hangs `ingest` (#290); #274 a range cut mid-speech keeps its last segment (#289,
+  L-130); #277 a failed open removes its registration (#293, L-131); #268 the shutdown remediation (#288); #256 a missing
+  shared library is named (#280); #261 a foreign session root explains itself (#279, L-126); #273, #282, #283, #285
+  tool fixes (#275, #287). **Answer fixed, code kept (L-127):** #265 a link (#295), #266 no room, best effort on Unix
+  (#291, L-061), #277's not-published answer: all `STORAGE_IO`. **Narrowed, not proven gone:** #206 the root's DACL is
+  read back and repeated (#301, L-005); #253 the kill test ends its strays (#300, L-129). **Tests or documents only:**
+  #271 (#294, L-060); #286 the dedupe window (#299, L-063: an R1 stub is the maintainer's call); #257 the `vsift.cmd` shim
+  (#281, L-109). **PR 7b, #272 (not fixed):** 46 of 47 scan records are fixed in the shipped FFmpeg (L-122); the next
+  month-end build to pin is 2026-10-31 (L-132) and **the re-pin is planned for after the stable `0.2.0`**; RQ-13 stays `failed`.
 - **Weak points that remain:** the codes of L-127; #206's cause is unproven; #253 is random; Windows has
   no free-space check (L-061); a busy lock refused one request in five once (L-131).
 
@@ -133,7 +132,7 @@ Control, the macOS prompts (L-098); power loss beyond Ubuntu 24.04 ext4 (L-037).
 | P11 | Complete (`40c4038`); SEC-T01 adversarial evidence is technical debt, moved to R1 (#188, L-068) |
 | P12 | Complete (2026-09-30, ADR 0022 Accepted): skill, harness, named-client trials; review tier qualified, compact tier 93% and 100% on the #222 re-run; open: L-095 (#224), #219, #204 (`1284e54`) |
 | P13 | Complete (2026-10-01, ADR 0023 Accepted): distribution, managed install, `handoff check`, human output; 0.1.0 published; release commit `011bc4d` |
-| P14 | **In progress** (started 2026-10-02): PRs 0-9 merged (PR 7 = the fixes of the campaigns and batch 1); 10a (the skill's wording) open, 10b, 10c and 11-13 remain; agent batch 1 ran (baseline) |
+| P14 | **In progress** (started 2026-10-02): PRs 0-9 merged (PR 7 = the fixes of the campaigns and batch 1); 10a, 10b and 10c prepared (the candidate is not published); 11-13 remain; agent batch 1 ran (baseline) |
 
 ## Architecture snapshot
 
