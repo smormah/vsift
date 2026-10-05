@@ -1390,3 +1390,41 @@ version; the delta check refused every trap tried; the points below are things t
   `headSha`, not the newest).
 - **The freeze test pins the whole-freeze digest** (`1e89b5cc...`, copied from the file), so a pull request that edits a frozen
   component and regenerates `freeze.json` shows in the diff of a test as well as of a data file.
+
+## Implementation note, 2026-10-05 (P14 PR 11b: the maintainer's try-out sheet and the batch checklist, prepared)
+
+The candidate `0.2.0-rc.1` was published on 2026-10-05 (tag `v0.2.0-rc.1` at `d5792ce31db1`, npm `next` on all four packages, a GitHub
+pre-release with ten files, `latest` untouched). PR 11 qualifies it in several pull requests; this is the **second, an increment**: two
+documents for the maintainer's hands, **prepared and not run**. The hosted evidence is PR 11a. PR 11 is complete only when the agent
+batches, the try-outs and the register pass are done and the ledger is complete. Nothing in this pull request touches code, a tool, a
+workflow or a setting: from the tag to the stable merge only the work record may change (`release.md` 6.8).
+
+- **[`rq-17-tryout-sheet.md`](../planning/rq-17-tryout-sheet.md)** (evidence item RQ-17): the Smart App Control try-out and a true
+  clean-machine install on the second Windows 11 machine, step by step for a person at the console, with the expected output
+  and a place to write each observation. It records decision H's rule on its first page (an observation blocks the stable only until it
+  is recorded) and decision C's trigger, and says what each outcome leads to; it decides nothing.
+- **[`p14-batch-2-3-checklist.md`](../planning/p14-batch-2-3-checklist.md)**: what runs in batches 2 and 3, the exact commands, the
+  configuration file (its keys, never its contents), the freeze files, `-AllowGraderChange` for batch 3, the cost and time from batch 1's
+  measured compact-tier runs (Claude 10 runs about $1.18 at list prices; Codex 10 runs 3.26 M input tokens, 116 s mean), and the
+  preconditions (Docker Desktop running, the machine awake, a clean checkout). Nothing is started by it.
+
+**Decisions taken inside this ADR, for the maintainer to confirm or overrule:**
+
+1. **The three ways in are read as: npm; the archive from a browser (with the Internet mark); the archive from a command line (without
+   it).** The third is a reading of "from a download" that tells whether the mark, and not the file, decides what Windows does. The npm
+   install comes first because on a clean machine it is both a Smart App Control try-out and the clean install.
+2. **The sheet asks for the Smart App Control state before and after every step.** In evaluation mode Windows may turn it On or Off by
+   itself, and installing Node.js can tip it; and it cannot be turned back on without reinstalling Windows, so the sheet forbids
+   turning anything off before the observation that needs it is written down.
+3. **A new question for the guide:** a default Windows 11 client refuses to run PowerShell scripts, which includes the `vsift.ps1` shim
+   npm writes (and `npm.ps1` itself). The hosted jobs do not show it. `install.md` says nothing about it, so the sheet asks for the
+   exact message and the route used; whether it becomes a documentation change (allowed before the stable release) follows from what
+   is seen.
+4. **A first look of two runs per client before a batch's rest** is recommended in the checklist, because the review tier's first real cost
+   and the skill's first run with the PR 10a wording are unmeasured; it is a suggestion, not a rule of the script.
+5. **One pull request for both documents**, so that the maintainer's two kinds of hands-on work can be reviewed together.
+
+**What is weaker than it sounds.** The sheet's expected outputs come from hosted Windows runs and the guide, not from a clean person's
+machine, and its reading of `VerifiedAndReputablePolicyState` (0 Off, 1 On, 2 Evaluation) is the community's, confirmed only for 0
+on the maintainer's machine; the Settings page is the authority. The checklist's cost for the review tier is an extrapolation, not a
+measurement. Neither document can show that an agent or a person succeeds: only their runs can.

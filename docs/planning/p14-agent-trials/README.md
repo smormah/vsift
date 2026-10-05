@@ -10,6 +10,8 @@ maintainer's explicit go. This folder is where the batches' bounded records land
 batch 1 is [batch-1-reading.md](batch-1-reading.md); it qualifies nothing, it is the "before"
 picture for the final round.
 
+The maintainer's checklist for batches 2 and 3 (what runs, the commands, the configuration file, the
+cost) is [`../p14-batch-2-3-checklist.md`](../p14-batch-2-3-checklist.md).
 The plan is [p14-qualification.md](../p14-qualification.md) section 7; the runbook, with what the
 maintainer does for each batch and what it costs, is
 [`docs/agents/trials.md`](../../agents/trials.md) ("The P14 batches"); the decisions are

@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+**Work record only (P14 PR 11b); nothing shipped changes.** Two documents for the maintainer's hands, prepared and not run: the
+RQ-17 try-out sheet for the second Windows 11 machine ([`docs/planning/rq-17-tryout-sheet.md`](docs/planning/rq-17-tryout-sheet.md):
+Smart App Control through npm and through the archive, a clean-machine install, the guide's first investigation) and the checklist
+for agent-trial batches 2 and 3 ([`docs/planning/p14-batch-2-3-checklist.md`](docs/planning/p14-batch-2-3-checklist.md)). No code, tool,
+workflow, schema or setting changed.
+
 ## [0.2.0-rc.1] - 2026-10-05
 
 **This is a release candidate, under qualification.** It is the candidate for `0.2.0`, the release that ships R0
