@@ -38,11 +38,11 @@ the CLI and write a cited report. P12's named-client trials qualified it:
 ## Where the project stands
 
 **P00-P13 are complete. P14, the R0 qualification (#17), is in progress** (started 2026-10-02;
-decisions A-H of ADR 0024 confirmed). Its plan is 14 pull requests (0-13); **PRs 0 (#250), 1 (#251), 2 (#255),
-3 (#254), 4 (#259), 5 (#276), 6 (#262), 7 (the fixes, below), 8 (#252) and 9 (#302, #304, #306) are merged; PR 10
-(the candidate `0.2.0-rc.1`) is **prepared, not published**: 10a (#307, the skill's wording) and 10b with 10c (the
-bump, the changelog, rung `candidate`, the committed freeze, the allowed lists and the steps, `release.md` 6.10) are open;
-PRs 11-13 remain; the packet is not complete.** What it must show, and what is weaker than it sounds:
+decisions A-H of ADR 0024 confirmed). Its plan is 14 pull requests (0-13); **PRs 0-10 are merged and the candidate
+`0.2.0-rc.1` is published (2026-10-05: `v0.2.0-rc.1` at `d5792ce31db1`, npm `next` on all four packages, `latest`
+untouched). PR 11, its qualification, is in progress: 11b (the try-out sheet and the batch 2 and 3 checklist, prepared,
+nothing run) is open and 11a (the hosted evidence) is running; PRs 12-13 remain; the packet is not complete.** What it
+must show, and what is weaker than it sounds:
 - **The published 0.1.0 has run on a video, but only that:** PR 3 ran the real-tool checkpoints against it
   on hosted Ubuntu 24.04, Windows and macOS 15 (tests from a later commit, L-115); PR 2 installed it on
   hosted runners, not clean machines. Smart App Control and the macOS prompts are unseen (L-098).
@@ -84,7 +84,7 @@ check reads the launcher's messages and the README graphics' text (L-121) and ea
 leans on (`limits`); `register-review-sheet.md` (every review `pending`). **Decided 2026-10-04:** the macOS wording,
 the versions policy and RQ-05's per-system rule (still `running`, plan section 21). `docs/guide/`
 (twelve pages, two generated) is held to the code by the `Guide` workflow (`tools/guide/`): 40 marked commands print what
-the pages show. **PR 10 (prepared 2026-10-05, nothing published).** `0.2.0-rc.1` is the version everywhere, the guide's
+the pages show. **PR 10 (the candidate, published 2026-10-05).** `0.2.0-rc.1` is the version everywhere, the guide's
 marker is the release `0.2.0`, rung `candidate`, the freeze of batches 2 and 3 is committed (a test holds it). The allowed
 lists of the candidate-to-stable check were too narrow for the repository's own rules (the changelog, handoff files and
 ledger change in every PR): a work record and `install.md` are now allowed, and from the tag to the stable merge nothing
@@ -132,7 +132,7 @@ Control, the macOS prompts (L-098); power loss beyond Ubuntu 24.04 ext4 (L-037).
 | P11 | Complete (`40c4038`); SEC-T01 adversarial evidence is technical debt, moved to R1 (#188, L-068) |
 | P12 | Complete (2026-09-30, ADR 0022 Accepted): skill, harness, named-client trials; review tier qualified, compact tier 93% and 100% on the #222 re-run; open: L-095 (#224), #219, #204 (`1284e54`) |
 | P13 | Complete (2026-10-01, ADR 0023 Accepted): distribution, managed install, `handoff check`, human output; 0.1.0 published; release commit `011bc4d` |
-| P14 | **In progress** (started 2026-10-02): PRs 0-9 merged (PR 7 = the fixes of the campaigns and batch 1); 10a, 10b and 10c prepared (the candidate is not published); 11-13 remain; agent batch 1 ran (baseline) |
+| P14 | **In progress** (started 2026-10-02): PRs 0-10 merged (PR 7 = the fixes of the campaigns and batch 1; the candidate `0.2.0-rc.1` is published); 11 in progress (11b prepared sheets open, 11a hosted evidence running); 12-13 remain; agent batch 1 ran (baseline) |
 
 ## Architecture snapshot
 

@@ -1183,3 +1183,21 @@ prepared. Nothing was tagged or published. The decisions and what is weaker than
 
 **Hosted minutes.** None for the work itself. The pull request's own CI runs the usual jobs and the Release dry run, whose
 plan for `0.2.0-rc.1` is the first plan for a release candidate.
+
+## 24. PR 11: the release candidate `0.2.0-rc.1` is qualified (in several pull requests, from 2026-10-05)
+
+The candidate was published on 2026-10-05: the tag `v0.2.0-rc.1` (annotated) at `d5792ce31db1106934233c86d0518c3ad1961e07`, npm `next` on
+`vsift-cli` and `@vsift/{win32-x64,darwin-arm64,linux-x64}`, a GitHub pre-release with ten files; `latest` is still the empty `0.0.0`.
+From the tag to the stable merge **only the work record may change** (`release.md` 6.8): this section, the ledger, the records and the
+sheets are work record; the crates, tools, workflows, schemas, skill and fixtures are frozen with the candidate. PR 11 is complete only
+when the hosted evidence, the agent batches, the try-outs and the register pass are done and `release-evidence --complete-for
+0.2.0-rc.1` passes; each pull request below says which part it is.
+
+### 24.1 PR 11b (an increment): what was prepared for the maintainer's hands
+
+Prepared and **not run**; nothing here is evidence yet.
+
+| Document | What it is |
+| --- | --- |
+| [`rq-17-tryout-sheet.md`](rq-17-tryout-sheet.md) | RQ-17: the Smart App Control try-out (npm, a browser download of the archive, a command-line download of it), a true clean-machine install of `vsift-cli@next`, the guide's first investigation on the practice recording and the `setup` flows, on the second Windows 11 machine (LOKI), step by step for a person at its console, each with the expected output and a place to write what was seen. Decision H: an observation blocks the stable only until it is recorded. Decision C's trigger is stated; the sheet decides nothing. macOS is untried (no Mac) |
+| [`p14-batch-2-3-checklist.md`](p14-batch-2-3-checklist.md) | RQ-15 and RQ-16: batch 2 (34 runs, the counted set with the skill) and batch 3 (18 runs, the cold final round): what runs, the commands, `campaign.json`'s keys, the committed freeze files, `-AllowGraderChange` for batch 3, the preconditions (Docker Desktop, the machine awake, a clean checkout) and the cost and time from batch 1's measurements. Each batch starts only on the maintainer's explicit go |

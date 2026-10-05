@@ -5,14 +5,15 @@ Current-state handoff, rewritten in every change; history: git, `CHANGELOG.md`, 
 ## Now
 
 **P00-P13 are complete. P14 (R0 qualification, #17) is in progress: decisions A-H confirmed
-2026-10-02.** The plan is 14 pull requests (0-13). **PRs 0 (#250), 1 (#251), 2 (#255), 3 (#254), 4 (#259),
-5 (#276), 6 (#262), 7 (the fixes, below) and 8 (#252) are merged; agent-trial batch 1 ran on 2026-10-03.**
-**PR 9 is merged (#302, #304, #306). PR 10, the candidate `0.2.0-rc.1`, is prepared and not published:
-10a (#307, the skill's wording) and 10b with 10c (the cut and `release.md` 6.10) are open.** The packet is not
-complete. Plan: `docs/planning/p14-qualification.md` (sections 15-23); ADR 0024 stays Proposed.
-**Evidence:** `p14-evidence-ledger.json`, all **for 0.1.0 only** and stale for the candidate: `passed` RQ-01 to
-RQ-04, RQ-06, RQ-07, RQ-09, RQ-12, RQ-19; **`failed`: RQ-08, RQ-10, RQ-13** (PR 7 fixes them; PR 11 re-runs them);
-RQ-05 `running` (L-113; plan section 21); RQ-14 `waived`; 6 `planned`.
+2026-10-02.** The plan is 14 pull requests (0-13). **PRs 0-10 are merged (agent-trial batch 1 ran on 2026-10-03),
+and the candidate `0.2.0-rc.1` is published (2026-10-05: tag `v0.2.0-rc.1` at `d5792ce31db1`, npm `next` on all four
+packages, a GitHub pre-release with ten files; `latest` is still the empty `0.0.0`).** **PR 11, its qualification,
+is in progress and not complete: 11b (the prepared try-out sheet and batch checklist, nothing run) is open; 11a (the
+hosted evidence) is running.** The packet is not complete. Plan: `docs/planning/p14-qualification.md` (sections 15-24);
+ADR 0024 stays Proposed.
+**Evidence:** `p14-evidence-ledger.json`, still **for 0.1.0 only** until 11a merges, so stale for the candidate:
+`passed` RQ-01 to RQ-04, RQ-06, RQ-07, RQ-09, RQ-12, RQ-19; **`failed`: RQ-08, RQ-10, RQ-13**; RQ-05 `running`
+(L-113; plan section 21); RQ-14 `waived`; 6 `planned`.
 **Public text:** `public-claims.json`, rung `candidate` (CL-101 and CL-102 are in use; both need RQ-19, passed for
 0.1.0 only, L-133); a claim above the rung fails while a register entry it leans on (`limits`) is pending.
 **Decided 2026-10-02 (ADR 0024):** **A** R0 is `0.2.0` on `latest`. **B** `0.2.0-rc.N` under `next`, never announced.
@@ -46,28 +47,23 @@ baseline): skill pilots 4 of 4, cold useful 1 of 6 (Claude) and 2 of 6 (Codex), 
 grader questions are ruled (#298). **README graphics:** redraw `roadmap.svg` with PRs 10 and 13 (L-121).
 **0.1.0:** on npm under `next` (`latest` is an empty placeholder) and a GitHub pre-release; not announced (L-105).
 
-## The remaining P14 pull requests (0-9 merged)
+## The remaining P14 pull requests (0-10 merged)
 
-**10** is complete only when the maintainer has published the candidate and verified it: **10a** (#307) the skill's
-wording; **10b and 10c** the bump and guide re-run, the changelog, the claims rung, the freeze of batches 2 and 3
-(committed, with a test), the allowed lists of the candidate-to-stable check (a work record and `install.md` are now
-allowed, `release.md` 6.8) and the maintainer's exact steps (`release.md` 6.10). **From the tag to the stable merge
-nothing else** (no Dependabot, workflow or tool change). **11** its qualification (batches 2 and 3; `P14 journeys`;
-re-run RQ-07 to RQ-10); **12** stable `0.2.0`; **13** ledger follow-up, P14 `complete`, handoff. **After the stable
-tag, within seven days:** register the two stable checks in `STABLE_CHECKS` (`tools/p14-published/lib/verify.cjs`).
+**11** the candidate's qualification, in parts: **11b** (open) `rq-17-tryout-sheet.md` and `p14-batch-2-3-checklist.md`,
+prepared and not run; **11a** the hosted evidence (the four runs of 2026-10-05 and the campaigns on the candidate: the
+ledger, plan section 24); then the agent batches (the maintainer's go), the try-outs and the register pass. **12**
+stable `0.2.0`; **13** ledger follow-up, P14 `complete`, handoff. **From the tag to the stable merge only the work
+record changes** (`release.md` 6.8: no Dependabot, workflow or tool change). **After the stable tag, within seven days:**
+register the two stable checks in `STABLE_CHECKS` (`tools/p14-published/lib/verify.cjs`).
 
 ## What the maintainer owes, and when
 
-- **Now:** **PR 10b:** confirm the widened allowed lists (ADR 0024's PR 10b note, decision 1), then **publish** by
-  `release.md` 6.10 (merge, tag, dry run, publish, verify; the "up to date" rule on `main` back on first). **The skill:**
-  read #307's three wording changes. **Dependabot:** #195 merged; #192, #193, #194 wait until after the stable.
-  **The FFmpeg re-pin** (#272, L-132) is planned for after the stable. **Batches 2 and 3** run only on the go, on the
-  candidate (`run-campaign.ps1 -Batch N -Client claude|codex -Version <rc>`; batch 3 needs `-AllowGraderChange`);
-  needs Claude Code 2.1.284 and Docker.
+- **Now:** review 11b; **the go for batches 2 and 3**, one batch at a time on the candidate (the checklist: batch 3
+  needs `-AllowGraderChange`; Claude Code 2.1.284 and Docker; state the reserve rule first; L-095); **the Smart App
+  Control try-out** on the second Windows 11 machine (the sheet; no macOS try-out). **Dependabot:** #192, #193, #194
+  wait until after the stable. **The FFmpeg re-pin** (#272, L-132) is planned for after the stable.
 - **PR 9:** one pass over `register-review-sheet.md` (thirty entries, seven later, nine readings: every review is
-  `pending`), how RQ-05 closes for 0.1.0 (a `P07 local ASR` dispatch at its commit, or the weekly runs accepted),
-  and whether `Guide` becomes a required check. **PRs 10 and 12:** each publish (`release.md` 6.3, 6.7). **PR 11:** the go for
-  batches 2 and 3 (L-095); a Smart App Control try-out on the second Windows 11 machine; no macOS try-out.
+  `pending`), and whether `Guide` becomes a required check. **PR 12:** the stable publish (`release.md` 6.7).
 
 ## Open decisions and readings (maintainer)
 
