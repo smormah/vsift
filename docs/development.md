@@ -633,7 +633,8 @@ node tools/guide/check-examples.cjs --binary target/debug/vsift
 - **A version bump re-checks the guide.** The guide names a release (`0.2.0`), not a
   candidate: `0.2.0-rc.1` and `0.2.0` are the same release to these tools, so the stable commit
   needs no guide change, which matters because it may differ from its accepted candidate only in
-  version-string files and shipped documents ([release process, 6.8](operations/release.md)).
+  version-string files, shipped documents and the work record, and the generated reference pages,
+  which name the release, are in none of them ([release process, 6.8](operations/release.md)).
   In the bump to a new release (before its first candidate is cut), run the examples, run
   `generate-reference.cjs --write`, and update the `guide-version` marker and the sentence
   beside it in `docs/guide/index.md`.

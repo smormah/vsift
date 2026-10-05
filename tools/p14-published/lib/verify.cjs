@@ -15,11 +15,15 @@
 // inside the artifacts differ) and `latest` on all four packages with the
 // GitHub release marked latest. They are NOT built here: no stable release has
 // ever been published, so neither could be tried on real bytes. `STABLE_CHECKS`
-// is where they are registered, before the stable publish (P14 PR 12's
-// preparation; docs/planning/p14-qualification.md section 15), and a stable
-// version fails verification by name until they are: a verification of a stable
-// release that silently skipped them would be a green result about the wrong
-// thing.
+// is where they are registered, **after the stable tag** (a small pull request
+// that lands within seven days of the stable publish, while the Release run's
+// `publish-plan` artifact exists), and a stable version fails verification by
+// name until they are: a verification of a stable release that silently skipped
+// them would be a green result about the wrong thing. After the tag, not
+// before: a change under `tools/` between the candidate and the stable commit
+// is refused by the candidate-to-stable check (docs/operations/release.md 6.8),
+// and `P14 verify release` is dispatched from `main` (`--ref main`), so the code
+// that verifies a stable release is `main`'s at that moment, not the tag's.
 //
 // What the delta check reads is P14 PR 8's record: an enforced stable plan
 // writes `release-delta.json` into the `publish-plan` artifact of the Release
@@ -41,7 +45,7 @@ const REQUIRED_STABLE_CHECKS = Object.freeze(['candidate-to-stable-delta', 'late
 /**
  * The registered stable checks, by name: each is `(context) => string` and
  * throws a QualificationError when it fails. It is empty today; the two checks
- * are added before the stable publish (a test in `test/verify.test.cjs` shows
+ * are added after the stable tag (a test in `test/verify.test.cjs` shows
  * the shape).
  */
 const STABLE_CHECKS = new Map();
@@ -274,7 +278,7 @@ function runStableChecks(channel, context, registry = STABLE_CHECKS) {
         name: `stable: ${name}`,
         ok: false,
         detail:
-          'not registered yet: it goes into STABLE_CHECKS (tools/p14-published/lib/verify.cjs) before the stable publish, ' +
+          'not registered yet: it goes into STABLE_CHECKS (tools/p14-published/lib/verify.cjs) after the stable tag, ' +
           `and a stable version is not verified without it${context.releaseRunId ? ` (the Release run is ${context.releaseRunId})` : ''}`,
       };
     }

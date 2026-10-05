@@ -191,7 +191,7 @@ test('integrity strings are converted to hex and anything else is refused', () =
 test('a pre-release needs no stable check, and a stable version fails by name until its two are registered', () => {
   assert.deepEqual(verify.runStableChecks('pre-release', {}), []);
   assert.deepEqual([...verify.REQUIRED_STABLE_CHECKS], ['candidate-to-stable-delta', 'latest-on-all-four-packages']);
-  assert.equal(verify.STABLE_CHECKS.size, 0, 'none is registered yet: they are added before the stable publish');
+  assert.equal(verify.STABLE_CHECKS.size, 0, 'none is registered yet: they are added after the stable tag');
   const unregistered = verify.runStableChecks('stable', {});
   assert.equal(unregistered.length, 2);
   for (const result of unregistered) {

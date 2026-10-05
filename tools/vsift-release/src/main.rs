@@ -164,8 +164,9 @@ enum Command {
     /// the output directory. Prints the plan job's outputs.
     PublishPlan(PlanArguments),
     /// Compare the accepted release candidate of this version with a commit
-    /// (the stable commit): only version strings and the launcher's README
-    /// may differ. Prints the comparison and fails if anything else does.
+    /// (the stable commit): only version strings, the launcher's README, the
+    /// installation guide and the work record may differ. Prints the
+    /// comparison and fails if anything else does.
     CandidateDelta {
         /// The stable commit, as a full lowercase SHA; defaults to `HEAD`.
         #[arg(long)]
@@ -524,7 +525,8 @@ fn write_publish_plan(
 }
 
 /// Compares the accepted release candidate of this version with a commit and
-/// reports whether only version strings and the launcher's README differ.
+/// reports whether only version strings, the launcher's README, the
+/// installation guide and the work record differ.
 fn candidate_delta(
     stable_commit: Option<String>,
     github_output: bool,

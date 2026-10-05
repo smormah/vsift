@@ -58,8 +58,9 @@ function readVersion(binary, env) {
 /**
  * The release a version belongs to: `0.2.0-rc.1` and `0.2.0` are both `0.2.0`. The guide is
  * checked against and says the release, not the candidate, because the stable commit may differ
- * from its accepted candidate only in version-string files and shipped documents (the release
- * process, section 6.8): a guide that named `0.2.0-rc.1` could not become `0.2.0` without a change
+ * from its accepted candidate only in version-string files, shipped documents and the work record
+ * (the release process, section 6.8), and the generated reference pages, which name the release,
+ * are in none of them: a guide that named `0.2.0-rc.1` could not become `0.2.0` without a change
  * the stable cut refuses.
  */
 function releaseOf(version) {

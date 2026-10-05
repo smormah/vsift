@@ -19,8 +19,10 @@ name: P14 verify release
 # P14 PR 8's enforced stable plan writes, `release-delta.json`, in the Release
 # run's publish-plan artifact) and the `latest` move on all four packages.
 # Neither can be tried before a stable release exists, so they are registered in
-# tools/p14-published/lib/verify.cjs (STABLE_CHECKS) before the stable publish;
-# until then a stable version fails here by name, rather than passing without them.
+# tools/p14-published/lib/verify.cjs (STABLE_CHECKS) after the stable tag, by a small
+# pull request (a change under tools/ before the stable commit is refused by the
+# candidate-to-stable check, and this workflow is dispatched from `main`); until then a
+# stable version fails here by name, rather than passing without them.
 #
 # The only token in reach is the job's default read-only one, which only `gh`
 # sees. No job here can publish, tag or change anything: contents: read and

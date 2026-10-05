@@ -689,9 +689,9 @@ this ADR:
   days; the verifier passes the run's id, taken from npm's provenance, in its context) and
   `latest-on-all-four-packages`. Neither can be tried on real bytes before a stable release
   exists, so they are not built here: `STABLE_CHECKS` in `tools/p14-published/lib/verify.cjs` is
-  where they register, before the stable publish (PR 12's preparation), and until they do a
-  stable version **fails by name** (tested), so a stable publish cannot be verified green without
-  them.
+  where they register, before the stable publish (PR 12's preparation; **superseded by PR 10b:
+  after the stable tag, see its note**), and until they do a stable version **fails by name**
+  (tested), so a stable publish cannot be verified green without them.
 - **The ledger.** RQ-01 to RQ-04 and RQ-19 are `passed` **for 0.1.0 at its commit only**, each with
   its runs. The version bump changes `Cargo.toml` and `npm/`, which are in every one of these
   scopes, so none counts for `0.2.0-rc.1`; each is `repeat` for the stable. Nothing the checker
@@ -1285,3 +1285,108 @@ that the words help or that they do no harm; they can only show that nothing els
 `SKILL.md` was not touched (the file is at 300), which is why every change is in `references/`. The description of the note in
 `handoff.schema.json` still says "380 characters" for the longest remediation; it is a comment on a limit of 600 and was left
 alone because the schema is embedded in the binary.
+
+## Implementation note, 2026-10-05 (P14 PR 10b and 10c: the release candidate's cut and the maintainer's steps)
+
+The second and third pull requests of PR 10, delivered as one: the version bump to `0.2.0-rc.1`, the changelog section, the
+settled allowed lists of the candidate-to-stable check, the claims rung, the freeze of the agent-trial batches and the
+exact steps ([`release.md`](../operations/release.md) section 6.10). **Nothing is tagged or published, no setting changed and
+no secret was used.** PR 10 is complete only when the maintainer has published the candidate and verified it. The workflows,
+the lint and the shell that publishes are unchanged, so no lint rule applies and none was added; the release seam's other
+two requirements are met in `candidate.rs` (a broken-copy mutation test, below) and by running the publishing shell's check
+(`tools/vsift-release/tests/publish-steps.sh`, unchanged and passing).
+
+**Decisions taken inside this ADR, for the maintainer to confirm or overrule.**
+
+1. **The allowed lists were too narrow to build the stable release, and are now settled** (`candidate.rs`, `release.md`
+   6.8). PR 8 allowed six version-string files and the launcher's README. But the repository's own rules (AGENTS.md: the
+   changelog and both handoff files in every pull request; a finding adds a known limit) change the changelog, `memory/` and
+   the evidence ledger in every pull request, and the stable plan's evidence guard reads the ledger **at the stable commit**
+   (the candidate's evidence is recorded after the cut). So the stable commit of PR 12 would have been refused for the
+   changelog and the memory files alone, and the cure, a longer list, is code, which is frozen at the cut. **What the stable
+   release's commit may now differ in, exactly:**
+   - **Version-string files** (content must equal the candidate's with the version text replaced): `Cargo.toml`,
+     `Cargo.lock`, `fuzz/Cargo.toml`, `fuzz/Cargo.lock`, `npm/vsift-cli/package.json`. `CHANGELOG.md` left this list.
+   - **Shipped documents** (an edit of an ordinary file, any content): `npm/vsift-cli/README.md` (unchanged since PR 8) and,
+     **new**, `docs/operations/install.md`. Reason for the new entry: the release notes link the installation guide at the
+     release's own tag, so at `v0.2.0` the guide would otherwise still say "do not install `vsift-cli` without `@next`", and
+     that link never changes. The alternative is to link `main` in the stable notes (the notes are code, frozen at the cut).
+   - **The work record** (an edit or an addition of an ordinary file, never a deletion; **new**): `CHANGELOG.md`, everything
+     below `memory/`, `docs/decisions/`, `docs/history/`, `docs/planning/` and `docs/guide/`, **except** the delivery ledger
+     `docs/planning/delivery-ledger.json` (it fixes the packet's objective and changes only in PR 13), the guide's generated
+     pages `docs/guide/reference/` and its practice files `docs/guide/files/` (a check regenerates and runs the binary against
+     them). Not shipped, read by no build or test of the program, and changed by the repository's own rules in every pull request.
+   - **Everything else is refused**: crates (so the managed catalogue too), `Cargo` files beyond the version, every other
+     file of the npm package, the skill, the schemas, the fixtures, the fuzz targets, every workflow, every tool (the release
+     tool and its notes, the trial harness with its scenarios, grader and settings, the qualification tools), the other
+     documents (the README, `SECURITY.md`, the operator runbooks, the CLI contract, the skill and trial guides) and the build
+     inputs (`rust-toolchain.toml`, `deny.toml`, `.gitattributes`). **From the tag to the stable release, merge nothing else.**
+   The tests: every allowed kind is accepted; one path of every refused area is refused, with the sibling-name traps
+   (`memory-old/`, `docs/planning-old/`); a path with `..`, `.`, an empty component or a backslash is refused; broken copies of
+   the lists (a record directory covering `crates/`, `tools/`, `.github/`, `docs/`, the launcher, or everything; a missing
+   trailing slash; the skill or the launcher's code listed as a document; a workflow or a crate manifest listed as a version
+   file; an emptied protected list) are noticed; and a test reads `release.md` 6.8 and requires every entry to be named. The
+   coordinator approved the widening in principle on 2026-10-05 within those limits; **it is a policy change the maintainer
+   must confirm.**
+2. **The rung is `candidate`, and its two statements are used before the publish.** CL-101 ("is a release candidate under
+   qualification") is in the README, the installation guide and the package's README, CL-102 (the evidence ledger holds what
+   is gathered, with its gaps) in the README and the installation guide, so that the check's stale-entry rule passes. Both
+   require RQ-19, which is `passed` **for 0.1.0**: the claims check reads a status, not a version ([L-133](../planning/known-limits.md#l-133),
+   new in this PR; L-101 is the general limit). The README and `roadmap.svg` are refused at the stable commit, so they keep this wording
+   until PR 13. Between the merge
+   and the publish, which should be about an hour, the README says a release candidate exists that is not yet on npm. If the
+   publish is delayed, the sentence is early, not false about support.
+3. **The freeze is committed at the cut** (`docs/planning/p14-agent-trials/batch-2/freeze.json` and `batch-3/freeze.json`, the
+   same bytes) and the test `committed_freeze` fails every pull request that changes a frozen component. The `commit` field
+   names `3cdf3ffc6edd2f4a71b91858cc28b74818cce6a1`, the merge commit of PR 10a on `main`, which carries the final skill; the
+   frozen components are byte-identical there and at the cut (nothing in 10b touches the skill, the grader, the scenarios, the
+   settings or the corpus truth: the digests were computed before and after the rebase and are the same, whole-freeze digest
+   `1e89b5cc488e7245d1a6d63ec8809c1f8a5c137ee87f5ed05f9b692c2af6e392`). The freeze cannot name the cut's own commit (a file
+   cannot hold its own commit's hash), so the digests bind, not the name. Batch 1's freeze is history and no longer holds. **Batch 3 needs `-AllowGraderChange`** (it checks its
+   cold components against batch 1's freeze, and the grader changed in PR 7, as accepted on 2026-10-04).
+4. **Dependabot** (the four open pull requests): merge #195 (`actions/setup-python` 7.0.0: workflows only; all three
+   `Journeys` jobs passed on it) before the cut, which the supervisor did; wait for #192 (`jsonschema` 0.58, test-only), #193
+   (`process-wrap` 10.0.1: the change is in `reset-sigmask`, a feature VSift does not enable, so no code it compiles changes) and
+   #194 (`lzma-rust2` 0.21.0: the XZ reader of the managed install, an exact pin whose hardening of memory accounting is
+   relevant but not urgent, because the archive is hash-verified before it is decoded; it also needs the fuzz crate's pin and
+   lockfile, so its CI fails on `Fuzz harness replay`) until after the stable release, and review #194 together with the
+   FFmpeg re-pin, which must raise the XZ bounds anyway (L-132). Each of the three also moves three `windows-sys` edges in
+   the lockfile (`errno`, `rustix`, `tempfile`: 0.59 to 0.61). None is a security advisory. `Dependency policy` passed on all four.
+5. **The FFmpeg re-pin is planned for after the stable release**, not before the cut and not between the two (L-132;
+   the shipped snapshot has the fixes for 46 of the 47 records read).
+
+**What is weaker than it sounds.** The check proves paths and bytes, not meaning (L-107): an installation guide that is wrong in
+the stable commit passes. The freeze test proves the digests of seven components, not that the trials ran under them. The
+claims check cannot see that RQ-19's evidence is for another version. The runbook was written from the 0.1.0 publish and the
+workflows' code; its commands that read the `release` environment and the rulesets were run read-only on 2026-10-05, and the
+rest have not been run against the candidate.
+
+**Review round, the same day** (an independent review of the pull request: no defect that could publish to `latest` or burn the
+version; the delta check refused every trap tried; the points below are things that cannot change after the cut, because
+`release.md`, `tools/`, `candidate.rs` and the other refused paths are frozen with it):
+
+- **The tagged commit is on `main` and green** (`release.md` 6.10 step 0.4): the Release workflow runs no tests and no guard checks
+  that a tagged commit was merged or tested, so the runbook has the maintainer check both, with the exact commands
+  (`git merge-base --is-ancestor`, and the commit's check runs, which print nothing when all passed) and the answers to expect.
+  It also says to merge the pull request only when the maintainer can tag and publish at once, and gives the command that turns the
+  "up to date" rule back on before tagging.
+- **`STABLE_CHECKS` are registered after the stable tag, not before** (the choice of two the review offered, **option (b)**). The
+  code decides it: `P14 verify release` is dispatched `--ref main`, so the code that verifies a stable release is `main`'s at
+  that moment, not the tag's; a change under `tools/` between the candidate and the stable commit is **refused** by 6.8, so
+  registering them "before the stable publish" would have forced a second candidate; and they cannot be tried on real bytes before
+  a stable release exists, so the first honest test is after the publish, from `main`, where a bug in them can be fixed without a
+  new candidate. Registering them now (option (a)) would have put untried code into the candidate. The cost: the registration has
+  to land within seven days of the stable publish, while the Release run's `publish-plan` artifact (the check's input) exists. Every
+  wording that said "before the stable publish" was changed (`verify.cjs`, `verify-release.cjs`, `p14-verify-release.yml`,
+  `release.md` 6.4, the plan, the work record).
+- **The delta check is compiled from the commit it judges**, so a stable commit that edited `candidate.rs` would pass its own edit.
+  The workflow is unchanged; the human backstop is in 6.7's preflight (`git diff --stat v0.2.0-rc.1 <the stable commit>` over the
+  code paths must list only the five version-string files and the launcher's README) and in L-107.
+- **The claims window is stated and the installation guide is true before and after the publish**: "when it is published it is
+  installed as `vsift-cli@next`; until then `@next` installs 0.1.0". The staleness limit is a new known limit, **L-133**, which also
+  says the README and `roadmap.svg` stay at the candidate wording until PR 13 because they are refused at the stable commit.
+- **The runbook says** that `attest` runs before the approval and creates permanent public attestations (repeating is harmless);
+  that deleting the release page or moving the tag is policy, not impossibility; and how to pick the right run (`headBranch` and
+  `headSha`, not the newest).
+- **The freeze test pins the whole-freeze digest** (`1e89b5cc...`, copied from the file), so a pull request that edits a frozen
+  component and regenerates `freeze.json` shows in the diff of a test as well as of a data file.

@@ -1,7 +1,10 @@
 # P14 agent trial records
 
 **Status: batch 1 (the baseline on the published 0.1.0) ran on 2026-10-03; batches 2 and 3 have
-not.** P14 PR 6 built the harness, the cold-agent mode, the hold-out scenarios and the campaign
+not, and their freeze is already committed** (`batch-2/freeze.json` and `batch-3/freeze.json`, written at the
+release candidate's cut by P14 PR 10b; a test fails every pull request that changes anything frozen
+until a second candidate and a new freeze are decided on purpose; batch 1's freeze is history and no
+longer holds). P14 PR 6 built the harness, the cold-agent mode, the hold-out scenarios and the campaign
 scripts; every batch spends the maintainer's Claude and Codex allowances and starts on the
 maintainer's explicit go. This folder is where the batches' bounded records land. The reading of
 batch 1 is [batch-1-reading.md](batch-1-reading.md); it qualifies nothing, it is the "before"

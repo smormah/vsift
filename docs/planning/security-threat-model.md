@@ -370,7 +370,7 @@ npm's trusted-publisher settings and "disallow bypass 2FA tokens".
   `channel` output and checks the version's shape in shell, and the lint holds each of those
   (65 deliberately broken copies of the workflow, each of which it must name); a stable plan is
   enforced on a publish and on a dispatch of the tag even as a dry run, and refuses unless the
-  commit is its accepted candidate plus only version strings and the launcher's README, the
+  commit is its accepted candidate plus only version strings, the launcher's README, the installation guide and the work record (P14 PR 10b), the
   candidate is published, `latest` on each package is a stable version below this one, the
   version is not on npm under another tag or with other bytes and the evidence ledger is
   complete for the candidate (the plan job runs the governance check and the plan refuses on a

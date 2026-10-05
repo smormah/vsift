@@ -531,11 +531,14 @@ answered hostile names and arguments as vsift itself does.
 - Not tested: pnpm, Yarn or Bun upgrades; a downgrade; Windows `vsift.cmd` typed in cmd.exe; macOS
   Gatekeeper and Windows Smart App Control (RQ-17); the other two archives' executables running;
   the media journeys on the published binary (PR 3); a candidate or a stable version.
-- **Before PR 12 (the stable publish)**, register in `STABLE_CHECKS`
+- **After the stable tag (decided in PR 10b: not before)**, register in `STABLE_CHECKS`
   (`tools/p14-published/lib/verify.cjs`) the candidate-to-stable delta, which reads PR 8's
-  `release-delta.json` from the Release run's `publish-plan` artifact (kept seven days; the run id
-  is in the check's context), and `latest` on all four packages; until then `P14 verify release`
-  fails a stable version by name. Its tests show the shape.
+  `release-delta.json` from the Release run's `publish-plan` artifact (kept seven days, so the
+  registration lands within seven days of the stable publish; the run id is in the check's
+  context), and `latest` on all four packages; until then `P14 verify release` fails a stable
+  version by name. Its tests show the shape. A change under `tools/` between the candidate and
+  the stable commit is refused by the candidate-to-stable check, and the workflow is dispatched
+  from `main`, so the registration does not need to be in the stable commit.
 - **PRs 10 and 12** dispatch `P14 published artifacts` and `P14 verify release` with the
   candidate's and then the stable's version (leave `from_version` empty: 0.1.0), and `P14 local
   upgrade` runs on the pull requests that change the code. The ledger records the run for that
@@ -1160,3 +1163,23 @@ Wording changes the skill might take from what the guide taught are listed in se
 the examples job, installs the three reviewed artifacts with the binary's own `setup install` (about three minutes with
 the plan, in run 37229607086) and runs the examples (about three more, most of it speech recognition); the reference job
 took one minute.
+
+## 23. PR 10: the release candidate `0.2.0-rc.1` is cut (10a #307, 10b and 10c, 2026-10-05)
+
+PR 10 is complete only when the maintainer has published the candidate and verified it (RQ-19); this section records what was
+prepared. Nothing was tagged or published. The decisions and what is weaker than it sounds are in
+[ADR 0024](../decisions/0024-r0-qualification-and-release-candidate.md)'s PR 10a and PR 10b notes; the steps are
+[`release.md`](../operations/release.md) section 6.10.
+
+| Item | Result |
+| --- | --- |
+| The skill | Three small wording changes and a correction (10a; section 20.2): a Windows `cmd.exe` sentence, the `STORAGE_IO` row, the `RESOURCE_LIMIT` exception and `handoff.md`'s note sentence. Its digest is in the freeze below |
+| The bump | `0.1.0` to `0.2.0-rc.1`: the workspace and fuzz manifests and lockfiles and the launcher's manifest. The guide's marker is the release `0.2.0`; its generated pages were regenerated and its 40 examples, run again on Windows 11 with the maintainer's FFmpeg and whisper.cpp 1.9.2, match |
+| The allowed lists | Settled: five version-string files, two shipped documents (the launcher's README and, new, the installation guide), a work record (new) and nothing else (`candidate.rs`, `release.md` 6.8); the stable commit as PR 8 wrote the check could not have passed (the changelog, the handoff files and the evidence ledger change in every pull request) |
+| The rung | `candidate`; CL-101 and CL-102 are in use in the README, the installation guide and the package's README; both require RQ-19, passed for 0.1.0 only ([L-133](known-limits.md#l-133)) |
+| The freeze | `docs/planning/p14-agent-trials/batch-2/freeze.json` and `batch-3/freeze.json` (the same bytes, naming the merge commit of PR 10a, `3cdf3ffc6edd`): skill `648569ae...`, grader `57507fad...`, cold, scenarios, hold-outs, settings and truth as in batch 1 except the two that changed; a test (`committed_freeze`) fails any pull request that changes what they bind |
+| Evidence | Unchanged: every item is stale for the candidate (`release-evidence --complete-for 0.2.0-rc.1` fails on all of them, as it should); PR 11 records the candidate's own |
+| Dependabot | #195 merged before the cut; #192, #193 and #194 wait until after the stable release (ADR note, decision 4) |
+
+**Hosted minutes.** None for the work itself. The pull request's own CI runs the usual jobs and the Release dry run, whose
+plan for `0.2.0-rc.1` is the first plan for a release candidate.

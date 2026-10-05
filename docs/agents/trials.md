@@ -848,7 +848,16 @@ and one digest over them; `freeze check --file <file> [--only grader,cold,settin
 difference; `prepare --freeze <file>` refuses if the freeze no longer holds and stamps the trial with its
 digest (`freeze_sha256` in every record). The cold baseline and the cold final round must be comparable, so
 batch 3 checks the grader, the cold scenarios, the settings and the truth against batch 1's freeze (the campaign
-script refuses a change without `-AllowGraderChange`). **The grader changed on 2026-10-04** (the three cold
+script refuses a change without `-AllowGraderChange`). **Since P14 PR 10b the freeze of batches 2 and 3 is committed**
+(`docs/planning/p14-agent-trials/batch-2/freeze.json` and `batch-3/freeze.json`, the same bytes, written with
+`vsift-agent-trials freeze write --repository . --commit <the commit the digests were taken at> --output <file>` at the
+release candidate's cut; the campaign script writes a freeze only when none exists, so it uses the committed one), and the
+test `committed_freeze` (Quality, three systems) fails any pull request that changes the skill, the grader, the scenarios,
+the hold-outs, the settings or the truth after the cut. Changing one on purpose means a second candidate and a new
+`freeze write`; `freeze check --repository . --file <file>` prints `nothing frozen has changed` when it holds. The `commit`
+field names the commit the digests were taken at, which a squash merge leaves behind: the digests are what bind, not the
+name. **Batch 3 needs `-AllowGraderChange`:** the script checks batch 3's cold components against **batch 1's** freeze, and the
+grader changed on 2026-10-04 (below), which the maintainer accepted; the usefulness grading did not change. **The grader changed on 2026-10-04** (the three cold
 classifications above, between batch 1 and batch 2, as the freeze rule allows): batch 2's freeze is a fresh
 `freeze write`, and batch 1's records and summary stay as graded at the time, so the baseline's safety counts
 (four runs that "failed the gate", all of them classifications of these three kinds) are not comparable with a

@@ -6,6 +6,66 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.2.0-rc.1] - 2026-10-05
+
+**This is a release candidate, under qualification.** It is the candidate for `0.2.0`, the release that ships R0
+(ADR 0024, decisions A and B). It is published under the npm tag `next` and never under `latest`, it is not announced,
+and it is no statement of support or stability: the evidence about it does not exist yet, and every earlier result was
+measured on `0.1.0`. The release evidence ledger ([`p14-evidence-ledger.json`](docs/planning/p14-evidence-ledger.json))
+says where each item stands and what it does not prove.
+
+### What is new since 0.1.0, in plain English
+
+**If you use VSift.**
+
+- **Rare failures now say what happened.** A link or a named pipe given as the video no longer reads as storage damage or
+  hangs (#264, #265); a video that does not fit on the drive is refused before it is copied, on Linux and macOS (#266; on
+  Windows the copy still has to fail first, [L-061](docs/planning/known-limits.md#l-061)); an id that names no published
+  session says so (#277); a `--session-root` folder VSift did not create explains itself (#261); `setup install` names a
+  missing shared library such as `libgomp1` (#256); and a shutdown that cancels a step of a worker request says how to deliver
+  it again (#268). The published failure codes did not change: v1 stays additive, and the one new JSON member
+  (`missing_shared_library`) is optional.
+- **A short recognition range cut in the middle of speech keeps its last segment** instead of failing as
+  `MISSING_CAPABILITY` (#274). The price: a session that holds such a revision cannot be read by 0.1.0 again
+  ([L-130](docs/planning/known-limits.md#l-130)).
+- **`vsift --help` ends with "A typical investigation"**, a worked example, and says that `--session-root` is for operators
+  (#297).
+- **On Windows a new session root has its permissions read back and repeated**: this narrows an intermittent failure of 0.1.0
+  and does not prove it gone (#206, [L-005](docs/planning/known-limits.md#l-005)).
+- **The agent skill** has three small wording changes: on Windows never run `vsift` through `cmd.exe`, and two failure rows
+  (P14 PR 10a). The package's README warns about the same shim (#257, [L-109](docs/planning/known-limits.md#l-109)).
+- **The npm launcher's message** on a machine with no matching package names the machines the release is built for.
+- **Documents.** A user guide ([`docs/guide/`](docs/guide/index.md): a first investigation, five recipes, concepts, citing
+  evidence, troubleshooting, a FAQ and the limits, with examples that are run against the real program), a support matrix
+  that says what each machine has shown and what it still needs, and an installation guide that says what has been run against
+  its steps.
+
+**If you test or maintain VSift.** The qualification of R0 (P14) was built and run on the published 0.1.0: a release evidence
+ledger and a claims registry that the Governance check reads on every pull request; clean installs from the real npm registry
+with npm, pnpm, Yarn and Bun on Windows, macOS and Ubuntu; the program's journeys on those three systems; long fuzzing (31
+targets), race and stress repetitions, a load ladder, a mixed soak and malicious-media runs; a harness that runs Claude Code and
+Codex agents from a clean install, with and without the skill; and the release machinery for a first stable release and the
+check that a stable commit differs from its candidate only where allowed. The runs found what the entries below list as fixed.
+
+### What has not been shown
+
+- **Nothing here has been qualified for this candidate.** Its published bytes have not been installed, run or attacked yet
+  (that is the next step, P14 PR 11), and every evidence item is stale for it. Three campaign items **failed on 0.1.0**
+  (RQ-08 race and stress on Windows, RQ-10 hostile media, RQ-13 the scan reading); their fixes are in this candidate and the
+  runs are repeated on it. RQ-05 (the program's journeys) is still `running`.
+- **FFmpeg.** The reviewed FFmpeg build that `setup install` downloads (BtbN, 2026-08-31) has the fixes for 46 of the 47
+  scan records read ([L-122](docs/planning/known-limits.md#l-122)). A newer build was reviewed and is not pinned: only a
+  month-end build can be, and the next is 2026-10-31 ([L-132](docs/planning/known-limits.md#l-132)). **The plan is to re-pin
+  after `0.2.0`, not between this candidate and it.**
+- **Unsigned executables** have not met Windows Smart App Control or macOS Gatekeeper on a real machine
+  ([L-098](docs/planning/known-limits.md#l-098)).
+- **Agent trials** have run as a baseline on 0.1.0 only; the counted rounds with the skill and the cold-agent round run on
+  this candidate.
+- **A synthetic corpus and a synthetic voice** only; nothing has been tried on a real recording
+  ([L-020](docs/planning/known-limits.md#l-020), [L-022](docs/planning/known-limits.md#l-022)).
+- **Not claimed:** a strict worker that contains a hostile decoder (decision E option 4, [L-068](docs/planning/known-limits.md#l-068)),
+  durability off Ubuntu 24.04 on ext4, managed installation outside Ubuntu 24.04 x64, Codex on Windows.
+
 ### Added
 
 - **The R0 user guide and its two CI checks** (P14 PR 9b, the second half of PR 9; documentation, test tooling and one
@@ -221,6 +281,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- **The release candidate `0.2.0-rc.1` is cut** (P14 PR 10b and 10c, 2026-10-05; the version bump, the allowed lists of
+  the candidate-to-stable check, the claims rung, the agent-trial freeze and the maintainer's runbook; **nothing is tagged
+  or published**: the maintainer does that by `docs/operations/release.md` section 6.10). **Version:** `0.1.0` becomes
+  `0.2.0-rc.1` in the workspace and fuzz manifests and lockfiles and in the launcher's manifest (its three optional
+  dependencies too); the user guide's marker moves to the release `0.2.0` (the generated reference pages with it) and its
+  40 examples, run again, match. **The check that holds the stable release to its candidate** (`vsift-release
+  candidate-delta`, P14 PR 8) could not have passed: it allowed only version strings and the launcher's README, but the
+  repository's own rules change the changelog, the handoff files and the evidence ledger in every pull request, and the
+  stable plan reads the ledger at the stable commit. Its lists are settled (`candidate.rs`, `release.md` 6.8): five
+  version-string files (the changelog is no longer one), two shipped documents (the launcher's README and, new, the
+  installation guide, which the release notes link to at the release's tag), and a **work record** (the changelog,
+  `memory/`, the decisions, the history, the planning and qualification records and the guide's hand-written pages: an edit or
+  an addition, never a deletion; the delivery ledger, the guide's generated pages and its practice files stay refused). Every
+  other path is refused, so **from the tag until the stable release is published nothing else may be merged: no
+  dependency bump, no workflow or tool change.** Tests: every allowed kind is accepted, one path of every protected area
+  is refused (the crates and the catalogue, the schemas, the fixtures, the skill, the trial harness, the settings, the release
+  tool, every workflow, the launcher's code, the other documents), broken copies of the lists are noticed, and `release.md`
+  must name every entry. **Claims:** the rung is `candidate`; the README, the installation guide and the package's README
+  say the release candidate is under qualification and point at the evidence ledger. **Agent trials:** the freeze of
+  batches 2 and 3 is committed (`batch-2/freeze.json`, `batch-3/freeze.json`) and a test fails any pull request that
+  changes what it binds (its whole-freeze digest is pinned in the test). **The two stable checks of `P14 verify release` are
+  registered after the stable tag**, not before (a `tools/` change before the stable commit would be refused). **Known limit
+  L-133:** the rung's two statements are in use on 0.1.0's RQ-19 evidence (the check reads a status, not a version), and the
+  README keeps the candidate wording until PR 13. **The FFmpeg re-pin is planned for after `0.2.0`** (L-132). Decisions for the
+  maintainer, and the fixes of an independent review of the runbook, are in ADR 0024's PR 10b note.
 - **The skill's wording, before the release candidate's freeze (P14 PR 10a, 2026-10-05; three small changes in
   `skills/vsift/references/`, a guide and records; nothing published, no product behaviour changed).** On Windows the
   skill now tells an agent to run `vsift` from PowerShell or Git Bash, never through `cmd.exe`, because npm's `vsift.cmd`
