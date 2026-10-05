@@ -558,8 +558,14 @@ anything. A pull request that changes the workflow or `tools/p14-published/` run
 stable version fails it by name for now: the two checks it adds (the delta between the
 candidate and the stable release, which reads the `release-delta.json` of 6.7 from the Release
 run's `publish-plan` artifact, and `latest` on all four packages) are registered in
-`tools/p14-published/lib/verify.cjs` before the stable publish, and a verification that skipped
-them would be green about the wrong thing. Run 36969577300 verified 0.1.0: ten of ten files and four of four tarballs
+`tools/p14-published/lib/verify.cjs`, and a verification that skipped them would be green
+about the wrong thing. **They are registered after the stable tag, not before:** a change to
+`tools/` between the candidate and the stable commit is refused by 6.8, and the workflow is
+dispatched from `main` (`gh workflow run p14-verify-release.yml --ref main -f version=<the
+stable version>`), so the code that runs is `main`'s at that moment, not the tag's. The
+registration is a small pull request after the stable publish, and it has to land **within
+seven days of it**, while the Release run's `publish-plan` artifact (the check's input) still
+exists. Run 36969577300 verified 0.1.0: ten of ten files and four of four tarballs
 attested, the provenance of all four packages read, and `npm audit signatures` verified the two
 packages a Linux runner installs (the launcher and `@vsift/linux-x64`, npm 10.9.9; the count
 npm reports depends on its version, which is why the provenance check reads all four packages
@@ -770,7 +776,20 @@ not skip an item because the candidate's publish went well.
    cannot be deleted without bypassing the ruleset).
 5. **The delta check, locally, at the stable commit** (6.8): `cargo run --locked -p
    vsift-release -- candidate-delta`. Every file it lists is a version string, a shipped
-   document or a work record (6.8), and nothing is marked REFUSED.
+   document or a work record (6.8), and nothing is marked REFUSED. **Then check it by hand,
+   because the check is compiled from the commit it judges** (the plan job and this command
+   build `vsift-release` from the checkout under test, so a stable commit that edited
+   `candidate.rs` would pass its own edit):
+
+   ```console
+   git diff --stat v0.2.0-rc.1 <the stable commit> -- crates tools .github skills schemas fixtures fuzz npm Cargo.toml Cargo.lock rust-toolchain.toml deny.toml
+   ```
+
+   It must list **only** `Cargo.toml`, `Cargo.lock`, `fuzz/Cargo.toml`, `fuzz/Cargo.lock`,
+   `npm/vsift-cli/package.json` and `npm/vsift-cli/README.md`, each with a few changed lines
+   (read the version-string files' diff: only the version text). **Any line under `crates/`,
+   `tools/`, `.github/`, `skills/`, `schemas/`, `fixtures/` or any other file of `npm/` means
+   the check was bypassed or wrong: do not publish.**
 6. **The evidence ledger** is complete for the candidate. The plan job runs P14 PR 1's check
    (`vsift-governance release-evidence --complete-for <candidate> --commit <candidate
    commit>`) and the plan refuses the run if it fails, so a pass is a precondition rather
@@ -946,18 +965,25 @@ differs. It takes about an hour, most of it waiting for builds and the registry.
 
 **What you are about to do cannot be undone.** A version published to npm can never be published again, even if it is removed,
 and a tag may be moved (you can bypass the ruleset) only until anything is published from it. If a step below fails before
-`npm publish` has run, nothing is lost and you can repeat it. After it, only the "If something fails" list applies. The commands
+`npm publish` has run, nothing is lost and you can repeat it, with one thing to know: **the `attest` job runs before the
+`release` environment's approval and creates public, permanent Sigstore attestations** of the run's files. Repeating is harmless
+(the builds are reproducible, so a second attestation names the same bytes, as on 2026-10-01: 6.5), but they exist from the
+moment `attest` finishes. After `npm publish`, only the "If something fails" list applies. The commands
 are written for Git Bash (or any POSIX shell); `gh` and `npm` commands work in PowerShell too, and `^{commit}` needs quotes there.
 
-**0. Before you start (about ten minutes, nothing here changes anything).**
+**0. Before you start (about fifteen minutes; only the settings step changes anything).**
 
-1. Merge nothing else. From the moment the tag exists until the stable release is published, **nothing may change on `main`
-   but the work record, the installation guide and the launcher's README** (6.8 lists them exactly): no Dependabot pull
-   request, no workflow edit, no dependency bump, no change to a tool or to any operator document. The stable release is
-   refused otherwise, and the cure is a second candidate. Dependabot opens new pull requests on Mondays: leave them open.
-2. The "Require branches to be up to date before merging" rule on `main`, which was turned off to speed merging, is **back on**
-   (Settings, Branches, the rule for `main`). Read-only check: `gh api repos/smormah/vsift/branches/main/protection --jq
-   .required_status_checks.strict` prints `true`.
+1. **Merge pull request #308 (the cut and this runbook) only when you can tag and publish at once.** On merge the README, the
+   installation guide and the launcher's README say a release candidate is under qualification, which is true only once it is
+   published (known limit [L-133](../planning/known-limits.md#l-133)); steps 0 to 4 fit in about an hour. Merge nothing else:
+   from the moment the tag exists until the stable release is published, **nothing may change on `main` but the work record, the
+   installation guide and the launcher's README** (6.8 lists them exactly): no Dependabot pull request, no workflow edit, no
+   dependency bump, no change to a tool or to any operator document. The stable release is refused otherwise, and the cure is a
+   second candidate. Dependabot opens new pull requests on Mondays: leave them open.
+2. **Turn the "Require branches to be up to date before merging" rule on `main` back on before you tag** (it was turned off to
+   speed merging): Settings, Branches, the rule for `main`, or `gh api -X PATCH
+   repos/smormah/vsift/branches/main/protection/required_status_checks -F strict=true` (administrator rights). Check it, read-only:
+   `gh api repos/smormah/vsift/branches/main/protection --jq .required_status_checks.strict` prints `true`.
 3. `main` is at the commit you mean to release: pull requests 10a and 10b are merged and nothing is open that you expect to merge.
 
    ```console
@@ -969,7 +995,19 @@ are written for Git Bash (or any POSIX shell); `gh` and `npm` commands work in P
    ```
 
    Expect the 10b merge commit and `version = "0.2.0-rc.1"`. Write the full 40-digit commit down: it is what you tag.
-4. The checks that bind this commit pass on your machine (about a minute each, after the first build):
+4. **The commit you tag is on `main` and every check of it passed.** The Release workflow builds and plans but runs no tests of its
+   own, and no guard checks that a tagged commit was merged or tested, so you check it:
+
+   ```console
+   git merge-base --is-ancestor <the 40-digit commit> origin/main && echo "on main"
+   gh api "repos/smormah/vsift/commits/<the 40-digit commit>/check-runs?per_page=100" --paginate --jq '.check_runs[] | select(.status != "completed" or (.conclusion | IN("success", "skipped", "neutral") | not)) | "\(.name): \(.status) \(.conclusion)"'
+   ```
+
+   Expect `on main`, and **no output at all** from the second command: every check run of that commit is completed and succeeded
+   (or was skipped on purpose: `Attest build provenance`, `Publish to npm ...` and the fuzz matrix show as skipped on a pull
+   request). Each line it prints is a check that failed or has not finished (for example `Quality (windows-latest): in_progress
+   null`): wait, or do not tag. The same command on the 10a merge commit printed nothing on 2026-10-05, with 36 check runs.
+5. The checks that bind this commit pass on your machine (about a minute each, after the first build):
 
    ```console
    cargo run --locked -p vsift-governance -- check
@@ -984,10 +1022,10 @@ are written for Git Bash (or any POSIX shell); `gh` and `npm` commands work in P
    changed` twice. Do **not** run `release-evidence --complete-for 0.2.0-rc.1` now: it fails on purpose, because every evidence
    item is still stale for the candidate (the qualification of PR 11 records it). Any other answer: stop and tell the
    supervisor; do not tag.
-5. The trusted publishers are still saved on npmjs.com for all four packages (6.2 step 6: a saved entry listed, owner `smormah`,
+6. The trusted publishers are still saved on npmjs.com for all four packages (6.2 step 6: a saved entry listed, owner `smormah`,
    repository `vsift`, workflow `release.yml`, environment `release`, **npm publish** allowed). This is the one setting no dry
    run can check (L-100); `--tag next` has gone through it for 0.1.0, so it is expected to hold.
-6. The `release` environment and the tag ruleset exist as 6.2 steps 3 and 4 say (read-only):
+7. The `release` environment and the tag ruleset exist as 6.2 steps 3 and 4 say (read-only):
 
    ```console
    gh api repos/smormah/vsift/environments/release --jq '{reviewers: [.protection_rules[]? | .reviewers[]? | .type], branch_policy: .deployment_branch_policy, can_admins_bypass: .can_admins_bypass}'
@@ -997,7 +1035,7 @@ are written for Git Bash (or any POSIX shell); `gh` and `npm` commands work in P
    Expect `{"branch_policy":{"custom_branch_policies":true,"protected_branches":false},"can_admins_bypass":false,"reviewers":["User"]}`
    (a required reviewer, administrators cannot bypass, custom policies for tags only) and `{"enforcement":"active","name":"release
    tags","target":"tag"}`. These were the answers on 2026-10-05.
-7. What npm holds now, from a shell with no npm login (`npm config get //registry.npmjs.org/:_authToken` prints `undefined`):
+8. What npm holds now, from a shell with no npm login (`npm config get //registry.npmjs.org/:_authToken` prints `undefined`):
 
    ```console
    npm view vsift-cli dist-tags
@@ -1024,11 +1062,13 @@ ticked, **Run workflow**. Or:
 
 ```console
 gh workflow run release.yml --repo smormah/vsift --ref v0.2.0-rc.1 -f dry_run=true
-gh run list --repo smormah/vsift --workflow release.yml --limit 1
+gh run list --repo smormah/vsift --workflow release.yml --event workflow_dispatch --limit 3 --json databaseId,headBranch,headSha,status,conclusion
 gh run watch <the run id> --repo smormah/vsift
 ```
 
-It takes about 30 to 40 minutes: 21 jobs, `attest` and `publish` skipped. Open the run's **Publish plan** summary and read it
+Pick the run by what it says, not by position: its `headBranch` must be `v0.2.0-rc.1` and its `headSha` the commit you wrote
+down (the newest run listed can be a pull request's or another dispatch). It takes about 30 to 40 minutes: 21 jobs, `attest`
+and `publish` skipped. Open the run's **Publish plan** summary and read it
 top to bottom. Expect:
 
 - the heading `Publish plan: dry run, nothing is published` and "This run was dispatched with `dry_run` set";
@@ -1117,7 +1157,7 @@ scenarios or settings differ from it.
 
 | When | What it means | What to do |
 | --- | --- | --- |
-| Step 0 check fails | the commit is not what was reviewed | do not tag; tell the supervisor |
+| Step 0 check fails (a failing check run, not on `main`, a governance or freeze answer) | the commit is not what was reviewed | do not tag; tell the supervisor |
 | Step 2 fails or is refused | nothing was attested or published | read "Refused because:", fix it, move the tag if the commit changes (nothing was published from it) |
 | Step 3: `publish` fails with `ENEEDAUTH` before any `+ package@version` line | a trusted publisher is not saved or is wrong | 6.5 first bullet of `ENEEDAUTH`; nothing was published |
 | Step 3: `publish` fails after some packages | a partial publish ([L-097](../planning/known-limits.md#l-097)) | **Re-run failed jobs** on the same run within seven days and approve again: versions npm holds with the same bytes are skipped |
@@ -1126,7 +1166,8 @@ scenarios or settings differ from it.
 | A published version is bad | the candidate itself is wrong | **never unpublish** (a version number can never be used again, and the attestations name its bytes): `npm deprecate vsift-cli@0.2.0-rc.1 "<what is wrong; use 0.2.0-rc.2>"` on all four packages, edit the GitHub release's notes to say so, and publish `0.2.0-rc.2` by this section again (a second candidate is planned for if findings need it; a third is your call) |
 
 **What is irreversible, in one list.** The four published versions and their provenance records on npm's transparency log; the
-Sigstore attestations of the ten files and four tarballs; the tag once anything was published from it; the release page's
-existence (its notes may be edited). **What is reversible:** `next` (`npm dist-tag add vsift-cli@0.1.0 next`, for each package,
+Sigstore attestations of the ten files and four tarballs (they exist from the end of `attest`, before the approval); the tag
+once anything was published from it. **Policy, not impossibility:** GitHub lets you delete the release page or move the tag,
+and this runbook says never (6.5), because the page, the tag and the attestations name each other. **What is reversible:** `next` (`npm dist-tag add vsift-cli@0.1.0 next`, for each package,
 two-factor authentication; the workflow never does it), the notes, a deprecation (`npm deprecate <package>@<version> ""` removes
 it).

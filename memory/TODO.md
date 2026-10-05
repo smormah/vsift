@@ -14,7 +14,7 @@ complete. Plan: `docs/planning/p14-qualification.md` (sections 15-23); ADR 0024 
 RQ-04, RQ-06, RQ-07, RQ-09, RQ-12, RQ-19; **`failed`: RQ-08, RQ-10, RQ-13** (PR 7 fixes them; PR 11 re-runs them);
 RQ-05 `running` (L-113; plan section 21); RQ-14 `waived`; 6 `planned`.
 **Public text:** `public-claims.json`, rung `candidate` (CL-101 and CL-102 are in use; both need RQ-19, passed for
-0.1.0 only, L-101); a claim above the rung fails while a register entry it leans on (`limits`) is pending.
+0.1.0 only, L-133); a claim above the rung fails while a register entry it leans on (`limits`) is pending.
 **Decided 2026-10-02 (ADR 0024):** **A** R0 is `0.2.0` on `latest`. **B** `0.2.0-rc.N` under `next`, never announced.
 **C** no signing unless try-outs show a block. **D** 84 agent runs in three batches, each on the go. **E** SEC-T01
 narrowed. **F** "supported" per cell by fixed rules; managed install Ubuntu-only. **G** a claims ladder; nothing
@@ -53,8 +53,8 @@ wording; **10b and 10c** the bump and guide re-run, the changelog, the claims ru
 (committed, with a test), the allowed lists of the candidate-to-stable check (a work record and `install.md` are now
 allowed, `release.md` 6.8) and the maintainer's exact steps (`release.md` 6.10). **From the tag to the stable merge
 nothing else** (no Dependabot, workflow or tool change). **11** its qualification (batches 2 and 3; `P14 journeys`;
-re-run RQ-07 to RQ-10); **12** stable `0.2.0`; **13** ledger follow-up, P14 `complete`, handoff. **Before PR 12:**
-register the two stable checks in `STABLE_CHECKS` (`tools/p14-published/lib/verify.cjs`).
+re-run RQ-07 to RQ-10); **12** stable `0.2.0`; **13** ledger follow-up, P14 `complete`, handoff. **After the stable
+tag, within seven days:** register the two stable checks in `STABLE_CHECKS` (`tools/p14-published/lib/verify.cjs`).
 
 ## What the maintainer owes, and when
 

@@ -1,6 +1,6 @@
 # Known limits register
 
-Date: 2026-10-05 (P14 PR 10b, the release candidate's cut: L-107 and L-108 updated for the settled allowed lists, L-132 for the re-pin plan; P14 PR 10a, the skill's wording before the candidate's freeze: L-109 and L-127 updated; 2026-10-04: P14 PR 9c, the maintainer's decisions on the macOS wording and RQ-05's rule: L-113 and L-114 updated; P14, a journeys stage that asserts a later fix is skipped below the first version that has it and never above it: L-115 updated; P14 PR 9a, the claims check reads the text of the README's graphics: L-121 narrowed to the roadmap's rung; L-004, L-035 and L-038 brought up to date, L-114 names the macOS wording; P14 PR 7, a failed open removes its own registration and a session that never published says so: L-131 added, L-127 gains its third case; P14 PR 7, the cold grader's three classifications: L-118 updated; P14 PR 7, a short range's cut final segment: L-130 added and L-124 closed and deleted; P14 PR 7, a source that does not fit the root is refused before the copy and the code stays `STORAGE_IO`: L-127 gains its second case, L-061 updated; P14 PR 7, a link as the source keeps its published code and gains a remediation: L-127 rewritten as one entry for the CLI answers whose code only loosely describes the case; P14 PR 7, the dedupe window is stated as it is: L-063 updated; P14 PR 7, the flaky kill test: a provider a killed host leaves suspended, L-129 added and L-055 narrowed; P14 PR 7, session-root creation on Windows is repaired by a DACL read-back and narrowed (#206): L-123 closed and deleted, L-005 updated; P14 PR 7, the admission test no longer fails on its own bound: L-060 states the missing bound and L-123 narrows to #206; P14 PR 7, a named pipe with no writer is refused at once: L-127 narrowed; P14 PR 7b: the FFmpeg finding re-read with a test that sees release-branch cherry-picks, L-122 narrowed from 35 records to one tie by elimination and L-132 added (L-129 to L-131 are P14 PR 7's); 2026-10-03: P14 PR 4: the robustness campaigns, L-122, L-123, L-124, L-127 and L-128 added (L-121, L-125 and L-126 were taken meanwhile by other pull requests); P14 PR 7, a missing shared library is named: L-110 closed; P14 PR 7: a session root VSift did not create now explains itself, L-126 added; P14 PR 7, the realistic cold-agent settings: L-125 added, L-118 re-read; P14 PR 5: L-068 rescheduled to R1 and L-004 re-read, by the maintainer's decision E option 4; 2026-10-02: P14 PR 3, the journeys on the published binary: L-113 to L-116 added, L-035, L-042 and L-099 updated; the README's graphics: L-121 added; P14 PR 6: the trial harness's clean-install and cold-agent modes, hold-outs and usage capture, L-117 to L-120 added; the README front page: L-102 closed, the v0.1.0 release page edited; P14 PR 2: the published-artifact qualification, L-109 to L-112 added; P14 PR 1: the evidence ledger, the claims registry and their checks, L-101 to L-103 added; P14 PR 8, the stable path and `latest`: L-105, L-107 and L-108 added, L-102 narrowed to the published v0.1.0 page, L-103 updated for the delta record, L-097 updated; P14 plan, PR 0: L-042 re-read, the checkpoints' source-built binary noted, L-098 updated with Smart App Control read Off on the maintainer's machine; 2026-10-01: P13 PR 12: the 0.1.0 pre-release was published, so L-036 and L-096 are closed and deleted, L-037 and L-043 re-read at the packet's close, L-097 and L-098 updated, L-100 added; P13 PR 11: documentation and the qualification record, L-098 and L-099 added, L-035, L-036, L-037, L-042 and L-096 updated for the passing power-loss run and the closing sweep; P13 PR 7 follow-up: the power-loss campaign's first run and its verifier fix, L-037 updated; P13 PR 10: attestation and publish wiring, L-036 updated, L-096 and L-097 added; 2026-09-30: P13 PR 7: kill tests of the managed store, directory flushes and its power-loss campaign, L-037 narrowed; the compact re-run #222 met its target: L-085 closed, L-095 added for the review tier's A-09 blurred re-run (#224), L-007 updated; P13 PR 9: npm packages and their qualification, L-091 to L-093 added and L-036 updated; P13 PR 6: managed lifecycle, L-037 narrowed and L-087 measured, L-090 added; P13 PR 4: managed installation; P13 PR 8: release archives, L-089 added and L-036 updated; P00-P13 complete; P12 closed on its final trial round with the compact tier below target, L-085; SEC-T01's adversarial evidence deferred as technical debt, L-068; P13 PR 2b closed L-073 and rewrote L-016 and L-017).
+Date: 2026-10-05 (P14 PR 10b, the release candidate's cut: L-133 added (the claims window of the candidate rung), L-107 and L-108 updated for the settled allowed lists and the by-hand backstop, L-132 for the re-pin plan; P14 PR 10a, the skill's wording before the candidate's freeze: L-109 and L-127 updated; 2026-10-04: P14 PR 9c, the maintainer's decisions on the macOS wording and RQ-05's rule: L-113 and L-114 updated; P14, a journeys stage that asserts a later fix is skipped below the first version that has it and never above it: L-115 updated; P14 PR 9a, the claims check reads the text of the README's graphics: L-121 narrowed to the roadmap's rung; L-004, L-035 and L-038 brought up to date, L-114 names the macOS wording; P14 PR 7, a failed open removes its own registration and a session that never published says so: L-131 added, L-127 gains its third case; P14 PR 7, the cold grader's three classifications: L-118 updated; P14 PR 7, a short range's cut final segment: L-130 added and L-124 closed and deleted; P14 PR 7, a source that does not fit the root is refused before the copy and the code stays `STORAGE_IO`: L-127 gains its second case, L-061 updated; P14 PR 7, a link as the source keeps its published code and gains a remediation: L-127 rewritten as one entry for the CLI answers whose code only loosely describes the case; P14 PR 7, the dedupe window is stated as it is: L-063 updated; P14 PR 7, the flaky kill test: a provider a killed host leaves suspended, L-129 added and L-055 narrowed; P14 PR 7, session-root creation on Windows is repaired by a DACL read-back and narrowed (#206): L-123 closed and deleted, L-005 updated; P14 PR 7, the admission test no longer fails on its own bound: L-060 states the missing bound and L-123 narrows to #206; P14 PR 7, a named pipe with no writer is refused at once: L-127 narrowed; P14 PR 7b: the FFmpeg finding re-read with a test that sees release-branch cherry-picks, L-122 narrowed from 35 records to one tie by elimination and L-132 added (L-129 to L-131 are P14 PR 7's); 2026-10-03: P14 PR 4: the robustness campaigns, L-122, L-123, L-124, L-127 and L-128 added (L-121, L-125 and L-126 were taken meanwhile by other pull requests); P14 PR 7, a missing shared library is named: L-110 closed; P14 PR 7: a session root VSift did not create now explains itself, L-126 added; P14 PR 7, the realistic cold-agent settings: L-125 added, L-118 re-read; P14 PR 5: L-068 rescheduled to R1 and L-004 re-read, by the maintainer's decision E option 4; 2026-10-02: P14 PR 3, the journeys on the published binary: L-113 to L-116 added, L-035, L-042 and L-099 updated; the README's graphics: L-121 added; P14 PR 6: the trial harness's clean-install and cold-agent modes, hold-outs and usage capture, L-117 to L-120 added; the README front page: L-102 closed, the v0.1.0 release page edited; P14 PR 2: the published-artifact qualification, L-109 to L-112 added; P14 PR 1: the evidence ledger, the claims registry and their checks, L-101 to L-103 added; P14 PR 8, the stable path and `latest`: L-105, L-107 and L-108 added, L-102 narrowed to the published v0.1.0 page, L-103 updated for the delta record, L-097 updated; P14 plan, PR 0: L-042 re-read, the checkpoints' source-built binary noted, L-098 updated with Smart App Control read Off on the maintainer's machine; 2026-10-01: P13 PR 12: the 0.1.0 pre-release was published, so L-036 and L-096 are closed and deleted, L-037 and L-043 re-read at the packet's close, L-097 and L-098 updated, L-100 added; P13 PR 11: documentation and the qualification record, L-098 and L-099 added, L-035, L-036, L-037, L-042 and L-096 updated for the passing power-loss run and the closing sweep; P13 PR 7 follow-up: the power-loss campaign's first run and its verifier fix, L-037 updated; P13 PR 10: attestation and publish wiring, L-036 updated, L-096 and L-097 added; 2026-09-30: P13 PR 7: kill tests of the managed store, directory flushes and its power-loss campaign, L-037 narrowed; the compact re-run #222 met its target: L-085 closed, L-095 added for the review tier's A-09 blurred re-run (#224), L-007 updated; P13 PR 9: npm packages and their qualification, L-091 to L-093 added and L-036 updated; P13 PR 6: managed lifecycle, L-037 narrowed and L-087 measured, L-090 added; P13 PR 4: managed installation; P13 PR 8: release archives, L-089 added and L-036 updated; P00-P13 complete; P12 closed on its final trial round with the compact tier below target, L-085; SEC-T01's adversarial evidence deferred as technical debt, L-068; P13 PR 2b closed L-073 and rewrote L-016 and L-017).
 Status: current-state register. Every entry below is **pending maintainer review**.
 
 ## Purpose and how to use it
@@ -164,8 +164,9 @@ Each entry has these fields:
 | [L-130](#l-130) | whisper.cpp ends the last segment of a range cut mid-speech past the audio, by several seconds; VSift cuts it at the audio's end, so that end says nothing about where speech stopped, and a session that holds such a revision cannot be read by 0.1.0 | accuracy/ASR | low | unscheduled | [#274](https://github.com/smormah/vsift/issues/274) | accepted residual |
 | [L-131](#l-131) | Requests that open sessions at the same moment contend on one try-only lock: in the measurements made between one request in five and one in four was refused `BUSY` and retried | performance | low | unscheduled | [#277](https://github.com/smormah/vsift/issues/277) | accepted residual |
 | [L-132](#l-132) | The reviewed FFmpeg can only follow a month-end build of its publisher, and a new pin does not move existing installs; the refresh candidate of 2026-10-03 is a daily build, needs two reviewed bounds raised and adds three libraries to the recipe | security | medium | P14 | [#272](https://github.com/smormah/vsift/issues/272) | open |
+| [L-133](#l-133) | The claims check reads an evidence item's status, not the version it is for, so the candidate rung's statements are in use on 0.1.0's evidence; and the README and `roadmap.svg` keep the candidate wording until the ledger follow-up | process/CI | low | P14 (PR 13) | [#17](https://github.com/smormah/vsift/issues/17) | deferred |
 
-Counts: 1 high, 34 medium, 82 low (117 entries).
+Counts: 1 high, 34 medium, 83 low (118 entries).
 
 ## Security
 
@@ -2801,8 +2802,10 @@ candidate to be the accepted one.**
   `v<X.Y.Z>-rc.<N>` tag is the candidate that was qualified: it takes it to be, because only the
   maintainer can create a `v*` tag and a stable release should never be built on an older
   candidate than the last one cut. The skill and the release notes are frozen with the code at
-  the cut, so the stable release notes' wording must be right in the candidate. The lists were
-  settled in P14 PR 10b: before it the changelog was a version-string file and the work record
+  the cut, so the stable release notes' wording must be right in the candidate. **The check is
+  compiled from the commit it judges** (the plan job and `candidate-delta` build `vsift-release`
+  from the checkout under test), so a stable commit that edited `candidate.rs` would pass its own
+  edit. The lists were settled in P14 PR 10b: before it the changelog was a version-string file and the work record
   was not allowed at all, which would have refused every stable commit, because the repository's
   own rules change the changelog, the handoff files and the evidence ledger in every pull
   request.
@@ -2817,7 +2820,10 @@ candidate to be the accepted one.**
 - **Why:** a mechanical check can prove what did not change, not what is right.
 - **Mitigation:** the plan prints every changed path and its class; the maintainer reads the
   README's and the installation guide's diffs and the delta check's output in the preflight (6.7
-  items 4 and 5); the lists are pinned by tests (the allowed kinds are accepted, one path of every
+  items 4 and 5), **and runs the human backstop that does not depend on the tool:** `git diff --stat
+  v0.2.0-rc.1 <stable commit> -- crates tools .github skills schemas fixtures fuzz npm Cargo.toml
+  Cargo.lock rust-toolchain.toml deny.toml` must list only the five version-string files and the
+  launcher's README (6.7 item 5); the lists are pinned by tests (the allowed kinds are accepted, one path of every
   protected area is refused, broken copies of the lists are noticed, and `release.md` 6.8 names
   every entry).
 - **Next step:** none planned.
@@ -3524,6 +3530,41 @@ that week.**
   ADR superseding ADR 0014's direct-origin rule, with the licence consequences).
 - **Owner:** P14. **Issue:** [#272](https://github.com/smormah/vsift/issues/272). **Status:**
   open. **Review:** pending.
+
+### L-133
+
+**The claims check reads an evidence item's status, not the version it is for, so the candidate rung's statements are in use on 0.1.0's evidence, and the README and `roadmap.svg` keep the candidate wording until the ledger follow-up.**
+
+- **What:** two things that follow from [L-101](#l-101) and from the stable commit's allowed lists
+  (`release.md` 6.8). (1) CL-101 ("is a release candidate under qualification") and CL-102 (the
+  evidence gathered so far is recorded in the evidence ledger) belong to the `candidate` rung and
+  each `require` RQ-19, the second verification of a publish, which is `passed` **for 0.1.0**. The
+  check (`check_use` in `tools/vsift-governance/src/public_claims/check.rs`) reads the item's
+  status and not the version or commit it was recorded for, so it is satisfied by 0.1.0's
+  verification while the sentence is about `0.2.0-rc.1`. From the merge of P14 PR 10b until the
+  maintainer publishes the candidate, the README, the installation guide and the launcher's README say
+  a release candidate is under qualification before it is on npm; the installation guide says
+  `@next` installs 0.1.0 until then. (2) The README and its graphic `roadmap.svg` are not among the
+  documents the stable commit may change, so they keep the candidate wording from the cut until the
+  ledger follow-up (P14 PR 13), including at and just after the publish of `0.2.0`: the front page
+  says a release candidate is under qualification while `latest` is `0.2.0`. Only the installation
+  guide and the launcher's README, which the stable commit may change, can say otherwise.
+- **Evidence:** `docs/planning/public-claims.json` (rung and the two statements);
+  [`release.md`](../operations/release.md) 6.8 and 6.10; the ADR 0024 note of P14 PR 10b.
+- **Impact:** a sentence that is early (before the publish) or late (after the stable release): no
+  statement of support or stability, no controlled word of the matrix, and nothing a user installs
+  depends on it. A reader of the front page may be told a candidate exists that is not published, or
+  that a candidate is under qualification when the release has been published.
+- **Why:** the claims check has no notion of a version (L-101), and the stable commit may not change
+  the README by design (the guard is that what ships equals what was qualified).
+- **Mitigation:** the statements say only that the candidate is under qualification and point at
+  the ledger; the runbook tells the maintainer to merge PR 10b only when they can tag and publish at
+  once; PR 11 records RQ-19 for the candidate's own bytes; PR 13 flips the README and `roadmap.svg`
+  (L-121) the day after the publish at the latest.
+- **Next step:** PR 11 (RQ-19 for `0.2.0-rc.1`); PR 13 (the README and the graphic). A version-aware
+  claims rule is an R1 consideration.
+- **Owner:** P14 (PR 13). **Issue:** [#17](https://github.com/smormah/vsift/issues/17).
+  **Status:** deferred. **Review:** pending.
 
 ## Review workflow
 

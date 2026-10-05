@@ -301,8 +301,11 @@ check that a stable commit differs from its candidate only where allowed. The ru
   must name every entry. **Claims:** the rung is `candidate`; the README, the installation guide and the package's README
   say the release candidate is under qualification and point at the evidence ledger. **Agent trials:** the freeze of
   batches 2 and 3 is committed (`batch-2/freeze.json`, `batch-3/freeze.json`) and a test fails any pull request that
-  changes what it binds. **The FFmpeg re-pin is planned for after `0.2.0`** (L-132). Decisions for the maintainer are in ADR
-  0024's PR 10b note.
+  changes what it binds (its whole-freeze digest is pinned in the test). **The two stable checks of `P14 verify release` are
+  registered after the stable tag**, not before (a `tools/` change before the stable commit would be refused). **Known limit
+  L-133:** the rung's two statements are in use on 0.1.0's RQ-19 evidence (the check reads a status, not a version), and the
+  README keeps the candidate wording until PR 13. **The FFmpeg re-pin is planned for after `0.2.0`** (L-132). Decisions for the
+  maintainer, and the fixes of an independent review of the runbook, are in ADR 0024's PR 10b note.
 - **The skill's wording, before the release candidate's freeze (P14 PR 10a, 2026-10-05; three small changes in
   `skills/vsift/references/`, a guide and records; nothing published, no product behaviour changed).** On Windows the
   skill now tells an agent to run `vsift` from PowerShell or Git Bash, never through `cmd.exe`, because npm's `vsift.cmd`

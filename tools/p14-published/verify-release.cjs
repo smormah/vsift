@@ -16,7 +16,7 @@
 // `gh` sees. Nothing is published, tagged or changed. A stable version also
 // needs two checks (the candidate-to-stable delta, read from P14 PR 8's
 // `release-delta.json`, and `latest` on all four packages); until they are
-// registered, before the stable publish, a stable version fails here by name.
+// registered, after the stable tag, a stable version fails here by name.
 
 const fs = require('node:fs');
 const path = require('node:path');

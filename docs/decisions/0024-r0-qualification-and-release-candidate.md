@@ -689,9 +689,9 @@ this ADR:
   days; the verifier passes the run's id, taken from npm's provenance, in its context) and
   `latest-on-all-four-packages`. Neither can be tried on real bytes before a stable release
   exists, so they are not built here: `STABLE_CHECKS` in `tools/p14-published/lib/verify.cjs` is
-  where they register, before the stable publish (PR 12's preparation), and until they do a
-  stable version **fails by name** (tested), so a stable publish cannot be verified green without
-  them.
+  where they register, before the stable publish (PR 12's preparation; **superseded by PR 10b:
+  after the stable tag, see its note**), and until they do a stable version **fails by name**
+  (tested), so a stable publish cannot be verified green without them.
 - **The ledger.** RQ-01 to RQ-04 and RQ-19 are `passed` **for 0.1.0 at its commit only**, each with
   its runs. The version bump changes `Cargo.toml` and `npm/`, which are in every one of these
   scopes, so none counts for `0.2.0-rc.1`; each is `repeat` for the stable. Nothing the checker
@@ -1331,7 +1331,9 @@ two requirements are met in `candidate.rs` (a broken-copy mutation test, below) 
 2. **The rung is `candidate`, and its two statements are used before the publish.** CL-101 ("is a release candidate under
    qualification") is in the README, the installation guide and the package's README, CL-102 (the evidence ledger holds what
    is gathered, with its gaps) in the README and the installation guide, so that the check's stale-entry rule passes. Both
-   require RQ-19, which is `passed` **for 0.1.0**: the claims check reads a status, not a version (L-101). Between the merge
+   require RQ-19, which is `passed` **for 0.1.0**: the claims check reads a status, not a version ([L-133](../planning/known-limits.md#l-133),
+   new in this PR; L-101 is the general limit). The README and `roadmap.svg` are refused at the stable commit, so they keep this wording
+   until PR 13. Between the merge
    and the publish, which should be about an hour, the README says a release candidate exists that is not yet on npm. If the
    publish is delayed, the sentence is early, not false about support.
 3. **The freeze is committed at the cut** (`docs/planning/p14-agent-trials/batch-2/freeze.json` and `batch-3/freeze.json`, the
@@ -1358,3 +1360,33 @@ the stable commit passes. The freeze test proves the digests of seven components
 claims check cannot see that RQ-19's evidence is for another version. The runbook was written from the 0.1.0 publish and the
 workflows' code; its commands that read the `release` environment and the rulesets were run read-only on 2026-10-05, and the
 rest have not been run against the candidate.
+
+**Review round, the same day** (an independent review of the pull request: no defect that could publish to `latest` or burn the
+version; the delta check refused every trap tried; the points below are things that cannot change after the cut, because
+`release.md`, `tools/`, `candidate.rs` and the other refused paths are frozen with it):
+
+- **The tagged commit is on `main` and green** (`release.md` 6.10 step 0.4): the Release workflow runs no tests and no guard checks
+  that a tagged commit was merged or tested, so the runbook has the maintainer check both, with the exact commands
+  (`git merge-base --is-ancestor`, and the commit's check runs, which print nothing when all passed) and the answers to expect.
+  It also says to merge the pull request only when the maintainer can tag and publish at once, and gives the command that turns the
+  "up to date" rule back on before tagging.
+- **`STABLE_CHECKS` are registered after the stable tag, not before** (the choice of two the review offered, **option (b)**). The
+  code decides it: `P14 verify release` is dispatched `--ref main`, so the code that verifies a stable release is `main`'s at
+  that moment, not the tag's; a change under `tools/` between the candidate and the stable commit is **refused** by 6.8, so
+  registering them "before the stable publish" would have forced a second candidate; and they cannot be tried on real bytes before
+  a stable release exists, so the first honest test is after the publish, from `main`, where a bug in them can be fixed without a
+  new candidate. Registering them now (option (a)) would have put untried code into the candidate. The cost: the registration has
+  to land within seven days of the stable publish, while the Release run's `publish-plan` artifact (the check's input) exists. Every
+  wording that said "before the stable publish" was changed (`verify.cjs`, `verify-release.cjs`, `p14-verify-release.yml`,
+  `release.md` 6.4, the plan, the work record).
+- **The delta check is compiled from the commit it judges**, so a stable commit that edited `candidate.rs` would pass its own edit.
+  The workflow is unchanged; the human backstop is in 6.7's preflight (`git diff --stat v0.2.0-rc.1 <the stable commit>` over the
+  code paths must list only the five version-string files and the launcher's README) and in L-107.
+- **The claims window is stated and the installation guide is true before and after the publish**: "when it is published it is
+  installed as `vsift-cli@next`; until then `@next` installs 0.1.0". The staleness limit is a new known limit, **L-133**, which also
+  says the README and `roadmap.svg` stay at the candidate wording until PR 13 because they are refused at the stable commit.
+- **The runbook says** that `attest` runs before the approval and creates permanent public attestations (repeating is harmless);
+  that deleting the release page or moving the tag is policy, not impossibility; and how to pick the right run (`headBranch` and
+  `headSha`, not the newest).
+- **The freeze test pins the whole-freeze digest** (`1e89b5cc...`, copied from the file), so a pull request that edits a frozen
+  component and regenerates `freeze.json` shows in the diff of a test as well as of a data file.

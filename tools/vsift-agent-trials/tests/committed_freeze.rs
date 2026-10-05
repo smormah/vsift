@@ -53,6 +53,27 @@ fn the_committed_freezes_still_hold() -> TestResult {
     Ok(())
 }
 
+/// The whole-freeze digest of the candidate's cut: `freeze_sha256` of both committed files, copied from them.
+///
+/// `the_committed_freezes_still_hold` passes if a pull request edits a frozen component and regenerates
+/// `freeze.json` in the same change, because the file then agrees with the tree. Pinning the digest here makes that
+/// visible: changing this constant is the decision to cut another candidate and write a new freeze
+/// (`docs/operations/release.md` section 6.8), and it shows in the diff of a test, not only of a data file.
+const CUT_FREEZE_SHA256: &str = "1e89b5cc488e7245d1a6d63ec8809c1f8a5c137ee87f5ed05f9b692c2af6e392";
+
+#[test]
+fn the_committed_freezes_are_the_ones_written_at_the_cut() -> TestResult {
+    for batch in BATCHES {
+        let recorded = freeze::load(&freeze_file(batch))?;
+        assert_eq!(
+            recorded.freeze_sha256, CUT_FREEZE_SHA256,
+            "batch {batch}: the freeze file is not the one written at the candidate's cut; a new freeze means a new \
+             candidate (docs/operations/release.md section 6.8), and this constant changes with it"
+        );
+    }
+    Ok(())
+}
+
 /// Both batches test the same candidate, so they are bound to the same
 /// frozen state: the two files differ at most by nothing.
 #[test]
