@@ -1336,8 +1336,11 @@ two requirements are met in `candidate.rs` (a broken-copy mutation test, below) 
    publish is delayed, the sentence is early, not false about support.
 3. **The freeze is committed at the cut** (`docs/planning/p14-agent-trials/batch-2/freeze.json` and `batch-3/freeze.json`, the
    same bytes) and the test `committed_freeze` fails every pull request that changes a frozen component. The `commit` field
-   names the commit the digests were taken at (the tip of PR 10a); a squash merge leaves that commit behind, so the digests
-   bind, not the name. Batch 1's freeze is history and no longer holds. **Batch 3 needs `-AllowGraderChange`** (it checks its
+   names `3cdf3ffc6edd2f4a71b91858cc28b74818cce6a1`, the merge commit of PR 10a on `main`, which carries the final skill; the
+   frozen components are byte-identical there and at the cut (nothing in 10b touches the skill, the grader, the scenarios, the
+   settings or the corpus truth: the digests were computed before and after the rebase and are the same, whole-freeze digest
+   `1e89b5cc488e7245d1a6d63ec8809c1f8a5c137ee87f5ed05f9b692c2af6e392`). The freeze cannot name the cut's own commit (a file
+   cannot hold its own commit's hash), so the digests bind, not the name. Batch 1's freeze is history and no longer holds. **Batch 3 needs `-AllowGraderChange`** (it checks its
    cold components against batch 1's freeze, and the grader changed in PR 7, as accepted on 2026-10-04).
 4. **Dependabot** (the four open pull requests): merge #195 (`actions/setup-python` 7.0.0: workflows only; all three
    `Journeys` jobs passed on it) before the cut, which the supervisor did; wait for #192 (`jsonschema` 0.58, test-only), #193
