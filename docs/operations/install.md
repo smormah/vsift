@@ -1,11 +1,11 @@
 # Installing VSift
 
-Status: user guide, updated 2026-10-04 (P14 PR 9a; written by P13 PR 11 and PR 12 for the
+Status: user guide, updated 2026-10-05 (P14 PR 11c, the candidate is published; P14 PR 9a; written by P13 PR 11 and PR 12 for the
 published pre-release; [ADR 0023](../decisions/0023-r0-distribution-managed-installation-and-handoff-check.md)).
-**VSift 0.2.0-rc.1 is a release candidate under qualification.** When it is published it is
-installed as `vsift-cli@next` (the npm packages under the dist-tag `next`, with npm provenance,
+**VSift 0.2.0-rc.1 is a release candidate under qualification.** It was published on 2026-10-05 and
+is installed as `vsift-cli@next` (the npm packages under the dist-tag `next`, with npm provenance,
 and native archives on a GitHub pre-release, each carrying a Sigstore build-provenance
-attestation); until then `@next` installs the pre-release 0.1.0, published on 2026-10-01. It is
+attestation); before that, `@next` installed the pre-release 0.1.0, published on 2026-10-01. It is
 not announced. It is not a stable release, and no platform is "supported" yet (section 1). The
 evidence gathered so far, with its gaps, is recorded in the release evidence ledger
 ([`p14-evidence-ledger.json`](../planning/p14-evidence-ledger.json)). A plain `npm install vsift-cli`
@@ -434,10 +434,12 @@ folder.
   ([L-044](../planning/known-limits.md#l-044)).
 - **What was run.** P14 ran the npm upgrade on hosted runners with sessions, a retained bundle and a
   registered configuration in place: the configuration came back byte for byte, an earlier session read
-  as before and a new session worked. Only 0.1.0 is published, so the upgrade was 0.1.0 over 0.1.0 and
-  0.1.0 to a locally built newer version, not a published newer release over 0.1.0
-  ([L-111](../planning/known-limits.md#l-111)); only npm was upgraded, and no pnpm, Yarn or Bun upgrade
-  was run.
+  as before and a new session worked. Until 2026-10-05 only 0.1.0 was published, so those upgrades were
+  0.1.0 over 0.1.0 and 0.1.0 to a locally built newer version ([L-111](../planning/known-limits.md#l-111)).
+  On 2026-10-05, after the publish, the same run upgraded the **published 0.1.0 to the published 0.2.0-rc.1**
+  over the real registry on hosted Windows, macOS and Ubuntu runners with the same result (`P14 published
+  artifacts`, run 37328348087): the first run of a newer published release over an older one. Only npm was
+  upgraded, and no pnpm, Yarn or Bun upgrade was run.
 
 ## 8. Uninstall
 
