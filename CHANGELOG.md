@@ -12,6 +12,11 @@ Smart App Control through npm and through the archive, a clean-machine install, 
 for agent-trial batches 2 and 3 ([`docs/planning/p14-batch-2-3-checklist.md`](docs/planning/p14-batch-2-3-checklist.md)). No code, tool,
 workflow, schema or setting changed.
 
+**Installation guide only (P14 PR 11c); nothing shipped changes.** [`docs/operations/install.md`](docs/operations/install.md) said
+the release candidate would be published later and that `@next` installed 0.1.0 until then. The candidate was published on
+2026-10-05, so the guide now says so, and its upgrade section says that the published 0.1.0 has been upgraded to the published
+0.2.0-rc.1 over the real registry on hosted runners (npm only). The guide is one of the few documents the stable commit may change.
+
 ## [0.2.0-rc.1] - 2026-10-05
 
 **This is a release candidate, under qualification.** It is the candidate for `0.2.0`, the release that ships R0
