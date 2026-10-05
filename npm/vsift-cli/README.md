@@ -14,8 +14,9 @@ vsift setup check
 
 One-shot use works too: `npx vsift-cli@next`, `pnpm dlx vsift-cli@next`,
 `yarn dlx --package vsift-cli@next vsift` or `bunx vsift-cli@next`. Node.js 22 or later,
-or Bun 1.2 or later, runs the launcher. The pre-release is published under the dist-tag
-`next`; `latest` stays a `0.0.0` placeholder until the first stable release.
+or Bun 1.2 or later, runs the launcher. **This version is a release candidate under qualification.**
+It is published under the dist-tag `next` and is not announced; `latest` stays a `0.0.0` placeholder until the
+first stable release.
 
 ## What gets installed
 

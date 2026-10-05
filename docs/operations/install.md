@@ -2,10 +2,12 @@
 
 Status: user guide, updated 2026-10-04 (P14 PR 9a; written by P13 PR 11 and PR 12 for the
 published pre-release; [ADR 0023](../decisions/0023-r0-distribution-managed-installation-and-handoff-check.md)).
-**VSift 0.1.0 is a pre-release, published on 2026-10-01.** It is available as the npm
+**VSift 0.2.0-rc.1 is a release candidate under qualification.** It is available as the npm
 packages under the dist-tag `next`, with npm provenance, and as native archives on a GitHub
-pre-release, each carrying a Sigstore build-provenance attestation. It is not a stable
-release, and no platform is "supported" yet (section 1). A plain `npm install vsift-cli`
+pre-release, each carrying a Sigstore build-provenance attestation; `next` named the pre-release
+0.1.0, published on 2026-10-01, until the candidate was published. It is not announced. It is not a stable
+release, and no platform is "supported" yet (section 1). The evidence gathered so far, with its gaps, is recorded in the release evidence ledger
+([`p14-evidence-ledger.json`](../planning/p14-evidence-ledger.json)). A plain `npm install vsift-cli`
 installs the empty `0.0.0` placeholder, which stays `latest` until a stable release, so
 always ask for `vsift-cli@next`. **What has been run against these steps.** In P13 they ran on
 hosted runners against a local registry. Since 2026-10-02 (P14) the published 0.1.0 has also

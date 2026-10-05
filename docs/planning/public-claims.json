@@ -1,6 +1,6 @@
 {
   "schema_version": "1",
-  "current_rung": "now",
+  "current_rung": "candidate",
   "documents": [
     "README.md",
     "docs/operations/install.md",
