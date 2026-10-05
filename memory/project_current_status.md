@@ -1,6 +1,6 @@
 # VSift current status
 
-As of 2026-10-04. Current-state document: rewrite it, don't append to it. Next actions and
+As of 2026-10-05. Current-state document: rewrite it, don't append to it. Next actions and
 open decisions are in `memory/TODO.md`.
 
 ## In plain English
@@ -29,18 +29,18 @@ embeddable engine library (`vsift`) that the CLI, and later other hosts, use. To
 
 **The agent skill** (`skills/vsift/`) teaches Claude Code or Codex to run an investigation with
 the CLI and write a cited report. P12's named-client trials qualified it:
-- **Review tier:** Claude Opus 5.5 in Claude Code and GPT-6-Astra in Codex each passed 11 of 11
-  trials mechanically and 9 of 11 fully. **Compact tier:** Claude Sonnet 5.5 and GPT-6-Sol: 82% in
-  P12; the re-run (#222) meets the 90% target, Sonnet 26 of 28 and Sol 28 of 28 (23 as run).
-- **Safety:** no agent leaked a secret, installed anything, acted on injected text or copied a
-  hidden character into a report. Codex ran in a Linux container (L-076, #204).
+- **Review tier:** Claude Opus 5.5 in Claude Code and GPT-6-Astra in Codex (a Linux container, L-076) each passed
+  11 of 11 trials mechanically and 9 of 11 fully. **Compact tier:** Claude Sonnet 5.5 and GPT-6-Sol: 82% in P12;
+  the re-run (#222) meets the 90% target, Sonnet 26 of 28 and Sol 28 of 28 (23 as run).
+- **Safety:** no agent leaked a secret, installed anything, acted on injected text or copied a hidden character.
+  **Since PR 10a the skill has a Windows `cmd.exe` sentence and two failure rows; batch 2 is the first trial with them.**
 
 ## Where the project stands
 
 **P00-P13 are complete. P14, the R0 qualification (#17), is in progress** (started 2026-10-02;
-decisions A-H of ADR 0024 confirmed). Its plan is 14 pull requests (0-13); **PRs 0 (#250), 1 (#251), 2
-(#255), 3 (#254), 4 (#259), 5 (#276), 6 (#262), 7 (the fixes, below), 8 (#252) and 9 (9a #302, 9b #304) are
-merged; PR 9c records the maintainer's decisions of 2026-10-04; PRs 10-13 remain; the whole packet is not complete.**
+decisions A-H of ADR 0024 confirmed). Its plan is 14 pull requests (0-13); **PRs 0 (#250), 1 (#251), 2 (#255),
+3 (#254), 4 (#259), 5 (#276), 6 (#262), 7 (the fixes, below), 8 (#252) and 9 (#302, #304, #306) are merged; PR 10
+(the candidate) has begun with 10a, the skill's wording, open; 10b, 10c and PRs 11-13 remain; the packet is not complete.**
 What it must show, and what is weaker than it sounds:
 - **The published 0.1.0 has run on a video, but only that:** PR 3 ran the real-tool checkpoints against it
   on hosted Ubuntu 24.04, Windows and macOS 15 (tests from a later commit, L-115); PR 2 installed it on
@@ -133,7 +133,7 @@ Control, the macOS prompts (L-098); power loss beyond Ubuntu 24.04 ext4 (L-037).
 | P11 | Complete (`40c4038`); SEC-T01 adversarial evidence is technical debt, moved to R1 (#188, L-068) |
 | P12 | Complete (2026-09-30, ADR 0022 Accepted): skill, harness, named-client trials; review tier qualified, compact tier 93% and 100% on the #222 re-run; open: L-095 (#224), #219, #204 (`1284e54`) |
 | P13 | Complete (2026-10-01, ADR 0023 Accepted): distribution, managed install, `handoff check`, human output; 0.1.0 published; release commit `011bc4d` |
-| P14 | **In progress** (started 2026-10-02): PRs 0-9 merged (PR 7 = the fixes of the campaigns and batch 1); 9c open; 10-13 remain; agent batch 1 ran (baseline) |
+| P14 | **In progress** (started 2026-10-02): PRs 0-9 merged (PR 7 = the fixes of the campaigns and batch 1); 10a (the skill's wording) open, 10b, 10c and 11-13 remain; agent batch 1 ran (baseline) |
 
 ## Architecture snapshot
 
@@ -144,7 +144,7 @@ the trial harness uses only `vsift` and `vsift-contract`; `tools/` (never shippe
 
 ## Quality evidence
 
-- **Local gates** (in each PR description): fmt, strict Clippy, workspace tests, warning-denied rustdoc,
-  governance. **CI on every PR:** Quality (three OS), Documentation, Governance, fuzz replay, worker boundary,
-  dependency policy, CodeQL, npm launcher tests; the Release dry run and P14 workflows on their paths.
-  **Required on `main`:** Quality, Documentation, Dependency policy, Analyze Rust, Governance. Squash merges.
+- **Local gates** (in each PR description): fmt, strict Clippy, workspace tests, warning-denied rustdoc, governance.
+  **CI on every PR:** Quality (three OS), Documentation, Governance, fuzz replay, worker boundary, dependency policy,
+  CodeQL, npm launcher tests; the Release dry run and P14 workflows on their paths. **Required on `main`:** Quality,
+  Documentation, Dependency policy, Analyze Rust, Governance. Squash merges.

@@ -62,7 +62,13 @@ select the skill; the user can also name it.
   nowhere in the skill's text, so it cannot be copied; a grader compares it with the
   truth. Without image access the agent works from the transcript only and marks
   every visual claim unsupported.
-- **Local shell.** The agent runs `vsift` itself; nothing is uploaded.
+- **Local shell.** The agent runs `vsift` itself; nothing is uploaded. On Windows it uses
+  PowerShell or Git Bash and never `cmd.exe` (`cmd /c`, a batch file): npm's `vsift.cmd` shim
+  makes `cmd.exe` read the command line a second time, so text taken from the evidence could
+  run as a command ([L-109](../planning/known-limits.md#l-109)). Added in
+  `references/commands.md` on 2026-10-05 (P14 PR 10a), before the candidate's freeze; the
+  agent trials do not exercise the shim (Claude Code reaches `vsift` through Git Bash and
+  Codex runs on Linux), so the sentence is untested by them.
 - **Budgets.** `compact` (the default, for small models and one-image clients) allows
   6 images, one per step, 30 tool calls, pages of 20, two refinements per claim,
   bursts of 4 frames and 15 minutes; `standard` allows 24 images, 4 per step, 80 tool
@@ -100,7 +106,14 @@ select the skill; the user can also name it.
   allowed words of every closed member beside the skeleton, and
   `references/handoff.md` lists all of them; a gap note may quote VSift's remediation
   whole (600 characters), and `references/resume.md` shows one exact resume card
-  (PR 3g). What to do per failure code is in `references/commands.md`. Transcript
+  (PR 3g). What to do per failure code is in `references/commands.md`; since 2026-10-05
+  (P14 PR 10a, before the candidate's freeze) its `STORAGE_IO` row tells the agent to read
+  the remediation first and to put what it says in the gap's note in its own words (three of
+  the CLI's `STORAGE_IO` answers are a link given instead of the file, a drive with no room
+  and an id that names no published session, [L-127](../planning/known-limits.md#l-127);
+  two of those remediations, 553 and 697 characters, leave little or no room in a note of
+  600 characters, so the agent is not told to quote them whole), and its `RESOURCE_LIMIT` row no longer sends the agent
+  to a smaller request when the remediation says there is no room. Transcript
   text is quoted only from a segment's `display_text` (a speaker from
   `display_label`), where VSift has already written every invisible or bidirectional
   character as `<U+202E>`-style notation; `text` and `original_text` keep them raw

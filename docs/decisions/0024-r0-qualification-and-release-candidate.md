@@ -1012,7 +1012,8 @@ two sentences. Launcher tests send the published-artifact job's hostile names an
 route and require them to arrive unchanged with no command run, and pin the three documents to the warning and
 the routes. **Not done:** one sentence in the skill (run `vsift` from PowerShell or Git Bash on Windows, never
 through `cmd.exe`), because the skill is frozen for the agent-trial batches; it is a candidate for the next
-freeze and the maintainer decides. [L-109](../planning/known-limits.md#l-109) is an accepted residual.
+freeze and the maintainer decides (**update, 2026-10-05: made in PR 10a**, see the note at the end of this ADR).
+[L-109](../planning/known-limits.md#l-109) is an accepted residual.
 
 ## Implementation note, 2026-10-03 (P14 PR 4, the robustness campaigns)
 
@@ -1248,3 +1249,39 @@ first run that reached them (the run before it failed on a development build's r
 step). Nothing has run them on macOS. A difference the masks do not cover is a finding to fix where it appears, by
 widening a mask or eliding a line, never by changing what a page claims. The generated pages are
 long (the JSON reference is about 150 KB) because they are complete, not because anyone should read them through.
+
+## Implementation note, 2026-10-05 (P14 PR 10a: the skill's wording before the candidate's freeze)
+
+The first of three pull requests of PR 10 (10a the skill, 10b the cut, 10c the maintainer's runbook); an increment, and PR 10
+is complete only when the candidate is published. Plan section 20.2 listed two wording candidates for the skill, held back while
+the skill was frozen for the agent batches; the skill is frozen again at the candidate's cut, so this is the last moment to
+make them before batch 2 tests the skill on the candidate. Nothing was published and no product behaviour changed; the
+files are `skills/vsift/references/commands.md` and `handoff.md`, the skill guide, the records, and one line of the test
+guard `skill_contract` (below). The text of each change, why, and whether it is a must or a nice to have are in
+[`p14-qualification.md`](../planning/p14-qualification.md) section 20.2.
+
+**Decisions taken inside this ADR, for the maintainer to confirm or overrule** (each is a separate commit, so any can be dropped):
+
+1. **The Windows sentence (a must).** On Windows run `vsift` from PowerShell or Git Bash, never through `cmd.exe`: a safety
+   statement about the shim of L-109, in the place where the skill already says where and how to run a command. It cannot be
+   tested by the agent batches, which never reach the shim.
+2. **The `STORAGE_IO` row (recommended).** The failure table now treats `STORAGE_IO` on its own: read `error.remediation` first
+   and say what it says, in the agent's own words. The reason is the maintainer's rule of 2026-10-04 (L-127): the published code
+   stays and the remediation carries the fix, which reaches a user only if the agent passes it on. It does **not** say "quote it
+   whole", because the handoff note holds 600 characters and two of the remediations are 553 and 697.
+3. **The `RESOURCE_LIMIT` row (nice to have).** An exception is added for "no room (a session full of evidence)", where a
+   smaller request cannot help. The plan's wording of this candidate assumed an `ingest` with no room answers `RESOURCE_LIMIT`;
+   since PR 7 it answers `STORAGE_IO`.
+4. **`handoff.md`** no longer says a note is "enough to quote VSift's remediation whole" for every remediation, which is
+   false for those two.
+
+**The guard.** `skill_contract` treats a dotted lower-case code span as a path of contract members and looks each member up, so
+`cmd.exe` and `vsift.cmd` failed it. `.cmd` and `.exe` are now file suffixes it skips, like `.md` and `.json`, with a test
+that a real field path (`data.files[].path`) is still looked up. It is test code (`#[cfg(test)]`).
+
+**What is weaker than it sounds.** The skill was qualified by P12 and the batch-1 pilots **without** these words. Batch 2 will
+test it with them, but the failure rows and the Windows sentence are exercised by almost no scenario, so the trials cannot show
+that the words help or that they do no harm; they can only show that nothing else broke. The skill's own limit of 300 lines for
+`SKILL.md` was not touched (the file is at 300), which is why every change is in `references/`. The description of the note in
+`handoff.schema.json` still says "380 characters" for the longest remediation; it is a comment on a limit of 600 and was left
+alone because the schema is embedded in the binary.
