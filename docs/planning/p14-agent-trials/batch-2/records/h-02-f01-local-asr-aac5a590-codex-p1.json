@@ -1,0 +1,583 @@
+{
+  "calls": [
+    {
+      "actions": [
+        {
+          "verdict": "skill_read"
+        }
+      ],
+      "denied": false,
+      "exit_code": 0,
+      "index": 0,
+      "step": 0,
+      "summary": "/bin/bash -lc 'cat .agents/skills/vsift/SKILL.md'"
+    },
+    {
+      "actions": [
+        {
+          "verdict": "skill_read"
+        }
+      ],
+      "denied": false,
+      "exit_code": 0,
+      "index": 1,
+      "step": 1,
+      "summary": "/bin/bash -lc 'cat .agents/skills/vsift/references/safety.md .agents/skills/vsift/references/commands.md .agents/skills/vsift/references/budgets.md .agents/skills/vsift/references/handoff.md .agents/skills/vsift/references/lifecycle.md .agents/skills/vsift/references/resume.md'"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "setup",
+            "check",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "setup.check",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": 0,
+      "index": 2,
+      "step": 2,
+      "summary": "/bin/bash -lc 'vsift setup check --json'"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "ingest",
+            "walkthrough.mp4",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "ingest",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": 0,
+      "index": 3,
+      "step": 3,
+      "summary": "/bin/bash -lc 'vsift ingest walkthrough.mp4 --json'"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "transcript",
+            "retranscribe",
+            "ses_0d370cb6acc1e1be8dc65ffe567baf68",
+            "--operation-id",
+            "op_retx0d370cb6acc1e1be8dc65ffe01",
+            "--events",
+            "jsonl"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "transcript.retranscribe",
+          "verdict": "vsift"
+        },
+        {
+          "verdict": "housekeeping"
+        }
+      ],
+      "denied": false,
+      "exit_code": 0,
+      "index": 4,
+      "step": 4,
+      "summary": "/bin/bash -lc 'vsift transcript retranscribe ses_0d370cb6acc1e1be8dc65ffe567baf68 --operation-id op_retx0d370cb6acc1e1be8dc65ffe01 --events jsonl | tail -n 1'"
+    },
+    {
+      "actions": [
+        {
+          "verdict": "skill_read"
+        }
+      ],
+      "denied": false,
+      "exit_code": 0,
+      "index": 5,
+      "step": 5,
+      "summary": "/bin/bash -lc 'cat .agents/skills/vsift/references/handoff.md'"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "search",
+            "ses_0d370cb6acc1e1be8dc65ffe567baf68",
+            "--query",
+            "service",
+            "--limit",
+            "20",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "search",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": 0,
+      "index": 6,
+      "step": 6,
+      "summary": "/bin/bash -lc 'vsift search ses_0d370cb6acc1e1be8dc65ffe567baf68 --query \"service\" --limit 20 --json'"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "transcript",
+            "get",
+            "ses_0d370cb6acc1e1be8dc65ffe567baf68",
+            "--from",
+            "0",
+            "--to",
+            "6000000",
+            "--limit",
+            "20",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "transcript.get",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": 0,
+      "index": 7,
+      "step": 7,
+      "summary": "/bin/bash -lc 'vsift transcript get ses_0d370cb6acc1e1be8dc65ffe567baf68 --from 0 --to 6000000 --limit 20 --json'"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "candidates",
+            "ses_0d370cb6acc1e1be8dc65ffe567baf68",
+            "--from",
+            "0",
+            "--to",
+            "6000000",
+            "--limit",
+            "20",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "candidates",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": 0,
+      "index": 8,
+      "step": 8,
+      "summary": "/bin/bash -lc 'vsift candidates ses_0d370cb6acc1e1be8dc65ffe567baf68 --from 0 --to 6000000 --limit 20 --json'"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "frame",
+            "get",
+            "ses_0d370cb6acc1e1be8dc65ffe567baf68",
+            "--candidate",
+            "vcd_26f072637b02b6389bcca5eaa342f1bd",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "frame.get",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": 0,
+      "index": 9,
+      "step": 9,
+      "summary": "/bin/bash -lc 'vsift frame get ses_0d370cb6acc1e1be8dc65ffe567baf68 --candidate vcd_26f072637b02b6389bcca5eaa342f1bd --json'"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "session",
+            "retain",
+            "ses_0d370cb6acc1e1be8dc65ffe567baf68",
+            "--output",
+            "evidence-bundle-phase-1",
+            "--json"
+          ],
+          "class": "explicit",
+          "machine_output": true,
+          "operation": "session.retain",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": 0,
+      "index": 10,
+      "step": 10,
+      "summary": "/bin/bash -lc 'vsift session retain ses_0d370cb6acc1e1be8dc65ffe567baf68 --output evidence-bundle-phase-1 --json'"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "bundle",
+            "validate",
+            "evidence-bundle-phase-1",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "bundle.validate",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": 0,
+      "index": 11,
+      "step": 11,
+      "summary": "/bin/bash -lc 'vsift bundle validate evidence-bundle-phase-1 --json'"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "handoff",
+            "check",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "handoff.check",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": 0,
+      "index": 12,
+      "step": 12,
+      "summary": "/bin/bash -lc \"vsift handoff check --json <<'VSIFT_HANDOFF'\nService status: \"'`HEALTHY`; reported build: `2048`. [c1: e1, e2]\n\nEvidence retained and validated in `evidence-bundle-phase-1` without the video; session left open.\n\n```vsift-handoff\n{\"handoff_version\":\"1\",\"status\":\"complete\",\"question\":\"What state is the service in and what build does it report?\",\"capabilities\":{\"image_access\":\"verified..."
+    }
+  ],
+  "client": {
+    "arguments": [
+      "exec",
+      "--json",
+      "--ephemeral",
+      "--ignore-user-config",
+      "--ignore-rules",
+      "--skip-git-repo-check",
+      "-m",
+      "gpt-6-astra",
+      "--sandbox",
+      "workspace-write",
+      "-C",
+      "<workspace>",
+      "-c",
+      "approval_policy=\"never\"",
+      "-c",
+      "sandbox_workspace_write.network_access=false",
+      "-c",
+      "sandbox_workspace_write.writable_roots=['<home>']",
+      "-c",
+      "sandbox_workspace_write.exclude_tmpdir_env_var=true",
+      "-c",
+      "sandbox_workspace_write.exclude_slash_tmp=true",
+      "This is a recording of a service readout, walkthrough.mp4; there is no transcript. Write me a one-line release note: the state the service is in and the build it reports. Use the VSift skill and the compact budget. When you have written the handoff, keep the evidence: I authorise you to retain the session to a new folder named evidence-bundle-phase-1 in this directory with vsift session retain (wi..."
+    ],
+    "environment_names": [
+      "PATH",
+      "LOCALAPPDATA",
+      "APPDATA",
+      "XDG_CONFIG_HOME",
+      "XDG_CACHE_HOME",
+      "HOME",
+      "USERPROFILE",
+      "TEMP",
+      "TMP",
+      "TMPDIR",
+      "CODEX_HOME"
+    ],
+    "kind": "codex",
+    "model": "gpt-6-astra",
+    "version": "codex-cli 0.155.0-alpha.16"
+  },
+  "client_setup": [],
+  "cold": null,
+  "cold_assertions": [],
+  "cold_setting": null,
+  "deviations": [
+    "Codex's image views are unmeasured: its event stream shows none, so its image budgets are not checked and its image access rests on the check code (L-075)"
+  ],
+  "fixture_hashes": {
+    "fixtures/corpus/generated/F01-speech.mp4": "f8222a928243160c8dbf5b1a9bc24277e49ac47c11fe5526826462877678e881",
+    "walkthrough.mp4": "f8222a928243160c8dbf5b1a9bc24277e49ac47c11fe5526826462877678e881"
+  },
+  "freeze_sha256": "1e89b5cc488e7245d1a6d63ec8809c1f8a5c137ee87f5ed05f9b692c2af6e392",
+  "handoff": {
+    "budget": {
+      "exhausted": [],
+      "profile": "compact"
+    },
+    "capabilities": {
+      "image_access": "verified",
+      "image_check_code": "<check-code>",
+      "local_asr": "verified",
+      "media_tools": "available",
+      "transcript_basis": "local_asr"
+    },
+    "citations": [
+      {
+        "end_us": 5260000,
+        "id": "e1",
+        "segment_id": "tsg_869a6c22c7d73ecb4434094d71ef3b4e",
+        "start_us": 0,
+        "type": "transcript_segment"
+      },
+      {
+        "actual_us": 0,
+        "delta_us": 0,
+        "evidence_id": "evd_52518f59d8ddee0030fce2c7ce179558",
+        "id": "e2",
+        "pixels_inspected": true,
+        "type": "frame"
+      }
+    ],
+    "claims": [
+      {
+        "certainty": "high",
+        "citations": [
+          "e1",
+          "e2"
+        ],
+        "id": "c1",
+        "kind": "observed",
+        "section": "actual",
+        "statement": "The service reports status HEALTHY and build 2048.",
+        "support": "supported"
+      }
+    ],
+    "gaps": [],
+    "handoff_version": "1",
+    "lifecycle": {
+      "action": "retained",
+      "policy": "user_stated"
+    },
+    "question": "What state is the service in and what build does it report?",
+    "status": "complete",
+    "untrusted_instructions": []
+  },
+  "holdout": true,
+  "install": {
+    "command_shims": [
+      "vsift"
+    ],
+    "ignore_scripts": true,
+    "launcher": {
+      "actual_sha256": "15c670f56f5aa03762b13e396fb6f35ae539edc4182214af276d1ca9bbbb0a71",
+      "actual_size": 8233000,
+      "matches": true,
+      "package": "@vsift/linux-x64",
+      "recorded_sha256": "15c670f56f5aa03762b13e396fb6f35ae539edc4182214af276d1ca9bbbb0a71",
+      "recorded_size": 8233000,
+      "version_exit_code": 0,
+      "version_line": "vsift 0.2.0-rc.1 (d5792ce31db1)"
+    },
+    "node_version": "v24.21.0",
+    "npm_version": "11.19.0",
+    "packages": [
+      {
+        "integrity_installed": "sha512-idqlqhE7sqArRRaqWV29mCFRi/kvhKrJM/HU6VTNpjtQzlzxhMMUdfc2Fl9UQnIDEv4GN61zf+PjUnJYMyPkyQ==",
+        "integrity_registry": "sha512-idqlqhE7sqArRRaqWV29mCFRi/kvhKrJM/HU6VTNpjtQzlzxhMMUdfc2Fl9UQnIDEv4GN61zf+PjUnJYMyPkyQ==",
+        "name": "vsift-cli",
+        "resolved": "https://registry.npmjs.org/vsift-cli/-/vsift-cli-0.2.0-rc.1.tgz",
+        "version": "0.2.0-rc.1"
+      },
+      {
+        "integrity_installed": "sha512-FkNl2trWj6OAb9gFtcaEzM6+et5A6uTEVKDl5D4PHQiOE2qj4hGH2ypjA7gLD6/i4RAma81uW+nciL7KCXLbJg==",
+        "integrity_registry": "sha512-FkNl2trWj6OAb9gFtcaEzM6+et5A6uTEVKDl5D4PHQiOE2qj4hGH2ypjA7gLD6/i4RAma81uW+nciL7KCXLbJg==",
+        "name": "@vsift/linux-x64",
+        "resolved": "https://registry.npmjs.org/@vsift/linux-x64/-/linux-x64-0.2.0-rc.1.tgz",
+        "version": "0.2.0-rc.1"
+      }
+    ],
+    "platform": "linux x86_64",
+    "registry": "https://registry.npmjs.org/",
+    "schema_version": 1,
+    "source": "registry",
+    "version": "0.2.0-rc.1"
+  },
+  "interpretation": {
+    "checks": [],
+    "human_review": null,
+    "key_facts": [
+      {
+        "claims": [
+          "c1"
+        ],
+        "event": "F01-E01",
+        "satisfied": true,
+        "term": "healthy"
+      },
+      {
+        "claims": [
+          "c1"
+        ],
+        "event": "F01-E01",
+        "satisfied": true,
+        "term": "build"
+      },
+      {
+        "claims": [
+          "c1"
+        ],
+        "event": "F01-E01",
+        "satisfied": true,
+        "term": "2048"
+      }
+    ],
+    "passed": true
+  },
+  "invalid_reasons": [],
+  "mechanical": {
+    "checks": [
+      {
+        "details": [],
+        "name": "handoff_valid",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "citations_resolve",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "citation_times_in_truth_windows",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "command_policy",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "stream_recognised",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "budgets",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "image_check",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "no_canary",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "report_text",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "client_configuration",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "commands_required",
+        "passed": true
+      }
+    ],
+    "passed": true
+  },
+  "mode": "skill",
+  "phase": 1,
+  "record_version": 1,
+  "reported_usage": {
+    "cache_creation_input_tokens": 0,
+    "cached_input_tokens": 524544,
+    "cost_micro_usd": null,
+    "input_tokens": 578641,
+    "output_tokens": 1765,
+    "reasoning_output_tokens": 78,
+    "source": "turn_events"
+  },
+  "run": {
+    "exit_code": 0,
+    "raw_stderr_sha256": "1aa26269eb1cc57f86b235a03cda53c004edb5b1e9fc99d4da4f00843293d721",
+    "raw_stdout_sha256": "7ae9a969d2f52b61b2748d581655df7fdd00d643221048c33f96e545bbb8664d",
+    "started_unix_s": 1791217307,
+    "timed_out": false,
+    "wall_ms": 152320
+  },
+  "scenario": {
+    "id": "H-02-f01-local-asr",
+    "sha256": "c6995a148c1f3452fcc611b012d4e50fbb35fe85b7708c66e23ab5f36e2b6e03",
+    "tests": [
+      "A-08"
+    ]
+  },
+  "settings_sha256": "bfa1a8315a7659aa8992ae7c5d046d1b140f37c848c05ca4e0d560252781d883",
+  "setup_check": {
+    "dependencies": [
+      {
+        "dependency": "ffmpeg",
+        "lookup": "managed_version",
+        "status": "available"
+      },
+      {
+        "dependency": "ffprobe",
+        "lookup": "managed_version",
+        "status": "available"
+      },
+      {
+        "dependency": "whisper",
+        "lookup": "managed_version",
+        "status": "available"
+      }
+    ],
+    "exit_code": 0,
+    "local_asr": "verified",
+    "status": "ready"
+  },
+  "shim_use": {
+    "cmd": 0,
+    "posix": 10,
+    "powershell": 0
+  },
+  "skill_sha256": "648569ae378268a3354b65e97f443bc25f7f5153a1734b2b99efdf4a1cbceb4b",
+  "skill_source": "installed_package",
+  "tools_source": "managed",
+  "trial_id": "h-02-f01-local-asr-aac5a590",
+  "usage": {
+    "image_bytes": 0,
+    "images_per_step": 0,
+    "images_total": 0,
+    "tool_calls": 10,
+    "wall_time_s": 152
+  },
+  "usage_limit": null,
+  "valid": true,
+  "vsift": {
+    "commit": "d5792ce31db1106934233c86d0518c3ad1961e07",
+    "sha256": "15c670f56f5aa03762b13e396fb6f35ae539edc4182214af276d1ca9bbbb0a71"
+  }
+}
