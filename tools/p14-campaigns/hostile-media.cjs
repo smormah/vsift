@@ -99,7 +99,10 @@ async function runCase(spec, canaries) {
       const body = JSON.stringify({ schema_version: '1', operation_id: `op_${crypto.createHash('sha256').update(spec.id).digest('hex').slice(0, 32)}`, durability: 'ephemeral', target: { ingest: { source: `hostile/${spec.file}`, transcript: null } }, steps: [{ close: {} }] });
       host.sudo(['sh', '-c', `cat > ${host.STATE}/queue/hostile-request.json && chown ${container.WORKER_USER} ${host.STATE}/queue/hostile-request.json`], { input: body });
     }
-    const workspace = spec.tmpfs && op !== 'job_small' ? SMALL_WORKSPACE : WORKSPACE;
+    // EVIDENCE-ONLY REVISION (never merged): the session root is a folder VSift creates inside the small
+    // filesystem, not the mount point itself (an existing folder VSift did not create is refused as INTEGRITY_FAILURE
+    // after a wait, install.md section 12), so that `ingest` reaches the free-space check of #266.
+    const workspace = spec.tmpfs && op !== 'job_small' ? `${SMALL_WORKSPACE}/root` : WORKSPACE;
     const answered = await run(commandFor(op, spec, session, workspace), { tmpfs: spec.tmpfs });
     const verdict = judge.judge({ spec, op, first: index === 0 || op === 'job_name' || op === 'job_small' || op === 'ingest_human', run: answered, canaries });
     if (op === 'ingest') {

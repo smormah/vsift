@@ -184,7 +184,7 @@ function cases(context) {
   add({ id: 'mkv-audio-absurd', group: 'declared', file: 'mkv-audio-absurd.mkv', description: 'an audio track of 255 channels at 3.4e38 Hz', build: () => ebml.file([ebml.info(1000), ebml.element(ebml.IDS.tracks, ebml.track({ number: 1, type: 2, codec: 'A_PCM/INT/LIT', sampleRate: 3.4e38, channels: 255 })), ebml.cluster(1, Buffer.alloc(256))]), ops: ['ingest', 'audio', 'recognise'] });
 
   // Size: a file above the limit, and one that does not fit the disk.
-  add({ id: 'sparse-30gib', group: 'size', file: 'sparse-30gib.mp4', description: 'a sparse file of 30 GiB (above the 20 GiB limit) that begins like an MP4', build: () => ({ sparse: 30 * 1024 * MIB, header: base.subarray(0, 32) }), ops: ['ingest', 'job_name'], expect: 'failure' });
+  add({ id: 'sparse-30gib', group: 'size', file: 'sparse-30gib.mp4', description: 'a sparse file of 30 GiB (above the 20 GiB limit) that begins like an MP4', build: () => ({ sparse: 30 * 1024 * MIB, header: base.subarray(0, 32) }), ops: ['ingest', 'job_name'], expect: 'failure', codes: [...TYPED, 'STORAGE_IO'] });
   add({ id: 'sparse-no-room', group: 'size', file: 'sparse-600mib.mp4', description: 'a sparse 600 MiB file ingested into a session root of 256 MiB (the 1 GiB free-space reserve cannot be met)', build: () => ({ sparse: 600 * MIB, header: base.subarray(0, 32) }), ops: ['ingest', 'job_small'], expect: 'any', codes: [...TYPED, 'STORAGE_IO'], tmpfs: 256 });
 
   // Sidecars (the source is F10.mp4).
