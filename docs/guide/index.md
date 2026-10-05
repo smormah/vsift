@@ -1,6 +1,6 @@
 # VSift user guide
 
-<!-- guide-version: 0.1.0 -->
+<!-- guide-version: 0.2.0 -->
 
 VSift turns a video on your machine into **timestamped speech**, **the moments the screen changed** and
 **the exact frames and audio that prove them**, each with an id you can cite. You use it yourself, from a
@@ -8,14 +8,14 @@ terminal, or you let an AI assistant on your machine use it. Nothing is uploaded
 
 This guide teaches you to do things with it. It is written for anyone with a video, not only for programmers.
 
-**Checked against vsift 0.1.0**: the source of the published pre-release plus the fixes merged since, which is
-what the next release is built from. Where this guide says what a command prints, that is real output of that
-build on practice recordings from the repository, and the examples are re-run whenever the code changes
-([how](#how-this-guide-is-kept-true)). The pre-release you install today as `vsift-cli@next` has the same
-commands and options, but older wording in `vsift --help` and in a few error messages, none of the fixes to
-rare cases made since (a named pipe or a link given as the video, too little room for the video, a short
-speech-recognition range, a failed open), and one optional JSON member fewer (`missing_shared_library` in the
-result of `setup install`). Everything else here applies to it.
+**Checked against vsift 0.2.0**: the release candidate `0.2.0-rc.1` and the release that follows it are built from
+the same code, so this guide names the release, not the candidate. Where this guide says what a command prints, that
+is real output of that build on practice recordings from the repository, and the examples are re-run whenever the
+code changes ([how](#how-this-guide-is-kept-true)). The earlier pre-release, `0.1.0`, has the same commands and
+options, but older wording in `vsift --help` and in a few error messages, none of the fixes to rare cases made since
+(a named pipe or a link given as the video, too little room for the video, a short speech-recognition range, a
+failed open), and one optional JSON member fewer (`missing_shared_library` in the result of `setup install`).
+Everything else here applies to it.
 
 ## Where to start
 

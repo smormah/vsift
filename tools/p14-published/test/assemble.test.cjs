@@ -13,6 +13,8 @@ const repository = path.join(__dirname, '..', '..', '..');
 const manifest = JSON.parse(fs.readFileSync(path.join(repository, 'npm', 'vsift-cli', 'package.json'), 'utf8'));
 
 test('the launcher manifest takes the higher version and pins every platform package to it', () => {
+  // A snapshot, not a version literal: the repository's own version changes with every release.
+  const snapshot = JSON.stringify(manifest);
   const result = assemble.launcherManifest(manifest, '0.1.1-p14local.1');
   assert.equal(result.version, '0.1.1-p14local.1');
   assert.deepEqual(result.optionalDependencies, {
@@ -21,7 +23,8 @@ test('the launcher manifest takes the higher version and pins every platform pac
     '@vsift/win32-x64': '0.1.1-p14local.1',
   });
   assert.equal(result.name, 'vsift-cli');
-  assert.equal(manifest.version, '0.1.0', 'the repository manifest is untouched');
+  assert.equal(JSON.stringify(manifest), snapshot, 'the repository manifest is untouched');
+  assert.notEqual(manifest.version, '0.1.1-p14local.1');
 });
 
 test('a launcher manifest with a script or another dependency set is refused', () => {
