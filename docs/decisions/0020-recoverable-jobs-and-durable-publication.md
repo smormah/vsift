@@ -447,6 +447,31 @@ durable. Fault points `registration-marker-create` and `registration-marker-rena
 (`FaultPoint::REGISTRATION`) stop a test child at both boundaries. The commit path is
 unchanged.
 
+## Note: the replaced-file retry's budget is counted from the first failed attempt (#314, 2026-10-06)
+
+PR 2's bounded retry for files replaced by rename (above) measured its 500 ms from before the first
+attempt. The release candidate's hosted stress campaign on Windows found one read in 140,721 answered
+`INTEGRITY_FAILURE` while another thread published generations (none in 200 repetitions on Ubuntu or macOS);
+repeating the test on a hosted runner with every CPU busy and diagnostics added reproduced it, one read in 600
+repetitions, after a single attempt that took 4.4 s. An attempt that itself outlasts the budget (here a thread
+that was not scheduled for seconds; an open call a scanner held would do the same) used it up: the reader had
+opened the old pointer, the writer replaced it during the stall, the reader found the file with no link left
+(`NotFound`), saw the clock run out and did not try again, and the read path reported the `NotFound` as damage
+(a job record, as a job with no record).
+
+The budget is now counted from the first failed attempt. The worst case for a file that really is missing is
+the first attempt, then the budget, then the one attempt under way when the budget runs out, so a missing file
+is reported after the same time as before when attempts are fast; an attempt that stalls across that deadline
+can still end the wait, which needs a replacement and then a stall in the retry. The policy takes its clock
+through a small seam (`RetryClock`), so the unit tests move a clock instead of waiting.
+
+No published failure code, schema or field changed. A hard link, a non-regular file, a file still missing or
+still refused with access denied (Windows) when the budget is spent, and an I/O error the read path does not
+recognise as a failure of the storage are still `INTEGRITY_FAILURE`. That last case includes, on Windows, a file
+another process holds without read sharing (os errors 32 and 33): it is answered at once and not waited for,
+and a later release should retry it and then report with the same code. It is recorded as known limit L-136 and
+was not seen in any campaign.
+
 ## Consequences
 
 - PR 1 changes no public contract. Warm reads no longer grow with the chain; every

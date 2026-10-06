@@ -687,7 +687,8 @@ fn checked_regular_file(file: File) -> io::Result<File> {
     }
 }
 
-/// How long a reader keeps trying a file a writer is replacing by rename.
+/// How long a reader keeps trying a file a writer is replacing by rename,
+/// counted from the first attempt that failed.
 ///
 /// The window is a rename: microseconds when the machine is idle, a few
 /// milliseconds under heavy load. A file still missing after this is missing.
@@ -710,26 +711,94 @@ const REPLACED_FILE_SPINS: u32 = 8;
 /// snapshot. A hard link, a non-regular file and every other error are
 /// returned at once, and a file still absent after the budget is absent, so
 /// real damage or tampering is still reported.
+///
+/// The budget is counted from the **first failed attempt**, not from before
+/// the first attempt (#314). An attempt can itself outlast the whole budget (a
+/// thread that was not scheduled for seconds on a loaded machine, an open call
+/// a scanner held) while the writer replaces the file the reader had just
+/// opened; the `NotFound` it ends with says nothing about the next attempt,
+/// and used to be reported as damage without one. The worst case for a file
+/// that really is missing is the first attempt, then the budget, then the one
+/// attempt that is under way when the budget runs out. An attempt that stalls
+/// across that deadline can still end the wait, which needs a replacement and
+/// then a stall in the retry.
 fn open_replaced_file(directory: &Dir, name: &str, write: bool) -> io::Result<File> {
     open_replaced_file_with(|| open_regular_file(directory, name, write))
 }
 
 /// [`open_replaced_file`] over any opener; the retry policy on its own, so a
 /// test can drive the exact interleavings a concurrent writer causes.
-fn open_replaced_file_with(mut open: impl FnMut() -> io::Result<File>) -> io::Result<File> {
-    let started = std::time::Instant::now();
-    let mut attempts = 0_u32;
+fn open_replaced_file_with(open: impl FnMut() -> io::Result<File>) -> io::Result<File> {
+    open_replaced_file_clocked(open, REPLACED_FILE_RETRY, &mut MonotonicClock::start())
+}
+
+/// What the retry policy does between two attempts.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Pause {
+    /// Give the CPU to another thread; a replacement is over in microseconds.
+    Yield,
+    /// Sleep for this long.
+    Sleep(std::time::Duration),
+}
+
+/// The clock and the pauses of the retry policy, so that a test can make an
+/// attempt take longer than the whole budget without waiting for it.
+trait RetryClock {
+    /// Time on a monotonic clock since a fixed start.
+    fn now(&self) -> std::time::Duration;
+    /// Takes the pause between two attempts.
+    fn pause(&mut self, pause: Pause);
+}
+
+/// The real clock: [`std::time::Instant`], [`std::thread::yield_now`] and
+/// [`std::thread::sleep`].
+struct MonotonicClock {
+    start: std::time::Instant,
+}
+
+impl MonotonicClock {
+    fn start() -> Self {
+        Self {
+            start: std::time::Instant::now(),
+        }
+    }
+}
+
+impl RetryClock for MonotonicClock {
+    fn now(&self) -> std::time::Duration {
+        self.start.elapsed()
+    }
+
+    fn pause(&mut self, pause: Pause) {
+        match pause {
+            Pause::Yield => std::thread::yield_now(),
+            Pause::Sleep(duration) => std::thread::sleep(duration),
+        }
+    }
+}
+
+/// The retry policy of [`open_replaced_file`] over any opener and clock.
+fn open_replaced_file_clocked(
+    mut open: impl FnMut() -> io::Result<File>,
+    budget: std::time::Duration,
+    clock: &mut impl RetryClock,
+) -> io::Result<File> {
+    let mut first_failure = None;
+    let mut retries = 0_u32;
     loop {
         match open() {
-            Err(error)
-                if in_replacement_window(&error) && started.elapsed() < REPLACED_FILE_RETRY =>
-            {
-                attempts = attempts.saturating_add(1);
-                if attempts <= REPLACED_FILE_SPINS {
-                    std::thread::yield_now();
-                } else {
-                    std::thread::sleep(std::time::Duration::from_millis(1));
+            Err(error) if in_replacement_window(&error) => {
+                let failed_at = clock.now();
+                let since = failed_at.saturating_sub(*first_failure.get_or_insert(failed_at));
+                if since >= budget {
+                    return Err(error);
                 }
+                retries = retries.saturating_add(1);
+                clock.pause(if retries <= REPLACED_FILE_SPINS {
+                    Pause::Yield
+                } else {
+                    Pause::Sleep(std::time::Duration::from_millis(1))
+                });
             }
             result => return result,
         }
@@ -795,8 +864,27 @@ fn map_committed_io(error: io::Error) -> SessionStorageError {
     if is_storage_failure(&error) {
         map_storage_io(error)
     } else {
+        #[cfg(test)]
+        report_io_error_read_as_damage(&error);
         SessionStorageError::IntegrityFailure
     }
+}
+
+/// Under test, writes the I/O error that [`map_committed_io`] reports as
+/// damage to the test's captured output.
+///
+/// `IntegrityFailure` is a unit variant, so a read that failed on a rare I/O
+/// error answers only `[IntegrityFailure]`: the one hosted Windows failure of
+/// #314 could not be told from damage, or from a sharing violation, afterwards.
+/// The harness shows captured output only for a failing test, and worker
+/// threads inherit the capture of the test that spawned them.
+#[cfg(test)]
+fn report_io_error_read_as_damage(error: &io::Error) {
+    eprintln!(
+        "session storage I/O error reported as damage: {:?}, OS error {:?}: {error}",
+        error.kind(),
+        error.raw_os_error()
+    );
 }
 
 /// Whether `error` is a failure of the storage rather than of the stored

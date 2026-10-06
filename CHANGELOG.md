@@ -26,6 +26,45 @@ corner case (a source over the limit and larger than the free space answers `STO
 [L-134](docs/planning/known-limits.md#l-134)), which the maintainer accepted for R0 and recorded as a waiver. The scan reading of the
 day is [`p14-scan-reading-2026-10-05.md`](docs/planning/p14-scan-reading-2026-10-05.md). The P10 durability campaign met its acceptance numbers (its hosted verdict job never got a runner: #316).
 
+**For the second candidate (`0.2.0-rc.2`); nothing here is released.** The maintainer decided on 2026-10-06 to cut a second
+candidate with the change below.
+
+### Fixed
+
+- **A reader that overlaps a writer's rename is no longer answered `INTEGRITY_FAILURE` because one of its own attempts was slow**
+  (#314; found by the P14 stress campaign on `0.2.0-rc.1`: one read in 140,721, in one of 200 repetitions, on a hosted Windows
+  Server 2025 runner, none on Ubuntu or macOS). **Cause, shown.** A reader that opens a file a writer replaces by rename (the commit
+  pointer, the chain checkpoint, a job record) can open the old file just before the rename and find it without a link just after;
+  it tries again for up to 500 ms. That 500 ms was measured from before the first attempt, so an attempt that itself took longer
+  than all of it used the budget up and its failure was not retried at all, and the read path reports that `NotFound` as damage
+  (a job record, as a job with no record). The hosted runner has four CPUs, and with every one busy a thread was left unscheduled
+  for seconds: in 600 repetitions of the old code (with diagnostics added) one read failed in this way, with the campaign's own
+  message (`1 of 3389 reads failed`, `[IntegrityFailure]`), after a single attempt that took 4.4 s; in 900 repetitions of
+  an earlier form of the fix (which made eight retries whatever the clock said; the form shipped here counts the budget from the
+  first failed attempt and has not run on a hosted runner) seven attempts took over half a second (up to 4.9 s) and ended in the
+  same `NotFound`, each was retried, and none of the 900 failed. **Change.** The budget is counted from the first failed attempt. The worst case for a file that really is
+  missing is the first attempt, then the 500 ms, then the one attempt under way when it runs out. **What still answers
+  `INTEGRITY_FAILURE`:** a hard link or a file that is not a regular file; a file still missing, or still refused with access
+  denied on Windows, when the budget is spent; an I/O error the read path does not recognise as a failure of the storage,
+  **including, on Windows, a file another process holds without read sharing (os errors 32 and 33), which is answered at once and
+  not waited for** (new known limit [L-136](docs/planning/known-limits.md#l-136); not observed in any campaign); and an attempt that
+  stalls across the deadline of the retry, which needs a replacement and then a stall in the retry. No published failure code,
+  schema or field changed. **Tests.** The retry policy takes its clock through a small seam, so the tests make an attempt take
+  longer than the budget on a clock they move and wait for nothing: a stalled first attempt is retried; a file that stays missing is
+  still reported after the budget (30 sleeps of a millisecond on that clock); with every attempt slow the wait is the first attempt
+  and one retry; any other error is returned at once. The first two fail on the old policy. A test run now prints the I/O error
+  behind an `INTEGRITY_FAILURE` (the campaign's failure said only `[IntegrityFailure]`). **What is not shown.** The one failure of
+  the campaign run did not record its cause: that it was this one is an inference from the same failure reproduced with
+  diagnostics, with the same test, the same message and the same runner. ADR 0020 has a dated note.
+- **The two session-root race tests no longer count the documented five-second refusal as a failure under artificial load; the
+  product is unchanged** (#312; test and documents only). One of 1,500 repetitions, with eight busy processes on four CPUs of a
+  hosted Windows runner, ended with a child refused `BUSY` ("session root is still being created by another process") after the
+  five seconds the contract allows. It was not reproduced in 3,200 further repetitions with up to eight busy processes per CPU (the
+  slowest child took 1.4 s, and none was refused when the children waited 60 s), so a creator that was not scheduled for five
+  seconds is the explanation that fits and a defect is not shown. The race tests now wait 60 s (the product's own bound keeps its
+  unit tests). **What is not shown:** the cause of the one event; **L-135** is narrowed to it (its reader half, #314, is the fix
+  above).
+
 ## [0.2.0-rc.1] - 2026-10-05
 
 **This is a release candidate, under qualification.** It is the candidate for `0.2.0`, the release that ships R0

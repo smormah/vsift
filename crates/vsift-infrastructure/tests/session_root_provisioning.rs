@@ -18,7 +18,7 @@ use std::{
 
 use vsift_infrastructure::{
     FilesystemSessionStore, SessionRootError, SessionRootProvisioning, SessionStoreOpenError,
-    open_session_root,
+    open_session_root, open_session_root_within,
 };
 
 type TestResult = Result<(), Box<dyn Error>>;
@@ -28,6 +28,17 @@ const CHILD_GATE: &str = "VSIFT_ROOT_RACE_GATE";
 const CHILD_MODE: &str = "VSIFT_ROOT_RACE_MODE";
 const CREATORS: usize = 6;
 const READERS: usize = 2;
+/// How long the racing openers of the two race tests wait for the creator.
+///
+/// The product waits five seconds and then refuses with the documented `BUSY`
+/// (`open_session_root`; the bound itself is tested with small waits in the
+/// store's unit tests). A creator that was not scheduled for longer than that
+/// in a test with every CPU kept busy made one opener give up in 1 of 1,500
+/// repetitions on a hosted Windows runner (#312), so these tests, which assert
+/// that the race converges on one root, wait far longer than the product does
+/// (as `open_session_root_within` says a test whose creators may be slowed
+/// can, #144). A creator that really never finishes still fails them.
+const RACE_WAIT: Duration = Duration::from_secs(60);
 /// Well under the five-second provisioning wait: a rejection that arrives
 /// sooner than this was not spent waiting for a creator.
 const PROMPT: Duration = Duration::from_secs(4);
@@ -157,7 +168,7 @@ fn provisioning_race_child() -> TestResult {
         }
         thread::sleep(Duration::from_millis(1));
     }
-    let result = open_session_root(&root, provisioning);
+    let result = open_session_root_within(&root, provisioning, RACE_WAIT);
     let described = outcome(&result);
     println!("outcome={described}");
     match (provisioning, result) {
@@ -256,7 +267,7 @@ fn concurrent_threads_create_one_root_and_every_one_adopts_it() -> TestResult {
                     SessionRootProvisioning::CreateIfMissing
                 };
                 barrier.wait();
-                let result = open_session_root(&root, provisioning);
+                let result = open_session_root_within(&root, provisioning, RACE_WAIT);
                 (provisioning, outcome(&result), result.is_ok())
             })
         })

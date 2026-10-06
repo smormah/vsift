@@ -1062,6 +1062,145 @@ fn a_reader_that_meets_a_rename_retries_instead_of_reporting_damage() -> TestRes
     Ok(())
 }
 
+/// A clock for the retry policy that only moves when a test moves it, so no
+/// test here depends on how long a thread really was not scheduled: an attempt
+/// "takes" a time by advancing `time`, and a sleep advances it by what it
+/// asks for.
+struct FakeClock<'a> {
+    time: &'a std::cell::Cell<std::time::Duration>,
+    yields: u32,
+}
+
+impl<'a> FakeClock<'a> {
+    fn new(time: &'a std::cell::Cell<std::time::Duration>) -> Self {
+        Self { time, yields: 0 }
+    }
+}
+
+impl super::RetryClock for FakeClock<'_> {
+    fn now(&self) -> std::time::Duration {
+        self.time.get()
+    }
+
+    fn pause(&mut self, pause: super::Pause) {
+        match pause {
+            super::Pause::Yield => self.yields += 1,
+            super::Pause::Sleep(duration) => self.time.set(self.time.get() + duration),
+        }
+    }
+}
+
+/// Regression (#314): the retry budget used to be counted from before the
+/// first attempt, so an attempt that itself took longer than the whole budget
+/// (a thread that was not scheduled for seconds on a loaded hosted Windows
+/// runner, an open call a scanner held) used it up and its failure was not
+/// retried at all. The reader had opened the old pointer, was stalled while the
+/// writer replaced it, found no link left and answered `NotFound`, which the
+/// read path reports as `INTEGRITY_FAILURE`: one read in 140,721 in the
+/// campaign. The stall is on the test's own clock, so nothing here waits and
+/// nothing depends on the machine's speed.
+#[test]
+fn a_reader_whose_attempt_outlasts_the_retry_budget_still_retries() -> TestResult {
+    let fixture = Fixture::new()?;
+    let store = chain_of(&fixture, 2)?;
+    let session = store
+        .root
+        .open_dir(PathBuf::from(SESSIONS_DIRECTORY).join(SESSION))?;
+    let time = std::cell::Cell::new(std::time::Duration::ZERO);
+    let mut step = 0;
+    let opened = super::open_replaced_file_clocked(
+        || {
+            step += 1;
+            if step == 1 {
+                // Opened, then stalled for twice the whole budget while the
+                // writer replaces the pointer.
+                let old = raw_pointer(&session)?;
+                time.set(time.get() + super::REPLACED_FILE_RETRY * 2);
+                reinstall_pointer(&session)?;
+                super::checked_regular_file(old)
+            } else {
+                super::open_regular_file(&session, CURRENT_FILE, false)
+            }
+        },
+        super::REPLACED_FILE_RETRY,
+        &mut FakeClock::new(&time),
+    )?;
+    assert_eq!(step, 2, "the replaced pointer was tried again once");
+    let pointer: super::CommitPointer =
+        super::stored::parse_versioned_json(&super::read_bounded(opened)?)?;
+    assert_eq!(pointer.generation, 2);
+    Ok(())
+}
+
+/// The retry never hides damage and never runs on: a file that stays missing
+/// is tried until the budget, counted from its first failed attempt, is spent
+/// and is then reported as missing; the worst case, when every attempt is
+/// slow, is the first attempt, the budget and the one attempt under way when
+/// it runs out; and an error that is not a replacement is returned at once.
+#[test]
+fn the_retry_is_bounded_and_never_hides_a_file_that_stays_missing() {
+    use std::{cell::Cell, io::ErrorKind, time::Duration};
+    const BUDGET: Duration = Duration::from_millis(30);
+
+    // Missing, with fast attempts: the yielding retries, then a millisecond
+    // apart, and the file is reported missing once the budget is spent.
+    let time = Cell::new(Duration::ZERO);
+    let mut clock = FakeClock::new(&time);
+    let mut attempts = 0_u32;
+    let refused = super::open_replaced_file_clocked(
+        || {
+            attempts += 1;
+            Err(ErrorKind::NotFound.into())
+        },
+        BUDGET,
+        &mut clock,
+    );
+    assert_eq!(
+        refused.err().map(|error| error.kind()),
+        Some(ErrorKind::NotFound)
+    );
+    assert_eq!(clock.yields, super::REPLACED_FILE_SPINS);
+    assert_eq!(time.get(), BUDGET, "the sleeps spent exactly the budget");
+    assert_eq!(attempts, 1 + super::REPLACED_FILE_SPINS + 30);
+
+    // Missing, with every attempt taking twice the budget: the first attempt
+    // starts the clock, the retry is made, and its failure ends the wait.
+    let time = Cell::new(Duration::ZERO);
+    let mut attempts = 0_u32;
+    let refused = super::open_replaced_file_clocked(
+        || {
+            attempts += 1;
+            time.set(time.get() + BUDGET * 2);
+            Err(ErrorKind::NotFound.into())
+        },
+        BUDGET,
+        &mut FakeClock::new(&time),
+    );
+    assert_eq!(
+        refused.err().map(|error| error.kind()),
+        Some(ErrorKind::NotFound)
+    );
+    assert_eq!(attempts, 2, "the first attempt and one retry");
+    assert_eq!(time.get(), BUDGET * 4);
+
+    // A hard link, a non-regular file and every other error: at once.
+    let time = Cell::new(Duration::ZERO);
+    let mut attempts = 0_u32;
+    let refused = super::open_replaced_file_clocked(
+        || {
+            attempts += 1;
+            Err(ErrorKind::InvalidData.into())
+        },
+        BUDGET,
+        &mut FakeClock::new(&time),
+    );
+    assert_eq!(
+        refused.err().map(|error| error.kind()),
+        Some(ErrorKind::InvalidData)
+    );
+    assert_eq!(attempts, 1);
+}
+
 /// The retry never hides damage: a hard-linked pointer is refused at once,
 /// and a pointer that stays missing is still an integrity failure.
 #[test]
