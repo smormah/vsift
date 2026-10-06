@@ -107,6 +107,11 @@ from a handle opened without waiting, so a pipe that nothing writes to is a refu
 hang (it used to block `ingest` until the process was killed). A UNIX socket cannot be
 opened at all and ends as `STORAGE_IO` with the generic storage remediation (known limit
 L-127); tests pin the pipe, the device and the socket.
+**A source over the 20 GiB limit is refused as `INVALID_SOURCE` (exit 3), whatever the free space,** and nothing is
+copied: the size limit is the first refusal, and the room check below does not look at a source the limit refuses. This is
+the answer 0.1.0 gave. The first release candidate (`0.2.0-rc.1`) gave `STORAGE_IO` to a source that was both over the
+limit and larger than the free space, because the room check added for #266 ran first; that changed a published failure
+code, which is not additive within v1, and was fixed for the second candidate (#310).
 **A link as the file itself is refused.** A source (or a supplied transcript) whose own final path
 component is a symbolic link is refused and nothing is read or copied: the answer is `STORAGE_IO` (exit 7), the
 code 0.1.0 already gave, with a remediation that says links are not followed and to name the file the link
@@ -116,15 +121,18 @@ resolved as the operating system resolves them, so a link in a parent folder is 
 itself must not be a link. A worker request answers a link differently, and unchanged since 0.1.0: it names a
 path inside an operator's `--input-root`, so a link anywhere on that path is `path_outside_input_root`
 (`INVALID_ARGUMENT`).
-**A source that does not fit the session root's filesystem** is refused with `STORAGE_IO` (exit 7),
-the code the CLI path gave, and a remediation that says nothing is damaged, tells the user to free space (or
+**A source within the size limit that does not fit the session root's filesystem** is refused with `STORAGE_IO`
+(exit 7), the code the CLI path gave, and a remediation that says nothing is damaged, tells the user to free space (or
 an operator to name a folder on a drive with more room with `--session-root`) and to retry (since P14 PR 7,
 #266). On Unix `ingest` checks the source's size (plus a 16 MiB margin for the session's records) against the
-free space before it copies anything; a write that runs out of room during the copy (the only check on
+free space before it copies anything, after the size limit above (a source over the limit is not asked for room); a write
+that runs out of room during the copy (the only check on
 Windows, which reads no free space, L-061) gives the same answer. The desktop check is best effort: a
 filesystem whose space cannot be read, or that reports none available, is not checked (known limit L-061).
 The code stays because changing a published failure code is not additive within v1 (known limit L-127). A
-worker workspace keeps its 1 GiB reserve and its `RESOURCE_LIMIT` answer, unchanged.
+worker workspace keeps its 1 GiB reserve and its `RESOURCE_LIMIT` answer, unchanged, and its order too: the reserve is
+checked first, as in 0.1.0, so a source over the limit that is also larger than the workspace's free space less the
+reserve is `RESOURCE_LIMIT` there.
 A session id that names no published session (never opened, still being opened by another
 command, interrupted while it opened, closed and cleaned, or whose folder is gone) **keeps the code the
 lookup always gave**: `STORAGE_IO` for an id with no session folder and no lock files,
@@ -1038,8 +1046,8 @@ by the retention, and `session clean --expired` removes it once expired, as for 
 session. Before a source is copied into a workspace on Unix, the filesystem must have
 the source's size and a 1 GiB reserve free, else `RESOURCE_LIMIT`; Windows does not
 check (L-061). A desktop root (the CLI's default) keeps a 16 MiB margin instead of the
-reserve and answers `STORAGE_IO` with its own remediation (see "A source that does not fit
-the session root's filesystem" under `ingest`).
+reserve and answers `STORAGE_IO` with its own remediation (see "A source within the size limit
+that does not fit the session root's filesystem" under `ingest`).
 
 **Weighted admission (X-07, ADR 0021 section 5a).** Every root (4 units for a desktop
 root) limits the work it runs at once by weight: a visual-candidate window's `FFmpeg`

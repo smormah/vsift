@@ -64,6 +64,23 @@ candidate with the change below.
   seconds is the explanation that fits and a defect is not shown. The race tests now wait 60 s (the product's own bound keeps its
   unit tests). **What is not shown:** the cause of the one event; **L-135** is narrowed to it (its reader half, #314, is the fix
   above).
+- **`vsift ingest` of a source over the 20 GiB limit answers `INVALID_SOURCE` again, whatever the free space** (P14, #310;
+  found by the P14 malicious-media campaign on the published `0.2.0-rc.1`: a sparse 30 GiB file answered `STORAGE_IO` in 0.1 s
+  where 0.1.0 said `INVALID_SOURCE`). The cause was the room check added for #266, which ran before the source-size limit,
+  so a source that was both over the limit and larger than the free space got the "no room" answer. That changed a published
+  failure code, which is not additive within v1 (known limits [L-126](docs/planning/known-limits.md#l-126) and
+  [L-127](docs/planning/known-limits.md#l-127)); the maintainer had accepted it for the first candidate, and it is fixed for
+  the second. Now, for a desktop root, a source over the limit is not asked for room, so the limit answers first: `INVALID_SOURCE`
+  (exit 3), at once, nothing copied, 0.1.0's answer. **Everything else is unchanged:** a source within the limit that does not fit
+  the root is still refused before the copy as `STORAGE_IO` with the remediation of #266 (L-127), a worker workspace still checks
+  its 1 GiB reserve first and answers `RESOURCE_LIMIT`, and no field, code or schema changes. L-127 and L-126 no longer carry a
+  known deviation, and [L-134](docs/planning/known-limits.md#l-134) is narrowed to what remains of #310: the campaign's no-room case
+  names the tmpfs mount point as the session root, so it never reaches the check (a defect of the case, tracked under #266). Tests:
+  the engine's room decision with the free space injected (a source over the limit is not asked, however little there is; one within
+  the limit up to and including it is; any other failure of the check stays a storage failure), the mapping of the size limit to
+  `INVALID_SOURCE`, and, on Unix, the binary: a sparse 4 TiB source answers `INVALID_SOURCE` with exit 3 and copies nothing (it
+  answered `STORAGE_IO` before this change), and a source a little larger than the free space of a small filesystem still answers the
+  no-room `STORAGE_IO`.
 
 ## [0.2.0-rc.1] - 2026-10-05
 

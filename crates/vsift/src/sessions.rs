@@ -17,7 +17,7 @@ use vsift_domain::{
 use vsift_infrastructure::{
     BundleSourcePolicy, BundleStatus, CleanOutcome, ContainedFile, ContainedSourceStore,
     FfprobeSourceDuration, FilesystemAdmissionPermit, FilesystemSessionStore, FreeSpaceCheck,
-    SessionIndexPage, SessionRootProvisioning, SessionStatus, SourceSnapshot,
+    MAX_SOURCE_BYTES, SessionIndexPage, SessionRootProvisioning, SessionStatus, SourceSnapshot,
 };
 
 use crate::{
@@ -942,20 +942,14 @@ where
 /// A desktop root, the CLI path, keeps only a small margin for the session's
 /// own records and refuses with [`OpenSessionError::SourceNoRoom`], which has
 /// its own remediation and the CLI path's published code, `STORAGE_IO` (known
-/// limit L-127). The desktop check is best effort (known limit L-061).
+/// limit L-127). The desktop check is best effort (known limit L-061), and it
+/// comes after the source-size limit ([`ensure_room_for_desktop_copy`]).
 fn free_space_reserve(
     store: &FilesystemSessionStore,
     incoming: u64,
 ) -> Result<FreeSpaceReserveCheck, EngineError> {
     if store.workspace_policy().is_none() {
-        store
-            .ensure_room_for_copy(incoming)
-            .map_err(|error| match error {
-                SessionStorageError::CapacityExhausted => {
-                    EngineError::OpenSession(OpenSessionError::SourceNoRoom)
-                }
-                other => EngineError::Storage(other),
-            })?;
+        ensure_room_for_desktop_copy(incoming, |bytes| store.ensure_room_for_copy(bytes))?;
         return Ok(FreeSpaceReserveCheck::NotEnforced);
     }
     Ok(match store.ensure_free_space(incoming)? {
@@ -963,6 +957,41 @@ fn free_space_reserve(
         FreeSpaceCheck::NotEnforced => FreeSpaceReserveCheck::NotEnforced,
     })
 }
+
+/// A desktop root's room check for a source of `incoming` bytes, **after** the
+/// source-size limit: a source over [`MAX_SOURCE_BYTES`] is never copied (staging
+/// refuses it before it writes anything, as `INVALID_SOURCE`), so it needs no
+/// room and is not asked for any.
+///
+/// Why this order matters (#310): `INVALID_SOURCE` is what 0.1.0 answered for
+/// such a source, whatever the disk. The room check added for #266 ran first
+/// and answered `STORAGE_IO` when the source was also larger than the free
+/// space, which changed a published failure code (not additive within v1, known
+/// limits L-126 and L-127). Stepping aside here, rather than checking the limit
+/// a second time, keeps the limit in one place (staging) and its answer exactly
+/// what it was. A source within the limit that does not fit keeps the #266
+/// answer. A worker workspace is not affected: its reserve was checked first
+/// in 0.1.0 and its answer is unchanged ([`free_space_reserve`]).
+///
+/// `ensure_room` is the store's check, passed in so that the order is tested
+/// with any amount of free space on every platform.
+fn ensure_room_for_desktop_copy(
+    incoming: u64,
+    ensure_room: impl FnOnce(u64) -> Result<FreeSpaceCheck, SessionStorageError>,
+) -> Result<(), EngineError> {
+    if incoming > MAX_SOURCE_BYTES {
+        return Ok(());
+    }
+    ensure_room(incoming)
+        .map(|_checked| ())
+        .map_err(|error| match error {
+            SessionStorageError::CapacityExhausted => {
+                EngineError::OpenSession(OpenSessionError::SourceNoRoom)
+            }
+            other => EngineError::Storage(other),
+        })
+}
+
 /// The durability a new session publishes with: at least what the caller
 /// requires, and in a worker workspace exactly the workspace's policy, which
 /// the caller cannot lower (ADR 0020 D-3, ADR 0021 section 3).
@@ -1009,11 +1038,88 @@ fn first_occupied_page(
 mod tests {
     use std::{cell::Cell, time::Duration};
 
-    use vsift_application::SessionStorageError;
+    use vsift_application::{OpenSessionError, SessionStorageError};
+    use vsift_infrastructure::{FreeSpaceCheck, MAX_SOURCE_BYTES};
 
-    use super::retry_while_transient;
+    use super::{ensure_room_for_desktop_copy, retry_while_transient};
+    use crate::error::EngineError;
 
     const LONG: Duration = Duration::from_secs(30);
+    const TIB: u64 = 1024 * 1024 * 1024 * 1024;
+
+    /// #310: a source over the size limit is never copied, so it is not asked
+    /// for room, however little there is: staging then refuses it with the
+    /// limit's answer, `INVALID_SOURCE`, which is what 0.1.0 gave whatever the
+    /// disk. Checking the room first answered `STORAGE_IO` whenever the source
+    /// was also larger than the free space. The check is a closure that always
+    /// says "no room", so the result does not depend on this machine's disk.
+    #[test]
+    fn a_source_over_the_size_limit_is_not_asked_for_room() {
+        for incoming in [MAX_SOURCE_BYTES + 1, 4 * TIB, u64::MAX] {
+            let asked = Cell::new(0_u32);
+
+            let outcome = ensure_room_for_desktop_copy(incoming, |_| {
+                asked.set(asked.get() + 1);
+                Err(SessionStorageError::CapacityExhausted)
+            });
+
+            assert_eq!(outcome, Ok(()), "{incoming} bytes");
+            assert_eq!(asked.get(), 0, "{incoming} bytes: the room was asked for");
+        }
+    }
+
+    /// #266, unchanged: a source the limit accepts, up to and including the
+    /// limit itself, that does not fit the root is refused before the copy as
+    /// "no room" (`STORAGE_IO` with its own remediation).
+    #[test]
+    fn a_source_within_the_size_limit_that_does_not_fit_is_refused_as_no_room() {
+        for incoming in [1, MAX_SOURCE_BYTES / 2, MAX_SOURCE_BYTES] {
+            let asked = Cell::new(None);
+
+            let outcome = ensure_room_for_desktop_copy(incoming, |bytes| {
+                asked.set(Some(bytes));
+                Err(SessionStorageError::CapacityExhausted)
+            });
+
+            assert_eq!(
+                outcome,
+                Err(EngineError::OpenSession(OpenSessionError::SourceNoRoom)),
+                "{incoming} bytes"
+            );
+            assert_eq!(asked.get(), Some(incoming), "{incoming} bytes");
+        }
+    }
+
+    /// A source that fits is let through, and so is one whose room could not be
+    /// measured (the check is best effort, known limit L-061): the copy's own
+    /// write failure stays the backstop.
+    #[test]
+    fn a_source_that_fits_or_cannot_be_measured_is_let_through() {
+        for checked in [FreeSpaceCheck::Enforced, FreeSpaceCheck::NotEnforced] {
+            assert_eq!(
+                ensure_room_for_desktop_copy(MAX_SOURCE_BYTES, |_| Ok(checked)),
+                Ok(()),
+                "{checked:?}"
+            );
+        }
+    }
+
+    /// Only "no room" is a source that does not fit; any other failure of the
+    /// check is the storage failure it was.
+    #[test]
+    fn a_failed_check_other_than_no_room_stays_a_storage_failure() {
+        for failure in [
+            SessionStorageError::Io,
+            SessionStorageError::IntegrityFailure,
+            SessionStorageError::Busy,
+        ] {
+            assert_eq!(
+                ensure_room_for_desktop_copy(1, |_| Err(failure)),
+                Err(EngineError::Storage(failure)),
+                "{failure:?}"
+            );
+        }
+    }
 
     /// The busy path: a removal that meets a busy root is tried again and
     /// succeeds when the root frees up.
