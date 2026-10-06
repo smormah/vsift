@@ -1,6 +1,6 @@
 # Known limits register
 
-Date: 2026-10-05 (P14 PR 11a, the candidate's hosted evidence: L-134 added (a corner case of the room check, accepted, and a malicious-media case that does not reach it), L-135 added (two rare Windows failures of the stress run, open), L-122 and L-134 reviews recorded as the maintainer's decisions of the day, L-127 and L-126 say plainly that one answer deviated from the published-codes rule, L-128 and L-111 updated for the candidate's runs, L-133's early-sentence window closed; P14 PR 10b, the release candidate's cut: L-133 added (the claims window of the candidate rung), L-107 and L-108 updated for the settled allowed lists and the by-hand backstop, L-132 for the re-pin plan; P14 PR 10a, the skill's wording before the candidate's freeze: L-109 and L-127 updated; 2026-10-04: P14 PR 9c, the maintainer's decisions on the macOS wording and RQ-05's rule: L-113 and L-114 updated; P14, a journeys stage that asserts a later fix is skipped below the first version that has it and never above it: L-115 updated; P14 PR 9a, the claims check reads the text of the README's graphics: L-121 narrowed to the roadmap's rung; L-004, L-035 and L-038 brought up to date, L-114 names the macOS wording; P14 PR 7, a failed open removes its own registration and a session that never published says so: L-131 added, L-127 gains its third case; P14 PR 7, the cold grader's three classifications: L-118 updated; P14 PR 7, a short range's cut final segment: L-130 added and L-124 closed and deleted; P14 PR 7, a source that does not fit the root is refused before the copy and the code stays `STORAGE_IO`: L-127 gains its second case, L-061 updated; P14 PR 7, a link as the source keeps its published code and gains a remediation: L-127 rewritten as one entry for the CLI answers whose code only loosely describes the case; P14 PR 7, the dedupe window is stated as it is: L-063 updated; P14 PR 7, the flaky kill test: a provider a killed host leaves suspended, L-129 added and L-055 narrowed; P14 PR 7, session-root creation on Windows is repaired by a DACL read-back and narrowed (#206): L-123 closed and deleted, L-005 updated; P14 PR 7, the admission test no longer fails on its own bound: L-060 states the missing bound and L-123 narrows to #206; P14 PR 7, a named pipe with no writer is refused at once: L-127 narrowed; P14 PR 7b: the FFmpeg finding re-read with a test that sees release-branch cherry-picks, L-122 narrowed from 35 records to one tie by elimination and L-132 added (L-129 to L-131 are P14 PR 7's); 2026-10-03: P14 PR 4: the robustness campaigns, L-122, L-123, L-124, L-127 and L-128 added (L-121, L-125 and L-126 were taken meanwhile by other pull requests); P14 PR 7, a missing shared library is named: L-110 closed; P14 PR 7: a session root VSift did not create now explains itself, L-126 added; P14 PR 7, the realistic cold-agent settings: L-125 added, L-118 re-read; P14 PR 5: L-068 rescheduled to R1 and L-004 re-read, by the maintainer's decision E option 4; 2026-10-02: P14 PR 3, the journeys on the published binary: L-113 to L-116 added, L-035, L-042 and L-099 updated; the README's graphics: L-121 added; P14 PR 6: the trial harness's clean-install and cold-agent modes, hold-outs and usage capture, L-117 to L-120 added; the README front page: L-102 closed, the v0.1.0 release page edited; P14 PR 2: the published-artifact qualification, L-109 to L-112 added; P14 PR 1: the evidence ledger, the claims registry and their checks, L-101 to L-103 added; P14 PR 8, the stable path and `latest`: L-105, L-107 and L-108 added, L-102 narrowed to the published v0.1.0 page, L-103 updated for the delta record, L-097 updated; P14 plan, PR 0: L-042 re-read, the checkpoints' source-built binary noted, L-098 updated with Smart App Control read Off on the maintainer's machine; 2026-10-01: P13 PR 12: the 0.1.0 pre-release was published, so L-036 and L-096 are closed and deleted, L-037 and L-043 re-read at the packet's close, L-097 and L-098 updated, L-100 added; P13 PR 11: documentation and the qualification record, L-098 and L-099 added, L-035, L-036, L-037, L-042 and L-096 updated for the passing power-loss run and the closing sweep; P13 PR 7 follow-up: the power-loss campaign's first run and its verifier fix, L-037 updated; P13 PR 10: attestation and publish wiring, L-036 updated, L-096 and L-097 added; 2026-09-30: P13 PR 7: kill tests of the managed store, directory flushes and its power-loss campaign, L-037 narrowed; the compact re-run #222 met its target: L-085 closed, L-095 added for the review tier's A-09 blurred re-run (#224), L-007 updated; P13 PR 9: npm packages and their qualification, L-091 to L-093 added and L-036 updated; P13 PR 6: managed lifecycle, L-037 narrowed and L-087 measured, L-090 added; P13 PR 4: managed installation; P13 PR 8: release archives, L-089 added and L-036 updated; P00-P13 complete; P12 closed on its final trial round with the compact tier below target, L-085; SEC-T01's adversarial evidence deferred as technical debt, L-068; P13 PR 2b closed L-073 and rewrote L-016 and L-017).
+Date: 2026-10-06 (P14, #314 and #312: L-135 narrowed to the root-creation wait (#312), its reader half being fixed; L-136 added (a Windows sharing or lock violation answers `INTEGRITY_FAILURE` at once); 2026-10-05: P14 PR 11a, the candidate's hosted evidence: L-134 added (a corner case of the room check, accepted, and a malicious-media case that does not reach it), L-135 added (two rare Windows failures of the stress run, open), L-122 and L-134 reviews recorded as the maintainer's decisions of the day, L-127 and L-126 say plainly that one answer deviated from the published-codes rule, L-128 and L-111 updated for the candidate's runs, L-133's early-sentence window closed; P14 PR 10b, the release candidate's cut: L-133 added (the claims window of the candidate rung), L-107 and L-108 updated for the settled allowed lists and the by-hand backstop, L-132 for the re-pin plan; P14 PR 10a, the skill's wording before the candidate's freeze: L-109 and L-127 updated; 2026-10-04: P14 PR 9c, the maintainer's decisions on the macOS wording and RQ-05's rule: L-113 and L-114 updated; P14, a journeys stage that asserts a later fix is skipped below the first version that has it and never above it: L-115 updated; P14 PR 9a, the claims check reads the text of the README's graphics: L-121 narrowed to the roadmap's rung; L-004, L-035 and L-038 brought up to date, L-114 names the macOS wording; P14 PR 7, a failed open removes its own registration and a session that never published says so: L-131 added, L-127 gains its third case; P14 PR 7, the cold grader's three classifications: L-118 updated; P14 PR 7, a short range's cut final segment: L-130 added and L-124 closed and deleted; P14 PR 7, a source that does not fit the root is refused before the copy and the code stays `STORAGE_IO`: L-127 gains its second case, L-061 updated; P14 PR 7, a link as the source keeps its published code and gains a remediation: L-127 rewritten as one entry for the CLI answers whose code only loosely describes the case; P14 PR 7, the dedupe window is stated as it is: L-063 updated; P14 PR 7, the flaky kill test: a provider a killed host leaves suspended, L-129 added and L-055 narrowed; P14 PR 7, session-root creation on Windows is repaired by a DACL read-back and narrowed (#206): L-123 closed and deleted, L-005 updated; P14 PR 7, the admission test no longer fails on its own bound: L-060 states the missing bound and L-123 narrows to #206; P14 PR 7, a named pipe with no writer is refused at once: L-127 narrowed; P14 PR 7b: the FFmpeg finding re-read with a test that sees release-branch cherry-picks, L-122 narrowed from 35 records to one tie by elimination and L-132 added (L-129 to L-131 are P14 PR 7's); 2026-10-03: P14 PR 4: the robustness campaigns, L-122, L-123, L-124, L-127 and L-128 added (L-121, L-125 and L-126 were taken meanwhile by other pull requests); P14 PR 7, a missing shared library is named: L-110 closed; P14 PR 7: a session root VSift did not create now explains itself, L-126 added; P14 PR 7, the realistic cold-agent settings: L-125 added, L-118 re-read; P14 PR 5: L-068 rescheduled to R1 and L-004 re-read, by the maintainer's decision E option 4; 2026-10-02: P14 PR 3, the journeys on the published binary: L-113 to L-116 added, L-035, L-042 and L-099 updated; the README's graphics: L-121 added; P14 PR 6: the trial harness's clean-install and cold-agent modes, hold-outs and usage capture, L-117 to L-120 added; the README front page: L-102 closed, the v0.1.0 release page edited; P14 PR 2: the published-artifact qualification, L-109 to L-112 added; P14 PR 1: the evidence ledger, the claims registry and their checks, L-101 to L-103 added; P14 PR 8, the stable path and `latest`: L-105, L-107 and L-108 added, L-102 narrowed to the published v0.1.0 page, L-103 updated for the delta record, L-097 updated; P14 plan, PR 0: L-042 re-read, the checkpoints' source-built binary noted, L-098 updated with Smart App Control read Off on the maintainer's machine; 2026-10-01: P13 PR 12: the 0.1.0 pre-release was published, so L-036 and L-096 are closed and deleted, L-037 and L-043 re-read at the packet's close, L-097 and L-098 updated, L-100 added; P13 PR 11: documentation and the qualification record, L-098 and L-099 added, L-035, L-036, L-037, L-042 and L-096 updated for the passing power-loss run and the closing sweep; P13 PR 7 follow-up: the power-loss campaign's first run and its verifier fix, L-037 updated; P13 PR 10: attestation and publish wiring, L-036 updated, L-096 and L-097 added; 2026-09-30: P13 PR 7: kill tests of the managed store, directory flushes and its power-loss campaign, L-037 narrowed; the compact re-run #222 met its target: L-085 closed, L-095 added for the review tier's A-09 blurred re-run (#224), L-007 updated; P13 PR 9: npm packages and their qualification, L-091 to L-093 added and L-036 updated; P13 PR 6: managed lifecycle, L-037 narrowed and L-087 measured, L-090 added; P13 PR 4: managed installation; P13 PR 8: release archives, L-089 added and L-036 updated; P00-P13 complete; P12 closed on its final trial round with the compact tier below target, L-085; SEC-T01's adversarial evidence deferred as technical debt, L-068; P13 PR 2b closed L-073 and rewrote L-016 and L-017).
 Status: current-state register. Every entry below is **pending maintainer review**.
 
 ## Purpose and how to use it
@@ -166,9 +166,10 @@ Each entry has these fields:
 | [L-132](#l-132) | The reviewed FFmpeg can only follow a month-end build of its publisher, and a new pin does not move existing installs; the refresh candidate of 2026-10-03 is a daily build, needs two reviewed bounds raised and adds three libraries to the recipe | security | medium | P14 | [#272](https://github.com/smormah/vsift/issues/272) | open |
 | [L-133](#l-133) | The claims check reads an evidence item's status, not the version it is for, so the candidate rung's statements are in use on 0.1.0's evidence; and the README and `roadmap.svg` keep the candidate wording until the ledger follow-up | process/CI | low | P14 (PR 13) | [#17](https://github.com/smormah/vsift/issues/17) | deferred |
 | [L-134](#l-134) | A source that is both over the 20 GiB limit and larger than the free space answers `STORAGE_IO` on the candidate (0.1.0: `INVALID_SOURCE`), and the malicious-media campaign's no-room case never reaches the room check, so #266's check is shown only by its CLI test | contract/UX | low | P14 | [#310](https://github.com/smormah/vsift/issues/310) | accepted residual |
-| [L-135](#l-135) | Two rare Windows failures showed in the candidate's stress run and their causes are not known: a concurrent root creation under CPU load gave up waiting for its peer (#312), and a reader was answered `IntegrityFailure` once in 140,721 reads while another thread published generations (#314) | integrity/durability | medium | P14 | [#312](https://github.com/smormah/vsift/issues/312), [#314](https://github.com/smormah/vsift/issues/314) | open |
+| [L-135](#l-135) | A concurrent root creation under CPU load gave up waiting for its peer once in 1,500 repetitions on Windows, and its cause is not shown: the wait for a creator is five seconds of wall-clock time | performance | low | P14 | [#312](https://github.com/smormah/vsift/issues/312) | open |
+| [L-136](#l-136) | On Windows, a file another process holds without read sharing is answered `INTEGRITY_FAILURE` at once, not waited for; not observed in any campaign | integrity/durability | low | unscheduled | [#314](https://github.com/smormah/vsift/issues/314) | open |
 
-Counts: 1 high, 34 medium, 83 low (118 entries).
+Counts: 1 high, 33 medium, 85 low (119 entries).
 
 ## Security
 
@@ -3646,32 +3647,82 @@ that week.**
 
 ### L-135
 
-**Two rare Windows failures showed in the candidate's stress run and their causes are not known: a concurrent root creation under CPU load gave up waiting for its peer, and a reader was answered `IntegrityFailure` once in 140,721 reads while another thread published generations.**
+**A concurrent root creation under CPU load gave up waiting for its peer once in 1,500 repetitions on Windows, and its cause is not shown: the wait for a creator is five seconds of wall-clock time.**
 
-- **What:** `P14 stress` run 37330746176 on the candidate (Windows Server 2025, 4 CPUs) had one failed repetition
-  in each of two jobs, both opened as issues before anything was repeated. (1)
-  [#312](https://github.com/smormah/vsift/issues/312): `concurrent_processes_create_one_root_and_every_one_adopts_it`
-  failed once in 1,500 repetitions with every CPU busy (8 burner processes), with `session root is still being
-  created by another process`, the refusal of a creator that did not finish inside the documented wait ([L-126](#l-126));
-  it is not #206's permissions message, which did not reproduce (0 of 1,500 plain, 7 on 0.1.0). The creator may
-  have been starved by the burners, or the wait and the creation protocol may have a gap on Windows under load.
-  (2) [#314](https://github.com/smormah/vsift/issues/314):
-  `filesystem_session_store::p10_tests::readers_never_report_damage_while_generations_are_published` failed once in 200
-  repetitions of the lock suite (`1 of 140721 reads failed`, `[IntegrityFailure]`): a reader was told stored data is
-  damaged while another thread published generations. Neither failed on Ubuntu or macOS in the same run, and the
-  second did not fail in 200 repetitions on Windows with 0.1.0.
-- **Evidence:** the run's artifacts `p14-stress-roots-loaded-windows-2025` and `p14-stress-locks-windows-2025`;
-  [`p14-qualification.md`](p14-qualification.md) section 24.2; the two issues.
-- **Impact:** (1) low: a command is refused and can be retried; nothing is stored wrongly. (2) medium until the cause is
-  known: if it is the product, a reader on Windows can be given the answer that says data is damaged when it is not
-  (the next read succeeds), which a caller that treats `INTEGRITY_FAILURE` as damage would act on; if it is the test's
-  timing on a loaded runner it is a flake. On Windows every session is ephemeral (the durable profile is Ubuntu only).
-- **Why:** unknown. #314 is the one that matters: it is the invariant that test exists to hold.
-- **Mitigation:** none yet. The issues are under investigation; nothing was rerun by the campaign.
-- **Next step:** the investigation's finding decides: a fix means a second candidate (`0.2.0-rc.2`) and the repeats a
-  candidate needs; otherwise the maintainer accepts the residual and records it.
-- **Owner:** P14. **Issue:** [#312](https://github.com/smormah/vsift/issues/312),
-  [#314](https://github.com/smormah/vsift/issues/314). **Status:** open. **Review:** pending.
+- **What:** commands that race to create the very first session root elect one creator, and the others
+  wait for it up to five seconds (`PROVISIONING_WAIT`) and then refuse with `BUSY` ("session root is
+  still being created by another process"; the contract says five seconds,
+  [L-126](#l-126)). The creator normally finishes in tens of milliseconds (eight processes racing took
+  71 ms in all on an idle machine). `P14 stress` run 37330746176 on the candidate (Windows Server 2025,
+  4 CPUs): `concurrent_processes_create_one_root_and_every_one_adopts_it` failed once in 1,500
+  repetitions with every CPU busy (8 burner processes, [#312](https://github.com/smormah/vsift/issues/312));
+  the test took 6.4 s, the bound plus the start of the children, so a child gave up while the creator
+  still held its lock. It is not #206's permissions message (0 of 1,500 plain, 7 on 0.1.0).
+  **Cause: not shown for that one event.** It was not reproduced in 3,200 further repetitions of the same
+  race on a hosted runner (1,000 at two and 1,000 at four busy processes per CPU with the product's bound,
+  1,000 at four and 100 at eight with the children waiting 60 s, 100 at eight with the bound): none failed
+  and none hung, and the slowest child took 1.4 s. So it is not a deadlock or a creator that never
+  finishes; a creator that was not scheduled for five seconds fits it, and the same runners left a thread
+  without a CPU for 4.4 s and 4.6 s, inside one open of a file, in repetitions of another test under the
+  same load (the diagnostics of [#314](https://github.com/smormah/vsift/issues/314)). The waiting command
+  also decides at the five-second mark from a look it took a moment before: a stall of the waiter itself
+  at that instant could end the wait although the creator had just finished. That is not shown to have
+  happened.
+  The other half of this entry, [#314](https://github.com/smormah/vsift/issues/314) (a reader answered
+  `IntegrityFailure` once in 140,721 reads), was shown to be a product defect in the reader's retry
+  budget and is fixed, with regression tests, in the change that narrowed this entry (the release
+  candidate `0.2.0-rc.2`); this entry no longer covers it.
+- **Evidence:** the run's artifact `p14-stress-roots-loaded-windows-2025`;
+  [`p14-qualification.md`](p14-qualification.md) section 24.2; the timed repetitions above (hosted
+  `windows-2025`; the race alone, not beside the file's other four tests); the bound's own unit test
+  (`an_opener_reports_busy_when_the_creator_outlasts_the_bound`); `cli-v1.md` (global options); the issue.
+- **Impact:** low: a command that is first to use the machine, at the very moment another one is, can be
+  refused `BUSY` on a machine that cannot give the creator a CPU for five seconds; retrying succeeds and
+  nothing is stored wrongly.
+- **Why:** the bound is fixed so that a creator that hangs, or is suspended, does not hold a command for
+  long; a creator that dies releases its lock at once and is not waited for.
+- **Mitigation:** `BUSY` is retryable and says so; the two race tests wait 60 s instead of five, so a
+  documented refusal under artificial load is not counted as a failure of the test (the product's own
+  bound is tested with small waits); run the first command of a machine alone.
+- **Next step:** if a refusal is reported from a real machine, raise the bound or end the wait when no
+  process holds the creator's lock, and look again once more before refusing (a contract change:
+  `cli-v1.md` says five seconds); otherwise the maintainer accepts the residual and records it.
+- **Owner:** P14. **Issue:** [#312](https://github.com/smormah/vsift/issues/312). **Status:** open.
+  **Review:** pending.
+
+### L-136
+
+**On Windows, a file another process holds without read sharing is answered `INTEGRITY_FAILURE` at once, not waited for.**
+
+- **What:** Windows refuses an open or a read of a file that another handle holds in a way that excludes
+  it with `ERROR_SHARING_VIOLATION` or `ERROR_LOCK_VIOLATION` (os errors 32 and 33), which the standard
+  library reports as `Uncategorized`. Every read of committed state takes an error it does not know for an
+  unexpected entry: the commit pointer, the chain checkpoint, the generation manifests, the artifacts and
+  the job record (`open_record` in `jobs.rs`, which turns every error but a missing file into
+  `INTEGRITY_FAILURE`) answer `INTEGRITY_FAILURE` at once, with no retry, for a healthy session. Shown
+  with a file held without read sharing on Windows 11: the pointer, the checkpoint and a manifest each
+  answered `INTEGRITY_FAILURE` in under two milliseconds. The retry for a file being replaced
+  ([ADR 0020](../decisions/0020-recoverable-jobs-and-durable-publication.md), the note of #314) covers a
+  missing file and, on Windows, access denied; it does not cover these two. A registration marker is not
+  affected: a scan treats a marker another process holds as not listed (#293).
+  **Not observed in any campaign.** The one hosted failure of #314 was a stalled attempt, not this (about
+  680,000 opens during continuous renames showed only the missing-file case), and no failure of the
+  stress, load or soak runs has been traced to it.
+- **Evidence:** [#314](https://github.com/smormah/vsift/issues/314) and its analysis; the held-file probe
+  above (a probe, not kept as a test: it would pin the answer that a later release is meant to change).
+- **Impact:** low: a command that reads a session on Windows at the moment a scanner, an indexer, a backup
+  tool or a remover holds one of its files that way is told the stored data is damaged; the next read
+  succeeds and nothing stored is damaged. A caller that treats `INTEGRITY_FAILURE` as damage would act on
+  it.
+- **Why:** the published failure codes do not change within v1 ([L-126](#l-126), [L-127](#l-127)), and
+  `STORAGE_IO`, which describes the case better, would be a change of the code a published answer has; the
+  case was seen only with a file held on purpose.
+- **Mitigation:** none in the product; a caller that sees `INTEGRITY_FAILURE` once on Windows can read
+  again before it believes it.
+- **Next step:** a later release retries these two errors within the existing budget for the replaced files
+  and the job record, and then reports with the same code.
+- **Owner:** unscheduled. **Issue:** [#314](https://github.com/smormah/vsift/issues/314). **Status:** open.
+  **Review:** pending.
 
 ## Review workflow
 
