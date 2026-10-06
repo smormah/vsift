@@ -556,7 +556,7 @@ Run either on its own while you edit it, and the completeness check when a relea
 ```console
 cargo run --locked -p vsift-governance -- release-evidence
 cargo run --locked -p vsift-governance -- public-claims
-cargo run --locked -p vsift-governance -- release-evidence --complete-for 0.2.0-rc.1 --commit <40 hex digits>
+cargo run --locked -p vsift-governance -- release-evidence --complete-for 0.2.0-rc.2 --commit <40 hex digits>
 ```
 
 - **The ledger's shape** (schema version 1; the Rust types in
@@ -631,7 +631,7 @@ node tools/guide/check-examples.cjs --binary target/debug/vsift
   `<candidate:3>` picks the third. A placeholder with no value yet fails the check rather than
   being guessed.
 - **A version bump re-checks the guide.** The guide names a release (`0.2.0`), not a
-  candidate: `0.2.0-rc.1` and `0.2.0` are the same release to these tools, so the stable commit
+  candidate: `0.2.0-rc.1`, `0.2.0-rc.2` and `0.2.0` are the same release to these tools, so the stable commit
   needs no guide change, which matters because it may differ from its accepted candidate only in
   version-string files, shipped documents and the work record, and the generated reference pages,
   which name the release, are in none of them ([release process, 6.8](operations/release.md)).

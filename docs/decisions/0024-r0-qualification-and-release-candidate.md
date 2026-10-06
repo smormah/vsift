@@ -1492,3 +1492,52 @@ of what the campaigns can see, not a proof that nothing else is wrong: the fuzz 
 coverage, the stress failures are single repetitions whose causes are not known, and the waiver of RQ-10 rests on a reading of the code and
 a corrected case from another revision of the tool. A pass of RQ-05 or RQ-18 is a statement about recorded evidence and the checks that
 read it, not about a person's machine (RQ-17) or an agent's behaviour (RQ-15, RQ-16).
+
+## Implementation note, 2026-10-06 (P14 PR 10, repeated: the second release candidate `0.2.0-rc.2`)
+
+PR 10 is done a second time. The hosted campaigns of PR 11a on `0.2.0-rc.1` (published 2026-10-05) found two defects in the program, and
+the maintainer decided on 2026-10-06 to cut a second candidate instead of accepting them: **`0.2.0-rc.2` is `0.2.0-rc.1` plus exactly two
+fixes and the version bump** (plan section 25 has the table). The two fixes are on `main`: a Windows reader that overlaps a writer's
+rename was answered `INTEGRITY_FAILURE` once in 140,721 reads, because the retry budget was counted from before its first attempt (#314,
+fixed by #318, with a dated note in ADR 0020); and a source over the size limit that was also larger than the free space answered
+`STORAGE_IO` where 0.1.0 said `INVALID_SOURCE`, a changed published failure code (#310, fixed by #319). **Nothing is tagged or published
+and no setting changed.** PR 10 is complete again only when the maintainer has published `0.2.0-rc.2` and verified it, by
+[`release.md`](../operations/release.md) section 6.11. The 2026-10-05 notes above are left as they were; where they say "`0.2.0-rc.1`
+stays" (the note of PR 11a, decision 1: RQ-10 waived), that was the decision for the first candidate, and this note supersedes it for the
+second without rewriting it.
+
+**Decisions taken inside this ADR, for the maintainer to confirm or overrule.**
+
+1. **No tool changed.** The candidate-to-stable check already takes the highest `v<X.Y.Z>-rc.<N>` tag, so the stable release is compared
+   with `v0.2.0-rc.2` and not with the first candidate (`the_highest_candidate_is_the_accepted_one` builds two candidates one fix apart);
+   the allowed lists are not widened. The release seam (`vsift-release`, `release.yml`, the lint) is untouched, so no lint rule or
+   mutation test applies, and `publish-steps.sh` still passes. What changed is the by-hand backstop in `release.md` 6.7 and L-107, which
+   now names `v0.2.0-rc.2` (a diff against the first candidate would show its two fixes).
+2. **The rung stays `candidate`, and the README and the installation guide name the second candidate.** CL-101 and CL-102 need RQ-19, which
+   the ledger holds `passed` for the first candidate; L-133's window (a sentence about a candidate that is not on npm yet) reopens between
+   the merge and the publish, so the runbook says to merge only when the maintainer can tag and publish at once, and the installation
+   guide says that until then `@next` installs the first candidate.
+3. **The first candidate's batch-2 results moved to `docs/planning/p14-agent-trials/batch-2-rc.1/`.** The campaign script keeps one state
+   file per client in the batch's folder and refuses one recorded for another version, and the committed freeze is read from the same
+   folder, so leaving them in `batch-2/` would have blocked the repeat or forced a different folder and a different freeze path in a
+   test. `batch-1-strict-first-attempt/` is the precedent for a superseded set kept beside the current one. Their reading stays where it
+   was, with a note.
+4. **The freeze files were written again and bind the same digests.** The seven components (skill, grader, scenarios, cold scenarios,
+   hold-outs, settings, truth) are byte-identical to the first candidate's, so `freeze write` gave the same whole-freeze digest
+   (`1e89b5cc...`, pinned in `committed_freeze`) and only the `commit` field changed; it names the base commit the digests were taken at,
+   and a file cannot name its own commit. The test is unchanged. What it enforces is the digests, not the name.
+5. **Nothing in the ledger was relabelled.** The first candidate's entries stay as they are and the staleness rule judges them:
+   `release-evidence --complete-for 0.2.0-rc.2` fails on 17 of the 20 items: the thirteen `passed` items whose scope changed (RQ-01 to RQ-07,
+   RQ-09, RQ-11, RQ-12, RQ-13, RQ-18, RQ-19), RQ-08 (`failed`) and RQ-15 to RQ-17 (`planned`); it does not name RQ-10 and RQ-14 (`waived`). RQ-10's waiver (2026-10-05) does not expire by itself and was a decision about the first candidate's two
+   findings; the repeat runs the media campaign and the maintainer decides then whether it still stands. The list of what is re-run is
+   plan section 25.3.
+6. **The upgrade is tried from the first candidate too** (`P14 published artifacts` with `from_version=0.2.0-rc.1`): it is the upgrade a
+   person on `next` really does. The workflow accepts any published version as the baseline and has not been run that way.
+7. **Deprecating the first candidate is optional and comes after the runs that install it** (`release.md` 6.11 step 7). It is reversible
+   and needs the maintainer's npm login.
+
+**What is weaker than it sounds.** "Exactly two fixes" is a statement about paths, not about behaviour; the six crate files are the two
+changes and their tests, and the repeated campaigns are what test them. Every result of PR 11a is now evidence about the first candidate
+only, and repeating it costs the hosted minutes, the maintainer's allowance for the agent batches and the try-outs again; a third candidate
+would cost them a third time. The malicious-media campaign still has its own defect (L-134), because the campaign tools are not changed in
+this cut. #312 (a session-root creation that gave up waiting under load, L-135) is not fixed, so RQ-08 may fail again for that reason.

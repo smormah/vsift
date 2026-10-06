@@ -1,9 +1,9 @@
 # RQ-17 try-out sheet: Smart App Control and a clean Windows 11 machine
 
-Status: **prepared 2026-10-05 (P14 PR 11b); nothing on it has been done.** It is for the maintainer, on a second,
+Status: **prepared 2026-10-05 (P14 PR 11b) and moved to the second candidate on 2026-10-06 (P14 PR 10 repeated); nothing on it has been done.** It is for the maintainer, on a second,
 clean, wipeable Windows 11 machine (called **LOKI** below; the plan's unknowns table records it, 2026-10-02), with a
 person at the console: every installer needs one. It is evidence item **RQ-17** of the
-[evidence ledger](p14-evidence-ledger.json), against the published release candidate `0.2.0-rc.1`. The plan is
+[evidence ledger](p14-evidence-ledger.json), against the published release candidate `0.2.0-rc.2`. The plan is
 [`p14-qualification.md`](p14-qualification.md) sections 8, 10 and 14; the decisions are
 [ADR 0024](../decisions/0024-r0-qualification-and-release-candidate.md) decisions C and H.
 
@@ -20,7 +20,7 @@ real machine name in any observation.** Say "LOKI". Crop screenshots to the wind
   a default machine with no way through short of turning protection off**, you then choose, before the stable release,
   between a **documented limitation** (`install.md` section 4 already says Smart App Control may block it) and **signing**
   (certificate or signing service fees, key custody, a new secret in the release workflow, new lint rules, about a week).
-  Signing changes the release workflow, which is code, so it means a second candidate (`0.2.0-rc.2`) and the repeats that
+  Signing changes the release workflow, which is code, so it means another candidate (`0.2.0-rc.3`) and the repeats that
   come with one. The sheet only collects the facts; it decides nothing.
 - **What it cannot show.** Another machine's policy (AppLocker, App Control for Business, a corporate proxy), a Mac (no
   Mac is available, so the macOS Gatekeeper try-out ships as "untried", decision H and the plan), or that a user's recording
@@ -45,9 +45,9 @@ real machine name in any observation.** Say "LOKI". Crop screenshots to the wind
 
 | Item | Value |
 | --- | --- |
-| The release | `0.2.0-rc.1`, a pre-release: <https://github.com/smormah/vsift/releases/tag/v0.2.0-rc.1> |
-| What `vsift --version` must print | `vsift 0.2.0-rc.1 (d5792ce31db1)` |
-| The Windows archive | `vsift-0.2.0-rc.1-x86_64-pc-windows-msvc.tar.gz`, 3,957,058 bytes; its checksum is the line for it in the release's `SHA256SUMS` |
+| The release | `0.2.0-rc.2`, a pre-release: <https://github.com/smormah/vsift/releases/tag/v0.2.0-rc.2> |
+| What `vsift --version` must print | `vsift 0.2.0-rc.2 (<the first 12 digits of the tag's commit, as the release page shows it>)` |
+| The Windows archive | `vsift-0.2.0-rc.2-x86_64-pc-windows-msvc.tar.gz`; its size is on the release page, and its checksum is the line for it in the release's `SHA256SUMS` (neither is known before the publish; the first candidate's archive was 3,957,058 bytes) |
 | Node.js | version 22 or later; the hosted runs used 22.23.3 with npm 10.9.9 (from <https://nodejs.org>; check the installer against the checksums on that site if you wish) |
 | The npm command | `npm install --global vsift-cli@next` (always with `@next`: a plain `vsift-cli` is the empty `0.0.0` placeholder) |
 | Part 3 only: the tools | below, with sizes and SHA-256 |
@@ -112,7 +112,7 @@ This is the path most people take, and the one a clean machine tests: nothing of
    vsift --version
    ```
 
-   Expected: `vsift 0.2.0-rc.1 (d5792ce31db1)`.
+   Expected: `vsift 0.2.0-rc.2 (<the first 12 digits of the tag's commit>)`.
 
    **If PowerShell says that running scripts is disabled** (about `vsift.ps1`): that is Windows' default execution policy on a
    client, and it also affects `npm` itself, so it may have stopped you earlier. Copy the message exactly. Then, **only after
@@ -190,17 +190,17 @@ Use a **fresh folder** for each way, so one result cannot colour the next. Re-re
 2. Check the checksum, as `install.md` section 3 step 2 says; the two hashes must be equal, case aside:
 
    ```powershell
-   (Get-FileHash -Algorithm SHA256 .\vsift-0.2.0-rc.1-x86_64-pc-windows-msvc.tar.gz).Hash
+   (Get-FileHash -Algorithm SHA256 .\vsift-0.2.0-rc.2-x86_64-pc-windows-msvc.tar.gz).Hash
    Select-String 'x86_64-pc-windows-msvc' .\SHA256SUMS
    ```
 
 3. Look at the download mark, then extract with the **Windows** `tar` (not Git's):
 
    ```powershell
-   Get-Item .\vsift-0.2.0-rc.1-x86_64-pc-windows-msvc.tar.gz -Stream *
-   Get-Content .\vsift-0.2.0-rc.1-x86_64-pc-windows-msvc.tar.gz -Stream Zone.Identifier
-   C:\Windows\System32\tar.exe -xzf .\vsift-0.2.0-rc.1-x86_64-pc-windows-msvc.tar.gz
-   Get-Item .\vsift-0.2.0-rc.1-x86_64-pc-windows-msvc\vsift.exe -Stream *
+   Get-Item .\vsift-0.2.0-rc.2-x86_64-pc-windows-msvc.tar.gz -Stream *
+   Get-Content .\vsift-0.2.0-rc.2-x86_64-pc-windows-msvc.tar.gz -Stream Zone.Identifier
+   C:\Windows\System32\tar.exe -xzf .\vsift-0.2.0-rc.2-x86_64-pc-windows-msvc.tar.gz
+   Get-Item .\vsift-0.2.0-rc.2-x86_64-pc-windows-msvc\vsift.exe -Stream *
    ```
 
    Expected: the archive has a `Zone.Identifier` stream (`ZoneId=3`). **Whether the extracted `vsift.exe` has one depends on
@@ -208,10 +208,10 @@ Use a **fresh folder** for each way, so one result cannot colour the next. Re-re
 4. Run it, from PowerShell:
 
    ```powershell
-   .\vsift-0.2.0-rc.1-x86_64-pc-windows-msvc\vsift.exe --version
+   .\vsift-0.2.0-rc.2-x86_64-pc-windows-msvc\vsift.exe --version
    ```
 
-   Expected if nothing blocks it: `vsift 0.2.0-rc.1 (d5792ce31db1)`. **If a window appears** ("Windows protected your PC", or a
+   Expected if nothing blocks it: `vsift 0.2.0-rc.2 (<the first 12 digits of the tag's commit>)`. **If a window appears** ("Windows protected your PC", or a
    Smart App Control message): write the exact title and text, whether **More info** and **Run anyway** exist, and what
    happens when you use them; photograph or screenshot it. `install.md` section 4 says SmartScreen offers **More info**, then
    **Run anyway**, and that Smart App Control offers no way through; this is where that is seen for the first time.
@@ -220,10 +220,10 @@ Use a **fresh folder** for each way, so one result cannot colour the next. Re-re
 **2b. A command-line download** (no Internet mark is expected): in a new folder,
 
 ```powershell
-curl.exe -L -O https://github.com/smormah/vsift/releases/download/v0.2.0-rc.1/vsift-0.2.0-rc.1-x86_64-pc-windows-msvc.tar.gz
-Get-Item .\vsift-0.2.0-rc.1-x86_64-pc-windows-msvc.tar.gz -Stream *
-C:\Windows\System32\tar.exe -xzf .\vsift-0.2.0-rc.1-x86_64-pc-windows-msvc.tar.gz
-.\vsift-0.2.0-rc.1-x86_64-pc-windows-msvc\vsift.exe --version
+curl.exe -L -O https://github.com/smormah/vsift/releases/download/v0.2.0-rc.2/vsift-0.2.0-rc.2-x86_64-pc-windows-msvc.tar.gz
+Get-Item .\vsift-0.2.0-rc.2-x86_64-pc-windows-msvc.tar.gz -Stream *
+C:\Windows\System32\tar.exe -xzf .\vsift-0.2.0-rc.2-x86_64-pc-windows-msvc.tar.gz
+.\vsift-0.2.0-rc.2-x86_64-pc-windows-msvc\vsift.exe --version
 ```
 
 Check the checksum as in 2a step 2 (the file is the same). Write down whether the run differed from 2a. If it did not,

@@ -17,7 +17,7 @@ exclude = ["fuzz"]
 resolver = "3"
 
 [workspace.package]
-version = "0.2.0-rc.1"
+version = "0.2.0-rc.2"
 edition = "2024"
 rust-version = "1.98"
 authors = ["VSift contributors"]
@@ -54,11 +54,11 @@ sha2 = { version = "0.11", default-features = false }
 tar = { version = "=0.4.46", default-features = false }
 time = { version = "0.3", features = ["formatting"] }
 tokio = { version = "1.48", features = ["fs", "io-util", "macros", "process", "rt-multi-thread", "signal", "sync", "time"] }
-vsift = { version = "0.2.0-rc.1", path = "crates/vsift" }
-vsift-application = { version = "0.2.0-rc.1", path = "crates/vsift-application" }
-vsift-contract = { version = "0.2.0-rc.1", path = "crates/vsift-contract" }
-vsift-domain = { version = "0.2.0-rc.1", path = "crates/vsift-domain" }
-vsift-infrastructure = { version = "0.2.0-rc.1", path = "crates/vsift-infrastructure" }
+vsift = { version = "0.2.0-rc.2", path = "crates/vsift" }
+vsift-application = { version = "0.2.0-rc.2", path = "crates/vsift-application" }
+vsift-contract = { version = "0.2.0-rc.2", path = "crates/vsift-contract" }
+vsift-domain = { version = "0.2.0-rc.2", path = "crates/vsift-domain" }
+vsift-infrastructure = { version = "0.2.0-rc.2", path = "crates/vsift-infrastructure" }
 windows-acl = "=0.3.0"
 # The governance checker's workflow lint (P13 PR 8): parses .github/workflows/*.yml
 # into a tree, so flow mappings and anchors cannot hide a permission or an

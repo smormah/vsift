@@ -6,28 +6,58 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
-**Work record only (P14 PR 11b); nothing shipped changes.** Two documents for the maintainer's hands, prepared and not run: the
-RQ-17 try-out sheet for the second Windows 11 machine ([`docs/planning/rq-17-tryout-sheet.md`](docs/planning/rq-17-tryout-sheet.md):
-Smart App Control through npm and through the archive, a clean-machine install, the guide's first investigation) and the checklist
-for agent-trial batches 2 and 3 ([`docs/planning/p14-batch-2-3-checklist.md`](docs/planning/p14-batch-2-3-checklist.md)). No code, tool,
-workflow, schema or setting changed.
+## [0.2.0-rc.2] - 2026-10-06
 
-**Installation guide only (P14 PR 11c); nothing shipped changes.** [`docs/operations/install.md`](docs/operations/install.md) said
-the release candidate would be published later and that `@next` installed 0.1.0 until then. The candidate was published on
-2026-10-05, so the guide now says so, and its upgrade section says that the published 0.1.0 has been upgraded to the published
-0.2.0-rc.1 over the real registry on hosted runners (npm only). The guide is one of the few documents the stable commit may change.
+**This is a release candidate, under qualification.** It is the second candidate for `0.2.0`, the release that ships R0
+(ADR 0024, decisions A and B), and it replaces `0.2.0-rc.1` as the candidate. It is published under the npm tag `next` and
+never under `latest`, it is not announced, and it is no statement of support or stability. **`0.2.0-rc.1` stays published:**
+npm never lets a published version go, and its tag and release page stay too, so it is superseded, not withdrawn. **Every
+result recorded for `0.2.0-rc.1` is superseded:** two of its findings are fixed here, so what they touch is run again on this
+candidate (P14 PR 11, repeated; [`p14-qualification.md`](docs/planning/p14-qualification.md) section 25), and the release
+evidence ledger ([`p14-evidence-ledger.json`](docs/planning/p14-evidence-ledger.json)) says where each item stands and what it
+does not prove.
 
-**Work record only (P14 PR 11a); nothing shipped changes.** The hosted evidence on the published `0.2.0-rc.1` is recorded in the
-evidence ledger and in [`docs/planning/p14-qualification.md`](docs/planning/p14-qualification.md) section 24.2: the second verification
-of the publish, clean installs, archives, the offline install, the upgrade of the published 0.1.0 to the candidate, the journeys on three
-systems, long fuzzing, the load and soak, the runbook walk, the scan reading and the two fault campaigns passed; the stress run found two
-rare Windows failures that are open (#312, #314, [L-135](docs/planning/known-limits.md#l-135)); the malicious-media run found one
-corner case (a source over the limit and larger than the free space answers `STORAGE_IO`, where 0.1.0 said `INVALID_SOURCE`: #310,
-[L-134](docs/planning/known-limits.md#l-134)), which the maintainer accepted for R0 and recorded as a waiver. The scan reading of the
-day is [`p14-scan-reading-2026-10-05.md`](docs/planning/p14-scan-reading-2026-10-05.md). The P10 durability campaign met its acceptance numbers (its hosted verdict job never got a runner: #316).
+### What changed since 0.2.0-rc.1, in plain English
 
-**For the second candidate (`0.2.0-rc.2`); nothing here is released.** The maintainer decided on 2026-10-06 to cut a second
-candidate with the change below.
+**If you use VSift.** Two rare failures are fixed, both found by the qualification of the first candidate. Nothing else in the
+program changed: no command, option, JSON field, failure code, help text, agent skill or reviewed tool did.
+
+- **On Windows a command that reads a session while another command publishes to it is no longer told the stored data is
+  damaged because one of its own attempts was slow** (#314, fixed by #318). The stress run on a loaded hosted machine saw it
+  once in 140,721 reads. The retry that exists for this case counted its half second from before the first attempt, so an
+  attempt that itself took longer used the budget up and was not retried; the budget now counts from the first failed attempt.
+  One related case is not covered and is a new known limit ([L-136](docs/planning/known-limits.md#l-136)): on Windows a file
+  another program holds without read sharing (a scanner, an indexer, a backup tool) is still answered `INTEGRITY_FAILURE` at
+  once. It was never seen in a campaign.
+- **`vsift ingest` of a video over the 20 GiB limit answers `INVALID_SOURCE` again, as 0.1.0 did, whatever the free space**
+  (#310, fixed by #319). The first candidate answered `STORAGE_IO` when the video was also larger than the drive, which changed
+  a published failure code; version 1 allows additions only. The answer for a video within the limit that does not fit is
+  unchanged.
+
+**If you test or maintain VSift.** The two session-root race tests wait 60 seconds instead of five, so that a documented
+refusal under artificial load is not counted as a failure of the test (#312; the product is unchanged and
+[L-135](docs/planning/known-limits.md#l-135) is narrowed to that one event). The candidate-to-stable check already compares a
+stable commit with the **highest** candidate tag, so it compares the stable release with this candidate, not with the first
+one (`release.md` 6.8 and 6.11).
+
+### What has not been shown
+
+- **Nothing has been run against this candidate's published bytes.** The evidence recorded for `0.2.0-rc.1` does not count
+  for it where the code, a version string or a document in an item's scope changed, which is almost everywhere
+  (`release-evidence --complete-for 0.2.0-rc.2` says which items and why). The hosted campaigns, agent-trial batches 2 and 3
+  (batch 2 ran on the first candidate: 34 runs, four readings still waiting) and the try-outs on a second Windows machine are
+  run again on this candidate. RQ-08 (race and stress) was `failed` on the first candidate; whether the fixed reader holds up
+  is exactly what the repeat tests. **#312 (a root creation that gave up waiting once in 1,500 loaded repetitions) is not
+  fixed**: its cause is not shown ([L-135](docs/planning/known-limits.md#l-135)).
+- **FFmpeg.** Unchanged since the first candidate: the reviewed build that `setup install` downloads (BtbN, 2026-08-31) has the
+  fixes for 46 of the 47 scan records read ([L-122](docs/planning/known-limits.md#l-122)), and the re-pin to the 2026-10-31
+  build is planned for after `0.2.0` ([L-132](docs/planning/known-limits.md#l-132)).
+- **Unsigned executables** have not met Windows Smart App Control or macOS Gatekeeper on a real machine
+  ([L-098](docs/planning/known-limits.md#l-098)).
+- **A synthetic corpus and a synthetic voice** only; nothing has been tried on a real recording
+  ([L-020](docs/planning/known-limits.md#l-020), [L-022](docs/planning/known-limits.md#l-022)).
+- **Not claimed:** a strict worker that contains a hostile decoder (decision E option 4, [L-068](docs/planning/known-limits.md#l-068)),
+  durability off Ubuntu 24.04 on ext4, managed installation outside Ubuntu 24.04 x64, Codex on Windows.
 
 ### Fixed
 
@@ -81,6 +111,56 @@ candidate with the change below.
   `INVALID_SOURCE`, and, on Unix, the binary: a sparse 4 TiB source answers `INVALID_SOURCE` with exit 3 and copies nothing (it
   answered `STORAGE_IO` before this change), and a source a little larger than the free space of a small filesystem still answers the
   no-room `STORAGE_IO`.
+
+### Work record since the first candidate (nothing shipped changes)
+
+**Work record only (P14 PR 11b); nothing shipped changes.** Two documents for the maintainer's hands, prepared and not run: the
+RQ-17 try-out sheet for the second Windows 11 machine ([`docs/planning/rq-17-tryout-sheet.md`](docs/planning/rq-17-tryout-sheet.md):
+Smart App Control through npm and through the archive, a clean-machine install, the guide's first investigation) and the checklist
+for agent-trial batches 2 and 3 ([`docs/planning/p14-batch-2-3-checklist.md`](docs/planning/p14-batch-2-3-checklist.md)). No code, tool,
+workflow, schema or setting changed.
+
+**Installation guide only (P14 PR 11c); nothing shipped changes.** [`docs/operations/install.md`](docs/operations/install.md) said
+the release candidate would be published later and that `@next` installed 0.1.0 until then. The candidate was published on
+2026-10-05, so the guide now says so, and its upgrade section says that the published 0.1.0 has been upgraded to the published
+0.2.0-rc.1 over the real registry on hosted runners (npm only). The guide is one of the few documents the stable commit may change.
+
+**Work record only (P14 PR 11a); nothing shipped changes.** The hosted evidence on the published `0.2.0-rc.1` is recorded in the
+evidence ledger and in [`docs/planning/p14-qualification.md`](docs/planning/p14-qualification.md) section 24.2: the second verification
+of the publish, clean installs, archives, the offline install, the upgrade of the published 0.1.0 to the candidate, the journeys on three
+systems, long fuzzing, the load and soak, the runbook walk, the scan reading and the two fault campaigns passed; the stress run found two
+rare Windows failures that are open (#312, #314, [L-135](docs/planning/known-limits.md#l-135)); the malicious-media run found one
+corner case (a source over the limit and larger than the free space answers `STORAGE_IO`, where 0.1.0 said `INVALID_SOURCE`: #310,
+[L-134](docs/planning/known-limits.md#l-134)), which the maintainer accepted for R0 and recorded as a waiver. The scan reading of the
+day is [`p14-scan-reading-2026-10-05.md`](docs/planning/p14-scan-reading-2026-10-05.md). The P10 durability campaign met its acceptance numbers (its hosted verdict job never got a runner: #316).
+
+**Work record only (P14, #317).** Agent-trial batch 2 ran on the first candidate on 2026-10-05: its 34 bounded records, summary and
+the maintainer-side reading are committed ([`batch-2-reading.md`](docs/planning/p14-agent-trials/batch-2-reading.md)); in the change
+that cuts the second candidate they moved to `docs/planning/p14-agent-trials/batch-2-rc.1/`, so that `batch-2/` holds only its freeze for the
+repeat on this one.
+
+### Changed
+
+- **The release candidate `0.2.0-rc.2` is cut** (P14 PR 10, repeated, 2026-10-06; the bump, the pointers, the freeze and the maintainer's
+  runbook; **nothing is tagged or published**: the maintainer does that by `docs/operations/release.md` section 6.11).
+  **Version:** `0.2.0-rc.1` becomes `0.2.0-rc.2` in the workspace and fuzz manifests and lockfiles and in the launcher's manifest (its
+  three optional dependencies too), and in no other version-string file; the user guide names the release `0.2.0`, so its marker and its two
+  generated pages are unchanged, and its 40 examples, run again, match. **Pointers:** the README and the installation guide name `0.2.0-rc.2`
+  as the release candidate under qualification (the rung stays `candidate`; the guide says that `@next` installs the first candidate until
+  the second is published), and the guide's first page, the developer documents, the try-out sheet and the agent-batch checklist follow.
+  **The candidate-to-stable check needed no change:** it compares the stable release with the highest `v0.2.0-rc.<N>` tag, so with both
+  candidates tagged it compares with `v0.2.0-rc.2` (a test builds exactly that), its allowed lists are not widened, and the release
+  workflow, its lint and its shell are untouched; the by-hand backstop in `release.md` 6.7 and in L-107 names `v0.2.0-rc.2`.
+  **Runbook:** new section 6.11 (`next` moves from `0.2.0-rc.1` to `0.2.0-rc.2`; read the dry run's published plan and compare its
+  checksums with the publish run's, as the two runs of the first candidate did, byte for byte; the upgrade is tried from `0.1.0` and from
+  `0.2.0-rc.1`; deprecating the first candidate is optional and comes last); 6.10 stays as the record of the first candidate.
+  **Agent trials:** the freeze of batches 2 and 3 was written again and binds the same digests as the first candidate's (nothing frozen
+  changed, so `committed_freeze` is unchanged; only the file's `commit` field differs); the first candidate's batch-2 records moved to
+  `docs/planning/p14-agent-trials/batch-2-rc.1/` so that the batch can run again on the second candidate. **Evidence:** every `passed`
+  item of the ledger is stale for the second candidate by the staleness rule, and nothing was edited to hide that:
+  `release-evidence --complete-for 0.2.0-rc.2` fails on 17 of the 20 items ([`p14-qualification.md`](docs/planning/p14-qualification.md)
+  section 25.2), and the hosted campaigns, batches 2 and 3 and the try-outs are repeated on it (section 25.3). **Known limits:** L-133
+  reopens for the hours between the merge and the publish; L-107, L-111 and L-132 name the second candidate. ADR 0024 has a dated note.
 
 ## [0.2.0-rc.1] - 2026-10-05
 

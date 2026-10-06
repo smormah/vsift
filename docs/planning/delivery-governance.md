@@ -35,7 +35,7 @@ be `passed`, and the phrases that are never claimed). Two commands run them on t
 
 ```console
 cargo run --locked -p vsift-governance -- release-evidence
-cargo run --locked -p vsift-governance -- release-evidence --complete-for 0.2.0-rc.1 [--commit <sha>]
+cargo run --locked -p vsift-governance -- release-evidence --complete-for 0.2.0-rc.2 [--commit <sha>]
 cargo run --locked -p vsift-governance -- public-claims
 ```
 
