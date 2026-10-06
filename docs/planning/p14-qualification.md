@@ -1193,6 +1193,10 @@ sheets are work record; the crates, tools, workflows, schemas, skill and fixture
 when the hosted evidence, the agent batches, the try-outs and the register pass are done and `release-evidence --complete-for
 0.2.0-rc.1` passes; each pull request below says which part it is.
 
+**Update, 2026-10-06:** the second candidate `0.2.0-rc.2` replaced the first one (section 25). Everything in this section is about
+`0.2.0-rc.1`, stays as recorded, and counts for the second candidate only where section 25.2 says its scope did not change; PR 11 is
+repeated on the second candidate (25.3).
+
 ### 24.1 PR 11b (an increment): what was prepared for the maintainer's hands
 
 Prepared and **not run**; nothing here is evidence yet.
@@ -1380,3 +1384,116 @@ and #314 under investigation; a fix means a second candidate, an acceptance a re
 pull request); **RQ-17** (`planned`: the try-outs on the clean Windows machine). Passed for the candidate: RQ-01 to RQ-07, RQ-09, RQ-11,
 RQ-12, RQ-13 (with its accepted residual), RQ-18 and RQ-19; RQ-10 and RQ-14 are `waived` (decisions of 2026-10-05 and 2026-10-03); RQ-20 is the
 check itself.
+
+## 25. The second candidate `0.2.0-rc.2` (P14 PR 10, repeated, 2026-10-06)
+
+The maintainer decided on 2026-10-06 to cut a second release candidate. PR 10 is repeated in one pull request, and it is complete again
+only when the maintainer has published `0.2.0-rc.2` and verified it (RQ-19 on its bytes). **Nothing is tagged or published here.** The
+decisions are in [ADR 0024](../decisions/0024-r0-qualification-and-release-candidate.md)'s note of 2026-10-06; the steps are
+[`release.md`](../operations/release.md) section 6.11. PR 11 (section 24) is repeated on the new candidate (25.3); the first candidate's
+results stay as history and are not rewritten.
+
+### 25.1 Why, and exactly what changed
+
+| Item | Result |
+| --- | --- |
+| Why | The hosted campaigns on `0.2.0-rc.1` found a product defect, a Windows reader answered `INTEGRITY_FAILURE` once in 140,721 reads while a generation was published ([#314](https://github.com/smormah/vsift/issues/314), RQ-08 `failed`), and a changed published failure code, an over-limit source answered `STORAGE_IO` where 0.1.0 said `INVALID_SOURCE` ([#310](https://github.com/smormah/vsift/issues/310), RQ-10 `waived` on 2026-10-05). Both are fixed on `main`, and the maintainer chose a second candidate over accepting them |
+| The code | **`0.2.0-rc.1` plus exactly two fixes.** #318 (`2c32499`): the retry budget of a read that overlaps a rename counts from the first failed attempt, in `filesystem_session_store/mod.rs`, with new tests; #319 (`3f101e7`): the source-size limit answers before the room check, in `sessions.rs` and `source_snapshot.rs`, with new tests. Six files under `crates/` differ from the tag (three production files and three test files; 538 lines added, 63 removed), and nothing else under `crates/`, `schemas/`, `fixtures/`, `skills/`, `tools/`, `.github/` or `fuzz/` (but the version strings in `fuzz/`) |
+| The bump | `0.2.0-rc.1` to `0.2.0-rc.2` in the five files the first cut changed (`Cargo.toml`, `Cargo.lock`, `fuzz/Cargo.toml`, `fuzz/Cargo.lock`, `npm/vsift-cli/package.json`); no test hard-codes the repository's version (the sample versions in the release tool's tests are fixtures) |
+| The guide | It names the release `0.2.0`, so the marker and the two generated pages are unchanged; `generate-reference.cjs --check` passes and the examples are run again (section 25.5) |
+| The allowed lists and the delta tool | **Unchanged.** `vsift-release candidate-delta` takes the highest `v0.2.0-rc.<N>` tag, so the stable release is compared with `v0.2.0-rc.2` and never with the first candidate; `the_highest_candidate_is_the_accepted_one` builds two candidates one fix apart and requires that. `release.md` 6.7 (the by-hand backstop) and 6.8 and known limit L-107 now name `v0.2.0-rc.2`. The release seam (`vsift-release`, `release.yml`, the lint) is untouched, so no lint rule or mutation test applies; `publish-steps.sh` passes |
+| The claims | The rung stays `candidate`; the README and the installation guide say `0.2.0-rc.2` is the release candidate under qualification (CL-101, CL-102); the launcher's README is version-free. [L-133](known-limits.md#l-133) reopens for the hours between the merge and the publish |
+| The freeze | `batch-2/freeze.json` and `batch-3/freeze.json` were written again at `3f101e7ac69a6c7e2a5d2256629c7686993e4515` (the commit the digests were taken at; the cut's own commit cannot be named by a file in it). **The seven component digests and the whole-freeze digest are the first candidate's** (`1e89b5cc...`), so only the `commit` field differs and `committed_freeze`'s pin is unchanged: **the freeze names that base commit, and the check enforces the digests, that is, that the skill, grader, scenarios, cold scenarios, hold-outs, settings and corpus truth are byte-identical to what the trials of the first candidate ran under** |
+| Batch 2's records | The first candidate's batch 2 (34 runs, [`batch-2-reading.md`](p14-agent-trials/batch-2-reading.md)) moved to `p14-agent-trials/batch-2-rc.1/` (records, summary, state files and a copy of the old freeze), so `batch-2/` and `batch-3/` hold only a freeze until they run on the second candidate. Reason: the campaign script reads and writes `state-<client>.json` in the batch's folder and refuses one recorded for another version, and the committed freeze is read from the same folder; `batch-1-strict-first-attempt/` is the precedent for keeping a superseded set beside the new one |
+| The runbook | `release.md` 6.11, with 6.10 kept as the record of the first candidate; the intro, 6.3, 6.7, 6.8 and the register (L-107, L-111, L-132, L-133) say what changed |
+| What did not change | The skill, the grader, the scenarios, the settings and the corpus truth (digests above); the FFmpeg catalogue (the re-pin to the 2026-10-31 build stays planned for after `0.2.0`, L-132); the release notes' templates (they take the version from the build, and say a later candidate may replace the one they describe); no Dependabot pull request was merged |
+
+### 25.2 What is stale for `0.2.0-rc.2`, and what is not
+
+The staleness rule (ADR 0024) lets an entry recorded at an earlier commit count only if nothing in its item's `scope` changed since. Between
+the first candidate's commit (`d5792ce31db1`) and the cut the changed paths are the six crate files, the five version-string files and
+the documents; so **every `passed` item fails the rule, and nothing was edited to make it do so**: the ledger's entries still say what
+they said, for the first candidate. `release-evidence --complete-for 0.2.0-rc.2 --commit <the commit>` answers:
+
+```text
+$ cargo run --locked -p vsift-governance -- release-evidence --complete-for 0.2.0-rc.2 --commit <the cut's commit>
+governance check failed:                                  (17 messages, one per item, exit 1; ids joined here)
+RQ-01 to RQ-07, RQ-09, RQ-11, RQ-12, RQ-13, RQ-18, RQ-19: is passed for 0.2.0-rc.1, but 7 to 10 file(s) in its scope changed
+    before 0.2.0-rc.2 (for example Cargo.lock, Cargo.toml, crates/vsift-cli/tests/no_room_cli_contract.rs); record it again
+RQ-08: is failed; it must be passed, waived by the maintainer or not applicable for 0.2.0-rc.2
+RQ-15, RQ-16, RQ-17: is planned; it must be passed, waived by the maintainer or not applicable for 0.2.0-rc.2
+```
+
+**It fails on 17 of the 20 items, as it must:** thirteen `passed` items whose scope changed (RQ-01 to RQ-07, RQ-09, RQ-11, RQ-12, RQ-13,
+RQ-18, RQ-19), RQ-08 (`failed`) and RQ-15 to RQ-17 (`planned`). It does not name RQ-10 and RQ-14 (`waived`) or RQ-20 (the check itself).
+The file counts of the crate-scoped items are 7 to 10 (the six crate files, `Cargo.lock`, and for some `Cargo.toml` and the launcher's
+manifest); RQ-13's scope is the whole repository and RQ-18's is the documents, so their counts (74 and 60 at the cut) grow with every change.
+
+| Why an item is stale | Items |
+| --- | --- |
+| The six crate files are in its scope (`crates`) and, for RQ-01 to RQ-06 and RQ-19, also the version strings (`Cargo.toml`, `npm`) | RQ-01 to RQ-07, RQ-09, RQ-11, RQ-12, RQ-19: **all the hosted evidence of section 24.2 except the two below** |
+| The scope is the whole repository (`.`): a dated reading, repeated for any change | RQ-13 (the scan reading) |
+| The scope is the documents (`docs`, the README, `SECURITY.md`) and the item is the Governance job at the candidate's own commit | RQ-18 |
+| Not `passed` on the first candidate either, so the rule never applies | RQ-08 `failed` (#312 is still open and not fixed: [L-135](known-limits.md#l-135); #314 is fixed and untested on the published bytes), RQ-15, RQ-16 and RQ-17 `planned` |
+| **Not stale, and not re-run by the tool: waived** | RQ-10 and RQ-14 |
+
+**RQ-10's waiver does not expire by itself.** The maintainer's decision of 2026-10-05 was made for the first candidate's two findings; the
+first is fixed in the second candidate, so the premise "`0.2.0-rc.1` stays" is gone, and what is left of RQ-10 is the campaign's no-room
+case ([L-134](known-limits.md#l-134)) and the link's `STORAGE_IO` ([#265](https://github.com/smormah/vsift/issues/265)). The completeness
+check passes the item on the waiver alone, so **the repeat runs the media campaign anyway and records the result on the second candidate,
+and the maintainer decides then whether the waiver still stands**; the ledger was not changed here. RQ-14 (SEC-T01) is unaffected: decision
+E's waiver is about a mechanism, not a version.
+
+### 25.3 The repeat of PR 11 on the second candidate
+
+What runs against which bytes, and by whom. Everything hosted is read-only; what tests the published packages is dispatched from `main`
+with the version, and the source-built campaigns (`Fuzz`, `P14 stress`, `P07 local ASR`, `P14 compatibility`, the two fault campaigns) run at
+the tag, as for the first candidate, with the same parameters, so that the figures compare with 0.1.0's and the first candidate's.
+
+| Item | What | From | Why it matters now |
+| --- | --- | --- | --- |
+| RQ-19 | `P14 verify release`, `version=0.2.0-rc.2` | `main`, right after the publish (6.11 step 5) | the second verification of the publish |
+| RQ-01 to RQ-04 | `P14 published artifacts` twice (`from_version` 0.1.0, then `0.2.0-rc.1`) and `P14 compatibility` | `main`; the tag | clean installs, archives, the offline install, and the two upgrades a person can do: 0.1.0 to the second candidate and the first candidate to it |
+| RQ-05, RQ-06 | `P14 journeys`, `P13 managed smoke` (`published_version`), `P07 local ASR` | `main`; the tag for `P07` | the journeys on three systems and the managed install on the published bytes |
+| RQ-07 | `Fuzz`, 31 targets, 3,601 s each | the tag | no parser changed, but the item's scope is the crates; the cost is the largest (about 1,950 job-minutes) |
+| RQ-08 | `P14 stress`, 24 jobs | the tag | **the reason for the candidate:** #314's suite on Windows, 200 repetitions, and the roots suite under load (#312, which is not fixed); the rule is zero failures in 200 repetitions per system |
+| RQ-09 | `P14 load` | `main`, `version=0.2.0-rc.2` | load ladder, batch, cancel, warm page, soak |
+| RQ-10 | `P14 malicious media` | `main`, `version=0.2.0-rc.2` | the second finding's fix: `sparse-30gib` is expected to answer `INVALID_SOURCE` again; the campaign's own no-room case still never reaches the room check (L-134) and its tools are not changed here |
+| RQ-11 | `P13 managed power loss` and `P10 durability campaign` | the tag | #318 changes the read path of the durable session store, so these matter more than for the load runs; the P10 verdict job needs a hosted runner ([#316](https://github.com/smormah/vsift/issues/316)) |
+| RQ-12 | `P14 runbook walk` | `main`, `version=0.2.0-rc.2` | the worker runbook, walked |
+| RQ-13 | `P14 scan reading` and a new dated reading | `main`, `version=0.2.0-rc.2` | a dated reading is repeated for any change; no dependency changed |
+| RQ-15, RQ-16 | agent-trial batch 2 (34 runs) and batch 3 (18 runs) on the maintainer's machine | the maintainer's explicit go for each | the first candidate's batch 2 stays graded as it was, with its four readings still open; the repeat uses the same freeze |
+| RQ-17 | the try-outs ([`rq-17-tryout-sheet.md`](rq-17-tryout-sheet.md)) on the second Windows 11 machine | the maintainer | the sheet is retargeted to the second candidate; nothing was done on the first |
+| RQ-18 | the Governance job of the CI run at the second candidate's commit | a push to `main` | it reads RQ-19's status, not its version (L-133) |
+| the register | the pass over `register-review-sheet.md` | the maintainer | unchanged by this cut |
+
+**Not repeated:** `P14 local upgrade` (the real upgrade of a published version stands in for it, L-111) and the longer fuzz run for the
+targets still growing (L-128: the maintainer's call).
+
+### 25.4 What is weaker than it sounds
+
+- **"Exactly two fixes" is a statement about paths.** The six crate files are the two changes and their tests, and the review of #318
+  and #319 is what says the production changes do only what their entries say; the path diff cannot. The repeated campaigns are the
+  test, and for RQ-08 the fix has not run on a hosted runner in the form that ships (the changelog says so).
+- **Every hosted result of section 24.2 is now evidence about the first candidate only.** None of it is wrong; none of it counts for
+  the second candidate until it is run again (about 3,700 job-minutes, the same order as before), and the agent batches and the try-outs
+  cost the maintainer's allowance and time again. A third candidate would do the same again.
+- **The malicious-media campaign still has its defect** (L-134): its tools are frozen with the candidate, and the supervisor's rule
+  for this cut was that nothing else changes. The repeat can show `sparse-30gib` answering as 0.1.0 did; it cannot show the no-room path
+  of `ingest` on the published bytes, which `no_room_cli_contract` shows from source.
+- **#312 is not fixed** and is the reason RQ-08 may fail again: one creator that was not scheduled for five seconds under load is an
+  explanation that fits and that nothing here changes (the race tests wait 60 s now, which counts the documented refusal as a pass of the
+  test, not as a fix of the product).
+- **The claims window reopens (L-133):** between the merge and the publish the README says the second candidate is under qualification
+  before it is on npm. The runbook says to merge only when the maintainer can tag and publish at once.
+- **The ledger's waiver of RQ-10** lets the completeness check pass that item without the second candidate's run (25.2).
+
+### 25.5 Checks run for this cut
+
+The gates of the change (formatting, strict Clippy with and without all features, rustdoc with warnings denied, the workspace tests,
+the governance checks, `publish-steps.sh`, the launcher and tool tests, the guide's checks and the committed freeze) and their results are in
+the pull request's description; none of them needed the registry or a secret. The guide's 40 marked examples were run again against this
+cut's binary (a debug build on Windows 11) with the maintainer's FFmpeg 9.0 and whisper.cpp 1.9.2 and `--require-speech`: **40 commands, 0 skipped, 0 failed**.
+
+**Hosted minutes.** None for the work itself. The pull request's own CI runs the usual jobs and the Release workflow's plan in report-only
+mode on the merge ref, whose first plan moves `next` from `0.2.0-rc.1` to `0.2.0-rc.2`.

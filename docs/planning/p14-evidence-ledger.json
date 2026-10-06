@@ -769,7 +769,7 @@
         {
           "reference": { "type": "record", "path": "docs/planning/p14-qualification.md" },
           "date": "2026-10-05",
-          "note": "Batch 2 (the counted set with the skill, on the published 0.2.0-rc.1) finished on the maintainer's machine on 2026-10-05. Its records and reading go in a separate pull request (docs/planning/p14-agent-trials/batch-2/); nothing of its results is claimed here, and this item stays planned until that reading is recorded."
+          "note": "Batch 2 (the counted set with the skill, on the published 0.2.0-rc.1) finished on the maintainer's machine on 2026-10-05. Its records and reading go in a separate pull request (docs/planning/p14-agent-trials/batch-2/, since moved to batch-2-rc.1/ when the second candidate was cut); nothing of its results is claimed here, and this item stays planned until that reading is recorded."
         }
       ],
       "date": "2026-10-05"

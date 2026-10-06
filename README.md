@@ -201,7 +201,7 @@ VSift is built in public, with its reasoning written down. The claims on this pa
 
 ## Honest status
 
-VSift is at **0.1.0, a pre-release**: the first release of R0, whose full qualification (P14) is in progress. It is not a stable release, and no platform is "supported" yet. The next release, 0.2.0, has a candidate: 0.2.0-rc.1 is a release candidate under qualification and is not announced, and the evidence gathered so far, with its gaps, is recorded in the release evidence ledger ([`p14-evidence-ledger.json`](docs/planning/p14-evidence-ledger.json)).
+VSift is at **0.1.0, a pre-release**: the first release of R0, whose full qualification (P14) is in progress. It is not a stable release, and no platform is "supported" yet. The next release, 0.2.0, has a candidate: 0.2.0-rc.2 is a release candidate under qualification and is not announced (it replaces 0.2.0-rc.1, the first candidate, which stays published), and the evidence gathered so far, with its gaps, is recorded in the release evidence ledger ([`p14-evidence-ledger.json`](docs/planning/p14-evidence-ledger.json)).
 
 - **Works today:** the whole journey above, on recordings you point it at: ingest, transcript import or local recognition, search, visual candidates, frames, crops, audio, recoverable jobs, a worker-host mode for supervisors, `handoff check`, and installation from npm or native archives.
 - **Measured on a synthetic corpus.** Every accuracy figure so far comes from synthetic recordings and a synthetic voice. Real recordings come with the post-R0 trial.

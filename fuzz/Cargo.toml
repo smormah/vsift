@@ -29,14 +29,14 @@ serde_json = "1.0.151"
 # The `bundle_manifest` target (P14 PR 4) names each artifact it invents by its
 # SHA-256, as the store does. The workspace's version and settings.
 sha2 = { version = "0.11", default-features = false }
-vsift-contract = { version = "0.2.0-rc.1", path = "../crates/vsift-contract" }
-vsift-domain = { version = "0.2.0-rc.1", path = "../crates/vsift-domain" }
-vsift-infrastructure = { version = "0.2.0-rc.1", path = "../crates/vsift-infrastructure" }
+vsift-contract = { version = "0.2.0-rc.2", path = "../crates/vsift-contract" }
+vsift-domain = { version = "0.2.0-rc.2", path = "../crates/vsift-domain" }
+vsift-infrastructure = { version = "0.2.0-rc.2", path = "../crates/vsift-infrastructure" }
 
 [dev-dependencies]
 # Re-derive the local-ASR and visual-index record seeds in the replay tests;
 # serde_json (a dependency above) reads the recorded visual samples too.
-vsift-application = { version = "0.2.0-rc.1", path = "../crates/vsift-application" }
+vsift-application = { version = "0.2.0-rc.2", path = "../crates/vsift-application" }
 # P14 PR 4: the archive seeds are built the way the infrastructure crate's own
 # archive tests build theirs (a tar, then gzip or xz around it), with the
 # workspace's pinned versions and settings; all three are already in the graph.

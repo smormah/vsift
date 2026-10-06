@@ -8,10 +8,12 @@ terminal, or you let an AI assistant on your machine use it. Nothing is uploaded
 
 This guide teaches you to do things with it. It is written for anyone with a video, not only for programmers.
 
-**Checked against vsift 0.2.0**: the release candidate `0.2.0-rc.1` and the release that follows it are built from
+**Checked against vsift 0.2.0**: the release candidate `0.2.0-rc.2` and the release that follows it are built from
 the same code, so this guide names the release, not the candidate. Where this guide says what a command prints, that
 is real output of that build on practice recordings from the repository, and the examples are re-run whenever the
-code changes ([how](#how-this-guide-is-kept-true)). The earlier pre-release, `0.1.0`, has the same commands and
+code changes ([how](#how-this-guide-is-kept-true)). The first candidate, `0.2.0-rc.1`, has the same commands, options
+and wording and two fixes fewer (a read of a session that overlaps a publish on Windows, and the answer for a video
+over the size limit). The earlier pre-release, `0.1.0`, has the same commands and
 options, but older wording in `vsift --help` and in a few error messages, none of the fixes to rare cases made since
 (a named pipe or a link given as the video, too little room for the video, a short speech-recognition range, a
 failed open), and one optional JSON member fewer (`missing_shared_library` in the result of `setup install`).

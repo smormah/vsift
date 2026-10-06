@@ -1,17 +1,21 @@
 # P14 agent-trial batches 2 and 3: the maintainer's checklist
 
-Status: **prepared 2026-10-05 (P14 PR 11b); nothing on it has run, and nothing will until you say go.** Both batches spend your
+Status: **prepared 2026-10-05 (P14 PR 11b) for the first candidate and moved to the second, `0.2.0-rc.2`, on 2026-10-06 (P14 PR 10
+repeated); nothing on it has run on the second candidate, and nothing will until you say go.** Batch 2 ran once, on the first candidate
+(`0.2.0-rc.1`, 2026-10-05: its records are in `docs/planning/p14-agent-trials/batch-2-rc.1/` and the reading is
+[`batch-2-reading.md`](p14-agent-trials/batch-2-reading.md)); the second candidate replaced that candidate, so batch 2 is run again
+and batch 3 runs for the first time, both on the second. Both batches spend your
 Claude and Codex allowances, so each starts only on your explicit go, one batch at a time (plan section 7, ADR 0024 decision D).
 No supervisor and no agent runs a batch. This page collects what the runbook
 ([`docs/agents/trials.md`](../agents/trials.md), "The P14 batches") spreads over several sections, with the numbers batch 1
 measured. It is evidence items **RQ-15** (batch 2: the counted set with the skill) and **RQ-16** (batch 3: the cold final
-round), on the published `0.2.0-rc.1`.
+round), on the published `0.2.0-rc.2`.
 
 ## What each batch is
 
 | | Batch 2 | Batch 3 |
 | --- | --- | --- |
-| Against | the published `vsift-cli@0.2.0-rc.1`, from a clean install into a fresh folder | the same |
+| Against | the published `vsift-cli@0.2.0-rc.2`, from a clean install into a fresh folder | the same |
 | What | the **counted set with the skill**: rule 11, the hold-outs, the blurred banner (L-095), the compact regression | the **cold final round**: no skill, no documents, the CLI on `PATH`; the 80% usefulness target and zero unsafe actions |
 | Runs | **34**: per client 17 | **18**: per client 9 |
 | Review tier (Claude Opus 5.5 / GPT-6-Astra) | per client 12: `A-08` local speech recognition x3, `A-09` supplied transcript x3, `A-09` blurred x3, hold-outs `H-01-f10-supplied-sidecar` and `H-02-f01-local-asr` x1 each, `A-01` do-not-install x1 | per client 3: `C-01`, `C-02` and `C-03` once each |
@@ -69,8 +73,8 @@ install, so these are floors):**
       cargo run --locked -p vsift-agent-trials --bin vsift-agent-trials -- freeze check --repository . --file docs/planning/p14-agent-trials/batch-3/freeze.json
       ```
 
-      The two files have the same bytes (whole-freeze digest `1e89b5cc488e7245d1a6d63ec8809c1f8a5c137ee87f5ed05f9b692c2af6e392`),
-      written at the cut over the skill, the grader, the scenarios, the cold scenarios, the hold-outs, the settings and the corpus
+      The two files have the same bytes (whole-freeze digest `1e89b5cc488e7245d1a6d63ec8809c1f8a5c137ee87f5ed05f9b692c2af6e392`,
+      the same as for the first candidate: nothing frozen changed), rewritten at the second candidate's cut over the skill, the grader, the scenarios, the cold scenarios, the hold-outs, the settings and the corpus
       truth. The script writes a freeze only when none exists, so it uses these, and checks them before every run.
 
 ## The configuration file, `C:\vsift-trials\campaign.json`
@@ -97,16 +101,16 @@ Run from the repository root with PowerShell 7 (`pwsh`). The version is exact, n
 
 ```powershell
 # 1. The plan, without calling any client, npm or Docker (it still refuses a dirty checkout, as a real run does)
-pwsh tools/vsift-agent-trials/campaigns/run-campaign.ps1 -Batch 2 -Client claude -Version 0.2.0-rc.1 -Config C:\vsift-trials\campaign.json -DryRun
-pwsh tools/vsift-agent-trials/campaigns/run-campaign.ps1 -Batch 2 -Client codex  -Version 0.2.0-rc.1 -Config C:\vsift-trials\campaign.json -DryRun
+pwsh tools/vsift-agent-trials/campaigns/run-campaign.ps1 -Batch 2 -Client claude -Version 0.2.0-rc.2 -Config C:\vsift-trials\campaign.json -DryRun
+pwsh tools/vsift-agent-trials/campaigns/run-campaign.ps1 -Batch 2 -Client codex  -Version 0.2.0-rc.2 -Config C:\vsift-trials\campaign.json -DryRun
 
 # 2. A first look: two runs per client, then read them (below) before the rest
-pwsh tools/vsift-agent-trials/campaigns/run-campaign.ps1 -Batch 2 -Client claude -Version 0.2.0-rc.1 -Config C:\vsift-trials\campaign.json -MaxRuns 2
-pwsh tools/vsift-agent-trials/campaigns/run-campaign.ps1 -Batch 2 -Client codex  -Version 0.2.0-rc.1 -Config C:\vsift-trials\campaign.json -MaxRuns 2
+pwsh tools/vsift-agent-trials/campaigns/run-campaign.ps1 -Batch 2 -Client claude -Version 0.2.0-rc.2 -Config C:\vsift-trials\campaign.json -MaxRuns 2
+pwsh tools/vsift-agent-trials/campaigns/run-campaign.ps1 -Batch 2 -Client codex  -Version 0.2.0-rc.2 -Config C:\vsift-trials\campaign.json -MaxRuns 2
 
 # 3. The rest (resumable: the state files and records are the memory)
-pwsh tools/vsift-agent-trials/campaigns/run-campaign.ps1 -Batch 2 -Client claude -Version 0.2.0-rc.1 -Config C:\vsift-trials\campaign.json
-pwsh tools/vsift-agent-trials/campaigns/run-campaign.ps1 -Batch 2 -Client codex  -Version 0.2.0-rc.1 -Config C:\vsift-trials\campaign.json
+pwsh tools/vsift-agent-trials/campaigns/run-campaign.ps1 -Batch 2 -Client claude -Version 0.2.0-rc.2 -Config C:\vsift-trials\campaign.json
+pwsh tools/vsift-agent-trials/campaigns/run-campaign.ps1 -Batch 2 -Client codex  -Version 0.2.0-rc.2 -Config C:\vsift-trials\campaign.json
 ```
 
 **Batch 3 is the same with `-Batch 3` and, on every command that is not a dry run, `-AllowGraderChange`.** The script checks batch 3's
@@ -134,7 +138,7 @@ For each client's first two skill runs (batch 2) check, in the record and `SUMMA
 1. the client's init event lists **only `vsift`** as a skill (Claude Code's bundled skills are off);
 2. **no `client_configuration` check failed** (such a trial is invalid and is retried);
 3. `install` shows **no reason** (`not_published_because` is empty): it names the registry's integrity and the launcher's digest check
-   and the version line `vsift 0.2.0-rc.1 (d5792ce31db1)`;
+   and the version line `vsift 0.2.0-rc.2 (<the first 12 digits of the tag's commit>)`;
 4. `setup_check` shows the tools **ready**;
 5. `reported_usage` is present (tokens, and for Claude Code a cost): **this is where the review tier's first real figures appear**,
    so you can decide whether to say go for the rest, and for batch 3.
@@ -157,7 +161,7 @@ batch 3) only from what `SUMMARY.md` computes and what you have read.
   tools, while a batch runs. A failure is a finding about the skill or the CLI, not about the grader.
 - Do not commit `campaign.json`, a client home, a raw log or anything under `C:\vsift-trials` outside the records the script writes.
 - Do not start batch 3 on batch 2's go: each needs its own, because each spends the allowance again.
-- Do not run either client against `0.1.0` or a source build for these batches: the install is the registry's `0.2.0-rc.1` and the
+- Do not run either client against `0.1.0` or a source build for these batches: the install is the registry's `0.2.0-rc.2` and the
   records say so.
 
 **What this checklist does not do:** run anything, change a frozen file, choose between the options of a finding, or count a result.

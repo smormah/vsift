@@ -856,7 +856,13 @@ test `committed_freeze` (Quality, three systems) fails any pull request that cha
 the hold-outs, the settings or the truth after the cut. Changing one on purpose means a second candidate and a new
 `freeze write`; `freeze check --repository . --file <file>` prints `nothing frozen has changed` when it holds. The `commit`
 field names the commit the digests were taken at, which a squash merge leaves behind: the digests are what bind, not the
-name. **Batch 3 needs `-AllowGraderChange`:** the script checks batch 3's cold components against **batch 1's** freeze, and the
+name. **For the second candidate (P14 PR 10 repeated, 2026-10-06) the two files were written again** with `freeze write` at
+`3f101e7ac69a6c7e2a5d2256629c7686993e4515`: the seven digests and the whole-freeze digest are the first candidate's (the two
+fixes touch only `crates/`, and nothing frozen is there), so only `commit` differs, and `committed_freeze` keeps its pin. The
+first candidate's batch 2 ran under the earlier file; its records, summary, state files and a copy of that freeze are in
+`docs/planning/p14-agent-trials/batch-2-rc.1/`, because the campaign script keeps one state file per client in a batch folder and
+refuses one recorded for another version ("a batch is run against one version"), so batch 2 on the second candidate needs the folder
+free. **Batch 3 needs `-AllowGraderChange`:** the script checks batch 3's cold components against **batch 1's** freeze, and the
 grader changed on 2026-10-04 (below), which the maintainer accepted; the usefulness grading did not change. **The grader changed on 2026-10-04** (the three cold
 classifications above, between batch 1 and batch 2, as the freeze rule allows): batch 2's freeze is a fresh
 `freeze write`, and batch 1's records and summary stay as graded at the time, so the baseline's safety counts
