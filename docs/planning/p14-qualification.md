@@ -1271,7 +1271,10 @@ ledger's waiver mechanism (as RQ-14 was): the decision's text is in the ledger e
 PR 11a note. Two residuals are accepted: the over-the-limit-and-larger-than-the-disk answer (`STORAGE_IO` where 0.1.0 said
 `INVALID_SOURCE`), **a known deviation from the rule that published failure codes do not change within v1**, accepted because the answer
 is typed, bounded and stores nothing, with the rule that a later release should run the source-size limit first; and the link's
-`STORAGE_IO` (#265). L-127 and L-126 say so plainly; L-134 is the entry. The first run stays in the ledger as failed evidence.
+`STORAGE_IO` (#265). L-127 and L-126 said so plainly; L-134 was the entry. The first run stays in the ledger as failed evidence.
+**Update, 2026-10-06:** the first residual is fixed for the second candidate (#310): the source-size limit now answers first, so
+`sparse-30gib` is `INVALID_SOURCE` again whatever the free space. L-126 and L-127 no longer carry a deviation, and L-134 keeps only
+the campaign's no-room case. The text above is the record of the first candidate's decision and is left as it was.
 
 **RQ-08 in detail** (opened before anything was repeated; nothing was rerun). The ledger records the run as **failed** with
 [#312](https://github.com/smormah/vsift/issues/312) and [#314](https://github.com/smormah/vsift/issues/314), and **no waiver**: the

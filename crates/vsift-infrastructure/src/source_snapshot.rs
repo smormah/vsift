@@ -908,4 +908,16 @@ mod tests {
             OpenSessionError::InvalidSource
         );
     }
+
+    /// #310: a source over the size limit is refused as an invalid source,
+    /// which is the answer 0.1.0 gave it whatever the free disk, and not as a
+    /// root with no room: the room check steps aside for it (the engine's
+    /// `ensure_room_for_desktop_copy`), so this is the answer that remains.
+    #[test]
+    fn a_source_over_the_size_limit_is_an_invalid_source_and_not_a_root_with_no_room() {
+        assert_eq!(
+            open_session_error(SourceError::TooLarge),
+            OpenSessionError::InvalidSource
+        );
+    }
 }

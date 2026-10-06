@@ -1483,7 +1483,9 @@ with 0.1.0's moved to `prior`. **If a second candidate is cut, all of it becomes
 5. **The `Review` lines of L-122 and L-134 read `accepted (2026-10-05)`** and record the decisions above, not the register's own one-pass
    review, which is separate and still pending for every other entry.
 6. **L-135 is new** (the two Windows failures, open), L-128 and L-111 are updated for the candidate's runs, and L-127 and L-126 say that one
-   answer deviated from their rule.
+   answer deviated from their rule. **Update, 2026-10-06:** that deviation (item 1) is fixed for the second candidate (#310): the source-size
+   limit now answers first, so a source over the limit is `INVALID_SOURCE` whatever the free space, as in 0.1.0. L-127 and L-126 no longer
+   carry a deviation and L-134 keeps only the campaign's no-room case. The decisions above stand as they were made for `0.2.0-rc.1`.
 
 **What is weaker than it sounds.** Every run is on shared hosted images and a synthetic corpus. The failed and waived items are a measure
 of what the campaigns can see, not a proof that nothing else is wrong: the fuzz hour is a floor, 15 of 31 targets were still finding

@@ -526,6 +526,11 @@
           "reference": { "type": "record", "path": "docs/planning/p14-qualification.md" },
           "date": "2026-10-02",
           "note": "Section 18.4: the cases, how each is judged, what 'refused' means for a file that is only copied, and the limits of the generated variants."
+        },
+        {
+          "reference": { "type": "issue", "number": 310 },
+          "date": "2026-10-06",
+          "note": "NOT EVIDENCE, a change of the product that the waiver above accepted: residual (a), a source over the 20 GiB limit that is also larger than the free space answering STORAGE_IO, is fixed for the second candidate. A desktop root's room check no longer runs for a source over the limit, so the limit answers first and sparse-30gib answers INVALID_SOURCE again, 0.1.0's answer, whatever the free space; a source within the limit that does not fit keeps #266's STORAGE_IO, and a worker workspace keeps its reserve and RESOURCE_LIMIT. It is tested in the engine with the free space injected and, on Unix, through the binary with a sparse 4 TiB source. No campaign has been run on the fixed code: this item's status, decision and evidence above are the first candidate's and are unchanged, and the second candidate's own run is what counts for it. Residual (c), the link, and the campaign's no-room case that never reaches the check (L-134) are unchanged."
         }
       ],
       "date": "2026-10-05"

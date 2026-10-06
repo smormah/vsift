@@ -1,6 +1,6 @@
 # Known limits register
 
-Date: 2026-10-06 (P14, #314 and #312: L-135 narrowed to the root-creation wait (#312), its reader half being fixed; L-136 added (a Windows sharing or lock violation answers `INTEGRITY_FAILURE` at once); 2026-10-05: P14 PR 11a, the candidate's hosted evidence: L-134 added (a corner case of the room check, accepted, and a malicious-media case that does not reach it), L-135 added (two rare Windows failures of the stress run, open), L-122 and L-134 reviews recorded as the maintainer's decisions of the day, L-127 and L-126 say plainly that one answer deviated from the published-codes rule, L-128 and L-111 updated for the candidate's runs, L-133's early-sentence window closed; P14 PR 10b, the release candidate's cut: L-133 added (the claims window of the candidate rung), L-107 and L-108 updated for the settled allowed lists and the by-hand backstop, L-132 for the re-pin plan; P14 PR 10a, the skill's wording before the candidate's freeze: L-109 and L-127 updated; 2026-10-04: P14 PR 9c, the maintainer's decisions on the macOS wording and RQ-05's rule: L-113 and L-114 updated; P14, a journeys stage that asserts a later fix is skipped below the first version that has it and never above it: L-115 updated; P14 PR 9a, the claims check reads the text of the README's graphics: L-121 narrowed to the roadmap's rung; L-004, L-035 and L-038 brought up to date, L-114 names the macOS wording; P14 PR 7, a failed open removes its own registration and a session that never published says so: L-131 added, L-127 gains its third case; P14 PR 7, the cold grader's three classifications: L-118 updated; P14 PR 7, a short range's cut final segment: L-130 added and L-124 closed and deleted; P14 PR 7, a source that does not fit the root is refused before the copy and the code stays `STORAGE_IO`: L-127 gains its second case, L-061 updated; P14 PR 7, a link as the source keeps its published code and gains a remediation: L-127 rewritten as one entry for the CLI answers whose code only loosely describes the case; P14 PR 7, the dedupe window is stated as it is: L-063 updated; P14 PR 7, the flaky kill test: a provider a killed host leaves suspended, L-129 added and L-055 narrowed; P14 PR 7, session-root creation on Windows is repaired by a DACL read-back and narrowed (#206): L-123 closed and deleted, L-005 updated; P14 PR 7, the admission test no longer fails on its own bound: L-060 states the missing bound and L-123 narrows to #206; P14 PR 7, a named pipe with no writer is refused at once: L-127 narrowed; P14 PR 7b: the FFmpeg finding re-read with a test that sees release-branch cherry-picks, L-122 narrowed from 35 records to one tie by elimination and L-132 added (L-129 to L-131 are P14 PR 7's); 2026-10-03: P14 PR 4: the robustness campaigns, L-122, L-123, L-124, L-127 and L-128 added (L-121, L-125 and L-126 were taken meanwhile by other pull requests); P14 PR 7, a missing shared library is named: L-110 closed; P14 PR 7: a session root VSift did not create now explains itself, L-126 added; P14 PR 7, the realistic cold-agent settings: L-125 added, L-118 re-read; P14 PR 5: L-068 rescheduled to R1 and L-004 re-read, by the maintainer's decision E option 4; 2026-10-02: P14 PR 3, the journeys on the published binary: L-113 to L-116 added, L-035, L-042 and L-099 updated; the README's graphics: L-121 added; P14 PR 6: the trial harness's clean-install and cold-agent modes, hold-outs and usage capture, L-117 to L-120 added; the README front page: L-102 closed, the v0.1.0 release page edited; P14 PR 2: the published-artifact qualification, L-109 to L-112 added; P14 PR 1: the evidence ledger, the claims registry and their checks, L-101 to L-103 added; P14 PR 8, the stable path and `latest`: L-105, L-107 and L-108 added, L-102 narrowed to the published v0.1.0 page, L-103 updated for the delta record, L-097 updated; P14 plan, PR 0: L-042 re-read, the checkpoints' source-built binary noted, L-098 updated with Smart App Control read Off on the maintainer's machine; 2026-10-01: P13 PR 12: the 0.1.0 pre-release was published, so L-036 and L-096 are closed and deleted, L-037 and L-043 re-read at the packet's close, L-097 and L-098 updated, L-100 added; P13 PR 11: documentation and the qualification record, L-098 and L-099 added, L-035, L-036, L-037, L-042 and L-096 updated for the passing power-loss run and the closing sweep; P13 PR 7 follow-up: the power-loss campaign's first run and its verifier fix, L-037 updated; P13 PR 10: attestation and publish wiring, L-036 updated, L-096 and L-097 added; 2026-09-30: P13 PR 7: kill tests of the managed store, directory flushes and its power-loss campaign, L-037 narrowed; the compact re-run #222 met its target: L-085 closed, L-095 added for the review tier's A-09 blurred re-run (#224), L-007 updated; P13 PR 9: npm packages and their qualification, L-091 to L-093 added and L-036 updated; P13 PR 6: managed lifecycle, L-037 narrowed and L-087 measured, L-090 added; P13 PR 4: managed installation; P13 PR 8: release archives, L-089 added and L-036 updated; P00-P13 complete; P12 closed on its final trial round with the compact tier below target, L-085; SEC-T01's adversarial evidence deferred as technical debt, L-068; P13 PR 2b closed L-073 and rewrote L-016 and L-017).
+Date: 2026-10-06 (P14, #310: a source over the size limit is `INVALID_SOURCE` again whatever the free space: L-127 and L-126 no longer carry a known deviation, L-134 is narrowed to the campaign's no-room case, L-061 says the room check comes after the size limit; P14, #314 and #312: L-135 narrowed to the root-creation wait (#312), its reader half being fixed; L-136 added (a Windows sharing or lock violation answers `INTEGRITY_FAILURE` at once); 2026-10-05: P14 PR 11a, the candidate's hosted evidence: L-134 added (a corner case of the room check, accepted, and a malicious-media case that does not reach it), L-135 added (two rare Windows failures of the stress run, open), L-122 and L-134 reviews recorded as the maintainer's decisions of the day, L-127 and L-126 say plainly that one answer deviated from the published-codes rule, L-128 and L-111 updated for the candidate's runs, L-133's early-sentence window closed; P14 PR 10b, the release candidate's cut: L-133 added (the claims window of the candidate rung), L-107 and L-108 updated for the settled allowed lists and the by-hand backstop, L-132 for the re-pin plan; P14 PR 10a, the skill's wording before the candidate's freeze: L-109 and L-127 updated; 2026-10-04: P14 PR 9c, the maintainer's decisions on the macOS wording and RQ-05's rule: L-113 and L-114 updated; P14, a journeys stage that asserts a later fix is skipped below the first version that has it and never above it: L-115 updated; P14 PR 9a, the claims check reads the text of the README's graphics: L-121 narrowed to the roadmap's rung; L-004, L-035 and L-038 brought up to date, L-114 names the macOS wording; P14 PR 7, a failed open removes its own registration and a session that never published says so: L-131 added, L-127 gains its third case; P14 PR 7, the cold grader's three classifications: L-118 updated; P14 PR 7, a short range's cut final segment: L-130 added and L-124 closed and deleted; P14 PR 7, a source that does not fit the root is refused before the copy and the code stays `STORAGE_IO`: L-127 gains its second case, L-061 updated; P14 PR 7, a link as the source keeps its published code and gains a remediation: L-127 rewritten as one entry for the CLI answers whose code only loosely describes the case; P14 PR 7, the dedupe window is stated as it is: L-063 updated; P14 PR 7, the flaky kill test: a provider a killed host leaves suspended, L-129 added and L-055 narrowed; P14 PR 7, session-root creation on Windows is repaired by a DACL read-back and narrowed (#206): L-123 closed and deleted, L-005 updated; P14 PR 7, the admission test no longer fails on its own bound: L-060 states the missing bound and L-123 narrows to #206; P14 PR 7, a named pipe with no writer is refused at once: L-127 narrowed; P14 PR 7b: the FFmpeg finding re-read with a test that sees release-branch cherry-picks, L-122 narrowed from 35 records to one tie by elimination and L-132 added (L-129 to L-131 are P14 PR 7's); 2026-10-03: P14 PR 4: the robustness campaigns, L-122, L-123, L-124, L-127 and L-128 added (L-121, L-125 and L-126 were taken meanwhile by other pull requests); P14 PR 7, a missing shared library is named: L-110 closed; P14 PR 7: a session root VSift did not create now explains itself, L-126 added; P14 PR 7, the realistic cold-agent settings: L-125 added, L-118 re-read; P14 PR 5: L-068 rescheduled to R1 and L-004 re-read, by the maintainer's decision E option 4; 2026-10-02: P14 PR 3, the journeys on the published binary: L-113 to L-116 added, L-035, L-042 and L-099 updated; the README's graphics: L-121 added; P14 PR 6: the trial harness's clean-install and cold-agent modes, hold-outs and usage capture, L-117 to L-120 added; the README front page: L-102 closed, the v0.1.0 release page edited; P14 PR 2: the published-artifact qualification, L-109 to L-112 added; P14 PR 1: the evidence ledger, the claims registry and their checks, L-101 to L-103 added; P14 PR 8, the stable path and `latest`: L-105, L-107 and L-108 added, L-102 narrowed to the published v0.1.0 page, L-103 updated for the delta record, L-097 updated; P14 plan, PR 0: L-042 re-read, the checkpoints' source-built binary noted, L-098 updated with Smart App Control read Off on the maintainer's machine; 2026-10-01: P13 PR 12: the 0.1.0 pre-release was published, so L-036 and L-096 are closed and deleted, L-037 and L-043 re-read at the packet's close, L-097 and L-098 updated, L-100 added; P13 PR 11: documentation and the qualification record, L-098 and L-099 added, L-035, L-036, L-037, L-042 and L-096 updated for the passing power-loss run and the closing sweep; P13 PR 7 follow-up: the power-loss campaign's first run and its verifier fix, L-037 updated; P13 PR 10: attestation and publish wiring, L-036 updated, L-096 and L-097 added; 2026-09-30: P13 PR 7: kill tests of the managed store, directory flushes and its power-loss campaign, L-037 narrowed; the compact re-run #222 met its target: L-085 closed, L-095 added for the review tier's A-09 blurred re-run (#224), L-007 updated; P13 PR 9: npm packages and their qualification, L-091 to L-093 added and L-036 updated; P13 PR 6: managed lifecycle, L-037 narrowed and L-087 measured, L-090 added; P13 PR 4: managed installation; P13 PR 8: release archives, L-089 added and L-036 updated; P00-P13 complete; P12 closed on its final trial round with the compact tier below target, L-085; SEC-T01's adversarial evidence deferred as technical debt, L-068; P13 PR 2b closed L-073 and rewrote L-016 and L-017).
 Status: current-state register. Every entry below is **pending maintainer review**.
 
 ## Purpose and how to use it
@@ -158,18 +158,18 @@ Each entry has these fields:
 | [L-122](#l-122) | One recorded FFmpeg vulnerability (CVE-2026-38350, libswscale) is tied to its fix only by elimination, and the reading proves the source of the shipped build, not its behaviour | security | medium | P14 | [#272](https://github.com/smormah/vsift/issues/272) | accepted residual |
 | [L-125](#l-125) | The realistic cold setting cannot be fenced to the workspace, so Claude Code runs it only on an isolated machine; the two clients' cold baselines are not the same test | process/CI | medium | P14 | [#17](https://github.com/smormah/vsift/issues/17) | accepted residual |
 | [L-126](#l-126) | A session root VSift did not create is refused with `INTEGRITY_FAILURE`, which says stored data is damaged; only the remediation says what happened | contract/UX | low | unscheduled | none | accepted residual |
-| [L-127](#l-127) | Some CLI answers carry a published failure code that only loosely describes the case; the codes stay within v1 and the remediation says what happened, with one known deviation: a source over the limit and larger than the free space answers `STORAGE_IO` since the candidate | contract/UX | low | P14 | [#265](https://github.com/smormah/vsift/issues/265), [#266](https://github.com/smormah/vsift/issues/266), [#277](https://github.com/smormah/vsift/issues/277), [#310](https://github.com/smormah/vsift/issues/310) | accepted residual |
+| [L-127](#l-127) | Some CLI answers carry a published failure code that only loosely describes the case; the codes stay within v1 and the remediation says what happened | contract/UX | low | P14 | [#265](https://github.com/smormah/vsift/issues/265), [#266](https://github.com/smormah/vsift/issues/266), [#277](https://github.com/smormah/vsift/issues/277) | accepted residual |
 | [L-128](#l-128) | The fuzzing is one hour per target on shared hosted CPUs, 15 to 19 of 31 targets were still finding coverage at the end (15 on the candidate's run, 19 on 0.1.0's), and three kinds of stored record have no target | security | low | P14 | [#17](https://github.com/smormah/vsift/issues/17) | accepted residual |
 | [L-129](#l-129) | On Windows, a host killed outright in the first instants of a provider's start leaves that provider suspended for good, and its stage cannot be deleted | security | low | unscheduled | [#253](https://github.com/smormah/vsift/issues/253) | accepted residual |
 | [L-130](#l-130) | whisper.cpp ends the last segment of a range cut mid-speech past the audio, by several seconds; VSift cuts it at the audio's end, so that end says nothing about where speech stopped, and a session that holds such a revision cannot be read by 0.1.0 | accuracy/ASR | low | unscheduled | [#274](https://github.com/smormah/vsift/issues/274) | accepted residual |
 | [L-131](#l-131) | Requests that open sessions at the same moment contend on one try-only lock: in the measurements made between one request in five and one in four was refused `BUSY` and retried | performance | low | unscheduled | [#277](https://github.com/smormah/vsift/issues/277) | accepted residual |
 | [L-132](#l-132) | The reviewed FFmpeg can only follow a month-end build of its publisher, and a new pin does not move existing installs; the refresh candidate of 2026-10-03 is a daily build, needs two reviewed bounds raised and adds three libraries to the recipe | security | medium | P14 | [#272](https://github.com/smormah/vsift/issues/272) | open |
 | [L-133](#l-133) | The claims check reads an evidence item's status, not the version it is for, so the candidate rung's statements are in use on 0.1.0's evidence; and the README and `roadmap.svg` keep the candidate wording until the ledger follow-up | process/CI | low | P14 (PR 13) | [#17](https://github.com/smormah/vsift/issues/17) | deferred |
-| [L-134](#l-134) | A source that is both over the 20 GiB limit and larger than the free space answers `STORAGE_IO` on the candidate (0.1.0: `INVALID_SOURCE`), and the malicious-media campaign's no-room case never reaches the room check, so #266's check is shown only by its CLI test | contract/UX | low | P14 | [#310](https://github.com/smormah/vsift/issues/310) | accepted residual |
+| [L-134](#l-134) | The malicious-media campaign's no-room case never reaches the room check, so on the published bytes #266's check is shown only by its CLI test and by a supplementary run from a scratch branch | process/CI | low | P14 | [#310](https://github.com/smormah/vsift/issues/310) | accepted residual |
 | [L-135](#l-135) | A concurrent root creation under CPU load gave up waiting for its peer once in 1,500 repetitions on Windows, and its cause is not shown: the wait for a creator is five seconds of wall-clock time | performance | low | P14 | [#312](https://github.com/smormah/vsift/issues/312) | open |
 | [L-136](#l-136) | On Windows, a file another process holds without read sharing is answered `INTEGRITY_FAILURE` at once, not waited for; not observed in any campaign | integrity/durability | low | unscheduled | [#314](https://github.com/smormah/vsift/issues/314) | open |
 
-Counts: 1 high, 33 medium, 85 low (119 entries).
+Counts: 1 high, 34 medium, 86 low (121 entries).
 
 ## Security
 
@@ -693,7 +693,8 @@ Counts: 1 high, 33 medium, 85 low (119 entries).
   unless the source's size and a 1 GiB reserve are free, and space that cannot be read is an
   error. A desktop root, the CLI's default, is refused (`STORAGE_IO` with its own
   remediation, since P14 PR 7, #266, see [L-127](#l-127)) unless the source's size and a
-  16 MiB margin are free. **That check is best effort:** a filesystem whose space cannot be
+  16 MiB margin are free; a source over the 20 GiB limit is not asked for room, the limit
+  answers it first (`INVALID_SOURCE`, #310). **That check is best effort:** a filesystem whose space cannot be
   read, or that reports no available blocks whatever it holds (some network and user-space
   filesystems do), is not checked, because refusing there would refuse every ingest; the
   copy's own write failure, which gives the same answer, is the backstop. On Windows
@@ -3359,9 +3360,7 @@ that week.**
 - **Impact:** a script or an agent that keys on the code sees an integrity failure and exit 7 for a
   user mistake; one that reads the remediation sees what to do. Agents do not pass `--session-root`
   (an operator option the cold grader fails), so the skill's table is not exercised by it.
-- **Why:** v1 is additive only since 0.1.0, and the skill is frozen until the trials finish. (One known
-  deviation from this rule exists, [L-127](#l-127)'s over-the-limit answer, which changed by the order of
-  two checks; the maintainer accepted it on 2026-10-05.)
+- **Why:** v1 is additive only since 0.1.0, and the skill is frozen until the trials finish.
 - **Mitigation:** the remediation text; the contract, the schema example and the install guide say
   so.
 - **Next step:** at the next major contract version, or the next skill freeze if a consumer is found
@@ -3371,7 +3370,7 @@ that week.**
 
 ### L-127
 
-**Some CLI answers carry a published failure code that only loosely describes the case; the codes stay within v1 and the remediation says what happened, with one known deviation: a source over the limit and larger than the free space answers `STORAGE_IO` since the candidate.**
+**Some CLI answers carry a published failure code that only loosely describes the case; the codes stay within v1 and the remediation says what happened.**
 
 - **What:** the P14 malicious-media campaign ran 96 generated inputs through 251 operations of
   the published 0.1.0 in a no-network, read-only-root, memory- and process-bounded container.
@@ -3390,7 +3389,8 @@ that week.**
     The campaign's `ingest` of a 600 MiB file into a root of 256 MiB failed after 5 s as
     `INTEGRITY_FAILURE`; **that code was not reproduced and its cause is not known** (on a hosted 256 MiB
     tmpfs 0.1.0 gave `STORAGE_IO` after 7.5 s with no remediation). Since P14 PR 7, on Unix, the CLI refuses
-    before the copy when the source and a 16 MiB margin do not fit, and a write that runs out of room gives
+    before the copy when the source and a 16 MiB margin do not fit (a source over the 20 GiB limit is not asked
+    for room: the limit answers it first, `INVALID_SOURCE`, as in 0.1.0), and a write that runs out of room gives
     the same answer: `STORAGE_IO` (exit 7), the CLI path's code, with a remediation that says nothing is
     damaged, to report to the user (free space, or an operator naming a folder on a bigger drive) and to
     retry. `job run` answers the same situation `RESOURCE_LIMIT`, which is the better code and stays
@@ -3406,19 +3406,13 @@ that week.**
     storage, and when it would be damage. No other command is promised to carry it
     ([`cli-v1.md`](../contracts/cli-v1.md)); `transcript get`, `search` and `session retain` answer the
     same codes without it.
-  - **A source that is over the 20 GiB limit and also larger than the free space** ([#310](https://github.com/smormah/vsift/issues/310),
-    [L-134](#l-134)). **This one is not a published code kept: it is a code that changed.** 0.1.0
-    answered `INVALID_SOURCE` (the limit); the candidate answers `STORAGE_IO` in 0.1 s, because the
-    free-space check that P14 PR 7 added in front of the copy for #266 runs before the source-size limit. It is a
-    **known deviation from the rule above and from L-126** (v1 is additive only: a changed code is not
-    additive). **The maintainer accepted it on 2026-10-05** and waived RQ-10 on that basis (the ledger entry and
-    ADR 0024's PR 11a note have the text), keeping `0.2.0-rc.1`, for three reasons: the answer is typed,
-    bounded and fast; nothing is copied or stored; and it concerns only a source that is both over 20 GiB and
-    larger than what is free (on a machine with room the limit answers as before). **A later release should
-    run the limit check first**, so that a source over the limit is `INVALID_SOURCE` whatever the disk.
   - (A **named pipe with no writer** that made `ingest` wait for ever is fixed and is not a
     case of this limit: [#264](https://github.com/smormah/vsift/issues/264), `CHANGELOG.md`.)
-- **Evidence:** `P14 malicious media` runs 37136669473 (0.1.0) and 37330709659 (the candidate; run 37361623352,
+  - (A **source over the 20 GiB limit that was also larger than the free space** answered `STORAGE_IO` in the first
+    release candidate, where 0.1.0 said `INVALID_SOURCE`: the room check added for #266 ran before the size limit.
+    It is fixed for the second candidate and is not a case of this limit, because the published code was
+    restored and not kept: [#310](https://github.com/smormah/vsift/issues/310), `CHANGELOG.md`.)
+- **Evidence:** `P14 malicious media` runs 37136669473 (0.1.0) and 37330709659 (the first candidate; run 37361623352,
   from a scratch branch with a corrected case, is supplementary, see L-134) (`hostile-summary.md`);
   [`p14-qualification.md`](p14-qualification.md) section 18; the CLI test
   `source_link_cli_contract`, `no_room_cli_contract`, `session_not_published_cli_contract`, the engine test
@@ -3429,19 +3423,15 @@ that week.**
 - **Why:** changing the code of a published answer is not additive within v1 (the rule of
   [L-126](#l-126)): `STORAGE_IO` for a link, which 0.1.0 answered, cannot become `INVALID_SOURCE`
   without breaking a consumer written against 0.1.0. The maintainer decided on 2026-10-04 to keep
-  the published codes and fix the answers with remediation text. **The one exception is the answer
-  of the over-the-limit case above, which changed by the order of two checks; accepted on 2026-10-05.**
+  the published codes and fix the answers with remediation text.
 - **Mitigation:** the remediation text, which the skill's `STORAGE_IO` row (P14 PR 10a) tells an agent to read
   and to report in its own words; [`cli-v1.md`](../contracts/cli-v1.md) states the link
   rule; use the worker path for paths you do not control.
 - **Next step:** at the next major contract version answer a link `INVALID_SOURCE` and a source with
   no room `RESOURCE_LIMIT` and an id with no published session `INVALID_ARGUMENT`, and re-read every case of this entry for the code it should have had. This
-  limit is not closed by the fix of any one case. **Sooner:** in the first release after `0.2.0`, run the
-  source-size limit before the free-space check (code, so not in this candidate), which restores
-  `INVALID_SOURCE` for that case without touching another code.
+  limit is not closed by the fix of any one case.
 - **Owner:** P14. **Issue:** [#265](https://github.com/smormah/vsift/issues/265),
-  [#266](https://github.com/smormah/vsift/issues/266), [#277](https://github.com/smormah/vsift/issues/277),
-  [#310](https://github.com/smormah/vsift/issues/310).
+  [#266](https://github.com/smormah/vsift/issues/266), [#277](https://github.com/smormah/vsift/issues/277).
   **Status:** accepted residual until v2.
   **Review:** pending.
 
@@ -3604,31 +3594,28 @@ that week.**
 
 ### L-134
 
-**A source that is both over the 20 GiB limit and larger than the free space answers `STORAGE_IO` on the candidate (0.1.0 answered `INVALID_SOURCE`), and the malicious-media campaign's no-room case never reaches the room check, so #266's check is shown only by its CLI test.**
+**The malicious-media campaign's no-room case never reaches the room check, so on the published bytes #266's check is shown only by its CLI test and by a supplementary run from a scratch branch.**
 
-- **What:** two findings of the `P14 malicious media` run on the published `0.2.0-rc.1`
-  ([#310](https://github.com/smormah/vsift/issues/310)). (1) `ingest` of a sparse 30 GiB file (the limit is
-  20 GiB) answers `STORAGE_IO` in 0.1 s on the hosted runner, nothing copied; 0.1.0 answered
-  `INVALID_SOURCE`. The cause, read from the code and the case's setup and not confirmed by a rerun, is the free-space check
-  that P14 PR 7 added in front of the copy for #266 (on Unix the CLI refuses before the copy when the
-  source and a 16 MiB margin do not fit, `STORAGE_IO`, [L-127](#l-127)): it runs before the source-size
-  limit, and the runner's disk is smaller than the file. On a machine with room the limit answers as
-  before. (2) The campaign's `sparse-no-room` case passes the 256 MiB tmpfs mount point itself as the
-  session root, a folder VSift did not create, which VSift refuses with `INTEGRITY_FAILURE` after a
-  wait of up to five seconds ([`install.md`](../operations/install.md) section 12, #261): the 5.2 s and the 7 MiB
-  peak fit that, not a copy that ran out of room. The same setup gave the same answer on 0.1.0, so
-  the campaign has not tested the no-room path of `ingest` on either version; the worker request in the
-  same case (a workspace made on the small filesystem) answers `RESOURCE_LIMIT` at once.
+- **What:** the `P14 malicious media` run on the published `0.2.0-rc.1`
+  ([#310](https://github.com/smormah/vsift/issues/310)) had two findings. The first was a product defect and is
+  fixed: `ingest` of a source over the 20 GiB limit that was also larger than the free space answered
+  `STORAGE_IO` where 0.1.0 said `INVALID_SOURCE`, because the room check added for #266 ran before the size
+  limit; the limit now answers first, so the answer is 0.1.0's again whatever the disk (`CHANGELOG.md`, `cli-v1.md`,
+  [L-127](#l-127)). **What remains is the second finding:** the campaign's `sparse-no-room` case passes the
+  256 MiB tmpfs mount point itself as the session root, a folder VSift did not create, which VSift refuses with
+  `INTEGRITY_FAILURE` after a wait of up to five seconds ([`install.md`](../operations/install.md) section 12,
+  #261): the 5.2 s and the 7 MiB peak fit that, not a copy that ran out of room. The same setup gave the same
+  answer on 0.1.0, so the campaign has not tested the no-room path of `ingest` on either version; the worker
+  request in the same case (a workspace made on the small filesystem) answers `RESOURCE_LIMIT` at once.
 - **Evidence:** `P14 malicious media` run 37330709659 (`hostile-result.json`, `hostile-summary.md`);
   `tools/p14-campaigns/hostile-media.cjs` (`SMALL_WORKSPACE`, `commandFor`);
   [`p14-qualification.md`](p14-qualification.md) section 24.2.
-- **Impact:** low. The answer is typed, bounded and stores nothing; a script that keys on
-  `INVALID_SOURCE` for an over-limit source meets `STORAGE_IO` when the disk is also too small, and the
-  remediation says what happened. The second finding concerns the evidence, not the product: the
-  fix of #266 has a regression test (`no_room_cli_contract`) and the real-bytes run does not exercise it.
-- **Why:** the published codes stay within v1 (the rule of L-126 and L-127), and the campaign tools are
-  frozen at the candidate: `tools/` may not change before the stable commit (`release.md` 6.8).
-- **Mitigation:** the remediation text; the test above. **The corrected case has been run, for evidence
+- **Impact:** low, and about the evidence, not the product: the fix of #266 has a regression test
+  (`no_room_cli_contract`) and the real-bytes run does not exercise it. The case's answer
+  (`INTEGRITY_FAILURE`, bounded, nothing stored) is tracked under #266 and does not fail the run's own judge.
+- **Why:** the campaign tools are frozen at the candidate: `tools/` may not change before the stable commit
+  (`release.md` 6.8).
+- **Mitigation:** the test above. **The corrected case has been run, for evidence
   only:** `P14 malicious media` run 37361623352, from the scratch branch
   `p14-pr11-evidence-media-corrected-case` at commit `bf378a36bfb6e4a9ad160049c87ea425c96e7ae3` (the tag's
   tool with two lines changed: the small-filesystem case's session root is a folder VSift creates, and
@@ -3637,13 +3624,11 @@ that week.**
   and the only finding left is the symbolic link (#265): the check of #266 works on the shipped bytes.
   That run is a different revision of the tool from the candidate's frozen one, and it does not turn
   the candidate's own run (37330709659) green.
-- **Next step:** **the maintainer decided on 2026-10-05**: (1) is accepted with [L-127](#l-127) (RQ-10 is
-  waived for R0 on that basis, `0.2.0-rc.1` stays), and a later release should run the source-size limit
-  before the free-space check; (2) is a defect of the campaign case, corrected on the scratch branch above
-  and in `tools/p14-campaigns` after the stable release.
+- **Next step:** the case is a defect of the campaign, corrected on the scratch branch above and in
+  `tools/p14-campaigns` after the stable release (the first finding is fixed, above).
 - **Owner:** P14. **Issue:** [#310](https://github.com/smormah/vsift/issues/310). **Status:**
-  accepted residual. **Review:** accepted (2026-10-05, by the maintainer's decision on RQ-10; the
-  register's own pass over the thirty entries is separate).
+  accepted residual. **Review:** accepted (2026-10-05, by the maintainer's decision on RQ-10, which covered
+  both findings; the first has since been fixed; the register's own pass over the thirty entries is separate).
 
 ### L-135
 
