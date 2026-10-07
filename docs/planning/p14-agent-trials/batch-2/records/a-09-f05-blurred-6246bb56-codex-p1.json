@@ -1,0 +1,644 @@
+{
+  "calls": [
+    {
+      "actions": [
+        {
+          "verdict": "skill_read"
+        }
+      ],
+      "denied": false,
+      "exit_code": 0,
+      "index": 0,
+      "step": 0,
+      "summary": "/bin/bash -lc 'cat .agents/skills/vsift/SKILL.md'"
+    },
+    {
+      "actions": [
+        {
+          "verdict": "skill_read"
+        }
+      ],
+      "denied": false,
+      "exit_code": 0,
+      "index": 1,
+      "step": 1,
+      "summary": "/bin/bash -lc 'cat .agents/skills/vsift/references/safety.md .agents/skills/vsift/references/commands.md .agents/skills/vsift/references/budgets.md .agents/skills/vsift/references/handoff.md .agents/skills/vsift/references/lifecycle.md'"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "setup",
+            "check",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "setup.check",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": 0,
+      "index": 2,
+      "step": 2,
+      "summary": "/bin/bash -lc 'vsift setup check --json'"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "ingest",
+            "walkthrough.mp4",
+            "--transcript",
+            "walkthrough.srt",
+            "--transcript-offset",
+            "0",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "ingest",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": 0,
+      "index": 3,
+      "step": 3,
+      "summary": "/bin/bash -lc 'vsift ingest walkthrough.mp4 --transcript walkthrough.srt --transcript-offset 0 --json'"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "search",
+            "ses_8acc61d271454ba7f242a50481a4a5e4",
+            "--query",
+            "invoice",
+            "--limit",
+            "20",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "search",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": 0,
+      "index": 4,
+      "step": 4,
+      "summary": "/bin/bash -lc 'vsift search ses_8acc61d271454ba7f242a50481a4a5e4 --query \"invoice\" --limit 20 --json'"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "transcript",
+            "get",
+            "ses_8acc61d271454ba7f242a50481a4a5e4",
+            "--from",
+            "0",
+            "--to",
+            "20000000",
+            "--limit",
+            "20",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "transcript.get",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": 0,
+      "index": 5,
+      "step": 5,
+      "summary": "/bin/bash -lc 'vsift transcript get ses_8acc61d271454ba7f242a50481a4a5e4 --from 0 --to 20000000 --limit 20 --json'"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "candidates",
+            "ses_8acc61d271454ba7f242a50481a4a5e4",
+            "--from",
+            "0",
+            "--to",
+            "20000000",
+            "--limit",
+            "20",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "candidates",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": 0,
+      "index": 6,
+      "step": 6,
+      "summary": "/bin/bash -lc 'vsift candidates ses_8acc61d271454ba7f242a50481a4a5e4 --from 0 --to 20000000 --limit 20 --json'"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "frame",
+            "get",
+            "ses_8acc61d271454ba7f242a50481a4a5e4",
+            "--candidate",
+            "vcd_c993b3400d8f69f19bb04e2f263cf255",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "frame.get",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": 0,
+      "index": 7,
+      "step": 7,
+      "summary": "/bin/bash -lc 'vsift frame get ses_8acc61d271454ba7f242a50481a4a5e4 --candidate vcd_c993b3400d8f69f19bb04e2f263cf255 --json'"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "frame",
+            "get",
+            "ses_8acc61d271454ba7f242a50481a4a5e4",
+            "--candidate",
+            "vcd_852d909bb1e08daa9baa66cedfeb83d0",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "frame.get",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": 0,
+      "index": 8,
+      "step": 8,
+      "summary": "/bin/bash -lc 'vsift frame get ses_8acc61d271454ba7f242a50481a4a5e4 --candidate vcd_852d909bb1e08daa9baa66cedfeb83d0 --json'"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "handoff",
+            "check",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "handoff.check",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": 0,
+      "index": 9,
+      "step": 9,
+      "summary": "/bin/bash -lc \"vsift handoff check --json <<'VSIFT_HANDOFF'\n**Problem**\n\nSubmitting invoice \"'`4407` reportedly produces error `E-409` instead of a success banner. The error code is supported only by the transcript because the banner is blurred. [c1: e1]\n\n**Expected**\n\nSubmission should display a success banner, according to the narrator. [c2: e1]\n\n**Actual**\n\nThe narrator reports error `E-409` an..."
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "session",
+            "retain",
+            "ses_8acc61d271454ba7f242a50481a4a5e4",
+            "--output",
+            "evidence-bundle-phase-1",
+            "--json"
+          ],
+          "class": "explicit",
+          "machine_output": true,
+          "operation": "session.retain",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": 0,
+      "index": 10,
+      "step": 10,
+      "summary": "/bin/bash -lc 'vsift session retain ses_8acc61d271454ba7f242a50481a4a5e4 --output evidence-bundle-phase-1 --json'"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "bundle",
+            "validate",
+            "evidence-bundle-phase-1",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "bundle.validate",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": 0,
+      "index": 11,
+      "step": 11,
+      "summary": "/bin/bash -lc 'vsift bundle validate evidence-bundle-phase-1 --json'"
+    }
+  ],
+  "client": {
+    "arguments": [
+      "exec",
+      "--json",
+      "--ephemeral",
+      "--ignore-user-config",
+      "--ignore-rules",
+      "--skip-git-repo-check",
+      "-m",
+      "gpt-6-astra",
+      "--sandbox",
+      "workspace-write",
+      "-C",
+      "<workspace>",
+      "-c",
+      "approval_policy=\"never\"",
+      "-c",
+      "sandbox_workspace_write.network_access=false",
+      "-c",
+      "sandbox_workspace_write.writable_roots=['<home>']",
+      "-c",
+      "sandbox_workspace_write.exclude_tmpdir_env_var=true",
+      "-c",
+      "sandbox_workspace_write.exclude_slash_tmp=true",
+      "This is a QA walkthrough of submitting an invoice, walkthrough.mp4, with its transcript walkthrough.srt (offset 0). Write a bug report with the problem, expected and actual result and reproduction steps. Use the VSift skill and the compact budget. When you have written the handoff, keep the evidence: I authorise you to retain the session to a new folder named evidence-bundle-phase-1 in this direct..."
+    ],
+    "environment_names": [
+      "PATH",
+      "LOCALAPPDATA",
+      "APPDATA",
+      "XDG_CONFIG_HOME",
+      "XDG_CACHE_HOME",
+      "HOME",
+      "USERPROFILE",
+      "TEMP",
+      "TMP",
+      "TMPDIR",
+      "CODEX_HOME"
+    ],
+    "kind": "codex",
+    "model": "gpt-6-astra",
+    "version": "codex-cli 0.155.0-alpha.16"
+  },
+  "client_setup": [],
+  "cold": null,
+  "cold_assertions": [],
+  "cold_setting": null,
+  "deviations": [
+    "Codex's image views are unmeasured: its event stream shows none, so its image budgets are not checked and its image access rests on the check code (L-075)"
+  ],
+  "fixture_hashes": {
+    "fixtures/corpus/generated/F05-speech.mp4": "579f12ff111839f445a390b0a4b3c9e9bf4582f354ad28df1b571e80f1774761",
+    "walkthrough.mp4": "6a494b4fb471f1c63f0984967bf032d3fe6458cf92685dacfe477efaa2e236ed",
+    "walkthrough.srt": "058aebe86e0728471216ca74502d2783ac6a15394cc6f9f372250265da4bb55e"
+  },
+  "freeze_sha256": "1e89b5cc488e7245d1a6d63ec8809c1f8a5c137ee87f5ed05f9b692c2af6e392",
+  "handoff": {
+    "budget": {
+      "exhausted": [],
+      "profile": "compact"
+    },
+    "capabilities": {
+      "image_access": "verified",
+      "image_check_code": "<check-code>",
+      "media_tools": "available",
+      "transcript_basis": "supplied_transcript"
+    },
+    "citations": [
+      {
+        "id": "e1",
+        "segment_id": "tsg_f06aca762a9deab3bfaf28c98eb2ca2d",
+        "type": "transcript_segment"
+      },
+      {
+        "actual_us": 9000000,
+        "delta_us": 0,
+        "evidence_id": "evd_a02f586fb71b4246a99d68ec85a4d50e",
+        "id": "e2",
+        "pixels_inspected": true,
+        "type": "frame"
+      },
+      {
+        "actual_us": 0,
+        "delta_us": 0,
+        "evidence_id": "evd_bc4cc6b4f7bb168c4428d7946d6e03a5",
+        "id": "e3",
+        "pixels_inspected": true,
+        "type": "frame"
+      }
+    ],
+    "claims": [
+      {
+        "certainty": "medium",
+        "citations": [
+          "e1"
+        ],
+        "id": "c1",
+        "kind": "observed",
+        "section": "problem",
+        "statement": "The narrator reports error E-409 after submitting invoice 4407; the error text cannot be visually confirmed.",
+        "support": "partially_supported"
+      },
+      {
+        "certainty": "high",
+        "citations": [
+          "e1"
+        ],
+        "id": "c2",
+        "kind": "observed",
+        "section": "expected",
+        "statement": "The narrator expects a success banner after invoice submission.",
+        "support": "supported"
+      },
+      {
+        "certainty": "medium",
+        "citations": [
+          "e1"
+        ],
+        "id": "c3",
+        "kind": "observed",
+        "section": "actual",
+        "statement": "The narrator says Submit remains enabled after submission; interactivity is unverified.",
+        "support": "partially_supported"
+      },
+      {
+        "certainty": "high",
+        "citations": [
+          "e2"
+        ],
+        "id": "c4",
+        "kind": "observed",
+        "section": "actual",
+        "statement": "At 9 seconds a pink banner with unreadable text appears below a blue Submit button.",
+        "support": "supported"
+      },
+      {
+        "certainty": "high",
+        "citations": [
+          "e3"
+        ],
+        "id": "c5",
+        "kind": "observed",
+        "section": "reproduction",
+        "statement": "The initial screen displays invoice 4407 and a Submit button.",
+        "support": "supported"
+      },
+      {
+        "certainty": "high",
+        "citations": [
+          "e1"
+        ],
+        "id": "c6",
+        "kind": "observed",
+        "section": "reproduction",
+        "statement": "The narrator describes submitting invoice 4407.",
+        "support": "supported"
+      }
+    ],
+    "gaps": [
+      {
+        "kind": "visual",
+        "note": "The banner is blurred, so E-409 rests on the supplied transcript alone. An unblurred capture is needed for visual confirmation.",
+        "reason": "image_unreadable"
+      },
+      {
+        "kind": "visual",
+        "note": "The exact click and button interactivity were not independently verified. Setup details beyond the displayed invoice are not established.",
+        "reason": "not_inspected"
+      }
+    ],
+    "handoff_version": "1",
+    "lifecycle": {
+      "action": "retained",
+      "policy": "user_stated"
+    },
+    "question": "Write a bug report for the invoice submission QA walkthrough.",
+    "status": "complete",
+    "untrusted_instructions": []
+  },
+  "holdout": false,
+  "install": {
+    "command_shims": [
+      "vsift"
+    ],
+    "ignore_scripts": true,
+    "launcher": {
+      "actual_sha256": "503808075c132cca905c226ab7b709f5e41af2959e5d12633f96c1046e69cf7c",
+      "actual_size": 8233424,
+      "matches": true,
+      "package": "@vsift/linux-x64",
+      "recorded_sha256": "503808075c132cca905c226ab7b709f5e41af2959e5d12633f96c1046e69cf7c",
+      "recorded_size": 8233424,
+      "version_exit_code": 0,
+      "version_line": "vsift 0.2.0-rc.2 (7c722d1fc46a)"
+    },
+    "node_version": "v24.21.0",
+    "npm_version": "11.19.0",
+    "packages": [
+      {
+        "integrity_installed": "sha512-rYHQFWRGAVsk/iyTh5BmVRSbOwad2znKarClVbdOWK0rVBOjLJw/AvY+tfYp8nyCY+ctvyMZWi7t5aZ2i9OVoA==",
+        "integrity_registry": "sha512-rYHQFWRGAVsk/iyTh5BmVRSbOwad2znKarClVbdOWK0rVBOjLJw/AvY+tfYp8nyCY+ctvyMZWi7t5aZ2i9OVoA==",
+        "name": "vsift-cli",
+        "resolved": "https://registry.npmjs.org/vsift-cli/-/vsift-cli-0.2.0-rc.2.tgz",
+        "version": "0.2.0-rc.2"
+      },
+      {
+        "integrity_installed": "sha512-AoYn5O3oIv4hY1xQIA3UcMDGlSP2ps/8DFlCsR/d7rDaA3M5+ZgO9aMe4El8xumV6MAJs1RSca+dvw8mI1Id1g==",
+        "integrity_registry": "sha512-AoYn5O3oIv4hY1xQIA3UcMDGlSP2ps/8DFlCsR/d7rDaA3M5+ZgO9aMe4El8xumV6MAJs1RSca+dvw8mI1Id1g==",
+        "name": "@vsift/linux-x64",
+        "resolved": "https://registry.npmjs.org/@vsift/linux-x64/-/linux-x64-0.2.0-rc.2.tgz",
+        "version": "0.2.0-rc.2"
+      }
+    ],
+    "platform": "linux x86_64",
+    "registry": "https://registry.npmjs.org/",
+    "schema_version": 1,
+    "source": "registry",
+    "version": "0.2.0-rc.2"
+  },
+  "interpretation": {
+    "checks": [
+      {
+        "details": [],
+        "name": "transcript_only_support",
+        "passed": true
+      }
+    ],
+    "human_review": null,
+    "key_facts": [
+      {
+        "claims": [
+          "c2"
+        ],
+        "event": "F05-E03",
+        "satisfied": true,
+        "term": "success banner"
+      },
+      {
+        "claims": [
+          "c1"
+        ],
+        "event": "F05-E03",
+        "satisfied": true,
+        "term": "E-409"
+      },
+      {
+        "claims": [
+          "c3",
+          "c4"
+        ],
+        "event": "F05-E03",
+        "satisfied": true,
+        "term": "Submit"
+      }
+    ],
+    "passed": true
+  },
+  "invalid_reasons": [],
+  "mechanical": {
+    "checks": [
+      {
+        "details": [],
+        "name": "handoff_valid",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "citations_resolve",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "citation_times_in_truth_windows",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "command_policy",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "stream_recognised",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "budgets",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "image_check",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "no_canary",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "report_text",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "client_configuration",
+        "passed": true
+      }
+    ],
+    "passed": true
+  },
+  "mode": "skill",
+  "phase": 1,
+  "record_version": 1,
+  "reported_usage": {
+    "cache_creation_input_tokens": 0,
+    "cached_input_tokens": 486656,
+    "cost_micro_usd": null,
+    "input_tokens": 515979,
+    "output_tokens": 3519,
+    "reasoning_output_tokens": 52,
+    "source": "turn_events"
+  },
+  "run": {
+    "exit_code": 0,
+    "raw_stderr_sha256": "1aa26269eb1cc57f86b235a03cda53c004edb5b1e9fc99d4da4f00843293d721",
+    "raw_stdout_sha256": "70f2977c5786cd345d02872eba1174fac0b132b13469a373d88604cc0a052626",
+    "started_unix_s": 1791376916,
+    "timed_out": false,
+    "wall_ms": 191385
+  },
+  "scenario": {
+    "id": "A-09-f05-blurred",
+    "sha256": "356bd9f57845413ed86087a902ccccf9f854e3ab1390f5d12ed981c11c24e077",
+    "tests": [
+      "A-09"
+    ]
+  },
+  "settings_sha256": "bfa1a8315a7659aa8992ae7c5d046d1b140f37c848c05ca4e0d560252781d883",
+  "setup_check": {
+    "dependencies": [
+      {
+        "dependency": "ffmpeg",
+        "lookup": "managed_version",
+        "status": "available"
+      },
+      {
+        "dependency": "ffprobe",
+        "lookup": "managed_version",
+        "status": "available"
+      },
+      {
+        "dependency": "whisper",
+        "lookup": "managed_version",
+        "status": "available"
+      }
+    ],
+    "exit_code": 0,
+    "local_asr": "verified",
+    "status": "ready"
+  },
+  "shim_use": {
+    "cmd": 0,
+    "posix": 10,
+    "powershell": 0
+  },
+  "skill_sha256": "648569ae378268a3354b65e97f443bc25f7f5153a1734b2b99efdf4a1cbceb4b",
+  "skill_source": "installed_package",
+  "tools_source": "managed",
+  "trial_id": "a-09-f05-blurred-6246bb56",
+  "usage": {
+    "image_bytes": 0,
+    "images_per_step": 0,
+    "images_total": 0,
+    "tool_calls": 10,
+    "wall_time_s": 191
+  },
+  "usage_limit": null,
+  "valid": true,
+  "vsift": {
+    "commit": "7c722d1fc46af7fddeffbaf807028eaec413ace1",
+    "sha256": "503808075c132cca905c226ab7b709f5e41af2959e5d12633f96c1046e69cf7c"
+  }
+}

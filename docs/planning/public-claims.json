@@ -408,7 +408,7 @@
       "text": "Claude Code on Windows 11 with Claude Opus 5.5 and Claude Sonnet 5.5 is qualified",
       "requires": ["RQ-15"],
       "limits": ["L-007", "L-082", "L-083", "L-095"],
-      "note": "Qualified only on the system it was trialled on, from a clean install of the published package."
+      "note": "Qualified only on the system it was trialled on, from a clean install of the published package. The round ran on 0.2.0-rc.2 on 2026-10-07 and Claude Opus 5.5's review tier missed two gates (mechanical 4 of 6, blurred banner 1 of 3: RQ-15 is failed, L-139); the repeat on the third candidate decides whether this statement can be used."
     },
     {
       "kind": "claim",

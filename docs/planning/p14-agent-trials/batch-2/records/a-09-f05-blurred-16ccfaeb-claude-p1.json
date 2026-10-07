@@ -1,0 +1,809 @@
+{
+  "calls": [
+    {
+      "actions": [
+        {
+          "verdict": "skill_read"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 0,
+      "step": 1,
+      "summary": "Skill vsift"
+    },
+    {
+      "actions": [
+        {
+          "verdict": "skill_read"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 1,
+      "step": 3,
+      "summary": "Read <workspace>\\.claude\\skills\\vsift\\references\\safety.md"
+    },
+    {
+      "actions": [
+        {
+          "verdict": "skill_read"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 2,
+      "step": 4,
+      "summary": "Read <workspace>\\.claude\\skills\\vsift\\references\\commands.md"
+    },
+    {
+      "actions": [
+        {
+          "verdict": "skill_read"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 3,
+      "step": 5,
+      "summary": "Read <workspace>\\.claude\\skills\\vsift\\references\\lifecycle.md"
+    },
+    {
+      "actions": [
+        {
+          "verdict": "skill_read"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 4,
+      "step": 6,
+      "summary": "Read <workspace>\\.claude\\skills\\vsift\\references\\handoff.md"
+    },
+    {
+      "actions": [
+        {
+          "image_check": true,
+          "path": "<workspace>/.claude/skills/vsift/assets/image-check.png",
+          "verdict": "image_open"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 5,
+      "step": 7,
+      "summary": "Read <workspace>\\.claude\\skills\\vsift\\assets\\image-check.png"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "setup",
+            "check",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "setup.check",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 6,
+      "step": 9,
+      "summary": "vsift setup check --json"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "ingest",
+            "walkthrough.mp4",
+            "--transcript",
+            "walkthrough.srt",
+            "--transcript-offset",
+            "0",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "ingest",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 7,
+      "step": 10,
+      "summary": "vsift ingest walkthrough.mp4 --transcript walkthrough.srt --transcript-offset 0 --json"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "search",
+            "ses_f65fe2d4f91c6391dee599dd2fc22b13",
+            "--query",
+            "invoice",
+            "--limit",
+            "20",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "search",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 8,
+      "step": 12,
+      "summary": "vsift search ses_f65fe2d4f91c6391dee599dd2fc22b13 --query \"invoice\" --limit 20 --json"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "candidates",
+            "ses_f65fe2d4f91c6391dee599dd2fc22b13",
+            "--from",
+            "0",
+            "--to",
+            "20000000",
+            "--limit",
+            "20",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "candidates",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 9,
+      "step": 14,
+      "summary": "vsift candidates ses_f65fe2d4f91c6391dee599dd2fc22b13 --from 0 --to 20000000 --limit 20 --json"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "frame",
+            "get",
+            "ses_f65fe2d4f91c6391dee599dd2fc22b13",
+            "--candidate",
+            "vcd_50758b892c27b1b5a1c43f5b4222305a",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "frame.get",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 10,
+      "step": 15,
+      "summary": "vsift frame get ses_f65fe2d4f91c6391dee599dd2fc22b13 --candidate vcd_50758b892c27b1b5a1c43f5b4222305a --json"
+    },
+    {
+      "actions": [
+        {
+          "image_check": false,
+          "path": "<session-root>/sessions/ses_f65fe2d4f91c6391dee599dd2fc22b13/artifacts/artifact-6bfce8f0d38a4d5cc13f60c7344a4150f3f2a756d7efca4444589ef2694c3911.png",
+          "verdict": "image_open"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 11,
+      "step": 16,
+      "summary": "Read <session-root>\\sessions\\ses_f65fe2d4f91c6391dee599dd2fc22b13\\artifacts\\artifact-6bfce8f0d38a4d5cc13f60c7344a4150f3f2a756d7efca4444589ef2694c3911.png"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "frame",
+            "get",
+            "ses_f65fe2d4f91c6391dee599dd2fc22b13",
+            "--candidate",
+            "vcd_f911d16ef4316109f6296ca2c2644c3e",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "frame.get",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 12,
+      "step": 18,
+      "summary": "vsift frame get ses_f65fe2d4f91c6391dee599dd2fc22b13 --candidate vcd_f911d16ef4316109f6296ca2c2644c3e --json"
+    },
+    {
+      "actions": [
+        {
+          "image_check": false,
+          "path": "<session-root>/sessions/ses_f65fe2d4f91c6391dee599dd2fc22b13/artifacts/artifact-c83a0d66688812247cfea2e0bb3e2566c84e69dd8652fc1829540617b3c4bd33.png",
+          "verdict": "image_open"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 13,
+      "step": 19,
+      "summary": "Read <session-root>\\sessions\\ses_f65fe2d4f91c6391dee599dd2fc22b13\\artifacts\\artifact-c83a0d66688812247cfea2e0bb3e2566c84e69dd8652fc1829540617b3c4bd33.png"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "crop",
+            "ses_f65fe2d4f91c6391dee599dd2fc22b13",
+            "evd_b30de1a64596b4c09525042f233014d6",
+            "--rect",
+            "110,450,440,80",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "crop",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 14,
+      "step": 22,
+      "summary": "vsift crop ses_f65fe2d4f91c6391dee599dd2fc22b13 evd_b30de1a64596b4c09525042f233014d6 --rect 110,450,440,80 --json"
+    },
+    {
+      "actions": [
+        {
+          "image_check": false,
+          "path": "<session-root>/sessions/ses_f65fe2d4f91c6391dee599dd2fc22b13/artifacts/artifact-ee4b179009191668ba9593660fd42e7b3f62615c4854ae0befd2dc3d506da1cf.png",
+          "verdict": "image_open"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 15,
+      "step": 23,
+      "summary": "Read <session-root>\\sessions\\ses_f65fe2d4f91c6391dee599dd2fc22b13\\artifacts\\artifact-ee4b179009191668ba9593660fd42e7b3f62615c4854ae0befd2dc3d506da1cf.png"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "handoff",
+            "check",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "handoff.check",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 16,
+      "step": 26,
+      "summary": "vsift handoff check --json <<'VSIFT_HANDOFF'\n## Problem\n\nSubmitting invoice 4407 does not show a success result. The narrator says the page shows error `E-409` and leaves Submit enabled [c1: e1]. A banner does appear below the Submit button at 00:09.000, but its text is blurred in the recording [c4: e2, e3, e4].\n\n## Expected\n\nAccording to the narrator, a success banner should appear after invoice ..."
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "session",
+            "retain",
+            "ses_f65fe2d4f91c6391dee599dd2fc22b13",
+            "--output",
+            "evidence-bundle-phase-1",
+            "--json"
+          ],
+          "class": "explicit",
+          "machine_output": true,
+          "operation": "session.retain",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 17,
+      "step": 28,
+      "summary": "vsift session retain ses_f65fe2d4f91c6391dee599dd2fc22b13 --output evidence-bundle-phase-1 --json"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "bundle",
+            "validate",
+            "evidence-bundle-phase-1",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "bundle.validate",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 18,
+      "step": 30,
+      "summary": "vsift bundle validate evidence-bundle-phase-1 --json"
+    }
+  ],
+  "client": {
+    "arguments": [
+      "-p",
+      "This is a QA walkthrough of submitting an invoice, walkthrough.mp4, with its transcript walkthrough.srt (offset 0). Write a bug report with the problem, expected and actual result and reproduction steps. Use the VSift skill and the compact budget. When you have written the handoff, keep the evidence: I authorise you to retain the session to a new folder named evidence-bundle-phase-1 in this direct...",
+      "--output-format",
+      "stream-json",
+      "--verbose",
+      "--model",
+      "claude-opus-5-5",
+      "--max-turns",
+      "60",
+      "--setting-sources",
+      "project",
+      "--permission-mode",
+      "dontAsk",
+      "--no-session-persistence",
+      "--strict-mcp-config"
+    ],
+    "environment_names": [
+      "PATH",
+      "SystemRoot",
+      "windir",
+      "SystemDrive",
+      "ComSpec",
+      "PATHEXT",
+      "OS",
+      "PROCESSOR_ARCHITECTURE",
+      "NUMBER_OF_PROCESSORS",
+      "ProgramData",
+      "CLAUDE_CODE_GIT_BASH_PATH",
+      "LOCALAPPDATA",
+      "APPDATA",
+      "XDG_CONFIG_HOME",
+      "XDG_CACHE_HOME",
+      "HOME",
+      "USERPROFILE",
+      "TEMP",
+      "TMP",
+      "TMPDIR",
+      "CLAUDE_CONFIG_DIR",
+      "DISABLE_AUTOUPDATER",
+      "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"
+    ],
+    "kind": "claude_code",
+    "model": "claude-opus-5-5",
+    "version": "2.1.284 (Claude Code)"
+  },
+  "client_setup": [
+    "marked the trial workspace as trusted in the client home"
+  ],
+  "cold": null,
+  "cold_assertions": [],
+  "cold_setting": null,
+  "deviations": [],
+  "fixture_hashes": {
+    "fixtures/corpus/generated/F05-speech.mp4": "579f12ff111839f445a390b0a4b3c9e9bf4582f354ad28df1b571e80f1774761",
+    "walkthrough.mp4": "4a7e62eb420aecdd4b3faa6643258e443ae5812f3626e0506807d53337a1a8c3",
+    "walkthrough.srt": "058aebe86e0728471216ca74502d2783ac6a15394cc6f9f372250265da4bb55e"
+  },
+  "freeze_sha256": "1e89b5cc488e7245d1a6d63ec8809c1f8a5c137ee87f5ed05f9b692c2af6e392",
+  "handoff": {
+    "budget": {
+      "profile": "compact"
+    },
+    "capabilities": {
+      "image_access": "verified",
+      "image_check_code": "<check-code>",
+      "local_asr": "not_run",
+      "media_tools": "available",
+      "transcript_basis": "supplied_transcript"
+    },
+    "citations": [
+      {
+        "end_us": 9775000,
+        "id": "e1",
+        "revision_id": "trv_f63e52e0f85cddf7f878c93663ed5800",
+        "segment_id": "tsg_bd1433532ef83fb195d0a1c733bf278a",
+        "start_us": 500000,
+        "type": "transcript_segment"
+      },
+      {
+        "actual_us": 0,
+        "candidate_id": "vcd_f911d16ef4316109f6296ca2c2644c3e",
+        "delta_us": 0,
+        "evidence_id": "evd_9f1a754519d9f558195513e49b931e6a",
+        "id": "e2",
+        "pixels_inspected": true,
+        "requested_us": 0,
+        "type": "frame"
+      },
+      {
+        "actual_us": 9000000,
+        "candidate_id": "vcd_50758b892c27b1b5a1c43f5b4222305a",
+        "delta_us": 0,
+        "evidence_id": "evd_b30de1a64596b4c09525042f233014d6",
+        "id": "e3",
+        "pixels_inspected": true,
+        "requested_us": 9000000,
+        "type": "frame"
+      },
+      {
+        "actual_us": 9000000,
+        "evidence_id": "evd_5c68f5e0eb2e91a8929f1d86df2e14e9",
+        "id": "e4",
+        "parent_evidence_id": "evd_b30de1a64596b4c09525042f233014d6",
+        "pixels_inspected": true,
+        "rect": {
+          "height": 80,
+          "width": 440,
+          "x": 110,
+          "y": 450
+        },
+        "type": "crop"
+      }
+    ],
+    "claims": [
+      {
+        "certainty": "medium",
+        "citations": [
+          "e1"
+        ],
+        "id": "c1",
+        "kind": "observed",
+        "section": "problem",
+        "statement": "Submitting invoice 4407 shows error E-409 instead of a success banner and leaves Submit enabled, according to the narrator.",
+        "support": "partially_supported"
+      },
+      {
+        "certainty": "high",
+        "citations": [
+          "e1"
+        ],
+        "id": "c2",
+        "kind": "observed",
+        "section": "expected",
+        "statement": "The narrator states that a success banner is expected after submitting invoice 4407.",
+        "support": "supported"
+      },
+      {
+        "certainty": "high",
+        "citations": [
+          "e2"
+        ],
+        "id": "c3",
+        "kind": "observed",
+        "section": "actual",
+        "statement": "At 00:00.000 the page shows heading INVOICE 4407 and a blue SUBMIT button with no banner below it.",
+        "support": "supported"
+      },
+      {
+        "certainty": "high",
+        "citations": [
+          "e2",
+          "e3",
+          "e4"
+        ],
+        "id": "c4",
+        "kind": "observed",
+        "section": "actual",
+        "statement": "At 00:09.000 a pinkish banner is shown below the SUBMIT button and its text is blurred and unreadable.",
+        "support": "supported"
+      },
+      {
+        "certainty": "high",
+        "citations": [
+          "e2",
+          "e3"
+        ],
+        "id": "c5",
+        "kind": "observed",
+        "section": "actual",
+        "statement": "The SUBMIT button is displayed in the same blue style at 00:09.000 as at 00:00.000.",
+        "support": "supported"
+      },
+      {
+        "certainty": "medium",
+        "citations": [
+          "e1"
+        ],
+        "id": "c6",
+        "kind": "observed",
+        "section": "actual",
+        "statement": "The banner shown after submitting invoice 4407 contains error E-409, per the transcript only.",
+        "support": "partially_supported"
+      },
+      {
+        "certainty": "medium",
+        "citations": [
+          "e1"
+        ],
+        "id": "c7",
+        "kind": "observed",
+        "section": "actual",
+        "statement": "The Submit button remains enabled after the error, per the transcript only.",
+        "support": "partially_supported"
+      },
+      {
+        "certainty": "high",
+        "citations": [
+          "e2"
+        ],
+        "id": "c8",
+        "kind": "observed",
+        "section": "reproduction",
+        "statement": "Step 1: open invoice 4407, whose page shows heading INVOICE 4407 and a SUBMIT button.",
+        "support": "supported"
+      },
+      {
+        "certainty": "medium",
+        "citations": [
+          "e1"
+        ],
+        "id": "c9",
+        "kind": "observed",
+        "section": "reproduction",
+        "statement": "Step 2: press Submit on invoice 4407, as the narrator says; the click itself was not seen in an opened frame.",
+        "support": "partially_supported"
+      }
+    ],
+    "gaps": [
+      {
+        "kind": "visual",
+        "note": "The banner below Submit at 00:09.000 is blurred; its text, including the error code E-409, rests on the transcript alone.",
+        "reason": "image_unreadable"
+      },
+      {
+        "kind": "visual",
+        "note": "Frames from 00:10.000 to 00:20.000 and the moment of the Submit click were not opened.",
+        "reason": "not_inspected"
+      },
+      {
+        "kind": "dependency",
+        "note": "whisper is missing so local speech recognition was not run; the supplied SRT transcript was used instead. Remediation: Install or locate a trusted whisper.cpp CLI executable for local ASR, then rerun setup check. A supplied transcript can skip local ASR.",
+        "reason": "transcript_unavailable"
+      }
+    ],
+    "handoff_version": "1",
+    "lifecycle": {
+      "action": "retained",
+      "mode": "retained",
+      "policy": "user_stated"
+    },
+    "question": "Write a bug report for the invoice submission shown in the walkthrough: problem, expected and actual result, and reproduction steps.",
+    "session": {
+      "session_id": "ses_f65fe2d4f91c6391dee599dd2fc22b13"
+    },
+    "status": "complete",
+    "untrusted_instructions": []
+  },
+  "holdout": false,
+  "install": {
+    "command_shims": [
+      "vsift",
+      "vsift.cmd",
+      "vsift.ps1"
+    ],
+    "ignore_scripts": true,
+    "launcher": {
+      "actual_sha256": "14b985a15ff30fde65d023eb9b3b0776f0d0328154455ee20c916a272e56496c",
+      "actual_size": 9870848,
+      "matches": true,
+      "package": "@vsift/win32-x64",
+      "recorded_sha256": "14b985a15ff30fde65d023eb9b3b0776f0d0328154455ee20c916a272e56496c",
+      "recorded_size": 9870848,
+      "version_exit_code": 0,
+      "version_line": "vsift 0.2.0-rc.2 (7c722d1fc46a)"
+    },
+    "node_version": "v22.16.0",
+    "npm_version": "11.4.2",
+    "packages": [
+      {
+        "integrity_installed": "sha512-rYHQFWRGAVsk/iyTh5BmVRSbOwad2znKarClVbdOWK0rVBOjLJw/AvY+tfYp8nyCY+ctvyMZWi7t5aZ2i9OVoA==",
+        "integrity_registry": "sha512-rYHQFWRGAVsk/iyTh5BmVRSbOwad2znKarClVbdOWK0rVBOjLJw/AvY+tfYp8nyCY+ctvyMZWi7t5aZ2i9OVoA==",
+        "name": "vsift-cli",
+        "resolved": "https://registry.npmjs.org/vsift-cli/-/vsift-cli-0.2.0-rc.2.tgz",
+        "version": "0.2.0-rc.2"
+      },
+      {
+        "integrity_installed": "sha512-vlAIEZB0aZgAOyctelJEJGWEWSakbHHvzQi/PY6RXV8XsdVWFOumaswl6HVsFnw5dFkT8t5viO/Yic8fDEozVg==",
+        "integrity_registry": "sha512-vlAIEZB0aZgAOyctelJEJGWEWSakbHHvzQi/PY6RXV8XsdVWFOumaswl6HVsFnw5dFkT8t5viO/Yic8fDEozVg==",
+        "name": "@vsift/win32-x64",
+        "resolved": "https://registry.npmjs.org/@vsift/win32-x64/-/win32-x64-0.2.0-rc.2.tgz",
+        "version": "0.2.0-rc.2"
+      }
+    ],
+    "platform": "windows x86_64",
+    "registry": "https://registry.npmjs.org/",
+    "schema_version": 1,
+    "source": "registry",
+    "version": "0.2.0-rc.2"
+  },
+  "interpretation": {
+    "checks": [
+      {
+        "details": [],
+        "name": "transcript_only_support",
+        "passed": true
+      }
+    ],
+    "human_review": null,
+    "key_facts": [
+      {
+        "claims": [
+          "c1",
+          "c2"
+        ],
+        "event": "F05-E03",
+        "satisfied": true,
+        "term": "success banner"
+      },
+      {
+        "claims": [
+          "c1",
+          "c6"
+        ],
+        "event": "F05-E03",
+        "satisfied": true,
+        "term": "E-409"
+      },
+      {
+        "claims": [
+          "c1",
+          "c4",
+          "c5",
+          "c7",
+          "c9"
+        ],
+        "event": "F05-E03",
+        "satisfied": true,
+        "term": "Submit"
+      }
+    ],
+    "passed": true
+  },
+  "invalid_reasons": [],
+  "mechanical": {
+    "checks": [
+      {
+        "details": [],
+        "name": "handoff_valid",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "citations_resolve",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "citation_times_in_truth_windows",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "command_policy",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "stream_recognised",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "budgets",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "image_check",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "no_canary",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "report_text",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "client_configuration",
+        "passed": true
+      }
+    ],
+    "passed": true
+  },
+  "mode": "skill",
+  "phase": 1,
+  "record_version": 1,
+  "reported_usage": {
+    "cache_creation_input_tokens": 40902,
+    "cached_input_tokens": 677084,
+    "cost_micro_usd": 673701,
+    "input_tokens": 32,
+    "output_tokens": 10547,
+    "reasoning_output_tokens": 0,
+    "source": "result_event"
+  },
+  "run": {
+    "exit_code": 0,
+    "raw_stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "raw_stdout_sha256": "14785beaf64d777e26ab96055583a0316ab55d2b2dc975cb07691fd23fb1e044",
+    "started_unix_s": 1791372513,
+    "timed_out": false,
+    "wall_ms": 117062
+  },
+  "scenario": {
+    "id": "A-09-f05-blurred",
+    "sha256": "356bd9f57845413ed86087a902ccccf9f854e3ab1390f5d12ed981c11c24e077",
+    "tests": [
+      "A-09"
+    ]
+  },
+  "settings_sha256": "bfa1a8315a7659aa8992ae7c5d046d1b140f37c848c05ca4e0d560252781d883",
+  "setup_check": {
+    "dependencies": [
+      {
+        "dependency": "ffmpeg",
+        "lookup": "configured_user_path",
+        "status": "available"
+      },
+      {
+        "dependency": "ffprobe",
+        "lookup": "configured_user_path",
+        "status": "available"
+      },
+      {
+        "dependency": "whisper",
+        "lookup": "filtered_path",
+        "status": "missing"
+      }
+    ],
+    "exit_code": 0,
+    "local_asr": "not_run",
+    "status": "degraded"
+  },
+  "shim_use": {
+    "cmd": 0,
+    "posix": 10,
+    "powershell": 0
+  },
+  "skill_sha256": "648569ae378268a3354b65e97f443bc25f7f5153a1734b2b99efdf4a1cbceb4b",
+  "skill_source": "installed_package",
+  "tools_source": "registered",
+  "trial_id": "a-09-f05-blurred-16ccfaeb",
+  "usage": {
+    "image_bytes": 106489,
+    "images_per_step": 1,
+    "images_total": 4,
+    "tool_calls": 14,
+    "wall_time_s": 117
+  },
+  "usage_limit": null,
+  "valid": true,
+  "vsift": {
+    "commit": "7c722d1fc46af7fddeffbaf807028eaec413ace1",
+    "sha256": "14b985a15ff30fde65d023eb9b3b0776f0d0328154455ee20c916a272e56496c"
+  }
+}
