@@ -6,6 +6,67 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- **The process-supervisor test no longer reads a marker file its child is still writing; the supervisor is unchanged** (P14,
+  #321; a test and documents only). **What failed:** one repetition in 1,500 of the supervisor suite on a hosted Windows
+  Server 2025 runner, on `0.2.0-rc.2`: `p06_descendants_and_inherited_pipe_holders_are_terminated` ended with
+  `ParseIntError { kind: Empty }`. **Cause.** The test's fixture, a child process, creates a marker file and then writes its
+  descendant's process id into it; the test read the file as soon as it existed and parsed whatever it found, so a read between
+  the two steps parsed an empty string. Shown without a second process: with the file left empty on purpose and written 150 ms
+  later, the old reader fails at once with that message. **Change.** The fixture ends the id with a line feed and the test takes
+  only a whole line for the id: an empty file, or one without the line feed, is "not written yet" and is waited for inside the
+  same five seconds (so the first digits of an id are never taken for the id of some other process either), and a whole line
+  that is not a process id fails at once. The marker is not renamed into place instead: a rename is one more operation on a new
+  file for a scanner to get in the way of on Windows. No assertion about the termination of descendants changed, and no product
+  code did. **Tests:** the reader on a marker created empty and written later (it fails on the old reader), on markers left empty,
+  left without the line feed and never created (each ends at the deadline with its own message), on a whole line that is not an
+  id, and the parse on its own. **What is not shown:** that this gap is what happened in the hosted repetition (the run recorded
+  only the message, which is the one reproduced), and the fixed test has passed 79 repetitions on one Windows 11 machine (39 of
+  the whole suite, 40 of it and the marker tests alone), not the 1,500 hosted repetitions;
+  [L-138](docs/planning/known-limits.md#l-138) is narrowed to that and closes with a clean stress run on the third candidate.
+  **Not #128:** that issue's sightings were other tests of the suite failing on a child's exit status; they use no marker file,
+  so it stays open. It was seen again in these local repetitions, on main's suite as with the fix (four tests whose fixture
+  child has three seconds; never `p06`), and [L-040](docs/planning/known-limits.md#l-040) records what was seen.
+- **The malicious-media campaign's no-room case tests the room check, not a refused folder; the product is unchanged** (P14,
+  #310's second finding; campaign tools, their tests and documents only). **What was wrong.** The case `sparse-no-room` gave
+  `vsift ingest` the mount point of its 256 MiB filesystem as the session root. That folder exists and VSift did not create it,
+  so VSift refused it with `INTEGRITY_FAILURE` after five seconds without looking at the source, and the tool counted that as
+  the filed finding of #266, because it tracked findings by case alone. So the no-room path of `ingest` was not tested on
+  0.1.0, `0.2.0-rc.1` or `0.2.0-rc.2`, and no run said so. **Change.** (1) A case with its own small filesystem roots its
+  sessions in folders inside the mount that do not exist yet, which VSift creates; the mount point is never a root. (2) The two
+  size cases pin each operation's answer to what the product gives, and anything else is a finding, a typed failure included:
+  a source within the limit that does not fit must answer `STORAGE_IO` with the no-room remediation on the CLI path and
+  `RESOURCE_LIMIT` on the worker path; a source over the limit must answer `INVALID_SOURCE` on the CLI path, and
+  `INVALID_SOURCE` or `RESOURCE_LIMIT` on the worker path (a workspace checks its reserve before the limit, so that answer
+  depends on the disk). (3) A filed finding is tracked for one operation and one outcome of its case; the same case answering
+  anything else fails the run. The list holds one finding now: `ingest` of a symbolic link answers `STORAGE_IO` (#265, a
+  published code, L-127). The named pipe (#264) and the no-room case (#266) are off it. **Tests** (Node.js, no container):
+  the session root of every operation of a small-filesystem case is a folder inside the mount and never the mount point (it
+  fails with the old root); the judge on the answers the runs recorded, where the refused folder of run 37613284274 is a new
+  finding and the room check's answer of run 37361623352 passes; the pinned answers, the remediation's beginning (read from
+  the constant in `vsift-contract`, so the two cannot part unnoticed), the tracked list and the summary's labels. **What is not
+  shown:** a campaign run of the corrected case from `main` is not recorded yet. The corrected root ran once from a scratch
+  branch on the published `0.2.0-rc.1` and answered `STORAGE_IO` in 0.1 s, which recorded the code and not the remediation;
+  the corrected tool then ran the whole campaign once in its own pull request on the published `0.2.0-rc.2` (run 37673774765:
+  green, one finding, the tracked link; `sparse-no-room` answered `STORAGE_IO` in 0.2 s with the no-room remediation). That is a
+  pull-request run; the run on the third candidate is the evidence. [L-134](docs/planning/known-limits.md#l-134) is narrowed to that. The campaign still does not test the room
+  check on Windows (which reads no free space, L-061), a filesystem that reports nothing available, or a write that runs out of
+  room during the copy.
+- **A trial-harness test no longer trips on a random identifier; the harness is unchanged** (P14, #327; one test file and this
+  entry only). `a_cold_workspace_holds_no_skill_no_documentation_and_nothing_that_names_the_tool` meant "a cold trial's folder is
+  not named after its scenario" and checked it by requiring that the folder's whole path did not contain `f05`, a fragment of
+  the scenario's name. The folder is `run-` and eight random hexadecimal digits, and `f05` is three hexadecimal digits, so
+  about one name in 700 contains it by chance (six places, one chance in 4,096 each), and the temporary folder's own name can
+  too; it failed once, on a macOS runner. The test now checks what it means: the folder's name is exactly `run-` and eight
+  lowercase hexadecimal digits (a shape with no room for a scenario's name), it does not contain the scenario's identifier, and
+  it is the only part of the path the harness adds. A second test holds the shape check itself: a random name that spells `f05`
+  is a cold name, and a name that carries a scenario's name, a longer, shorter or upper-case identifier is not. The other
+  checks of that test (no skill, no instruction file, the cold settings, the neutral canary, the prompt) are unchanged, and no
+  other assertion in the harness's tests compares a random value with a fragment it could spell: the canaries are hexadecimal
+  and are searched for `vsift`, which hexadecimal digits cannot spell. `tools/vsift-agent-trials/src`, the scenarios, the
+  settings and the frozen grader are not touched.
+
 ## [0.2.0-rc.2] - 2026-10-06
 
 **This is a release candidate, under qualification.** It is the second candidate for `0.2.0`, the release that ships R0

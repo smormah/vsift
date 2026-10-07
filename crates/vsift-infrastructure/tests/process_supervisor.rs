@@ -4,8 +4,9 @@ use std::{
     env,
     error::Error,
     ffi::OsString,
+    fmt,
     io::{self, Write},
-    num::NonZeroUsize,
+    num::{NonZeroUsize, ParseIntError},
     path::{Path, PathBuf},
     process::{Command, Stdio},
     time::{Duration, Instant as StandardInstant},
@@ -125,7 +126,10 @@ fn fixture_descendant(parent_lifecycle: ParentLifecycle) -> Result<(), Box<dyn E
     }
     let mut child = command.spawn()?;
     if let Some(marker) = env::var_os(DESCENDANT_MARKER) {
-        std::fs::write(marker, child.id().to_string())?;
+        // The line feed is what tells the reader that the id is whole: creating
+        // the file and writing it are two steps, and the test can read between
+        // them (#321). See `parse_descendant_marker`.
+        std::fs::write(marker, format!("{}\n", child.id()))?;
     }
     writeln!(io::stdout(), "DESCENDANT_PID={}", child.id())?;
     io::stdout().flush()?;
@@ -390,6 +394,101 @@ async fn p06_descendants_and_inherited_pipe_holders_are_terminated() -> Result<(
     Ok(())
 }
 
+/// #321: the fixture creates its marker and then writes it, so a reader can
+/// find the file empty. The reader this replaced parsed whatever it read, and
+/// an empty file failed the test with `ParseIntError { kind: Empty }` (once in
+/// 1,500 hosted Windows repetitions). Here the file is empty on purpose when
+/// the wait starts and is written 150 ms later.
+#[tokio::test]
+async fn a_marker_its_writer_has_created_but_not_yet_written_is_waited_for()
+-> Result<(), Box<dyn Error>> {
+    let marker = unique_marker_path("marker-created-then-written");
+    std::fs::write(&marker, "")?;
+    let late_marker = marker.clone();
+    let writer = tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(150)).await;
+        std::fs::write(late_marker, "4242\n")
+    });
+
+    let read = wait_for_descendant_marker(&marker, Duration::from_secs(5)).await;
+    let written = writer.await;
+    let _ = std::fs::remove_file(&marker);
+    written??;
+
+    assert!(matches!(read, Ok(4242)), "{read:?}");
+    Ok(())
+}
+
+/// A marker that never becomes a whole line ends the wait at its deadline, as
+/// one that never appears does. It is never read as a process id: the first
+/// bytes of `4242` are `42`, the id of some other process, and the test would
+/// go on to watch that one.
+#[tokio::test]
+async fn a_marker_that_is_never_finished_ends_at_the_deadline() -> Result<(), Box<dyn Error>> {
+    for (label, unfinished) in [("marker-left-empty", ""), ("marker-left-partial", "42")] {
+        let marker = unique_marker_path(label);
+        std::fs::write(&marker, unfinished)?;
+
+        let read = wait_for_descendant_marker(&marker, Duration::from_millis(200)).await;
+        let _ = std::fs::remove_file(&marker);
+
+        assert!(
+            matches!(read, Err(MarkerError::NotWrittenBeforeDeadline)),
+            "{unfinished:?}: {read:?}"
+        );
+    }
+    let never_created = unique_marker_path("marker-never-created");
+    let read = wait_for_descendant_marker(&never_created, Duration::from_millis(200)).await;
+    assert!(
+        matches!(read, Err(MarkerError::NotWrittenBeforeDeadline)),
+        "{read:?}"
+    );
+    Ok(())
+}
+
+/// A whole line that is not a process id is the fixture's mistake and fails at
+/// once; waiting would only hide it behind the deadline's message.
+#[tokio::test]
+async fn a_finished_marker_that_is_not_a_process_id_fails_at_once() -> Result<(), Box<dyn Error>> {
+    let marker = unique_marker_path("marker-not-a-process-id");
+    std::fs::write(&marker, "not a process id\n")?;
+
+    let started = StandardInstant::now();
+    let read = wait_for_descendant_marker(&marker, Duration::from_secs(60)).await;
+    let _ = std::fs::remove_file(&marker);
+
+    assert!(
+        matches!(read, Err(MarkerError::NotAProcessId(_))),
+        "{read:?}"
+    );
+    assert!(started.elapsed() < Duration::from_secs(30));
+    Ok(())
+}
+
+#[test]
+fn only_a_whole_line_is_taken_for_the_descendant_process_id() -> Result<(), Box<dyn Error>> {
+    assert_eq!(
+        parse_descendant_marker("")?,
+        DescendantMarker::StillBeingWritten
+    );
+    assert_eq!(
+        parse_descendant_marker("42")?,
+        DescendantMarker::StillBeingWritten
+    );
+    assert_eq!(
+        parse_descendant_marker("4242\n")?,
+        DescendantMarker::Complete(4242)
+    );
+    assert_eq!(
+        parse_descendant_marker("4294967295\n")?,
+        DescendantMarker::Complete(u32::MAX)
+    );
+    for not_an_id in ["\n", "42\n43\n", "-1\n", "4294967296\n", "42 \n"] {
+        assert!(parse_descendant_marker(not_an_id).is_err(), "{not_an_id:?}");
+    }
+    Ok(())
+}
+
 #[tokio::test]
 async fn p07_spawn_race_fails_without_an_unmanaged_process() -> Result<(), Box<dyn Error>> {
     let directory = unique_marker_path("spawn-race");
@@ -639,21 +738,76 @@ fn supervisor(stream_limit: usize) -> Result<ProcessSupervisor, Box<dyn Error>> 
     ))
 }
 
-async fn wait_for_descendant_marker(
-    marker: &Path,
-    deadline: Duration,
-) -> Result<u32, Box<dyn Error>> {
+/// What the content of a descendant marker says.
+#[derive(Debug, Eq, PartialEq)]
+enum DescendantMarker {
+    /// The fixture has created the file but has not finished writing it.
+    StillBeingWritten,
+    /// The whole marker: the process id of the fixture's descendant.
+    Complete(u32),
+}
+
+/// Why no descendant process id was read from a marker.
+#[derive(Debug)]
+enum MarkerError {
+    /// The marker did not exist, or held no whole line, when the wait ended.
+    NotWrittenBeforeDeadline,
+    /// The marker held a whole line that is not a process id.
+    NotAProcessId(ParseIntError),
+    /// The marker could not be read, for a reason other than not existing yet.
+    Read(io::Error),
+}
+
+impl fmt::Display for MarkerError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::NotWrittenBeforeDeadline => formatter
+                .write_str("fixture did not write its descendant marker before the test deadline"),
+            Self::NotAProcessId(error) => {
+                write!(formatter, "descendant marker is not a process id: {error}")
+            }
+            Self::Read(error) => write!(formatter, "descendant marker could not be read: {error}"),
+        }
+    }
+}
+
+impl Error for MarkerError {}
+
+/// Reads what a marker holds: the fixture writes the id and a line feed, and
+/// only the line feed says that the id is whole.
+///
+/// The fixture is another process. It creates the file and then writes it, so
+/// a read can land between the two and find the file empty (#321), and no read
+/// of a file that is still being written is promised all of a write. Anything
+/// without the final line feed is therefore not yet the marker, whatever
+/// digits it holds. Renaming a finished file into place would hide the gap
+/// too, but that is one more operation on a new file for a scanner to get in
+/// the way of on Windows; the terminator needs nothing from the filesystem.
+fn parse_descendant_marker(content: &str) -> Result<DescendantMarker, ParseIntError> {
+    match content.strip_suffix('\n') {
+        None => Ok(DescendantMarker::StillBeingWritten),
+        Some(line) => line.parse().map(DescendantMarker::Complete),
+    }
+}
+
+/// Waits, up to `deadline`, for the fixture's marker to hold its descendant's
+/// process id, looking every 25 ms.
+async fn wait_for_descendant_marker(marker: &Path, deadline: Duration) -> Result<u32, MarkerError> {
     let started = StandardInstant::now();
     while started.elapsed() < deadline {
         match std::fs::read_to_string(marker) {
-            Ok(value) => return Ok(value.parse()?),
-            Err(error) if error.kind() == io::ErrorKind::NotFound => {
-                tokio::time::sleep(Duration::from_millis(25)).await;
+            Ok(content) => {
+                let read = parse_descendant_marker(&content).map_err(MarkerError::NotAProcessId)?;
+                if let DescendantMarker::Complete(pid) = read {
+                    return Ok(pid);
+                }
             }
-            Err(error) => return Err(error.into()),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+            Err(error) => return Err(MarkerError::Read(error)),
         }
+        tokio::time::sleep(Duration::from_millis(25)).await;
     }
-    Err("fixture did not create its descendant marker before the test deadline".into())
+    Err(MarkerError::NotWrittenBeforeDeadline)
 }
 
 fn wait_until_process_gone(pid: u32, deadline: Duration) -> Result<bool, Box<dyn Error>> {
