@@ -23,7 +23,14 @@ use crate::{
 
 /// Maximum source size in the accepted desktop profile.
 pub const MAX_SOURCE_BYTES: u64 = 20 * 1024 * 1024 * 1024;
-/// Maximum time for an opened source stream to be copied or rehashed.
+/// Maximum time for an opened source stream to be copied or rehashed: ten
+/// minutes, for the whole read and not per block.
+///
+/// The source is untrusted input, so something has to bound a file that never
+/// ends or a device that never answers. The bound is fixed: no option raises
+/// it, and a 20 GiB source needs about 34 MiB/s sustained to be copied inside
+/// it, which a network share, a removable drive or a folder that downloads on
+/// first read may not give (known limit L-140, #325).
 pub const MAX_SOURCE_READ_DURATION: Duration = Duration::from_secs(600);
 const HEX: &[u8; 16] = b"0123456789abcdef";
 
@@ -107,7 +114,7 @@ impl SourceSnapshot {
             operation_id,
             (source, &initial),
             None,
-            cancellation,
+            (cancellation, &mut read_deadline()),
         )
     }
 
@@ -134,7 +141,7 @@ impl SourceSnapshot {
             operation_id,
             (file, &metadata),
             None,
-            cancellation,
+            (cancellation, &mut read_deadline()),
         )
     }
 
@@ -161,20 +168,25 @@ impl SourceSnapshot {
             operation_id,
             (file, &metadata),
             Some(admission),
-            cancellation,
+            (cancellation, &mut read_deadline()),
         )
     }
 
     /// Copies an opened source whose metadata is `initial` into the session,
     /// under `admission` when the caller holds it, else under a weight-1
     /// admission taken here.
+    ///
+    /// The copy stops at the caller's cancellation or when `time_is_up` says
+    /// so ([`copy_until`]); either way its partial private file is removed.
+    /// Every caller passes [`read_deadline`]; the tests pass a count of blocks
+    /// so that the time is up without ten minutes going by.
     fn stage_opened(
         store: &FilesystemSessionStore,
         session_id: &SessionId,
         operation_id: &OperationId,
         (mut source, initial): (File, &cap_std::fs::Metadata),
         admission: Option<crate::FilesystemAdmissionPermit>,
-        cancellation: &dyn StageCancellation,
+        (cancellation, time_is_up): (&dyn StageCancellation, &mut dyn FnMut() -> bool),
     ) -> Result<Self, SourceError> {
         if initial.len() > MAX_SOURCE_BYTES {
             return Err(SourceError::TooLarge);
@@ -196,7 +208,7 @@ impl SourceSnapshot {
         let mut output = directory
             .open_with(&file_name, &options)
             .map_err(SourceError::Io)?;
-        let result = copy_bounded(&mut source, &mut output, cancellation).and_then(
+        let result = copy_until(&mut source, &mut output, cancellation, time_is_up).and_then(
             |(id, bytes, container)| {
                 output.sync_all().map_err(SourceError::Io)?;
                 let final_meta = source.metadata().map_err(SourceError::Io)?;
@@ -556,10 +568,13 @@ pub(crate) fn open_session_error(error: SourceError) -> OpenSessionError {
         }
         SourceError::Io(_) => OpenSessionError::SourceIo,
         SourceError::SymbolicLink => OpenSessionError::SourceIsLink,
+        // A copy that ran out of time says nothing about the source: it was
+        // slow to read, or the root slow to write (#325). The code a host
+        // gives it stays the one it always was (L-127).
+        SourceError::Deadline => OpenSessionError::SourceCopyTooSlow,
         SourceError::InvalidPath
         | SourceError::NotRegularFile
         | SourceError::TooLarge
-        | SourceError::Deadline
         | SourceError::UnsupportedContainer
         | SourceError::ChangedDuringStage
         | SourceError::SnapshotChanged
@@ -759,19 +774,45 @@ fn read_header(file: &mut File, header: &mut [u8]) -> Result<usize, SourceError>
     Ok(read)
 }
 
+/// Says when a read that starts now has used [`MAX_SOURCE_READ_DURATION`]:
+/// the wall-clock answer to [`copy_until`]'s question.
+fn read_deadline() -> impl FnMut() -> bool {
+    let started = Instant::now();
+    move || started.elapsed() > MAX_SOURCE_READ_DURATION
+}
+
+/// Copies and hashes a whole source within [`MAX_SOURCE_READ_DURATION`].
 fn copy_bounded(
     source: &mut impl Read,
     destination: &mut impl Write,
     cancellation: &dyn StageCancellation,
 ) -> Result<(SourceId, u64, SourceContainer), SourceError> {
-    let started = Instant::now();
+    copy_until(source, destination, cancellation, &mut read_deadline())
+}
+
+/// Copies `source` to `destination` in 64 KiB blocks, hashing what it copies,
+/// until the source ends, `time_is_up` says so ([`SourceError::Deadline`]) or
+/// the caller cancels ([`SourceError::Cancelled`]). Both are asked before
+/// every block, so neither waits for more than one read.
+///
+/// The limit is on the whole copy, not on progress: a copy that advances
+/// steadily is stopped like one that stalled (#325 holds the design for a
+/// budget a caller can raise and a copy that can be continued). The question
+/// is a parameter and not a clock read here so that a test can make the time
+/// run out after a chosen block instead of waiting ten minutes.
+fn copy_until(
+    source: &mut impl Read,
+    destination: &mut impl Write,
+    cancellation: &dyn StageCancellation,
+    time_is_up: &mut dyn FnMut() -> bool,
+) -> Result<(SourceId, u64, SourceContainer), SourceError> {
     let mut hash = Sha256::new();
     let mut header = [0_u8; 12];
     let mut header_count = 0_usize;
     let mut total = 0_u64;
     let mut buffer = vec![0_u8; 64 * 1024];
     loop {
-        if started.elapsed() > MAX_SOURCE_READ_DURATION {
+        if time_is_up() {
             return Err(SourceError::Deadline);
         }
         if cancellation.is_cancelled() {
@@ -821,7 +862,10 @@ pub enum SourceError {
     SymbolicLink,
     /// Selected source exceeds the profile maximum.
     TooLarge,
-    /// Source read exceeded the stage deadline.
+    /// Reading the source took longer than [`MAX_SOURCE_READ_DURATION`] and
+    /// was stopped. It says how long the read took, not what the source is: a
+    /// staging reports it as a slow copy
+    /// ([`OpenSessionError::SourceCopyTooSlow`], #325).
     Deadline,
     /// Only embedded-track ISO media and Matroska containers are admitted.
     UnsupportedContainer,
@@ -874,11 +918,256 @@ impl Error for SourceError {
 
 #[cfg(test)]
 mod tests {
-    use std::io::{Error as IoError, ErrorKind};
+    use std::{
+        error::Error,
+        ffi::OsStr,
+        fs,
+        io::{Cursor, Error as IoError, ErrorKind},
+        path::PathBuf,
+        sync::atomic::{AtomicU64, Ordering},
+        time::{Duration, SystemTime, UNIX_EPOCH},
+    };
 
-    use vsift_application::OpenSessionError;
+    use vsift_application::{
+        InitializeSessionStorage, InitializeSessionStorageRequest, NeverCancelled, OpenSessionError,
+    };
+    use vsift_domain::{DurabilityRequirement, OperationId, SessionId};
 
-    use super::{SourceError, open_session_error};
+    use super::{
+        MAX_SOURCE_BYTES, MAX_SOURCE_READ_DURATION, SourceContainer, SourceError, SourceSnapshot,
+        copy_until, open_session_error, open_source, read_deadline,
+    };
+    use crate::FilesystemSessionStore;
+
+    type TestResult = Result<(), Box<dyn Error>>;
+
+    /// The size of one block of the copy.
+    const BLOCK: usize = 64 * 1024;
+    const OWNED_PREFIX: &str = "vsift-source-snapshot-unit-";
+    static NEXT_ROOT: AtomicU64 = AtomicU64::new(0);
+
+    /// A scratch folder of this test file, removed on drop.
+    struct OwnedRoot(PathBuf);
+
+    impl OwnedRoot {
+        fn new() -> Result<Self, Box<dyn Error>> {
+            let stamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
+            let sequence = NEXT_ROOT.fetch_add(1, Ordering::Relaxed);
+            let path = std::env::temp_dir().join(format!(
+                "{OWNED_PREFIX}{}-{stamp}-{sequence}",
+                std::process::id()
+            ));
+            fs::create_dir(&path)?;
+            Ok(Self(path))
+        }
+    }
+
+    impl Drop for OwnedRoot {
+        fn drop(&mut self) {
+            if self
+                .0
+                .file_name()
+                .and_then(OsStr::to_str)
+                .is_some_and(|name| name.starts_with(OWNED_PREFIX))
+            {
+                let _ = fs::remove_dir_all(&self.0);
+            }
+        }
+    }
+
+    /// A stand-in video of `blocks` blocks: an ISO media header, then filler.
+    fn stand_in(blocks: usize) -> Vec<u8> {
+        let mut bytes = vec![0x5a_u8; blocks * BLOCK];
+        for (target, byte) in bytes.iter_mut().zip(b"\0\0\0\x18ftypisom") {
+            *target = *byte;
+        }
+        bytes
+    }
+
+    /// The time is up from the `ask`-th time the copy asks (it asks before
+    /// every block), so the copy stops after `ask - 1` blocks without a clock.
+    fn up_from(ask: usize) -> impl FnMut() -> bool {
+        let mut asked = 0_usize;
+        move || {
+            asked += 1;
+            asked >= ask
+        }
+    }
+
+    /// #325: the limit on a source copy is asked before every block, so a copy
+    /// that runs out of time stops there, as a deadline and as nothing else,
+    /// whatever the bytes are. The clock is a parameter of the copy, so the
+    /// time runs out after two blocks here and not after ten minutes.
+    #[test]
+    fn a_copy_whose_time_runs_out_stops_before_its_next_block() -> TestResult {
+        let source = stand_in(4);
+
+        // With time to spare the whole source is copied and identified.
+        let mut copied = Vec::new();
+        let (_, bytes, container) = copy_until(
+            &mut Cursor::new(&source),
+            &mut copied,
+            &NeverCancelled,
+            &mut || false,
+        )?;
+        assert_eq!(bytes, u64::try_from(source.len())?);
+        assert_eq!(container, SourceContainer::IsoMedia);
+        assert_eq!(copied, source);
+
+        // Out of time at the third ask: two blocks are copied, the third is
+        // never read.
+        let mut reader = Cursor::new(&source);
+        let mut copied = Vec::new();
+        let stopped = copy_until(&mut reader, &mut copied, &NeverCancelled, &mut up_from(3));
+        assert!(matches!(stopped, Err(SourceError::Deadline)), "{stopped:?}");
+        assert_eq!(copied.len(), 2 * BLOCK);
+        assert_eq!(reader.position(), u64::try_from(2 * BLOCK)?);
+
+        // Out of time before the first block: nothing is read at all.
+        let mut reader = Cursor::new(&source);
+        let mut copied = Vec::new();
+        let stopped = copy_until(&mut reader, &mut copied, &NeverCancelled, &mut up_from(1));
+        assert!(matches!(stopped, Err(SourceError::Deadline)), "{stopped:?}");
+        assert!(copied.is_empty());
+        assert_eq!(reader.position(), 0);
+
+        // The bytes are not judged before the copy ends: a file that is no
+        // video and ran out of time is a slow copy, not an unsupported one.
+        let not_a_video = vec![0x41_u8; 4 * BLOCK];
+        let stopped = copy_until(
+            &mut Cursor::new(&not_a_video),
+            &mut Vec::new(),
+            &NeverCancelled,
+            &mut up_from(3),
+        );
+        assert!(matches!(stopped, Err(SourceError::Deadline)), "{stopped:?}");
+        let judged = copy_until(
+            &mut Cursor::new(&not_a_video),
+            &mut Vec::new(),
+            &NeverCancelled,
+            &mut || false,
+        );
+        assert!(
+            matches!(judged, Err(SourceError::UnsupportedContainer)),
+            "{judged:?}"
+        );
+        Ok(())
+    }
+
+    /// The wall-clock answer: not up when the copy starts, with the published
+    /// ten minutes behind it (20 GiB in ten minutes is about 34 MiB/s, the
+    /// figure known limit L-140 gives).
+    #[test]
+    fn the_real_limit_is_ten_minutes_from_the_start_of_the_copy() {
+        assert_eq!(MAX_SOURCE_READ_DURATION, Duration::from_mins(10));
+        let mut time_is_up = read_deadline();
+        assert!(!time_is_up());
+        assert!(!time_is_up());
+        let needed = MAX_SOURCE_BYTES / MAX_SOURCE_READ_DURATION.as_secs() / (1024 * 1024);
+        assert_eq!(needed, 34);
+    }
+
+    /// #325: a staging whose copy runs out of time fails as a deadline, leaves
+    /// no partial private copy behind, and is reported to the open-session use
+    /// case as a slow copy, not as an invalid source. The same file is staged
+    /// when it has the time: the source was never what was wrong.
+    #[tokio::test]
+    async fn a_staging_that_runs_out_of_time_is_a_slow_copy_and_leaves_nothing() -> TestResult {
+        let root = OwnedRoot::new()?;
+        let workspace = root.0.join("workspace");
+        let store = FilesystemSessionStore::provision_default(&workspace)?;
+        let session_id = SessionId::parse("ses_0123456789abcdef")?;
+        let registration = store.register_session(
+            &session_id,
+            &OperationId::parse("op_0123456789abcdef")?,
+            1_000,
+        )?;
+        InitializeSessionStorage::new(store)
+            .execute(InitializeSessionStorageRequest::new(
+                session_id.clone(),
+                OperationId::parse("op_0123456789abcdef")?,
+                DurabilityRequirement::Ephemeral,
+            ))
+            .await?;
+        drop(registration);
+        let store = FilesystemSessionStore::open_existing(&workspace)?;
+        let source_path = root.0.join("recording.mp4");
+        fs::write(&source_path, stand_in(4))?;
+
+        let (source, initial) = open_source(&source_path)?;
+        let stopped = SourceSnapshot::stage_opened(
+            &store,
+            &session_id,
+            &OperationId::parse("op_1111111111111111")?,
+            (source, &initial),
+            None,
+            (&NeverCancelled, &mut up_from(3)),
+        );
+        let Err(error) = stopped else {
+            return Err("a copy that ran out of time was staged".into());
+        };
+        assert!(matches!(error, SourceError::Deadline), "{error:?}");
+        {
+            let (directory, _, _hold) = store.source_artifact_directory(&session_id)?;
+            let mut left = Vec::new();
+            for entry in directory.entries()? {
+                left.push(entry?.file_name());
+            }
+            assert!(left.is_empty(), "the partial copy was left: {left:?}");
+        }
+        assert_eq!(
+            open_session_error(error),
+            OpenSessionError::SourceCopyTooSlow
+        );
+
+        let (source, initial) = open_source(&source_path)?;
+        let staged = SourceSnapshot::stage_opened(
+            &store,
+            &session_id,
+            &OperationId::parse("op_2222222222222222")?,
+            (source, &initial),
+            None,
+            (&NeverCancelled, &mut read_deadline()),
+        )?;
+        assert_eq!(staged.bytes(), u64::try_from(4 * BLOCK)?);
+        assert_eq!(staged.container(), SourceContainer::IsoMedia);
+        Ok(())
+    }
+
+    /// #325: a deadline is its own cause for the host, and every other refusal
+    /// of a source is what it was. Before, a deadline was folded into
+    /// `InvalidSource`, and a slow copy told the user the video was at fault.
+    #[test]
+    fn a_deadline_is_a_slow_copy_and_every_other_refusal_is_unchanged() {
+        assert_eq!(
+            open_session_error(SourceError::Deadline),
+            OpenSessionError::SourceCopyTooSlow
+        );
+        for invalid in [
+            SourceError::InvalidPath,
+            SourceError::NotRegularFile,
+            SourceError::TooLarge,
+            SourceError::UnsupportedContainer,
+            SourceError::ChangedDuringStage,
+            SourceError::SnapshotChanged,
+            SourceError::IdentityFailure,
+        ] {
+            let described = invalid.to_string();
+            assert_eq!(
+                open_session_error(invalid),
+                OpenSessionError::InvalidSource,
+                "{described}"
+            );
+        }
+        assert_eq!(
+            open_session_error(SourceError::Cancelled),
+            OpenSessionError::Cancelled
+        );
+        assert_eq!(
+            open_session_error(SourceError::SymbolicLink),
+            OpenSessionError::SourceIsLink
+        );
+    }
 
     /// #266: a write that ran out of room is the session root's filesystem
     /// being too small (`RESOURCE_LIMIT`), not a source that could not be read

@@ -96,7 +96,8 @@ Other causes you will meet:
 
 ## `INVALID_SOURCE`: the video or the transcript cannot be used
 
-VSift refuses a file it cannot trust or read, and it says nothing more than that the source is invalid:
+VSift refuses a file it cannot trust or read, and for most reasons it says nothing more than that the source is
+invalid:
 
 <!-- check: exit 3 -->
 ```console
@@ -113,7 +114,13 @@ Go through these, in order:
 2. **Is it a regular file?** A folder, a named pipe or a device is refused. So is a link: name the file the link points to.
 3. **Is it too big?** Over 20 GiB, or four hours, or very many streams, or pictures larger than 16 megapixels.
    [Limits](limits.md) has the numbers.
-4. **If it is a transcript** (the message comes from `ingest --transcript`): the `Fix:` line names the reason and the
+4. **Did it take ten minutes and then fail?** Then nothing is wrong with the video, whatever the first line says.
+   Opening a video copies it into VSift's own folder, and the copy is stopped after ten minutes. This one has a
+   `Fix:` line, which begins "Copying this video into VSift's session took longer than the ten-minute limit". It
+   happens with a big video on a network drive, a memory stick, an SD card or a folder that downloads from the cloud
+   when first read. Copy the video to a disk in your computer and open that copy. Trying again from the same place
+   starts the copy from the beginning.
+5. **If it is a transcript** (the message comes from `ingest --transcript`): the `Fix:` line names the reason and the
    line. The usual ones are text with no times (`untimed_text`), a timestamp in the wrong form
    (`invalid_timestamp`), cues out of order and a file that is not UTF-8. Export it again as SRT or WebVTT.
 

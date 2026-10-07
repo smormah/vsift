@@ -51,8 +51,8 @@ use vsift_contract::{
     MANAGED_INSTALL_BUSY_REMEDIATION, MANAGED_STORAGE_REMEDIATION, MANAGED_UNAVAILABLE_REMEDIATION,
     MEDIA_TOOLS_FOR_TRANSCRIPT_REMEDIATION, NO_AUDIO_STREAM_REMEDIATION, NO_TRANSCRIPT_REMEDIATION,
     NO_VIDEO_STREAM_REMEDIATION, OperationResponse, SESSION_NOT_PUBLISHED_REMEDIATION,
-    SOURCE_IS_LINK_REMEDIATION, SOURCE_NO_ROOM_REMEDIATION, STALE_PLAN_REMEDIATION,
-    SUPERSEDED_REMEDIATION, TerminalEventResponse, UNKNOWN_JOB_REMEDIATION,
+    SOURCE_COPY_TOO_SLOW_REMEDIATION, SOURCE_IS_LINK_REMEDIATION, SOURCE_NO_ROOM_REMEDIATION,
+    STALE_PLAN_REMEDIATION, SUPERSEDED_REMEDIATION, TerminalEventResponse, UNKNOWN_JOB_REMEDIATION,
     UNKNOWN_REVISION_REMEDIATION, UNOWNED_SESSION_ROOT_REMEDIATION, UNPINNED_MODEL_REMEDIATION,
     VISUAL_TOOLS_REMEDIATION, WORKSPACE_NOT_DURABLE_REMEDIATION,
     WORKSPACE_POLICY_MISMATCH_REMEDIATION, WORKSPACE_ROOT_REMEDIATION, local_asr_failure_summary,
@@ -757,6 +757,9 @@ fn worker_remediation(error: &EngineError) -> Option<String> {
             SOURCE_IS_LINK_REMEDIATION
         }
         EngineError::OpenSession(OpenSessionError::SourceNoRoom) => SOURCE_NO_ROOM_REMEDIATION,
+        EngineError::OpenSession(OpenSessionError::SourceCopyTooSlow) => {
+            SOURCE_COPY_TOO_SLOW_REMEDIATION
+        }
         EngineError::SessionNotPublished(_) => SESSION_NOT_PUBLISHED_REMEDIATION,
         EngineError::WorkspaceNotDurable => WORKSPACE_NOT_DURABLE_REMEDIATION,
         EngineError::AdmissionExceedsCapacity { .. } => ADMISSION_CAPACITY_REMEDIATION,
@@ -1104,10 +1107,10 @@ where
 
 #[cfg(test)]
 mod tests {
-    use vsift::{EngineError, EnginePorts, JobId, OpenSessionError};
+    use vsift::{EngineError, EnginePorts, FailureCode, JobId, OpenSessionError};
     use vsift_contract::{
         CommandName, IDEMPOTENCY_CONFLICT_REMEDIATION, JOB_BUSY_REMEDIATION,
-        SOURCE_NO_ROOM_REMEDIATION,
+        SOURCE_COPY_TOO_SLOW_REMEDIATION, SOURCE_NO_ROOM_REMEDIATION,
     };
 
     use super::{
@@ -1139,6 +1142,77 @@ mod tests {
             value["error"]["remediation"][0]["summary"],
             SOURCE_NO_ROOM_REMEDIATION
         );
+        Ok(())
+    }
+
+    /// #325: an ingest whose copy of the video outran the ten-minute limit
+    /// keeps its published code, `INVALID_SOURCE`, and its exit status (3;
+    /// changing a published code is not additive within v1, known limit
+    /// L-127), and gains the remediation that says the copy was slow and the
+    /// video was not judged. Before the typed cause the same failure was a
+    /// bare `INVALID_SOURCE` with no remediation at all. The whole answer is
+    /// the published example, in JSON and for a person.
+    #[test]
+    fn a_source_copy_that_was_too_slow_keeps_its_code_and_says_what_happened()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let example: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../../schemas/v1/examples/ingest-copy-too-slow.json"),
+        )?)?;
+        let too_slow = || {
+            CommandFailure::from(EngineError::OpenSession(
+                OpenSessionError::SourceCopyTooSlow,
+            ))
+        };
+        assert_eq!(too_slow().summary(), Some(SOURCE_COPY_TOO_SLOW_REMEDIATION));
+
+        let mut stdout = Vec::new();
+        let mut stderr = Vec::new();
+        let mut writer = OutputWriter::new(&mut stdout, &mut stderr);
+        let written = write_command_failure(
+            &mut writer,
+            OutputMode::Json,
+            CommandName::Ingest,
+            too_slow(),
+        );
+        assert_eq!(written, ProcessExit::Source);
+        assert_eq!(written.code(), 3);
+        assert!(stderr.is_empty());
+        let value: serde_json::Value = serde_json::from_slice(&stdout)?;
+        assert_eq!(value, example);
+
+        let mut stdout = Vec::new();
+        let mut stderr = Vec::new();
+        let mut writer = OutputWriter::new(&mut stdout, &mut stderr);
+        let written = write_command_failure(
+            &mut writer,
+            OutputMode::Human,
+            CommandName::Ingest,
+            too_slow(),
+        );
+        assert_eq!(written, ProcessExit::Source);
+        assert!(stdout.is_empty());
+        let text = String::from_utf8(stderr)?;
+        assert_eq!(
+            text,
+            format!(
+                "Error: The source is invalid or unsupported. (INVALID_SOURCE)\nFix: {SOURCE_COPY_TOO_SLOW_REMEDIATION}\n"
+            )
+        );
+
+        // An invalid source proper is unchanged: the same code, and no
+        // remediation that talks about a copy.
+        let invalid =
+            CommandFailure::from(EngineError::OpenSession(OpenSessionError::InvalidSource));
+        assert_eq!(invalid.code, FailureCode::InvalidSource);
+        assert_eq!(invalid.summary(), None);
+
+        // The limit the text names is the limit the copy has.
+        assert_eq!(
+            vsift_infrastructure::MAX_SOURCE_READ_DURATION,
+            std::time::Duration::from_mins(10)
+        );
+        assert!(SOURCE_COPY_TOO_SLOW_REMEDIATION.contains("ten-minute limit"));
         Ok(())
     }
 

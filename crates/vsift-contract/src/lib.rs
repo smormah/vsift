@@ -224,8 +224,9 @@ pub use setup::{
     SetupCheckResponse, SetupPlanResponse, explicit_path_option,
 };
 pub use storage::{
-    PrivateFolder, SESSION_NOT_PUBLISHED_REMEDIATION, SOURCE_IS_LINK_REMEDIATION,
-    SOURCE_NO_ROOM_REMEDIATION, UNOWNED_SESSION_ROOT_REMEDIATION, non_private_folder_summary,
+    PrivateFolder, SESSION_NOT_PUBLISHED_REMEDIATION, SOURCE_COPY_TOO_SLOW_REMEDIATION,
+    SOURCE_IS_LINK_REMEDIATION, SOURCE_NO_ROOM_REMEDIATION, UNOWNED_SESSION_ROOT_REMEDIATION,
+    non_private_folder_summary,
 };
 pub use stream::{
     EventKind, EvidenceEventResponse, EvidenceRecordType, EvidenceStream, TranscriptEvidenceStream,

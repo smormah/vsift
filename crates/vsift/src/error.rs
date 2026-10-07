@@ -359,23 +359,7 @@ impl EngineError {
         match self {
             Self::SessionRoot(error) => error.failure_code(),
             Self::Storage(error) => storage_failure_code(*error),
-            Self::OpenSession(error) => match error {
-                OpenSessionError::InvalidSource => FailureCode::InvalidSource,
-                // A link and a root with no room are not storage failures, but the
-                // published codes stay (v1 is additive only): the remediation says
-                // what happened (L-127).
-                OpenSessionError::SourceIo
-                | OpenSessionError::SourceIsLink
-                | OpenSessionError::SourceNoRoom => FailureCode::StorageIo,
-                OpenSessionError::InvalidClock => FailureCode::InvalidArgument,
-                OpenSessionError::Storage(storage) => storage_failure_code(*storage),
-                OpenSessionError::SourceProbe(probe) => probe_failure_code(*probe),
-                OpenSessionError::TranscriptRejected(rejected) => {
-                    transcript_failure_code(*rejected)
-                }
-                OpenSessionError::TranscriptInvalid(_) => FailureCode::Internal,
-                OpenSessionError::Cancelled => FailureCode::Cancelled,
-            },
+            Self::OpenSession(error) => open_session_failure_code(*error),
             // The code the lookup answered before the typed error existed (L-127).
             Self::SessionNotPublished(storage) => storage_failure_code(*storage),
             Self::TranscriptRejected(rejected) => transcript_failure_code(*rejected),
@@ -1066,6 +1050,30 @@ impl From<IdentifierGenerationError> for EngineError {
     }
 }
 
+/// Public code for a failed session open.
+///
+/// Three causes keep a published code that is not what happened, because a
+/// published code does not change within v1 (known limit L-127); each has a
+/// remediation that says what did: a copy that ran out of time is not an
+/// invalid source (#325), and a link and a root with no room are not storage
+/// failures (#265, #266).
+const fn open_session_failure_code(error: OpenSessionError) -> FailureCode {
+    match error {
+        OpenSessionError::InvalidSource | OpenSessionError::SourceCopyTooSlow => {
+            FailureCode::InvalidSource
+        }
+        OpenSessionError::SourceIo
+        | OpenSessionError::SourceIsLink
+        | OpenSessionError::SourceNoRoom => FailureCode::StorageIo,
+        OpenSessionError::InvalidClock => FailureCode::InvalidArgument,
+        OpenSessionError::Storage(storage) => storage_failure_code(storage),
+        OpenSessionError::SourceProbe(probe) => probe_failure_code(probe),
+        OpenSessionError::TranscriptRejected(rejected) => transcript_failure_code(rejected),
+        OpenSessionError::TranscriptInvalid(_) => FailureCode::Internal,
+        OpenSessionError::Cancelled => FailureCode::Cancelled,
+    }
+}
+
 const fn storage_failure_code(error: SessionStorageError) -> FailureCode {
     match error {
         SessionStorageError::UnsupportedGuarantee { .. } => FailureCode::MissingCapability,
@@ -1580,6 +1588,17 @@ mod tests {
         assert_eq!(
             EngineError::OpenSession(OpenSessionError::SourceIo).failure_code(),
             FailureCode::StorageIo
+        );
+        // #325: a copy that outran its time keeps the code it always had, the
+        // one of an invalid source (v1 is additive only); its remediation says
+        // the copy was slow and the video was not judged (L-127).
+        assert_eq!(
+            EngineError::OpenSession(OpenSessionError::SourceCopyTooSlow).failure_code(),
+            FailureCode::InvalidSource
+        );
+        assert_eq!(
+            EngineError::OpenSession(OpenSessionError::InvalidSource).failure_code(),
+            FailureCode::InvalidSource
         );
     }
 
