@@ -1,6 +1,6 @@
 # Known limits register
 
-Date: 2026-10-07 (P14 PR 11 repeated on the second candidate: L-137 added (the pinned whisper.cpp lacks one upstream memory-safety fix that VSift can reach) and L-138 added (a supervisor test reads a marker file another process is still writing; accepted by the maintainer's decision on RQ-08 of the same day); L-137 reworded to the assessed position after a read-only reachability assessment (one upstream fix is reachable, for 1 to 200 samples of audio) and accepted for R0 by the maintainer the same day; L-128, L-133, L-134 and L-135 updated for the repeat's runs; 2026-10-06: P14 PR 10 repeated, the second candidate `0.2.0-rc.2`: L-133 reopens for the window before its publish and names RQ-19's evidence as the first candidate's, L-107's by-hand backstop names the last candidate's tag, L-132's re-pin plan covers both candidates, L-111 notes that the upgrade is repeated on the second; P14, #310: a source over the size limit is `INVALID_SOURCE` again whatever the free space: L-127 and L-126 no longer carry a known deviation, L-134 is narrowed to the campaign's no-room case, L-061 says the room check comes after the size limit; P14, #314 and #312: L-135 narrowed to the root-creation wait (#312), its reader half being fixed; L-136 added (a Windows sharing or lock violation answers `INTEGRITY_FAILURE` at once); 2026-10-05: P14 PR 11a, the candidate's hosted evidence: L-134 added (a corner case of the room check, accepted, and a malicious-media case that does not reach it), L-135 added (two rare Windows failures of the stress run, open), L-122 and L-134 reviews recorded as the maintainer's decisions of the day, L-127 and L-126 say plainly that one answer deviated from the published-codes rule, L-128 and L-111 updated for the candidate's runs, L-133's early-sentence window closed; P14 PR 10b, the release candidate's cut: L-133 added (the claims window of the candidate rung), L-107 and L-108 updated for the settled allowed lists and the by-hand backstop, L-132 for the re-pin plan; P14 PR 10a, the skill's wording before the candidate's freeze: L-109 and L-127 updated; 2026-10-04: P14 PR 9c, the maintainer's decisions on the macOS wording and RQ-05's rule: L-113 and L-114 updated; P14, a journeys stage that asserts a later fix is skipped below the first version that has it and never above it: L-115 updated; P14 PR 9a, the claims check reads the text of the README's graphics: L-121 narrowed to the roadmap's rung; L-004, L-035 and L-038 brought up to date, L-114 names the macOS wording; P14 PR 7, a failed open removes its own registration and a session that never published says so: L-131 added, L-127 gains its third case; P14 PR 7, the cold grader's three classifications: L-118 updated; P14 PR 7, a short range's cut final segment: L-130 added and L-124 closed and deleted; P14 PR 7, a source that does not fit the root is refused before the copy and the code stays `STORAGE_IO`: L-127 gains its second case, L-061 updated; P14 PR 7, a link as the source keeps its published code and gains a remediation: L-127 rewritten as one entry for the CLI answers whose code only loosely describes the case; P14 PR 7, the dedupe window is stated as it is: L-063 updated; P14 PR 7, the flaky kill test: a provider a killed host leaves suspended, L-129 added and L-055 narrowed; P14 PR 7, session-root creation on Windows is repaired by a DACL read-back and narrowed (#206): L-123 closed and deleted, L-005 updated; P14 PR 7, the admission test no longer fails on its own bound: L-060 states the missing bound and L-123 narrows to #206; P14 PR 7, a named pipe with no writer is refused at once: L-127 narrowed; P14 PR 7b: the FFmpeg finding re-read with a test that sees release-branch cherry-picks, L-122 narrowed from 35 records to one tie by elimination and L-132 added (L-129 to L-131 are P14 PR 7's); 2026-10-03: P14 PR 4: the robustness campaigns, L-122, L-123, L-124, L-127 and L-128 added (L-121, L-125 and L-126 were taken meanwhile by other pull requests); P14 PR 7, a missing shared library is named: L-110 closed; P14 PR 7: a session root VSift did not create now explains itself, L-126 added; P14 PR 7, the realistic cold-agent settings: L-125 added, L-118 re-read; P14 PR 5: L-068 rescheduled to R1 and L-004 re-read, by the maintainer's decision E option 4; 2026-10-02: P14 PR 3, the journeys on the published binary: L-113 to L-116 added, L-035, L-042 and L-099 updated; the README's graphics: L-121 added; P14 PR 6: the trial harness's clean-install and cold-agent modes, hold-outs and usage capture, L-117 to L-120 added; the README front page: L-102 closed, the v0.1.0 release page edited; P14 PR 2: the published-artifact qualification, L-109 to L-112 added; P14 PR 1: the evidence ledger, the claims registry and their checks, L-101 to L-103 added; P14 PR 8, the stable path and `latest`: L-105, L-107 and L-108 added, L-102 narrowed to the published v0.1.0 page, L-103 updated for the delta record, L-097 updated; P14 plan, PR 0: L-042 re-read, the checkpoints' source-built binary noted, L-098 updated with Smart App Control read Off on the maintainer's machine; 2026-10-01: P13 PR 12: the 0.1.0 pre-release was published, so L-036 and L-096 are closed and deleted, L-037 and L-043 re-read at the packet's close, L-097 and L-098 updated, L-100 added; P13 PR 11: documentation and the qualification record, L-098 and L-099 added, L-035, L-036, L-037, L-042 and L-096 updated for the passing power-loss run and the closing sweep; P13 PR 7 follow-up: the power-loss campaign's first run and its verifier fix, L-037 updated; P13 PR 10: attestation and publish wiring, L-036 updated, L-096 and L-097 added; 2026-09-30: P13 PR 7: kill tests of the managed store, directory flushes and its power-loss campaign, L-037 narrowed; the compact re-run #222 met its target: L-085 closed, L-095 added for the review tier's A-09 blurred re-run (#224), L-007 updated; P13 PR 9: npm packages and their qualification, L-091 to L-093 added and L-036 updated; P13 PR 6: managed lifecycle, L-037 narrowed and L-087 measured, L-090 added; P13 PR 4: managed installation; P13 PR 8: release archives, L-089 added and L-036 updated; P00-P13 complete; P12 closed on its final trial round with the compact tier below target, L-085; SEC-T01's adversarial evidence deferred as technical debt, L-068; P13 PR 2b closed L-073 and rewrote L-016 and L-017).
+Date: 2026-10-07 (P14, #321: the supervisor test takes only a whole line of its marker file for the process id: L-138 narrowed to the hosted repetitions the fix has not yet run, its status now monitoring and its owner P14, and L-040 records that #128's failures were seen again while the fix was tried; P14 PR 11 repeated on the second candidate: L-137 added (the pinned whisper.cpp lacks one upstream memory-safety fix that VSift can reach) and L-138 added (a supervisor test reads a marker file another process is still writing; accepted by the maintainer's decision on RQ-08 of the same day); L-137 reworded to the assessed position after a read-only reachability assessment (one upstream fix is reachable, for 1 to 200 samples of audio) and accepted for R0 by the maintainer the same day; L-128, L-133, L-134 and L-135 updated for the repeat's runs; 2026-10-06: P14 PR 10 repeated, the second candidate `0.2.0-rc.2`: L-133 reopens for the window before its publish and names RQ-19's evidence as the first candidate's, L-107's by-hand backstop names the last candidate's tag, L-132's re-pin plan covers both candidates, L-111 notes that the upgrade is repeated on the second; P14, #310: a source over the size limit is `INVALID_SOURCE` again whatever the free space: L-127 and L-126 no longer carry a known deviation, L-134 is narrowed to the campaign's no-room case, L-061 says the room check comes after the size limit; P14, #314 and #312: L-135 narrowed to the root-creation wait (#312), its reader half being fixed; L-136 added (a Windows sharing or lock violation answers `INTEGRITY_FAILURE` at once); 2026-10-05: P14 PR 11a, the candidate's hosted evidence: L-134 added (a corner case of the room check, accepted, and a malicious-media case that does not reach it), L-135 added (two rare Windows failures of the stress run, open), L-122 and L-134 reviews recorded as the maintainer's decisions of the day, L-127 and L-126 say plainly that one answer deviated from the published-codes rule, L-128 and L-111 updated for the candidate's runs, L-133's early-sentence window closed; P14 PR 10b, the release candidate's cut: L-133 added (the claims window of the candidate rung), L-107 and L-108 updated for the settled allowed lists and the by-hand backstop, L-132 for the re-pin plan; P14 PR 10a, the skill's wording before the candidate's freeze: L-109 and L-127 updated; 2026-10-04: P14 PR 9c, the maintainer's decisions on the macOS wording and RQ-05's rule: L-113 and L-114 updated; P14, a journeys stage that asserts a later fix is skipped below the first version that has it and never above it: L-115 updated; P14 PR 9a, the claims check reads the text of the README's graphics: L-121 narrowed to the roadmap's rung; L-004, L-035 and L-038 brought up to date, L-114 names the macOS wording; P14 PR 7, a failed open removes its own registration and a session that never published says so: L-131 added, L-127 gains its third case; P14 PR 7, the cold grader's three classifications: L-118 updated; P14 PR 7, a short range's cut final segment: L-130 added and L-124 closed and deleted; P14 PR 7, a source that does not fit the root is refused before the copy and the code stays `STORAGE_IO`: L-127 gains its second case, L-061 updated; P14 PR 7, a link as the source keeps its published code and gains a remediation: L-127 rewritten as one entry for the CLI answers whose code only loosely describes the case; P14 PR 7, the dedupe window is stated as it is: L-063 updated; P14 PR 7, the flaky kill test: a provider a killed host leaves suspended, L-129 added and L-055 narrowed; P14 PR 7, session-root creation on Windows is repaired by a DACL read-back and narrowed (#206): L-123 closed and deleted, L-005 updated; P14 PR 7, the admission test no longer fails on its own bound: L-060 states the missing bound and L-123 narrows to #206; P14 PR 7, a named pipe with no writer is refused at once: L-127 narrowed; P14 PR 7b: the FFmpeg finding re-read with a test that sees release-branch cherry-picks, L-122 narrowed from 35 records to one tie by elimination and L-132 added (L-129 to L-131 are P14 PR 7's); 2026-10-03: P14 PR 4: the robustness campaigns, L-122, L-123, L-124, L-127 and L-128 added (L-121, L-125 and L-126 were taken meanwhile by other pull requests); P14 PR 7, a missing shared library is named: L-110 closed; P14 PR 7: a session root VSift did not create now explains itself, L-126 added; P14 PR 7, the realistic cold-agent settings: L-125 added, L-118 re-read; P14 PR 5: L-068 rescheduled to R1 and L-004 re-read, by the maintainer's decision E option 4; 2026-10-02: P14 PR 3, the journeys on the published binary: L-113 to L-116 added, L-035, L-042 and L-099 updated; the README's graphics: L-121 added; P14 PR 6: the trial harness's clean-install and cold-agent modes, hold-outs and usage capture, L-117 to L-120 added; the README front page: L-102 closed, the v0.1.0 release page edited; P14 PR 2: the published-artifact qualification, L-109 to L-112 added; P14 PR 1: the evidence ledger, the claims registry and their checks, L-101 to L-103 added; P14 PR 8, the stable path and `latest`: L-105, L-107 and L-108 added, L-102 narrowed to the published v0.1.0 page, L-103 updated for the delta record, L-097 updated; P14 plan, PR 0: L-042 re-read, the checkpoints' source-built binary noted, L-098 updated with Smart App Control read Off on the maintainer's machine; 2026-10-01: P13 PR 12: the 0.1.0 pre-release was published, so L-036 and L-096 are closed and deleted, L-037 and L-043 re-read at the packet's close, L-097 and L-098 updated, L-100 added; P13 PR 11: documentation and the qualification record, L-098 and L-099 added, L-035, L-036, L-037, L-042 and L-096 updated for the passing power-loss run and the closing sweep; P13 PR 7 follow-up: the power-loss campaign's first run and its verifier fix, L-037 updated; P13 PR 10: attestation and publish wiring, L-036 updated, L-096 and L-097 added; 2026-09-30: P13 PR 7: kill tests of the managed store, directory flushes and its power-loss campaign, L-037 narrowed; the compact re-run #222 met its target: L-085 closed, L-095 added for the review tier's A-09 blurred re-run (#224), L-007 updated; P13 PR 9: npm packages and their qualification, L-091 to L-093 added and L-036 updated; P13 PR 6: managed lifecycle, L-037 narrowed and L-087 measured, L-090 added; P13 PR 4: managed installation; P13 PR 8: release archives, L-089 added and L-036 updated; P00-P13 complete; P12 closed on its final trial round with the compact tier below target, L-085; SEC-T01's adversarial evidence deferred as technical debt, L-068; P13 PR 2b closed L-073 and rewrote L-016 and L-017).
 Status: current-state register. Every entry below is **pending maintainer review**.
 
 ## Purpose and how to use it
@@ -169,7 +169,7 @@ Each entry has these fields:
 | [L-135](#l-135) | A concurrent root creation under CPU load gave up waiting for its peer once in 1,500 repetitions on Windows, and its cause is not shown: the wait for a creator is five seconds of wall-clock time | performance | low | P14 | [#312](https://github.com/smormah/vsift/issues/312) | open |
 | [L-136](#l-136) | On Windows, a file another process holds without read sharing is answered `INTEGRITY_FAILURE` at once, not waited for; not observed in any campaign | integrity/durability | low | unscheduled | [#314](https://github.com/smormah/vsift/issues/314) | open |
 | [L-137](#l-137) | The pinned whisper.cpp v1.9.2 lacks one upstream fix that VSift can reach: a heap read past the audio buffer for a non-silent chunk of 1 to 200 samples (12.5 ms or less), which VSift does not prevent because it has no minimum chunk or range length; fixed after the stable release | security | medium | P14 | [#322](https://github.com/smormah/vsift/issues/322) | accepted residual |
-| [L-138](#l-138) | The process supervisor's `p06` test reads a marker file that its fixture child may still be writing, so a Windows repetition failed once in 1,500 with an empty process id; the failure is the test's, and fixing it is a change under `crates/` | process/CI | low | unscheduled | [#321](https://github.com/smormah/vsift/issues/321) | accepted residual |
+| [L-138](#l-138) | The process supervisor's `p06` test read a marker file that its fixture child might still be writing, and a Windows repetition failed once in 1,500 with an empty process id; the test is fixed, and the fix has not yet run on the hosted Windows repetitions that showed the failure | process/CI | low | P14 | [#321](https://github.com/smormah/vsift/issues/321) | monitoring |
 
 Counts: 1 high, 35 medium, 87 low (123 entries).
 
@@ -2460,9 +2460,20 @@ raw.**
   `p03_caps_stdout_stderr_and_combined_floods_during_read` and
   `p04_preserves_invalid_bytes_and_handles_no_newline_and_delayed_output` under a
   parallel release build); 40/40 and 20/20 isolated reruns passed; never seen in CI.
-- **Evidence:** issue #128 and its comments.
+  **Seen again on 2026-10-07, on one Windows 11 machine, with the suite repeated on its
+  own** (`cargo test -p vsift-infrastructure --test process_supervisor`, while the fix of
+  #321 was tried, [L-138](#l-138)): 6 of 25 repetitions of main's suite failed (five in
+  the tests named next; the sixth's output was not kept), and 14 of 39 with that fix, each
+  of those in some or all of the same four tests, the ones that give a fixture child
+  three seconds: the two `p01` tests (`outcome.status.success()` is false), `p03`
+  (`stdout-flood did not terminate at its output limit`) and `p04` (`Deadline` where
+  `Exited` is expected). A child that had not finished when its three seconds ended fits
+  all three messages; why a child took that long there was not looked into. `p06`, whose
+  child has ten seconds, failed in none of them.
+- **Evidence:** issue #128 and its comments; the repetitions above (their output was read
+  and not kept).
 - **Impact:** noisy local runs; a possible timing assumption around child exit or Job
-  Object cleanup.
+  Object cleanup, or a three-second deadline that a slow start of the child uses up.
 - **Why:** unknown.
 - **Mitigation:** record the failing names and output on recurrence before rerunning.
 - **Next step:** a parallel stress run like the lock stress workflow.
@@ -3791,37 +3802,54 @@ that week.**
 
 ### L-138
 
-**The process supervisor's `p06` test reads a marker file that its fixture child may still be writing, so a Windows repetition failed once in 1,500 with an empty process id; the failure is the test's, and fixing it is a change under `crates/`.**
+**The process supervisor's `p06` test read a marker file that its fixture child might still be writing, and a Windows repetition failed once in 1,500 with an empty process id; the test is fixed, and the fix has not yet run on the hosted Windows repetitions that showed the failure.**
 
 - **What:** `p06_descendants_and_inherited_pipe_holders_are_terminated`
   (`crates/vsift-infrastructure/tests/process_supervisor.rs`) waits for the fixture child to write its
-  descendant's process id into a marker file and reads the file as soon as it exists
-  (`wait_for_descendant_marker`); the fixture writes it with `std::fs::write`, which creates the file
-  before it writes the bytes. A read between the two returns an empty string, and parsing it is exactly
-  the failure seen: `ParseIntError { kind: Empty }`. `P14 stress` run 37611376706 on `0.2.0-rc.2`,
-  `supervisor (windows-2025)`: repetition 1050 of 1,500 failed, 1,499 passed ([#321](https://github.com/smormah/vsift/issues/321)).
-  **This is a reading of the source, not a reproduction.** No other repetition of the suite failed on any
-  system in this run (1,500 CPU-loaded ones on Windows and 3,000 on each of Ubuntu and macOS were clean), and
-  0.2.0-rc.1's run had 3,000 clean per system, so the failure is one in 3,000 Windows repetitions of this run
-  and one in 6,000 of the two candidates' runs together; it is the same suite and system as [#128](https://github.com/smormah/vsift/issues/128),
-  with a different test and a different message.
+  descendant's process id into a marker file. The fixture creates the file and then writes it, and the test
+  read the file as soon as it existed and parsed whatever it found: a read between the two steps returned an
+  empty string, and parsing that is exactly the failure seen, `ParseIntError { kind: Empty }`. `P14 stress`
+  run 37611376706 on `0.2.0-rc.2`, `supervisor (windows-2025)`: repetition 1050 of 1,500 failed, 1,499 passed
+  ([#321](https://github.com/smormah/vsift/issues/321)). No other repetition of the suite failed on any system
+  in that run (1,500 CPU-loaded ones on Windows and 3,000 on each of Ubuntu and macOS were clean), and
+  0.2.0-rc.1's run had 3,000 clean per system, so the failure is one in 3,000 Windows repetitions of that run
+  and one in 6,000 of the two candidates' runs together.
+  **Fixed in the test, for the third candidate:** the fixture ends the id with a line feed, and the test takes
+  only a whole line for the id; an empty file or one without the line feed is "not written yet" and is waited
+  for inside the same five seconds, and a whole line that is not a process id fails at once. **The gap is
+  shown without a second process:** with the file left empty on purpose and written 150 ms later, the old
+  reader failed at once with the hosted run's message and the new one returns the id. **What is not shown:**
+  that this gap is what happened in repetition 1050. The run recorded only the message, so that is an
+  inference from the same message reproduced; and the fixed test has passed 79 repetitions on one Windows 11
+  machine (39 of the whole suite, 40 of this test and the marker tests alone), not the 1,500 hosted
+  repetitions of the campaign. In 14 of those 39 the suite failed in other tests, as main's does on that
+  machine ([L-040](#l-040)).
+  **Not [#128](https://github.com/smormah/vsift/issues/128):** that issue's two sightings were other tests of
+  the suite (`p03` and `p04` among them) failing on a child's exit status under heavy local load; those tests
+  use no marker file, so this fix does not touch that cause and [L-040](#l-040) stays as it is.
 - **Evidence:** run 37611376706's artifact `p14-stress-supervisor-windows-2025`
-  (`repetition-1050-failed.log`); [`p14-qualification.md`](p14-qualification.md) section 26.2.
-- **Impact:** low for the product: the supervisor's termination assertions were never reached, and no
-  product code is on the failing line. It matters for the evidence: the plan's rule for RQ-08 is zero
-  failures in at least 200 repetitions per system, so the run is failed evidence and the item is waived for R0
-  by the maintainer's decision of 2026-10-07, with this entry as the register entry.
-- **Why:** the test was written to poll for the file, not for its content; the fix (read until the
-  content parses, or write the marker by renaming a finished file into place) is a change to a test file under
-  `crates/`, which the candidate-to-stable check does not allow between the tag and the stable commit.
-- **Mitigation:** none needed in the product; a failing repetition names its test, and the log shows the
-  empty parse.
-- **Next step:** fix the test after the stable `0.2.0` (the maintainer decided against a third candidate for it);
-  a recurrence with another message, or a failure in another test of the suite, is a new finding and is not
-  covered by the acceptance.
-- **Owner:** unscheduled. **Issue:** [#321](https://github.com/smormah/vsift/issues/321). **Status:**
-  accepted residual. **Review:** accepted (2026-10-07, by the maintainer's decision on RQ-08, on a reading of the
-  test source and not a reproduction; the register's own pass over the entries is separate).
+  (`repetition-1050-failed.log`); [`p14-qualification.md`](p14-qualification.md) section 26.2; the tests
+  `a_marker_its_writer_has_created_but_not_yet_written_is_waited_for` (it fails on the old reader),
+  `a_marker_that_is_never_finished_ends_at_the_deadline`, `a_finished_marker_that_is_not_a_process_id_fails_at_once`
+  and `only_a_whole_line_is_taken_for_the_descendant_process_id` in the same file.
+- **Impact:** low, and about the evidence, not the product: the supervisor's termination assertions were never
+  reached in the failed repetition, no product code is on the failing line, and the fix changes no product
+  code and no assertion about termination. On `0.2.0-rc.2` the plan's rule for RQ-08 (zero failures in at
+  least 200 repetitions per system) was not met by the run, which stays failed evidence for that candidate; the
+  item was waived for it by the maintainer's decision of 2026-10-07, with this entry as the register entry.
+- **Why:** the test was written to poll for the file, not for its content. The marker is not renamed into
+  place instead, because a rename is one more operation on a new file for a scanner to get in the way of on
+  Windows; the line feed needs nothing from the filesystem.
+- **Mitigation:** none needed in the product; a failing repetition names its test, and the three ways a marker
+  can fail to give an id now have their own messages (not written before the deadline, not a process id, not
+  readable).
+- **Next step:** the stress run on the third candidate (`P14 stress`, the `supervisor` and `supervisor-loaded`
+  suites, 1,500 repetitions each per system). A clean run closes this entry; a failure of this test with
+  another message, or of another test of the suite, is a new finding.
+- **Owner:** P14. **Issue:** [#321](https://github.com/smormah/vsift/issues/321). **Status:**
+  monitoring. **Review:** accepted (2026-10-07, by the maintainer's decision on RQ-08 for `0.2.0-rc.2`, on a
+  reading of the test source and not a reproduction; the fix and its narrowing of this entry came after that
+  decision and are not part of it; the register's own pass over the entries is separate).
 
 ## Review workflow
 

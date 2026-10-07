@@ -6,6 +6,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- **The process-supervisor test no longer reads a marker file its child is still writing; the supervisor is unchanged** (P14,
+  #321; a test and documents only). **What failed:** one repetition in 1,500 of the supervisor suite on a hosted Windows
+  Server 2025 runner, on `0.2.0-rc.2`: `p06_descendants_and_inherited_pipe_holders_are_terminated` ended with
+  `ParseIntError { kind: Empty }`. **Cause.** The test's fixture, a child process, creates a marker file and then writes its
+  descendant's process id into it; the test read the file as soon as it existed and parsed whatever it found, so a read between
+  the two steps parsed an empty string. Shown without a second process: with the file left empty on purpose and written 150 ms
+  later, the old reader fails at once with that message. **Change.** The fixture ends the id with a line feed and the test takes
+  only a whole line for the id: an empty file, or one without the line feed, is "not written yet" and is waited for inside the
+  same five seconds (so the first digits of an id are never taken for the id of some other process either), and a whole line
+  that is not a process id fails at once. The marker is not renamed into place instead: a rename is one more operation on a new
+  file for a scanner to get in the way of on Windows. No assertion about the termination of descendants changed, and no product
+  code did. **Tests:** the reader on a marker created empty and written later (it fails on the old reader), on markers left empty,
+  left without the line feed and never created (each ends at the deadline with its own message), on a whole line that is not an
+  id, and the parse on its own. **What is not shown:** that this gap is what happened in the hosted repetition (the run recorded
+  only the message, which is the one reproduced), and the fixed test has passed 79 repetitions on one Windows 11 machine (39 of
+  the whole suite, 40 of it and the marker tests alone), not the 1,500 hosted repetitions;
+  [L-138](docs/planning/known-limits.md#l-138) is narrowed to that and closes with a clean stress run on the third candidate.
+  **Not #128:** that issue's sightings were other tests of the suite failing on a child's exit status; they use no marker file,
+  so it stays open. It was seen again in these local repetitions, on main's suite as with the fix (four tests whose fixture
+  child has three seconds; never `p06`), and [L-040](docs/planning/known-limits.md#l-040) records what was seen.
+
 ## [0.2.0-rc.2] - 2026-10-06
 
 **This is a release candidate, under qualification.** It is the second candidate for `0.2.0`, the release that ships R0
