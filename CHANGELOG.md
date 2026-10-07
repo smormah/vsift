@@ -139,6 +139,19 @@ the maintainer-side reading are committed ([`batch-2-reading.md`](docs/planning/
 that cuts the second candidate they moved to `docs/planning/p14-agent-trials/batch-2-rc.1/`, so that `batch-2/` holds only its freeze for the
 repeat on this one.
 
+**Work record only (P14 PR 11, repeated; nothing shipped changes).** The hosted evidence on the published `0.2.0-rc.2` (published 2026-10-07) is
+recorded in the evidence ledger and in [`docs/planning/p14-qualification.md`](docs/planning/p14-qualification.md) section 26, with the first
+candidate's entries moved to `prior`. The second verification of the publish, clean installs, archives, the offline install, the upgrades of the
+published 0.1.0 and of the published `0.2.0-rc.1` to it, the journeys on three systems, long fuzzing, the load and soak, the runbook walk, the malicious-media run,
+the scan reading and the two fault campaigns (both with their hosted verdict jobs) passed. **The two fixes held where they were tested:** the Windows lock
+suite that had one failure in 200 repetitions on the first candidate ran 200 of 200 clean (#314), and a source over the size limit is `INVALID_SOURCE` again
+(#310). **The stress run failed once**: one repetition in 1,500 of the plain process-supervisor suite on Windows, which a reading of the test puts in the test, not in
+the supervisor ([#321](https://github.com/smormah/vsift/issues/321), [L-138](docs/planning/known-limits.md#l-138)); RQ-08 is recorded `failed` and the
+maintainer decides. The by-hand scan reading of the day is [`p14-scan-reading-2026-10-07.md`](docs/planning/p14-scan-reading-2026-10-07.md): nothing changed
+in its sources since 2026-10-05, and one new observation (whisper.cpp releases newer than the pinned 1.9.2 carry memory-safety hardening; no CVE, reachability not
+assessed) is for the maintainer ([#322](https://github.com/smormah/vsift/issues/322), [L-137](docs/planning/known-limits.md#l-137)). Four evidence items
+still block `release-evidence --complete-for 0.2.0-rc.2`: RQ-08 and the agent trials and try-outs (RQ-15 to RQ-17).
+
 ### Changed
 
 - **The release candidate `0.2.0-rc.2` is cut** (P14 PR 10, repeated, 2026-10-06; the bump, the pointers, the freeze and the maintainer's

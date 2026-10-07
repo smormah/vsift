@@ -1541,3 +1541,46 @@ changes and their tests, and the repeated campaigns are what test them. Every re
 only, and repeating it costs the hosted minutes, the maintainer's allowance for the agent batches and the try-outs again; a third candidate
 would cost them a third time. The malicious-media campaign still has its own defect (L-134), because the campaign tools are not changed in
 this cut. #312 (a session-root creation that gave up waiting under load, L-135) is not fixed, so RQ-08 may fail again for that reason.
+
+## Implementation note, 2026-10-07 (P14 PR 11, repeated: the hosted evidence on the second candidate `0.2.0-rc.2`)
+
+The hosted part of PR 11 is repeated on the published `0.2.0-rc.2` (tag `v0.2.0-rc.2` at `7c722d1fc46af7fddeffbaf807028eaec413ace1`, the packages
+published at 09:43 UTC): this is **the whole of the hosted part, not an increment of it**, and it is work record only (the ledger, the plan's
+section 26, the by-hand scan reading of the day, the register, this note, the changelog and the two memory files). PR 11 repeated is complete only
+when RQ-08, RQ-15, RQ-16 and RQ-17 are `passed`, `waived` or `not_applicable` for `0.2.0-rc.2` and `release-evidence --complete-for 0.2.0-rc.2`
+passes; **four items block it** (plan 26.6). The runs, tables and findings are [`p14-qualification.md`](../planning/p14-qualification.md) section 26;
+every `passed` entry of the first candidate is `prior` evidence in the ledger now. No code, tool, workflow, schema or setting changed, nothing was
+published or tagged, and nothing was re-run (runner shortage, #316, showed as queueing only).
+
+**What the repeat showed.** Every hosted campaign passed except one: the clean installs, archives, offline install, the two upgrades (from 0.1.0 and from
+`0.2.0-rc.1`), the journeys on three systems, the managed smoke, fuzzing (31 targets, 2.92 billion runs), load and soak, the runbook walk, the media
+campaign, both fault campaigns (this time with their hosted verdict jobs) and the scan reading. **The two fixes held where they were tested:** the lock
+suite on Windows, which had one failure in 200 repetitions on the first candidate (#314), ran 200 of 200 clean, and `sparse-30gib` answers
+`INVALID_SOURCE` again on the published bytes (#310). **The stress run failed once**: one repetition in 1,500 of the plain supervisor suite on Windows
+(#321, L-138), which a reading of the test source puts in the **test** (it parses a marker file its fixture child may still be writing), not in the
+supervisor.
+
+**Decisions taken inside this ADR, for the maintainer to confirm or overrule.**
+
+1. **RQ-08 is recorded `failed` with no waiver** and #321 open: the plan's rule is zero failures in at least 200 repetitions per system, and one
+   repetition of 20,100 failed. The options are in plan 26.2: accept #321 with L-138 as the register entry and record the item `waived` (or
+   accepted) for R0, or fix the test in a third candidate. The recommendation is the first (the failing line is a test's parse of a half-written file; the
+   fix is a test-file change under `crates/`, which the candidate-to-stable check refuses after the tag; a third candidate would cost the hosted
+   minutes, the agent batches and the try-outs a third time and make the product no different).
+2. **RQ-10 stays `waived`, untouched**, with the second candidate's run added as evidence. The decision of 2026-10-05 was made for the first candidate's two
+   findings and its premise ("`0.2.0-rc.1` stays") is gone; the run is green without it (the judge counts #265 and #266 as tracked, and `sparse-30gib` is fixed).
+   A waiver would now cover only the link's `STORAGE_IO` (#265, L-127) and the campaign's own no-room case (L-134), which cannot be corrected before the stable
+   release. The maintainer confirms or lifts it; lifting it lets RQ-10 be recorded `passed` with those two named.
+3. **RQ-13 is `passed` for the second candidate** on the same basis as the first (the maintainer's acceptance of CVE-2026-38350, #272, L-122), and **one
+   new observation is recorded for the maintainer, not as a finding of a ranked severity**: whisper.cpp 1.9.3 to 1.9.5 carry memory-safety hardening the
+   pinned 1.9.2 lacks, with no CVE, advisory or severity, reachability not assessed (#322, L-137). The earlier readings did not read the project's release
+   list. Accept it with L-137 (re-pin after `0.2.0` together with the FFmpeg refresh, L-132) or assess reachability first; a re-pin before `0.2.0` is a third candidate.
+4. **RQ-11 is `passed` on the hosted verdicts** (both Acceptance jobs ran), unlike the first candidate's, whose P10 verdict was a by-hand run of the script.
+5. **RQ-18 is recorded on the CI run of the push of 2026-10-06 at the candidate's own commit**, which is the only CI run at that commit (nothing merged since
+   changes the commit); L-133's second window is closed (RQ-19 passed for the second candidate).
+6. **Two register entries are new** (L-137, L-138) and L-128, L-133, L-134 and L-135 are updated for the repeat's runs; every Review line stays `pending`.
+
+**What is weaker than it sounds.** The same as for the first candidate (plan 24.2 and 26.5): shared hosted images, a synthetic corpus and voice, a fuzz hour that is a
+floor (18 of 31 targets still finding coverage), a stress rate measured on shared runners, and a media campaign with a case that tests nothing about the room
+check. A zero in the lock suite is not a proof that #314 is gone; the fix rests on its regression tests. RQ-13's FFmpeg row is a repeat of a reading of public
+records.

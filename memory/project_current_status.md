@@ -1,6 +1,6 @@
 # VSift current status
 
-As of 2026-10-06. Current-state document: rewrite it, don't append to it. Next actions and
+As of 2026-10-07. Current-state document: rewrite it, don't append to it. Next actions and
 open decisions are in `memory/TODO.md`.
 
 ## In plain English
@@ -38,23 +38,22 @@ the CLI and write a cited report. P12's named-client trials qualified it:
 ## Where the project stands
 
 **P00-P13 are complete. P14, the R0 qualification (#17), is in progress** (started 2026-10-02;
-decisions A-H of ADR 0024 confirmed). Its plan is 14 pull requests (0-13); **PRs 0-9 are merged. PR 10, the candidate, has been done
-twice. `0.2.0-rc.1` was published on 2026-10-05 (`v0.2.0-rc.1` at `d5792ce31db1`, npm `next` on all four packages, `latest`
-untouched) and is superseded but stays published. `0.2.0-rc.2` (rc.1 plus the fixes of #314 and #310 and nothing else) is prepared and
-READY TO TAG, NOT PUBLISHED: the maintainer tags and publishes it by `release.md` 6.11, and next is still `0.2.0-rc.1` until then. PR 11,
-its qualification, is repeated on rc.2; PRs 12-13 remain; the packet is not complete.** What it must show, and what is weaker than it sounds:
-- **Everything recorded on rc.1 is history for rc.2** (plan 24.2 and the ledger): clean installs, archives, the offline install, the
-  upgrade of 0.1.0 to rc.1, the journeys on three systems (macOS with Homebrew's tools, L-114; P11's durable stage cannot run hosted,
-  L-113), fuzzing, load, the runbook and the scan reading **passed on rc.1; not clean machines** (L-112). `release-evidence
-  --complete-for 0.2.0-rc.2` fails on 17 of 20 items (13 stale `passed`, RQ-08 `failed`, RQ-15 to RQ-17 `planned`; plan 25.2). Smart App
-  Control and the macOS prompts are unseen (L-098). **A synthetic corpus and voice only** (L-020, L-022); batch 2 ran on rc.1 with four
-  readings still open (`batch-2-reading.md`) and is run again.
-- **Why a second candidate:** the stress run found a real Windows defect, #314 (a reader answered `IntegrityFailure` once in 140,721
-  reads while generations were published: a retry budget counted from before the first attempt, fixed by #318; what remains on Windows is
-  L-136, never seen), and the malicious-media run a changed published code, #310 (an over-limit source answered `STORAGE_IO`, fixed by
-  #319). **Open:** #312 (a root creation gave up waiting once in 1,500 loaded repetitions: L-135, not fixed, so RQ-08 may fail again).
-  RQ-10's waiver of 2026-10-05 (L-134) was for rc.1's findings and does not expire by itself; the FFmpeg residual CVE-2026-38350 is accepted
-  (L-122, RQ-13). **SEC-T01 stays half done in R0** (L-068; RQ-14 waived). **`latest` has never moved** (L-105). Decisions: `TODO.md`.
+decisions A-H of ADR 0024 confirmed). Its plan is 14 pull requests (0-13); **PRs 0-9 are merged. PR 10, the candidate, was done twice and
+both are published: `0.2.0-rc.1` (2026-10-05, `v0.2.0-rc.1` at `d5792ce31db1`; superseded, stays on npm) and `0.2.0-rc.2` (2026-10-07,
+`v0.2.0-rc.2` at `7c722d1fc46a`, npm `next` on all four packages, `latest` untouched): rc.1 plus the fixes of #314 and #310 and nothing else.
+PR 11, the qualification, is repeated on rc.2: its HOSTED part is done and recorded (plan section 26); the agent batches 2 and 3 and the
+try-outs are not; PRs 12-13 remain; the packet is not complete.** What it shows, and what is weaker than it sounds:
+- **On rc.2, hosted:** the second verification of the publish (RQ-19), clean installs, archives, the offline install, the upgrades from
+  0.1.0 and from rc.1 (npm only), the journeys on three systems (macOS with Homebrew's tools, L-114; P11's durable stage cannot run hosted,
+  L-113), fuzzing (18 of 31 targets still growing, L-128), load, the runbook walk, the media run (green), both fault campaigns (hosted verdict
+  jobs ran) and the scan reading **passed; not clean machines** (L-112). **RQ-08 `failed`:** one Windows repetition of 20,100 (#321, L-138: a
+  race in a supervisor test, read from the source), while the lock suite (#314) was 200 of 200 and #312 did not recur. `release-evidence
+  --complete-for 0.2.0-rc.2` fails on exactly four items: RQ-08, RQ-15, RQ-16, RQ-17. Smart App Control and the macOS prompts are unseen
+  (L-098). **A synthetic corpus and voice only** (L-020, L-022); batch 2 ran on rc.1 with four readings still open (`batch-2-reading.md`).
+- **Open decisions:** accept #321 or cut a third candidate; keep or lift RQ-10's waiver (what is left of it: the link's `STORAGE_IO`, #265, and
+  the campaign's own no-room case, L-134); the whisper.cpp pin lags upstream by three releases that harden memory safety (#322, L-137: no CVE).
+  The FFmpeg residual CVE-2026-38350 is accepted (L-122, RQ-13); #312 is not fixed (L-135). **SEC-T01 stays half done in R0** (L-068; RQ-14
+  waived). **`latest` has never moved** (L-105). Decisions: `TODO.md`.
 
 ## P14 PRs 1 to 6 and 8 in one view
 
@@ -86,7 +85,7 @@ check reads the launcher's messages and the README graphics' text (L-121) and ea
 leans on (`limits`); `register-review-sheet.md` (every review `pending`). **Decided 2026-10-04:** the macOS wording,
 the versions policy and RQ-05's per-system rule (still `running`, plan section 21). `docs/guide/`
 (twelve pages, two generated) is held to the code by the `Guide` workflow (`tools/guide/`): 40 marked commands print what
-the pages show. **PR 10 (the candidate; rc.1 published 2026-10-05, rc.2 prepared 2026-10-06).** The version is `0.2.0-rc.2`
+the pages show. **PR 10 (the candidate; rc.1 published 2026-10-05, rc.2 on 2026-10-07).** The version is `0.2.0-rc.2`
 everywhere, the guide's marker is the release `0.2.0`, rung `candidate`, the freeze of batches 2 and 3 is committed with the same
 digests as for rc.1 (a test holds it) and rc.1's batch-2 records are in `batch-2-rc.1/`. The allowed lists of the candidate-to-stable
 check (a work record and `install.md` are allowed; nothing else may merge from the tag to the stable, so Dependabot waits: #192, #193,
@@ -133,7 +132,7 @@ Control, the macOS prompts (L-098); power loss beyond Ubuntu 24.04 ext4 (L-037).
 | P11 | Complete (`40c4038`); SEC-T01 adversarial evidence is technical debt, moved to R1 (#188, L-068) |
 | P12 | Complete (2026-09-30, ADR 0022 Accepted): skill, harness, named-client trials; review tier qualified, compact tier 93% and 100% on the #222 re-run; open: L-095 (#224), #219, #204 (`1284e54`) |
 | P13 | Complete (2026-10-01, ADR 0023 Accepted): distribution, managed install, `handoff check`, human output; 0.1.0 published; release commit `011bc4d` |
-| P14 | **In progress** (started 2026-10-02): PRs 0-9 merged (PR 7 = the fixes of the campaigns and batch 1); 10: rc.1 published and superseded, **rc.2 prepared, not published**; 11 (hosted evidence, `install.md`, batch 2's records and the sheets are merged for rc.1) is repeated on rc.2; 12-13 remain |
+| P14 | **In progress** (started 2026-10-02): PRs 0-9 merged (PR 7 = the fixes of the campaigns and batch 1); 10: rc.1 published and superseded, **rc.2 published 2026-10-07**; 11 repeated on rc.2: **hosted part recorded (RQ-08 `failed`, #321)**, batches 2 and 3 and the try-outs still to do; 12-13 remain |
 
 ## Architecture snapshot
 

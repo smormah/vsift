@@ -1,6 +1,6 @@
 # Known limits register
 
-Date: 2026-10-06 (P14 PR 10 repeated, the second candidate `0.2.0-rc.2`: L-133 reopens for the window before its publish and names RQ-19's evidence as the first candidate's, L-107's by-hand backstop names the last candidate's tag, L-132's re-pin plan covers both candidates, L-111 notes that the upgrade is repeated on the second; P14, #310: a source over the size limit is `INVALID_SOURCE` again whatever the free space: L-127 and L-126 no longer carry a known deviation, L-134 is narrowed to the campaign's no-room case, L-061 says the room check comes after the size limit; P14, #314 and #312: L-135 narrowed to the root-creation wait (#312), its reader half being fixed; L-136 added (a Windows sharing or lock violation answers `INTEGRITY_FAILURE` at once); 2026-10-05: P14 PR 11a, the candidate's hosted evidence: L-134 added (a corner case of the room check, accepted, and a malicious-media case that does not reach it), L-135 added (two rare Windows failures of the stress run, open), L-122 and L-134 reviews recorded as the maintainer's decisions of the day, L-127 and L-126 say plainly that one answer deviated from the published-codes rule, L-128 and L-111 updated for the candidate's runs, L-133's early-sentence window closed; P14 PR 10b, the release candidate's cut: L-133 added (the claims window of the candidate rung), L-107 and L-108 updated for the settled allowed lists and the by-hand backstop, L-132 for the re-pin plan; P14 PR 10a, the skill's wording before the candidate's freeze: L-109 and L-127 updated; 2026-10-04: P14 PR 9c, the maintainer's decisions on the macOS wording and RQ-05's rule: L-113 and L-114 updated; P14, a journeys stage that asserts a later fix is skipped below the first version that has it and never above it: L-115 updated; P14 PR 9a, the claims check reads the text of the README's graphics: L-121 narrowed to the roadmap's rung; L-004, L-035 and L-038 brought up to date, L-114 names the macOS wording; P14 PR 7, a failed open removes its own registration and a session that never published says so: L-131 added, L-127 gains its third case; P14 PR 7, the cold grader's three classifications: L-118 updated; P14 PR 7, a short range's cut final segment: L-130 added and L-124 closed and deleted; P14 PR 7, a source that does not fit the root is refused before the copy and the code stays `STORAGE_IO`: L-127 gains its second case, L-061 updated; P14 PR 7, a link as the source keeps its published code and gains a remediation: L-127 rewritten as one entry for the CLI answers whose code only loosely describes the case; P14 PR 7, the dedupe window is stated as it is: L-063 updated; P14 PR 7, the flaky kill test: a provider a killed host leaves suspended, L-129 added and L-055 narrowed; P14 PR 7, session-root creation on Windows is repaired by a DACL read-back and narrowed (#206): L-123 closed and deleted, L-005 updated; P14 PR 7, the admission test no longer fails on its own bound: L-060 states the missing bound and L-123 narrows to #206; P14 PR 7, a named pipe with no writer is refused at once: L-127 narrowed; P14 PR 7b: the FFmpeg finding re-read with a test that sees release-branch cherry-picks, L-122 narrowed from 35 records to one tie by elimination and L-132 added (L-129 to L-131 are P14 PR 7's); 2026-10-03: P14 PR 4: the robustness campaigns, L-122, L-123, L-124, L-127 and L-128 added (L-121, L-125 and L-126 were taken meanwhile by other pull requests); P14 PR 7, a missing shared library is named: L-110 closed; P14 PR 7: a session root VSift did not create now explains itself, L-126 added; P14 PR 7, the realistic cold-agent settings: L-125 added, L-118 re-read; P14 PR 5: L-068 rescheduled to R1 and L-004 re-read, by the maintainer's decision E option 4; 2026-10-02: P14 PR 3, the journeys on the published binary: L-113 to L-116 added, L-035, L-042 and L-099 updated; the README's graphics: L-121 added; P14 PR 6: the trial harness's clean-install and cold-agent modes, hold-outs and usage capture, L-117 to L-120 added; the README front page: L-102 closed, the v0.1.0 release page edited; P14 PR 2: the published-artifact qualification, L-109 to L-112 added; P14 PR 1: the evidence ledger, the claims registry and their checks, L-101 to L-103 added; P14 PR 8, the stable path and `latest`: L-105, L-107 and L-108 added, L-102 narrowed to the published v0.1.0 page, L-103 updated for the delta record, L-097 updated; P14 plan, PR 0: L-042 re-read, the checkpoints' source-built binary noted, L-098 updated with Smart App Control read Off on the maintainer's machine; 2026-10-01: P13 PR 12: the 0.1.0 pre-release was published, so L-036 and L-096 are closed and deleted, L-037 and L-043 re-read at the packet's close, L-097 and L-098 updated, L-100 added; P13 PR 11: documentation and the qualification record, L-098 and L-099 added, L-035, L-036, L-037, L-042 and L-096 updated for the passing power-loss run and the closing sweep; P13 PR 7 follow-up: the power-loss campaign's first run and its verifier fix, L-037 updated; P13 PR 10: attestation and publish wiring, L-036 updated, L-096 and L-097 added; 2026-09-30: P13 PR 7: kill tests of the managed store, directory flushes and its power-loss campaign, L-037 narrowed; the compact re-run #222 met its target: L-085 closed, L-095 added for the review tier's A-09 blurred re-run (#224), L-007 updated; P13 PR 9: npm packages and their qualification, L-091 to L-093 added and L-036 updated; P13 PR 6: managed lifecycle, L-037 narrowed and L-087 measured, L-090 added; P13 PR 4: managed installation; P13 PR 8: release archives, L-089 added and L-036 updated; P00-P13 complete; P12 closed on its final trial round with the compact tier below target, L-085; SEC-T01's adversarial evidence deferred as technical debt, L-068; P13 PR 2b closed L-073 and rewrote L-016 and L-017).
+Date: 2026-10-07 (P14 PR 11 repeated on the second candidate: L-137 added (the pinned whisper.cpp is three releases behind upstream, which hardened memory safety meanwhile) and L-138 added (a supervisor test reads a marker file another process is still writing); L-128, L-133, L-134 and L-135 updated for the repeat's runs; 2026-10-06: P14 PR 10 repeated, the second candidate `0.2.0-rc.2`: L-133 reopens for the window before its publish and names RQ-19's evidence as the first candidate's, L-107's by-hand backstop names the last candidate's tag, L-132's re-pin plan covers both candidates, L-111 notes that the upgrade is repeated on the second; P14, #310: a source over the size limit is `INVALID_SOURCE` again whatever the free space: L-127 and L-126 no longer carry a known deviation, L-134 is narrowed to the campaign's no-room case, L-061 says the room check comes after the size limit; P14, #314 and #312: L-135 narrowed to the root-creation wait (#312), its reader half being fixed; L-136 added (a Windows sharing or lock violation answers `INTEGRITY_FAILURE` at once); 2026-10-05: P14 PR 11a, the candidate's hosted evidence: L-134 added (a corner case of the room check, accepted, and a malicious-media case that does not reach it), L-135 added (two rare Windows failures of the stress run, open), L-122 and L-134 reviews recorded as the maintainer's decisions of the day, L-127 and L-126 say plainly that one answer deviated from the published-codes rule, L-128 and L-111 updated for the candidate's runs, L-133's early-sentence window closed; P14 PR 10b, the release candidate's cut: L-133 added (the claims window of the candidate rung), L-107 and L-108 updated for the settled allowed lists and the by-hand backstop, L-132 for the re-pin plan; P14 PR 10a, the skill's wording before the candidate's freeze: L-109 and L-127 updated; 2026-10-04: P14 PR 9c, the maintainer's decisions on the macOS wording and RQ-05's rule: L-113 and L-114 updated; P14, a journeys stage that asserts a later fix is skipped below the first version that has it and never above it: L-115 updated; P14 PR 9a, the claims check reads the text of the README's graphics: L-121 narrowed to the roadmap's rung; L-004, L-035 and L-038 brought up to date, L-114 names the macOS wording; P14 PR 7, a failed open removes its own registration and a session that never published says so: L-131 added, L-127 gains its third case; P14 PR 7, the cold grader's three classifications: L-118 updated; P14 PR 7, a short range's cut final segment: L-130 added and L-124 closed and deleted; P14 PR 7, a source that does not fit the root is refused before the copy and the code stays `STORAGE_IO`: L-127 gains its second case, L-061 updated; P14 PR 7, a link as the source keeps its published code and gains a remediation: L-127 rewritten as one entry for the CLI answers whose code only loosely describes the case; P14 PR 7, the dedupe window is stated as it is: L-063 updated; P14 PR 7, the flaky kill test: a provider a killed host leaves suspended, L-129 added and L-055 narrowed; P14 PR 7, session-root creation on Windows is repaired by a DACL read-back and narrowed (#206): L-123 closed and deleted, L-005 updated; P14 PR 7, the admission test no longer fails on its own bound: L-060 states the missing bound and L-123 narrows to #206; P14 PR 7, a named pipe with no writer is refused at once: L-127 narrowed; P14 PR 7b: the FFmpeg finding re-read with a test that sees release-branch cherry-picks, L-122 narrowed from 35 records to one tie by elimination and L-132 added (L-129 to L-131 are P14 PR 7's); 2026-10-03: P14 PR 4: the robustness campaigns, L-122, L-123, L-124, L-127 and L-128 added (L-121, L-125 and L-126 were taken meanwhile by other pull requests); P14 PR 7, a missing shared library is named: L-110 closed; P14 PR 7: a session root VSift did not create now explains itself, L-126 added; P14 PR 7, the realistic cold-agent settings: L-125 added, L-118 re-read; P14 PR 5: L-068 rescheduled to R1 and L-004 re-read, by the maintainer's decision E option 4; 2026-10-02: P14 PR 3, the journeys on the published binary: L-113 to L-116 added, L-035, L-042 and L-099 updated; the README's graphics: L-121 added; P14 PR 6: the trial harness's clean-install and cold-agent modes, hold-outs and usage capture, L-117 to L-120 added; the README front page: L-102 closed, the v0.1.0 release page edited; P14 PR 2: the published-artifact qualification, L-109 to L-112 added; P14 PR 1: the evidence ledger, the claims registry and their checks, L-101 to L-103 added; P14 PR 8, the stable path and `latest`: L-105, L-107 and L-108 added, L-102 narrowed to the published v0.1.0 page, L-103 updated for the delta record, L-097 updated; P14 plan, PR 0: L-042 re-read, the checkpoints' source-built binary noted, L-098 updated with Smart App Control read Off on the maintainer's machine; 2026-10-01: P13 PR 12: the 0.1.0 pre-release was published, so L-036 and L-096 are closed and deleted, L-037 and L-043 re-read at the packet's close, L-097 and L-098 updated, L-100 added; P13 PR 11: documentation and the qualification record, L-098 and L-099 added, L-035, L-036, L-037, L-042 and L-096 updated for the passing power-loss run and the closing sweep; P13 PR 7 follow-up: the power-loss campaign's first run and its verifier fix, L-037 updated; P13 PR 10: attestation and publish wiring, L-036 updated, L-096 and L-097 added; 2026-09-30: P13 PR 7: kill tests of the managed store, directory flushes and its power-loss campaign, L-037 narrowed; the compact re-run #222 met its target: L-085 closed, L-095 added for the review tier's A-09 blurred re-run (#224), L-007 updated; P13 PR 9: npm packages and their qualification, L-091 to L-093 added and L-036 updated; P13 PR 6: managed lifecycle, L-037 narrowed and L-087 measured, L-090 added; P13 PR 4: managed installation; P13 PR 8: release archives, L-089 added and L-036 updated; P00-P13 complete; P12 closed on its final trial round with the compact tier below target, L-085; SEC-T01's adversarial evidence deferred as technical debt, L-068; P13 PR 2b closed L-073 and rewrote L-016 and L-017).
 Status: current-state register. Every entry below is **pending maintainer review**.
 
 ## Purpose and how to use it
@@ -159,7 +159,7 @@ Each entry has these fields:
 | [L-125](#l-125) | The realistic cold setting cannot be fenced to the workspace, so Claude Code runs it only on an isolated machine; the two clients' cold baselines are not the same test | process/CI | medium | P14 | [#17](https://github.com/smormah/vsift/issues/17) | accepted residual |
 | [L-126](#l-126) | A session root VSift did not create is refused with `INTEGRITY_FAILURE`, which says stored data is damaged; only the remediation says what happened | contract/UX | low | unscheduled | none | accepted residual |
 | [L-127](#l-127) | Some CLI answers carry a published failure code that only loosely describes the case; the codes stay within v1 and the remediation says what happened | contract/UX | low | P14 | [#265](https://github.com/smormah/vsift/issues/265), [#266](https://github.com/smormah/vsift/issues/266), [#277](https://github.com/smormah/vsift/issues/277) | accepted residual |
-| [L-128](#l-128) | The fuzzing is one hour per target on shared hosted CPUs, 15 to 19 of 31 targets were still finding coverage at the end (15 on the candidate's run, 19 on 0.1.0's), and three kinds of stored record have no target | security | low | P14 | [#17](https://github.com/smormah/vsift/issues/17) | accepted residual |
+| [L-128](#l-128) | The fuzzing is one hour per target on shared hosted CPUs, 15 to 19 of 31 targets were still finding coverage at the end (19 on 0.1.0's run, 15 on the first candidate's, 18 on the second's), and three kinds of stored record have no target | security | low | P14 | [#17](https://github.com/smormah/vsift/issues/17) | accepted residual |
 | [L-129](#l-129) | On Windows, a host killed outright in the first instants of a provider's start leaves that provider suspended for good, and its stage cannot be deleted | security | low | unscheduled | [#253](https://github.com/smormah/vsift/issues/253) | accepted residual |
 | [L-130](#l-130) | whisper.cpp ends the last segment of a range cut mid-speech past the audio, by several seconds; VSift cuts it at the audio's end, so that end says nothing about where speech stopped, and a session that holds such a revision cannot be read by 0.1.0 | accuracy/ASR | low | unscheduled | [#274](https://github.com/smormah/vsift/issues/274) | accepted residual |
 | [L-131](#l-131) | Requests that open sessions at the same moment contend on one try-only lock: in the measurements made between one request in five and one in four was refused `BUSY` and retried | performance | low | unscheduled | [#277](https://github.com/smormah/vsift/issues/277) | accepted residual |
@@ -168,8 +168,10 @@ Each entry has these fields:
 | [L-134](#l-134) | The malicious-media campaign's no-room case never reaches the room check, so on the published bytes #266's check is shown only by its CLI test and by a supplementary run from a scratch branch | process/CI | low | P14 | [#310](https://github.com/smormah/vsift/issues/310) | accepted residual |
 | [L-135](#l-135) | A concurrent root creation under CPU load gave up waiting for its peer once in 1,500 repetitions on Windows, and its cause is not shown: the wait for a creator is five seconds of wall-clock time | performance | low | P14 | [#312](https://github.com/smormah/vsift/issues/312) | open |
 | [L-136](#l-136) | On Windows, a file another process holds without read sharing is answered `INTEGRITY_FAILURE` at once, not waited for; not observed in any campaign | integrity/durability | low | unscheduled | [#314](https://github.com/smormah/vsift/issues/314) | open |
+| [L-137](#l-137) | The pinned whisper.cpp v1.9.2 is three releases behind its project, whose newer releases carry memory-safety hardening (a heap read on audio under 201 samples, malformed model files) that no CVE, advisory or severity names; reachability from VSift is not assessed | security | medium | P14 | [#322](https://github.com/smormah/vsift/issues/322) | open |
+| [L-138](#l-138) | The process supervisor's `p06` test reads a marker file that its fixture child may still be writing, so a Windows repetition failed once in 1,500 with an empty process id; the failure is the test's, and fixing it is a change under `crates/` | process/CI | low | unscheduled | [#321](https://github.com/smormah/vsift/issues/321) | open |
 
-Counts: 1 high, 34 medium, 86 low (121 entries).
+Counts: 1 high, 35 medium, 87 low (123 entries).
 
 ## Security
 
@@ -3441,7 +3443,7 @@ that week.**
 
 ### L-128
 
-**The fuzzing is one hour per target on shared hosted CPUs, 15 to 19 of 31 targets were still finding coverage at the end (15 on the candidate's run, 19 on 0.1.0's), and three kinds of stored record have no target.**
+**The fuzzing is one hour per target on shared hosted CPUs, 15 to 19 of 31 targets were still finding coverage at the end (19 on 0.1.0's run, 15 on the first candidate's, 18 on the second's), and three kinds of stored record have no target.**
 
 - **What:** the P14 campaign ran every one of the 31 targets for 3,601 s (3.68 billion runs in all)
   with no crash, timeout or out-of-memory. For 19 targets the last new coverage came in the final
@@ -3451,15 +3453,19 @@ that week.**
   **On the candidate** (2026-10-05, `Fuzz` run 37330740720 at the tag, the same 31 targets and 3,601 s each,
   2.88 billion runs on slower shared CPUs): again no crash, timeout or out-of-memory; 15 targets found their
   last new coverage in the final tenth, two (`crop_rect`, `transcript_cursor`) none after their first 1
-  percent. Every target stays a floor of its hour, whatever the count of the day.
+  percent. **On the second candidate** (2026-10-07, `Fuzz` run 37611372051 at the tag `v0.2.0-rc.2`, the same targets and
+  seconds, 2.92 billion runs): again no crash, timeout or out-of-memory; 18 targets found their last new coverage in the final
+  tenth, two (`crop_rect`, `png_sequence`) none after their first 3 percent. The two candidates have the same parsers and the
+  count moved from 15 to 18, so it measures the hour's randomness as much as the targets. Every target stays a floor
+  of its hour, whatever the count of the day.
   Seven targets were added by the gap review (the saved setup plan, the bundle manifest and its
   artifacts, the tar, gzip and xz archive inventories, the identifier grammars, the input-path
   grammar). Not fuzzed: the session root's ownership marker, the media-tool verification record and the
   user dependency configuration, which are read from folders VSift
   creates owner-private; the managed store's ownership marker is compared with
   fixed bytes, not parsed. The bundle target runs on Unix only (the Windows replay skips it).
-- **Evidence:** `Fuzz` runs 36978914176 (0.1.0) and 37330740720 (the candidate), one plateau line per
-  target in each job log; [`p14-qualification.md`](p14-qualification.md) sections 18.1 and 24.2.
+- **Evidence:** `Fuzz` runs 36978914176 (0.1.0), 37330740720 (the first candidate) and 37611372051 (the second), one plateau line per
+  target in each job log; [`p14-qualification.md`](p14-qualification.md) sections 18.1, 24.2 and 26.2.
 - **Impact:** "no finding" is a floor: it covers those inputs for that hour, not every input. A
   malformed file in one of the three unfuzzed records is read by code no fuzzer has exercised;
   the writer of such a file already has the user's rights.
@@ -3579,7 +3585,8 @@ that week.**
   `0.2.0-rc.2` until the maintainer publishes it, the README, the installation guide and the launcher's README say that
   `0.2.0-rc.2` is a release candidate under qualification before it is on npm (the installation guide says that until then
   `@next` installs `0.2.0-rc.1`), and the RQ-19 behind CL-101 and CL-102 is the first candidate's until PR 11 is repeated and
-  records it for the second.
+  records it for the second. **Update, 2026-10-07:** `0.2.0-rc.2` was published on 2026-10-07 (09:43 UTC) and `P14 verify release` (run 37602927119)
+  passed for it, so the second window is closed and RQ-19 is `passed` for the second candidate in the ledger.
   (2) The README and its graphic `roadmap.svg` are not among the
   documents the stable commit may change, so they keep the candidate wording from the cut until the
   ledger follow-up (P14 PR 13), including at and just after the publish of `0.2.0`: the front page
@@ -3619,7 +3626,11 @@ that week.**
   request in the same case (a workspace made on the small filesystem) answers `RESOURCE_LIMIT` at once.
 - **Evidence:** `P14 malicious media` run 37330709659 (`hostile-result.json`, `hostile-summary.md`);
   `tools/p14-campaigns/hostile-media.cjs` (`SMALL_WORKSPACE`, `commandFor`);
-  [`p14-qualification.md`](p14-qualification.md) section 24.2.
+  [`p14-qualification.md`](p14-qualification.md) section 24.2. **On the second candidate** (run 37613284274,
+  2026-10-07, the published `0.2.0-rc.2`): `sparse-30gib` answers `INVALID_SOURCE` in 0.1 s again (the fix of #310 works on the
+  published bytes), `sparse-no-room` still answers `INTEGRITY_FAILURE` after 5.2 s (the case's own defect, unchanged because
+  the tools are frozen), the link answers `STORAGE_IO` (#265), the named pipe passes; the campaign's judge accepted the run (2
+  findings, both tracked, none new) and the run is green. Section 26.2.
 - **Impact:** low, and about the evidence, not the product: the fix of #266 has a regression test
   (`no_room_cli_contract`) and the real-bytes run does not exercise it. The case's answer
   (`INTEGRITY_FAILURE`, bounded, nothing stored) is tracked under #266 and does not fail the run's own judge.
@@ -3663,6 +3674,9 @@ that week.**
   also decides at the five-second mark from a look it took a moment before: a stall of the waiter itself
   at that instant could end the wait although the creator had just finished. That is not shown to have
   happened.
+  **On the second candidate** (`P14 stress` run 37611376706, 2026-10-07) the race did not recur: 0 of 1,500 plain
+  and 0 of 1,500 CPU-loaded repetitions on Windows (and on Ubuntu and macOS), so it has failed once in 3,000
+  CPU-loaded Windows repetitions across the two candidates' runs and the cause is still not shown.
   The other half of this entry, [#314](https://github.com/smormah/vsift/issues/314) (a reader answered
   `IntegrityFailure` once in 140,721 reads), was shown to be a product defect in the reader's retry
   budget and is fixed, with regression tests, in the change that narrowed this entry (the release
@@ -3717,6 +3731,75 @@ that week.**
 - **Next step:** a later release retries these two errors within the existing budget for the replaced files
   and the job record, and then reports with the same code.
 - **Owner:** unscheduled. **Issue:** [#314](https://github.com/smormah/vsift/issues/314). **Status:** open.
+  **Review:** pending.
+
+### L-137
+
+**The pinned whisper.cpp v1.9.2 is three releases behind its project, whose newer releases carry memory-safety hardening that no CVE, advisory or severity names; reachability from VSift is not assessed.**
+
+- **What:** the reviewed build is whisper.cpp v1.9.2 (2026-08-04: the managed catalogue, the reviewed-build
+  recognition and the pinned Windows and Ubuntu tools). The project has since published v1.9.3
+  (2026-08-20), v1.9.4 (2026-09-11) and v1.9.5 (2026-10-06). The by-hand reading of 2026-10-07
+  ([`p14-scan-reading-2026-10-07.md`](p14-scan-reading-2026-10-07.md)) compared the pin with the release
+  list, which the earlier readings (National Vulnerability Database records and repository advisories,
+  neither of which names 1.9.2) did not. The change lists name: a heap out-of-bounds read in the mel
+  spectrogram for audio shorter than 201 samples (12.5 ms at 16 kHz; `8631825d`, 2026-08-07, in v1.9.3), a
+  stack-buffer overflow on a malformed model file's tensor header (`df1547b6`, v1.9.3) and later input
+  checks (a tensor type, the VAD model's layer count, an integer overflow in the parallel chunk offsets)
+  in v1.9.4 and v1.9.5. **There is no record, advisory or severity for any of them.** VSift writes each
+  recognition chunk as a WAV and runs `whisper-cli` on it, with bounds on output, time and memory and, in a
+  worker, strict isolation; the adapter sets no minimum length of its own, and whether the chunk planner can
+  produce a chunk under 201 samples is **not shown either way**. The pinned model is hash-checked, so the
+  model-file fixes matter only for a user's own model.
+- **Evidence:** [#322](https://github.com/smormah/vsift/issues/322); the reading above; GitHub's release
+  list and `compare/v1.9.2...v1.9.5` of ggml-org/whisper.cpp (582 commits, almost all ggml backends for other
+  hardware); `crates/vsift-infrastructure/src/managed_catalogue.rs` (`WHISPER_URL`),
+  `process_dependency_probe.rs`, `whisper_cli.rs` (`transcribe_chunk`).
+- **Impact:** a heap read past a buffer in a child process that runs under VSift's bounds and, in a worker,
+  strict isolation; a malformed file given to it as a model is a user's own choice. The worst case in this
+  setting was not assessed, and the plan's rule (section 6: no open high or critical finding affecting a
+  supported path unless accepted with a register entry) is not engaged, because no severity exists.
+- **Why:** the catalogue is frozen with the release candidate (`crates/` may not change between the tag and
+  the stable commit, `release.md` 6.8), and a re-pin of a reviewed tool needs its own review of the new
+  release's bytes and recipe (as the FFmpeg refresh does, [L-132](#l-132)).
+- **Mitigation:** the bounds above; `setup check` reports a build it does not recognise as reviewed; an
+  operator may register their own whisper.cpp build.
+- **Next step:** the maintainer chooses between accepting the entry as it stands (re-pinning whisper.cpp
+  after `0.2.0` together with the FFmpeg refresh) and assessing reachability first (the shortest chunk
+  the planner can produce, and a test with audio under 201 samples against the pinned build); a re-pin
+  before `0.2.0` would be a third candidate.
+- **Owner:** P14. **Issue:** [#322](https://github.com/smormah/vsift/issues/322). **Status:** open.
+  **Review:** pending.
+
+### L-138
+
+**The process supervisor's `p06` test reads a marker file that its fixture child may still be writing, so a Windows repetition failed once in 1,500 with an empty process id; the failure is the test's, and fixing it is a change under `crates/`.**
+
+- **What:** `p06_descendants_and_inherited_pipe_holders_are_terminated`
+  (`crates/vsift-infrastructure/tests/process_supervisor.rs`) waits for the fixture child to write its
+  descendant's process id into a marker file and reads the file as soon as it exists
+  (`wait_for_descendant_marker`); the fixture writes it with `std::fs::write`, which creates the file
+  before it writes the bytes. A read between the two returns an empty string, and parsing it is exactly
+  the failure seen: `ParseIntError { kind: Empty }`. `P14 stress` run 37611376706 on `0.2.0-rc.2`,
+  `supervisor (windows-2025)`: repetition 1050 of 1,500 failed, 1,499 passed ([#321](https://github.com/smormah/vsift/issues/321)).
+  **This is a reading of the source, not a reproduction.** No other repetition of the suite failed on any
+  system in this run (1,500 CPU-loaded ones on Windows and 3,000 on each of Ubuntu and macOS were clean), and
+  0.2.0-rc.1's run had 3,000 clean per system, so the failure is one in 3,000 Windows repetitions of this run
+  and one in 6,000 of the two candidates' runs together; it is the same suite and system as [#128](https://github.com/smormah/vsift/issues/128),
+  with a different test and a different message.
+- **Evidence:** run 37611376706's artifact `p14-stress-supervisor-windows-2025`
+  (`repetition-1050-failed.log`); [`p14-qualification.md`](p14-qualification.md) section 26.2.
+- **Impact:** low for the product: the supervisor's termination assertions were never reached, and no
+  product code is on the failing line. It matters for the evidence: the plan's rule for RQ-08 is zero
+  failures in at least 200 repetitions per system, so the run is recorded as `failed`.
+- **Why:** the test was written to poll for the file, not for its content; the fix (read until the
+  content parses, or write the marker by renaming a finished file into place) is a change to a test file under
+  `crates/`, which the candidate-to-stable check does not allow between the tag and the stable commit.
+- **Mitigation:** none needed in the product; a failing repetition names its test, and the log shows the
+  empty parse.
+- **Next step:** fix the test after `0.2.0` (or in a third candidate, if the maintainer cuts one); the
+  maintainer may accept RQ-08's failure with this entry, or waive it.
+- **Owner:** unscheduled. **Issue:** [#321](https://github.com/smormah/vsift/issues/321). **Status:** open.
   **Review:** pending.
 
 ## Review workflow
