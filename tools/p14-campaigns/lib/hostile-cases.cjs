@@ -26,6 +26,16 @@ const CANARY_PATH = '/var/lib/vsift/outside-canary.txt';
 const MEDIA_OPS = ['ingest', 'candidates', 'frame', 'audio', 'recognise'];
 
 /**
+ * How the remediation of an `ingest` that has no room for its copy begins.
+ * `STORAGE_IO` alone is also the answer of a disk that failed, so the no-room
+ * case requires this beside the code. It is the stable first sentence of
+ * `SOURCE_NO_ROOM_REMEDIATION` in `crates/vsift-contract/src/storage.rs`, as far
+ * as that crate's own test pins it; a test here reads the constant and fails
+ * if the two part.
+ */
+const NO_ROOM_REMEDIATION_START = "The folder that holds VSift's sessions does not have room for a copy";
+
+/**
  * @typedef {object} Case
  * @property {string} id
  * @property {string} group
@@ -35,8 +45,9 @@ const MEDIA_OPS = ['ingest', 'candidates', 'frame', 'audio', 'recognise'];
  * @property {string[]} ops what VSift is asked to do, in order
  * @property {'failure'|'refused'|'any'} expect `failure`: the first operation must fail typed (a sidecar, a path); `refused`: some operation must fail typed (a media file: `ingest` only copies and sniffs the container, the probe and the decoders run in the later operations); `any`: a result or a typed failure
  * @property {string[]} [codes] failures allowed (default: the plan's three)
+ * @property {Record<string, { codes: string[], remediation?: string }>} [answers] by operation, the answer the product is known to give, where the case is about that answer: the operation must fail with one of exactly these codes (`codes` above and the follow-up codes do not apply to it) and, when `remediation` is given, with a first remediation that begins so (lib/hostile-judge.cjs)
  * @property {string} [transcript] a sidecar file to import with the ingest (the source is then F10.mp4)
- * @property {string} [tmpfs] a small filesystem for the session root, `size` in MiB
+ * @property {number} [tmpfs] a small filesystem of this many MiB, mounted for the case alone; the session roots of the case are folders inside it that do not exist yet (`sessionRoot` in hostile-media.cjs), never the mount point
  * @property {boolean} [human] also run the human output (to check it carries no raw control character)
  */
 
@@ -183,9 +194,16 @@ function cases(context) {
   add({ id: 'mkv-png-liar', group: 'bomb', file: 'mkv-png-liar.mkv', description: 'a track that says 64 by 64 around an image that says 30000 by 30000 (900 MB decoded)', build: () => mkvWithPng({ claimedWidth: 64, claimedHeight: 64, imageWidth: 30000, imageHeight: 30000 }), ops: ['ingest', 'candidates', 'frame'] });
   add({ id: 'mkv-audio-absurd', group: 'declared', file: 'mkv-audio-absurd.mkv', description: 'an audio track of 255 channels at 3.4e38 Hz', build: () => ebml.file([ebml.info(1000), ebml.element(ebml.IDS.tracks, ebml.track({ number: 1, type: 2, codec: 'A_PCM/INT/LIT', sampleRate: 3.4e38, channels: 255 })), ebml.cluster(1, Buffer.alloc(256))]), ops: ['ingest', 'audio', 'recognise'] });
 
-  // Size: a file above the limit, and one that does not fit the disk.
-  add({ id: 'sparse-30gib', group: 'size', file: 'sparse-30gib.mp4', description: 'a sparse file of 30 GiB (above the 20 GiB limit) that begins like an MP4', build: () => ({ sparse: 30 * 1024 * MIB, header: base.subarray(0, 32) }), ops: ['ingest', 'job_name'], expect: 'failure' });
-  add({ id: 'sparse-no-room', group: 'size', file: 'sparse-600mib.mp4', description: 'a sparse 600 MiB file ingested into a session root of 256 MiB (the 1 GiB free-space reserve cannot be met)', build: () => ({ sparse: 600 * MIB, header: base.subarray(0, 32) }), ops: ['ingest', 'job_small'], expect: 'any', codes: [...TYPED, 'STORAGE_IO'], tmpfs: 256 });
+  // Size: a file above the limit, and one that does not fit the disk. These two cases are about which answer the
+  // product gives, so each operation's answer is pinned (`answers`), not only held to the plan's three codes.
+  //
+  // Over the limit: `ingest` answers INVALID_SOURCE whatever the free space (#310; the room check once ran first and
+  // answered STORAGE_IO). A worker workspace checks its 1 GiB reserve before the limit, as it did in 0.1.0, so the
+  // request answers RESOURCE_LIMIT on a disk without 31 GiB free (a hosted runner) and INVALID_SOURCE on one with.
+  add({ id: 'sparse-30gib', group: 'size', file: 'sparse-30gib.mp4', description: 'a sparse file of 30 GiB (above the 20 GiB limit) that begins like an MP4', build: () => ({ sparse: 30 * 1024 * MIB, header: base.subarray(0, 32) }), ops: ['ingest', 'job_name'], expect: 'failure', answers: { ingest: { codes: ['INVALID_SOURCE'] }, job_name: { codes: ['INVALID_SOURCE', 'RESOURCE_LIMIT'] } } });
+  // Within the limit, no room: `ingest` refuses before the copy with STORAGE_IO and the no-room remediation (#266; the
+  // code is the CLI path's published one, L-127), and the worker request with RESOURCE_LIMIT (its reserve cannot be met).
+  add({ id: 'sparse-no-room', group: 'size', file: 'sparse-600mib.mp4', description: 'a sparse 600 MiB file (within the 20 GiB limit) ingested into a session root on a filesystem of 256 MiB: the copy cannot fit, and neither can a worker workspace\'s 1 GiB reserve', build: () => ({ sparse: 600 * MIB, header: base.subarray(0, 32) }), ops: ['ingest', 'job_small'], expect: 'failure', answers: { ingest: { codes: ['STORAGE_IO'], remediation: NO_ROOM_REMEDIATION_START }, job_small: { codes: ['RESOURCE_LIMIT'] } }, tmpfs: 256 });
 
   // Sidecars (the source is F10.mp4).
   const sidecar = (id, file, description, build, extra = {}) => add({ id, group: 'sidecar', file, description, build, ops: ['ingest'], expect: 'failure', transcript: file, ...extra });
@@ -262,4 +280,4 @@ async function materialise(directory, spec) {
   throw new Error(`case ${spec.id} built something unknown`);
 }
 
-module.exports = { MIB, TYPED, CANARY_PATH, MEDIA_OPS, NAMES, cases, nameCases, materialise, flipped, srt };
+module.exports = { MIB, TYPED, CANARY_PATH, MEDIA_OPS, NO_ROOM_REMEDIATION_START, NAMES, cases, nameCases, materialise, flipped, srt };

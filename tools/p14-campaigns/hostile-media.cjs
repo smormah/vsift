@@ -27,8 +27,36 @@ const judge = require('./lib/hostile-judge.cjs');
 
 const WORKSPACE = `${host.STATE}/ws-hostile`;
 const WORKER_WORKSPACE = `${host.STATE}/ws-hostile-worker`;
-const SMALL_WORKSPACE = `${host.STATE}/ws-small`;
+/** Where the small filesystem of a `tmpfs` case is mounted in its containers. It is a mount point, never a session root. */
+const SMALL_MOUNT = `${host.STATE}/ws-small`;
 const HOSTILE = `${host.INPUTS}/hostile`;
+
+/**
+ * The session root of one operation of a case.
+ *
+ * A case with a small filesystem of its own gets a folder inside the mount
+ * that does not exist yet, one for the desktop commands and one for the worker
+ * workspace, and VSift creates it. The mount point itself must never be the
+ * root: it exists already and VSift did not create it, so VSift refuses it
+ * with `INTEGRITY_FAILURE` after a wait of up to five seconds
+ * (docs/operations/install.md section 12) without looking at the source. That
+ * is what the no-room case did until this was corrected, so it had tested a
+ * refused folder, and never the room check, on every version it ran on (#310,
+ * known limit L-134).
+ * @param {{ tmpfs?: number }} spec the case
+ * @param {string} op the operation
+ * @returns {string}
+ */
+function sessionRoot(spec, op) {
+  if (op === 'job_small') return `${SMALL_MOUNT}/w`;
+  if (op === 'job_name') return WORKER_WORKSPACE;
+  return spec.tmpfs ? `${SMALL_MOUNT}/root` : WORKSPACE;
+}
+
+/** The `docker run` options that give a case its small filesystem, mounted at `SMALL_MOUNT` for that container alone. */
+function smallFilesystem(spec) {
+  return spec.tmpfs ? ['--tmpfs', `${SMALL_MOUNT}:rw,size=${spec.tmpfs}m,uid=10001,gid=10001,mode=0700`] : [];
+}
 
 function parse(argv) {
   const options = {};
@@ -54,7 +82,7 @@ async function run(command, spec = {}) {
     memory: '1g',
     pids: 128,
     volumes: [`${host.STATE}:${host.STATE}:rw`, `${host.INPUTS}:${host.INPUTS}:ro`, `${host.BUNDLES}:${host.BUNDLES}:rw`],
-    extra: spec.tmpfs ? ['--tmpfs', `${SMALL_WORKSPACE}:rw,size=${spec.tmpfs}m,uid=10001,gid=10001,mode=0700`] : [],
+    extra: smallFilesystem(spec),
   });
   const result = await container.docker(args, { timeoutMs: judge.BOUNDS.wallMs + 30_000, killName: name });
   const state = container.state(name);
@@ -62,8 +90,9 @@ async function run(command, spec = {}) {
   return { ...result, oomKilled: Boolean(state && state.oomKilled), network: state ? state.network : null };
 }
 
-/** The `vsift` arguments of each operation. */
-function commandFor(op, spec, session, workspace) {
+/** The `vsift` arguments of each operation, with the session root `sessionRoot` gives it. */
+function commandFor(op, spec, session) {
+  const workspace = sessionRoot(spec, op);
   const root = ['--session-root', workspace];
   const source = spec.transcript ? `${host.INPUTS}/incoming/F10.mp4` : `${HOSTILE}/${spec.file}`;
   switch (op) {
@@ -80,10 +109,10 @@ function commandFor(op, spec, session, workspace) {
     case 'recognise':
       return ['vsift', ...root, 'transcript', 'retranscribe', session, '--from', '0', '--to', '5000000', '--json'];
     case 'job_name':
-      return ['vsift', '--host-isolation', 'strict-linux', '--session-root', WORKER_WORKSPACE, 'job', 'run', '--request', `${host.STATE}/queue/hostile-request.json`, '--input-root', host.INPUTS, '--bundle-root', host.BUNDLES, '--json'];
+      return ['vsift', '--host-isolation', 'strict-linux', ...root, 'job', 'run', '--request', `${host.STATE}/queue/hostile-request.json`, '--input-root', host.INPUTS, '--bundle-root', host.BUNDLES, '--json'];
     case 'job_small':
       // A worker workspace made on the small filesystem, then the request: the free-space reserve is enforced there.
-      return ['sh', '-c', `vsift --session-root ${SMALL_WORKSPACE}/w session init-workspace --durability ephemeral --admission-slots 4 --retention-hours 1 --json > /dev/null && vsift --host-isolation strict-linux --session-root ${SMALL_WORKSPACE}/w job run --request ${host.STATE}/queue/hostile-request.json --input-root ${host.INPUTS} --bundle-root ${host.BUNDLES} --json`];
+      return ['sh', '-c', `vsift --session-root ${workspace} session init-workspace --durability ephemeral --admission-slots 4 --retention-hours 1 --json > /dev/null && vsift --host-isolation strict-linux --session-root ${workspace} job run --request ${host.STATE}/queue/hostile-request.json --input-root ${host.INPUTS} --bundle-root ${host.BUNDLES} --json`];
     default:
       throw new Error(`unknown operation ${op}`);
   }
@@ -99,8 +128,7 @@ async function runCase(spec, canaries) {
       const body = JSON.stringify({ schema_version: '1', operation_id: `op_${crypto.createHash('sha256').update(spec.id).digest('hex').slice(0, 32)}`, durability: 'ephemeral', target: { ingest: { source: `hostile/${spec.file}`, transcript: null } }, steps: [{ close: {} }] });
       host.sudo(['sh', '-c', `cat > ${host.STATE}/queue/hostile-request.json && chown ${container.WORKER_USER} ${host.STATE}/queue/hostile-request.json`], { input: body });
     }
-    const workspace = spec.tmpfs && op !== 'job_small' ? SMALL_WORKSPACE : WORKSPACE;
-    const answered = await run(commandFor(op, spec, session, workspace), { tmpfs: spec.tmpfs });
+    const answered = await run(commandFor(op, spec, session), { tmpfs: spec.tmpfs });
     const verdict = judge.judge({ spec, op, first: index === 0 || op === 'job_name' || op === 'job_small' || op === 'ingest_human', run: answered, canaries });
     if (op === 'ingest') {
       const ok = verdict.json && (verdict.json.status === 'complete' || verdict.json.status === 'partial');
@@ -126,8 +154,18 @@ async function runCase(spec, canaries) {
   return results;
 }
 
-/** The findings already filed as issues, by case id: a run that finds only these does not fail (judge.splitKnown). */
-const TRACKED = Object.freeze({ fifo: 264, 'symlink-to-canary': 265, 'sparse-no-room': 266 });
+/**
+ * The findings already filed as issues, by case id: the issue, and the one
+ * operation and outcome it was filed for. A run that finds only these does not
+ * fail; the same case answering anything else is a new finding
+ * (judge.trackedIssue). One is left: `ingest` of a symbolic link answers
+ * `STORAGE_IO`, a published code that does not change within v1 (#265, known
+ * limit L-127). The named pipe (#264) has passed since 0.2.0-rc.1, and the
+ * no-room case (#266) passes now that it names a root VSift creates (#310).
+ */
+const TRACKED = Object.freeze({
+  'symlink-to-canary': Object.freeze({ issue: 265, op: 'ingest', outcome: 'failed STORAGE_IO' }),
+});
 
 function markdown(report) {
   const headline = report.ok
@@ -145,7 +183,10 @@ function markdown(report) {
   lines.push('');
   if (report.findingsList.length > 0) {
     lines.push('### Findings', '');
-    for (const finding of report.findingsList) lines.push(`- \`${finding.id}\` ${finding.op}: ${finding.findings.join('; ')}${TRACKED[finding.id] ? ` (tracked: #${TRACKED[finding.id]})` : ' (NEW)'}`);
+    for (const finding of report.findingsList) {
+      const issue = judge.trackedIssue(finding, TRACKED);
+      lines.push(`- \`${finding.id}\` ${finding.op}: ${finding.findings.join('; ')}${issue === null ? ' (NEW)' : ` (tracked: #${issue})`}`);
+    }
     for (const id of report.fixed) lines.push(`- \`${id}\` is tracked and now passes: remove it from TRACKED`);
     lines.push('');
   }
@@ -207,7 +248,7 @@ async function main() {
   // What happened to the files around the root.
   const outside = host.run('sudo', ['-n', 'find', host.STATE, '/srv/vsift', '-xdev', '-newer', `${host.STATE}/queue/p14-stamp`, '!', '-path', host.STATE, '!', '-path', '/srv/vsift', '!', '-path', `${host.STATE}/ws-hostile*`, '!', '-path', `${host.STATE}/ws-small*`, '!', '-path', `${host.STATE}/home*`, '!', '-path', `${host.STATE}/queue*`, '!', '-path', `${host.STATE}/results*`]).stdout.split('\n').filter(Boolean);
   const canaryNow = host.run('sudo', ['-n', 'sha256sum', cases.CANARY_PATH]).stdout.split(' ')[0];
-  const leaked = host.run('sudo', ['-n', 'grep', '-rl', '--binary-files=text', canary, WORKSPACE, WORKER_WORKSPACE, SMALL_WORKSPACE, host.BUNDLES, `${host.STATE}/home`]).stdout.split('\n').filter(Boolean);
+  const leaked = host.run('sudo', ['-n', 'grep', '-rl', '--binary-files=text', canary, WORKSPACE, WORKER_WORKSPACE, SMALL_MOUNT, host.BUNDLES, `${host.STATE}/home`]).stdout.split('\n').filter(Boolean);
   const pwned = host.run('sudo', ['-n', 'find', '/var/lib/vsift', '/srv/vsift', '/tmp', '-name', 'pwned', '-not', '-path', `${HOSTILE}/*`]).stdout.split('\n').filter(Boolean);
   const containment = [
     { name: 'no file was created or changed outside the root, the home and the queue', ok: outside.length === 0, detail: outside.length ? outside.slice(0, 5).join(', ') : 'nothing newer than the start of the run outside them' },
@@ -217,7 +258,7 @@ async function main() {
   ];
 
   const operations = results.reduce((sum, entry) => sum + entry.results.length, 0);
-  const findingsList = results.flatMap((entry) => entry.results.filter((result) => !result.ok).map((result) => ({ id: entry.id, op: result.op, findings: result.findings })));
+  const findingsList = results.flatMap((entry) => entry.results.filter((result) => !result.ok).map((result) => ({ id: entry.id, op: result.op, outcome: result.outcome, findings: result.findings })));
   const all = results.flatMap((entry) => entry.results);
   const passingIds = results.filter((entry) => entry.results.every((result) => result.ok)).map((entry) => entry.id);
   const split = judge.splitKnown(findingsList, TRACKED, passingIds);
@@ -246,7 +287,12 @@ async function main() {
   process.exitCode = report.fresh.length === 0 && report.containmentOk ? 0 : 1;
 }
 
-main().catch((error) => {
-  process.stderr.write(`${error.stack || error.message}\n`);
-  process.exitCode = 2;
-});
+// The tests load this file for its session roots, its commands and its tracked list; only a direct run starts a campaign.
+if (require.main === module) {
+  main().catch((error) => {
+    process.stderr.write(`${error.stack || error.message}\n`);
+    process.exitCode = 2;
+  });
+}
+
+module.exports = { WORKSPACE, WORKER_WORKSPACE, SMALL_MOUNT, TRACKED, sessionRoot, smallFilesystem, commandFor, markdown };

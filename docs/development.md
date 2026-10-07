@@ -544,6 +544,21 @@ before the run is repeated (governance rule 14), not a rerun. The governance wor
 `tools/p14-published/test/pins.test.cjs` hold the workflows to the same pins and read-only scopes as the
 others.
 
+Three rules of the malicious-media campaign, all learned from one case that tested the wrong thing
+([known limit L-134](planning/known-limits.md#l-134)):
+
+- **A session root is a folder that does not exist yet.** VSift never adopts a folder it did not create
+  and refuses one after a wait, before it looks at the source. A case that needs a filesystem of its own
+  (`tmpfs` in `lib/hostile-cases.cjs`) gets it mounted for its containers, and its roots are folders inside
+  the mount (`sessionRoot` in `hostile-media.cjs`), never the mount point.
+- **A case that is about one answer pins it** (`answers`, by operation: the codes and, where a code alone
+  does not say what happened, how the remediation begins). The plan's three codes are the rule for a
+  hostile input in general; a pinned operation may give only its own answer, so a typed failure for another
+  reason is a finding.
+- **A filed finding is tracked for one operation and one outcome** (`TRACKED` in `hostile-media.cjs`).
+  The same case answering anything else is new and fails the run. When a tracked case passes, the summary
+  says to remove it from the list.
+
 ## Governance checks, release evidence and public claims
 
 `cargo run --locked -p vsift-governance -- check` is the Governance job. Besides the delivery
