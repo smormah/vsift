@@ -94,7 +94,13 @@ select the skill; the user can also name it.
   the claim's shape from an empty list). Each claim names its subject and value and
   cites evidence showing that value; a region a frame shows as unreadable supports
   nothing, so a claim about its content is `partially_supported` on the transcript
-  (#224); the retained bundle is a snapshot, so the agent retains after its last
+  (#224). Two evidence rules were added on 2026-10-07, after batch 2 of the P14 agent
+  trials (Claude Opus 5.5, review tier, on both candidates): an unreadable region proves
+  nothing about its content in either direction, so a claim that something is absent from
+  it is not `supported` on that frame either; and a claim states only what its own
+  citations show or say, so every name, number or identifier in it is in evidence that
+  claim cites (`SKILL.md` states both in one sentence each, `references/handoff.md` in
+  full). The retained bundle is a snapshot, so the agent retains after its last
   evidence command (#220); a web address seen in evidence is defanged in the Markdown
   only, and the JSON describes it without writing it (#221). The
   JSON states only what the agent alone knows: its claims, the identity of each piece
