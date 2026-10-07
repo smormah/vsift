@@ -1547,8 +1547,8 @@ this cut. #312 (a session-root creation that gave up waiting under load, L-135) 
 The hosted part of PR 11 is repeated on the published `0.2.0-rc.2` (tag `v0.2.0-rc.2` at `7c722d1fc46af7fddeffbaf807028eaec413ace1`, the packages
 published at 09:43 UTC): this is **the whole of the hosted part, not an increment of it**, and it is work record only (the ledger, the plan's
 section 26, the by-hand scan reading of the day, the register, this note, the changelog and the two memory files). PR 11 repeated is complete only
-when RQ-08, RQ-15, RQ-16 and RQ-17 are `passed`, `waived` or `not_applicable` for `0.2.0-rc.2` and `release-evidence --complete-for 0.2.0-rc.2`
-passes; **four items block it** (plan 26.6). The runs, tables and findings are [`p14-qualification.md`](../planning/p14-qualification.md) section 26;
+when RQ-15, RQ-16 and RQ-17 are `passed`, `waived` or `not_applicable` for `0.2.0-rc.2` and `release-evidence --complete-for 0.2.0-rc.2`
+passes; **those three items block it** (plan 26.6). The runs, tables and findings are [`p14-qualification.md`](../planning/p14-qualification.md) section 26;
 every `passed` entry of the first candidate is `prior` evidence in the ledger now. No code, tool, workflow, schema or setting changed, nothing was
 published or tagged, and nothing was re-run (runner shortage, #316, showed as queueing only).
 
@@ -1560,27 +1560,45 @@ suite on Windows, which had one failure in 200 repetitions on the first candidat
 (#321, L-138), which a reading of the test source puts in the **test** (it parses a marker file its fixture child may still be writing), not in the
 supervisor.
 
+**Decided by the maintainer on 2026-10-07, after reading the results (recorded here; the ledger and the register carry the same text):**
+
+1. **RQ-08 is waived for R0, and `0.2.0-rc.2` stays (no third candidate).** The `P14 stress` run on the candidate failed one repetition of 20,100: the plain
+   process-supervisor suite on Windows, repetition 1,050 of 1,500, `p06_descendants_and_inherited_pipe_holders_are_terminated`, `ParseIntError { kind: Empty }`
+   (#321). **It is accepted as a race in the test, with L-138 as the register entry:** the test reads a marker file as soon as it exists while its fixture
+   child may still be writing it; no product code is on the failing line and the supervisor's assertions were not reached. That is a reading of the test source,
+   not a reproduction. The run stays in the ledger as failed evidence; the waiver is the decision's text, as RQ-14's was (decision E). **The test is fixed
+   after the stable release**, because a change to a file under `crates/` between the tag and the stable commit would force a third candidate. **The waiver
+   does not cover:** #312 (a root creation that gave up waiting under CPU load, L-135), which is not fixed, did not recur in this run and stays open with its own
+   entry; #128 and #206, which stay under watch; a failure of any other suite, test or system, or of this test with another message; the delivery suite's 100
+   repetitions, below the rule's 200 by design; and a release in which anything in the item's scope has changed since the tag.
+2. **RQ-10: recorded `passed` if the schema and the item's own rule allow it with tracked findings; otherwise `waived` with the narrowed text; no waiver is
+   carried over silently.** The schema allows a pass (a `passed` item may name open issues). **The item's own rule does not**, so the item is **`waived` for R0 by
+   this decision, which replaces that of 2026-10-05**: the pass rule (plan section 2) names three codes (`INVALID_SOURCE`, `RESOURCE_LIMIT`,
+   `DEADLINE_EXCEEDED`), and two answers of the candidate's run are typed and bounded but carry others (`STORAGE_IO` for a symbolic link, `INTEGRITY_FAILURE`
+   for the mis-built no-room case). The run is green only because the campaign's judge does not fail a run for a finding it tracks; it still reports both as
+   findings. RQ-13's rule has an "accepted by the maintainer with a register entry" clause and RQ-10's has none, so a pass would need the rule changed, which is not a
+   record of evidence. **Two residuals are accepted:** the link's `STORAGE_IO` (#265, L-127: a published failure code stays within v1) and the campaign tool's
+   mis-built no-room case (L-134, #266, #310), which cannot be corrected before the stable release because the tools are frozen. The first residual of
+   2026-10-05 (an over-limit source answering `STORAGE_IO`) is fixed in this candidate and no longer covered or needed. **The waiver does not cover** a new
+   finding of the campaign, a broken containment check, an answer outside its bounds, or the no-room path of `ingest` on the published bytes, which the
+   campaign has shown on no version. Both residuals are also named in the entry's `does_not_prove`.
+3. **L-137 (#322, the pinned whisper.cpp is three releases behind upstream, which hardened memory safety meanwhile) stays an open observation.** It is
+   neither accepted nor rejected: a separate read-only reachability assessment is being done, and the entry's disposition waits for it. RQ-13 is `passed` for
+   the second candidate on the same basis as the first (the acceptance of CVE-2026-38350, #272, L-122, of 2026-10-05); no severity exists for L-137's
+   observation, so the plan's rule (section 6) is not engaged by it.
+
 **Decisions taken inside this ADR, for the maintainer to confirm or overrule.**
 
-1. **RQ-08 is recorded `failed` with no waiver** and #321 open: the plan's rule is zero failures in at least 200 repetitions per system, and one
-   repetition of 20,100 failed. The options are in plan 26.2: accept #321 with L-138 as the register entry and record the item `waived` (or
-   accepted) for R0, or fix the test in a third candidate. The recommendation is the first (the failing line is a test's parse of a half-written file; the
-   fix is a test-file change under `crates/`, which the candidate-to-stable check refuses after the tag; a third candidate would cost the hosted
-   minutes, the agent batches and the try-outs a third time and make the product no different).
-2. **RQ-10 stays `waived`, untouched**, with the second candidate's run added as evidence. The decision of 2026-10-05 was made for the first candidate's two
-   findings and its premise ("`0.2.0-rc.1` stays") is gone; the run is green without it (the judge counts #265 and #266 as tracked, and `sparse-30gib` is fixed).
-   A waiver would now cover only the link's `STORAGE_IO` (#265, L-127) and the campaign's own no-room case (L-134), which cannot be corrected before the stable
-   release. The maintainer confirms or lifts it; lifting it lets RQ-10 be recorded `passed` with those two named.
-3. **RQ-13 is `passed` for the second candidate** on the same basis as the first (the maintainer's acceptance of CVE-2026-38350, #272, L-122), and **one
-   new observation is recorded for the maintainer, not as a finding of a ranked severity**: whisper.cpp 1.9.3 to 1.9.5 carry memory-safety hardening the
-   pinned 1.9.2 lacks, with no CVE, advisory or severity, reachability not assessed (#322, L-137). The earlier readings did not read the project's release
-   list. Accept it with L-137 (re-pin after `0.2.0` together with the FFmpeg refresh, L-132) or assess reachability first; a re-pin before `0.2.0` is a third candidate.
-4. **RQ-11 is `passed` on the hosted verdicts** (both Acceptance jobs ran), unlike the first candidate's, whose P10 verdict was a by-hand run of the script.
-5. **RQ-18 is recorded on the CI run of the push of 2026-10-06 at the candidate's own commit**, which is the only CI run at that commit (nothing merged since
+1. **RQ-10 is `waived` and not `passed`** (item 2 above is the maintainer's instruction; the reading of the rule is this record's). Overrule it by amending
+   the pass rule in plan section 2 to admit a tracked, accepted code, and then recording the item `passed` on run 37613284274.
+2. **RQ-11 is `passed` on the hosted verdicts** (both Acceptance jobs ran), unlike the first candidate's, whose P10 verdict was a by-hand run of the script.
+3. **RQ-18 is recorded on the CI run of the push of 2026-10-06 at the candidate's own commit**, which is the only CI run at that commit (nothing merged since
    changes the commit); L-133's second window is closed (RQ-19 passed for the second candidate).
-6. **Two register entries are new** (L-137, L-138) and L-128, L-133, L-134 and L-135 are updated for the repeat's runs; every Review line stays `pending`.
+4. **Two register entries are new**: L-137 (open, review pending) and L-138 (accepted residual by item 1; the register's own one-pass review is separate);
+   L-128, L-133, L-134 and L-135 are updated for the repeat's runs.
 
 **What is weaker than it sounds.** The same as for the first candidate (plan 24.2 and 26.5): shared hosted images, a synthetic corpus and voice, a fuzz hour that is a
 floor (18 of 31 targets still finding coverage), a stress rate measured on shared runners, and a media campaign with a case that tests nothing about the room
 check. A zero in the lock suite is not a proof that #314 is gone; the fix rests on its regression tests. RQ-13's FFmpeg row is a repeat of a reading of public
-records.
+records. **Three of twenty items are now waived (RQ-08, RQ-10, RQ-14):** a waiver says the rule was not met and why that is accepted for R0, and the acceptance of
+#321 rests on a reading of a test, not on a reproduction of the race.

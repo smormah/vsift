@@ -64,8 +64,9 @@ project's release history. This reading did (GitHub's release list and compare e
   matter only for a user's own model. The effect of the read would be heap bytes read past a buffer in a child process.
 - **What it means for the stable release:** the catalogue is frozen with the candidate (`crates/` may not change before the stable
   commit), so a re-pin before `0.2.0` would be a third candidate. The natural place is the FFmpeg re-pin planned for after the stable
-  ([L-132](known-limits.md#l-132)). The maintainer decides: accept with [L-137](known-limits.md#l-137) as the register entry, or assess
-  reachability first.
+  ([L-132](known-limits.md#l-132)). The choice put to the maintainer was to accept it with [L-137](known-limits.md#l-137) as the register
+  entry or to assess reachability first; the maintainer's answer of the same day is that L-137 stays an open observation while a separate
+  read-only reachability assessment is done.
 
 ## What it does not show, and what is weaker than it sounds
 
@@ -88,7 +89,7 @@ project's release history. This reading did (GitHub's release list and compare e
 | Finding | Issue | Severity (proposed) | Disposition |
 | --- | --- | --- | --- |
 | The one FFmpeg record tied to its fix by elimination (CVE-2026-38350) | [#272](https://github.com/smormah/vsift/issues/272) | high (the record's) until accepted | open; accepted by the maintainer on 2026-10-05 with L-122 as the register entry |
-| whisper.cpp releases 1.9.3 to 1.9.5 carry memory-safety hardening the pinned 1.9.2 lacks (no record, reachability not assessed) | [#322](https://github.com/smormah/vsift/issues/322) | none assigned (unassessed) | open; the maintainer chooses between accepting it with L-137 and assessing reachability first |
+| whisper.cpp releases 1.9.3 to 1.9.5 carry memory-safety hardening the pinned 1.9.2 lacks (no record, reachability not assessed) | [#322](https://github.com/smormah/vsift/issues/322) | none assigned (unassessed) | open. Maintainer, 2026-10-07: it stays an open observation, neither accepted nor rejected, while a separate read-only reachability assessment is done |
 
 ## Repeating it
 

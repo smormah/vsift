@@ -46,14 +46,15 @@ try-outs are not; PRs 12-13 remain; the packet is not complete.** What it shows,
 - **On rc.2, hosted:** the second verification of the publish (RQ-19), clean installs, archives, the offline install, the upgrades from
   0.1.0 and from rc.1 (npm only), the journeys on three systems (macOS with Homebrew's tools, L-114; P11's durable stage cannot run hosted,
   L-113), fuzzing (18 of 31 targets still growing, L-128), load, the runbook walk, the media run (green), both fault campaigns (hosted verdict
-  jobs ran) and the scan reading **passed; not clean machines** (L-112). **RQ-08 `failed`:** one Windows repetition of 20,100 (#321, L-138: a
-  race in a supervisor test, read from the source), while the lock suite (#314) was 200 of 200 and #312 did not recur. `release-evidence
-  --complete-for 0.2.0-rc.2` fails on exactly four items: RQ-08, RQ-15, RQ-16, RQ-17. Smart App Control and the macOS prompts are unseen
+  jobs ran) and the scan reading **passed; not clean machines** (L-112). **The stress run failed** one Windows repetition of 20,100 (#321,
+  L-138: a race in a supervisor test, read from the source), while the lock suite (#314) was 200 of 200 and #312 did not recur. `release-evidence
+  --complete-for 0.2.0-rc.2` fails on exactly three items: RQ-15, RQ-16, RQ-17. Smart App Control and the macOS prompts are unseen
   (L-098). **A synthetic corpus and voice only** (L-020, L-022); batch 2 ran on rc.1 with four readings still open (`batch-2-reading.md`).
-- **Open decisions:** accept #321 or cut a third candidate; keep or lift RQ-10's waiver (what is left of it: the link's `STORAGE_IO`, #265, and
-  the campaign's own no-room case, L-134); the whisper.cpp pin lags upstream by three releases that harden memory safety (#322, L-137: no CVE).
-  The FFmpeg residual CVE-2026-38350 is accepted (L-122, RQ-13); #312 is not fixed (L-135). **SEC-T01 stays half done in R0** (L-068; RQ-14
-  waived). **`latest` has never moved** (L-105). Decisions: `TODO.md`.
+- **Three of twenty items are waived, by the maintainer (2026-10-07 for the first two):** RQ-08 (#321 accepted as a test race; fixed after the
+  stable), RQ-10 (the run is green, but a link's `STORAGE_IO`, #265, and the campaign's mis-built no-room case, L-134, are outside the codes its rule
+  names) and RQ-14 (SEC-T01 half done in R0, L-068). **Open:** the whisper.cpp pin lags upstream by three releases that harden memory safety
+  (#322, L-137: no CVE; a reachability reading is under way); #312 is not fixed (L-135). The FFmpeg residual CVE-2026-38350 is accepted (L-122,
+  RQ-13). **`latest` has never moved** (L-105). Decisions: `TODO.md`.
 
 ## P14 PRs 1 to 6 and 8 in one view
 
@@ -132,7 +133,7 @@ Control, the macOS prompts (L-098); power loss beyond Ubuntu 24.04 ext4 (L-037).
 | P11 | Complete (`40c4038`); SEC-T01 adversarial evidence is technical debt, moved to R1 (#188, L-068) |
 | P12 | Complete (2026-09-30, ADR 0022 Accepted): skill, harness, named-client trials; review tier qualified, compact tier 93% and 100% on the #222 re-run; open: L-095 (#224), #219, #204 (`1284e54`) |
 | P13 | Complete (2026-10-01, ADR 0023 Accepted): distribution, managed install, `handoff check`, human output; 0.1.0 published; release commit `011bc4d` |
-| P14 | **In progress** (started 2026-10-02): PRs 0-9 merged (PR 7 = the fixes of the campaigns and batch 1); 10: rc.1 published and superseded, **rc.2 published 2026-10-07**; 11 repeated on rc.2: **hosted part recorded (RQ-08 `failed`, #321)**, batches 2 and 3 and the try-outs still to do; 12-13 remain |
+| P14 | **In progress** (started 2026-10-02): PRs 0-9 merged (PR 7 = the fixes of the campaigns and batch 1); 10: rc.1 published and superseded, **rc.2 published 2026-10-07**; 11 repeated on rc.2: **hosted part recorded (RQ-08 waived for #321, RQ-10 waived anew)**, batches 2 and 3 and the try-outs still to do; 12-13 remain |
 
 ## Architecture snapshot
 

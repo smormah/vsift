@@ -12,21 +12,22 @@ rc.1 plus the fixes of #314 and #310 and nothing else. **PR 11 (the qualificatio
 (plan section 26, the ledger, `p14-scan-reading-2026-10-07.md`); the agent batches 2 and 3 and the try-outs are not.** The packet is not complete.
 Plan: `docs/planning/p14-qualification.md` (15-26); ADR 0024 stays Proposed.
 **Evidence** (`p14-evidence-ledger.json`) for rc.2: `passed` RQ-01 to RQ-07, RQ-09, RQ-11 (both hosted verdict jobs ran), RQ-12, RQ-13 (L-122's
-residual accepted), RQ-18, RQ-19; `waived` RQ-10 (the run is green; the waiver is the maintainer's to confirm or lift) and RQ-14; **`failed`
-RQ-08** (one Windows repetition of 20,100: #321, a race in a supervisor *test*, L-138; the lock suite 200 of 200 and #312 did not recur); `planned`
-RQ-15 to RQ-17 (rc.1's batch 2 is in `p14-agent-trials/batch-2-rc.1/`, four readings open in `batch-2-reading.md`; nothing claimed for rc.2).
-**`release-evidence --complete-for 0.2.0-rc.2` fails on exactly four items: RQ-08, RQ-15, RQ-16, RQ-17.**
+residual accepted), RQ-18, RQ-19; **`waived` (three of twenty): RQ-08** (the run failed one Windows repetition of 20,100: #321, a race in a
+supervisor *test*, L-138; the lock suite was 200 of 200 and #312 did not recur), **RQ-10** (the run is green, but two answers carry codes its rule
+does not name) and RQ-14; `planned` RQ-15 to RQ-17 (rc.1's batch 2 is in `p14-agent-trials/batch-2-rc.1/`, four readings open in
+`batch-2-reading.md`; nothing claimed for rc.2). **`release-evidence --complete-for 0.2.0-rc.2` fails on exactly three items: RQ-15, RQ-16, RQ-17.**
 **Public text:** `public-claims.json`, rung `candidate` (CL-101 and CL-102 name rc.2 and need RQ-19, now passed for it: L-133's second window is closed).
 **Decided 2026-10-02 (ADR 0024):** **A** R0 is `0.2.0` on `latest`. **B** `0.2.0-rc.N` under `next`, never announced. **C** no
 signing unless try-outs show a block. **D** 84 agent runs in three batches, each on the go. **E** SEC-T01 narrowed. **F** "supported"
 per cell by fixed rules; managed install Ubuntu-only. **G** a claims ladder; nothing announced before P14 completes. **H** a try-out
 blocks the stable only until observed. #246 waits.
 
-**Maintainer decisions open after the hosted repeat** (details: plan 26.2 to 26.4, ADR note of 2026-10-07): (1) **RQ-08:** accept #321 with L-138 and
-waive the item (recommended: a test-file fix is a third candidate), or cut a third candidate. (2) **RQ-10:** confirm the 2026-10-05 waiver (it would now cover only
-the link's `STORAGE_IO`, #265, and the campaign's own no-room case, L-134) or lift it and record `passed`. (3) **#322 / L-137:** whisper.cpp 1.9.3 to
-1.9.5 carry memory-safety hardening the pinned 1.9.2 lacks (no CVE, reachability not assessed): accept with L-137 and re-pin after `0.2.0`, or assess first.
-(4) Optionally deprecate rc.1 (`release.md` 6.11 step 7; the runs that install it have finished).
+**Decided by the maintainer on 2026-10-07** (plan 26.2 to 26.4, ADR note of that day): (1) **RQ-08 waived for R0, rc.2 stays:** #321 is accepted as a
+test race with L-138; the run stays failed evidence; the test is fixed after the stable (a change under `crates/` is a third candidate); the waiver does
+not cover #312, #128, #206 or any other failure. (2) **RQ-10's 2026-10-05 waiver is replaced** by one for rc.2 covering only the link's `STORAGE_IO`
+(#265, L-127) and the campaign tool's mis-built no-room case (L-134); it is `waived`, not `passed`, because its rule names three codes (to overrule:
+amend the rule in plan section 2). (3) **#322 / L-137** (whisper.cpp 1.9.3 to 1.9.5 harden memory safety; the pin is 1.9.2; no CVE) **stays an open
+observation** while a separate read-only reachability assessment is done. **Still open:** optionally deprecate rc.1 (`release.md` 6.11 step 7).
 
 **PR 7, every finding by outcome** (one pull request and one regression test each). **Maintainer rule
 2026-10-04: a published failure code stays (v1 is additive); the remediation carries the fix (L-127).**
@@ -49,19 +50,19 @@ realistic: L-125), hold-outs, `freeze` and usage capture; batch 1 (0.1.0, 20 run
 ## The remaining P14 pull requests (0-9 merged; 10 done twice)
 
 **11 repeated:** hosted part done on rc.2 (above). Left: the agent batches 2 and 3 on rc.2 (the freeze is committed; each on the maintainer's go),
-the try-outs (`rq-17-tryout-sheet.md`; the execution-policy note for `install.md` only after they observe it), the register pass, and the
-decisions above. **12** stable `0.2.0`; **13** ledger follow-up, P14 `complete`, handoff. **From the tag to the stable merge only the work
+the try-outs (`rq-17-tryout-sheet.md`; the execution-policy note for `install.md` only after they observe it), the register pass, and
+L-137's reachability reading. **12** stable `0.2.0`; **13** ledger follow-up, P14 `complete`, handoff. **From the tag to the stable merge only the work
 record and `install.md` change** (`release.md` 6.8: no Dependabot, workflow, tool or test change; so #321's fix and the FFmpeg and whisper.cpp
 re-pins wait for after `0.2.0`, or a third candidate). **After the stable tag, within seven days:** register the two stable checks in `STABLE_CHECKS`
 (`tools/p14-published/lib/verify.cjs`).
 
 ## What the maintainer owes, and when
 
-- **Now:** the four decisions above; the go for batch 2 (again) and batch 3 (`-AllowGraderChange`; Claude Code 2.1.284 and Docker; state the
+- **Now:** the go for batch 2 (again) and batch 3 (`-AllowGraderChange`; Claude Code 2.1.284 and Docker; state the
   reserve rule first; L-095); the Smart App Control try-out on the second Windows 11 machine; #312: fix or accept. **Dependabot:** #192, #193,
   #194 wait until after the stable. **The FFmpeg re-pin** (#272, L-132) and the whisper.cpp one (#322, L-137) are planned for after the stable.
-- **Register:** one pass over `register-review-sheet.md` (thirty entries, seven later, nine readings: every review is `pending`; L-137 and L-138
-  are new and pending), and whether `Guide` becomes a required check. **PR 12:** the stable publish (`release.md` 6.7).
+- **Register:** one pass over `register-review-sheet.md` (thirty entries, seven later, nine readings: every review is `pending`; L-137 is new and open,
+  L-138 new and accepted by the RQ-08 decision), and whether `Guide` becomes a required check. **PR 12:** the stable publish (`release.md` 6.7).
 
 ## Open decisions and readings (maintainer)
 

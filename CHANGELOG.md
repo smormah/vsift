@@ -146,11 +146,15 @@ published 0.1.0 and of the published `0.2.0-rc.1` to it, the journeys on three s
 the scan reading and the two fault campaigns (both with their hosted verdict jobs) passed. **The two fixes held where they were tested:** the Windows lock
 suite that had one failure in 200 repetitions on the first candidate ran 200 of 200 clean (#314), and a source over the size limit is `INVALID_SOURCE` again
 (#310). **The stress run failed once**: one repetition in 1,500 of the plain process-supervisor suite on Windows, which a reading of the test puts in the test, not in
-the supervisor ([#321](https://github.com/smormah/vsift/issues/321), [L-138](docs/planning/known-limits.md#l-138)); RQ-08 is recorded `failed` and the
-maintainer decides. The by-hand scan reading of the day is [`p14-scan-reading-2026-10-07.md`](docs/planning/p14-scan-reading-2026-10-07.md): nothing changed
-in its sources since 2026-10-05, and one new observation (whisper.cpp releases newer than the pinned 1.9.2 carry memory-safety hardening; no CVE, reachability not
-assessed) is for the maintainer ([#322](https://github.com/smormah/vsift/issues/322), [L-137](docs/planning/known-limits.md#l-137)). Four evidence items
-still block `release-evidence --complete-for 0.2.0-rc.2`: RQ-08 and the agent trials and try-outs (RQ-15 to RQ-17).
+the supervisor ([#321](https://github.com/smormah/vsift/issues/321), [L-138](docs/planning/known-limits.md#l-138)). **The maintainer decided on
+2026-10-07** to accept it as a test race and to waive RQ-08 for R0 (no third candidate; the test is fixed after the stable release, because a change under
+`crates/` would force one; the run stays as failed evidence), and replaced the first candidate's waiver of RQ-10 by one for this candidate that covers only what
+is left: a link's `STORAGE_IO` (#265, L-127) and the campaign tool's mis-built no-room case (L-134). RQ-10 is `waived` and not `passed` although its run is green,
+because its rule names three failure codes and those two answers carry others. The by-hand scan reading of the day is
+[`p14-scan-reading-2026-10-07.md`](docs/planning/p14-scan-reading-2026-10-07.md): nothing changed in its sources since 2026-10-05, and one new observation
+(whisper.cpp releases newer than the pinned 1.9.2 carry memory-safety hardening; no CVE, reachability not assessed) stays open while its reachability is
+assessed ([#322](https://github.com/smormah/vsift/issues/322), [L-137](docs/planning/known-limits.md#l-137)). Three evidence items still block
+`release-evidence --complete-for 0.2.0-rc.2`: the agent trials and the try-outs (RQ-15 to RQ-17).
 
 ### Changed
 

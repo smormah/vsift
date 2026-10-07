@@ -1508,9 +1508,11 @@ The second candidate was published on 2026-10-07 (the packages at 09:43 UTC): th
 `0.2.0-rc.2`, a GitHub pre-release with ten files, `latest` still the empty `0.0.0`, and `0.2.0-rc.1` superseded but untouched. From the
 tag to the stable merge **only the work record may change** (`release.md` 6.8). This section repeats section 24.2 on the new bytes: it is
 **the whole of the hosted part of PR 11 repeated, not an increment of it** (every hosted campaign of section 25.3 ran), and the pull
-request that records it is work record only. PR 11 repeated is complete only when RQ-08, RQ-15, RQ-16 and RQ-17 are `passed`,
+request that records it is work record only. PR 11 repeated is complete only when RQ-15, RQ-16 and RQ-17 are `passed`,
 `waived` or `not_applicable` for `0.2.0-rc.2` and `release-evidence --complete-for 0.2.0-rc.2` passes (26.6). Nothing for RQ-15 to
-RQ-17 is recorded here: the agent batches and the try-outs belong to the supervisor and the maintainer.
+RQ-17 is recorded here: the agent batches and the try-outs belong to the supervisor and the maintainer. **The maintainer decided on
+2026-10-07, after reading the results:** RQ-08 is waived for R0 with #321 accepted as a test race (26.2); RQ-10's waiver of 2026-10-05 is
+replaced by one for this candidate with only what is left (26.3); L-137 stays an open observation while its reachability is assessed (26.4).
 
 ### 26.1 The runs and their results
 
@@ -1528,9 +1530,9 @@ candidate's own entry for each item with the first candidate's moved to `prior`.
 | RQ-06 | `P13 managed smoke` [37602940209](https://github.com/smormah/vsift/actions/runs/37602940209) | **passed**: three jobs with the published binary as the one under test | none |
 | RQ-05 | `P14 journeys` [37602936329](https://github.com/smormah/vsift/actions/runs/37602936329) (122 job-minutes, macOS 83), `P07 local ASR` [37613288555](https://github.com/smormah/vsift/actions/runs/37613288555), with RQ-09 and RQ-12 below | **passed** under the per-system rule (section 21): 54 stages passed on each of Ubuntu 24.04, Windows and macOS 15, none skipped; the durable stage refused as `MISSING_CAPABILITY` with nothing created on all three; the P07 gates held on Ubuntu and Windows (their own run) and macOS (in the journeys run: clean word error rate 4.06%, 2.83 times slower than real time) | none; two P07 figures differ from the first candidate's by a word or so (Windows base 4.06% against 3.25%, Ubuntu base_q5_1 F08 38.46% against 46.15%) while the gates held, and were not investigated |
 | RQ-07 | `Fuzz` [37611372051](https://github.com/smormah/vsift/actions/runs/37611372051) | **passed**: 31 targets, 3,601 s each, 2.92 billion runs, no crash, timeout or out-of-memory | none; 18 targets still finding coverage at the end ([L-128](known-limits.md#l-128)) |
-| RQ-08 | `P14 stress` [37611376706](https://github.com/smormah/vsift/actions/runs/37611376706) (25 jobs, 1,143 job-minutes) | **failed**: 24 of 25 jobs clean; one repetition failed in one Windows job (a test of the process supervisor, 1 of 1,500; the lock suite, the reason for the candidate, was clean: 0 of 200). **No waiver** | [#321](https://github.com/smormah/vsift/issues/321) (new, [L-138](known-limits.md#l-138)); #314 and #312 did not recur |
+| RQ-08 | `P14 stress` [37611376706](https://github.com/smormah/vsift/actions/runs/37611376706) (25 jobs, 1,143 job-minutes) | the run **failed**: 24 of 25 jobs clean; one repetition failed in one Windows job (a test of the process supervisor, 1 of 1,500; the lock suite, the reason for the candidate, was clean: 0 of 200). The item is **waived** for R0 by the maintainer's decision of 2026-10-07 (26.2) | [#321](https://github.com/smormah/vsift/issues/321) (new, [L-138](known-limits.md#l-138)); #314 and #312 did not recur |
 | RQ-09 | `P14 load` [37613280024](https://github.com/smormah/vsift/actions/runs/37613280024) | **passed**: every gate held | none |
-| RQ-10 | `P14 malicious media` [37613284274](https://github.com/smormah/vsift/actions/runs/37613284274) | the run **succeeded** (96 inputs, 94 inside their bounds and two tracked findings, none new); the item stays **waived** (the decision of 2026-10-05 is untouched: 26.3) | #265 and #266 as before (L-127, L-134); #310's first finding is fixed (`sparse-30gib` is `INVALID_SOURCE` again) |
+| RQ-10 | `P14 malicious media` [37613284274](https://github.com/smormah/vsift/actions/runs/37613284274) | the run **succeeded** (96 inputs, 94 inside their bounds and two tracked findings, none new); the item is **waived** by the maintainer's decision of 2026-10-07, which replaces that of 2026-10-05 and covers only the two tracked answers (26.3) | #265 and #266 as before (L-127, L-134); #310's first finding is fixed (`sparse-30gib` is `INVALID_SOURCE` again) |
 | RQ-11 | `P13 managed power loss` [37619456739](https://github.com/smormah/vsift/actions/runs/37619456739) and `P10 durability campaign` [37619462038](https://github.com/smormah/vsift/actions/runs/37619462038), both at the tag | **passed**: both campaigns met their acceptance numbers **and both hosted Acceptance jobs ran** (no by-hand verdict this time) | none |
 | RQ-12 | `P14 runbook walk` [37611439339](https://github.com/smormah/vsift/actions/runs/37611439339) | **passed**: 18 steps, all matched, none diverged | none |
 | RQ-13 | `P14 scan reading` [37611430394](https://github.com/smormah/vsift/actions/runs/37611430394) and [`p14-scan-reading-2026-10-07.md`](p14-scan-reading-2026-10-07.md) | **passed**, with the one residual the maintainer accepted on 2026-10-05 (#272, L-122) and one new observation for the maintainer (26.4) | [#322](https://github.com/smormah/vsift/issues/322) ([L-137](known-limits.md#l-137), new) |
@@ -1550,8 +1552,8 @@ power-loss campaign's managed store used stand-in versions of the tools ([L-037]
 
 ### 26.2 RQ-08 (stress) and RQ-07 (fuzz) in detail
 
-**RQ-08** (opened before anything was repeated; nothing was rerun). The ledger records the run as **failed** with
-[#321](https://github.com/smormah/vsift/issues/321) and **no waiver**: the decision is the maintainer's.
+**RQ-08** (opened before anything was repeated; nothing was rerun). The run is **failed** evidence with
+[#321](https://github.com/smormah/vsift/issues/321), and the item is **waived for R0** by the maintainer's decision of 2026-10-07 (the last point below).
 
 | Suite | Repetitions per system | Windows | Ubuntu | macOS |
 | --- | ---: | --- | --- | --- |
@@ -1577,12 +1579,16 @@ power-loss campaign's managed store used stand-in versions of the tools ([L-037]
   between the two parses an empty string, which is exactly this error. If so it is a race in the **test**, no product code is on the failing line
   and the supervisor's termination assertions were not reached. It is the same suite and system as #128 with a different test and message.
   The rule (zero failures in at least 200 repetitions per system) is met by every other suite and not met here.
-- **Options for the maintainer (not decided here).** (a) Accept #321 with [L-138](known-limits.md#l-138) as the register entry and record the item
-  waived (or accepted) for R0: the cause is read in the test source and a fix is a change to a test file under `crates/`, which the
-  candidate-to-stable check does not allow after the tag. (b) Fix the test in a third candidate and repeat the 3,654 job-minutes of this section, the
-  agent batches and the try-outs. The recommendation of this record is (a): the failing line is the test's own parse of a half-written file, the
-  product's lock, admission, root and delivery suites are clean on all three systems, and a third candidate for a test would not make the product
-  different.
+- **The maintainer's decision (2026-10-07).** The options were (a) to accept #321 with [L-138](known-limits.md#l-138) as the register entry and
+  waive the item, or (b) to fix the test in a third candidate and repeat the 3,654 job-minutes of this section, the agent batches and the try-outs.
+  **The maintainer chose (a): `0.2.0-rc.2` stays, #321 is accepted as a race in the test, and RQ-08 is waived for R0** through the ledger's waiver
+  mechanism (as RQ-14 and, for the first candidate, RQ-10 were); the decision's text is in the ledger entry and in
+  [ADR 0024](../decisions/0024-r0-qualification-and-release-candidate.md)'s note of 2026-10-07. The run stays in the ledger as failed evidence. The test is
+  fixed after the stable release, because a change to a file under `crates/` between the tag and the stable commit would force a third candidate.
+  **What the waiver does not cover:** #312 ([L-135](known-limits.md#l-135)), which is not fixed, did not recur here and stays open with its own entry; #128 and
+  #206, which stay under watch; a failure of any other suite, test or system, or of this test with another message; the delivery suite's 100
+  repetitions, below the rule's 200 by design; and a release in which anything in the item's scope has changed since the tag. The acceptance rests on a
+  reading of the test source, not on a reproduction.
 
 **RQ-07.** Per target (`Fuzz` run 37611372051; the last column is where in the run the final new coverage appeared; a high figure means the
 target had not stopped finding paths). Totals: 2,918,298,500 runs (2,879,921,578 on the first candidate, 3.68 billion on 0.1.0); peak memory 878 MB at most;
@@ -1639,12 +1645,25 @@ matter:
 Everything else held: no network use, no canary or marker leaked, nothing created or changed outside the root, the home and the queue, no injected command
 ran; the slowest operation took 5.2 s and the largest memory peak was 809 MiB of the 1,024 MiB limit (the 512 MiB free-space box, which completed).
 
-**What a waiver would cover now.** The ledger still holds RQ-10 `waived` by the decision of 2026-10-05, whose text names two residuals: (a) the
-over-the-limit-and-larger-than-the-disk answer, **now fixed**, and (c) the link's `STORAGE_IO`. The premise of that decision (`0.2.0-rc.1`
-stays) is gone. This run is green without any waiver, because the judge treats #265 and #266 as tracked. If the maintainer keeps the waiver it
-covers only what is left: the link's `STORAGE_IO` (#265, L-127) and the campaign's own no-room case, which cannot be corrected before the stable
-release because the tools are frozen (L-134); if the maintainer lifts it, RQ-10 can be recorded `passed` on this run with those two named in `does_not_prove`, as RQ-13 was
-recorded `passed` with its accepted residual. **The ledger was not changed on this point; the decision is the maintainer's.**
+**The maintainer's decision on RQ-10 (2026-10-07), and why the item is `waived` and not `passed`.** The decision of 2026-10-05 named two
+residuals: (a) the over-the-limit-and-larger-than-the-disk answer, **now fixed**, and (c) the link's `STORAGE_IO`; its premise (`0.2.0-rc.1` stays)
+is gone, and it is not carried over. The maintainer asked for RQ-10 to be recorded `passed` for the second candidate **if the ledger's schema and the
+item's own rule allow a pass with tracked findings**, and otherwise for the waiver to be restated with only what is left.
+
+- **The schema allows it:** a `passed` item may name open issues (RQ-13 does), and needs a run of its workflow, which this is.
+- **The item's own rule does not.** The pass rule (section 2, the table the ledger is checked against) reads "each a typed failure (`INVALID_SOURCE`,
+  `RESOURCE_LIMIT` or `DEADLINE_EXCEEDED`) inside its bound; no hang, no network, no file outside the root". Two answers of this run are typed and bounded but
+  carry other codes: `STORAGE_IO` for the link and `INTEGRITY_FAILURE` for the mis-built no-room case. The run is green only because the judge does not fail a
+  run for a finding it tracks (`TRACKED` in `hostile-media.cjs`); it still reports both as findings. RQ-13's rule has the clause "unless ... accepted by the
+  maintainer with a register entry", which is why it could be `passed` with its residual; RQ-10's rule has no such clause, and the first candidate's entry was
+  waived for the same reason. A pass would need the rule's list of codes changed, which is a change of the rule and not a record of evidence (an earlier
+  sentence of this record that said the item could be recorded `passed` with the two named in `does_not_prove` was wrong on this point).
+- **So RQ-10 is `waived` for R0 by a new decision dated 2026-10-07**, with the narrowed text in the ledger entry and in ADR 0024's note. It covers exactly two
+  residuals: the link's `STORAGE_IO` (#265, [L-127](known-limits.md#l-127): a published failure code stays within v1) and the campaign tool's mis-built no-room
+  case ([L-134](known-limits.md#l-134)), which cannot be corrected before the stable release because the tools are frozen. Both are also named in the entry's
+  `does_not_prove`. **It does not cover** a new finding, a broken containment check, an answer outside its bounds, or the no-room path of `ingest` on the published
+  bytes, which this campaign has shown on no version (`no_room_cli_contract` shows it from source, and the first candidate's supplementary run from a scratch
+  branch showed it on those bytes).
 
 ### 26.4 RQ-11, RQ-12 and RQ-13 in detail
 
@@ -1668,8 +1687,8 @@ stays accepted by the maintainer's decision of 2026-10-05, so RQ-13 is recorded 
 the earlier readings did not read** (the project's release list): whisper.cpp 1.9.3 to 1.9.5 carry memory-safety hardening (a heap read on audio under 201
 samples, malformed model files, an integer overflow) that the pinned 1.9.2 lacks; there is no CVE, advisory or severity, so the plan's rule is not engaged,
 and whether VSift can feed a chunk that short is not shown either way ([#322](https://github.com/smormah/vsift/issues/322), [L-137](known-limits.md#l-137)). The
-catalogue was not touched (a re-pin before `0.2.0` is a third candidate) and no one at either project was contacted. The maintainer decides whether to accept it with L-137,
-as with L-122, or to assess reachability first.
+catalogue was not touched (a re-pin before `0.2.0` is a third candidate) and no one at either project was contacted. **Maintainer, 2026-10-07:** L-137 stays an
+**open observation**, neither accepted nor rejected; a separate read-only reachability assessment is being done, and its disposition waits for that.
 
 ### 26.5 Hosted minutes, and what is weaker than it sounds
 
@@ -1689,17 +1708,18 @@ campaign 285, `P14 journeys` 122 (macOS 83), the two `P14 published artifacts` r
 
 ### 26.6 What blocks `release-evidence --complete-for 0.2.0-rc.2`
 
-Run at the end of this change (`--commit 7c722d1fc46af7fddeffbaf807028eaec413ace1`):
+Run at the end of this change, after the maintainer's decisions of 2026-10-07 were recorded (`--commit 7c722d1fc46af7fddeffbaf807028eaec413ace1`):
 
 ```text
 $ cargo run --locked -p vsift-governance -- release-evidence --complete-for 0.2.0-rc.2 --commit 7c722d1fc46af7fddeffbaf807028eaec413ace1
 governance check failed:
-- RQ-08: is failed; it must be passed, waived by the maintainer or not applicable for 0.2.0-rc.2
 - RQ-15: is planned; it must be passed, waived by the maintainer or not applicable for 0.2.0-rc.2
 - RQ-16: is planned; it must be passed, waived by the maintainer or not applicable for 0.2.0-rc.2
 - RQ-17: is planned; it must be passed, waived by the maintainer or not applicable for 0.2.0-rc.2
 ```
 
-Four items block (of the seventeen of section 25.2): **RQ-08** (`failed`: #321, the maintainer's decision in 26.2), and **RQ-15, RQ-16 and RQ-17** (`planned`: the agent
-batches and the try-outs, which are not hosted evidence). Passed for the second candidate: RQ-01 to RQ-07, RQ-09, RQ-11, RQ-12, RQ-13 (with its accepted residual), RQ-18 and RQ-19;
-RQ-10 and RQ-14 are `waived` (the decisions of 2026-10-05 and 2026-10-03; RQ-10's is the maintainer's to confirm: 26.3); RQ-20 is the check itself.
+Three items block (of the seventeen of section 25.2): **RQ-15, RQ-16 and RQ-17** (`planned`: the agent batches and the try-outs, which are not hosted
+evidence). Before the decisions were recorded the check also named RQ-08 (`failed`). Passed for the second candidate: RQ-01 to RQ-07, RQ-09, RQ-11, RQ-12,
+RQ-13 (with its accepted residual), RQ-18 and RQ-19; **`waived`: RQ-08 (2026-10-07: #321, L-138), RQ-10 (2026-10-07: the link's code and the mis-built
+no-room case) and RQ-14 (2026-10-03)**; RQ-20 is the check itself. Three waived items of twenty is what the record says, not a pass of them: each waiver's
+text says what it does not cover.
