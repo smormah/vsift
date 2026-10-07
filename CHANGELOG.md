@@ -53,6 +53,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   pull-request run; the run on the third candidate is the evidence. [L-134](docs/planning/known-limits.md#l-134) is narrowed to that. The campaign still does not test the room
   check on Windows (which reads no free space, L-061), a filesystem that reports nothing available, or a write that runs out of
   room during the copy.
+- **A trial-harness test no longer trips on a random identifier; the harness is unchanged** (P14, #327; one test file and this
+  entry only). `a_cold_workspace_holds_no_skill_no_documentation_and_nothing_that_names_the_tool` meant "a cold trial's folder is
+  not named after its scenario" and checked it by requiring that the folder's whole path did not contain `f05`, a fragment of
+  the scenario's name. The folder is `run-` and eight random hexadecimal digits, and `f05` is three hexadecimal digits, so
+  about one name in 700 contains it by chance (six places, one chance in 4,096 each), and the temporary folder's own name can
+  too; it failed once, on a macOS runner. The test now checks what it means: the folder's name is exactly `run-` and eight
+  lowercase hexadecimal digits (a shape with no room for a scenario's name), it does not contain the scenario's identifier, and
+  it is the only part of the path the harness adds. A second test holds the shape check itself: a random name that spells `f05`
+  is a cold name, and a name that carries a scenario's name, a longer, shorter or upper-case identifier is not. The other
+  checks of that test (no skill, no instruction file, the cold settings, the neutral canary, the prompt) are unchanged, and no
+  other assertion in the harness's tests compares a random value with a fragment it could spell: the canaries are hexadecimal
+  and are searched for `vsift`, which hexadecimal digits cannot spell. `tools/vsift-agent-trials/src`, the scenarios, the
+  settings and the frozen grader are not touched.
 
 ## [0.2.0-rc.2] - 2026-10-06
 
