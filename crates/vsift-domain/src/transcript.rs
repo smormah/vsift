@@ -368,8 +368,14 @@ pub enum TranscriptWarningKind {
     NonSpeechMarkersRemoved,
     /// Local ASR: text repeated by both chunks of an overlap was kept once.
     SeamDuplicatesRemoved,
-    /// Local ASR: chunks with no audible signal were not transcribed and are
-    /// recorded as silent gaps.
+    /// Local ASR: chunks with nothing to recognise were not given to the
+    /// recognizer and are recorded as gaps: no audible signal, no audio at
+    /// all, or (since 0.2.0-rc.3) less than 100 ms of audio, whatever its level (a
+    /// window that short is not even decoded).
+    ///
+    /// The identifier says "silent" and counts all three. It is not split:
+    /// a new warning kind is stored in the revision, where the releases before
+    /// it read an unknown kind as damage.
     SilentChunksSkipped,
     /// Local ASR: the run recognised no speech at all in the range it covered,
     /// so the revision holds no new segment there. The attempt is still

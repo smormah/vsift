@@ -8,7 +8,7 @@ use vsift_domain::{
     EvidenceRequest, EvidenceSelection, EvidenceSubject, FrameRef, FrameSelection,
     FrameSelectionError, FrameTolerance, ListedFrame, MediaTime, NeighbourCount, NeighbourPlan,
     NeighbourStop, PartialReason, SelectionRole, TimeRange, VisualCandidateId, plan_burst,
-    plan_neighbours, select_frame,
+    plan_neighbours, rounds_to_no_pcm_sample, select_frame,
 };
 
 use super::{
@@ -360,7 +360,11 @@ pub async fn extract_crop<X: FrameExtractor, C: EvidenceControl>(
 /// # Errors
 ///
 /// [`EvidenceError::RangeOutsideSource`] for a range that starts at or after
-/// the end of the source, and the shared failures.
+/// the end of the source, [`EvidenceError::RangeTooShort`] for one whose
+/// length, once clipped, rounds to no sample of the clip (31 microseconds or
+/// less; the extractor is not asked for it), and the shared failures. A range
+/// of 32 to 62 microseconds rounds to one sample and is extracted as it always
+/// was.
 pub async fn extract_audio<X: AudioExtractor, C: EvidenceControl>(
     call: &EvidenceCall<'_, C>,
     extractor: &X,
@@ -374,6 +378,9 @@ pub async fn extract_audio<X: AudioExtractor, C: EvidenceControl>(
     let range_clipped = requested.end() > duration;
     let clipped = TimeRange::new(requested.start(), requested.end().min(duration))
         .map_err(|_| EvidenceError::RangeOutsideSource)?;
+    if rounds_to_no_pcm_sample(clipped) {
+        return Err(EvidenceError::RangeTooShort);
+    }
     let mut collector = Collector::new(call)?;
     collector.check_stop()?;
     let clip = extractor

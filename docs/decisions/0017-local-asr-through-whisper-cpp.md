@@ -345,3 +345,77 @@ valid only from this version on: 0.1.0's `TranscriptRevision::new` refuses it as
 `INTEGRITY_FAILURE`, and every command that reads the revision fails. The record is not damaged and nothing is migrated; use
 the newer version, or discard the session (sessions are disposable unless persisted). The behaviour is recorded as
 [L-130](../planning/known-limits.md#l-130).
+
+## 2026-10-08 note: a floor of 100 ms before the recogniser and before the decode (P14, #322, #332)
+
+Section 3 says a chunk is recorded and not transcribed when it is silent, and section 2 says a chunk with no audio is a
+gap. Neither set a least amount of audio, and nothing upstream does: a requested range has no minimum, the last chunk of a
+plan is what is left of its range, and the decode returns only what the audio track holds in a window. Two defects followed.
+
+- **The recogniser was handed any length** (#322). The by-hand scan reading of 2026-10-07 found that the reviewed whisper.cpp
+  v1.9.2 reads up to 200 samples past its buffer when it is given fewer than 201 (fixed upstream in v1.9.3) and, by a reading
+  of its source, that its command line fails for 40 or fewer ([L-137](../planning/known-limits.md#l-137)). That a short
+  audible range reached the recogniser is now shown, not only read: with the rules below taken out, an application test and an
+  engine test over a real decode both show the recogniser called for it.
+- **The decoder was handed any length** (#332, found while testing the first). FFmpeg cuts its output by a count of samples
+  and takes a length that rounds to none for no limit at all (`libavfilter/trim.c`:
+  `duration_tb = av_rescale_q(duration, AV_TIME_BASE_Q, tb)` rounds to the nearest, and 0 means no duration was given). What
+  came back then was one whole filter frame instead of the range: with the decode's `asetnsamples=n=65536`, up to 65,536
+  samples of the source, less when less audio is left (seen with FFmpeg 9.0 on a 6 s, 16 kHz clip: 65,536 samples from its
+  start and from 1 s, and from 2 s the 64,000 that are left; about a second and a half of a 44.1 kHz track). So a
+  `transcript retranscribe` range of a few microseconds was recognised like a long one, its segments lying after `--to`,
+  and an `audio` clip of such a range held that frame.
+
+**The rules now.**
+
+1. **A planned chunk whose window is shorter than 100 ms is a gap and is not decoded** (`MIN_RECOGNITION_MICROS`,
+   `PlannedChunk::is_below_recognition_floor`). It is recorded as `no_audio`: nothing was decoded, so there is no decoded
+   range to record. With the R0 plan only a requested range under 100 ms gives such a chunk (a property test: the last window
+   of a longer range is longer than the 5 s overlap).
+2. **Decoded chunk audio of fewer than 1,600 samples (100 ms at 16 kHz), whatever its level, is a gap and is not given to
+   the recogniser** (`MIN_RECOGNITION_SAMPLES`, `is_below_recognition_floor`). It is recorded as `silent`, with its decoded
+   range. This is the case of a window of 100 ms or more of which the audio track covers a sliver.
+3. **No audio decode is asked for a length that rounds to no sample** (`rounds_to_no_pcm_sample`: under half a sample at
+   16 kHz, so 31 microseconds or less). The media adapter refuses it before FFmpeg runs, for a speech chunk and for an
+   evidence clip alike, so a decode of zero length cannot be asked for. Rule 1 keeps a speech chunk from ever meeting that
+   refusal; the `audio` command answers it as `INVALID_ARGUMENT` with its own remediation. The rule follows FFmpeg's
+   rounding on purpose: FFmpeg cuts by the count of output samples rounded to the nearest, so a range of 32 to 62
+   microseconds rounds to one sample, was answered with one, and stays answered. Refusing every range under one whole
+   sample (63 microseconds) would not depend on where the tool rounds, and was not taken (the maintainer's decision of
+   2026-10-08: refuse only what was wrong), because it would refuse requests that were answered correctly.
+
+All three rules are the domain's, applied in the use cases and, for the third, again at the decode boundary. 100 ms is the
+figure under which whisper.cpp itself decodes nothing (ten frames of spectrogram, "input is too short"), so no chunk that
+could have produced a word is skipped; and the rules stand in front of every recogniser, so they also cover a recogniser a
+user installed, which no review covers. A range that is all gaps is a run that heard nothing (section 7): it commits a
+revision with no new segment and `no_speech_recognised`, and exits 0, where such a range could fail as `MISSING_CAPABILITY`
+or be recognised as another range before.
+
+**No new identifier.** The short chunks are stored under the two existing outcomes and counted under `silent_chunks_skipped`.
+A separate outcome or warning would be more exact and was not taken: both are stored in the revision record, where every
+earlier release decodes an unknown value as damage (`INTEGRITY_FAILURE`), so a session holding one short chunk could no
+longer be read after a roll back (the cost L-130 already carries for one case); and nothing a caller does differs between a
+quiet tenth of a second and a short one. The cost is that `silent` and `no_audio` each name two conditions, and the fixed
+sentence of the warning ("no audible signal") is loose for a short loud chunk; the contract and the schemas' descriptions
+say so. Field names and shapes of v1 do not change (three descriptions do).
+
+**Not changed:** the chunk plan, the range flags of `transcript retranscribe` (no minimum is added: a short range is
+answered, not refused), the silence rule, the decode's arguments, the pinned whisper.cpp (its re-pin stays with the FFmpeg
+refresh, L-132) and the recognition key of a job.
+
+**Checkpoints.** A resumed job judges the floor before anything it stored. For a window under 100 ms the only checkpoint
+that is reused is the gap rule 1 gives; one that an earlier version stored with recognised output, or as silent with a
+decoded range, is discarded and counted as such, and the chunk becomes the gap. Otherwise a job resumed across the upgrade
+with a recogniser the user installed (whose output is not re-verified) would have brought back the answer the rule removes.
+
+**What `audio` changes.** A range of 31 microseconds or less was answered with a clip that held a filter frame of
+seconds and reported as a success; it is now refused. That is the one request whose answer was wrong. Where such a range
+decoded to nothing (at the end of a clip, or on the audio-only fixture) its answer was `INVALID_SOURCE` and is
+`INVALID_ARGUMENT` now: one published code replaced by another, for this request only. A range of 32 to 62 microseconds
+keeps its answer, a clip of one sample. The cost of following the tool is that rule 3 is right only while FFmpeg rounds a
+length to the nearest sample at the 16 kHz output. That was measured with FFmpeg 9.0 on Windows (the corpus clips and WAV
+sources of 8 to 96 kHz: 31 microseconds is no limit, 32 is one sample, whatever the source's rate) and with the reviewed
+managed build (FFmpeg `n9.0.1-11-ge47273f4d9-20260831`, hosted run 37719064583 of 2026-10-08: the three opt-in tests passed). The opt-in tests that run a real
+FFmpeg pin 31, 32 and 62 microseconds; they are the only check of it and the one to run when FFmpeg is refreshed (L-132). A bound
+after the decode (no more samples than the range and one) would make the rule independent of the tool; it is a follow-up,
+not part of the third candidate (L-141).

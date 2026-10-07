@@ -61,6 +61,12 @@ pub const BURST_RANGE_REMEDIATION: &str = "A frame burst covers at most 60 s. No
 /// Remediation for an audio range longer than thirty seconds.
 pub const AUDIO_RANGE_REMEDIATION: &str = "An audio clip covers at most 30 s. Nothing was changed. Split the range into clips of at most 30 s, or use transcript get and search for the speech of a longer range.";
 
+/// Remediation for an audio range whose length rounds to no sample of the
+/// clip (#332): 31 microseconds or less, as asked or once it is clipped to the
+/// end of the source. Fixed prose; it names no path and no time of the
+/// request.
+pub const AUDIO_RANGE_TOO_SHORT_REMEDIATION: &str = "The range is 31 microseconds or less, as asked or once it is clipped to the end of the source: under half a sample of the clip (one sample at 16 kHz is 62.5 microseconds), so it holds no audio. Nothing was changed. Request a longer range, or one that ends further before the end of the source.";
+
 /// Remediation for an audio range that starts at or after the end of the source.
 pub const AUDIO_RANGE_START_REMEDIATION: &str = "The range starts at or after the end of the source, so it has no audio. Nothing was changed. Request a range that starts before the end; a range that runs past the end is clipped to it.";
 

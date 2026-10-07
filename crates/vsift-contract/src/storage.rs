@@ -94,13 +94,15 @@ pub const SOURCE_NO_ROOM_REMEDIATION: &str = "The folder that holds VSift's sess
 /// the only one it may give (changing a published failure code is not
 /// additive; known limit L-127). That code says the video is at fault, which
 /// was never looked at, so this text says what happened: the copy was slow,
-/// the video was not judged, and a copy on a local disk is what to try. It is
+/// the video was not judged, and a copy on a local disk is what to try. It
+/// says "usually", because the copy has two ends: when the session root is the
+/// slow one, moving the video does not help, and the text says so. It is
 /// for the person, not for an agent to act on alone: copying gigabytes of
 /// someone's video to another place is their decision. The first sentence is
 /// stable. It names no path, size or speed; the limit it names is the fixed
 /// one (`MAX_SOURCE_READ_DURATION` in `vsift-infrastructure`, known limit
 /// L-140), and a test of the CLI, which sees both, holds the two together.
-pub const SOURCE_COPY_TOO_SLOW_REMEDIATION: &str = "Copying this video into VSift's session took longer than the ten-minute limit, so the copy was stopped. The video itself was not judged and may be fine (the code is the closest published one); nothing was committed. This happens with a large video on a slow disk, a network share, a removable drive or a cloud-synced folder that downloads on first read. Report this to the user: copying the video to a local disk and running the same command on that copy fixes it. Running the same command again on the same file starts the copy from the beginning.";
+pub const SOURCE_COPY_TOO_SLOW_REMEDIATION: &str = "Copying this video into VSift's session took longer than the ten-minute limit, so the copy was stopped. The video itself was not judged and may be fine (the code is the closest published one); nothing was committed. This happens with a large video on a slow disk, a network share, a removable drive or a cloud-synced folder that downloads on first read. Report this to the user: copying the video to a local disk and running the same command on that copy usually fixes it (if the folder that holds VSift's sessions is on a slow or network disk, that can be the slow side instead). Running the same command again on the same file starts the copy from the beginning.";
 
 /// Remediation when no published session has the given id (#277): it was never
 /// opened, is still being opened by another command, its opening was
@@ -172,6 +174,14 @@ mod tests {
         assert!(text.contains("closest published one"), "{text}");
         assert!(text.contains("Report this to the user"), "{text}");
         assert!(text.contains("local disk"), "{text}");
+        // A local copy is the usual way out, not a promise: the session root
+        // can be the slow end of the copy.
+        assert!(text.contains("usually fixes it"), "{text}");
+        assert!(!text.contains("copy fixes it"), "{text}");
+        assert!(
+            text.contains("folder that holds VSift's sessions"),
+            "{text}"
+        );
         // It is not the answer of a bad file, and it promises no way to go on:
         // no option raises the limit and a rerun starts again (#325).
         for wrong in [

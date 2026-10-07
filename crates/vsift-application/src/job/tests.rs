@@ -1023,6 +1023,89 @@ async fn foreign_or_invalid_checkpoints_are_discarded_and_redone() -> TestResult
     Ok(())
 }
 
+/// #332: the floor is judged before anything stored. A checkpoint that holds
+/// recognised output, or a decoded range, for a window under 100 ms was stored
+/// before the rule existed; a run that finds one does not reuse it. It is
+/// discarded, the chunk is the gap the rule gives, and nothing is decoded or
+/// recognised. The gap the rule itself stores is reused like any other.
+#[tokio::test]
+async fn a_checkpoint_stored_for_a_window_under_the_floor_is_not_reused_as_speech() -> TestResult {
+    let harness = Harness::new()?;
+    let resolved = harness.resolve(None)?;
+    let (owner, _) = harness.store.open_or_create(&resolved.spec, NOW)?;
+    let request = TranscribeRangeRequest {
+        source_segment: &harness.source,
+        range: range(2 * SECOND, 2 * SECOND + 50_000)?,
+        plan: ChunkPlan::R0,
+        audio_stream: 1,
+        expected: &harness.identity,
+    };
+    let never = Flag(Arc::new(AtomicBool::new(false)));
+    let scope = CheckpointScope {
+        checkpoints: &owner,
+        key: &resolved.spec.recognition_key,
+        progress: &NoProgress,
+    };
+    let chunks = vsift_domain::plan_chunks(harness.source.id(), request.range, ChunkPlan::R0)?;
+    let [chunk] = chunks.as_slice() else {
+        return Err("a range of 50 ms is one chunk".into());
+    };
+    assert!(chunk.is_below_recognition_floor());
+
+    for stored in [
+        vsift_domain::CheckpointOutcome::Recognised {
+            audio: chunk.window(),
+            output: words(chunk).map_err(|_| "no words")?,
+        },
+        vsift_domain::CheckpointOutcome::Silent {
+            audio: chunk.window(),
+        },
+    ] {
+        owner.store(&ChunkCheckpoint::new(
+            resolved.spec.recognition_key.clone(),
+            chunk,
+            stored,
+        ))?;
+        let (transcription, used) = transcribe_range_checkpointed(
+            request,
+            scope,
+            &harness.audio,
+            &harness.recognizer,
+            &never,
+        )
+        .await?;
+        assert_eq!((used.reused, used.discarded), (0, 1));
+        assert!(transcription.segments.is_empty());
+        assert_eq!(
+            transcription
+                .run
+                .chunks()
+                .first()
+                .map(vsift_domain::AsrChunkRecord::outcome),
+            Some(vsift_domain::AsrChunkOutcome::NoAudio)
+        );
+        // What the run stored in its place is the gap, as this run's.
+        let CheckpointRead::Found(replacement) = owner.load(chunk.index()) else {
+            return Err("the gap was not stored".into());
+        };
+        assert_eq!(replacement.key(), &resolved.spec.recognition_key);
+        assert!(matches!(
+            replacement.into_outcome(),
+            vsift_domain::CheckpointOutcome::NoAudio
+        ));
+    }
+
+    // The stored gap is the rule's own answer and is reused.
+    let (again, used) =
+        transcribe_range_checkpointed(request, scope, &harness.audio, &harness.recognizer, &never)
+            .await?;
+    assert_eq!((used.reused, used.discarded), (1, 0));
+    assert!(again.segments.is_empty());
+    assert_eq!(harness.audio.calls.load(Ordering::SeqCst), 0);
+    assert_eq!(harness.recognizer.calls.load(Ordering::SeqCst), 0);
+    Ok(())
+}
+
 /// Silent and empty chunks are checkpointed too, and resumed as gaps.
 #[tokio::test]
 async fn silent_and_empty_chunks_resume_as_gaps() -> TestResult {

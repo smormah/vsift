@@ -74,7 +74,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   the CLI). **The code is unchanged: `INVALID_SOURCE`, exit 3**, as since 0.1.0 (a published failure code does not change within
   v1, known limits L-126 and L-127), and the answer gains a remediation in fixed words: the copy took longer than the ten-minute
   limit, the video itself was not judged and may be fine, nothing was committed, report it to the user, and copying the video to
-  a local disk and running the same command on that copy fixes it (example
+  a local disk and running the same command on that copy usually fixes it, with a clause that says the folder that holds
+  VSift's sessions can be the slow side instead (example
   [`ingest-copy-too-slow.json`](schemas/v1/examples/ingest-copy-too-slow.json)). `job run` copies a worker's source with the same
   limit and reaches the same cause: its result's failure code is the same as before and the command's error carries the same
   remediation. A supplied transcript has no such limit. **Not changed, on purpose:** the limit (ten minutes, on the whole copy
@@ -90,6 +91,67 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   CLI's answer built from the typed cause, equal to it in JSON and as a person reads it. **What is not shown:** no real slow
   copy was run, and no test waits ten minutes; the speeds are arithmetic. The guide's troubleshooting and limits pages and the
   contract say what the message means.
+- **Audio shorter than 100 ms is recorded as a gap, never given to the speech recogniser and, when the range itself is that
+  short, never decoded** (P14, #322 and #332, known limit [L-137](docs/planning/known-limits.md#l-137)). **What was wrong.**
+  Nothing set a least amount of audio: a `transcript retranscribe --from/--to` range has no minimum, and a chunk decodes only
+  what the audio track holds in its window. Two defects followed. (1) An audible chunk of a few samples was handed to the
+  recogniser, and the reviewed whisper.cpp v1.9.2 reads up to 200 samples past its buffer when it is given fewer than 201
+  (12.5 ms; fixed upstream in v1.9.3) and, by a reading of its source, its command line fails for 40 or fewer, which failed the
+  run as `MISSING_CAPABILITY` (#322). (2) Found while testing the first: the range's length was handed to FFmpeg whatever it
+  was, and FFmpeg takes a length that rounds to no sample for no limit at all (its `trim` filter rounds the length to the
+  nearest sample of the output and reads a count of 0 as "not set"), so **a range of 31 microseconds or less was answered with
+  one whole filter frame of audio instead of its range, up to 65,536 samples of the source (about four seconds of a 16 kHz
+  track, about a second and a half at 44.1 kHz, less when less audio is left), and recognised like a long range**, its
+  segments lying after `--to` (#332; seen with FFmpeg 9.0 on a 6 s clip: 65,536 samples from its start, and from 2 s the four
+  seconds that are left). The `audio` command shares that decode, and a clip cut for such a range held that frame. **Change,
+  three rules of the domain.**
+  A planned chunk whose window is shorter than 100 ms is recorded as a gap and is **not decoded**. Decoded chunk audio of
+  fewer than 1,600 samples (100 ms at 16 kHz), whatever its level, is recorded as a gap and is not given to the recogniser
+  (the case of a longer window of which the audio track covers a sliver). And no audio decode, for a speech chunk or an
+  evidence clip, is asked for a length that rounds to no sample (31 microseconds or less, under half a sample at 16 kHz): the
+  media adapter refuses it before FFmpeg runs, so a decode of zero length cannot be asked for. The rules stand in front of every recogniser, a user's own whisper.cpp included; 100 ms is the figure under
+  which whisper.cpp itself decodes nothing, so no chunk that could have produced a word is skipped. **What a caller sees.**
+  `transcript retranscribe` of a range under a tenth of a second exits 0 with a revision that has no new segment,
+  `no_audio_chunks: 1`, `transcribed_chunks: 0` and the warnings `silent_chunks_skipped` and `no_speech_recognised`, as a run
+  that heard nothing does; a search reports it in `no_speech_ranges`. **`audio` of a range of 31 microseconds or less, as asked
+  or once it is clipped to the end of the video, is now `INVALID_ARGUMENT`** (exit 2) with a remediation that says how short
+  that is; nothing is decoded or stored. That request reported success before, with a clip that held a filter frame of
+  seconds and not its range. **For this one request a published code is replaced by another:** where such a range decoded to
+  nothing it was `INVALID_SOURCE` before (a range of 31 microseconds or less that ends at the end of an ordinary clip, and
+  any such range of the audio-only fixture), and it is `INVALID_ARGUMENT` now, on every file.
+  **Only that is refused:** a range of 32 to 62 microseconds, whose length rounds to one sample, is answered exactly as before
+  (a clip of one sample), and no request that was answered correctly changes. **No identifier is added:** the short
+  chunks are stored as the existing `no_audio` outcome (a window that is not decoded has no decoded range to record) and the
+  existing `silent` outcome (with its decoded range, under 100,000 microseconds), and counted under the existing warning. A
+  new outcome or warning would be stored in the revision record, where every earlier release decodes an unknown value as
+  damage (`INTEGRITY_FAILURE`), and nothing a caller does differs between a quiet tenth of a second and a short one. The cost
+  is that each of the two names covers two conditions now and the warning's sentence ("no audible signal") is loose for a
+  short loud chunk; the contract, ADR 0017 (a dated note) and the schemas' descriptions say so. No field or option changes, no
+  failure code is added and none changes its meaning; the one request named above gets a different published code. Ranges
+  and chunks of 100 ms and more, the chunk plan, the silence rule and the range flags of `transcript retranscribe` are
+  unchanged. **A resumed job judges the floor before anything it stored:** a checkpoint that an earlier version stored for a
+  window under 100 ms with recognised output or a decoded range is discarded and the chunk is the gap the rule gives (found
+  in review: with a recogniser the user installed, such a checkpoint would have been reused). **Tests:** the three rules at their edges (1, 31, 32, 62 and 63 microseconds;
+  99,999 and 100,000; 1,599 and 1,600 samples) with two property tests (domain); a run in which the decoder and the
+  recogniser count their calls: a range from one microsecond to 99,999 is neither decoded nor recognised and is a run that
+  heard nothing, 100 ms is decoded and recognised, 1,599 loud samples of a long window are decoded and not sent (application;
+  these fail without the rules); a stored checkpoint for a window under the floor is discarded, not reused as speech
+  (application; it fails without the rule); an audio range of 31 microseconds or less is refused before the extractor is asked, also
+  when the source's end is what cuts it short, and ranges of 32, 62 and 63 microseconds are extracted (application), with the
+  refusal's code and remediation (engine, CLI); the decode boundary for all three kinds of decode, which hands over exactly
+  the lengths that round to a sample (infrastructure); and, opt-in because they need FFmpeg, the same through the engine and
+  a real decode for both commands and at the adapter, where 32 and 62 microseconds still come back as exactly one sample. **What is not shown.** Nothing here ran whisper.cpp: the recogniser in the tests is a
+  double, and the P07 checkpoint has no stage for a short range. The third rule follows FFmpeg's rounding (to the nearest sample at the
+  16 kHz output, `libavfilter/trim.c`). The boundary between 31 and 32 microseconds was measured with FFmpeg 9.0 on Windows
+  (the corpus clips and WAV sources of 8 to 96 kHz) and **with the reviewed managed build too** (FFmpeg `n9.0.1-11-ge47273f4d9-20260831`, Ubuntu 24.04,
+  hosted run [37719064583](https://github.com/smormah/vsift/actions/runs/37719064583) from a scratch branch that held this change's code and one temporary workflow, since deleted: the three
+  opt-in tests passed; a raw probe with the decode's arguments gave a whole frame (64,000 or 65,536 samples) for 1, 30 and 31 microseconds and one sample for 32, 33, 62 and 63, on three corpus clips). A build that rounded otherwise would bring the defect back for some lengths, and only the
+  opt-in tests would show it: no regular hosted job runs them, and nothing checks a decode against its range afterwards. A
+  bound after the decode is a follow-up ([L-141](docs/planning/known-limits.md#l-141)). whisper.cpp is
+  **not re-pinned**; that stays with the FFmpeg refresh after the stable release (L-132), and L-137 is narrowed to it.
+  **Found on the way, in the same new known limit ([L-141](docs/planning/known-limits.md#l-141), issue #334), not caused or
+  changed here:** an `audio` clip of a few milliseconds can be answered `INVALID_SOURCE`, "could not decode that part", for a
+  healthy file (on the audio-only fixture every range from 32 microseconds to about 47 ms decoded to nothing).
 
 ## [0.2.0-rc.2] - 2026-10-06
 

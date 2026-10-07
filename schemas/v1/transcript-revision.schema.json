@@ -122,7 +122,7 @@
       }
     },
     "local_asr": {
-      "description": "The local-ASR run that produced the revision's own segments: provider build and model by SHA-256, the pinned model profile and decoding profile, the chunk plan, recognizer threads, the decoded audio stream, the source range its chunks covered, and how many chunks were transcribed, silent (every 20 ms frame below -50 dBFS, not transcribed) or had no audio.",
+      "description": "The local-ASR run that produced the revision's own segments: provider build and model by SHA-256, the pinned model profile and decoding profile, the chunk plan, recognizer threads, the decoded audio stream, the source range its chunks covered, and how many chunks were transcribed, silent (not transcribed: every 20 ms frame below -50 dBFS, or, since 0.2.0-rc.3, less than 100 ms of decoded audio whatever its level) or had no audio (none was decoded in the window: the audio track holds none there, or, since 0.2.0-rc.3, the window is shorter than 100 ms and is not decoded).",
       "type": "object",
       "additionalProperties": false,
       "required": [

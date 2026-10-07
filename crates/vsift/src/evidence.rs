@@ -458,7 +458,9 @@ impl Engine {
     ///
     /// As [`Engine::frame_get`], and for an empty or reversed range, a range
     /// over thirty seconds (`NavigationRangeTooLong`), a range that starts at
-    /// or after the end of the source and a source without an audio stream
+    /// or after the end of the source, a range whose length, clipped to the
+    /// source, rounds to no sample of the clip (`AudioRangeTooShort`: 31
+    /// microseconds or less, #332) and a source without an audio stream
     /// (`NoAudioStream`).
     pub async fn audio(&self, request: AudioClipRequest) -> Result<EvidenceResults, EngineError> {
         let range = requested_range(request.from_micros, request.to_micros)?;
@@ -870,6 +872,7 @@ const fn evidence_error(error: EvidenceError) -> EngineError {
         EvidenceError::KindMismatch => EngineError::EvidenceKindMismatch,
         EvidenceError::CropOutsideParent => EngineError::CropOutsideParent,
         EvidenceError::RangeOutsideSource => EngineError::RangeOutsideSource,
+        EvidenceError::RangeTooShort => EngineError::AudioRangeTooShort,
         EvidenceError::Record(_) | EvidenceError::Identity(_) => EngineError::EvidenceAssembly,
     }
 }

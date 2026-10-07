@@ -22,8 +22,8 @@ use vsift_domain::{
     RecognitionKey, SegmentOrigin, SessionId, SourceId, SourceSegment, TimeRange,
     TranscriptProvenance, TranscriptRevision, TranscriptRevisionError, TranscriptRevisionId,
     TranscriptRevisionParts, TranscriptSegment, TranscriptSegmentParts, TranscriptWarningKind,
-    TranscriptWarnings, ValidatedChunk, decoded_audio_range, is_silent_pcm, merge_chunks,
-    plan_chunks, validate_chunk_output,
+    TranscriptWarnings, ValidatedChunk, decoded_audio_range, is_below_recognition_floor,
+    is_silent_pcm, merge_chunks, plan_chunks, validate_chunk_output,
 };
 
 use crate::{
@@ -80,8 +80,20 @@ impl fmt::Display for SpeechAudioError {
 impl Error for SpeechAudioError {}
 
 /// Port that decodes bounded speech PCM for one planned chunk.
+///
+/// An adapter returns what the stream holds in the window and never pads it:
+/// how little audio is still worth recognising is the domain's rule, applied
+/// by [`transcribe_range`].
 pub trait SpeechAudioSource: Send + Sync {
     /// Decodes at most the chunk's window of the selected audio stream.
+    ///
+    /// [`transcribe_range`] never asks for a window shorter than
+    /// [`MIN_RECOGNITION_MICROS`](vsift_domain::MIN_RECOGNITION_MICROS)
+    /// (100 ms). An adapter still refuses a window whose length rounds to no
+    /// sample (31 microseconds or less), with
+    /// [`SpeechAudioError::Unavailable`], and never passes one on: a media
+    /// tool takes such a length for no limit at all and answers with seconds
+    /// of audio (#332).
     fn speech_pcm(
         &self,
         chunk: &PlannedChunk,
@@ -154,6 +166,11 @@ pub trait SpeechRecognizer: Send + Sync {
     ) -> impl Future<Output = Result<RecognizerIdentity, SpeechRecognitionError>> + Send;
 
     /// Recognizes `pcm` and returns the provider's bounded, parsed output.
+    ///
+    /// [`transcribe_range`] calls this only with audible audio of at least
+    /// [`MIN_RECOGNITION_SAMPLES`](vsift_domain::MIN_RECOGNITION_SAMPLES)
+    /// samples (100 ms): shorter or silent audio is recorded as a gap and
+    /// never reaches an adapter.
     ///
     /// The output is structurally valid (bounded sizes, strict UTF-8 text) but
     /// not yet checked against the chunk; the use case applies the domain's
@@ -366,8 +383,14 @@ pub struct AsrTranscription {
 /// The recognizer's identity is read before the first chunk and after the
 /// last and must equal `expected` both times, so a model or binary swapped
 /// during the run fails it rather than mixing outputs. A chunk whose decoded
-/// audio is silent is recorded as a silent gap without running the
-/// recognizer; a chunk with no decoded audio is recorded as a gap. Nothing is
+/// audio is silent, or shorter than 100 ms
+/// ([`MIN_RECOGNITION_SAMPLES`](vsift_domain::MIN_RECOGNITION_SAMPLES)), is
+/// recorded as a silent gap without running the recognizer, so a recognizer
+/// is never given less than that; a chunk with no decoded audio is recorded
+/// as a gap, and so, without being decoded, is a chunk whose window is under
+/// 100 ms ([`PlannedChunk::is_below_recognition_floor`]). A range that is all
+/// gaps is a run that heard nothing, not a failure ([`build_asr_revision`]).
+/// Nothing is
 /// returned unless every chunk succeeded: a failure or cancellation discards
 /// all work, so a caller never commits part of a run.
 ///
@@ -643,6 +666,13 @@ where
 ///
 /// Anything else found is removed and counted as discarded, so the chunk is
 /// done again from the audio.
+///
+/// The floor is judged before anything stored. For a window under 100 ms
+/// ([`PlannedChunk::is_below_recognition_floor`]) the only usable checkpoint
+/// is the gap the rule itself gives: one that holds recognised output or a
+/// decoded range was stored before the rule existed (#332), and reusing it
+/// would bring back the answer the rule removes, so it is discarded like any
+/// other unusable checkpoint.
 fn reuse_checkpoint<K: ChunkCheckpoints>(
     scope: &CheckpointScope<'_, K>,
     chunk: &PlannedChunk,
@@ -660,6 +690,11 @@ fn reuse_checkpoint<K: ChunkCheckpoints>(
     let result = if checkpoint.belongs_to(scope.key, chunk) {
         match checkpoint.into_outcome() {
             CheckpointOutcome::NoAudio => Some(ChunkResult::Gap(AsrChunkOutcome::NoAudio)),
+            CheckpointOutcome::Silent { .. } | CheckpointOutcome::Recognised { .. }
+                if chunk.is_below_recognition_floor() =>
+            {
+                None
+            }
             CheckpointOutcome::Silent { audio } => {
                 Some(ChunkResult::Gap(AsrChunkOutcome::Silent { audio }))
             }
@@ -681,8 +716,13 @@ fn reuse_checkpoint<K: ChunkCheckpoints>(
     result
 }
 
-/// Decodes and, unless it is silent, recognises one chunk; returns what it
-/// became and the checkpoint outcome that records it.
+/// Decodes and, unless it has nothing to recognise (no audio, less than
+/// 100 ms of it, or silence), recognises one chunk; returns what it became and
+/// the checkpoint outcome that records it.
+///
+/// A chunk whose window is under 100 ms is not decoded at all: it could only
+/// become a gap, and the decoder is never asked for a length that small
+/// (#332; [`vsift_domain::MIN_RECOGNITION_MICROS`] says why).
 async fn fresh_chunk<A, R, C>(
     chunk: &PlannedChunk,
     bounds: TimeRange,
@@ -695,6 +735,12 @@ where
     R: SpeechRecognizer,
     C: AsrCancellation,
 {
+    if chunk.is_below_recognition_floor() {
+        return Ok((
+            ChunkResult::Gap(AsrChunkOutcome::NoAudio),
+            CheckpointOutcome::NoAudio,
+        ));
+    }
     let decoded = match audio.speech_pcm(chunk).await {
         Ok(pcm) => {
             decoded_audio_range(pcm.actual_start, pcm.samples.len()).map(|range| (pcm, range))
@@ -710,7 +756,9 @@ where
             CheckpointOutcome::NoAudio,
         ));
     };
-    if is_silent_pcm(&pcm.samples) {
+    // The floor comes first and does not look at the signal: under 100 ms
+    // nothing is sent, loud or quiet (#322; the domain constant says why).
+    if is_below_recognition_floor(&pcm.samples) || is_silent_pcm(&pcm.samples) {
         return Ok((
             ChunkResult::Gap(AsrChunkOutcome::Silent { audio: decoded }),
             CheckpointOutcome::Silent { audio: decoded },

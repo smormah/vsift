@@ -546,6 +546,13 @@ pub enum EvidenceError {
     CropOutsideParent,
     /// A range starts at or after the end of the source.
     RangeOutsideSource,
+    /// The length of an audio range, clipped to the source, rounds to no
+    /// sample of the clip (31 microseconds or less), so there is nothing to
+    /// cut. It is refused here and never reaches the media tool, which takes
+    /// a length of no sample for no limit at all and returned a whole block
+    /// of audio, about four seconds, under a range of microseconds (#332). A
+    /// range of 32 to 62 microseconds rounds to one sample and is not this.
+    RangeTooShort,
     /// The record could not be built; an internal fault.
     Record(EvidenceRecordError),
     /// An identity could not be derived; an internal fault.
@@ -576,6 +583,9 @@ impl fmt::Display for EvidenceError {
             }
             Self::RangeOutsideSource => {
                 formatter.write_str("the range starts at or after the end of the source")
+            }
+            Self::RangeTooShort => {
+                formatter.write_str("the length of the audio range rounds to no sample")
             }
             Self::Record(error) => error.fmt(formatter),
             Self::Identity(error) => error.fmt(formatter),

@@ -137,7 +137,7 @@ reserve is `RESOURCE_LIMIT` there.
 (exit 3), the code this case has had since 0.1.0, and, since the third release candidate (#325), a remediation that
 says what happened: the copy took longer than the ten-minute limit, the video itself was not judged and may be fine,
 nothing was committed, report it to the user, and copying the video to a local disk and running the same command on
-that copy fixes it (example [`ingest-copy-too-slow.json`](../../schemas/v1/examples/ingest-copy-too-slow.json)). Before,
+that copy usually fixes it; the text adds that the folder that holds VSift's sessions can be the slow side instead (example [`ingest-copy-too-slow.json`](../../schemas/v1/examples/ingest-copy-too-slow.json)). Before,
 the same answer came with no remediation and so said only that the video was invalid. The limit is on the whole copy,
 not on its progress, and it is fixed: no option raises it, the partial copy is removed, and running the command again
 starts from the beginning. A 20 GiB source needs about 34 MiB/s sustained to be copied inside it, which a slow disk,
@@ -523,6 +523,44 @@ when the run ends; while the run works, `session close` and `session clean` retu
 chunks are recorded and skipped; times are anchored at each chunk's first decoded
 sample; text heard twice where chunks overlap is kept once. Each chunk may take at
 most 120 seconds, and a run at most 1,024 chunks.
+
+**A chunk with nothing to recognise is a recorded gap, never a failure, and is not
+given to the recogniser.** Since `0.2.0-rc.3` the recogniser is given nothing shorter than
+100 ms (1,600 samples at 16 kHz). There are four cases, under the two published names:
+
+- **`no_audio`:** no audio was decoded in the chunk's window, because the audio track
+  holds none there, or, **since `0.2.0-rc.3`, because the window itself is shorter than 100 ms
+  and is not decoded at all.** That is what a `--from`/`--to` range under a tenth of a
+  second comes to (the range flags have no minimum of their own, and such a range is
+  answered, not refused). No decoded range is recorded, because nothing was observed.
+- **`silent`:** audio was decoded and was not given to the recogniser: every 20 ms
+  frame of it is below -50 dBFS, or, **since `0.2.0-rc.3`, there is less than 100 ms of it**,
+  whatever its level (a window of 100 ms or more of which the audio track covers only a
+  sliver). Its decoded range is recorded, and a range under 100,000 microseconds tells
+  the short case from the quiet one.
+
+All of them count under the warning `silent_chunks_skipped`, appear in
+`transcript_coverage.no_speech_ranges` of a search, and leave the run a success: a run in
+which every chunk is a gap commits a revision with no new segment and the warning
+`no_speech_recognised`, as any run that hears nothing does. So a range under 100 ms now
+answers with exit 0, `no_audio_chunks: 1` and `transcribed_chunks: 0`.
+
+Two defects end with this rule. 0.1.0 and the candidates before `0.2.0-rc.3` handed any
+length to the recogniser: whisper.cpp v1.9.2 reads past its buffer for fewer than 201
+samples (12.5 ms), and by a reading of its source its command line fails for 40 or fewer
+(2.5 ms), which failed the run as `MISSING_CAPABILITY`
+([L-137](../planning/known-limits.md#l-137)). And they handed any length to FFmpeg, which
+takes one that rounds to no sample for no limit at all: **a range of 31 microseconds or
+less was answered with one whole filter frame of audio instead of its range (up to 65,536
+samples of the source, about four seconds of a 16 kHz track) and recognised like a long
+range**, its segments lying after `--to` (#332). A window under 100 ms is no longer decoded, and no decode of
+any command is asked for a length that rounds to no sample (31 microseconds or less;
+below, under `audio`).
+
+The identifiers are the published ones: a new outcome or warning for the short cases
+would be stored in the revision, where earlier releases read an unknown value as damage
+(`INTEGRITY_FAILURE`), and nothing a caller does differs between a quiet tenth of a second
+and a short one. The cost is that `silent` and `no_audio` each name two conditions.
 
 **Revisions.** Every run commits one new, immutable, complete revision, numbered after
 the newest, which becomes the default for `transcript get`. With a range, and an
@@ -1145,8 +1183,8 @@ a supplied file, taken to cover the whole video but not verified complete; `loca
 what local recognition examined; `mixed`: local recognition spliced into supplied
 text), `scope: "transcript_text"`, the `searched_range` (the request clipped to the
 video, null when wholly outside it), and `transcribed_ranges`, `untranscribed_ranges`
-and `no_speech_ranges` (transcribed parts where recognition found no audible signal or
-no audio), each merged, in start order and at most 100 long (`ranges_truncated` says
+and `no_speech_ranges` (transcribed parts where recognition found no audible signal, no
+audio or, since `0.2.0-rc.3`, less than 100 ms of audio), each merged, in start order and at most 100 long (`ranges_truncated` says
 when one was cut). The envelope `coverage` member, frozen since v1 was published, is
 filled by `search`: `truncated` is true exactly when part of the searched range has no
 transcript, `gaps` lists those parts as `"<from_us>-<to_us>"` (merged, at most 100)
@@ -1460,7 +1498,26 @@ writes the crop as one `frame_evidence` event.
 16-bit little-endian, D5) of the half-open range, at most 30 s. A range that runs past
 the end of the source is clipped to it and says so (`range_clipped: true`); one that
 starts at or after the end, an empty or reversed range and one over 30 s are
-`INVALID_ARGUMENT` with a remediation, as is a source without an audio stream. `data`
+`INVALID_ARGUMENT` with a remediation, as is a source without an audio stream.
+**Since `0.2.0-rc.3` a range of 31 microseconds or less is `INVALID_ARGUMENT` too**
+(#332), as asked or once it is clipped to the end of the source: its length rounds to no
+sample of the clip (one sample at 16 kHz is 62.5 microseconds, half of one 31.25). Its
+remediation says so, and nothing is decoded or stored. Before, FFmpeg took a length of no
+sample for no limit, and the command reported success with a clip that held one whole
+filter frame of audio instead of the range: up to 65,536 samples of the source, about
+four seconds of a 16 kHz track, less at a higher rate or when less audio is left (seen at
+the decode, on a 6 s clip: 65,536 samples from its start, the four seconds that are left
+from 2 s). Where such a range decoded to nothing (one that ends at the end of the source,
+and any on some audio-only sources) the answer was `INVALID_SOURCE`; for this request,
+and only for it, that published code is replaced by `INVALID_ARGUMENT` too.
+**Nothing else changes.** A range of 32 to 62 microseconds is shorter than
+a sample too, but its length rounds to one: it is handed to the decode and answered
+exactly as before, with a clip of one sample where the file decodes one, and every range
+from 63 microseconds on is as it was. On some files a range of up to a few tens of
+milliseconds decodes to nothing and is answered as audio that could not be decoded,
+before and now (issue #334, [L-141](../planning/known-limits.md#l-141)). The refusal at
+31 microseconds follows FFmpeg's rounding as it was measured with FFmpeg 9.0; the same
+entry says what that rests on. `data`
 ([`audio-data.schema.json`](../../schemas/v1/audio-data.schema.json), example
 [`audio.json`](../../schemas/v1/examples/audio.json)) has `operation` `audio`, the
 `request` (`from_us`, `to_us`), `request_key`, `reused`, `profile`, `tool_fingerprint`,

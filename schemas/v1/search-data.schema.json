@@ -116,7 +116,7 @@
         "transcribed_ranges": { "$ref": "#/$defs/ranges" },
         "untranscribed_ranges": { "$ref": "#/$defs/ranges" },
         "no_speech_ranges": {
-          "description": "Transcribed ranges where local recognition found no audible signal or no audio; never overlapping a segment.",
+          "description": "Transcribed ranges where local recognition found no audible signal, no audio or, since 0.2.0-rc.3, less than 100 ms of audio; never overlapping a segment.",
           "$ref": "#/$defs/ranges"
         },
         "ranges_truncated": {

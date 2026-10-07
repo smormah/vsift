@@ -118,8 +118,9 @@ Go through these, in order:
    Opening a video copies it into VSift's own folder, and the copy is stopped after ten minutes. This one has a
    `Fix:` line, which begins "Copying this video into VSift's session took longer than the ten-minute limit". It
    happens with a big video on a network drive, a memory stick, an SD card or a folder that downloads from the cloud
-   when first read. Copy the video to a disk in your computer and open that copy. Trying again from the same place
-   starts the copy from the beginning.
+   when first read. Copy the video to a disk in your computer and open that copy: that usually fixes it. If VSift's
+   own folder is on a network drive or a slow disk, that can be the slow side instead. Trying again from the same
+   place starts the copy from the beginning.
 5. **If it is a transcript** (the message comes from `ingest --transcript`): the `Fix:` line names the reason and the
    line. The usual ones are text with no times (`untimed_text`), a timestamp in the wrong form
    (`invalid_timestamp`), cues out of order and a file that is not UTF-8. Export it again as SRT or WebVTT.

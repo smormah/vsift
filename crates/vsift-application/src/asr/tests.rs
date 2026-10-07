@@ -65,6 +65,8 @@ enum Audio {
     Speech,
     Silence,
     Nothing,
+    /// This many loud samples from the window's start, whatever its length.
+    Loud(usize),
     Fails(SpeechAudioError),
 }
 
@@ -110,6 +112,10 @@ impl FakeAudio {
                 samples: vec![0; samples],
             }),
             Audio::Nothing => Err(SpeechAudioError::NoAudio),
+            Audio::Loud(count) => Ok(SpeechPcm {
+                actual_start: chunk.window().start(),
+                samples: vec![3_000; count],
+            }),
             Audio::Fails(error) => Err(error),
         }
     }
@@ -120,6 +126,8 @@ struct FakeRecognizer {
     identities: Mutex<Vec<RecognizerIdentity>>,
     output: fn(&PlannedChunk) -> Result<ProviderChunkOutput, SpeechRecognitionError>,
     calls: AtomicUsize,
+    /// Every chunk it was given, in order: its index and its sample count.
+    heard: Mutex<Vec<(u32, usize)>>,
     cancel_after_first: Option<&'static AtomicBool>,
 }
 
@@ -129,8 +137,18 @@ impl FakeRecognizer {
             identities: Mutex::new(vec![identity]),
             output: one_segment,
             calls: AtomicUsize::new(0),
+            heard: Mutex::new(Vec::new()),
             cancel_after_first: None,
         }
+    }
+
+    /// The chunks the recognizer was given.
+    fn heard(&self) -> Built<Vec<(u32, usize)>> {
+        Ok(self
+            .heard
+            .lock()
+            .map_err(|_| "the fake recognizer's record is poisoned")?
+            .clone())
     }
 }
 
@@ -169,9 +187,12 @@ impl SpeechRecognizer for FakeRecognizer {
     fn recognize(
         &self,
         chunk: &PlannedChunk,
-        _pcm: &SpeechPcm,
+        pcm: &SpeechPcm,
     ) -> impl Future<Output = Result<ProviderChunkOutput, SpeechRecognitionError>> + Send {
         self.calls.fetch_add(1, Ordering::SeqCst);
+        if let Ok(mut heard) = self.heard.lock() {
+            heard.push((chunk.index(), pcm.samples.len()));
+        }
         if let Some(flag) = self.cancel_after_first {
             flag.store(true, Ordering::SeqCst);
         }
@@ -457,6 +478,199 @@ async fn a_run_without_speech_is_recorded_without_segments() -> TestResult {
             (TranscriptWarningKind::NoSpeechRecognised, 1, 1),
         ]
     );
+    Ok(())
+}
+
+/// #322, L-137: decoded audio under 100 ms (1,600 samples) is recorded as a
+/// gap, with its decoded range, and is never given to the recognizer, however
+/// loud it is; audio of exactly 100 ms is given to it. Before the floor the
+/// recognizer was called for the 1,599 loud samples too (whisper.cpp v1.9.2
+/// reads past its buffer for fewer than 201).
+#[tokio::test]
+async fn audio_under_the_floor_is_a_recorded_gap_and_never_reaches_the_recognizer() -> TestResult {
+    let audio = FakeAudio::new(vec![Audio::Speech, Audio::Loud(1_599), Audio::Loud(1_600)]);
+    let mut recognizer = FakeRecognizer::new(identity(DIGEST)?);
+    // It hears nothing: a tenth of a second has no room for the usual segment.
+    recognizer.output = |_| {
+        Ok(ProviderChunkOutput {
+            language: LanguageTag::parse("en").ok(),
+            segments: Vec::new(),
+        })
+    };
+    let transcription = run(&audio, &recognizer, &Flag(&NEVER)).await??;
+
+    // Chunk 1 was decoded and was not sent; chunks 0 and 2 were sent whole.
+    assert_eq!(audio.calls.load(Ordering::SeqCst), 3);
+    assert_eq!(recognizer.heard()?, [(0, 480_000), (2, 1_600)]);
+    let outcomes: Vec<AsrChunkOutcome> = transcription
+        .run
+        .chunks()
+        .iter()
+        .map(vsift_domain::AsrChunkRecord::outcome)
+        .collect();
+    assert_eq!(
+        outcomes,
+        [
+            AsrChunkOutcome::Transcribed {
+                audio: range(0, 30 * SECOND)?,
+            },
+            // 1,599 samples from 25 s: 99.9375 ms, kept to the microsecond.
+            AsrChunkOutcome::Silent {
+                audio: range(25 * SECOND, 25 * SECOND + 99_937)?,
+            },
+            AsrChunkOutcome::Transcribed {
+                audio: range(50 * SECOND, 50 * SECOND + 100_000)?,
+            },
+        ]
+    );
+    let warnings: Vec<_> = transcription
+        .warnings
+        .as_slice()
+        .iter()
+        .map(|warning| (warning.kind(), warning.count(), warning.first_cue()))
+        .collect();
+    assert_eq!(
+        warnings,
+        [(TranscriptWarningKind::SilentChunksSkipped, 1, 2)]
+    );
+    Ok(())
+}
+
+/// Every size the reviewed recognizer mishandles stays away from it: one
+/// sample, the 40 its command line fails on, the 200 it reads past, and the
+/// sample before the floor.
+#[tokio::test]
+async fn no_chunk_of_fewer_than_1600_samples_is_ever_recognised() -> TestResult {
+    for samples in [1_usize, 40, 41, 200, 201, 1_599] {
+        let audio = FakeAudio::new(vec![Audio::Loud(samples); 3]);
+        let recognizer = FakeRecognizer::new(identity(DIGEST)?);
+        let transcription = run(&audio, &recognizer, &Flag(&NEVER)).await??;
+        assert_eq!(recognizer.calls.load(Ordering::SeqCst), 0, "{samples}");
+        assert!(
+            transcription
+                .run
+                .chunks()
+                .iter()
+                .all(|record| matches!(record.outcome(), AsrChunkOutcome::Silent { .. })),
+            "{samples}"
+        );
+    }
+    Ok(())
+}
+
+/// Transcribes `requested` of the 70 s source with a recognizer that hears
+/// nothing, and returns the run with how often audio was decoded and how often
+/// the recognizer was called.
+async fn run_range(requested: TimeRange) -> Built<(AsrTranscription, usize, usize)> {
+    let source = source()?;
+    let expected = identity(DIGEST)?;
+    let audio = FakeAudio::new(Vec::new());
+    let mut recognizer = FakeRecognizer::new(identity(DIGEST)?);
+    recognizer.output = |_| {
+        Ok(ProviderChunkOutput {
+            language: LanguageTag::parse("en").ok(),
+            segments: Vec::new(),
+        })
+    };
+    let transcription = transcribe_range(
+        TranscribeRangeRequest {
+            source_segment: &source,
+            range: requested,
+            plan: ChunkPlan::R0,
+            audio_stream: 1,
+            expected: &expected,
+        },
+        &audio,
+        &recognizer,
+        &Flag(&NEVER),
+    )
+    .await?;
+    Ok((
+        transcription,
+        audio.calls.load(Ordering::SeqCst),
+        recognizer.calls.load(Ordering::SeqCst),
+    ))
+}
+
+/// #332: a requested range shorter than 100 ms is one chunk whose window is
+/// under the floor. It is recorded as a gap with no audio and is **neither
+/// decoded nor recognised**, and the run is not a failure: it commits a
+/// revision with no segment and the two warnings of a run that heard nothing
+/// (ADR 0017 section 7). The lengths are the ones the media tool mishandled (a
+/// window of 31 microseconds or less was answered with a block of about four
+/// seconds and recognised as seconds of speech), its first good ones, and the floor's two
+/// sides. Before the rule every one of them was handed to the decoder.
+#[tokio::test]
+async fn a_range_under_the_floor_is_recorded_without_decoding_and_is_not_a_failure() -> TestResult {
+    let start = 10 * SECOND;
+    for micros in [1_u64, 31, 32, 62, 63, 12_500, 50_000, 99_999] {
+        let requested = range(start, start + micros)?;
+        let (transcription, decodes, recognitions) = run_range(requested).await?;
+        assert_eq!((decodes, recognitions), (0, 0), "{micros}");
+        assert!(transcription.segments.is_empty(), "{micros}");
+        assert_eq!(transcription.language, None, "{micros}");
+
+        let source = source()?;
+        let revision = build_asr_revision(AsrRevisionRequest {
+            session_id: &SessionId::parse("ses_0123456789abcdef")?,
+            source_id: &SourceId::from_sha256(DIGEST)?,
+            source_segment: &source,
+            number: NonZeroU32::MIN,
+            transcription,
+            splice: None,
+        })?;
+        assert!(revision.segments().is_empty(), "{micros}");
+        let TranscriptProvenance::LocalAsr(run) = revision.provenance() else {
+            return Err("the revision is not a local-ASR one".into());
+        };
+        assert_eq!(run.covered_range(), Some(requested), "{micros}");
+        assert_eq!(
+            run.chunks()
+                .iter()
+                .map(vsift_domain::AsrChunkRecord::outcome)
+                .collect::<Vec<_>>(),
+            [AsrChunkOutcome::NoAudio],
+            "{micros}"
+        );
+        let warnings: Vec<_> = revision
+            .warnings()
+            .as_slice()
+            .iter()
+            .map(|warning| (warning.kind(), warning.count(), warning.first_cue()))
+            .collect();
+        assert_eq!(
+            warnings,
+            [
+                (TranscriptWarningKind::SilentChunksSkipped, 1, 1),
+                (TranscriptWarningKind::NoSpeechRecognised, 1, 1),
+            ],
+            "{micros}"
+        );
+    }
+    Ok(())
+}
+
+/// The other side of the floor: a range of exactly 100 ms, and anything
+/// longer, is decoded and given to the recognizer as before.
+#[tokio::test]
+async fn a_range_of_a_tenth_of_a_second_or_more_is_decoded_and_recognised() -> TestResult {
+    let start = 10 * SECOND;
+    for micros in [100_000_u64, 100_001, 150_000, SECOND] {
+        let requested = range(start, start + micros)?;
+        let (transcription, decodes, recognitions) = run_range(requested).await?;
+        assert_eq!((decodes, recognitions), (1, 1), "{micros}");
+        assert!(
+            matches!(
+                transcription
+                    .run
+                    .chunks()
+                    .first()
+                    .map(vsift_domain::AsrChunkRecord::outcome),
+                Some(AsrChunkOutcome::Transcribed { .. })
+            ),
+            "{micros}"
+        );
+    }
     Ok(())
 }
 

@@ -681,6 +681,114 @@ async fn wav_clips_report_the_first_decoded_sample() -> TestResult {
     Ok(())
 }
 
+/// The count of 16-bit samples a WAV clip holds after its header; a file
+/// shorter than a header is an error of the test, not a panic.
+fn wav_samples(wav: &[u8]) -> Built<usize> {
+    wav.len()
+        .checked_sub(WAV_HEADER_BYTES)
+        .map(|bytes| bytes / 2)
+        .ok_or_else(|| "a WAV clip shorter than its header".into())
+}
+
+/// #332, at the decode boundary and through the real provider. A range whose
+/// length rounds to no 16 kHz sample (31 microseconds or less) is refused
+/// before `FFmpeg` runs, for a speech chunk and for an evidence clip alike:
+/// `FFmpeg` took such a length for no limit and returned one whole filter
+/// frame, up to 65,536 samples of the source (here the four seconds to the end
+/// of the file, for a request of microseconds). A range of
+/// 32 or 62 microseconds rounds to one sample and still comes back as exactly
+/// one, as it did before the refusal existed. From there up the decode is as
+/// long as its range, to within a sample, on both sides of 100 ms.
+#[tokio::test]
+#[ignore = "requires ffmpeg and ffprobe on PATH"]
+async fn a_length_that_rounds_to_no_sample_is_refused_and_any_other_is_cut_to_its_length()
+-> TestResult {
+    let staged = Staged::new(&fixture("F01-speech.mp4")).await?;
+    let media = media(&staged.conformance, &staged.store);
+    let cancel = ProcessCancellation::new;
+    let description = media.probe(&staged.snapshot, cancel()).await?;
+    let audio = description
+        .streams
+        .iter()
+        .find(|stream| stream.kind == vsift_domain::MediaStreamKind::Audio)
+        .ok_or("no audio stream")?
+        .index;
+    let selection = MediaSelection {
+        video: None,
+        audio: Some(audio),
+    };
+    let bound = BoundSource::bind(staged.snapshot)?;
+    let start = 2_000_000;
+
+    for micros in [1_u64, 31] {
+        let request = range(start, start + micros)?;
+        let speech = media
+            .speech_pcm(&bound, &description, selection, request, cancel())
+            .await;
+        assert!(
+            matches!(speech, Err(MediaError::InvalidAudioRange)),
+            "speech, {micros} microseconds: {:?}",
+            speech.map(|decoded| decoded.pcm_s16le.len() / 2)
+        );
+        let clip = media
+            .wav_clip(&bound, &description, selection, request, cancel())
+            .await;
+        assert!(
+            matches!(clip, Err(MediaError::InvalidAudioRange)),
+            "clip, {micros} microseconds: {:?}",
+            clip.map(|decoded| decoded.wav.len())
+        );
+    }
+
+    // Unchanged from before the refusal: one sample, for the chunk decode and
+    // for the clip alike, not an error and not a filter frame of seconds.
+    for micros in [32_u64, 62] {
+        let request = range(start, start + micros)?;
+        let speech = media
+            .speech_pcm(&bound, &description, selection, request, cancel())
+            .await?;
+        assert_eq!(
+            speech.pcm_s16le.len() / 2,
+            1,
+            "speech, {micros} microseconds"
+        );
+        let clip = media
+            .wav_clip(&bound, &description, selection, request, cancel())
+            .await?;
+        assert_eq!(wav_samples(&clip.wav)?, 1, "clip, {micros} microseconds");
+    }
+
+    for micros in [63_u64, 125, 1_000, 12_500, 50_000, 99_999, 100_000, 500_000] {
+        let request = range(start, start + micros)?;
+        let speech = match media
+            .speech_pcm(&bound, &description, selection, request, cancel())
+            .await
+        {
+            Ok(speech) => speech,
+            // A range of a sample or two may hold no decoded sample: the
+            // typed answer of a window without audio, never a longer decode.
+            Err(MediaError::NoDecodedAudio) if micros < 1_000 => continue,
+            Err(error) => return Err(format!("speech, {micros} microseconds: {error}").into()),
+        };
+        let samples = u64::try_from(speech.pcm_s16le.len() / 2)?;
+        // No longer than the range and one sample: never a whole filter frame.
+        assert!(
+            samples >= 1 && samples * 1_000_000 <= (micros + 63) * 16_000,
+            "speech, {micros} microseconds decoded {samples} samples"
+        );
+        let clip = media
+            .wav_clip(&bound, &description, selection, request, cancel())
+            .await?;
+        assert_eq!(
+            u64::try_from(wav_samples(&clip.wav)?)?,
+            samples,
+            "clip, {micros} microseconds"
+        );
+    }
+    bound.release_verified()?;
+    Ok(())
+}
+
 /// SEC-17 regression through the real provider: a clip whose `title` is
 /// written to look like `showinfo` and `ashowinfo` lines still reports its
 /// true frame and audio times.
