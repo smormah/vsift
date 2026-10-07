@@ -98,7 +98,14 @@ results and their limits are in [the skill guide](../agents/skill.md). Codex on 
 ([#204](https://github.com/smormah/vsift/issues/204), [L-076](known-limits.md#l-076)); Claude Haiku 4.5 and
 GPT-6-Luna are below the line ([L-082](known-limits.md#l-082), [L-084](known-limits.md#l-084)); the skill has
 not been trialled on macOS; any other client or model is untested. The statements CL-204 and CL-205 name the
-two clients and need RQ-15, the clean-install round, which has not run on a candidate.
+two clients and need RQ-15, the clean-install round. **That round ran on both release candidates (batch 2, 34
+runs each; on `0.2.0-rc.2` on 2026-10-07), and RQ-15 is `waived`, not `passed`** (the maintainer's decision of
+2026-10-07; [P14 plan](p14-qualification.md) section 27). GPT-6-Astra met the review tier's gates, and Claude
+Sonnet 5.5 and GPT-6-Sol the compact tier's. **Claude Opus 5.5 did not meet two review-tier gates** (4 of 6
+mechanically; 1 of 3 on the blurred banner) **and is excluded from what R0 claims**
+([L-139](known-limits.md#l-139)). So for Claude Code a later document may name Claude Sonnet 5.5 only, CL-204
+may not be used as worded, and no statement that needs RQ-15 (CL-201, CL-202, CL-204, CL-205) can be used
+until the maintainer settles how a waived item backs it (plan section 27.4).
 
 **Runtimes.** Installing through a package manager needs Node.js 22 or later, or Bun 1.2 or later, to run the
 launcher; the native archive needs neither.

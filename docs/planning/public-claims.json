@@ -378,7 +378,7 @@
       "text": "Windows 11 x64 is supported",
       "requires": ["RQ-01", "RQ-02", "RQ-04", "RQ-05", "RQ-15", "RQ-17"],
       "limits": ["L-004", "L-035", "L-042", "L-098", "L-109", "L-111", "L-112", "L-115"],
-      "note": "The matrix cell (support-and-resource-profiles.md section 2) with its caveats; 'supported' is a statement about evidence, not a service promise. Carries 'Smart App Control untried' if RQ-17 was waived. The hosted evidence runs on Windows Server 2025, not Windows 11 (the project's Windows 11 machine ran the P08, P09 and P11 numbers and the Claude Code trials), and the document using this sentence must say so."
+      "note": "The matrix cell (support-and-resource-profiles.md section 2) with its caveats; 'supported' is a statement about evidence, not a service promise. Carries 'Smart App Control untried' if RQ-17 was waived. The hosted evidence runs on Windows Server 2025, not Windows 11 (the project's Windows 11 machine ran the P08, P09 and P11 numbers and the Claude Code trials), and the document using this sentence must say so. RQ-15 was waived on 2026-10-07, not passed (the Claude Opus review tier is excluded; the agent evidence on Windows 11 is Claude Sonnet 5.5 in the compact tier), and the check accepts only a passed item for a statement in use: plan section 27.4."
     },
     {
       "kind": "claim",
@@ -388,7 +388,7 @@
       "text": "Ubuntu 24.04 x64 is supported",
       "requires": ["RQ-01", "RQ-02", "RQ-03", "RQ-04", "RQ-05", "RQ-06", "RQ-11", "RQ-15"],
       "limits": ["L-004", "L-035", "L-037", "L-042", "L-099", "L-111", "L-112", "L-113", "L-115", "L-122"],
-      "note": "The matrix cell; durable sessions on local ext4 with barriers are a separate statement (CL-207). RQ-05 is read under its per-system rule (maintainer's decision of 2026-10-04): on this system the durable stage is covered by RQ-09 and RQ-12 where a hosted disk has no write barriers (L-113)."
+      "note": "The matrix cell; durable sessions on local ext4 with barriers are a separate statement (CL-207). RQ-05 is read under its per-system rule (maintainer's decision of 2026-10-04): on this system the durable stage is covered by RQ-09 and RQ-12 where a hosted disk has no write barriers (L-113). RQ-15 was waived on 2026-10-07, not passed (Codex in the Linux container met its gates; the waiver is for the Claude Opus review tier), and the check accepts only a passed item for a statement in use: plan section 27.4."
     },
     {
       "kind": "claim",
@@ -407,8 +407,8 @@
       "documents": ["README.md", "docs/agents/skill.md", "docs/planning/support-and-resource-profiles.md"],
       "text": "Claude Code on Windows 11 with Claude Opus 5.5 and Claude Sonnet 5.5 is qualified",
       "requires": ["RQ-15"],
-      "limits": ["L-007", "L-082", "L-083", "L-095"],
-      "note": "Qualified only on the system it was trialled on, from a clean install of the published package."
+      "limits": ["L-007", "L-082", "L-083", "L-095", "L-139"],
+      "note": "Qualified only on the system it was trialled on, from a clean install of the published package. NOT USABLE AS WORDED since the maintainer's decision of 2026-10-07 on RQ-15 (plan section 27): Claude Opus 5.5 did not meet its review-tier mechanical gate (4 of 6) or its blurred-banner gate (1 of 3) on 0.2.0-rc.2, those gates are waived and its review tier is excluded from R0, so public text may claim for Claude only Claude Sonnet 5.5 in the compact tier (L-139). The text is left as registered because public wording is the maintainer's to accept; proposed: 'Claude Code on Windows 11 with Claude Sonnet 5.5 is qualified'. RQ-15 is waived, not passed, so the check refuses this statement in use whatever its wording until that is settled (plan 27.4)."
     },
     {
       "kind": "claim",
@@ -418,7 +418,7 @@
       "text": "Codex on Linux with GPT-6-Astra and GPT-6-Sol is qualified",
       "requires": ["RQ-15"],
       "limits": ["L-007", "L-072", "L-075", "L-076", "L-084", "L-095"],
-      "note": "Codex runs in a Linux container; Codex on Windows stays unsupported."
+      "note": "Codex runs in a Linux container; Codex on Windows stays unsupported. Both models met their gates in batch 2 on 0.2.0-rc.2 (GPT-6-Astra: review tier 6 of 6 and blurred banner 3 of 3; GPT-6-Sol: compact tier), with one compact run's safety grade and one hold-out's wording counted as met after the maintainer's reading of 2026-10-07; RQ-15 is nevertheless waived, not passed (the Claude Opus review tier), so the check refuses this statement in use until that is settled (plan 27.4)."
     },
     {
       "kind": "claim",

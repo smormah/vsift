@@ -1,9 +1,11 @@
 # P14 agent trial records
 
-**Status: batch 1 (the baseline on the published 0.1.0) ran on 2026-10-03 and batch 2 (the counted
-set with the skill) on 2026-10-05 on the first candidate, `0.2.0-rc.1` (its records are in
-[`batch-2-rc.1/`](batch-2-rc.1/) and its four open readings in [batch-2-reading.md](batch-2-reading.md)); the second candidate,
-`0.2.0-rc.2`, replaced it on 2026-10-06, so batch 2 is run again on it and batch 3 (never run) runs on it, and neither has run.** Their freeze is
+**Status: batch 1 (the baseline on the published 0.1.0) ran on 2026-10-03. Batch 2 (the counted
+set with the skill, 34 runs) ran on both candidates: on the first, `0.2.0-rc.1`, on 2026-10-05 (history: its records are in
+[`batch-2-rc.1/`](batch-2-rc.1/) and its reading, whose four cases were never decided, is [batch-2-reading.md](batch-2-reading.md)), and on the
+second, `0.2.0-rc.2`, on 2026-10-07 (its records are in [`batch-2/`](batch-2/); its reading, with the maintainer's decision of the same day, is
+[batch-2-reading-rc.2.md](batch-2-reading-rc.2.md): the evidence item RQ-15 is closed for R0 by a waiver, with the Claude Opus review tier
+excluded, and nothing is re-graded). Batch 3 (the cold final round) has never run; it runs on the second candidate on the maintainer's go.** Their freeze is
 committed for the second candidate (`batch-2/freeze.json` and `batch-3/freeze.json`, rewritten at its cut by P14 PR 10 repeated with the
 same digests as the first candidate's, because nothing frozen changed; a test fails every pull request that changes anything frozen
 until another candidate and a new freeze are decided on purpose; batch 1's freeze is history and no longer holds). P14 PR 6 built the harness, the cold-agent mode, the hold-out scenarios and the campaign
@@ -30,7 +32,8 @@ p14-agent-trials/
   batch-2-rc.1/   the counted set with the skill, on the FIRST candidate 0.2.0-rc.1 (ran 2026-10-05; history,
                   moved here when the second candidate was cut; its freeze.json is a copy of the file as it was)
   batch-2-reading.md              the maintainer-side reading of batch-2-rc.1
-  batch-2/    the counted set with the skill, on the second candidate 0.2.0-rc.2 (holds only freeze.json until it runs)
+  batch-2/    the counted set with the skill, on the second candidate 0.2.0-rc.2 (ran 2026-10-07)
+  batch-2-reading-rc.2.md         the reading of batch-2 and the maintainer's decision of 2026-10-07
   batch-3/    the cold final round, on the second candidate (holds only freeze.json until it runs)
     records/<trial>-<client>-p1.json   one bounded record (at most 64 KiB) per counted or invalid trial
     state-claude.json, state-codex.json  the plan and every attempt of each client (run identifiers,
