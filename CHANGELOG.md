@@ -152,8 +152,10 @@ the supervisor ([#321](https://github.com/smormah/vsift/issues/321), [L-138](doc
 is left: a link's `STORAGE_IO` (#265, L-127) and the campaign tool's mis-built no-room case (L-134). RQ-10 is `waived` and not `passed` although its run is green,
 because its rule names three failure codes and those two answers carry others. The by-hand scan reading of the day is
 [`p14-scan-reading-2026-10-07.md`](docs/planning/p14-scan-reading-2026-10-07.md): nothing changed in its sources since 2026-10-05, and one new observation
-(whisper.cpp releases newer than the pinned 1.9.2 carry memory-safety hardening; no CVE, reachability not assessed) stays open while its reachability is
-assessed ([#322](https://github.com/smormah/vsift/issues/322), [L-137](docs/planning/known-limits.md#l-137)). Three evidence items still block
+(whisper.cpp releases newer than the pinned 1.9.2 carry memory-safety hardening; no CVE) was assessed from the source the same day: one fix is reachable
+from VSift, a heap read inside the `whisper-cli` child for a non-silent chunk of 1 to 200 samples (12.5 ms or less), because VSift sets no minimum chunk or
+range length. The maintainer accepted it for R0; after `0.2.0` VSift gets a floor (audio under 100 ms is recorded as a gap, not sent to the recogniser) and
+then whisper.cpp is re-pinned with the FFmpeg refresh ([#322](https://github.com/smormah/vsift/issues/322), [L-137](docs/planning/known-limits.md#l-137)). Three evidence items still block
 `release-evidence --complete-for 0.2.0-rc.2`: the agent trials and the try-outs (RQ-15 to RQ-17).
 
 ### Changed

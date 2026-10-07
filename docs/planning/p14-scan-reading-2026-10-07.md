@@ -12,9 +12,11 @@ catalogue was not touched, nobody at the FFmpeg project was contacted, and nothi
 [L-122](known-limits.md#l-122)). **Nothing else was found in the sources of the earlier readings, and nothing changed in them
 since 2026-10-05:** no FFmpeg or whisper.cpp record was published or modified in the National Vulnerability Database after the
 last reading, the catalogue's tools are the same builds, and every other source is clean. **One new observation, outside those
-sources, is not a finding of a rank the rule names and is recorded for the maintainer's decision:** the whisper.cpp project has
+sources, is not a finding of a rank the rule names:** the whisper.cpp project has
 published three releases newer than the pinned v1.9.2 whose change lists include memory-safety hardening, with no CVE, no
-advisory and no severity ([#322](https://github.com/smormah/vsift/issues/322), [L-137](known-limits.md#l-137)).
+advisory and no severity ([#322](https://github.com/smormah/vsift/issues/322), [L-137](known-limits.md#l-137)). A read-only
+reachability assessment the same day found one of those fixes reachable from VSift (a heap read in the child for a non-silent chunk
+of 1 to 200 samples), and **the maintainer accepted it for R0 on 2026-10-07, to be fixed after the stable release**.
 
 ## How it was read
 
@@ -58,15 +60,38 @@ project's release history. This reading did (GitHub's release list and compare e
   overflow in the parallel chunk offsets) in v1.9.4 and v1.9.5.
 - **No CVE, advisory or severity exists** for any of them, so the rule of plan section 6 (no open high or critical finding) is not
   engaged, and nothing here is a finding of that rank.
-- **Reachability was not assessed.** VSift writes each recognition chunk as a WAV and runs `whisper-cli` on it, with bounds on output,
-  time and memory and, in a worker, strict isolation; the adapter sets no minimum length of its own, and whether the chunk planner can
-  produce a chunk under 201 samples is not shown either way. The model is the pinned, hash-checked one, so the malformed-model fixes
-  matter only for a user's own model. The effect of the read would be heap bytes read past a buffer in a child process.
+- **Reachability was not assessed by this reading**, which stopped at the release list. A separate read-only assessment followed the
+  same day (below).
 - **What it means for the stable release:** the catalogue is frozen with the candidate (`crates/` may not change before the stable
   commit), so a re-pin before `0.2.0` would be a third candidate. The natural place is the FFmpeg re-pin planned for after the stable
-  ([L-132](known-limits.md#l-132)). The choice put to the maintainer was to accept it with [L-137](known-limits.md#l-137) as the register
-  entry or to assess reachability first; the maintainer's answer of the same day is that L-137 stays an open observation while a separate
-  read-only reachability assessment is done.
+  ([L-132](known-limits.md#l-132)).
+
+### The reachability assessment and the maintainer's decision (2026-10-07)
+
+A reading of the source at whisper.cpp v1.9.2 and at the VSift tag; **nothing was run**. The full position is
+[L-137](known-limits.md#l-137); in short:
+
+- **One fix is reachable:** `8631825d` (v1.9.3), a heap read past the audio buffer in `log_mel_spectrogram` for 1 to 200 samples of audio
+  (12.5 ms at 16 kHz). VSift has no minimum chunk or range length (the planner `plan_chunks`, the `--from`/`--to` range, an FFmpeg decode
+  with no padding, and a gate before the recogniser that refuses only "no audio" and "every frame below -50 dBFS"), so a **non-silent**
+  chunk of 1 to 200 samples reaches `whisper-cli` with a requested range of 12.5 ms or less or, rarely and by inference (FFmpeg's
+  behaviour was not run), when the audio track covers 12.5 ms or less of a chunk's window.
+- **Effect, read from the source:** 40 samples or fewer: language detection fails, the CLI exits 10, VSift reports a provider failure
+  and the run fails (upstream v1.9.5 still behaves so: a re-pin alone does not fix it). 41 to 200 samples: exit 0 with no segments, at
+  worst a shifted detected-language tag. The read is of up to 800 bytes past the buffer inside the child: a read, nothing written, the
+  input does not control what is read, no raw bytes leave the child; a crash becomes the typed `AbnormalTermination`. How often it
+  crashes was not determined.
+- **Not reachable:** the model-file fixes (only the two models pinned by size and SHA-256 run; residual: a local swap between hashing
+  and loading), the 0-sample case (an empty decode is refused and recorded as a gap), VAD (never passed), `whisper_full_parallel` (`-p 1`,
+  chunks of at most 30 s), the buffer loader, and the gguf and ggml-cpu changes.
+- **Scope and containment:** the pin governs only the Ubuntu managed install and the reviewed Windows hash; on Windows and macOS a
+  user's own whisper.cpp of any version runs. `whisper-cli` is a separate process with no shell, a cleared environment, a 120 s deadline,
+  bounded output and a strict JSON parse; **on a desktop there is no sandbox and memory is bounded only by the operating system**
+  ([L-004](known-limits.md#l-004)).
+- **Decision (maintainer, 2026-10-07):** accepted for R0 with L-137 as the register entry; fixed after `0.2.0`, in this order: a floor in
+  VSift (decoded audio under 1,600 samples, 100 ms, is recorded as a gap and not sent to the recogniser, which covers every whisper.cpp
+  build and the failure at 40 samples or fewer), then a re-pin of whisper.cpp together with the FFmpeg refresh (L-132). Both are changes
+  under `crates/` or to the catalogue and would force a third candidate now, which the exposure does not justify. #322 stays open.
 
 ## What it does not show, and what is weaker than it sounds
 
@@ -89,7 +114,7 @@ project's release history. This reading did (GitHub's release list and compare e
 | Finding | Issue | Severity (proposed) | Disposition |
 | --- | --- | --- | --- |
 | The one FFmpeg record tied to its fix by elimination (CVE-2026-38350) | [#272](https://github.com/smormah/vsift/issues/272) | high (the record's) until accepted | open; accepted by the maintainer on 2026-10-05 with L-122 as the register entry |
-| whisper.cpp releases 1.9.3 to 1.9.5 carry memory-safety hardening the pinned 1.9.2 lacks (no record, reachability not assessed) | [#322](https://github.com/smormah/vsift/issues/322) | none assigned (unassessed) | open. Maintainer, 2026-10-07: it stays an open observation, neither accepted nor rejected, while a separate read-only reachability assessment is done |
+| whisper.cpp releases 1.9.3 to 1.9.5 carry memory-safety hardening the pinned 1.9.2 lacks; one fix is reachable from VSift (a heap read in the child for 1 to 200 samples of non-silent audio) | [#322](https://github.com/smormah/vsift/issues/322) | none assigned (no record; assessed from source the same day) | the issue stays open; accepted for R0 by the maintainer on 2026-10-07 with L-137 as the register entry, fixed after the stable release (a floor in VSift, then a re-pin) |
 
 ## Repeating it
 

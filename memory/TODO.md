@@ -26,8 +26,10 @@ blocks the stable only until observed. #246 waits.
 test race with L-138; the run stays failed evidence; the test is fixed after the stable (a change under `crates/` is a third candidate); the waiver does
 not cover #312, #128, #206 or any other failure. (2) **RQ-10's 2026-10-05 waiver is replaced** by one for rc.2 covering only the link's `STORAGE_IO`
 (#265, L-127) and the campaign tool's mis-built no-room case (L-134); it is `waived`, not `passed`, because its rule names three codes (to overrule:
-amend the rule in plan section 2). (3) **#322 / L-137** (whisper.cpp 1.9.3 to 1.9.5 harden memory safety; the pin is 1.9.2; no CVE) **stays an open
-observation** while a separate read-only reachability assessment is done. **Still open:** optionally deprecate rc.1 (`release.md` 6.11 step 7).
+amend the rule in plan section 2). (3) **#322 / L-137 accepted for R0** after a read-only reachability assessment (nothing run): one upstream whisper.cpp
+fix is reachable, a heap read in the child for a non-silent chunk of 1 to 200 samples, because VSift has no minimum chunk or range length. **After `0.2.0`,
+in order:** a VSift floor (audio under 1,600 samples is a gap, not sent to the recogniser), then the re-pin with FFmpeg's (L-132). **Still open:**
+optionally deprecate rc.1 (`release.md` 6.11 step 7).
 
 **PR 7, every finding by outcome** (one pull request and one regression test each). **Maintainer rule
 2026-10-04: a published failure code stays (v1 is additive); the remediation carries the fix (L-127).**
@@ -39,7 +41,7 @@ observation** while a separate read-only reachability assessment is done. **Stil
 - **Narrowed, not proven gone:** #206 the DACL read-back (#301; L-005); #253 the kill test (#300; L-129); #312 the race tests wait 60 s
   (L-135; did not recur on rc.2); #321 a supervisor test reads a half-written marker (L-138). **Tests or documents only:** #271 (#294, L-060); #286 (#299; an R1 stub is the maintainer's call, L-063); #257 (#281, L-109).
 - **Not fixed:** #272 the FFmpeg snapshot: 46 of 47 records are fixed in the shipped build (#296, L-122); a pin must be a month-end
-  build, the next is 2026-10-31 (L-132), **after `0.2.0`**; the whisper.cpp pin lags too (L-137).
+  build, the next is 2026-10-31 (L-132), **after `0.2.0`**; the whisper.cpp pin lags too (L-137, accepted: one reachable heap read for 1 to 200 samples).
 
 **Earlier P14 PRs** (plan 15-26; `docs/development.md`; `docs/agents/trials.md`). **PR 4** (`tools/p14-campaigns/`, hosted runners only):
 31 fuzz targets, load, malicious media, runbook walk, scan reading. **PR 3:** `P14 journeys` runs the real-tool checkpoints against
@@ -50,8 +52,8 @@ realistic: L-125), hold-outs, `freeze` and usage capture; batch 1 (0.1.0, 20 run
 ## The remaining P14 pull requests (0-9 merged; 10 done twice)
 
 **11 repeated:** hosted part done on rc.2 (above). Left: the agent batches 2 and 3 on rc.2 (the freeze is committed; each on the maintainer's go),
-the try-outs (`rq-17-tryout-sheet.md`; the execution-policy note for `install.md` only after they observe it), the register pass, and
-L-137's reachability reading. **12** stable `0.2.0`; **13** ledger follow-up, P14 `complete`, handoff. **From the tag to the stable merge only the work
+the try-outs (`rq-17-tryout-sheet.md`; the execution-policy note for `install.md` only after they observe it), and the register pass.
+**12** stable `0.2.0`; **13** ledger follow-up, P14 `complete`, handoff. **From the tag to the stable merge only the work
 record and `install.md` change** (`release.md` 6.8: no Dependabot, workflow, tool or test change; so #321's fix and the FFmpeg and whisper.cpp
 re-pins wait for after `0.2.0`, or a third candidate). **After the stable tag, within seven days:** register the two stable checks in `STABLE_CHECKS`
 (`tools/p14-published/lib/verify.cjs`).
@@ -60,9 +62,9 @@ re-pins wait for after `0.2.0`, or a third candidate). **After the stable tag, w
 
 - **Now:** the go for batch 2 (again) and batch 3 (`-AllowGraderChange`; Claude Code 2.1.284 and Docker; state the
   reserve rule first; L-095); the Smart App Control try-out on the second Windows 11 machine; #312: fix or accept. **Dependabot:** #192, #193,
-  #194 wait until after the stable. **The FFmpeg re-pin** (#272, L-132) and the whisper.cpp one (#322, L-137) are planned for after the stable.
-- **Register:** one pass over `register-review-sheet.md` (thirty entries, seven later, nine readings: every review is `pending`; L-137 is new and open,
-  L-138 new and accepted by the RQ-08 decision), and whether `Guide` becomes a required check. **PR 12:** the stable publish (`release.md` 6.7).
+  #194 wait until after the stable. **After the stable:** the VSift floor for short audio, then the whisper.cpp re-pin (#322, L-137) with FFmpeg's (#272, L-132).
+- **Register:** one pass over `register-review-sheet.md` (thirty entries, seven later, nine readings: every review is `pending`; L-137 and L-138
+  are new and accepted by the decisions of 2026-10-07), and whether `Guide` becomes a required check. **PR 12:** the stable publish (`release.md` 6.7).
 
 ## Open decisions and readings (maintainer)
 

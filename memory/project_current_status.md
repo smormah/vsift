@@ -52,9 +52,9 @@ try-outs are not; PRs 12-13 remain; the packet is not complete.** What it shows,
   (L-098). **A synthetic corpus and voice only** (L-020, L-022); batch 2 ran on rc.1 with four readings still open (`batch-2-reading.md`).
 - **Three of twenty items are waived, by the maintainer (2026-10-07 for the first two):** RQ-08 (#321 accepted as a test race; fixed after the
   stable), RQ-10 (the run is green, but a link's `STORAGE_IO`, #265, and the campaign's mis-built no-room case, L-134, are outside the codes its rule
-  names) and RQ-14 (SEC-T01 half done in R0, L-068). **Open:** the whisper.cpp pin lags upstream by three releases that harden memory safety
-  (#322, L-137: no CVE; a reachability reading is under way); #312 is not fixed (L-135). The FFmpeg residual CVE-2026-38350 is accepted (L-122,
-  RQ-13). **`latest` has never moved** (L-105). Decisions: `TODO.md`.
+  names) and RQ-14 (SEC-T01 half done in R0, L-068). **Accepted for R0 (2026-10-07), fixed after the stable:** the pinned whisper.cpp 1.9.2 lacks
+  one upstream fix VSift can reach, a heap read in the child for a non-silent chunk of 1 to 200 samples (#322, L-137: no CVE; read from source,
+  nothing run). **Open:** #312 is not fixed (L-135). The FFmpeg residual CVE-2026-38350 is accepted (L-122, RQ-13). **`latest` has never moved** (L-105). Decisions: `TODO.md`.
 
 ## P14 PRs 1 to 6 and 8 in one view
 

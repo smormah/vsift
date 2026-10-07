@@ -1512,7 +1512,8 @@ request that records it is work record only. PR 11 repeated is complete only whe
 `waived` or `not_applicable` for `0.2.0-rc.2` and `release-evidence --complete-for 0.2.0-rc.2` passes (26.6). Nothing for RQ-15 to
 RQ-17 is recorded here: the agent batches and the try-outs belong to the supervisor and the maintainer. **The maintainer decided on
 2026-10-07, after reading the results:** RQ-08 is waived for R0 with #321 accepted as a test race (26.2); RQ-10's waiver of 2026-10-05 is
-replaced by one for this candidate with only what is left (26.3); L-137 stays an open observation while its reachability is assessed (26.4).
+replaced by one for this candidate with only what is left (26.3); L-137 is accepted for R0 after a read-only reachability assessment and fixed after
+the stable release (26.4).
 
 ### 26.1 The runs and their results
 
@@ -1535,7 +1536,7 @@ candidate's own entry for each item with the first candidate's moved to `prior`.
 | RQ-10 | `P14 malicious media` [37613284274](https://github.com/smormah/vsift/actions/runs/37613284274) | the run **succeeded** (96 inputs, 94 inside their bounds and two tracked findings, none new); the item is **waived** by the maintainer's decision of 2026-10-07, which replaces that of 2026-10-05 and covers only the two tracked answers (26.3) | #265 and #266 as before (L-127, L-134); #310's first finding is fixed (`sparse-30gib` is `INVALID_SOURCE` again) |
 | RQ-11 | `P13 managed power loss` [37619456739](https://github.com/smormah/vsift/actions/runs/37619456739) and `P10 durability campaign` [37619462038](https://github.com/smormah/vsift/actions/runs/37619462038), both at the tag | **passed**: both campaigns met their acceptance numbers **and both hosted Acceptance jobs ran** (no by-hand verdict this time) | none |
 | RQ-12 | `P14 runbook walk` [37611439339](https://github.com/smormah/vsift/actions/runs/37611439339) | **passed**: 18 steps, all matched, none diverged | none |
-| RQ-13 | `P14 scan reading` [37611430394](https://github.com/smormah/vsift/actions/runs/37611430394) and [`p14-scan-reading-2026-10-07.md`](p14-scan-reading-2026-10-07.md) | **passed**, with the one residual the maintainer accepted on 2026-10-05 (#272, L-122) and one new observation for the maintainer (26.4) | [#322](https://github.com/smormah/vsift/issues/322) ([L-137](known-limits.md#l-137), new) |
+| RQ-13 | `P14 scan reading` [37611430394](https://github.com/smormah/vsift/actions/runs/37611430394) and [`p14-scan-reading-2026-10-07.md`](p14-scan-reading-2026-10-07.md) | **passed**, with the one residual the maintainer accepted on 2026-10-05 (#272, L-122) and one new observation, assessed and accepted by the maintainer the same day (26.4) | [#322](https://github.com/smormah/vsift/issues/322) ([L-137](known-limits.md#l-137), new, accepted) |
 | RQ-18 | `CI` [37434552274](https://github.com/smormah/vsift/actions/runs/37434552274) at the candidate's commit (the push of 2026-10-06) | **passed**: the Governance job at the claims rung `candidate` and the other nine jobs; the `Guide` run of the same commit ([37434552146](https://github.com/smormah/vsift/actions/runs/37434552146)) passed | none |
 
 **What was not run.** `P14 local upgrade` (the real upgrade of a published version is what it stood in for, L-111), and the longer fuzz run for
@@ -1685,10 +1686,24 @@ the alert store (0 in any state), the pinned actions, whisper.cpp (NVD), Node.js
 records (the same 58, every fix in the shipped snapshot). **Nothing changed since 2026-10-05 in those sources.** The residual CVE-2026-38350 (#272, L-122) stands and
 stays accepted by the maintainer's decision of 2026-10-05, so RQ-13 is recorded `passed` for the second candidate. **One new observation, from a source
 the earlier readings did not read** (the project's release list): whisper.cpp 1.9.3 to 1.9.5 carry memory-safety hardening (a heap read on audio under 201
-samples, malformed model files, an integer overflow) that the pinned 1.9.2 lacks; there is no CVE, advisory or severity, so the plan's rule is not engaged,
-and whether VSift can feed a chunk that short is not shown either way ([#322](https://github.com/smormah/vsift/issues/322), [L-137](known-limits.md#l-137)). The
-catalogue was not touched (a re-pin before `0.2.0` is a third candidate) and no one at either project was contacted. **Maintainer, 2026-10-07:** L-137 stays an
-**open observation**, neither accepted nor rejected; a separate read-only reachability assessment is being done, and its disposition waits for that.
+samples, malformed model files, an integer overflow) that the pinned 1.9.2 lacks; there is no CVE, advisory or severity, so the plan's rule is not engaged
+([#322](https://github.com/smormah/vsift/issues/322), [L-137](known-limits.md#l-137)). The catalogue was not touched (a re-pin before `0.2.0` is a third
+candidate) and no one at either project was contacted.
+
+**The reachability assessment and the maintainer's decision on L-137 (2026-10-07).** A read-only assessment followed the reading the same day (the source at
+whisper.cpp v1.9.2 and at the VSift tag; **nothing was run**). **One of the upstream fixes is reachable from VSift:** `8631825d` (v1.9.3), a heap read past
+the audio buffer in `log_mel_spectrogram` for 1 to 200 samples of audio (12.5 ms at 16 kHz). VSift has no minimum chunk or range length, so a non-silent chunk
+that short reaches `whisper-cli` when the requested range is 12.5 ms or less or, rarely and by inference, when the audio track covers that little of a chunk's
+window. Read from the source: with 40 samples or fewer the run fails as a provider failure (upstream v1.9.5 still behaves so); with 41 to 200 the CLI exits 0 with
+no segments; the read is of up to 800 bytes inside the child, nothing is written, the input does not control what is read and no raw bytes leave the child; a
+crash becomes the typed `AbnormalTermination`, and how often it crashes was not determined. **Not reachable:** the model-file fixes (only the two pinned,
+hash-checked models run), the 0-sample case, VAD, `whisper_full_parallel` and the loader changes. The pin governs only the Ubuntu managed install and the
+reviewed Windows hash; on Windows and macOS a user's own whisper.cpp runs. `whisper-cli` is a separate process with no shell, a cleared environment, a 120 s
+deadline, bounded output and a strict JSON parse; on a desktop there is no sandbox and memory is bounded only by the operating system
+([L-004](known-limits.md#l-004)). **The maintainer accepted it for R0 with L-137 as the register entry, to be fixed after the stable release** in this order: a
+floor in VSift (decoded audio under 1,600 samples, 100 ms, is recorded as a gap and not sent to the recogniser: this covers every whisper.cpp build and the
+failure at 40 samples or fewer), then a re-pin of whisper.cpp together with the FFmpeg refresh ([L-132](known-limits.md#l-132)). Both are changes under `crates/` or to
+the catalogue and would force a third candidate now, which the exposure does not justify. #322 stays open.
 
 ### 26.5 Hosted minutes, and what is weaker than it sounds
 

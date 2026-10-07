@@ -1582,10 +1582,22 @@ supervisor.
    2026-10-05 (an over-limit source answering `STORAGE_IO`) is fixed in this candidate and no longer covered or needed. **The waiver does not cover** a new
    finding of the campaign, a broken containment check, an answer outside its bounds, or the no-room path of `ingest` on the published bytes, which the
    campaign has shown on no version. Both residuals are also named in the entry's `does_not_prove`.
-3. **L-137 (#322, the pinned whisper.cpp is three releases behind upstream, which hardened memory safety meanwhile) stays an open observation.** It is
-   neither accepted nor rejected: a separate read-only reachability assessment is being done, and the entry's disposition waits for it. RQ-13 is `passed` for
-   the second candidate on the same basis as the first (the acceptance of CVE-2026-38350, #272, L-122, of 2026-10-05); no severity exists for L-137's
-   observation, so the plan's rule (section 6) is not engaged by it.
+3. **L-137 (#322, the pinned whisper.cpp v1.9.2 lacks upstream memory-safety hardening) is accepted for R0 and fixed after the stable release.** The
+   maintainer first left it open while a read-only reachability assessment was done (the source at whisper.cpp v1.9.2 and at the VSift tag; nothing was run),
+   and decided on its result the same day. **One upstream fix is reachable from VSift:** `8631825d` (v1.9.3), a heap read past the audio buffer in
+   `log_mel_spectrogram` for 1 to 200 samples of audio (12.5 ms at 16 kHz); VSift has no minimum chunk or range length, so a non-silent chunk that short reaches
+   `whisper-cli` with a requested range of 12.5 ms or less or, rarely and by inference (FFmpeg's behaviour was not run), when the audio track covers that little of
+   a chunk's window. Read from the source: 40 samples or fewer fail the run as a provider failure (upstream v1.9.5 still behaves so, so a re-pin alone does not fix
+   it); 41 to 200 exit 0 with no segments; the read is of up to 800 bytes inside the child, nothing is written, the input does not control what is read, no raw
+   bytes leave the child, and a crash becomes the typed `AbnormalTermination`; how often it crashes was not determined. **Not reachable:** the model-file fixes
+   (only the two models pinned by size and SHA-256 run), the 0-sample case, VAD, `whisper_full_parallel` and the loader changes. The pin governs only the Ubuntu
+   managed install and the reviewed Windows hash; on Windows and macOS a user's own whisper.cpp runs. **Containment, exactly:** a separate process, no shell, a
+   cleared environment, a 120 s deadline, bounded output and a strict JSON parse; on a desktop there is no sandbox and memory is bounded only by the operating
+   system (L-004). **After `0.2.0`, in this order:** a floor in VSift (decoded audio under 1,600 samples, 100 ms, is recorded as a gap and not sent to the
+   recogniser, which covers every whisper.cpp build and the failure at 40 samples or fewer), then a re-pin of whisper.cpp together with the FFmpeg refresh
+   (L-132). Both are changes under `crates/` or to the catalogue and would force a third candidate now, which the exposure does not justify. #322 stays open.
+   RQ-13 is `passed` for the second candidate on the plan's rule (section 6): CVE-2026-38350 (#272, L-122) was accepted on 2026-10-05, and L-137, which has no
+   record or severity, is accepted with its register entry too.
 
 **Decisions taken inside this ADR, for the maintainer to confirm or overrule.**
 
@@ -1594,11 +1606,12 @@ supervisor.
 2. **RQ-11 is `passed` on the hosted verdicts** (both Acceptance jobs ran), unlike the first candidate's, whose P10 verdict was a by-hand run of the script.
 3. **RQ-18 is recorded on the CI run of the push of 2026-10-06 at the candidate's own commit**, which is the only CI run at that commit (nothing merged since
    changes the commit); L-133's second window is closed (RQ-19 passed for the second candidate).
-4. **Two register entries are new**: L-137 (open, review pending) and L-138 (accepted residual by item 1; the register's own one-pass review is separate);
+4. **Two register entries are new**: L-137 (accepted residual by item 3 above) and L-138 (accepted residual by item 1; the register's own one-pass review is separate for both);
    L-128, L-133, L-134 and L-135 are updated for the repeat's runs.
 
 **What is weaker than it sounds.** The same as for the first candidate (plan 24.2 and 26.5): shared hosted images, a synthetic corpus and voice, a fuzz hour that is a
 floor (18 of 31 targets still finding coverage), a stress rate measured on shared runners, and a media campaign with a case that tests nothing about the room
 check. A zero in the lock suite is not a proof that #314 is gone; the fix rests on its regression tests. RQ-13's FFmpeg row is a repeat of a reading of public
 records. **Three of twenty items are now waived (RQ-08, RQ-10, RQ-14):** a waiver says the rule was not met and why that is accepted for R0, and the acceptance of
-#321 rests on a reading of a test, not on a reproduction of the race.
+#321 rests on a reading of a test, not on a reproduction of the race. The acceptance of L-137 rests on a reading of two sources too: no short chunk was run
+against the pinned build, and how often the read crashes the child is not known.
