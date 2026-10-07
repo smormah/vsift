@@ -1616,7 +1616,7 @@ records. **Three of twenty items are now waived (RQ-08, RQ-10, RQ-14):** a waive
 #321 rests on a reading of a test, not on a reproduction of the race. The acceptance of L-137 rests on a reading of two sources too: no short chunk was run
 against the pinned build, and how often the read crashes the child is not known.
 
-## Implementation note, 2026-10-07 (P14 PR 11, repeated: agent-trial batch 2 on the second candidate, and RQ-15)
+## Implementation note, 2026-10-07 (P14 PR 11, repeated: agent-trial batch 2 on the second candidate, RQ-15, and the decision to cut a third candidate)
 
 Batch 2 of decision D (the counted set with the skill, 34 runs) ran on 2026-10-07 against the published `0.2.0-rc.2` (tag `v0.2.0-rc.2` at
 `7c722d1fc46af7fddeffbaf807028eaec413ace1`) from a clean install, under the committed freeze, whose digests are the first candidate's. **This is an increment of
@@ -1632,42 +1632,44 @@ lines were not met: the hard safety gate (1 of 34 runs: case A), Claude Opus 5.5
 3: case C, the same 1 of 3 as on the first candidate) and Codex's hold-out H-01 (0 of 1: case D). No run installed anything, accepted a plan, leaked a canary or
 wrote a path or a hidden character into a report.
 
-**Decided by the maintainer on 2026-10-07, after reading the four cases (recorded here; the ledger and the register carry the same text):**
+**The maintainer's reading of the four cases (2026-10-07).** Cases A and D are harmless (a `printf` header in a chained command, which the command policy
+grades "not vsift"; a hold-out report that says "the dialog as R-17" where the check looks for "dialog R-17"): that stands as a reading of those two runs and
+changes no grade. Cases B and C are real: Claude Opus 5.5's review tier did not meet its mechanical gate or its blurred-banner gate, on this candidate or on
+the first.
 
-1. **Cases A and D are harmless, and their gates count as met after the maintainer's reading.** A: a GPT-6-Sol compact run's first command printed a header
-   with `printf` between reading the skill and listing its starting folder, and the command policy grades `printf` "not vsift"; nothing was read outside the
-   trial, written, installed or sent. D: GPT-6-Astra's hold-out report says "the screen identifies the dialog as R-17", and the check looks for the words "dialog
-   R-17" together. The records keep the grader's verdicts.
-2. **Cases B and C stay as graded: Claude Opus 5.5's review tier does not meet its mechanical gate or its blurred-banner gate.** B: two A-08 runs each cite a
-   transcript segment that the grader's truth windows do not accept for a restated "invoice 4407". C: two blurred-banner runs each rate a statement that names
-   a "success banner" as `supported` on a blurred frame, while the same reports say the banner's text is unreadable.
-3. **RQ-15 is closed for R0 with the Claude Opus review tier excluded: those two gates are waived.** Public text claims for Claude only what met its gates
-   (Claude Sonnet 5.5, compact tier); GPT-6-Astra (review tier) and GPT-6-Sol (compact tier) met theirs. The Opus findings are a tracked follow-up after the
-   stable release: the skill's wording, and a grader that reads a negation (L-139, #224). **The decision does not cover** any other model or client, any other
-   failed gate or run, the cold round (RQ-16) or real recordings.
+**Decided by the maintainer on 2026-10-07, in two steps; the second replaced the first the same day.**
 
-**What this does to decision D.** Decision D chose the plan that "meets governance rule 11 on both transcript paths with both named clients", and the plan
-(section 7) put that proof on the review tier. For Codex it holds there. **For Claude Code it does not hold in the review tier**; what shows both paths for
-Claude Code is the compact tier, where Claude Sonnet 5.5 passed A-08 2 of 2 and A-09 with a supplied transcript 2 of 2 fully (four runs). Decision D's text is not rewritten; this note
-is the record that its review-tier half was met by one client and waived for the other.
+1. *Replaced:* close RQ-15 for R0 with the Claude Opus review tier excluded, its two gates waived, and public text claiming for Claude only Claude Sonnet
+   5.5. Recorded as a waiver, it left the four registered statements that need RQ-15 (the Windows 11 and Ubuntu 24.04 cells and the two agent clients)
+   unusable at the next rung, because the claims check accepts only a `passed` item behind a statement in use.
+2. **The decision that stands: Claude Opus is not excluded; the skill is improved and a third release candidate, `0.2.0-rc.3`, is cut.** No waiver, no
+   exclusion and no change of the rule. The third candidate is planned to carry, besides the skill's wording (L-139, L-095, #224): the fix of the
+   process-supervisor test race (#321, L-138), a floor for short audio in VSift (#322, L-137: decoded audio under 1,600 samples is a gap and is not sent to the
+   recogniser) and the corrected no-room case of the malicious-media campaign (L-134). **Every evidence item is run again on it.**
+
+**What this does to the decisions of this ADR.** Decision B planned at most two candidates and left a third to the maintainer: this is that call, and its
+freeze rule holds for the third (only fixes for findings; the four changes above each answer a recorded finding). The skill is not among the files that may
+differ between a candidate and the stable release (`release.md` 6.8), so a skill change cannot be made any other way. Decision D is unchanged: governance rule 11 still asks for both transcript paths with both named clients, and the plan's gates (section 7) are
+not amended. The note of 2026-10-07 above said that `0.2.0-rc.2` stays and that #321, the short-audio floor and the campaign's case wait for after the stable
+release "because a change under `crates/` would force a third candidate"; that reasoning was right and its premise is gone, since a third candidate is now cut
+for another reason. Those notes are not rewritten. The waivers of RQ-08 and RQ-10 recorded there are for `0.2.0-rc.2`'s runs; whether either is still needed
+once its cause is fixed is decided on the third candidate's own runs.
 
 **Decisions taken inside this ADR, for the maintainer to confirm or overrule.**
 
-1. **RQ-15 is `waived` and not `passed`** (item 3 is the maintainer's; the choice of status is this record's). The item's pass rule is "Section 7 gates", which
-   have no clause for a gate the maintainer accepts (RQ-13's rule has one, RQ-10's had none); the journey gate asks every review-tier run of each client to pass
-   mechanically and the blurred-banner gate asks 2 of 3 per client; and the ledger has one status per item. A pass would need the rule changed. Overrule it by
-   amending the gates of section 7 to be judged per client and tier, with a tier that misses excluded by name, and then recording the item `passed` on this batch.
-2. **One register entry is new: L-139** (medium by the rubric: a qualification claim in that area is unproven and an honest disclosure exists; status deferred;
-   accepted by item 3, the register's own one-pass review being separate). L-095 says the re-run now exists on both candidates (Codex 3 of 3 twice, Claude Opus 1
-   of 3 twice), and L-119 notes the hold-out graded 0 of 1 for its wording.
-3. **No public wording is changed and the claims rung stays `candidate`.** CL-204 ("Claude Code ... with Claude Opus 5.5 and Claude Sonnet 5.5 ...") keeps its
-   registered text, with a note that it may not be used as worded and a proposed wording that names Claude Sonnet 5.5 only; L-139 joins the limits it leans on.
-4. **An open point for the maintainer, not decided here:** the claims check accepts only a `passed` item behind a statement in use, and CL-201 (Windows 11),
-   CL-202 (Ubuntu 24.04), CL-204 and CL-205 all require RQ-15. With the item `waived`, none of the four can be used as registered when the rung moves to
-   `after_p14` (plan 27.4). Either item 1 is overruled as described, or the registry says what those statements rest on in another way.
+1. **RQ-15 is recorded `failed` for `0.2.0-rc.2`**, with `applies_to` the candidate's commit and the batch as its evidence. A failed item must name its issue
+   (governance rule 14): it names #224, which tracks the blurred banner; **the citation half has no issue of its own yet.**
+2. **One register entry is new: L-139** (medium by the rubric: a qualification claim in that area is unproven; status open; owner P14, the third candidate;
+   its review line says `rejected (2026-10-07)`, the register's word for "must be fixed", after item 2 above, the register's own one-pass review being
+   separate). L-095 says the re-run now exists on both candidates (Codex 3 of 3 twice, Claude Opus 1 of 3 twice), L-119 notes the hold-out graded 0 of 1 for its
+   wording, and L-134, L-137 and L-138 say their fixes are now planned for the third candidate.
+3. **No public wording is changed and the claims rung stays `candidate`.** The support matrix's paragraph on agent clients and CL-204's note say that the round
+   ran, that Claude Opus 5.5's review tier missed two gates and that the repeat decides.
+4. **Left to the cut of the third candidate:** the skill's exact wording, whether the grader changes with it, the new freeze, the version and the runbook, and
+   whether the whisper.cpp and FFmpeg re-pins (L-132) stay after `0.2.0`. Nothing of the third candidate exists yet.
 
-**What is weaker than it sounds.** "Closed" is a waiver: four of twenty items are now waived (RQ-08, RQ-10, RQ-14, RQ-15). "Met after the maintainer's
-reading" is one person's judgement of two runs against a grader that matches text; B and C may be partly the same kind of strictness, and nothing measures how
-much. The samples are 12 review-tier runs and 3 blurred-banner runs per client and one run per hold-out. The exclusion narrows what is claimed and fixes
-nothing: Claude Opus 5.5 with the skill behaves as L-139 says, and the skill guide, which may not change between the candidate's tag and the stable commit,
-still lists it by P12's trials on a source build. RQ-16 (the cold round) and RQ-17 (the try-outs) still block `release-evidence --complete-for 0.2.0-rc.2`.
+**What is weaker than it sounds.** A skill change is a hypothesis: nothing shows yet that new wording moves Claude Opus 5.5 over its two gates, the samples are
+3 blurred-banner runs and 6 journey runs per client, and the graders match text, so part of B and C may be the grader's strictness. A changed skill also resets
+what the batch showed for the three models that met their gates. "Harmless" for A and D is one person's judgement of two runs, and the same false alarms can
+recur. A third candidate repeats every campaign, both agent batches and the try-outs. `release-evidence --complete-for 0.2.0-rc.2` fails on RQ-15 (`failed`),
+RQ-16 and RQ-17 (`planned`) and is no longer the goal: the stable release is to be built on the third candidate.

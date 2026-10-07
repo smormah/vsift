@@ -8,33 +8,34 @@ Current-state handoff, rewritten in every change; history: git, `CHANGELOG.md`, 
 requests (0-13); PRs 0-9 are merged. **PR 10, the candidate, was done twice and both are published:** `0.2.0-rc.1` (2026-10-05, tag
 `v0.2.0-rc.1` at `d5792ce31db1`; superseded, still on npm) and **`0.2.0-rc.2` (2026-10-07, 09:43 UTC; tag `v0.2.0-rc.2` at
 `7c722d1fc46af7fddeffbaf807028eaec413ace1`, npm `next` on all four packages, a pre-release with ten files, `latest` still the empty `0.0.0`)**:
-rc.1 plus the fixes of #314 and #310 and nothing else. **PR 11 (the qualification) is repeated on rc.2: its hosted part (plan section 26) and
-agent-trial batch 2 (section 27; 34 runs, 2026-10-07) are done and recorded; batch 3 (the cold round) and the try-outs are not.** The packet is
-not complete. Plan: `docs/planning/p14-qualification.md` (15-27); ADR 0024 stays Proposed.
+rc.1 plus the fixes of #314 and #310 and nothing else. **PR 11 (the qualification) was repeated on rc.2: its hosted part (plan section 26) and
+agent-trial batch 2 (section 27; 34 runs, 2026-10-07) are recorded. Batch 2 failed RQ-15, and the maintainer decided the same day to cut a THIRD
+candidate, `0.2.0-rc.3` (planned, not cut): rc.2 will not become the stable.** The packet is not complete. Plan: `p14-qualification.md` (15-27); ADR 0024 stays Proposed.
 **Evidence** (`p14-evidence-ledger.json`) for rc.2: `passed` RQ-01 to RQ-07, RQ-09, RQ-11 (both hosted verdict jobs ran), RQ-12, RQ-13 (L-122's
-residual accepted), RQ-18, RQ-19; **`waived` (four of twenty): RQ-08** (the run failed one Windows repetition of 20,100: #321, a race in a
+residual accepted), RQ-18, RQ-19; **`waived` (three of twenty): RQ-08** (the run failed one Windows repetition of 20,100: #321, a race in a
 supervisor *test*, L-138; the lock suite was 200 of 200 and #312 did not recur), **RQ-10** (the run is green, but two answers carry codes its rule
-does not name), RQ-14 and **RQ-15** (batch 2: Claude Opus missed two review-tier gates; below); `planned` RQ-16 and RQ-17.
-**`release-evidence --complete-for 0.2.0-rc.2` fails on exactly two items: RQ-16 and RQ-17.**
+does not name) and RQ-14; **`failed` RQ-15** (batch 2: Claude Opus missed two review-tier gates; below); `planned` RQ-16 and RQ-17. **`release-evidence
+--complete-for 0.2.0-rc.2` fails on RQ-15, RQ-16 and RQ-17 and is no longer the goal: every item is run again on rc.3.**
 **Public text:** `public-claims.json`, rung `candidate` (CL-101 and CL-102 name rc.2 and need RQ-19, now passed for it: L-133's second window is closed).
 **Decided 2026-10-02 (ADR 0024):** **A** R0 is `0.2.0` on `latest`. **B** `0.2.0-rc.N` under `next`, never announced. **C** no
 signing unless try-outs show a block. **D** 84 agent runs in three batches, each on the go. **E** SEC-T01 narrowed. **F** "supported"
 per cell by fixed rules; managed install Ubuntu-only. **G** a claims ladder; nothing announced before P14 completes. **H** a try-out
 blocks the stable only until observed. #246 waits.
 
-**Decided by the maintainer on 2026-10-07** (plan 26.2 to 26.4, ADR note of that day): (1) **RQ-08 waived for R0, rc.2 stays:** #321 is accepted as a
+**Decided by the maintainer on 2026-10-07** (plan 26.2 to 26.4 and 27; items 1 to 3 were for rc.2, and item 4 overtakes their "rc.2 stays" and
+"after the stable"): (1) **RQ-08 waived for R0, rc.2 stays:** #321 is accepted as a
 test race with L-138; the run stays failed evidence; the test is fixed after the stable (a change under `crates/` is a third candidate); the waiver does
 not cover #312, #128, #206 or any other failure. (2) **RQ-10's 2026-10-05 waiver is replaced** by one for rc.2 covering only the link's `STORAGE_IO`
 (#265, L-127) and the campaign tool's mis-built no-room case (L-134); it is `waived`, not `passed`, because its rule names three codes (to overrule:
 amend the rule in plan section 2). (3) **#322 / L-137 accepted for R0** after a read-only reachability assessment (nothing run): one upstream whisper.cpp
 fix is reachable, a heap read in the child for a non-silent chunk of 1 to 200 samples, because VSift has no minimum chunk or range length. **After `0.2.0`,
 in order:** a VSift floor (audio under 1,600 samples is a gap, not sent to the recogniser), then the re-pin with FFmpeg's (L-132). **Still open:**
-optionally deprecate rc.1 (`release.md` 6.11 step 7). (4) **Batch 2 on rc.2 is read and RQ-15 is closed for R0 with the Claude Opus review tier
-excluded** (plan 27; `p14-agent-trials/batch-2-reading-rc.2.md`; nothing re-graded). As graded 28 of 34 runs passed fully and none installed
-anything or leaked. Two misses are harmless and count as met after the maintainer's reading (a `printf` header failed the hard safety gate, 1 of 34;
-Codex's H-01 hold-out wrote "the dialog as R-17"). **Claude Opus 5.5 did not meet its mechanical gate (4 of 6) or its blurred-banner gate (1 of 3,
-as on rc.1): both waived, left as graded (L-139, L-095, #224).** Public text may claim for Claude only Sonnet 5.5 (compact tier); GPT-6-Astra and
-GPT-6-Sol met their gates. RQ-15 is `waived`, not `passed`: its rule has no clause for an accepted miss (to overrule: amend section 7's gates).
+optionally deprecate rc.1 (`release.md` 6.11 step 7). (4) **Batch 2 on rc.2 is read (plan 27; `batch-2-reading-rc.2.md`; nothing re-graded):** as
+graded 28 of 34 runs passed fully and none installed anything or leaked; two misses are harmless by the maintainer's reading, which changes no grade
+(a `printf` header failed the hard safety gate; Codex's H-01 wrote "the dialog as R-17"); **Claude Opus 5.5 really missed its mechanical gate (4 of 6)
+and its blurred-banner gate (1 of 3), as on rc.1 (L-139, L-095, #224). A first decision to exclude Opus and waive was replaced the same day: no
+waiver, no exclusion, no rule change; improve the skill and cut `0.2.0-rc.3`,** which also carries #321's test fix (L-138), the short-audio floor
+(L-137) and the campaign's corrected no-room case (L-134). GPT-6-Astra, Sonnet 5.5 and GPT-6-Sol met their gates with the skill as it is.
 
 **PR 7, the findings by outcome** (each with its pull request and regression test; the list is in `project_current_status.md`). **Maintainer
 rule 2026-10-04: a published failure code stays (v1 is additive); the remediation carries the fix (L-127).**
@@ -48,31 +49,30 @@ rule 2026-10-04: a published failure code stays (v1 is additive); the remediatio
 **PR 3:** `P14 journeys`, weekly too (L-114, L-115; P11's durable stage cannot run hosted: #258, L-113). **PR 6 and batch 1:** the harness (cold
 mode, hold-outs, `freeze`, usage); batch 1 (0.1.0, 20 runs) was a baseline. **README graphics:** redraw `roadmap.svg` with PRs 10 and 13 (L-121).
 
-## The remaining P14 pull requests (0-9 merged; 10 done twice)
+## The remaining P14 pull requests (0-9 merged; 10 and 11 each done twice, a third time planned)
 
-**11 repeated:** the hosted part and batch 2 are done on rc.2 (above). Left: batch 3 on rc.2 = RQ-16 (18 cold runs; the freeze is committed; on the
-maintainer's go), the try-outs = RQ-17 (`rq-17-tryout-sheet.md`; the execution-policy note for `install.md` only after they observe it), and the
-register pass. **12** stable `0.2.0`; **13** ledger follow-up, P14 `complete`, handoff, and the skill guide's model table (it still lists Claude
-Opus by P12's trials and may not change before the stable). **From the tag to the stable merge only the work record and `install.md` change**
-(`release.md` 6.8; so #321's fix, the skill and the re-pins wait for after `0.2.0`, or a third candidate). **After the stable tag, within seven
-days:** register the two stable checks in `STABLE_CHECKS` (`tools/p14-published/lib/verify.cjs`).
+**10, a third time (next):** cut `0.2.0-rc.3` = rc.2 plus four fixes of recorded findings: the skill's wording (L-139, #224: a negated statement
+about an unreadable region; the segment cited for a restated fact), #321's test (L-138), the short-audio floor (#322, L-137: under 1,600 samples is
+a gap) and the campaign's no-room case (L-134); the version, a NEW freeze (the skill changes), the runbook; the maintainer publishes. **11, a third
+time:** every hosted campaign, batch 2, batch 3 = RQ-16 (18 cold runs) and the try-outs = RQ-17 (`rq-17-tryout-sheet.md`) on rc.3, then the register
+pass. **12** stable `0.2.0`; **13** ledger follow-up, P14 `complete`, handoff. **From a candidate's tag to the stable merge only the work record and
+`install.md` change** (`release.md` 6.8). **After the stable tag, within seven days:** register the two stable checks in `STABLE_CHECKS`.
 
 ## What the maintainer owes, and when
 
-- **Now:** the go for batch 3 (`-AllowGraderChange`; Claude Code 2.1.284 and Docker; state the reserve rule first); the Smart App Control
-  try-out on the second Windows 11 machine; #312: fix or accept. **Dependabot:** #192, #193, #194 wait until after the stable. **After the
-  stable:** the VSift floor for short audio, then the whisper.cpp re-pin (#322, L-137) with FFmpeg's (#272, L-132); the skill wording and a grader
-  that reads a negation, then Claude Opus's review tier again (L-139; the citation half has no issue of its own yet).
-- **Register:** one pass over `register-review-sheet.md` (thirty entries, eight later, nine readings: every review is `pending`; L-137 to L-139
-  are new and accepted by the decisions of 2026-10-07), and whether `Guide` becomes a required check. **PR 12:** the stable publish (`release.md` 6.7).
+- **Now:** nothing runs on rc.2 any more. **For rc.3:** the publish once it is cut; then the go for batches 2 and 3 (Claude Code 2.1.284 and
+  Docker; state the reserve rule first) and the Smart App Control try-out on the second Windows 11 machine; #312: fix or accept. **Dependabot:**
+  #192, #193, #194 wait until after the stable. **After the stable:** the whisper.cpp re-pin (#322, L-137) with FFmpeg's (#272, L-132).
+- **Register:** one pass over `register-review-sheet.md` (thirty entries, eight later, nine readings: every review is `pending` but L-137 and
+  L-138, accepted, and L-139, rejected = to be fixed, by the decisions of 2026-10-07), and whether `Guide` becomes a required check.
 
 ## Open decisions and readings (maintainer)
 
-- **Before the rung moves (PR 13; plan 27.4):** the claims check accepts only a `passed` item behind a statement in use, and CL-201, CL-202, CL-204
-  and CL-205 all need RQ-15, which is `waived`: amend section 7's gates and record it `passed`, or re-base those four statements. CL-204 names
-  Claude Opus and needs new wording (proposed in its note: Claude Sonnet 5.5 only).
+- **For the cut of rc.3 (plan 27.4):** the skill's exact wording; whether the grader changes with it (it cannot read a negation); whether RQ-08's
+  and RQ-10's waivers are still needed once their causes are fixed; an issue for L-139's citation half (#224 covers the blurred banner only).
+  **If Claude Opus misses again on rc.3:** the claims check accepts only `passed` behind CL-201, CL-202, CL-204 and CL-205, which all need RQ-15.
 - **R1 options:** a stub per ended request (L-063); the Windows kill window (L-129, an ADR); a bounded wait for the initialization
-  lock (L-131, L-135); retry the Windows sharing violations (L-136); fix the p06 supervisor test (L-138). **At v2:** the codes L-127 keeps. **#204** Codex on Windows
+  lock (L-131, L-135); retry the Windows sharing violations (L-136). **At v2:** the codes L-127 keeps. **#204** Codex on Windows
   (L-076). **Readings** (none blocks): L-062, L-067, L-069, L-017, L-088, L-090, `tokio`, `durable_worker`, MSRV.
 
 ## Tracked issues and gates

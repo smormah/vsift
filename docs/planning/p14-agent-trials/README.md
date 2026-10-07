@@ -4,11 +4,12 @@
 set with the skill, 34 runs) ran on both candidates: on the first, `0.2.0-rc.1`, on 2026-10-05 (history: its records are in
 [`batch-2-rc.1/`](batch-2-rc.1/) and its reading, whose four cases were never decided, is [batch-2-reading.md](batch-2-reading.md)), and on the
 second, `0.2.0-rc.2`, on 2026-10-07 (its records are in [`batch-2/`](batch-2/); its reading, with the maintainer's decision of the same day, is
-[batch-2-reading-rc.2.md](batch-2-reading-rc.2.md): the evidence item RQ-15 is closed for R0 by a waiver, with the Claude Opus review tier
-excluded, and nothing is re-graded). Batch 3 (the cold final round) has never run; it runs on the second candidate on the maintainer's go.** Their freeze is
+[batch-2-reading-rc.2.md](batch-2-reading-rc.2.md): Claude Opus 5.5's review tier missed two gates, the evidence item RQ-15 is `failed` for that
+candidate, nothing is re-graded, and the maintainer decided to improve the skill and cut a third candidate, `0.2.0-rc.3`, on which batch 2 is run
+again). Batch 3 (the cold final round) has never run; it is for the third candidate, on the maintainer's go.** Their freeze is
 committed for the second candidate (`batch-2/freeze.json` and `batch-3/freeze.json`, rewritten at its cut by P14 PR 10 repeated with the
 same digests as the first candidate's, because nothing frozen changed; a test fails every pull request that changes anything frozen
-until another candidate and a new freeze are decided on purpose; batch 1's freeze is history and no longer holds). P14 PR 6 built the harness, the cold-agent mode, the hold-out scenarios and the campaign
+until another candidate and a new freeze are decided on purpose, which the third candidate's cut now has to do for its skill change; batch 1's freeze is history and no longer holds). P14 PR 6 built the harness, the cold-agent mode, the hold-out scenarios and the campaign
 scripts; every batch spends the maintainer's Claude and Codex allowances and starts on the
 maintainer's explicit go. This folder is where the batches' bounded records land. The reading of
 batch 1 is [batch-1-reading.md](batch-1-reading.md); it qualifies nothing, it is the "before"

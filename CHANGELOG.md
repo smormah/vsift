@@ -167,15 +167,15 @@ accepted a setup plan, leaked a canary or wrote a path or a hidden character int
 on the blurred banner) and the compact tier met its gate (9 of 10 over Claude Sonnet 5.5 and GPT-6-Sol). **Claude Opus 5.5 did not meet two review-tier gates:** 4 of 6
 runs passed the mechanical check (two cite narration outside the accepted window for a restated fact), and 1 of 3 passed the blurred-banner check (two rate a
 statement that names a "success banner" as supported by a blurred frame), the same 1 of 3 as on the first candidate
-([L-139](docs/planning/known-limits.md#l-139), new; [L-095](docs/planning/known-limits.md#l-095) updated). **The maintainer decided on 2026-10-07:** two
-other misses are harmless and their gates count as met after that reading (one run printed a header with `printf` in a chained command, which the hard safety gate
-grades as not allowed; one hold-out report wrote "the dialog as R-17" where the check wants "dialog R-17"); the Claude Opus results stay as graded and nothing is
-re-graded; and the evidence item RQ-15 is closed for R0 with the Claude Opus review tier excluded: its two gates are waived, public text claims for Claude only
-Claude Sonnet 5.5 in the compact tier, and the Opus findings are followed up after the stable release (the skill's wording and a grader that reads a negation,
-[#224](https://github.com/smormah/vsift/issues/224)). RQ-15 is recorded `waived` and not `passed`, because its rule asks every client to meet the gates and has
-no clause for an accepted miss. Two evidence items still block `release-evidence --complete-for 0.2.0-rc.2`: the cold-agent round (RQ-16) and the try-outs (RQ-17).
-The claims rung is unchanged; of the documents the claims check reads only the support matrix changes (its paragraph on agent clients says the above). The
-skill guide still describes the earlier trials and may not change before the stable release.
+([L-139](docs/planning/known-limits.md#l-139), new; [L-095](docs/planning/known-limits.md#l-095) updated). Two other misses were read by the maintainer as
+harmless (one run printed a header with `printf` in a chained command, which the hard safety gate grades as not allowed; one hold-out report wrote "the dialog as
+R-17" where the check wants "dialog R-17"); that is a reading of those two runs, and nothing is re-graded. **The evidence item RQ-15 is recorded `failed` for
+`0.2.0-rc.2`.** **The maintainer decided on 2026-10-07** not to waive the two gates and not to exclude Claude Opus (a first decision of that day to do so was
+replaced the same day), but **to improve the skill and cut a third release candidate, `0.2.0-rc.3`**. It is planned to carry the skill's wording
+([#224](https://github.com/smormah/vsift/issues/224)), the fix of the supervisor test race (#321, L-138), a floor for short audio (#322, L-137) and the corrected
+no-room case of the malicious-media campaign (L-134), and every evidence item is run again on it. Nothing of it exists yet: no code, skill, tool or test changes
+here. `release-evidence --complete-for 0.2.0-rc.2` now fails on RQ-15, RQ-16 and RQ-17 and is no longer the goal. The claims rung is unchanged; of the documents
+the claims check reads only the support matrix changes (its paragraph on agent clients says that the round ran, what Claude Opus missed and that the repeat decides).
 
 ### Changed
 

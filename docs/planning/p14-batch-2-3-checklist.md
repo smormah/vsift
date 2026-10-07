@@ -2,8 +2,10 @@
 
 Status: **prepared 2026-10-05 (P14 PR 11b) for the first candidate and moved to the second, `0.2.0-rc.2`, on 2026-10-06 (P14 PR 10
 repeated). Batch 2 has run on the second candidate (2026-10-07, 34 runs: its records are in `docs/planning/p14-agent-trials/batch-2/`,
-and the reading with your decision of that day is [`batch-2-reading-rc.2.md`](p14-agent-trials/batch-2-reading-rc.2.md); RQ-15 is closed
-by a waiver, plan section 27). Batch 3 has not run, and will not until you say go.** Batch 2 also ran on the first candidate
+and the reading with your decision of that day is [`batch-2-reading-rc.2.md`](p14-agent-trials/batch-2-reading-rc.2.md); RQ-15 is `failed`
+for it, plan section 27). You decided that day to improve the skill and cut a third candidate, `0.2.0-rc.3`: both batches are for the third
+candidate now, under a new freeze, and this page is moved to it by that cut (its commands still name `0.2.0-rc.2`). Batch 3 has not run on
+any candidate, and will not until you say go.** Batch 2 also ran on the first candidate
 (`0.2.0-rc.1`, 2026-10-05: its records are in `docs/planning/p14-agent-trials/batch-2-rc.1/` and the reading is
 [`batch-2-reading.md`](p14-agent-trials/batch-2-reading.md)); the second candidate replaced that candidate, so batch 2 was run again
 and batch 3 runs for the first time, both on the second. Both batches spend your

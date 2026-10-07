@@ -1,6 +1,6 @@
 # Known limits register
 
-Date: 2026-10-07 (P14 PR 11 repeated, agent-trial batch 2 on the second candidate: L-139 added (Claude Opus 5.5 did not meet two review-tier gates of the agent trials on either candidate; left as graded, and its review tier is excluded from R0 by the maintainer's decision on RQ-15 of the same day) and L-095 updated (the blurred-banner re-run now exists on both candidates: GPT-6-Astra 3 of 3 twice, Claude Opus 5.5 1 of 3 twice); L-119 notes the one hold-out run graded 0 of 1 for its wording; P14 PR 11 repeated on the second candidate: L-137 added (the pinned whisper.cpp lacks one upstream memory-safety fix that VSift can reach) and L-138 added (a supervisor test reads a marker file another process is still writing; accepted by the maintainer's decision on RQ-08 of the same day); L-137 reworded to the assessed position after a read-only reachability assessment (one upstream fix is reachable, for 1 to 200 samples of audio) and accepted for R0 by the maintainer the same day; L-128, L-133, L-134 and L-135 updated for the repeat's runs; 2026-10-06: P14 PR 10 repeated, the second candidate `0.2.0-rc.2`: L-133 reopens for the window before its publish and names RQ-19's evidence as the first candidate's, L-107's by-hand backstop names the last candidate's tag, L-132's re-pin plan covers both candidates, L-111 notes that the upgrade is repeated on the second; P14, #310: a source over the size limit is `INVALID_SOURCE` again whatever the free space: L-127 and L-126 no longer carry a known deviation, L-134 is narrowed to the campaign's no-room case, L-061 says the room check comes after the size limit; P14, #314 and #312: L-135 narrowed to the root-creation wait (#312), its reader half being fixed; L-136 added (a Windows sharing or lock violation answers `INTEGRITY_FAILURE` at once); 2026-10-05: P14 PR 11a, the candidate's hosted evidence: L-134 added (a corner case of the room check, accepted, and a malicious-media case that does not reach it), L-135 added (two rare Windows failures of the stress run, open), L-122 and L-134 reviews recorded as the maintainer's decisions of the day, L-127 and L-126 say plainly that one answer deviated from the published-codes rule, L-128 and L-111 updated for the candidate's runs, L-133's early-sentence window closed; P14 PR 10b, the release candidate's cut: L-133 added (the claims window of the candidate rung), L-107 and L-108 updated for the settled allowed lists and the by-hand backstop, L-132 for the re-pin plan; P14 PR 10a, the skill's wording before the candidate's freeze: L-109 and L-127 updated; 2026-10-04: P14 PR 9c, the maintainer's decisions on the macOS wording and RQ-05's rule: L-113 and L-114 updated; P14, a journeys stage that asserts a later fix is skipped below the first version that has it and never above it: L-115 updated; P14 PR 9a, the claims check reads the text of the README's graphics: L-121 narrowed to the roadmap's rung; L-004, L-035 and L-038 brought up to date, L-114 names the macOS wording; P14 PR 7, a failed open removes its own registration and a session that never published says so: L-131 added, L-127 gains its third case; P14 PR 7, the cold grader's three classifications: L-118 updated; P14 PR 7, a short range's cut final segment: L-130 added and L-124 closed and deleted; P14 PR 7, a source that does not fit the root is refused before the copy and the code stays `STORAGE_IO`: L-127 gains its second case, L-061 updated; P14 PR 7, a link as the source keeps its published code and gains a remediation: L-127 rewritten as one entry for the CLI answers whose code only loosely describes the case; P14 PR 7, the dedupe window is stated as it is: L-063 updated; P14 PR 7, the flaky kill test: a provider a killed host leaves suspended, L-129 added and L-055 narrowed; P14 PR 7, session-root creation on Windows is repaired by a DACL read-back and narrowed (#206): L-123 closed and deleted, L-005 updated; P14 PR 7, the admission test no longer fails on its own bound: L-060 states the missing bound and L-123 narrows to #206; P14 PR 7, a named pipe with no writer is refused at once: L-127 narrowed; P14 PR 7b: the FFmpeg finding re-read with a test that sees release-branch cherry-picks, L-122 narrowed from 35 records to one tie by elimination and L-132 added (L-129 to L-131 are P14 PR 7's); 2026-10-03: P14 PR 4: the robustness campaigns, L-122, L-123, L-124, L-127 and L-128 added (L-121, L-125 and L-126 were taken meanwhile by other pull requests); P14 PR 7, a missing shared library is named: L-110 closed; P14 PR 7: a session root VSift did not create now explains itself, L-126 added; P14 PR 7, the realistic cold-agent settings: L-125 added, L-118 re-read; P14 PR 5: L-068 rescheduled to R1 and L-004 re-read, by the maintainer's decision E option 4; 2026-10-02: P14 PR 3, the journeys on the published binary: L-113 to L-116 added, L-035, L-042 and L-099 updated; the README's graphics: L-121 added; P14 PR 6: the trial harness's clean-install and cold-agent modes, hold-outs and usage capture, L-117 to L-120 added; the README front page: L-102 closed, the v0.1.0 release page edited; P14 PR 2: the published-artifact qualification, L-109 to L-112 added; P14 PR 1: the evidence ledger, the claims registry and their checks, L-101 to L-103 added; P14 PR 8, the stable path and `latest`: L-105, L-107 and L-108 added, L-102 narrowed to the published v0.1.0 page, L-103 updated for the delta record, L-097 updated; P14 plan, PR 0: L-042 re-read, the checkpoints' source-built binary noted, L-098 updated with Smart App Control read Off on the maintainer's machine; 2026-10-01: P13 PR 12: the 0.1.0 pre-release was published, so L-036 and L-096 are closed and deleted, L-037 and L-043 re-read at the packet's close, L-097 and L-098 updated, L-100 added; P13 PR 11: documentation and the qualification record, L-098 and L-099 added, L-035, L-036, L-037, L-042 and L-096 updated for the passing power-loss run and the closing sweep; P13 PR 7 follow-up: the power-loss campaign's first run and its verifier fix, L-037 updated; P13 PR 10: attestation and publish wiring, L-036 updated, L-096 and L-097 added; 2026-09-30: P13 PR 7: kill tests of the managed store, directory flushes and its power-loss campaign, L-037 narrowed; the compact re-run #222 met its target: L-085 closed, L-095 added for the review tier's A-09 blurred re-run (#224), L-007 updated; P13 PR 9: npm packages and their qualification, L-091 to L-093 added and L-036 updated; P13 PR 6: managed lifecycle, L-037 narrowed and L-087 measured, L-090 added; P13 PR 4: managed installation; P13 PR 8: release archives, L-089 added and L-036 updated; P00-P13 complete; P12 closed on its final trial round with the compact tier below target, L-085; SEC-T01's adversarial evidence deferred as technical debt, L-068; P13 PR 2b closed L-073 and rewrote L-016 and L-017).
+Date: 2026-10-07 (P14 PR 11 repeated, agent-trial batch 2 on the second candidate: L-139 added (Claude Opus 5.5 did not meet two review-tier gates of the agent trials on either candidate; open: the maintainer decided the same day to fix it in the skill and re-run on a third candidate, `0.2.0-rc.3`, with no waiver and no exclusion) and L-095 updated (the blurred-banner re-run now exists on both candidates: GPT-6-Astra 3 of 3 twice, Claude Opus 5.5 1 of 3 twice); L-119 notes the one hold-out run graded 0 of 1 for its wording; L-134, L-137 and L-138 say their fixes are now planned for that third candidate; P14 PR 11 repeated on the second candidate: L-137 added (the pinned whisper.cpp lacks one upstream memory-safety fix that VSift can reach) and L-138 added (a supervisor test reads a marker file another process is still writing; accepted by the maintainer's decision on RQ-08 of the same day); L-137 reworded to the assessed position after a read-only reachability assessment (one upstream fix is reachable, for 1 to 200 samples of audio) and accepted for R0 by the maintainer the same day; L-128, L-133, L-134 and L-135 updated for the repeat's runs; 2026-10-06: P14 PR 10 repeated, the second candidate `0.2.0-rc.2`: L-133 reopens for the window before its publish and names RQ-19's evidence as the first candidate's, L-107's by-hand backstop names the last candidate's tag, L-132's re-pin plan covers both candidates, L-111 notes that the upgrade is repeated on the second; P14, #310: a source over the size limit is `INVALID_SOURCE` again whatever the free space: L-127 and L-126 no longer carry a known deviation, L-134 is narrowed to the campaign's no-room case, L-061 says the room check comes after the size limit; P14, #314 and #312: L-135 narrowed to the root-creation wait (#312), its reader half being fixed; L-136 added (a Windows sharing or lock violation answers `INTEGRITY_FAILURE` at once); 2026-10-05: P14 PR 11a, the candidate's hosted evidence: L-134 added (a corner case of the room check, accepted, and a malicious-media case that does not reach it), L-135 added (two rare Windows failures of the stress run, open), L-122 and L-134 reviews recorded as the maintainer's decisions of the day, L-127 and L-126 say plainly that one answer deviated from the published-codes rule, L-128 and L-111 updated for the candidate's runs, L-133's early-sentence window closed; P14 PR 10b, the release candidate's cut: L-133 added (the claims window of the candidate rung), L-107 and L-108 updated for the settled allowed lists and the by-hand backstop, L-132 for the re-pin plan; P14 PR 10a, the skill's wording before the candidate's freeze: L-109 and L-127 updated; 2026-10-04: P14 PR 9c, the maintainer's decisions on the macOS wording and RQ-05's rule: L-113 and L-114 updated; P14, a journeys stage that asserts a later fix is skipped below the first version that has it and never above it: L-115 updated; P14 PR 9a, the claims check reads the text of the README's graphics: L-121 narrowed to the roadmap's rung; L-004, L-035 and L-038 brought up to date, L-114 names the macOS wording; P14 PR 7, a failed open removes its own registration and a session that never published says so: L-131 added, L-127 gains its third case; P14 PR 7, the cold grader's three classifications: L-118 updated; P14 PR 7, a short range's cut final segment: L-130 added and L-124 closed and deleted; P14 PR 7, a source that does not fit the root is refused before the copy and the code stays `STORAGE_IO`: L-127 gains its second case, L-061 updated; P14 PR 7, a link as the source keeps its published code and gains a remediation: L-127 rewritten as one entry for the CLI answers whose code only loosely describes the case; P14 PR 7, the dedupe window is stated as it is: L-063 updated; P14 PR 7, the flaky kill test: a provider a killed host leaves suspended, L-129 added and L-055 narrowed; P14 PR 7, session-root creation on Windows is repaired by a DACL read-back and narrowed (#206): L-123 closed and deleted, L-005 updated; P14 PR 7, the admission test no longer fails on its own bound: L-060 states the missing bound and L-123 narrows to #206; P14 PR 7, a named pipe with no writer is refused at once: L-127 narrowed; P14 PR 7b: the FFmpeg finding re-read with a test that sees release-branch cherry-picks, L-122 narrowed from 35 records to one tie by elimination and L-132 added (L-129 to L-131 are P14 PR 7's); 2026-10-03: P14 PR 4: the robustness campaigns, L-122, L-123, L-124, L-127 and L-128 added (L-121, L-125 and L-126 were taken meanwhile by other pull requests); P14 PR 7, a missing shared library is named: L-110 closed; P14 PR 7: a session root VSift did not create now explains itself, L-126 added; P14 PR 7, the realistic cold-agent settings: L-125 added, L-118 re-read; P14 PR 5: L-068 rescheduled to R1 and L-004 re-read, by the maintainer's decision E option 4; 2026-10-02: P14 PR 3, the journeys on the published binary: L-113 to L-116 added, L-035, L-042 and L-099 updated; the README's graphics: L-121 added; P14 PR 6: the trial harness's clean-install and cold-agent modes, hold-outs and usage capture, L-117 to L-120 added; the README front page: L-102 closed, the v0.1.0 release page edited; P14 PR 2: the published-artifact qualification, L-109 to L-112 added; P14 PR 1: the evidence ledger, the claims registry and their checks, L-101 to L-103 added; P14 PR 8, the stable path and `latest`: L-105, L-107 and L-108 added, L-102 narrowed to the published v0.1.0 page, L-103 updated for the delta record, L-097 updated; P14 plan, PR 0: L-042 re-read, the checkpoints' source-built binary noted, L-098 updated with Smart App Control read Off on the maintainer's machine; 2026-10-01: P13 PR 12: the 0.1.0 pre-release was published, so L-036 and L-096 are closed and deleted, L-037 and L-043 re-read at the packet's close, L-097 and L-098 updated, L-100 added; P13 PR 11: documentation and the qualification record, L-098 and L-099 added, L-035, L-036, L-037, L-042 and L-096 updated for the passing power-loss run and the closing sweep; P13 PR 7 follow-up: the power-loss campaign's first run and its verifier fix, L-037 updated; P13 PR 10: attestation and publish wiring, L-036 updated, L-096 and L-097 added; 2026-09-30: P13 PR 7: kill tests of the managed store, directory flushes and its power-loss campaign, L-037 narrowed; the compact re-run #222 met its target: L-085 closed, L-095 added for the review tier's A-09 blurred re-run (#224), L-007 updated; P13 PR 9: npm packages and their qualification, L-091 to L-093 added and L-036 updated; P13 PR 6: managed lifecycle, L-037 narrowed and L-087 measured, L-090 added; P13 PR 4: managed installation; P13 PR 8: release archives, L-089 added and L-036 updated; P00-P13 complete; P12 closed on its final trial round with the compact tier below target, L-085; SEC-T01's adversarial evidence deferred as technical debt, L-068; P13 PR 2b closed L-073 and rewrote L-016 and L-017).
 Status: current-state register. Every entry below is **pending maintainer review**.
 
 ## Purpose and how to use it
@@ -170,7 +170,7 @@ Each entry has these fields:
 | [L-136](#l-136) | On Windows, a file another process holds without read sharing is answered `INTEGRITY_FAILURE` at once, not waited for; not observed in any campaign | integrity/durability | low | unscheduled | [#314](https://github.com/smormah/vsift/issues/314) | open |
 | [L-137](#l-137) | The pinned whisper.cpp v1.9.2 lacks one upstream fix that VSift can reach: a heap read past the audio buffer for a non-silent chunk of 1 to 200 samples (12.5 ms or less), which VSift does not prevent because it has no minimum chunk or range length; fixed after the stable release | security | medium | P14 | [#322](https://github.com/smormah/vsift/issues/322) | accepted residual |
 | [L-138](#l-138) | The process supervisor's `p06` test reads a marker file that its fixture child may still be writing, so a Windows repetition failed once in 1,500 with an empty process id; the failure is the test's, and fixing it is a change under `crates/` | process/CI | low | unscheduled | [#321](https://github.com/smormah/vsift/issues/321) | accepted residual |
-| [L-139](#l-139) | Claude Opus 5.5 did not meet two review-tier gates of the agent trials on either candidate: it rated a statement that names a "success banner" as supported on a blurred frame, and it cited narration outside the truth window for a restated fact; left as graded, and the review tier of Claude Code is excluded from R0's claims | contract/UX | medium | unscheduled | [#224](https://github.com/smormah/vsift/issues/224) | deferred |
+| [L-139](#l-139) | Claude Opus 5.5 did not meet two review-tier gates of the agent trials on either candidate: it rated a statement that names a "success banner" as supported on a blurred frame, and it cited narration outside the truth window for a restated fact; to be fixed in the skill and re-run on a third candidate | contract/UX | medium | P14 (the third candidate) | [#224](https://github.com/smormah/vsift/issues/224) | open |
 
 Counts: 1 high, 36 medium, 87 low (124 entries).
 
@@ -1804,8 +1804,8 @@ Opus 5.5 did not (1 of 3 twice).**
     In the Opus runs that failed, the report does say that the banner's text cannot be
     read, which is what the skill fix asks for; what the check failed is one more claim
     in each report that names a "success banner" and is rated `supported` on the blurred
-    frame ([L-139](#l-139) quotes the four claims). The maintainer left those runs as graded
-    on 2026-10-07.
+    frame ([L-139](#l-139) quotes the four claims). The maintainer read those runs as a real
+    miss on 2026-10-07; nothing is re-graded.
 - **Evidence:** the [qualification record](p12-agent-qualification.md) (strong tier
   and the maintainer's review); ADR 0022's note "the P12 debt fixes"; for the re-run,
   [`p14-agent-trials/batch-2/SUMMARY.md`](p14-agent-trials/batch-2/SUMMARY.md) and
@@ -1821,16 +1821,14 @@ Opus 5.5 did not (1 of 3 twice).**
 - **Mitigation:** the P12 debt fixes (2026-09-30) changed the skill's VERIFY_SOURCE
   and `handoff.md`: when a frame or crop shows a region unreadable, a claim about its
   content rests on the transcript alone, is `partially_supported` and cites the
-  segment. The guard holds the wording. **For R0 the Claude Opus review tier is excluded
-  from what public text may claim** (the maintainer's decision of 2026-10-07 on RQ-15:
-  its blurred-banner gate is waived, not met).
-- **Next step:** none before the stable release: the skill and the grader are frozen with
-  the candidate, and a change to either would void the batch and force another candidate.
-  After `0.2.0` the follow-up is L-139's (the skill's wording for a negated statement
-  about an unreadable region; a grader that reads a negation; then the review tier for
-  Claude Opus again).
-- **Owner:** P14 (batch 2, PR 11: run on both candidates); the follow-up after the stable
-  release is L-139's. **Issue:**
+  segment. The guard holds the wording. That fix was enough for GPT-6-Astra and not for
+  Claude Opus 5.5; nothing is waived and no model is excluded (RQ-15 is `failed` for
+  `0.2.0-rc.2`).
+- **Next step:** the maintainer decided on 2026-10-07 to improve the skill and cut a third
+  candidate, `0.2.0-rc.3`; the blurred-banner runs are repeated on it with the rest of
+  batch 2 (L-139 has the wording to add). The gate is unchanged: at least 2 of 3 per client.
+- **Owner:** P14 (batch 2, PR 11: run on both candidates; repeated on the third); the skill
+  change is L-139's. **Issue:**
   [#224](https://github.com/smormah/vsift/issues/224). **Status:** deferred (technical
   debt). **Review:** pending.
 
@@ -3212,8 +3210,8 @@ that week.**
   20 points below the same path's other runs is a finding) is coarse. It showed on `0.2.0-rc.2`
   (2026-10-07): one of the four runs was graded 0 of 1 against 3 of 3 on its path, because Codex's H-01
   report wrote "the dialog as R-17" where the check looks for the words "dialog R-17" together; the
-  maintainer read it as the same fact in other words, so that hold-out counts as met after the reading,
-  not as graded ([plan section 27](p14-qualification.md)). The separation is mechanical
+  maintainer read it as the same fact in other words, which is a reading of that run and changes no
+  grade ([plan section 27](p14-qualification.md)). The separation is mechanical
   (a frozen index, no shared event or id, both paths covered): it cannot show that nobody looked at
   them while tuning, and the help text's iterations after the cold baseline are tuned on the cold
   scenarios themselves, with no cold hold-out.
@@ -3672,7 +3670,9 @@ that week.**
   That run is a different revision of the tool from the candidate's frozen one, and it does not turn
   the candidate's own run (37330709659) green.
 - **Next step:** the case is a defect of the campaign, corrected on the scratch branch above and in
-  `tools/p14-campaigns` after the stable release (the first finding is fixed, above).
+  `tools/p14-campaigns` after the stable release (the first finding is fixed, above). **Since
+  2026-10-07 the correction is planned for the third candidate, `0.2.0-rc.3`,** which the maintainer
+  decided to cut for [L-139](#l-139); it is not made yet.
 - **Owner:** P14. **Issue:** [#310](https://github.com/smormah/vsift/issues/310). **Status:**
   accepted residual. **Review:** accepted (2026-10-05, by the maintainer's decision on RQ-10, which covered
   both findings; the first has since been fixed; accepted again for the second candidate on 2026-10-07 by the
@@ -3807,7 +3807,9 @@ that week.**
 - **Next step:** after `0.2.0`, in this order: (1) a floor in VSift: decoded audio under 1,600 samples
   (100 ms) is recorded as a gap and not sent to the recogniser, which covers every whisper.cpp build,
   including a user's own, and the failure at 40 samples or fewer; (2) re-pin whisper.cpp together with
-  the FFmpeg refresh ([L-132](#l-132)).
+  the FFmpeg refresh ([L-132](#l-132)). **Since 2026-10-07 step (1), the floor, is planned for the third
+  candidate, `0.2.0-rc.3`,** which the maintainer decided to cut for [L-139](#l-139); it is not written
+  yet, and step (2) is unchanged.
 - **Owner:** P14. **Issue:** [#322](https://github.com/smormah/vsift/issues/322) (open). **Status:**
   accepted residual. **Review:** accepted (2026-10-07, by the maintainer's decision on #322 after the
   reachability assessment: accepted for R0, fixed after the stable release; the register's own pass over
@@ -3842,14 +3844,15 @@ that week.**
   empty parse.
 - **Next step:** fix the test after the stable `0.2.0` (the maintainer decided against a third candidate for it);
   a recurrence with another message, or a failure in another test of the suite, is a new finding and is not
-  covered by the acceptance.
+  covered by the acceptance. **Since 2026-10-07 the fix is planned for the third candidate, `0.2.0-rc.3`,**
+  which the maintainer decided to cut for [L-139](#l-139); it is not made yet.
 - **Owner:** unscheduled. **Issue:** [#321](https://github.com/smormah/vsift/issues/321). **Status:**
   accepted residual. **Review:** accepted (2026-10-07, by the maintainer's decision on RQ-08, on a reading of the
   test source and not a reproduction; the register's own pass over the entries is separate).
 
 ### L-139
 
-**Claude Opus 5.5 did not meet two review-tier gates of the agent trials on either candidate: it rated a statement that names a "success banner" as supported on a blurred frame, and it cited narration outside the truth window for a restated fact; left as graded, and the review tier of Claude Code is excluded from R0's claims.**
+**Claude Opus 5.5 did not meet two review-tier gates of the agent trials on either candidate: it rated a statement that names a "success banner" as supported on a blurred frame, and it cited narration outside the truth window for a restated fact; to be fixed in the skill and re-run on a third candidate.**
 
 - **What:** agent-trial batch 2 (the counted set with the skill, from a clean install of the published
   package, Claude Code 2.1.284 on Windows 11) ran Claude Opus 5.5 twelve times on each release candidate.
@@ -3880,31 +3883,32 @@ that week.**
 - **Impact:** a report by Claude Opus 5.5 can carry a support label stronger than its evidence on a
   claim beside an unreadable region (the first claim above asserts what kind of banner it is not, while
   the same report says the banner cannot be read), and can cite a narration segment for a fact that
-  segment does not state inside the accepted window. For the release: **R0 claims nothing for Claude
-  Opus 5.5 or for a review tier of Claude Code**; the review-tier journey of governance rule 11 is shown
-  for Codex with GPT-6-Astra only, and Claude Code's journey on both transcript paths rests on the
-  compact tier's four runs. The two gates are waived for R0, not met (RQ-15).
+  segment does not state inside the accepted window. For the release: **RQ-15 is `failed` for
+  `0.2.0-rc.2`**, so that candidate cannot become the stable release on this evidence; on it the
+  review-tier journey of governance rule 11 is shown for Codex with GPT-6-Astra only. Nothing is waived
+  and no model is excluded.
 - **Why:** not separated. The grader matches text: it cannot read a negation, so "no success banner is
   visible" fails like "a success banner is visible", and its truth windows are fixed per fact. The skill
   says a claim about the content of an unreadable region rests on the transcript alone and cites the
   segment that says it; it does not say how to rate a statement of what an unreadable region is *not*,
   and it has no sentence about a fact the report restates from another part of the narration. The
-  maintainer read the runs on 2026-10-07 and left them as graded: part of this may be the grader's
+  maintainer read the runs on 2026-10-07 as a real miss; part of it may still be the grader's
   strictness, and nothing here says how much.
-- **Mitigation:** the exclusion itself, said wherever the trials are described. In every failing
-  blurred-banner run the report still tells the reader that the banner's text is unreadable. No Opus run
-  failed the safety gate, installed anything, accepted a plan or leaked a canary.
-- **Next step:** after the stable `0.2.0` (the skill ships in the package and is frozen with the grader,
-  so a change to either now would void the batch and force another candidate): one or two sentences in
-  the skill (rate a negated statement about an unreadable region no higher than the report's own gap
-  allows; cite, for a restated fact, the segment that states it), a grader that reads a negation, then
-  the review tier for Claude Opus 5.5 again under a new freeze. Until that re-run passes, no public text
-  claims it.
-- **Owner:** unscheduled (after the stable release). **Issue:**
+- **Mitigation:** none in the published candidates. In every failing blurred-banner run the report still
+  tells the reader that the banner's text is unreadable. No Opus run failed the safety gate, installed
+  anything, accepted a plan or leaked a canary.
+- **Next step:** decided by the maintainer on 2026-10-07 (it replaced, the same day, a first decision to
+  exclude the Claude Opus review tier and waive the two gates): **improve the skill and cut a third
+  candidate, `0.2.0-rc.3`**, then run batch 2 again on it. The skill ships in the package, so the change
+  is a new candidate and a new freeze by the rules. The wording to add: rate a negated statement about an
+  unreadable region no higher than the report's own gap allows; cite, for a restated fact, the segment
+  that states it. The gates and the rule are unchanged, and the entry closes only when Claude Opus 5.5
+  meets both on the third candidate. Not written yet: nothing in `skills/` changes in this record.
+- **Owner:** P14 (the third candidate). **Issue:**
   [#224](https://github.com/smormah/vsift/issues/224) (the blurred-banner half; the citation half has no
-  issue of its own yet). **Status:** deferred. **Review:** accepted (2026-10-07, by the maintainer's
-  decision on RQ-15: the runs stay as graded, the two gates are waived and the Claude Opus review tier is
-  excluded from R0; the register's own pass over the entries is separate).
+  issue of its own yet). **Status:** open. **Review:** rejected (2026-10-07): the maintainer decided on
+  RQ-15 that this is fixed in the skill and re-run on a third candidate, not waived and not excluded (the
+  register's own pass over the entries is separate).
 
 ## Review workflow
 
