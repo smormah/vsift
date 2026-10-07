@@ -28,6 +28,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   **Not #128:** that issue's sightings were other tests of the suite failing on a child's exit status; they use no marker file,
   so it stays open. It was seen again in these local repetitions, on main's suite as with the fix (four tests whose fixture
   child has three seconds; never `p06`), and [L-040](docs/planning/known-limits.md#l-040) records what was seen.
+- **The malicious-media campaign's no-room case tests the room check, not a refused folder; the product is unchanged** (P14,
+  #310's second finding; campaign tools, their tests and documents only). **What was wrong.** The case `sparse-no-room` gave
+  `vsift ingest` the mount point of its 256 MiB filesystem as the session root. That folder exists and VSift did not create it,
+  so VSift refused it with `INTEGRITY_FAILURE` after five seconds without looking at the source, and the tool counted that as
+  the filed finding of #266, because it tracked findings by case alone. So the no-room path of `ingest` was not tested on
+  0.1.0, `0.2.0-rc.1` or `0.2.0-rc.2`, and no run said so. **Change.** (1) A case with its own small filesystem roots its
+  sessions in folders inside the mount that do not exist yet, which VSift creates; the mount point is never a root. (2) The two
+  size cases pin each operation's answer to what the product gives, and anything else is a finding, a typed failure included:
+  a source within the limit that does not fit must answer `STORAGE_IO` with the no-room remediation on the CLI path and
+  `RESOURCE_LIMIT` on the worker path; a source over the limit must answer `INVALID_SOURCE` on the CLI path, and
+  `INVALID_SOURCE` or `RESOURCE_LIMIT` on the worker path (a workspace checks its reserve before the limit, so that answer
+  depends on the disk). (3) A filed finding is tracked for one operation and one outcome of its case; the same case answering
+  anything else fails the run. The list holds one finding now: `ingest` of a symbolic link answers `STORAGE_IO` (#265, a
+  published code, L-127). The named pipe (#264) and the no-room case (#266) are off it. **Tests** (Node.js, no container):
+  the session root of every operation of a small-filesystem case is a folder inside the mount and never the mount point (it
+  fails with the old root); the judge on the answers the runs recorded, where the refused folder of run 37613284274 is a new
+  finding and the room check's answer of run 37361623352 passes; the pinned answers, the remediation's beginning (read from
+  the constant in `vsift-contract`, so the two cannot part unnoticed), the tracked list and the summary's labels. **What is not
+  shown:** a campaign run of the corrected case from `main` is not recorded yet. The corrected root ran once from a scratch
+  branch on the published `0.2.0-rc.1` and answered `STORAGE_IO` in 0.1 s, which recorded the code and not the remediation;
+  the corrected tool then ran the whole campaign once in its own pull request on the published `0.2.0-rc.2` (run 37673774765:
+  green, one finding, the tracked link; `sparse-no-room` answered `STORAGE_IO` in 0.2 s with the no-room remediation). That is a
+  pull-request run; the run on the third candidate is the evidence. [L-134](docs/planning/known-limits.md#l-134) is narrowed to that. The campaign still does not test the room
+  check on Windows (which reads no free space, L-061), a filesystem that reports nothing available, or a write that runs out of
+  room during the copy.
 
 ## [0.2.0-rc.2] - 2026-10-06
 

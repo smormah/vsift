@@ -9,16 +9,70 @@ const failed = (code) => JSON.stringify({ status: 'failed', error: { code } });
 const run = (over = {}) => ({ code: 1, stdout: failed('INVALID_SOURCE'), stderr: `${METRICS()}\n`, durationMs: 2000, timedOut: false, oomKilled: false, network: 'none', ...over });
 const spec = (over = {}) => ({ id: 'x', expect: 'failure', ...over });
 
+const TRACKED = { link: { issue: 265, op: 'ingest', outcome: 'failed STORAGE_IO' }, pipe: { issue: 264, op: 'ingest', outcome: 'no JSON (exit 137)' } };
+const wrongCode = (code) => `failed with ${code}, not one of INVALID_SOURCE, RESOURCE_LIMIT, DEADLINE_EXCEEDED`;
+
 test('tracked findings are told apart from new ones, and a fixed case is named', () => {
   const findings = [
-    { id: 'fifo', op: 'ingest', findings: ['hang'] },
-    { id: 'brand-new', op: 'ingest', findings: ['wrong code'] },
+    { id: 'link', op: 'ingest', outcome: 'failed STORAGE_IO', findings: [wrongCode('STORAGE_IO')] },
+    { id: 'brand-new', op: 'ingest', outcome: 'failed INTERNAL', findings: [wrongCode('INTERNAL')] },
   ];
-  const split = j.splitKnown(findings, { fifo: 264, 'symlink-to-canary': 265 }, ['symlink-to-canary', 'other']);
-  assert.deepEqual(split.known.map((entry) => [entry.id, entry.issue]), [['fifo', 264]]);
+  const split = j.splitKnown(findings, TRACKED, ['pipe', 'other']);
+  assert.deepEqual(split.known.map((entry) => [entry.id, entry.issue]), [['link', 265]]);
   assert.deepEqual(split.fresh.map((entry) => entry.id), ['brand-new']);
-  assert.deepEqual(split.fixed, ['symlink-to-canary']);
+  assert.deepEqual(split.fixed, ['pipe']);
   assert.deepEqual(j.splitKnown([], {}, []), { known: [], fresh: [], fixed: [] });
+});
+
+test('a tracked case that answers anything but what was filed is a new finding', () => {
+  // #310, L-134: the no-room case was tracked by its id alone, so its INTEGRITY_FAILURE (the tool had named a folder
+  // VSift refuses) was counted as the filed finding and no run failed for it.
+  const filed = { id: 'link', op: 'ingest', outcome: 'failed STORAGE_IO', findings: [wrongCode('STORAGE_IO')] };
+  assert.equal(j.trackedIssue(filed, TRACKED), 265);
+  for (const [what, other] of [
+    ['another outcome', { ...filed, outcome: 'failed INTEGRITY_FAILURE', findings: [wrongCode('INTEGRITY_FAILURE')] }],
+    ['another operation', { ...filed, op: 'job_name' }],
+    ['something beside the wrong code', { ...filed, findings: [...filed.findings, 'raw control characters in the output (0x1b)'] }],
+    ['a case that is not tracked', { ...filed, id: 'other' }],
+  ]) {
+    assert.equal(j.trackedIssue(other, TRACKED), null, what);
+    const split = j.splitKnown([other], TRACKED, []);
+    assert.deepEqual([split.known.length, split.fresh.length], [0, 1], what);
+  }
+  assert.equal(j.trackedIssue({ ...filed, id: 'toString' }, TRACKED), null, 'an inherited property is not a tracked case');
+});
+
+test('a pinned answer is the only one an operation may give', () => {
+  const pinned = spec({ expect: 'failure', codes: ['INVALID_SOURCE', 'RESOURCE_LIMIT', 'DEADLINE_EXCEEDED', 'STORAGE_IO'], answers: { ingest: { codes: ['STORAGE_IO'], remediation: 'The folder has no room' }, job_small: { codes: ['RESOURCE_LIMIT'] } } });
+  const noRoom = (summary) => JSON.stringify({ status: 'failed', error: { code: 'STORAGE_IO', remediation: summary === null ? [] : [{ summary }] } });
+  const ingest = (stdout, over = {}) => j.judge({ spec: pinned, op: 'ingest', first: true, run: run({ stdout, ...over }), canaries: [] });
+
+  assert.equal(ingest(noRoom('The folder has no room for a copy. Free some.')).ok, true);
+  // The answer the mis-built case gave: typed and inside its bound, and not what the case is about.
+  assert.match(ingest(failed('INTEGRITY_FAILURE')).findings[0], /failed with INTEGRITY_FAILURE, not one of STORAGE_IO$/);
+  // A code the case's wider list or the plan allows is still not the pinned one.
+  assert.match(ingest(failed('INVALID_SOURCE')).findings[0], /failed with INVALID_SOURCE, not one of STORAGE_IO$/);
+  // The right code for another reason: a disk that failed answers STORAGE_IO too.
+  assert.match(ingest(noRoom('The path you gave is a link.')).findings[0], /its remediation does not begin "The folder has no room": "The path you gave is a link\."/);
+  assert.match(ingest(noRoom(null)).findings[0], /its remediation does not begin/);
+  assert.match(ingest(failed('STORAGE_IO')).findings[0], /its remediation does not begin/);
+  assert.match(ingest(JSON.stringify({ status: 'complete', data: {} }), { code: 0 }).findings[0], /was accepted \(complete\) but must fail with STORAGE_IO/);
+
+  const worker = (code) => j.judge({ spec: pinned, op: 'job_small', first: true, run: run({ stdout: JSON.stringify({ status: 'failed', data: { failure: { code } } }) }), canaries: [] });
+  assert.equal(worker('RESOURCE_LIMIT').ok, true);
+  assert.equal(worker('STORAGE_IO').ok, false);
+  // An operation the case does not pin keeps the case's own codes, and a follow-up call its extra one.
+  assert.equal(j.judge({ spec: pinned, op: 'frame', first: false, run: run({ stdout: failed('INVALID_ARGUMENT') }), canaries: [] }).ok, true);
+  assert.equal(j.judge({ spec: spec({ answers: { ingest: { codes: ['INVALID_SOURCE'] } } }), op: 'frame', first: false, run: run({ stdout: failed('RESOURCE_LIMIT') }), canaries: [] }).ok, true);
+  // A pinned operation does not get the follow-up code.
+  assert.equal(j.judge({ spec: spec({ answers: { frame: { codes: ['INVALID_SOURCE'] } } }), op: 'frame', first: false, run: run({ stdout: failed('INVALID_ARGUMENT') }), canaries: [] }).ok, false);
+});
+
+test('the first remediation of a failed command is read, and nothing else is taken for one', () => {
+  assert.equal(j.remediationOf({ error: { code: 'STORAGE_IO', remediation: [{ summary: 'first' }, { summary: 'second' }] } }), 'first');
+  for (const json of [null, {}, { error: {} }, { error: { remediation: [] } }, { error: { remediation: 'text' } }, { error: { remediation: [{ summary: 7 }] } }, { data: { failure: { code: 'RESOURCE_LIMIT' } } }]) {
+    assert.equal(j.remediationOf(json), '');
+  }
 });
 
 test('the container\'s own metrics are read from the last line', () => {
