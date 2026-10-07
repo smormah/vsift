@@ -274,6 +274,48 @@ async fn managed_tools_need_a_published_install() -> TestResult {
     Ok(())
 }
 
+/// Whether `name` is what the harness calls a cold trial's folder: `run-` and
+/// eight lowercase hexadecimal digits, and nothing else. A name of that shape
+/// has no room for a scenario's identifier; a skill trial's folder, which is
+/// named for its scenario, does not have it.
+fn is_cold_trial_name(name: &str) -> bool {
+    name.strip_prefix("run-").is_some_and(|identifier| {
+        identifier.len() == 8
+            && identifier
+                .bytes()
+                .all(|byte| matches!(byte, b'0'..=b'9' | b'a'..=b'f'))
+    })
+}
+
+/// #327: a random identifier may spell a fragment of a scenario's name, `f05`
+/// among them, and is still not named after the scenario; a folder named for
+/// a scenario is refused whatever else it holds.
+#[test]
+fn a_cold_trial_name_is_judged_by_its_shape_not_by_what_its_digits_spell() {
+    for random in [
+        "run-0a1b2c3d",
+        "run-a1f05b22",
+        "run-f05f05f0",
+        "run-c01f05ab",
+    ] {
+        assert!(is_cold_trial_name(random), "{random}");
+    }
+    for named in [
+        "c-01-f05-supplied-0a1b2c3d",
+        "run-f05-supplied",
+        "run-c-01-f05",
+        "run-0a1b2c3d-f05",
+        "f05-run-0a1b2c3d",
+        "run-0a1b2c3",
+        "run-0a1b2c3d4",
+        "run-0A1B2C3D",
+        "run-",
+        "0a1b2c3d",
+    ] {
+        assert!(!is_cold_trial_name(named), "{named}");
+    }
+}
+
 #[tokio::test]
 async fn a_cold_workspace_holds_no_skill_no_documentation_and_nothing_that_names_the_tool()
 -> TestResult {
@@ -286,18 +328,27 @@ async fn a_cold_workspace_holds_no_skill_no_documentation_and_nothing_that_names
     )
     .await?;
     assert_eq!(manifest.mode, TrialMode::Cold);
-    // The trial folder is in every path the agent sees: it names no scenario.
+    // The trial folder is in every path the agent sees, and it names no
+    // scenario: its name is `run-` and a random identifier and nothing else,
+    // and it is the only part of the path the harness chooses. (Looking for
+    // the scenario's `f05` anywhere in the path, as this test once did, also
+    // finds it in a random identifier or in the temporary folder's own name:
+    // #327.)
     assert!(
-        manifest.trial_id.starts_with("run-"),
+        is_cold_trial_name(&manifest.trial_id),
         "{}",
         manifest.trial_id
     );
     assert!(
-        !layout
-            .trial()
-            .to_string_lossy()
-            .to_ascii_lowercase()
-            .contains("f05")
+        !manifest
+            .trial_id
+            .contains(&manifest.scenario_id.to_ascii_lowercase()),
+        "{}",
+        manifest.trial_id
+    );
+    assert_eq!(
+        layout.trial(),
+        scratch.path().join("root").join(&manifest.trial_id)
     );
     assert_eq!(manifest.skill_source, SkillSource::None);
     assert_eq!(manifest.skill_sha256, "none");
