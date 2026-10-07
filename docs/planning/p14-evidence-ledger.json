@@ -23,15 +23,25 @@
       "scope": ["Cargo.toml", "Cargo.lock", "rust-toolchain.toml", "crates", "npm", "skills/vsift", "tools/vsift-release", ".github/workflows/release.yml", "tools/p14-published", ".github/workflows/p14-published-artifacts.yml"],
       "gate": { "candidate": "required", "stable": "repeat" },
       "status": "passed",
-      "applies_to": { "version": "0.2.0-rc.1", "commit": "d5792ce31db1106934233c86d0518c3ad1961e07" },
+      "applies_to": { "version": "0.2.0-rc.2", "commit": "7c722d1fc46af7fddeffbaf807028eaec413ace1" },
       "evidence": [
+        {
+          "reference": { "type": "workflow_run", "workflow": "P14 published artifacts", "run_id": 37602931887 },
+          "date": "2026-10-07",
+          "note": "The twelve clean-install jobs (npm, pnpm, Yarn and Bun on Windows Server 2025, macOS 15 and Ubuntu 24.04) of the dispatch with version 0.2.0-rc.2 and from_version 0.1.0 from main at 7c722d1, the tag's commit, minutes after the publish (09:43 UTC): vsift-cli@0.2.0-rc.2 installed from the real registry with cargo, rustc, rustup, git and python not resolving (asserted first); global (Yarn: project) and one-shot installs with scripts disabled; --version names 0.2.0-rc.2 and the tag commit (7c722d1fc46a) on every manager and system; hostile file names and arguments through the PowerShell and Bun shims and through yarn answered as vsift itself does (39 of 39 on each Windows job that has them); a fake ffmpeg planted in the working directory and on PATH is never selected or run from the working directory or a relative entry and is never trusted for media work (SEC-02); optional dependencies omitted fail with exit 127 naming the package. The same twelve jobs of the second dispatch (run 37611381117, from_version 0.2.0-rc.1) were green too. All 23 jobs of each run passed. The Windows vsift.cmd shim is an observation, not a pass: 36 of 39 hostile cases answered as vsift itself does, the others are cmd.exe re-reading the command line (#257, L-109, an accepted residual). For 0.2.0-rc.2 only; hosted images are not clean machines (L-112)."
+        },
+        {
+          "reference": { "type": "record", "path": "docs/planning/p14-qualification.md" },
+          "date": "2026-10-07",
+          "note": "Section 26.1: the runs of the second candidate and what each shows and does not show."
+        }
+      ],
+      "prior": [
         {
           "reference": { "type": "workflow_run", "workflow": "P14 published artifacts", "run_id": 37328348087 },
           "date": "2026-10-05",
           "note": "The twelve clean-install jobs (npm, pnpm, Yarn and Bun on Windows Server 2025, macOS 15 and Ubuntu 24.04) of the dispatch with version 0.2.0-rc.1 from main at d5792ce, the tag's commit, minutes after the publish: vsift-cli@0.2.0-rc.1 installed from the real registry with cargo, rustc, rustup, git and python not resolving (asserted first); global (Yarn: project) and one-shot installs with scripts disabled; --version names 0.2.0-rc.1 and the tag commit (d5792ce31db1); the installed skill is the tag's, 12 files byte for byte; hostile file names and arguments through the PowerShell, shell and Bun shims answered as vsift itself does (the Windows npm job: 39 of 39 through vsift.ps1); a fake ffmpeg planted in the working directory and on PATH is never selected or run from the working directory or a relative entry and is never trusted for media work (SEC-02); optional dependencies omitted fail with exit 127 naming the package; npm audit signatures and gh attestation verify pass. All twelve jobs green. The Windows vsift.cmd shim is an observation, not a pass: 36 of 39 hostile cases answered as vsift itself, the others are cmd.exe re-reading the command line (#257, L-109, an accepted residual). For 0.2.0-rc.1 only; hosted images are not clean machines (L-112)."
-        }
-      ],
-      "prior": [
+        },
         {
           "reference": { "type": "workflow_run", "workflow": "P14 published artifacts", "run_id": 36969577337 },
           "date": "2026-10-02",
@@ -53,7 +63,7 @@
           "note": "One install of 0.1.0 from the real registry, with npm only, on the maintainer's Windows 11 development machine (npm audit signatures 4 and 4, npx vsift --version). No pnpm, Yarn or Bun, no other system, not a clean machine."
         }
       ],
-      "date": "2026-10-05"
+      "date": "2026-10-07"
     },
     {
       "id": "RQ-02",
@@ -74,22 +84,27 @@
       "scope": ["Cargo.toml", "Cargo.lock", "rust-toolchain.toml", "crates", "npm", "skills/vsift", "tools/vsift-release", ".github/workflows/release.yml", "tools/p14-published", ".github/workflows/p14-published-artifacts.yml"],
       "gate": { "candidate": "required", "stable": "repeat" },
       "status": "passed",
-      "applies_to": { "version": "0.2.0-rc.1", "commit": "d5792ce31db1106934233c86d0518c3ad1961e07" },
+      "applies_to": { "version": "0.2.0-rc.2", "commit": "7c722d1fc46af7fddeffbaf807028eaec413ace1" },
       "evidence": [
+        {
+          "reference": { "type": "workflow_run", "workflow": "P14 published artifacts", "run_id": 37602931887 },
+          "date": "2026-10-07",
+          "note": "The three archive jobs of the same dispatch (0.2.0-rc.2, 7c722d1): the three archives and SHA256SUMS downloaded from the v0.2.0-rc.2 release, the checksums matched and the three attestations verified against the Release workflow and refs/tags/v0.2.0-rc.2; each archive extracted with tar and held its executable in the right format, the licences, notices, SBOM and skill; each system's own executable printed vsift 0.2.0-rc.2 (7c722d1fc46a) and answered setup check --json (exit 2, status blocked: no tools) with no Node.js, Rust, Git or Python on PATH; the shipped skill is the tag's. Repeated by the second dispatch (run 37611381117), also green. For 0.2.0-rc.2 only; no browser download (RQ-17)."
+        }
+      ],
+      "prior": [
         {
           "reference": { "type": "workflow_run", "workflow": "P14 published artifacts", "run_id": 37328348087 },
           "date": "2026-10-05",
           "note": "The three archive jobs of the same dispatch (0.2.0-rc.1, d5792ce): the three archives and SHA256SUMS downloaded from the v0.2.0-rc.1 release, the checksums matched and the three attestations verified against the Release workflow and refs/tags/v0.2.0-rc.1; each archive extracted with tar and held its executable in the right format (Mach-O arm64, PE x64, ELF x64), the licences, notices, SBOM and skill; each system's own executable printed vsift 0.2.0-rc.1 (d5792ce31db1) and answered setup check --json (exit 2, status blocked: no tools) with no Node.js, Rust, Git or Python on PATH; the shipped skill is the tag's, 12 files identical. For 0.2.0-rc.1 only; no browser download (RQ-17)."
-        }
-      ],
-      "prior": [
+        },
         {
           "reference": { "type": "workflow_run", "workflow": "P14 published artifacts", "run_id": 36969577337 },
           "date": "2026-10-02",
           "note": "The three archive jobs of this run at 6aa5403: the three archives and SHA256SUMS downloaded from the v0.1.0 release, checksums and attestations verified, extracted, each executable in the right format, the system's own run with --version (0.1.0 and the tag commit) and setup check --json with no Node.js, Rust, Git or Python on PATH, and the shipped skill byte-identical to the tag's. For 0.1.0 only; no browser download (RQ-17)."
         }
       ],
-      "date": "2026-10-05"
+      "date": "2026-10-07"
     },
     {
       "id": "RQ-03",
@@ -109,15 +124,20 @@
       "scope": ["Cargo.toml", "Cargo.lock", "crates", "tools/p14-published", ".github/workflows/p14-published-artifacts.yml"],
       "gate": { "candidate": "required", "stable": "repeat" },
       "status": "passed",
-      "applies_to": { "version": "0.2.0-rc.1", "commit": "d5792ce31db1106934233c86d0518c3ad1961e07" },
+      "applies_to": { "version": "0.2.0-rc.2", "commit": "7c722d1fc46af7fddeffbaf807028eaec413ace1" },
       "evidence": [
+        {
+          "reference": { "type": "workflow_run", "workflow": "P14 published artifacts", "run_id": 37602931887 },
+          "date": "2026-10-07",
+          "note": "The offline-install job of the same dispatch (0.2.0-rc.2, 7c722d1): the published Linux archive downloaded, checksummed, attested and extracted; the three reviewed artifacts (ffmpeg_ffprobe, whisper_cli, whisper_model) downloaded by the binary's own setup plan with size and SHA-256 checked, then installed with --artifact-dir in a container with --network none: all three components activated, setup list verifies every component and a rerun is already_current for all three; the same install without the folder fails as offline; a relative folder is INVALID_ARGUMENT; one changed byte is INTEGRITY_FAILURE (digest_mismatch, exit 7: ffmpeg activated, whisper_cli refused, whisper_model blocked, setup check degraded) and the file is never used; a missing file is INVALID_ARGUMENT (artifact_missing, exit 2). Repeated by the second dispatch (run 37611381117), also green. For 0.2.0-rc.2 only."
+        }
+      ],
+      "prior": [
         {
           "reference": { "type": "workflow_run", "workflow": "P14 published artifacts", "run_id": 37328348087 },
           "date": "2026-10-05",
           "note": "The offline-install job of the same dispatch (0.2.0-rc.1, d5792ce): the published Linux archive downloaded, checksummed, attested and extracted; its own setup plan names three reviewed artifacts (ffmpeg_ffprobe n9.0.1-11-ge47273f4d9-20260831, whisper_cli whisper.cpp-v1.9.2-ubuntu-x64, whisper_model whisper-base-multilingual-80da2d8), downloaded by that plan with size and SHA-256 checked, then installed with --artifact-dir in a container with --network none: all three components activated, setup check ready from the managed store, every component verifies and a rerun is already_current; the same install without the folder fails as offline (so the network is really absent); a relative folder is INVALID_ARGUMENT; one changed byte is INTEGRITY_FAILURE (digest_mismatch) and the file is never used; a missing file is INVALID_ARGUMENT (artifact_missing). The minimal Ubuntu image was given libgomp1, which the whisper.cpp build needs (#256: the error now names it and install.md says so). For 0.2.0-rc.1 only."
-        }
-      ],
-      "prior": [
+        },
         {
           "reference": { "type": "workflow_run", "workflow": "P14 published artifacts", "run_id": 36969577337 },
           "date": "2026-10-02",
@@ -129,7 +149,7 @@
           "note": "The offline path has run with stand-in artifacts only; the managed smoke downloads the real files online, from a source-built binary."
         }
       ],
-      "date": "2026-10-05"
+      "date": "2026-10-07"
     },
     {
       "id": "RQ-04",
@@ -149,8 +169,25 @@
       "scope": ["Cargo.toml", "Cargo.lock", "rust-toolchain.toml", "crates", "npm", "schemas", "docs/contracts/cli-v1.md", "tools/p14-published", ".github/workflows/p14-published-artifacts.yml", ".github/workflows/p14-local-upgrade.yml", ".github/workflows/p14-compatibility.yml"],
       "gate": { "candidate": "required", "stable": "repeat" },
       "status": "passed",
-      "applies_to": { "version": "0.2.0-rc.1", "commit": "d5792ce31db1106934233c86d0518c3ad1961e07" },
+      "applies_to": { "version": "0.2.0-rc.2", "commit": "7c722d1fc46af7fddeffbaf807028eaec413ace1" },
       "evidence": [
+        {
+          "reference": { "type": "workflow_run", "workflow": "P14 published artifacts", "run_id": 37602931887 },
+          "date": "2026-10-07",
+          "note": "The three upgrade jobs (real-registry mode) of the dispatch with from_version 0.1.0: the published 0.1.0 (011bc4da1af6) installed from the real registry with its media tools (Ubuntu: the managed install of that version; Windows: registered tools), a configuration registered, two sessions made (a supplied SRT and a VTT) and a bundle retained; then npm install --global vsift-cli@0.2.0-rc.2 (now vsift 0.2.0-rc.2, 7c722d1fc46a): the configuration byte-identical (and the media-tool verification record unchanged), session A's status, transcript and search read the same (additive members allowed), the session list and the bundle as before, the managed tools still verify (Ubuntu), a new session works; then install.md section 8 walked: managed tools removed, the package gone, VSift's own folders exactly the ones the guide names, deleting them left no trace and the bundle, registered tools and source files stayed. All three green."
+        },
+        {
+          "reference": { "type": "workflow_run", "workflow": "P14 published artifacts", "run_id": 37611381117 },
+          "date": "2026-10-07",
+          "note": "The three upgrade jobs of the dispatch with from_version 0.2.0-rc.1 (the upgrade a person on next really does), 23 jobs, all green: the published 0.2.0-rc.1 (d5792ce31db1) installed with the same fixtures, then npm install --global vsift-cli@0.2.0-rc.2 (now 7c722d1fc46a): configuration identical, session A read the same, the list and the retained bundle as before, a new session works, and install.md section 8 walked to a clean uninstall on each of Ubuntu, Windows and macOS. npm only; no downgrade (L-044)."
+        },
+        {
+          "reference": { "type": "workflow_run", "workflow": "P14 compatibility", "run_id": 37611434666 },
+          "date": "2026-10-07",
+          "note": "Dispatched at the tag v0.2.0-rc.2 with the full history and VSIFT_REQUIRE_RELEASE_TAG=v0.1.0: the frozen copy of 0.1.0's JSON examples is the v0.1.0 tag's bytes, every one validates against the candidate's v1 schemas and every error code of the published examples is still published (published_compatibility, 4 tests), and the candidate's readers decode 0.1.0's stored session records (published_v0_1_0_records, 4 tests)."
+        }
+      ],
+      "prior": [
         {
           "reference": { "type": "workflow_run", "workflow": "P14 published artifacts", "run_id": 37328348087 },
           "date": "2026-10-05",
@@ -160,9 +197,7 @@
           "reference": { "type": "workflow_run", "workflow": "P14 compatibility", "run_id": 37330686129 },
           "date": "2026-10-05",
           "note": "Dispatched at the tag v0.2.0-rc.1 with the full history and VSIFT_REQUIRE_RELEASE_TAG=v0.1.0: the frozen copy of 0.1.0's JSON examples is the v0.1.0 tag's bytes, every one validates against the candidate's v1 schemas and every error code of the published examples is still published (published_compatibility, 4 tests), and the candidate's readers decode 0.1.0's stored session records: an imported and a local-ASR transcript revision, the evidence record with its identities, the visual index (published_v0_1_0_records, 4 tests)."
-        }
-      ],
-      "prior": [
+        },
         {
           "reference": { "type": "workflow_run", "workflow": "P14 published artifacts", "run_id": 36969577337 },
           "date": "2026-10-02",
@@ -179,7 +214,7 @@
           "note": "With the full history and VSIFT_REQUIRE_RELEASE_TAG=v0.1.0: the frozen copy of 0.1.0's 52 JSON examples is the tag's bytes, every one validates against the current v1 schemas, and the current readers decode the four stored session records (the same tests run in every Quality job)."
         }
       ],
-      "date": "2026-10-05"
+      "date": "2026-10-07"
     },
     {
       "id": "RQ-05",
@@ -200,8 +235,31 @@
       "scope": ["Cargo.toml", "Cargo.lock", "rust-toolchain.toml", "crates", "npm", "skills/vsift", "tools/vsift-release", ".github/workflows/release.yml", ".github/workflows/p14-journeys.yml", "tools/p14_journeys.py", "tools/p07_local_asr_tools.py", "fixtures"],
       "gate": { "candidate": "required", "stable": "repeat" },
       "status": "passed",
-      "applies_to": { "version": "0.2.0-rc.1", "commit": "d5792ce31db1106934233c86d0518c3ad1961e07" },
+      "applies_to": { "version": "0.2.0-rc.2", "commit": "7c722d1fc46af7fddeffbaf807028eaec413ace1" },
       "evidence": [
+        {
+          "reference": { "type": "workflow_run", "workflow": "P14 journeys", "run_id": 37602936329 },
+          "date": "2026-10-07",
+          "note": "The published vsift 0.2.0-rc.2 (7c722d1fc46a), installed from the real npm registry and run as the native executable through VSIFT_E2E_BINARY (the tests compiled from the tag's own source), on hosted Ubuntu 24.04 (managed tools installed by the binary's own setup install), Windows Server 2025 (the repository's pinned builds, hash-checked) and macOS 15 arm64 (Homebrew's ffmpeg 9.0.1_1 and whisper-cpp 1.9.2, not reviewed builds): nine checkpoints per system (ten on macOS, with the T-04 gates), 54 stages passed on each system and one blocked, none skipped. The blocked stage is P11's durable workspace on all three, as the per-system rule expects: on each host (Ubuntu's hosted disk has no write barriers, L-113) the host refused a durable workspace with MISSING_CAPABILITY and created nothing; the durable path itself on Ubuntu 24.04 with write barriers is what RQ-09 and RQ-12 of this same version show (below). The T-04 recognizer gates ran in process on macOS in this run (base: clean word error rate 4.06%, F08 61.53%, 2.83 times slower than real time; base_q5_1: 4.87% and 46.15%, 2.87 times slower; only the reviewed misses). Wall time 83, 22 and 15 minutes on macOS, Windows and Ubuntu (122 job-minutes). The first candidate's run had the same 54 passed stages."
+        },
+        {
+          "reference": { "type": "workflow_run", "workflow": "P07 local ASR", "run_id": 37613288555 },
+          "date": "2026-10-07",
+          "note": "The T-04 gates dispatched at the tag v0.2.0-rc.2 on hosted Ubuntu 24.04 and Windows Server 2025, both jobs passed (in process through the engine library with the pinned tools; the adapter over the speech clips, the CLI checkpoint and the gates for both profiles). Ubuntu: base clean word error rate 3.25%, F08 61.53%, real-time factor 0.240, peak 319 MiB; base_q5_1 4.06%, F08 38.46%, factor 0.233, peak 234 MiB. Windows: base 4.06%, F08 61.53%, factor 0.337, peak 336 MiB; base_q5_1 4.06%, F08 46.15%, factor 0.279, peak 250 MiB. No unexpected miss. Two figures differ from the first candidate's run (Windows base 4.06% against 3.25%; Ubuntu base_q5_1 F08 38.46% against 46.15%) while the gates held; nothing in the two fixes touches recognition, and the difference was not investigated (a runner's CPU is a candidate; not shown)."
+        },
+        {
+          "reference": { "type": "workflow_run", "workflow": "P14 load", "run_id": 37613280024 },
+          "date": "2026-10-07",
+          "note": "The Ubuntu 24.04 durable path with write barriers for this version: durable workspaces on an ext4 volume with write barriers (os_crash_durable publication), a 100-request batch and 1,000 mixed requests with kills and redelivery, every gate held (see RQ-09)."
+        },
+        {
+          "reference": { "type": "workflow_run", "workflow": "P14 runbook walk", "run_id": 37611439339 },
+          "date": "2026-10-07",
+          "note": "The Ubuntu 24.04 durable path with write barriers for this version, again: a durable workspace created on an ext4 volume with write barriers, the hardened container example and the systemd unit with a drain and a SIGKILL, all 18 steps matched (see RQ-12)."
+        }
+      ],
+      "issues": [258, 263],
+      "prior": [
         {
           "reference": { "type": "workflow_run", "workflow": "P14 journeys", "run_id": 37328354601 },
           "date": "2026-10-05",
@@ -221,10 +279,7 @@
           "reference": { "type": "workflow_run", "workflow": "P14 runbook walk", "run_id": 37330704044 },
           "date": "2026-10-05",
           "note": "The Ubuntu 24.04 durable path with write barriers for this version, again: a durable workspace created on an ext4 volume with write barriers, the hardened container example and the systemd unit with a drain and a SIGKILL, all 18 steps matched (see RQ-12)."
-        }
-      ],
-      "issues": [258, 263],
-      "prior": [
+        },
         {
           "reference": { "type": "workflow_run", "workflow": "P14 journeys", "run_id": 36965956708 },
           "date": "2026-10-02",
@@ -266,7 +321,7 @@
           "note": "A dispatch of the same gates on hosted Ubuntu 24.04 and Windows Server 2025 (both jobs passed), in process on source at f4695c3, a commit after the 0.1.0 commit; not the published binary. A dispatch at the 0.1.0 commit would put these two systems' gates among the counted evidence; the release candidate's run must."
         }
       ],
-      "date": "2026-10-05"
+      "date": "2026-10-07"
     },
     {
       "id": "RQ-06",
@@ -287,15 +342,20 @@
       "scope": ["Cargo.toml", "Cargo.lock", "crates", ".github/workflows/p13-managed-smoke.yml", "tools/p14_journeys.py"],
       "gate": { "candidate": "required", "stable": "repeat" },
       "status": "passed",
-      "applies_to": { "version": "0.2.0-rc.1", "commit": "d5792ce31db1106934233c86d0518c3ad1961e07" },
+      "applies_to": { "version": "0.2.0-rc.2", "commit": "7c722d1fc46af7fddeffbaf807028eaec413ace1" },
       "evidence": [
+        {
+          "reference": { "type": "workflow_run", "workflow": "P13 managed smoke", "run_id": 37602940209 },
+          "date": "2026-10-07",
+          "note": "Dispatched with published_version 0.2.0-rc.2 from main at 7c722d1: all three jobs green on Ubuntu 24.04 (the pinned smoke before activation, the real setup plan, install and check, and the install end to end with its kills and the local-ASR journey) with the published vsift 0.2.0-rc.2 (7c722d1fc46a) from the real npm registry as the binary under test (the report's binary_under_test source is override, overall passed), downloading the three reviewed artifacts from their publishers. Evidence for 0.2.0-rc.2 only; the weekly schedule runs the highest published version."
+        }
+      ],
+      "prior": [
         {
           "reference": { "type": "workflow_run", "workflow": "P13 managed smoke", "run_id": 37328360989 },
           "date": "2026-10-05",
           "note": "Dispatched with published_version 0.2.0-rc.1 from main at d5792ce: all three jobs green on Ubuntu 24.04 (the pinned smoke before activation, the real setup plan, install and check, and the install end to end with its kills and the local-ASR journey) with the published vsift 0.2.0-rc.1 (d5792ce31db1) from the real npm registry as the binary under test (the report's binary_under_test source is override), downloading the three reviewed artifacts from their publishers. Evidence for 0.2.0-rc.1 only; the weekly schedule runs the highest published version."
-        }
-      ],
-      "prior": [
+        },
         {
           "reference": { "type": "workflow_run", "workflow": "P13 managed smoke", "run_id": 36965088525 },
           "date": "2026-10-02",
@@ -312,7 +372,7 @@
           "note": "Green at 01656d6, same limits; nothing watches the publishers' files between releases (L-099)."
         }
       ],
-      "date": "2026-10-05"
+      "date": "2026-10-07"
     },
     {
       "id": "RQ-07",
@@ -333,8 +393,20 @@
       "scope": ["fuzz", "crates", "Cargo.lock", ".github/workflows/fuzz.yml"],
       "gate": { "candidate": "required", "stable": "carry" },
       "status": "passed",
-      "applies_to": { "version": "0.2.0-rc.1", "commit": "d5792ce31db1106934233c86d0518c3ad1961e07" },
+      "applies_to": { "version": "0.2.0-rc.2", "commit": "7c722d1fc46af7fddeffbaf807028eaec413ace1" },
       "evidence": [
+        {
+          "reference": { "type": "workflow_run", "workflow": "Fuzz", "run_id": 37611372051 },
+          "date": "2026-10-07",
+          "note": "All 31 targets ran 3,601 s each on hosted Ubuntu 24.04, dispatched at the tag v0.2.0-rc.2 (7c722d1fc46a, the candidate's own commit) with seconds=3601 (the same as for the first candidate): 2,918,298,500 runs in 111,662 s of fuzzing (1,952 job-minutes with the set-up job), no crash, timeout or out-of-memory, peak resident memory at most 878 MB. One plateau line per target is in each job log and the per-target table is in the plan: 18 targets found their last new coverage in the final tenth of their runs (the first candidate's run had 15 and 0.1.0's 19; the two candidates have the same parsers), two (crop_rect, png_sequence) none after their first 3 percent. The hour is a floor of a size that varies with the shared runners (2.92 billion runs; 2.88 billion on the first candidate, 3.68 billion on 0.1.0), not a repeat."
+        },
+        {
+          "reference": { "type": "record", "path": "docs/planning/p14-qualification.md" },
+          "date": "2026-10-07",
+          "note": "Section 26.2: the per-target figures of this run and what they do not show."
+        }
+      ],
+      "prior": [
         {
           "reference": { "type": "workflow_run", "workflow": "Fuzz", "run_id": 37330740720 },
           "date": "2026-10-05",
@@ -344,9 +416,7 @@
           "reference": { "type": "record", "path": "docs/planning/p14-qualification.md" },
           "date": "2026-10-05",
           "note": "Section 24.2: the per-target figures of this run and what they do not show."
-        }
-      ],
-      "prior": [
+        },
         {
           "reference": { "type": "workflow_run", "workflow": "Fuzz", "run_id": 36978914176 },
           "date": "2026-10-02",
@@ -363,7 +433,7 @@
           "note": "The first run of the Fuzz workflow passed all six targets of the time. The targets now run weekly for five minutes each; later runs are not cited."
         }
       ],
-      "date": "2026-10-05"
+      "date": "2026-10-07"
     },
     {
       "id": "RQ-08",
@@ -372,7 +442,7 @@
         "requirements": ["R-07", "R-09"],
         "threats": ["SEC-04", "SEC-07", "SEC-08", "SEC-09"],
         "verification": ["S-04", "S-05", "S-12", "X-04", "X-05"],
-        "limits": ["L-060", "L-135"]
+        "limits": ["L-060", "L-135", "L-138"]
       },
       "proves": "The locking and admission claims hold on three kernels: zero failures in at least 200 repetitions per system of lock stress (Windows added), weighted admission, engine worker and batch; any failure is captured and filed first (governance rule 14).",
       "does_not_prove": "Every interleaving. Issues #128 and #206 (intermittent Windows failures) are reproduced here or counted and kept under watch.",
@@ -383,9 +453,27 @@
       },
       "scope": ["crates", "Cargo.lock", ".github/workflows/lock-stress.yml", ".github/workflows/p14-stress.yml", "tools/p14-campaigns/stress.cjs", "tools/p14-campaigns/lib/repeat.cjs"],
       "gate": { "candidate": "required", "stable": "carry" },
-      "status": "failed",
-      "applies_to": { "version": "0.2.0-rc.1", "commit": "d5792ce31db1106934233c86d0518c3ad1961e07" },
+      "status": "waived",
+      "decision": {
+        "statement": "Waived for R0 by the maintainer on 2026-10-07, for the second release candidate 0.2.0-rc.2, which stays (no third candidate). One residual is accepted: one repetition in 1,500 of the plain process-supervisor suite on Windows failed in p06_descendants_and_inherited_pipe_holders_are_terminated with ParseIntError { kind: Empty } (#321), accepted as a race in the test, which reads a marker file its fixture child may still be writing, with L-138 as the register entry; no product code is on the failing line and the supervisor's assertions were not reached (a reading of the test source, not a reproduction). The run stays in the ledger as failed evidence. The test is fixed after the stable release, because a change to a file under crates/ between the tag and the stable commit would force a third candidate. The waiver does not cover: #312 (a root creation that gave up waiting under CPU load, L-135), which is not fixed, did not recur in this run and stays open with its own entry; #128 and #206, which stay under watch; a failure of any other suite, test or system, or of this test with another message; the delivery suite's 100 repetitions, which are below the rule's 200 by design; and it does not carry to a release in which anything in this item's scope has changed since the tag.",
+        "reference": { "type": "record", "path": "docs/decisions/0024-r0-qualification-and-release-candidate.md" },
+        "date": "2026-10-07"
+      },
+      "reason": "The pass rule asks for zero failures in at least 200 repetitions per system. 20,099 of 20,100 repetitions passed and every suite but one met the rule on all three systems, including the Windows lock suite the second candidate was cut for (200 of 200) and the CPU-loaded root creation (0 of 1,500); the one failure is read as the test's own race, and the test cannot be corrected without a change under crates/, which is a third candidate.",
       "evidence": [
+        {
+          "reference": { "type": "workflow_run", "workflow": "P14 stress", "run_id": 37611376706 },
+          "date": "2026-10-07",
+          "note": "FAILED. Eight suites on each of Windows Server 2025, Ubuntu 24.04 and macOS 15 (24 jobs and a set-up job, 1,143 job-minutes; the longest, the lock suite on Windows, took 177 minutes), dispatched at the tag v0.2.0-rc.2 (7c722d1fc46a) with the same parameters as for 0.1.0 and the first candidate: lock and lifecycle (200 repetitions), weighted admission with the coordination locks (200), engine worker, batch, jobs and lifecycle (200), the external-delivery simulation (100, each a randomised run), and the process supervisor and root-creation tests (1,500 each, plain and with every CPU kept busy). 20,100 repetitions in all (6,700 per system); 24 of 25 jobs passed with zero failed or hung repetitions and no repetition hung anywhere. **One repetition failed on Windows:** the plain supervisor suite, repetition 1,050 of 1,500, test p06_descendants_and_inherited_pipe_holders_are_terminated, \"Error: ParseIntError { kind: Empty }\" (#321, new, L-138): from the source, the test reads a marker file the fixture child may still be writing, so it is the test's, not the supervisor's, defect (a reading, not a reproduction). Issue #321 was opened before anything was repeated; nothing was rerun. **What the second candidate was cut for:** the lock suite on Windows, 200 repetitions of 329 tests, 0 failed (the first candidate had one in 200: #314, readers_never_report_damage_while_generations_are_published, fixed by #318); the CPU-loaded root-creation suite on Windows, 0 of 1,500 (one in 1,500 on the first candidate: #312, not fixed, L-135); #206's message 0 of 1,500 plain and loaded; weighted admission on Windows 0 of 200; #128 did not reproduce (0 of 3,000 on each system, plain and loaded). The delivery suite ran 100 repetitions per system, below the rule's 200, because each starts hundreds of processes. The rule (zero failures in at least 200 repetitions per system) is met by every suite but the one above, so this run is failed evidence and stays so; the maintainer waived the item for R0 on 2026-10-07 (the decision of this entry)."
+        },
+        {
+          "reference": { "type": "record", "path": "docs/planning/p14-qualification.md" },
+          "date": "2026-10-07",
+          "note": "Section 26.2: the per-suite results, what the one failure is and is not, and the maintainer's decision."
+        }
+      ],
+      "issues": [312, 314, 321],
+      "prior": [
         {
           "reference": { "type": "workflow_run", "workflow": "P14 stress", "run_id": 37330746176 },
           "date": "2026-10-05",
@@ -395,10 +483,7 @@
           "reference": { "type": "record", "path": "docs/planning/p14-qualification.md" },
           "date": "2026-10-05",
           "note": "Section 24.2: the per-suite results and what the two failures are and are not."
-        }
-      ],
-      "issues": [312, 314],
-      "prior": [
+        },
         {
           "reference": { "type": "workflow_run", "workflow": "P14 stress", "run_id": 36978939586 },
           "date": "2026-10-02",
@@ -415,7 +500,7 @@
           "note": "The delivery ledger's P10 entry records 40 of 40 macOS stress rounds after the lock-anchor fix. Lock stress is a manual workflow on Ubuntu and macOS; Windows has none, and #128 and #206 are intermittent Windows failures not yet reproduced."
         }
       ],
-      "date": "2026-10-05"
+      "date": "2026-10-07"
     },
     {
       "id": "RQ-09",
@@ -436,8 +521,20 @@
       "scope": ["crates", "Cargo.lock", ".github/workflows/p14-load.yml", "tools/p14-campaigns/load.cjs", "tools/p14-campaigns/prepare-host.cjs", "tools/p14-campaigns/worker.Dockerfile", "tools/p14-campaigns/lib/requests.cjs", "tools/p14-campaigns/lib/events.cjs", "tools/p14-campaigns/lib/cgroup-sampler.cjs", "tools/p14-campaigns/lib/load-verdict.cjs", "tools/p14-campaigns/lib/host.cjs", "tools/p14-campaigns/lib/container.cjs"],
       "gate": { "candidate": "required", "stable": "carry" },
       "status": "passed",
-      "applies_to": { "version": "0.2.0-rc.1", "commit": "d5792ce31db1106934233c86d0518c3ad1961e07" },
+      "applies_to": { "version": "0.2.0-rc.2", "commit": "7c722d1fc46af7fddeffbaf807028eaec413ace1" },
       "evidence": [
+        {
+          "reference": { "type": "workflow_run", "workflow": "P14 load", "run_id": 37613280024 },
+          "date": "2026-10-07",
+          "note": "The published 0.2.0-rc.2 in the hardened worker container (strict isolation attested, durable workspaces on an ext4 volume with write barriers, the reviewed tools installed by the binary) on a hosted 4-CPU Ubuntu 24.04 runner, 23 job-minutes, dispatched from main at 7c722d1 with the same parameters as for the first candidate: the diagnosis phase (all ten speech clips recognise their first five seconds), the ladder at 1, 2, 4 and 8 jobs (24 of 24 at each; coordinator peak 12.3 to 14.4 MiB), a 100-request batch (100 of 100; 21 bundles and 100 sessions validate), a cancel of a 30-minute recognition (CANCELLED, no descendant 10 s later), 200 warm candidate pages at p95 5 ms, and 1,000 mixed requests in 24 rounds with 5 SIGTERM drains, 5 SIGKILLs, 161 redeliveries and 6 cleaner passes: 1,000 of 1,000 came to what they were asked, 158 bundles and 737 sessions validated or read back, the cleaner removed all 737, coordinator memory at most 14.8 MiB with no growth in memory or descriptors, no path or sentinel in any output. Every gate held. For 0.2.0-rc.2 only; the two 12,000-request soaks of 0.1.0 were not repeated."
+        },
+        {
+          "reference": { "type": "record", "path": "docs/planning/p14-qualification.md" },
+          "date": "2026-10-07",
+          "note": "Section 26.1: the second candidate's runs of this item, what each shows and does not show."
+        }
+      ],
+      "prior": [
         {
           "reference": { "type": "workflow_run", "workflow": "P14 load", "run_id": 37330716117 },
           "date": "2026-10-05",
@@ -447,9 +544,7 @@
           "reference": { "type": "record", "path": "docs/planning/p14-qualification.md" },
           "date": "2026-10-05",
           "note": "Section 24.2: the candidate's runs of this item, what each shows and does not show."
-        }
-      ],
-      "prior": [
+        },
         {
           "reference": { "type": "workflow_run", "workflow": "P14 load", "run_id": 37137094810 },
           "date": "2026-10-03",
@@ -471,7 +566,7 @@
           "note": "The admission ladder ran at 1, 2 and 4 jobs once, on one Windows machine; the 8-job rung, the 100-request batch and the soak never ran."
         }
       ],
-      "date": "2026-10-05"
+      "date": "2026-10-07"
     },
     {
       "id": "RQ-10",
@@ -483,7 +578,7 @@
         "limits": ["L-004", "L-127", "L-134"]
       },
       "proves": "The bounds hold under abuse: each decompression-bomb and resource-abuse variant (huge dimensions, many streams, declared long duration, damaged and truncated files, container nesting, external references) ends in a typed failure inside its bound, with no hang, no network and no file outside the root.",
-      "does_not_prove": "That a decoder bug cannot be exploited. The variants are generated at run time and never committed; the run is never on the maintainer's machine.",
+      "does_not_prove": "That a decoder bug cannot be exploited. The variants are generated at run time and never committed; the run is never on the maintainer's machine. That a symbolic link given as the source is refused with one of the rule's three codes: it answers STORAGE_IO (#265, L-127). Anything about the no-room path of ingest: the campaign's case is mis-built and never reaches the room check (L-134).",
       "producer": {
         "kind": "workflow",
         "p14_pr": 4,
@@ -493,12 +588,25 @@
       "gate": { "candidate": "required", "stable": "carry" },
       "status": "waived",
       "decision": {
-        "statement": "Waived for R0 by the maintainer on 2026-10-05, with the release candidate 0.2.0-rc.1 kept (no second candidate). Two residuals are accepted: (a) a source that is both over the 20 GiB limit and larger than the free space answers STORAGE_IO, because the free-space check added for #266 runs before the size-limit check, where 0.1.0 answered INVALID_SOURCE (L-134, #310): a known deviation from the rule that published failure codes do not change within v1, accepted because the answer is typed, bounded and stores nothing, and a later release should run the limit check first; and (c) a symbolic link given as the source answers STORAGE_IO with a remediation that says what happened (#265, L-127). The campaign's own no-room case did not reach the check (a defect of the case); corrected for evidence only, on a branch that is never merged, it showed STORAGE_IO in 0.1 s on the published bytes.",
+        "statement": "Waived for R0 by the maintainer on 2026-10-07, for the second release candidate 0.2.0-rc.2; this replaces the decision of 2026-10-05, which was made for the first candidate's findings and is not carried over. The maintainer asked for the item to be recorded passed if its own rule allows it with tracked findings; it does not (the reason below), so the waiver is restated with only what is left. Two residuals are accepted: a symbolic link given as the source answers STORAGE_IO with a remediation that says what happened, where the rule names INVALID_SOURCE (#265, L-127: a published failure code stays within v1); and the campaign's own no-room case is mis-built (it passes a folder VSift did not create as the session root, which is refused with INTEGRITY_FAILURE after a wait of up to five seconds, as install.md section 12 documents), so it tests nothing about the room check, and the tool is frozen with the candidate (L-134, #266, #310). The first residual of 2026-10-05, an over-limit source answering STORAGE_IO, is fixed in this candidate (#310, #319: sparse-30gib answers INVALID_SOURCE on the published bytes) and is no longer covered or needed. The waiver does not cover: a new finding of the campaign, a broken containment check, an answer outside its bounds, or the no-room path of ingest on the published bytes, which this campaign has shown on no version (its evidence is the CLI test no_room_cli_contract and the first candidate's supplementary run from a scratch branch).",
         "reference": { "type": "record", "path": "docs/decisions/0024-r0-qualification-and-release-candidate.md" },
-        "date": "2026-10-05"
+        "date": "2026-10-07"
       },
-      "reason": "The pass rule asks for INVALID_SOURCE, RESOURCE_LIMIT or DEADLINE_EXCEEDED inside the bounds. The published candidate met every bound (typed, bounded, no network, no file outside the root, no hang) but answers STORAGE_IO in the two accepted cases, which the campaign's judge cannot pass without a change to a tool, and a change to a tool is a second candidate. R0 makes no claim of containing hostile media (RQ-14 is waived too).",
+      "reason": "The pass rule (plan section 2) asks for each input to end as a typed failure with INVALID_SOURCE, RESOURCE_LIMIT or DEADLINE_EXCEEDED inside its bound, with no hang, no network and no file outside the root. On the published 0.2.0-rc.2 every bound and every containment check held and 94 of 96 inputs met the rule; two answers are typed and bounded but carry other codes (STORAGE_IO for the link, INTEGRITY_FAILURE for the mis-built no-room case). The campaign's judge does not fail a run for findings it tracks, so the run is green, but it reports both as findings; a pass would need the rule's list of codes to change, which is a change of the rule and not a record of evidence. R0 makes no claim of containing hostile media (RQ-14 is waived too).",
       "evidence": [
+        {
+          "reference": { "type": "workflow_run", "workflow": "P14 malicious media", "run_id": 37613284274 },
+          "date": "2026-10-07",
+          "note": "Dispatched from main with version 0.2.0-rc.2 (the campaign tool is the tag's frozen one, as for the first candidate's first run): 96 generated inputs through 251 operations of the published 0.2.0-rc.2 (7c722d1fc46a) in a no-network, read-only-root, 1 GiB, 128-process container on hosted Ubuntu 24.04: 94 inputs ended as a typed failure or an in-bound completion with no network use and no canary or marker leaked, and two are the known findings the campaign tracks: symlink-to-canary ingest answers STORAGE_IO (#265, L-127, unchanged) and sparse-no-room ingest answers INTEGRITY_FAILURE after 5.2 s, because the case passes the tmpfs mount point itself as the session root, a folder VSift did not create (the campaign case's own defect, L-134, #310/#266: it has tested the no-room path of ingest on no version). The judge accepted the run (2 findings, both tracked, none new) and it is green. What changed from the first candidate: sparse-30gib ingest answers INVALID_SOURCE in 0.1 s again (the size-limit fix of #310, #319, works on the published bytes) and its worker request RESOURCE_LIMIT; the named pipe still passes (INVALID_SOURCE at once). The slowest operation took 5.2 s; the largest memory peak was 809 MiB of the 1,024 MiB limit (the 512 MiB free-space box, which completed). Containment: nothing was created or changed outside the root, the home and the queue, the canary is unchanged and in no session, bundle or configuration file, and no injected command ran. The run is green because the judge does not fail a run for a tracked finding; it still reports the two answers as findings, and they are outside the three codes the pass rule names, which is why the item is waived and not passed (the decision of this entry, 2026-10-07)."
+        },
+        {
+          "reference": { "type": "record", "path": "docs/planning/p14-qualification.md" },
+          "date": "2026-10-07",
+          "note": "Section 26.3: the second candidate's run, the cases and what a waiver would cover."
+        }
+      ],
+      "issues": [265, 266, 310],
+      "prior": [
         {
           "reference": { "type": "workflow_run", "workflow": "P14 malicious media", "run_id": 37330709659 },
           "date": "2026-10-05",
@@ -513,10 +621,7 @@
           "reference": { "type": "record", "path": "docs/planning/p14-qualification.md" },
           "date": "2026-10-05",
           "note": "Section 24.2: the candidate's run, the three cases, the corrected-case run and the analysis."
-        }
-      ],
-      "issues": [265, 266, 310],
-      "prior": [
+        },
         {
           "reference": { "type": "workflow_run", "workflow": "P14 malicious media", "run_id": 37136669473 },
           "date": "2026-10-02",
@@ -533,7 +638,7 @@
           "note": "NOT EVIDENCE, a change of the product that the waiver above accepted: residual (a), a source over the 20 GiB limit that is also larger than the free space answering STORAGE_IO, is fixed for the second candidate. A desktop root's room check no longer runs for a source over the limit, so the limit answers first and sparse-30gib answers INVALID_SOURCE again, 0.1.0's answer, whatever the free space; a source within the limit that does not fit keeps #266's STORAGE_IO, and a worker workspace keeps its reserve and RESOURCE_LIMIT. It is tested in the engine with the free space injected and, on Unix, through the binary with a sparse 4 TiB source. No campaign has been run on the fixed code: this item's status, decision and evidence above are the first candidate's and are unchanged, and the second candidate's own run is what counts for it. Residual (c), the link, and the campaign's no-room case that never reaches the check (L-134) are unchanged."
         }
       ],
-      "date": "2026-10-05"
+      "date": "2026-10-07"
     },
     {
       "id": "RQ-11",
@@ -554,8 +659,20 @@
       "scope": ["crates", "Cargo.lock", "tools/p10-crash-campaign", ".github/workflows/p10-durability-campaign.yml", ".github/workflows/p13-managed-power-loss.yml"],
       "gate": { "candidate": "required", "stable": "carry" },
       "status": "passed",
-      "applies_to": { "version": "0.2.0-rc.1", "commit": "d5792ce31db1106934233c86d0518c3ad1961e07" },
+      "applies_to": { "version": "0.2.0-rc.2", "commit": "7c722d1fc46af7fddeffbaf807028eaec413ace1" },
       "evidence": [
+        {
+          "reference": { "type": "workflow_run", "workflow": "P10 durability campaign", "run_id": 37619462038 },
+          "date": "2026-10-07",
+          "note": "Dispatched at the tag v0.2.0-rc.2 (7c722d1fc46a) with the workflow's defaults (400 workload operations, 80 QEMU kills per shard, 60 write-error rounds) on hosted Ubuntu 24.04: all nine jobs succeeded, **including the hosted Acceptance job, which printed \"All acceptance criteria met\"** (285 job-minutes; the longest layer job 53 minutes). Layer A positive: 52,667 entries, 11,072 replay points, 400 acknowledged commands: 0 lost points, 0 lost acknowledgements, 0 damaged points, 0 fsck or mount failures, 0 torn points. The negative control (the store without its flushes) lost 840 points and 53 acknowledgements and damaged 796 points, as it must, so the harness can see loss. Layer B, four shards: 320 QEMU kills over 81 cycles per shard, 0 failed cycles (318 of the 320 kills landed during an operation: two in shard 2 fell between operations; the acceptance numbers do not ask for more). Layer C: 60 rounds, 180 injected write errors, all 180 typed STORAGE_IO and none acknowledged, final status 0, no fsck failure. The figures equal those of the first candidate and the earlier reruns (11,094 points, 320 kills, 180 of 180 typed, negative control 840 and 53). Unlike the first candidate's run, the verdict was produced by the hosted job, not by a by-hand run of the script. #318 changed the read path of the durable session store, so this run matters for it; the campaign's workload does not read generations while a writer renames them, so it is not a test of #314."
+        },
+        {
+          "reference": { "type": "workflow_run", "workflow": "P13 managed power loss", "run_id": 37619456739 },
+          "date": "2026-10-07",
+          "note": "Dispatched at the tag v0.2.0-rc.2 on hosted Ubuntu 24.04: all four jobs passed (9 job-minutes), the hosted Acceptance job included. Positive run: 9,682 entries, 1,812 power-loss points, 134 acknowledged commands: 0 lost points, 0 lost acknowledgements, 0 damaged points, 0 fsck failures, 0 mount failures, 0 torn points. Negative control (the store without its flushes): 3,057 entries, 493 points, 72 lost points, 36 lost acknowledgements, as it must lose some. The same figures as the runs on 0.1.0's code and the first candidate (1,812 points; the control lost 36). The managed store's real tools were stand-in versions (L-037)."
+        }
+      ],
+      "prior": [
         {
           "reference": { "type": "workflow_run", "workflow": "P10 durability campaign", "run_id": 37361383864 },
           "date": "2026-10-05",
@@ -565,9 +682,7 @@
           "reference": { "type": "workflow_run", "workflow": "P13 managed power loss", "run_id": 37361388844 },
           "date": "2026-10-05",
           "note": "Dispatched at the tag v0.2.0-rc.1 (d5792ce31db1) on hosted Ubuntu 24.04: all four jobs passed (9 job-minutes). Positive run: 9,682 entries, 1,812 power-loss points, 134 acknowledged commands: 0 lost points, 0 lost acknowledgements, 0 damaged points, 0 fsck failures, 0 mount failures, 0 torn points. Negative control (the store without its flushes): 491 points, 72 lost points, 36 lost acknowledgements, as it must lose some. The same figures as the run on 0.1.0's code (1,812 points, negative control lost 36). The managed store's real tools were stand-in versions (L-037)."
-        }
-      ],
-      "prior": [
+        },
         {
           "reference": { "type": "workflow_run", "workflow": "P10 durability campaign", "run_id": 36347502530 },
           "date": "2026-09-27",
@@ -584,7 +699,7 @@
           "note": "1,812 points, 0 lost acknowledgements, 0 damaged, negative control 36 lost, stand-in versions for the managed store. Ubuntu 24.04 ext4 only."
         }
       ],
-      "date": "2026-10-05"
+      "date": "2026-10-07"
     },
     {
       "id": "RQ-12",
@@ -604,15 +719,20 @@
       "scope": ["crates", "Cargo.lock", "docs/operations/worker-host.md", ".github/workflows/p14-runbook-walk.yml", "tools/p14-campaigns/runbook-walk.cjs"],
       "gate": { "candidate": "required", "stable": "carry" },
       "status": "passed",
-      "applies_to": { "version": "0.2.0-rc.1", "commit": "d5792ce31db1106934233c86d0518c3ad1961e07" },
+      "applies_to": { "version": "0.2.0-rc.2", "commit": "7c722d1fc46af7fddeffbaf807028eaec413ace1" },
       "evidence": [
+        {
+          "reference": { "type": "workflow_run", "workflow": "P14 runbook walk", "run_id": 37611439339 },
+          "date": "2026-10-07",
+          "note": "The worker runbook as it stands at 7c722d1 walked step by step with the published 0.2.0-rc.2 (7c722d1fc46a) on hosted Ubuntu 24.04.5 (kernel 6.17.0-1022-azure, 4 CPUs), dispatched from main: 18 steps, all matched, none diverged: the worker account and folders, the reviewed tools installed by the binary itself, setup configure and setup check, a durable workspace on an ext4 volume with write barriers (os_crash_durable), the supervisor refused outside a unit or container (ISOLATION_UNAVAILABLE), the hardened container example with strict isolation attested, replay, IDEMPOTENCY_CONFLICT and BUSY with retry_after_ms 2000, the 1,001-line batch refused whole, the systemd unit started, stopped under systemctl stop with a drain (30 s, exit 6, terminal event present) and restarted (16 of 16 lines recorded), a SIGKILL of the whole unit and redelivery (8 of 8), and session clean over 24 bucket pages (26 sessions removed). The walk follows commands, not prose: a sentence such as the dedupe window (#286) is read, not run."
+        }
+      ],
+      "prior": [
         {
           "reference": { "type": "workflow_run", "workflow": "P14 runbook walk", "run_id": 37330704044 },
           "date": "2026-10-05",
           "note": "The worker runbook as it stands at d5792ce walked step by step with the published 0.2.0-rc.1 (d5792ce31db1) on hosted Ubuntu 24.04.5 (kernel 6.17.0-1022-azure, 4 CPUs), dispatched from main: 18 steps, all matched, none diverged (the first walks of 0.1.0 diverged at ten steps; PR 4 fixed the runbook): the worker account and folders, the reviewed tools installed by the binary itself, setup configure and setup check, a durable workspace on an ext4 volume with write barriers (os_crash_durable), the supervisor refused outside a unit or container (ISOLATION_UNAVAILABLE), the hardened container example with strict isolation attested, replay, IDEMPOTENCY_CONFLICT and BUSY with retry_after_ms 2000, the 1,001-line batch refused whole, the systemd unit started, stopped under systemctl stop with a drain (17.9 s, exit 6, terminal event present) and restarted (16 of 16 lines recorded), a SIGKILL of the whole unit and redelivery (8 of 8), and session clean over 25 bucket pages (26 sessions removed). The walk follows commands, not prose: a sentence such as the dedupe window (#286) is read, not run."
-        }
-      ],
-      "prior": [
+        },
         {
           "reference": { "type": "workflow_run", "workflow": "P14 runbook walk", "run_id": 37136669570 },
           "date": "2026-10-02",
@@ -624,7 +744,7 @@
           "note": "Section 18.5: the walk, the runbook corrections and what the hosted runner cannot show (a real disk, other distributions)."
         }
       ],
-      "date": "2026-10-05"
+      "date": "2026-10-07"
     },
     {
       "id": "RQ-13",
@@ -632,7 +752,7 @@
       "supports": {
         "requirements": ["R-14"],
         "verification": ["R-SEC03"],
-        "limits": ["L-122", "L-132"]
+        "limits": ["L-122", "L-132", "L-137"]
       },
       "proves": "The state of what was read on the day: no unresolved high or critical finding in a supported path across Cargo, GitHub alerts, the native tools, the runtime and build, and the SBOM inventory.",
       "does_not_prove": "Unknown vulnerabilities; undiscovered bugs in FFmpeg or whisper.cpp. CVE-2026-38350 (High, libswscale): its fix is tied to the record by elimination only, not by name, and the maintainer accepted that residual on 2026-10-05 (L-122, #272); if the record describes another site, nothing in the reading covers it.",
@@ -644,8 +764,21 @@
       "scope": ["."],
       "gate": { "candidate": "required", "stable": "repeat" },
       "status": "passed",
-      "applies_to": { "version": "0.2.0-rc.1", "commit": "d5792ce31db1106934233c86d0518c3ad1961e07" },
+      "applies_to": { "version": "0.2.0-rc.2", "commit": "7c722d1fc46af7fddeffbaf807028eaec413ace1" },
       "evidence": [
+        {
+          "reference": { "type": "record", "path": "docs/planning/p14-scan-reading-2026-10-07.md" },
+          "date": "2026-10-07",
+          "note": "The reading for the second candidate, 2026-10-07, on the day of the publish: cargo deny 0.20.2 ok for the workspace and the fuzz crate; 0 code-scanning, Dependabot and secret-scanning alerts in any state and 0 CodeQL results on main at 7c722d1; no advisory against the nine pinned actions checked by version (the one advisory that names the codeql-action line, of 2025, names versions far older than the 2026 pin); whisper.cpp v1.9.2: the same four records, none new, none naming 1.9.2; Node.js 24.21.0 and npm 11.19.0 (not the newest 11.x; no advisory names it); the SBOM matches the resolved crates. FFmpeg (the catalogue's build, unchanged): the same 58 records as on 2026-10-05, none published after 2026-09-27 or modified since 2026-10-02; the ancestry tool re-run over all of them finds every fix in the shipped snapshot (16 ancestors and 28 cherry-picks with identical patch text; none absent, reverted or different). One residual stands, unchanged: CVE-2026-38350 (High, libswscale) is tied to its fix by elimination only (#272, L-122); the maintainer accepted it on 2026-10-05 with L-122 as the register entry, which is what the plan's rule (section 6) asks for. **One new observation, not a finding of a rank the rule names:** whisper.cpp 1.9.3 to 1.9.5 (published 2026-08-20, 2026-09-11 and 2026-10-06) carry memory-safety hardening that the pinned 1.9.2 lacks, with no CVE, advisory or severity (#322, L-137). A read-only reachability assessment of the same day (source only, nothing run) found one of those fixes reachable from VSift, a heap read inside the whisper-cli child for a non-silent chunk of 1 to 200 samples, and the maintainer accepted it for R0 on 2026-10-07 with L-137 as the register entry (a floor in VSift, then a re-pin, after the stable release). Not scanned: the worker image's packages; the Windows and macOS executables' system libraries."
+        },
+        {
+          "reference": { "type": "workflow_run", "workflow": "P14 scan reading", "run_id": 37611430394 },
+          "date": "2026-10-07",
+          "note": "The hosted part, dispatched from main with version 0.2.0-rc.2: cargo deny 0.20.2 (advisories, bans, licences and sources ok for both crates), the published Linux executable (glibc 2.34 at most; needs libssl.so.3, libcrypto.so.3, libgcc_s.so.1, libm.so.6, libc.so.6), and the release's SBOM against cargo metadata (164 components; 165 crates resolved; only the root package vsift-cli 0.2.0-rc.2 differs)."
+        }
+      ],
+      "issues": [272, 322],
+      "prior": [
         {
           "reference": { "type": "record", "path": "docs/planning/p14-scan-reading-2026-10-05.md" },
           "date": "2026-10-05",
@@ -655,10 +788,7 @@
           "reference": { "type": "workflow_run", "workflow": "P14 scan reading", "run_id": 37330697823 },
           "date": "2026-10-05",
           "note": "The hosted part, dispatched from main with version 0.2.0-rc.1: cargo deny 0.20.2 (advisories, bans, licences and sources ok for both crates), the published Linux executable (glibc 2.34 at most; needs libssl.so.3, libcrypto.so.3, libgcc_s.so.1, libm.so.6, libc.so.6), and the release's SBOM against cargo metadata (164 components; 165 crates resolved; only the root package vsift-cli 0.2.0-rc.1 differs)."
-        }
-      ],
-      "issues": [272],
-      "prior": [
+        },
         {
           "reference": { "type": "record", "path": "docs/planning/p14-scan-reading-2026-10-02.md" },
           "date": "2026-10-02",
@@ -700,7 +830,7 @@
           "note": "The same candidate through the local-ASR adapter, the CLI checkpoint and the T-04 gates on Ubuntu 24.04 and Windows."
         }
       ],
-      "date": "2026-10-05"
+      "date": "2026-10-07"
     },
     {
       "id": "RQ-14",
@@ -846,16 +976,22 @@
       "scope": ["README.md", "SECURITY.md", "docs", "npm/vsift-cli/README.md"],
       "gate": { "candidate": "required", "stable": "repeat" },
       "status": "passed",
-      "applies_to": { "version": "0.2.0-rc.1", "commit": "d5792ce31db1106934233c86d0518c3ad1961e07" },
+      "applies_to": { "version": "0.2.0-rc.2", "commit": "7c722d1fc46af7fddeffbaf807028eaec413ace1" },
       "evidence": [
+        {
+          "reference": { "type": "workflow_run", "workflow": "CI", "run_id": 37434552274 },
+          "date": "2026-10-06",
+          "note": "The Governance job (and the other nine jobs, all green) of the push to main at 7c722d1, the second candidate's own commit (2026-10-06), at the claims rung candidate: the delivery ledger, the evidence ledger's structure, the claims registry and its check (the statements in use, CL-101 and CL-102, name RQ-19; every scanned document, the matrix, the launcher's messages and the README graphics' text carry no controlled word outside a registered statement and no banned phrase), the register enforcement and the size limits of the two handoff files. The Guide workflow of the same commit (run 37434552146) also passed: the generated reference pages equal the binary and the schemas, and the 40 marked examples print what the pages show. This shows recorded evidence and absent banned words, not that a sentence is true (L-101); the claims check reads RQ-19's status and not its version (L-133), and RQ-19 is passed for the second candidate in this same ledger."
+        }
+      ],
+      "prior": [
         {
           "reference": { "type": "workflow_run", "workflow": "CI", "run_id": 37278869623 },
           "date": "2026-10-05",
           "note": "The Governance job (and the other nine jobs, all green) of the push to main at d5792ce, the candidate's own commit, at the claims rung candidate: the delivery ledger, the evidence ledger's structure, the claims registry and its check (the statements in use, CL-101 and CL-102, name RQ-19; every scanned document, the matrix, the launcher's messages and the README graphics' text carry no controlled word outside a registered statement and no banned phrase), the register enforcement and the size limits of the two handoff files. The Guide workflow of the same commit (run 37278869635) also passed: the generated reference pages equal the binary and the schemas, and the 40 marked examples print what the pages show. This shows recorded evidence and absent banned words, not that a sentence is true (L-101); the claims check reads RQ-19's status and not its version (L-133), and RQ-19 is passed for the candidate in this same ledger."
         }
       ],
-      "prior": [],
-      "date": "2026-10-05"
+      "date": "2026-10-06"
     },
     {
       "id": "RQ-19",
@@ -876,15 +1012,20 @@
       "scope": ["Cargo.toml", "Cargo.lock", "rust-toolchain.toml", "crates", "npm", "skills/vsift", "tools/vsift-release", ".github/workflows/release.yml", "tools/p14-published", ".github/workflows/p14-verify-release.yml"],
       "gate": { "candidate": "required", "stable": "repeat" },
       "status": "passed",
-      "applies_to": { "version": "0.2.0-rc.1", "commit": "d5792ce31db1106934233c86d0518c3ad1961e07" },
+      "applies_to": { "version": "0.2.0-rc.2", "commit": "7c722d1fc46af7fddeffbaf807028eaec413ace1" },
       "evidence": [
+        {
+          "reference": { "type": "workflow_run", "workflow": "P14 verify release", "run_id": 37602927119 },
+          "date": "2026-10-07",
+          "note": "From a hosted runner holding no publishing credential, dispatched from main with version 0.2.0-rc.2 about three minutes after the publish (the packages were published at 09:43 UTC): 20 checks, all pass. The tag v0.2.0-rc.2 names 7c722d1fc46a; the four packages are published at 0.2.0-rc.2 with next 0.2.0-rc.2 and latest 0.0.0 (the placeholder) and no install script; npm provenance of each names this repository's Release workflow (run 37592020376), the tag and the tag's commit; npm audit signatures reports 2 packages with verified registry signatures and 2 with verified attestations; gh attestation verify passes for 10 of 10 release files and 4 of 4 tarballs; the release holds exactly ten files whose digests equal GitHub's and whose checksums match; it is a pre-release, not a draft, and GitHub's latest release is none. For 0.2.0-rc.2 only; the two checks a stable version adds (the candidate-to-stable delta and latest on all four packages) are registered after the stable publish."
+        }
+      ],
+      "prior": [
         {
           "reference": { "type": "workflow_run", "workflow": "P14 verify release", "run_id": 37328341759 },
           "date": "2026-10-05",
           "note": "From a hosted runner holding no publishing credential, dispatched from main with version 0.2.0-rc.1 three minutes after the publish: 20 checks, all pass. The tag v0.2.0-rc.1 names d5792ce31db1; the four packages are published at 0.2.0-rc.1 with next 0.2.0-rc.1 and latest 0.0.0 (the placeholder) and no install script; npm provenance of each names this repository's Release workflow (run 37323324151), the tag and the tag's commit; npm audit signatures reports 2 packages with verified registry signatures and 2 with verified attestations; gh attestation verify passes for 10 of 10 release files and 4 of 4 tarballs; the release holds exactly ten files whose digests equal GitHub's and whose checksums match; it is a pre-release, not a draft, and GitHub's latest release is none. For 0.2.0-rc.1 only; the two checks a stable version adds (the candidate-to-stable delta and latest on all four packages) are registered after the stable publish."
-        }
-      ],
-      "prior": [
+        },
         {
           "reference": { "type": "workflow_run", "workflow": "P14 verify release", "run_id": 36969577300 },
           "date": "2026-10-02",
@@ -896,7 +1037,7 @@
           "note": "One supervising agent session on the maintainer's Windows 11 machine ran npm audit signatures (4 and 4) and gh attestation verify (10 of 10 files, 4 of 4 tarballs) for 0.1.0. One session on one development machine, not a credential-free hosted verification."
         }
       ],
-      "date": "2026-10-05"
+      "date": "2026-10-07"
     },
     {
       "id": "RQ-20",

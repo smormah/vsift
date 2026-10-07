@@ -1541,3 +1541,77 @@ changes and their tests, and the repeated campaigns are what test them. Every re
 only, and repeating it costs the hosted minutes, the maintainer's allowance for the agent batches and the try-outs again; a third candidate
 would cost them a third time. The malicious-media campaign still has its own defect (L-134), because the campaign tools are not changed in
 this cut. #312 (a session-root creation that gave up waiting under load, L-135) is not fixed, so RQ-08 may fail again for that reason.
+
+## Implementation note, 2026-10-07 (P14 PR 11, repeated: the hosted evidence on the second candidate `0.2.0-rc.2`)
+
+The hosted part of PR 11 is repeated on the published `0.2.0-rc.2` (tag `v0.2.0-rc.2` at `7c722d1fc46af7fddeffbaf807028eaec413ace1`, the packages
+published at 09:43 UTC): this is **the whole of the hosted part, not an increment of it**, and it is work record only (the ledger, the plan's
+section 26, the by-hand scan reading of the day, the register, this note, the changelog and the two memory files). PR 11 repeated is complete only
+when RQ-15, RQ-16 and RQ-17 are `passed`, `waived` or `not_applicable` for `0.2.0-rc.2` and `release-evidence --complete-for 0.2.0-rc.2`
+passes; **those three items block it** (plan 26.6). The runs, tables and findings are [`p14-qualification.md`](../planning/p14-qualification.md) section 26;
+every `passed` entry of the first candidate is `prior` evidence in the ledger now. No code, tool, workflow, schema or setting changed, nothing was
+published or tagged, and nothing was re-run (runner shortage, #316, showed as queueing only).
+
+**What the repeat showed.** Every hosted campaign passed except one: the clean installs, archives, offline install, the two upgrades (from 0.1.0 and from
+`0.2.0-rc.1`), the journeys on three systems, the managed smoke, fuzzing (31 targets, 2.92 billion runs), load and soak, the runbook walk, the media
+campaign, both fault campaigns (this time with their hosted verdict jobs) and the scan reading. **The two fixes held where they were tested:** the lock
+suite on Windows, which had one failure in 200 repetitions on the first candidate (#314), ran 200 of 200 clean, and `sparse-30gib` answers
+`INVALID_SOURCE` again on the published bytes (#310). **The stress run failed once**: one repetition in 1,500 of the plain supervisor suite on Windows
+(#321, L-138), which a reading of the test source puts in the **test** (it parses a marker file its fixture child may still be writing), not in the
+supervisor.
+
+**Decided by the maintainer on 2026-10-07, after reading the results (recorded here; the ledger and the register carry the same text):**
+
+1. **RQ-08 is waived for R0, and `0.2.0-rc.2` stays (no third candidate).** The `P14 stress` run on the candidate failed one repetition of 20,100: the plain
+   process-supervisor suite on Windows, repetition 1,050 of 1,500, `p06_descendants_and_inherited_pipe_holders_are_terminated`, `ParseIntError { kind: Empty }`
+   (#321). **It is accepted as a race in the test, with L-138 as the register entry:** the test reads a marker file as soon as it exists while its fixture
+   child may still be writing it; no product code is on the failing line and the supervisor's assertions were not reached. That is a reading of the test source,
+   not a reproduction. The run stays in the ledger as failed evidence; the waiver is the decision's text, as RQ-14's was (decision E). **The test is fixed
+   after the stable release**, because a change to a file under `crates/` between the tag and the stable commit would force a third candidate. **The waiver
+   does not cover:** #312 (a root creation that gave up waiting under CPU load, L-135), which is not fixed, did not recur in this run and stays open with its own
+   entry; #128 and #206, which stay under watch; a failure of any other suite, test or system, or of this test with another message; the delivery suite's 100
+   repetitions, below the rule's 200 by design; and a release in which anything in the item's scope has changed since the tag.
+2. **RQ-10: recorded `passed` if the schema and the item's own rule allow it with tracked findings; otherwise `waived` with the narrowed text; no waiver is
+   carried over silently.** The schema allows a pass (a `passed` item may name open issues). **The item's own rule does not**, so the item is **`waived` for R0 by
+   this decision, which replaces that of 2026-10-05**: the pass rule (plan section 2) names three codes (`INVALID_SOURCE`, `RESOURCE_LIMIT`,
+   `DEADLINE_EXCEEDED`), and two answers of the candidate's run are typed and bounded but carry others (`STORAGE_IO` for a symbolic link, `INTEGRITY_FAILURE`
+   for the mis-built no-room case). The run is green only because the campaign's judge does not fail a run for a finding it tracks; it still reports both as
+   findings. RQ-13's rule has an "accepted by the maintainer with a register entry" clause and RQ-10's has none, so a pass would need the rule changed, which is not a
+   record of evidence. **Two residuals are accepted:** the link's `STORAGE_IO` (#265, L-127: a published failure code stays within v1) and the campaign tool's
+   mis-built no-room case (L-134, #266, #310), which cannot be corrected before the stable release because the tools are frozen. The first residual of
+   2026-10-05 (an over-limit source answering `STORAGE_IO`) is fixed in this candidate and no longer covered or needed. **The waiver does not cover** a new
+   finding of the campaign, a broken containment check, an answer outside its bounds, or the no-room path of `ingest` on the published bytes, which the
+   campaign has shown on no version. Both residuals are also named in the entry's `does_not_prove`.
+3. **L-137 (#322, the pinned whisper.cpp v1.9.2 lacks upstream memory-safety hardening) is accepted for R0 and fixed after the stable release.** The
+   maintainer first left it open while a read-only reachability assessment was done (the source at whisper.cpp v1.9.2 and at the VSift tag; nothing was run),
+   and decided on its result the same day. **One upstream fix is reachable from VSift:** `8631825d` (v1.9.3), a heap read past the audio buffer in
+   `log_mel_spectrogram` for 1 to 200 samples of audio (12.5 ms at 16 kHz); VSift has no minimum chunk or range length, so a non-silent chunk that short reaches
+   `whisper-cli` with a requested range of 12.5 ms or less or, rarely and by inference (FFmpeg's behaviour was not run), when the audio track covers that little of
+   a chunk's window. Read from the source: 40 samples or fewer fail the run as a provider failure (upstream v1.9.5 still behaves so, so a re-pin alone does not fix
+   it); 41 to 200 exit 0 with no segments; the read is of up to 800 bytes inside the child, nothing is written, the input does not control what is read, no raw
+   bytes leave the child, and a crash becomes the typed `AbnormalTermination`; how often it crashes was not determined. **Not reachable:** the model-file fixes
+   (only the two models pinned by size and SHA-256 run), the 0-sample case, VAD, `whisper_full_parallel` and the loader changes. The pin governs only the Ubuntu
+   managed install and the reviewed Windows hash; on Windows and macOS a user's own whisper.cpp runs. **Containment, exactly:** a separate process, no shell, a
+   cleared environment, a 120 s deadline, bounded output and a strict JSON parse; on a desktop there is no sandbox and memory is bounded only by the operating
+   system (L-004). **After `0.2.0`, in this order:** a floor in VSift (decoded audio under 1,600 samples, 100 ms, is recorded as a gap and not sent to the
+   recogniser, which covers every whisper.cpp build and the failure at 40 samples or fewer), then a re-pin of whisper.cpp together with the FFmpeg refresh
+   (L-132). Both are changes under `crates/` or to the catalogue and would force a third candidate now, which the exposure does not justify. #322 stays open.
+   RQ-13 is `passed` for the second candidate on the plan's rule (section 6): CVE-2026-38350 (#272, L-122) was accepted on 2026-10-05, and L-137, which has no
+   record or severity, is accepted with its register entry too.
+
+**Decisions taken inside this ADR, for the maintainer to confirm or overrule.**
+
+1. **RQ-10 is `waived` and not `passed`** (item 2 above is the maintainer's instruction; the reading of the rule is this record's). Overrule it by amending
+   the pass rule in plan section 2 to admit a tracked, accepted code, and then recording the item `passed` on run 37613284274.
+2. **RQ-11 is `passed` on the hosted verdicts** (both Acceptance jobs ran), unlike the first candidate's, whose P10 verdict was a by-hand run of the script.
+3. **RQ-18 is recorded on the CI run of the push of 2026-10-06 at the candidate's own commit**, which is the only CI run at that commit (nothing merged since
+   changes the commit); L-133's second window is closed (RQ-19 passed for the second candidate).
+4. **Two register entries are new**: L-137 (accepted residual by item 3 above) and L-138 (accepted residual by item 1; the register's own one-pass review is separate for both);
+   L-128, L-133, L-134 and L-135 are updated for the repeat's runs.
+
+**What is weaker than it sounds.** The same as for the first candidate (plan 24.2 and 26.5): shared hosted images, a synthetic corpus and voice, a fuzz hour that is a
+floor (18 of 31 targets still finding coverage), a stress rate measured on shared runners, and a media campaign with a case that tests nothing about the room
+check. A zero in the lock suite is not a proof that #314 is gone; the fix rests on its regression tests. RQ-13's FFmpeg row is a repeat of a reading of public
+records. **Three of twenty items are now waived (RQ-08, RQ-10, RQ-14):** a waiver says the rule was not met and why that is accepted for R0, and the acceptance of
+#321 rests on a reading of a test, not on a reproduction of the race. The acceptance of L-137 rests on a reading of two sources too: no short chunk was run
+against the pinned build, and how often the read crashes the child is not known.
