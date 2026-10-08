@@ -1749,7 +1749,8 @@ Batch 2 is the counted set with the skill of section 7 (34 runs). It ran on 2026
 freeze committed in `batch-2/freeze.json` (the first candidate's digests: the skill, the grader, the scenarios and the settings did not change). Claude Code
 2.1.284 ran on the maintainer's Windows 11 machine and Codex 0.155.0-alpha.16 in the Linux container: 17 runs per client, the review tier 12 each (Claude Opus
 5.5, GPT-6-Astra) and the compact tier 5 each (Claude Sonnet 5.5, GPT-6-Sol). The records, the summary and both clients' state are in
-[`p14-agent-trials/batch-2/`](p14-agent-trials/batch-2/); the cases and the maintainer's reading are
+[`p14-agent-trials/batch-2-rc.2/`](p14-agent-trials/batch-2-rc.2/) (they were in `batch-2/` when this section was written; the cut of the
+third candidate moved them on 2026-10-08, section 28, and "`batch-2/`" below means that folder as it was); the cases and the maintainer's reading are
 [`batch-2-reading-rc.2.md`](p14-agent-trials/batch-2-reading-rc.2.md). **This is an increment of PR 11 repeated, not the whole of it:** it records RQ-15
 and nothing for RQ-16 (batch 3, the cold round) or RQ-17 (the try-outs). The pull request is work record only, and **nothing is re-graded**: every record is
 as the frozen grader wrote it. **RQ-15 is `failed` for `0.2.0-rc.2`, and the maintainer decided the same day to fix the cause in the skill and to cut a third
@@ -1880,3 +1881,190 @@ will not be made to pass for `0.2.0-rc.2`:** the stable release is to be built o
 own commit. What comes next, in order: the cut of `0.2.0-rc.3` (PR 10 a third time: the four changes, the version, a new freeze, the runbook), its publish by
 the maintainer, PR 11 a third time (the hosted campaigns, batch 2, batch 3 and the try-outs on its bytes), the one pass over the register, and then the stable
 release (PR 12).
+
+**Update, 2026-10-08:** the cut exists (section 28). It holds the four changes of 27.4 and three more fixes that were merged for it; the grader did not
+change; the waivers and the re-pins are answered or left open in 28.5.
+
+## 28. The third candidate `0.2.0-rc.3` (P14 PR 10, repeated again, 2026-10-08)
+
+The maintainer decided on 2026-10-07 to cut a third release candidate (section 27) and settled on 2026-10-07 and 2026-10-08 what it holds.
+PR 10 is repeated a second time in one pull request, and it is complete again only when the maintainer has published `0.2.0-rc.3` and
+verified it (RQ-19 on its bytes). **Nothing is tagged or published here, and no evidence is recorded for the third candidate.** The
+decisions are in [ADR 0024](../decisions/0024-r0-qualification-and-release-candidate.md)'s note of 2026-10-08; the steps are
+[`release.md`](../operations/release.md) section 6.12. PR 11 is repeated on the new candidate, all of it (28.4); the first two
+candidates' results stay as history and are not rewritten.
+
+### 28.1 Why, and exactly what changed
+
+| Item | Result |
+| --- | --- |
+| Why | Agent-trial batch 2 on `0.2.0-rc.2` (section 27): Claude Opus 5.5's review tier missed two gates, the blurred banner (1 of 3) and the mechanical check (4 of 6), as on the first candidate, and RQ-15 is `failed` for `0.2.0-rc.2`. The maintainer chose to change the skill and run the round again, not to waive the gates or exclude the model. The skill ships in the package and is not among the files a stable commit may change (`release.md` 6.8), so a skill change is a new candidate |
+| What it holds | **`0.2.0-rc.2` plus exactly this**, by the maintainer's decisions of 2026-10-07 and 2026-10-08: (1) the skill's two evidence rules, in this cut; (2) what was merged to `main` after the second candidate's tag for the third: #333 (`30f2967`), #331 (`58b35e7`) and #330 (`eb4eb82`). Nothing else: no FFmpeg or whisper.cpp re-pin (after the stable release) and no Dependabot pull request |
+| Against section 27.4's plan | The four planned changes are all in: the skill's wording, the supervisor test's marker race (#321), the floor for short audio (#322) and the campaign's corrected no-room case (#310). **Three more came with them, each a finding's fix:** a range that rounds to no audio sample was answered with a whole filter frame (#332, found while testing #322, fixed in #330); a source copy that outruns the ten-minute limit now says so (#325's first step, #331); and a trial-harness test that could fail on a random name (#327, in #333) |
+| The skill | Two rules (the commit `6c07126` of the branch `p14-rc3-skill-wording`, applied here on top of `main`): an unreadable region proves nothing about its content in either direction, and a claim states only what its own citations show or say. `skills/vsift/SKILL.md` has one sentence for each and stays at 300 lines (its bound); `skills/vsift/references/handoff.md` has both in full; `docs/agents/skill.md` records them; `fuzz/seeds/handoff_check/SKILL.md`, a copy of `SKILL.md`, follows and equals it byte for byte |
+| The program | Against the tag `v0.2.0-rc.2`, 28 files under `crates/` differ (17 source files, 11 test files and fixtures; 1,906 lines added, 106 removed). What a caller can see: audio under 100 ms is a recorded gap and never reaches the recogniser; `audio` of a range of 31 microseconds or less is refused as `INVALID_ARGUMENT`, **which replaces `INVALID_SOURCE` for the cases where such a range decoded to nothing: one published code changed for one request** (the changelog and `cli-v1.md` say so); and the answer for a copy that ran out of time keeps `INVALID_SOURCE` and gains a remediation. Under `schemas/v1/` three descriptions changed and one example was added; no field, option or command changed |
+| The tests and tools | Under `tools/`, seven files differ: the malicious-media campaign's cases, judge and runner with their two test files (`tools/p14-campaigns/`), and two test files of the trial harness (`prepare_modes.rs` for #327, and `committed_freeze.rs`, whose pin this cut moves). **`tools/vsift-agent-trials/src` did not change**, so the grader is the second candidate's. Nothing under `.github/`, `tools/vsift-release/`, `tools/vsift-governance/`, `fixtures/`, `deny.toml` or `rust-toolchain.toml` differs |
+| The bump | `0.2.0-rc.2` to `0.2.0-rc.3` in the five files the earlier cuts changed (`Cargo.toml`, `Cargo.lock`, `fuzz/Cargo.toml`, `fuzz/Cargo.lock`, `npm/vsift-cli/package.json`); no test hard-codes the repository's version (the `0.2.0-rc.2` strings left under `crates/` and `tools/` are sample versions in tests) |
+| The guide | It names the release `0.2.0`, so the bump moves no marker and no generated page; the pages that say what `--help`, the remediations and the limits are were regenerated by #330 and #331 in their own pull requests. The checks run for this cut are in 28.7 |
+| The allowed lists and the delta tool | **Unchanged.** `vsift-release candidate-delta` takes the highest `v0.2.0-rc.<N>` tag, so once the maintainer has created `v0.2.0-rc.3` the stable release is compared with it and never with the first two (`the_highest_candidate_is_the_accepted_one`). `release.md` 6.7 (the by-hand backstop) and 6.8 and known limit L-107 name `v0.2.0-rc.3`. The release seam (`vsift-release`, `release.yml`, the lint) is untouched, so no lint rule or mutation test applies; `publish-steps.sh` passes |
+| The claims | The rung stays `candidate`; the README and the installation guide say `0.2.0-rc.3` is the release candidate under qualification (CL-101, CL-102); the launcher's README is version-free. [L-133](known-limits.md#l-133) reopens for the hours between the merge and the publish |
+| Batch 2's records | The second candidate's batch 2 (34 runs, [`batch-2-reading-rc.2.md`](p14-agent-trials/batch-2-reading-rc.2.md)) moved to `p14-agent-trials/batch-2-rc.2/` (records, summary, state files and a copy of the freeze it ran under), as the first's moved to `batch-2-rc.1/`, so `batch-2/` and `batch-3/` hold only a freeze until they run on the third candidate. The ledger's RQ-15 entry names the new path of the summary, and nothing else in the ledger changed |
+| The runbook | `release.md` 6.12, with 6.10 and 6.11 kept as the records of the first two candidates |
+| What did not change | The grader, the scenarios, the cold scenarios, the hold-outs, the settings and the corpus truth (28.2); the FFmpeg catalogue and the whisper.cpp pin (L-132, L-137); the release notes' templates; the gates of section 7 and every pass rule of section 2 |
+
+### 28.2 The freeze is new, on purpose
+
+`batch-2/freeze.json` and `batch-3/freeze.json` were written again with `freeze write`. They have the same bytes, and `freeze check` answers
+"nothing frozen has changed" for both. The pin of the whole-freeze digest in the test `committed_freeze` moved with them, with a comment that
+says why.
+
+| Component | First and second candidates | Third candidate |
+| --- | --- | --- |
+| `skill` | `648569ae378268a3354b65e97f443bc25f7f5153a1734b2b99efdf4a1cbceb4b` | **`34ff775f667980ec80525e851dffecab8a2fe665082af01294829168b488ff22`** |
+| `grader` (the harness's `src` and `Cargo.toml`) | `57507fad47aca5baa211ba5c3e56c4d7062e852a5e379cdfb81a9f339e6f3c38` | the same |
+| `scenarios` | `3a77c3d3219cc827e47daa26326ab4c087c36e2bf8cebafecc7d848c758f084d` | the same |
+| `cold` | `b288c18b940b04adeebbe1b1fc4fc5ddc7267ba41b3085fdd95a075c000416f2` | the same |
+| `holdout` | `1963f6e4ff22c295c08a56783e4e6d09525dd38f0ec9ccb557958d08557ffb72` | the same |
+| `settings` | `e04ee4cc499604064dd9687cfd9b1efaaa700ce79a943fa6f341476763f3ee4e` | the same |
+| `truth` | `ed1e41e1541455688213768519ca128ee87b68afc1cd4eace4877e46a57bc745` | the same |
+| **The whole freeze** | `1e89b5cc488e7245d1a6d63ec8809c1f8a5c137ee87f5ed05f9b692c2af6e392` | **`654955dd210eae2707b15a5334a3390edca9b7e17e300ebe68310f4b815ba5c6`** |
+
+**Only the skill differs.** #333 touched the harness's `tests/` only, which the `grader` component does not read, so the grader's digest is
+unchanged, and so is how a run is graded: the same text-matching checks will judge the reports written under the new rules. The files name
+`8eaf0a11490b619b659f1891a033366f526b535a`, the commit of this cut's branch at which the skill changed (the digests are the same at every
+later commit of the cut); a squash merge leaves that commit behind, reachable through the pull request, and the digests are what bind, not
+the name. **Batch 1's freeze is history** (the baseline on 0.1.0). **Batch 3 still needs `-AllowGraderChange`:** the script compares batch
+3's grader, cold scenarios, settings and truth with batch 1's freeze, and the grader changed on 2026-10-04, between batch 1 and batch 2
+(`freeze check --only grader,cold,settings,truth` against `batch-1/freeze.json` answers "grader changed since the freeze", as before); the
+skill is not one of the four it compares. The checklist says so.
+
+### 28.3 What is stale for `0.2.0-rc.3`, and what is not
+
+The staleness rule (ADR 0024) lets an entry recorded at an earlier commit count only if nothing in its item's `scope` changed since. Between
+the second candidate's commit (`7c722d1fc46a`) and this cut the changed paths are the 28 crate files, the skill, the campaign tools, the
+schemas' descriptions, the five version-string files and the documents; so **every `passed` item fails the rule, and nothing was edited to
+make it do so**: the ledger's entries still say what they said, for the second candidate.
+
+Run at the cut's commit `082844fb09f8aec717381604f229bc3ec90632e9` (this record's own commit follows it and changes only this file and the two
+memory files, all three of which had already changed since the second candidate, so the counts are the same at the head):
+
+```text
+$ cargo run --locked -p vsift-governance -- release-evidence --complete-for 0.2.0-rc.3 --commit 082844fb09f8aec717381604f229bc3ec90632e9
+governance check failed:                                  (16 messages, one per item, exit 1; ids joined here)
+RQ-01, RQ-02, RQ-05, RQ-19: is passed for 0.2.0-rc.2, but 33 file(s) in its scope changed before 0.2.0-rc.3
+    (for example Cargo.lock, Cargo.toml, crates/vsift-application/src/asr.rs); record it again
+RQ-03, RQ-06: the same, 30 file(s);  RQ-04: 37;  RQ-07: 32;  RQ-09, RQ-11, RQ-12: 29
+RQ-13: is passed for 0.2.0-rc.2, but 118 file(s) in its scope changed before 0.2.0-rc.3 (for example CHANGELOG.md, Cargo.lock, Cargo.toml)
+RQ-18: is passed for 0.2.0-rc.2, but 67 file(s) in its scope changed before 0.2.0-rc.3 (for example README.md, docs/agents/skill.md,
+    docs/agents/trials.md)
+RQ-15: is failed; it must be passed, waived by the maintainer or not applicable for 0.2.0-rc.3
+RQ-16, RQ-17: is planned; it must be passed, waived by the maintainer or not applicable for 0.2.0-rc.3
+```
+
+**It names 16 of the 20 items, as it must:** thirteen `passed` items whose scope changed (RQ-01 to RQ-07, RQ-09, RQ-11, RQ-12, RQ-13, RQ-18,
+RQ-19), RQ-15 (`failed`) and RQ-16 and RQ-17 (`planned`). It does not name RQ-08, RQ-10 and RQ-14 (`waived`) or RQ-20 (the check itself).
+The second candidate's cut named 17: RQ-08 was `failed` then and is `waived` now. The file counts of the crate-scoped items are 29 to 37
+(the 28 crate files, `Cargo.lock`, and for some `Cargo.toml`, the launcher's manifest, the skill or a tool); RQ-13's scope is the whole
+repository and RQ-18's is the documents, so their counts grow with every change (RQ-13's includes the 34 records this cut moved).
+
+| Why an item is named | Items |
+| --- | --- |
+| Files under `crates/` are in its scope and, for most, also the version strings (`Cargo.toml`, `Cargo.lock`, `npm`) or the skill | RQ-01 to RQ-07, RQ-09, RQ-11, RQ-12, RQ-19: **all the hosted evidence of section 26 except the two below** |
+| The scope is the whole repository (`.`): a dated reading, repeated for any change | RQ-13 (the scan reading) |
+| The scope is the documents (`docs`, the README, `SECURITY.md`) and the item is the Governance job at the candidate's own commit | RQ-18 |
+| Not `passed` on the second candidate either, so the rule never applies | RQ-15 `failed` (the reason for this candidate); RQ-16 and RQ-17 `planned` (neither has run on any candidate) |
+| **Not named, and not re-run by the tool: waived** | RQ-08 and RQ-10 (both waived on 2026-10-07 for the second candidate's runs) and RQ-14 (2026-10-03, decision E) |
+
+**The two waivers of 2026-10-07 do not expire by themselves, and both were decisions about the second candidate's runs.** The completeness
+check does not name a waived item, so it would pass RQ-08 and RQ-10 for the third candidate without a single run on it. The repeat runs
+both campaigns anyway, and whether either waiver is still needed is an open question for the maintainer (28.5).
+
+### 28.4 The repeat of PR 11 on the third candidate
+
+Everything is run again: the third candidate changes the program, the skill and a campaign tool, where the second changed two paths of the
+program. Everything hosted is read-only; what tests the published packages is dispatched from `main` with the version, and the source-built
+campaigns run at the tag, with the same parameters as before, so that the figures compare with 0.1.0's and the first two candidates'.
+
+| Item | What | From | Why it matters now |
+| --- | --- | --- | --- |
+| RQ-19 | `P14 verify release`, `version=0.2.0-rc.3` | `main`, right after the publish (6.12 step 5) | the second verification of the publish |
+| RQ-01 to RQ-04 | `P14 published artifacts` with `from_version` 0.1.0, then `0.2.0-rc.2` (and `0.2.0-rc.1` if the maintainer wants it), one after another; `P14 compatibility` | `main`; the tag | clean installs, archives, the offline install and the upgrades; **the installed package must carry the new skill** (the workflow compares the shipped skill with the tag's `skills/vsift`, byte for byte, in the archives and in the installed package; a skill trial also checks the installed copy against the repository's) |
+| RQ-05, RQ-06 | `P14 journeys`, `P13 managed smoke` (`published_version`), `P07 local ASR` | `main`; the tag for `P07` | the journeys on three systems; #330 changes the speech path (the floor) and the decode both commands share, and the P07 checkpoint has no stage for a short range, so it shows that ordinary ranges are unharmed, not that the floor works |
+| RQ-07 | `Fuzz`, 31 targets, 3,601 s each | the tag | the `handoff_check` target's seed is the changed skill; no parser changed; the largest cost (about 1,950 job-minutes) |
+| RQ-08 | `P14 stress`, 25 jobs | the tag | **the fixed supervisor test (#321, [L-138](known-limits.md#l-138)):** 1,500 plain and 1,500 loaded repetitions per system; #312 ([L-135](known-limits.md#l-135)) is still not fixed; the rule is zero failures in 200 repetitions per system |
+| RQ-09 | `P14 load` | `main`, `version=0.2.0-rc.3` | load ladder, batch, cancel, warm page, soak |
+| RQ-10 | `P14 malicious media` | `main`, `version=0.2.0-rc.3` | **the corrected no-room case, for the first time as recorded evidence** ([L-134](known-limits.md#l-134)): `sparse-no-room` must answer `STORAGE_IO` with the no-room remediation; one tracked finding is left, the link's `STORAGE_IO` (#265) |
+| RQ-11 | `P13 managed power loss` and `P10 durability campaign` | the tag | #331 changes the source copy's staging (the clock and a typed cause); the durable store's write path is otherwise untouched |
+| RQ-12 | `P14 runbook walk` | `main`, `version=0.2.0-rc.3` | the worker runbook, walked |
+| RQ-13 | `P14 scan reading` and a new dated reading | `main`, `version=0.2.0-rc.3` | a dated reading is repeated for any change; no dependency changed; the whisper.cpp observation (L-137) now has the floor in front of it |
+| RQ-15 | agent-trial batch 2 (34 runs), under the new freeze | the maintainer's explicit go | **the reason for the candidate:** Claude Opus 5.5's two gates, and the other three models again with the changed skill |
+| RQ-16 | agent-trial batch 3 (18 runs, no skill), with `-AllowGraderChange` | the maintainer's explicit go, separate from batch 2's | never run on any candidate; the cold agent reads `vsift --help` and the remediations, two of which are new |
+| RQ-17 | the try-outs ([`rq-17-tryout-sheet.md`](rq-17-tryout-sheet.md)) on the second, clean Windows 11 machine | the maintainer | the sheet is retargeted to the third candidate; nothing was done on the first two |
+| RQ-18 | the Governance job of the CI run at the third candidate's commit | a push to `main` | it reads RQ-19's status, not its version (L-133) |
+| the register | the one pass over `register-review-sheet.md` | the maintainer | L-134 and L-138 close with clean runs; L-139 and L-095 wait for batch 2 |
+
+**Not repeated:** `P14 local upgrade` (the real upgrade of a published version stands in for it, L-111) and the longer fuzz run for the
+targets still growing (L-128: the maintainer's call). **Cost:** about 3,650 hosted job-minutes on the second candidate (26.5), the two
+agent batches on the maintainer's allowances (batch 2 was about $9 at list prices for Claude and 9.3 M input tokens for Codex on the second
+candidate; batch 3 is unmeasured) and the try-outs.
+
+### 28.5 Open questions for the maintainer
+
+1. **Is RQ-08's waiver still needed on the third candidate's results?** It was granted on 2026-10-07 for one failed repetition of a test that
+   is now fixed (#321). If the stress run on the third candidate has no failure, the item can be recorded `passed` on that run and the waiver
+   is not carried over; L-138 closes. If the fixed test fails with another message, or another test of a suite fails (#128 and #312 are not
+   fixed), that is a new finding and a new decision. Recommended: no waiver in advance; decide on the run.
+2. **Is RQ-10's waiver still needed?** Of its two residuals, the campaign tool's mis-built case is corrected, and a green run on the third
+   candidate closes L-134. **The link's `STORAGE_IO` remains** (#265, L-127: a published code that stays within v1), and RQ-10's pass rule
+   names three codes and has no clause for a finding the maintainer accepted, where RQ-13's has one (26.3). So a run that is green with one
+   tracked finding still cannot be recorded `passed` under the rule as written. The choice is the maintainer's: (a) waive RQ-10 again for the
+   third candidate, naming only the link; or (b) add to RQ-10's rule the clause RQ-13 has ("unless accepted by the maintainer with a register
+   entry"), which is a change of a rule in this plan and its ADR, not a record of evidence, and then record `passed`. Neither changes code.
+3. **An issue for the citation half of L-139.** RQ-15 is `failed` and names #224, which tracks the blurred banner; the citation half (a claim
+   that restates a fact and cites a segment that does not state it) has no issue, and governance rule 14 asks for one behind a failed item.
+   This cut opens none (its author may open only its own pull request): the supervisor opens it, and L-139 and the ledger entry then name it.
+4. **Whether to dispatch the optional upgrade from `0.2.0-rc.1`** (6.12 step 5), and **whether to deprecate the earlier candidates** after
+   the runs (6.12 step 7).
+5. **If Claude Opus 5.5 misses a gate again on the third candidate**, the choice of 2026-10-07 comes back (another wording, a waiver, an
+   exclusion, or a look at the grader's text matching); nothing here decides it in advance.
+
+### 28.6 What is weaker than it sounds
+
+- **The skill change is a hypothesis.** No trial has run with the new wording. The sample is three blurred-banner runs and six journey runs
+  per client, the grader matches text and cannot read a negation, and the two rules were written after reading the failing reports, so the
+  round on the third candidate is the first test of them, not a confirmation.
+- **A changed skill resets what the earlier rounds showed for the three models that passed.** GPT-6-Astra, Claude Sonnet 5.5 and GPT-6-Sol
+  met their gates with the old skill; they have to meet them again.
+- **"`0.2.0-rc.2` plus exactly" is a statement about pull requests and paths, and this delta is larger than the second candidate's:** 17
+  source files of the program against three, changed answers of three commands (`transcript retranscribe`, `audio`, `ingest`), and one
+  published failure code replaced for one request.
+  The reviews of #330, #331 and #333 are what say each change does only what its entry says.
+- **Every hosted result of section 26 is now evidence about the second candidate only**, and the repeat costs the hosted minutes, the
+  allowances and the maintainer's time a third time.
+- **Two waived items would pass the completeness check without a run** (28.3); the plan runs them anyway.
+- **What the new fixes have not met:** the floor was not run with whisper.cpp and its real-decode tests are opt-in
+  ([L-137](known-limits.md#l-137), [L-141](known-limits.md#l-141)); the fixed supervisor test has 79 local repetitions, not 1,500 hosted ones
+  (L-138); the corrected campaign case ran once, in a pull request (L-134); no real slow copy was run ([L-140](known-limits.md#l-140)).
+- **The freeze test proves digests, not that the trials ran under them**, and the file names a commit that a squash merge leaves behind.
+- **The claims window reopens (L-133):** between the merge and the publish the README says the third candidate is under qualification before
+  it is on npm. The runbook says to merge only when the maintainer can tag and publish at once.
+- **6.12 has not been run.** Its commands are 6.11's, which ran on 2026-10-07, with new numbers. New or untried: the eight-value integrity
+  loop, dispatching the upgrade runs one after another, and `npm view <package>@<version> deprecated`. The dry run's id of the second
+  candidate is not in the repository, so "it went as written" rests on the supervisor's account and on the runs that followed.
+
+### 28.7 Checks run for this cut
+
+The gates of the change (formatting, strict Clippy with and without all features, rustdoc with warnings denied, the workspace tests, the
+governance checks, the two `freeze check` answers and the `committed_freeze` test, `publish-steps.sh`, the launcher, published-artifact,
+campaign and guide tool tests) and their results are in the pull request's description; none of them needed the registry or a secret.
+The skill's guard (`skill_contract`, which holds `SKILL.md` to 300 lines and to the CLI's own command table) passes. **The package still
+carries the skill byte for byte, as far as that can be shown before the pull request's own Release run:** a Windows archive packaged from
+this tree by `vsift-release package` (a debug executable and stand-in notices and SBOM: a check of the packaging, not a release input) holds
+`skills/vsift/` equal to the repository's, file for file; the launcher package takes its skill from the archives, and the tool refuses
+archives whose skills differ; the Release workflow of the pull request builds the three real archives and the four packages and checks them
+(`verify`, `npm-verify`). **The guide:** `generate-reference.cjs --check` answers "the guide's reference pages and promises agree with vsift 0.2.0", and its 40 marked
+examples were run again against this cut's binary (a debug build on Windows 11) with FFmpeg 9.0 and whisper.cpp 1.9.2 and
+`--require-speech`: **40 commands run, 0 skipped, 0 failed**. Nothing under `docs/guide/` changed but the sentence that names the candidate.
+
+**Hosted minutes.** None for the work itself. The pull request's own CI runs the usual jobs and the Release workflow's plan in report-only
+mode on the merge ref, whose plan moves `next` from `0.2.0-rc.2` to `0.2.0-rc.3`.

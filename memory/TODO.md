@@ -5,82 +5,80 @@ Current-state handoff, rewritten in every change; history: git, `CHANGELOG.md`, 
 ## Now
 
 **P00-P13 are complete. P14 (R0 qualification, #17) is in progress** (decisions A-H, 2026-10-02). Plan: 14 pull
-requests (0-13); PRs 0-9 are merged. **PR 10, the candidate, was done twice and both are published:** `0.2.0-rc.1` (2026-10-05, tag
-`v0.2.0-rc.1` at `d5792ce31db1`; superseded, still on npm) and **`0.2.0-rc.2` (2026-10-07, 09:43 UTC; tag `v0.2.0-rc.2` at
-`7c722d1fc46af7fddeffbaf807028eaec413ace1`, npm `next` on all four packages, a pre-release with ten files, `latest` still the empty `0.0.0`)**:
-rc.1 plus the fixes of #314 and #310 and nothing else. **PR 11 (the qualification) was repeated on rc.2: its hosted part (plan section 26) and
-agent-trial batch 2 (section 27; 34 runs, 2026-10-07) are recorded. Batch 2 failed RQ-15, and the maintainer decided the same day to cut a THIRD
-candidate, `0.2.0-rc.3` (planned, not cut): rc.2 will not become the stable.** The packet is not complete. Plan: `p14-qualification.md` (15-27); ADR 0024 stays Proposed.
-**Evidence** (`p14-evidence-ledger.json`) for rc.2: `passed` RQ-01 to RQ-07, RQ-09, RQ-11 (both hosted verdict jobs ran), RQ-12, RQ-13 (L-122's
-residual accepted), RQ-18, RQ-19; **`waived` (three of twenty): RQ-08** (the run failed one Windows repetition of 20,100: #321, a race in a
-supervisor *test*, L-138; the lock suite was 200 of 200 and #312 did not recur), **RQ-10** (the run is green, but two answers carry codes its rule
-does not name) and RQ-14; **`failed` RQ-15** (batch 2: Claude Opus missed two review-tier gates; below); `planned` RQ-16 and RQ-17. **`release-evidence
---complete-for 0.2.0-rc.2` fails on RQ-15, RQ-16 and RQ-17 and is no longer the goal: every item is run again on rc.3.**
-**Public text:** `public-claims.json`, rung `candidate` (CL-101 and CL-102 name rc.2 and need RQ-19, now passed for it: L-133's second window is closed).
+requests (0-13); PRs 0-9 are merged. **PR 10, the candidate, is prepared a third time: `0.2.0-rc.3` is cut and READY TO TAG, NOT PUBLISHED.**
+The first two candidates are published and superseded, and stay on npm: `0.2.0-rc.1` (2026-10-05, tag `v0.2.0-rc.1` at `d5792ce31db1`) and
+`0.2.0-rc.2` (2026-10-07, tag `v0.2.0-rc.2` at `7c722d1fc46af7fddeffbaf807028eaec413ace1`). **Until the maintainer publishes rc.3, npm `next`
+is `0.2.0-rc.2` on all four packages and `latest` is the empty `0.0.0`.** This change is the whole of the repeat's preparation; PR 10 is complete
+again only when rc.3 is published and verified. The packet is not complete. Plan: `p14-qualification.md` (15-28); ADR 0024 stays Proposed.
+**What rc.3 is:** rc.2 plus exactly (1) **two evidence rules in the agent skill** (an unreadable region proves nothing about its content in either direction; a claim states only what its own
+citations show or say), the answer to batch 2's two missed gates (L-139, L-095); (2) #330: audio under 100 ms is a gap and never reaches the recogniser (#322, L-137), and `audio` of a range
+of 31 microseconds or less is refused as `INVALID_ARGUMENT` (#332; one published code replaced for that one request); (3) #331: a copy that outruns the ten-minute limit says so, code kept
+(#325 step 1, L-140); (4) #333: test and tool fixes only (#321's marker race, L-138; the campaign's no-room case, L-134; #327). No FFmpeg or whisper.cpp re-pin and no Dependabot.
+**The agent-trial freeze is NEW on purpose** (`batch-2/` and `batch-3/freeze.json`): only the `skill` digest changed; the grader, scenarios,
+hold-outs, settings and truth are rc.2's. Whole-freeze digest `654955dd...` (it was `1e89b5cc...`), pinned in `committed_freeze`. rc.2's batch-2
+records are in `p14-agent-trials/batch-2-rc.2/`, rc.1's in `batch-2-rc.1/`.
+**Evidence** (`p14-evidence-ledger.json`): **nothing is recorded for rc.3.** Every entry is rc.2's: `passed` RQ-01 to RQ-07, RQ-09, RQ-11, RQ-12, RQ-13, RQ-18, RQ-19; `waived` RQ-08, RQ-10,
+RQ-14; `failed` RQ-15; `planned` RQ-16, RQ-17. **`release-evidence --complete-for 0.2.0-rc.3` names 16 of 20 items** (the thirteen `passed` ones are stale; RQ-15; RQ-16; RQ-17). It does not
+name the waived three, so RQ-08 and RQ-10 would pass without a run on rc.3: they are run anyway (plan 28.3, 28.4).
+**Public text:** `public-claims.json`, rung `candidate`. The README and `install.md` name rc.3 from the merge, before it is on npm (L-133's window,
+open until the publish; `install.md` says `@next` installs rc.2 until then): merge only when the maintainer can tag and publish at once.
 **Decided 2026-10-02 (ADR 0024):** **A** R0 is `0.2.0` on `latest`. **B** `0.2.0-rc.N` under `next`, never announced. **C** no
 signing unless try-outs show a block. **D** 84 agent runs in three batches, each on the go. **E** SEC-T01 narrowed. **F** "supported"
 per cell by fixed rules; managed install Ubuntu-only. **G** a claims ladder; nothing announced before P14 completes. **H** a try-out
 blocks the stable only until observed. #246 waits.
 
-**Decided by the maintainer on 2026-10-07** (plan 26.2 to 26.4 and 27; items 1 to 3 were for rc.2, and item 4 overtakes their "rc.2 stays" and
-"after the stable"): (1) **RQ-08 waived for R0, rc.2 stays:** #321 is accepted as a
-test race with L-138; the run stays failed evidence; the test is fixed after the stable (a change under `crates/` is a third candidate); the waiver does
-not cover #312, #128, #206 or any other failure. (2) **RQ-10's 2026-10-05 waiver is replaced** by one for rc.2 covering only the link's `STORAGE_IO`
-(#265, L-127) and the campaign tool's mis-built no-room case (L-134); it is `waived`, not `passed`, because its rule names three codes (to overrule:
-amend the rule in plan section 2). (3) **#322 / L-137 accepted for R0** after a read-only reachability assessment (nothing run): one upstream whisper.cpp
-fix is reachable, a heap read in the child for a non-silent chunk of 1 to 200 samples, because VSift has no minimum chunk or range length. **After `0.2.0`,
-in order:** a VSift floor (audio under 1,600 samples is a gap, not sent to the recogniser), then the re-pin with FFmpeg's (L-132). **Still open:**
-optionally deprecate rc.1 (`release.md` 6.11 step 7). (4) **Batch 2 on rc.2 is read (plan 27; `batch-2-reading-rc.2.md`; nothing re-graded):** as
-graded 28 of 34 runs passed fully and none installed anything or leaked; two misses are harmless by the maintainer's reading, which changes no grade
-(a `printf` header failed the hard safety gate; Codex's H-01 wrote "the dialog as R-17"); **Claude Opus 5.5 really missed its mechanical gate (4 of 6)
-and its blurred-banner gate (1 of 3), as on rc.1 (L-139, L-095, #224). A first decision to exclude Opus and waive was replaced the same day: no
-waiver, no exclusion, no rule change; improve the skill and cut `0.2.0-rc.3`,** which also carries #321's test fix (L-138), the short-audio floor
-(L-137) and the campaign's corrected no-room case (L-134). GPT-6-Astra, Sonnet 5.5 and GPT-6-Sol met their gates with the skill as it is.
+**Decided by the maintainer on 2026-10-07 and 2026-10-08** (plan 26, 27, 28; ADR 0024's notes): batch 2 on rc.2 was read: 28 of 34 runs passed fully as graded, none installed anything or
+leaked; **Claude Opus 5.5 missed its mechanical gate (4 of 6) and its blurred-banner gate (1 of 3), as on rc.1, so RQ-15 is `failed` for rc.2.** No waiver, no exclusion, no rule change:
+**improve the skill and cut rc.3**, with the fixes above and nothing else; the re-pins stay after `0.2.0`. For rc.2's runs the maintainer had waived RQ-08 (#321, a test race) and RQ-10 (the
+link's `STORAGE_IO`, #265; the campaign's mis-built case) and accepted L-137; those were decisions about rc.2 and are re-decided on rc.3's results.
 
 **PR 7, the findings by outcome** (each with its pull request and regression test; the list is in `project_current_status.md`). **Maintainer
 rule 2026-10-04: a published failure code stays (v1 is additive); the remediation carries the fix (L-127).**
-- **Fixed in rc.2:** #314 the reader's retry budget (#318; L-136 is what remains on Windows), #310 the size limit answers before the room
-  check (#319, so L-127 keeps no deviation). **Narrowed, not proven gone:** #206 (L-005); #253 (L-129); #312 the race tests wait 60 s
-  (L-135; did not recur on rc.2); #321 a supervisor test reads a half-written marker (L-138).
+- **Fixed in rc.2:** #314 the reader's retry budget (#318; L-136 remains on Windows), #310 the size limit answers before the room check (#319).
+  **Fixed in rc.3:** #322 and #332 (#330), #325 step 1 (#331), and in tests or tools #321, #310's second finding and #327 (#333).
+  **Narrowed, not proven gone:** #206 (L-005); #253 (L-129); #312 the race tests wait 60 s (L-135; did not recur on rc.2).
 - **Not fixed:** #272 the FFmpeg snapshot: 46 of 47 records are fixed in the shipped build (#296, L-122); a pin must be a month-end
-  build, the next is 2026-10-31 (L-132), **after `0.2.0`**; the whisper.cpp pin lags too (L-137, accepted: one reachable heap read for 1 to 200 samples).
+  build, the next is 2026-10-31 (L-132), **after `0.2.0`**, with the whisper.cpp re-pin (L-137: the floor covers the one reachable read).
 
-**Earlier P14 PRs** (plan 15-27; `docs/development.md`; `docs/agents/trials.md`). **PR 4:** `tools/p14-campaigns/`, hosted runners only.
+**Earlier P14 PRs** (plan 15-28; `docs/development.md`; `docs/agents/trials.md`). **PR 4:** `tools/p14-campaigns/`, hosted runners only.
 **PR 3:** `P14 journeys`, weekly too (L-114, L-115; P11's durable stage cannot run hosted: #258, L-113). **PR 6 and batch 1:** the harness (cold
 mode, hold-outs, `freeze`, usage); batch 1 (0.1.0, 20 runs) was a baseline. **README graphics:** redraw `roadmap.svg` with PRs 10 and 13 (L-121).
 
-## The remaining P14 pull requests (0-9 merged; 10 and 11 each done twice, a third time planned)
+## The remaining P14 pull requests (0-9 merged; 10 prepared three times, 11 done twice)
 
-**10, a third time (next):** cut `0.2.0-rc.3` = rc.2 plus four fixes of recorded findings: the skill's wording (L-139, #224: a negated statement
-about an unreadable region; the segment cited for a restated fact), #321's test (L-138), the short-audio floor (#322, L-137: under 1,600 samples is
-a gap) and the campaign's no-room case (L-134); the version, a NEW freeze (the skill changes), the runbook; the maintainer publishes. **11, a third
-time:** every hosted campaign, batch 2, batch 3 = RQ-16 (18 cold runs) and the try-outs = RQ-17 (`rq-17-tryout-sheet.md`) on rc.3, then the register
-pass. **12** stable `0.2.0`; **13** ledger follow-up, P14 `complete`, handoff. **From a candidate's tag to the stable merge only the work record and
-`install.md` change** (`release.md` 6.8). **After the stable tag, within seven days:** register the two stable checks in `STABLE_CHECKS`.
+**10, a third time (this change; then the maintainer):** tag the merge commit, dry run, compare checksums, publish, verify, by `release.md` 6.12.
+**11, a third time (next):** on rc.3, every hosted campaign (about 3,650 job-minutes on rc.2), batch 2 (34 runs, the new freeze) and batch 3 =
+RQ-16 (18 cold runs, never run; `-AllowGraderChange`), each on the maintainer's go, the clean-machine try-out = RQ-17
+(`rq-17-tryout-sheet.md`), then the register pass (plan 28.4). **12** stable `0.2.0`; **13** ledger follow-up, P14 `complete`, handoff. **From a
+candidate's tag to the stable merge only the work record and `install.md` change** (`release.md` 6.8); the stable is compared with the highest
+candidate tag, `v0.2.0-rc.3` once it exists. **After the stable tag, within seven days:** register the two stable checks in `STABLE_CHECKS`.
 
 ## What the maintainer owes, and when
 
-- **Now:** nothing runs on rc.2 any more. **For rc.3:** the publish once it is cut; then the go for batches 2 and 3 (Claude Code 2.1.284 and
-  Docker; state the reserve rule first) and the Smart App Control try-out on the second Windows 11 machine; #312: fix or accept. **Dependabot:**
-  #192, #193, #194 wait until after the stable. **After the stable:** the whisper.cpp re-pin (#322, L-137) with FFmpeg's (#272, L-132).
+- **Now, for rc.3 (`release.md` 6.12, about an hour):** merge the cut only when ready to tag and publish at once; tag the merge commit; dry run on the tag and keep its plan; publish and
+  compare the checksums before approving; check from outside; dispatch `P14 verify release`, `journeys`, `managed smoke` and `published artifacts` from 0.1.0 and from rc.2, one after another
+  (from rc.1 is optional); write down both run ids. **Then:** the go for batch 2, separately the go for batch 3 (Claude Code 2.1.284 and Docker; state the reserve rule first), and the Smart
+  App Control try-out on the second Windows 11 machine. #312: fix or accept. **Dependabot:** #192, #193, #194 wait until after the stable. **After the stable:** the whisper.cpp re-pin (#322,
+  L-137) with FFmpeg's (#272, L-132).
 - **Register:** one pass over `register-review-sheet.md` (thirty entries, eight later, nine readings: every review is `pending` but L-137 and
   L-138, accepted, and L-139, rejected = to be fixed, by the decisions of 2026-10-07), and whether `Guide` becomes a required check.
 
 ## Open decisions and readings (maintainer)
 
-- **For the cut of rc.3 (plan 27.4):** the skill's exact wording; whether the grader changes with it (it cannot read a negation); whether RQ-08's
-  and RQ-10's waivers are still needed once their causes are fixed; an issue for L-139's citation half (#224 covers the blurred banner only).
-  **If Claude Opus misses again on rc.3:** the claims check accepts only `passed` behind CL-201, CL-202, CL-204 and CL-205, which all need RQ-15.
+- **On rc.3's results (plan 28.5):** whether RQ-08's waiver is still needed if the stress run is clean (recommended: no, record the run); whether RQ-10 is waived again for the link's
+  `STORAGE_IO` alone or its rule gains the "accepted by the maintainer" clause RQ-13's has; **an issue for L-139's citation half** (#224 covers the blurred banner only; governance rule 14;
+  the supervisor opens it); the optional upgrade from rc.1; deprecating rc.1 and rc.2. **If Claude Opus misses again on rc.3:** the claims check accepts only `passed` behind CL-201, CL-202,
+  CL-204 and CL-205, which all need RQ-15; the skill change is a hypothesis, untested until batch 2 runs.
 - **R1 options:** a stub per ended request (L-063); the Windows kill window (L-129, an ADR); a bounded wait for the initialization
-  lock (L-131, L-135); retry the Windows sharing violations (L-136). **At v2:** the codes L-127 keeps. **#204** Codex on Windows
-  (L-076). **Readings** (none blocks): L-062, L-067, L-069, L-017, L-088, L-090, `tokio`, `durable_worker`, MSRV.
+  lock (L-131, L-135); retry the Windows sharing violations (L-136); #325's later steps (L-140); #334 (L-141). **At v2:** the codes L-127
+  keeps. **#204** Codex on Windows (L-076). **Readings** (none blocks): L-062, L-067, L-069, L-017, L-088, L-090, `tokio`, `durable_worker`, MSRV.
 
 ## Tracked issues and gates
 
 - **Open:** #17 (P14), #219, #224 (L-095, L-139), #188 (SEC-T01, R1), #232, #246 (deferred), #258, #263, #272 (residual accepted, L-122),
-  #310 (fixed in rc.2; L-134 keeps the campaign's case), #312 (L-135), #314 (fixed in rc.2; L-136), #316 (hosted runners scarce),
-  **#321** (the supervisor test race, L-138), **#322** (whisper.cpp pin, L-137); #128 (watch); flaky tests #253 (Windows kill test) and #268
-  (macOS SIGTERM test): comment with the run link, rerun the job; #170-#178 (register); #159, #150, #147.
+  #312 (L-135), #314 (fixed in rc.2; L-136), #316 (hosted runners scarce), **#321** (fixed in the test; L-138 closes with a clean stress run),
+  **#322** (the floor is in rc.3; the pin stays, L-137), #325 (step 1 done, L-140), #334 (L-141); #128 (watch); flaky tests #253 (Windows kill
+  test) and #268 (macOS SIGTERM test): comment with the run link, rerun the job; #170-#178 (register); #159, #150, #147.
 - **Opt-in real-tool paths** (`--ignored`) run a Cargo-built binary unless `VSIFT_E2E_BINARY` names an installed one (L-042); a failed
   run is a finding: issue first, then rerun. A stage that tests a fix newer than the published version skips below its first version
   only (L-115). **P14 tools:** `tools/p14-published/test/`, `tools/p14-campaigns/test/`. **Campaigns:** never on the maintainer's
