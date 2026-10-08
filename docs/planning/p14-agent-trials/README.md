@@ -1,15 +1,16 @@
 # P14 agent trial records
 
 **Status: batch 1 (the baseline on the published 0.1.0) ran on 2026-10-03. Batch 2 (the counted
-set with the skill, 34 runs) ran on both candidates: on the first, `0.2.0-rc.1`, on 2026-10-05 (history: its records are in
+set with the skill, 34 runs) ran on the first two candidates, and both runs are history: on the first, `0.2.0-rc.1`, on 2026-10-05 (its records are in
 [`batch-2-rc.1/`](batch-2-rc.1/) and its reading, whose four cases were never decided, is [batch-2-reading.md](batch-2-reading.md)), and on the
-second, `0.2.0-rc.2`, on 2026-10-07 (its records are in [`batch-2/`](batch-2/); its reading, with the maintainer's decision of the same day, is
+second, `0.2.0-rc.2`, on 2026-10-07 (its records are in [`batch-2-rc.2/`](batch-2-rc.2/); its reading, with the maintainer's decision of the same day, is
 [batch-2-reading-rc.2.md](batch-2-reading-rc.2.md): Claude Opus 5.5's review tier missed two gates, the evidence item RQ-15 is `failed` for that
-candidate, nothing is re-graded, and the maintainer decided to improve the skill and cut a third candidate, `0.2.0-rc.3`, on which batch 2 is run
-again). Batch 3 (the cold final round) has never run; it is for the third candidate, on the maintainer's go.** Their freeze is
-committed for the second candidate (`batch-2/freeze.json` and `batch-3/freeze.json`, rewritten at its cut by P14 PR 10 repeated with the
-same digests as the first candidate's, because nothing frozen changed; a test fails every pull request that changes anything frozen
-until another candidate and a new freeze are decided on purpose, which the third candidate's cut now has to do for its skill change; batch 1's freeze is history and no longer holds). P14 PR 6 built the harness, the cold-agent mode, the hold-out scenarios and the campaign
+candidate, nothing is re-graded, and the maintainer decided to improve the skill and cut a third candidate, `0.2.0-rc.3`). The third candidate was
+cut on 2026-10-08: batch 2 is run again on it and batch 3 (the cold final round, never run) runs on it, each on the maintainer's go, and neither has
+run.** Their freeze is committed for the third candidate (`batch-2/freeze.json` and `batch-3/freeze.json`, written at its cut by P14 PR 10 repeated
+again). **It is a new freeze on purpose: the skill gained two evidence rules, so the `skill` digest and the whole-freeze digest differ from the first
+two candidates'; the other six components are theirs.** A test fails every pull request that changes anything frozen
+until another candidate and a new freeze are decided on purpose, and pins the whole-freeze digest; batch 1's freeze is history and no longer holds. P14 PR 6 built the harness, the cold-agent mode, the hold-out scenarios and the campaign
 scripts; every batch spends the maintainer's Claude and Codex allowances and starts on the
 maintainer's explicit go. This folder is where the batches' bounded records land. The reading of
 batch 1 is [batch-1-reading.md](batch-1-reading.md); it qualifies nothing, it is the "before"
@@ -33,9 +34,11 @@ p14-agent-trials/
   batch-2-rc.1/   the counted set with the skill, on the FIRST candidate 0.2.0-rc.1 (ran 2026-10-05; history,
                   moved here when the second candidate was cut; its freeze.json is a copy of the file as it was)
   batch-2-reading.md              the maintainer-side reading of batch-2-rc.1
-  batch-2/    the counted set with the skill, on the second candidate 0.2.0-rc.2 (ran 2026-10-07)
-  batch-2-reading-rc.2.md         the reading of batch-2 and the maintainer's decision of 2026-10-07
-  batch-3/    the cold final round, on the second candidate (holds only freeze.json until it runs)
+  batch-2-rc.2/   the counted set with the skill, on the SECOND candidate 0.2.0-rc.2 (ran 2026-10-07; history,
+                  moved here when the third candidate was cut; its freeze.json is a copy of the file as it was)
+  batch-2-reading-rc.2.md         the reading of batch-2-rc.2 and the maintainer's decision of 2026-10-07
+  batch-2/    the counted set with the skill, on the third candidate 0.2.0-rc.3 (holds only freeze.json until it runs)
+  batch-3/    the cold final round, on the third candidate (holds only freeze.json until it runs)
     records/<trial>-<client>-p1.json   one bounded record (at most 64 KiB) per counted or invalid trial
     state-claude.json, state-codex.json  the plan and every attempt of each client (run identifiers,
                                          trial identifiers, outcomes; no path, prompt or name)

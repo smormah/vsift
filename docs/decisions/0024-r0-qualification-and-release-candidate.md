@@ -1673,3 +1673,61 @@ once its cause is fixed is decided on the third candidate's own runs.
 what the batch showed for the three models that met their gates. "Harmless" for A and D is one person's judgement of two runs, and the same false alarms can
 recur. A third candidate repeats every campaign, both agent batches and the try-outs. `release-evidence --complete-for 0.2.0-rc.2` fails on RQ-15 (`failed`),
 RQ-16 and RQ-17 (`planned`) and is no longer the goal: the stable release is to be built on the third candidate.
+
+## Implementation note, 2026-10-08 (P14 PR 10, repeated again: the third release candidate `0.2.0-rc.3`)
+
+PR 10 is done a third time. Agent-trial batch 2 on `0.2.0-rc.2` (2026-10-07) left RQ-15 `failed`, and the maintainer decided that day to change the
+skill and cut a third candidate instead of waiving two gates or excluding a model (the note above). **`0.2.0-rc.3` is `0.2.0-rc.2` plus exactly this
+and the version bump, by the maintainer's decisions of 2026-10-07 and 2026-10-08:** the skill's two evidence rules, made in this cut; and what was
+merged to `main` for the third candidate after the second's tag, #333 (the supervisor test's marker race, #321; the malicious-media campaign's
+no-room case, #310; a trial-harness test, #327), #331 (a source copy that outruns the ten-minute limit says so; the code stays) and #330 (audio under
+100 ms is a gap and is never given to the recogniser, #322; a range that rounds to no sample is refused, #332). **Nothing else:** no FFmpeg or
+whisper.cpp re-pin, which stay after the stable release, and no Dependabot pull request. **Nothing is tagged or published, no setting changed and no
+evidence is recorded for the third candidate.** PR 10 is complete again only when the maintainer has published `0.2.0-rc.3` and verified it, by
+[`release.md`](../operations/release.md) section 6.12. The notes above are left as they were; where the note of 2026-10-07 lists four planned
+changes, this one records what the cut holds, and where the notes of the second candidate say "`0.2.0-rc.2` stays", that was the decision before
+batch 2 ran on it.
+
+**Decisions taken inside this ADR, for the maintainer to confirm or overrule.**
+
+1. **The skill's wording is two rules, and the grader does not change with it** (the question the note of 2026-10-07 left to the cut). An unreadable
+   region proves nothing about its content in either direction, so a claim that something is absent from it is not `supported` on that frame; and a
+   claim states only what its own citations show or say. `SKILL.md` has one sentence for each and stays at its bound of 300 lines, which the
+   `skill_contract` guard holds; `references/handoff.md` has both in full. The grader, the scenarios, the hold-outs, the settings and the gates are
+   byte for byte the second candidate's: a changed grader beside a changed skill would leave no way to say which of the two moved a result.
+2. **The freeze is new, on purpose, and the pin moves with it.** `freeze write` gave a new `skill` digest (`34ff775f...`, where it was `648569ae...`)
+   and a new whole-freeze digest (`654955dd210eae2707b15a5334a3390edca9b7e17e300ebe68310f4b815ba5c6`, where it was `1e89b5cc...`); the other six
+   components are unchanged (#333 touched only the harness's `tests/`, which the `grader` component does not read). The constant in `committed_freeze`
+   is changed in the same pull request, with a comment that says why: decision B's freeze rule asks for exactly that, a change that shows in the diff
+   of a test. Batch 3 still needs `-AllowGraderChange`, for the reason of 2026-10-04 and no new one.
+3. **Three fixes beyond the four planned on 2026-10-07 are in the candidate**, each a finding's fix under decision B's rule and each merged in its own
+   reviewed pull request before this cut: #332 (found while testing #322), the first step of #325, and #327. One of them replaces a published failure
+   code for one request (`audio` of a range of 31 microseconds or less: `INVALID_SOURCE`, where such a range decoded to nothing, becomes
+   `INVALID_ARGUMENT`); the contract and the changelog say so. This note records that it is in the candidate; it does not reopen #330's review.
+4. **No tool of the release seam changed.** The candidate-to-stable check takes the highest `v<X.Y.Z>-rc.<N>` tag, so once `v0.2.0-rc.3` exists the
+   stable release is compared with it; the allowed lists are not widened; `vsift-release`, `release.yml` and the lint are untouched, and
+   `publish-steps.sh` passes. The by-hand backstop in `release.md` 6.7 and L-107 names `v0.2.0-rc.3`.
+5. **The rung stays `candidate`, and the README and the installation guide name the third candidate.** L-133's window reopens between the merge and
+   the publish; the runbook says to merge only when the maintainer can tag and publish at once, and the installation guide says that until then
+   `@next` installs the second candidate.
+6. **The second candidate's batch-2 results moved to `docs/planning/p14-agent-trials/batch-2-rc.2/`**, for the reason and by the precedent of the
+   first's (`batch-2-rc.1/`). The ledger's RQ-15 entry names the summary's new path; nothing else in the ledger changed, and nothing was relabelled.
+7. **Every evidence item is run again on the third candidate, the two waived ones included.** `release-evidence --complete-for 0.2.0-rc.3` names 16
+   of the 20 items: the thirteen `passed` items, stale by the rule, RQ-15 (`failed`) and RQ-16 and RQ-17 (`planned`). It does not name RQ-08 and
+   RQ-10, waived on 2026-10-07 for the second candidate's runs, so the check would pass them with no run on the third: the plan runs both campaigns
+   anyway (section 28.4), and whether either waiver is still needed is left to the maintainer on those results (section 28.5). RQ-14's waiver is about
+   a mechanism, not a version.
+8. **The upgrade is tried from 0.1.0 and from the second candidate; from the first it is optional** (`release.md` 6.12 step 5), and runs of one
+   workflow dispatched from `main` are started one after another, because a waiting run is replaced by a newer one.
+
+**Left open, for the maintainer** (plan section 28.5): whether RQ-08's waiver is carried over if the stress run is clean (recommended: no, record the
+run); whether RQ-10 is waived again for the link's `STORAGE_IO` alone or its rule gains the clause RQ-13's has; and an issue for the citation half of
+L-139, which governance rule 14 asks for behind a failed item and which this cut could not open.
+
+**What is weaker than it sounds.** The skill change is a hypothesis: no trial has run with the new wording, the samples are three blurred-banner runs
+and six journey runs per client, and the grader still matches text. A changed skill resets what the earlier rounds showed for the three models that
+passed. "Plus exactly" is a statement about pull requests and paths, and this delta is larger than the second candidate's: 17 source files of the
+program, changed answers of three commands and one replaced failure code. Every result recorded for `0.2.0-rc.2` is now evidence about that candidate
+only, and repeating it costs the hosted minutes, the maintainer's allowances for two agent batches and the try-outs a third time; a fourth candidate
+would cost them again. Decision B planned at most two candidates and left a third to the maintainer: this is that third, cut for a recorded
+finding as the second was, and nothing in this note says it is the last.

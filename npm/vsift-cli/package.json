@@ -1,6 +1,6 @@
 {
   "name": "vsift-cli",
-  "version": "0.2.0-rc.2",
+  "version": "0.2.0-rc.3",
   "description": "Local, source-grounded video evidence for you or your AI assistant: transcripts, screen changes and exact frames. The vsift command-line tool.",
   "license": "MIT OR Apache-2.0",
   "homepage": "https://github.com/smormah/vsift",
@@ -24,8 +24,8 @@
     "node": ">=22"
   },
   "optionalDependencies": {
-    "@vsift/darwin-arm64": "0.2.0-rc.2",
-    "@vsift/linux-x64": "0.2.0-rc.2",
-    "@vsift/win32-x64": "0.2.0-rc.2"
+    "@vsift/darwin-arm64": "0.2.0-rc.3",
+    "@vsift/linux-x64": "0.2.0-rc.3",
+    "@vsift/win32-x64": "0.2.0-rc.3"
   }
 }

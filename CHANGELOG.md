@@ -6,6 +6,80 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.2.0-rc.3] - 2026-10-08
+
+**This is a release candidate, under qualification.** It is the third candidate for `0.2.0`, the release that ships R0
+(ADR 0024, decisions A and B), and it replaces `0.2.0-rc.2` as the candidate. It is published under the npm tag `next` and
+never under `latest`, it is not announced, and it is no statement of support or stability. **`0.2.0-rc.1` and `0.2.0-rc.2`
+stay published:** npm never lets a published version go, and their tags and release pages stay too, so they are superseded,
+not withdrawn. **Every result recorded for `0.2.0-rc.2` is superseded:** the agent skill and the program changed, so every
+evidence item is run again on this candidate (P14 PR 11, repeated again;
+[`p14-qualification.md`](docs/planning/p14-qualification.md) section 28), and the release evidence ledger
+([`p14-evidence-ledger.json`](docs/planning/p14-evidence-ledger.json)) says where each item stands and what it does not
+prove.
+
+### What changed since 0.2.0-rc.2, in plain English
+
+**If you let an AI assistant use VSift through its skill.** The skill has two more rules about evidence. They are the
+reason for this candidate: in the agent trials on both earlier candidates one of the four models tried, Claude Opus 5.5,
+missed two checks (one of three runs passed the blurred-banner check, and four of six the citation check), and the
+maintainer chose to improve the skill and try again, not to waive the checks or leave the model out.
+
+- **Something you cannot read proves nothing, in either direction.** A blurred or cut-off part of a frame cannot show what
+  it says, and it cannot show that something is *not* there. A report may no longer say "no success banner is visible" as a
+  fact the picture supports when the banner's text cannot be read. It says what can be seen, and takes the rest from the
+  transcript or marks it as not supported.
+- **A claim states only what its own citations show or say.** Every name, number or identifier in a claim has to be in
+  the evidence that claim cites. A claim may not carry an identifier remembered from another part of the video without
+  citing that part too.
+
+**If you use VSift from the command line.** Three answers changed; no command, option or JSON field did.
+
+- **Very short audio is no longer given to the speech recogniser.** Audio shorter than a tenth of a second is recorded as a
+  gap ("nothing to recognise here") and `transcript retranscribe` of such a range ends normally with no new text. Before,
+  a few milliseconds of sound could reach the recogniser, and the reviewed whisper.cpp reads past its buffer for input that
+  short (#322).
+- **A range too short to hold a single audio sample is refused, not answered with seconds of audio.** `vsift audio` of a
+  range of 31 microseconds or less gave back up to about four seconds of sound that was not the range asked for, and
+  `transcript retranscribe` recognised it like a long range (#332). `audio` now refuses that request as `INVALID_ARGUMENT`
+  (exit 2) and says how short it is. **One published code changed with it:** where such a range used to decode to nothing
+  the answer was `INVALID_SOURCE`, and it is `INVALID_ARGUMENT` now. Nothing that was answered correctly changes.
+- **A video that takes more than ten minutes to copy is no longer just called invalid.** `ingest` still stops such a copy
+  and the code is still `INVALID_SOURCE` (exit 3), but the answer now says what happened: the copy ran out of time, the
+  video itself was not judged and may be fine, and copying it to a local disk first usually fixes it (#325, its first
+  step; the limit itself is unchanged, [L-140](docs/planning/known-limits.md#l-140)).
+
+**If you test or maintain VSift.** Three fixes to tests and tools, none of them to the program: a test of the process
+supervisor read a file its helper was still writing, which failed one repetition in 1,500 of the stress run on the second
+candidate (#321); the malicious-media campaign's "no room" case named a folder VSift refuses, so it had never tested the
+room check on any version (#310's second finding); and a trial-harness test compared a random name with three characters
+it could spell by chance (#327). The agent-trial freeze is **new**: the skill changed on purpose, so batches 2 and 3 run
+under new digests. The candidate-to-stable check compares the stable release with the highest candidate tag, which will
+be this candidate's (`release.md` 6.8 and 6.12).
+
+### What has not been shown
+
+- **Nothing has been run against this candidate's published bytes, and nothing shows yet that the two new skill rules are
+  enough.** They are a change of wording made for three blurred-banner runs and six journey runs per client; batch 2 on
+  this candidate decides, and it has to show again that the three models which passed with the old skill (GPT-6-Astra,
+  Claude Sonnet 5.5, GPT-6-Sol) still pass with the new one. The evidence recorded for `0.2.0-rc.2` does not count for this
+  candidate (`release-evidence --complete-for 0.2.0-rc.3` says which items and why): the hosted campaigns, agent-trial
+  batches 2 and 3 (batch 3, the round without the skill, has run on no candidate) and the try-outs on a second Windows
+  machine are run on it.
+- **The short-audio rules were not run with whisper.cpp**, and the tests that check them against a real FFmpeg are opt-in:
+  no regular hosted job runs them ([L-137](docs/planning/known-limits.md#l-137),
+  [L-141](docs/planning/known-limits.md#l-141)). The fixed supervisor test has passed 79 local repetitions, not the 1,500
+  hosted ones ([L-138](docs/planning/known-limits.md#l-138)); the corrected campaign case has run once, in a pull request
+  ([L-134](docs/planning/known-limits.md#l-134)). No real slow copy was run.
+- **FFmpeg and whisper.cpp are not re-pinned.** The reviewed FFmpeg build is the one of 2026-08-31 and the reviewed
+  whisper.cpp is v1.9.2; both re-pins come after `0.2.0` ([L-132](docs/planning/known-limits.md#l-132), L-137).
+- **Unsigned executables** have not met Windows Smart App Control or macOS Gatekeeper on a real machine
+  ([L-098](docs/planning/known-limits.md#l-098)).
+- **A synthetic corpus and a synthetic voice** only; nothing has been tried on a real recording
+  ([L-020](docs/planning/known-limits.md#l-020), [L-022](docs/planning/known-limits.md#l-022)).
+- **Not claimed:** a strict worker that contains a hostile decoder (decision E option 4, [L-068](docs/planning/known-limits.md#l-068)),
+  durability off Ubuntu 24.04 on ext4, managed installation outside Ubuntu 24.04 x64, Codex on Windows.
+
 ### Fixed
 
 - **The process-supervisor test no longer reads a marker file its child is still writing; the supervisor is unchanged** (P14,
@@ -152,6 +226,57 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   **Found on the way, in the same new known limit ([L-141](docs/planning/known-limits.md#l-141), issue #334), not caused or
   changed here:** an `audio` clip of a few milliseconds can be answered `INVALID_SOURCE`, "could not decode that part", for a
   healthy file (on the audio-only fixture every range from 32 microseconds to about 47 ms decoded to nothing).
+
+### Changed
+
+- **The agent skill states two more evidence rules** (P14, the third candidate's reason; L-139, L-095, #224; the skill, its
+  guide and the fuzz seed that copies it; no program code). **What was wrong.** In agent-trial batch 2 on `0.2.0-rc.1` and on
+  `0.2.0-rc.2`, Claude Opus 5.5 in the review tier passed the blurred-banner check in 1 of 3 runs and the mechanical check
+  in 5 of 6 and then 4 of 6. In the blurred runs the report did say the banner's text was unreadable, and then rated one more
+  claim that names a "success banner" as `supported` on the blurred frame ("no success banner is visible"). In the others a
+  claim restated the narration, named "invoice 4407" and cited a segment that does not say it. The skill said that a claim
+  about the *content* of an unreadable region rests on the transcript; it did not say how to rate a statement of what such
+  a region is *not*, and it had no sentence about a fact restated from another part of the narration. **Change.**
+  `SKILL.md` states each rule in one sentence, in VERIFY_SOURCE ("Unreadable pixels prove neither what is there nor that
+  something is absent.") and in REPORT ("It states only what its own citations show or say: each name, number or identifier
+  in it is in evidence it cites."), and stays at its bound of 300 lines; `references/handoff.md` states both in full, with
+  what to write instead (two claims: one for what is visible, one for the content or its absence from the transcript
+  alone, and the gap recorded). `docs/agents/skill.md` records the change and what is still not shown, and the
+  `handoff_check` fuzz seed, a copy of `SKILL.md`, follows. **Not changed:** the grader, the scenarios, the hold-outs, the
+  settings, the gates and the rule (RQ-15 stays "every review-tier journey run, and at least 2 of 3 blurred-banner runs,
+  per client"). No model is excluded and nothing is waived. **What is not shown:** that the wording moves the model. The
+  grader matches text and cannot read a negation, so part of the misses may be its strictness; batch 2 on this candidate is
+  the test, for all four models.
+- **The release candidate `0.2.0-rc.3` is cut** (P14 PR 10, repeated again, 2026-10-08; the bump, the pointers, the new
+  freeze and the maintainer's runbook; **nothing is tagged or published**: the maintainer does that by
+  `docs/operations/release.md` section 6.12). **What it is:** `0.2.0-rc.2` plus the skill's two rules above and the five
+  fixes of this section, which were merged after the second candidate's tag (#330, #331, #333), and nothing else: no FFmpeg
+  or whisper.cpp re-pin and no Dependabot pull request. **Version:** `0.2.0-rc.2` becomes `0.2.0-rc.3` in the workspace and
+  fuzz manifests and lockfiles and in the launcher's manifest (its three optional dependencies too), and in no other
+  version-string file; the user guide names the release `0.2.0`, so its marker and its generated pages are unchanged by the
+  bump. **Pointers:** the README and the installation guide name `0.2.0-rc.3` as the release candidate under qualification
+  (the rung stays `candidate`; the guide says that `@next` installs the second candidate until the third is published),
+  and the guide's first page, the developer documents, the try-out sheet and the agent-batch checklist follow.
+  **The candidate-to-stable check needed no change:** it takes the highest `v0.2.0-rc.<N>` tag, so once the maintainer has
+  tagged this candidate the stable release is compared with `v0.2.0-rc.3`; its allowed lists are not widened, and the
+  release workflow, its lint and its shell are untouched. The by-hand backstop in `release.md` 6.7 and in L-107 names
+  `v0.2.0-rc.3`. **Runbook:** new section 6.12 (`next` moves from `0.2.0-rc.2` to `0.2.0-rc.3`; the upgrade is tried from
+  `0.1.0` and from `0.2.0-rc.2`, and optionally from `0.2.0-rc.1`; runs that share a concurrency group are dispatched one
+  after another); 6.10 and 6.11 stay as the records of the first two candidates. **Agent trials: a new freeze, on
+  purpose.** `batch-2/freeze.json` and `batch-3/freeze.json` were written again: the `skill` digest is new
+  (`34ff775f667980ec80525e851dffecab8a2fe665082af01294829168b488ff22`, where it was
+  `648569ae378268a3354b65e97f443bc25f7f5153a1734b2b99efdf4a1cbceb4b`) and so is the whole-freeze digest
+  (`654955dd210eae2707b15a5334a3390edca9b7e17e300ebe68310f4b815ba5c6`, where it was
+  `1e89b5cc488e7245d1a6d63ec8809c1f8a5c137ee87f5ed05f9b692c2af6e392`); the grader, the scenarios, the cold scenarios, the
+  hold-outs, the settings and the corpus truth are byte-identical to the first two candidates'. The pin in the
+  `committed_freeze` test moved with it and says why. The second candidate's batch-2 records, summary, state files and a
+  copy of its freeze moved to `docs/planning/p14-agent-trials/batch-2-rc.2/`, so that the batch can run again.
+  **Evidence:** nothing was recorded for this candidate and nothing in the ledger was relabelled (one record path follows
+  the moved folder); `release-evidence --complete-for 0.2.0-rc.3` fails on 16 of the 20 items
+  ([`p14-qualification.md`](docs/planning/p14-qualification.md) section 28.3), and the hosted campaigns, batches 2 and 3
+  and the try-outs are repeated on it (section 28.4). **Known limits:** L-133 reopens for the hours between the merge and
+  the publish; L-107 names the third candidate's tag; L-139 and L-095 say the skill change is made and that the batch on
+  this candidate decides; L-132 says the catalogue is unchanged again. ADR 0024 has a dated note.
 
 ## [0.2.0-rc.2] - 2026-10-06
 
@@ -307,7 +432,7 @@ then whisper.cpp is re-pinned with the FFmpeg refresh ([#322](https://github.com
 
 **Work record only (P14 PR 11, repeated: agent-trial batch 2 and RQ-15; nothing shipped changes).** Agent-trial batch 2, the counted set with the skill (34 runs),
 ran on the published `0.2.0-rc.2` on 2026-10-07 from a clean install, with the same frozen skill and grader as on the first candidate. Its 34 records, summary
-and reading are committed ([`docs/planning/p14-agent-trials/batch-2/`](docs/planning/p14-agent-trials/batch-2/),
+and reading are committed ([`docs/planning/p14-agent-trials/batch-2-rc.2/`](docs/planning/p14-agent-trials/batch-2-rc.2/), where the cut of the third candidate moved them from `batch-2/`,
 [`batch-2-reading-rc.2.md`](docs/planning/p14-agent-trials/batch-2-reading-rc.2.md)), and the results are in
 [`docs/planning/p14-qualification.md`](docs/planning/p14-qualification.md) section 27. As graded, 28 of 34 runs passed fully, and no run installed anything,
 accepted a setup plan, leaked a canary or wrote a path or a hidden character into a report. Codex met its review-tier gates with GPT-6-Astra (6 of 6, and 3 of 3
