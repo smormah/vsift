@@ -1731,3 +1731,45 @@ program, changed answers of three commands and one replaced failure code. Every 
 only, and repeating it costs the hosted minutes, the maintainer's allowances for two agent batches and the try-outs a third time; a fourth candidate
 would cost them again. Decision B planned at most two candidates and left a third to the maintainer: this is that third, cut for a recorded
 finding as the second was, and nothing in this note says it is the last.
+
+## Implementation note, 2026-10-08 (P14 PR 11, repeated again: the hosted evidence on the third candidate `0.2.0-rc.3`)
+
+The hosted part of PR 11 is repeated on the published `0.2.0-rc.3` (tag `v0.2.0-rc.3` at `83dca856e7a00fc9a71c87baae99f0b1d401dd31`, publish run 37746979716, 2026-10-08):
+**the whole of the hosted part, not an increment of it** (every campaign of the plan's 28.4 ran; only the optional upgrade from `0.2.0-rc.1` did not), and work record only
+(the ledger, the plan's section 29, the by-hand scan reading of the day, the register, this note, the changelog and the two memory files). Nothing was tagged or published, no
+code, tool, workflow, schema or setting changed, nothing was re-run, and no run failed, so no issue was opened. The runs, tables and cases are
+[`p14-qualification.md`](../planning/p14-qualification.md) section 29; every `passed` entry of the second candidate is `prior` evidence in the ledger now.
+
+**What the repeat showed.** Every hosted campaign was green: the second verification of the publish (20 checks), the clean installs, archives, offline install and the upgrades from
+0.1.0 and from `0.2.0-rc.2` (the shipped skill is the tag's, byte for byte), the journeys on three systems, the managed smoke, fuzzing (31 targets, 3.49 billion runs), the stress
+run (25 jobs, 20,100 repetitions, none failed or hung), load and soak, the runbook walk, the media campaign, both fault campaigns (with their hosted verdict jobs) and the scan reading.
+**The fixes held where they were tested:** the supervisor suite on Windows, which had one failure in 1,500 on the second candidate (#321), ran 3,000 of 3,000 clean, the lock suite
+on Windows 200 of 200 again, and the corrected no-room case of the media campaign answered `STORAGE_IO` with the no-room remediation on published bytes for the first time.
+The stress run does not show the floor, the skill or the slow-copy remediation: no campaign here tests them.
+
+**Decisions taken inside this ADR, for the maintainer to confirm or overrule.**
+
+1. **RQ-08 is recorded `passed` on the run, and the waiver of 2026-10-07 is not carried over** (the answer plan 28.5 recommended: no waiver in advance, decide on the run). The waiver's text
+   is kept as a `prior` record of the entry. #321 can be closed; L-138 is updated to say its fix has run 3,000 clean hosted Windows repetitions and that no limit is left in it, and is
+   left in the register for the register pass to delete (it is linked from the changelog, this ADR and the plan, and `docs/development.md` and `tools/` are frozen until the stable).
+2. **RQ-10: the run could not be `passed`, and the maintainer decided on 2026-10-08 to waive the link case only, for `0.2.0-rc.3`.** (The pull request first recorded the item `failed` against its
+   rule, because a waiver is the maintainer's to give; the decision below replaced that status the next day.) The run is green with one tracked finding, the link's `STORAGE_IO` (#265, L-127), which the
+   item's pass rule (three codes, no clause for an accepted finding) does not admit. **Decision of 2026-10-08 (the ledger carries the same text): RQ-10 is waived for R0, for the third candidate only.**
+   It covers **exactly one residual**: `ingest` of a symbolic link given as the video answers `STORAGE_IO` with a remediation that says what happened, where the rule names `INVALID_SOURCE`
+   (#265, L-127: a published failure code stays within v1). The run is green otherwise (96 inputs, 251 operations): the corrected no-room case works on published bytes (`sparse-no-room` `ingest`
+   `STORAGE_IO` in 0.1 s with the pinned no-room remediation and the worker request `RESOURCE_LIMIT`; `sparse-30gib` `INVALID_SOURCE`, worker request `RESOURCE_LIMIT`), the pipe passes and containment
+   held. The campaign tool's mis-built case, covered on 2026-10-07, is corrected and needs no waiver. **The waiver does not cover** a new finding, a broken containment check, an answer outside the item's
+   bounds, the room check on Windows (L-061) or anything else, **and it does not carry over to another candidate** (nor do the decisions of 2026-10-05 and 2026-10-07 carry over to this one). The run stays
+   as counted evidence. **Not covered, reported:** 20 of the 96 inputs have an operation that ends `INVALID_ARGUMENT` (17 hostile file names refused by the worker request, two follow-up calls on
+   accepted sources, and the worker request that names the link). The plan's section 18.4 and the judge's `FOLLOW_UP_CODES` accept the code for a follow-up call on an accepted source, which is why the judge
+   did not report them; L-127 and the decision of 2026-10-07 do not name them and the pass rule lists three codes. They are not waived and the waiver was not widened to them; whether the rule
+   should admit the code is the maintainer's, as a change of the rule. Neither changes code.
+3. **L-134 is narrowed, not deleted:** the corrected case is shown, and what the campaign still does not try (the Windows room check, other sizes, a write that runs out of room) stays a limit.
+4. **RQ-11 is `passed` on the hosted verdicts** (both Acceptance jobs ran) and **RQ-18 on the CI run of the push at the candidate's own commit** (37734145382, with the Guide run 37734145467);
+   L-133's third window is closed (RQ-19 passed for the third candidate).
+5. **The upgrade from `0.2.0-rc.1` was not dispatched** (optional, `release.md` 6.12 step 5), and the earlier candidates were not deprecated (step 7: the maintainer's, with an npm login).
+
+**What is weaker than it sounds.** The same as for the earlier candidates (plan 26.5 and 29.6): shared hosted images, a synthetic corpus and voice, a fuzz hour that is a floor (16 of 31 targets still
+finding coverage), a stress rate measured on shared runners with #312 not fixed, and a media campaign that tries the room check once. **A green hosted part says nothing about the two reasons for the
+candidate:** whether the skill's two new rules move Claude Opus 5.5 is RQ-15 (batch 2, not run here), and the floor of 100 ms was run with no whisper.cpp. Three of twenty items block
+`release-evidence --complete-for 0.2.0-rc.3`: RQ-15, RQ-16 and RQ-17 (plan 29.7). Two items are now waived (RQ-10 for this candidate only, RQ-14), and each waiver's text says what it does not cover.

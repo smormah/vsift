@@ -37,22 +37,23 @@ the CLI and write a cited report. P12's named-client trials qualified it:
 
 ## Where the project stands
 
-**P00-P13 are complete. P14, the R0 qualification (#17), is in progress** (started 2026-10-02; decisions A-H of ADR 0024 confirmed). Its plan is 14 pull requests (0-13); **PRs 0-9
-are merged. PR 10, the candidate, is prepared a third time: `0.2.0-rc.3` is cut and ready to tag; it is NOT published.** The first two candidates are published and superseded and
-stay on npm: `0.2.0-rc.1` (2026-10-05, `v0.2.0-rc.1` at `d5792ce31db1`) and `0.2.0-rc.2` (2026-10-07, `v0.2.0-rc.2` at `7c722d1fc46a`). Until the maintainer publishes rc.3, npm
-`next` is rc.2 and `latest` is the empty `0.0.0`. The packet is not complete. Where things stand:
-- **Why a third candidate:** agent-trial batch 2 (34 runs with the skill) ran on rc.1 and on rc.2. Codex met its gates both times; **Claude Opus 5.5 missed two review-tier gates
-  both times** (on rc.2: 4 of 6 mechanically, 1 of 3 on the blurred banner), so RQ-15 is `failed` for rc.2 and rc.2 will not become the stable. The maintainer chose to improve the
-  skill and run the round again: no waiver, no exclusion.
+**P00-P13 are complete. P14, the R0 qualification (#17), is in progress** (started 2026-10-02; decisions A-H of ADR 0024 confirmed). Its plan is 14 pull requests (0-13); **PRs 0-10
+are done. The third candidate `0.2.0-rc.3` was published and verified on 2026-10-08** (tag `v0.2.0-rc.3` at `83dca856e7a0`, publish run 37746979716): npm `next` is rc.3 on all four packages and
+`latest` is the empty `0.0.0`. The first two candidates are published, superseded and not deprecated: `0.2.0-rc.1` (2026-10-05, `d5792ce31db1`) and `0.2.0-rc.2` (2026-10-07, `7c722d1fc46a`). The packet is
+not complete. Where things stand:
+- **Why a third candidate:** batch 2 (34 runs with the skill) ran on rc.1 and rc.2; Codex met its gates both times, **Claude Opus 5.5 missed two review-tier gates both times** (rc.2: 4 of 6
+  mechanically, 1 of 3 on the blurred banner), so RQ-15 is `failed` for rc.2. The maintainer chose to improve the skill and run the round again: no waiver, no exclusion.
 - **What rc.3 is:** rc.2 plus two evidence rules in the skill (an unreadable region proves nothing either way; a claim states only what its own citations show or say), a floor for short
   audio (under 100 ms is a gap, never recognised: #322, L-137), a refusal of an `audio` range too short to hold a sample (#332; one published code replaced for that request), a remediation
   for a copy that runs out of time (#325 step 1, L-140) and three test or tool fixes (#321, the campaign's no-room case, #327). No re-pin of FFmpeg or whisper.cpp, no Dependabot.
-- **What is shown for rc.3: nothing yet.** Every ledger entry is rc.2's and is stale for rc.3 (`release-evidence --complete-for 0.2.0-rc.3` names 16 of 20 items). On rc.2 the hosted
-  campaigns passed except one stress repetition (#321, a test race, now fixed in the test), three items were waived (RQ-08, RQ-10, RQ-14), and RQ-16 (the cold round) and RQ-17 (the try-outs)
-  never ran on any candidate. Everything is run again on rc.3: the hosted campaigns, batch 2 under a new freeze, batch 3, the clean-machine try-out, the register pass (plan section 28).
+- **What is shown for rc.3 (plan section 29, 2026-10-08; work record only):** the whole hosted part of PR 11 ran and was green: the publish verified (20 checks), installs, archives, offline install
+  and upgrades from 0.1.0 and rc.2 (the package carries the tag's skill byte for byte), journeys on three systems, managed smoke, fuzzing (3.49 billion runs), **the stress run (20,100 repetitions, none
+  failed; the fixed Windows supervisor test ran 3,000 clean, #321)**, load, runbook walk, both fault campaigns, the scan reading. RQ-01 to RQ-09, RQ-11 to RQ-13, RQ-18 and RQ-19 are `passed` for rc.3; RQ-14
+  waived. **RQ-10 is `waived` for rc.3 only (maintainer, 2026-10-08), for the link's `STORAGE_IO` alone** (the rule names three codes; the run is green otherwise; plan 29.5); RQ-15 is rc.2's `failed`; RQ-16 and
+  RQ-17 never ran. `release-evidence --complete-for 0.2.0-rc.3` names those three. **Still to do:** batch 2 (new freeze), batch 3, the clean-machine try-out, the register pass.
 - **What is weak:** the skill change is a hypothesis until batch 2 runs; the floor was not run with whisper.cpp (L-137, L-141); hosted images
   are not clean machines (L-112); Smart App Control and the macOS prompts are unseen (L-098); **a synthetic corpus and voice only** (L-020,
-  L-022). **Open:** #312 (L-135). CVE-2026-38350 is accepted (L-122). **`latest` has never moved** (L-105). Decisions: `TODO.md`.
+  L-022). **Open:** #312 (L-135; one failure in 4,500 loaded Windows repetitions across three candidates; not fixed). CVE-2026-38350 is accepted (L-122). **`latest` has never moved** (L-105). Decisions: `TODO.md`.
 
 ## P14 PRs 1 to 6 and 8 in one view
 
@@ -84,12 +85,12 @@ check reads the launcher's messages and the README graphics' text (L-121) and ea
 leans on (`limits`); `register-review-sheet.md` (every review `pending`). **Decided 2026-10-04:** the macOS wording,
 the versions policy and RQ-05's per-system rule (still `running`, plan section 21). `docs/guide/`
 (twelve pages, two generated) is held to the code by the `Guide` workflow (`tools/guide/`): 40 marked commands print what
-the pages show. **PR 10 (the candidate; rc.1 published 2026-10-05, rc.2 on 2026-10-07, rc.3 cut on 2026-10-08 and not published).**
+the pages show. **PR 10 (the candidate; rc.1 published 2026-10-05, rc.2 on 2026-10-07, rc.3 on 2026-10-08).**
 The version is `0.2.0-rc.3` everywhere, the guide's marker is the release `0.2.0`, rung `candidate`. **The freeze of batches 2 and 3 is new:**
 the skill's digest changed on purpose, the other six components are rc.2's, and a test pins the whole digest (`654955dd...`); the earlier
 batch-2 records are in `batch-2-rc.1/` and `batch-2-rc.2/`. The allowed lists of the candidate-to-stable check (a work record and
 `install.md` are allowed; nothing else may merge from the tag to the stable, so Dependabot waits: #192, #193, #194 after the stable) are
-unchanged, and the check compares the stable with the highest `-rc.N` tag: `v0.2.0-rc.3` once the maintainer creates it (`release.md` 6.12).
+unchanged, and the check compares the stable with the highest `-rc.N` tag: `v0.2.0-rc.3` (`release.md` 6.12).
 
 ## P14 PR 7 in one view (every finding by outcome; one pull request and one regression test each)
 
@@ -132,7 +133,7 @@ Control, the macOS prompts (L-098); power loss beyond Ubuntu 24.04 ext4 (L-037).
 | P11 | Complete (`40c4038`); SEC-T01 adversarial evidence is technical debt, moved to R1 (#188, L-068) |
 | P12 | Complete (2026-09-30, ADR 0022 Accepted): skill, harness, named-client trials; review tier qualified, compact tier 93% and 100% on the #222 re-run; open: L-095 (#224), #219, #204 (`1284e54`) |
 | P13 | Complete (2026-10-01, ADR 0023 Accepted): distribution, managed install, `handoff check`, human output; 0.1.0 published; release commit `011bc4d` |
-| P14 | **In progress** (started 2026-10-02): PRs 0-9 merged (PR 7 = the fixes of the campaigns and batch 1); 10: rc.1 and rc.2 published and superseded; 11 repeated on rc.2: hosted part recorded (RQ-08 and RQ-10 waived) and batch 2 read (RQ-15 failed: Claude Opus missed two gates); **a third candidate, rc.3, is cut (the skill's two evidence rules and five fixes) and ready to tag, not published**; then the maintainer's publish, 11 a third time, 12-13 |
+| P14 | **In progress** (started 2026-10-02): PRs 0-10 done (PR 7 = the fixes of the campaigns and batch 1); 10: rc.1 and rc.2 published and superseded; 11 repeated on rc.2: batch 2 read (RQ-15 failed: Claude Opus missed two gates); **rc.3 (the skill's two evidence rules and five fixes) published 2026-10-08 and its hosted evidence recorded (RQ-08 passed, RQ-10 waived for the link case only)**; still to do: batch 2 and 3, the try-out, the register pass; then 12-13 |
 
 ## Architecture snapshot
 
