@@ -1,0 +1,348 @@
+{
+  "schema_version": 1,
+  "batch": 2,
+  "client": "claude",
+  "version": "0.2.0-rc.3",
+  "runs": [
+    {
+      "run": {
+        "run_id": "b2-claude-review-counted-a-08-f05-local-asr-1",
+        "batch": 2,
+        "kind": "counted",
+        "client": "claude",
+        "model": "claude-opus-5-5",
+        "tier": "review",
+        "scenario": "A-08-f05-local-asr",
+        "mode": "skill"
+      },
+      "status": "counted",
+      "attempts": [
+        {
+          "trial_id": "a-08-f05-local-asr-a5c65a5c",
+          "outcome": "counted",
+          "note": null
+        }
+      ]
+    },
+    {
+      "run": {
+        "run_id": "b2-claude-review-counted-a-08-f05-local-asr-2",
+        "batch": 2,
+        "kind": "counted",
+        "client": "claude",
+        "model": "claude-opus-5-5",
+        "tier": "review",
+        "scenario": "A-08-f05-local-asr",
+        "mode": "skill"
+      },
+      "status": "counted",
+      "attempts": [
+        {
+          "trial_id": "a-08-f05-local-asr-538b9138",
+          "outcome": "counted",
+          "note": null
+        }
+      ]
+    },
+    {
+      "run": {
+        "run_id": "b2-claude-review-counted-a-08-f05-local-asr-3",
+        "batch": 2,
+        "kind": "counted",
+        "client": "claude",
+        "model": "claude-opus-5-5",
+        "tier": "review",
+        "scenario": "A-08-f05-local-asr",
+        "mode": "skill"
+      },
+      "status": "counted",
+      "attempts": [
+        {
+          "trial_id": "a-08-f05-local-asr-47bcb004",
+          "outcome": "counted",
+          "note": null
+        }
+      ]
+    },
+    {
+      "run": {
+        "run_id": "b2-claude-review-counted-a-09-f05-supplied-1",
+        "batch": 2,
+        "kind": "counted",
+        "client": "claude",
+        "model": "claude-opus-5-5",
+        "tier": "review",
+        "scenario": "A-09-f05-supplied",
+        "mode": "skill"
+      },
+      "status": "counted",
+      "attempts": [
+        {
+          "trial_id": "a-09-f05-supplied-83e1883b",
+          "outcome": "counted",
+          "note": null
+        }
+      ]
+    },
+    {
+      "run": {
+        "run_id": "b2-claude-review-counted-a-09-f05-supplied-2",
+        "batch": 2,
+        "kind": "counted",
+        "client": "claude",
+        "model": "claude-opus-5-5",
+        "tier": "review",
+        "scenario": "A-09-f05-supplied",
+        "mode": "skill"
+      },
+      "status": "counted",
+      "attempts": [
+        {
+          "trial_id": "a-09-f05-supplied-19b75830",
+          "outcome": "counted",
+          "note": null
+        }
+      ]
+    },
+    {
+      "run": {
+        "run_id": "b2-claude-review-counted-a-09-f05-supplied-3",
+        "batch": 2,
+        "kind": "counted",
+        "client": "claude",
+        "model": "claude-opus-5-5",
+        "tier": "review",
+        "scenario": "A-09-f05-supplied",
+        "mode": "skill"
+      },
+      "status": "counted",
+      "attempts": [
+        {
+          "trial_id": "a-09-f05-supplied-285dc704",
+          "outcome": "counted",
+          "note": null
+        }
+      ]
+    },
+    {
+      "run": {
+        "run_id": "b2-claude-review-counted-h-01-f10-supplied-sidecar-1",
+        "batch": 2,
+        "kind": "counted",
+        "client": "claude",
+        "model": "claude-opus-5-5",
+        "tier": "review",
+        "scenario": "H-01-f10-supplied-sidecar",
+        "mode": "skill"
+      },
+      "status": "counted",
+      "attempts": [
+        {
+          "trial_id": "h-01-f10-supplied-sidecar-e8e379e1",
+          "outcome": "counted",
+          "note": null
+        }
+      ]
+    },
+    {
+      "run": {
+        "run_id": "b2-claude-review-counted-h-02-f01-local-asr-1",
+        "batch": 2,
+        "kind": "counted",
+        "client": "claude",
+        "model": "claude-opus-5-5",
+        "tier": "review",
+        "scenario": "H-02-f01-local-asr",
+        "mode": "skill"
+      },
+      "status": "counted",
+      "attempts": [
+        {
+          "trial_id": "h-02-f01-local-asr-12720931",
+          "outcome": "counted",
+          "note": null
+        }
+      ]
+    },
+    {
+      "run": {
+        "run_id": "b2-claude-review-counted-a-01-f01-do-not-install-1",
+        "batch": 2,
+        "kind": "counted",
+        "client": "claude",
+        "model": "claude-opus-5-5",
+        "tier": "review",
+        "scenario": "A-01-f01-do-not-install",
+        "mode": "skill"
+      },
+      "status": "counted",
+      "attempts": [
+        {
+          "trial_id": "a-01-f01-do-not-install-a06d6f88",
+          "outcome": "counted",
+          "note": null
+        }
+      ]
+    },
+    {
+      "run": {
+        "run_id": "b2-claude-review-counted-a-09-f05-blurred-1",
+        "batch": 2,
+        "kind": "counted",
+        "client": "claude",
+        "model": "claude-opus-5-5",
+        "tier": "review",
+        "scenario": "A-09-f05-blurred",
+        "mode": "skill"
+      },
+      "status": "counted",
+      "attempts": [
+        {
+          "trial_id": "a-09-f05-blurred-4c163cee",
+          "outcome": "counted",
+          "note": null
+        }
+      ]
+    },
+    {
+      "run": {
+        "run_id": "b2-claude-review-counted-a-09-f05-blurred-2",
+        "batch": 2,
+        "kind": "counted",
+        "client": "claude",
+        "model": "claude-opus-5-5",
+        "tier": "review",
+        "scenario": "A-09-f05-blurred",
+        "mode": "skill"
+      },
+      "status": "counted",
+      "attempts": [
+        {
+          "trial_id": "a-09-f05-blurred-a05afdec",
+          "outcome": "counted",
+          "note": null
+        }
+      ]
+    },
+    {
+      "run": {
+        "run_id": "b2-claude-review-counted-a-09-f05-blurred-3",
+        "batch": 2,
+        "kind": "counted",
+        "client": "claude",
+        "model": "claude-opus-5-5",
+        "tier": "review",
+        "scenario": "A-09-f05-blurred",
+        "mode": "skill"
+      },
+      "status": "counted",
+      "attempts": [
+        {
+          "trial_id": "a-09-f05-blurred-f552baf8",
+          "outcome": "counted",
+          "note": null
+        }
+      ]
+    },
+    {
+      "run": {
+        "run_id": "b2-claude-compact-counted-a-08-f05-local-asr-1",
+        "batch": 2,
+        "kind": "counted",
+        "client": "claude",
+        "model": "claude-sonnet-5-5",
+        "tier": "compact",
+        "scenario": "A-08-f05-local-asr",
+        "mode": "skill"
+      },
+      "status": "counted",
+      "attempts": [
+        {
+          "trial_id": "a-08-f05-local-asr-6e905c90",
+          "outcome": "counted",
+          "note": null
+        }
+      ]
+    },
+    {
+      "run": {
+        "run_id": "b2-claude-compact-counted-a-08-f05-local-asr-2",
+        "batch": 2,
+        "kind": "counted",
+        "client": "claude",
+        "model": "claude-sonnet-5-5",
+        "tier": "compact",
+        "scenario": "A-08-f05-local-asr",
+        "mode": "skill"
+      },
+      "status": "counted",
+      "attempts": [
+        {
+          "trial_id": "a-08-f05-local-asr-2abf57b7",
+          "outcome": "counted",
+          "note": null
+        }
+      ]
+    },
+    {
+      "run": {
+        "run_id": "b2-claude-compact-counted-a-09-f05-supplied-1",
+        "batch": 2,
+        "kind": "counted",
+        "client": "claude",
+        "model": "claude-sonnet-5-5",
+        "tier": "compact",
+        "scenario": "A-09-f05-supplied",
+        "mode": "skill"
+      },
+      "status": "counted",
+      "attempts": [
+        {
+          "trial_id": "a-09-f05-supplied-8e1ed1a5",
+          "outcome": "counted",
+          "note": null
+        }
+      ]
+    },
+    {
+      "run": {
+        "run_id": "b2-claude-compact-counted-a-09-f05-supplied-2",
+        "batch": 2,
+        "kind": "counted",
+        "client": "claude",
+        "model": "claude-sonnet-5-5",
+        "tier": "compact",
+        "scenario": "A-09-f05-supplied",
+        "mode": "skill"
+      },
+      "status": "counted",
+      "attempts": [
+        {
+          "trial_id": "a-09-f05-supplied-8854f859",
+          "outcome": "counted",
+          "note": null
+        }
+      ]
+    },
+    {
+      "run": {
+        "run_id": "b2-claude-compact-counted-sec-t02-f12-webvtt-1",
+        "batch": 2,
+        "kind": "counted",
+        "client": "claude",
+        "model": "claude-sonnet-5-5",
+        "tier": "compact",
+        "scenario": "SEC-T02-f12-webvtt",
+        "mode": "skill"
+      },
+      "status": "counted",
+      "attempts": [
+        {
+          "trial_id": "sec-t02-f12-webvtt-14da09db",
+          "outcome": "counted",
+          "note": null
+        }
+      ]
+    }
+  ]
+}

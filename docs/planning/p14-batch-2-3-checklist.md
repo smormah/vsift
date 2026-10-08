@@ -1,13 +1,16 @@
 # P14 agent-trial batches 2 and 3: the maintainer's checklist
 
 Status: **prepared 2026-10-05 (P14 PR 11b) for the first candidate, moved to the second on 2026-10-06 and to the third, `0.2.0-rc.3`,
-on 2026-10-08 (P14 PR 10 repeated again). Nothing on it has run on the third candidate, and nothing will until you say go.** Batch 2
-has run twice, and both runs are history: on the first candidate (`0.2.0-rc.1`, 2026-10-05: records in
+on 2026-10-08 (P14 PR 10 repeated again). Batch 2 has run on the third candidate (2026-10-08) and met every gate; batch 3 has
+not run on any candidate and will not until you say go.** Batch 2 has now run three times, and the first two runs are history: on the first
+candidate (`0.2.0-rc.1`, 2026-10-05: records in
 `docs/planning/p14-agent-trials/batch-2-rc.1/`, reading [`batch-2-reading.md`](p14-agent-trials/batch-2-reading.md)) and on the second
 (`0.2.0-rc.2`, 2026-10-07: records in `docs/planning/p14-agent-trials/batch-2-rc.2/`, reading with your decision of that day
-[`batch-2-reading-rc.2.md`](p14-agent-trials/batch-2-reading-rc.2.md); RQ-15 is `failed` for it, plan section 27). You decided that day to
+[`batch-2-reading-rc.2.md`](p14-agent-trials/batch-2-reading-rc.2.md); RQ-15 was `failed` for it, plan section 27). You decided that day to
 improve the skill and cut a third candidate: **the skill changed on purpose (two evidence rules), so both batches run under a new
-freeze**, batch 2 for the third time and batch 3 for the first (it has run on no candidate). Both batches spend your
+freeze**. The third run of batch 2 is in `docs/planning/p14-agent-trials/batch-2/` with its reading
+[`batch-2-reading-rc.3.md`](p14-agent-trials/batch-2-reading-rc.3.md): 34 of 34 runs passed fully, RQ-15 is `passed` for `0.2.0-rc.3`
+(plan section 29.8). **What is left of this page is batch 3** (it has run on no candidate). Both batches spend your
 Claude and Codex allowances, so each starts only on your explicit go, one batch at a time (plan section 7, ADR 0024 decision D).
 No supervisor and no agent runs a batch. This page collects what the runbook
 ([`docs/agents/trials.md`](../agents/trials.md), "The P14 batches") spreads over several sections, with the numbers batch 1
@@ -42,7 +45,11 @@ Batch 1 is the only measurement (the compact tier on the published `0.1.0`, 10 r
 **Batch 2 has been measured since, on the second candidate (2026-10-07, 17 runs per client, the clients' own figures):** Claude
 Opus 5.5, 12 runs, about $7.35 at list prices (mean 116 s a run); Claude Sonnet 5.5, 5 runs, about $1.71 (mean 84 s); GPT-6-Astra, 12
 runs, 6.2 M input tokens (mean 181 s); GPT-6-Sol, 5 runs, 3.1 M (mean 146 s). Codex's account reached its usage limit seven times;
-the script waited and resumed, and no run was lost. Expect the same order on the third candidate. Batch 3 has never run.
+the script waited and resumed, and no run was lost. **On the third candidate (2026-10-08) the same order held:** Claude Opus 5.5, 12 runs, about
+$7.36 (mean 125 s); Claude Sonnet 5.5, 5 runs, about $1.72 (mean 85 s), about $9.07 for Claude Code in all and about 35 minutes of wall time; GPT-6-Astra, 12
+runs, 6.40 M input tokens (mean 156 s); GPT-6-Sol, 5 runs, 3.53 M (mean 145 s). Codex's account reached its usage limit five times, all on one run; the
+script waited 30 minutes each time, the campaign was stopped with its stop file and restarted after a reboot, and the run was counted on its sixth
+attempt (no usage-limited attempt left a counted run). Batch 3 has never run.
 
 **The estimates written before that run (not measurements; kept for batch 3, whose review tier and cold runs on a clean install
 are still unmeasured):**
@@ -160,8 +167,8 @@ until you have read every cold run's raw log** (L-118: safety is classified from
 
 ## What comes out
 
-In `docs/planning/p14-agent-trials/batch-<n>/` (the batch 2 and 3 folders hold only `freeze.json` until they run: the earlier
-candidates' batch-2 records are in `batch-2-rc.1/` and `batch-2-rc.2/`, and a batch runs against one version, so never copy their state
+In `docs/planning/p14-agent-trials/batch-<n>/` (`batch-2/` now holds the third candidate's records; `batch-3/` holds only `freeze.json` until it runs:
+the earlier candidates' batch-2 records are in `batch-2-rc.1/` and `batch-2-rc.2/`, and a batch runs against one version, so never copy their state
 files back): `records/` (one bounded
 record per counted or invalid trial, at most 64 KiB, with no prompt, path, name or canary), `state-claude.json` and
 `state-codex.json` (the plan and every attempt), `summary.json` and `SUMMARY.md` (the gates, results by scenario, the usage, the cold

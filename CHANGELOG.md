@@ -302,6 +302,20 @@ against whisper.cpp ([#322](https://github.com/smormah/vsift/issues/322), [L-137
 from `0.2.0-rc.1` was not run, and the earlier candidates were not deprecated. Register entries updated for the runs: L-040, L-111, L-128, L-133, L-134, L-135,
 L-137 and L-138.
 
+**Work record only (P14 PR 11, repeated again; nothing shipped changes): the agent trials with the skill on the published `0.2.0-rc.3`.** Agent-trial batch 2 (34 runs, from a
+clean install of the published package, 17 with Claude Code and 17 with Codex) ran on 2026-10-08 and **met every gate as the frozen grader graded it; 34 of 34 runs passed fully**,
+where 28 of 34 passed on `0.2.0-rc.2`. This is the batch the candidate was cut for: Claude Opus 5.5, which had missed two review-tier checks on both earlier candidates (the blurred
+banner 1 of 3 twice, the citation check 5 of 6 and then 4 of 6), passed the blurred banner 3 of 3 and the journey checks 6 of 6, GPT-6-Astra, Claude Sonnet 5.5 and GPT-6-Sol still met theirs
+with the changed skill, no run installed anything, accepted a plan, leaked a canary or wrote a path or a hidden character into a report, and all four hold-outs passed. The evidence
+ledger records RQ-15 as `passed` for `0.2.0-rc.3` and keeps the second candidate's `failed` entry as history. Codex's account reached its usage limit five times, all on one run; the
+campaign waited, was stopped cleanly, survived a reboot and counted that run on its sixth attempt, and the state and the records show no counted partial run. **It is a small sample, not
+a proof:** three blurred-banner runs and six journey runs per client, a grader that matches text, one wording of the skill and no proof that it caused the change, two clients on one
+machine each, and only the agent-with-skill trials; the cold round (batch 3, RQ-16, never run on any candidate) and the clean-machine try-outs (RQ-17) have not happened.
+`release-evidence --complete-for 0.2.0-rc.3` now names those two, so PR 11 repeated again is not complete. The records, the reading and the plan's section 29.8 are in
+[`docs/planning/p14-agent-trials/`](docs/planning/p14-agent-trials/) and [`docs/planning/p14-qualification.md`](docs/planning/p14-qualification.md); register entries updated:
+[L-095](docs/planning/known-limits.md#l-095), [L-119](docs/planning/known-limits.md#l-119) and [L-139](docs/planning/known-limits.md#l-139) (all three stay open; L-139's citation half is
+[#336](https://github.com/smormah/vsift/issues/336)). No public claim or the claims rung changed. ADR 0024 has a dated note.
+
 ## [0.2.0-rc.2] - 2026-10-06
 
 **This is a release candidate, under qualification.** It is the second candidate for `0.2.0`, the release that ships R0
