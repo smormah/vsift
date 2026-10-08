@@ -290,7 +290,7 @@ issue was opened. **The fixes held where they were tested:** the process-supervi
 candidate (#321), ran 3,000 of 3,000 clean, so RQ-08 is recorded `passed` and the waiver of 2026-10-07 is not carried over
 ([L-138](docs/planning/known-limits.md#l-138) says no limit is left in it); and the media campaign's corrected no-room case answered `STORAGE_IO` with the
 no-room remediation on published bytes for the first time ([L-134](docs/planning/known-limits.md#l-134), narrowed to what the campaign still does not try).
-**RQ-10 is `waived` for this candidate only, by the maintainer's decision of 2026-10-09, and for the link case alone:** the run is green with one tracked finding, a
+**RQ-10 is `waived` for this candidate only, by the maintainer's decision of 2026-10-08, and for the link case alone:** the run is green with one tracked finding, a
 symbolic link given as the source answers `STORAGE_IO` (#265, [L-127](docs/planning/known-limits.md#l-127)), which the item's rule (three codes, no clause for an
 accepted finding) does not admit, so the item cannot be `passed`. The waiver covers exactly that answer; it does not cover a new finding, a containment break, an answer outside the
 item's bounds, the room check on Windows or anything else, and it does not carry over to another candidate. **Not covered, reported:** 20 of the 96 inputs have a follow-up call that ends

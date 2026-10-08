@@ -49,7 +49,7 @@ not complete. Where things stand:
 - **What is shown for rc.3 (plan section 29, 2026-10-08; work record only):** the whole hosted part of PR 11 ran and was green: the publish verified (20 checks), installs, archives, offline install
   and upgrades from 0.1.0 and rc.2 (the package carries the tag's skill byte for byte), journeys on three systems, managed smoke, fuzzing (3.49 billion runs), **the stress run (20,100 repetitions, none
   failed; the fixed Windows supervisor test ran 3,000 clean, #321)**, load, runbook walk, both fault campaigns, the scan reading. RQ-01 to RQ-09, RQ-11 to RQ-13, RQ-18 and RQ-19 are `passed` for rc.3; RQ-14
-  waived. **RQ-10 is `waived` for rc.3 only (maintainer, 2026-10-09), for the link's `STORAGE_IO` alone** (the rule names three codes; the run is green otherwise; plan 29.5); RQ-15 is rc.2's `failed`; RQ-16 and
+  waived. **RQ-10 is `waived` for rc.3 only (maintainer, 2026-10-08), for the link's `STORAGE_IO` alone** (the rule names three codes; the run is green otherwise; plan 29.5); RQ-15 is rc.2's `failed`; RQ-16 and
   RQ-17 never ran. `release-evidence --complete-for 0.2.0-rc.3` names those three. **Still to do:** batch 2 (new freeze), batch 3, the clean-machine try-out, the register pass.
 - **What is weak:** the skill change is a hypothesis until batch 2 runs; the floor was not run with whisper.cpp (L-137, L-141); hosted images
   are not clean machines (L-112); Smart App Control and the macOS prompts are unseen (L-098); **a synthetic corpus and voice only** (L-020,

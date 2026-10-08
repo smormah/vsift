@@ -18,7 +18,7 @@ records are in `p14-agent-trials/batch-2-rc.2/`, rc.1's in `batch-2-rc.1/`. **Ba
 **PR 11, the hosted part, is repeated on rc.3 and recorded (plan section 29, `p14-scan-reading-2026-10-08.md`; work record only; no run failed, nothing re-run).** Every campaign was green: verify (20
 checks), clean installs/archives/offline install and upgrades from 0.1.0 and rc.2 (the package carries the tag's skill byte for byte), journeys on 3 systems, managed smoke, fuzz (31 targets, 3.49
 billion runs), **stress 25 jobs and 20,100 repetitions with none failed (the Windows supervisor test fixed in rc.3 ran 3,000 clean, #321)**, load, runbook walk, both fault campaigns, scan reading
-(nothing new). **Evidence** (`p14-evidence-ledger.json`): `passed` for rc.3 RQ-01 to RQ-09, RQ-11, RQ-12, RQ-13, RQ-18, RQ-19; `waived` RQ-14 and **RQ-10 (maintainer, 2026-10-09: rc.3 only, the link's `STORAGE_IO` (#265) alone; the run is green otherwise; plan 29.5)**; `failed` RQ-15 (rc.2's batch; not run on rc.3);
+(nothing new). **Evidence** (`p14-evidence-ledger.json`): `passed` for rc.3 RQ-01 to RQ-09, RQ-11, RQ-12, RQ-13, RQ-18, RQ-19; `waived` RQ-14 and **RQ-10 (maintainer, 2026-10-08: rc.3 only, the link's `STORAGE_IO` (#265) alone; the run is green otherwise; plan 29.5)**; `failed` RQ-15 (rc.2's batch; not run on rc.3);
 `planned` RQ-16, RQ-17. **`release-evidence --complete-for 0.2.0-rc.3 --commit 83dca856...` names 3 of 20: RQ-15, RQ-16, RQ-17.** Not waived, reported: 20 media-run inputs end a follow-up call `INVALID_ARGUMENT` (plan 18.4 accepts it; the rule names three codes).
 **Public text:** `public-claims.json`, rung `candidate`; the README and `install.md` name rc.3 as the candidate under qualification (L-133's third window closed with the publish).
 **Decided 2026-10-02 (ADR 0024):** **A** R0 is `0.2.0` on `latest`. **B** `0.2.0-rc.N` under `next`, never announced. **C** no
@@ -28,7 +28,7 @@ blocks the stable only until observed. #246 waits.
 
 **Decided by the maintainer on 2026-10-07 and 2026-10-08:** batch 2 on rc.2: 28 of 34 runs passed fully; **Claude Opus 5.5 missed its mechanical gate (4 of 6) and its blurred-banner gate (1 of 3), as
 on rc.1, so RQ-15 is `failed` for rc.2.** No waiver, no exclusion: **improve the skill and cut rc.3** (done); the re-pins stay after `0.2.0`. The waivers of RQ-08 and RQ-10 were about rc.2's runs:
-RQ-08 is re-decided on the rc.3 run (`passed`, not carried over); RQ-10 on 2026-10-09 (waived for rc.3, the link case only; the rc.1 upgrade stays skipped).
+RQ-08 is re-decided on the rc.3 run (`passed`, not carried over); RQ-10 on 2026-10-08 (waived for rc.3, the link case only; the rc.1 upgrade stays skipped).
 
 **PR 7, the findings by outcome** (each with its pull request and regression test; the list is in `project_current_status.md`). **Maintainer
 rule 2026-10-04: a published failure code stays (v1 is additive); the remediation carries the fix (L-127).**

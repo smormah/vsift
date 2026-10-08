@@ -1752,9 +1752,9 @@ The stress run does not show the floor, the skill or the slow-copy remediation: 
 1. **RQ-08 is recorded `passed` on the run, and the waiver of 2026-10-07 is not carried over** (the answer plan 28.5 recommended: no waiver in advance, decide on the run). The waiver's text
    is kept as a `prior` record of the entry. #321 can be closed; L-138 is updated to say its fix has run 3,000 clean hosted Windows repetitions and that no limit is left in it, and is
    left in the register for the register pass to delete (it is linked from the changelog, this ADR and the plan, and `docs/development.md` and `tools/` are frozen until the stable).
-2. **RQ-10: the run could not be `passed`, and the maintainer decided on 2026-10-09 to waive the link case only, for `0.2.0-rc.3`.** (The pull request first recorded the item `failed` against its
+2. **RQ-10: the run could not be `passed`, and the maintainer decided on 2026-10-08 to waive the link case only, for `0.2.0-rc.3`.** (The pull request first recorded the item `failed` against its
    rule, because a waiver is the maintainer's to give; the decision below replaced that status the next day.) The run is green with one tracked finding, the link's `STORAGE_IO` (#265, L-127), which the
-   item's pass rule (three codes, no clause for an accepted finding) does not admit. **Decision of 2026-10-09 (the ledger carries the same text): RQ-10 is waived for R0, for the third candidate only.**
+   item's pass rule (three codes, no clause for an accepted finding) does not admit. **Decision of 2026-10-08 (the ledger carries the same text): RQ-10 is waived for R0, for the third candidate only.**
    It covers **exactly one residual**: `ingest` of a symbolic link given as the video answers `STORAGE_IO` with a remediation that says what happened, where the rule names `INVALID_SOURCE`
    (#265, L-127: a published failure code stays within v1). The run is green otherwise (96 inputs, 251 operations): the corrected no-room case works on published bytes (`sparse-no-room` `ingest`
    `STORAGE_IO` in 0.1 s with the pinned no-room remediation and the worker request `RESOURCE_LIMIT`; `sparse-30gib` `INVALID_SOURCE`, worker request `RESOURCE_LIMIT`), the pipe passes and containment
