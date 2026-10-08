@@ -290,13 +290,15 @@ issue was opened. **The fixes held where they were tested:** the process-supervi
 candidate (#321), ran 3,000 of 3,000 clean, so RQ-08 is recorded `passed` and the waiver of 2026-10-07 is not carried over
 ([L-138](docs/planning/known-limits.md#l-138) says no limit is left in it); and the media campaign's corrected no-room case answered `STORAGE_IO` with the
 no-room remediation on published bytes for the first time ([L-134](docs/planning/known-limits.md#l-134), narrowed to what the campaign still does not try).
-**RQ-10 is recorded `failed` against its own rule, not waived and not passed, and the choice is the maintainer's:** the run is green with one tracked finding, a
+**RQ-10 is `waived` for this candidate only, by the maintainer's decision of 2026-10-09, and for the link case alone:** the run is green with one tracked finding, a
 symbolic link given as the source answers `STORAGE_IO` (#265, [L-127](docs/planning/known-limits.md#l-127)), which the item's rule (three codes, no clause for an
-accepted finding) does not admit; the plan's section 29.5 says exactly what a waiver would cover. The by-hand scan reading of the day is
+accepted finding) does not admit, so the item cannot be `passed`. The waiver covers exactly that answer; it does not cover a new finding, a containment break, an answer outside the
+item's bounds, the room check on Windows or anything else, and it does not carry over to another candidate. **Not covered, reported:** 20 of the 96 inputs have a follow-up call that ends
+`INVALID_ARGUMENT`, which the campaign's own judging rule accepts (plan 18.4) and the item's rule does not name; they are not waived (plan section 29.5). The by-hand scan reading of the day is
 [`p14-scan-reading-2026-10-08.md`](docs/planning/p14-scan-reading-2026-10-08.md): nothing new in its sources (the same 58 FFmpeg records, every fix in the
 shipped build; no whisper.cpp release newer than 1.9.5); the observation of 2026-10-07 is narrowed by this candidate's 100 ms floor, which no campaign ran
-against whisper.cpp ([#322](https://github.com/smormah/vsift/issues/322), [L-137](docs/planning/known-limits.md#l-137)). Four items still block
-`release-evidence --complete-for 0.2.0-rc.3`: RQ-10 (the maintainer's decision), and the agent trials and the try-outs (RQ-15 to RQ-17). The optional upgrade
+against whisper.cpp ([#322](https://github.com/smormah/vsift/issues/322), [L-137](docs/planning/known-limits.md#l-137)). Three items still block
+`release-evidence --complete-for 0.2.0-rc.3`: the agent trials and the try-outs (RQ-15 to RQ-17). The optional upgrade
 from `0.2.0-rc.1` was not run, and the earlier candidates were not deprecated. Register entries updated for the runs: L-040, L-111, L-128, L-133, L-134, L-135,
 L-137 and L-138.
 

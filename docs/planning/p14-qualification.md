@@ -2071,8 +2071,8 @@ mode on the merge ref, whose plan moves `next` from `0.2.0-rc.2` to `0.2.0-rc.3`
 
 **Update, 2026-10-08 (section 29):** the third candidate was published and verified the same day and the hosted part of PR 11 was repeated on it.
 Of the open questions above, the first is answered by the run (RQ-08 is recorded `passed`; the waiver of 2026-10-07 is not carried over), the second
-is **still open** (RQ-10 is `failed` against its rule until the maintainer decides, 29.5), the fourth is half answered (the upgrade from `0.2.0-rc.1`
-was not dispatched; deprecation is not done), the third (an issue for the citation half of L-139) is still unopened and the fifth waits for the agent batch (29.7).
+is **answered** (RQ-10 is `waived` for this candidate only, for the link case alone, by the maintainer's decision of 2026-10-09, 29.5), the fourth is half answered (the upgrade from `0.2.0-rc.1`
+was not dispatched; deprecation is not done), the third (an issue for the citation half of L-139) is filed as #336 and the fifth waits for the agent batch (29.7).
 
 ## 29. PR 11, repeated again: the third release candidate `0.2.0-rc.3` is qualified (hosted evidence, 2026-10-08)
 
@@ -2082,9 +2082,10 @@ The third candidate was published on 2026-10-08 (the publish run [37746979716](h
 `0.2.0-rc.2` superseded but untouched. From the tag to the stable merge **only the work record may change** (`release.md` 6.8). This section repeats
 section 26 on the new bytes (28.4): it is **the whole of the hosted part of PR 11 repeated again, not an increment of it** (every hosted campaign of
 28.4 ran; only the optional upgrade from `0.2.0-rc.1` did not), and the pull request that records it is work record only. PR 11 repeated again is
-complete only when RQ-15, RQ-16 and RQ-17 are `passed`, `waived` or `not_applicable` for `0.2.0-rc.3`, RQ-10 is decided (29.5) and
+complete only when RQ-15, RQ-16 and RQ-17 are `passed`, `waived` or `not_applicable` for `0.2.0-rc.3` and
 `release-evidence --complete-for 0.2.0-rc.3` passes (29.7). Nothing for RQ-15 to RQ-17 is recorded here: the agent batches and the try-outs belong to the
-maintainer. **No decision of the maintainer is recorded in this section:** it records results and what each would cover.
+maintainer. **The one decision of the maintainer recorded in this section is that of 2026-10-09 on RQ-10** (29.5: waived for this candidate, the link case
+alone); the rest is results.
 
 ### 29.1 The runs and their results
 
@@ -2105,7 +2106,7 @@ third candidate's own entry for each item below with the second candidate's move
 | RQ-07 | `Fuzz` [37752816621](https://github.com/smormah/vsift/actions/runs/37752816621) | **passed**: 31 targets, 3,601 s each, 3.49 billion runs, no crash, timeout or out-of-memory | none; 16 targets still finding coverage at the end ([L-128](known-limits.md#l-128)) |
 | RQ-08 | `P14 stress` [37752821463](https://github.com/smormah/vsift/actions/runs/37752821463) (25 jobs, 1,177 job-minutes) | **passed**: all 25 jobs clean, 20,100 repetitions, 0 failed, 0 hung; the supervisor suite on Windows, 1 failure in 1,500 on the second candidate (#321), ran 3,000 of 3,000 clean | none; #321's fix held, #312 and #128 did not recur |
 | RQ-09 | `P14 load` [37753187467](https://github.com/smormah/vsift/actions/runs/37753187467) | **passed**: every gate held | none |
-| RQ-10 | `P14 malicious media` [37753191530](https://github.com/smormah/vsift/actions/runs/37753191530) | the run **succeeded** (96 inputs, 251 operations, one tracked finding, none new) and **the corrected no-room case ran on published bytes**; the item is recorded **`failed`** against its own rule until the maintainer decides (29.5) | #265 (L-127), the link's `STORAGE_IO`; #266's no-room path is shown (L-134 narrowed) |
+| RQ-10 | `P14 malicious media` [37753191530](https://github.com/smormah/vsift/actions/runs/37753191530) | the run **succeeded** (96 inputs, 251 operations, one tracked finding, none new) and **the corrected no-room case ran on published bytes**; the item is **`waived`** for this candidate only, for the link case alone, by the maintainer's decision of 2026-10-09 (29.5) | #265 (L-127), the link's `STORAGE_IO`, waived; #266's no-room path is shown (L-134 narrowed); 20 inputs' `INVALID_ARGUMENT` follow-ups are not waived (29.5) |
 | RQ-11 | `P13 managed power loss` [37754344992](https://github.com/smormah/vsift/actions/runs/37754344992) and `P10 durability campaign` [37754349320](https://github.com/smormah/vsift/actions/runs/37754349320), both at the tag | **passed**: both campaigns met their acceptance numbers **and both hosted Acceptance jobs ran** | none |
 | RQ-12 | `P14 runbook walk` [37752983142](https://github.com/smormah/vsift/actions/runs/37752983142) | **passed**: 18 steps, all matched, none diverged | none |
 | RQ-13 | `P14 scan reading` [37752978771](https://github.com/smormah/vsift/actions/runs/37752978771) and [`p14-scan-reading-2026-10-08.md`](p14-scan-reading-2026-10-08.md) | **passed**, with the one residual the maintainer accepted on 2026-10-05 (#272, L-122); the whisper.cpp observation (#322, L-137) is narrowed by the floor of this candidate | none new |
@@ -2230,7 +2231,7 @@ RQ-13 is recorded `passed` for the third candidate. The whisper.cpp observation 
 of 100 ms in front of it, which no campaign ran against whisper.cpp; the pin and the re-pin are unchanged (after the stable release). The catalogue was not touched and no one at
 either project was contacted.
 
-### 29.5 RQ-10 (malicious media) in detail, and the decision it leaves to the maintainer
+### 29.5 RQ-10 (malicious media) in detail, and the maintainer's decision of 2026-10-09
 
 `P14 malicious media` ran the same 96 generated inputs through the same 251 operations as on 0.1.0 and the first two candidates, against the published `0.2.0-rc.3` in a no-network
 container. **The campaign tool is this tag's, with the case #333 corrected:** the no-room case names a session root VSift creates inside the small filesystem, the two size cases pin the
@@ -2248,21 +2249,28 @@ Everything else held: no network use, no canary or marker leaked, nothing create
 took 4.5 s and the largest memory peak was 1,024 MiB of the 1,024 MiB limit (the 512 MiB free-space box, which completed: file cache, no out-of-memory kill; 809 MiB on the second
 candidate's run, 1,024 MiB on the first's).
 
-**Why the item is recorded `failed` and not `passed` or `waived`.** The pass rule (section 2, the table the ledger is checked against) reads "each a typed failure (`INVALID_SOURCE`,
+**Why the item cannot be `passed`.** The pass rule (section 2, the table the ledger is checked against) reads "each a typed failure (`INVALID_SOURCE`,
 `RESOURCE_LIMIT` or `DEADLINE_EXCEEDED`) inside its bound; no hang, no network, no file outside the root". The link's `STORAGE_IO` is typed and bounded but is not one of the three, and the
-rule, unlike RQ-13's, has no clause for a finding the maintainer accepted with a register entry; the run is green only because the judge does not fail a run for a finding it tracks. (A
-second, older mismatch, not new on this candidate: 20 of the 96 inputs, 17 of them hostile file names, have an operation that ends `INVALID_ARGUMENT`, which the tool accepts for an
-argument the command refuses and the rule's list does not name.) A `passed` entry would claim the rule was met, which it was not. A `waived` entry needs the maintainer's decision, and the
-decision of 2026-10-07 was made for the second candidate's run and replaced the one of 2026-10-05; neither is carried over silently. So the ledger holds the run as counted evidence and the
-status `failed`, with #265 named (governance rule 14), and `release-evidence --complete-for 0.2.0-rc.3` names RQ-10 until the maintainer decides. This is the honest state under the rule, not a
-claim that something broke: nothing about the product changed between the run of the second candidate and this one except that the other residual is gone.
+rule, unlike RQ-13's, has no clause for a finding the maintainer accepted with a register entry; the run is green only because the judge does not fail a run for a finding it tracks. A `passed`
+entry would claim the rule was met, which it was not. The decision of 2026-10-07 was made for the second candidate's run and replaced the one of 2026-10-05; neither is carried over.
 
-**What a waiver for this candidate would cover, if the maintainer chooses (a):** exactly one residual, the answer to a symbolic link given as the source of `ingest`: `STORAGE_IO` with a
-remediation that says what happened, where the rule names `INVALID_SOURCE` (#265, [L-127](known-limits.md#l-127): a published failure code stays within v1). The campaign tool's mis-built
-no-room case, which the waiver of 2026-10-07 also covered, is corrected and shown and needs no waiver. It would **not** cover a new finding of the campaign, a broken containment check, an
-answer outside its bounds, the room check on Windows (which reads no free space, [L-061](known-limits.md#l-061)), or the older `INVALID_ARGUMENT` mismatch unless the decision names it. **Or (b)**, the
-maintainer changes the item's rule in this plan and in the ADR (to add RQ-13's clause, "unless accepted by the maintainer with a register entry", and optionally `INVALID_ARGUMENT` for an argument
-refused by the command), and the item is then recorded `passed` on run 37753191530 with #265 named; that is a change of a rule, not of evidence, and it is the maintainer's. Neither choice changes code.
+**The maintainer's decision (2026-10-09): waive the link case only, for `0.2.0-rc.3`.** The item is recorded **`waived`** by that dated decision (the same mechanism and style as the earlier
+narrowed waivers; its text is in the ledger entry and in [ADR 0024](../decisions/0024-r0-qualification-and-release-candidate.md)'s note of 2026-10-08, which carries it, as amended on 2026-10-09). It covers **exactly one
+residual**: `ingest` of a symbolic link given as the video answers `STORAGE_IO` with a remediation that says what happened, where the rule names `INVALID_SOURCE` (#265,
+[L-127](known-limits.md#l-127): a published failure code stays within v1). The run is green otherwise: 96 inputs, 251 operations, the corrected no-room case works on published bytes
+(`sparse-no-room` `ingest` `STORAGE_IO` in 0.1 s with the pinned no-room remediation, the worker request `RESOURCE_LIMIT`; `sparse-30gib` `INVALID_SOURCE`, the worker request
+`RESOURCE_LIMIT`), the named pipe passes, and containment held. The campaign tool's mis-built no-room case, which the decision of 2026-10-07 also covered, is corrected and needs no waiver. **It does
+not cover** a new finding of the campaign, a broken containment check, an answer outside the item's bounds, the room check on Windows (which reads no free space,
+[L-061](known-limits.md#l-061)) or anything else, and **it does not carry over to another candidate**. (A waived item carries no `applies_to`, so the completeness check would not name RQ-10 for a fourth candidate; the decision's text and this section are what limit it to this one, as with the earlier waivers, and a new candidate would run the campaign and decide again.) The run, with its one finding, stays in the ledger as counted evidence.
+
+**The 20 `INVALID_ARGUMENT` inputs are not covered by that waiver, and are reported plainly.** 20 of the 96 inputs have an operation that ends `INVALID_ARGUMENT`: 17 hostile file names whose
+worker request (`job_name`) is refused (`name-03`, `-06` to `-13`, `-22`, `-28`, `-31`, `-33` to `-36` and `name-deep`: `ingest` accepted them), two follow-up calls on an accepted source
+(`mp4-bitflips-c`: `candidates` and `frame`; `mkv-audio-absurd`: `recognise`), and the worker request that names the link. They are **explained by this plan, not by the register or the earlier
+decision**: section 18.4 judges "`INVALID_ARGUMENT` for a follow-up call on an accepted source" as a typed answer, the judge's `FOLLOW_UP_CODES` says the same in code, and the cases for the
+folder, link and pipe inputs list it beside the three; that is why the judge did not report them and they are not among the run's findings. They are **not** in [L-127](known-limits.md#l-127)
+(which lists the CLI answers whose code only loosely describes the case) or in the decision of 2026-10-07, and the pass rule's list does not name the code. So the waiver was not widened to
+them: if the maintainer reads the rule strictly they are a further mismatch with no waiver, and if the rule should admit the code for a follow-up call it is a change of the rule in this plan and
+its ADR, not of evidence. Neither is decided here.
 
 ### 29.6 Hosted minutes, and what is weaker than it sounds
 
@@ -2284,27 +2292,28 @@ smoke, compatibility, scan reading, runbook walk, malicious media and the power-
 
 ### 29.7 What blocks `release-evidence --complete-for 0.2.0-rc.3`, and what is open for the maintainer
 
-Run at the end of this change (`--commit 83dca856e7a00fc9a71c87baae99f0b1d401dd31`):
+Run at the end of this change, after the maintainer's decision of 2026-10-09 was recorded (`--commit 83dca856e7a00fc9a71c87baae99f0b1d401dd31`):
 
 ```text
 $ cargo run --locked -p vsift-governance -- release-evidence --complete-for 0.2.0-rc.3 --commit 83dca856e7a00fc9a71c87baae99f0b1d401dd31
 governance check failed:
-- RQ-10: is failed; it must be passed, waived by the maintainer or not applicable for 0.2.0-rc.3
 - RQ-15: is failed; it must be passed, waived by the maintainer or not applicable for 0.2.0-rc.3
 - RQ-16: is planned; it must be passed, waived by the maintainer or not applicable for 0.2.0-rc.3
 - RQ-17: is planned; it must be passed, waived by the maintainer or not applicable for 0.2.0-rc.3
 ```
 
-Four items block (of the twenty; the check before this record named sixteen, 28.3). **RQ-10** blocks until the maintainer decides (29.5); **RQ-15** is `failed` for the second candidate and has not run on
-the third (the agent batch 2 is the reason for the candidate); **RQ-16 and RQ-17** are `planned` (the cold round and the try-outs have run on no candidate). Passed for the third candidate:
-RQ-01 to RQ-09, RQ-11, RQ-12, RQ-13, RQ-18 and RQ-19; `waived`: RQ-14 only (2026-10-03, a mechanism, not a version); RQ-20 is the check itself. **RQ-08 and RQ-10 are no longer waived**: the
-check passed them with no run before this record, the plan ran both anyway, and one is `passed` on its run while the other is `failed` on its rule.
+Three items block (of the twenty; the check before this record named sixteen, 28.3): **RQ-15** is `failed` for the second candidate and has not run on the third (the agent batch 2 is the reason for the
+candidate); **RQ-16 and RQ-17** are `planned` (the cold round and the try-outs have run on no candidate). Passed for the third candidate: RQ-01 to RQ-09, RQ-11, RQ-12, RQ-13, RQ-18 and RQ-19;
+`waived`: RQ-10 (2026-10-09, for this candidate only, the link case alone) and RQ-14 (2026-10-03, a mechanism, not a version); RQ-20 is the check itself. **RQ-08 is no longer waived**: the check
+passed it with no run before this record, the plan ran it anyway, and it is `passed` on its run. Two of twenty items are waived, and each waiver's text says what it does not cover.
 
-**Open for the maintainer** (this record decides none of them):
+**Open for the maintainer** (the decision of 2026-10-09 settled RQ-10's status; these remain):
 
-1. **RQ-10 (29.5):** waive it for the third candidate for the link's `STORAGE_IO` alone, or add RQ-13's clause (and optionally `INVALID_ARGUMENT`) to the rule and record it `passed`.
-2. **RQ-08:** recorded `passed` on the run (28.5 question 1, recommended answer). **#321** can be closed (the fix, its regression tests and 3,000 clean hosted Windows repetitions); the author of this pull request may not close issues.
-   **[L-138](known-limits.md#l-138)** now describes no live limit and is left in the register, updated, for the register pass to delete (CHANGELOG, ADR and plan link to it, and
+1. **The 20 `INVALID_ARGUMENT` inputs of the media run (29.5):** not waived and not a reported finding; read the rule strictly, or let it admit the code for a follow-up call on an accepted source
+   (a change of the rule in this plan and its ADR). Reported, not decided here.
+2. **RQ-08:** recorded `passed` on the run (28.5 question 1, recommended answer). **#321** can be closed (the maintainer does it: the fix, its regression tests and 3,000 clean hosted Windows
+   repetitions). **[L-138](known-limits.md#l-138)** now describes no live limit and is left in the register, updated, for the register pass to delete (CHANGELOG, ADR and plan link to it, and
    `docs/development.md` and `tools/` are frozen until the stable).
-3. **An issue for the citation half of L-139** (28.5 question 3), still unopened; and **whether to deprecate** `0.2.0-rc.1` and `0.2.0-rc.2` (6.12 step 7).
+3. **The citation half of L-139** is filed as [#336](https://github.com/smormah/vsift/issues/336) (28.5 question 3, answered); **whether to deprecate** `0.2.0-rc.1` and `0.2.0-rc.2` (6.12 step 7);
+   the upgrade from `0.2.0-rc.1` stays skipped (decided 2026-10-09).
 4. **The agent batch 2 and batch 3** and the try-outs, each on the maintainer's explicit go; if Claude Opus 5.5 misses a gate again the choice of 2026-10-07 returns (28.5 question 5).

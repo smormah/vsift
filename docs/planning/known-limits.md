@@ -3475,7 +3475,9 @@ that week.**
     It is fixed for the second candidate and is not a case of this limit, because the published code was
     restored and not kept: [#310](https://github.com/smormah/vsift/issues/310), `CHANGELOG.md`.)
 - **Evidence:** `P14 malicious media` runs 37136669473 (0.1.0) and 37330709659 (the first candidate; run 37361623352,
-  from a scratch branch with a corrected case, is supplementary, see L-134) (`hostile-summary.md`);
+  from a scratch branch with a corrected case, is supplementary, see L-134), 37613284274 (the second) and 37753191530
+  (the third: the link's `STORAGE_IO` is its one finding, and the maintainer waived RQ-10 for that candidate on
+  2026-10-09 for exactly this answer, plan 29.5) (`hostile-summary.md`);
   [`p14-qualification.md`](p14-qualification.md) section 18; the CLI test
   `source_link_cli_contract`, `no_room_cli_contract`, `session_not_published_cli_contract`, the engine test
   `a_closed_and_cleaned_session_is_not_published_and_not_damaged` and the staging tests in `p04_source.rs`;
@@ -3726,7 +3728,7 @@ that week.**
 - **Impact:** low, and about the evidence, not the product: the room check of #266 has a regression test on
   the binary (`no_room_cli_contract`), and the campaign has now shown it once on published bytes. RQ-10 was
   waived for `0.2.0-rc.2` by the maintainer's decision of 2026-10-07, which covered the link's code and the
-  old case; for `0.2.0-rc.3` the item is not waived (plan 29.5), and the old case is not the reason.
+  old case; for `0.2.0-rc.3` it is waived by the maintainer's decision of 2026-10-09 for the link case alone (plan 29.5), and the old case is not part of it.
 - **Why:** the campaign tools were frozen with each candidate (`tools/` may not change before the stable
   commit, `release.md` 6.8), so the case could only be corrected when a third candidate was decided; the
   sizes and systems it does not try were not asked for.
