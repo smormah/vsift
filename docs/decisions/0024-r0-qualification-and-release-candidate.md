@@ -1773,3 +1773,42 @@ The stress run does not show the floor, the skill or the slow-copy remediation: 
 finding coverage), a stress rate measured on shared runners with #312 not fixed, and a media campaign that tries the room check once. **A green hosted part says nothing about the two reasons for the
 candidate:** whether the skill's two new rules move Claude Opus 5.5 is RQ-15 (batch 2, not run here), and the floor of 100 ms was run with no whisper.cpp. Three of twenty items block
 `release-evidence --complete-for 0.2.0-rc.3`: RQ-15, RQ-16 and RQ-17 (plan 29.7). Two items are now waived (RQ-10 for this candidate only, RQ-14), and each waiver's text says what it does not cover.
+
+## Implementation note, 2026-10-08 (P14 PR 11, repeated again: agent-trial batch 2 on the third candidate `0.2.0-rc.3`, RQ-15)
+
+Batch 2 of decision D (the counted set with the skill, 34 runs) ran on 2026-10-08 against the published `0.2.0-rc.3` (tag `v0.2.0-rc.3` at
+`83dca856e7a00fc9a71c87baae99f0b1d401dd31`) from a clean install, under the freeze the cut committed (whole-freeze digest `654955dd...`; only the skill's digest differs from the
+first two candidates'). **This is an increment of PR 11 repeated again, not the whole of it, and it is work record only** (the 34 records, their summary and state, the reading, the
+ledger's RQ-15 entry, the plan's section 29.8, the register, this note, the changelog and the two memory files). No code, tool, skill, workflow, schema, setting or public claim changed,
+nothing was re-graded and nothing was run again. The results, the cases and the comparison with the earlier candidates are
+[`p14-qualification.md`](../planning/p14-qualification.md) section 29.8 and
+[`batch-2-reading-rc.3.md`](../planning/p14-agent-trials/batch-2-reading-rc.3.md).
+
+**What the batch showed, as the frozen grader graded it.** Every gate of the plan's section 7 is met and 34 of 34 runs passed fully (28 of 34 on the second candidate): the hard
+safety gate (0 of 34 runs with a command-policy, canary or report-text failure), the review-tier journey for both clients (mechanical 6 of 6 and interpretation 6 of 6 each), the blurred
+banner for both (3 of 3 each; Claude Opus 5.5 was 1 of 3 on each earlier candidate), the compact regression (10 of 10) and all four hold-outs (1 of 1 each). The two misses that made
+RQ-15 `failed` for the second candidate, and the reason for the third, did not recur. Codex's account reached its usage limit five times, all on one run; the campaign waited, was stopped
+cleanly, survived a reboot and counted the run on its sixth attempt, and the state files and records show no counted partial run.
+
+**Decisions taken inside this ADR, for the maintainer to confirm or overrule.**
+
+1. **RQ-15 is recorded `passed` for `0.2.0-rc.3`**, with `applies_to` the candidate's commit, the batch's summary, the reading and the plan's section as its evidence, and the second
+   candidate's `failed` entry kept in `prior`. The rule (section 7's gates) is mechanical and unchanged; no judgement of a case was needed, because no gate was missed. The entry
+   still names #224 and now #336.
+2. **L-095 and L-139 are updated with the result and stay open.** Three runs per client is a small sample (Claude Opus 5.5 passing 3 of 3 after 1 of 3 twice is a threshold met, not a
+   rate), the grader matches text, and one wording is not a proof of its cause; closing either entry, and the review lines (L-139's `rejected` reads "to be fixed"), are the register
+   pass's. L-119 notes that all four hold-outs passed this time.
+3. **No public wording is changed and the claims rung stays `candidate`.** With RQ-15 `passed`, CL-202, CL-204 and CL-205 have every evidence item they name `passed` (CL-201 still
+   waits for RQ-17), but all sit at the rung `after_p14`, none is in use, and each leans on register entries whose review is `pending`. CL-204's note and the support matrix's paragraph
+   on agent clients still say that the repeat on the third candidate decides; they were left as they were because `public-claims.json` and the public wording are the maintainer's call
+   and the claims check did not require a change.
+
+**Left open, for the maintainer** (plan section 29.8): the 20 `INVALID_ARGUMENT` inputs of the media run (29.5: widen RQ-10's rule or not); the explicit go for batch 3 (RQ-16, the cold
+final round, which needs `-AllowGraderChange`, Claude Code 2.1.284 and Docker, with the reserve rule stated first); the clean-machine try-out (RQ-17) and the one pass over the register;
+whether to deprecate `0.2.0-rc.1` and `0.2.0-rc.2`; then PR 12 (the stable `0.2.0`) and PR 13.
+
+**What is weaker than it sounds.** These are the agent-with-skill trials only: the cold agent (RQ-16) has never run, nor the try-outs (RQ-17). The samples are 3 blurred-banner runs and
+6 journey runs per client and one run per hold-out. The frozen grader matches text and was not changed with the skill, so a pass means its checks did not fire. There are two clients,
+one machine each, a synthetic corpus and voice, and the same authors for the scenarios, the hold-outs and the grader. The floor for short audio and the slow-copy remediation are in no
+scenario. `release-evidence --complete-for 0.2.0-rc.3` now names two items, RQ-16 and RQ-17 (plan 29.8), and PR 11 repeated again is not complete until they are `passed`, `waived` or
+`not_applicable` for the candidate.
