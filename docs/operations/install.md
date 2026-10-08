@@ -1,13 +1,16 @@
 # Installing VSift
 
-Status: user guide, updated 2026-10-06 (P14 PR 10 repeated, the second candidate; P14 PR 11c; P14 PR 9a; written by P13 PR 11
-and PR 12 for the published pre-release; [ADR 0023](../decisions/0023-r0-distribution-managed-installation-and-handoff-check.md)).
-**VSift 0.2.0-rc.2 is a release candidate under qualification.** It is the second candidate for 0.2.0 and replaces 0.2.0-rc.1
-(two fixes: a read of a session that overlaps a publish, and the answer for a video over the size limit; the changelog says what).
+Status: user guide, updated 2026-10-08 (P14 PR 10 repeated again, the third candidate; P14 PR 10 repeated, the second; P14 PR 11c;
+P14 PR 9a; written by P13 PR 11 and PR 12 for the published pre-release;
+[ADR 0023](../decisions/0023-r0-distribution-managed-installation-and-handoff-check.md)).
+**VSift 0.2.0-rc.3 is a release candidate under qualification.** It is the third candidate for 0.2.0 and replaces 0.2.0-rc.2
+(two evidence rules in the agent skill, audio under a tenth of a second is no longer given to the speech recogniser, and a
+copy that runs out of time says so; the changelog says what).
 When it is published it is installed as `vsift-cli@next` (the npm packages under the dist-tag `next`, with npm provenance,
 and native archives on a GitHub pre-release, each carrying a Sigstore build-provenance
-attestation); until then `@next` installs the first candidate, 0.2.0-rc.1, published on 2026-10-05, which stays published and
-which this one replaces; before that it installed the pre-release 0.1.0, published on 2026-10-01. It is
+attestation); **until then `@next` installs the second candidate, 0.2.0-rc.2**, published on 2026-10-07, which stays published and
+which this one replaces, as the first candidate, 0.2.0-rc.1 of 2026-10-05, does; before those it installed the pre-release 0.1.0,
+published on 2026-10-01. It is
 not announced. It is not a stable release, and no platform is "supported" yet (section 1). The
 evidence gathered so far, with its gaps, is recorded in the release evidence ledger
 ([`p14-evidence-ledger.json`](../planning/p14-evidence-ledger.json)). A plain `npm install vsift-cli`
@@ -441,8 +444,10 @@ folder.
   On 2026-10-05, after the publish, the same run upgraded the **published 0.1.0 to the published 0.2.0-rc.1**
   over the real registry on hosted Windows, macOS and Ubuntu runners with the same result (`P14 published
   artifacts`, run 37328348087): the first run of a newer published release over an older one. Only npm was
-  upgraded, and no pnpm, Yarn or Bun upgrade was run. Those runs are for 0.2.0-rc.1; the same upgrades are run again
-  for 0.2.0-rc.2 once it is published, and until then nothing has been run against its bytes.
+  upgraded, and no pnpm, Yarn or Bun upgrade was run. On 2026-10-07 the same run upgraded the published 0.1.0 and the
+  published 0.2.0-rc.1 to the published 0.2.0-rc.2 on the three systems with the same result (runs 37602931887 and
+  37611381117). Those runs are for 0.2.0-rc.1 and 0.2.0-rc.2; the same upgrades are run again for 0.2.0-rc.3 once it is
+  published, and until then nothing has been run against its bytes.
 
 ## 8. Uninstall
 

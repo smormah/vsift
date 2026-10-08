@@ -74,6 +74,14 @@ Each claim has an `id` (`c1`, `c2`, ...), the `section` it belongs to, and:
   value at that time; a value shown at another time ("changed from 5") is a claim of
   its own, with its own evidence.
 
+**A claim states only what its own citations show or say.** Every name, number,
+identifier or quoted word in a statement is shown or said by evidence that same claim
+cites; evidence another claim cites does not count. When a claim joins facts from two
+places (what a speaker says and what a frame shows, or two segments), cite both. Never
+add an identifier from memory of another segment or frame: cite that evidence too, or
+leave the identifier out. When the transcript and the screen write a value differently,
+a claim that writes it as the screen does cites the frame that shows it.
+
 A visual claim needs a frame or crop citation whose `pixels_inspected` is true. When
 `image_access` is `unavailable`, every visual claim is `unsupported`, each frame or
 crop citation has `pixels_inspected` false, and a gap with reason
@@ -87,6 +95,17 @@ transcript says it: that claim rests on the transcript alone. Mark it
 `partially_supported` and cite the transcript segment; do not cite those pixels as
 its support. A claim about what the image does show clearly (a button, a heading)
 still cites the frame.
+
+**An unreadable region proves nothing about its content, in either direction.** It
+cannot show that something is there, and it cannot show that something is not there:
+the part you cannot read could say anything. So a claim that says what the region
+holds, or that something is absent ("no ... is visible", "... instead of ...") while
+the region that could hold it cannot be read, is never `supported` on that frame.
+Write two claims. One says only what is visible (a box, its colour, where it is, that
+its text cannot be read), cites the frame and names nothing the region might hold. The
+other states the content, or its absence, from the transcript alone:
+`partially_supported` with the segment cited, or `inferred` and `unsupported` when
+nothing says it. Record the gap (`visual`, `image_unreadable`).
 
 A claim that is `supported`, `partially_supported` or `contradicted` cites at least one
 piece of evidence. What `setup check` or `session status` told you (a tool is missing,

@@ -59,7 +59,14 @@ fn the_committed_freezes_still_hold() -> TestResult {
 /// `freeze.json` in the same change, because the file then agrees with the tree. Pinning the digest here makes that
 /// visible: changing this constant is the decision to cut another candidate and write a new freeze
 /// (`docs/operations/release.md` section 6.8), and it shows in the diff of a test, not only of a data file.
-const CUT_FREEZE_SHA256: &str = "1e89b5cc488e7245d1a6d63ec8809c1f8a5c137ee87f5ed05f9b692c2af6e392";
+///
+/// The third candidate's freeze is new on purpose (`0.2.0-rc.3`, 2026-10-08): the skill gained two evidence
+/// rules after batch 2 on the second candidate, by the maintainer's decision of 2026-10-07, so the `skill`
+/// component and with it this digest changed. The other six components are the ones the first two
+/// candidates were frozen with, whose whole-freeze digest was
+/// `1e89b5cc488e7245d1a6d63ec8809c1f8a5c137ee87f5ed05f9b692c2af6e392` (copies of that file are kept in
+/// `batch-2-rc.1/` and `batch-2-rc.2/`).
+const CUT_FREEZE_SHA256: &str = "654955dd210eae2707b15a5334a3390edca9b7e17e300ebe68310f4b815ba5c6";
 
 #[test]
 fn the_committed_freezes_are_the_ones_written_at_the_cut() -> TestResult {

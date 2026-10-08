@@ -94,7 +94,13 @@ select the skill; the user can also name it.
   the claim's shape from an empty list). Each claim names its subject and value and
   cites evidence showing that value; a region a frame shows as unreadable supports
   nothing, so a claim about its content is `partially_supported` on the transcript
-  (#224); the retained bundle is a snapshot, so the agent retains after its last
+  (#224). Two evidence rules were added on 2026-10-07, after batch 2 of the P14 agent
+  trials (Claude Opus 5.5, review tier, on both candidates): an unreadable region proves
+  nothing about its content in either direction, so a claim that something is absent from
+  it is not `supported` on that frame either; and a claim states only what its own
+  citations show or say, so every name, number or identifier in it is in evidence that
+  claim cites (`SKILL.md` states both in one sentence each, `references/handoff.md` in
+  full). The retained bundle is a snapshot, so the agent retains after its last
   evidence command (#220); a web address seen in evidence is defanged in the Markdown
   only, and the JSON describes it without writing it (#221). The
   JSON states only what the agent alone knows: its claims, the identity of each piece
@@ -260,9 +266,14 @@ Prefer a review-tier model when the report must be right first time.
 
 ## Not yet done
 
-- **The review tier's blurred-banner re-run.** A-09 on Claude Opus 5.5 and GPT-6-Astra
-  after the #224 fix; the maintainer starts it
-  ([L-095](../planning/known-limits.md#l-095)).
+- **The review tier's blurred-banner re-run on the third candidate.** The re-run after the
+  #224 fix has run twice, in batch 2 on the first two release candidates (2026-10-05 and
+  2026-10-07, three runs per client each time): GPT-6-Astra met the gate both times (3 of 3),
+  and Claude Opus 5.5 did not (1 of 3 both times), and it also missed the mechanical gate (4
+  of 6 on the second candidate). The two evidence rules of 2026-10-07 (above) are the change
+  made for that, in the third candidate `0.2.0-rc.3`; **nothing shows yet that they are
+  enough**: batch 2 is run again on that candidate, and the maintainer starts it
+  ([L-095](../planning/known-limits.md#l-095), [L-139](../planning/known-limits.md#l-139)).
 - **A named-agent run from a clean installation of the release candidate** (P14, the
   release qualification; ADR 0023 decision H10). The harness for it is built (P14 PR 6):
   VSift is installed from the real npm registry into a fresh folder, a skill trial copies the
@@ -278,9 +289,12 @@ Prefer a review-tier model when the report must be right first time.
   help, reached the key facts in 1 of 6 compact runs with Claude Code (a setting that lets it
   run `vsift` alone) and 2 of 6 with Codex (a container with ordinary read-only helpers); the
   two settings are different tests, and the cold target is 80% on the candidate's final round.
-  A baseline measures; it is not a result for the candidate, and no counted set, hold-out or
-  blurred-banner re-run has run. Batches 2 and 3 wait for the maintainer's go
-  ([the P14 batches](trials.md#the-p14-batches)). Since the baseline `vsift --help` has a
+  A baseline measures; it is not a result for the candidate. **Batch 2 (the counted set, the
+  hold-outs and the blurred banner; 34 runs) has since run on the first and on the second
+  candidate; on the second the evidence item is recorded as failed, for the two Claude Opus 5.5
+  gates above** ([P14 plan](../planning/p14-qualification.md) section 27). Batch 2 on the third
+  candidate and batch 3 (the cold final round, which has run on no candidate) wait for the
+  maintainer's go ([the P14 batches](trials.md#the-p14-batches)). Since the baseline `vsift --help` has a
   "typical investigation" section (P14 PR 7), which the cold agent reads and the skill does not
   need.
 - **Open readings and limits:** Sonnet's "previous value" slip (#219), Codex on Windows

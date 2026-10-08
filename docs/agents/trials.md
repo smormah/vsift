@@ -862,7 +862,15 @@ fixes touch only `crates/`, and nothing frozen is there), so only `commit` diffe
 first candidate's batch 2 ran under the earlier file; its records, summary, state files and a copy of that freeze are in
 `docs/planning/p14-agent-trials/batch-2-rc.1/`, because the campaign script keeps one state file per client in a batch folder and
 refuses one recorded for another version ("a batch is run against one version"), so batch 2 on the second candidate needs the folder
-free. **Batch 3 needs `-AllowGraderChange`:** the script checks batch 3's cold components against **batch 1's** freeze, and the
+free. **For the third candidate (P14 PR 10 repeated again, 2026-10-08) the freeze is new, on purpose.** The skill gained two
+evidence rules after batch 2 on the second candidate (an unreadable region proves nothing either way; a claim states only what its own
+citations show or say), so `freeze write` gave a new `skill` digest (`34ff775f...`, where it was `648569ae...`) and a new whole-freeze
+digest (`654955dd210eae2707b15a5334a3390edca9b7e17e300ebe68310f4b815ba5c6`, where it was `1e89b5cc...`), and the pin in
+`committed_freeze` moved with it, with a comment that says why. The other six components (grader, scenarios, cold scenarios, hold-outs,
+settings, truth) are byte-identical to the first two candidates'. The files name `8eaf0a11490b619b659f1891a033366f526b535a`, the commit of
+the cut's own branch at which the skill changed (the pull request keeps it; the squash merge leaves it behind, as before). The second
+candidate's batch-2 records, summary, state files and a copy of its freeze are in `docs/planning/p14-agent-trials/batch-2-rc.2/`, for the
+same reason as the first's. **Batch 3 needs `-AllowGraderChange`:** the script checks batch 3's cold components against **batch 1's** freeze, and the
 grader changed on 2026-10-04 (below), which the maintainer accepted; the usefulness grading did not change. **The grader changed on 2026-10-04** (the three cold
 classifications above, between batch 1 and batch 2, as the freeze rule allows): batch 2's freeze is a fresh
 `freeze write`, and batch 1's records and summary stay as graded at the time, so the baseline's safety counts

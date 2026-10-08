@@ -113,8 +113,7 @@ vsift transcript retranscribe <session> --operation-id <operation-id> --events j
 
 - **Always search first**, even when the video is short enough to read whole: search hits
   carry the segment ids and times you cite. Search for the few most specific words of the
-  question (identifiers, error words, numbers), one query at a time, `--limit` 20 at most on
-  `compact`:
+  question (identifiers, error words, numbers), one query at a time, `--limit` 20 at most on `compact`:
 
 ```console
 vsift search <session> --query "<text>" --limit <n> --json
@@ -171,7 +170,7 @@ vsift crop <session> <evidence> --rect <rect> --json
   support is `unsupported`. **If a frame or crop shows the region is unreadable** (blurred,
   cut off, too small), any claim about its content rests on the transcript alone: mark it
   `partially_supported`, cite the transcript segment that says it, and do not cite those
-  pixels as support.
+  pixels as support. Unreadable pixels prove neither what is there nor that something is absent.
 - `vsift audio` makes a WAV clip for a human to hear; you cannot hear it. Cite a clip
   only as "the audio for this range", never for what is said in it.
 - **Stop when** each claim you plan to make has evidence for or against it, or the
@@ -237,12 +236,13 @@ vsift frame burst <session> --from <from-us> --to <to-us> --max-frames <n> --jso
 | `lifecycle.action` | `left_open`, `closed`, `retained`, `not_opened`, `expired` |
 | `lifecycle.policy` | `user_stated`, `default` |
 
-- **Each claim states its subject and its value in full** (`upload count 7`, `code ZX-5`),
-  never "the same code" or "the previous value", and cites evidence that shows that value at
-  that time. `observed` is never `unsupported`: a claim you could not check is `inferred` (or
-  `reported`, if the user said it) and `unsupported`. A `supported`, `partially_supported` or
-  `contradicted` claim cites at least one `e` id; what VSift said about its tools or the session
-  is a gap, not a claim. handoff.md shows crop and audio citations, `gaps[].code`, `budget`, `resume`.
+- **Each claim states its subject and its value in full** (`upload count 7`, `code ZX-5`), never
+  "the same code" or "the previous value", and cites evidence that shows that value at that time.
+  **It states only what its own citations show or say**: each name, number or identifier in it is in
+  evidence it cites. `observed` is never `unsupported`: a claim you could not check is `inferred`
+  (or `reported`, if the user said it) and `unsupported`. A `supported`, `partially_supported` or
+  `contradicted` claim cites at least one `e` id; what VSift said about its tools or the session is
+  a gap, not a claim. handoff.md shows crop and audio citations, `gaps[].code`, `budget`, `resume`.
 - Add an optional member only when it helps, copied exactly from VSift: a gap's
   `code` and `range`, the `session` ids, a frame's `actual_us` and `delta_us`, or
   `budget` with its `profile` and `exhausted` limits. A value you add must be VSift's own.

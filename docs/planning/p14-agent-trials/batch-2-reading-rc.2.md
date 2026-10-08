@@ -1,12 +1,18 @@
 # Batch 2 reading on the second candidate (2026-10-07, 0.2.0-rc.2)
 
+**History (2026-10-08).** This is the reading of batch 2 **on the second candidate**, which the third candidate
+`0.2.0-rc.3` replaces (the skill's two evidence rules, decided below, and four fixes: plan section 28). Its records,
+summary and state moved from `batch-2/` to [`batch-2-rc.2/`](batch-2-rc.2/) so that `batch-2/` is free for the repeat on
+the third candidate, which the maintainer starts on an explicit go. Nothing below was re-graded, and none of it counts
+for `0.2.0-rc.3`: the skill changed on purpose, so the repeat runs under a new freeze.
+
 Batch 2 is the counted set with the skill, repeated against the published second candidate `0.2.0-rc.2`
 from a clean install (the registry's bytes, proved in every record), on the freeze in
-`batch-2/freeze.json` (the same component digests as the first candidate's batch: the skill, grader,
+`batch-2-rc.2/freeze.json` (a copy of the file as it was; the same component digests as the first candidate's batch: the skill, grader,
 scenarios and settings did not change). Claude Code 2.1.284 ran on the maintainer's machine, Codex
 0.155.0-alpha.16 in the Linux container. 34 counted runs, 17 per client: the review tier 12 each (Claude
 Opus 5.5, GPT-6-Astra) and the compact tier 5 each (Claude Sonnet 5.5, GPT-6-Sol). The records are in
-[`batch-2/`](batch-2/). The first candidate's batch is history: [`batch-2-rc.1/`](batch-2-rc.1/) and
+[`batch-2-rc.2/`](batch-2-rc.2/). The first candidate's batch is history: [`batch-2-rc.1/`](batch-2-rc.1/) and
 [batch-2-reading.md](batch-2-reading.md).
 
 ## As the grader graded it
