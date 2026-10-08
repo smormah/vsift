@@ -55,9 +55,12 @@ impl fmt::Display for RecognitionKey {
 /// What one chunk produced.
 #[derive(Clone, Debug, PartialEq)]
 pub enum CheckpointOutcome {
-    /// No audio sample was decoded in the window.
+    /// No audio sample was decoded in the window: the stream holds none there,
+    /// or the window is under 100 ms and was not decoded.
     NoAudio,
-    /// Audio was decoded and found silent, so the recognizer was not run.
+    /// Audio was decoded and found silent, or shorter than the least a
+    /// recognizer is given, so the recognizer was not run
+    /// ([`AsrChunkOutcome::Silent`](crate::AsrChunkOutcome::Silent)).
     Silent {
         /// Observed decoded source range.
         audio: TimeRange,

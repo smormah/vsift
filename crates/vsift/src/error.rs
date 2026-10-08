@@ -154,6 +154,11 @@ pub enum EngineError {
     /// A burst range is longer than sixty seconds or an audio range longer
     /// than thirty.
     NavigationRangeTooLong,
+    /// The length of an audio range, clipped to the source, rounds to no
+    /// sample of the clip (31 microseconds or less), so there is nothing to
+    /// cut (#332). A range of 32 to 62 microseconds rounds to one sample and
+    /// is answered with a clip, as it always was.
+    AudioRangeTooShort,
     /// A frame tolerance, neighbour count or burst count is out of range.
     InvalidNavigation(NavigationError),
     /// The session's visual index holds no candidate with the requested
@@ -398,6 +403,7 @@ impl EngineError {
             | Self::EvidenceKindMismatch
             | Self::CropOutsideParent
             | Self::NavigationRangeTooLong
+            | Self::AudioRangeTooShort
             | Self::InvalidNavigation(_)
             | Self::CandidateNotFound
             | Self::WorkspaceNotDurable
@@ -784,6 +790,9 @@ impl fmt::Display for EngineError {
             }
             Self::NavigationRangeTooLong => formatter
                 .write_str("the range is too long: at most 60 s for a burst and 30 s for audio"),
+            Self::AudioRangeTooShort => {
+                formatter.write_str("the length of the audio range rounds to no sample")
+            }
             Self::InvalidNavigation(error) => error.fmt(formatter),
             Self::CandidateNotFound => {
                 formatter.write_str("the session has no visual candidate with that identity")
@@ -864,6 +873,7 @@ impl Error for EngineError {
             | Self::EvidenceKindMismatch
             | Self::CropOutsideParent
             | Self::NavigationRangeTooLong
+            | Self::AudioRangeTooShort
             | Self::CandidateNotFound
             | Self::EvidenceBudgetExhausted
             | Self::EvidenceAssembly
@@ -1832,6 +1842,10 @@ mod tests {
             (EngineError::CropOutsideParent, FailureCode::InvalidArgument),
             (
                 EngineError::NavigationRangeTooLong,
+                FailureCode::InvalidArgument,
+            ),
+            (
+                EngineError::AudioRangeTooShort,
                 FailureCode::InvalidArgument,
             ),
             (

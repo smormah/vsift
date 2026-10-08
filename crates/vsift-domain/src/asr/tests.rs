@@ -7,9 +7,10 @@ use proptest::prelude::{prop_assert, prop_assert_eq, proptest};
 use super::{
     AsrChunkOutcome, AsrChunkRecord, AsrDecodingProfile, AsrModel, AsrModelProfile, AsrProvider,
     AsrProviderBuild, AsrRun, AsrRunParts, ChunkPlan, ChunkPlanError, ChunkSegments, ChunkTime,
-    PlannedChunk, ProviderChunkOutput, ProviderOutputError, ProviderSegment, ProviderToken,
-    ProviderTokenKind, ReviewedAsrModel, Sha256Hex, decoded_audio_range, is_silent_pcm,
-    merge_chunks, plan_chunks, validate_chunk_output,
+    MIN_RECOGNITION_MICROS, MIN_RECOGNITION_SAMPLES, PlannedChunk, ProviderChunkOutput,
+    ProviderOutputError, ProviderSegment, ProviderToken, ProviderTokenKind, ReviewedAsrModel,
+    SPEECH_SAMPLE_RATE, Sha256Hex, decoded_audio_range, is_below_recognition_floor, is_silent_pcm,
+    merge_chunks, plan_chunks, rounds_to_no_pcm_sample, validate_chunk_output,
 };
 use crate::{
     CarriedFrom, Confidence, ConfidenceOrigin, CueSource, CueText, CueTiming, InheritedRevision,
@@ -197,6 +198,11 @@ proptest! {
                         overlap
                     );
                     prop_assert_eq!(pair[0].window().duration_micros(), window);
+                }
+                // A window after the first is longer than the overlap: the
+                // window before it did not reach the end of the range.
+                for later in chunks.iter().skip(1) {
+                    prop_assert!(later.window().duration_micros() > overlap);
                 }
                 prop_assert_eq!(plan_chunks(&id, requested, plan).ok(), Some(chunks));
             }
@@ -580,6 +586,153 @@ fn silence_is_every_frame_below_minus_fifty_dbfs() {
     click[5] = i16::MIN;
     click[6] = i16::MAX;
     assert!(!is_silent_pcm(&click));
+}
+
+/// #322: decoded audio under 100 ms (1,600 samples at 16 kHz) is below the
+/// floor whatever it holds; 100 ms is not. The floor is a count of samples, so
+/// full-scale audio one sample short is under it and silence at the floor is
+/// not (silence has its own rule).
+#[test]
+fn the_recognition_floor_is_one_hundred_milliseconds_of_samples() -> TestResult {
+    assert_eq!(MIN_RECOGNITION_SAMPLES, 1_600);
+    assert_eq!(
+        u64::try_from(MIN_RECOGNITION_SAMPLES)? * 1_000_000 / u64::from(SPEECH_SAMPLE_RATE),
+        100_000,
+        "the floor is 100 ms of the speech sample rate"
+    );
+    for level in [0_i16, 100, 3_000, i16::MAX, i16::MIN] {
+        assert!(is_below_recognition_floor(&vec![level; 1_599]), "{level}");
+        assert!(!is_below_recognition_floor(&vec![level; 1_600]), "{level}");
+    }
+    // The sizes whisper.cpp v1.9.2 mishandles are all under it: 40 samples
+    // (its command line fails), 200 (it reads past the buffer) and one.
+    for samples in [0_usize, 1, 40, 41, 200, 201] {
+        assert!(
+            is_below_recognition_floor(&vec![i16::MAX; samples]),
+            "{samples}"
+        );
+    }
+    assert!(!is_below_recognition_floor(&vec![3_000; 16_000]));
+    assert!(!is_below_recognition_floor(&vec![3_000; 480_000]));
+    // The two rules are independent: loud and short is under the floor and
+    // not silent; long and quiet is silent and not under the floor.
+    assert!(!is_silent_pcm(&vec![3_000; 1_599]));
+    assert!(is_silent_pcm(&vec![0; 1_600]));
+    Ok(())
+}
+
+/// #332, the decode boundary: a range whose length rounds to no 16 kHz sample
+/// (under 31.25 microseconds) is not a range to ask a decoder for; the media
+/// tool took 1 and 31 microseconds for no limit and returned a block of about
+/// four seconds. 32 and 62 microseconds are shorter than a sample too (62.5), but
+/// they round to one and were cut to one: they stay decode requests, as 63 is.
+#[test]
+fn only_a_range_that_rounds_to_no_sample_is_not_a_decode_request() -> TestResult {
+    let start = 2 * SECOND;
+    for micros in [1_u64, 2, 30, 31] {
+        assert!(
+            rounds_to_no_pcm_sample(range(start, start + micros)?),
+            "{micros}"
+        );
+    }
+    for micros in [32_u64, 33, 62, 63, 64, 125, 99_999, 100_000, 30 * SECOND] {
+        assert!(
+            !rounds_to_no_pcm_sample(range(start, start + micros)?),
+            "{micros}"
+        );
+    }
+    // The rule is the rounded count of samples and nothing else: for every
+    // length up to two samples it agrees with rounding to the nearest.
+    for micros in 1_u64..=125 {
+        let doubled = micros * 2 * u64::from(SPEECH_SAMPLE_RATE);
+        let nearest = (doubled + 1_000_000) / 2_000_000;
+        assert_eq!(
+            rounds_to_no_pcm_sample(range(start, start + micros)?),
+            nearest == 0,
+            "{micros}"
+        );
+    }
+    // The longest range there is does not overflow the rule.
+    assert!(!rounds_to_no_pcm_sample(range(0, u64::MAX)?));
+    Ok(())
+}
+
+/// #332: a window shorter than 100 ms is below the floor before anything is
+/// decoded, down to one microsecond; a window of exactly 100 ms is not. The
+/// lengths are those the media tool was seen to mishandle (it answered a
+/// window of 31 microseconds or less with a block of about four seconds) and
+/// the two sides of the floor.
+#[test]
+fn a_window_shorter_than_the_floor_is_below_it_whatever_a_decoder_would_return() -> TestResult {
+    assert_eq!(MIN_RECOGNITION_MICROS, 100_000);
+    assert_eq!(
+        u64::try_from(MIN_RECOGNITION_SAMPLES)? * 1_000_000 / u64::from(SPEECH_SAMPLE_RATE),
+        MIN_RECOGNITION_MICROS,
+        "the two floors are one length"
+    );
+    let start = 2 * SECOND;
+    for micros in [1_u64, 31, 32, 62, 63, 1_000, 12_500, 50_000, 99_999] {
+        assert!(
+            chunk(0, start, start + micros)?.is_below_recognition_floor(),
+            "{micros}"
+        );
+    }
+    for micros in [100_000_u64, 100_001, SECOND, 30 * SECOND] {
+        assert!(
+            !chunk(0, start, start + micros)?.is_below_recognition_floor(),
+            "{micros}"
+        );
+    }
+    Ok(())
+}
+
+proptest! {
+    /// With the R0 plan a window is below the floor only when the whole
+    /// requested range is, and then it is the only chunk: a longer range never
+    /// leaves a tail too short to recognise (its last window is longer than
+    /// the 5 s overlap).
+    #[test]
+    fn only_a_requested_range_under_the_floor_gives_an_r0_chunk_under_it(
+        start in 0_u64..14_000_000_000,
+        length in 1_u64..200_000_000,
+    ) {
+        let (Ok(requested), Ok(id)) = (range(start, start + length), segment_id()) else {
+            return Ok(());
+        };
+        let Ok(chunks) = plan_chunks(&id, requested, ChunkPlan::R0) else {
+            return Ok(());
+        };
+        let below = chunks
+            .iter()
+            .filter(|chunk| chunk.is_below_recognition_floor())
+            .count();
+        if length < MIN_RECOGNITION_MICROS {
+            prop_assert_eq!((chunks.len(), below), (1, 1));
+        } else {
+            prop_assert_eq!(below, 0);
+        }
+    }
+
+    /// The floor depends on the number of samples alone, and it is the same
+    /// line as "the decoded range is shorter than 100 ms": a record that keeps
+    /// only the range still says which side of the floor the chunk was on.
+    #[test]
+    fn the_floor_follows_the_sample_count_and_the_decoded_range(
+        samples in 0_usize..4_000,
+        level in proptest::num::i16::ANY,
+        start in 0_u64..14_400_000_000,
+    ) {
+        let pcm = vec![level; samples];
+        prop_assert_eq!(is_below_recognition_floor(&pcm), samples < 1_600);
+        let decoded = decoded_audio_range(MediaTime::from_micros(start), samples);
+        prop_assert_eq!(decoded.is_none(), samples == 0);
+        if let Some(decoded) = decoded {
+            prop_assert_eq!(
+                decoded.duration_micros() < 100_000,
+                is_below_recognition_floor(&pcm)
+            );
+        }
+    }
 }
 
 /// T-03: a sentence crossing a seam is heard whole by one chunk and kept once.

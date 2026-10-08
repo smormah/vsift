@@ -30,15 +30,15 @@ use std::{
 };
 
 use vsift::{
-    AsrDecodingProfile, AsrFailure, AsrFailureReason, AsrModel, AsrModelProfile, AsrProvider,
-    AsrProviderBuild, AsrStage, Cancellation, ChunkTime, CueText, Engine, EngineConfig,
-    EngineError, EnginePorts, FailureCode, HostIsolation, IngestRequest, LanguageTag,
+    AsrChunkOutcome, AsrDecodingProfile, AsrFailure, AsrFailureReason, AsrModel, AsrModelProfile,
+    AsrProvider, AsrProviderBuild, AsrStage, Cancellation, ChunkTime, CueText, Engine,
+    EngineConfig, EngineError, EnginePorts, FailureCode, HostIsolation, IngestRequest, LanguageTag,
     LocalAsrVerification, LocalAsrVerificationFailure, LocalAsrVerifier, ManagedRootLocation,
     MediaToolVerification, MediaToolVerifier, PlannedChunk, ProgressObserver, ProviderChunkOutput,
     ProviderSegment, ProviderToken, ProviderTokenKind, RecognizerIdentity, RetranscribeRange,
     RetranscribeRequest, RuntimeDependency, SessionId, SessionRootLocation, Sha256Hex, SpeechPcm,
-    SpeechRecognitionError, SpeechRecognizer, TranscriptQuery, TranscriptWarningKind,
-    UserConfigurationLocation,
+    SpeechRecognitionError, SpeechRecognizer, TranscriptProvenance, TranscriptQuery,
+    TranscriptWarningKind, UserConfigurationLocation,
 };
 
 type TestResult = Result<(), Box<dyn Error>>;
@@ -529,6 +529,120 @@ async fn a_run_that_hears_no_speech_is_recorded() -> TestResult {
     );
     let read_back = engine.transcript(read(&session, None))?;
     assert!(read_back.segments().is_empty());
+    Ok(())
+}
+
+/// The outcomes of the chunks of a local-ASR revision's own run.
+fn chunk_outcomes(revision: &vsift::TranscriptRevision) -> Built<Vec<AsrChunkOutcome>> {
+    let TranscriptProvenance::LocalAsr(run) = revision.provenance() else {
+        return Err("the revision is not a local-ASR one".into());
+    };
+    Ok(run
+        .chunks()
+        .iter()
+        .map(vsift::AsrChunkRecord::outcome)
+        .collect())
+}
+
+/// #322 and #332, through the engine and a real decode. A requested range
+/// shorter than 100 ms is recorded as a gap and is neither decoded nor given
+/// to the recognizer, although the audio there is audible (the middle of
+/// F01's speech). The run is not a failure: it commits a revision with no
+/// segment and the warnings of a run that heard nothing. From 100 ms on the
+/// range is decoded and recognised as before.
+///
+/// Two things failed here before. The recognizer was called for ranges under
+/// 100 ms (the reviewed whisper.cpp reads past its buffer for under 201
+/// samples). And a range of 31 microseconds or less was answered with one
+/// whole filter frame of audio (up to 65,536 samples of the source), because
+/// `FFmpeg` takes so short a length for no limit: on this clip the four
+/// seconds after the range were recognised, and the chunk was recorded as
+/// transcribed with four seconds of audio for a window of microseconds.
+#[tokio::test]
+#[ignore = "requires FFmpeg and FFprobe on PATH"]
+async fn a_range_under_a_tenth_of_a_second_is_recorded_and_never_decoded_or_recognised()
+-> TestResult {
+    let harness = Harness::passing(AsrModelProfile::Base, Speech::Nothing)?;
+    let engine = harness.engine();
+    let session = harness
+        .plain_session(&engine, fixture("F01-speech.mp4"))
+        .await?;
+    let start = 2 * SECOND;
+
+    // The lengths the media tool mishandled (1, 31), its first good ones (32,
+    // 62, 63), 200 samples (the most whisper.cpp v1.9.2 reads past), 50 ms,
+    // and the last microsecond under the floor.
+    let mut number = 0_u32;
+    for length in [1_u64, 31, 32, 62, 63, 12_500, 50_000, 99_999] {
+        number += 1;
+        let outcome = engine
+            .retranscribe(request(&session, Some((start, start + length))))
+            .await?;
+        let revision = outcome.revision();
+        assert_eq!(revision.number(), number, "{length}");
+        assert_eq!(harness.recognizer.calls().1, 0, "{length}");
+        assert!(revision.segments().is_empty(), "{length}");
+        let outcomes = chunk_outcomes(revision)?;
+        assert_eq!(outcomes, [AsrChunkOutcome::NoAudio], "{length}");
+        let warnings: Vec<_> = revision
+            .warnings()
+            .as_slice()
+            .iter()
+            .map(|warning| (warning.kind(), warning.count()))
+            .collect();
+        assert_eq!(
+            warnings,
+            [
+                (TranscriptWarningKind::SilentChunksSkipped, 1),
+                (TranscriptWarningKind::NoSpeechRecognised, 1),
+            ],
+            "{length}"
+        );
+    }
+    assert!(
+        engine
+            .transcript(read(&session, None))?
+            .segments()
+            .is_empty()
+    );
+
+    // The other side of the floor: a range of exactly 100 ms is decoded, to
+    // its own length within a sample. Whether it is then recognised depends on
+    // that one sample (1,600 are, 1,599 are a gap), so it is not asserted.
+    let outcome = engine
+        .retranscribe(request(&session, Some((start, start + 100_000))))
+        .await?;
+    let outcomes = chunk_outcomes(outcome.revision())?;
+    let [AsrChunkOutcome::Transcribed { audio } | AsrChunkOutcome::Silent { audio }] =
+        outcomes.as_slice()
+    else {
+        return Err(format!("100 ms: the chunk was recorded as {outcomes:?}").into());
+    };
+    assert!(
+        (99_937..=100_063).contains(&audio.duration_micros()),
+        "{audio:?}"
+    );
+    let at_the_floor = harness.recognizer.calls().1;
+
+    // Well over it, 150 ms and half a second are recognised as before.
+    for (calls, length) in [(1_usize, 150_000_u64), (2, SECOND / 2)] {
+        let outcome = engine
+            .retranscribe(request(&session, Some((start, start + length))))
+            .await?;
+        let outcomes = chunk_outcomes(outcome.revision())?;
+        let [AsrChunkOutcome::Transcribed { audio }] = outcomes.as_slice() else {
+            return Err(format!("{length}: the chunk was recorded as {outcomes:?}").into());
+        };
+        assert!(
+            audio.duration_micros().abs_diff(length) <= 63,
+            "{length}: {audio:?}"
+        );
+        assert_eq!(
+            harness.recognizer.calls().1,
+            at_the_floor + calls,
+            "{length}"
+        );
+    }
     Ok(())
 }
 

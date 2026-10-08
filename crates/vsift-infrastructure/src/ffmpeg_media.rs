@@ -12,7 +12,7 @@ use vsift_domain::{
     DisplayRotation, FrameDimensions, FrameTiming, MAX_WINDOW_SAMPLES, MediaDecodeSupport,
     MediaDescription, MediaSelection, MediaStream, MediaStreamKind, MediaTime, SINGLE_STAGE_WEIGHT,
     StreamTime, TimeRange, VISUAL_FRAME_BYTES, VISUAL_FRAME_HEIGHT, VISUAL_FRAME_WIDTH,
-    VISUAL_SAMPLE_INTERVAL_MICROS, VISUAL_WINDOW_WEIGHT, VisualWindow,
+    VISUAL_SAMPLE_INTERVAL_MICROS, VISUAL_WINDOW_WEIGHT, VisualWindow, rounds_to_no_pcm_sample,
 };
 
 mod evidence;
@@ -566,11 +566,7 @@ impl<'a> FfmpegMedia<'a> {
         if stream.decode_support == MediaDecodeSupport::Unsupported {
             return Err(MediaError::UnsupportedCodec);
         }
-        if range.end() > description.duration
-            || range.duration_micros() > profile.max_range_micros()
-        {
-            return Err(MediaError::InvalidAudioRange);
-        }
+        profile.check_range(range, description.duration)?;
         let seek =
             i64::try_from(range.start().as_micros()).map_err(|_| MediaError::InvalidAudioRange)?;
         let request = Self::request(source, self.registry.ffmpeg.clone(), profile.deadline())?
@@ -681,6 +677,34 @@ enum PcmProfile {
 }
 
 impl PcmProfile {
+    /// The decode boundary: whether `range` of a source `duration` long may be
+    /// handed to `FFmpeg` as a seek and a `-t` length.
+    ///
+    /// It must lie inside the source, be no longer than the profile allows,
+    /// and be a length that does not round to no output sample
+    /// ([`rounds_to_no_pcm_sample`], 31 microseconds or less). `FFmpeg` cuts
+    /// by the rounded count (its `trim` filter computes
+    /// `duration_tb = av_rescale_q(duration, AV_TIME_BASE_Q, tb)`, to the
+    /// nearest) and takes a count of none for no limit at all. What came back
+    /// then was not the range but one whole filter frame: with this decode's
+    /// `asetnsamples=n=65536`, up to 65,536 samples of the source, about four
+    /// seconds of a 16 kHz track, or what is left of the audio when that is
+    /// less (#332). So no decode of zero length is
+    /// ever asked for. A range of 32 to 62 microseconds rounds to one sample
+    /// and is handed over as it always was. The callers above refuse a
+    /// zero-length range with their own answers (a speech chunk under 100 ms
+    /// is a gap, an evidence clip of no sample an invalid range); this is the
+    /// check that cannot be skipped.
+    fn check_range(self, range: TimeRange, duration: MediaTime) -> Result<(), MediaError> {
+        if range.end() > duration
+            || range.duration_micros() > self.max_range_micros()
+            || rounds_to_no_pcm_sample(range)
+        {
+            return Err(MediaError::InvalidAudioRange);
+        }
+        Ok(())
+    }
+
     const fn max_range_micros(self) -> u64 {
         match self {
             Self::Clip => 10_000_000,
@@ -1282,14 +1306,81 @@ impl Error for MediaError {
 #[cfg(test)]
 mod tests {
     use super::{
-        MediaError, ObservedFrameTime, VisualSamplingWindow, parse_ashowinfo_start,
-        parse_ffprobe_metadata, parse_frame_showinfo, parse_visual_samples,
+        MediaError, ObservedFrameTime, PcmProfile, VisualSamplingWindow, parse_ashowinfo_start,
+        parse_ffprobe_metadata, parse_frame_showinfo, parse_visual_samples, seconds_arg,
     };
     use crate::SourceContainer;
     use vsift_domain::{
         DisplayRotation, MediaDecodeSupport, MediaSelection, MediaStreamKind, MediaTime,
         VISUAL_FRAME_BYTES,
     };
+
+    /// #332, the decode boundary: for every kind of PCM decode, a range whose
+    /// length rounds to no 16 kHz sample (31 microseconds or less) is refused
+    /// before a length is ever handed to `FFmpeg`, as a range past the source
+    /// or longer than the profile allows is: those are the lengths `FFmpeg`
+    /// took for no limit (it returned one whole filter frame, about four
+    /// seconds). 32 and 62
+    /// microseconds round to one sample, were cut to one, and are handed over
+    /// as before; so is 63.
+    #[test]
+    fn no_pcm_decode_is_asked_for_a_length_that_rounds_to_no_sample()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let duration = MediaTime::from_micros(6_000_000);
+        let range = |start: u64, micros: u64| {
+            vsift_domain::TimeRange::new(
+                MediaTime::from_micros(start),
+                MediaTime::from_micros(start + micros),
+            )
+        };
+        for profile in [
+            PcmProfile::Clip,
+            PcmProfile::Speech,
+            PcmProfile::EvidenceWav,
+        ] {
+            for micros in [1_u64, 30, 31] {
+                assert!(
+                    matches!(
+                        profile.check_range(range(2_000_000, micros)?, duration),
+                        Err(MediaError::InvalidAudioRange)
+                    ),
+                    "{profile:?} {micros}"
+                );
+            }
+            for micros in [32_u64, 62, 63, 64, 125, 99_999, 100_000, 4_000_000] {
+                assert!(
+                    profile
+                        .check_range(range(2_000_000, micros)?, duration)
+                        .is_ok(),
+                    "{profile:?} {micros}"
+                );
+            }
+            // The two older refusals stand: past the source, and too long.
+            assert!(matches!(
+                profile.check_range(range(5_999_990, 100)?, duration),
+                Err(MediaError::InvalidAudioRange)
+            ));
+            assert!(matches!(
+                profile.check_range(
+                    range(0, profile.max_range_micros() + 1)?,
+                    MediaTime::from_micros(60_000_000)
+                ),
+                Err(MediaError::InvalidAudioRange)
+            ));
+        }
+        // The shortest length that is handed over does not print as no time,
+        // and no length that is handed over rounds to no sample.
+        assert_eq!(seconds_arg(32), "0.000032");
+        assert_ne!(seconds_arg(32), seconds_arg(0));
+        for micros in 1_u64..=200 {
+            let handed_over = PcmProfile::Clip
+                .check_range(range(2_000_000, micros)?, duration)
+                .is_ok();
+            let samples = (micros * 16_000 + 500_000) / 1_000_000;
+            assert_eq!(handed_over, samples > 0, "{micros}");
+        }
+        Ok(())
+    }
 
     const VALID: &str = r#"{"format":{"duration":"2.000000","start_time":"1.250000"},"streams":[{"index":0,"codec_type":"video","codec_name":"h264","time_base":"1/1000","start_pts":1250,"width":320,"height":240,"side_data_list":[{"rotation":-90}]},{"index":2,"codec_type":"audio","codec_name":"aac","time_base":"1/16000","start_pts":32000,"tags":{"language":"eng"}}]}"#;
 

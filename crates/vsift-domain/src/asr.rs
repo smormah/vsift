@@ -8,8 +8,8 @@
 //! - how a range is cut into chunks, deterministically (`plan_chunks`);
 //! - which provider segments are credible for their chunk (T-05/T-06): times
 //!   are checked against the chunk's decoded audio, never clamped silently;
-//! - that a chunk with no audible signal is recorded as a silent gap rather
-//!   than transcribed;
+//! - that a chunk with no audible signal, or with less than 100 ms of audio,
+//!   is recorded as a gap rather than given to the recognizer;
 //! - how the overlapping chunks are merged back into one ordered transcript
 //!   without losing or doubling speech at a seam (T-03).
 //!
@@ -61,6 +61,49 @@ const SILENCE_FRAME_SAMPLES: usize = 320;
 const FULL_SCALE_SQUARED: u128 = 32_768 * 32_768;
 /// -50 dBFS as a power ratio denominator: 10^(50/10).
 const SILENCE_POWER_RATIO: u128 = 100_000;
+/// The least decoded speech audio a recognizer is given: 1,600 mono 16 kHz
+/// samples, which is 100 ms. A chunk that decodes to less is recorded as a gap
+/// and never reaches a recognizer ([`is_below_recognition_floor`]), and a chunk
+/// whose window is shorter than that is not even decoded
+/// ([`MIN_RECOGNITION_MICROS`], [`PlannedChunk::is_below_recognition_floor`]).
+///
+/// Why there is a floor. Nothing upstream sets a least length: a requested
+/// range may be one microsecond, the last chunk of a plan is whatever is left
+/// of its range, and a decoder returns only the samples an audio track has in a
+/// window. So a recognizer could be handed a handful of samples, which no
+/// recognizer can turn into words and which a recognizer need not survive: the
+/// reviewed whisper.cpp v1.9.2 reads up to 200 samples past the buffer when it
+/// is given fewer than 201 (its spectrogram mirrors samples 1 to 200 before it
+/// checks the length; fixed upstream in v1.9.3), and by a reading of its
+/// source its command line fails outright for 40 or fewer, which fails the
+/// whole run (#322, known limit L-137). A user's own recognizer build is not
+/// under review at all, so the bound belongs here, in front of every
+/// recognizer, and not in one adapter.
+///
+/// Why 1,600. 100 ms is the figure below which whisper.cpp itself decodes
+/// nothing: `whisper_full_with_state` returns without a segment when the
+/// spectrogram has fewer than ten 10 ms frames ("input is too short ... <
+/// 100 ms"). So a chunk under the floor is one that recognition would have
+/// answered with nothing, were it safe to ask. The floor is about eight times
+/// the 201 samples the unfixed read needs, and far below any spoken word. It
+/// is a bound on what is sent, not a model of the recognizer: whisper.cpp's
+/// framing reaches ten frames only at 1,640 samples, so audio a little over
+/// the floor is sent and still answered with nothing, which is harmless.
+pub const MIN_RECOGNITION_SAMPLES: usize = 1_600;
+/// [`MIN_RECOGNITION_SAMPLES`] as source time: 100,000 microseconds. A planned
+/// chunk whose window is shorter is recorded as a gap without being decoded
+/// ([`PlannedChunk::is_below_recognition_floor`]).
+///
+/// Why the window is judged before the decode, and not only the samples
+/// after it. A window under the floor asks for less audio than a recognizer
+/// is ever given, so decoding it can only produce a gap; and a decoder must
+/// not be trusted with a length that small. A window shorter than half a
+/// sample made the media tool return a whole block of audio instead, about
+/// four seconds of a 16 kHz track (it takes a duration that rounds to no
+/// samples for no limit at all and then hands back one block of its filter),
+/// so a range of a few microseconds was recognised as seconds of speech
+/// (#332). Judging the request makes the answer the same for every decoder.
+pub const MIN_RECOGNITION_MICROS: u64 = 100_000;
 const MICROS_PER_SECOND: u64 = 1_000_000;
 const SHA256_HEX_LENGTH: usize = 64;
 
@@ -419,6 +462,18 @@ impl PlannedChunk {
     pub const fn window(&self) -> TimeRange {
         self.window
     }
+
+    /// Whether the window is shorter than [`MIN_RECOGNITION_MICROS`]
+    /// (100 ms): too short to hold the least audio a recognizer is given.
+    ///
+    /// Such a chunk is recorded as a gap with no audio
+    /// ([`AsrChunkOutcome::NoAudio`]) and is neither decoded nor recognised.
+    /// With the R0 plan only a requested range under 100 ms gives one: the
+    /// last window of a longer range is at least the overlap long.
+    #[must_use]
+    pub const fn is_below_recognition_floor(&self) -> bool {
+        self.window.duration_micros() < MIN_RECOGNITION_MICROS
+    }
 }
 
 /// Cuts `range` of one source segment into overlapping chunks.
@@ -458,6 +513,28 @@ pub fn plan_chunks(
     }
 }
 
+/// Whether the length of `range`, counted in samples of mono 16 kHz PCM (the
+/// form every audio decode is asked for, a speech chunk and an evidence clip
+/// alike) and rounded to the nearest, is no sample at all: under half a sample
+/// (31.25 microseconds), so 31 microseconds or less.
+///
+/// Such a range is never a decode request. The media tool cuts its output by
+/// that rounded count, and a count of none it takes for no limit at all: a
+/// range of 31 microseconds or less was answered with one whole block of the
+/// tool's filter, up to 65,536 samples of the source (about four seconds at
+/// 16 kHz, or what is left of the audio when that is less), not with its
+/// range (#332). The rule refuses exactly those lengths and no other: a range of 32
+/// to 62 microseconds is shorter than a sample too, but it rounds to one, the
+/// tool cuts it to one, and a request that was answered correctly keeps its
+/// answer.
+#[must_use]
+pub fn rounds_to_no_pcm_sample(range: TimeRange) -> bool {
+    range
+        .duration_micros()
+        .saturating_mul(2 * u64::from(SPEECH_SAMPLE_RATE))
+        < MICROS_PER_SECOND
+}
+
 /// Returns the source range of `samples` decoded mono 16 kHz samples starting
 /// at `start`, or `None` when there are none.
 #[must_use]
@@ -476,13 +553,27 @@ pub enum AsrChunkOutcome {
         /// Observed first decoded sample to last decoded sample.
         audio: TimeRange,
     },
-    /// Audio was decoded but every 20 ms frame was below -50 dBFS, so the
-    /// recognizer was not run; the window is a silent gap.
+    /// Audio was decoded but held nothing a recognizer could use, so the
+    /// recognizer was not run and the window is a gap: every 20 ms frame was
+    /// below -50 dBFS ([`is_silent_pcm`]), or there was less than 100 ms of it
+    /// ([`is_below_recognition_floor`]), whatever its level.
+    ///
+    /// The second case shares this outcome and its stored name (`silent`)
+    /// rather than getting one of its own: a new outcome in a stored revision
+    /// is one that the releases before it read as damage, and a consumer acts
+    /// on both in the same way (nothing was transcribed here, and the decoded
+    /// range says how much audio there was). `audio` tells the two apart for a
+    /// reader who needs to: a range under 100 ms is the short case.
     Silent {
         /// Observed first decoded sample to last decoded sample.
         audio: TimeRange,
     },
     /// No audio sample was decoded in the window; it is a gap with no audio.
+    /// Either the stream holds none there, or the window is shorter than
+    /// 100 ms and was not decoded at all
+    /// ([`PlannedChunk::is_below_recognition_floor`]): nothing was observed,
+    /// so there is no decoded range to record, and this outcome, which has
+    /// none, is the one that says so.
     NoAudio,
 }
 
@@ -1095,10 +1186,24 @@ pub fn is_silent_pcm(samples: &[i16]) -> bool {
     })
 }
 
+/// Whether decoded speech PCM is too short to be given to a recognizer: fewer
+/// than [`MIN_RECOGNITION_SAMPLES`] samples (100 ms), whatever they hold.
+///
+/// Such a chunk is recorded as a gap, exactly as a silent one is
+/// ([`AsrChunkOutcome::Silent`], with its decoded range), and the recognizer
+/// is not run. The constant says why. Loud or quiet makes no difference: the
+/// rule is about how much audio there is, and it is decided before the silence
+/// test so that it never depends on the signal.
+#[must_use]
+pub const fn is_below_recognition_floor(samples: &[i16]) -> bool {
+    samples.len() < MIN_RECOGNITION_SAMPLES
+}
+
 /// One chunk's accepted segments, the input of [`merge_chunks`].
 ///
-/// A silent chunk or one with no audio takes part with no segments: it still
-/// owns its core, so nothing from a neighbour is attributed into its time.
+/// A chunk that was not recognised (silent, too short or with no audio) takes
+/// part with no segments: it still owns its core, so nothing from a neighbour
+/// is attributed into its time.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ChunkSegments {
     /// The planned chunk.

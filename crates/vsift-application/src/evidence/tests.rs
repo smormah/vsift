@@ -760,6 +760,92 @@ async fn a_crop_of_a_crop_names_source_pixels() -> TestResult {
     Ok(())
 }
 
+/// An audio extractor over a 6 s source that counts how often it is asked.
+struct CountingAudio(AtomicUsize);
+
+impl AudioExtractor for CountingAudio {
+    fn stream_index(&self) -> u32 {
+        1
+    }
+
+    fn duration(&self) -> MediaTime {
+        micros(6_000_000)
+    }
+
+    fn clip(
+        &self,
+        clipped: TimeRange,
+    ) -> impl Future<Output = Result<ExtractedClip, EvidenceMediaError>> + Send {
+        self.0.fetch_add(1, Ordering::SeqCst);
+        ready(Ok(ExtractedClip {
+            actual_start: clipped.start(),
+            wav: format!("wav {}", clipped.duration_micros()).into_bytes(),
+        }))
+    }
+}
+
+/// #332: an audio range whose length rounds to no sample of the clip (31
+/// microseconds or less) is refused as too short, and the extractor is never
+/// asked for it: the media tool took such a length for no limit and returned
+/// a block of about four seconds under a range of microseconds. A range
+/// clipped to the end of the source is judged by what is left of it. Nothing
+/// else changes: 32 and 62 microseconds round to one sample and are extracted
+/// as they were before the refusal existed, and so is 63.
+#[tokio::test]
+async fn only_an_audio_range_that_rounds_to_no_sample_is_refused_and_never_extracted() -> TestResult
+{
+    let fixture = Fixture::new()?;
+    let control = Control::never();
+    let audio = CountingAudio(AtomicUsize::new(0));
+    for (start, end) in [
+        (2_000_000, 2_000_001),
+        (2_000_000, 2_000_031),
+        // Ten microseconds of source are left of a one-second request, and
+        // thirty-one of another.
+        (5_999_990, 6_999_990),
+        (5_999_969, 6_999_969),
+    ] {
+        assert_eq!(
+            extract_audio(
+                &fixture.call(&control, budget()),
+                &audio,
+                AudioRange::new(range(start, end)?)?,
+            )
+            .await,
+            Err(EvidenceError::RangeTooShort),
+            "{start} to {end}"
+        );
+    }
+    assert_eq!(audio.0.load(Ordering::SeqCst), 0);
+
+    for (start, end, length) in [
+        (2_000_000, 2_000_032, 32),
+        (2_000_000, 2_000_062, 62),
+        (2_000_000, 2_000_063, 63),
+        // Thirty-two microseconds of source are left of a one-second request.
+        (5_999_968, 6_999_968, 32),
+        (5_999_937, 6_999_937, 63),
+    ] {
+        let clip = extract_audio(
+            &fixture.call(&control, budget()),
+            &audio,
+            AudioRange::new(range(start, end)?)?,
+        )
+        .await?;
+        let Some(EvidenceSubject::Audio { range: cut, .. }) = clip
+            .record
+            .items()
+            .first()
+            .map(vsift_domain::EvidenceItem::subject)
+        else {
+            return Err("expected a clip".into());
+        };
+        assert_eq!(cut.duration_micros(), length, "{start} to {end}");
+    }
+    assert_eq!(audio.0.load(Ordering::SeqCst), 5);
+    Ok(())
+}
+
 #[tokio::test]
 async fn an_audio_clip_is_clipped_to_the_source_and_reports_its_first_sample() -> TestResult {
     let fixture = Fixture::new()?;

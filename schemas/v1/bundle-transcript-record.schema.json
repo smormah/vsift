@@ -765,7 +765,7 @@
       }
     },
     "run": {
-      "description": "One local-ASR run: provider build and model by SHA-256, profiles, the chunk plan, recognizer threads, the decoded audio stream and every planned chunk in order with its outcome. Chunks must be exactly the plan of the range they cover; a transcribed or silent chunk records its observed decoded audio range, a chunk with no audio records none.",
+      "description": "One local-ASR run: provider build and model by SHA-256, profiles, the chunk plan, recognizer threads, the decoded audio stream and every planned chunk in order with its outcome. Chunks must be exactly the plan of the range they cover; a transcribed or silent chunk records its observed decoded audio range, a chunk with no audio records none. A silent chunk was not given to the recognizer: every 20 ms frame was below -50 dBFS, or, since 0.2.0-rc.3, it held less than 100 ms of decoded audio whatever its level (its range is then shorter than 100000 microseconds). A chunk with no audio had none decoded in its window: the audio track holds none there, or, since 0.2.0-rc.3, the window is shorter than 100000 microseconds and is not decoded.",
       "type": "object",
       "additionalProperties": false,
       "required": [

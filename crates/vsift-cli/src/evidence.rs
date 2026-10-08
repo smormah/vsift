@@ -12,8 +12,8 @@ use vsift::{
     FrameSelection, FrameTarget,
 };
 use vsift_contract::{
-    AUDIO_RANGE_REMEDIATION, AUDIO_RANGE_START_REMEDIATION, AudioEvidenceStream,
-    BURST_RANGE_REMEDIATION, CROP_OUTSIDE_REMEDIATION, DeliveredEvidenceFile,
+    AUDIO_RANGE_REMEDIATION, AUDIO_RANGE_START_REMEDIATION, AUDIO_RANGE_TOO_SHORT_REMEDIATION,
+    AudioEvidenceStream, BURST_RANGE_REMEDIATION, CROP_OUTSIDE_REMEDIATION, DeliveredEvidenceFile,
     EVIDENCE_BUDGET_REMEDIATION, EVIDENCE_KIND_REMEDIATION, EVIDENCE_PATH_REMEDIATION,
     EVIDENCE_TOOLS_REMEDIATION, EvidencePresentation, EvidencePresentationError,
     FrameEvidenceStream, LifecycleResponse, NO_AUDIO_CLIP_REMEDIATION, NO_FRAMES_REMEDIATION,
@@ -49,6 +49,7 @@ fn evidence_failure(error: EngineError, medium: Medium) -> CommandFailure {
         (EngineError::NavigationRangeTooLong, Medium::Picture) => Some(BURST_RANGE_REMEDIATION),
         (EngineError::NavigationRangeTooLong, Medium::Sound) => Some(AUDIO_RANGE_REMEDIATION),
         (EngineError::RangeOutsideSource, Medium::Sound) => Some(AUDIO_RANGE_START_REMEDIATION),
+        (EngineError::AudioRangeTooShort, _) => Some(AUDIO_RANGE_TOO_SHORT_REMEDIATION),
         (EngineError::NoAudioStream, Medium::Sound) => Some(NO_AUDIO_CLIP_REMEDIATION),
         (EngineError::CandidateNotFound, _) => Some(UNKNOWN_CANDIDATE_REMEDIATION),
         (EngineError::EvidenceNotFound, _) => Some(UNKNOWN_EVIDENCE_REMEDIATION),
@@ -294,4 +295,28 @@ pub(crate) async fn audio_stream(
         lifecycle(&results)?,
     )
     .map_err(|error| presentation_failure(&error))
+}
+
+#[cfg(test)]
+mod tests {
+    use vsift::{EngineError, FailureCode};
+    use vsift_contract::{AUDIO_RANGE_START_REMEDIATION, AUDIO_RANGE_TOO_SHORT_REMEDIATION};
+
+    use super::{Medium, evidence_failure};
+
+    /// #332: an audio range whose length rounds to no sample is the caller's
+    /// range to change, `INVALID_ARGUMENT`, with a remediation that says how
+    /// short is too short; it is not the answer of a range past the end.
+    #[test]
+    fn an_audio_range_that_rounds_to_no_sample_is_an_invalid_argument_with_its_own_remediation() {
+        let failure = evidence_failure(EngineError::AudioRangeTooShort, Medium::Sound);
+        assert_eq!(failure.code, FailureCode::InvalidArgument);
+        assert_eq!(failure.summary(), Some(AUDIO_RANGE_TOO_SHORT_REMEDIATION));
+        assert!(AUDIO_RANGE_TOO_SHORT_REMEDIATION.contains("31 microseconds or less"));
+        assert!(AUDIO_RANGE_TOO_SHORT_REMEDIATION.len() <= 1024);
+
+        let past_the_end = evidence_failure(EngineError::RangeOutsideSource, Medium::Sound);
+        assert_eq!(past_the_end.code, FailureCode::InvalidArgument);
+        assert_eq!(past_the_end.summary(), Some(AUDIO_RANGE_START_REMEDIATION));
+    }
 }

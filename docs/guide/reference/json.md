@@ -302,7 +302,7 @@ The content of a retained bundle artifact whose bundle.json kind is transcript_r
 | `source_segment.end_us` | integer | yes | at least 1 |
 | `source_segment.state` | "closed" | yes |  |
 | `origin` | constant "local_asr" | yes |  |
-| `run` | object | yes | One local-ASR run: provider build and model by SHA-256, profiles, the chunk plan, recognizer threads, the decoded audio stream and every planned chunk in order with its outcome. Chunks must be exactly the plan of the range they cover; a transcribed or silent chunk records its observed decoded audio range, a chunk with no audio records none. |
+| `run` | object | yes | One local-ASR run: provider build and model by SHA-256, profiles, the chunk plan, recognizer threads, the decoded audio stream and every planned chunk in order with its outcome. Chunks must be exactly the plan of the range they cover; a transcribed or silent chunk records its observed decoded audio range, a chunk with no audio records none. A silent chunk was not given to the recognizer: every 20 ms frame was below -50 dBFS, or, since 0.2.0-rc.3, it held less than 100 ms of decoded audio whatever its level (its range is then shorter than 100000 microseconds). A chunk with no audio had none decoded in its window: the audio track holds none there, or, since 0.2.0-rc.3, the window is shorter than 100000 microseconds and is not decoded. |
 | `run.provider` | "whisper_cpp" | yes |  |
 | `run.executable_sha256` | string | yes | pattern `^[0-9a-f]{64}$` |
 | `run.model_profile` | "base" \| "base_q5_1" \| "unreviewed" | yes |  |
@@ -334,7 +334,7 @@ The content of a retained bundle artifact whose bundle.json kind is transcript_r
 | `inherited[].provenance.imported.sidecar` | object | yes | Identity of the exact supplied bytes that were parsed. |
 | `inherited[].provenance.imported.sidecar.sha256` | string | yes | pattern `^[0-9a-f]{64}$` |
 | `inherited[].provenance.imported.sidecar.bytes` | integer | yes | 1 to 8388608 |
-| `inherited[].provenance.local_asr` | object | yes | One local-ASR run: provider build and model by SHA-256, profiles, the chunk plan, recognizer threads, the decoded audio stream and every planned chunk in order with its outcome. Chunks must be exactly the plan of the range they cover; a transcribed or silent chunk records its observed decoded audio range, a chunk with no audio records none. |
+| `inherited[].provenance.local_asr` | object | yes | One local-ASR run: provider build and model by SHA-256, profiles, the chunk plan, recognizer threads, the decoded audio stream and every planned chunk in order with its outcome. Chunks must be exactly the plan of the range they cover; a transcribed or silent chunk records its observed decoded audio range, a chunk with no audio records none. A silent chunk was not given to the recognizer: every 20 ms frame was below -50 dBFS, or, since 0.2.0-rc.3, it held less than 100 ms of decoded audio whatever its level (its range is then shorter than 100000 microseconds). A chunk with no audio had none decoded in its window: the audio track holds none there, or, since 0.2.0-rc.3, the window is shorter than 100000 microseconds and is not decoded. |
 | `inherited[].provenance.local_asr.provider` | "whisper_cpp" | yes |  |
 | `inherited[].provenance.local_asr.executable_sha256` | string | yes | pattern `^[0-9a-f]{64}$` |
 | `inherited[].provenance.local_asr.model_profile` | "base" \| "base_q5_1" \| "unreviewed" | yes |  |
@@ -993,7 +993,7 @@ The data member of a complete or partial search result: one bounded page of the 
 | `transcript_coverage.untranscribed_ranges` | array of object | yes | at most 100 items |
 | `transcript_coverage.untranscribed_ranges[].from_us` | integer | yes | at least 0 |
 | `transcript_coverage.untranscribed_ranges[].to_us` | integer | yes | at least 1 |
-| `transcript_coverage.no_speech_ranges` | array of object | yes | Transcribed ranges where local recognition found no audible signal or no audio; never overlapping a segment.; at most 100 items |
+| `transcript_coverage.no_speech_ranges` | array of object | yes | Transcribed ranges where local recognition found no audible signal, no audio or, since 0.2.0-rc.3, less than 100 ms of audio; never overlapping a segment.; at most 100 items |
 | `transcript_coverage.no_speech_ranges[].from_us` | integer | yes | at least 0 |
 | `transcript_coverage.no_speech_ranges[].to_us` | integer | yes | at least 1 |
 | `transcript_coverage.ranges_truncated` | boolean | yes | True when a range list held more than 100 ranges and only its first 100, in start order, are listed. |
@@ -1030,7 +1030,7 @@ The data member of the complete or partial terminal result that ends a search --
 | `transcript_coverage.untranscribed_ranges` | array of object | yes | at most 100 items |
 | `transcript_coverage.untranscribed_ranges[].from_us` | integer | yes | at least 0 |
 | `transcript_coverage.untranscribed_ranges[].to_us` | integer | yes | at least 1 |
-| `transcript_coverage.no_speech_ranges` | array of object | yes | Transcribed ranges where local recognition found no audible signal or no audio; never overlapping a segment.; at most 100 items |
+| `transcript_coverage.no_speech_ranges` | array of object | yes | Transcribed ranges where local recognition found no audible signal, no audio or, since 0.2.0-rc.3, less than 100 ms of audio; never overlapping a segment.; at most 100 items |
 | `transcript_coverage.no_speech_ranges[].from_us` | integer | yes | at least 0 |
 | `transcript_coverage.no_speech_ranges[].to_us` | integer | yes | at least 1 |
 | `transcript_coverage.ranges_truncated` | boolean | yes | True when a range list held more than 100 ranges and only its first 100, in start order, are listed. |
@@ -1413,7 +1413,7 @@ Identity, alignment and outcome of one immutable transcript revision. Warnings a
 | `warnings[].count` | integer | yes | at least 1 |
 | `warnings[].first_cue` | integer | yes | at least 1 |
 | `warnings[].excluded_cues` | boolean | yes |  |
-| `local_asr` | object | no | The local-ASR run that produced the revision's own segments: provider build and model by SHA-256, the pinned model profile and decoding profile, the chunk plan, recognizer threads, the decoded audio stream, the source range its chunks covered, and how many chunks were transcribed, silent (every 20 ms frame below -50 dBFS, not transcribed) or had no audio. |
+| `local_asr` | object | no | The local-ASR run that produced the revision's own segments: provider build and model by SHA-256, the pinned model profile and decoding profile, the chunk plan, recognizer threads, the decoded audio stream, the source range its chunks covered, and how many chunks were transcribed, silent (not transcribed: every 20 ms frame below -50 dBFS, or, since 0.2.0-rc.3, less than 100 ms of decoded audio whatever its level) or had no audio (none was decoded in the window: the audio track holds none there, or, since 0.2.0-rc.3, the window is shorter than 100 ms and is not decoded). |
 | `local_asr.provider` | "whisper_cpp" | yes |  |
 | `local_asr.executable_sha256` | string | yes | pattern `^[0-9a-f]{64}$` |
 | `local_asr.model_profile` | "base" \| "base_q5_1" | yes |  |

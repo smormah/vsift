@@ -1048,3 +1048,91 @@ async fn real_bursts_stay_in_budget_and_clips_report_their_first_sample() -> Tes
     assert_eq!(video_only.err(), Some(EngineError::NoVideoStream));
     Ok(())
 }
+
+/// The count of 16-bit samples in a stored WAV clip, after its 44-byte header;
+/// a file shorter than a header is an error of the test, not a panic.
+fn stored_clip_samples(path: &std::path::Path) -> Built<usize> {
+    fs::read(path)?
+        .len()
+        .checked_sub(44)
+        .map(|bytes| bytes / 2)
+        .ok_or_else(|| "a stored clip shorter than a WAV header".into())
+}
+
+/// #332, the `audio` command: a range whose length rounds to no sample of the
+/// clip (31 microseconds or less) is an invalid argument and stores nothing.
+/// Before, the media tool took such a length for no limit, and the clip stored
+/// under a range of microseconds held one whole filter frame of audio (on this
+/// clip, the four seconds to the end of the file). Only that changes: 32 and 62 microseconds are still answered with a clip of
+/// exactly one sample, as before, and from 63 microseconds on the clip is as
+/// long as its range.
+#[tokio::test]
+#[ignore = "requires FFmpeg and FFprobe on PATH"]
+async fn only_a_real_audio_range_that_rounds_to_no_sample_is_refused_and_stores_nothing()
+-> TestResult {
+    if !media_tools_on_path() {
+        return Err("FFmpeg and FFprobe must be on PATH".into());
+    }
+    let root = OwnedRoot::new()?;
+    let (engine, session) = real_session(&root, &fixture("F01-speech.mp4")).await?;
+    let clip = |micros: u64| {
+        engine.audio(AudioClipRequest {
+            session: session.clone(),
+            from_micros: 2_000_000,
+            to_micros: 2_000_000 + micros,
+            cancellation: Cancellation::new(),
+        })
+    };
+    for micros in [1_u64, 31] {
+        let refused = clip(micros).await.err();
+        assert_eq!(
+            refused,
+            Some(EngineError::AudioRangeTooShort),
+            "{micros} microseconds"
+        );
+        assert_eq!(
+            refused.map(|error| error.failure_code()),
+            Some(FailureCode::InvalidArgument)
+        );
+    }
+    assert_eq!(engine.session_status(&session)?.artifact_count(), 0);
+
+    // Unchanged: a length that rounds to one sample is a clip of one sample.
+    for micros in [32_u64, 62] {
+        let cut = clip(micros).await?;
+        let file = cut.files().first().ok_or("no clip")?;
+        assert_eq!(
+            stored_clip_samples(file.path())?,
+            1,
+            "{micros} microseconds"
+        );
+    }
+
+    // From there on, a clip is never longer than its range and a sample. A
+    // range of a few milliseconds may instead decode to nothing, the typed
+    // answer of a window without audio: it depends on the file (issue #334:
+    // the audio-only fixture does so under about 47 ms).
+    for (micros, most_samples) in [
+        (63_u64, 2_usize),
+        (1_000, 17),
+        (50_000, 801),
+        (100_000, 1_601),
+    ] {
+        let cut = match clip(micros).await {
+            Ok(cut) => cut,
+            Err(EngineError::EvidenceMedia(EvidenceMediaError::NoDecodedAudio))
+                if micros < 50_000 =>
+            {
+                continue;
+            }
+            Err(error) => return Err(format!("{micros} microseconds: {error:?}").into()),
+        };
+        let file = cut.files().first().ok_or("no clip")?;
+        let samples = stored_clip_samples(file.path())?;
+        assert!(
+            (1..=most_samples).contains(&samples),
+            "{micros} microseconds gave {samples} samples"
+        );
+    }
+    Ok(())
+}
