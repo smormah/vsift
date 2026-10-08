@@ -315,6 +315,7 @@ fn frozen_failures_render_as_message_remediation_and_command() -> TestResult {
         ),
         ("storage-not-private.json", "failure-storage-not-private"),
         ("session-root-unowned.json", "failure-session-root-unowned"),
+        ("ingest-copy-too-slow.json", "failure-ingest-copy-too-slow"),
         (
             "media-tool-verification-failed.json",
             "failure-media-tool-verification",

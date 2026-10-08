@@ -291,7 +291,11 @@ it is checked by `vsift-contract`'s `storage_contract` and by the CLI's Windows
 failure when `--session-root` names an existing folder VSift did not create (it holds no
 ownership marker): `INTEGRITY_FAILURE`, as in 0.1.0, with the remediation that says the
 folder is not VSift's and what to do; it is checked by `storage_contract` and by the CLI's
-`foreign_session_root_cli_contract`.
+`foreign_session_root_cli_contract`. `ingest-copy-too-slow.json` is the `ingest` failure when
+the copy of the video into the session took longer than the ten-minute limit (#325):
+`INVALID_SOURCE`, as it always was, with the remediation that says the copy was slow and the
+video was not judged; it is checked by `storage_contract` and by a unit test of the CLI, which
+builds it from the typed cause.
 
 The Rust types that produce these documents live in the `vsift-contract` crate
 (`crates/vsift-contract`), which every VSift host uses so they all emit identical JSON.

@@ -133,6 +133,19 @@ The code stays because changing a published failure code is not additive within 
 worker workspace keeps its 1 GiB reserve and its `RESOURCE_LIMIT` answer, unchanged, and its order too: the reserve is
 checked first, as in 0.1.0, so a source over the limit that is also larger than the workspace's free space less the
 reserve is `RESOURCE_LIMIT` there.
+**A source whose copy into the session takes longer than ten minutes** is stopped and refused with `INVALID_SOURCE`
+(exit 3), the code this case has had since 0.1.0, and, since the third release candidate (#325), a remediation that
+says what happened: the copy took longer than the ten-minute limit, the video itself was not judged and may be fine,
+nothing was committed, report it to the user, and copying the video to a local disk and running the same command on
+that copy fixes it (example [`ingest-copy-too-slow.json`](../../schemas/v1/examples/ingest-copy-too-slow.json)). Before,
+the same answer came with no remediation and so said only that the video was invalid. The limit is on the whole copy,
+not on its progress, and it is fixed: no option raises it, the partial copy is removed, and running the command again
+starts from the beginning. A 20 GiB source needs about 34 MiB/s sustained to be copied inside it, which a slow disk,
+a network drive, a removable drive or a cloud-synced folder that downloads on first read may not give (known limit
+L-140). The code stays because changing a published failure code is not additive within v1 (known limit L-127). A
+worker request (`job run`) copies its source with the same limit and reaches the same cause: its result's failure
+code is `INVALID_SOURCE`, unchanged, and the command's error carries the same remediation. A supplied transcript has
+no time limit of this kind (it is at most 8 MiB).
 A session id that names no published session (never opened, still being opened by another
 command, interrupted while it opened, closed and cleaned, or whose folder is gone) **keeps the code the
 lookup always gave**: `STORAGE_IO` for an id with no session folder and no lock files,

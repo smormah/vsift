@@ -13,6 +13,12 @@ real meetings, accents or noisy rooms, so every accuracy figure below says what 
   or MPEG-4; audio in AAC, MP3, Opus, Vorbis, FLAC or uncompressed PCM. Anything else (AVI, FLV, WMV) is
   refused, not guessed at: re-save it first.
 - **Size.** Up to 4 hours and 20 GiB, 32 streams and 16 megapixels per picture. A bigger file is refused.
+- **Ten minutes to open a video.** Opening a video copies it into VSift's own folder, and the copy is stopped after
+  ten minutes, however far it got. A disk in your computer is nearly always fast enough. A big video on
+  a network drive, a memory stick, an SD card or a folder that downloads from the cloud when first read may not be:
+  copy it to a disk in your computer first and open that copy
+  ([what the message looks like](troubleshooting.md#invalid_source-the-video-or-the-transcript-cannot-be-used)).
+  Nothing raises the ten minutes, and trying again starts the copy from the beginning.
 - **Per command.** A page of results is 20 by default and 100 at most (`--limit`); a burst of frames is 12 by
   default and 100 at most (`--max-frames`); an audio clip is 30 seconds at most and is a WAV at 16 kHz mono;
   a session keeps at most 512 stored items; one result is at most 1 MiB. Bigger asks fail with

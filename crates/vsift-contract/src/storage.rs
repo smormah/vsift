@@ -87,6 +87,21 @@ pub const SOURCE_IS_LINK_REMEDIATION: &str = "The path you gave is a link, and V
 /// It never contains a path or a size.
 pub const SOURCE_NO_ROOM_REMEDIATION: &str = "The folder that holds VSift's sessions does not have room for a copy of this video. Nothing was committed, nothing is damaged and the video itself is fine (the code is the closest published one). Report this to the user: freeing space on that drive, or an operator naming a folder on a drive with more room with --session-root, fixes it; do not choose a folder yourself. Then run the command again. The folder is the --session-root directory, or VSift-sessions under LOCALAPPDATA on Windows, Library/Caches on macOS, or the XDG cache directory on Linux.";
 
+/// Remediation when the copy of the source into the session took longer than
+/// the ten-minute limit and was stopped (#325).
+///
+/// The code stays `INVALID_SOURCE`, what this case always gave and, within v1,
+/// the only one it may give (changing a published failure code is not
+/// additive; known limit L-127). That code says the video is at fault, which
+/// was never looked at, so this text says what happened: the copy was slow,
+/// the video was not judged, and a copy on a local disk is what to try. It is
+/// for the person, not for an agent to act on alone: copying gigabytes of
+/// someone's video to another place is their decision. The first sentence is
+/// stable. It names no path, size or speed; the limit it names is the fixed
+/// one (`MAX_SOURCE_READ_DURATION` in `vsift-infrastructure`, known limit
+/// L-140), and a test of the CLI, which sees both, holds the two together.
+pub const SOURCE_COPY_TOO_SLOW_REMEDIATION: &str = "Copying this video into VSift's session took longer than the ten-minute limit, so the copy was stopped. The video itself was not judged and may be fine (the code is the closest published one); nothing was committed. This happens with a large video on a slow disk, a network share, a removable drive or a cloud-synced folder that downloads on first read. Report this to the user: copying the video to a local disk and running the same command on that copy fixes it. Running the same command again on the same file starts the copy from the beginning.";
+
 /// Remediation when no published session has the given id (#277): it was never
 /// opened, is still being opened by another command, its opening was
 /// interrupted (a crash) and left only a registration, it was cleaned already,
@@ -105,8 +120,9 @@ pub const SESSION_NOT_PUBLISHED_REMEDIATION: &str = "No published session has th
 #[cfg(test)]
 mod tests {
     use super::{
-        PrivateFolder, SESSION_NOT_PUBLISHED_REMEDIATION, SOURCE_IS_LINK_REMEDIATION,
-        SOURCE_NO_ROOM_REMEDIATION, UNOWNED_SESSION_ROOT_REMEDIATION, non_private_folder_summary,
+        PrivateFolder, SESSION_NOT_PUBLISHED_REMEDIATION, SOURCE_COPY_TOO_SLOW_REMEDIATION,
+        SOURCE_IS_LINK_REMEDIATION, SOURCE_NO_ROOM_REMEDIATION, UNOWNED_SESSION_ROOT_REMEDIATION,
+        non_private_folder_summary,
     };
 
     #[test]
@@ -137,6 +153,39 @@ mod tests {
         assert!(text.contains("nothing is damaged"), "{text}");
         assert!(
             !text.contains("corrupt") && !text.contains("integrity"),
+            "{text}"
+        );
+        assert!(text.len() <= 1024, "{} bytes", text.len());
+        assert!(!text.contains('\\') && !text.contains(":/"), "{text}");
+    }
+
+    #[test]
+    fn the_slow_copy_remediation_is_stable_bounded_and_does_not_blame_the_video() {
+        let text = SOURCE_COPY_TOO_SLOW_REMEDIATION;
+        assert!(
+            text.starts_with(
+                "Copying this video into VSift's session took longer than the ten-minute limit"
+            ),
+            "{text}"
+        );
+        assert!(text.contains("was not judged"), "{text}");
+        assert!(text.contains("closest published one"), "{text}");
+        assert!(text.contains("Report this to the user"), "{text}");
+        assert!(text.contains("local disk"), "{text}");
+        // It is not the answer of a bad file, and it promises no way to go on:
+        // no option raises the limit and a rerun starts again (#325).
+        for wrong in [
+            "invalid",
+            "unsupported",
+            "corrupt",
+            "damaged",
+            "--",
+            "resume",
+        ] {
+            assert!(!text.contains(wrong), "{wrong}: {text}");
+        }
+        assert!(
+            text.contains("starts the copy from the beginning"),
             "{text}"
         );
         assert!(text.len() <= 1024, "{} bytes", text.len());

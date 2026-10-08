@@ -66,6 +66,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   other assertion in the harness's tests compares a random value with a fragment it could spell: the canaries are hexadecimal
   and are searched for `vsift`, which hexadecimal digits cannot spell. `tools/vsift-agent-trials/src`, the scenarios, the
   settings and the frozen grader are not touched.
+- **A source copy that outruns the ten-minute limit says so; the published code stays** (P14, #325, step 1 only). **What was
+  wrong.** `vsift ingest` copies the video into its session and stops the copy after ten minutes. That failure was folded into
+  "the source is invalid" (`INVALID_SOURCE`, exit 3) with no remediation, so a healthy long recording on a slow disk, a network
+  drive or a cloud-synced folder was called invalid after ten minutes, and nothing said why. **Change.** The stopped copy has
+  its own typed cause through the layers (`SourceError::Deadline`, `OpenSessionError::SourceCopyTooSlow`, the engine's error,
+  the CLI). **The code is unchanged: `INVALID_SOURCE`, exit 3**, as since 0.1.0 (a published failure code does not change within
+  v1, known limits L-126 and L-127), and the answer gains a remediation in fixed words: the copy took longer than the ten-minute
+  limit, the video itself was not judged and may be fine, nothing was committed, report it to the user, and copying the video to
+  a local disk and running the same command on that copy fixes it (example
+  [`ingest-copy-too-slow.json`](schemas/v1/examples/ingest-copy-too-slow.json)). `job run` copies a worker's source with the same
+  limit and reaches the same cause: its result's failure code is the same as before and the command's error carries the same
+  remediation. A supplied transcript has no such limit. **Not changed, on purpose:** the limit (ten minutes, on the whole copy
+  and not on progress), no option to raise it, no way to continue a stopped copy and no progress for the copy; those are the
+  design in #325 for the release after the stable one. A new known limit states the bound and who meets it
+  ([L-140](docs/planning/known-limits.md#l-140): about 34 MiB/s sustained for 20 GiB), and L-127 gains the case. The same ten
+  minutes also bound the re-hash of a session's own copy and the copy into a bundle, whose answers are not changed. **Tests:**
+  the copy asks whether its time is up before every block through a small seam, so a test makes the time run out after two
+  blocks and waits for nothing (the copy stops there, as a deadline, whatever the bytes are; a file that is no video and ran out
+  of time is a slow copy, not an unsupported one); a staging that runs out of time leaves no partial copy and is reported as a
+  slow copy, and the same file is staged when it has the time; the mapping of every refusal of a source (the deadline is its own
+  cause, the others are what they were; these two fail on the old mapping); the engine's code; the contract example, and the
+  CLI's answer built from the typed cause, equal to it in JSON and as a person reads it. **What is not shown:** no real slow
+  copy was run, and no test waits ten minutes; the speeds are arithmetic. The guide's troubleshooting and limits pages and the
+  contract say what the message means.
 
 ## [0.2.0-rc.2] - 2026-10-06
 

@@ -153,7 +153,9 @@ pub struct OpenSessionOutcome {
 /// Expected failure of a foreground session open.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum OpenSessionError {
-    /// Selected source was invalid, unsupported, or changed while staged.
+    /// Selected source was invalid, unsupported, or changed while staged. A
+    /// copy that ran out of time is [`Self::SourceCopyTooSlow`], which says
+    /// nothing about the source.
     InvalidSource,
     /// Source input could not be read.
     SourceIo,
@@ -170,6 +172,14 @@ pub enum OpenSessionError {
     /// remediation that says what happened (known limit L-127: changing a
     /// published failure code is not additive within v1).
     SourceNoRoom,
+    /// The copy of the selected source into the session took longer than the
+    /// time a copy is allowed and was stopped; nothing was activated (#325).
+    /// The source was not judged: a healthy video on a slow disk, a network
+    /// share or a folder that downloads on first read ends here. The
+    /// published code stays `INVALID_SOURCE`, what this case always gave, with
+    /// a remediation that says what happened (known limit L-127: changing a
+    /// published failure code is not additive within v1).
+    SourceCopyTooSlow,
     /// The clock could not represent the bounded lifetime.
     InvalidClock,
     /// Storage or coordination rejected the operation.
@@ -196,6 +206,9 @@ impl fmt::Display for OpenSessionError {
             }
             Self::SourceNoRoom => {
                 formatter.write_str("the session root has no room for a copy of the source")
+            }
+            Self::SourceCopyTooSlow => {
+                formatter.write_str("copying the selected source took longer than the time limit")
             }
             Self::InvalidClock => {
                 formatter.write_str("session clock is outside the supported range")
