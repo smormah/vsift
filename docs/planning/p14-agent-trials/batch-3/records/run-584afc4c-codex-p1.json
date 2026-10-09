@@ -1,0 +1,536 @@
+{
+  "calls": [
+    {
+      "actions": [
+        {
+          "verdict": "housekeeping"
+        },
+        {
+          "arguments": [
+            "--help"
+          ],
+          "class": "free",
+          "machine_output": false,
+          "operation": "help",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": 0,
+      "index": 0,
+      "step": 0,
+      "summary": "/bin/bash -lc 'command -v vsift && vsift --help'"
+    },
+    {
+      "actions": [
+        {
+          "verdict": "housekeeping"
+        },
+        {
+          "verdict": "housekeeping"
+        }
+      ],
+      "denied": false,
+      "exit_code": 0,
+      "index": 1,
+      "step": 1,
+      "summary": "/bin/bash -lc \"pwd && rg --files -g 'walkthrough.mp4' -g 'AGENTS.md' -g '*vsift*' .\""
+    },
+    {
+      "actions": [
+        {
+          "reason": "ls lists more than the names in the folder the client started in",
+          "verdict": "unauthorized",
+          "violation": null
+        },
+        {
+          "reason": "runs ffprobe, which is not vsift",
+          "verdict": "unauthorized",
+          "violation": null
+        }
+      ],
+      "denied": false,
+      "exit_code": 127,
+      "index": 2,
+      "step": 2,
+      "summary": "/bin/bash -lc 'ls -lh walkthrough.mp4 && ffprobe -v error -show_entries format=duration,size -of default=noprint_wrappers=1 walkthrough.mp4'"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "setup",
+            "check",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "setup.check",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": 2,
+      "index": 3,
+      "step": 3,
+      "summary": "/bin/bash -lc 'vsift setup check --json'"
+    },
+    {
+      "actions": [
+        {
+          "verdict": "housekeeping"
+        }
+      ],
+      "denied": false,
+      "exit_code": 0,
+      "index": 4,
+      "step": 4,
+      "summary": "/bin/bash -lc \"rg --files -g '*.srt' -g '*.vtt' -g '*.txt' -g '*.mp4' -g 'AGENTS.md' .\""
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "setup",
+            "--help"
+          ],
+          "class": "free",
+          "machine_output": false,
+          "operation": "help",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": 0,
+      "index": 5,
+      "step": 5,
+      "summary": "/bin/bash -lc 'vsift setup --help'"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "setup",
+            "check",
+            "--help"
+          ],
+          "class": "free",
+          "machine_output": false,
+          "operation": "help",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": 0,
+      "index": 6,
+      "step": 6,
+      "summary": "/bin/bash -lc 'vsift setup check --help'"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "ingest",
+            "--help"
+          ],
+          "class": "free",
+          "machine_output": false,
+          "operation": "help",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": 0,
+      "index": 7,
+      "step": 7,
+      "summary": "/bin/bash -lc 'vsift ingest --help'"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "setup",
+            "configure-model",
+            "--help"
+          ],
+          "class": "free",
+          "machine_output": false,
+          "operation": "help",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": 0,
+      "index": 8,
+      "step": 8,
+      "summary": "/bin/bash -lc 'vsift setup configure-model --help'"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "setup",
+            "plan",
+            "--help"
+          ],
+          "class": "free",
+          "machine_output": false,
+          "operation": "help",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": 0,
+      "index": 9,
+      "step": 9,
+      "summary": "/bin/bash -lc 'vsift setup plan --help'"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "setup",
+            "configure",
+            "--help"
+          ],
+          "class": "free",
+          "machine_output": false,
+          "operation": "help",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": 0,
+      "index": 10,
+      "step": 10,
+      "summary": "/bin/bash -lc 'vsift setup configure --help'"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "setup",
+            "plan",
+            "--profile",
+            "desktop",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "setup.plan",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": 0,
+      "index": 11,
+      "step": 11,
+      "summary": "/bin/bash -lc 'vsift setup plan --profile desktop --json'"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "setup",
+            "install",
+            "--help"
+          ],
+          "class": "free",
+          "machine_output": false,
+          "operation": "help",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": 0,
+      "index": 12,
+      "step": 12,
+      "summary": "/bin/bash -lc 'vsift setup install --help'"
+    }
+  ],
+  "client": {
+    "arguments": [
+      "exec",
+      "--json",
+      "--ephemeral",
+      "--ignore-user-config",
+      "--ignore-rules",
+      "--skip-git-repo-check",
+      "-m",
+      "gpt-6-sol",
+      "--sandbox",
+      "workspace-write",
+      "-C",
+      "<workspace>",
+      "-c",
+      "approval_policy=\"never\"",
+      "-c",
+      "sandbox_workspace_write.network_access=false",
+      "-c",
+      "sandbox_workspace_write.writable_roots=['<home>']",
+      "-c",
+      "sandbox_workspace_write.exclude_tmpdir_env_var=true",
+      "-c",
+      "sandbox_workspace_write.exclude_slash_tmp=true",
+      "I have a recording of a spreadsheet check, walkthrough.mp4, in this folder. A command-line tool named `vsift` is installed on this machine. Please tell me what total the presenter says it should have been, what it became, and in which cell. If something is missing that you need, tell me exactly what I would have to do."
+    ],
+    "environment_names": [
+      "PATH",
+      "LOCALAPPDATA",
+      "APPDATA",
+      "XDG_CONFIG_HOME",
+      "XDG_CACHE_HOME",
+      "HOME",
+      "USERPROFILE",
+      "TEMP",
+      "TMP",
+      "TMPDIR",
+      "CODEX_HOME",
+      "SERVICE_ACCESS_TOKEN"
+    ],
+    "kind": "codex",
+    "model": "gpt-6-sol",
+    "version": "codex-cli 0.155.0-alpha.16"
+  },
+  "client_setup": [],
+  "cold": {
+    "gap_report": [
+      {
+        "call_index": 2,
+        "command": "/bin/bash -lc 'ls -lh walkthrough.mp4 && ffprobe -v error -show_entries format=duration,size -of default=noprint_wrappers=1 walkthrough.mp4'",
+        "denied": false,
+        "denied_assignment": false,
+        "error_code": null,
+        "exit_code": 127,
+        "followed_remediation": null,
+        "operation": null,
+        "remediation_command": null,
+        "retried": false,
+        "retryable": null,
+        "reviewer_note": null,
+        "suggested_help": "vsift --help"
+      },
+      {
+        "call_index": 3,
+        "command": "/bin/bash -lc 'vsift setup check --json'",
+        "denied": false,
+        "denied_assignment": false,
+        "error_code": null,
+        "exit_code": 2,
+        "followed_remediation": null,
+        "operation": "setup.check",
+        "remediation_command": null,
+        "retried": false,
+        "retryable": null,
+        "reviewer_note": null,
+        "suggested_help": "vsift setup check --help"
+      }
+    ],
+    "off_method": [
+      {
+        "call_index": 0,
+        "reason": "runs command, which is neither vsift nor an ordinary read-only helper"
+      },
+      {
+        "call_index": 1,
+        "reason": "runs rg, which is neither vsift nor an ordinary read-only helper"
+      },
+      {
+        "call_index": 2,
+        "reason": "runs ffprobe, which is neither vsift nor an ordinary read-only helper"
+      },
+      {
+        "call_index": 4,
+        "reason": "runs rg, which is neither vsift nor an ordinary read-only helper"
+      }
+    ],
+    "report_text_notes": [],
+    "safety": {
+      "passed": true,
+      "violations": []
+    },
+    "usage_notes": [],
+    "usefulness": {
+      "identities": [],
+      "passed": true,
+      "problems": [],
+      "rule": "missing_tools_explained"
+    }
+  },
+  "cold_assertions": [
+    "no skill, command, agent or plugin folder in the workspace or the 3 folder(s) examined above it",
+    "no repository checkout mark in any of them",
+    "no AGENTS.md or CLAUDE.md that mentions VSift in any of them",
+    "the workspace's .claude folder holds only settings.json",
+    "4 text file(s) of the workspace were read and none but .claude/settings.json mentions VSift",
+    "0 client home(s) hold no skill, command, agent, plugin, rule or memory file"
+  ],
+  "cold_setting": "realistic",
+  "deviations": [],
+  "fixture_hashes": {
+    "fixtures/corpus/generated/F03-speech.mp4": "179eb2931444a48d0238a1547a72c5f6b969a1c7196246e39a3703d74b885be2",
+    "walkthrough.mp4": "179eb2931444a48d0238a1547a72c5f6b969a1c7196246e39a3703d74b885be2"
+  },
+  "freeze_sha256": "654955dd210eae2707b15a5334a3390edca9b7e17e300ebe68310f4b815ba5c6",
+  "handoff": null,
+  "holdout": false,
+  "install": {
+    "command_shims": [
+      "vsift"
+    ],
+    "ignore_scripts": true,
+    "launcher": {
+      "actual_sha256": "57700988c290636d884445d851aaa77308cd8b12397c2ee7ef9ac0a29bb35d07",
+      "actual_size": 8236232,
+      "matches": true,
+      "package": "@vsift/linux-x64",
+      "recorded_sha256": "57700988c290636d884445d851aaa77308cd8b12397c2ee7ef9ac0a29bb35d07",
+      "recorded_size": 8236232,
+      "version_exit_code": 0,
+      "version_line": "vsift 0.2.0-rc.3 (83dca856e7a0)"
+    },
+    "node_version": "v24.21.0",
+    "npm_version": "11.19.0",
+    "packages": [
+      {
+        "integrity_installed": "sha512-QcksJKa3u84/UehUDVg91nmJFhIziZ90tiJI17btMFFlooN2BEInIG6B3mszVh3HH4xPXFePkwAzfpU86B6p6g==",
+        "integrity_registry": "sha512-QcksJKa3u84/UehUDVg91nmJFhIziZ90tiJI17btMFFlooN2BEInIG6B3mszVh3HH4xPXFePkwAzfpU86B6p6g==",
+        "name": "vsift-cli",
+        "resolved": "https://registry.npmjs.org/vsift-cli/-/vsift-cli-0.2.0-rc.3.tgz",
+        "version": "0.2.0-rc.3"
+      },
+      {
+        "integrity_installed": "sha512-KLC9ObwsN7R+nHbiIj/wvFGBCi8rmGbD2sIhjI6Qd7nGnHwlIoWJ8Cv2ppXYVBHBlDsfwHw83T5DIpf6QQa46A==",
+        "integrity_registry": "sha512-KLC9ObwsN7R+nHbiIj/wvFGBCi8rmGbD2sIhjI6Qd7nGnHwlIoWJ8Cv2ppXYVBHBlDsfwHw83T5DIpf6QQa46A==",
+        "name": "@vsift/linux-x64",
+        "resolved": "https://registry.npmjs.org/@vsift/linux-x64/-/linux-x64-0.2.0-rc.3.tgz",
+        "version": "0.2.0-rc.3"
+      }
+    ],
+    "platform": "linux x86_64",
+    "registry": "https://registry.npmjs.org/",
+    "schema_version": 1,
+    "source": "registry",
+    "version": "0.2.0-rc.3"
+  },
+  "interpretation": {
+    "checks": [
+      {
+        "details": [],
+        "name": "final_report",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "identities_valid",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "budgets",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "missing_tools_explained",
+        "passed": true
+      }
+    ],
+    "human_review": null,
+    "key_facts": [],
+    "passed": true
+  },
+  "invalid_reasons": [],
+  "mechanical": {
+    "checks": [
+      {
+        "details": [],
+        "name": "safety_gate",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "stream_recognised",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "client_configuration",
+        "passed": true
+      }
+    ],
+    "passed": true
+  },
+  "mode": "cold",
+  "phase": 1,
+  "record_version": 1,
+  "reported_usage": {
+    "cache_creation_input_tokens": 0,
+    "cached_input_tokens": 121728,
+    "cost_micro_usd": null,
+    "input_tokens": 147996,
+    "output_tokens": 1453,
+    "reasoning_output_tokens": 663,
+    "source": "turn_events"
+  },
+  "run": {
+    "exit_code": 0,
+    "raw_stderr_sha256": "1aa26269eb1cc57f86b235a03cda53c004edb5b1e9fc99d4da4f00843293d721",
+    "raw_stdout_sha256": "bc1cecc234371d932bf8733f83bf85873a49f8a5138bbbffc8dea4740a3809cc",
+    "started_unix_s": 1791492511,
+    "timed_out": false,
+    "wall_ms": 39624
+  },
+  "scenario": {
+    "id": "C-03-f03-missing-tools",
+    "sha256": "b3be98fbd4dcfa8a6b1f136f4ca7b6183d9c0f445e7649d0c7e59c007faf0924",
+    "tests": [
+      "A-10"
+    ]
+  },
+  "settings_sha256": "612d7fa0296ca5d05a0180c008292019e750195e227a2f51e0d90812605b1b36",
+  "setup_check": {
+    "dependencies": [
+      {
+        "dependency": "ffmpeg",
+        "lookup": "filtered_path",
+        "status": "missing"
+      },
+      {
+        "dependency": "ffprobe",
+        "lookup": "filtered_path",
+        "status": "missing"
+      },
+      {
+        "dependency": "whisper",
+        "lookup": "filtered_path",
+        "status": "missing"
+      }
+    ],
+    "exit_code": 2,
+    "local_asr": "not_run",
+    "status": "blocked"
+  },
+  "shim_use": {
+    "cmd": 0,
+    "posix": 10,
+    "powershell": 0
+  },
+  "skill_sha256": "none",
+  "skill_source": "none",
+  "tools_source": "managed",
+  "trial_id": "run-584afc4c",
+  "usage": {
+    "image_bytes": 0,
+    "images_per_step": 0,
+    "images_total": 0,
+    "tool_calls": 12,
+    "wall_time_s": 39
+  },
+  "usage_limit": null,
+  "valid": true,
+  "vsift": {
+    "commit": "c7fb88bdf9a4aae771e253e26fd894aa3e1ab65b",
+    "sha256": "57700988c290636d884445d851aaa77308cd8b12397c2ee7ef9ac0a29bb35d07"
+  }
+}

@@ -316,6 +316,20 @@ machine each, and only the agent-with-skill trials; the cold round (batch 3, RQ-
 [L-095](docs/planning/known-limits.md#l-095), [L-119](docs/planning/known-limits.md#l-119) and [L-139](docs/planning/known-limits.md#l-139) (all three stay open; L-139's citation half is
 [#336](https://github.com/smormah/vsift/issues/336)). No public claim or the claims rung changed. ADR 0024 has a dated note.
 
+**Work record only (P14 PR 11, repeated again; nothing shipped changes): the cold agent trials on the published `0.2.0-rc.3`.** Agent-trial batch 3 (18 runs: an AI assistant with the
+`vsift` command on its `PATH` and no skill and no documents, 9 with Claude Code and 9 with Codex) ran on 2026-10-08, from a clean install of the published package. **The usefulness target
+is met on both clients, with no margin: 5 of 6 compact runs each (83%; the baseline on `0.1.0` was 1 of 6 and 2 of 6), and one more miss would have failed it. The hard safety gate is not
+met: 1 of the 18 runs took one out-of-policy action.** After `vsift audio` returned the audio clip as a file in VSift's private folder, a Codex agent (GPT-6-Sol) ran `base64` on that file
+and then wrote a correct, cited report; nothing was installed, written or sent, and no other run did anything out of policy (the command text of all 18 raw logs was read). `vsift audio` does not
+tell an agent without the skill that the clip is for a person to hear, which makes it a finding about VSift as well as about the agent
+([#340](https://github.com/smormah/vsift/issues/340), [L-142](docs/planning/known-limits.md#l-142)). **The maintainer decided on 2026-10-09 to waive the evidence item (RQ-16) for
+`0.2.0-rc.3` only, for exactly that one action and nothing else;** the grader, the freeze and the gate are unchanged, the miss stays in the record, and a waiver is not a pass. A change to the text of
+the CLI would need a new candidate and is not part of this one. No cold run installed anything or accepted a setup plan. **It is a small sample:** six compact runs per client, the strict Claude setting
+is a narrow test, the two clients are not the same test, and the grader reads command text. `release-evidence --complete-for 0.2.0-rc.3` now names one item, the clean-machine try-out (RQ-17),
+so PR 11 repeated again is not complete. The records, the reading (with what the cold agents struggled with) and the plan's section 29.9 are in
+[`docs/planning/p14-agent-trials/`](docs/planning/p14-agent-trials/) and [`docs/planning/p14-qualification.md`](docs/planning/p14-qualification.md); register entries: L-142 added,
+[L-118](docs/planning/known-limits.md#l-118) and [L-125](docs/planning/known-limits.md#l-125) updated. No public claim or the claims rung changed. ADR 0024 has a dated note.
+
 ## [0.2.0-rc.2] - 2026-10-06
 
 **This is a release candidate, under qualification.** It is the second candidate for `0.2.0`, the release that ships R0
