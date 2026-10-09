@@ -2597,3 +2597,106 @@ whisper.cpp and FFmpeg re-pins and the README graphics, all after the stable.
   to meet, and this record says so. The item is not `passed` on it.
 - **The supervisor's reading of the cold logs is not the maintainer's.** The gate that fired once, on a harmless read, rests on one grader and two readers who are not the maintainer, until the maintainer
   confirms.
+
+## 30. PR 12: the stable release commit `0.2.0` is prepared (2026-10-09)
+
+After the maintainer's decisions of 2026-10-09 (29.10) the commit that, once merged, the maintainer tags `v0.2.0` was prepared on the branch `p14-pr12-stable-0.2.0`, built on the
+branch of those decisions (#343, not yet on `main`; the pull request of this section is opened after #343 merges). **This is the preparation of PR 12, not PR 12. PR 12 is complete only when
+the maintainer has tagged `v0.2.0`, published it by the procedure of `release.md` 6.7 and verified it; none of that has happened.** Nothing was tagged, dispatched or published, no setting changed,
+no npm command was run and no secret was used. The maintainer's steps, in order and one command to a block, are [`p14-stable-release-steps.md`](p14-stable-release-steps.md) (a planning page, because
+`release.md` may not change before the tag). The candidate window (L-133) and the stable's open points are in 30.5 and 30.6.
+
+### 30.1 What the stable commit is
+
+It is the third candidate's source with a different version number. Against the tag `v0.2.0-rc.3` (`83dca856e7a0`), and nowhere else:
+
+| Class (`release.md` 6.8) | Files | Change |
+| --- | --- | --- |
+| Version strings | `Cargo.toml`, `Cargo.lock`, `fuzz/Cargo.toml`, `fuzz/Cargo.lock`, `npm/vsift-cli/package.json` | `0.2.0-rc.3` becomes `0.2.0`: 26 lines, each file equal to the candidate's with the version text replaced and nothing else (the package's own version and the pins of its three platform packages included) |
+| Shipped documents | `npm/vsift-cli/README.md`, `docs/operations/install.md` | rewritten for `npm install vsift-cli` with no tag (30.3) |
+| Work record | `CHANGELOG.md`, `memory/TODO.md`, `memory/project_current_status.md`, `docs/decisions/0024-...md` (a dated note), this plan (this section), `docs/planning/implementation-work-packets.md`, `docs/planning/known-limits.md`, `docs/planning/public-claims.json` (two stale non-claims removed), `docs/planning/p14-stable-release-steps.md` (new), `docs/guide/index.md` (two sentences) | the position after the stable commit; nothing is closed that the evidence does not close |
+
+Not touched: everything under `crates/`, `tools/`, `.github/`, `skills/`, `schemas/`, `fixtures/`, `rust-toolchain.toml`, `deny.toml`, `docs/planning/delivery-ledger.json`, `docs/guide/reference/` and
+`docs/guide/files/`, the evidence ledger, and four pages the lists do not allow: the root `README.md`, `docs/agents/skill.md`, `docs/development.md` and `docs/operations/release.md`
+(post-stable work, 30.5). The executables and packages are built again from this source with the new number: `vsift --version` prints `0.2.0` and the commit it was built from, so
+the bytes of the stable are not the candidate's bytes, and the hosted checks run again on them after the publish (ADR 0024 decision A).
+
+### 30.2 Checks run for this commit
+
+Run on the maintainer's Windows 11 development machine from a worktree of the branch; nothing used the network but `cargo` fetching locked crates, and no service was contacted.
+
+| Check | Result |
+| --- | --- |
+| `cargo run --locked -p vsift-release -- candidate-delta` (it takes the highest `v0.2.0-rc.<N>` tag, `v0.2.0-rc.3`) | exit 0, nothing `REFUSED`. It lists 84 files: **5 `version string only`** (`Cargo.toml`, `Cargo.lock`, `fuzz/Cargo.toml`, `fuzz/Cargo.lock`, `npm/vsift-cli/package.json`), **2 `shipped document`** (`docs/operations/install.md`, `npm/vsift-cli/README.md`) and **77 `work record`**; it ends "The differences are limited to version strings, the launcher's README, the installation guide and the work record." |
+| By hand: `git diff --stat v0.2.0-rc.3 <commit> -- crates tools .github skills schemas fixtures fuzz npm Cargo.toml Cargo.lock rust-toolchain.toml deny.toml` | six files only: `Cargo.toml` (12), `Cargo.lock` (16), `fuzz/Cargo.toml` (8), `fuzz/Cargo.lock` (8), `npm/vsift-cli/package.json` (8) and `npm/vsift-cli/README.md` (38 changed lines of prose); 58 insertions, 32 deletions |
+| By hand: the five version files' diff | 52 changed lines, 26 removed and 26 added; each removed line contains `0.2.0-rc.3` and equals its added twin once `0.2.0-rc.3` is read as `0.2.0` (the pairing check of the checklist prints nothing) |
+| By hand: `git diff --name-only v0.2.0-rc.3 <commit>`, minus the work-record directories | exactly seven files: the five version files, `docs/operations/install.md` and `npm/vsift-cli/README.md`; `docs/planning/delivery-ledger.json`, `docs/guide/reference/` and `docs/guide/files/` are not in the diff |
+| `cargo fmt --all --check` | exit 0 |
+| `cargo check --workspace --locked` | exit 0 (the lockfile matches the bumped version) |
+| `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings` | exit 0 |
+| `cargo test --workspace --locked --no-fail-fast` | 143 test binaries, 1,854 tests passed, 0 failed, 81 ignored (the opt-in real-tool paths). **Seen once, in an earlier plain `cargo test --workspace --locked` run, and not filed:** `claude_code_gets_one_settings_source_in_a_trusted_workspace` (`vsift-agent-trials`, `tests/run_stub.rs`) failed with "the client did not start: no thread belonging to the child was found", which reads as a Windows process-start race of the stub client under the load of the whole run (not diagnosed); it passed 3 of 3 on its own and in the second full run, and nothing it touches changed. A plain run stops at the first failing test binary, which is why the second run used `--no-fail-fast` |
+| `cargo test -p vsift-release -p vsift-governance --locked` | 135 and 95 tests passed, 0 failed; `bash tools/vsift-release/tests/publish-steps.sh .github/workflows/release.yml`: passed 56, failed 0 |
+| `cargo run --locked -p vsift-governance -- check` | exit 0: "VSift delivery ledger is valid." (the two handoff files are 76 and 147 lines, within 100 and 150) |
+| `cargo run --locked -p vsift-governance -- public-claims` | exit 0: "VSift public claims agree with the evidence ledger (this proves recorded evidence and absent banned words, not that a sentence is true)." |
+| `cargo run --locked -p vsift-governance -- release-evidence --complete-for 0.2.0-rc.3 --commit 83dca856e7a00fc9a71c87baae99f0b1d401dd31` | exit 0: "VSift release evidence is complete for 0.2.0-rc.3 at 83dca856e7a0." (and plain `release-evidence`: "VSift release evidence ledger is valid.") |
+| The `Guide` workflow's first job, locally: `node --test "tools/guide/test/*.test.cjs"` and `node tools/guide/generate-reference.cjs --binary target/debug/vsift --check` | 36 of 36 tests passed; "the guide's reference pages and promises agree with vsift 0.2.0". The second job (the guide's examples against the real binary with the reviewed tools installed) needs the Ubuntu route and was not run here; the only guide page changed is `index.md` and it has no marked command |
+| `node --test npm/test/launcher.test.cjs` (Node.js 22.16) | 25 tests: 22 passed, 0 failed, 3 skipped (they need a POSIX system); they include the checks that the installation guide, `SECURITY.md` and the package README keep the `vsift.cmd` warning |
+| Personal-data scan of the added lines | no email address, personal name or user-name home path; the repository owner's account name appears in repository slugs (`smormah/vsift`) and, once, as the owner value of the trusted-publisher setting the maintainer reads on npmjs.com (the same value `release.md` 6.2 gives) |
+
+### 30.3 What the two shipped documents say, and the claims they stay under
+
+- **The installation guide** names `0.2.0` as the first release published under `latest`, says `npm install vsift-cli` with no tag installs it, describes `@next` as the channel for release candidates
+  (it names `0.2.0-rc.3` or a later candidate or release: true whether or not the maintainer moves it), says the release is built from the third candidate's source and that nothing has been run against its own
+  bytes until the post-publish checks are recorded, states what the release promises (the grammar, exit codes and v1 JSON, additive only; nothing else), brings Yarn 4's one-day hold forward for `latest`, and
+  keeps its honest limits: R0 targets, not yet a supported platform; Smart App Control may block an npm-installed VSift; **the Smart App Control, clean-machine and Gatekeeper try-out was not done (RQ-17
+  waived, L-143)**; no person has run VSift on a Mac (hosted runners only). It does not mention Codex on Windows (the skill guide and the register say it is not supported). The upgrade evidence of section 7
+  gains the third candidate's runs.
+- **The launcher's README** (the page npm shows) says the same in fewer words: the commands without a tag, "the first release published under the dist-tag `latest`", `@next` is for release candidates, what
+  was not tried, and the Windows `vsift.cmd` warning that the launcher test requires.
+- **No claim is raised.** The claims rung stays `candidate`. The documents do not use "stable" or "supported" outside registered statements (the ladder of decision G has no rung between the candidate and the end
+  of P14, so between the publish and PR 13 they say what is true in neutral words). `public-claims` passes after two non-claims were removed from the registry because their words left the documents
+  (NC-006 "a stable release waits for", NC-007 "until the first stable release"); that only narrows the registry. CL-101 ("is a release candidate under qualification") is now used by the root README alone,
+  and CL-102 (the evidence is recorded in the release evidence ledger) by the README and the installation guide.
+- **`docs/guide/index.md` is edited as well** (the install command, which said `@next`, and the sentence that named the candidate and "the release that follows it"). It is a work-record path the check allows,
+  but not one of the two documents decision A names; reverting that hunk touches nothing else.
+
+### 30.4 What the release ships untried
+
+Four of the twenty evidence items are `waived` and none is a pass (the completeness check sees none of the limits; the decisions' texts do): RQ-10 (the link case, `0.2.0-rc.3` only: see 30.6), RQ-14 (SEC-T01
+narrowed, decision E), RQ-16 (one cold read of the clip `vsift audio` named; carried to the stable on 2026-10-09; #340, L-142) and RQ-17 (no Smart App Control or SmartScreen try-out, no true clean-machine
+install, no Mac Gatekeeper try-out; carried to the stable; L-143). In addition: **the first move of `latest` has never run against the real services** (L-105: `--tag latest` under trusted publishing,
+`gh release edit --latest`, the read-back time); **nothing has been run against `0.2.0`'s own bytes**; Yarn's behaviour for an untagged install during its one-day hold was not tried; macOS is hosted-runner
+evidence only; everything is measured on a synthetic corpus and a synthetic voice (L-020, L-022); the README, `SECURITY.md`, the skill guide and the developer documents keep the candidate window's wording until PR 13.
+
+### 30.5 What the publish and PR 13 still have to do
+
+1. **The maintainer's steps** (`p14-stable-release-steps.md`): the preflight (the trusted publishers can be read only on npmjs.com), the tag `v0.2.0`, the dry run and its plan, the publish dispatch with
+   `dry_run` cleared and the approval, the checks from outside, **the deprecation of `0.2.0-rc.1` and `0.2.0-rc.2` on all four packages (decided 2026-10-09; the maintainer's npm login; `0.2.0-rc.3` is not covered)**,
+   and the hosted checks on `0.2.0` (`P14 verify release`, `P14 journeys`, `P13 managed smoke`, and `P14 published artifacts` from 0.1.0 and then from 0.2.0-rc.3, one after another).
+2. **Within seven days of the publish** (the publish run's `publish-plan` artifact expires): register the two `STABLE_CHECKS` of `tools/p14-published/lib/verify.cjs` (the candidate-to-stable delta and
+   `latest` on all four packages), which changes `tools/` and its tests and is allowed once the stable is published; keep `release-delta.json`; dispatch `P14 verify release` again. **The first run on `0.2.0` is
+   red on exactly those two named checks, by design.**
+3. **PR 13**, the ledger follow-up: the ledger's own entries for `0.2.0` for the items whose stable gate is `repeat` (RQ-01 to RQ-06, RQ-13, RQ-18, RQ-19) with `release_delta` copied in for the `carry` items;
+   `release-evidence --complete-for 0.2.0 --commit <stable commit>` passing; the repository-only pages flipped and the claims rung moved as section 9 says; P14 `complete` in the delivery ledger with the stable
+   release commit; ADR 0024 Accepted; the register swept (L-105, L-108, L-133 and L-103 brought up to date); the work record stating R0 complete and the neutral checkpoint for using the published CLI.
+4. **Pages the lists do not allow, stale from the publish until PR 13** (post-stable work): the root `README.md` (the `@next` install block and the status paragraph) and `roadmap.svg`; `docs/agents/skill.md`
+   (line 43 installs with `@next`; line ~296 "batch 3 has run on no candidate"); `docs/development.md` (the `--complete-for 0.2.0-rc.3` example and the candidate-window notes); `docs/operations/release.md`
+   (6.12 step 7 says the deprecation is optional and before the stable: decided, at the stable; the checklist is its text until `release.md` is updated); `SECURITY.md`. Allowed but left alone:
+   `docs/guide/limits.md` line 5, the support matrix line 106, `delivery-governance.md` line 38, `rq-17-tryout-sheet.md` (`@next` installs).
+
+### 30.6 Open for the maintainer (none decided here)
+
+1. **Does the RQ-10 waiver carry to the stable?** It names `0.2.0-rc.3` only, for the link case alone; the decisions of 2026-10-09 carried RQ-16's and RQ-17's waivers to the stable by name and said
+   nothing of RQ-10's. The stable is the same bytes, and the completeness check passes either way (a waived item is complete for any version), so what is open is the wording of the ledger entry and of this plan.
+2. **Whether to move `next`** after the publish (L-108); both shipped documents are true either way.
+3. **Whether the stable's documents should say more or less about the first day for Yarn users** (the untagged case was not tried).
+4. The register pass, the reading of the cold logs (L-118), #340, #312 and the re-pins, as in 29.10: unchanged and after the stable.
+
+### 30.7 What is weaker than it sounds
+
+- **The candidate-to-stable check compares paths and bytes, not meaning** (L-107): it cannot say that the two documents are right, that the claims they avoid are the ones to avoid, or that the highest tag is the
+  candidate that was qualified. The by-hand backstop (a `git diff --stat` of the code paths against `v0.2.0-rc.3`) is in the checklist because the check is compiled from the commit it judges.
+- **Four waived items are not four passes**, and two of them (RQ-16, RQ-17) are waived for the release on the same bytes as the candidate: what the release adds is the hosted re-run on its bytes, not new
+  agent or try-out evidence.
+- **The documents are early by the length of the window between the merge and the publish** (L-133), and the pages that could not change are late by the length of the window between the publish and PR 13.
+- **Nothing here exercised the first `latest` publish.** The dry run on the tag is the only rehearsal, and it cannot see trusted publishing or the release being marked latest.

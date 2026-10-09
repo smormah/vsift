@@ -127,20 +127,6 @@
     },
     {
       "kind": "non_claim",
-      "id": "NC-006",
-      "documents": ["docs/operations/install.md"],
-      "text": "a stable release waits for",
-      "note": "A condition: a stable release waits for the release qualification."
-    },
-    {
-      "kind": "non_claim",
-      "id": "NC-007",
-      "documents": ["docs/operations/install.md", "npm/vsift-cli/README.md"],
-      "text": "until the first stable release",
-      "note": "A condition: the latest dist-tag stays the empty placeholder until then."
-    },
-    {
-      "kind": "non_claim",
       "id": "NC-008",
       "documents": ["docs/operations/install.md"],
       "text": "what is and is not supported",

@@ -6,6 +6,69 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-09
+
+**This is the release: the first VSift published under npm's `latest`, so `npm install vsift-cli` with no tag installs it.** It is the version
+ADR 0024 decision A calls stable (no pre-release suffix), and it is **`0.2.0-rc.3` with a different version number**: the same source, so
+every change listed under `0.2.0-rc.3` below (the agent skill's two evidence rules, the 100 ms floor for audio, the refusal of an `audio` range too short to hold a sample, the
+remediation for a copy that runs out of time, and three fixes to tests and tools) is in this release, and nothing else is. **The commit was prepared on 2026-10-09; it is
+a release only when the maintainer has tagged `v0.2.0` and published it, and until then `latest` is still the empty `0.0.0` placeholder** (the installation guide
+and the launcher's README, which say otherwise, are early by that long: [L-133](docs/planning/known-limits.md#l-133)). It is not announced. `0.2.0-rc.1` and
+`0.2.0-rc.2` stay published; the maintainer deprecates them after this release is published and checked (decided 2026-10-09). `0.2.0-rc.3` is not deprecated.
+
+### What changed since 0.2.0-rc.3, in plain English
+
+**Nothing in the program.** The stable commit differs from the tag `v0.2.0-rc.3` only in its version numbers (`Cargo.toml`, `Cargo.lock`, `fuzz/Cargo.toml`,
+`fuzz/Cargo.lock` and `npm/vsift-cli/package.json`, each equal to the candidate's with `0.2.0-rc.3` replaced by `0.2.0`), the launcher's README, the installation
+guide and the work record, and a program checks that (`cargo run --locked -p vsift-release -- candidate-delta` refuses everything else: `release.md` 6.8). So `vsift
+--version` prints `0.2.0` and the commit the release was built from, and the executables and packages are built again from the same source with that number; the
+hosted checks are run again on the published bytes (they are the first step after the publish: [`p14-stable-release-steps.md`](docs/planning/p14-stable-release-steps.md)).
+
+**If you install VSift.** Ask for it without a tag: `npm install --global vsift-cli` (likewise with pnpm and Bun; Yarn 4 users get it a day later, because Yarn holds back any version
+younger than a day; the installation guide has the one setting that lets it through). `latest` was the empty `0.0.0` placeholder until now, a package with no command.
+`vsift-cli@next` is the channel for release candidates and you do not need it: it still names `0.2.0-rc.3`, or a later candidate or release; nothing moves it for you. The
+installation guide and the launcher's README (the page npm shows) were rewritten for this: they no longer tell you to use `@next`, and they say plainly what was not tried (below).
+
+**What this release promises**, in the words of its release notes: the `vsift` command-line grammar, its exit codes and its v1 JSON contracts. They change only by addition: new commands,
+fields and failure codes may appear, and what exists keeps its meaning. Nothing else is promised. The readable text that commands print without `--json` is for people and may change.
+
+### What has not been shown
+
+Four evidence items are `waived` for this release, none is a pass, and the ledger's completeness check cannot see the limits of a waiver; the decisions' texts do.
+
+- **Windows Smart App Control, SmartScreen, a true clean-machine install and macOS Gatekeeper were not tried before this release** (the maintainer's decision of 2026-10-09 under decision H of
+  ADR 0024: an item that is not done ships documented as untried; [L-143](docs/planning/known-limits.md#l-143), [L-098](docs/planning/known-limits.md#l-098)). The executables are not signed
+  or notarized, and Smart App Control, where it is turned on, can block an unsigned program however it was installed, npm included. No person has run VSift on a Mac: what is known of macOS
+  comes from hosted runners with Homebrew's tools. The try-out may still be done after this release and recorded.
+- **One cold agent in 18 read the audio clip that `vsift audio` had named, with `base64`, inside the container** (the hard safety gate of the cold round; waived on 2026-10-09 for `0.2.0-rc.3` and
+  this release, for that one action only: [#340](https://github.com/smormah/vsift/issues/340), [L-142](docs/planning/known-limits.md#l-142)). The text of the CLI was not changed for it, because a change
+  to the CLI is a new candidate.
+- **A symbolic link given as the video answers `STORAGE_IO`, a published code the malicious-media item's rule does not name** (#265, [L-127](docs/planning/known-limits.md#l-127)); the item is
+  `waived` for `0.2.0-rc.3`, for the link case alone. Whether that waiver also names this release is an open point of the stable's checklist.
+- **The strict worker profile is not claimed to contain a hostile decoder** (decision E option 4, [L-068](docs/planning/known-limits.md#l-068)).
+- **Everything was measured on a synthetic corpus and a synthetic voice; nothing was tried on a real recording** ([L-020](docs/planning/known-limits.md#l-020),
+  [L-022](docs/planning/known-limits.md#l-022)). Durability is shown on Ubuntu 24.04 with local ext4 only, managed installation exists on Ubuntu 24.04 x64 only, and Codex on Windows is not supported.
+- **Nothing has yet been run against this release's own bytes.** The evidence recorded for `0.2.0-rc.3` is for that candidate's commit; the hosted workflows are dispatched on `0.2.0` after the
+  publish and recorded by the ledger follow-up (PR 13). Open items of the register that this release carries are unchanged: #312, #340, the FFmpeg and whisper.cpp re-pins, the Dependabot pull requests.
+- **No platform is "supported", the claims rung is still `candidate`, and the front page, the security policy and the skill guide still describe the candidate window** until the follow-up.
+
+### Changed
+
+- **The installation guide (`docs/operations/install.md`) and the launcher's README (`npm/vsift-cli/README.md`) are rewritten for the release** (the two documents the stable commit may change
+  besides the work record; no program changes). Commands install `vsift-cli` with no tag; `@next` is described as the channel for release candidates; the guide says that the release is built from the
+  third candidate's source, what the release promises, that nothing has been run against its own bytes yet, and what was not tried (above); Yarn 4's one-day hold is stated for the release.
+  `docs/guide/index.md` (the user guide's first page) gets the same two sentences (the install command and the candidate it names). The public-claims check passes at the rung `candidate` with no claim
+  raised: the two non-claims that excused "a stable release waits for" and "until the first stable release" (NC-006, NC-007), whose words are gone from the documents, were removed from
+  `docs/planning/public-claims.json`.
+
+### Work record (nothing shipped changes)
+
+The stable's checklist for the maintainer is [`docs/planning/p14-stable-release-steps.md`](docs/planning/p14-stable-release-steps.md) (preflight, tag, dry run, publish, the checks from outside, the
+deprecation of `0.2.0-rc.1` and `0.2.0-rc.2`, the hosted checks, and what PR 13 does), written as a planning page because `release.md` may not change before the tag. The plan has a new section 30, ADR 0024 a dated
+note, the work packets' PR 12 row and the register (L-103, L-105, L-108, L-133) say where PR 12 stands, and the two handoff files were rewritten. `release-evidence --complete-for 0.2.0-rc.3 --commit
+83dca856e7a00fc9a71c87baae99f0b1d401dd31` passes. **PR 12 is prepared, not complete:** it is complete when the maintainer has published `0.2.0` and verified it, and the packet P14 stays open until
+PR 13 (the ledger follow-up, which also flips the front page, `SECURITY.md`, the skill guide and the developer documents that the stable commit may not change).
+
 ## [0.2.0-rc.3] - 2026-10-08
 
 **This is a release candidate, under qualification.** It is the third candidate for `0.2.0`, the release that ships R0

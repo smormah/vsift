@@ -1905,3 +1905,43 @@ reading is not theirs; #340; then PR 12 (the stable `0.2.0`, with the deprecatio
 the hosted re-run on its bytes, not new agent or try-out evidence; nobody has seen Smart App Control or Gatekeeper react to VSift, and one cold agent in 18 took an out-of-policy action. The rule of RQ-10
 was widened after the result: it now says what the judge always did, but a rule changed after a run is a rule the run did not have to meet. The completeness check cannot see the limits of a waiver, so
 the limits are only as strong as these texts.
+
+## Implementation note, 2026-10-09 (P14 PR 12: the stable release commit `0.2.0` is prepared)
+
+The commit that the maintainer tags `v0.2.0` is prepared on the branch `p14-pr12-stable-0.2.0`, on top of the maintainer's decisions of the same day (the note above). **This is the
+preparation of PR 12, not PR 12: it is complete only when the maintainer has tagged, published and verified `0.2.0`.** Nothing was tagged, published, dispatched or changed in a setting,
+and no npm command was run. Decision A's rule is applied as `release.md` 6.7 and 6.8 write it: the stable commit differs from the tag `v0.2.0-rc.3` only in the stable's own version strings, the
+two documents the release ships, and the work record, and `cargo run --locked -p vsift-release -- candidate-delta` lists every file with its class and refuses nothing.
+
+**What the commit contains.**
+
+1. **The version strings, text only:** `0.2.0-rc.3` becomes `0.2.0` in `Cargo.toml`, `Cargo.lock`, `fuzz/Cargo.toml`, `fuzz/Cargo.lock` and `npm/vsift-cli/package.json` (its own version and the
+   three platform packages' pins), 26 lines in all, each file equal to the candidate's with the version text replaced and nothing else. `cargo check --workspace --locked` accepts the lockfile.
+2. **The two shipped documents:** `npm/vsift-cli/README.md` and `docs/operations/install.md` install `vsift-cli` with no tag (`latest` is `0.2.0`), describe `@next` as the channel for release
+   candidates, say that the release is built from the third candidate's source and that nothing has been run against its own bytes yet, state what was not tried (Smart App Control, SmartScreen, a true
+   clean-machine install and Gatekeeper: RQ-17 waived, L-143; macOS evidence from hosted runners only; the cold agent's one read: RQ-16, L-142) and say what the release promises, in the words of its
+   own release notes. Yarn 4's one-day hold is stated for `latest`. The upgrade evidence of section 7 gains the third candidate's runs.
+3. **The work record:** `CHANGELOG.md` (a `0.2.0` section), this note, the plan's section 30, the work packets' PR 10, PR 11 and PR 12 rows, the register (L-103, L-105, L-108, L-133 brought to the
+   position after the stable commit), the two handoff files, and the maintainer's checklist [`p14-stable-release-steps.md`](../planning/p14-stable-release-steps.md) (a planning page, because
+   `release.md` may not change before the tag).
+
+**Decisions taken inside this ADR, for the maintainer to confirm or overrule.**
+
+1. **The documents do not use the word "stable", and no claim is raised.** The claims check reserves "stable" and "supported" for registered statements, and the ladder of decision G has no rung between
+   the candidate and the end of P14, so between the publish and PR 13 the rung stays `candidate` and the documents say what is true in neutral words ("the first release published under `latest`", "a
+   release", "not yet a supported platform"). The two non-claims whose words left the documents (NC-006, "a stable release waits for"; NC-007, "until the first stable release") were removed from
+   `docs/planning/public-claims.json`, which only narrows it. If the maintainer wants the word "stable" in the installation guide, that is a registry change and a rung decision, and was not made here.
+2. **`docs/guide/index.md` is edited too** (two sentences: the install command and the candidate it names). It is a work-record path the check allows and a page whose `@next` instruction would be wrong
+   the moment `latest` moves; it is not one of the two documents decision A names, so the maintainer may revert that hunk without touching anything else.
+3. **The checklist says the first `P14 verify release` on `0.2.0` is red on two named checks by design** (`STABLE_CHECKS` are registered after the stable tag: the note on PR 10b above), and that
+   PR 13 must register them within seven days of the publish and dispatch it again; the ledger's RQ-19 entry for `0.2.0` is that second run.
+4. **The deprecation of `0.2.0-rc.1` and `0.2.0-rc.2` is step 9 of the checklist** (decided 2026-10-09; the maintainer runs the eight `npm deprecate` commands after the publish is verified, and `0.2.0-rc.3`
+   is not deprecated). `release.md` 6.12 step 7 still says the deprecation is optional and before the stable; the checklist supersedes it for this release and `release.md` is updated after the tag.
+
+**Left open, for the maintainer.** (1) The RQ-10 waiver names `0.2.0-rc.3` only; the decisions of 2026-10-09 carried RQ-16's and RQ-17's to the stable by name and did not mention RQ-10's. The stable
+is the same bytes and the completeness check passes either way, so this is a wording decision. (2) Whether to move `next` after the publish (L-108). (3) What Yarn does with an untagged `yarn add
+vsift-cli` during its one-day hold was not tried; the guide says so. (4) The register pass and the reading of the cold logs (L-118), #340, #312 and the re-pins, all after the stable.
+
+**What is weaker than it sounds.** The candidate-to-stable check compares paths and bytes, not meaning (L-107): it cannot say that the two documents are right. Four of twenty evidence items are waived and none is a
+pass. The release ships with nothing run against its own bytes; that is the first step after the publish and PR 13's evidence. The front page, the security policy, the skill guide and the developer documents
+are outside the allowed lists and keep the candidate wording until PR 13 (L-133).
