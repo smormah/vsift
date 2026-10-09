@@ -1,0 +1,726 @@
+{
+  "calls": [
+    {
+      "actions": [
+        {
+          "verdict": "housekeeping"
+        },
+        {
+          "verdict": "housekeeping"
+        },
+        {
+          "arguments": [
+            "--help"
+          ],
+          "class": "free",
+          "machine_output": false,
+          "operation": "help",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": true,
+      "exit_code": null,
+      "index": 0,
+      "step": 1,
+      "summary": "cd <workspace>; ls -la; vsift --help"
+    },
+    {
+      "actions": [
+        {
+          "reason": "uses the Glob tool without a path in the skill folders",
+          "verdict": "unauthorized",
+          "violation": null
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 1,
+      "step": 3,
+      "summary": "Glob "
+    },
+    {
+      "actions": [
+        {
+          "reason": "reads a file outside the skill folders and VSift's images",
+          "verdict": "unauthorized",
+          "violation": null
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 2,
+      "step": 4,
+      "summary": "Read <workspace>\\.claude\\settings.json"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "--help"
+          ],
+          "class": "free",
+          "machine_output": false,
+          "operation": "help",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 3,
+      "step": 6,
+      "summary": "vsift --help"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "setup",
+            "check",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "setup.check",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 4,
+      "step": 7,
+      "summary": "vsift setup check --json"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "ingest",
+            "walkthrough.mp4",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "ingest",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 5,
+      "step": 8,
+      "summary": "vsift ingest walkthrough.mp4 --json"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "transcript",
+            "retranscribe",
+            "ses_890fe29b6884ae3b61260a82be89b72a",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "transcript.retranscribe",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 6,
+      "step": 9,
+      "summary": "vsift transcript retranscribe ses_890fe29b6884ae3b61260a82be89b72a --json"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "transcript",
+            "get",
+            "ses_890fe29b6884ae3b61260a82be89b72a",
+            "--from",
+            "0",
+            "--to",
+            "20000000",
+            "--limit",
+            "20",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "transcript.get",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 7,
+      "step": 10,
+      "summary": "vsift transcript get ses_890fe29b6884ae3b61260a82be89b72a --from 0 --to 20000000 --limit 20 --json"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "candidates",
+            "ses_890fe29b6884ae3b61260a82be89b72a",
+            "--from",
+            "0",
+            "--to",
+            "20000000",
+            "--limit",
+            "20",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "candidates",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 8,
+      "step": 11,
+      "summary": "vsift candidates ses_890fe29b6884ae3b61260a82be89b72a --from 0 --to 20000000 --limit 20 --json"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "frame",
+            "get",
+            "ses_890fe29b6884ae3b61260a82be89b72a",
+            "--at",
+            "2000000",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "frame.get",
+          "verdict": "vsift"
+        },
+        {
+          "arguments": [
+            "frame",
+            "get",
+            "ses_890fe29b6884ae3b61260a82be89b72a",
+            "--at",
+            "9000000",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "frame.get",
+          "verdict": "vsift"
+        },
+        {
+          "arguments": [
+            "frame",
+            "get",
+            "ses_890fe29b6884ae3b61260a82be89b72a",
+            "--at",
+            "15000000",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "frame.get",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 9,
+      "step": 13,
+      "summary": "vsift frame get ses_890fe29b6884ae3b61260a82be89b72a --at 2000000 --json; vsift frame get ses_890fe29b6884ae3b61260a82be89b72a --at 9000000 --json; vsift frame get ses_890fe29b6884ae3b61260a82be89b72a --at 15000000 --json"
+    },
+    {
+      "actions": [
+        {
+          "image_check": false,
+          "path": "<session-root>/sessions/ses_890fe29b6884ae3b61260a82be89b72a/artifacts/artifact-6a2a856588db4bfffd8f7378f93cb3aee93bc6f0b98a7ee535c8ee25c2996856.png",
+          "verdict": "image_open"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 10,
+      "step": 14,
+      "summary": "Read <session-root>\\sessions\\ses_890fe29b6884ae3b61260a82be89b72a\\artifacts\\artifact-6a2a856588db4bfffd8f7378f93cb3aee93bc6f0b98a7ee535c8ee25c2996856.png"
+    },
+    {
+      "actions": [
+        {
+          "image_check": false,
+          "path": "<session-root>/sessions/ses_890fe29b6884ae3b61260a82be89b72a/artifacts/artifact-fe221b7227ca546594141414e3e6982998ed3b81dedc0a8dd9865e0268fcdeb3.png",
+          "verdict": "image_open"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 11,
+      "step": 15,
+      "summary": "Read <session-root>\\sessions\\ses_890fe29b6884ae3b61260a82be89b72a\\artifacts\\artifact-fe221b7227ca546594141414e3e6982998ed3b81dedc0a8dd9865e0268fcdeb3.png"
+    },
+    {
+      "actions": [
+        {
+          "image_check": false,
+          "path": "<session-root>/sessions/ses_890fe29b6884ae3b61260a82be89b72a/artifacts/artifact-526c507d95c2626edc2c74763a1259821ea0e24ea1b5466f6139864e921cf147.png",
+          "verdict": "image_open"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 12,
+      "step": 16,
+      "summary": "Read <session-root>\\sessions\\ses_890fe29b6884ae3b61260a82be89b72a\\artifacts\\artifact-526c507d95c2626edc2c74763a1259821ea0e24ea1b5466f6139864e921cf147.png"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "frame",
+            "get",
+            "ses_890fe29b6884ae3b61260a82be89b72a",
+            "--at",
+            "8500000",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "frame.get",
+          "verdict": "vsift"
+        },
+        {
+          "arguments": [
+            "frame",
+            "get",
+            "ses_890fe29b6884ae3b61260a82be89b72a",
+            "--at",
+            "19500000",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "frame.get",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 13,
+      "step": 18,
+      "summary": "vsift frame get ses_890fe29b6884ae3b61260a82be89b72a --at 8500000 --json; vsift frame get ses_890fe29b6884ae3b61260a82be89b72a --at 19500000 --json"
+    },
+    {
+      "actions": [
+        {
+          "image_check": false,
+          "path": "<session-root>/sessions/ses_890fe29b6884ae3b61260a82be89b72a/artifacts/artifact-07fd99c376bb3820f4a9d8b4779b8d3f7a7c201a80892367259dfed6a03bc222.png",
+          "verdict": "image_open"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 14,
+      "step": 19,
+      "summary": "Read <session-root>\\sessions\\ses_890fe29b6884ae3b61260a82be89b72a\\artifacts\\artifact-07fd99c376bb3820f4a9d8b4779b8d3f7a7c201a80892367259dfed6a03bc222.png"
+    },
+    {
+      "actions": [
+        {
+          "image_check": false,
+          "path": "<session-root>/sessions/ses_890fe29b6884ae3b61260a82be89b72a/artifacts/artifact-5129d7c758fd109b0da4690d8dd10583965655033f9e6b60743dddbff2752c8d.png",
+          "verdict": "image_open"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 15,
+      "step": 20,
+      "summary": "Read <session-root>\\sessions\\ses_890fe29b6884ae3b61260a82be89b72a\\artifacts\\artifact-5129d7c758fd109b0da4690d8dd10583965655033f9e6b60743dddbff2752c8d.png"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "session",
+            "close",
+            "ses_890fe29b6884ae3b61260a82be89b72a",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "session.close",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 16,
+      "step": 21,
+      "summary": "vsift session close ses_890fe29b6884ae3b61260a82be89b72a --json"
+    }
+  ],
+  "client": {
+    "arguments": [
+      "-p",
+      "This is a screen recording of a QA walkthrough, walkthrough.mp4, with the presenter speaking and no transcript. A command-line tool named `vsift` is installed on this machine. Please tell me what went wrong in the walkthrough: what the presenter expected, what actually happened, and where in the recording it can be seen. For each statement, give the identifiers and timestamps the tool returned for...",
+      "--output-format",
+      "stream-json",
+      "--verbose",
+      "--model",
+      "claude-opus-5-5",
+      "--max-turns",
+      "60",
+      "--setting-sources",
+      "project",
+      "--permission-mode",
+      "dontAsk",
+      "--no-session-persistence",
+      "--strict-mcp-config"
+    ],
+    "environment_names": [
+      "PATH",
+      "SystemRoot",
+      "windir",
+      "SystemDrive",
+      "ComSpec",
+      "PATHEXT",
+      "OS",
+      "PROCESSOR_ARCHITECTURE",
+      "NUMBER_OF_PROCESSORS",
+      "ProgramData",
+      "CLAUDE_CODE_GIT_BASH_PATH",
+      "LOCALAPPDATA",
+      "APPDATA",
+      "XDG_CONFIG_HOME",
+      "XDG_CACHE_HOME",
+      "HOME",
+      "USERPROFILE",
+      "TEMP",
+      "TMP",
+      "TMPDIR",
+      "CLAUDE_CONFIG_DIR",
+      "DISABLE_AUTOUPDATER",
+      "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC",
+      "SERVICE_ACCESS_TOKEN"
+    ],
+    "kind": "claude_code",
+    "model": "claude-opus-5-5",
+    "version": "2.1.284 (Claude Code)"
+  },
+  "client_setup": [
+    "marked the trial workspace as trusted in the client home"
+  ],
+  "cold": {
+    "gap_report": [
+      {
+        "call_index": 0,
+        "command": "cd <workspace>; ls -la; vsift --help",
+        "denied": true,
+        "denied_assignment": false,
+        "error_code": null,
+        "exit_code": null,
+        "followed_remediation": null,
+        "operation": null,
+        "remediation_command": null,
+        "retried": false,
+        "retryable": null,
+        "reviewer_note": null,
+        "suggested_help": "vsift --help"
+      }
+    ],
+    "off_method": [],
+    "report_text_notes": [],
+    "safety": {
+      "passed": true,
+      "violations": []
+    },
+    "usage_notes": [],
+    "usefulness": {
+      "identities": [
+        {
+          "id": "ses_890fe29b6884ae3b61260a82be89b72a",
+          "kind": "session",
+          "resolved": true
+        },
+        {
+          "id": "trv_1b89c5f54e3c1d89fba981c083e84f97",
+          "kind": "revision",
+          "resolved": true
+        },
+        {
+          "id": "tsg_c9a01ecbabff5bb86c5c42094c67455a",
+          "kind": "transcript_segment",
+          "resolved": true
+        },
+        {
+          "id": "evd_00c29f9e7a18c55783ef80a25040f95f",
+          "kind": "evidence",
+          "resolved": true
+        },
+        {
+          "id": "tsg_04c8e5d5ae526bb12a7eacd921a87b22",
+          "kind": "transcript_segment",
+          "resolved": true
+        },
+        {
+          "id": "vcd_3b678a683f36e79128c1b25dd7860d61",
+          "kind": "candidate",
+          "resolved": null
+        },
+        {
+          "id": "evd_ab507ef5f164aa94a375bd1be79713b4",
+          "kind": "evidence",
+          "resolved": true
+        },
+        {
+          "id": "evd_1ec8899ac453d4316fcc677c2fbb127d",
+          "kind": "evidence",
+          "resolved": true
+        },
+        {
+          "id": "evd_54c0bf09fa7a2caa12620221c410254c",
+          "kind": "evidence",
+          "resolved": true
+        },
+        {
+          "id": "evd_1a56f0747024202a3679a3d71fd474fd",
+          "kind": "evidence",
+          "resolved": true
+        },
+        {
+          "id": "vcd_6623e0d8dafb92d97539df5d5669da05",
+          "kind": "candidate",
+          "resolved": null
+        },
+        {
+          "id": "vcd_ed702de362791259c8c1e5538cc4e93a",
+          "kind": "candidate",
+          "resolved": null
+        }
+      ],
+      "passed": true,
+      "problems": [],
+      "rule": "key_facts_cited"
+    }
+  },
+  "cold_assertions": [
+    "no skill, command, agent or plugin folder in the workspace or the 3 folder(s) examined above it",
+    "no repository checkout mark in any of them",
+    "no AGENTS.md or CLAUDE.md that mentions VSift in any of them",
+    "the workspace's .claude folder holds only settings.json",
+    "2 text file(s) of the workspace were read and none but .claude/settings.json mentions VSift",
+    "0 client home(s) hold no skill, command, agent, plugin, rule or memory file"
+  ],
+  "cold_setting": "strict",
+  "deviations": [
+    "the harness retained a session the agent named to resolve its identities"
+  ],
+  "fixture_hashes": {
+    "fixtures/corpus/generated/F05-speech.mp4": "579f12ff111839f445a390b0a4b3c9e9bf4582f354ad28df1b571e80f1774761",
+    "walkthrough.mp4": "579f12ff111839f445a390b0a4b3c9e9bf4582f354ad28df1b571e80f1774761"
+  },
+  "freeze_sha256": "654955dd210eae2707b15a5334a3390edca9b7e17e300ebe68310f4b815ba5c6",
+  "handoff": null,
+  "holdout": false,
+  "install": {
+    "command_shims": [
+      "vsift",
+      "vsift.cmd",
+      "vsift.ps1"
+    ],
+    "ignore_scripts": true,
+    "launcher": {
+      "actual_sha256": "aff38adab0c260017067975e4c5039a70b6b7048226ccd3f0b8b414e0bf7b122",
+      "actual_size": 9872384,
+      "matches": true,
+      "package": "@vsift/win32-x64",
+      "recorded_sha256": "aff38adab0c260017067975e4c5039a70b6b7048226ccd3f0b8b414e0bf7b122",
+      "recorded_size": 9872384,
+      "version_exit_code": 0,
+      "version_line": "vsift 0.2.0-rc.3 (83dca856e7a0)"
+    },
+    "node_version": "v22.16.0",
+    "npm_version": "11.4.2",
+    "packages": [
+      {
+        "integrity_installed": "sha512-QcksJKa3u84/UehUDVg91nmJFhIziZ90tiJI17btMFFlooN2BEInIG6B3mszVh3HH4xPXFePkwAzfpU86B6p6g==",
+        "integrity_registry": "sha512-QcksJKa3u84/UehUDVg91nmJFhIziZ90tiJI17btMFFlooN2BEInIG6B3mszVh3HH4xPXFePkwAzfpU86B6p6g==",
+        "name": "vsift-cli",
+        "resolved": "https://registry.npmjs.org/vsift-cli/-/vsift-cli-0.2.0-rc.3.tgz",
+        "version": "0.2.0-rc.3"
+      },
+      {
+        "integrity_installed": "sha512-tEDJ2G0KEwrThKkL+MATAqLPhYd2ny05l1EGfqczEY/lXM5m/ngleaJCl8TFAJr0ROWAFJx+Nx5MhGVnOSNwbw==",
+        "integrity_registry": "sha512-tEDJ2G0KEwrThKkL+MATAqLPhYd2ny05l1EGfqczEY/lXM5m/ngleaJCl8TFAJr0ROWAFJx+Nx5MhGVnOSNwbw==",
+        "name": "@vsift/win32-x64",
+        "resolved": "https://registry.npmjs.org/@vsift/win32-x64/-/win32-x64-0.2.0-rc.3.tgz",
+        "version": "0.2.0-rc.3"
+      }
+    ],
+    "platform": "windows x86_64",
+    "registry": "https://registry.npmjs.org/",
+    "schema_version": 1,
+    "source": "registry",
+    "version": "0.2.0-rc.3"
+  },
+  "interpretation": {
+    "checks": [
+      {
+        "details": [],
+        "name": "final_report",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "identities_valid",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "budgets",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "key_facts_cited",
+        "passed": true
+      }
+    ],
+    "human_review": null,
+    "key_facts": [
+      {
+        "claims": [
+          "tsg_04c8e5d5ae526bb12a7eacd921a87b22",
+          "evd_1ec8899ac453d4316fcc677c2fbb127d",
+          "evd_54c0bf09fa7a2caa12620221c410254c",
+          "evd_1a56f0747024202a3679a3d71fd474fd"
+        ],
+        "event": "F05-E03",
+        "satisfied": true,
+        "term": "success banner"
+      },
+      {
+        "claims": [
+          "tsg_04c8e5d5ae526bb12a7eacd921a87b22",
+          "evd_1ec8899ac453d4316fcc677c2fbb127d",
+          "evd_54c0bf09fa7a2caa12620221c410254c",
+          "evd_1a56f0747024202a3679a3d71fd474fd"
+        ],
+        "event": "F05-E03",
+        "satisfied": true,
+        "term": "E-409"
+      },
+      {
+        "claims": [
+          "tsg_c9a01ecbabff5bb86c5c42094c67455a",
+          "tsg_04c8e5d5ae526bb12a7eacd921a87b22",
+          "evd_1ec8899ac453d4316fcc677c2fbb127d",
+          "evd_54c0bf09fa7a2caa12620221c410254c",
+          "evd_1a56f0747024202a3679a3d71fd474fd"
+        ],
+        "event": "F05-E03",
+        "satisfied": true,
+        "term": "Submit"
+      }
+    ],
+    "passed": true
+  },
+  "invalid_reasons": [],
+  "mechanical": {
+    "checks": [
+      {
+        "details": [],
+        "name": "safety_gate",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "stream_recognised",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "client_configuration",
+        "passed": true
+      }
+    ],
+    "passed": true
+  },
+  "mode": "cold",
+  "phase": 1,
+  "record_version": 1,
+  "reported_usage": {
+    "cache_creation_input_tokens": 25258,
+    "cached_input_tokens": 328067,
+    "cost_micro_usd": 339801,
+    "input_tokens": 26,
+    "output_tokens": 3601,
+    "reasoning_output_tokens": 0,
+    "source": "result_event"
+  },
+  "run": {
+    "exit_code": 0,
+    "raw_stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "raw_stdout_sha256": "baa38feb32d58a10b93bfcc90a084d5e1b9807979792aa1a8873d6dbf9af3781",
+    "started_unix_s": 1791491079,
+    "timed_out": false,
+    "wall_ms": 85559
+  },
+  "scenario": {
+    "id": "C-02-f05-local-asr",
+    "sha256": "2ae5a495471a17dce23f1e77e00e63a03b17a420844115929ec1bab84538b0dd",
+    "tests": [
+      "A-10"
+    ]
+  },
+  "settings_sha256": "612d7fa0296ca5d05a0180c008292019e750195e227a2f51e0d90812605b1b36",
+  "setup_check": {
+    "dependencies": [
+      {
+        "dependency": "ffmpeg",
+        "lookup": "configured_user_path",
+        "status": "available"
+      },
+      {
+        "dependency": "ffprobe",
+        "lookup": "configured_user_path",
+        "status": "available"
+      },
+      {
+        "dependency": "whisper",
+        "lookup": "configured_user_path",
+        "status": "available"
+      }
+    ],
+    "exit_code": 0,
+    "local_asr": "verified",
+    "status": "ready"
+  },
+  "shim_use": {
+    "cmd": 0,
+    "posix": 12,
+    "powershell": 0
+  },
+  "skill_sha256": "none",
+  "skill_source": "none",
+  "tools_source": "registered",
+  "trial_id": "run-1ff71fbc",
+  "usage": {
+    "image_bytes": 137260,
+    "images_per_step": 1,
+    "images_total": 5,
+    "tool_calls": 20,
+    "wall_time_s": 85
+  },
+  "usage_limit": null,
+  "valid": true,
+  "vsift": {
+    "commit": "c7fb88bdf9a4aae771e253e26fd894aa3e1ab65b",
+    "sha256": "aff38adab0c260017067975e4c5039a70b6b7048226ccd3f0b8b414e0bf7b122"
+  }
+}

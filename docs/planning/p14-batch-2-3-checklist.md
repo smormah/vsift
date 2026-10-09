@@ -1,8 +1,9 @@
 # P14 agent-trial batches 2 and 3: the maintainer's checklist
 
 Status: **prepared 2026-10-05 (P14 PR 11b) for the first candidate, moved to the second on 2026-10-06 and to the third, `0.2.0-rc.3`,
-on 2026-10-08 (P14 PR 10 repeated again). Batch 2 has run on the third candidate (2026-10-08) and met every gate; batch 3 has
-not run on any candidate and will not until you say go.** Batch 2 has now run three times, and the first two runs are history: on the first
+on 2026-10-08 (P14 PR 10 repeated again). Batch 2 has run on the third candidate (2026-10-08) and met every gate; batch 3 has run on it too
+(the evening of 2026-10-08): cold usefulness is met on both clients with no margin, cold safety is not met (1 of 18 runs), and RQ-16 is waived for `0.2.0-rc.3` only by your
+decision of 2026-10-09 (plan section 29.9).** Batch 2 has now run three times, and the first two runs are history: on the first
 candidate (`0.2.0-rc.1`, 2026-10-05: records in
 `docs/planning/p14-agent-trials/batch-2-rc.1/`, reading [`batch-2-reading.md`](p14-agent-trials/batch-2-reading.md)) and on the second
 (`0.2.0-rc.2`, 2026-10-07: records in `docs/planning/p14-agent-trials/batch-2-rc.2/`, reading with your decision of that day
@@ -10,7 +11,9 @@ candidate (`0.2.0-rc.1`, 2026-10-05: records in
 improve the skill and cut a third candidate: **the skill changed on purpose (two evidence rules), so both batches run under a new
 freeze**. The third run of batch 2 is in `docs/planning/p14-agent-trials/batch-2/` with its reading
 [`batch-2-reading-rc.3.md`](p14-agent-trials/batch-2-reading-rc.3.md): 34 of 34 runs passed fully, RQ-15 is `passed` for `0.2.0-rc.3`
-(plan section 29.8). **What is left of this page is batch 3** (it has run on no candidate). Both batches spend your
+(plan section 29.8). Batch 3 is in `docs/planning/p14-agent-trials/batch-3/` with its reading
+[`batch-3-reading-rc.3.md`](p14-agent-trials/batch-3-reading-rc.3.md) (plan section 29.9). **Both batches have now run on the third candidate; what is
+left of this page is for a later candidate, if there is one:** both batches spend your
 Claude and Codex allowances, so each starts only on your explicit go, one batch at a time (plan section 7, ADR 0024 decision D).
 No supervisor and no agent runs a batch. This page collects what the runbook
 ([`docs/agents/trials.md`](../agents/trials.md), "The P14 batches") spreads over several sections, with the numbers batch 1
@@ -49,17 +52,23 @@ the script waited and resumed, and no run was lost. **On the third candidate (20
 $7.36 (mean 125 s); Claude Sonnet 5.5, 5 runs, about $1.72 (mean 85 s), about $9.07 for Claude Code in all and about 35 minutes of wall time; GPT-6-Astra, 12
 runs, 6.40 M input tokens (mean 156 s); GPT-6-Sol, 5 runs, 3.53 M (mean 145 s). Codex's account reached its usage limit five times, all on one run; the
 script waited 30 minutes each time, the campaign was stopped with its stop file and restarted after a reboot, and the run was counted on its sixth
-attempt (no usage-limited attempt left a counted run). Batch 3 has never run.
+attempt (no usage-limited attempt left a counted run).
 
-**The estimates written before that run (not measurements; kept for batch 3, whose review tier and cold runs on a clean install
-are still unmeasured):**
+**Batch 3 has been measured too (2026-10-08, the third candidate, 9 runs per client, the clients' own figures):** Claude Opus 5.5, 3 runs, about $0.85 at list prices
+(mean 61 s a run); Claude Sonnet 5.5, 6 runs, about $0.45 (mean 29 s), so **about $1.31 for Claude Code in all** and about 7 minutes of wall time; GPT-6-Astra, 3 runs,
+405,458 input tokens (mean 56 s); GPT-6-Sol, 6 runs, 1,226,398 (mean 61 s), about 1.63 million input tokens for Codex and about 35 minutes of wall time for its half (five to
+six minutes a run for the two scenarios that need the tools, because each run starts a container and installs the three managed tools, and under a minute for the missing-tools
+scenario). No usage limit was met and no run was blocked. It cost far less than batch 2 (about $9.07 for Claude Code there) because the cold runs are short (29 to 61 s a run for Claude Code).
+
+**The estimates written before those runs (not measurements; kept as history, now that batch 2 and batch 3 are measured above):**
 
 - **Batch 2.** The compact part is 5 runs per client: about $0.60 for Claude and about 1.6 M input tokens for Codex. The 12
   review runs per client (Opus 5.5 and GPT-6-Astra, longer scenarios, three with speech recognition) are the unmeasured part:
   expect each to cost a multiple of a compact run, the first real figure for those two models. A first look at 2 runs per
   client (below) gives you the number before the rest.
 - **Batch 3.** Cold runs make more calls and failed attempts than skill runs (batch 1's cold Claude runs were short because
-  the strict setting stopped them early; Codex's used up to 8 retried calls). 6 compact and 3 review runs per client.
+  the strict setting stopped them early; Codex's used up to 8 retried calls). 6 compact and 3 review runs per client. (Measured: the
+  most failed or retried calls in one run were 7, and the batch took about 42 minutes in all.)
 - **Time.** Claude Code about 1 to 2 minutes a run, Codex 2 to 5 minutes, plus per run a managed install of the three tools
   inside the Codex container (about 271 MB from the publishers, one or two minutes). **Per client, batch 2 is likely 30 to 60
   minutes for Claude and one to two hours for Codex; batch 3 about half that.** The first Codex run of a batch builds the
@@ -167,9 +176,9 @@ until you have read every cold run's raw log** (L-118: safety is classified from
 
 ## What comes out
 
-In `docs/planning/p14-agent-trials/batch-<n>/` (`batch-2/` now holds the third candidate's records; `batch-3/` holds only `freeze.json` until it runs:
+In `docs/planning/p14-agent-trials/batch-<n>/` (`batch-2/` and `batch-3/` now hold the third candidate's records:
 the earlier candidates' batch-2 records are in `batch-2-rc.1/` and `batch-2-rc.2/`, and a batch runs against one version, so never copy their state
-files back): `records/` (one bounded
+files back; a later candidate would move these folders aside first, as the second did): `records/` (one bounded
 record per counted or invalid trial, at most 64 KiB, with no prompt, path, name or canary), `state-claude.json` and
 `state-codex.json` (the plan and every attempt), `summary.json` and `SUMMARY.md` (the gates, results by scenario, the usage, the cold
 runs with their violations and gaps). The raw logs stay local. The records are committed in the pull request that acts on them: tell the

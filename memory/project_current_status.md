@@ -1,6 +1,6 @@
 # VSift current status
 
-As of 2026-10-08. Current-state document: rewrite it, don't append to it. Next actions and
+As of 2026-10-09. Current-state document: rewrite it, don't append to it. Next actions and
 open decisions are in `memory/TODO.md`.
 
 ## In plain English
@@ -34,6 +34,7 @@ the CLI and write a cited report. P12's named-client trials qualified it:
   the re-run (#222) meets the 90% target, Sonnet 26 of 28 and Sol 28 of 28 (23 as run).
 - **Safety:** no agent leaked a secret, installed anything, acted on injected text or copied a hidden character.
   **P14's batch 2 (a clean install of each candidate) refined this: Claude Opus missed two review-tier gates on rc.1 and rc.2 (L-139); the third candidate's skill has two more evidence rules for that, and on 2026-10-08 all four models met every gate on it (34 of 34 runs; three runs per scenario, so a small sample, not a proof).**
+  **Without the skill (batch 3, the cold round, rc.3): no cold agent installed anything or accepted a plan; one of 18 read an audio clip file with `base64`, which the hard gate counts, and RQ-16 is waived for rc.3 only (L-142, #340).**
 
 ## Where the project stands
 
@@ -46,31 +47,33 @@ empty `0.0.0`. `0.2.0-rc.1` (2026-10-05) and `0.2.0-rc.2` (2026-10-07) are publi
   short to hold a sample (#332; one published code replaced for that request), a remediation for a copy that runs out of time (#325 step 1, L-140) and three test or tool fixes (#321, #310, #327). No re-pin, no Dependabot.
 - **What is shown for rc.3 (plan section 29, 2026-10-08; work record only):** the whole hosted part of PR 11 ran and was green: the publish verified (20 checks), installs, archives, offline install
   and upgrades from 0.1.0 and rc.2 (the package carries the tag's skill byte for byte), journeys on three systems, managed smoke, fuzzing (3.49 billion runs), **the stress run (20,100 repetitions, none
-  failed; the fixed Windows supervisor test ran 3,000 clean, #321)**, load, runbook walk, both fault campaigns, the scan reading. RQ-01 to RQ-09, RQ-11 to RQ-13, RQ-18 and RQ-19 are `passed` for rc.3; RQ-14
+  failed; the fixed Windows supervisor test ran 3,000 clean, #321)**, load, runbook walk, both fault campaigns, the scan reading. RQ-01 to RQ-09, RQ-11 to RQ-13, RQ-18 and RQ-19 are `passed` for rc.3 (RQ-15 and RQ-16 below); RQ-14
   waived. **RQ-10 is `waived` for rc.3 only (maintainer, 2026-10-08), for the link's `STORAGE_IO` alone** (the rule names three codes; the run is green otherwise; plan 29.5).
-- **Batch 2 on rc.3 (plan section 29.8, `batch-2-reading-rc.3.md`; 2026-10-08):** 34 runs from a clean install, **every gate met, 34 of 34 runs passed fully** (28 of 34 on rc.2): Claude Opus 5.5 passed the blurred banner
-  3 of 3 and the journey 6 of 6 where it had missed both twice; Astra, Sonnet and Sol still passed with the new skill; all four hold-outs passed; no unsafe action. **RQ-15 is `passed` for rc.3** (rc.2's `failed`
-  entry is kept as history). Codex hit its usage limit five times on one run (waited, stopped, rebooted, resumed); no counted partial run. About $9.07 for Claude Code at list prices.
-  **Small sample, not a proof:** 3 blurred runs per client, 1 run per hold-out, a text-matching grader, one skill wording, with-skill trials only (L-095, L-119, L-139 stay open).
-  `release-evidence --complete-for 0.2.0-rc.3` now names **two items, RQ-16 and RQ-17**. **PR 11's third time is not complete.** **Still to do:** batch 3 (RQ-16, never run), the clean-machine try-out (RQ-17), the register pass.
-- **What is weak:** the skill change met its gates once on a small sample; the floor was not run with whisper.cpp (L-137, L-141); hosted images
+- **Batch 2 on rc.3 (plan section 29.8, `batch-2-reading-rc.3.md`; 2026-10-08):** 34 runs with the skill from a clean install, **every gate met, 34 of 34 runs passed fully** (28 of 34 on rc.2): Claude Opus 5.5 passed the
+  blurred banner 3 of 3 and the journey 6 of 6 where it had missed both twice; the other three models still passed; all four hold-outs passed. **RQ-15 is `passed` for rc.3** (rc.2's `failed` entry is kept as history).
+  About $9.07 for Claude Code at list prices. **Small sample, not a proof:** 3 blurred runs per client, 1 run per hold-out, a text-matching grader, one skill wording (L-095, L-119, L-139 stay open).
+- **Batch 3 on rc.3 (plan section 29.9, `batch-3-reading-rc.3.md`; run 2026-10-08, decided 2026-10-09):** 18 cold runs (no skill, no documents; Claude Code 9 under the strict setting, Codex 9 under the realistic
+  one), no blocked run, no usage limit, about 42 minutes, about $1.31 for Claude Code and 1.63 M input tokens for Codex. **Cold usefulness is met on both clients with no margin (5 of 6 each, target 80%; the
+  baseline on 0.1.0 was 1 of 6 and 2 of 6). Cold safety, a hard gate, is not met: 1 of 18 runs** (Codex GPT-6-Sol ran `base64` on the audio clip `vsift audio` had named; nothing installed, written or sent;
+  the report was correct). `vsift audio` says nothing to an agent without the skill about the clip: #340, L-142. **The maintainer waived RQ-16 for rc.3 only, for that one action (2026-10-09); a waiver is not a
+  pass,** and a fix of the CLI's text needs a new candidate. What the cold agents struggled with is in the reading (the client's refusals, a 100-item page where the budget is 50, `INVALID_ARGUMENT` for a
+  session with no transcript, a `BUSY` for two simultaneous calls). `release-evidence --complete-for 0.2.0-rc.3` now names **one item, RQ-17**. **PR 11's third time is not complete.** **Still to do:** the
+  clean-machine try-out (RQ-17) and the register pass.
+- **What is weak:** the skill change met its gates once on a small sample; the cold round met its target twice with no margin and its safety gate not at all (one harmless read; the strict Claude setting is a
+  narrow test: L-125, L-118); the floor was not run with whisper.cpp (L-137, L-141); hosted images
   are not clean machines (L-112); Smart App Control and the macOS prompts are unseen (L-098); **a synthetic corpus and voice only** (L-020,
   L-022). **Open:** #312 (L-135; one failure in 4,500 loaded Windows repetitions across three candidates; not fixed). CVE-2026-38350 is accepted (L-122). **`latest` has never moved** (L-105). Decisions: `TODO.md`.
 
 ## P14 PRs 1 to 6 and 8 in one view
 
-**PR 1 (#251):** the evidence ledger (RQ-01..RQ-20) and claims registry (rung `now`, `candidate` since PR 10b), checked on every
-PR (L-101). **PR 2 (#255):** clean installs from the real registry (npm, pnpm, Yarn, Bun; three systems),
-archives, offline install, upgrade and a second verifier (RQ-01..04, RQ-19), `passed` for 0.1.0 only (L-109
-to L-112). **PR 8 (#252):** the version alone decides the channel (a suffix means `next`, none moves
-`latest`), guarded by the candidate delta and the complete ledger (L-103); no real stable publish yet
-(L-105). **PR 3 (#254):** `P14 journeys` runs the real-tool checkpoints against `vsift-cli@<version>` from
-the registry on three systems, weekly too; on 0.1.0 53 stages passed on each (RQ-06 `passed`, RQ-05
-`running`: P11's durable stage is blocked, #258).
+**PR 1 (#251):** the evidence ledger (RQ-01..RQ-20) and claims registry (rung `now`, `candidate` since PR 10b), checked on every PR (L-101). **PR 2 (#255):** clean installs from the real registry
+(npm, pnpm, Yarn, Bun; three systems), archives, offline install, upgrade and a second verifier (RQ-01..04, RQ-19), `passed` for 0.1.0 only (L-109 to L-112). **PR 8 (#252):** the version alone decides the
+channel (a suffix means `next`, none moves `latest`), guarded by the candidate delta and the complete ledger (L-103); no real stable publish yet (L-105). **PR 3 (#254):** `P14 journeys` runs the real-tool
+checkpoints against `vsift-cli@<version>` from the registry on three systems, weekly too; on 0.1.0 53 stages passed on each (RQ-06 `passed`, RQ-05 `running`: P11's durable stage is blocked, #258).
 
-**PR 6 (#262; `docs/agents/trials.md`) and batch 1.** `tools/vsift-agent-trials` installs the published package, runs a cold agent (**Claude strict**, **Codex
-realistic**, L-125), keeps hold-outs, freezes inputs by digest, captures usage and plans three batches (L-117 to L-120). **Batch 1** (2026-10-03, 0.1.0, 20 runs, a
-baseline): skill pilots 4 of 4; cold useful 1 of 6 (Claude), 2 of 6 (Codex); none installed anything; the three grader classes were ruled and implemented (#298).
+**PR 6 (#262; `docs/agents/trials.md`) and batch 1.** `tools/vsift-agent-trials` installs the published package, runs a cold agent (**Claude strict**, **Codex realistic**, L-125), keeps hold-outs, freezes
+inputs by digest, captures usage and plans three batches (L-117 to L-120). **Batch 1** (2026-10-03, 0.1.0, 20 runs, a baseline): skill pilots 4 of 4; cold useful 1 of 6 (Claude), 2 of 6 (Codex); none
+installed anything; the three grader classes were ruled and implemented (#298). Batch 3 (above) is the comparison.
 
 **PR 4 (#259; plan section 18; hosted runners only)** ran the campaigns on 0.1.0 (`tools/p14-campaigns/`): RQ-07 passed (31 fuzz targets, no crash; 19 still growing: L-128); RQ-08
 failed (Windows #206, #271); RQ-09 passed (found #274, #277, #286); RQ-10 failed (96 hostile inputs, 93 held: #264-#266); RQ-12 passed; RQ-13 failed (#272).
@@ -86,7 +89,7 @@ the versions policy and RQ-05's per-system rule (still `running`, plan section 2
 the pages show. **PR 10 (the candidate; rc.1 published 2026-10-05, rc.2 on 2026-10-07, rc.3 on 2026-10-08).**
 The version is `0.2.0-rc.3` everywhere, the guide's marker is the release `0.2.0`, rung `candidate`. **The freeze of batches 2 and 3 is new:**
 the skill's digest changed on purpose, the other six components are rc.2's, and a test pins the whole digest (`654955dd...`); the earlier batch-2 records are in
-`batch-2-rc.1/` and `batch-2-rc.2/`, rc.3's in `batch-2/`. From the tag to the stable only a work record and `install.md` may merge (so Dependabot waits: #192, #193, #194 after the
+`batch-2-rc.1/` and `batch-2-rc.2/`, rc.3's in `batch-2/` and `batch-3/`. From the tag to the stable only a work record and `install.md` may merge (so Dependabot waits: #192, #193, #194 after the
 stable); the check compares the stable with the highest `-rc.N` tag: `v0.2.0-rc.3` (`release.md` 6.12).
 
 ## P14 PR 7 in one view (every finding by outcome; one pull request and one regression test each)
@@ -105,10 +108,8 @@ stable); the check compares the stable with the highest `-rc.N` tag: `v0.2.0-rc.
 
 ## P13 in one view (complete)
 
-[ADR 0023](../docs/decisions/0023-r0-distribution-managed-installation-and-handoff-check.md) (**Accepted**
-2026-10-01); record `p13-distribution.md`. **Delivered:** native archives, the npm launcher, managed
-installation, human output, `handoff check`, the 0.1.0 pre-release (`011bc4d`). **Not proved:** Smart App
-Control, the macOS prompts (L-098); power loss beyond Ubuntu 24.04 ext4 (L-037).
+[ADR 0023](../docs/decisions/0023-r0-distribution-managed-installation-and-handoff-check.md) (**Accepted** 2026-10-01); record `p13-distribution.md`. **Delivered:** native archives, the npm launcher,
+managed installation, human output, `handoff check`, the 0.1.0 pre-release (`011bc4d`). **Not proved:** Smart App Control, the macOS prompts (L-098); power loss beyond Ubuntu 24.04 ext4 (L-037).
 
 ## What works (public CLI)
 
@@ -130,7 +131,7 @@ Control, the macOS prompts (L-098); power loss beyond Ubuntu 24.04 ext4 (L-037).
 | P11 | Complete (`40c4038`); SEC-T01 adversarial evidence is technical debt, moved to R1 (#188, L-068) |
 | P12 | Complete (2026-09-30, ADR 0022 Accepted): skill, harness, named-client trials; review tier qualified, compact tier 93% and 100% on the #222 re-run; open: L-095 (#224), #219, #204 (`1284e54`) |
 | P13 | Complete (2026-10-01, ADR 0023 Accepted): distribution, managed install, `handoff check`, human output; 0.1.0 published; release commit `011bc4d` |
-| P14 | **In progress** (started 2026-10-02): PRs 0-10 done (PR 7 = the fixes of the campaigns and batch 1); 10: rc.1 and rc.2 published and superseded; 11 repeated on rc.2: batch 2 read (RQ-15 failed: Claude Opus missed two gates); **rc.3 (the skill's two evidence rules and five fixes) published 2026-10-08; its hosted evidence (RQ-10 waived for the link case only) and its batch 2 (every gate met, RQ-15 passed) are recorded**; PR 11 is not complete: batch 3, the try-out and the register pass remain; then 12-13 |
+| P14 | **In progress** (started 2026-10-02): PRs 0-10 done (PR 7 = the fixes of the campaigns and batch 1); 10: rc.1 and rc.2 published and superseded; 11 repeated on rc.2: batch 2 read (RQ-15 failed: Claude Opus missed two gates); **rc.3 (the skill's two evidence rules and five fixes) published 2026-10-08; its hosted evidence (RQ-10 waived for the link case only), its batch 2 (every gate met, RQ-15 passed) and its batch 3 (cold usefulness met with no margin, cold safety missed by one harmless read, RQ-16 waived for rc.3 only) are recorded**; PR 11 is not complete: the try-out (RQ-17) and the register pass remain; then 12-13 |
 
 ## Architecture snapshot
 
