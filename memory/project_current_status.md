@@ -34,34 +34,36 @@ the CLI and write a cited report. P12's named-client trials qualified it:
   the re-run (#222) meets the 90% target, Sonnet 26 of 28 and Sol 28 of 28 (23 as run).
 - **Safety:** no agent leaked a secret, installed anything, acted on injected text or copied a hidden character.
   **P14's batch 2 (a clean install of each candidate) refined this: Claude Opus missed two review-tier gates on rc.1 and rc.2 (L-139); the third candidate's skill has two more evidence rules for that, and on 2026-10-08 all four models met every gate on it (34 of 34 runs; three runs per scenario, so a small sample, not a proof).**
-  **Without the skill (batch 3, the cold round, rc.3): no cold agent installed anything or accepted a plan; one of 18 read an audio clip file with `base64`, which the hard gate counts, and RQ-16 is waived for rc.3 only (L-142, #340).**
+  **Without the skill (batch 3, the cold round, rc.3): no cold agent installed anything or accepted a plan; one of 18 read an audio clip file with `base64`, which the hard gate counts, and RQ-16 is waived for rc.3 and the stable `0.2.0` (same bytes), for that one action only (L-142, #340).**
 
 ## Where the project stands
 
 **P00-P13 are complete. P14, the R0 qualification (#17), is in progress** (started 2026-10-02; decisions A-H of ADR 0024). Its plan is 14 pull requests (0-13); **PRs 0-10
-are done. The third candidate `0.2.0-rc.3` was published and verified on 2026-10-08** (tag `v0.2.0-rc.3` at `83dca856e7a0`, publish run 37746979716): npm `next` is rc.3 on all four packages and `latest` is the
-empty `0.0.0`. `0.2.0-rc.1` (2026-10-05) and `0.2.0-rc.2` (2026-10-07) are published, superseded and not deprecated. The packet is not complete. Where things stand:
-- **Why a third candidate, and what it is:** batch 2 (34 runs with the skill) ran on rc.1 and rc.2; Codex met its gates both times, **Claude Opus 5.5 missed two review-tier gates both times** (rc.2: 4 of 6
-  mechanically, 1 of 3 on the blurred banner), so RQ-15 was `failed` for rc.2; the maintainer chose to improve the skill: no waiver, no exclusion. **rc.3 is rc.2 plus** two evidence rules in the skill (an unreadable
-  region proves nothing either way; a claim states only what its own citations show or say), a floor for short audio (under 100 ms is a gap, never recognised: #322, L-137), a refusal of an `audio` range too
-  short to hold a sample (#332; one published code replaced for that request), a remediation for a copy that runs out of time (#325 step 1, L-140) and three test or tool fixes (#321, #310, #327). No re-pin, no Dependabot.
+are done.** The third candidate `0.2.0-rc.3` was published and verified on 2026-10-08 (tag `v0.2.0-rc.3` at `83dca856e7a0`, publish run 37746979716): npm `next` is rc.3 on all four packages and `latest` is the
+empty `0.0.0`. `0.2.0-rc.1` (2026-10-05) and `0.2.0-rc.2` (2026-10-07) are published, superseded and not deprecated (they are deprecated at the stable, decided 2026-10-09). **PR 11, repeated a third time on rc.3, has its evidence complete: `release-evidence --complete-for 0.2.0-rc.3` passes; the register pass is left.** The packet is not complete. Where things stand:
+- **Why a third candidate, and what it is:** batch 2 ran on rc.1 and rc.2; **Claude Opus 5.5 missed two review-tier gates both times**, so RQ-15 was `failed` for rc.2, and the maintainer chose to improve the
+  skill: no waiver, no exclusion. **rc.3 is rc.2 plus** two evidence rules in the skill, a floor for short audio (under 100 ms is a gap, never recognised: #322, L-137), a refusal of an `audio` range too
+  short to hold a sample (#332; one published code replaced for that request), a remediation for a copy that runs out of time (#325 step 1, L-140) and three test or tool fixes. No re-pin, no Dependabot.
 - **What is shown for rc.3 (plan section 29, 2026-10-08; work record only):** the whole hosted part of PR 11 ran and was green: the publish verified (20 checks), installs, archives, offline install
   and upgrades from 0.1.0 and rc.2 (the package carries the tag's skill byte for byte), journeys on three systems, managed smoke, fuzzing (3.49 billion runs), **the stress run (20,100 repetitions, none
   failed; the fixed Windows supervisor test ran 3,000 clean, #321)**, load, runbook walk, both fault campaigns, the scan reading. RQ-01 to RQ-09, RQ-11 to RQ-13, RQ-18 and RQ-19 are `passed` for rc.3 (RQ-15 and RQ-16 below); RQ-14
-  waived. **RQ-10 is `waived` for rc.3 only (maintainer, 2026-10-08), for the link's `STORAGE_IO` alone** (the rule names three codes; the run is green otherwise; plan 29.5).
-- **Batch 2 on rc.3 (plan section 29.8, `batch-2-reading-rc.3.md`; 2026-10-08):** 34 runs with the skill from a clean install, **every gate met, 34 of 34 runs passed fully** (28 of 34 on rc.2): Claude Opus 5.5 passed the
-  blurred banner 3 of 3 and the journey 6 of 6 where it had missed both twice; the other three models still passed; all four hold-outs passed. **RQ-15 is `passed` for rc.3** (rc.2's `failed` entry is kept as history).
-  About $9.07 for Claude Code at list prices. **Small sample, not a proof:** 3 blurred runs per client, 1 run per hold-out, a text-matching grader, one skill wording (L-095, L-119, L-139 stay open).
+  waived. **RQ-10 is `waived` for rc.3 only (maintainer, 2026-10-08), for the link's `STORAGE_IO` alone** (the run is green otherwise; plan 29.5). Its rule was widened on 2026-10-09 to admit `INVALID_ARGUMENT`
+  where the media judge does, so the 20 inputs that end so meet it; the item is still `waived`, not `passed`.
+- **Batch 2 on rc.3 (plan section 29.8, `batch-2-reading-rc.3.md`; 2026-10-08):** 34 runs with the skill from a clean install, **every gate met, 34 of 34 passed fully** (28 of 34 on rc.2): Claude Opus 5.5 passed the
+  blurred banner 3 of 3 and the journey 6 of 6 where it had missed both twice; all four hold-outs passed. **RQ-15 is `passed` for rc.3.** About $9.07 for Claude Code. **A small sample, not a proof** (L-095, L-119, L-139 stay open).
 - **Batch 3 on rc.3 (plan section 29.9, `batch-3-reading-rc.3.md`; run 2026-10-08, decided 2026-10-09):** 18 cold runs (no skill, no documents; Claude Code 9 under the strict setting, Codex 9 under the realistic
   one), no blocked run, no usage limit, about 42 minutes, about $1.31 for Claude Code and 1.63 M input tokens for Codex. **Cold usefulness is met on both clients with no margin (5 of 6 each, target 80%; the
   baseline on 0.1.0 was 1 of 6 and 2 of 6). Cold safety, a hard gate, is not met: 1 of 18 runs** (Codex GPT-6-Sol ran `base64` on the audio clip `vsift audio` had named; nothing installed, written or sent;
-  the report was correct). `vsift audio` says nothing to an agent without the skill about the clip: #340, L-142. **The maintainer waived RQ-16 for rc.3 only, for that one action (2026-10-09); a waiver is not a
-  pass,** and a fix of the CLI's text needs a new candidate. What the cold agents struggled with is in the reading (the client's refusals, a 100-item page where the budget is 50, `INVALID_ARGUMENT` for a
-  session with no transcript, a `BUSY` for two simultaneous calls). `release-evidence --complete-for 0.2.0-rc.3` now names **one item, RQ-17**. **PR 11's third time is not complete.** **Still to do:** the
-  clean-machine try-out (RQ-17) and the register pass.
+  the report was correct). `vsift audio` says nothing to an agent without the skill about the clip: #340, L-142. **The maintainer waived RQ-16 for rc.3, for that one action (2026-10-09), and the same day carried the waiver to the
+  stable `0.2.0` (same bytes); a waiver is not a pass,** and a fix of the CLI's text needs a new candidate. The reading lists what the cold agents struggled with.
+- **The maintainer's decisions of 2026-10-09 (plan section 29.10; work record only, nothing was run again):** RQ-10's rule admits `INVALID_ARGUMENT` where the judge does (above); the RQ-16 waiver
+  carries to the stable; **RQ-17 (the clean-machine and Smart App Control try-out) is `waived` for rc.3 and the stable: they ship untried** (no Smart App Control or SmartScreen try-out, no true clean-machine
+  install, no Mac Gatekeeper try-out; decision H; L-143; the try-out may still be done after the stable, and CL-201 stays unused until it is `passed`); rc.1 and rc.2 are deprecated at the stable, a step
+  PR 12 must include (the maintainer runs it). **`release-evidence --complete-for 0.2.0-rc.3` passes (exit 0).** Four items are waived (RQ-10, RQ-14, RQ-16, RQ-17) and none is a pass. **Still to do:** the
+  register pass; the maintainer's own reading of the raw cold logs is pending (they are reading a generated command list of the 18 runs; to be recorded when they confirm).
 - **What is weak:** the skill change met its gates once on a small sample; the cold round met its target twice with no margin and its safety gate not at all (one harmless read; the strict Claude setting is a
   narrow test: L-125, L-118); the floor was not run with whisper.cpp (L-137, L-141); hosted images
-  are not clean machines (L-112); Smart App Control and the macOS prompts are unseen (L-098); **a synthetic corpus and voice only** (L-020,
+  are not clean machines (L-112); Smart App Control and the macOS prompts are unseen and untried (L-098, L-143); **a synthetic corpus and voice only** (L-020,
   L-022). **Open:** #312 (L-135; one failure in 4,500 loaded Windows repetitions across three candidates; not fixed). CVE-2026-38350 is accepted (L-122). **`latest` has never moved** (L-105). Decisions: `TODO.md`.
 
 ## P14 PRs 1 to 6 and 8 in one view
@@ -131,7 +133,7 @@ managed installation, human output, `handoff check`, the 0.1.0 pre-release (`011
 | P11 | Complete (`40c4038`); SEC-T01 adversarial evidence is technical debt, moved to R1 (#188, L-068) |
 | P12 | Complete (2026-09-30, ADR 0022 Accepted): skill, harness, named-client trials; review tier qualified, compact tier 93% and 100% on the #222 re-run; open: L-095 (#224), #219, #204 (`1284e54`) |
 | P13 | Complete (2026-10-01, ADR 0023 Accepted): distribution, managed install, `handoff check`, human output; 0.1.0 published; release commit `011bc4d` |
-| P14 | **In progress** (started 2026-10-02): PRs 0-10 done (PR 7 = the fixes of the campaigns and batch 1); 10: rc.1 and rc.2 published and superseded; 11 repeated on rc.2: batch 2 read (RQ-15 failed: Claude Opus missed two gates); **rc.3 (the skill's two evidence rules and five fixes) published 2026-10-08; its hosted evidence (RQ-10 waived for the link case only), its batch 2 (every gate met, RQ-15 passed) and its batch 3 (cold usefulness met with no margin, cold safety missed by one harmless read, RQ-16 waived for rc.3 only) are recorded**; PR 11 is not complete: the try-out (RQ-17) and the register pass remain; then 12-13 |
+| P14 | **In progress** (started 2026-10-02): PRs 0-10 done (PR 7 = the fixes of the campaigns and batch 1); 10: rc.1 and rc.2 published and superseded; 11 repeated on rc.2: batch 2 read (RQ-15 failed: Claude Opus missed two gates); **rc.3 (the skill's two evidence rules and five fixes) published 2026-10-08; its hosted evidence (RQ-10 waived for the link case only), its batch 2 (every gate met, RQ-15 passed) and its batch 3 (cold usefulness met with no margin, cold safety missed by one harmless read, RQ-16 waived) are recorded, and on 2026-10-09 the maintainer waived RQ-17 (the stable ships untried): the evidence check passes**; PR 11's register pass remains; then 12 (with the deprecation of rc.1 and rc.2) and 13 |
 
 ## Architecture snapshot
 
