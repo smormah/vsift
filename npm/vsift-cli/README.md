@@ -7,16 +7,42 @@ or let your AI assistant use it. This package (`vsift-cli`) installs the `vsift`
 agent skill that teaches Claude Code or Codex to use it.
 
 ```console
-npm install --global vsift-cli@next
+npm install --global vsift-cli
 vsift --version
 vsift setup check
 ```
 
-One-shot use works too: `npx vsift-cli@next`, `pnpm dlx vsift-cli@next`,
-`yarn dlx --package vsift-cli@next vsift` or `bunx vsift-cli@next`. Node.js 22 or later,
-or Bun 1.2 or later, runs the launcher. **This version is a release candidate under qualification.**
-It is published under the dist-tag `next` and is not announced; `latest` stays a `0.0.0` placeholder until the
-first stable release.
+One-shot use works too: `npx vsift-cli`, `pnpm dlx vsift-cli`,
+`yarn dlx --package vsift-cli vsift` or `bunx vsift-cli`. Node.js 22 or later,
+or Bun 1.2 or later, runs the launcher.
+
+## Which version you get
+
+**Version 0.2.0 is the first release published under the dist-tag `latest`**, so the commands
+above, without a tag, install it. Until then `latest` was an empty `0.0.0` placeholder, a package
+with no command. It has not been announced. Yarn 4 holds back a version for a day after it is
+published, so Yarn users get 0.2.0 a day after the publish (the installation guide has the
+setting that lets it through).
+
+The dist-tag `next` is for release candidates and you do not need it: it names `0.2.0-rc.3`,
+the release candidate that 0.2.0 was built from, or a later candidate or release. The older
+candidates `0.2.0-rc.1` and `0.2.0-rc.2` stay published and are superseded.
+
+## What was not tried
+
+0.2.0 is built from the same source as the release candidate `0.2.0-rc.3` and differs from it
+only in its version numbers, this README and the installation guide. That candidate was tried on hosted runners and in
+trials with the agent skill, on a synthetic corpus and a synthetic voice; nothing has been run
+on a real recording. Two things were not tried before this release, and it ships without them:
+
+- **Windows Smart App Control, SmartScreen and macOS Gatekeeper** have not been seen reacting
+  to VSift, and no machine without a developer's tools has installed this package. The
+  executables are not signed or notarized, and Smart App Control, where it is turned on, can
+  block an unsigned program however it was installed, npm included.
+- **A Mac.** VSift has not been run on a Mac by the people who build it; the macOS checks ran on hosted runners with
+  Homebrew's tools, which VSift does not review.
+
+The installation guide (linked below) and the register of known limits say what else is missing.
 
 ## What gets installed
 

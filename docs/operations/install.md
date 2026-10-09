@@ -1,40 +1,43 @@
 # Installing VSift
 
-Status: user guide, updated 2026-10-08 (P14 PR 10 repeated again, the third candidate; P14 PR 10 repeated, the second; P14 PR 11c;
+Status: user guide, updated 2026-10-09 (P14 PR 12, the release 0.2.0; P14 PR 10 repeated again, the third candidate; P14 PR 11c;
 P14 PR 9a; written by P13 PR 11 and PR 12 for the published pre-release;
 [ADR 0023](../decisions/0023-r0-distribution-managed-installation-and-handoff-check.md)).
-**VSift 0.2.0-rc.3 is a release candidate under qualification.** It is the third candidate for 0.2.0 and replaces 0.2.0-rc.2
-(two evidence rules in the agent skill, audio under a tenth of a second is no longer given to the speech recogniser, and a
-copy that runs out of time says so; the changelog says what).
-When it is published it is installed as `vsift-cli@next` (the npm packages under the dist-tag `next`, with npm provenance,
-and native archives on a GitHub pre-release, each carrying a Sigstore build-provenance
-attestation); **until then `@next` installs the second candidate, 0.2.0-rc.2**, published on 2026-10-07, which stays published and
-which this one replaces, as the first candidate, 0.2.0-rc.1 of 2026-10-05, does; before those it installed the pre-release 0.1.0,
-published on 2026-10-01. It is
-not announced. It is not a stable release, and no platform is "supported" yet (section 1). The
+**VSift 0.2.0 is the first release published under npm's `latest` dist-tag**, so `npm install vsift-cli` with no tag installs it.
+The npm packages carry npm provenance, and the native archives on its GitHub release carry a Sigstore build-provenance
+attestation, as every file of the release does. Before it, `latest` was an empty `0.0.0` placeholder, a package with no command. The
+pre-release 0.1.0 (2026-10-01) and the release candidates 0.2.0-rc.1 (2026-10-05), 0.2.0-rc.2 (2026-10-07) and 0.2.0-rc.3
+(2026-10-08) were installed with `vsift-cli@next`; they stay published and are superseded. 0.2.0 is not announced.
+**0.2.0 is built from the same source as the third release candidate, 0.2.0-rc.3**, and differs from it only in its version
+numbers, this guide, the npm package's README and the project's work record (a mechanical check enforces that:
+[`release.md`](release.md) section 6.8). What was tried on that candidate was tried on that source. The executable carries the
+new version number and commit, so the hosted checks are run again on the published 0.2.0 (`release.md` section 6.7), and until
+their results are recorded in the release evidence ledger nothing has been run against 0.2.0's own bytes.
+The machines in section 1 are R0 targets, not yet a supported platform. The
 evidence gathered so far, with its gaps, is recorded in the release evidence ledger
-([`p14-evidence-ledger.json`](../planning/p14-evidence-ledger.json)). A plain `npm install vsift-cli`
-installs the empty `0.0.0` placeholder, which stays `latest` until a stable release, so
-always ask for `vsift-cli@next`. **What has been run against these steps.** In P13 they ran on
-hosted runners against a local registry. Since 2026-10-02 (P14) the published 0.1.0 has also
+([`p14-evidence-ledger.json`](../planning/p14-evidence-ledger.json)). **What was not tried before this release, and it ships
+without them:** Windows Smart App Control and SmartScreen, a true clean-machine install of `vsift-cli`, and macOS Gatekeeper
+(section 4; [L-143](../planning/known-limits.md#l-143)); and VSift has not been run on a Mac by the people who build it, so what is known of macOS comes
+from hosted runners only. **What has been run against these steps.** In P13 they ran on
+hosted runners against a local registry. Since 2026-10-02 (P14) the published packages have also
 been installed from the real registry with npm, pnpm, Yarn and Bun on hosted Windows, macOS and
-Ubuntu runners, its three archives have been downloaded, checked, extracted and run, the offline
+Ubuntu runners, first 0.1.0 and then each release candidate, the last being 0.2.0-rc.3 on 2026-10-08; the three archives have been
+downloaded, checked, extracted and run, the offline
 install of the managed tools has been run with the real files, the upgrade and uninstall steps
 (sections 7 and 8) have been walked, and the same bytes have run the supplied-transcript and
-local-speech journeys on all three systems. Those are results for 0.1.0 only (the release
-candidate and the release repeat them on their own bytes), on hosted virtual machines, which
+local-speech journeys on all three systems. Those are results for the bytes of those versions, on hosted virtual machines, which
 carry developer tools a clean machine lacks ([L-112](../planning/known-limits.md#l-112)). No
 person has run them on a Mac, and nobody has seen Smart App Control or Gatekeeper react to a
 VSift file (section 4). The records are the [P14 plan](../planning/p14-qualification.md)
-(sections 15 to 18) and [`p13-distribution.md`](../planning/p13-distribution.md). Building from
+(sections 15 to 18 and 26 to 29) and [`p13-distribution.md`](../planning/p13-distribution.md). Building from
 source ([`development.md`](../development.md)) also works.
 
 ## 1. What is and is not supported
 
-| Machine | Status today | What has been shown (0.1.0, hosted runners) | Notes |
+| Machine | Status today | What has been shown (hosted runners, on the published versions) | Notes |
 | --- | --- | --- | --- |
 | Windows 11 x64 | R0 target | Installs with all four package managers, the archive runs and both journeys ran, on a hosted Windows Server 2025 image; the project's Windows 11 development machine ran the agent trials | npm package `@vsift/win32-x64`. Bring your own FFmpeg, FFprobe and whisper.cpp (section 5.2). Smart App Control is untried (section 4) |
-| macOS 15 on Apple silicon | R0 target | The same checks passed on a hosted macOS 15 image with Homebrew's tools, which VSift does not review ([L-114](../planning/known-limits.md#l-114)); no person has run VSift on a Mac | `@vsift/darwin-arm64`. Bring your own tools (section 5.2). Gatekeeper is untried (section 4) |
+| macOS 15 on Apple silicon | R0 target | The same checks passed on a hosted macOS 15 image with Homebrew's tools, which VSift does not review ([L-114](../planning/known-limits.md#l-114)); VSift has not been run on a Mac by the people who build it | `@vsift/darwin-arm64`. Bring your own tools (section 5.2). Gatekeeper is untried (section 4) |
 | Ubuntu 24.04 on x64 | R0 target, and the only machine where VSift installs its own tools | The same checks passed, with the managed tools installed by the binary itself, also offline from the real files | `@vsift/linux-x64`; needs glibc 2.35 or later and OpenSSL 3 (`libssl.so.3`), which Ubuntu 22.04 and 24.04 have. The managed whisper.cpp build also needs the OpenMP runtime `libgomp.so.1` (Ubuntu package `libgomp1`, which a minimal container image lacks; section 5.1) |
 | Another Linux on x64 with glibc 2.35 or later and OpenSSL 3 | not a target | Nothing | The binary is built on Ubuntu 22.04 and may run; it has not been tested |
 | Linux on Arm, Intel Macs, Windows on Arm, Windows 10, Alpine and other musl Linux | not supported | Nothing | The launcher says so and exits 127 (section 10) |
@@ -49,10 +52,13 @@ source ([`development.md`](../development.md)) also works.
   24.04 x64 only (ADR 0023 decision E). On Windows and macOS you install FFmpeg,
   FFprobe, whisper.cpp and the speech model yourself and tell VSift where they are
   (section 5.2).
-- **A pre-release** has no stability promise beyond the versioned JSON contracts
-  ([`cli-v1.md`](../contracts/cli-v1.md)). The readable text that commands print without
-  `--json` is for people and may change. A stable release waits for the release
-  qualification of P14, which is in progress.
+- **What 0.2.0 promises** is the `vsift` command-line grammar, its exit codes and its v1 JSON
+  contracts ([`cli-v1.md`](../contracts/cli-v1.md)). They change only by addition: new commands,
+  fields and failure codes may appear, and what exists keeps its meaning. Nothing else is
+  promised: the readable text that commands print without `--json` is for people and may
+  change, and the accuracy figures were measured on a synthetic corpus. The release
+  qualification of P14 is not finished: its last step records the hosted checks on 0.2.0
+  itself.
 - **Not signed.** The Windows and macOS executables carry no Authenticode signature and
   no Apple notarization. Section 4 says what that means for you and how to check a
   download instead.
@@ -62,29 +68,36 @@ to run the small launcher. Installing from a native archive needs neither.
 
 ## 2. Install with a package manager
 
-The npm package is `vsift-cli`; the command it installs is `vsift`. The pre-release is
-published under the dist-tag `next`, so always ask for `vsift-cli@next`. **Do not install
-`vsift-cli` without `@next`:** `latest` stays the empty `0.0.0` placeholder until the first
-stable release, and installs a package that has no command. Install globally, so the
+The npm package is `vsift-cli`; the command it installs is `vsift`. **Ask for it without a
+tag:** 0.2.0 is published under the dist-tag `latest`, which is what a plain `vsift-cli` means.
+The dist-tag `next` is for release candidates and you do not need it; it names `0.2.0-rc.3`,
+the candidate 0.2.0 was built from, or a later candidate or release. The empty `0.0.0`
+placeholder that was `latest` before 0.2.0 has no command: if `vsift` is not found after an
+install and your package manager reports `vsift-cli` at `0.0.0`, it resolved the placeholder
+(for example a registry mirror that has not caught up; Yarn's one-day hold below may do the same,
+which was not tried), and asking for the exact version, `vsift-cli@0.2.0`, installs the
+release. Install globally, so the
 `vsift` command is on your `PATH`:
 
 ```console
-npm install --global vsift-cli@next
-pnpm add --global vsift-cli@next
-bun add --global vsift-cli@next
+npm install --global vsift-cli
+pnpm add --global vsift-cli
+bun add --global vsift-cli
 ```
 
 Yarn 4 has no global install; add VSift to a project and run it through Yarn:
 
 ```console
-yarn add vsift-cli@next
+yarn add vsift-cli
 yarn vsift --version
 ```
 
 Recent Yarn 4 releases (4.18.1 checked) hold back any version published less than a day
-ago (`npmMinimalAgeGate`, default one day), so for the first day after a release Yarn
-reports that the versions of `vsift-cli` or `@vsift/...` "are quarantined". Wait a day, or
-exempt VSift in the project's `.yarnrc.yml`:
+ago (`npmMinimalAgeGate`, default one day), so Yarn users get 0.2.0 a day after it was
+published, and every later release a day after its publish. Until then Yarn
+reports that the versions of `vsift-cli` or `@vsift/...` "are quarantined" (seen with the exact
+version of 0.1.0, 6.5 hours after its publish). Wait a day, or exempt VSift in the project's
+`.yarnrc.yml`:
 
 ```yaml
 npmPreapprovedPackages:
@@ -95,10 +108,10 @@ npmPreapprovedPackages:
 Or run it once without installing:
 
 ```console
-npx vsift-cli@next --version
-pnpm dlx vsift-cli@next --version
-yarn dlx --quiet --package vsift-cli@next vsift --version
-bunx vsift-cli@next --version
+npx vsift-cli --version
+pnpm dlx vsift-cli --version
+yarn dlx --quiet --package vsift-cli vsift --version
+bunx vsift-cli --version
 ```
 
 **What is installed.** The `vsift-cli` package holds a small launcher (`bin/vsift.cjs` and
@@ -226,7 +239,13 @@ the trust signals are the Sigstore attestation and npm provenance of section 3 a
 section 6, which anyone can verify. It also means **VSift makes no claim of publisher
 trust**, and the operating systems treat an unsigned program from the internet with
 suspicion. What follows is written from Microsoft's and Apple's documentation: VSift has
-not yet watched these prompts appear for one of its own archives. (One `npx vsift
+not yet watched these prompts appear for one of its own archives. **The try-out that would
+have shown them was not done before 0.2.0:** a Windows 11 machine with Smart App Control On,
+a machine without a developer's tools installing `vsift-cli` from npm, and a Mac with a
+browser download. The maintainer chose to publish 0.2.0 without them (decision H of
+[ADR 0024](../decisions/0024-r0-qualification-and-release-candidate.md);
+[L-143](../planning/known-limits.md#l-143)), so on these points you may be the first to find
+out; if you meet a block, section 12 says how to report it. (One `npx vsift
 --version` of the published npm package ran on a Windows 11 machine with no block or
 prompt; that machine has Smart App Control Off, so this says nothing about it.)
 
@@ -275,7 +294,7 @@ described in terms of the mark, as above.
 | Check | What it proves | Command |
 | --- | --- | --- |
 | `SHA256SUMS` | The archive is the one listed on the release page; no proof of origin | section 3, step 2 |
-| `gh attestation verify` | The file was built by this repository's Release workflow from the tagged commit | section 3, step 3 (also works on an npm tarball from `npm pack vsift-cli@next`) |
+| `gh attestation verify` | The file was built by this repository's Release workflow from the tagged commit | section 3, step 3 (also works on an npm tarball from `npm pack vsift-cli`) |
 | `npm audit signatures` | The installed npm packages carry valid registry signatures and provenance attestations from that workflow | section 6 |
 | The launcher's own check | The platform package is the one released with this launcher, and the executable's size and SHA-256 are the ones recorded when it was built | automatic on every run (section 10) |
 
@@ -404,7 +423,7 @@ folder.
    ```console
    mkdir vsift-check && cd vsift-check
    echo '{"private": true}' > package.json    # PowerShell: Set-Content package.json '{"private": true}'
-   npm install vsift-cli@next
+   npm install vsift-cli
    npm audit signatures
    npx vsift --version
    ```
@@ -425,8 +444,10 @@ folder.
 
 ## 7. Upgrade
 
-- **npm:** install again with the tag: `npm install --global vsift-cli@next` (likewise for
-  pnpm and Bun; Yarn: `yarn add vsift-cli@next` again in the project). The launcher and the
+- **npm:** install again: `npm install --global vsift-cli` (likewise for
+  pnpm and Bun; Yarn: `yarn add vsift-cli` again in the project). Someone who installed a
+  release candidate with `@next` is moved to 0.2.0 the same way, because `latest` is the higher
+  version; `@next` is not the way to get releases. The launcher and the
   platform package move together, because the launcher pins the platform packages to its
   own exact version; the launcher refuses a platform package of another version (exit 126).
 - **Archive:** extract the new archive over an empty folder and replace the old one, after
@@ -446,8 +467,9 @@ folder.
   artifacts`, run 37328348087): the first run of a newer published release over an older one. Only npm was
   upgraded, and no pnpm, Yarn or Bun upgrade was run. On 2026-10-07 the same run upgraded the published 0.1.0 and the
   published 0.2.0-rc.1 to the published 0.2.0-rc.2 on the three systems with the same result (runs 37602931887 and
-  37611381117). Those runs are for 0.2.0-rc.1 and 0.2.0-rc.2; the same upgrades are run again for 0.2.0-rc.3 once it is
-  published, and until then nothing has been run against its bytes.
+  37611381117), and on 2026-10-08 the published 0.1.0 and the published 0.2.0-rc.2 to the published 0.2.0-rc.3 (runs
+  37748859247 and 37752825599). Those runs are for the candidates; the same upgrades are run again for 0.2.0 after its
+  publish (`release.md` section 6.7), and until their results are recorded nothing has been run against 0.2.0's own bytes.
 
 ## 8. Uninstall
 

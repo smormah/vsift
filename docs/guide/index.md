@@ -8,7 +8,7 @@ terminal, or you let an AI assistant on your machine use it. Nothing is uploaded
 
 This guide teaches you to do things with it. It is written for anyone with a video, not only for programmers.
 
-**Checked against vsift 0.2.0**: the release candidate `0.2.0-rc.3` and the release that follows it are built from
+**Checked against vsift 0.2.0**: the release `0.2.0` and the release candidate `0.2.0-rc.3` it was built from have
 the same code, so this guide names the release, not the candidate. Where this guide says what a command prints, that
 is real output of that build on practice recordings from the repository, and the examples are re-run whenever the
 code changes ([how](#how-this-guide-is-kept-true)). The second candidate, `0.2.0-rc.2`, has the same commands and
@@ -38,8 +38,8 @@ Everything else here applies to it.
 ## Install it first
 
 [The install guide](../operations/install.md) covers every route (npm, pnpm, Yarn, Bun or a download), getting
-FFmpeg and FFprobe, the optional speech tools, upgrading and uninstalling. VSift is a **pre-release** today:
-install it as `vsift-cli@next`.
+FFmpeg and FFprobe, the optional speech tools, upgrading and uninstalling. Install the release with
+`npm install --global vsift-cli`; the `@next` tag is only for release candidates.
 
 ## All the pages
 
