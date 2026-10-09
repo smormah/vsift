@@ -1,6 +1,6 @@
 # RQ-17 try-out sheet: Smart App Control and a clean Windows 11 machine
 
-Status: **prepared 2026-10-05 (P14 PR 11b), moved to the second candidate on 2026-10-06 (P14 PR 10 repeated) and to the third on 2026-10-08 (P14 PR 10 repeated again); nothing on it has been done on any candidate.** It is for the maintainer, on a second,
+Status: **prepared 2026-10-05 (P14 PR 11b), moved to the second candidate on 2026-10-06 (P14 PR 10 repeated) and to the third on 2026-10-08 (P14 PR 10 repeated again); nothing on it has been done on any candidate.** **Decided 2026-10-09: RQ-17 is `waived` for `0.2.0-rc.3` and the stable `0.2.0`, which ship untried (decision H of ADR 0024; [L-143](known-limits.md#l-143)). The sheet is no longer a step before the stable; it stays available for a try-out after it, and the observation, whatever it shows, is recorded in a later records change.** It is for the maintainer, on a second,
 clean, wipeable Windows 11 machine (called **LOKI** below; the plan's unknowns table records it, 2026-10-02), with a
 person at the console: every installer needs one. It is evidence item **RQ-17** of the
 [evidence ledger](p14-evidence-ledger.json), against the published release candidate `0.2.0-rc.3`. The plan is
@@ -15,7 +15,8 @@ real machine name in any observation.** Say "LOKI". Crop screenshots to the wind
 
 - **Decision H (accepted 2026-10-02): a try-out blocks the stable release only until an observation is recorded, whatever it
   shows.** A blocked file, a warning, a pass and "could not be done" are all observations. Untried hardware is stated, never
-  hidden. Nothing in this sheet can fail it by showing a bad result.
+  hidden. Nothing in this sheet can fail it by showing a bad result. (On 2026-10-09 the maintainer used the provision for an
+  item that is not done: RQ-17 is `waived` and the stable ships untried, so nothing here blocks the stable any more.)
 - **Decision C's trigger.** If Smart App Control (or Gatekeeper, which this sheet cannot try) **blocks an npm-installed VSift on
   a default machine with no way through short of turning protection off**, you then choose, before the stable release,
   between a **documented limitation** (`install.md` section 4 already says Smart App Control may block it) and **signing**

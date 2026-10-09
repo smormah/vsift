@@ -1855,3 +1855,53 @@ supervisor's reading of the raw logs stands for the maintainer's (L-118); whethe
 different version graded before the safety classifications of 2026-10-04, and what moved the result is not shown. The strict Claude setting is a narrow test, the two clients are not the same test, the corpus and voice
 are synthetic, the scenarios, the help text and the grader have the same authors, and the grader reads command text and matches words. A waiver is not a pass: the item's rule was not met in one run of 18.
 `release-evidence --complete-for 0.2.0-rc.3` now names one item, RQ-17 (plan 29.9), and PR 11 repeated again is not complete until it is `passed`, `waived` or `not_applicable` for the candidate.
+
+## Implementation note, 2026-10-09 (P14 PR 11, repeated again: the maintainer's decisions on RQ-10's rule, RQ-16 for the stable, deprecation at the stable and RQ-17)
+
+After batch 3 was recorded (the note above), the maintainer decided four open points on 2026-10-09. **This is work record only** (the ledger, the plan's section 29.10, this note, the register,
+the changelog, the RQ-17 sheet's status line, the work packets' PR 12 row and the two memory files): no code, tool, workflow, schema, skill, grader, scenario, setting, freeze, public claim or rung
+changed, nothing was run again and nothing is re-graded. The reasoning and the wording are [`p14-qualification.md`](../planning/p14-qualification.md) sections 18.4 and 29.10. Every earlier
+note of this ADR stands as it was written; where a later decision answers a question an earlier note left open, this note says so.
+
+**Decisions of the maintainer, 2026-10-09 (the ledger carries the same text where it is a ledger entry).**
+
+1. **RQ-10's pass rule admits `INVALID_ARGUMENT`.** It answers the question the note of 2026-10-08 left open ("whether the rule should admit the code is the maintainer's, as a change of the rule"). The rule
+   is widened to what the campaign's judge accepts and no more: the three codes; `INVALID_ARGUMENT` for a follow-up call on a source that `ingest` accepted (`FOLLOW_UP_CODES` in
+   `tools/p14-campaigns/lib/hostile-judge.cjs`); and `INVALID_ARGUMENT` on every operation of the file-name, folder, link and pipe cases, which list it in their own `codes`
+   (`tools/p14-campaigns/lib/hostile-cases.cjs`); a pinned answer keeps only its pinned codes. This is a change of the rule, not of the code or the run, and nothing was repeated. **RQ-10 stays `waived`
+   for `0.2.0-rc.3`** (decision of 2026-10-08, the link's `STORAGE_IO` alone, which the widened rule does not admit); it is not `passed`. The 20 inputs of the run that end `INVALID_ARGUMENT` now meet the
+   rule.
+2. **The RQ-16 waiver carries to the stable `0.2.0`.** It answers "whether the stable needs its own decision on RQ-16" (the note above). The stable is built from the same bytes as `0.2.0-rc.3`, so the
+   waiver for exactly one action (a read, by a tool other than `vsift`, of the audio clip file that `vsift audio` named in its own result for the same session, inside the container, on the synthetic
+   corpus) covers `0.2.0-rc.3` and the stable `0.2.0` cut from it. It does not cover another candidate (for example an `rc.4`) or any other action; a new candidate would need its own cold round and
+   decision. Every other part of the waiver stands.
+3. **`0.2.0-rc.1` and `0.2.0-rc.2` are deprecated at the stable release, not before.** It answers "whether to deprecate" (the notes above). PR 12 must include the step: the maintainer runs the `npm
+   deprecate` commands for both candidates on the four packages after the stable is published and verified, and the supervisor never does. `0.2.0-rc.3` is not covered.
+4. **RQ-17 is `waived` for `0.2.0-rc.3` and the stable `0.2.0`: the stable ships untried.** Decision H provides for it ("an item you cannot do ships documented as untried"). No Smart App Control or
+   SmartScreen try-out, no true clean-machine install of `vsift-cli` and no Mac Gatekeeper try-out was done before the stable; `install.md` section 4 already warns that Smart App Control may block an
+   npm-installed VSift. The waiver does not cover a claim that VSift runs on a default Windows 11 machine with Smart App Control On, that a downloaded archive passes SmartScreen or Gatekeeper, or that
+   an install on a clean machine works; it does not cover decision C's trigger (a later observed block with no way through still starts the signing question); it does not name another candidate. The
+   try-out may still be done after the stable and its observation recorded in a later records change, which would also give the claim CL-201 its evidence (CL-201 stays unused until RQ-17 is `passed`).
+   The register gains L-143.
+
+**Decisions taken inside this ADR, for the maintainer to confirm or overrule.**
+
+1. **The rule of RQ-10 includes the cases' own codes, not only `FOLLOW_UP_CODES`.** The constant admits `INVALID_ARGUMENT` for only 3 operations on 2 of the 20 inputs; the other 18 are admitted by the
+   cases' `codes` (the runner marks `job_name` and `ingest_human` as first operations, which the constant does not reach). The rule is worded as the judge is, so that no input stays outside it while the
+   judge passes it. If the maintainer meant the constant only, the 18 inputs are an open question again.
+2. **The RQ-17 waiver says it does not name another candidate**, as the RQ-10 and RQ-16 waivers do.
+3. **The ledger's RQ-10 entry keeps its decision date (2026-10-08) and gains a dated sentence**; its item date moves to 2026-10-09. RQ-16's decision date stays 2026-10-09 and the stable is added by a dated
+   sentence of the same statement. A waived item carries no `applies_to`, so the checker cannot see any of these limits; the texts do.
+
+**Where the evidence stands.** `release-evidence --complete-for 0.2.0-rc.3 --commit 83dca856e7a00fc9a71c87baae99f0b1d401dd31` now passes (exit 0, nothing named): RQ-01 to RQ-09, RQ-11, RQ-12, RQ-13,
+RQ-15, RQ-18 and RQ-19 are `passed`, RQ-10, RQ-14, RQ-16 and RQ-17 are `waived`, and RQ-20 is the check. By the plan's own definition the evidence of PR 11 repeated again is complete. `public-claims`
+agrees with the ledger and says nothing about CL-201, which is at the rung `after_p14` and unused.
+
+**Left open, for the maintainer:** the one pass over the register (it now includes L-142 and L-143), including the stale wording of CL-204's note and the support matrix's paragraph on agent clients;
+the maintainer's own reading of the raw cold logs (L-118), which is **pending**: the maintainer is reading a generated command list of the 18 runs, to be recorded when they confirm, and the supervisor's
+reading is not theirs; #340; then PR 12 (the stable `0.2.0`, with the deprecation step) and PR 13.
+
+**What is weaker than it sounds.** Four of twenty items are waived and none of the four is a pass. Two of them (RQ-16, RQ-17) are waived for the stable too, on the same bytes, so what the stable adds is
+the hosted re-run on its bytes, not new agent or try-out evidence; nobody has seen Smart App Control or Gatekeeper react to VSift, and one cold agent in 18 took an out-of-policy action. The rule of RQ-10
+was widened after the result: it now says what the judge always did, but a rule changed after a run is a rule the run did not have to meet. The completeness check cannot see the limits of a waiver, so
+the limits are only as strong as these texts.

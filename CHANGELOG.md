@@ -294,7 +294,7 @@ no-room remediation on published bytes for the first time ([L-134](docs/planning
 symbolic link given as the source answers `STORAGE_IO` (#265, [L-127](docs/planning/known-limits.md#l-127)), which the item's rule (three codes, no clause for an
 accepted finding) does not admit, so the item cannot be `passed`. The waiver covers exactly that answer; it does not cover a new finding, a containment break, an answer outside the
 item's bounds, the room check on Windows or anything else, and it does not carry over to another candidate. **Not covered, reported:** 20 of the 96 inputs have a follow-up call that ends
-`INVALID_ARGUMENT`, which the campaign's own judging rule accepts (plan 18.4) and the item's rule does not name; they are not waived (plan section 29.5). The by-hand scan reading of the day is
+`INVALID_ARGUMENT`, which the campaign's own judging rule accepts (plan 18.4) and the item's rule does not name; they are not waived (plan section 29.5). (Since 2026-10-09 the item's rule admits that code where the judge does, so those 20 inputs meet it: see the last paragraph of this section.) The by-hand scan reading of the day is
 [`p14-scan-reading-2026-10-08.md`](docs/planning/p14-scan-reading-2026-10-08.md): nothing new in its sources (the same 58 FFmpeg records, every fix in the
 shipped build; no whisper.cpp release newer than 1.9.5); the observation of 2026-10-07 is narrowed by this candidate's 100 ms floor, which no campaign ran
 against whisper.cpp ([#322](https://github.com/smormah/vsift/issues/322), [L-137](docs/planning/known-limits.md#l-137)). Three items still block
@@ -329,6 +329,20 @@ is a narrow test, the two clients are not the same test, and the grader reads co
 so PR 11 repeated again is not complete. The records, the reading (with what the cold agents struggled with) and the plan's section 29.9 are in
 [`docs/planning/p14-agent-trials/`](docs/planning/p14-agent-trials/) and [`docs/planning/p14-qualification.md`](docs/planning/p14-qualification.md); register entries: L-142 added,
 [L-118](docs/planning/known-limits.md#l-118) and [L-125](docs/planning/known-limits.md#l-125) updated. No public claim or the claims rung changed. ADR 0024 has a dated note.
+
+**Work record only (P14 PR 11, repeated again; nothing shipped changes): the maintainer's decisions of 2026-10-09.** Four open points were decided; no code, tool, skill, workflow, setting or public
+claim changed, and nothing was run again. **(1) The pass rule of the malicious-media item (RQ-10) now admits `INVALID_ARGUMENT`,** exactly where the campaign's own judge always accepted it: for a follow-up
+call on a video that `ingest` accepted, and for the file-name, folder, link and pipe inputs, whose cases list it. The 20 inputs of the `0.2.0-rc.3` run that end that way therefore meet the rule. It is a
+change of the rule, not of the program or the run: **the item stays `waived` for `0.2.0-rc.3`, for the symbolic link's `STORAGE_IO` alone, and is not `passed`.** **(2) The waiver of the cold-agent item
+(RQ-16)**, for the one harmless read of the audio clip that `vsift audio` had named, **now covers the stable `0.2.0` as well as `0.2.0-rc.3`**, because the stable is built from the same bytes; it does not
+cover another candidate or any other action. **(3) `0.2.0-rc.1` and `0.2.0-rc.2` are deprecated at the stable release, not before;** the maintainer runs the npm commands, and the stable's pull request (PR 12)
+must include that step. **(4) The clean-machine and Smart App Control try-out (RQ-17) is `waived` for `0.2.0-rc.3` and the stable `0.2.0`: they ship untried.** No Smart App Control or SmartScreen try-out, no
+true clean-machine install of `vsift-cli` and no Mac Gatekeeper try-out was done before the stable (`install.md` section 4 already warns that Smart App Control may block an npm-installed VSift); the try-out may
+still be done after the stable and recorded, and a waiver is not a pass, so the statement that Windows 11 is supported stays unused ([L-143](docs/planning/known-limits.md#l-143) added;
+[L-098](docs/planning/known-limits.md#l-098), [L-118](docs/planning/known-limits.md#l-118) and [L-142](docs/planning/known-limits.md#l-142) updated). **`release-evidence --complete-for 0.2.0-rc.3` now passes:**
+passed items are RQ-01 to RQ-09, RQ-11 to RQ-13, RQ-15, RQ-18 and RQ-19, and four are waived (RQ-10, RQ-14, RQ-16, RQ-17), each with its limits in the decision's text. **The maintainer's own reading of the
+raw cold logs is not recorded: they are reading a generated command list of the 18 runs, to be recorded when they confirm,** and the register pass is still to do. The packet P14 is not complete: the stable
+`0.2.0` (PR 12) and the ledger follow-up (PR 13) remain. The wording is [`docs/planning/p14-qualification.md`](docs/planning/p14-qualification.md) sections 18.4 and 29.10; ADR 0024 has a dated note.
 
 ## [0.2.0-rc.2] - 2026-10-06
 

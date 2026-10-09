@@ -241,3 +241,8 @@ the wording question of the 20 `INVALID_ARGUMENT` inputs of the media run (RQ-10
 about #340 (it needs a new candidate for the text of the CLI, or is accepted for `0.2.x`); **whether the stable `0.2.0` needs its own decision on RQ-16**,
 since the waiver's text names this candidate only and the completeness check does not (a waived item is complete for any version); whether the
 supervisor's reading of the raw logs stands for L-118's reading by the maintainer; and then PR 12 (the stable `0.2.0`) and PR 13.
+
+**Update, later on 2026-10-09 (plan section 29.10):** the maintainer has since decided four of these. The 20 `INVALID_ARGUMENT` inputs are inside RQ-10's rule (widened to what the judge accepts; RQ-10 stays
+`waived` for `0.2.0-rc.3`); the RQ-16 waiver carries to the stable `0.2.0` (the same bytes), for the same one action; the deprecation of `0.2.0-rc.1` and `0.2.0-rc.2` is at the stable, not before; RQ-17 is
+`waived` for `0.2.0-rc.3` and the stable (shipped untried, L-143). Still open: the register pass, #340, and the maintainer's own reading of the raw logs, which is pending (the maintainer is reading a generated
+command list of the 18 runs, to be recorded when they confirm). This reading is otherwise as it was written.

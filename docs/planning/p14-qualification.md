@@ -52,7 +52,7 @@ that does not count, what a stable release must repeat or may carry) is in the
 | RQ-07 | Long fuzzing of every target, with a gap review of untrusted-input parsers and new targets where one is missing | Hosted, the `Fuzz` workflow with a raised duration cap | At least 60 minutes per target; no crash, timeout or out-of-memory; a coverage-plateau line per target; every finding minimised into a seed and a regression test | No finding in that time on those inputs | Absence of bugs |
 | RQ-08 | Race and stress repetitions on all three systems: lock stress (Windows added), weighted admission, engine worker and batch, and repeated runs to reproduce #128 and #206 | Hosted | Zero failures in at least 200 repetitions per system; any failure captured and filed first (rule 14) | The locking and admission claims hold on three kernels | Every interleaving |
 | RQ-09 | Load and soak: ladder 1, 2, 4 and 8 jobs; a 100-request batch; 1,000 mixed requests (imports, candidates, frames, small recognitions, malformed lines, cancels, kills and resumes) in at most 5 hours; a sampler for memory, descriptors and descendants | Hosted Ubuntu 24.04, the strict-worker container | Coordinator memory at most 256 MiB; no monotonic growth after warm-up; no descendant ten seconds after a cancel; every committed session validates; no sentinel in any output; warm p95 candidate page at most 250 ms on a prepared 30-minute session | The verification section 5 gates on this hardware | The 8-hour length, the reference machine, GPUs, other hosts. Throughput is reported as a measurement, never a promise |
-| RQ-10 | Malicious media: decompression-bomb and resource-abuse variants (huge dimensions, many streams, declared long duration, damaged and truncated files, container nesting, external references) generated at run time, never committed | Disposable hosted container, `--network none`, memory and process limits; **never on the maintainer's machine** | Each a typed failure (`INVALID_SOURCE`, `RESOURCE_LIMIT` or `DEADLINE_EXCEEDED`) inside its bound; no hang, no network, no file outside the root | The bounds hold under abuse (the ADR 0012 and L-004 follow-up) | That a decoder bug cannot be exploited |
+| RQ-10 | Malicious media: decompression-bomb and resource-abuse variants (huge dimensions, many streams, declared long duration, damaged and truncated files, container nesting, external references) generated at run time, never committed | Disposable hosted container, `--network none`, memory and process limits; **never on the maintainer's machine** | Each a typed failure inside its bound; no hang, no network, no file outside the root. The typed codes are `INVALID_SOURCE`, `RESOURCE_LIMIT` and `DEADLINE_EXCEEDED`, and, **since the maintainer's decision of 2026-10-09**, `INVALID_ARGUMENT` exactly where the campaign's judge admits it (section 18.4: a follow-up call on a source that `ingest` accepted; the file-name, folder, link and pipe cases) | The bounds hold under abuse (the ADR 0012 and L-004 follow-up) | That a decoder bug cannot be exploited |
 | RQ-11 | The two fault campaigns on the candidate: the P10 durability campaign and `P13 managed power loss` | Hosted Ubuntu 24.04 VMs; **never on the maintainer's machine** | The workflows' own acceptance numbers; the negative control must lose acknowledgements | The ext4 claims hold for the candidate's code (L-008, L-037) | Another filesystem, a disk that ignores flushes, a real-size managed install |
 | RQ-12 | The worker runbook walked verbatim: its container example and its systemd unit with the installed binary | Hosted Ubuntu 24.04 | A batch starts with strict isolation attested; the unit stops with a drain and resumes | The runbook works as written (L-038) | Other distributions or hosts |
 | RQ-13 | R-SEC03, the scan reading (section 6) | Read by the packet owner and recorded | No unresolved high or critical finding in a supported path | The state of what was read on the day | Unknown vulnerabilities; undiscovered bugs in FFmpeg or whisper.cpp |
@@ -290,7 +290,7 @@ client is **qualified** only on the system it was trialled on. Anything short of
 
 | Machine | Install path | Tools | Evidence required | Draft status |
 | --- | --- | --- | --- | --- |
-| Windows 11 25H2 x64 | npm, pnpm, Yarn, Bun; archive | Your own FFmpeg, FFprobe, whisper.cpp (pinned versions tested) | RQ-01, 02, 04, 05, 15 (Claude Code), 17 | Supported, with "Smart App Control untried" if RQ-17 is not done |
+| Windows 11 25H2 x64 | npm, pnpm, Yarn, Bun; archive | Your own FFmpeg, FFprobe, whisper.cpp (pinned versions tested) | RQ-01, 02, 04, 05, 15 (Claude Code), 17 | Supported, with "Smart App Control untried" if RQ-17 is not done (it is not: RQ-17 is `waived` since 2026-10-09, section 29.10) |
 | Ubuntu 24.04 x64 | the same | Managed (`setup install`, offline `--artifact-dir`) or your own | RQ-01..06, 11, 15 (Codex) | Supported; durable sessions on local ext4 with barriers |
 | macOS 15 arm64 | the same | Your own only; no managed install | RQ-01, 02, 04, 05 | Supported for what the hosted run proves (CLI, supplied transcript, local ASR with your whisper.cpp); agent skill untrialled; a "qualification target" if the run does not pass |
 | Strict worker (Ubuntu 24.04) | n/a | n/a | RQ-09, 12, 14 | **Not claimed:** a "qualification target" (decision E option 4, 2026-10-03; RQ-14 `waived`) |
@@ -354,8 +354,8 @@ plain text: it cannot see meaning (L-101).
 | --- | --- | --- |
 | Confirm the plan | Done 2026-10-02: the eight decisions of ADR 0024, and "start" | n/a |
 | Smart App Control, first look | Done 2026-10-02: it is **Off** on the maintainer's Windows 11 Pro machine (registry value `VerifiedAndReputablePolicyState` is 0). The 0.1.0 install and run there therefore says nothing about Smart App Control | n/a |
-| Smart App Control, On | A fresh Windows 11 virtual machine or another PC (a fresh Windows install starts Smart App Control in evaluation mode; what state a given install shows is unknown, so record it): npm install, `vsift --version`, `setup check`, then a browser download of the archive | Ship with "untried"; the Windows row carries the caveat |
-| macOS Gatekeeper | A Mac with macOS 15: browser download, first run | Ship with "untried" (unknown whether a Mac is available); a hosted `spctl` check is partial support |
+| Smart App Control, On | A fresh Windows 11 virtual machine or another PC (a fresh Windows install starts Smart App Control in evaluation mode; what state a given install shows is unknown, so record it): npm install, `vsift --version`, `setup check`, then a browser download of the archive | Ship with "untried"; the Windows row carries the caveat. **Taken 2026-10-09: RQ-17 is `waived` for `0.2.0-rc.3` and the stable `0.2.0` (29.10, L-143)** |
+| macOS Gatekeeper | A Mac with macOS 15: browser download, first run | Ship with "untried" (unknown whether a Mac is available); a hosted `spctl` check is partial support. **Taken 2026-10-09 (29.10, L-143)** |
 | Agent batches | Say go for each of three batches; the blurred-banner re-run is inside them | The packet waits; counts are not reduced silently |
 | SEC-T01 | Review the fixture and its CI job, or choose the fallback | Narrow the claim (decision E) |
 | Publishes | Candidate, a possible second candidate and the stable: tag, dry run, dispatch, approve, verify (about an hour each; `release.md` section 6) | The packet waits |
@@ -417,7 +417,7 @@ counts as qualification evidence.
 | Risk | Why it matters | What the plan does |
 | --- | --- | --- |
 | macOS has never run real media or speech | The first hosted run may show defects, and Homebrew's tools are not reviewed builds | RQ-05 early (PR 3), a fix budget, an honest "target" fallback |
-| Smart App Control may block unsigned executables | A default Windows 11 consumer machine may not run VSift at all | The try-out, the signing trigger of decision C |
+| Smart App Control may block unsigned executables | A default Windows 11 consumer machine may not run VSift at all | The try-out (waived 2026-10-09, shipped untried: 29.10), the signing trigger of decision C |
 | Real recordings are untried | Every accuracy number is synthetic | Claims worded as measured on a synthetic corpus; the post-R0 trial |
 | The agent allowance | 84 runs is about one and a half rounds; usage limits stall batches | Three batches, usage capture, the lean option |
 | SEC-T01's authoring block recurred (2026-10-03) | Without the evidence no strict-worker claim | **Taken:** the maintainer chose the narrowed claim (decision E, option 4) on 2026-10-03; RQ-14 is `waived`; the fixture waits for R1 |
@@ -435,7 +435,7 @@ counts as qualification evidence.
 | What Smart App Control state a fresh Windows 11 install shows | Unknown (a fresh install starts in evaluation mode) | The try-out records the state it finds; decision C's trigger applies to what it shows |
 | Whether Windows Sandbox is available on the maintainer's machine | Unknown: it could not be read without elevation | Not needed if a virtual machine or another PC is used; the maintainer may check |
 | Whether the maintainer owns a Mac (macOS 15) | **Known: no** (2026-10-02) | The macOS Gatekeeper try-out ships "untried" and says so, with a hosted `spctl` check as partial support (decision H); macOS stays a target unless the hosted evidence earns more (decision F) |
-| A second Windows machine for the Smart App Control try-out | **Known: yes** (2026-10-02): the maintainer has a clean, wipeable Windows 11 test machine | The try-out and a true clean-machine install run there (the installer step needs the maintainer at its console); what a fresh install shows for Smart App Control is recorded when it runs |
+| A second Windows machine for the Smart App Control try-out | **Known: yes** (2026-10-02): the maintainer has a clean, wipeable Windows 11 test machine | The try-out and a true clean-machine install run there (the installer step needs the maintainer at its console); what a fresh install shows for Smart App Control is recorded when it runs. **Not used before the stable (RQ-17 waived 2026-10-09, 29.10); available for a try-out after it** |
 | Whether hosted-runner minutes are free for the account | Unknown; the supervisor has asked. The repository is public and GitHub documents standard runners as free for public repositories (not re-checked for this account) | Section 5 lists runner-hours either way; a cost would change the soak and fuzz budgets, not the gates |
 | Whether any test compares a build with the published 0.1.0 schemas | **Settled in PR 2 (2026-10-02): none did.** `published_compatibility` and `published_v0_1_0_records` do now (section 15.3) | Done |
 | Whether the real-tool checkpoints can run an installed binary through `assert_cmd`'s environment override | **Settled by PR 3 (2026-10-02): no.** `assert_cmd` 2.2.2 reads `CARGO_BIN_EXE_vsift` when a test runs, but `cargo test` sets that variable itself and replaces any value from outside (a nonexistent path changed nothing) | A repository-owned variable, `VSIFT_E2E_BINARY`, read by one test module (section 17) |
@@ -886,6 +886,23 @@ outside** the root, the home and the queue, the canary unchanged and in no store
 command run. Ingest of a file only copies and sniffs it, so for a damaged container the refusal is
 expected from a later call (candidates, a frame, the audio, a recognition): a case marked "refused" passes
 when some operation fails typed and none succeeds after it.
+
+**The pass rule as widened on 2026-10-09 (the maintainer's decision; plan section 29.10), word for word what the judge accepts.** Until then the written rule named three
+codes and the judge accepted a fourth in the places below, which is why a run could be green while the written rule was not met. A failed operation is a typed answer when its code is:
+
+1. `INVALID_SOURCE`, `RESOURCE_LIMIT` or `DEADLINE_EXCEEDED` (the judge's default for a case that sets no codes of its own, written in `judge()` in `tools/p14-campaigns/lib/hostile-judge.cjs` and as `TYPED` in `tools/p14-campaigns/lib/hostile-cases.cjs`); or
+2. `INVALID_ARGUMENT` for **a follow-up call on a source that `ingest` accepted**: `candidates`, `frame`, `audio` or `recognise`, which `runCase` in `tools/p14-campaigns/hostile-media.cjs`
+   runs only after an `ingest` that completed. This is `FOLLOW_UP_CODES` in `tools/p14-campaigns/lib/hostile-judge.cjs` (`['INVALID_ARGUMENT']`), which the judge adds to every
+   operation that the runner does not mark as first. The runner marks the case's first operation and also `job_name`, `job_small` and `ingest_human`, which are requests of their own and not
+   follow-ups, so the constant does not reach those three; or
+3. `INVALID_ARGUMENT` for **every operation of an input whose case lists it beside the three** (`codes` in `tools/p14-campaigns/lib/hostile-cases.cjs`): the 37 file-name cases (`name-00`
+   to `name-36`), the 150-folder path (`name-deep`), and the folder, the symbolic link and the named pipe (`folder`, `symlink-to-canary`, `fifo`). For these inputs the code is accepted
+   for `ingest`, the human-output `ingest` and the worker request (`job_name`) alike, because those cases list it for all their operations.
+
+Where a case pins an operation's exact answer (`answers`: `sparse-30gib` and `sparse-no-room`), only the pinned codes, and where pinned the start of the remediation, are accepted for that
+operation, and none of the above applies to it. Everything else in the rule is as before: inside its bound (120 s, 1 GiB, 128 processes), no hang, no network, no file created or changed
+outside the root, the home and the queue, the canary unchanged, no injected command. **Any other code is a finding**, for example `STORAGE_IO` for the link's `ingest`. The rule and the judge
+are now the same sentence; a change to `FOLLOW_UP_CODES` or to a case's `codes` is a change of this rule and needs the maintainer's decision recorded here.
 
 | Group | Inputs | What they are | Outcome |
 | --- | ---: | --- | --- |
@@ -2088,7 +2105,9 @@ complete only when RQ-15, RQ-16 and RQ-17 are `passed`, `waived` or `not_applica
 maintainer. **The one decision of the maintainer recorded in this section is that of 2026-10-08 on RQ-10** (29.5: waived for this candidate, the link case
 alone); the rest is results. **Update, later on 2026-10-08: agent-trial batch 2 has run on the third candidate and RQ-15 is `passed` for it (29.8); RQ-16 and RQ-17 are still
 open, so PR 11 repeated again is still not complete.** **Update, 2026-10-09: batch 3 has run (the evening of 2026-10-08) and RQ-16 is `waived` for this candidate only, for one
-action (29.9, the maintainer's decision of 2026-10-09); RQ-17, the clean-machine try-out, is the one item left, so PR 11 repeated again is still not complete.**
+action (29.9, the maintainer's decision of 2026-10-09); RQ-17, the clean-machine try-out, is the one item left, so PR 11 repeated again is still not complete.** **Update, later on 2026-10-09: RQ-17 is
+`waived` too (shipped untried), the check passes, and the evidence of PR 11 repeated again is complete by the definition above; the register pass and the maintainer's reading of the cold logs remain
+(29.10).**
 
 ### 29.1 The runs and their results
 
@@ -2109,7 +2128,7 @@ third candidate's own entry for each item below with the second candidate's move
 | RQ-07 | `Fuzz` [37752816621](https://github.com/smormah/vsift/actions/runs/37752816621) | **passed**: 31 targets, 3,601 s each, 3.49 billion runs, no crash, timeout or out-of-memory | none; 16 targets still finding coverage at the end ([L-128](known-limits.md#l-128)) |
 | RQ-08 | `P14 stress` [37752821463](https://github.com/smormah/vsift/actions/runs/37752821463) (25 jobs, 1,177 job-minutes) | **passed**: all 25 jobs clean, 20,100 repetitions, 0 failed, 0 hung; the supervisor suite on Windows, 1 failure in 1,500 on the second candidate (#321), ran 3,000 of 3,000 clean | none; #321's fix held, #312 and #128 did not recur |
 | RQ-09 | `P14 load` [37753187467](https://github.com/smormah/vsift/actions/runs/37753187467) | **passed**: every gate held | none |
-| RQ-10 | `P14 malicious media` [37753191530](https://github.com/smormah/vsift/actions/runs/37753191530) | the run **succeeded** (96 inputs, 251 operations, one tracked finding, none new) and **the corrected no-room case ran on published bytes**; the item is **`waived`** for this candidate only, for the link case alone, by the maintainer's decision of 2026-10-08 (29.5) | #265 (L-127), the link's `STORAGE_IO`, waived; #266's no-room path is shown (L-134 narrowed); 20 inputs' `INVALID_ARGUMENT` follow-ups are not waived (29.5) |
+| RQ-10 | `P14 malicious media` [37753191530](https://github.com/smormah/vsift/actions/runs/37753191530) | the run **succeeded** (96 inputs, 251 operations, one tracked finding, none new) and **the corrected no-room case ran on published bytes**; the item is **`waived`** for this candidate only, for the link case alone, by the maintainer's decision of 2026-10-08 (29.5) | #265 (L-127), the link's `STORAGE_IO`, waived; #266's no-room path is shown (L-134 narrowed); the 20 inputs' `INVALID_ARGUMENT` answers were not waived on 2026-10-08 and are inside the rule since 2026-10-09 (29.5, 29.10) |
 | RQ-11 | `P13 managed power loss` [37754344992](https://github.com/smormah/vsift/actions/runs/37754344992) and `P10 durability campaign` [37754349320](https://github.com/smormah/vsift/actions/runs/37754349320), both at the tag | **passed**: both campaigns met their acceptance numbers **and both hosted Acceptance jobs ran** | none |
 | RQ-12 | `P14 runbook walk` [37752983142](https://github.com/smormah/vsift/actions/runs/37752983142) | **passed**: 18 steps, all matched, none diverged | none |
 | RQ-13 | `P14 scan reading` [37752978771](https://github.com/smormah/vsift/actions/runs/37752978771) and [`p14-scan-reading-2026-10-08.md`](p14-scan-reading-2026-10-08.md) | **passed**, with the one residual the maintainer accepted on 2026-10-05 (#272, L-122); the whisper.cpp observation (#322, L-137) is narrowed by the floor of this candidate | none new |
@@ -2266,7 +2285,7 @@ residual**: `ingest` of a symbolic link given as the video answers `STORAGE_IO` 
 not cover** a new finding of the campaign, a broken containment check, an answer outside the item's bounds, the room check on Windows (which reads no free space,
 [L-061](known-limits.md#l-061)) or anything else, and **it does not carry over to another candidate**. (A waived item carries no `applies_to`, so the completeness check would not name RQ-10 for a fourth candidate; the decision's text and this section are what limit it to this one, as with the earlier waivers, and a new candidate would run the campaign and decide again.) The run, with its one finding, stays in the ledger as counted evidence.
 
-**The 20 `INVALID_ARGUMENT` inputs are not covered by that waiver, and are reported plainly.** 20 of the 96 inputs have an operation that ends `INVALID_ARGUMENT`: 17 hostile file names whose
+**The 20 `INVALID_ARGUMENT` inputs were not covered by that waiver, and were reported plainly (they are inside the rule since 2026-10-09: the update at the end of this section).** 20 of the 96 inputs have an operation that ends `INVALID_ARGUMENT`: 17 hostile file names whose
 worker request (`job_name`) is refused (`name-03`, `-06` to `-13`, `-22`, `-28`, `-31`, `-33` to `-36` and `name-deep`: `ingest` accepted them), two follow-up calls on an accepted source
 (`mp4-bitflips-c`: `candidates` and `frame`; `mkv-audio-absurd`: `recognise`), and the worker request that names the link. They are **explained by this plan, not by the register or the earlier
 decision**: section 18.4 judges "`INVALID_ARGUMENT` for a follow-up call on an accepted source" as a typed answer, the judge's `FOLLOW_UP_CODES` says the same in code, and the cases for the
@@ -2274,6 +2293,14 @@ folder, link and pipe inputs list it beside the three; that is why the judge did
 (which lists the CLI answers whose code only loosely describes the case) or in the decision of 2026-10-07, and the pass rule's list does not name the code. So the waiver was not widened to
 them: if the maintainer reads the rule strictly they are a further mismatch with no waiver, and if the rule should admit the code for a follow-up call it is a change of the rule in this plan and
 its ADR, not of evidence. Neither is decided here.
+
+**Update, 2026-10-09: the 20 inputs are inside the rule now.** The maintainer widened the pass rule to admit `INVALID_ARGUMENT` exactly where the judge does (18.4; decision 1 of 29.10). Two
+parts of the judge explain the 20 inputs, not one, and the paragraph above was loose on this: the 2 follow-up inputs (3 operations: `mp4-bitflips-c` `candidates` and `frame`, `mkv-audio-absurd`
+`recognise`) are admitted by `FOLLOW_UP_CODES` in `tools/p14-campaigns/lib/hostile-judge.cjs`; the other 18 inputs (the worker request of the 17 file names and the worker request that names the
+link) are admitted by the `codes` of their cases in `tools/p14-campaigns/lib/hostile-cases.cjs`, because the runner marks `job_name` as a first operation and the constant does not reach it (the
+run's log, run 37753191530, shows each operation). All 20 meet the written rule now. Nothing was run again: this is a change of the rule, not of the code, the tool or the run. **It does not change
+RQ-10's status for `0.2.0-rc.3`: the item stays `waived`,** for the link's `STORAGE_IO` alone, which the widened rule still does not admit. RQ-10 is not `passed`, and the waiver is neither widened nor
+shortened by this.
 
 ### 29.6 Hosted minutes, and what is weaker than it sounds
 
@@ -2312,18 +2339,18 @@ passed it with no run before this record, the plan ran it anyway, and it is `pas
 
 **Open for the maintainer** (the decision of 2026-10-08 settled RQ-10's status; these remain):
 
-1. **The 20 `INVALID_ARGUMENT` inputs of the media run (29.5):** not waived and not a reported finding; read the rule strictly, or let it admit the code for a follow-up call on an accepted source
-   (a change of the rule in this plan and its ADR). Reported, not decided here.
+1. **The 20 `INVALID_ARGUMENT` inputs of the media run (29.5):** **decided 2026-10-09 (29.10): the rule is widened and they are inside it.** Until then: not waived and not a reported finding; read the rule strictly, or let it admit the code for a follow-up call on an accepted source
+   (a change of the rule in this plan and its ADR).
 2. **RQ-08:** recorded `passed` on the run (28.5 question 1, recommended answer). **#321** can be closed (the maintainer does it: the fix, its regression tests and 3,000 clean hosted Windows
    repetitions). **[L-138](known-limits.md#l-138)** now describes no live limit and is left in the register, updated, for the register pass to delete (CHANGELOG, ADR and plan link to it, and
    `docs/development.md` and `tools/` are frozen until the stable).
-3. **The citation half of L-139** is filed as [#336](https://github.com/smormah/vsift/issues/336) (28.5 question 3, answered); **whether to deprecate** `0.2.0-rc.1` and `0.2.0-rc.2` (6.12 step 7);
+3. **The citation half of L-139** is filed as [#336](https://github.com/smormah/vsift/issues/336) (28.5 question 3, answered); **the deprecation** of `0.2.0-rc.1` and `0.2.0-rc.2` (6.12 step 7): **decided 2026-10-09 (29.10): at the stable release, not before;**
    the upgrade from `0.2.0-rc.1` stays skipped (decided 2026-10-08).
 4. **The agent batch 2 and batch 3** and the try-outs, each on the maintainer's explicit go; if Claude Opus 5.5 misses a gate again the choice of 2026-10-07 returns (28.5 question 5).
 
 **Update, later on 2026-10-08 (29.8):** batch 2 ran on the third candidate and met every gate, so RQ-15 is `passed` and the check above now names two items,
 RQ-16 and RQ-17. Items 1 to 3 stand as written, and in item 4 the choice of 2026-10-07 did not come back, because Claude Opus 5.5 met both gates; batch 3 and the
-try-outs are still the maintainer's. **Update, 2026-10-09 (29.9):** batch 3 ran and RQ-16 is `waived` for this candidate only, so the check names RQ-17 alone.
+try-outs are still the maintainer's. **Update, 2026-10-09 (29.9):** batch 3 ran and RQ-16 is `waived` for this candidate only, so the check names RQ-17 alone. **Update, later on 2026-10-09 (29.10):** RQ-17 is `waived` too and the check passes.
 
 ### 29.8 Agent-trial batch 2 on the third candidate (RQ-15, 2026-10-08)
 
@@ -2399,16 +2426,16 @@ RQ-14 (2026-10-03, a mechanism, not a version); RQ-20 is the check itself.
 
 **Open for the maintainer** (none of these is decided here; the first is the 20 inputs of 29.5 and is unchanged):
 
-1. **The 20 `INVALID_ARGUMENT` inputs of the media run (29.5):** not waived and not a reported finding; read RQ-10's rule strictly, or let it admit the code for a follow-up call on an accepted
+1. **The 20 `INVALID_ARGUMENT` inputs of the media run (29.5):** **decided 2026-10-09 (29.10): the rule is widened and they are inside it.** Until then: not waived and not a reported finding; read RQ-10's rule strictly, or let it admit the code for a follow-up call on an accepted
    source (a change of the rule in this plan and its ADR). The plan's section 18.4 and the judge already accept it; the rule's three codes do not name it.
 2. **The explicit go for batch 3 (RQ-16, the cold final round, 18 runs).** It needs `-AllowGraderChange` (the grader changed on 2026-10-04, after batch 1's freeze: 28.2), Claude Code 2.1.284
    and Docker, and the reserve rule has to be stated first (the checklist: a compact miss allows up to 6 more runs of that scenario, judged pooled by the same rule). Its cost is unmeasured.
 3. **The clean-machine try-out (RQ-17)** on the second Windows 11 machine and a Mac, and **the register pass** (28.4, 29.7), are the maintainer's.
-4. **Whether to deprecate** `0.2.0-rc.1` and `0.2.0-rc.2` (6.12 step 7, with an npm login). After those: PR 12 (the stable `0.2.0`, which `release-evidence` cannot yet allow) and PR 13 (the
+4. **Deprecation** of `0.2.0-rc.1` and `0.2.0-rc.2` (6.12 step 7, with an npm login): **decided 2026-10-09 (29.10): at the stable release, not before.** After those: PR 12 (the stable `0.2.0`, which `release-evidence` cannot yet allow) and PR 13 (the
    ledger follow-up, P14 `complete`, the handoff).
 
 **Update, 2026-10-09 (29.9):** batch 3 ran on the third candidate on 2026-10-08 and the maintainer decided on RQ-16 on 2026-10-09, so item 2 is answered and the check above now names
-RQ-17 alone. Items 1, 3 and 4 stand as written.
+RQ-17 alone. Items 1, 3 and 4 stand as written. **Update, later on 2026-10-09 (29.10):** item 1 and item 4 are decided as marked, RQ-17 in item 3 is `waived` (shipped untried) and the register pass stays open.
 
 ### 29.9 Agent-trial batch 3 on the third candidate (RQ-16, run 2026-10-08, decision 2026-10-09)
 
@@ -2444,7 +2471,7 @@ per-user folder, any install or acceptance of a setup plan, any write, any netwo
 the freeze and the gate's definition are unchanged; the miss stays in the record as counted evidence; the usefulness gates stand as met (no margin). A fix to the text of the CLI needs a new candidate
 (the stable-over-candidate check refuses changes under `crates/` after the tag) and is not part of `0.2.0-rc.3`; the options are in #340 (help and remediation text, an additive JSON hint, or accept and fix
 in `0.2.x`). (A waived item carries no `applies_to`, and the completeness check treats it as complete for any version, as with RQ-10's waiver in 29.5; the decision's text and this section are what
-limit it to this candidate and this action.)
+limit it to this candidate and this action.) **A second decision the same day carries the waiver, for the same one action, to the stable `0.2.0` cut from the same bytes (29.10).**
 
 **How RQ-16 is recorded.** The ledger's RQ-16 entry is **`waived`**, with the decision's text, a reason, the batch's summary, the reading and this section as evidence, `issues` #340, the baseline in
 `prior`, and a `does_not_prove` that says plainly that one cold run took one out-of-policy action, that the usefulness margin is zero, and what the strict setting, the small samples and the text-reading grader
@@ -2487,11 +2514,86 @@ does not cover. **The checker would not name RQ-16 for the stable `0.2.0`** (a w
 
 **Open for the maintainer** (none of these is decided here):
 
-1. **The clean-machine try-out (RQ-17)** on the second Windows 11 machine and a Mac, and **the one pass over the register** (28.4, 29.7; it now includes L-142), including the stale wording of CL-204's
+1. **The clean-machine try-out (RQ-17)** on the second Windows 11 machine and a Mac (**decided later on 2026-10-09 (29.10): `waived`, shipped untried, L-143**), and **the one pass over the register** (28.4, 29.7; it now includes L-142 and L-143), including the stale wording of CL-204's
    note and the support matrix's paragraph on agent clients.
 2. **#340:** which option (help and remediation text, an additive JSON hint, or accept and fix in `0.2.x`). A change to the CLI's text needs a new candidate, and so another run of every campaign and batch
    that the change touches; leaving the text as it is, is the third option.
-3. **Whether the stable `0.2.0` needs its own decision on RQ-16**, since the waiver names this candidate only and the check does not.
-4. **The 20 `INVALID_ARGUMENT` inputs of the media run** (29.5), still open: read RQ-10's rule strictly, or let it admit the code for a follow-up call on an accepted source.
-5. **Whether the supervisor's reading of the 18 raw logs stands for the maintainer's** (L-118), and **whether to deprecate** `0.2.0-rc.1` and `0.2.0-rc.2` (6.12 step 7, with an npm login).
+3. **Whether the stable `0.2.0` needs its own decision on RQ-16**, since the waiver names this candidate only and the check does not. **Decided later on 2026-10-09 (29.10): the waiver carries to the stable (the same bytes).**
+4. **The 20 `INVALID_ARGUMENT` inputs of the media run** (29.5), open when this was written: read RQ-10's rule strictly, or let it admit the code for a follow-up call on an accepted source. **Decided later on 2026-10-09 (29.10): the rule is widened.**
+5. **Whether the supervisor's reading of the 18 raw logs stands for the maintainer's** (L-118; **the maintainer is reading a generated command list of the 18 runs, to be recorded when they confirm**), and **the deprecation** of `0.2.0-rc.1` and `0.2.0-rc.2` (6.12 step 7, with an npm login; **decided later on 2026-10-09 (29.10): at the stable release**).
 6. After those: PR 12 (the stable `0.2.0`, which `release-evidence` cannot yet allow) and PR 13 (the ledger follow-up, P14 `complete`, the handoff).
+
+### 29.10 The maintainer's decisions of 2026-10-09: RQ-10's rule, RQ-16 for the stable, deprecation at the stable, RQ-17 waived
+
+On 2026-10-09, after batch 3 was recorded (29.9), the maintainer decided four open points of 29.5, 29.7, 29.8 and 29.9. **This is work record only** (the ledger, this plan, ADR 0024's note of
+2026-10-09, the register, the changelog, the RQ-17 sheet's status, the work packets' PR 12 row and the two memory files). No code, tool, workflow, schema, skill, grader, scenario, setting,
+`freeze.json`, public claim or rung changed; nothing was run again and nothing is re-graded. **This closes the evidence of PR 11 repeated again:** with it every item of the ledger is `passed` or
+`waived` for `0.2.0-rc.3` and the completeness check passes (below), which is how section 29 defined the PR complete. **What remains of it is the maintainer's and is not evidence:** the register pass
+(28.4, 29.7) and their own reading of the raw cold logs. The P14 packet is not complete: PR 12 (the stable `0.2.0`) and PR 13 remain.
+
+**1. RQ-10's pass rule admits `INVALID_ARGUMENT` (answered yes).** The rule that section 2 states for RQ-10 is widened, in the words of section 18.4, to what the judge accepts and no more: the
+three codes; `INVALID_ARGUMENT` for a follow-up call on a source that `ingest` accepted (`FOLLOW_UP_CODES` in `tools/p14-campaigns/lib/hostile-judge.cjs`, applied to every operation the runner does not
+mark as first: `candidates`, `frame`, `audio` and `recognise`); and `INVALID_ARGUMENT` on every operation of the cases that list it beside the three (`codes` in `tools/p14-campaigns/lib/hostile-cases.cjs`:
+the 37 file-name cases, `name-deep`, `folder`, `symlink-to-canary` and `fifo`); a case that pins an operation's answer keeps only its pinned codes. The section 2 row, section 18.4, the ledger entry's text
+fields (`does_not_prove`, `reason` and the waiver's text, as a dated sentence), 29.1's row and 29.5 say so. It is a change of the rule, **not** of the code, the tool or the run, and the run of
+`0.2.0-rc.3` was not repeated. **It does not change the item's status for `0.2.0-rc.3`:** RQ-10 stays `waived`, for the link's `STORAGE_IO` alone (#265, L-127), which the widened rule does not admit;
+the 20 `INVALID_ARGUMENT` inputs of that run, until now an open question, meet the rule. RQ-10 is not `passed`. A later candidate whose run shows no such finding could be recorded `passed` under the
+widened rule.
+
+**2. The RQ-16 waiver carries to the stable `0.2.0` (answered yes).** The stable is built from the same bytes as `0.2.0-rc.3` (only work-record files change after the tag, `release.md` 6.8), so the
+maintainer's waiver for exactly one action (a read, by a tool other than `vsift`, of the audio clip file that `vsift audio` named in its own result for the same session, inside the container, on the
+synthetic corpus) covers `0.2.0-rc.3` and the stable `0.2.0` cut from it. It still does **not** cover another candidate (for example an `rc.4`) or any other action, and a new candidate would need its
+own cold round and decision. Every other part of the waiver stands as 29.9 records it. A fix of the CLI's text (#340) would be a different candidate, not the stable. The ledger entry's decision text,
+`does_not_prove`, L-142 and the ADR note say so.
+
+**3. `0.2.0-rc.1` and `0.2.0-rc.2` are deprecated at the stable release, not before (answered: do it at the stable).** This answers the open question of 6.12 step 7. **PR 12 must include the step:**
+after the stable is published and verified, the maintainer deprecates `0.2.0-rc.1` and `0.2.0-rc.2` on all four packages (`vsift-cli`, `@vsift/win32-x64`, `@vsift/darwin-arm64` and
+`@vsift/linux-x64`) with an npm login, using the `npm deprecate` form of `release.md` 6.11 and 6.12 step 7 with a message that names the stable, and checks each with `npm view <package>@<version>
+deprecated`. The maintainer runs the commands; the supervisor never does. `release.md` is not edited here (it is outside this change's paths): PR 12 adds the step to the stable's runbook and
+checklist, and the work packets' PR 12 row records it now. `0.2.0-rc.3` is not covered by this decision.
+
+**4. RQ-17 is `waived` for `0.2.0-rc.3` and the stable `0.2.0`: the stable ships untried.** The maintainer decided not to do the clean-machine and Smart App Control try-out on LOKI before the stable,
+which decision H of ADR 0024 provides for ("an item you cannot do ships documented as untried"; untried hardware is stated, never hidden). **No Smart App Control or SmartScreen try-out, no true
+clean-machine install of `vsift-cli`, and no Mac Gatekeeper try-out was done before the stable.** [`install.md`](../operations/install.md) section 4 already warns that Smart App Control may block
+an npm-installed VSift. The waiver does not cover any claim that VSift runs on a default Windows 11 machine with Smart App Control On, that a downloaded archive passes SmartScreen or Gatekeeper, or
+that an install on a clean machine works with nothing else present; it does not cover decision C's trigger (a later observation of a block with no way through short of turning protection off still
+starts the signing question), and it does not name another candidate. The try-out may still be done after the stable and its observation recorded in a later records change (the sheet,
+[`rq-17-tryout-sheet.md`](rq-17-tryout-sheet.md), stays available); that would also give the claim CL-201 the evidence it names. **A waiver is not a pass:** CL-201 requires RQ-17 `passed`, sits at the
+rung `after_p14` and stays unused. The register gains [L-143](known-limits.md#l-143) (medium; owner P14 (RQ-17); accepted residual; review pending) and RQ-17's `supports.limits` lists it. The ledger's
+RQ-17 entry is `waived` with the decision text, a reason and a `does_not_prove` that says the above plainly.
+
+**Where `release-evidence --complete-for 0.2.0-rc.3` stands, and what the maintainer still holds.** Run at the end of this change (`--commit 83dca856e7a00fc9a71c87baae99f0b1d401dd31`):
+
+```text
+$ cargo run --locked -p vsift-governance -- release-evidence --complete-for 0.2.0-rc.3 --commit 83dca856e7a00fc9a71c87baae99f0b1d401dd31
+VSift release evidence is complete for 0.2.0-rc.3 at 83dca856e7a0.
+```
+
+Exit code 0: nothing is named. Passed for the third candidate: RQ-01 to RQ-09, RQ-11, RQ-12, RQ-13, RQ-15, RQ-18 and RQ-19; `waived`: RQ-10 (2026-10-08, this candidate only, the link case alone), RQ-14
+(2026-10-03, a mechanism, not a version), RQ-16 (2026-10-09, one action, this candidate and the stable) and RQ-17 (2026-10-09, untried, this candidate and the stable); RQ-20 is the check itself. **Four of
+twenty items are waived, and each waiver's text says what it does not cover.** The checker treats a waived item as complete for any version and cannot see the limits above, so it would also pass for an
+`rc.4` and for the stable on these four items: the limits live in the decisions' texts and in this section, and a new candidate has to decide again.
+
+**Left open, for the maintainer:** the one pass over the register (28.4, 29.7; it now includes L-142 and L-143), including the stale wording of CL-204's note and the support matrix's paragraph on agent
+clients ("the repeat on the third candidate decides"); **the maintainer's own reading of the raw cold logs (L-118): the maintainer is reading a generated command list of the 18 runs, to be recorded when
+they confirm** (the supervisor's reading of all 18 is recorded, and is not theirs); #340 (which option, or accept for `0.2.x`); closing #321; #312 (fix or accept); the Dependabot pull requests, the
+whisper.cpp and FFmpeg re-pins and the README graphics, all after the stable.
+
+**Decided inside this plan, for the maintainer to confirm or overrule.**
+
+1. **The rule of RQ-10 contains the cases' own codes (the third part of the 18.4 rule), not only `FOLLOW_UP_CODES`.** The decision was worded as "a follow-up call on an accepted source", and the constant
+   alone admits only 3 operations on 2 inputs; the other 18 of the 20 inputs are admitted by the cases' `codes`, which matter because the runner marks `job_name` and `ingest_human` as first operations.
+   The rule was worded as the judge is, which is what was asked, so that no input stays outside it while the judge passes it. If the maintainer meant the constant only, say so: the rule would then be
+   narrower than the judge, and those 18 inputs would be an open question again.
+2. **The RQ-17 waiver names `0.2.0-rc.3` and the stable `0.2.0` and says it does not name another candidate** (as the RQ-10 and RQ-16 waivers say). The decision named those two versions; the sentence
+   about an `rc.4` is this record's reading of "exactly these".
+
+**What is weaker than it sounds.**
+
+- **Two of the four waived items are waived for the stable too (RQ-16, RQ-17), and the stable is the same bytes.** What the stable adds is the hosted qualification re-run on its bytes (PR 12), not new
+  agent or try-out evidence. Nobody has seen Smart App Control or Gatekeeper react to VSift; a cold agent took one out-of-policy action in 18 runs; RQ-10's link case answers a code the rule does not
+  name. The public text stays as careful as before: no cell says "supported", the claims rung is `candidate`, and `public-claims` agrees with the ledger (it says nothing about CL-201, which is unused).
+- **The rule of RQ-10 was widened after the result.** The judge's behaviour did not change, and the rule now says what the judge always did; but a rule changed after a run is a rule the run did not have
+  to meet, and this record says so. The item is not `passed` on it.
+- **The supervisor's reading of the cold logs is not the maintainer's.** The gate that fired once, on a harmless read, rests on one grader and two readers who are not the maintainer, until the maintainer
+  confirms.
