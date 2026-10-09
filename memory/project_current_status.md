@@ -3,6 +3,8 @@
 As of 2026-10-09. Current-state document: rewrite it, don't append to it. Next actions and
 open decisions are in `memory/TODO.md`.
 
+**Note, 2026-10-10:** `0.2.0` was published on 2026-10-09 (tag `v0.2.0` at `eeb2a22a46a8`, the merge of #344; the GitHub release is not a pre-release). What this page says of PR 12 being "prepared", of nothing being published and of `latest` being `0.0.0` was written before the publish; PR 13 records the publish, its checks and the deprecation of rc.1 and rc.2 and rewrites it. The one change of 2026-10-10 here is the RQ-10 waiver.
+
 ## In plain English
 
 VSift is a Rust command-line tool that gives anyone, and their AI assistant, local,
@@ -53,7 +55,7 @@ is complete (the maintainer's register pass and reading of the cold logs remain)
   short to hold a sample (#332; one published code replaced for that request), a remediation for a copy that runs out of time (#325 step 1, L-140) and three test or tool fixes. No re-pin, no Dependabot.
 - **What is shown for rc.3 (plan section 29, 2026-10-08):** the whole hosted part of PR 11 ran and was green: the publish verified (20 checks), installs, archives, offline install and upgrades from 0.1.0
   and rc.2, journeys on three systems, managed smoke, fuzzing (3.49 billion runs), **the stress run (20,100 repetitions, none failed; the fixed Windows supervisor test ran 3,000 clean, #321)**, load, runbook
-  walk, both fault campaigns, the scan reading. **RQ-10 is `waived` for rc.3 only, for the link's `STORAGE_IO` alone** (plan 29.5); its rule was widened on 2026-10-09 to admit `INVALID_ARGUMENT` where the
+  walk, both fault campaigns, the scan reading. **RQ-10 is `waived` for rc.3 and, by the maintainer's decision of 2026-10-10, for the stable `0.2.0`, for the link's `STORAGE_IO` alone** (plan 29.5; the campaign was not run on the stable's own bytes); its rule was widened on 2026-10-09 to admit `INVALID_ARGUMENT` where the
   media judge does, so the 20 inputs that end so meet it; the item is still `waived`, not `passed`. **Batch 2** (with the skill, 34 runs): **every gate met, 34 of 34 passed fully** (28 of 34 on rc.2); Claude
   Opus 5.5 passed the blurred banner 3 of 3 and the journey 6 of 6; RQ-15 `passed`; a small sample, not a proof (L-095, L-119, L-139 stay open). **Batch 3** (18 cold runs, no skill): **usefulness is met
   on both clients with no margin (5 of 6 each, target 80%); cold safety, a hard gate, is not met: 1 of 18 runs** (Codex GPT-6-Sol ran `base64` on the audio clip `vsift audio` had named; nothing installed, written or
@@ -62,7 +64,7 @@ is complete (the maintainer's register pass and reading of the cold logs remain)
   clean-machine and Smart App Control try-out) is `waived` for rc.3 and the stable: they ship untried** (no Smart App Control or SmartScreen try-out, no true clean-machine install, no Mac Gatekeeper try-out;
   decision H; L-143; the try-out may still be done after the stable, and CL-201 stays unused until it is `passed`); rc.1 and rc.2 are deprecated at the stable. **`release-evidence --complete-for 0.2.0-rc.3` passes
   (exit 0).** Four items are waived (RQ-10, RQ-14, RQ-16, RQ-17) and none is a pass. **Still to do:** the register pass; the maintainer's own reading of the raw cold logs (they are reading a generated command
-  list of the 18 runs; to be recorded when they confirm). **Open point:** the RQ-10 waiver names rc.3 only, and the decisions did not say whether it carries to the stable.
+  list of the 18 runs; to be recorded when they confirm). **Decided 2026-10-10:** the RQ-10 waiver, which named rc.3 only, carries to the stable for the link case alone.
 - **What is weak:** the skill change met its gates once on a small sample; the cold round met its target twice with no margin and its safety gate not at all (one harmless read; the strict Claude setting is a
   narrow test: L-125, L-118); the floor was not run with whisper.cpp (L-137, L-141); hosted images are not clean machines (L-112); Smart App Control and the macOS prompts are unseen and untried (L-098, L-143);
   **a synthetic corpus and voice only** (L-020, L-022). **Open:** #312 (L-135; one failure in 4,500 loaded Windows repetitions across three candidates; not fixed). CVE-2026-38350 is accepted (L-122).

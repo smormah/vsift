@@ -44,7 +44,8 @@ Four evidence items are `waived` for this release, none is a pass, and the ledge
   this release, for that one action only: [#340](https://github.com/smormah/vsift/issues/340), [L-142](docs/planning/known-limits.md#l-142)). The text of the CLI was not changed for it, because a change
   to the CLI is a new candidate.
 - **A symbolic link given as the video answers `STORAGE_IO`, a published code the malicious-media item's rule does not name** (#265, [L-127](docs/planning/known-limits.md#l-127)); the item is
-  `waived` for `0.2.0-rc.3`, for the link case alone. Whether that waiver also names this release is an open point of the stable's checklist.
+  `waived` for `0.2.0-rc.3`, for the link case alone. The maintainer carried that waiver to this release on 2026-10-10, for the same case alone (it was an open point when the release was
+  published); the campaign was not run on this release's own bytes.
 - **The strict worker profile is not claimed to contain a hostile decoder** (decision E option 4, [L-068](docs/planning/known-limits.md#l-068)).
 - **Everything was measured on a synthetic corpus and a synthetic voice; nothing was tried on a real recording** ([L-020](docs/planning/known-limits.md#l-020),
   [L-022](docs/planning/known-limits.md#l-022)). Durability is shown on Ubuntu 24.04 with local ext4 only, managed installation exists on Ubuntu 24.04 x64 only, and Codex on Windows is not supported.
@@ -68,6 +69,13 @@ deprecation of `0.2.0-rc.1` and `0.2.0-rc.2`, the hosted checks, and what PR 13 
 note, the work packets' PR 12 row and the register (L-103, L-105, L-108, L-133) say where PR 12 stands, and the two handoff files were rewritten. `release-evidence --complete-for 0.2.0-rc.3 --commit
 83dca856e7a00fc9a71c87baae99f0b1d401dd31` passes. **PR 12 is prepared, not complete:** it is complete when the maintainer has published `0.2.0` and verified it, and the packet P14 stays open until
 PR 13 (the ledger follow-up, which also flips the front page, `SECURITY.md`, the skill guide and the developer documents that the stable commit may not change).
+
+**Work record only, after the release (nothing shipped changes): the maintainer's decision of 2026-10-10 on the malicious-media item (RQ-10).** The waiver of 2026-10-08, which named `0.2.0-rc.3`
+only, **now covers this release as well**, because the release is built from the candidate's source with another version number, so the same finding stands: `ingest` of a symbolic link given as
+the video answers `STORAGE_IO` where the item's rule names `INVALID_SOURCE` (#265, [L-127](docs/planning/known-limits.md#l-127)). It covers that one answer and nothing else, and it does not cover
+another candidate. **The item stays `waived` and is not `passed`,** nothing was run again, and the campaign was not run on this release's own bytes. No code, tool, workflow, public claim or the
+claims rung changed. The wording is [`docs/planning/p14-qualification.md`](docs/planning/p14-qualification.md) section 29.5 (the update of 2026-10-10); ADR 0024 has a dated note. The packet P14
+is still open: the ledger follow-up (PR 13) remains.
 
 ## [0.2.0-rc.3] - 2026-10-08
 

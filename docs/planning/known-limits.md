@@ -3527,7 +3527,8 @@ that week.**
 - **Evidence:** `P14 malicious media` runs 37136669473 (0.1.0) and 37330709659 (the first candidate; run 37361623352,
   from a scratch branch with a corrected case, is supplementary, see L-134), 37613284274 (the second) and 37753191530
   (the third: the link's `STORAGE_IO` is its one finding, and the maintainer waived RQ-10 for that candidate on
-  2026-10-08 for exactly this answer, plan 29.5) (`hostile-summary.md`);
+  2026-10-08 for exactly this answer, and on 2026-10-10 carried that waiver to the stable `0.2.0` cut from it,
+  plan 29.5) (`hostile-summary.md`);
   [`p14-qualification.md`](p14-qualification.md) section 18; the CLI test
   `source_link_cli_contract`, `no_room_cli_contract`, `session_not_published_cli_contract`, the engine test
   `a_closed_and_cleaned_session_is_not_published_and_not_damaged` and the staging tests in `p04_source.rs`;

@@ -4,6 +4,7 @@ Current-state handoff, rewritten in every change; history: git, `CHANGELOG.md`, 
 
 ## Now (2026-10-09)
 
+**Note, 2026-10-10:** `0.2.0` was published on 2026-10-09 (tag `v0.2.0` at `eeb2a22a46a8`, the merge of #344; the GitHub release is not a pre-release). What this page says of PR 12 being "prepared", of nothing being published and of `latest` being `0.0.0` was written before the publish; PR 13 records the publish, its checks and the deprecation of rc.1 and rc.2 and rewrites it. The one change of 2026-10-10 here is the RQ-10 waiver.
 **P00-P13 are complete. P14 (R0 qualification, #17) is in progress.** Its plan has 14 pull requests (0-13): 0-10 are done, 11's evidence is complete (the maintainer's register pass and reading of the cold logs remain), **12 (the stable `0.2.0`) is PREPARED and not complete**, 13 follows. Plan:
 `p14-qualification.md` (sections 15-30); ADR 0024 stays Proposed until P14 completes.
 - **PR 12 is prepared, not done.** The commit the maintainer will tag `v0.2.0` is on the branch `p14-pr12-stable-0.2.0`, built on #343 (the maintainer's decisions of 2026-10-09, not yet on `main`); the
@@ -24,7 +25,7 @@ Current-state handoff, rewritten in every change; history: git, `CHANGELOG.md`, 
   matrix (line 106), `delivery-governance.md` (line 38), `rq-17-tryout-sheet.md` (`@next` installs).
 - **State of the packages:** `latest` is the empty `0.0.0` placeholder on all four npm packages; `next` is `0.2.0-rc.3` (tag `v0.2.0-rc.3` at `83dca856e7a0`, published 2026-10-08). `0.2.0-rc.1` (2026-10-05) and
   `0.2.0-rc.2` (2026-10-07) are published, superseded and not deprecated yet.
-- **Evidence for `0.2.0-rc.3` is complete (2026-10-09):** `passed` RQ-01 to RQ-09, RQ-11 to RQ-13, RQ-15, RQ-18, RQ-19; `waived` RQ-14 (a mechanism), **RQ-10** (rc.3 only: a symbolic link answers `STORAGE_IO`,
+- **Evidence for `0.2.0-rc.3` is complete (2026-10-09):** `passed` RQ-01 to RQ-09, RQ-11 to RQ-13, RQ-15, RQ-18, RQ-19; `waived` RQ-14 (a mechanism), **RQ-10** (rc.3 and, decided 2026-10-10, the stable: a symbolic link answers `STORAGE_IO`,
   #265; its rule now admits `INVALID_ARGUMENT`), **RQ-16** (rc.3 and the stable: one cold agent read the clip `vsift audio` named; #340, L-142) and **RQ-17** (rc.3 and the stable: no Smart App Control, clean-machine
   or Gatekeeper try-out; L-143). A waiver is not a pass and the checker cannot see its limits; they live in the decisions' texts. Nothing has been run against `0.2.0`'s own bytes: that follows the publish.
 - **Public text:** `public-claims.json` rung `candidate`; CL-201, CL-206 and the other later-rung claims stay unused. CL-204's note and the support matrix's agent-client paragraph still say "the repeat decides" (stale
@@ -32,11 +33,10 @@ Current-state handoff, rewritten in every change; history: git, `CHANGELOG.md`, 
 **Decided 2026-10-02 (ADR 0024):** **A** R0 is `0.2.0` on `latest`. **B** `0.2.0-rc.N` under `next`, never announced. **C** no signing unless try-outs show a block. **D** 84 agent runs in three batches.
 **E** SEC-T01 narrowed. **F** "supported" per cell by fixed rules; managed install Ubuntu-only. **G** a claims ladder; nothing announced before P14 completes. **H** a try-out blocks the stable only until
 observed (or waived: used for RQ-17). #246 waits. **2026-10-07/08:** improve the skill and cut rc.3 (done, batch 2 met every gate); the re-pins stay after `0.2.0`. **2026-10-09:** RQ-10's rule admits
-`INVALID_ARGUMENT`; the RQ-16 waiver carries to the stable; rc.1 and rc.2 are deprecated at the stable; RQ-17 waived, the stable ships untried.
+`INVALID_ARGUMENT`; the RQ-16 waiver carries to the stable; rc.1 and rc.2 are deprecated at the stable; RQ-17 waived, the stable ships untried. **2026-10-10:** the RQ-10 waiver carries to the stable, for the link case only (plan 29.5).
 
 ## Open for the maintainer (none decided here)
 
-- **Does the RQ-10 waiver carry to the stable?** It names rc.3 only; the decisions of 2026-10-09 carried RQ-16's and RQ-17's by name and not RQ-10's. The checker passes either way; it is a wording decision.
 - **Move `next` after the publish?** (L-108.) The workflow never does; both shipped documents are true either way. What Yarn 4 does with an untagged `yarn add vsift-cli` during its one-day hold is not known.
 - **The register pass** over `register-review-sheet.md` (every review `pending` but L-137 and L-138 accepted, L-139 rejected = to be fixed; L-142 and L-143 are new). L-139 and L-095 record rc.3's result and stay
   open; L-138 describes no live limit and L-134 is narrowed. Also whether `Guide` becomes a required check, and CL-204's note and the matrix paragraph.

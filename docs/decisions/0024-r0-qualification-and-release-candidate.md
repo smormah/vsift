@@ -1945,3 +1945,20 @@ vsift-cli` during its one-day hold was not tried; the guide says so. (4) The reg
 **What is weaker than it sounds.** The candidate-to-stable check compares paths and bytes, not meaning (L-107): it cannot say that the two documents are right. Four of twenty evidence items are waived and none is a
 pass. The release ships with nothing run against its own bytes; that is the first step after the publish and PR 13's evidence. The front page, the security policy, the skill guide and the developer documents
 are outside the allowed lists and keep the candidate wording until PR 13 (L-133).
+
+## Implementation note, 2026-10-10 (P14: the RQ-10 waiver carries to the stable `0.2.0`)
+
+The maintainer answered the first point the note above left open. **This is work record only** (the ledger's RQ-10 entry, the plan's sections 29.5 and 30, this note, one evidence line of
+L-127 in the register, the stable's checklist, the changelog and the two memory files): no code, tool, workflow, schema, public claim or rung changed and nothing was run again. Every earlier
+note of this ADR stands as it was written.
+
+**Decision of the maintainer, 2026-10-10 (the ledger carries the same text): the RQ-10 waiver carries to the stable `0.2.0`.** The stable (tag `v0.2.0`, commit `eeb2a22a46a8`) is built from the
+same source as `0.2.0-rc.3`: after the candidate's tag only the version strings, the two shipped documents and the work record changed, and no program code. The same finding therefore stands, and
+the waiver of 2026-10-08, for exactly one residual (`ingest` of a symbolic link given as the video answers `STORAGE_IO` where the item's rule names `INVALID_SOURCE`; #265, L-127), covers
+`0.2.0-rc.3` and the stable `0.2.0` cut from it. It does not cover another candidate (for example an `rc.4`), a new finding of the campaign, a broken containment check, an answer outside the
+item's bounds, the room check on Windows (L-061) or anything else; a new candidate would run the campaign and need its own decision. It is carried the way the RQ-16 waiver was on 2026-10-09: the
+ledger entry keeps its decision date (2026-10-08) and gains a dated sentence, and its item date moves to 2026-10-10.
+
+**What is weaker than it sounds.** RQ-10 is `waived`, not `passed`, for the candidate and for the stable. The malicious-media campaign was not run on the stable's own bytes (the item's stable
+gate is `carry`); the decision rests on the stable being the candidate's source with another version number. Three of the four waived items (RQ-10, RQ-16, RQ-17) are now waived for the stable
+by name, and the completeness check cannot see the limits of any of them, so the limits are only as strong as these texts.
