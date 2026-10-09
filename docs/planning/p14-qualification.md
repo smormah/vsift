@@ -2302,6 +2302,15 @@ run's log, run 37753191530, shows each operation). All 20 meet the written rule 
 RQ-10's status for `0.2.0-rc.3`: the item stays `waived`,** for the link's `STORAGE_IO` alone, which the widened rule still does not admit. RQ-10 is not `passed`, and the waiver is neither widened nor
 shortened by this.
 
+**Update, 2026-10-10: the waiver carries to the stable `0.2.0`.** The maintainer answered the open point of 30.6: yes. The stable (tag `v0.2.0`, commit `eeb2a22a46a8`) is built from the same source as
+`0.2.0-rc.3` (after the candidate's tag only the version strings, the two shipped documents and the work record changed, no program code: section 30), so the same finding stands, and the waiver of
+2026-10-08, for exactly one residual (`ingest` of a symbolic link given as the video answers `STORAGE_IO`, #265, [L-127](known-limits.md#l-127)), covers `0.2.0-rc.3` **and the stable `0.2.0` cut from
+it**. It still does **not** cover another candidate (for example an `rc.4`), a new finding of the campaign, a broken containment check, an answer outside the item's bounds, the room check on Windows
+([L-061](known-limits.md#l-061)) or anything else; a new candidate would run the campaign and decide again. Where this section says "for `0.2.0-rc.3`" and "this candidate only", read "this candidate and
+the stable cut from it"; "it does not carry over to another candidate" stands as written. Nothing was run again for this decision, and the campaign was not run on the stable's own bytes (the item's
+stable gate is `carry`). **RQ-10 is not `passed`.** It is carried the way the RQ-16 waiver was (29.10, decision 2): the ledger entry keeps its decision date (2026-10-08) and gains a dated sentence, its
+`does_not_prove` says the same, and ADR 0024 has a note of 2026-10-10. This is work record only: no code, tool, workflow, schema, public claim or rung changed.
+
 ### 29.6 Hosted minutes, and what is weaker than it sounds
 
 **Hosted minutes.** About 3,680 job-minutes (about 61 runner-hours) in fifteen runs, each job rounded up to its minute: the fuzz run 1,952, the stress run 1,177, the P10
@@ -2662,7 +2671,7 @@ Run on the maintainer's Windows 11 development machine from a worktree of the br
 
 ### 30.4 What the release ships untried
 
-Four of the twenty evidence items are `waived` and none is a pass (the completeness check sees none of the limits; the decisions' texts do): RQ-10 (the link case, `0.2.0-rc.3` only: see 30.6), RQ-14 (SEC-T01
+Four of the twenty evidence items are `waived` and none is a pass (the completeness check sees none of the limits; the decisions' texts do): RQ-10 (the link case; carried to the stable on 2026-10-10: 29.5 and 30.6), RQ-14 (SEC-T01
 narrowed, decision E), RQ-16 (one cold read of the clip `vsift audio` named; carried to the stable on 2026-10-09; #340, L-142) and RQ-17 (no Smart App Control or SmartScreen try-out, no true clean-machine
 install, no Mac Gatekeeper try-out; carried to the stable; L-143). In addition: **the first move of `latest` has never run against the real services** (L-105: `--tag latest` under trusted publishing,
 `gh release edit --latest`, the read-back time); **nothing has been run against `0.2.0`'s own bytes**; Yarn's behaviour for an untagged install during its one-day hold was not tried; macOS is hosted-runner
@@ -2686,8 +2695,9 @@ evidence only; everything is measured on a synthetic corpus and a synthetic voic
 
 ### 30.6 Open for the maintainer (none decided here)
 
-1. **Does the RQ-10 waiver carry to the stable?** It names `0.2.0-rc.3` only, for the link case alone; the decisions of 2026-10-09 carried RQ-16's and RQ-17's waivers to the stable by name and said
-   nothing of RQ-10's. The stable is the same bytes, and the completeness check passes either way (a waived item is complete for any version), so what is open is the wording of the ledger entry and of this plan.
+1. **Does the RQ-10 waiver carry to the stable? Decided 2026-10-10: yes, for the link case alone and not for another candidate** (the update at the end of 29.5). As written on 2026-10-09 it was open: the
+   waiver named `0.2.0-rc.3` only, and the decisions of 2026-10-09 carried RQ-16's and RQ-17's waivers to the stable by name and said nothing of RQ-10's. The stable is the same source, and the
+   completeness check passes either way (a waived item is complete for any version), so what was decided is the wording of the ledger entry and of this plan.
 2. **Whether to move `next`** after the publish (L-108); both shipped documents are true either way.
 3. **Whether the stable's documents should say more or less about the first day for Yarn users** (the untagged case was not tried).
 4. The register pass, the reading of the cold logs (L-118), #340, #312 and the re-pins, as in 29.10: unchanged and after the stable.
@@ -2696,7 +2706,7 @@ evidence only; everything is measured on a synthetic corpus and a synthetic voic
 
 - **The candidate-to-stable check compares paths and bytes, not meaning** (L-107): it cannot say that the two documents are right, that the claims they avoid are the ones to avoid, or that the highest tag is the
   candidate that was qualified. The by-hand backstop (a `git diff --stat` of the code paths against `v0.2.0-rc.3`) is in the checklist because the check is compiled from the commit it judges.
-- **Four waived items are not four passes**, and two of them (RQ-16, RQ-17) are waived for the release on the same bytes as the candidate: what the release adds is the hosted re-run on its bytes, not new
+- **Four waived items are not four passes**, and three of them (RQ-16, RQ-17 and, since 2026-10-10, RQ-10) are waived for the release on the same bytes as the candidate: what the release adds is the hosted re-run on its bytes, not new
   agent or try-out evidence.
 - **The documents are early by the length of the window between the merge and the publish** (L-133), and the pages that could not change are late by the length of the window between the publish and PR 13.
 - **Nothing here exercised the first `latest` publish.** The dry run on the tag is the only rehearsal, and it cannot see trusted publishing or the release being marked latest.

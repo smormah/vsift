@@ -39,7 +39,7 @@ Four evidence items are `waived`, none is a pass, and `release-evidence` cannot 
 
 | Item | What was waived | Where the text is |
 | --- | --- | --- |
-| RQ-10, malicious media | the link case only: `ingest` of a symbolic link answers `STORAGE_IO` where the rule names `INVALID_SOURCE` (#265, L-127). **The waiver names `0.2.0-rc.3` only; whether it carries to the stable is not decided (open point 1 of the last section)** | plan 29.5 and 29.10 |
+| RQ-10, malicious media | the link case only: `ingest` of a symbolic link answers `STORAGE_IO` where the rule names `INVALID_SOURCE` (#265, L-127). **Carried to the stable on 2026-10-10, for the link case alone** (it named `0.2.0-rc.3` only when the release was published; open point 1 of the last section) | plan 29.5 and 29.10 |
 | RQ-14, SEC-T01 | the strict worker is not claimed to contain a hostile decoder (decision E option 4) | ADR 0024 amendment of 2026-10-03 |
 | RQ-16, the cold agent | one cold run in 18 read the clip `vsift audio` had named, with `base64`, inside the container (#340, L-142); carried to the stable on 2026-10-09 | plan 29.9 and 29.10 |
 | RQ-17, the try-outs | no Smart App Control or SmartScreen try-out, no true clean-machine install, no Mac Gatekeeper try-out, no person has run VSift on a Mac (L-143, L-098); carried to the stable on 2026-10-09 | plan 29.10 |
@@ -620,9 +620,9 @@ rung until PR 13, so CL-201 to CL-209 stay unused.
 
 **Open for you, none decided here:**
 
-1. **Does the RQ-10 waiver carry to the stable?** It names `0.2.0-rc.3` only, "the link case alone"; on 2026-10-09 you carried RQ-16's and RQ-17's waivers to the stable by name and
-   did not mention RQ-10's. The stable is the same bytes. The completeness check passes either way (a waived item is complete for any version), so this is a wording decision for the
-   ledger entry and the plan.
+1. **Does the RQ-10 waiver carry to the stable? Decided 2026-10-10: yes, for the link case alone and not for another candidate** (plan 29.5, the update of 2026-10-10). It named
+   `0.2.0-rc.3` only; on 2026-10-09 you carried RQ-16's and RQ-17's waivers to the stable by name and did not mention RQ-10's. The stable is the same source. The completeness check
+   passes either way (a waived item is complete for any version), so this was a wording decision for the ledger entry and the plan.
 2. **Whether to move `next`** (step 1 item 12, L-108).
 3. **What to do about Yarn on the first day** beyond the note in `install.md`, the launcher's README and the release notes (nothing was tried: Yarn's behaviour for an untagged
    `yarn add vsift-cli` inside the one-day hold is not known; with an exact version it said "quarantined" on 0.1.0).
