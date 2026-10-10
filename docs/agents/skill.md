@@ -137,9 +137,11 @@ select the skill; the user can also name it.
 
 ## The change for 0.2.1 (2026-10-10; not in any release yet)
 
-Prepared on the branch `skill-0.2.1` and folded into the `0.2.1` release-candidate cut with its new agent-trial
-freeze: the skill is a frozen trial component, so this changes its digest and batches 2 and 3 are run again on
-the new text before the qualification above is claimed for it. The change, and nothing else:
+Prepared on the branch `skill-0.2.1` and applied, unchanged, in the cut of the release candidate `0.2.1-rc.1` with its
+new agent-trial freeze: the skill is a frozen trial component, so this changes its digest (`2f8686b7...`) and batches 2
+and 3 are run again on the new text before the qualification above is claimed for it. **No trial has run on this text,
+and no trial scenario exercises the partial-transcript rule** (the scenarios and the grader are frozen with the
+rest, so the rule is read in the report only by what the existing scenarios happen to meet). The change, and nothing else:
 
 - **Wording** (#349). The description says "video walkthrough", not "QA walkthrough", and names a bug report as one
   example of a handoff, not the headline use; `references/handoff.md` says the Problem section is what the question
@@ -284,6 +286,12 @@ Prefer a review-tier model when the report must be right first time.
 
 ## Not yet done
 
+- **The skill of `0.2.1` is untried** (the change above, in the candidate `0.2.1-rc.1`, 2026-10-10). Everything below was
+  measured on the third candidate's skill, which `0.2.0` ships. Batches 2 and 3 are to be run again under the new freeze, each
+  on the maintainer's explicit go and after the candidate is published
+  ([`p14-batch-2-3-checklist.md`](../planning/p14-batch-2-3-checklist.md)); until they have, none of the figures below is a
+  statement about the `0.2.1` skill. The new rule for reporting a `partial` transcription has no scenario: adding one is the
+  maintainer's decision, and a new scenario changes a frozen component, so it would need its own freeze and candidate.
 - **The review tier's blurred-banner re-run met its gate on the third candidate, on a small
   sample.** The re-run after the #224 fix ran in batch 2 on the first two release
   candidates (2026-10-05 and 2026-10-07, three runs per client each time): GPT-6-Astra met
