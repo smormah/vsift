@@ -15,8 +15,8 @@ embeddable engine library (`vsift`) that the CLI, and later other hosts, use. To
   survives kills and, on Ubuntu 24.04 with ext4, power loss);
 - copy a video into a private, disposable session; import an SRT or WebVTT transcript with it,
   aligned by an offset; or transcribe the speech itself with whisper.cpp (`transcript
-  retranscribe`), continue an interrupted transcription, and report, resume or cancel that work (**known defect, high: a real recording whose 30-second chunk has little speech and one rejected
-  segment fails the whole run and keeps nothing, #353, L-145; the fix is planned for 0.2.1**);
+  retranscribe`), continue an interrupted transcription, and report, resume or cancel that work (**known defect in the published `0.2.0`, high: a real recording whose 30-second chunk has little speech
+  and one rejected segment fails the whole run and keeps nothing, #353, L-145; fixed on `main`, ships in `0.2.1`, not released**);
 - return timestamped transcript segments, search them, list the moments where the screen changed,
   and return exact frames, neighbours, bursts, crops and WAV clips;
 - manage the session's lifetime and retention, validate retained bundles, stop a long command
@@ -54,19 +54,24 @@ the CLI and write a cited report. P12's named-client trials qualified it:
   cold read of an audio clip, #340) and RQ-17 (the maintainer's Smart App Control, clean-machine and Mac try-outs were not done: the release ships untried, L-143). The checker cannot see their limits; the decisions' texts do.
 - **Not done or not shown:** RQ-13 (the scan reading on `0.2.0`, complete, 2026-10-10) is `passed` with one new finding that the maintainer accepted for R0 and will have fixed after the release: CVE-2026-107678 (Medium: the MP4
   demuxer's `pssh` handling, no fix in the shipped FFmpeg snapshot, nothing run on a crafted file; L-144, #351); the Ubuntu and Windows ASR gates and the durable path were not repeated on the release's tag; the
-  claims rung is still `candidate`, no platform is "supported", and 76 of the 130 register entries are `pending` review (no public statement leans on the pending ones).
+  claims rung is still `candidate`, no platform is "supported", and 79 of the 133 register entries are `pending` review (no public statement leans on the pending ones).
 - **The neutral checkpoint for using the published CLI (plan section 12) was met when P14 was recorded complete, and the trial has started.** The maintainer installed `0.2.0` on their own machine on 2026-10-10,
   copied the skill, byte for byte, into their own agent client's folder and is testing real recordings. That use never counts as qualification evidence. **Section 12's condition (no open high-severity limit
-  blocks the investigate-a-video journey) is not true while L-145 is open**; the plan's text, which names L-068 as the only high entry, is not edited by this change.
-- **The first real recording found a high-severity defect on 2026-10-10: #353, L-145 (open, not begun).** A 34-minute screencast with long pauses failed `transcript retranscribe` as `MISSING_CAPABILITY` and kept
-  nothing: one 30-second chunk with few recognised segments, one of them rejected, trips the quarter rule, and the application has no outcome for an unusable chunk but failing the run; `job resume` fails the
-  same way, the job stays `resumable`, and the error's remediation is #274's, which is wrong here. The 30-second windows five seconds either side transcribed; the recording cannot be committed and no session has reproduced it. The
-  maintainer's decision of the same day: **`0.2.1` carries everything waiting** (#353, #340 the audio text, #342, #345, #349), as separate fixes, then `0.2.1-rc.1` (the skill changes only with the new freeze in
-  that cut, as at rc.3), its hosted evidence, the agent batches 2 and 3 re-run on the candidate on the maintainer's go, and the stable. **P14 stays complete and `0.2.0` stays published and is not deprecated.**
-  Every accuracy figure so far is from a synthetic corpus with dense speech (L-022); this is the first real one.
+  blocks the investigate-a-video journey) is not true until `0.2.1` is published**, because L-145 stays open until then; the plan's text, which names L-068 as the only high entry, is not edited by this change.
+- **The first real recording found a high-severity defect on 2026-10-10: #353, L-145. It is fixed on `main` (#358, `510637e`, after four independent review rounds) and not released; `0.2.0` is still affected.**
+  A 34-minute screencast with long pauses failed `transcript retranscribe` as `MISSING_CAPABILITY` and kept nothing: one 30-second chunk with few recognised segments, one of them rejected, tripped the quarter rule,
+  and the application had no outcome for an unusable chunk but failing the run; `job resume` failed the same way, the job stayed `resumable`, and the error's remediation was #274's, which was wrong here. **On `main`
+  an unusable chunk is a recorded gap and the run answers `partial`, listing the stretch as not transcribed; the quarter rule tolerates one rejected segment in a chunk of fewer than four; the failure that remains
+  (most answered chunks unusable) says which reason, how many chunks and where, and the job is not resumable.** This is shown by tests on stand-in recordings, not on the recording that found it (it cannot be committed).
+- **The patch release `0.2.1` (the maintainer's decision of 2026-10-10: it carries everything waiting). The code fixes are merged to `main`; the release is not made.** Merged: #353 (above), #340 and #342 (`audio`'s
+  help and readable result say an agent cannot listen to a clip, which left the JSON as it was; the evidence commands' `BUSY` has a retry hint and a remediation) and #345 (a flaky Windows test of the trial harness,
+  the harness itself unchanged). **Not done:** the skill's wording (#349, which can change only with a new agent-trial freeze in the candidate's cut), the `0.2.1-rc.1` cut, its hosted evidence, the agent batches 2
+  and 3 re-run on the candidate (the maintainer's go and allowances), and the stable cut and its publish. **P14 stays complete; `0.2.0` stays published, is not deprecated and has the defect:** the README and the
+  install guide say so and give the workarounds (a supplied transcript, or ranges that avoid the failing stretch). Every accuracy figure so far is from a synthetic corpus with dense speech (L-022); this is the
+  first real one. The fix's own decisions left three limits for the register (L-146, L-147, L-148).
 - **What is weak:** the skill change met its gates once on a small sample; the cold round met its usefulness target twice with no margin and its safety gate not at all (one harmless read; no person has read the raw cold
   logs, L-118); hosted images are not clean machines (L-112); Smart App Control and the macOS prompts are unseen (L-098, L-143); **a synthetic corpus and voice only** (L-020, L-022), which the first real recording showed to matter (#353). CVE-2026-38350 (L-122), the
-  whisper.cpp pin (L-137) and CVE-2026-107678 (L-144) are the maintainer's accepted residuals. Open defects: **#353 (L-145, high: real recordings with pauses)**, #312 (L-135; one failure in 4,500 loaded Windows repetitions), #340, #342, #351.
+  whisper.cpp pin (L-137) and CVE-2026-107678 (L-144) are the maintainer's accepted residuals. Open defects: **#353 (L-145, high: real recordings with pauses; fixed on `main`, not released)**, #312 (L-135; one failure in 4,500 loaded Windows repetitions), #351; #340 and #342 are fixed on `main`, not released.
 
 ## How P14 went, in one view (details: `docs/planning/p14-qualification.md`, sections 15 to 31)
 
@@ -103,7 +108,7 @@ the CLI and write a cited report. P12's named-client trials qualified it:
 | P11 | Complete (`40c4038`); SEC-T01 adversarial evidence is technical debt, moved to R1 (#188, L-068) |
 | P12 | Complete (2026-09-30, ADR 0022 Accepted): skill, harness, named-client trials; review tier qualified, compact tier 93% and 100% on the #222 re-run; open: L-095 (#224), #219, #204 (`1284e54`) |
 | P13 | Complete (2026-10-01, ADR 0023 Accepted): distribution, managed install, `handoff check`, human output; 0.1.0 published; release commit `011bc4d` |
-| P14 | **Complete (2026-10-10, ADR 0024 Accepted): the R0 qualification; `0.2.0` published 2026-10-09 (`eeb2a22a46a8`); four items waived, one accepted FFmpeg finding (L-144, #351), the rung still `candidate`; a high finding came after it (#353, L-145), with `0.2.1` planned** |
+| P14 | **Complete (2026-10-10, ADR 0024 Accepted): the R0 qualification; `0.2.0` published 2026-10-09 (`eeb2a22a46a8`); four items waived, one accepted FFmpeg finding (L-144, #351), the rung still `candidate`; a high finding came after it (#353, L-145), fixed on `main` and not released: `0.2.1` is being prepared** |
 
 ## Architecture snapshot
 

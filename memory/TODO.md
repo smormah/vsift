@@ -17,34 +17,40 @@ platform is called "supported": the claims rung is still `candidate`. **Complete
 - **The neutral checkpoint for using the published CLI (plan section 12) was met when P14 was recorded complete, and the trial has started.** The maintainer installed `0.2.0` on their own machine on 2026-10-10,
   copied the skill, byte for byte, into their own agent client's folder and is testing real recordings; nothing is installed or configured on their machine by a session, and the notes of that use are reviewed in
   batches. The trial is never qualification evidence. **Its first real recording found #353 (L-145, high; below).** Section 12's condition is "no open high-severity limit blocks the investigate-a-video journey", and
-  L-145 is one while it is open; the plan's own text (31.4 names L-068 as the only high entry) is not edited here.
-- **The first real recording found a high-severity defect the day after the release (2026-10-10): #353, L-145.** A recording whose 30-second chunk holds few recognised segments, one of them rejected, makes
-  `transcript retranscribe` fail the whole run as `MISSING_CAPABILITY` and commit nothing; `job resume` fails the same way; the error's remediation does not say what failed. Every accuracy and robustness figure so
-  far came from a synthetic corpus with dense speech and real recordings were untried (L-022). **Open and not begun; P14 stays complete and `0.2.0` stays published.** Workaround: a supplied transcript
-  (`ingest --transcript`), or ranges that avoid the failing window.
+  L-145 is one until `0.2.1` is published, because the published `0.2.0` still has the defect (the fix is on `main`); the plan's own text (31.4 names L-068 as the only high entry) is not edited here.
+- **The first real recording found a high-severity defect the day after the release (2026-10-10): #353, L-145. It is fixed on `main` and not released; `0.2.0` is still affected.** A recording whose 30-second chunk
+  holds few recognised segments, one of them rejected, makes `transcript retranscribe` fail the whole run as `MISSING_CAPABILITY` and commit nothing; `job resume` fails the same way; the error's remediation does
+  not say what failed. Every accuracy and robustness figure so far came from a synthetic corpus with dense speech and real recordings were untried (L-022). **P14 stays complete and `0.2.0` stays published and is not
+  deprecated.** For `0.2.0` users the workarounds stand: a supplied transcript (`ingest --transcript`), or ranges that avoid the failing window; the README and the install guide carry that known-issue note.
 - **The LOKI try-out (RQ-17) is still available** (`docs/planning/rq-17-tryout-sheet.md`, being updated in another pull request): it would give CL-201 its evidence, and until it is done the Windows row stays untried.
 - **The pages that named the candidate are corrected** (README, skill guide, development guide, release runbook, `SECURITY.md`, three sentences of `install.md`); `roadmap.svg` and the README's "status:
   pre-release" badge are not (L-121): they wait for the README design session.
 
-## Next: the patch release 0.2.1 (the maintainer's decision of 2026-10-10; none of it begun)
+## Next: the patch release 0.2.1 (the maintainer's decision of 2026-10-10; the code fixes are on `main`, the release is not begun)
 
-This is a patch release, not a work packet. **This change only registers the finding (L-145) and records the plan; no fix is written.**
-- **It carries everything waiting:** #353 the transcription fix (high), #340 the audio text (L-142), #342 the `BUSY` answer's missing retry hint, #345 the flaky Windows trial-harness test, #349 the skill
-  description's wording. The design of #353's fix is in the issue and is the maintainer's to decide (when a failed chunk fails the run, the minimum count for the quarter rule, the new reason's text), with a note in ADR 0017.
-- **The order:** each fix is its own pull request with its regression test (#353 closes only with the evidence the issue lists, not before). The skill can change only together with a new freeze, in the cut of the
-  release candidate, as at rc.3, so the skill's wording (#349) goes in with that cut. Then `0.2.1-rc.1` (a new candidate: code, skill and shipped documents are frozen at its cut), its hosted evidence, **the agent
-  batches 2 and 3 re-run on the candidate on the maintainer's go**, and the stable `0.2.1` built from the candidate's bytes.
-- **Meanwhile** `0.2.0` stays published and is not deprecated; `latest` is `0.2.0` and `next` is still `0.2.0-rc.3`. Nothing is announced.
+This is a patch release, not a work packet. **Increments done, release not done: nothing here is published, and the register entries stay open until the release.**
+- **On `main` now (merged 2026-10-10, each its own pull request with its regression tests; the issues are closed on GitHub):** #353 the transcription fix (#358, `510637e`, after four independent review rounds: a chunk
+  whose answer cannot be used is a recorded gap and the run is `partial`; the quarter rule applies from four segments; the failure says what failed and the job is not resumable; ADR 0017 and 0020 notes); #340 and #342
+  (#357: `audio`'s help and readable result say an agent cannot listen to a clip, and `BUSY` from the evidence commands carries a retry hint and a remediation); #345 (#356: the flaky Windows settings-source test retries
+  the harness's start race, the harness itself unchanged). **What they did not do:** #353 is not shown on the real recording (it is commercial; the tests use stand-ins); #340 left the JSON of `audio` as it was (no
+  hint) and added no cold-scenario expectation; #345 left the race in the harness's `run` (it is part of the frozen grader digest), so a real trial can still meet it.
+- **Not done:** the skill's wording (#349, open), which can change only together with a new agent-trial freeze in the cut of the release candidate, as at rc.3; the `0.2.1-rc.1` cut (a new candidate: code, skill and
+  shipped documents are frozen at its cut); its hosted evidence; **the agent batches 2 and 3 re-run on the candidate, which need the maintainer's go and allowances**; the stable `0.2.1`, built from the candidate's
+  bytes, and its publish; the records change that deletes L-145 and re-reads L-142 once that is published.
+- **Meanwhile** `0.2.0` stays published, is not deprecated and **is still affected by L-145**; `latest` is `0.2.0` and `next` is still `0.2.0-rc.3`. The known-issue note is in the README and the install guide. Nothing is announced.
 
 ## Open for the maintainer
 
-- **L-145's review is `pending`:** confirm its severity (high by the rubric's second line, read for the investigate-a-video journey) and decide #353's design; say whether plan section 12's and 31.4's wording is amended.
+- **L-145's review is `pending`:** confirm its severity (high by the rubric's second line, read for the investigate-a-video journey); say whether plan section 12's and 31.4's wording is amended. **L-146, L-147 and L-148
+  are new (from the ADR notes of the #353 fix) and `pending`:** L-146 (a model swapped during a run: checkpoints written after the swap sit under the original model's key; low), L-147 (a worker's `retranscribe` step is
+  `complete` with `coverage` null when chunks were unreadable; medium, a schema change in a later release) and L-148 (two costs of keeping earlier text inside an unreadable stretch; low): confirm each severity reading,
+  and say whether L-146 and L-147 get an issue (none is filed).
 - **RQ-05 on the release's own tag lacks** the Ubuntu and Windows ASR gates and the durable path (the third candidate's runs stand in `prior`; RQ-09 and RQ-12 carry): dispatch `P07 local ASR`, `P14 load`, `P14
   runbook walk` at `v0.2.0` or accept (31.5 item 2). **`P14 compatibility` was not dispatched at `v0.2.0`** (item 3).
 - **The claims rung stays `candidate`.** Moving it to `after_p14` makes CL-201 to CL-209 stale unless each is used or deleted: six could be used on passed evidence (CL-202, 203, 204, 205, 207, 209) and three cannot
   (CL-201 needs RQ-17, CL-206 RQ-16, CL-208 RQ-14: waived). That is wording for the README, `install.md` and the matrix, which is yours (31.5 item 4). **Move `next`?** (L-108; still `0.2.0-rc.3`.)
-- **Close #17** (the P14 issue) and **#321** (3,000 clean hosted repetitions); #312 fix or accept; #340: which option (help text only, or an additive JSON hint), now in 0.2.1 as the audio text.
-- **The register:** 76 of 130 entries are still `pending` (L-145 is new; no public statement leans on the pending ones); L-139 stays rejected (to be fixed, #336); the MSRV policy is undecided; `Guide` is not a required check.
+- **Close #17** (the P14 issue) and **#321** (3,000 clean hosted repetitions); #312 fix or accept; **#340: the text fix is on `main` (option 1); say whether the additive JSON hint (option 2) is still wanted**, which the candidate's cold round may inform.
+- **The register:** 79 of 133 entries are still `pending` (L-145 to L-148 are new; no public statement leans on the pending ones); L-139 stays rejected (to be fixed, #336); the MSRV policy is undecided; `Guide` is not a required check.
 
 ## Later: the work list (not in 0.2.1; none of it blocks anything)
 
@@ -58,7 +64,7 @@ This is a patch release, not a work packet. **This change only registers the fin
 
 ## Tracked issues and gates
 
-- **Open, in 0.2.1:** #353 (L-145, high), #340 (L-142), #342, #345, #349. **Open, other:** #351 (L-144), #17, #219, #224 (L-095, L-139), #188, #232, #246 (deferred), #258, #263, #272 (residual accepted, L-122),
+- **Fixed on `main`, closed on GitHub, not released:** #353 (L-145, high; open in the register until `0.2.1` is published), #340 (L-142), #342, #345. **Open, in 0.2.1:** #349. **Open, other:** #351 (L-144), #17, #219, #224 (L-095, L-139), #188, #232, #246 (deferred), #258, #263, #272 (residual accepted, L-122),
   #312 (L-135), #314 (fixed in rc.2; L-136), #316 (hosted runners scarce), #321, #336, #322 (the floor is in; the pin stays, L-137), #325, #334, #337; #128 (watch); flaky tests #253 (Windows kill test) and #268
   (macOS SIGTERM test): comment with the run link and rerun the job.
 - **A change after the stable release may touch any file**, but a new version is a new candidate: the code, the skill and the shipped documents are frozen at a candidate's cut (`release.md` 6.8 binds the next stable
@@ -69,7 +75,7 @@ This is a patch release, not a work packet. **This change only registers the fin
 
 ## What the next session reads first
 
-`memory/project_current_status.md`, then `docs/planning/p14-qualification.md` section 31 (what P14 recorded and what is open), `docs/planning/known-limits.md` (L-145 for the 0.2.1 work; L-105, L-121, L-133 for the release and the README),
+`memory/project_current_status.md`, then `docs/planning/p14-qualification.md` section 31 (what P14 recorded and what is open), `docs/planning/known-limits.md` (L-145 to L-148 and L-142 for the 0.2.1 work; L-105, L-121, L-133 for the release and the README),
 `docs/operations/release.md` 6.13 and `docs/planning/p14-stable-release-steps.md` (the model for the next stable version), and the delivery ledger. R1 starts with P15's decision packet, not before the maintainer says.
 
 ## Guardrails
