@@ -29,7 +29,7 @@ use std::{
 use crate::{
     Confidence, ConfidenceOrigin, CueText, LanguageTag, MediaTime, ProviderEndTrim, SourceSegment,
     SourceSegmentId, TimeRange, TranscriptRevisionError, TranscriptWarningKind, TranscriptWarnings,
-    spans::{merged, span, subtract, to_ranges},
+    spans::{Span, merged, overlaps_any, span, subtract, to_ranges},
 };
 
 /// Sample rate of the speech PCM contract: mono signed 16-bit at 16 kHz.
@@ -787,13 +787,9 @@ impl AsrRun {
     /// them by five seconds, covers them: in start order, merged, empty when the
     /// run had no unusable chunk (#353).
     ///
-    /// These are the ranges the run did not re-transcribe, and the rule for the
-    /// text the superseded revision had in them is stated here once, for the
-    /// application that builds a revision and the domain that validates it: a
-    /// segment of the superseded revision that lies wholly inside one of them
-    /// is kept, as it was and with its original provenance, even though it is
-    /// inside the replaced range; every other segment inside the replaced range
-    /// is replaced by what the run transcribed there.
+    /// These are the ranges the run did not re-transcribe. What becomes of the
+    /// text the superseded revision had in and around them is
+    /// [`EarlierTextRule`]'s.
     #[must_use]
     pub fn unusable_gaps(&self) -> Vec<TimeRange> {
         let mut covered = Vec::new();
@@ -828,6 +824,75 @@ impl AsrRun {
             return Err(TranscriptRevisionError::InvalidAsrRun);
         }
         Ok(())
+    }
+}
+
+/// What a retranscription keeps of the earlier text inside the range it
+/// replaced, when it could not read all of that range (#353).
+///
+/// **The rule, in one sentence:** a segment of the superseded revision that
+/// lies in the replaced range is kept, whole and with its original provenance,
+/// when it reaches into a part of the range the run could not read (a gap,
+/// [`AsrRun::unusable_gaps`]) and none of the text the run itself wrote
+/// overlaps it; every other segment in the range is replaced.
+///
+/// Why this and not another. A run replaces earlier text because it read the
+/// audio and wrote what it heard. A segment that lies wholly in what the run
+/// read is replaced by that, or by silence. A segment that lies wholly in a gap
+/// was not read at all, so there is nothing to replace it with and deleting it
+/// would only lose text. A segment that crosses the edge of a gap, which sits
+/// at the edge of a neighbouring chunk's window, was read only in part, and
+/// even a microsecond past the edge makes it so:
+///
+/// - If the run's own text overlaps it, the run has heard the same words and
+///   its text replaces the segment, as it replaces any other (a sentence that
+///   crosses a window edge is heard again by the neighbour that read its end).
+/// - If nothing the run wrote overlaps it, the part of the audio the run did
+///   read and found quiet, or without text, is no evidence against the whole
+///   segment: the read part of a window beside an unread one is its edge, which
+///   the chunk overlap exists to make a neighbour answer for. The segment is
+///   kept whole. A run does not replace what it did not read in full.
+///
+/// The rule is the same for every consumer: the application builds the
+/// revision with it, the revision applies it when it is validated (so a stored
+/// record cannot keep or drop what the rule would not), and coverage counts
+/// what it keeps.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct EarlierTextRule {
+    replaced: Span,
+    gaps: Vec<Span>,
+    written: Vec<Span>,
+}
+
+impl EarlierTextRule {
+    /// The rule for a run over `replaced` whose own text occupies `written`.
+    pub fn new(
+        replaced: TimeRange,
+        run: &AsrRun,
+        written: impl IntoIterator<Item = TimeRange>,
+    ) -> Self {
+        Self {
+            replaced: span(replaced),
+            gaps: run.unusable_gaps().into_iter().map(span).collect(),
+            written: merged(written.into_iter().map(span).collect()),
+        }
+    }
+
+    /// Whether a segment of the superseded revision at `earlier` is carried
+    /// into the new revision: it lies outside the replaced range, or lies in
+    /// it and the rule keeps it. A segment that crosses the replaced range's
+    /// own edge is never carried (a range is widened to whole segments, so
+    /// none does).
+    #[must_use]
+    pub fn carries(&self, earlier: TimeRange) -> bool {
+        let candidate = span(earlier);
+        if !overlaps_any(&[self.replaced], candidate) {
+            return true;
+        }
+        self.replaced.0 <= candidate.0
+            && candidate.1 <= self.replaced.1
+            && overlaps_any(&self.gaps, candidate)
+            && !overlaps_any(&self.written, candidate)
     }
 }
 

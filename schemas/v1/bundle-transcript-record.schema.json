@@ -253,7 +253,7 @@
       }
     },
     "v2": {
-      "description": "Version 2: a revision produced by local speech recognition (transcript retranscribe). It records its run, what it superseded and replaced, the provenance it inherited, and each segment either as recognised by its run or as carried from an earlier revision. inherited is omitted when the record carries nothing.",
+      "description": "Version 2: a revision produced by local speech recognition (transcript retranscribe). It records its run, what it superseded and replaced, the provenance it inherited, and each segment either as recognised by its run or as carried from an earlier revision. inherited is omitted when the record carries nothing, and carried_untranscribed (since 0.2.1) when the superseded revision covered everything outside the replaced range.",
       "type": "object",
       "additionalProperties": false,
       "required": [
@@ -350,6 +350,15 @@
               "$ref": "#/$defs/range"
             }
           ]
+        },
+        "carried_untranscribed": {
+          "description": "Since 0.2.1 (#353): what the superseded revision did not cover outside replaced_range, in start order, merged, inside the source and never overlapping replaced_range. A search of the superseded revision listed these ranges as untranscribed; this revision records them because it keeps the provenance only of the runs whose text it carries, and an earlier run's windows, or an imported file, are not counted over a part that revision left untranscribed. Omitted when empty, so a record whose chain never left a part untranscribed is written as before.",
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1024,
+          "items": {
+            "$ref": "#/$defs/range"
+          }
         },
         "inherited": {
           "type": "array",

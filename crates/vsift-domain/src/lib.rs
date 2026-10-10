@@ -31,9 +31,9 @@ pub use admission::{
 pub use asr::{
     AsrChunkOutcome, AsrChunkRecord, AsrDecodingProfile, AsrModel, AsrModelProfile, AsrProvider,
     AsrProviderBuild, AsrRun, AsrRunParts, AsrSegmentDraft, ChunkPlan, ChunkPlanError,
-    ChunkSegments, ChunkTime, DigestError, MAX_CHUNK_WINDOW_MICROS, MAX_PLANNED_CHUNKS,
-    MAX_PROVIDER_SEGMENTS, MAX_PROVIDER_TOKENS, MIN_RECOGNITION_MICROS, MIN_RECOGNITION_SAMPLES,
-    MIN_SEGMENTS_FOR_REJECTION_RATIO, MergedSegment, MergedTranscript,
+    ChunkSegments, ChunkTime, DigestError, EarlierTextRule, MAX_CHUNK_WINDOW_MICROS,
+    MAX_PLANNED_CHUNKS, MAX_PROVIDER_SEGMENTS, MAX_PROVIDER_TOKENS, MIN_RECOGNITION_MICROS,
+    MIN_RECOGNITION_SAMPLES, MIN_SEGMENTS_FOR_REJECTION_RATIO, MergedSegment, MergedTranscript,
     PROVIDER_END_TOLERANCE_MICROS, PlannedChunk, ProviderChunkOutput, ProviderOutputError,
     ProviderSegment, ProviderToken, ProviderTokenKind, ReviewedAsrModel, SPEECH_SAMPLE_RATE,
     Sha256Hex, UNUSABLE_CHUNK_SHARE_DENOMINATOR, ValidatedChunk, decoded_audio_range,
@@ -92,13 +92,14 @@ pub use timeline::{
 };
 pub use transcript::{
     AlignedCue, AlignmentOrigin, CarriedFrom, CueMarkup, CueSource, CueText, CueTiming,
-    ImportedCue, InheritedRevision, LanguageTag, LanguageTagError, MAX_CUE_TEXT_BYTES,
-    MAX_SUPPLIED_TRANSCRIPT_BYTES, MAX_TRANSCRIPT_CUES, MAX_TRANSCRIPT_OFFSET_MICROS,
-    ParsedTranscript, ProviderEndTrim, SegmentOrigin, SidecarIdentity, SourceSegment,
-    SourceSegmentState, TranscriptFormat, TranscriptImportError, TranscriptOffset,
-    TranscriptProvenance, TranscriptRejection, TranscriptRevision, TranscriptRevisionError,
-    TranscriptRevisionParts, TranscriptSegment, TranscriptSegmentParts, TranscriptSlice,
-    TranscriptWarning, TranscriptWarningKind, TranscriptWarnings, align_imported_cues,
+    ImportedCue, InheritedRevision, LanguageTag, LanguageTagError, MAX_CARRIED_UNTRANSCRIBED,
+    MAX_CUE_TEXT_BYTES, MAX_SUPPLIED_TRANSCRIPT_BYTES, MAX_TRANSCRIPT_CUES,
+    MAX_TRANSCRIPT_OFFSET_MICROS, ParsedTranscript, ProviderEndTrim, SegmentOrigin,
+    SidecarIdentity, SourceSegment, SourceSegmentState, TranscriptFormat, TranscriptImportError,
+    TranscriptOffset, TranscriptProvenance, TranscriptRejection, TranscriptRevision,
+    TranscriptRevisionError, TranscriptRevisionParts, TranscriptSegment, TranscriptSegmentParts,
+    TranscriptSlice, TranscriptWarning, TranscriptWarningKind, TranscriptWarnings,
+    align_imported_cues,
 };
 pub use visual::{
     CandidateChange, CandidateDraft, CandidateReason, CandidateStability, CoverageGapReason,

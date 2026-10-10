@@ -20,13 +20,14 @@ use std::{error::Error, fmt, future::Future, num::NonZeroU16, num::NonZeroU32};
 use vsift_domain::{
     AsrChunkOutcome, AsrChunkRecord, AsrDecodingProfile, AsrModel, AsrModelProfile,
     AsrProviderBuild, AsrRun, AsrRunParts, CarriedFrom, CheckpointOutcome, ChunkCheckpoint,
-    ChunkPlan, ChunkPlanError, InheritedRevision, LanguageTag, MediaTime, MergedSegment,
-    PlannedChunk, ProgressStage, ProgressUpdate, ProviderChunkOutput, ProviderOutputError,
-    RecognitionKey, SegmentOrigin, SessionId, SourceId, SourceSegment, TimeRange,
-    TranscriptProvenance, TranscriptRevision, TranscriptRevisionError, TranscriptRevisionId,
-    TranscriptRevisionParts, TranscriptSegment, TranscriptSegmentParts, TranscriptWarningKind,
-    TranscriptWarnings, ValidatedChunk, decoded_audio_range, is_below_recognition_floor,
-    is_silent_pcm, merge_chunks, plan_chunks, unusable_chunks_end_the_run, validate_chunk_output,
+    ChunkPlan, ChunkPlanError, EarlierTextRule, InheritedRevision, LanguageTag, MediaTime,
+    MergedSegment, PlannedChunk, ProgressStage, ProgressUpdate, ProviderChunkOutput,
+    ProviderOutputError, RecognitionKey, SegmentOrigin, SessionId, SourceId, SourceSegment,
+    TimeRange, TranscriptProvenance, TranscriptRevision, TranscriptRevisionError,
+    TranscriptRevisionId, TranscriptRevisionParts, TranscriptSegment, TranscriptSegmentParts,
+    TranscriptWarningKind, TranscriptWarnings, ValidatedChunk, decoded_audio_range,
+    is_below_recognition_floor, is_silent_pcm, merge_chunks, plan_chunks,
+    unusable_chunks_end_the_run, validate_chunk_output,
 };
 
 use crate::{
@@ -570,14 +571,17 @@ impl From<AsrFailure> for AsrRunFailure {
 ///
 /// Before a chunk is decoded its checkpoint is read. A checkpoint of this
 /// run (the same recognition key, index and window) is used in place of
-/// decoding and recognising: a silent or empty chunk as recorded, and stored
+/// decoding and recognising: a silent or empty chunk as recorded, stored
 /// recognizer output through exactly the validation and merge a fresh run
-/// applies, so an interrupted and resumed run yields the same revision as an
-/// uninterrupted one. A checkpoint that is unreadable, of another run, or
-/// whose output the rules reject is removed and the chunk done again; it is
-/// counted in [`CheckpointUse::discarded`], never guessed at (S-08). After a
-/// chunk is done fresh its outcome (the raw output, once it has passed
-/// validation) is stored before the next chunk starts; a checkpoint that
+/// applies, and the verdict of a chunk whose answer the rules refused as a
+/// whole (#353: its decoded range and the reason, never the refused answer), so
+/// an interrupted and resumed run yields the same revision as an uninterrupted
+/// one and does not ask the recognizer about the chunk again. A checkpoint that
+/// is unreadable, of another run, or whose output the rules reject is removed
+/// and the chunk done again; it is counted in [`CheckpointUse::discarded`],
+/// never guessed at (S-08). After a chunk is done fresh its outcome is stored
+/// before the next chunk starts: the raw output once it has passed validation,
+/// a gap as recorded, or the verdict on an unusable answer; a checkpoint that
 /// cannot be stored costs only the redo.
 ///
 /// # Errors
@@ -1141,10 +1145,14 @@ impl Assembled<'_> {
 /// segment of the superseded revision outside the replaced range is carried
 /// with its original text, timing and provenance, and the run's segments fill
 /// the range, except where the run could not read the audio: a segment of the
-/// superseded revision that lies wholly inside a part of the range that the
-/// run left unread ([`AsrRun::unusable_gaps`]) is carried too, because a run
-/// that failed to read a stretch must not delete what the session already had
-/// there (#353). Carried segments get new identities in this revision, so the
+/// superseded revision that reaches into a part of the range that the run left
+/// unread ([`AsrRun::unusable_gaps`]) and that none of the run's own text
+/// overlaps is carried too, because a run that failed to read a stretch must
+/// not delete what the session already had there ([`EarlierTextRule`], #353).
+/// The revision also records what the superseded revision left untranscribed
+/// outside the range ([`TranscriptRevision::carried_untranscribed`]), which its
+/// coverage needs and no run it carries tells. Carried segments get new
+/// identities in this revision, so the
 /// superseded revision's records stay valid and are never overwritten, and
 /// each names the revision and segment that first produced it
 /// ([`CarriedFrom`]). A run that recognised no speech still yields a revision
@@ -1198,7 +1206,6 @@ pub fn build_asr_revision(
         ],
     ))
     .map_err(|_| TranscriptBuildError::Invalid(TranscriptRevisionError::InvalidIdentity))?;
-    let gaps = run.unusable_gaps();
     let any_unusable = run
         .chunks()
         .iter()
@@ -1214,9 +1221,23 @@ pub fn build_asr_revision(
             NonZeroU32::MIN,
         );
     }
-    let (mut assembled, inherited) = match request.splice {
-        Some(splice) => carried_segments(splice, &gaps)?,
-        None => (Vec::new(), Vec::new()),
+    let (mut assembled, inherited, carried_untranscribed) = match request.splice {
+        Some(splice) => {
+            let rule = EarlierTextRule::new(
+                splice.replaced_range,
+                run,
+                transcription
+                    .segments
+                    .iter()
+                    .map(|merged| merged.segment.range()),
+            );
+            let (carried, inherited) = carried_segments(splice, &rule)?;
+            // What the superseded revision left untranscribed outside this
+            // run's range stays so: its run may not be recorded here at all.
+            let untranscribed = splice.base.untranscribed_outside(splice.replaced_range);
+            (carried, inherited, untranscribed)
+        }
+        None => (Vec::new(), Vec::new(), Vec::new()),
     };
     assembled.extend(transcription.segments.into_iter().map(Assembled::Own));
     // Stable: ties keep carried segments first, then provider order.
@@ -1231,6 +1252,7 @@ pub fn build_asr_revision(
         supersedes,
         replaced_range: request.splice.map(|splice| splice.replaced_range),
         inherited,
+        carried_untranscribed,
         language: transcription.language,
         segments,
         warnings,
@@ -1292,23 +1314,22 @@ fn identified_segments(
 /// its originating revision and segment, and the provenance of every revision
 /// they originate in, in order of first use.
 ///
-/// Those are the segments outside the replaced range, and, inside it, the
-/// segments that lie wholly inside one of the run's `gaps`: the parts of the
-/// range no chunk transcribed or found quiet because the recogniser's answer
-/// for them was unusable (#353). A run that could not read a stretch must not
-/// delete the text the session already had there, so that text is kept as it
-/// was, with its original provenance; text inside a part the run did transcribe
-/// (or found silent) is replaced, as before, and so is a segment that reaches
-/// out of a gap into such a part, because the run's own text covers it there.
+/// Those are the segments `rule` carries ([`EarlierTextRule`], #353): the
+/// segments outside the replaced range, and, inside it, the segments that reach
+/// into a part of it that the run could not read and that none of the run's own
+/// text overlaps. A run that could not read a stretch must not delete the text
+/// the session already had there, so that text is kept whole, as it was, with
+/// its original provenance; everything else inside the range is replaced, as
+/// before.
 fn carried_segments<'a>(
     splice: RevisionSplice<'a>,
-    gaps: &[TimeRange],
+    rule: &EarlierTextRule,
 ) -> Result<(Vec<Assembled<'a>>, Vec<InheritedRevision>), TranscriptBuildError> {
     let base = splice.base;
     let mut carried = Vec::new();
     let mut inherited: Vec<InheritedRevision> = Vec::new();
     for segment in base.segments() {
-        if segment.intersects(splice.replaced_range) && !segment.lies_within_any(gaps) {
+        if !rule.carries(segment.range()) {
             continue;
         }
         let (origin, source) = match segment.carried_from() {
@@ -1341,3 +1362,6 @@ fn carried_segments<'a>(
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod chain_tests;

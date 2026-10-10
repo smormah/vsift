@@ -426,6 +426,11 @@ const SEEDS: &[Seed] = &[
         Origin::Copy(TRANSCRIPT_RECORD_EXAMPLES),
     ),
     seed(
+        Target::TranscriptRecord,
+        "F01-untranscribed-carried.json",
+        Origin::Copy(TRANSCRIPT_RECORD_EXAMPLES),
+    ),
+    seed(
         Target::FfprobeMetadata,
         "F11-excessive-streams.json",
         Origin::Copy("fixtures/corpus/generated"),
@@ -798,6 +803,7 @@ fn well_formed_seeds_are_accepted() -> TestResult {
             Target::TranscriptRecord,
             "F01-kept-in-an-unreadable-part.json",
         ),
+        (Target::TranscriptRecord, "F01-untranscribed-carried.json"),
         (Target::FfprobeMetadata, "two-streams-rotated.json"),
         (Target::FfprobeMetadata, "audio-only-unknown-codec.json"),
         (Target::TranscriptCursor, "transcript-get-next-cursor.txt"),

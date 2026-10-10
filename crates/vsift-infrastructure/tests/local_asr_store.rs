@@ -423,6 +423,116 @@ fn text_kept_in_an_unreadable_part_round_trips_and_is_checked_on_reading() -> Te
     Ok(())
 }
 
+/// #353: a revision spliced from one that left a part untranscribed records the
+/// part (`carried_untranscribed`), because it keeps the provenance only of the
+/// runs whose text it carries and the first run's window would otherwise be
+/// counted over it. The record round trips, conforms to the published schema
+/// and is checked on reading: the parts are in order, merged, inside the source
+/// and outside the replaced range.
+#[test]
+fn what_an_earlier_revision_left_untranscribed_is_recorded_and_checked_on_reading() -> TestResult {
+    let (first, _) = f01_revisions()?;
+    let source = first.source_segment().clone();
+    let session = SessionId::parse(EXAMPLE_SESSION)?;
+    let source_id = SourceId::parse(F01_SPEECH_SOURCE)?;
+    let splice = |base: &TranscriptRevision,
+                  number: u32,
+                  replaced: TimeRange,
+                  outcome: AsrChunkOutcome|
+     -> Built<TranscriptRevision> {
+        Ok(build_asr_revision(AsrRevisionRequest {
+            session_id: &session,
+            source_id: &source_id,
+            source_segment: &source,
+            number: NonZeroU32::new(number).ok_or("zero")?,
+            transcription: AsrTranscription {
+                run: run(&source, replaced, outcome)?,
+                language: None,
+                segments: Vec::new(),
+                warnings: TranscriptWarnings::default(),
+            },
+            splice: Some(RevisionSplice {
+                base,
+                replaced_range: replaced,
+            }),
+        })?)
+    };
+    // 5.5-6 s could not be read, and there was no text there to keep.
+    let unread = range(5_500_000, 6 * SECOND)?;
+    let second = splice(
+        &first,
+        2,
+        unread,
+        AsrChunkOutcome::Unusable { audio: unread },
+    )?;
+    assert!(second.carried_untranscribed().is_empty());
+    // A later run over 5.3-5.4 s, far from it, silent.
+    let quiet = range(5_300_000, 5_400_000)?;
+    let third = splice(&second, 3, quiet, AsrChunkOutcome::Silent { audio: quiet })?;
+    assert_eq!(third.carried_untranscribed(), [unread]);
+
+    let encoded = encode_transcript_record(&third)?;
+    let value: serde_json::Value = serde_json::from_slice(&encoded)?;
+    assert_eq!(
+        value["carried_untranscribed"],
+        serde_json::json!([{"start_us": 5_500_000, "end_us": 6_000_000}])
+    );
+    assert!(conforms_to_record_schema(&value)?);
+    assert_eq!(decode_transcript_record(&encoded)?, third);
+    // A revision that records nothing is written without the member, as before.
+    let before: serde_json::Value = serde_json::from_slice(&encode_transcript_record(&second)?)?;
+    assert!(before.get("carried_untranscribed").is_none());
+    // The record is committed as a fuzz seed.
+    assert!(
+        fs::read(
+            repository("crates/vsift-infrastructure/tests/data/transcript_records")
+                .join("F01-untranscribed-carried.json")
+        )? == encoded,
+        "regenerate the committed record: the encoder no longer writes its bytes"
+    );
+
+    for (label, listed) in [
+        (
+            "into the replaced range",
+            serde_json::json!([{"start_us": 5_350_000, "end_us": 6_000_000}]),
+        ),
+        (
+            "beyond the source",
+            serde_json::json!([{"start_us": 5_500_000, "end_us": 7_000_000}]),
+        ),
+        (
+            "out of order",
+            serde_json::json!([
+                {"start_us": 5_500_000, "end_us": 5_700_000},
+                {"start_us": 1_000_000, "end_us": 2_000_000}
+            ]),
+        ),
+        (
+            "touching",
+            serde_json::json!([
+                {"start_us": 5_500_000, "end_us": 5_700_000},
+                {"start_us": 5_700_000, "end_us": 6_000_000}
+            ]),
+        ),
+    ] {
+        let mut changed = value.clone();
+        changed["carried_untranscribed"] = listed;
+        assert_eq!(
+            decode_transcript_record(&serde_json::to_vec(&changed)?),
+            Err(SessionStorageError::IntegrityFailure),
+            "{label}"
+        );
+    }
+    // A record of a revision that is not spliced carries none.
+    let mut plain: serde_json::Value = serde_json::from_slice(&encode_transcript_record(&first)?)?;
+    plain["carried_untranscribed"] = serde_json::json!([{"start_us": 1, "end_us": 2}]);
+    assert_eq!(
+        decode_transcript_record(&serde_json::to_vec(&plain)?),
+        Err(SessionStorageError::IntegrityFailure)
+    );
+    Ok(())
+}
+
 /// Strict decoding re-checks every carried segment against its inherited
 /// provenance and the replaced range.
 #[test]

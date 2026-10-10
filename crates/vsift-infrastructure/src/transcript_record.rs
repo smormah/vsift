@@ -285,6 +285,7 @@ impl StoredTranscript {
             supersedes: None,
             replaced_range: None,
             inherited: Vec::new(),
+            carried_untranscribed: Vec::new(),
             language: optional_language(self.language).ok()?,
             segments,
             warnings,
@@ -357,6 +358,13 @@ struct StoredAsrTranscript {
     replaced_range: Option<StoredRange>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     inherited: Vec<StoredInherited>,
+    /// What the superseded revision did not cover outside `replaced_range`
+    /// (#353), written only when there is any, so that every other record is
+    /// written exactly as before. A release before it reads the member as
+    /// damage, as it reads an `unusable` chunk, and only a session whose
+    /// chain holds a chunk of that kind has such a record.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    carried_untranscribed: Vec<StoredRange>,
     language: Option<String>,
     warnings: Vec<StoredWarning>,
     segments: Vec<StoredAsrEntry>,
@@ -543,6 +551,12 @@ impl StoredAsrTranscript {
                 .iter()
                 .map(StoredInherited::from_domain)
                 .collect(),
+            carried_untranscribed: revision
+                .carried_untranscribed()
+                .iter()
+                .copied()
+                .map(StoredRange::from_domain)
+                .collect(),
             language: revision.language().map(|tag| tag.as_str().to_owned()),
             warnings: stored_warnings(revision.warnings()),
             segments: revision
@@ -576,6 +590,10 @@ impl StoredAsrTranscript {
             Some(range) => Some(stored_range(range.start_us, range.end_us)?),
             None => None,
         };
+        let mut carried_untranscribed = Vec::with_capacity(self.carried_untranscribed.len());
+        for range in self.carried_untranscribed {
+            carried_untranscribed.push(stored_range(range.start_us, range.end_us)?);
+        }
         TranscriptRevision::new(TranscriptRevisionParts {
             id: TranscriptRevisionId::parse(self.revision_id).ok()?,
             number: NonZeroU32::new(self.revision)?,
@@ -585,6 +603,7 @@ impl StoredAsrTranscript {
             supersedes,
             replaced_range,
             inherited,
+            carried_untranscribed,
             language: optional_language(self.language).ok()?,
             segments,
             warnings: domain_warnings(self.warnings)?,

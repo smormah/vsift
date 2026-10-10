@@ -7,10 +7,10 @@ use proptest::prelude::{prop_assert, prop_assert_eq, proptest};
 use super::{
     AsrChunkOutcome, AsrChunkRecord, AsrDecodingProfile, AsrModel, AsrModelProfile, AsrProvider,
     AsrProviderBuild, AsrRun, AsrRunParts, ChunkPlan, ChunkPlanError, ChunkSegments, ChunkTime,
-    MIN_RECOGNITION_MICROS, MIN_RECOGNITION_SAMPLES, MIN_SEGMENTS_FOR_REJECTION_RATIO,
-    PlannedChunk, ProviderChunkOutput, ProviderOutputError, ProviderSegment, ProviderToken,
-    ProviderTokenKind, ReviewedAsrModel, SPEECH_SAMPLE_RATE, Sha256Hex,
-    UNUSABLE_CHUNK_SHARE_DENOMINATOR, decoded_audio_range, is_below_recognition_floor,
+    EarlierTextRule, MIN_RECOGNITION_MICROS, MIN_RECOGNITION_SAMPLES,
+    MIN_SEGMENTS_FOR_REJECTION_RATIO, PlannedChunk, ProviderChunkOutput, ProviderOutputError,
+    ProviderSegment, ProviderToken, ProviderTokenKind, ReviewedAsrModel, SPEECH_SAMPLE_RATE,
+    Sha256Hex, UNUSABLE_CHUNK_SHARE_DENOMINATOR, decoded_audio_range, is_below_recognition_floor,
     is_silent_pcm, merge_chunks, plan_chunks, rounds_to_no_pcm_sample, unusable_chunks_end_the_run,
     validate_chunk_output,
 };
@@ -1522,6 +1522,7 @@ fn asr_revision_over(
         supersedes: None,
         replaced_range: None,
         inherited: Vec::new(),
+        carried_untranscribed: Vec::new(),
         language: None,
         segments,
         warnings: TranscriptWarnings::default(),
@@ -1988,6 +1989,107 @@ fn the_gaps_of_a_run_are_its_unusable_windows_less_the_answered_ones() -> TestRe
     // Nothing answered: the whole range.
     let all = run(&[unusable(0, 30)?, unusable(25, 55)?, unusable(50, 70)?])?;
     assert_eq!(all.unusable_gaps(), [range(0, 70 * SECOND)?]);
+    Ok(())
+}
+
+/// #353, the rule for the text a run that could not read all of its range keeps
+/// of the earlier revision: kept, whole, when it reaches into a gap and none of
+/// the run's own text overlaps it; every other segment in the range is
+/// replaced; a segment outside the range is carried.
+#[test]
+fn the_rule_keeps_text_that_reaches_into_a_gap_unless_the_runs_own_text_overlaps_it() -> TestResult
+{
+    let outcomes = [
+        AsrChunkOutcome::Unusable {
+            audio: range(0, 30 * SECOND)?,
+        },
+        AsrChunkOutcome::Transcribed {
+            audio: range(25 * SECOND, 55 * SECOND)?,
+        },
+        AsrChunkOutcome::Transcribed {
+            audio: range(50 * SECOND, 70 * SECOND)?,
+        },
+    ];
+    let planned = run(&outcomes)?;
+    // The gap is 0-25 s. The run replaced 0-65 s and wrote 26-28 s and 40-41 s.
+    assert_eq!(planned.unusable_gaps(), [range(0, 25 * SECOND)?]);
+    let rule = EarlierTextRule::new(
+        range(0, 65 * SECOND)?,
+        &planned,
+        [
+            range(26 * SECOND, 28 * SECOND)?,
+            range(40 * SECOND, 41 * SECOND)?,
+        ],
+    );
+    for (label, earlier, carried) in [
+        ("wholly in the gap", range(3 * SECOND, 5 * SECOND)?, true),
+        ("the whole gap", range(0, 25 * SECOND)?, true),
+        (
+            "past the gap's edge by a microsecond",
+            range(24 * SECOND, 25 * SECOND + 1)?,
+            true,
+        ),
+        (
+            "across the gap into what was read, over no text",
+            range(24 * SECOND, 25 * SECOND + 500_000)?,
+            true,
+        ),
+        (
+            "ending where the run's text starts",
+            range(20 * SECOND, 26 * SECOND)?,
+            true,
+        ),
+        (
+            "overlapped by the run's text by a microsecond",
+            range(20 * SECOND, 26 * SECOND + 1)?,
+            false,
+        ),
+        (
+            "across the gap and over the run's text",
+            range(20 * SECOND, 30 * SECOND)?,
+            false,
+        ),
+        (
+            "touching the gap's edge only",
+            range(25 * SECOND, 26 * SECOND)?,
+            false,
+        ),
+        (
+            "wholly in what was read",
+            range(30 * SECOND, 32 * SECOND)?,
+            false,
+        ),
+        (
+            "inside the replaced range, beyond any gap",
+            range(60 * SECOND, 62 * SECOND)?,
+            false,
+        ),
+        (
+            "outside the replaced range",
+            range(66 * SECOND, 68 * SECOND)?,
+            true,
+        ),
+        (
+            "across the replaced range's edge",
+            range(60 * SECOND, 70 * SECOND)?,
+            false,
+        ),
+    ] {
+        assert_eq!(rule.carries(earlier), carried, "{label}");
+    }
+
+    // A run that read everything keeps nothing inside its range.
+    let read = run(&[
+        AsrChunkOutcome::Transcribed {
+            audio: range(0, 30 * SECOND)?,
+        },
+        AsrChunkOutcome::Silent {
+            audio: range(25 * SECOND, 55 * SECOND)?,
+        },
+        AsrChunkOutcome::NoAudio,
+    ])?;
+    let nothing = EarlierTextRule::new(range(0, 70 * SECOND)?, &read, []);
+    assert!(!nothing.carries(range(3 * SECOND, 5 * SECOND)?));
     Ok(())
 }
 

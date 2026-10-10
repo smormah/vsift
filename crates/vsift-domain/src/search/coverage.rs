@@ -26,15 +26,19 @@
 //!   outside that range, each revision whose segments it carries contributes
 //!   its own coverage by the same rules. A run whose segments were all replaced
 //!   is no longer recorded in the revision, so what only it examined counts as
-//!   not covered: the report can understate coverage, never overstate it. That
-//!   holds for an unusable window of the revision's own run too: an earlier
-//!   revision's windows, which its replaced segments no longer back, are not
-//!   counted over it. What the revision does hold there is counted: a segment
-//!   it carries from the earlier revision that lies wholly inside the run's own
-//!   unusable gaps ([`AsrRun::unusable_gaps`]) was kept because the run could
-//!   not replace it (#353), and its own range is covered. The rest of the gap
-//!   stays untranscribed, which is true: the run did not read it and the
-//!   revision holds no text there.
+//!   not covered: the report can understate coverage, never overstate it.
+//!
+//! **The rule that keeps it so, in one sentence (#353):** a revision covers an
+//! instant only where it holds a segment there or a run it still records read
+//! that audio, and an earlier run's window is never counted inside a range a
+//! later run replaced (the later run's own windows are counted there) nor
+//! inside a part the superseded revision did not itself cover
+//! ([`TranscriptRevision::carried_untranscribed`], recorded by each spliced
+//! revision because a revision keeps the provenance only of the runs whose text
+//! it carries). So a part some run could not read stays untranscribed through
+//! every later retranscription, however far from it, until a run reads it; and
+//! the text a revision keeps there ([`crate::EarlierTextRule`]) is covered by
+//! that text and nothing else of the part is.
 //!
 //! No-speech ranges never contain a segment of the revision.
 
@@ -245,23 +249,29 @@ fn revision_coverage(
         TranscriptProvenance::LocalAsr(run) => run,
     };
     let own = run_windows(run);
-    let mut covered = own.covered();
-    // What an earlier revision covers is counted only outside the windows this
-    // run examined, an unusable one included: the run replaced what the
-    // earlier revision said there, so its windows no longer back anything
-    // inside them.
-    let own_examined = own.examined();
-    // The one exception: text the earlier revision had inside a gap of this
-    // run was kept, as it was, because the run could not replace it (#353). Its
-    // own range is covered, and nothing else of the gap is.
-    let gaps = run.unusable_gaps();
-    let retained: Vec<Span> = revision
+    let segments: Vec<Span> = revision
         .segments()
         .iter()
-        .filter(|segment| segment.carried_from().is_some() && segment.lies_within_any(&gaps))
         .map(|segment| span(segment.range()))
         .collect();
-    covered.extend(retained);
+    // What the revision holds: the windows its run read, and every segment it
+    // has, its own, carried, or kept where its run could not read (#353).
+    let mut covered = own.covered();
+    covered.extend(segments.iter().copied());
+    // What an earlier revision covers is counted only outside the windows this
+    // run examined, an unusable one included (the run replaced what the
+    // earlier revision said there, so its windows no longer back anything
+    // inside them), and outside the parts the superseded revision itself did
+    // not cover: a window of a run that revision no longer holds, or an
+    // imported file's whole source, says nothing about a part that revision
+    // left untranscribed, and the revision may no longer carry the run that
+    // left it.
+    let not_counted = merged(
+        own.examined()
+            .into_iter()
+            .chain(revision.carried_untranscribed().iter().copied().map(span))
+            .collect(),
+    );
     let mut heard = own.transcribed;
     let mut quiet = own.quiet;
     let mut supplied = false;
@@ -269,22 +279,17 @@ fn revision_coverage(
         match inherited.provenance() {
             TranscriptProvenance::Imported { .. } => {
                 supplied = true;
-                covered.extend(subtract(&[source], &own_examined));
+                covered.extend(subtract(&[source], &not_counted));
             }
             TranscriptProvenance::LocalAsr(inherited_run) => {
                 let earlier = run_windows(inherited_run);
-                covered.extend(subtract(&earlier.transcribed, &own_examined));
-                covered.extend(subtract(&earlier.quiet, &own_examined));
-                heard.extend(subtract(&earlier.transcribed, &own_examined));
-                quiet.extend(subtract(&earlier.quiet, &own_examined));
+                covered.extend(subtract(&earlier.transcribed, &not_counted));
+                covered.extend(subtract(&earlier.quiet, &not_counted));
+                heard.extend(subtract(&earlier.transcribed, &not_counted));
+                quiet.extend(subtract(&earlier.quiet, &not_counted));
             }
         }
     }
-    let segments: Vec<Span> = revision
-        .segments()
-        .iter()
-        .map(|segment| span(segment.range()))
-        .collect();
     let speech = merged(heard.into_iter().chain(segments).collect());
     let no_speech = subtract(&merged(quiet), &speech);
     let basis = if supplied {
