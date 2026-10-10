@@ -7,7 +7,7 @@
 VSift turns a video on your machine into **timestamped speech**, **the moments the screen changed** and **the exact frames that prove them**. Use it yourself to get a transcript and find the moment you need, or let the AI assistant you run locally use it to work out what a recording shows, without anyone transcribing it or screenshotting it by hand.
 
 [![CI](https://github.com/smormah/vsift/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/smormah/vsift/actions/workflows/ci.yml)
-[![npm (next)](https://img.shields.io/npm/v/vsift-cli/next?label=vsift-cli%40next&color=cb3837)](https://www.npmjs.com/package/vsift-cli)
+[![npm](https://img.shields.io/npm/v/vsift-cli?label=vsift-cli&color=cb3837)](https://www.npmjs.com/package/vsift-cli)
 [![Release](https://img.shields.io/github/v/release/smormah/vsift?include_prereleases&label=release&color=2a4a73)](https://github.com/smormah/vsift/releases)
 [![Last commit](https://img.shields.io/github/last-commit/smormah/vsift/main?color=2dd4bf)](https://github.com/smormah/vsift/commits/main)
 [![Licence](https://img.shields.io/badge/licence-MIT%20OR%20Apache--2.0-blue)](#licence)
@@ -131,10 +131,10 @@ VSift is a native Rust command-line tool. FFmpeg, FFprobe and whisper.cpp run as
 
 ## Quick start
 
-> VSift is a **0.x pre-release**. The npm package `vsift-cli` carries it under the `next` tag, so ask for `@next`. You need Node.js 22 or later (or Bun 1.2 or later) to install it, and FFmpeg and FFprobe to process video.
+> VSift is at **0.2.0**, published on npm as `vsift-cli` under the `latest` tag, so no tag is needed. You need Node.js 22 or later (or Bun 1.2 or later) to install it, and FFmpeg and FFprobe to process video.
 
 ```console
-npm install --global vsift-cli@next
+npm install --global vsift-cli
 vsift setup check
 vsift ingest ./recording.mp4
 ```
@@ -201,13 +201,13 @@ VSift is built in public, with its reasoning written down. The claims on this pa
 
 ## Honest status
 
-VSift is at **0.1.0, a pre-release**: the first release of R0, whose full qualification (P14) is in progress. It is not a stable release, and no platform is "supported" yet. The next release, 0.2.0, has a candidate: 0.2.0-rc.3 is a release candidate under qualification and is not announced (it replaces 0.2.0-rc.1 and 0.2.0-rc.2, the first two candidates, which stay published), and the evidence gathered so far, with its gaps, is recorded in the release evidence ledger ([`p14-evidence-ledger.json`](docs/planning/p14-evidence-ledger.json)).
+VSift is at **0.2.0**, the release of R0 and the first published under npm's `latest` tag, so `npm install vsift-cli` installs it. It is not announced. It is built from the same source as the third release candidate, 0.2.0-rc.3, the release qualification (P14) is recorded complete (2026-10-10), and the hosted checks were run again on 0.2.0's own bytes. Four of the twenty evidence items were waived, not passed, and Windows Smart App Control, a clean machine and macOS Gatekeeper were not tried, so the machines below are R0 targets, not yet a supported platform. The evidence gathered so far, with its gaps, is recorded in the release evidence ledger ([`p14-evidence-ledger.json`](docs/planning/p14-evidence-ledger.json)). The 0.1.0 pre-release and the three release candidates stay published and are superseded.
 
 - **Works today:** the whole journey above, on recordings you point it at: ingest, transcript import or local recognition, search, visual candidates, frames, crops, audio, recoverable jobs, a worker-host mode for supervisors, `handoff check`, and installation from npm or native archives.
 - **Measured on a synthetic corpus.** Every accuracy figure so far comes from synthetic recordings and a synthetic voice. Real recordings come with the post-R0 trial.
-- **Platforms:** built for Windows 11 x64, macOS 15 (Apple silicon) and Linux x64. On hosted test machines the published 0.1.0 has installed with npm, pnpm, Yarn and Bun on all three and run the speech and screen-change journeys; a hosted machine is not a clean one, and nobody has yet run VSift on a Mac. Managed tool installation is tested on Ubuntu 24.04 x64 only. Codex's Windows sandbox cannot run VSift today ([#204](https://github.com/smormah/vsift/issues/204)). The [support matrix](docs/planning/support-and-resource-profiles.md) lists what each machine has shown and what is still missing.
+- **Platforms:** built for Windows 11 x64, macOS 15 (Apple silicon) and Linux x64. On hosted test machines the published 0.2.0 has installed with npm, pnpm, Yarn and Bun on all three and run the speech and screen-change journeys; a hosted machine is not a clean one, and nobody has yet run VSift on a Mac. Managed tool installation is tested on Ubuntu 24.04 x64 only. Codex's Windows sandbox cannot run VSift today ([#204](https://github.com/smormah/vsift/issues/204)). The [support matrix](docs/planning/support-and-resource-profiles.md) lists what each machine has shown and what is still missing.
 - **The executables are not code-signed or notarized.** Windows SmartScreen or macOS Gatekeeper may warn about a file you download directly; the [installation guide](docs/operations/install.md) says what to expect and how to verify a download instead.
-- **What is next:** R0 completes with P14, the release qualification. [R1](docs/planning/r1-industrial-capability-expansion.md) then adds managed cross-video indexing, enrichment, reconstruction and operated worker growth.
+- **What is next:** R0's work packets, P00 to P14, are complete. [R1](docs/planning/r1-industrial-capability-expansion.md) then adds managed cross-video indexing, enrichment, reconstruction and operated worker growth.
 
 <p align="center">
   <img src="docs/assets/readme/roadmap.svg" alt="Roadmap. Done: work packets P00 to P13, each with its evidence, and the 0.1.0 pre-release on npm under the next tag. Now: P14, the release qualification with trials and campaigns. Next: release candidates 0.2.0-rc.N under next, then 0.2.0, the R0 release on npm latest, then R1: cross-video indexing, enrichment and workers. Planned steps are plans, not dates." width="100%">

@@ -16,15 +16,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   four packages and the GitHub release to be published, not a pre-release and GitHub's latest. A pre-release is asked for neither. **The delta check can only pass while GitHub
   keeps the artifact, seven days after the publish** (until 2026-10-16 for `0.2.0`); after that it fails by name and points at the evidence ledger's `release_delta`, never passes
   without its input ([L-103](docs/planning/known-limits.md#l-103)). Their tests use the values of the real `0.2.0` publish and no network.
+- **P14 is recorded complete, `0.2.0`'s own evidence is in the ledger and ADR 0024 is Accepted (P14 PR 13b, 2026-10-10; records and pages only, nothing that ships changes).** The hosted checks
+  were run on the published `0.2.0` on 2026-10-09: `P14 published artifacts` from `0.1.0` and from `0.2.0-rc.3` (23 of 23 jobs each: twelve clean installs, the archives, the offline install, the upgrades),
+  `P14 journeys` on three systems (54 stages passed and 1 blocked, as the per-system rule says), `P13 managed smoke`, and the Governance job at the stable commit; the first `P14 verify release` on `0.2.0` failed
+  on exactly the two stable checks that were not yet registered, by design, and the run after P14 PR 13a (#348), 38013937541, passed all 22 checks, the two stable ones among them. The evidence ledger holds the release's own entries for RQ-01 to RQ-06, RQ-18 and RQ-19, the
+  recorded `release_delta` (copied from the publish run's artifact, which GitHub keeps seven days), and the third candidate's evidence carried for RQ-07 to RQ-12 and RQ-14 to RQ-17 (four items waived, none a pass).
+  **RQ-13's scan reading of 2026-10-10 (the third candidate's method, with the public sources) found everything of 2026-10-08 unchanged except nine new FFmpeg records of 2026-10-08, one of which, CVE-2026-107678
+  (Medium: the MP4 demuxer's `pssh` handling, no fix in the shipped snapshot), is a new finding** (register entry L-144). **The maintainer accepted it for R0 on 2026-10-10 and decided to fix it after the release (tracking issue #351; at the re-pin of L-132 look for the upstream fix, and add a malformed-MP4 `pssh` case to the malicious-media campaign), so RQ-13 is recorded `passed` for `0.2.0`** with the finding named and what was not tried said in the entry (`docs/planning/p14-scan-reading-2026-10-10.md`, plan section 31.2). The delivery ledger marks P14 `complete`, with the stable release commit
+  `eeb2a22a46a8`; the register's L-105 records what the first move of `latest` did, L-103, L-108, L-121 and L-133 are brought up to date, and **L-144 is new** (accepted residual, accepted 2026-10-10).
+- **The pages that named the candidate or `@next`.** The README (the install block and the badge say `vsift-cli` with no tag, the status paragraph says what is true after the release, `0.2.0` and P14 complete), the skill
+  guide (the install command, and the third-candidate and cold-round results it listed as not yet done), the development guide (the completeness check's example), the release runbook (the header, 6.12 step 7, which is now the
+  decided and done deprecation, and a new 6.13 that records the stable publish and what it showed), `SECURITY.md` (the supported-versions table: the newest `0.2.x` receives security fixes), three sentences of the
+  installation guide, one of the guide's limits page and an example in the delivery-governance page. `roadmap.svg` was left: it is out of date in more than a word (L-121).
+- **The claims registry** loses four statements whose words left the documents (NC-004, NC-005, NC-014 and CL-101: "not a stable release...", "until a stable release", "and no stable release", "is a release candidate
+  under qualification") and names the release checklist's file in the runbook (NC-810); the notes of NC-011 and NC-012 follow the security policy. **The rung is still `candidate` and no claim is raised or used**: moving it to
+  `after_p14` would make the nine statements of that rung stale unless each is used or deleted (plan 31.5 item 4).
+- **The two handoff files** (`memory/`) say that R0's packets are complete and what remains open.
 
 ## [0.2.0] - 2026-10-09
 
 **This is the release: the first VSift published under npm's `latest`, so `npm install vsift-cli` with no tag installs it.** It is the version
 ADR 0024 decision A calls stable (no pre-release suffix), and it is **`0.2.0-rc.3` with a different version number**: the same source, so
 every change listed under `0.2.0-rc.3` below (the agent skill's two evidence rules, the 100 ms floor for audio, the refusal of an `audio` range too short to hold a sample, the
-remediation for a copy that runs out of time, and three fixes to tests and tools) is in this release, and nothing else is. **The commit was prepared on 2026-10-09; it is
-a release only when the maintainer has tagged `v0.2.0` and published it, and until then `latest` is still the empty `0.0.0` placeholder** (the installation guide
-and the launcher's README, which say otherwise, are early by that long: [L-133](docs/planning/known-limits.md#l-133)). It is not announced. `0.2.0-rc.1` and
+remediation for a copy that runs out of time, and three fixes to tests and tools) is in this release, and nothing else is. **It was published on 2026-10-09** (tag `v0.2.0` at `eeb2a22a46a8`, the merge of #344; publish run 37946261087; [`release.md`](docs/operations/release.md) 6.13); `latest` was the empty `0.0.0`
+placeholder until then. It is not announced. `0.2.0-rc.1` and
 `0.2.0-rc.2` stay published and **were deprecated on 2026-10-10**, after this release was published and checked (decided 2026-10-09): npm warns on an install of either and names this release.
 `0.2.0-rc.3` is not deprecated.
 
@@ -61,9 +76,9 @@ Four evidence items are `waived` for this release, none is a pass, and the ledge
 - **The strict worker profile is not claimed to contain a hostile decoder** (decision E option 4, [L-068](docs/planning/known-limits.md#l-068)).
 - **Everything was measured on a synthetic corpus and a synthetic voice; nothing was tried on a real recording** ([L-020](docs/planning/known-limits.md#l-020),
   [L-022](docs/planning/known-limits.md#l-022)). Durability is shown on Ubuntu 24.04 with local ext4 only, managed installation exists on Ubuntu 24.04 x64 only, and Codex on Windows is not supported.
-- **Nothing has yet been run against this release's own bytes.** The evidence recorded for `0.2.0-rc.3` is for that candidate's commit; the hosted workflows are dispatched on `0.2.0` after the
-  publish and recorded by the ledger follow-up (PR 13). Open items of the register that this release carries are unchanged: #312, #340, the FFmpeg and whisper.cpp re-pins, the Dependabot pull requests.
-- **No platform is "supported", the claims rung is still `candidate`, and the front page, the security policy and the skill guide still describe the candidate window** until the follow-up.
+- **Nothing had been run against this release's own bytes when it was published.** The hosted workflows were dispatched on `0.2.0` after the publish and are recorded by the ledger follow-up (P14 PR 13b,
+  below). Open items of the register that this release carries are unchanged: #312, #340, the FFmpeg and whisper.cpp re-pins, the Dependabot pull requests.
+- **No platform is "supported" and the claims rung is still `candidate`.** The front page, the security policy and the skill guide described the candidate window until the follow-up (P14 PR 13b, below).
 
 ### Changed
 

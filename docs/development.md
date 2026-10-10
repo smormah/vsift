@@ -571,8 +571,11 @@ Run either on its own while you edit it, and the completeness check when a relea
 ```console
 cargo run --locked -p vsift-governance -- release-evidence
 cargo run --locked -p vsift-governance -- public-claims
-cargo run --locked -p vsift-governance -- release-evidence --complete-for 0.2.0-rc.3 --commit <40 hex digits>
+cargo run --locked -p vsift-governance -- release-evidence --complete-for <version> --commit <40 hex digits>
 ```
+
+For example `--complete-for 0.2.0 --commit eeb2a22a46a85ab10a456f2ab5d6a62e292836c5` is the check of the
+release 0.2.0 (it names the stable commit; a candidate's version, such as `0.2.0-rc.3`, is checked as a candidate).
 
 - **The ledger's shape** (schema version 1; the Rust types in
   `tools/vsift-governance/src/release_evidence/schema.rs` are the schema, and every struct
@@ -583,9 +586,10 @@ cargo run --locked -p vsift-governance -- release-evidence --complete-for 0.2.0-
   `repeat`, `carry` or `not_required`), `status` (`planned`, `running`, `passed`, `failed`,
   `waived`, `not_applicable`), `applies_to` (`version`, `commit`), `evidence` and `prior` (each a
   typed `reference` of `workflow_run`, `pull_request`, `issue` or `record`, with a `date` and a
-  `note`), `issues`, `decision`, `reason` and `date`. `release_delta` stays null until
-  the maintainer copies the stable plan's `release-delta.json` (P14 PR 8's delta check) into it
-  after the publish.
+  `note`), `issues`, `decision`, `reason` and `date`. `release_delta` is null until a stable
+  release is published and its ledger follow-up copies the stable plan's `release-delta.json`
+  (P14 PR 8's delta check) into it; it holds the record of `0.2.0` since 2026-10-10 (nothing
+  copies it for you: [L-103](planning/known-limits.md#l-103)).
 - **Changing an evidence item's status** is a change to the ledger: set `status`, give the
   version and commit it is for (`applies_to`) and at least one typed link (a workflow run, a
   pull request, a repository record), move what no longer counts into `prior`, and add the

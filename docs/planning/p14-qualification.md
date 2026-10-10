@@ -1,17 +1,14 @@
 # P14 R0 qualification: plan, traceability and budgets
 
-Status: **plan, 2026-10-02; the maintainer confirmed decisions A to H on 2026-10-02 and
-started P14** (the [delivery ledger](delivery-ledger.json) marks it `in_progress`). Design
-and decisions: [ADR 0024](../decisions/0024-r0-qualification-and-release-candidate.md)
-(Proposed until P14 completes, as ADR 0023 was); the pull-request sequence is "P14 scope and
-pull requests" in
-[implementation-work-packets](implementation-work-packets.md). This file becomes the P14
-qualification record when the packet completes: until then every "Evidence that exists"
-cell is what the earlier records show, every "P14 adds" cell is a plan, and the only results are
-those of sections 15 (PR 2) and 17 (PR 3), on the published 0.1.0. Test IDs are [verification](verification.md)'s; the `RQ-nn` IDs below are local to
-P14's [evidence ledger](p14-evidence-ledger.json) and have their rows in verification
-section 8 (added by PR 1, 2026-10-02, which also built the ledger's checks and the
-[claims registry](public-claims.json)). Dates are UTC.
+Status: **the P14 qualification record; P14 is recorded complete on 2026-10-10 (section 31).** It began as the plan of
+2026-10-02, which the maintainer confirmed (decisions A to H) when they started P14. Sections 1 to 14 are that plan as written
+and are not rewritten (their "Evidence that exists" cells are what the earlier records showed on that day, and their "P14 adds"
+cells were plans); sections 15 to 31 are the results, in the order they were obtained. Design and decisions:
+[ADR 0024](../decisions/0024-r0-qualification-and-release-candidate.md) (Accepted 2026-10-10 with P14's completion, as ADR 0023
+was); the pull-request sequence is "P14 scope and pull requests" in
+[implementation-work-packets](implementation-work-packets.md). Test IDs are [verification](verification.md)'s; the `RQ-nn`
+IDs below are local to P14's [evidence ledger](p14-evidence-ledger.json) and have their rows in verification section 8 (added
+by PR 1, 2026-10-02, which also built the ledger's checks and the [claims registry](public-claims.json)). Dates are UTC.
 
 ## 1. What P14 must show
 
@@ -2716,3 +2713,144 @@ evidence only; everything is measured on a synthetic corpus and a synthetic voic
   agent or try-out evidence.
 - **The documents are early by the length of the window between the merge and the publish** (L-133), and the pages that could not change are late by the length of the window between the publish and PR 13.
 - **Nothing here exercised the first `latest` publish.** The dry run on the tag is the only rehearsal, and it cannot see trusted publishing or the release being marked latest.
+
+## 31. PR 13b: 0.2.0's own evidence, the pages that named the candidate, and P14 recorded complete (2026-10-10)
+
+The maintainer published `0.2.0` on 2026-10-09 and checked it (section 30.5; [`release.md`](../operations/release.md) 6.13) and deprecated
+`0.2.0-rc.1` and `0.2.0-rc.2` on 2026-10-10 (29.10, decision 3). The supervisor then ran the hosted checks on `0.2.0`'s own bytes, and this section
+records them and what they change. **This is a records-and-pages change.** No code, tool, workflow, schema, skill, grader, scenario, setting or
+`freeze.json` changed (`skills/` is untouched and the trial freeze check prints `nothing frozen has changed`); the session that wrote it dispatched,
+tagged, published and deprecated nothing, and nothing was announced. What it changes: the evidence ledger (`release_delta` copied in; own entries for
+`0.2.0` for RQ-01 to RQ-06, RQ-13, RQ-18 and RQ-19: 31.1 to 31.3), the delivery ledger (P14 `complete`), ADR 0024 (Accepted), the pages that named
+the candidate or `@next` (the README, the skill guide, the development guide, the release runbook with its new 6.13, the security policy, and three
+sentences of `install.md`, one of the guide's limits page and one example in the delivery-governance page that the evidence made stale), the claims
+registry (four statements removed because their words left the documents, one file name registered), the register (one new entry, L-144, found by the scan reading and accepted by the maintainer), the changelog and the two memory files.
+
+### 31.1 The runs on `0.2.0`'s own bytes, and what each shows and does not show
+
+All were dispatched from `main` by the supervisor (the stable commit `eeb2a22a46a8` for the runs of 2026-10-09, between about 5.6 and 7 hours after the publish; `main` as it then was for the scan reading and the green `P14 verify release` of 2026-10-10), and each
+ran against the real registry and the real GitHub release of `0.2.0`; every run's conclusion, commit and job list was checked with `gh run view` before it was cited.
+
+| Items | Run | Result | What it shows | What it does not show |
+| --- | --- | --- | --- | --- |
+| RQ-01 to RQ-04 | `P14 published artifacts` [37999883603](https://github.com/smormah/vsift/actions/runs/37999883603), `from_version` 0.1.0 | 23 of 23 jobs passed | `vsift-cli@0.2.0` installs from the real registry with npm, pnpm, Yarn and Bun on Windows Server 2025, macOS 15 and Ubuntu 24.04, global and one-shot, scripts off, in a scrubbed environment; `--version` prints `vsift 0.2.0 (eeb2a22a46a8)` everywhere; hostile names and arguments through the shims (39 of 39 on Windows through `vsift.ps1`, Bun and Yarn, 60 of 60 elsewhere; 36 of 39 through `vsift.cmd`, the known L-109 observation); the planted `ffmpeg` is never run (SEC-02); omitted optional dependencies exit 127; `npm audit signatures` and `gh attestation verify` in the same job; the three archives from the release (checksums, attestations, executables in the right format, 12 skill files identical to the tag's); the offline `--artifact-dir` install with the three real reviewed artifacts in a no-network container (tamper, missing and relative-folder refusals); the upgrade 0.1.0 to 0.2.0 over the real registry with sessions, a bundle and a configuration kept, and `install.md` section 8 walked to a clean uninstall | An untagged `yarn add vsift-cli` (the jobs used the exact version after the documented exemption: Yarn did hold the 5.6-hour-old version back); a clean machine (L-112); a browser download (RQ-17); pnpm, Yarn and Bun upgrades (npm only); a downgrade (L-044) |
+| RQ-01 to RQ-04 | `P14 published artifacts` [38000209110](https://github.com/smormah/vsift/actions/runs/38000209110), `from_version` 0.2.0-rc.3 | 23 of 23 jobs passed | The same jobs, and the upgrade a person on `next` really does: 0.2.0-rc.3 to 0.2.0 | As above; `0.2.0-rc.1` and `0.2.0-rc.2` were not baselines (deprecated) |
+| RQ-05 | `P14 journeys` [37999886382](https://github.com/smormah/vsift/actions/runs/37999886382) | passed on Ubuntu, Windows and macOS | The published binary completes the supplied-transcript and local-ASR journeys and the P06 to P11 checkpoints: 9 checkpoints per system (10 on macOS), **54 stages passed and 1 blocked on each**, the blocked one being P11's durable workspace, which each host refused with `MISSING_CAPABILITY` and created nothing, as the per-system rule says; the T-04 gates held on macOS in process (base 4.06% clean word error rate, F08 61.53%; base_q5_1 4.87% and 46.15%; no unexpected miss) | **Not repeated on the stable release's tag:** the Ubuntu and Windows T-04 gates (`P07 local ASR`) and the Ubuntu durable path with write barriers (`P14 load`, `P14 runbook walk`; the carried RQ-09 and RQ-12 cover it); the third candidate's runs of them stay in `prior`, for the same program source. Real recordings; other hardware; Homebrew's builds are not reviewed |
+| RQ-06 | `P13 managed smoke` [37999889647](https://github.com/smormah/vsift/actions/runs/37999889647) | 3 of 3 jobs passed | The three reviewed artifacts still download from their publishers, and the published binary installs and runs them end to end with kills and the local-ASR journey on Ubuntu 24.04 | That the publishers' files will stay (L-099) |
+| RQ-13 | `P14 scan reading` [38007675152](https://github.com/smormah/vsift/actions/runs/38007675152) and [`p14-scan-reading-2026-10-10.md`](p14-scan-reading-2026-10-10.md) | passed (the hosted part); the by-hand reading is complete and found one new finding, accepted by the maintainer | `cargo deny` clean for both crates; the executable's requirements and the SBOM as before; no alert in any store; 0 CodeQL results at the stable commit; the public records for whisper.cpp, the pinned actions' advisories and the runtime pins unchanged; **nine new FFmpeg records of 2026-10-08, one of them (CVE-2026-107678, Medium, the MP4 demuxer's `pssh` handling) not fixed in the shipped snapshot and reachable through an enabled demuxer** (31.2) | That a source reading finds every vulnerability; a test of any binary; the worker image's packages; that CVE-2026-107678 can be triggered inside VSift's bounds (not tried) |
+| RQ-18 | `CI` [37943660818](https://github.com/smormah/vsift/actions/runs/37943660818), `Guide` 37943660757, `Security` 37943660762 and `CodeQL` 37943660727, the push to `main` at the stable commit (2026-10-09) | all green | The Governance job at the claims rung `candidate`: the delivery ledger, the evidence ledger's structure, the claims registry and the size limits of the two handoff files | That any sentence is true (L-101); the check reads RQ-19's status and not its version (L-133) |
+| RQ-19 | `P14 verify release` [37999880619](https://github.com/smormah/vsift/actions/runs/37999880619) (history, not evidence) and the green run [38013937541](https://github.com/smormah/vsift/actions/runs/38013937541) (2026-10-10, `main` at `6ca2f3c`, after #348) | the first failed on exactly the two checks a stable version adds, by design; the green run passed 22 of 22 checks, the two stable ones among them | The publish is what was qualified, checked from a runner with no credential: the four packages' dist-tags and provenance, `npm audit signatures`, `gh attestation verify` of 10 of 10 files and 4 of 4 tarballs, the checksums, the release's flags and ten files; and, in the green run, the candidate-to-stable delta and `latest` on all four packages | A compromised GitHub or npm |
+
+**Carried, not repeated.** RQ-07 to RQ-12 and RQ-14 to RQ-17 are the third candidate's evidence, carried by the recorded `release_delta` (verdict `allowed`: Release run
+37946261087, the candidate `0.2.0-rc.3` at `83dca856e7a0`, the stable commit `eeb2a22a46a8`, 2026-10-09, copied from the run's `publish-plan` artifact and compared with
+the maintainer's saved copy: identical). Four of them are `waived` (RQ-10 for the link case, RQ-14, RQ-16, RQ-17) and none is a pass.
+
+### 31.2 RQ-13: the reading, its one new finding and the maintainer's acceptance of it
+
+The reading of 2026-10-10 was made in two passes on the same day. **The first** was limited to this repository's own GitHub data, the artifacts of the named hosted runs and the
+local checkout (the session had no other network). **The second**, authorised by the supervisor within the method the maintainer accepted for the third candidate, read the sources
+that method used: the National Vulnerability Database for FFmpeg and whisper.cpp (two windows to 2026-10-10 and the standing records by identifier), GitHub's public endpoints for the
+two projects and for the pinned actions' advisories, the Node.js release index, npm's registry and the Docker registry's manifest for `ubuntu:24.04`, all anonymous and read-only with
+each client's own identifier ([`p14-scan-reading-2026-10-10.md`](p14-scan-reading-2026-10-10.md), which lists the requests).
+
+**What it found.** Everything of 2026-10-08 is unchanged: the 58 FFmpeg records (every resolved fix in the shipped snapshot: 16 ancestors and 28 identical cherry-picks), the whisper.cpp
+records and the project's releases, the pinned actions (no advisory against any pin), Node.js and npm, the base image, the alert stores and CodeQL, the lockfiles and the SBOM; the two
+standing residuals (CVE-2026-38350, L-122; the whisper.cpp pin, L-137) are unchanged. **Nine FFmpeg records are new**, published on 2026-10-08 after the third candidate's reading: eight
+are outside what VSift's arguments reach (the TLS, SFTP, DASH, HLS and RTSP code, a serializer only an encoder or a muxer calls) or are fixed on the shipped line, and **one is not:
+CVE-2026-107678** (Medium; the MP4 demuxer's `pssh` boxes and a recursive free; the source of the shipped snapshot shows the chain; no fix known; the record says "through 9.0.2"; `mov` is
+one of the two demuxers VSift enables). It is a denial of service of a bounded child, not high or critical, so the plan's rule (section 6) is not breached by it.
+
+**The maintainer's decision of 2026-10-10 (in chat): accept it for R0 and fix it after the stable release**, the way L-122 and L-137 were accepted. The tracking issue is
+[#351](https://github.com/smormah/vsift/issues/351) and the register entry is **L-144** (`accepted residual`, `accepted (2026-10-10)`): when the 2026-10-31 month-end FFmpeg build is
+chosen for the re-pin (L-132), look for an upstream fix or cherry-pick one, and add a malformed-MP4 `pssh` case to the malicious-media campaign so that the effect on VSift's child is
+measured. **RQ-13 is therefore recorded `passed` for `0.2.0`**, on the plan's rule (no open high or critical finding on a supported path, unless accepted with a register entry), with the
+finding named in the entry and in its `does_not_prove`: an unfixed FFmpeg record that VSift's MP4 demuxer can reach exists and is accepted; nothing was run on a crafted file, so whether
+the 5 MB probe triggers it is not shown; the project's code host (`code.ffmpeg.org`) was not read and its pull request 24593 is unread.
+
+### 31.3 Where `release-evidence --complete-for 0.2.0` stands
+
+Run at the end of this change with `--commit eeb2a22a46a85ab10a456f2ab5d6a62e292836c5`:
+
+```text
+$ cargo run --locked -p vsift-governance -- release-evidence --complete-for 0.2.0 --commit eeb2a22a46a85ab10a456f2ab5d6a62e292836c5
+VSift release evidence is complete for 0.2.0 at eeb2a22a46a8.
+```
+
+**Exit 0:** RQ-01 to RQ-06, RQ-13, RQ-18 and RQ-19 have their own entries for `0.2.0`, and the other items count by the recorded `release_delta` (verdict `allowed`; the waived ones count as
+recorded decisions). Before RQ-13 was recorded, with RQ-13 the only item named, it exited 1. **The check for the third candidate
+(`--complete-for 0.2.0-rc.3 --commit 83dca856e7a00fc9a71c87baae99f0b1d401dd31`) no longer passes, and that is the ledger's design, not a regression:** an item holds one `applies_to`, so the items
+recorded for `0.2.0` name the stable release, and the staleness rule refuses them for the candidate because files in their scope (the version strings, the documents) differ between the two
+commits; it passed for the candidate until their entries moved, as the second candidate's check stopped passing when the third's evidence was recorded. The candidate's own entries stay in `prior`.
+
+### 31.4 What "P14 complete" records, and the neutral checkpoint
+
+The delivery ledger marks P14 `complete` with the stable release commit `eeb2a22a46a85ab10a456f2ab5d6a62e292836c5` as its merge commit, as P13's names the commit its
+pre-release was built from (the last implementation change; a completion record cannot know its own merge commit, section 11), and a verification summary. It is
+the record of a whole packet: P00 to P14 are complete, and the R0 release gate of verification section 7 has its evidence recorded in the ledger and accepted by the
+checker, **with four items waived and the limits those waivers name** (31.1). It does not say the evidence is good enough for any claim beyond the ones the registry holds.
+
+**The neutral checkpoint for using the published CLI (section 12) is met and raised.** The conditions are: the stable is published and verified (30.5, `release.md` 6.13);
+the named-agent run from a clean install passed (RQ-15, batch 2 on the third candidate: 34 of 34 runs); no open high-severity limit blocks the investigate-a-video
+journey (the register's one high entry, L-068, is the strict worker's adversarial evidence, moved to R1 by decision E, and concerns the worker profile, not the journey);
+and Smart App Control was read first and is Off on the maintainer's machine (2026-10-02). **Nothing was installed, copied or configured on the maintainer's machine by
+a session; the maintainer installed `0.2.0` on their own machine on 2026-10-10 and copied the skill into their own agent client's folder, byte for byte.** The trial never
+counts as qualification evidence, its notes are reviewed in batches, and drafts need the maintainer's approval.
+
+### 31.5 Decisions of this change, to confirm by merging, and what is open
+
+**Decided by the maintainer, in chat, 2026-10-10:** item 1. **Decided inside this change for the maintainer to confirm by merging it:** the claims rung stays `candidate` (item 4); P14 is recorded
+`complete` and ADR 0024 is Accepted (31.4 and the ADR note); the claims-registry edits (NC-004, NC-005, NC-014 and CL-101 removed, NC-810 added, the notes of NC-011 and NC-012 changed); RQ-05 is
+recorded on the journeys run alone (item 2). **Open:** items 2, 3, 5, 6 and 7.
+
+1. **RQ-13 for `0.2.0` (decided): CVE-2026-107678 is accepted for R0 and fixed after the stable release** (31.2; register L-144, issue [#351](https://github.com/smormah/vsift/issues/351)).
+2. **Is the stable release's own RQ-05 enough without the Ubuntu and Windows ASR gates and the durable path?** They were not dispatched on the tag `v0.2.0` (31.1); the
+   source is the third candidate's, whose runs of them passed, and RQ-09 and RQ-12 carry. They are read-only workflows (`P07 local ASR`, `P14 load`, `P14 runbook walk`)
+   if you want them on the tag; the next scheduled `P07 local ASR` run on `main` is another data point.
+3. **Dispatch `P14 compatibility` at `v0.2.0`?** It is the one run that compares the frozen 0.1.0 examples with the 0.1.0 tag's bytes; the CI tests of the same names ran at
+   the stable commit but skipped that comparison (shallow checkout).
+4. **The claims rung stays `candidate`, and moving it is a wording decision, not a bookkeeping one.** Section 9 and the PR 13 row say PR 13 moves it to `after_p14`. The
+   check makes that move more than a flag: at `after_p14` every statement of that rung (CL-201 to CL-209) must be used in a document or be removed from the registry, or
+   `public-claims` fails as stale (tried and read back on 2026-10-10, then reverted). Six of the nine could be used on the evidence that is `passed` (CL-202, CL-203, CL-204,
+   CL-205, CL-207, CL-209) and three cannot (CL-201 needs RQ-17, CL-206 needs RQ-16 and CL-208 needs RQ-14, all waived, none passed). Using the six means writing "supported" and
+   "qualified" sentences into the README, `install.md` and the matrix, which is yours; deleting the three is a registry change that loses reviewed wording. This change did neither:
+   no public page uses any `after_p14` statement and no claim is raised. It did remove CL-101 ("is a release candidate under qualification"), which no document says any more.
+5. **Whether to move `next`** (L-108): it is still `0.2.0-rc.3`.
+6. **The README's roadmap graphic and its "status: pre-release" badge** are out of date in more than a word (L-121) and were left for the README design session; the README's text beside
+   them is current.
+7. **After the stable, none of it blocking:** [#340](https://github.com/smormah/vsift/issues/340) (the audio clip a cold agent cannot use; options in L-142), [#342](https://github.com/smormah/vsift/issues/342)
+   (`BUSY` with no retry hint), [#349](https://github.com/smormah/vsift/issues/349) (the skill description's wording, in the next skill change), [#345](https://github.com/smormah/vsift/issues/345)
+   (a flaky Windows test), [#337](https://github.com/smormah/vsift/issues/337) (the release workflow refuses a branch dispatch late), [#325](https://github.com/smormah/vsift/issues/325) and
+   [#334](https://github.com/smormah/vsift/issues/334) (the copy limit and the short-audio answer), the FFmpeg and whisper.cpp re-pins (L-132, L-137; the next month-end build is
+   2026-10-31) and with the first, [#351](https://github.com/smormah/vsift/issues/351) (CVE-2026-107678: look for the upstream fix, and add a malformed-MP4 `pssh` case to the malicious-media campaign), the Dependabot pull requests (#192, #193, #194), #309, the `release.md` tidy, the RQ-17 try-out on LOKI and a Mac (it would give CL-201 its evidence), and
+   closing the P14 issue [#17](https://github.com/smormah/vsift/issues/17) with this merge.
+
+### 31.6 What is weaker than it sounds
+
+- **Four of the twenty items are waived and three of them are waived for a release that nobody else has tried**: nobody has seen Smart App Control, SmartScreen or Gatekeeper react to
+  VSift, one cold agent took one out-of-policy action in 18 and no person has read the raw logs, and the malicious-media link case answers a code the rule does not name.
+- **The release's own bytes were tested, but by one day's hosted runs**: hosted images are not clean machines, the corpus and the voice are synthetic, and macOS has been seen only
+  on hosted runners.
+- **"Complete" is a statement about the ledger, not about the product's readiness.** It means the packet's evidence is recorded and the checker accepts it. The claims rung did not move,
+  no platform is called supported, and nothing is announced.
+- **A reachable, unfixed FFmpeg record is accepted, not fixed** (L-144, with L-122 and L-137): nothing was run on a crafted file. **RQ-13 is a reading of public records, not a test of a binary**, and the freshest records (nine, two days old) are the ones with the least analysis behind them; **RQ-05 rests on a sentence about what was not repeated** (31.1), and the checker cannot see that sentence.
+
+### 31.7 Checks run for this change
+
+Run in a worktree of the branch, on the Windows development machine, after rebasing onto `main` at `d0b8b3e` (P14 PR 13a and the RQ-17 sheet); the network was used only for `cargo` fetching locked crates, `gh` reading this repository (runs, jobs, artifacts, alert counts)
+and the anonymous read-only requests of the scan reading, which `p14-scan-reading-2026-10-10.md` lists (service by service, with nothing personal in any of them).
+
+| Check | Result |
+| --- | --- |
+| `cargo fmt --all --check` | exit 0 |
+| `cargo run --locked -p vsift-governance -- check` | exit 0: "VSift delivery ledger is valid." |
+| `cargo run --locked -p vsift-governance -- public-claims` | exit 0: "VSift public claims agree with the evidence ledger (this proves recorded evidence and absent banned words, not that a sentence is true)." |
+| `cargo run --locked -p vsift-governance -- release-evidence --complete-for 0.2.0 --commit eeb2a22a46a85ab10a456f2ab5d6a62e292836c5` | exit 0: "VSift release evidence is complete for 0.2.0 at eeb2a22a46a8." |
+| `cargo run --locked -p vsift-governance -- release-evidence --complete-for 0.2.0-rc.3 --commit 83dca856e7a00fc9a71c87baae99f0b1d401dd31` | exit 1, naming the items recorded for `0.2.0` (31.3: by the ledger's design) |
+| `cargo run --locked -q -p vsift-agent-trials --bin vsift-agent-trials -- freeze check --repository . --file docs/planning/p14-agent-trials/batch-3/freeze.json` | exit 0: "nothing frozen has changed" |
+| `cargo test --locked -p vsift-governance -p vsift-release` | 135 and 95 tests passed, 0 failed |
+| `node --test "tools/guide/test/*.test.cjs"` | 36 of 36 passed |
+| `node --test npm/test/launcher.test.cjs` (Node.js 22.16; `SECURITY.md`, `install.md` and the package README are read by it) | 25 tests: 22 passed, 0 failed, 3 skipped (they need a POSIX system) |
+| The personal-data scan of the added lines (908 lines against `main`) | no email address, personal name or user-name home path |
+
+Not run here: the `Guide` workflow's two Ubuntu jobs (the generated reference and the marked examples against the real binary; the only guide page changed is `limits.md`, one sentence, with no
+marked command), the full workspace test run and Clippy (no Rust source changed).

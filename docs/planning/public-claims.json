@@ -113,20 +113,6 @@
     },
     {
       "kind": "non_claim",
-      "id": "NC-004",
-      "documents": ["README.md", "docs/operations/install.md"],
-      "text": "not a stable release, and no platform is \"supported\" yet",
-      "note": "A negation about the 0.1.0 pre-release and every platform."
-    },
-    {
-      "kind": "non_claim",
-      "id": "NC-005",
-      "documents": ["docs/operations/install.md", "SECURITY.md"],
-      "text": "until a stable release",
-      "note": "A condition: describes what holds before a stable release exists."
-    },
-    {
-      "kind": "non_claim",
       "id": "NC-008",
       "documents": ["docs/operations/install.md"],
       "text": "what is and is not supported",
@@ -144,21 +130,14 @@
       "id": "NC-011",
       "documents": ["SECURITY.md"],
       "text": "not a supported version",
-      "note": "A negation: the pre-release is not a supported version."
+      "note": "A negation: the 0.1.0 pre-release and the release candidates are not a supported version; they receive no security fixes."
     },
     {
       "kind": "non_claim",
       "id": "NC-012",
       "documents": ["SECURITY.md"],
       "text": "supported versions",
-      "note": "The heading of the section that says there is no supported version yet."
-    },
-    {
-      "kind": "non_claim",
-      "id": "NC-014",
-      "documents": ["SECURITY.md"],
-      "text": "and no stable release",
-      "note": "A negation: no stable release exists."
+      "note": "The heading of the section that says which versions receive security fixes (the newest 0.2.x only)."
     },
     {
       "kind": "non_claim",
@@ -259,6 +238,13 @@
       "note": "The name of the Release workflow's twelve npm install-and-check jobs (`npm-qualify`); naming the job claims no platform or package manager is qualified."
     },
     {
+      "kind": "non_claim",
+      "id": "NC-810",
+      "documents": ["docs/operations/release.md"],
+      "text": "stable release steps",
+      "note": "The file name of the maintainer checklist for the stable release 0.2.0 (docs/planning/p14-stable-release-steps.md), which section 6.13 points at; a name, not a quality."
+    },
+    {
       "kind": "claim",
       "id": "CL-002",
       "rung": "now",
@@ -337,15 +323,6 @@
       "basis": ["docs/planning/p10-durable-publication.md"],
       "limits": ["L-008", "L-056", "L-058"],
       "note": "Generated from the description of workspace-data.schema.json (P11): a durable workspace is accepted only on the profile the P10 campaign covered. Same reason as CL-010."
-    },
-    {
-      "kind": "claim",
-      "id": "CL-101",
-      "rung": "candidate",
-      "documents": ["README.md", "docs/operations/install.md", "npm/vsift-cli/README.md"],
-      "text": "is a release candidate under qualification",
-      "requires": ["RQ-19"],
-      "note": "The candidate rung's only headline (decision G): published under next, never announced, no claim of support or stability. Allowed once the publish was checked by a second runner."
     },
     {
       "kind": "claim",

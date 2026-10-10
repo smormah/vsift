@@ -42,10 +42,11 @@ Read these documents together:
     deferral and accepted trade-off in one reviewable place.
 11. [Worker-host runbook](../operations/worker-host.md): how an operator runs VSift
     under an external supervisor (P11), with the guarantee matrix per platform.
-12. [P14 qualification plan](p14-qualification.md): the release-qualification evidence
+12. [P14 qualification plan and record](p14-qualification.md): the release-qualification evidence
     items, traceability, budgets, supported-profile matrix and public-claims policy
     (2026-10-02, with [ADR 0024](../decisions/0024-r0-qualification-and-release-candidate.md);
-    its decisions were confirmed by the maintainer, who started P14), with its machine-checked
+    its decisions were confirmed by the maintainer, who started P14; **the record of P14's results
+    and of its completion on 2026-10-10 is sections 15 to 31**), with its machine-checked
     [evidence ledger](p14-evidence-ledger.json) and
     [public-claims registry](public-claims.json) (P14 PR 1).
 13. [User guide specification](user-guide-spec.md): the structure, rules and delivery of the

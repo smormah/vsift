@@ -11,8 +11,8 @@ pre-release 0.1.0 (2026-10-01) and the release candidates 0.2.0-rc.1 (2026-10-05
 **0.2.0 is built from the same source as the third release candidate, 0.2.0-rc.3**, and differs from it only in its version
 numbers, this guide, the npm package's README and the project's work record (a mechanical check enforces that:
 [`release.md`](release.md) section 6.8). What was tried on that candidate was tried on that source. The executable carries the
-new version number and commit, so the hosted checks are run again on the published 0.2.0 (`release.md` section 6.7), and until
-their results are recorded in the release evidence ledger nothing has been run against 0.2.0's own bytes.
+new version number and commit, so the hosted checks were run again on the published 0.2.0 on 2026-10-09 (`release.md` section 6.13), and
+their results are recorded in the release evidence ledger.
 The machines in section 1 are R0 targets, not yet a supported platform. The
 evidence gathered so far, with its gaps, is recorded in the release evidence ledger
 ([`p14-evidence-ledger.json`](../planning/p14-evidence-ledger.json)). **What was not tried before this release, and it ships
@@ -21,7 +21,7 @@ without them:** Windows Smart App Control and SmartScreen, a true clean-machine 
 from hosted runners only. **What has been run against these steps.** In P13 they ran on
 hosted runners against a local registry. Since 2026-10-02 (P14) the published packages have also
 been installed from the real registry with npm, pnpm, Yarn and Bun on hosted Windows, macOS and
-Ubuntu runners, first 0.1.0 and then each release candidate, the last being 0.2.0-rc.3 on 2026-10-08; the three archives have been
+Ubuntu runners, first 0.1.0, then each release candidate and then 0.2.0 itself on 2026-10-09; the three archives have been
 downloaded, checked, extracted and run, the offline
 install of the managed tools has been run with the real files, the upgrade and uninstall steps
 (sections 7 and 8) have been walked, and the same bytes have run the supplied-transcript and
@@ -468,8 +468,8 @@ folder.
   upgraded, and no pnpm, Yarn or Bun upgrade was run. On 2026-10-07 the same run upgraded the published 0.1.0 and the
   published 0.2.0-rc.1 to the published 0.2.0-rc.2 on the three systems with the same result (runs 37602931887 and
   37611381117), and on 2026-10-08 the published 0.1.0 and the published 0.2.0-rc.2 to the published 0.2.0-rc.3 (runs
-  37748859247 and 37752825599). Those runs are for the candidates; the same upgrades are run again for 0.2.0 after its
-  publish (`release.md` section 6.7), and until their results are recorded nothing has been run against 0.2.0's own bytes.
+  37748859247 and 37752825599). On 2026-10-09, after its publish, the same run upgraded the published 0.1.0 and the published
+  0.2.0-rc.3 to the published 0.2.0 on the three systems with the same result (runs 37999883603 and 38000209110).
 
 ## 8. Uninstall
 
