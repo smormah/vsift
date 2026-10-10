@@ -82,8 +82,9 @@ coding, a speaker who stops to type). VSift does not throw the rest away: it kee
 leaves that stretch without a transcript and says so. The result ends with `Status: partial`, a line
 `Not transcribed by this run (…)` lists the stretch in microseconds, and a warning explains it. If you were
 re-transcribing a recording that already had a transcript (one you imported, or an earlier run), the words that
-transcript had inside such a stretch are **kept** as they were, not deleted; the line still lists the whole stretch,
-because that is what this run did not transcribe. `search` lists as not transcribed only what has no words, so a word
+transcript had around such a stretch are **kept** as they were, not deleted, when they reach into the stretch and the
+new words do not overlap them (a sentence that crosses the stretch's edge is kept whole); the line still lists the whole
+stretch, because that is what this run did not transcribe. `search` lists as not transcribed only what has no words, so a word
 said there and not kept cannot be found, and VSift never reports such a stretch as silence. Transcribing just that
 stretch again (`--from` and `--to` of the stretch) cuts the audio at other points and may cover it, and a transcript file
 you already have can supply it (`vsift ingest <video> --transcript <file>`). If most stretches fail like this the

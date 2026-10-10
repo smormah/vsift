@@ -188,7 +188,9 @@ These files are the machine-readable public v1 boundary:
   `transcript_record` artifact: one revision with all its segments, as stored. It is
   a storage record, not a response: its `schema_version` is the integer record
   version, `1` for an import and `2` for a local-ASR revision (with its run, what it
-  superseded, inherited provenance and carried segments), and its text is untrusted
+  superseded, inherited provenance and carried segments and, since 0.2.1 and only when there
+  is any, `carried_untranscribed`: what the superseded revision did not cover outside the
+  range it replaced), and its text is untrusted
   and unsanitized (P07).
 
 The `--events jsonl` stream is a sequence of events with a contiguous `sequence`

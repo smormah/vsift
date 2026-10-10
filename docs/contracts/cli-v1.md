@@ -590,7 +590,7 @@ the envelope's `coverage` is `{"truncated": true, "gaps": ["<from_us>-<to_us>", 
 parts of the run's range that **this run** did not transcribe: the window of each unusable chunk less what a neighbour
 transcribed or found silent. The reason is the published `untranscribed_range` of a search, not a new one: the run left the
 range untranscribed, and what is specific to this cause is the outcome, the count and the warning. The warning's fixed prose
-says that earlier text inside those ranges is kept as it was (below) and any other words said there cannot be found,
+says that earlier text that reaches into those ranges is kept whole as it was, unless the run's own text overlaps it (below), and any other words said there cannot be found,
 that transcribing just the gap again (`--from` and `--to` of the gap) cuts the audio at other points
 and may cover it, and that a transcript file the user already has can supply it with `ingest --transcript`; the first rests on one real
 recording, where a chunk cut a few seconds earlier or later transcribed. A run with no such chunk is `complete`,
@@ -598,16 +598,31 @@ with `coverage` `null` and none of these members, exactly as before; example
 [`transcript-retranscribe.partial.json`](../../schemas/v1/examples/transcript-retranscribe.partial.json).
 
 **An unreadable part keeps the text the session already had there** (since `0.2.1`). A range retranscription replaces the
-segments of the newest revision inside its range with what it transcribes. Where the run could not read part of its range, it
-instead carries the segments of the newest revision that lie **wholly inside** such a part, as they were, with their original
-provenance and `carried_from`; a segment that reaches out of it lies partly in a part the run read, and the run's text replaces it. So
-after `transcript retranscribe --from 10s --to 65s` over an imported transcript with cues at 5, 12, 40 and 60 s whose first chunk
-(10 to 40 s) is unusable and whose second (35 to 65 s) is read, the new revision holds the cues at 5 and 12 s as imported, the
-words the second chunk heard, and not the cues at 40 and 60 s. `data.untranscribed_ranges` and `coverage` list 10 to 35 s, which
-is what the run did not transcribe, and a later `search` lists only 10 to 12 s and 14 to 35 s as untranscribed, with the transcribed
-ranges 0 to 10 s, 12 to 14 s and 35 to 70 s, because the kept cue is text it can find. The two lists differ exactly where kept
-text lies. `transcript get` shows the kept cue as an ordinary segment with its original alignment and `carried_from`; it does
-not list ranges. The decision is recorded in [ADR 0017](../decisions/0017-local-asr-through-whisper-cpp.md), note of 2026-10-10.
+segments of the newest revision inside its range with what it transcribes. **The rule, in one sentence:** a segment of the
+newest revision that lies in the replaced range is kept, whole and with its original provenance and `carried_from`, when it
+reaches into a part of the range the run could not read and none of the text the run itself wrote overlaps it; every other
+segment in the range is replaced. A segment that lies wholly in the part the run could not read is kept. A segment that crosses
+the part's edge, which is the edge of a neighbouring chunk's window, was read only in part, and is kept by however little it
+reaches into the part (a microsecond is enough) unless the run's own text overlaps it, in which case the run has heard the same
+words and its text replaces the segment; text the run's text only touches is kept, and so is text over audio the run read and
+found quiet or empty, because the read part of a window beside an unread one is its edge and no evidence against the whole
+segment. A run replaces what it read in full, and no more. So after `transcript retranscribe --from 10s --to 65s` over an
+imported transcript with cues at 5, 12, 40 and 60 s whose first chunk (10 to 40 s) is unusable and whose second (35 to 65 s) is
+read, the new revision holds the cues at 5 and 12 s as imported, the words the second chunk heard, and not the cues at 40 and
+60 s. `data.untranscribed_ranges` and `coverage` list 10 to 35 s, which is what the run did not transcribe, and a later
+`search` lists only 10 to 12 s and 14 to 35 s as untranscribed, with the transcribed ranges 0 to 10 s, 12 to 14 s and 35 to 70 s,
+because the kept cue is text it can find. The two lists differ exactly where kept text lies. `transcript get` shows the kept
+cue as an ordinary segment with its original alignment and `carried_from`; it does not list ranges.
+
+**A part left unread stays untranscribed through later runs** (since `0.2.1`). A revision keeps the provenance only of the
+runs whose text it carries, so the run of a revision that left a part unread may not be in a later revision at all, and an
+earlier run's windows (or an imported file, which covers the whole source) would be counted over the part. So a spliced
+revision records, in its stored record (`carried_untranscribed`, [`bundle-transcript-record.schema.json`](../../schemas/v1/bundle-transcript-record.schema.json);
+omitted when there is none, so every other record is written as before), what its superseded revision did not cover outside the
+range it replaced, and a search never counts an earlier run's window over it. After the run above, a `retranscribe --from 0
+--to 8s` leaves 10 to 12 s and 14 to 35 s untranscribed, as before it, and so does every later run far from them, until a run reads
+them. The search can still say less than the runs read (a run none of whose text a revision carries is not counted), never
+more. The decisions are recorded in [ADR 0017](../decisions/0017-local-asr-through-whisper-cpp.md), note of 2026-10-10.
 
 **The run fails only when most of the chunks the recogniser answered are unusable** (more than half; chunks that were
 never given to it, silent or without audio, are not counted; a lone answered chunk that is unusable fails, one of two
@@ -663,7 +678,7 @@ remediation says what is true: after the fixed first sentence it names the reaso
 structural one), how many chunks of how many had been answered when the run stopped, and the first unusable chunk by
 position (`chunk 66 of 83`), by `H:MM:SS` and in microseconds, the unit of `--from` and `--to`; `error.affected_ids` names the
 job. For `too_many_rejected_segments` it says the tool works (VSift's own check of it passed before the run) and then
-only what the numbers establish. **With more than three chunks answered** it says that this recording's speech could not be
+only what the numbers establish. **With more than three chunks answered** it says that most of the speech the run covered could not be
 transcribed reliably and to use a transcript the user has: `ingest --transcript <file>` (example
 [`retranscribe-unusable-output.json`](../../schemas/v1/examples/retranscribe-unusable-output.json), the run of an 83-chunk
 recording whose first three chunks are silent, stopped at the 41st answer). **With three or fewer** it says that this stretch of
@@ -671,7 +686,7 @@ the recording could not be transcribed and to try a slightly different range wit
 other points and may work, or the same transcript (example
 [`retranscribe-unusable-output.short-range.json`](../../schemas/v1/examples/retranscribe-unusable-output.short-range.json)).
 Neither says that a larger or different range will not help: no run has established that. (Before `0.2.1` it told to retry
-with a larger range and to reinstall whisper.cpp, which could not help.) For a structural fault
+with a larger range or the whole video, and to reinstall whisper.cpp only if the whole video failed too. That is the advice written for a short range cut in mid-speech (#274), where a larger range does help; it does not describe this failure.) For a structural fault
 the recogniser is the suspect and the reinstall step stays. The model's identity is checked before the answers are judged, so a
 recogniser swapped during the run is `model_changed`, not this failure. **The job ends `failed` at once** (`job status`:
 `resumable: false`, `resumable_reason: failed`; `job resume` refuses), because a resume would read the same verdicts from its

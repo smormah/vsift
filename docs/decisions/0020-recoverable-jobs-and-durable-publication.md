@@ -487,7 +487,12 @@ Two additions to sections 4 and 5, proposed with [ADR 0017's note of the same da
   kind as an unusable checkpoint and redoes the chunk, so nothing breaks on a roll back.
 - **A run checks the model's identity before it judges the answers.** A recogniser swapped while the run was in progress (the executable or the model file replaced) made the
   answers those of two models, so the run reports `model_changed`, a failure a retry can fix, and not that most answers were unusable, which ends the job. The order matters
-  here and only here: `model_changed` is an ordinary retryable failure of the job, an unusable-answers failure is not.
+  here and only here: `model_changed` is an ordinary retryable failure of the job, an unusable-answers failure is not. **A limit that this does not remove:** the identity is read
+  before the first chunk and after the last, not before each one (a per-chunk read hashes the model every time), so a swap is found when the run ends, and the checkpoints written
+  after the swap are stored under the recognition key of the model the run started with. If that model is put back and the job resumed, they are reused: a stored `recognised` output
+  of the other model would be committed under the original model's provenance (the limit of such checkpoints before this change), and a stored `unusable` verdict of it makes the
+  resumed run fail as unusable answers, which ends the job as failed, after which the same command starts it afresh and works. A fix (end the job on `model_changed`, or check the
+  identity per chunk) changes a published behaviour or a cost, and is left for the register, not made in a patch release.
 - **What a supervisor sees when a worker step could not read part of a recording.** In `job run` and `job batch`, a `retranscribe` step whose run had unusable chunks is
   still `complete` with `coverage: null`, as is the request: its outputs name the revision, the generation and the chunks reused, and the worker schema has no member for
   gaps. This is deliberate for 0.2.1 (the worker schema is unchanged) and means a supervisor that reads only the request's result is not told that part of the recording was

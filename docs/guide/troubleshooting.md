@@ -198,8 +198,8 @@ work. But whisper.cpp's answers for most of what it was given could not be place
 present them as a transcript. The line says how many 30-second chunks failed and where the first is, in
 microseconds, the unit of `--from` and `--to`, and what it says to do next depends on how many chunks were answered.
 If it says **this stretch of the recording could not be transcribed** (three chunks or fewer), try a slightly
-different range with `--from` and `--to`, which cuts the audio at other points and may work. If it says **this
-recording's speech could not be transcribed reliably** (more than three), use a transcript you already have:
+different range with `--from` and `--to`, which cuts the audio at other points and may work. If it says **most of the
+speech this run covered could not be transcribed reliably** (more than three), use a transcript you already have:
 `vsift ingest <video> --transcript <file>` with an SRT or WebVTT file. Either way that transcript file needs no speech
 recognition. Nothing was committed, the job is marked failed and not resumable, and the same command run again
 starts it from the beginning. (A recording in which only a stretch or two fail is not this: it finishes as `partial`,

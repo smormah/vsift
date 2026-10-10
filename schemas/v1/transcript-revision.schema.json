@@ -173,11 +173,11 @@
       ]
     },
     "replaced_range": {
-      "description": "The range of the superseded revision this one replaced: the requested range widened to whole segments of that revision, or the whole source. Null without a superseded revision. Segments of the superseded revision inside it are replaced by the run's own, except (since 0.2.1) those lying wholly inside a part of it that the run could not read (a chunk with the outcome unusable that no neighbouring chunk covers), which are carried as they were.",
+      "description": "The range of the superseded revision this one replaced: the requested range widened to whole segments of that revision, or the whole source. Null without a superseded revision. Segments of the superseded revision inside it are replaced by the run's own, except (since 0.2.1) those that reach into a part of it that the run could not read (a chunk with the outcome unusable that no neighbouring chunk covers) and that none of the run's own text overlaps, which are carried whole as they were.",
       "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/range" }]
     },
     "carried_segment_count": {
-      "description": "Segments carried unchanged from earlier revisions (each names its origin in carried_from), including, since 0.2.1, text kept inside a part of the replaced range that the run could not read; segment_count minus this is what the run recognised.",
+      "description": "Segments carried unchanged from earlier revisions (each names its origin in carried_from), including, since 0.2.1, text kept where it reaches into a part of the replaced range that the run could not read; segment_count minus this is what the run recognised.",
       "type": "integer",
       "minimum": 0,
       "maximum": 20000
