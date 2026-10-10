@@ -13,12 +13,14 @@
 //! same stream for the same page.
 
 use serde::Serialize;
-use vsift_domain::{SessionId, TimeRange, TranscriptRevision, TranscriptSegment};
+use vsift_domain::{SearchCoverage, SessionId, TimeRange, TranscriptRevision, TranscriptSegment};
 
 use crate::{
     AudioEvidenceData, CONTRACT_VERSION, CommandName, FrameEvidenceData, LifecycleResponse,
     OperationResponse, TerminalEventResponse, TranscriptRevisionData, TranscriptSegmentData,
-    VisualCandidateData, transcript::RangeData,
+    VisualCandidateData,
+    search::TranscriptCoverageData,
+    transcript::{RangeData, finish_transcript_read},
 };
 
 /// One published JSON Lines event kind, written to the event's `event` field.
@@ -289,7 +291,8 @@ pub trait EvidenceStream {
 ///
 /// It is the page's metadata without its items: the items were the preceding
 /// evidence events, and `record_count` says how many there were so a reader
-/// can prove it received all of them.
+/// can prove it received all of them. `transcript_coverage` is the page's
+/// own (#373): a stream that read over a gap ends `partial`, as the page does.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct TranscriptStreamData {
     session_id: String,
@@ -297,6 +300,7 @@ pub struct TranscriptStreamData {
     range: RangeData,
     record_count: usize,
     next_cursor: Option<String>,
+    transcript_coverage: TranscriptCoverageData,
 }
 
 /// One `transcript.get` page as a JSON Lines evidence stream.
@@ -333,15 +337,19 @@ impl TranscriptEvidenceStream {
                 EvidenceEventResponse::transcript_segment(sequence, command, revision, segment)
             })
             .collect();
+        let coverage = SearchCoverage::of(revision, Some(range));
         let data = TranscriptStreamData {
             session_id: session_id.as_str().to_owned(),
             revision: TranscriptRevisionData::new(revision),
             range: RangeData::new(range),
             record_count: records.len(),
             next_cursor: next_cursor.map(str::to_owned),
+            transcript_coverage: TranscriptCoverageData::new(&coverage),
         };
-        let result =
-            OperationResponse::complete(command.identifier(), &data)?.with_lifecycle(lifecycle);
+        let result = finish_transcript_read(
+            OperationResponse::complete(command.identifier(), &data)?.with_lifecycle(lifecycle),
+            &coverage,
+        );
         let terminal_sequence = u64::try_from(records.len()).unwrap_or(u64::MAX);
         Ok(Self {
             records,

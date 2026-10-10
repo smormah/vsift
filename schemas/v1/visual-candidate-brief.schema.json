@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vsift.dev/schemas/v1/visual-candidate-brief.schema.json",
+  "title": "VSift visual candidate, brief view v1",
+  "description": "One visual candidate as the brief view of candidates gives it (--view brief, 0.2.1): the identity, representative_us, span, reasons, stability, the size of the change that opened it and the visual_hash that shows when a screen repeats, which is what a reader needs to place it and to decide whether to look at its frame. It is NOT an evidence record: the evidence stream always carries visual-candidate.schema.json, whose record an index stores by candidate_id, and a brief view is refused for a stream. Every member is the member of the same name of the full candidate, with the same value. The brief view leaves out what every candidate of the index repeats (source_id, source_segment_id, stream_index, displayed_dimensions and analysis: the answer's item_constants hold them once), the window (its ordinal is representative_us divided by the index's window_us, rounded down), and change_window and sample_count, which the full view still gives. change is absent, not null, for a first frame or a periodic sample, which no change opened. Candidates are evidence assistance, not evidence: the original frames are authoritative.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "candidate_id",
+    "representative_us",
+    "span",
+    "reasons",
+    "stability",
+    "visual_hash"
+  ],
+  "properties": {
+    "candidate_id": {
+      "description": "Derived from the session, source, stream, analysis profile, window and representative time, so it never changes when later windows are analysed.",
+      "type": "string",
+      "pattern": "^vcd_[a-z0-9]{16,64}$"
+    },
+    "representative_us": { "type": "integer", "minimum": 0 },
+    "span": { "$ref": "#/$defs/range" },
+    "reasons": {
+      "description": "Why the candidate was proposed, as visual-candidate.schema.json defines each reason.",
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 5,
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "first_frame",
+          "visual_change",
+          "motion_start",
+          "settled_after_motion",
+          "periodic_coverage"
+        ]
+      }
+    },
+    "stability": {
+      "enum": ["settled", "transient", "in_motion", "open_at_window_end"]
+    },
+    "change": {
+      "description": "The size of the change that opened the candidate, as visual-candidate.schema.json defines it; absent when no observed change opened it.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["changed_blocks", "max_block_delta"],
+      "properties": {
+        "changed_blocks": { "type": "integer", "minimum": 0, "maximum": 144 },
+        "max_block_delta": { "type": "integer", "minimum": 0, "maximum": 255 }
+      }
+    },
+    "visual_hash": {
+      "description": "A 64-bit difference hash of the representative frame as 16 lowercase hexadecimal digits: a similarity key that shows when a screen repeats, not a security digest.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{16}$"
+    }
+  },
+  "$defs": {
+    "range": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from_us", "to_us"],
+      "properties": {
+        "from_us": { "type": "integer", "minimum": 0 },
+        "to_us": { "type": "integer", "minimum": 1 }
+      }
+    }
+  }
+}

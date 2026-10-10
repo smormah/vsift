@@ -26,7 +26,8 @@ use vsift_domain::{
 
 use crate::{
     CommandName, CoverageResponse, EvidenceEventResponse, LifecycleResponse, MAX_COVERAGE_RANGES,
-    OperationResponse, TerminalEventResponse, stream::EvidenceStream, transcript::RangeData,
+    OperationResponse, ResultView, TerminalEventResponse, stream::EvidenceStream,
+    transcript::RangeData, view::BRIEF_VIEW,
 };
 
 /// Envelope reason: more gaps exist than the envelope lists.
@@ -120,6 +121,42 @@ pub struct VisualCandidateData {
     analysis: AnalysisData,
 }
 
+/// What every candidate of one visual index repeats in the full view: the
+/// source, its segment and stream, the displayed size and how the frames were
+/// analysed.
+///
+/// The one place these are derived, so a full item and the brief view's
+/// `item_constants` cannot disagree. A candidate's own window is not here: it
+/// differs from one candidate to the next.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub(crate) struct ItemConstants {
+    source_id: String,
+    source_segment_id: String,
+    stream_index: u32,
+    displayed_dimensions: DimensionsData,
+    analysis: AnalysisData,
+}
+
+impl ItemConstants {
+    fn new(index: &VisualIndex, source_segment_id: &SourceSegmentId) -> Self {
+        let dimensions = index.displayed_dimensions();
+        Self {
+            source_id: index.source_id().as_str().to_owned(),
+            source_segment_id: source_segment_id.as_str().to_owned(),
+            stream_index: index.stream_index(),
+            displayed_dimensions: DimensionsData {
+                width: dimensions.width(),
+                height: dimensions.height(),
+            },
+            analysis: AnalysisData {
+                profile: index.profile().identifier(),
+                width: VISUAL_FRAME_WIDTH,
+                height: VISUAL_FRAME_HEIGHT,
+            },
+        }
+    }
+}
+
 impl VisualCandidateData {
     /// The candidate's identity, the record's upsert key.
     pub(crate) fn candidate_id(&self) -> &str {
@@ -152,12 +189,12 @@ impl VisualCandidateData {
                 .ok()
                 .map(RangeData::new)
         });
-        let dimensions = index.displayed_dimensions();
+        let constants = ItemConstants::new(index, source_segment_id);
         Self {
             candidate_id: candidate.id().as_str().to_owned(),
-            source_id: index.source_id().as_str().to_owned(),
-            source_segment_id: source_segment_id.as_str().to_owned(),
-            stream_index: index.stream_index(),
+            source_id: constants.source_id,
+            source_segment_id: constants.source_segment_id,
+            stream_index: constants.stream_index,
             window,
             representative_us: representative,
             span: RangeData::new(candidate.span()),
@@ -170,15 +207,46 @@ impl VisualCandidateData {
             }),
             visual_hash: candidate.hash().to_hex(),
             sample_count: candidate.sample_count(),
-            displayed_dimensions: DimensionsData {
-                width: dimensions.width(),
-                height: dimensions.height(),
-            },
-            analysis: AnalysisData {
-                profile: index.profile().identifier(),
-                width: VISUAL_FRAME_WIDTH,
-                height: VISUAL_FRAME_HEIGHT,
-            },
+            displayed_dimensions: constants.displayed_dimensions,
+            analysis: constants.analysis,
+        }
+    }
+}
+
+/// One visual candidate in the brief view (`--view brief`, #365): what a
+/// reader needs to place it and to decide whether to look at its frame.
+///
+/// It is the identity, `representative_us`, `span`, `reasons`, `stability`,
+/// the size of the `change` that opened it (absent for a first frame or a
+/// periodic sample, which no change opened) and the `visual_hash` that shows
+/// when a screen repeats. It leaves out what every candidate of the index
+/// repeats (the page's `item_constants` holds it once); the `window`, which
+/// is `representative_us` over the index's `window_us`; and
+/// `change_window` and `sample_count`, which narrow when a change happened
+/// and how many samples the span holds, and which the full view still gives.
+/// A member is the full candidate's member with the same value.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub(crate) struct BriefVisualCandidateData {
+    candidate_id: String,
+    representative_us: u64,
+    span: RangeData,
+    reasons: Vec<&'static str>,
+    stability: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    change: Option<ChangeData>,
+    visual_hash: String,
+}
+
+impl From<&VisualCandidateData> for BriefVisualCandidateData {
+    fn from(full: &VisualCandidateData) -> Self {
+        Self {
+            candidate_id: full.candidate_id.clone(),
+            representative_us: full.representative_us,
+            span: full.span,
+            reasons: full.reasons.clone(),
+            stability: full.stability,
+            change: full.change,
+            visual_hash: full.visual_hash.clone(),
         }
     }
 }
@@ -303,6 +371,48 @@ impl CandidatesData {
     }
 }
 
+/// Data of a complete or partial `candidates` result in the brief view
+/// (`--view brief`, #365): [`CandidatesData`] with each item reduced to
+/// `BriefVisualCandidateData`, a `view` member saying so, and the
+/// `item_constants` that the full view repeats on every item stated once.
+///
+/// The index block, the coverage with every typed gap and the cursor are the
+/// full page's own, made by the same code. Nothing about what was and was not
+/// analysed is left out of the brief view.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct CandidatesBriefData {
+    session_id: String,
+    view: &'static str,
+    range: RangeData,
+    index: IndexData,
+    item_constants: ItemConstants,
+    coverage: VisualCoverageData,
+    items: Vec<BriefVisualCandidateData>,
+    next_cursor: Option<String>,
+}
+
+impl CandidatesBriefData {
+    /// Presents one page of candidates in the brief view.
+    #[must_use]
+    pub fn new(page: &CandidatesPresentation<'_>) -> Self {
+        let full = CandidatesData::new(page);
+        Self {
+            session_id: full.session_id,
+            view: BRIEF_VIEW,
+            range: full.range,
+            index: full.index,
+            item_constants: ItemConstants::new(page.index, page.source_segment_id),
+            coverage: full.coverage,
+            items: full
+                .items
+                .iter()
+                .map(BriefVisualCandidateData::from)
+                .collect(),
+            next_cursor: full.next_cursor,
+        }
+    }
+}
+
 /// Data of the terminal event that ends a `candidates` evidence stream: the
 /// page without its items, which were the preceding evidence events, and
 /// `record_count` saying how many there were.
@@ -369,7 +479,7 @@ fn finish(
     }
 }
 
-/// The complete `candidates` result for one page.
+/// The complete `candidates` result for one page, in the full view.
 ///
 /// # Errors
 ///
@@ -378,10 +488,28 @@ pub fn candidates_response(
     page: &CandidatesPresentation<'_>,
     lifecycle: LifecycleResponse,
 ) -> Result<OperationResponse<serde_json::Value>, serde_json::Error> {
-    let response = OperationResponse::complete(
-        CommandName::Candidates.identifier(),
-        &CandidatesData::new(page),
-    )?;
+    candidates_response_with_view(page, lifecycle, ResultView::Full)
+}
+
+/// The complete `candidates` result for one page in `view`.
+///
+/// The view changes only the items, the `item_constants` and the `view`
+/// member: the coverage, the `partial` status and the warning are the same in
+/// both, from the one `finish`.
+///
+/// # Errors
+///
+/// Returns the serialization error when the data cannot be represented as JSON.
+pub fn candidates_response_with_view(
+    page: &CandidatesPresentation<'_>,
+    lifecycle: LifecycleResponse,
+    view: ResultView,
+) -> Result<OperationResponse<serde_json::Value>, serde_json::Error> {
+    let command = CommandName::Candidates.identifier();
+    let response = match view {
+        ResultView::Full => OperationResponse::complete(command, &CandidatesData::new(page))?,
+        ResultView::Brief => OperationResponse::complete(command, &CandidatesBriefData::new(page))?,
+    };
     Ok(finish(response, page.gaps, lifecycle))
 }
 

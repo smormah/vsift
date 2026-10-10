@@ -22,8 +22,11 @@ use vsift_domain::{
 
 use crate::{
     CommandName, CoverageResponse, EvidenceEventResponse, LifecycleResponse, OperationResponse,
-    TerminalEventResponse, TranscriptRevisionData, TranscriptSegmentData, sanitize_untrusted_text,
-    stream::EvidenceStream, transcript::RangeData,
+    ResultView, TerminalEventResponse, TranscriptRevisionData, TranscriptSegmentData,
+    sanitize_untrusted_text,
+    stream::EvidenceStream,
+    transcript::{BriefTranscriptSegmentData, RangeData},
+    view::BRIEF_VIEW,
 };
 
 /// Largest number of ranges in each `transcript_coverage` list and of gaps in
@@ -96,8 +99,12 @@ struct SearchHitData {
 }
 
 /// The detailed coverage of the searched range, clipped to the source.
+///
+/// `search` and `transcript get` both present it, from the one domain rule
+/// ([`SearchCoverage::of`]), so a range has the same gaps whichever command
+/// reads it.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-struct TranscriptCoverageData {
+pub(crate) struct TranscriptCoverageData {
     basis: &'static str,
     scope: &'static str,
     searched_range: Option<RangeData>,
@@ -108,7 +115,7 @@ struct TranscriptCoverageData {
 }
 
 impl TranscriptCoverageData {
-    fn new(coverage: &SearchCoverage) -> Self {
+    pub(crate) fn new(coverage: &SearchCoverage) -> Self {
         let lists = [
             coverage.transcribed(),
             coverage.untranscribed(),
@@ -161,6 +168,56 @@ impl SearchData {
             hits: hit_data(page),
             next_cursor: page.next_cursor.map(str::to_owned),
             transcript_coverage: TranscriptCoverageData::new(page.coverage),
+        }
+    }
+}
+
+/// Data of a complete `search` result in the brief view (`--view brief`,
+/// #365): [`SearchData`] with each item reduced to what a reader cites and
+/// places (`BriefTranscriptSegmentData`), and a `view` member saying so.
+///
+/// Everything else is the full page's own, made by the same code: the
+/// revision block that holds what every item repeats, the parallel `hits`,
+/// the cursor and the coverage. A brief page never leaves out the coverage:
+/// a gap is never taken as absence, in either view.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct SearchBriefData {
+    session_id: String,
+    view: &'static str,
+    revision: TranscriptRevisionData,
+    query: SearchQueryData,
+    range: Option<RangeData>,
+    items: Vec<BriefTranscriptSegmentData>,
+    hits: Vec<SearchHitData>,
+    next_cursor: Option<String>,
+    transcript_coverage: TranscriptCoverageData,
+}
+
+impl SearchBriefData {
+    /// Presents one page of search results in the brief view.
+    #[must_use]
+    pub fn new(page: &SearchPresentation<'_>) -> Self {
+        Self::from(&SearchData::new(page))
+    }
+}
+
+impl From<&SearchData> for SearchBriefData {
+    /// Projects the full page, so a brief member can only be a full member.
+    fn from(full: &SearchData) -> Self {
+        Self {
+            session_id: full.session_id.clone(),
+            view: BRIEF_VIEW,
+            revision: full.revision.clone(),
+            query: full.query.clone(),
+            range: full.range,
+            items: full
+                .items
+                .iter()
+                .map(BriefTranscriptSegmentData::from)
+                .collect(),
+            hits: full.hits.clone(),
+            next_cursor: full.next_cursor.clone(),
+            transcript_coverage: full.transcript_coverage.clone(),
         }
     }
 }
@@ -237,7 +294,7 @@ fn finish(
     }
 }
 
-/// The complete `search` result for one page.
+/// The complete `search` result for one page, in the full view.
 ///
 /// # Errors
 ///
@@ -246,8 +303,28 @@ pub fn search_response(
     page: &SearchPresentation<'_>,
     lifecycle: LifecycleResponse,
 ) -> Result<OperationResponse<serde_json::Value>, serde_json::Error> {
-    let response =
-        OperationResponse::complete(CommandName::Search.identifier(), &SearchData::new(page))?;
+    search_response_with_view(page, lifecycle, ResultView::Full)
+}
+
+/// The complete `search` result for one page in `view`.
+///
+/// The view changes only the items and the `view` member: the coverage, the
+/// `partial` status and the warning are the same in both, from the one
+/// `finish`.
+///
+/// # Errors
+///
+/// Returns the serialization error when the data cannot be represented as JSON.
+pub fn search_response_with_view(
+    page: &SearchPresentation<'_>,
+    lifecycle: LifecycleResponse,
+    view: ResultView,
+) -> Result<OperationResponse<serde_json::Value>, serde_json::Error> {
+    let command = CommandName::Search.identifier();
+    let response = match view {
+        ResultView::Full => OperationResponse::complete(command, &SearchData::new(page))?,
+        ResultView::Brief => OperationResponse::complete(command, &SearchBriefData::new(page))?,
+    };
     Ok(finish(response, page.coverage, lifecycle))
 }
 

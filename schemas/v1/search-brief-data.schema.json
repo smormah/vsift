@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vsift.dev/schemas/v1/search-brief-data.schema.json",
+  "title": "VSift search data, brief view v1",
+  "description": "The data member of a complete or partial search result asked for with --view brief (0.2.1): search-data.schema.json with each item reduced to transcript-segment-brief.schema.json and a view member that is always brief. The parallel hits (segment_id and how it matched), the normalised query, the requested range, the cursor and transcript_coverage are the full page's own, and the revision block holds once what the full view repeats on every item. Validate the envelope with operation-response.schema.json: its coverage member is truncated, and its status partial, exactly when transcript_coverage.untranscribed_ranges is not empty. The view is refused with --events jsonl. Pass next_cursor back with the same session, query, range, revision and view to continue.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "session_id",
+    "view",
+    "revision",
+    "query",
+    "range",
+    "items",
+    "hits",
+    "next_cursor",
+    "transcript_coverage"
+  ],
+  "properties": {
+    "session_id": { "type": "string", "pattern": "^ses_[a-z0-9]{16,64}$" },
+    "view": { "const": "brief" },
+    "revision": { "$ref": "transcript-revision.schema.json" },
+    "query": { "$ref": "search-data.schema.json#/$defs/query" },
+    "range": {
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "search-data.schema.json#/$defs/range" }
+      ]
+    },
+    "items": {
+      "type": "array",
+      "maxItems": 100,
+      "items": { "$ref": "transcript-segment-brief.schema.json" }
+    },
+    "hits": {
+      "type": "array",
+      "maxItems": 100,
+      "items": { "$ref": "search-data.schema.json#/$defs/hit" }
+    },
+    "next_cursor": { "$ref": "search-data.schema.json#/$defs/next_cursor" },
+    "transcript_coverage": { "$ref": "search-data.schema.json#/$defs/transcript_coverage" }
+  }
+}

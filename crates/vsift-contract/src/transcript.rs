@@ -23,14 +23,16 @@
 use serde::Serialize;
 use vsift_domain::{
     AlignmentOrigin, AsrChunkOutcome, AsrRun, JobId, MAX_CUE_TEXT_BYTES, ProviderEndTrim,
-    SegmentOrigin, SessionId, SourceSegment, TimeRange, TranscriptImportError, TranscriptOffset,
-    TranscriptProvenance, TranscriptRejection, TranscriptRevision, TranscriptSegment,
-    TranscriptWarningKind,
+    SearchCoverage, SegmentOrigin, SessionId, SourceSegment, TimeRange, TranscriptImportError,
+    TranscriptOffset, TranscriptProvenance, TranscriptRejection, TranscriptRevision,
+    TranscriptSegment, TranscriptWarningKind,
 };
 
 use crate::{
-    ConfidenceResponse, OperationResponse, render_hidden_characters, sanitize_untrusted_text,
-    search::{bounded, envelope_coverage},
+    CommandName, ConfidenceResponse, LifecycleResponse, OperationResponse, ResultView,
+    render_hidden_characters, sanitize_untrusted_text,
+    search::{TranscriptCoverageData, bounded, envelope_coverage},
+    view::BRIEF_VIEW,
 };
 
 /// Every character sanitization can replace grows from at most one byte to
@@ -366,6 +368,52 @@ impl TranscriptSegmentData {
     }
 }
 
+/// One transcript segment in the brief view (`--view brief`, #365): what a
+/// reader needs to cite and place it, and nothing the answer states elsewhere.
+///
+/// It is the identity, the time, the text to quote (`display_text`, with the
+/// hidden characters visible) and the speaker's `display_label` with its
+/// origin, when there is one. It leaves out, because the revision block of the
+/// same answer holds them once, `revision_id`, `source_id` and
+/// `source_segment_id`; and, because a citation does not need them, `text` and
+/// `original_text` (the full view keeps those raw), `markup`, `confidence`,
+/// `language`, the alignment and cue details, and `carried_from`. A member is
+/// the full item's member with the same value: the brief item is projected from
+/// the full one, never built apart from it.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub(crate) struct BriefTranscriptSegmentData {
+    segment_id: String,
+    start_us: u64,
+    end_us: u64,
+    display_text: String,
+    /// Absent, not null, when the segment has no speaker label: the brief view
+    /// is the one that spends no characters on nothing.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    speaker: Option<BriefSpeakerData>,
+}
+
+/// A speaker without its raw label: the label to quote and where it came from.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+struct BriefSpeakerData {
+    display_label: String,
+    origin: &'static str,
+}
+
+impl From<&TranscriptSegmentData> for BriefTranscriptSegmentData {
+    fn from(full: &TranscriptSegmentData) -> Self {
+        Self {
+            segment_id: full.segment_id.clone(),
+            start_us: full.start_us,
+            end_us: full.end_us,
+            display_text: full.display_text.clone(),
+            speaker: full.speaker.as_ref().map(|speaker| BriefSpeakerData {
+                display_label: speaker.display_label.clone(),
+                origin: speaker.origin,
+            }),
+        }
+    }
+}
+
 /// The revision and segment a carried segment's text was first produced in.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 struct CarriedFromData {
@@ -578,6 +626,12 @@ pub fn finish_retranscription(
 }
 
 /// Data of a `transcript.get` result: one bounded page of segments.
+///
+/// `transcript_coverage` (0.2.1, #373) says which parts of the requested range
+/// a transcript covers, by the rule `search` uses
+/// ([`SearchCoverage::of`]): a range that holds no segment is read as "nothing
+/// was said" only where the transcript covers it. Every page of one request
+/// states the coverage of the whole requested range, not of the page.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct TranscriptPageData {
     session_id: String,
@@ -585,6 +639,7 @@ pub struct TranscriptPageData {
     range: RangeData,
     items: Vec<TranscriptSegmentData>,
     next_cursor: Option<String>,
+    transcript_coverage: TranscriptCoverageData,
 }
 
 impl TranscriptPageData {
@@ -597,6 +652,26 @@ impl TranscriptPageData {
         segments: &[TranscriptSegment],
         next_cursor: Option<&str>,
     ) -> Self {
+        Self::with_coverage(
+            session_id,
+            revision,
+            range,
+            segments,
+            next_cursor,
+            &SearchCoverage::of(revision, Some(range)),
+        )
+    }
+
+    /// [`Self::new`] for a host that already holds the range's coverage, so
+    /// the data and the envelope that follows it come from one computation.
+    pub(crate) fn with_coverage(
+        session_id: &SessionId,
+        revision: &TranscriptRevision,
+        range: TimeRange,
+        segments: &[TranscriptSegment],
+        next_cursor: Option<&str>,
+        coverage: &SearchCoverage,
+    ) -> Self {
         Self {
             session_id: session_id.as_str().to_owned(),
             revision: TranscriptRevisionData::new(revision),
@@ -606,8 +681,151 @@ impl TranscriptPageData {
                 .map(|segment| TranscriptSegmentData::new(revision, segment))
                 .collect(),
             next_cursor: next_cursor.map(str::to_owned),
+            transcript_coverage: TranscriptCoverageData::new(coverage),
         }
     }
+}
+
+/// Data of a `transcript.get` result in the brief view (`--view brief`, #365):
+/// [`TranscriptPageData`] with each item reduced to what a reader cites and
+/// places (`BriefTranscriptSegmentData`), and a `view` member saying so.
+///
+/// The revision block (which holds what the full view repeats on every item),
+/// the range, the cursor and the coverage are the full page's own, made by the
+/// same code: a brief page states its gaps exactly as a full one does.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct TranscriptBriefPageData {
+    session_id: String,
+    view: &'static str,
+    revision: TranscriptRevisionData,
+    range: RangeData,
+    items: Vec<BriefTranscriptSegmentData>,
+    next_cursor: Option<String>,
+    transcript_coverage: TranscriptCoverageData,
+}
+
+impl TranscriptBriefPageData {
+    /// Presents one page read from `revision` in the brief view.
+    #[must_use]
+    pub fn new(
+        session_id: &SessionId,
+        revision: &TranscriptRevision,
+        range: TimeRange,
+        segments: &[TranscriptSegment],
+        next_cursor: Option<&str>,
+    ) -> Self {
+        Self::from(&TranscriptPageData::new(
+            session_id,
+            revision,
+            range,
+            segments,
+            next_cursor,
+        ))
+    }
+}
+
+impl From<&TranscriptPageData> for TranscriptBriefPageData {
+    /// Projects the full page, so a brief member can only be a full member.
+    fn from(full: &TranscriptPageData) -> Self {
+        Self {
+            session_id: full.session_id.clone(),
+            view: BRIEF_VIEW,
+            revision: full.revision.clone(),
+            range: full.range,
+            items: full
+                .items
+                .iter()
+                .map(BriefTranscriptSegmentData::from)
+                .collect(),
+            next_cursor: full.next_cursor.clone(),
+            transcript_coverage: full.transcript_coverage.clone(),
+        }
+    }
+}
+
+/// Everything a host presents about one page of a transcript read.
+///
+/// The fields borrow the engine's typed result, so every host presents the
+/// same page identically.
+#[derive(Clone, Debug)]
+pub struct TranscriptPresentation<'a> {
+    /// Session that was read.
+    pub session_id: &'a SessionId,
+    /// The revision that was read.
+    pub revision: &'a TranscriptRevision,
+    /// The requested half-open range.
+    pub range: TimeRange,
+    /// The page's segments, in start order.
+    pub segments: &'a [TranscriptSegment],
+    /// Token for the next page, absent on the last page.
+    pub next_cursor: Option<&'a str>,
+}
+
+/// Fixed warning of a transcript read whose range is not fully transcribed
+/// (#373): says what a gap is not (a silence), the same thing `search` says
+/// of one, in the words of a read.
+pub const UNTRANSCRIBED_READ_WARNING: &str = "Part of the requested range has no transcript, so reading it shows no words there; that does not mean none were said. coverage and transcript_coverage list the gaps. Run transcript retranscribe to transcribe them.";
+
+/// The complete `transcript.get` result for one page in `view`.
+///
+/// It is the complete result it always was, with the lifecycle and
+/// `transcript_coverage` added, unless part of the requested range has no
+/// transcript: then it is `partial`, a success that exits 0, its envelope
+/// `coverage` lists the parts as `<from_us>-<to_us>` under the reason
+/// `untranscribed_range` (the words and shape of a `search` over the same
+/// range, because the one rule decides both) and a fixed warning says what a
+/// gap is not. A range every part of which is covered keeps `coverage: null`,
+/// as it always had.
+///
+/// # Errors
+///
+/// Returns the serialization error when the data cannot be represented as JSON.
+pub fn transcript_get_response(
+    page: &TranscriptPresentation<'_>,
+    lifecycle: LifecycleResponse,
+    view: ResultView,
+) -> Result<OperationResponse<serde_json::Value>, serde_json::Error> {
+    let coverage = SearchCoverage::of(page.revision, Some(page.range));
+    let data = TranscriptPageData::with_coverage(
+        page.session_id,
+        page.revision,
+        page.range,
+        page.segments,
+        page.next_cursor,
+        &coverage,
+    );
+    let command = CommandName::TranscriptGet.identifier();
+    let response = match view {
+        ResultView::Full => OperationResponse::complete(command, &data)?,
+        ResultView::Brief => {
+            OperationResponse::complete(command, &TranscriptBriefPageData::from(&data))?
+        }
+    };
+    Ok(finish_transcript_read(
+        response.with_lifecycle(lifecycle),
+        &coverage,
+    ))
+}
+
+/// Completes a `transcript.get` response whose requested range is not fully
+/// transcribed with its `partial` status, envelope coverage and warning, and
+/// returns every other response unchanged (#373).
+///
+/// `coverage` is [`SearchCoverage::of`] for the revision and range that were
+/// read, which is what `search` reports for the same revision and range: one
+/// rule for both commands. A read has no use for a reason beyond the
+/// published `untranscribed_range`, so that is the one it gives.
+#[must_use]
+pub(crate) fn finish_transcript_read(
+    response: OperationResponse<serde_json::Value>,
+    coverage: &SearchCoverage,
+) -> OperationResponse<serde_json::Value> {
+    if coverage.is_complete() {
+        return response;
+    }
+    response
+        .with_coverage(envelope_coverage(coverage.untranscribed()))
+        .with_warnings(&[UNTRANSCRIBED_READ_WARNING])
 }
 
 /// Fixed prose of the warning `provider_chunks_rejected`: some audio was given

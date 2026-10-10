@@ -207,6 +207,10 @@ pub(crate) struct TranscriptPage {
     pub(crate) range: Range,
     pub(crate) items: Vec<TranscriptSegment>,
     pub(crate) next_cursor: Option<String>,
+    /// What a transcript covers of the range (0.2.1, #373); absent from a
+    /// result written before it, which no command now writes.
+    #[serde(default)]
+    pub(crate) transcript_coverage: Option<TranscriptCoverage>,
 }
 
 /// `transcript.retranscribe` data.

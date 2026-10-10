@@ -138,7 +138,12 @@ fn json(output: &Output) -> Built<Value> {
     let value: Value = serde_json::from_slice(&output.stdout)?;
     validate("operation-response.schema.json", &value)?;
     if value["command"] == "search" && value["error"].is_null() {
-        validate("search-data.schema.json", &value["data"])?;
+        let schema = if value["data"]["view"] == "brief" {
+            "search-brief-data.schema.json"
+        } else {
+            "search-data.schema.json"
+        };
+        validate(schema, &value["data"])?;
     }
     Ok(value)
 }
@@ -587,5 +592,420 @@ async fn an_incompletely_transcribed_search_is_partial_and_exits_zero() -> TestR
         ),
     )?;
     assert_eq!(json(&inside)?["status"], "complete");
+    Ok(())
+}
+
+/// Whether `brief` is a projection of `full`: every member of `brief`, at every
+/// depth, is a member of `full` with the same value, and an array is one when
+/// each of its elements is.
+fn is_projection_of(brief: &Value, full: &Value) -> bool {
+    match (brief, full) {
+        (Value::Object(brief), Value::Object(full)) => brief.iter().all(|(member, value)| {
+            full.get(member)
+                .is_some_and(|other| is_projection_of(value, other))
+        }),
+        (Value::Array(brief), Value::Array(full)) => {
+            brief.len() == full.len()
+                && brief
+                    .iter()
+                    .zip(full)
+                    .all(|(brief, full)| is_projection_of(brief, full))
+        }
+        (brief, full) => brief == full,
+    }
+}
+
+/// #365: `--view brief` answers the same search with each item reduced,
+/// through the binary: `--view full` is the default answer byte for byte, the
+/// brief answer names its view and holds nothing the full one does not, and a
+/// partial search is partial, with the same gaps, in both.
+#[tokio::test]
+async fn the_brief_view_is_the_full_result_without_what_every_item_repeats() -> TestResult {
+    let root = OwnedRoot::new()?;
+    let session = seed_session(&root, half_transcribed).await?;
+    let default = vsift(&root, &search(&session, "R-17", &["--json"]))?;
+    let explicit = vsift(
+        &root,
+        &search(&session, "R-17", &["--view", "full", "--json"]),
+    )?;
+    assert_eq!(default.status.code(), Some(0));
+    assert_eq!(default.stdout, explicit.stdout);
+    let full = json(&default)?;
+    assert!(full["data"].get("view").is_none());
+
+    let output = vsift(
+        &root,
+        &search(&session, "R-17", &["--view", "brief", "--json"]),
+    )?;
+    assert_eq!(output.status.code(), Some(0));
+    let brief = json(&output)?;
+    assert_eq!(brief["data"]["view"], "brief");
+    assert_eq!(brief["status"], "partial");
+    assert_eq!(brief["coverage"], full["coverage"]);
+    assert_eq!(brief["warnings"], full["warnings"]);
+    for (member, value) in full["data"].as_object().ok_or("no data")? {
+        if member != "items" {
+            assert_eq!(&brief["data"][member], value, "data member {member}");
+        }
+    }
+    let (brief_items, full_items) = (
+        brief["data"]["items"].as_array().ok_or("items")?,
+        full["data"]["items"].as_array().ok_or("items")?,
+    );
+    assert_eq!(full_items.len(), 1);
+    assert_eq!(brief_items.len(), 1);
+    assert!(is_projection_of(&brief_items[0], &full_items[0]));
+    assert_eq!(
+        brief_items[0]["display_text"],
+        "Dialog R-17 is displayed now."
+    );
+    assert!(output.stdout.len() < default.stdout.len());
+
+    // A cursor of one view continues in the other.
+    let other = OwnedRoot::new()?;
+    let id = seed_session(&other, f10).await?;
+    let first = json(&vsift(
+        &other,
+        &search(
+            &id,
+            "synthetic",
+            &["--limit", "1", "--view", "brief", "--json"],
+        ),
+    )?)?;
+    let cursor = first["data"]["next_cursor"]
+        .as_str()
+        .ok_or("no cursor")?
+        .to_owned();
+    let rest = json(&vsift(
+        &other,
+        &search(
+            &id,
+            "synthetic",
+            &["--limit", "1", "--cursor", &cursor, "--json"],
+        ),
+    )?)?;
+    assert!(rest["data"].get("view").is_none());
+    assert_eq!(rest["data"]["items"].as_array().map(Vec::len), Some(1));
+    assert_ne!(
+        first["data"]["items"][0]["segment_id"],
+        rest["data"]["items"][0]["segment_id"]
+    );
+    Ok(())
+}
+
+/// The brief view is refused for a stream before the session is read, so the
+/// answer is the same for a session that exists and one that does not; the
+/// full view still streams as it did.
+#[tokio::test]
+async fn the_brief_view_is_refused_for_a_stream_before_the_session_is_read() -> TestResult {
+    let root = OwnedRoot::new()?;
+    let session = seed_session(&root, f10).await?;
+    for id in [session.as_str(), "ses_ffffffffffffffff"] {
+        let refused = vsift(
+            &root,
+            &search(id, "R-17", &["--view", "brief", "--events", "jsonl"]),
+        )?;
+        assert_eq!(refused.status.code(), Some(2));
+        let lines = stream(&refused)?;
+        assert_eq!(lines.len(), 1);
+        let error = &lines[0]["result"]["error"];
+        assert_eq!(error["code"], "INVALID_ARGUMENT");
+        let remedy = error["remediation"][0]["summary"]
+            .as_str()
+            .ok_or("remediation missing")?;
+        assert!(
+            remedy.contains("--view") && remedy.contains("--json"),
+            "{remedy}"
+        );
+    }
+    let default = vsift(&root, &search(&session, "R-17", &["--events", "jsonl"]))?;
+    let explicit = vsift(
+        &root,
+        &search(&session, "R-17", &["--view", "full", "--events", "jsonl"]),
+    )?;
+    assert_eq!(default.status.code(), Some(0));
+    assert_eq!(default.stdout, explicit.stdout);
+    // Readable text is the same for both views.
+    let text = vsift(&root, &search(&session, "R-17", &[]))?;
+    let brief_text = vsift(&root, &search(&session, "R-17", &["--view", "brief"]))?;
+    assert_eq!(text.status.code(), Some(0));
+    assert_eq!(text.stdout, brief_text.stdout);
+    Ok(())
+}
+
+/// A local-ASR revision of a 55 s source whose first chunk (0-30 s) was
+/// transcribed, "Dialog R-17 is displayed now." at 1-4 s, and whose second
+/// (25-55 s) the recogniser answered with something that could not be used
+/// (#353): 30-55 s has no transcript.
+fn with_unusable_chunk(session_id: &SessionId, source_id: &SourceId) -> Built<TranscriptRevision> {
+    let source = vsift_application::whole_file_source_segment(
+        source_id,
+        MediaTime::from_micros(55 * SECOND),
+    )?;
+    let covered = TimeRange::new(
+        MediaTime::from_micros(0),
+        MediaTime::from_micros(55 * SECOND),
+    )?;
+    let planned = plan_chunks(source.id(), covered, ChunkPlan::R0)?;
+    let (first, second) = match planned.as_slice() {
+        [first, second] => (first.clone(), second.clone()),
+        other => return Err(format!("expected two chunks, got {}", other.len()).into()),
+    };
+    let run = AsrRun::new(AsrRunParts {
+        provider: AsrProviderBuild::new(AsrProvider::WhisperCpp, Sha256Hex::parse(DIGEST)?),
+        model: AsrModel::new(AsrModelProfile::Base, Sha256Hex::parse(DIGEST)?),
+        decoding: AsrDecodingProfile::R0V1,
+        plan: ChunkPlan::R0,
+        threads: NonZeroU16::new(4).ok_or("zero")?,
+        audio_stream: 1,
+        chunks: vec![
+            AsrChunkRecord::new(
+                first.clone(),
+                AsrChunkOutcome::Transcribed {
+                    audio: first.window(),
+                },
+            ),
+            AsrChunkRecord::new(
+                second.clone(),
+                AsrChunkOutcome::Unusable {
+                    audio: second.window(),
+                },
+            ),
+        ],
+    })?;
+    let output = ProviderChunkOutput {
+        language: None,
+        segments: vec![ProviderSegment {
+            start: ChunkTime::from_millis(1_000).ok_or("time")?,
+            end: ChunkTime::from_millis(4_000).ok_or("time")?,
+            text: Some(CueText::new(
+                "Dialog R-17 is displayed now.".to_owned(),
+                "Dialog R-17 is displayed now.".to_owned(),
+            )?),
+            tokens: vec![ProviderToken {
+                kind: ProviderTokenKind::Text,
+                probability: 0.75,
+            }],
+        }],
+    };
+    let (segments, language, warnings) =
+        validate_chunk_output(&first, first.window(), source.range(), output)?.into_parts();
+    Ok(build_asr_revision(AsrRevisionRequest {
+        session_id,
+        source_id,
+        source_segment: &source,
+        number: NonZeroU32::MIN,
+        transcription: AsrTranscription {
+            run,
+            language,
+            segments: merge_chunks(&[segments]).segments,
+            warnings,
+        },
+        splice: None,
+    })?)
+}
+
+fn get<'a>(session: &'a str, from: &'a str, to: &'a str, extra: &[&'a str]) -> Vec<&'a str> {
+    let mut arguments = vec!["transcript", "get", session, "--from", from, "--to", to];
+    arguments.extend_from_slice(extra);
+    arguments
+}
+
+/// Parses a `transcript get` `--json` result in either view.
+fn read_json(output: &Output) -> Built<Value> {
+    assert!(output.stderr.is_empty(), "a JSON command wrote to stderr");
+    let value: Value = serde_json::from_slice(&output.stdout)?;
+    validate("operation-response.schema.json", &value)?;
+    assert_eq!(value["command"], "transcript.get");
+    if value["error"].is_null() {
+        let schema = if value["data"]["view"] == "brief" {
+            "transcript-get-brief-data.schema.json"
+        } else {
+            "transcript-get-data.schema.json"
+        };
+        validate(schema, &value["data"])?;
+    }
+    Ok(value)
+}
+
+/// How a session with a gap is made and what a read of it must say.
+struct GapCase {
+    build: fn(&SessionId, &SourceId) -> Built<TranscriptRevision>,
+    /// The length of the source, in seconds.
+    length: u64,
+    /// The first second no transcript covers; the gap runs to the source's end.
+    gap_start: u64,
+    /// A range, in seconds, that ends inside the gap, and the gap a read of it
+    /// lists.
+    crossing: (u64, u64, &'static str),
+}
+
+/// The JSON reads of one gap: partial as a search over the range is, the same
+/// in the brief view, complete where the transcript covers the range and only
+/// partly partial where it does not. Returns the read of the whole source.
+fn assert_json_reads_of_a_gap(root: &OwnedRoot, session: &str, case: &GapCase) -> Built<Value> {
+    let (end, gap_start) = (
+        (case.length * SECOND).to_string(),
+        (case.gap_start * SECOND).to_string(),
+    );
+    let output = vsift(root, &get(session, "0", &end, &["--json"]))?;
+    assert_eq!(output.status.code(), Some(0));
+    let read = read_json(&output)?;
+    assert_eq!(read["status"], "partial");
+    assert_eq!(
+        read["coverage"],
+        serde_json::json!({
+            "truncated": true,
+            "gaps": [format!("{gap_start}-{end}")],
+            "reasons": ["untranscribed_range"],
+        })
+    );
+    assert_eq!(read["data"]["transcript_coverage"]["basis"], "local_asr");
+    assert_eq!(read["warnings"].as_array().map(Vec::len), Some(1));
+
+    // A search over the same revision and range reports the same coverage.
+    let searched = json(&vsift(
+        root,
+        &search(session, "dialog", &["--from", "0", "--to", &end, "--json"]),
+    )?)?;
+    assert_eq!(searched["status"], "partial");
+    assert_eq!(read["coverage"], searched["coverage"]);
+    assert_eq!(
+        read["data"]["transcript_coverage"],
+        searched["data"]["transcript_coverage"]
+    );
+
+    // The brief view states the same gap.
+    let brief = read_json(&vsift(
+        root,
+        &get(session, "0", &end, &["--view", "brief", "--json"]),
+    )?)?;
+    for member in ["status", "coverage", "warnings", "lifecycle"] {
+        assert_eq!(brief[member], read[member], "{member}");
+    }
+    assert_eq!(
+        brief["data"]["transcript_coverage"],
+        read["data"]["transcript_coverage"]
+    );
+
+    // Inside what is covered the read is complete, as it always was.
+    let inside = read_json(&vsift(root, &get(session, "0", &gap_start, &["--json"]))?)?;
+    assert_eq!(inside["status"], "complete");
+    assert!(inside["coverage"].is_null());
+    assert_eq!(inside["warnings"], serde_json::json!([]));
+    assert!(
+        inside["data"]["transcript_coverage"]["untranscribed_ranges"]
+            .as_array()
+            .is_some_and(Vec::is_empty)
+    );
+
+    // A range that crosses into the gap lists only its own part of it.
+    let (from, to, listed) = case.crossing;
+    let (from, to) = ((from * SECOND).to_string(), (to * SECOND).to_string());
+    let crossing = read_json(&vsift(root, &get(session, &from, &to, &["--json"]))?)?;
+    assert_eq!(crossing["status"], "partial");
+    assert_eq!(crossing["coverage"]["gaps"], serde_json::json!([listed]));
+    Ok(read)
+}
+
+/// The stream of a read over a gap ends partial with the same member and still
+/// exits 0, its records are complete evidence, and a person reads the gap in
+/// the text.
+fn assert_stream_and_text_reads_of_a_gap(
+    root: &OwnedRoot,
+    session: &str,
+    case: &GapCase,
+    read: &Value,
+) -> TestResult {
+    let end = (case.length * SECOND).to_string();
+    let events = vsift(root, &get(session, "0", &end, &["--events", "jsonl"]))?;
+    assert_eq!(events.status.code(), Some(0));
+    let text = String::from_utf8(events.stdout)?;
+    let lines: Vec<Value> = text
+        .lines()
+        .map(serde_json::from_str)
+        .collect::<Result<_, _>>()?;
+    let (terminal, records) = lines.split_last().ok_or("empty stream")?;
+    validate("terminal-event.schema.json", terminal)?;
+    validate("operation-response.schema.json", &terminal["result"])?;
+    validate(
+        "transcript-get-stream-data.schema.json",
+        &terminal["result"]["data"],
+    )?;
+    assert_eq!(terminal["result"]["status"], "partial");
+    assert_eq!(terminal["result"]["coverage"], read["coverage"]);
+    assert_eq!(
+        terminal["result"]["data"]["transcript_coverage"],
+        read["data"]["transcript_coverage"]
+    );
+    for line in records {
+        validate("evidence-event.schema.json", line)?;
+        validate("transcript-segment.schema.json", &line["record"])?;
+    }
+
+    let human = vsift(root, &get(session, "0", &end, &[]))?;
+    assert_eq!(human.status.code(), Some(0));
+    let human = String::from_utf8(human.stdout)?;
+    assert!(human.contains("Not transcribed (words said there cannot be found):"));
+    assert!(human.contains("Status: partial"), "{human}");
+    Ok(())
+}
+
+/// #373: a read over a range a transcript does not cover is `partial` and
+/// exits 0, as a search over it is, and lists the gap in the same words: for a
+/// recording whose second chunk could not be read (#353) and for a range
+/// transcription of the first half of a recording. A range that stays inside
+/// what is covered is complete, with `coverage` null as it always was; one that
+/// starts or ends inside the gap lists only its own part; both views, the
+/// stream and the readable text say so.
+#[tokio::test]
+async fn a_read_over_a_gap_is_partial_as_a_search_over_it_is() -> TestResult {
+    for case in [
+        GapCase {
+            build: with_unusable_chunk,
+            length: 55,
+            gap_start: 30,
+            crossing: (20, 40, "30000000-40000000"),
+        },
+        GapCase {
+            build: half_transcribed,
+            length: 12,
+            gap_start: 6,
+            crossing: (3, 9, "6000000-9000000"),
+        },
+    ] {
+        let root = OwnedRoot::new()?;
+        let session = seed_session(&root, case.build).await?;
+        let read = assert_json_reads_of_a_gap(&root, &session, &case)?;
+        assert_stream_and_text_reads_of_a_gap(&root, &session, &case, &read)?;
+    }
+    Ok(())
+}
+
+/// An imported transcript covers the whole source, so a read of any range is
+/// complete, and the member says how far that can be trusted.
+#[tokio::test]
+async fn an_imported_transcript_read_is_complete_and_states_its_basis() -> TestResult {
+    let root = OwnedRoot::new()?;
+    let session = seed_session(&root, f10).await?;
+    for (from, to) in [
+        ("0", "12000000"),
+        ("3500000", "4500000"),
+        ("11000000", "30000000"),
+    ] {
+        let output = vsift(&root, &get(&session, from, to, &["--json"]))?;
+        assert_eq!(output.status.code(), Some(0));
+        let read = read_json(&output)?;
+        assert_eq!(read["status"], "complete", "{from}-{to}");
+        assert!(read["coverage"].is_null(), "{from}-{to}");
+        assert_eq!(
+            read["data"]["transcript_coverage"]["basis"],
+            "supplied_transcript"
+        );
+        assert_eq!(
+            read["data"]["transcript_coverage"]["untranscribed_ranges"],
+            serde_json::json!([])
+        );
+    }
     Ok(())
 }

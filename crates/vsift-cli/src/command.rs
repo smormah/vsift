@@ -8,7 +8,7 @@ use vsift::{
     ManagedComponent, ManagedVersionKey, ManagedVersionKeyError, OperationId, RuntimeDependency,
     SessionId, SetupProfile, TranscriptRevisionId, VisualCandidateId,
 };
-use vsift_contract::CommandName;
+use vsift_contract::{CommandName, ResultView};
 
 /// The top-level help's worked example: what a first investigation runs, in
 /// order, for a reader (often an agent) that has only this help (P14 PR 7).
@@ -564,6 +564,41 @@ impl TranscriptCommand {
     }
 }
 
+/// How much of each item a read answers with (#365).
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, ValueEnum)]
+pub(crate) enum ViewArgument {
+    /// Every field of every item: the answer every release gave (the default).
+    #[default]
+    Full,
+    /// Each item without what the answer already states once: the revision's
+    /// hashes, source and model details (or the index's source and size). It
+    /// shapes the --json answer (readable text is the same for both), and
+    /// --events jsonl refuses it, because a stream's records are complete
+    /// evidence.
+    Brief,
+}
+
+impl ViewArgument {
+    /// The contract's view this option names.
+    pub(crate) const fn result_view(self) -> ResultView {
+        match self {
+            Self::Full => ResultView::Full,
+            Self::Brief => ResultView::Brief,
+        }
+    }
+}
+
+/// The `--view` option of `transcript get`, `search` and `candidates`, defined
+/// once so the three commands cannot describe it differently.
+#[derive(Args, Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub(crate) struct ReadView {
+    /// Which answer to give. `brief` keeps each item's ids, times and text (a
+    /// candidate's reasons and hash) and leaves out what every item repeats, so
+    /// a page is a fraction of the size; read the full view for everything else.
+    #[arg(long = "view", value_enum, default_value_t)]
+    pub view: ViewArgument,
+}
+
 /// Bounded, pageable transcript read.
 #[derive(Args, Debug)]
 pub(crate) struct TranscriptGetArguments {
@@ -584,6 +619,8 @@ pub(crate) struct TranscriptGetArguments {
     /// Revision to read (a `trv_` identity); defaults to the newest.
     #[arg(long)]
     pub revision: Option<TranscriptRevisionId>,
+    #[command(flatten)]
+    pub read_view: ReadView,
 }
 
 /// Local speech recognition of a session, whole or over one range.
@@ -631,6 +668,8 @@ pub(crate) struct SearchArguments {
     /// Revision to search (a `trv_` identity); defaults to the newest.
     #[arg(long)]
     pub revision: Option<TranscriptRevisionId>,
+    #[command(flatten)]
+    pub read_view: ReadView,
 }
 
 /// Visual-candidate page request; missing windows of the range are analysed
@@ -653,6 +692,8 @@ pub(crate) struct CandidatesArguments {
     /// range; a call with a cursor never analyses anything.
     #[arg(long)]
     pub cursor: Option<String>,
+    #[command(flatten)]
+    pub read_view: ReadView,
 }
 
 /// Frame namespace arguments.

@@ -178,6 +178,11 @@ fn frozen_examples_render_as_readable_text() -> TestResult {
             "transcript-get-asr",
         ),
         (
+            CommandName::TranscriptGet,
+            "transcript-get.partial.json",
+            "transcript-get-partial",
+        ),
+        (
             CommandName::TranscriptRetranscribe,
             "transcript-retranscribe.json",
             "transcript-retranscribe",

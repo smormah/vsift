@@ -103,7 +103,7 @@
           "enum": ["supplied_transcript", "local_asr", "mixed"]
         },
         "scope": {
-          "description": "What search reads: transcript text only; on-screen text is not searched.",
+          "description": "What search (and, since 0.2.1, transcript get, which reuses this definition) reads: transcript text only; on-screen text is not searched.",
           "const": "transcript_text"
         },
         "searched_range": {

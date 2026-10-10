@@ -16,8 +16,9 @@ use vsift_application::{
     page_transcript,
 };
 use vsift_contract::{
-    CommandName, EventKind, EvidenceRecordType, LifecycleResponse, OperationResponse,
-    TerminalEventResponse, TranscriptEvidenceStream, TranscriptPageData,
+    CommandName, EventKind, EvidenceRecordType, LifecycleResponse, OperationResponse, ResultView,
+    TerminalEventResponse, TranscriptEvidenceStream, TranscriptPresentation,
+    transcript_get_response,
 };
 use vsift_domain::{
     CueSource, CueText, CueTiming, FailureCode, ImportedCue, MediaTime, PageLimit,
@@ -105,7 +106,10 @@ fn validate_line(line: &Value) -> TestResult {
         Some("terminal") => {
             validate("terminal-event.schema.json", line)?;
             validate("operation-response.schema.json", &line["result"])?;
-            if line["result"]["status"] == "complete" {
+            if matches!(
+                line["result"]["status"].as_str(),
+                Some("complete" | "partial")
+            ) {
                 validate(
                     "transcript-get-stream-data.schema.json",
                     &line["result"]["data"],
@@ -195,13 +199,17 @@ fn page(
     let segments: Vec<_> = page.segments.into_iter().cloned().collect();
     let next_cursor = page.next_cursor.map(|cursor| cursor.encode());
     let lifecycle = || LifecycleResponse::ephemeral(EXPIRES_AT.to_owned());
-    let json = serde_json::to_value(
-        OperationResponse::complete(
-            CommandName::TranscriptGet.identifier(),
-            &TranscriptPageData::new(&session, revision, range, &segments, next_cursor.as_deref()),
-        )?
-        .with_lifecycle(lifecycle()),
-    )?;
+    let json = serde_json::to_value(transcript_get_response(
+        &TranscriptPresentation {
+            session_id: &session,
+            revision,
+            range,
+            segments: &segments,
+            next_cursor: next_cursor.as_deref(),
+        },
+        lifecycle(),
+        ResultView::Full,
+    )?)?;
     let stream = TranscriptEvidenceStream::new(
         &session,
         revision,
@@ -240,6 +248,35 @@ fn the_stream_matches_the_frozen_example_byte_for_byte() -> TestResult {
     for line in parsed(&page.lines)? {
         validate_line(&line)?;
     }
+    Ok(())
+}
+
+/// #365 and #373: a stream is the stream the published `0.1.0` wrote, byte for
+/// byte in every record, with only the terminal data's new member added. The
+/// brief view is never a stream's: its records are published evidence an index
+/// stores by key, and they stay complete.
+#[test]
+fn a_stream_is_what_was_published_but_for_the_new_terminal_member() -> TestResult {
+    let page = page(&f10_revision()?, 0, 12_000_000, 2, None)?;
+    let published = fs::read_to_string(
+        schema_root().join("frozen/v0.1.0/examples/transcript-get.events.jsonl"),
+    )?;
+    let published: Vec<&str> = published.lines().collect();
+    assert_eq!(page.lines.len(), published.len());
+    let (terminal, records) = page.lines.split_last().ok_or("empty stream")?;
+    for (emitted, frozen) in records.iter().zip(&published) {
+        assert_eq!(emitted, frozen);
+    }
+    let mut terminal: Value = serde_json::from_str(terminal)?;
+    terminal["result"]["data"]
+        .as_object_mut()
+        .ok_or("terminal data is not an object")?
+        .remove("transcript_coverage")
+        .ok_or("the new member is missing")?;
+    assert_eq!(
+        terminal,
+        serde_json::from_str::<Value>(published.last().ok_or("empty stream")?)?
+    );
     Ok(())
 }
 
@@ -286,7 +323,13 @@ fn records_are_the_page_items_then_one_terminal_event() -> TestResult {
     let data = &terminal["result"]["data"];
     assert_eq!(data["record_count"], items.len());
     assert!(data.get("items").is_none());
-    for member in ["session_id", "revision", "range", "next_cursor"] {
+    for member in [
+        "session_id",
+        "revision",
+        "range",
+        "next_cursor",
+        "transcript_coverage",
+    ] {
         assert!(
             data[member] == page.json["data"][member],
             "terminal data {member} differs from the page"

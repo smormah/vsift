@@ -19,9 +19,9 @@ use vsift::{
 use vsift_contract::{
     BundleData, BundleSourceInclusion, CleanData, CleanItem, CleanItemOutcome, CommandName,
     LifecycleResponse, ListedSession, OpenData, OperationResponse, PageData, RequestDurability,
-    RetranscribeJob, SessionJobData, SessionState, SessionStatusData, StatusData,
-    TranscriptEvidenceStream, TranscriptPageData, TranscriptRetranscribeData, WorkspaceData,
-    WorkspaceInitOutcome, finish_retranscription, job_warning_messages,
+    ResultView, RetranscribeJob, SessionJobData, SessionState, SessionStatusData, StatusData,
+    TranscriptEvidenceStream, TranscriptPresentation, TranscriptRetranscribeData, WorkspaceData,
+    WorkspaceInitOutcome, finish_retranscription, job_warning_messages, transcript_get_response,
     transcript_warning_messages,
 };
 
@@ -342,29 +342,42 @@ pub(crate) async fn retranscribe(
     ))
 }
 
-/// Reads one bounded page of a session's transcript as one result.
+/// Reads one bounded page of a session's transcript as one result, in `view`.
+///
+/// The result is `partial` when part of the requested range has no transcript
+/// (#373): the contract decides that from the same rule `search` uses, so a
+/// read over a gap is never taken for a read of a silence.
 pub(crate) fn transcript_get(
     engine: &Engine,
     arguments: TranscriptGetArguments,
+    view: ResultView,
 ) -> Result<Response, CommandFailure> {
     let excerpt = read_transcript(engine, arguments)?;
-    let data = TranscriptPageData::new(
-        excerpt.session().session_id(),
-        excerpt.revision(),
-        excerpt.range(),
-        excerpt.segments(),
-        excerpt.next_cursor(),
-    );
     let lifecycle = session_lifecycle(excerpt.session().lifetime())?;
-    Ok(response(CommandName::TranscriptGet, &data)?.with_lifecycle(lifecycle))
+    transcript_get_response(
+        &TranscriptPresentation {
+            session_id: excerpt.session().session_id(),
+            revision: excerpt.revision(),
+            range: excerpt.range(),
+            segments: excerpt.segments(),
+            next_cursor: excerpt.next_cursor(),
+        },
+        lifecycle,
+        view,
+    )
+    .map_err(|_| CommandFailure::from(FailureCode::Internal))
 }
 
 /// Reads one bounded page of a session's transcript as an evidence stream:
 /// one evidence event per segment, then the terminal event.
+///
+/// A stream is always the full records; the brief view is refused before the
+/// session is read ([`crate::read_view::refuse_brief_stream`]).
 pub(crate) fn transcript_stream(
     engine: &Engine,
     arguments: TranscriptGetArguments,
 ) -> Result<TranscriptEvidenceStream, CommandFailure> {
+    crate::read_view::refuse_brief_stream(arguments.read_view)?;
     let excerpt = read_transcript(engine, arguments)?;
     let lifecycle = session_lifecycle(excerpt.session().lifetime())?;
     TranscriptEvidenceStream::new(

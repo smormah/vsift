@@ -19,9 +19,9 @@ use vsift_application::{
     whole_file_source_segment,
 };
 use vsift_contract::{
-    CommandName, EvidenceStream, LifecycleResponse, OperationResponse, SearchEvidenceStream,
-    SearchPresentation, UNTRANSCRIBED_SEARCH_WARNING, search_query_rejection_summary,
-    search_response,
+    CommandName, EvidenceStream, LifecycleResponse, OperationResponse, ResultView,
+    SearchEvidenceStream, SearchPresentation, UNTRANSCRIBED_SEARCH_WARNING,
+    search_query_rejection_summary, search_response, search_response_with_view,
 };
 use vsift_domain::{
     AsrChunkOutcome, AsrChunkRecord, AsrDecodingProfile, AsrModel, AsrModelProfile, AsrProvider,
@@ -299,9 +299,11 @@ fn revision_with_words_that_no_segment_holds() -> Built<TranscriptRevision> {
     })?)
 }
 
-/// One page of `query` over `revision` in both published forms.
+/// One page of `query` over `revision` in its published forms: the full
+/// `--json` result, the brief one (`--view brief`) and the evidence stream.
 struct Page {
     json: Value,
+    brief: Value,
     lines: Vec<String>,
 }
 
@@ -344,6 +346,11 @@ fn search(
     };
     let lifecycle = || LifecycleResponse::ephemeral(EXPIRES_AT.to_owned());
     let json = serde_json::to_value(search_response(&presentation, lifecycle())?)?;
+    let brief = serde_json::to_value(search_response_with_view(
+        &presentation,
+        lifecycle(),
+        ResultView::Brief,
+    )?)?;
     let stream = SearchEvidenceStream::new(&presentation, lifecycle())?;
     let mut lines = stream
         .records()
@@ -351,7 +358,7 @@ fn search(
         .map(serde_json::to_string)
         .collect::<Result<Vec<_>, _>>()?;
     lines.push(serde_json::to_string(stream.terminal())?);
-    Ok(Page { json, lines })
+    Ok(Page { json, brief, lines })
 }
 
 fn parsed(lines: &[String]) -> Built<Vec<Value>> {
@@ -649,5 +656,144 @@ fn search_schemas_reject_unknown_fields_and_values() -> TestResult {
         .ok_or("not an object")?
         .insert("items".to_owned(), Value::Array(Vec::new()));
     assert!(!is_valid("search-stream-data.schema.json", &with_items)?);
+    Ok(())
+}
+
+/// Whether `brief` is a projection of `full`: every member of `brief`, at every
+/// depth, is a member of `full` with the same value, and an array is one when
+/// each of its elements is.
+fn is_projection_of(brief: &Value, full: &Value) -> bool {
+    match (brief, full) {
+        (Value::Object(brief), Value::Object(full)) => brief.iter().all(|(member, value)| {
+            full.get(member)
+                .is_some_and(|other| is_projection_of(value, other))
+        }),
+        (Value::Array(brief), Value::Array(full)) => {
+            brief.len() == full.len()
+                && brief
+                    .iter()
+                    .zip(full)
+                    .all(|(brief, full)| is_projection_of(brief, full))
+        }
+        (brief, full) => brief == full,
+    }
+}
+
+/// #365: the brief result is its frozen example. The full result names no view,
+/// the brief one does, and what the brief one leaves out of each item is in the
+/// revision block once.
+#[test]
+fn the_brief_result_matches_the_frozen_example() -> TestResult {
+    let page = search(&f10_revision()?, "R-17", None, 20)?;
+    validate("operation-response.schema.json", &page.brief)?;
+    validate("search-brief-data.schema.json", &page.brief["data"])?;
+    assert!(
+        page.brief == load("examples/search.brief.json")?,
+        "the brief search result differs from examples/search.brief.json"
+    );
+    assert!(page.json["data"].get("view").is_none());
+    assert_eq!(page.brief["data"]["view"], "brief");
+    for item in page.brief["data"]["items"]
+        .as_array()
+        .ok_or("items missing")?
+    {
+        validate("transcript-segment-brief.schema.json", item)?;
+    }
+    assert_eq!(
+        page.brief["data"]["items"][0]["display_text"],
+        "Dialog R-17 is displayed now."
+    );
+    assert_eq!(
+        page.brief["data"]["revision"]["revision_id"],
+        page.json["data"]["items"][0]["revision_id"]
+    );
+    Ok(())
+}
+
+/// #365: the two views are one result. Everything but the items, the `view`
+/// member and the shape of an item is the full result's, value for value, for a
+/// complete search and for a partial one; each brief item is a projection of
+/// the full item at the same rank, and the hits that name them are unchanged.
+#[test]
+fn the_brief_result_is_a_projection_of_the_full_result() -> TestResult {
+    for (revision, query) in [
+        (f10_revision()?, "synthetic"),
+        (half_transcribed_revision()?, "build 2,048"),
+    ] {
+        let page = search(&revision, query, None, 20)?;
+        for member in ["schema_version", "command", "status", "warnings", "error"] {
+            assert_eq!(page.brief[member], page.json[member], "{member}");
+        }
+        assert_eq!(page.brief["coverage"], page.json["coverage"]);
+        assert_eq!(page.brief["lifecycle"], page.json["lifecycle"]);
+        for (member, value) in page.json["data"].as_object().ok_or("data")? {
+            if member != "items" {
+                assert_eq!(&page.brief["data"][member], value, "data member {member}");
+            }
+        }
+        let (brief_items, full_items) = (
+            page.brief["data"]["items"].as_array().ok_or("items")?,
+            page.json["data"]["items"].as_array().ok_or("items")?,
+        );
+        assert!(!full_items.is_empty());
+        assert_eq!(brief_items.len(), full_items.len());
+        for (brief_item, full_item) in brief_items.iter().zip(full_items) {
+            assert!(is_projection_of(brief_item, full_item));
+        }
+        for (hit, item) in page.brief["data"]["hits"]
+            .as_array()
+            .ok_or("hits")?
+            .iter()
+            .zip(brief_items)
+        {
+            assert_eq!(hit["segment_id"], item["segment_id"]);
+        }
+    }
+    Ok(())
+}
+
+/// The brief view never leaves out a gap: a partial search is partial, with the
+/// same coverage and warning, in either view.
+#[test]
+fn a_partial_brief_result_states_its_gap_as_the_full_one_does() -> TestResult {
+    let page = search(&half_transcribed_revision()?, "build 2,048", None, 20)?;
+    validate("operation-response.schema.json", &page.brief)?;
+    validate("search-brief-data.schema.json", &page.brief["data"])?;
+    assert_eq!(page.brief["status"], "partial");
+    assert_eq!(
+        page.brief["coverage"],
+        serde_json::json!({
+            "truncated": true,
+            "gaps": ["6000000-12000000"],
+            "reasons": ["untranscribed_range"],
+        })
+    );
+    assert_eq!(
+        page.brief["warnings"],
+        serde_json::json!([UNTRANSCRIBED_SEARCH_WARNING])
+    );
+    assert_eq!(
+        page.brief["data"]["transcript_coverage"],
+        page.json["data"]["transcript_coverage"]
+    );
+    Ok(())
+}
+
+/// The full result and the stream are what they were: the new view changes
+/// neither, and a stream's records are the full items.
+#[test]
+fn the_full_result_and_the_stream_are_unchanged_by_the_brief_view() -> TestResult {
+    let page = search(&f10_revision()?, "synthetic", None, 20)?;
+    let lines = parsed(&page.lines)?;
+    for (line, item) in lines
+        .iter()
+        .zip(page.json["data"]["items"].as_array().ok_or("items")?)
+    {
+        assert_eq!(&line["record"], item);
+        assert!(line["record"].get("view").is_none());
+    }
+    let terminal = lines.last().ok_or("terminal")?;
+    assert!(terminal["result"]["data"].get("view").is_none());
+    assert!(page.json["data"].get("view").is_none());
     Ok(())
 }
