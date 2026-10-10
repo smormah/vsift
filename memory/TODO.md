@@ -4,7 +4,7 @@ Current-state handoff, rewritten in every change; history: git, `CHANGELOG.md`, 
 
 ## Now (2026-10-09)
 
-**Note, 2026-10-10:** `0.2.0` was published on 2026-10-09 (tag `v0.2.0` at `eeb2a22a46a8`, the merge of #344; the GitHub release is not a pre-release). What this page says of PR 12 being "prepared", of nothing being published and of `latest` being `0.0.0` was written before the publish; PR 13 records the publish, its checks and the deprecation of rc.1 and rc.2 and rewrites it. The one change of 2026-10-10 here is the RQ-10 waiver.
+**Note, 2026-10-10:** `0.2.0` was published on 2026-10-09 (tag `v0.2.0` at `eeb2a22a46a8`, the merge of #344; the GitHub release is not a pre-release). What this page says of PR 12 being "prepared", of nothing being published and of `latest` being `0.0.0` was written before the publish; PR 13 records the publish and its checks and rewrites it. The changes of 2026-10-10 here: the RQ-10 waiver, and **`0.2.0-rc.1` and `0.2.0-rc.2` are deprecated on all four packages (2026-10-10, read back; rc.3 and `0.2.0` are not)**.
 **P00-P13 are complete. P14 (R0 qualification, #17) is in progress.** Its plan has 14 pull requests (0-13): 0-10 are done, 11's evidence is complete (the maintainer's register pass and reading of the cold logs remain), **12 (the stable `0.2.0`) is PREPARED and not complete**, 13 follows. Plan:
 `p14-qualification.md` (sections 15-30); ADR 0024 stays Proposed until P14 completes.
 - **PR 12 is prepared, not done.** The commit the maintainer will tag `v0.2.0` is on the branch `p14-pr12-stable-0.2.0`, built on #343 (the maintainer's decisions of 2026-10-09, not yet on `main`); the
@@ -15,8 +15,8 @@ Current-state handoff, rewritten in every change; history: git, `CHANGELOG.md`, 
   `docs/planning/p14-stable-release-steps.md` (written as a planning page because `release.md` may not change before the tag).
 - **What the maintainer does next, in this order:** (1) merge #343, then the PR 12 pull request, only when able to tag and publish at once (installation guide and npm README say `latest` is `0.2.0`
   before it is); (2) the checklist's preflight (the one setting only they can read: the four trusted publishers on npmjs.com, which `--tag latest` has never used), tag `v0.2.0`, dry run, publish with
-  `dry_run` cleared, approve the `release` environment, check from outside; (3) **deprecate `0.2.0-rc.1` and `0.2.0-rc.2` on the four packages** (eight `npm deprecate` commands in the checklist; decided
-  2026-10-09; the supervisor never runs them; rc.3 is not deprecated); (4) the hosted checks on `0.2.0` (`P14 verify release` is red on two named checks by design until they are registered);
+  `dry_run` cleared, approve the `release` environment, check from outside; (3) **done 2026-10-10: `0.2.0-rc.1` and `0.2.0-rc.2` are deprecated on the four packages** (the checklist's eight `npm deprecate` commands; decided
+  2026-10-09; a session typed them on the maintainer's instruction, with the maintainer's login and second factor; rc.3 is not deprecated); (4) the hosted checks on `0.2.0` (`P14 verify release` is red on two named checks by design until they are registered);
   (5) **within seven days:** keep the publish run's `release-delta.json`, and have the two `STABLE_CHECKS` of `tools/p14-published/lib/verify.cjs` registered; (6) PR 13.
 - **PR 13 (to do after the publish):** the ledger's own entries for `0.2.0` (`repeat` items RQ-01 to RQ-06, RQ-13, RQ-18, RQ-19), `release_delta` copied in, `release-evidence --complete-for 0.2.0 --commit
   <stable commit>` passing, the repository-only pages flipped, the claims rung to `after_p14`, P14 `complete` in the delivery ledger, ADR 0024 Accepted, the register swept, the neutral checkpoint for using the
@@ -24,7 +24,7 @@ Current-state handoff, rewritten in every change; history: git, `CHANGELOG.md`, 
   ~296), `docs/development.md` (the `--complete-for 0.2.0-rc.3` example), `docs/operations/release.md` (6.12 step 7), `SECURITY.md`. **Allowed but left alone:** `docs/guide/limits.md` (line 5), the support
   matrix (line 106), `delivery-governance.md` (line 38), `rq-17-tryout-sheet.md` (`@next` installs).
 - **State of the packages:** `latest` is the empty `0.0.0` placeholder on all four npm packages; `next` is `0.2.0-rc.3` (tag `v0.2.0-rc.3` at `83dca856e7a0`, published 2026-10-08). `0.2.0-rc.1` (2026-10-05) and
-  `0.2.0-rc.2` (2026-10-07) are published, superseded and not deprecated yet.
+  `0.2.0-rc.2` (2026-10-07) are published, superseded and deprecated (2026-10-10).
 - **Evidence for `0.2.0-rc.3` is complete (2026-10-09):** `passed` RQ-01 to RQ-09, RQ-11 to RQ-13, RQ-15, RQ-18, RQ-19; `waived` RQ-14 (a mechanism), **RQ-10** (rc.3 and, decided 2026-10-10, the stable: a symbolic link answers `STORAGE_IO`,
   #265; its rule now admits `INVALID_ARGUMENT`), **RQ-16** (rc.3 and the stable: one cold agent read the clip `vsift audio` named; #340, L-142) and **RQ-17** (rc.3 and the stable: no Smart App Control, clean-machine
   or Gatekeeper try-out; L-143). A waiver is not a pass and the checker cannot see its limits; they live in the decisions' texts. Nothing has been run against `0.2.0`'s own bytes: that follows the publish.

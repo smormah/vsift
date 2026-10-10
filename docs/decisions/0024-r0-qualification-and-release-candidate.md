@@ -1962,3 +1962,14 @@ ledger entry keeps its decision date (2026-10-08) and gains a dated sentence, an
 **What is weaker than it sounds.** RQ-10 is `waived`, not `passed`, for the candidate and for the stable. The malicious-media campaign was not run on the stable's own bytes (the item's stable
 gate is `carry`); the decision rests on the stable being the candidate's source with another version number. Three of the four waived items (RQ-10, RQ-16, RQ-17) are now waived for the stable
 by name, and the completeness check cannot see the limits of any of them, so the limits are only as strong as these texts.
+
+## Implementation note, 2026-10-10 (P14 PR 12: `0.2.0-rc.1` and `0.2.0-rc.2` are deprecated)
+
+Decision 3 of the note of 2026-10-09 (deprecate at the stable, not before) is carried out. **This is work record only.** On 2026-10-10, after `0.2.0` was published and checked (`latest` was
+`0.2.0` and `next` was `0.2.0-rc.3` on all four packages, and no version was deprecated), the eight `npm deprecate` commands of the checklist's step 9 were run. Read back with `npm view
+<package>@<version> deprecated`: `0.2.0-rc.1` and `0.2.0-rc.2` carry "Superseded by 0.2.0. Install vsift-cli." on `vsift-cli`, `@vsift/win32-x64`, `@vsift/darwin-arm64` and `@vsift/linux-x64`;
+`0.2.0-rc.3` and `0.2.0` are not deprecated on any of the four; no tag moved and nothing was unpublished.
+
+**Who ran them.** The note of 2026-10-09 says the maintainer runs the commands and the supervisor never does. The maintainer changed that for this step: on their instruction a session typed
+the commands in the maintainer's own terminal, under the maintainer's npm login, and the maintainer approved each of the eight writes with the second factor. No session logged in or handled
+a credential. This note records the exception; it is not a standing rule for other npm account actions.

@@ -2559,7 +2559,9 @@ own cold round and decision. Every other part of the waiver stands as 29.9 recor
 after the stable is published and verified, the maintainer deprecates `0.2.0-rc.1` and `0.2.0-rc.2` on all four packages (`vsift-cli`, `@vsift/win32-x64`, `@vsift/darwin-arm64` and
 `@vsift/linux-x64`) with an npm login, using the `npm deprecate` form of `release.md` 6.11 and 6.12 step 7 with a message that names the stable, and checks each with `npm view <package>@<version>
 deprecated`. The maintainer runs the commands; the supervisor never does. `release.md` is not edited here (it is outside this change's paths): PR 12 adds the step to the stable's runbook and
-checklist, and the work packets' PR 12 row records it now. `0.2.0-rc.3` is not covered by this decision.
+checklist, and the work packets' PR 12 row records it now. `0.2.0-rc.3` is not covered by this decision. **Done on 2026-10-10** (after the stable was published and checked): all eight carry the
+message `Superseded by 0.2.0. Install vsift-cli.`, and `0.2.0-rc.3` and `0.2.0` are not deprecated on any of the four packages (`npm view <package>@<version> deprecated`). On the maintainer's instruction a session typed the commands in the maintainer's own terminal, under the maintainer's npm login, and the maintainer approved each of the eight writes with the second factor:
+an exception to "the supervisor never does", made by the maintainer for this step (the checklist's step 9 has the result).
 
 **4. RQ-17 is `waived` for `0.2.0-rc.3` and the stable `0.2.0`: the stable ships untried.** The maintainer decided not to do the clean-machine and Smart App Control try-out on LOKI before the stable,
 which decision H of ADR 0024 provides for ("an item you cannot do ships documented as untried"; untried hardware is stated, never hidden). **No Smart App Control or SmartScreen try-out, no true
@@ -2680,7 +2682,7 @@ evidence only; everything is measured on a synthetic corpus and a synthetic voic
 ### 30.5 What the publish and PR 13 still have to do
 
 1. **The maintainer's steps** (`p14-stable-release-steps.md`): the preflight (the trusted publishers can be read only on npmjs.com), the tag `v0.2.0`, the dry run and its plan, the publish dispatch with
-   `dry_run` cleared and the approval, the checks from outside, **the deprecation of `0.2.0-rc.1` and `0.2.0-rc.2` on all four packages (decided 2026-10-09; the maintainer's npm login; `0.2.0-rc.3` is not covered)**,
+   `dry_run` cleared and the approval, the checks from outside, **the deprecation of `0.2.0-rc.1` and `0.2.0-rc.2` on all four packages (decided 2026-10-09; the maintainer's npm login; `0.2.0-rc.3` is not covered; **done 2026-10-10**: 29.10, decision 3)**,
    and the hosted checks on `0.2.0` (`P14 verify release`, `P14 journeys`, `P13 managed smoke`, and `P14 published artifacts` from 0.1.0 and then from 0.2.0-rc.3, one after another).
 2. **Within seven days of the publish** (the publish run's `publish-plan` artifact expires): register the two `STABLE_CHECKS` of `tools/p14-published/lib/verify.cjs` (the candidate-to-stable delta and
    `latest` on all four packages), which changes `tools/` and its tests and is allowed once the stable is published; keep `release-delta.json`; dispatch `P14 verify release` again. **The first run on `0.2.0` is

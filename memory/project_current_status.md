@@ -3,7 +3,7 @@
 As of 2026-10-09. Current-state document: rewrite it, don't append to it. Next actions and
 open decisions are in `memory/TODO.md`.
 
-**Note, 2026-10-10:** `0.2.0` was published on 2026-10-09 (tag `v0.2.0` at `eeb2a22a46a8`, the merge of #344; the GitHub release is not a pre-release). What this page says of PR 12 being "prepared", of nothing being published and of `latest` being `0.0.0` was written before the publish; PR 13 records the publish, its checks and the deprecation of rc.1 and rc.2 and rewrites it. The one change of 2026-10-10 here is the RQ-10 waiver.
+**Note, 2026-10-10:** `0.2.0` was published on 2026-10-09 (tag `v0.2.0` at `eeb2a22a46a8`, the merge of #344; the GitHub release is not a pre-release). What this page says of PR 12 being "prepared", of nothing being published and of `latest` being `0.0.0` was written before the publish; PR 13 records the publish and its checks and rewrites it. The changes of 2026-10-10 here: the RQ-10 waiver, and **`0.2.0-rc.1` and `0.2.0-rc.2` are deprecated on all four packages (2026-10-10, read back; rc.3 and `0.2.0` are not)**.
 
 ## In plain English
 
@@ -47,9 +47,9 @@ is complete (the maintainer's register pass and reading of the cold logs remain)
 - **PR 12, prepared 2026-10-09 (plan section 30; checklist `docs/planning/p14-stable-release-steps.md`):** the commit the maintainer tags `v0.2.0` is on the branch `p14-pr12-stable-0.2.0` (built on #343, the
   maintainer's decisions of the day; the supervisor opens its pull request once #343 is merged). It differs from the tag `v0.2.0-rc.3` only in five version-string files, the two shipped documents (the
   installation guide and the npm README, now for `latest`) and the work record, and `candidate-delta` refuses nothing. **Nothing is tagged, published or dispatched: PR 12 is complete only when the
-  maintainer has published `0.2.0` and verified it,** then deprecated `0.2.0-rc.1` and `0.2.0-rc.2` (decided 2026-10-09). The first `P14 verify release` on `0.2.0` is red on two named checks by design until PR 13
+  maintainer has published `0.2.0` and verified it,** then deprecated `0.2.0-rc.1` and `0.2.0-rc.2` (decided 2026-10-09; **done 2026-10-10**, all eight read back). The first `P14 verify release` on `0.2.0` is red on two named checks by design until PR 13
   registers them (within seven days of the publish). **On npm today:** `next` is `0.2.0-rc.3` on all four packages (published and verified 2026-10-08, tag `v0.2.0-rc.3` at `83dca856e7a0`, publish run
-  37746979716) and `latest` is the empty `0.0.0`; `0.2.0-rc.1` (2026-10-05) and `0.2.0-rc.2` (2026-10-07) are published, superseded and not deprecated yet.
+  37746979716) and `latest` is the empty `0.0.0`; `0.2.0-rc.1` (2026-10-05) and `0.2.0-rc.2` (2026-10-07) are published, superseded and deprecated (2026-10-10).
 - **Why a third candidate, and what it is:** batch 2 ran on rc.1 and rc.2; **Claude Opus 5.5 missed two review-tier gates both times**, so RQ-15 was `failed` for rc.2, and the maintainer chose to improve the
   skill: no waiver, no exclusion. **rc.3 is rc.2 plus** two evidence rules in the skill, a floor for short audio (under 100 ms is a gap, never recognised: #322, L-137), a refusal of an `audio` range too
   short to hold a sample (#332; one published code replaced for that request), a remediation for a copy that runs out of time (#325 step 1, L-140) and three test or tool fixes. No re-pin, no Dependabot.
@@ -133,7 +133,7 @@ managed installation, human output, `handoff check`, the 0.1.0 pre-release (`011
 | P11 | Complete (`40c4038`); SEC-T01 adversarial evidence is technical debt, moved to R1 (#188, L-068) |
 | P12 | Complete (2026-09-30, ADR 0022 Accepted): skill, harness, named-client trials; review tier qualified, compact tier 93% and 100% on the #222 re-run; open: L-095 (#224), #219, #204 (`1284e54`) |
 | P13 | Complete (2026-10-01, ADR 0023 Accepted): distribution, managed install, `handoff check`, human output; 0.1.0 published; release commit `011bc4d` |
-| P14 | **In progress** (started 2026-10-02): PRs 0-10 done (PR 7 = the fixes of the campaigns and batch 1; 10: three candidates published, rc.3 on 2026-10-08); PR 11's evidence is complete (RQ-10, RQ-14, RQ-16 and RQ-17 waived, the rest passed; the register pass remains); **PR 12 is PREPARED, not done: the stable commit `0.2.0` is on the branch `p14-pr12-stable-0.2.0`, nothing is tagged or published, and it is complete only when the maintainer has published and verified it (then the deprecation of rc.1 and rc.2)**; then 13 |
+| P14 | **In progress** (started 2026-10-02): PRs 0-10 done (PR 7 = the fixes of the campaigns and batch 1; 10: three candidates published, rc.3 on 2026-10-08); PR 11's evidence is complete (RQ-10, RQ-14, RQ-16 and RQ-17 waived, the rest passed; the register pass remains); **PR 12 is PREPARED, not done: the stable commit `0.2.0` is on the branch `p14-pr12-stable-0.2.0`, nothing is tagged or published, and it is complete only when the maintainer has published and verified it (the deprecation of rc.1 and rc.2 is done, 2026-10-10)**; then 13 |
 
 ## Architecture snapshot
 

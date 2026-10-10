@@ -14,7 +14,8 @@ every change listed under `0.2.0-rc.3` below (the agent skill's two evidence rul
 remediation for a copy that runs out of time, and three fixes to tests and tools) is in this release, and nothing else is. **The commit was prepared on 2026-10-09; it is
 a release only when the maintainer has tagged `v0.2.0` and published it, and until then `latest` is still the empty `0.0.0` placeholder** (the installation guide
 and the launcher's README, which say otherwise, are early by that long: [L-133](docs/planning/known-limits.md#l-133)). It is not announced. `0.2.0-rc.1` and
-`0.2.0-rc.2` stay published; the maintainer deprecates them after this release is published and checked (decided 2026-10-09). `0.2.0-rc.3` is not deprecated.
+`0.2.0-rc.2` stay published and **were deprecated on 2026-10-10**, after this release was published and checked (decided 2026-10-09): npm warns on an install of either and names this release.
+`0.2.0-rc.3` is not deprecated.
 
 ### What changed since 0.2.0-rc.3, in plain English
 
@@ -76,6 +77,11 @@ the video answers `STORAGE_IO` where the item's rule names `INVALID_SOURCE` (#26
 another candidate. **The item stays `waived` and is not `passed`,** nothing was run again, and the campaign was not run on this release's own bytes. No code, tool, workflow, public claim or the
 claims rung changed. The wording is [`docs/planning/p14-qualification.md`](docs/planning/p14-qualification.md) section 29.5 (the update of 2026-10-10); ADR 0024 has a dated note. The packet P14
 is still open: the ledger follow-up (PR 13) remains.
+
+**Work record only, after the release: `0.2.0-rc.1` and `0.2.0-rc.2` were deprecated on npm on 2026-10-10.** All eight (the two candidates on `vsift-cli`, `@vsift/win32-x64`,
+`@vsift/darwin-arm64` and `@vsift/linux-x64`) carry the message "Superseded by 0.2.0. Install vsift-cli.", read back with `npm view <package>@<version> deprecated`; `0.2.0-rc.3` (which `next`
+names) and `0.2.0` are not deprecated on any of the four, and no tag moved. Nothing was unpublished: both candidates stay installable by exact version, with a warning. On the maintainer's instruction a session typed the commands in the maintainer's own terminal, under the maintainer's npm login, and the maintainer approved each of the eight writes with the second factor.
+The result is in step 9 of [`docs/planning/p14-stable-release-steps.md`](docs/planning/p14-stable-release-steps.md). The packet P14 is still open: PR 13 remains.
 
 ## [0.2.0-rc.3] - 2026-10-08
 
