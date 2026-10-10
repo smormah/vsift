@@ -141,10 +141,12 @@ fn heard(
     let chunk = run.chunks().first().ok_or("no chunk")?.chunk().clone();
     let (segments, language, warnings) =
         validate_chunk_output(&chunk, covered, source.range(), output)?.into_parts();
+    let merged = merge_chunks(&[segments]);
     Ok(AsrTranscription {
         run,
         language,
-        segments: merge_chunks(&[segments]).segments,
+        segments: merged.segments,
+        unplaced: merged.unplaced,
         warnings,
     })
 }
@@ -192,6 +194,7 @@ fn f01_revisions() -> Built<(TranscriptRevision, TranscriptRevision)> {
             )?,
             language: None,
             segments: Vec::new(),
+            unplaced: Vec::new(),
             warnings,
         },
         splice: Some(RevisionSplice {
@@ -256,6 +259,7 @@ fn a_quantized_profile_run_round_trips_as_base_q5_1() -> TestResult {
             )?,
             language: None,
             segments: Vec::new(),
+            unplaced: Vec::new(),
             warnings: TranscriptWarnings::default(),
         },
         splice: None,
@@ -321,6 +325,7 @@ fn an_unusable_chunk_round_trips_and_conforms_to_the_record_schema() -> TestResu
             run,
             language: None,
             segments: Vec::new(),
+            unplaced: Vec::new(),
             warnings,
         },
         splice: None,
@@ -386,6 +391,7 @@ fn text_kept_in_an_unreadable_part_round_trips_and_is_checked_on_reading() -> Te
             )?,
             language: None,
             segments: Vec::new(),
+            unplaced: Vec::new(),
             warnings,
         },
         splice: Some(RevisionSplice {
@@ -449,6 +455,7 @@ fn what_an_earlier_revision_left_untranscribed_is_recorded_and_checked_on_readin
                 run: run(&source, replaced, outcome)?,
                 language: None,
                 segments: Vec::new(),
+                unplaced: Vec::new(),
                 warnings: TranscriptWarnings::default(),
             },
             splice: Some(RevisionSplice {
@@ -528,6 +535,149 @@ fn what_an_earlier_revision_left_untranscribed_is_recorded_and_checked_on_readin
     plain["carried_untranscribed"] = serde_json::json!([{"start_us": 1, "end_us": 2}]);
     assert_eq!(
         decode_transcript_record(&serde_json::to_vec(&plain)?),
+        Err(SessionStorageError::IntegrityFailure)
+    );
+    Ok(())
+}
+
+/// The revision of the F01 clip of #359's record: two segments kept, at 0.6 and
+/// 3.0 s, and between them one rejected for an empty range at 1.0 s, whose words
+/// may lie from there to 3.0 s.
+fn revision_with_words_that_no_segment_holds() -> Built<TranscriptRevision> {
+    let session = SessionId::parse(EXAMPLE_SESSION)?;
+    let source_id = SourceId::parse(F01_SPEECH_SOURCE)?;
+    let source = whole_file_source_segment(&source_id, MediaTime::from_micros(6 * SECOND))?;
+    let word = |from_ms: u64, to_ms: u64, words: &str| -> Built<ProviderSegment> {
+        Ok(ProviderSegment {
+            start: ChunkTime::from_millis(from_ms).ok_or("time")?,
+            end: ChunkTime::from_millis(to_ms).ok_or("time")?,
+            text: Some(CueText::new(words.to_owned(), words.to_owned())?),
+            tokens: Vec::new(),
+        })
+    };
+    let output = ProviderChunkOutput {
+        language: LanguageTag::parse("en").ok(),
+        segments: vec![
+            word(600, 900, "the build is healthy")?,
+            word(1_000, 1_000, "error code E-409")?,
+            word(3_000, 3_500, "and the queue is empty")?,
+        ],
+    };
+    let revision = build_asr_revision(AsrRevisionRequest {
+        session_id: &session,
+        source_id: &source_id,
+        source_segment: &source,
+        number: NonZeroU32::MIN,
+        transcription: heard(&source, source.range(), output)?,
+        splice: None,
+    })?;
+    assert_eq!(revision.unplaced(), [range(SECOND, 3 * SECOND)?]);
+    Ok(revision)
+}
+
+/// #359: a revision whose run wrote words that no segment holds records where
+/// they may lie (`unplaced_ranges`), written only then, so every other record
+/// is as it was. The record round trips and conforms to the published schema.
+#[test]
+fn words_that_no_segment_holds_are_recorded() -> TestResult {
+    let revision = revision_with_words_that_no_segment_holds()?;
+    let encoded = encode_transcript_record(&revision)?;
+    let value: serde_json::Value = serde_json::from_slice(&encoded)?;
+    assert_eq!(
+        value["unplaced_ranges"],
+        serde_json::json!([{"start_us": 1_000_000, "end_us": 3_000_000}])
+    );
+    assert!(conforms_to_record_schema(&value)?);
+    assert_eq!(decode_transcript_record(&encoded)?, revision);
+    // A revision whose run left nothing of the kind is written without the
+    // member, byte for byte as before.
+    let (first, second) = f01_revisions()?;
+    for plain in [&first, &second] {
+        let before: serde_json::Value = serde_json::from_slice(&encode_transcript_record(plain)?)?;
+        assert!(before.get("unplaced_ranges").is_none());
+    }
+    // The record is committed as a fuzz seed.
+    let committed = repository(
+        "crates/vsift-infrastructure/tests/data/transcript_records/F01-words-no-segment-holds.json",
+    );
+    assert!(
+        fs::read(&committed)? == encoded,
+        "regenerate the committed record: the encoder no longer writes its bytes"
+    );
+    Ok(())
+}
+
+/// #359: what a record lists as unplaced is checked on reading: the stretches
+/// are in order, merged, inside the source and inside what the run covered, and
+/// an import has none.
+#[test]
+fn what_a_record_lists_as_unplaced_is_checked_on_reading() -> TestResult {
+    let revision = revision_with_words_that_no_segment_holds()?;
+    let value: serde_json::Value = serde_json::from_slice(&encode_transcript_record(&revision)?)?;
+    let (_, second) = f01_revisions()?;
+    for (label, listed) in [
+        (
+            "beyond the source",
+            serde_json::json!([{"start_us": 5_000_000, "end_us": 7_000_000}]),
+        ),
+        (
+            "out of order",
+            serde_json::json!([
+                {"start_us": 4_000_000, "end_us": 5_000_000},
+                {"start_us": 1_000_000, "end_us": 3_000_000}
+            ]),
+        ),
+        (
+            "overlapping",
+            serde_json::json!([
+                {"start_us": 1_000_000, "end_us": 3_000_000},
+                {"start_us": 2_000_000, "end_us": 4_000_000}
+            ]),
+        ),
+        (
+            "touching",
+            serde_json::json!([
+                {"start_us": 1_000_000, "end_us": 3_000_000},
+                {"start_us": 3_000_000, "end_us": 4_000_000}
+            ]),
+        ),
+        (
+            "empty",
+            serde_json::json!([{"start_us": 2_000_000, "end_us": 2_000_000}]),
+        ),
+        (
+            "backwards",
+            serde_json::json!([{"start_us": 3_000_000, "end_us": 2_000_000}]),
+        ),
+    ] {
+        let mut changed = value.clone();
+        changed["unplaced_ranges"] = listed;
+        assert_eq!(
+            decode_transcript_record(&serde_json::to_vec(&changed)?),
+            Err(SessionStorageError::IntegrityFailure),
+            "{label}"
+        );
+    }
+    // Outside the range the record's own run covered: the run of the second
+    // revision covers only 5.5 to 6 s.
+    let mut outside: serde_json::Value =
+        serde_json::from_slice(&encode_transcript_record(&second)?)?;
+    outside["unplaced_ranges"] = serde_json::json!([{"start_us": 1_000_000, "end_us": 2_000_000}]);
+    assert_eq!(
+        decode_transcript_record(&serde_json::to_vec(&outside)?),
+        Err(SessionStorageError::IntegrityFailure)
+    );
+    // Not an empty list: the member is omitted, never written empty.
+    let mut empty = value.clone();
+    empty["unplaced_ranges"] = serde_json::json!([]);
+    assert!(!conforms_to_record_schema(&empty)?);
+    // An import is not a run: its record has no such member.
+    let mut import: serde_json::Value = serde_json::from_slice(&fs::read(repository(
+        "schemas/v1/examples/bundle-transcript-record.json",
+    ))?)?;
+    import["unplaced_ranges"] = serde_json::json!([{"start_us": 1, "end_us": 2}]);
+    assert_eq!(
+        decode_transcript_record(&serde_json::to_vec(&import)?),
         Err(SessionStorageError::IntegrityFailure)
     );
     Ok(())

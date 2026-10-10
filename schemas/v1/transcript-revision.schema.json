@@ -162,6 +162,15 @@
           "type": "integer",
           "minimum": 1,
           "maximum": 1024
+        },
+        "unplaced_ranges": {
+          "description": "Since 0.2.1 (#359): the stretches of this run where the recogniser wrote words that no segment of the revision holds, in start order and merged. A segment the recogniser wrote whose times could not be placed in its audio is rejected and counted by the warning provider_segments_rejected, which carries no time; when it has a word in its text, starts inside its chunk's audio and is followed there by another segment, the stretch from its start to the next segment's start is where its words may lie (an upper bound: the words took part of it). What is listed is that stretch less everything a kept segment of any chunk covers, where what is left is longer than half a second, the tolerance that two chunks' timestamps for the same speech differ by. A search of the revision does not count such a stretch as transcribed unless a segment of the revision or a window the run found silent covers it, so a word said there cannot be found and the search says so. The run's own status is unchanged by it. Absent when there are none, which is every revision whose run rejected nothing of the kind, so such a revision is presented exactly as before 0.2.1. At most 1024; where there would be more the nearest are joined, which marks more and never less.",
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1024,
+          "items": {
+            "$ref": "#/$defs/range"
+          }
         }
       }
     },

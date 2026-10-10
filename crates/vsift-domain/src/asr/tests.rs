@@ -2,15 +2,18 @@
 
 use std::num::{NonZeroU16, NonZeroU32};
 
-use proptest::prelude::{prop_assert, prop_assert_eq, proptest};
+use proptest::prelude::{
+    Just, ProptestConfig, Strategy, prop, prop_assert, prop_assert_eq, prop_oneof, proptest,
+};
 
 use super::{
     AsrChunkOutcome, AsrChunkRecord, AsrDecodingProfile, AsrModel, AsrModelProfile, AsrProvider,
     AsrProviderBuild, AsrRun, AsrRunParts, ChunkPlan, ChunkPlanError, ChunkSegments, ChunkTime,
     EarlierTextRule, MIN_RECOGNITION_MICROS, MIN_RECOGNITION_SAMPLES,
     MIN_SEGMENTS_FOR_REJECTION_RATIO, PlannedChunk, ProviderChunkOutput, ProviderOutputError,
-    ProviderSegment, ProviderToken, ProviderTokenKind, ReviewedAsrModel, SPEECH_SAMPLE_RATE,
-    Sha256Hex, UNUSABLE_CHUNK_SHARE_DENOMINATOR, decoded_audio_range, is_below_recognition_floor,
+    ProviderSegment, ProviderToken, ProviderTokenKind, ReviewedAsrModel,
+    SEAM_COVERAGE_TOLERANCE_MICROS, SPEECH_SAMPLE_RATE, Sha256Hex,
+    UNUSABLE_CHUNK_SHARE_DENOMINATOR, decoded_audio_range, is_below_recognition_floor,
     is_silent_pcm, merge_chunks, plan_chunks, rounds_to_no_pcm_sample, unusable_chunks_end_the_run,
     validate_chunk_output,
 };
@@ -21,6 +24,7 @@ use crate::{
     TranscriptProvenance, TranscriptRevision, TranscriptRevisionError, TranscriptRevisionId,
     TranscriptRevisionParts, TranscriptSegment, TranscriptSegmentId, TranscriptSegmentParts,
     TranscriptWarningKind, TranscriptWarnings,
+    spans::{SpanSet, span},
 };
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -103,6 +107,7 @@ fn empty(chunk_index: u32, window: (u64, u64)) -> Built<ChunkSegments> {
     Ok(ChunkSegments {
         chunk: chunk(chunk_index, window.0, window.1)?,
         segments: Vec::new(),
+        unplaced: Vec::new(),
     })
 }
 
@@ -1406,6 +1411,958 @@ fn a_sentence_starting_at_a_window_is_not_covered_by_the_previous_sentence() -> 
     Ok(())
 }
 
+/// #359, the first row of the report, with its own timings. The earlier chunk
+/// (window 0 to 30 s) ends with a segment 22.32 to 29.50 s, which ends 0.5 s
+/// before its window does and so is not cut. The later chunk (25 to 55 s)
+/// starts with 25.00 to 32.44 s and 32.44 to 39.72 s. The first of those is cut
+/// by its window's edge, and the earlier segment spans its midpoint (28.72 s),
+/// so the merge used to keep the earlier segment instead and drop the later one
+/// whole, although it runs 2.94 s past the end of the earlier one, into audio
+/// the earlier chunk never heard. Everything after 29.50 s was in neither chunk's
+/// output. Now the later segment is kept and loses only the words the earlier
+/// one already has.
+#[test]
+fn a_later_segment_that_runs_past_the_earlier_window_keeps_its_new_words() -> TestResult {
+    let window_0 = (0, 30 * SECOND);
+    let window_1 = (25 * SECOND, 55 * SECOND);
+    let first = with(
+        draft(0, window_0, 10 * SECOND, 14 * SECOND, "intro words here")?,
+        draft(
+            0,
+            window_0,
+            22_320_000,
+            29_500_000,
+            "and then we open the settings page and click",
+        )?,
+    );
+    let second = with(
+        draft(
+            1,
+            window_1,
+            25 * SECOND,
+            32_440_000,
+            "settings page and click the save button twice",
+        )?,
+        draft(
+            1,
+            window_1,
+            32_440_000,
+            39_720_000,
+            "then the banner appears",
+        )?,
+    );
+    let merged = merge_chunks(&[first, second]);
+    let kept: Vec<&str> = merged
+        .segments
+        .iter()
+        .map(|merged| merged.segment.text().text())
+        .collect();
+    assert_eq!(
+        kept,
+        [
+            "intro words here",
+            "and then we open the settings page and click",
+            "the save button twice",
+            "then the banner appears",
+        ]
+    );
+    // The repeated words were trimmed from the later copy and counted.
+    assert_eq!(
+        merged
+            .warnings
+            .as_slice()
+            .iter()
+            .find(|warning| warning.kind() == TranscriptWarningKind::SeamDuplicatesRemoved)
+            .map(|warning| warning.count()),
+        Some(1)
+    );
+    // The kept segment keeps its own range, 2.94 s of it past the earlier one.
+    assert_eq!(
+        merged.segments[2].segment.range(),
+        range(25 * SECOND, 32_440_000)?
+    );
+    Ok(())
+}
+
+/// #359, the mirror at a right edge. The earlier chunk's last segment
+/// (22.0 to 29.9 s) is cut by its window's end (30 s). The later chunk (25 to
+/// 55 s) hears the same sentence from 25.6 s, 0.6 s after its own window
+/// starts, so its segment is not cut, and it spans the earlier segment's
+/// midpoint (25.95 s). The merge used to keep only the later one, which cannot
+/// have the words said before 25.6 s: the first 3.6 s of the earlier segment,
+/// heard by no other chunk, were lost.
+#[test]
+fn an_earlier_segment_that_starts_before_the_later_window_keeps_its_first_words() -> TestResult {
+    let window_0 = (0, 30 * SECOND);
+    let window_1 = (25 * SECOND, 55 * SECOND);
+    let first = with(
+        draft(0, window_0, 10 * SECOND, 14 * SECOND, "before the seam")?,
+        draft(
+            0,
+            window_0,
+            22 * SECOND,
+            29_900_000,
+            "so first we log in and then we open",
+        )?,
+    );
+    let second = with(
+        draft(
+            1,
+            window_1,
+            25_600_000,
+            40 * SECOND,
+            "and then we open the settings page",
+        )?,
+        draft(1, window_1, 41 * SECOND, 44 * SECOND, "after the seam")?,
+    );
+    let (kept, duplicates) = texts(&[first, second]);
+    assert_eq!(
+        kept,
+        [
+            "before the seam",
+            "so first we log in and then we open",
+            "the settings page",
+            "after the seam",
+        ]
+    );
+    assert_eq!(duplicates, 1);
+    Ok(())
+}
+
+/// #359 in a chain of three chunks, windows 0 to 30, 25 to 55 and 50 to 80 s:
+/// both seams used to lose the end of a segment that the later chunk hears
+/// from its first sample. Chunk 1's first segment runs 2.94 s past chunk 0's
+/// last, and chunk 2's first (50.0 to 57.0 s) runs 2.6 s past the 54.4 s at
+/// which chunk 1's long segment ends (0.6 s before that window's end, so it is
+/// not cut, and it spans the later segment's midpoint, 53.5 s).
+#[test]
+fn a_chain_of_chunks_loses_nothing_at_either_seam() -> TestResult {
+    let window_0 = (0, 30 * SECOND);
+    let window_1 = (25 * SECOND, 55 * SECOND);
+    let window_2 = (50 * SECOND, 80 * SECOND);
+    let first = draft(
+        0,
+        window_0,
+        22_320_000,
+        29_500_000,
+        "one two three four five six",
+    )?;
+    let second = with(
+        draft(
+            1,
+            window_1,
+            25 * SECOND,
+            32_440_000,
+            "five six seven eight nine",
+        )?,
+        draft(
+            1,
+            window_1,
+            32_440_000,
+            54_400_000,
+            "ten eleven twelve thirteen fourteen fifteen sixteen",
+        )?,
+    );
+    let third = with(
+        draft(
+            2,
+            window_2,
+            50 * SECOND,
+            57 * SECOND,
+            "fifteen sixteen seventeen eighteen nineteen",
+        )?,
+        draft(
+            2,
+            window_2,
+            58 * SECOND,
+            62 * SECOND,
+            "twenty twenty-one twenty-two",
+        )?,
+    );
+    let (kept, duplicates) = texts(&[first, second, third]);
+    assert_eq!(
+        kept,
+        [
+            "one two three four five six",
+            "seven eight nine",
+            "ten eleven twelve thirteen fourteen fifteen sixteen",
+            "seventeen eighteen nineteen",
+            "twenty twenty-one twenty-two",
+        ]
+    );
+    assert_eq!(duplicates, 2);
+    Ok(())
+}
+
+/// A segment that spans the whole overlap and more: 25.0 to 31.0 s is longer
+/// than the 5 s overlap. The earlier chunk's segment 20.0 to 29.0 s spans its
+/// midpoint (28.0 s) and is not cut, so the later one used to be dropped and
+/// the 2 s after 29.0 s lost.
+#[test]
+fn a_segment_longer_than_the_overlap_that_starts_at_the_window_edge_is_kept() -> TestResult {
+    let first = draft(
+        0,
+        (0, 30 * SECOND),
+        20 * SECOND,
+        29 * SECOND,
+        "the first half of a long thought",
+    )?;
+    let second = draft(
+        1,
+        (25 * SECOND, 55 * SECOND),
+        25 * SECOND,
+        31 * SECOND,
+        "long thought that goes on and on",
+    )?;
+    let (kept, duplicates) = texts(&[first, second]);
+    assert_eq!(
+        kept,
+        ["the first half of a long thought", "that goes on and on"]
+    );
+    assert_eq!(duplicates, 1);
+    // The same segment 0.4 s after the window's start is still cut by it, and
+    // 0.6 s after it is not; both keep the words after the earlier one's end.
+    for start in [25_400_000, 25_600_000] {
+        let first = draft(
+            0,
+            (0, 30 * SECOND),
+            20 * SECOND,
+            29 * SECOND,
+            "the first half of a long thought",
+        )?;
+        let second = draft(
+            1,
+            (25 * SECOND, 55 * SECOND),
+            start,
+            31 * SECOND,
+            "long thought that goes on and on",
+        )?;
+        assert_eq!(
+            texts(&[first, second]).0,
+            ["the first half of a long thought", "that goes on and on"],
+            "starting at {start}"
+        );
+    }
+    Ok(())
+}
+
+/// The mirror's margin: a segment ending 0.4 s before the window's end is cut
+/// by it, and one ending 0.6 s before it is not. Either way, the words said
+/// before the later chunk's window starts are kept.
+#[test]
+fn the_edge_margin_does_not_decide_whether_speech_is_lost() -> TestResult {
+    for end in [29_600_000, 29_400_000] {
+        let first = draft(
+            0,
+            (0, 30 * SECOND),
+            22 * SECOND,
+            end,
+            "so first we log in and then we open",
+        )?;
+        let second = draft(
+            1,
+            (25 * SECOND, 55 * SECOND),
+            25_600_000,
+            40 * SECOND,
+            "and then we open the settings page",
+        )?;
+        assert_eq!(
+            texts(&[first, second]).0,
+            ["so first we log in and then we open", "the settings page"],
+            "ending at {end}"
+        );
+    }
+    Ok(())
+}
+
+/// What the guard tolerates is a derived bound, found here by search and not
+/// assumed (#359). Over the R0 plan (windows 0 to 30 s and 25 to 55 s), the
+/// earlier chunk's last segment is as close to its window's end as a segment can
+/// be and still not be cut (it ends one edge margin before 30 s), and the later
+/// chunk's first segment runs past that window's end by as little as one
+/// microsecond. Rules 1 and 2 drop the later segment. The tolerance must restore
+/// it, because what it carries past 30 s is audio the earlier chunk never heard;
+/// the largest tolerance that does is the edge margin. The mirror at the right
+/// edge (the earlier chunk's segment starts one microsecond before the later
+/// window does, the later chunk's segment starts one margin after it) gives the
+/// same bound.
+#[test]
+fn the_tolerance_is_the_largest_that_never_loses_speech_beyond_a_window_edge() -> TestResult {
+    let window_0 = chunk(0, 0, 30 * SECOND)?;
+    let window_1 = chunk(1, 25 * SECOND, 55 * SECOND)?;
+    let edge = super::SEAM_EDGE_MICROS;
+    // One chunk's segment over absolute microseconds, built through the
+    // validation every real segment goes through.
+    let provider =
+        |planned: &PlannedChunk, from: u64, to: u64, words: &str| -> Built<ChunkSegments> {
+            let origin = planned.window().start().as_micros();
+            let segment = ProviderSegment {
+                start: ChunkTime::from_micros(from - origin),
+                end: ChunkTime::from_micros(to - origin),
+                text: Some(text(words)?),
+                tokens: Vec::new(),
+            };
+            Ok(validate_chunk_output(
+                planned,
+                planned.window(),
+                range(0, 600 * SECOND)?,
+                output(vec![segment]),
+            )?
+            .into_parts()
+            .0)
+        };
+    let pairs = |loss_in_audio_only_the_later_chunk_heard: u64| -> Built<Vec<Vec<ChunkSegments>>> {
+        let beyond = loss_in_audio_only_the_later_chunk_heard;
+        Ok(vec![
+            // Right edge of the earlier window: the later segment runs past it.
+            vec![
+                provider(&window_0, 22 * SECOND, 30 * SECOND - edge, "earlier")?,
+                provider(&window_1, 25 * SECOND, 30 * SECOND + beyond, "later")?,
+            ],
+            // Left edge of the later window: the earlier segment starts before it.
+            vec![
+                provider(
+                    &window_0,
+                    25 * SECOND - beyond,
+                    30 * SECOND - 100_000,
+                    "earlier",
+                )?,
+                provider(&window_1, 25 * SECOND + edge, 40 * SECOND, "later")?,
+            ],
+        ])
+    };
+    // Whether the guard, with this tolerance, keeps every second of the audio
+    // that only one chunk heard.
+    let loses_nothing = |tolerance: u64| -> Built<bool> {
+        for beyond in [1, 1_000, 250_000, 3_000_000] {
+            for layout in pairs(beyond)? {
+                // Each layout is two chunks, one segment each, merged by rules
+                // 1 and 2 first.
+                let mut kept = super::keep_by_rules_one_and_two(&layout);
+                let before = kept.clone();
+                super::restore_lost_speech_within(&layout, &mut kept, tolerance);
+                // A segment of one chunk is the other's loss only when rules 1
+                // and 2 dropped it, which they must have for the test to say
+                // anything.
+                assert_ne!(before.len(), 2, "rules 1 and 2 kept both: nothing to test");
+                if kept.len() != 2 {
+                    return Ok(false);
+                }
+            }
+        }
+        Ok(true)
+    };
+    // Monotonic in the tolerance: a larger one restores no more than a smaller.
+    let (mut low, mut high) = (0_u64, 4 * edge);
+    assert!(loses_nothing(low)?);
+    assert!(!loses_nothing(high)?);
+    while high - low > 1 {
+        let middle = low + (high - low) / 2;
+        if loses_nothing(middle)? {
+            low = middle;
+        } else {
+            high = middle;
+        }
+    }
+    assert_eq!(low, edge);
+    assert_eq!(low, SEAM_COVERAGE_TOLERANCE_MICROS);
+    Ok(())
+}
+
+/// The boundary of the tolerance itself: a dropped segment whose uncovered end
+/// is exactly the tolerance long is left (it is the recognisers' noise), and one
+/// microsecond longer is restored.
+#[test]
+fn what_a_dropped_segment_carries_beyond_the_tolerance_is_restored_and_no_more() -> TestResult {
+    let window_0 = chunk(0, 0, 30 * SECOND)?;
+    let window_1 = chunk(1, 25 * SECOND, 55 * SECOND)?;
+    let segment = |planned: &PlannedChunk, from: u64, to: u64| -> Built<ChunkSegments> {
+        let origin = planned.window().start().as_micros();
+        Ok(validate_chunk_output(
+            planned,
+            planned.window(),
+            range(0, 600 * SECOND)?,
+            output(vec![ProviderSegment {
+                start: ChunkTime::from_micros(from - origin),
+                end: ChunkTime::from_micros(to - origin),
+                text: Some(text("words")?),
+                tokens: Vec::new(),
+            }]),
+        )?
+        .into_parts()
+        .0)
+    };
+    let end_of_neighbour = 29_500_000;
+    for (extra, restored) in [
+        (0, false),
+        (1, false),
+        (SEAM_COVERAGE_TOLERANCE_MICROS - 1, false),
+        (SEAM_COVERAGE_TOLERANCE_MICROS, false),
+        (SEAM_COVERAGE_TOLERANCE_MICROS + 1, true),
+        (2 * SECOND, true),
+    ] {
+        let layout = [
+            segment(&window_0, 22 * SECOND, end_of_neighbour)?,
+            segment(&window_1, 25 * SECOND, end_of_neighbour + extra)?,
+        ];
+        let merged = merge_chunks(&layout);
+        assert_eq!(
+            merged.segments.len(),
+            if restored { 2 } else { 1 },
+            "{extra} microseconds past the neighbour's end"
+        );
+    }
+    Ok(())
+}
+
+/// A segment from a generated layout: its chunk, its place in the chunk, and
+/// words that no other segment has, so the repeat rule has nothing to match.
+struct Generated {
+    chunks: Vec<ChunkSegments>,
+}
+
+/// One chunk's generated answer: the delay before its first segment, then
+/// (length, gap before the next) for each segment, and the start of each
+/// rejected segment with words (an empty range) among them.
+type ChunkAnswer = (u64, Vec<(u64, u64)>, Vec<u64>);
+
+fn chunk_answer() -> impl Strategy<Value = ChunkAnswer> {
+    (
+        // A first segment right at the window's edge, just inside the edge
+        // margin, just outside it, or anywhere.
+        prop_oneof![
+            Just(0_u64),
+            Just(300),
+            Just(450),
+            Just(500),
+            Just(600),
+            0_u64..4_000
+        ],
+        prop::collection::vec((200_u64..14_000, 0_u64..3_000), 0..7),
+        prop::collection::vec(0_u64..30_000, 0..3),
+    )
+}
+
+/// Builds the merge input for an R0 plan over `total_ms` from generated
+/// answers. `None` when a chunk's answer is unusable under the output rules,
+/// which no case is about.
+fn generated(total_ms: u64, answers: &[ChunkAnswer]) -> Built<Option<Generated>> {
+    let planned = plan_chunks(&segment_id()?, range(0, total_ms * 1_000)?, ChunkPlan::R0)?;
+    let mut chunks = Vec::new();
+    for (planned, (delay, shape, junk)) in planned.iter().zip(answers) {
+        let window_ms = planned.window().duration_micros() / 1_000;
+        let mut provider = Vec::new();
+        let mut cursor = *delay;
+        for (number, (length, gap)) in shape.iter().enumerate() {
+            if cursor >= window_ms {
+                break;
+            }
+            let end = (cursor + length).min(window_ms);
+            provider.push((
+                cursor,
+                provider_segment(cursor, end, &format!("c{}s{number}", planned.index()))?,
+            ));
+            cursor = end + gap;
+        }
+        for start in junk.iter().filter(|start| **start < window_ms) {
+            provider.push((*start, provider_segment(*start, *start, "junk words")?));
+        }
+        provider.sort_by_key(|(start, _)| *start);
+        let validated = validate_chunk_output(
+            planned,
+            planned.window(),
+            range(0, 600 * SECOND)?,
+            output(provider.into_iter().map(|(_, segment)| segment).collect()),
+        );
+        let Ok(validated) = validated else {
+            return Ok(None);
+        };
+        chunks.push(validated.into_parts().0);
+    }
+    Ok(Some(Generated { chunks }))
+}
+
+/// The longest stretch of `segment` that no segment of `kept` covers.
+fn longest_uncovered(kept: &SpanSet, segment: &super::AsrSegmentDraft) -> u64 {
+    kept.gaps_within(span(segment.range()))
+        .iter()
+        .map(|(start, end)| end - start)
+        .max()
+        .unwrap_or(0)
+}
+
+/// Every validated segment of every chunk, as the span set of the segments the
+/// merge kept: used to ask what is covered.
+fn kept_spans(merged: &super::MergedTranscript) -> SpanSet {
+    let mut kept = SpanSet::default();
+    for segment in &merged.segments {
+        kept.insert(span(segment.segment.range()));
+    }
+    kept
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(1_500))]
+
+    /// #359: over generated layouts of up to five chunks of the R0 plan, with
+    /// segments hugging the window edges, every instant that some chunk's
+    /// validated segment covers is covered by a kept segment, but for a stretch
+    /// no longer than the tolerance; the merge invents nothing and keeps start
+    /// order; where rules 1 and 2 lost nothing, the guard changes nothing, so a
+    /// run that lost nothing merges exactly as it did; and whatever the merge
+    /// reports as unplaced is uncovered, long enough to report, and inside the
+    /// stretches the chunks gave.
+    #[test]
+    fn no_layout_of_chunks_loses_speech_at_a_seam(
+        total_ms in 31_000_u64..=130_000,
+        answers in prop::collection::vec(chunk_answer(), 5),
+    ) {
+        let Ok(Some(layout)) = generated(total_ms, &answers) else {
+            return Ok(());
+        };
+        let chunks = &layout.chunks;
+        let merged = merge_chunks(chunks);
+        let kept = kept_spans(&merged);
+        // Everything validated is covered, to within the tolerance.
+        for chunk in chunks {
+            for segment in &chunk.segments {
+                prop_assert!(
+                    longest_uncovered(&kept, segment) <= SEAM_COVERAGE_TOLERANCE_MICROS,
+                    "chunk {} lost {:?}",
+                    chunk.chunk.index(),
+                    segment.range()
+                );
+            }
+        }
+        // The merge invents nothing, and keeps order.
+        for merged_segment in &merged.segments {
+            let source = chunks
+                .get(usize::try_from(merged_segment.chunk).unwrap_or(usize::MAX))
+                .map(|chunk| chunk.segments.iter().any(|segment| {
+                    segment.range() == merged_segment.segment.range()
+                }));
+            prop_assert_eq!(source, Some(true));
+        }
+        let in_order = merged
+            .segments
+            .windows(2)
+            .all(|pair| pair[0].segment.range().start() <= pair[1].segment.range().start());
+        prop_assert!(in_order);
+        // A run that rules 1 and 2 lost nothing from is merged as before.
+        let by_rules = super::keep_by_rules_one_and_two(chunks);
+        let mut guarded = by_rules.clone();
+        super::restore_lost_speech(chunks, &mut guarded);
+        let lost = guarded != by_rules;
+        if !lost {
+            prop_assert_eq!(&merged, &super::assemble(chunks, by_rules));
+        }
+        // What is reported unplaced.
+        let candidates: Vec<_> = chunks
+            .iter()
+            .flat_map(|chunk| chunk.unplaced.iter().copied().map(span))
+            .collect();
+        for stretch in &merged.unplaced {
+            let (start, end) = span(*stretch);
+            prop_assert!(end - start > SEAM_COVERAGE_TOLERANCE_MICROS);
+            prop_assert!(kept.gaps_within((start, end)) == vec![(start, end)]);
+            prop_assert!(candidates.iter().any(|(from, until)| *from <= start && end <= *until));
+        }
+        prop_assert!(merged.unplaced.windows(2).all(|pair| pair[0].end() < pair[1].start()));
+    }
+}
+
+/// A long run of dense speech merges and keeps the rule: 128 chunks of 250
+/// segments of 120 ms, so that every overlap holds a neighbour's segments at
+/// another phase and most are copies the merge has to decide about. Every
+/// validated segment is covered to within the tolerance. (The guard keeps what is
+/// covered in a tree, not in a list it rebuilds for each segment, so its work
+/// does not grow with the square of the segments; measured once in an
+/// unoptimised build at the bound of 1,024 chunks, 256,000 segments took 7 s,
+/// of which 1.3 s was the guard.)
+#[test]
+fn a_long_run_of_dense_speech_keeps_the_rule() -> TestResult {
+    let total_ms = 25_000 * 127 + 30_000;
+    let planned = plan_chunks(&segment_id()?, range(0, total_ms * 1_000)?, ChunkPlan::R0)?;
+    assert_eq!(planned.len(), 128);
+    let mut chunks = Vec::new();
+    for planned in &planned {
+        let window_ms = planned.window().duration_micros() / 1_000;
+        let mut provider = Vec::new();
+        // 250 segments of 120 ms, dense enough that every overlap holds copies
+        // of its neighbour's segments, offset by the chunk's own start.
+        for number in 0..250_u64 {
+            let start = number * 120;
+            if start + 100 < window_ms {
+                provider.push(provider_segment(
+                    start,
+                    start + 100,
+                    &format!("c{}s{number}", planned.index()),
+                )?);
+            }
+        }
+        chunks.push(
+            validate_chunk_output(
+                planned,
+                planned.window(),
+                range(0, 40_000 * SECOND)?,
+                output(provider),
+            )?
+            .into_parts()
+            .0,
+        );
+    }
+    let merged = merge_chunks(&chunks);
+    let kept = kept_spans(&merged);
+    for chunk in &chunks {
+        for segment in &chunk.segments {
+            assert!(
+                longest_uncovered(&kept, segment) <= SEAM_COVERAGE_TOLERANCE_MICROS,
+                "chunk {} lost {:?}",
+                chunk.chunk.index(),
+                segment.range()
+            );
+        }
+    }
+    // Nothing is invented, and the run is in order.
+    assert!(merged.segments.len() <= chunks.iter().map(|chunk| chunk.segments.len()).sum());
+    assert!(
+        merged
+            .segments
+            .windows(2)
+            .all(|pair| { pair[0].segment.range().start() <= pair[1].segment.range().start() })
+    );
+    Ok(())
+}
+
+/// The property above is not vacuous: over a fixed pseudo-random sweep of the
+/// same layouts, the guard acts in a real share of them (rules 1 and 2 alone
+/// lose speech there) and leaves a real share alone, and the unplaced stretches
+/// it reports are non-empty in some. If a change to the generator or the rules
+/// made the guard never act, the property would still pass; this would not.
+#[test]
+fn the_generated_layouts_reach_the_guard() -> TestResult {
+    let mut state = 0x9e37_79b9_7f4a_7c15_u64;
+    let mut next = |bound: u64| {
+        state ^= state << 13;
+        state ^= state >> 7;
+        state ^= state << 17;
+        state % bound
+    };
+    let (mut acted, mut left_alone, mut unplaced) = (0_u32, 0_u32, 0_u32);
+    for _ in 0..3_000 {
+        let total_ms = 31_000 + next(99_000);
+        let answers: Vec<ChunkAnswer> = (0..5)
+            .map(|_| {
+                let delay =
+                    [0, 300, 450, 500, 600, next(4_000)][usize::try_from(next(6)).unwrap_or(0)];
+                let shape = (0..next(7))
+                    .map(|_| (200 + next(13_800), next(3_000)))
+                    .collect();
+                let junk = (0..next(3)).map(|_| next(30_000)).collect();
+                (delay, shape, junk)
+            })
+            .collect();
+        let Some(layout) = generated(total_ms, &answers)? else {
+            continue;
+        };
+        let by_rules = super::keep_by_rules_one_and_two(&layout.chunks);
+        let mut guarded = by_rules.clone();
+        super::restore_lost_speech(&layout.chunks, &mut guarded);
+        if guarded == by_rules {
+            left_alone += 1;
+        } else {
+            acted += 1;
+        }
+        unplaced += u32::from(!merge_chunks(&layout.chunks).unplaced.is_empty());
+    }
+    assert!(acted > 100, "{acted}");
+    assert!(left_alone > 100, "{left_alone}");
+    assert!(unplaced > 20, "{unplaced}");
+    Ok(())
+}
+
+/// The stretches of source time that validating `segments` (milliseconds into
+/// the chunk, `(start, end, words)`) over a chunk whose audio is its window
+/// leaves as possibly holding rejected words, in seconds.
+fn unplaced_by(
+    window: (u64, u64),
+    audio_ms: u64,
+    segments: &[(u64, u64, &str)],
+) -> Built<Vec<(u64, u64)>> {
+    let planned = chunk(0, window.0, window.1)?;
+    let audio = range(window.0, window.0 + audio_ms * 1_000)?;
+    let mut provider = Vec::new();
+    for (start, end, words) in segments {
+        provider.push(provider_segment(*start, *end, words)?);
+    }
+    let validated =
+        validate_chunk_output(&planned, audio, range(0, 600 * SECOND)?, output(provider))?;
+    Ok(validated
+        .unplaced()
+        .iter()
+        .map(|stretch| {
+            (
+                stretch.start().as_micros() / 1_000,
+                stretch.end().as_micros() / 1_000,
+            )
+        })
+        .collect())
+}
+
+/// #359: a rejected segment with words that starts inside its audio, and is
+/// followed there by another segment, may hold words that belong between its
+/// start and that next one's: the chunk says so, and the merge decides whether
+/// the kept segments cover it.
+#[test]
+fn a_rejected_segment_with_words_marks_the_stretch_to_the_next_segment() -> TestResult {
+    let window = (0, 30 * SECOND);
+    // An empty range (2.0 s to 2.0 s) between two kept segments.
+    assert_eq!(
+        unplaced_by(
+            window,
+            30_000,
+            &[
+                (0, 1_500, "kept one"),
+                (2_000, 2_000, "words nobody placed"),
+                (6_000, 8_000, "kept two"),
+                (9_000, 10_000, "kept three"),
+            ],
+        )?,
+        [(2_000, 6_000)]
+    );
+    // A reversed one starts at the earlier of its two times.
+    assert_eq!(
+        unplaced_by(
+            window,
+            30_000,
+            &[
+                (0, 1_500, "kept one"),
+                (3_000, 2_500, "reversed"),
+                (6_000, 8_000, "kept two"),
+                (9_000, 10_000, "kept three"),
+            ],
+        )?,
+        [(2_500, 6_000)]
+    );
+    // One that starts inside the audio and runs beyond the padded window.
+    assert_eq!(
+        unplaced_by(
+            (0, 5 * SECOND),
+            5_001,
+            &[
+                (0, 1_000, "kept one"),
+                (1_200, 2_000, "kept two"),
+                (2_100, 3_000, "kept three"),
+                (3_100, 4_000, "kept four"),
+                (4_000, 40_000, "ran past the window"),
+                (4_500, 4_900, "kept five"),
+            ],
+        )?,
+        [(4_000, 4_500)]
+    );
+    // A rejected segment's words end where the next segment begins, a marker
+    // included: the recogniser says what follows is not speech.
+    assert_eq!(
+        unplaced_by(
+            window,
+            30_000,
+            &[
+                (0, 1_500, "kept one"),
+                (2_000, 2_000, "words nobody placed"),
+                (3_000, 4_000, "[BLANK_AUDIO]"),
+                (9_000, 10_000, "kept three"),
+                (11_000, 12_000, "kept four"),
+            ],
+        )?,
+        [(2_000, 3_000)]
+    );
+    // Two in a row are two stretches, and the merge joins them.
+    assert_eq!(
+        unplaced_by(
+            window,
+            30_000,
+            &[
+                (0, 1_500, "kept one"),
+                (2_000, 2_000, "first"),
+                (3_000, 3_000, "second"),
+                (6_000, 8_000, "kept two"),
+                (9_000, 10_000, "kept three"),
+                (11_000, 12_000, "kept four"),
+                (13_000, 14_000, "kept five"),
+                (15_000, 16_000, "kept six"),
+            ],
+        )?,
+        [(2_000, 3_000), (3_000, 6_000)]
+    );
+    Ok(())
+}
+
+/// What a rejected segment does not mark, and why: no word in it; no start
+/// inside the audio; nothing after it inside the audio to bound the words. The
+/// segment is still counted as rejected.
+#[test]
+fn a_rejected_segment_says_nothing_it_cannot_say() -> TestResult {
+    let window = (0, 30 * SECOND);
+    let beside = |rejected: (u64, u64, &str)| -> Built<Vec<(u64, u64)>> {
+        unplaced_by(
+            window,
+            30_000,
+            &[
+                (0, 1_500, "kept one"),
+                rejected,
+                (6_000, 8_000, "kept two"),
+                (9_000, 10_000, "kept three"),
+                (11_000, 12_000, "kept four"),
+            ],
+        )
+    };
+    // Punctuation is not a word.
+    assert_eq!(beside((2_000, 2_000, "..."))?, []);
+    assert_eq!(beside((2_000, 2_000, "- . ,"))?, []);
+    // Letters and digits are.
+    assert_eq!(beside((2_000, 2_000, "7"))?, [(2_000, 6_000)]);
+    // The last thing the recogniser said has nothing after it to end it.
+    assert_eq!(
+        unplaced_by(
+            window,
+            30_000,
+            &[
+                (0, 1_500, "kept one"),
+                (6_000, 8_000, "kept two"),
+                (9_000, 10_000, "kept three"),
+                (11_000, 12_000, "kept four"),
+                (20_000, 20_000, "a stray last word"),
+            ],
+        )?,
+        []
+    );
+    // One that starts at or after the audio's end names no time in it, even
+    // with another segment after it (the audio is 5.001 s here).
+    let kept = [
+        (0, 1_000, "kept one"),
+        (1_200, 2_000, "kept two"),
+        (2_100, 3_000, "kept three"),
+        (3_100, 4_000, "kept four"),
+        (4_100, 4_200, "kept five"),
+        (4_300, 4_400, "kept six"),
+        (4_500, 4_600, "kept seven"),
+        (4_700, 4_800, "kept eight"),
+    ];
+    let with = |tail: &[(u64, u64, &'static str)]| -> Vec<(u64, u64, &'static str)> {
+        kept.iter().chain(tail).copied().collect()
+    };
+    assert_eq!(
+        unplaced_by(
+            (0, 5 * SECOND),
+            5_001,
+            &with(&[
+                (5_001, 7_000, "in the padding"),
+                (7_100, 8_000, "more padding")
+            ]),
+        )?,
+        []
+    );
+    // One whose next segment starts at or after the audio's end is a last one.
+    assert_eq!(
+        unplaced_by(
+            (0, 5 * SECOND),
+            5_001,
+            &with(&[(4_900, 4_900, "a stray word"), (5_200, 6_000, "padding")]),
+        )?,
+        []
+    );
+    // Another segment at the same start leaves no stretch.
+    assert_eq!(
+        unplaced_by(
+            window,
+            30_000,
+            &[
+                (0, 1_500, "kept one"),
+                (2_000, 2_000, "same start"),
+                (2_000, 4_000, "kept two"),
+                (9_000, 10_000, "kept three"),
+                (11_000, 12_000, "kept four"),
+            ],
+        )?,
+        []
+    );
+    Ok(())
+}
+
+/// What the merge reports of the stretches the chunks mark: only what no kept
+/// segment of any chunk covers, and only where that is longer than the
+/// tolerance, which is the noise two recognisers' ends make.
+#[test]
+fn the_merge_reports_a_marked_stretch_only_where_nothing_kept_covers_it() -> TestResult {
+    let window_0 = (0, 30 * SECOND);
+    let window_1 = (25 * SECOND, 55 * SECOND);
+    let validated = |planned_index: u32,
+                     window: (u64, u64),
+                     segments: &[(u64, u64, &str)]|
+     -> Built<ChunkSegments> {
+        let planned = chunk(planned_index, window.0, window.1)?;
+        let mut provider = Vec::new();
+        for (start, end, words) in segments {
+            provider.push(provider_segment(*start, *end, words)?);
+        }
+        Ok(validate_chunk_output(
+            &planned,
+            planned.window(),
+            range(0, 600 * SECOND)?,
+            output(provider),
+        )?
+        .into_parts()
+        .0)
+    };
+    // Chunk 0 marks 26 s to 29 s (a rejected segment at 26 s, the next at 29 s),
+    // and chunk 1, which starts at 25 s, has a kept segment from 26.5 s to
+    // 28.0 s: what is left is 26.0 to 26.5 s, as long as the tolerance and so
+    // not reported, and 28.0 to 29.0 s, which is.
+    let first = validated(
+        0,
+        window_0,
+        &[
+            (1_000, 4_000, "kept one"),
+            (5_000, 8_000, "kept two"),
+            (26_000, 26_000, "unplaced words"),
+            (29_000, 29_500, "kept three"),
+        ],
+    )?;
+    let second = validated(
+        1,
+        window_1,
+        &[(1_500, 3_000, "kept four"), (14_000, 16_000, "kept five")],
+    )?;
+    assert_eq!(first.unplaced.len(), 1);
+    let merged = merge_chunks(&[first.clone(), second.clone()]);
+    assert_eq!(
+        merged
+            .unplaced
+            .iter()
+            .map(|stretch| (stretch.start().as_micros(), stretch.end().as_micros()))
+            .collect::<Vec<_>>(),
+        [(28_000_000, 29_000_000)]
+    );
+    // With nothing from the second chunk over it, the whole stretch is.
+    let alone = merge_chunks(&[first.clone(), empty(1, window_1)?]);
+    assert_eq!(
+        alone
+            .unplaced
+            .iter()
+            .map(|stretch| (stretch.start().as_micros(), stretch.end().as_micros()))
+            .collect::<Vec<_>>(),
+        [(26_000_000, 29_000_000)]
+    );
+    // A kept segment over the whole stretch leaves none.
+    let covering = validated(
+        1,
+        window_1,
+        &[(500, 5_000, "kept four"), (14_000, 16_000, "kept five")],
+    )?;
+    assert!(merge_chunks(&[first, covering]).unplaced.is_empty());
+    Ok(())
+}
+
 fn run(outcomes: &[AsrChunkOutcome]) -> Built<AsrRun> {
     let planned = plan_chunks(&segment_id()?, range(0, 70 * SECOND)?, ChunkPlan::R0)?;
     Ok(AsrRun::new(AsrRunParts {
@@ -1523,6 +2480,7 @@ fn asr_revision_over(
         replaced_range: None,
         inherited: Vec::new(),
         carried_untranscribed: Vec::new(),
+        unplaced: Vec::new(),
         language: None,
         segments,
         warnings: TranscriptWarnings::default(),

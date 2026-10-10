@@ -234,6 +234,65 @@ fn half_transcribed_revision() -> Built<TranscriptRevision> {
             run,
             language,
             segments: merged.segments,
+            unplaced: merged.unplaced,
+            warnings,
+        },
+        splice: None,
+    })?)
+}
+
+/// A local-ASR revision of a 12 s source whose one run transcribed its first
+/// 6 s and in which the recogniser wrote words that no segment holds (#359): two
+/// segments kept, at 0.6 to 0.9 s and 3.0 to 3.5 s, and between them, at 1.0 s,
+/// one rejected for an empty range.
+fn revision_with_words_that_no_segment_holds() -> Built<TranscriptRevision> {
+    let session = SessionId::parse(SESSION)?;
+    let source_id = SourceId::from_sha256(DIGEST)?;
+    let source = whole_file_source_segment(&source_id, MediaTime::from_micros(12 * SECOND))?;
+    let audio = range(0, 6 * SECOND)?;
+    let planned = plan_chunks(source.id(), audio, ChunkPlan::R0)?;
+    let first = planned.first().ok_or("no chunk")?.clone();
+    let segment = |from: u64, to: u64, words: &str| -> Built<ProviderSegment> {
+        Ok(ProviderSegment {
+            start: ChunkTime::from_millis(from).ok_or("time")?,
+            end: ChunkTime::from_millis(to).ok_or("time")?,
+            text: Some(CueText::new(words.to_owned(), words.to_owned())?),
+            tokens: Vec::new(),
+        })
+    };
+    let output = ProviderChunkOutput {
+        language: None,
+        segments: vec![
+            segment(600, 900, "the build is healthy")?,
+            segment(1_000, 1_000, "error code E-409")?,
+            segment(3_000, 3_500, "and the queue is empty")?,
+        ],
+    };
+    let validated = validate_chunk_output(&first, audio, source.range(), output)?;
+    let (chunk_segments, language, warnings) = validated.into_parts();
+    let merged = merge_chunks(&[chunk_segments]);
+    let run = AsrRun::new(AsrRunParts {
+        provider: AsrProviderBuild::new(AsrProvider::WhisperCpp, Sha256Hex::parse(DIGEST)?),
+        model: AsrModel::new(AsrModelProfile::Base, Sha256Hex::parse(DIGEST)?),
+        decoding: AsrDecodingProfile::R0V1,
+        plan: ChunkPlan::R0,
+        threads: NonZeroU16::new(4).ok_or("zero")?,
+        audio_stream: 1,
+        chunks: vec![AsrChunkRecord::new(
+            first,
+            AsrChunkOutcome::Transcribed { audio },
+        )],
+    })?;
+    Ok(build_asr_revision(AsrRevisionRequest {
+        session_id: &session,
+        source_id: &source_id,
+        source_segment: &source,
+        number: NonZeroU32::MIN,
+        transcription: AsrTranscription {
+            run,
+            language,
+            segments: merged.segments,
+            unplaced: merged.unplaced,
             warnings,
         },
         splice: None,
@@ -472,6 +531,65 @@ fn an_incompletely_transcribed_range_is_a_partial_result() -> TestResult {
     let inside = search(&revision, "build 2,048", Some(range(0, 6 * SECOND)?), 20)?;
     assert_eq!(inside.json["status"], "complete");
     assert_eq!(inside.json["coverage"]["truncated"], false);
+    Ok(())
+}
+
+/// #359: words the recogniser wrote and no segment holds are not covered by the
+/// window they were written in, so a search over them is `partial`, names the
+/// stretch as a gap with the published reason, and says in the revision it
+/// presents (`local_asr.unplaced_ranges`) where the words may lie; a search that
+/// stays clear of the stretch is complete. Without such words the same run is
+/// covered whole, as it always was.
+#[test]
+fn a_search_over_words_that_no_segment_holds_is_partial_and_names_the_stretch() -> TestResult {
+    let revision = revision_with_words_that_no_segment_holds()?;
+    let page = search(&revision, "queue is empty", None, 20)?;
+    validate("operation-response.schema.json", &page.json)?;
+    validate("search-data.schema.json", &page.json["data"])?;
+    assert_eq!(page.json["status"], "partial");
+    assert_eq!(
+        page.json["coverage"],
+        serde_json::json!({
+            "truncated": true,
+            "gaps": ["1000000-3000000", "6000000-12000000"],
+            "reasons": ["untranscribed_range"],
+        })
+    );
+    let coverage = &page.json["data"]["transcript_coverage"];
+    assert_eq!(
+        coverage["transcribed_ranges"],
+        serde_json::json!([
+            {"from_us": 0, "to_us": 1_000_000},
+            {"from_us": 3_000_000, "to_us": 6_000_000},
+        ])
+    );
+    assert_eq!(
+        page.json["data"]["revision"]["local_asr"]["unplaced_ranges"],
+        serde_json::json!([{"from_us": 1_000_000, "to_us": 3_000_000}])
+    );
+    // The word that was kept is found; the one that was rejected is not.
+    assert_eq!(page.json["data"]["hits"].as_array().map(Vec::len), Some(1));
+    let lost = search(&revision, "E-409", None, 20)?;
+    assert_eq!(lost.json["data"]["hits"].as_array().map(Vec::len), Some(0));
+    assert_eq!(lost.json["status"], "partial");
+    for line in parsed(&page.lines)? {
+        validate_line(&line)?;
+    }
+    // Clear of the stretch, within what was transcribed, it is complete.
+    let clear = search(
+        &revision,
+        "queue is empty",
+        Some(range(3 * SECOND, 6 * SECOND)?),
+        20,
+    )?;
+    assert_eq!(clear.json["status"], "complete");
+    // Over the stretch it is not.
+    let over = search(&revision, "queue", Some(range(SECOND, 2 * SECOND)?), 20)?;
+    assert_eq!(over.json["status"], "partial");
+    assert_eq!(
+        over.json["coverage"]["gaps"],
+        serde_json::json!(["1000000-2000000"])
+    );
     Ok(())
 }
 

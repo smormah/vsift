@@ -253,7 +253,7 @@
       }
     },
     "v2": {
-      "description": "Version 2: a revision produced by local speech recognition (transcript retranscribe). It records its run, what it superseded and replaced, the provenance it inherited, and each segment either as recognised by its run or as carried from an earlier revision. inherited is omitted when the record carries nothing, and carried_untranscribed (since 0.2.1) when no part the superseded revision left untranscribed lies under a run or file this record inherits.",
+      "description": "Version 2: a revision produced by local speech recognition (transcript retranscribe). It records its run, what it superseded and replaced, the provenance it inherited, and each segment either as recognised by its run or as carried from an earlier revision. inherited is omitted when the record carries nothing, carried_untranscribed (since 0.2.1) when no part the superseded revision left untranscribed lies under a run or file this record inherits, and unplaced_ranges (since 0.2.1) when the run left no words that no segment holds.",
       "type": "object",
       "additionalProperties": false,
       "required": [
@@ -352,7 +352,16 @@
           ]
         },
         "carried_untranscribed": {
-          "description": "Since 0.2.1 (#353): the parts outside replaced_range that the superseded revision did not cover and that a window or file this revision carries (inherited) would otherwise be counted over, in start order, merged, inside the source and never overlapping replaced_range. A search of the superseded revision listed these ranges as untranscribed; this revision records them because it keeps the provenance only of the runs whose text it carries, and an earlier run's windows, or an imported file, are not counted over a part that revision left untranscribed. A part nothing inherited claims is not recorded. Omitted when empty, which is every record whose chain holds no unusable chunk, so such a record is written as before and is read by a release before 0.2.1; a release before it reads this member as damage.",
+          "description": "Since 0.2.1 (#353): the parts outside replaced_range that the superseded revision did not cover and that a window or file this revision carries (inherited) would otherwise be counted over, in start order, merged, inside the source and never overlapping replaced_range. A search of the superseded revision listed these ranges as untranscribed; this revision records them because it keeps the provenance only of the runs whose text it carries, and an earlier run's windows, or an imported file, are not counted over a part that revision left untranscribed. A part nothing inherited claims is not recorded. Omitted when empty, which is every record whose chain holds no unusable chunk and no run with unplaced_ranges (a chain whose superseded revision left a stretch of unplaced words under a window or file this record inherits has it too), so such a record is written as before and is read by a release before 0.2.1; a release before it reads this member as damage.",
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1024,
+          "items": {
+            "$ref": "#/$defs/range"
+          }
+        },
+        "unplaced_ranges": {
+          "description": "Since 0.2.1 (#359): the stretches of this record's own run where the recogniser wrote words that no segment holds, in start order, merged, inside the source and inside the range the run covered. See local_asr.unplaced_ranges of the revision summary for what a stretch is. Omitted when empty, which is every record whose run rejected nothing of the kind, so such a record is written as before and is read by a release before 0.2.1; a release before it reads this member as damage, as it reads carried_untranscribed.",
           "type": "array",
           "minItems": 1,
           "maxItems": 1024,

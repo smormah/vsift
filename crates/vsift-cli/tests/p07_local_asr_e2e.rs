@@ -763,6 +763,46 @@ fn seam(base: &Path, tools: &Tools, work: &Path) -> StageResult {
             )?;
         }
     }
+    // #359: F07's sentence is 9.25 s long and starts 50 ms before the second
+    // chunk's window does, so it runs 4 s past the first chunk's window (which
+    // ends at 30 s) into audio only the second chunk heard. Whatever the
+    // recogniser makes of the first chunk's copy of it, no stretch of it longer
+    // than the span tolerance may be in no kept segment: a merge that drops the
+    // later chunk's first segment because the earlier chunk has one that spans
+    // its midpoint loses exactly that. (Not run in the session that added it:
+    // it needs the real tools.)
+    let sentence = expected
+        .iter()
+        .find(|utterance| utterance["fixture"] == "F07")
+        .and_then(|utterance| {
+            Some((
+                utterance["start_us"].as_u64()?,
+                utterance["end_us"].as_u64()?,
+            ))
+        })
+        .ok_or_else(|| failed("the seam clip has no F07 utterance"))?;
+    ensure(
+        sentence.1 - sentence.0 > 5_000_000 && sentence.0.abs_diff(25_000_000) <= 100_000,
+        "the long sentence no longer starts at the second chunk's window",
+    )?;
+    let items = page["items"].as_array().map_or(&[][..], Vec::as_slice);
+    let longest_uncovered = longest_uncovered_us(items, sentence);
+    // A published binary older than the fix is not held to it: this stage is
+    // required of it for what it asserted before (P14's published journeys).
+    let long_sentence_checked = match published_binary::predates(SEAM_SPEECH_FIRST_VERSION) {
+        Ok(Some(_)) => false,
+        Ok(None) => {
+            ensure(
+                longest_uncovered <= SPAN_TOLERANCE_US,
+                &format!(
+                    "{longest_uncovered} us of the sentence from {} us to {} us is in no segment: {text}",
+                    sentence.0, sentence.1
+                ),
+            )?;
+            true
+        }
+        Err(error) => return Err(failed(&error.to_string())),
+    };
     // The sentence across the seam comes from chunk 0 or chunk 1 once.
     let seam_owner: Vec<Value> = page["items"]
         .as_array()
@@ -790,8 +830,33 @@ fn seam(base: &Path, tools: &Tools, work: &Path) -> StageResult {
         "warnings": data["revision"]["warnings"],
         "word_counts": counts,
         "segments_in_overlap": seam_owner,
+        "long_sentence_us": [sentence.0, sentence.1],
+        "long_sentence_longest_uncovered_us": longest_uncovered,
+        "long_sentence_held_to_it": long_sentence_checked,
+        "unplaced_ranges": data["revision"]["local_asr"]["unplaced_ranges"],
         "retranscribe_ms": elapsed,
     }))
+}
+
+/// The longest stretch of `span` that no segment of `items` (transcript
+/// segments with `start_us` and `end_us`) covers, in microseconds.
+fn longest_uncovered_us(items: &[Value], (from, to): (u64, u64)) -> u64 {
+    let mut covered: Vec<(u64, u64)> = items
+        .iter()
+        .filter_map(|item| Some((item["start_us"].as_u64()?, item["end_us"].as_u64()?)))
+        .collect();
+    covered.sort_unstable();
+    let (mut cursor, mut longest) = (from, 0_u64);
+    for (start, end) in covered {
+        if start > cursor {
+            longest = longest.max(start.min(to) - cursor.min(to));
+        }
+        cursor = cursor.max(end);
+        if cursor >= to {
+            return longest;
+        }
+    }
+    longest.max(to.saturating_sub(cursor))
 }
 
 fn to_seconds(micros: u64) -> f64 {
@@ -961,6 +1026,12 @@ fn stage(name: &str, started: Instant, result: StageResult) -> Value {
         }),
     }
 }
+
+/// The first version that cannot lose the end of a sentence at a chunk seam
+/// (#359), checked by the long sentence of the seam stage: the second release
+/// candidate of 0.2.1. A published binary older than it still passes the
+/// stage's other checks and is not held to this one.
+const SEAM_SPEECH_FIRST_VERSION: &str = "0.2.1-rc.2";
 
 /// The first version whose recognition clamps a range cut mid-speech: #274, fixed
 /// after 0.1.0 (P14 PR 7), so the first release candidate is the first that has it.

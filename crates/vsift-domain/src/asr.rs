@@ -27,9 +27,10 @@ use std::{
 };
 
 use crate::{
-    Confidence, ConfidenceOrigin, CueText, LanguageTag, MediaTime, ProviderEndTrim, SourceSegment,
-    SourceSegmentId, TimeRange, TranscriptRevisionError, TranscriptWarningKind, TranscriptWarnings,
-    spans::{Span, merged, overlaps_any, span, subtract, to_ranges},
+    Confidence, ConfidenceOrigin, CueText, LanguageTag, MAX_UNPLACED_STRETCHES, MediaTime,
+    ProviderEndTrim, SourceSegment, SourceSegmentId, TimeRange, TranscriptRevisionError,
+    TranscriptWarningKind, TranscriptWarnings,
+    spans::{Span, SpanSet, join_nearest, merged, overlaps_any, span, subtract, to_ranges},
 };
 
 /// Sample rate of the speech PCM contract: mono signed 16-bit at 16 kHz.
@@ -56,6 +57,50 @@ pub const MAX_PROVIDER_SEGMENTS: usize = 256;
 pub const MAX_PROVIDER_TOKENS: usize = 512;
 /// A segment this close to an inner window edge was probably cut by the edge.
 const SEAM_EDGE_MICROS: u64 = 500_000;
+/// The most that a validated segment may carry beyond the segments the merge
+/// keeps, at either of its ends or between them, and still be treated as the
+/// two recognisers' timing noise and not as speech lost at a seam (#359): half
+/// a second, the edge margin.
+///
+/// What it decides. [`merge_chunks`] keeps one of two segments that two chunks
+/// recognised for the same speech, and drops the other. A dropped segment must
+/// not have carried anything the kept segments do not: wherever the part of it
+/// that no kept segment covers is longer than this, it is restored (the guard
+/// of the merge's rules), and where it is not, the part is the difference
+/// between two recognisers' ends for one sentence and is left. The same length
+/// is the shortest stretch of rejected words that [`merge_chunks`] reports as
+/// [`MergedTranscript::unplaced`]: it would be inconsistent to report that much
+/// of words nobody placed while leaving as much of a kept copy without a word,
+/// and so no second figure has to be defended. That is a convention for the
+/// two to agree, not a measurement of how long a stray word lasts.
+///
+/// Why this value, derived and not chosen. Take the seam of #359: the dropped
+/// segment is cut by the later window's left edge, and the segment that stands
+/// for it, in the earlier chunk, is not itself cut, so it ends at least
+/// `SEAM_EDGE_MICROS` before its window's end `W`. What the dropped segment
+/// carries beyond that end is tolerated for at most the tolerance, so it ends
+/// no later than `W - SEAM_EDGE_MICROS + tolerance`. With a tolerance of at
+/// most the margin that is at or before `W`: what is tolerated lies in audio
+/// the earlier chunk heard too, so a segment that runs past `W`, into audio
+/// only the later chunk heard, can never lose the part beyond `W`, however
+/// close its start is to the neighbour's end. A tolerance of even one
+/// microsecond more would let it, so the margin is the largest value with that
+/// guarantee. It is also all that is needed, because it is the margin that
+/// already decides how near its window's end a last segment may be before it
+/// is taken to be cut, and so unfit to stand for a neighbour's. The right edge
+/// is the mirror image (a segment cut by its window's end, stood for by the next
+/// chunk's, which starts at least a margin after its own window's start). The
+/// overlap (5 s in the R0 plan) does not enter the bound: what limits what a
+/// neighbour heard is its window's edge, and the bound is the same for every
+/// plan. A test finds the largest tolerance with the guarantee by search over
+/// the R0 plan, so a change to the margin moves it with it.
+///
+/// What it costs. Up to half a second at the end of a dropped copy can be words
+/// the kept segment's recogniser did not write down, which is one word at a
+/// normal speaking rate. The release before lost that and everything after the
+/// neighbour's end with it, with no sign; this loses at most that, still with
+/// no sign, and a test holds the bound.
+pub const SEAM_COVERAGE_TOLERANCE_MICROS: u64 = SEAM_EDGE_MICROS;
 /// Fewest shared words that identify seam text as a duplicate rather than a
 /// genuine repeat.
 const MIN_SEAM_DUPLICATE_WORDS: usize = 2;
@@ -1074,6 +1119,7 @@ pub struct ValidatedChunk {
     audio: TimeRange,
     language: Option<LanguageTag>,
     segments: Vec<AsrSegmentDraft>,
+    unplaced: Vec<TimeRange>,
     warnings: TranscriptWarnings,
 }
 
@@ -1102,6 +1148,14 @@ impl ValidatedChunk {
         &self.segments
     }
 
+    /// The stretches of this chunk's audio in which words the recogniser wrote
+    /// down may lie, which were rejected and so are in no segment (#359): see
+    /// [`ChunkSegments::unplaced`]. Empty when nothing of the kind was rejected.
+    #[must_use]
+    pub fn unplaced(&self) -> &[TimeRange] {
+        &self.unplaced
+    }
+
     /// Counted rejections, trims and removed markers.
     #[must_use]
     pub const fn warnings(&self) -> &TranscriptWarnings {
@@ -1115,6 +1169,7 @@ impl ValidatedChunk {
             ChunkSegments {
                 chunk: self.chunk,
                 segments: self.segments,
+                unplaced: self.unplaced,
             },
             self.language,
             self.warnings,
@@ -1238,7 +1293,16 @@ pub fn validate_chunk_output(
     let decoded = audio.duration_micros();
     let (mut considered, mut rejected, mut trimmed, mut markers) = (0_u32, 0_u32, 0_u32, 0_u32);
     let mut segments = Vec::with_capacity(output.segments.len());
-    for segment in output.segments {
+    let mut unplaced = Vec::new();
+    // The start of each segment in provider order, markers and rejected ones
+    // included: where one rejected segment's words may end is where the next
+    // thing the recogniser said begins.
+    let starts: Vec<ChunkTime> = output
+        .segments
+        .iter()
+        .map(|segment| segment.start)
+        .collect();
+    for (position, segment) in output.segments.into_iter().enumerate() {
         let Some(text) = segment
             .text
             .filter(|text| !is_non_speech_marker(text.text()))
@@ -1256,6 +1320,13 @@ pub fn validate_chunk_output(
             .filter(|range| range.start() >= source.start() && range.end() <= source.end())
         else {
             rejected = rejected.saturating_add(1);
+            unplaced.extend(unplaced_stretch(
+                audio,
+                source,
+                &text,
+                (segment.start, segment.end),
+                starts.get(position + 1).copied(),
+            ));
             continue;
         };
         if trim == ProviderEndTrim::TrimmedToAudioEnd {
@@ -1291,8 +1362,61 @@ pub fn validate_chunk_output(
         audio,
         language: output.language,
         segments,
+        unplaced,
         warnings,
     })
+}
+
+/// The stretch of `audio` in which the words of a rejected segment may lie, or
+/// `None` when no stretch can be said (#359).
+///
+/// A rejected segment names a time that cannot be placed in its audio, so it
+/// cannot say how long its words took. What can be said is where they start,
+/// when the segment names a start inside the audio, and where they end by:
+/// the recogniser wrote its segments in order, so words that start at `from`
+/// end before the next thing it wrote begins. The stretch runs from the earlier
+/// of the segment's two times (a reversed segment's end may be its true start)
+/// to the start of the next segment in provider order. It is an upper bound,
+/// not a measurement: the words took part of it. [`merge_chunks`] takes what
+/// the kept segments cover out of it and reports the rest if it is longer than
+/// [`SEAM_COVERAGE_TOLERANCE_MICROS`].
+///
+/// Nothing is said, and the segment stays only counted, when
+///
+/// - its text has no letter or digit: punctuation alone is not a word, so
+///   nothing a reader could look for is lost;
+/// - it names no time inside the audio (it starts at or after the audio's end):
+///   words the recogniser puts after the audio ended are not about the audio,
+///   as an end past it is not evidence that speech continued there
+///   ([`TranscriptWarningKind::ProviderEndTrimmed`]), and the recogniser works in a
+///   window padded to 30 s, so a time after the audio's end is a time in the padding;
+/// - nothing starts after it inside the audio: with no next segment there is
+///   nothing to bound the words, and a stretch to the audio's end would report
+///   a silent tail as untranscribed. What lies at a chunk's end is also in
+///   the next chunk's first seconds, which the overlap exists for.
+fn unplaced_stretch(
+    audio: TimeRange,
+    source: TimeRange,
+    text: &CueText,
+    (start, end): (ChunkTime, ChunkTime),
+    next: Option<ChunkTime>,
+) -> Option<TimeRange> {
+    if !text.text().chars().any(char::is_alphanumeric) {
+        return None;
+    }
+    let decoded = audio.duration_micros();
+    let from = start.as_micros().min(end.as_micros());
+    let until = next?.as_micros();
+    if from >= decoded || until >= decoded || from >= until {
+        return None;
+    }
+    let first = audio.start().as_micros().checked_add(from)?;
+    let last = audio.start().as_micros().checked_add(until)?;
+    TimeRange::new(
+        MediaTime::from_micros(first.max(source.start().as_micros())),
+        MediaTime::from_micros(last.min(source.end().as_micros())),
+    )
+    .ok()
 }
 
 /// Whether `rejected` of `considered` text segments make a chunk unusable
@@ -1456,6 +1580,15 @@ pub struct ChunkSegments {
     pub chunk: PlannedChunk,
     /// Accepted segments in provider order.
     pub segments: Vec<AsrSegmentDraft>,
+    /// Where the recogniser wrote words that were rejected and so are in no
+    /// segment (#359): for each rejected segment with a word in its text that
+    /// starts inside the chunk's audio and is followed there by another
+    /// segment, the stretch from its start to the next one's. An upper bound
+    /// on where the words were said, not a measurement.
+    /// [`merge_chunks`] takes the parts of it that kept segments cover out and
+    /// reports what is left, if it is longer than the tolerance
+    /// ([`SEAM_COVERAGE_TOLERANCE_MICROS`]), as [`MergedTranscript::unplaced`].
+    pub unplaced: Vec<TimeRange>,
 }
 
 /// One segment kept by [`merge_chunks`], with the chunk that produced it.
@@ -1474,6 +1607,15 @@ pub struct MergedTranscript {
     pub segments: Vec<MergedSegment>,
     /// Seam duplicates removed.
     pub warnings: TranscriptWarnings,
+    /// The parts of the run where the recogniser wrote words that no segment
+    /// holds, in start order and merged (#359): the stretches of
+    /// [`ChunkSegments::unplaced`] that no kept segment covers, where they are
+    /// longer than [`SEAM_COVERAGE_TOLERANCE_MICROS`]. Each lies inside the
+    /// audio of the chunks and outside every segment above, and at most
+    /// [`crate::MAX_UNPLACED_STRETCHES`] are listed (the nearest are joined
+    /// beyond that). Empty for a run whose rejected segments (if any) left
+    /// nothing the kept segments do not cover.
+    pub unplaced: Vec<TimeRange>,
 }
 
 #[derive(Clone, Copy, Eq, PartialEq)]
@@ -1498,17 +1640,50 @@ enum Side {
 ///    the facing edge; that neighbour segment is kept instead, wherever its
 ///    own midpoint lies. A neighbour segment that only touches the cut one
 ///    (the end of the previous sentence) is not a copy of it. Without such a
-///    neighbour segment the cut segment is kept, so speech is never lost.
+///    neighbour segment the cut segment is kept.
+///
+///    **The guard on rules 1 and 2 (#359).** Before rule 3, every segment rules
+///    1 and 2 dropped is checked against what they kept. Wherever more than
+///    [`SEAM_COVERAGE_TOLERANCE_MICROS`] of a dropped segment's time, in one
+///    stretch, is covered by no kept segment, the segment is restored: it
+///    carried speech that no kept segment has. Rules 1 and 2 decide by one point
+///    of the segment (its midpoint) and by whether a neighbour has a segment
+///    there, so they could drop a segment that runs past its neighbour's end, or
+///    starts before it, into audio that no other chunk heard, and lose the words
+///    there with no sign; the guard looks at the time itself and cannot be
+///    misled by either, at either edge and along a chain of chunks. Restoring
+///    may leave the same words twice, where the two chunks recognised the
+///    overlap differently; rule 3 trims them where the words match, and a reader
+///    can see a repeat, which is not true of a hole. The guard restores nothing
+///    when the rules lost nothing (beyond the tolerance), so a run that lost
+///    nothing merges exactly as it did without the guard. Dropped segments are
+///    checked in start order against a set that grows as they are restored.
 /// 3. At each seam, the last kept segment of the earlier chunk and the first
 ///    kept segment of the later one are compared when their times overlap. If
 ///    the earlier one's normalised words end with at least two words the later
 ///    one starts with, those words are trimmed from the later copy, which is
 ///    dropped when nothing remains; a later copy wholly contained in the earlier
 ///    one is dropped. Repeats at times that do not overlap are genuine and kept.
+///    This rule decides about words, not time: a copy it drops has its words in
+///    the segment it repeats, so the guarantee of the guard is that every
+///    instant of every segment is covered by a kept segment, to within the
+///    tolerance, or by words that a kept segment repeats.
+///
+/// Last, [`MergedTranscript::unplaced`] is what the chunks' rejected segments
+/// leave uncovered: [`ChunkSegments::unplaced`] less the kept segments, where
+/// what is left is longer than the tolerance.
 ///
 /// `chunks` must be in plan order.
 #[must_use]
 pub fn merge_chunks(chunks: &[ChunkSegments]) -> MergedTranscript {
+    let mut kept = keep_by_rules_one_and_two(chunks);
+    restore_lost_speech(chunks, &mut kept);
+    assemble(chunks, kept)
+}
+
+/// Rules 1 and 2 of [`merge_chunks`]: the `(chunk, position)` of every segment
+/// they keep.
+fn keep_by_rules_one_and_two(chunks: &[ChunkSegments]) -> BTreeSet<(usize, usize)> {
     let cores = chunk_cores(chunks);
     let mut kept = BTreeSet::new();
     for (index, chunk) in chunks.iter().enumerate() {
@@ -1548,6 +1723,11 @@ pub fn merge_chunks(chunks: &[ChunkSegments]) -> MergedTranscript {
             }
         }
     }
+    kept
+}
+
+/// Orders the kept segments, applies rule 3 and finds what is left unplaced.
+fn assemble(chunks: &[ChunkSegments], kept: BTreeSet<(usize, usize)>) -> MergedTranscript {
     let mut ordered: Vec<(usize, AsrSegmentDraft)> = kept
         .into_iter()
         .filter_map(|(index, position)| {
@@ -1559,6 +1739,7 @@ pub fn merge_chunks(chunks: &[ChunkSegments]) -> MergedTranscript {
         .collect();
     ordered.sort_by_key(|(index, segment)| (segment.range.start(), segment.range.end(), *index));
     let warnings = remove_seam_duplicates(&mut ordered, chunks);
+    let unplaced = uncovered_unplaced_stretches(chunks, &ordered);
     MergedTranscript {
         segments: ordered
             .into_iter()
@@ -1568,7 +1749,81 @@ pub fn merge_chunks(chunks: &[ChunkSegments]) -> MergedTranscript {
             })
             .collect(),
         warnings,
+        unplaced,
     }
+}
+
+/// The guard on rules 1 and 2 of [`merge_chunks`] (#359): puts back every
+/// segment they dropped whose time is not covered by the ones they kept, beyond
+/// [`SEAM_COVERAGE_TOLERANCE_MICROS`].
+///
+/// The dropped segments are taken in start order (then end, chunk and
+/// position), each against the set of everything kept so far, restorations
+/// included, so a segment that an earlier restoration covers is not restored in
+/// turn, and the result is the same for the same input. After it, every
+/// dropped segment has no stretch longer than the tolerance that is covered by
+/// nothing kept: either it was covered when it was checked, which later
+/// restorations only improve, or it was restored and covers itself.
+fn restore_lost_speech(chunks: &[ChunkSegments], kept: &mut BTreeSet<(usize, usize)>) {
+    restore_lost_speech_within(chunks, kept, SEAM_COVERAGE_TOLERANCE_MICROS);
+}
+
+/// [`restore_lost_speech`] for a given tolerance, so that a test can find by
+/// search the largest one with the guarantee that
+/// [`SEAM_COVERAGE_TOLERANCE_MICROS`] explains.
+fn restore_lost_speech_within(
+    chunks: &[ChunkSegments],
+    kept: &mut BTreeSet<(usize, usize)>,
+    tolerance: u64,
+) {
+    let mut covered = SpanSet::default();
+    let mut dropped: Vec<(Span, usize, usize)> = Vec::new();
+    for (index, chunk) in chunks.iter().enumerate() {
+        for (position, segment) in chunk.segments.iter().enumerate() {
+            let placed = span(segment.range);
+            if kept.contains(&(index, position)) {
+                covered.insert(placed);
+            } else {
+                dropped.push((placed, index, position));
+            }
+        }
+    }
+    dropped.sort_unstable();
+    for (placed, index, position) in dropped {
+        if covered
+            .gaps_within(placed)
+            .iter()
+            .any(|&(start, end)| end - start > tolerance)
+        {
+            kept.insert((index, position));
+            covered.insert(placed);
+        }
+    }
+}
+
+/// [`MergedTranscript::unplaced`]: what the chunks' rejected segments left
+/// uncovered by the segments that were kept, where it is longer than
+/// [`SEAM_COVERAGE_TOLERANCE_MICROS`].
+fn uncovered_unplaced_stretches(
+    chunks: &[ChunkSegments],
+    kept: &[(usize, AsrSegmentDraft)],
+) -> Vec<TimeRange> {
+    let mut covered = SpanSet::default();
+    for (_, segment) in kept {
+        covered.insert(span(segment.range));
+    }
+    let candidates = merged(
+        chunks
+            .iter()
+            .flat_map(|chunk| chunk.unplaced.iter().copied().map(span))
+            .collect(),
+    );
+    let stretches: Vec<Span> = candidates
+        .into_iter()
+        .flat_map(|candidate| covered.gaps_within(candidate))
+        .filter(|&(start, end)| end - start > SEAM_COVERAGE_TOLERANCE_MICROS)
+        .collect();
+    to_ranges(&join_nearest(stretches, MAX_UNPLACED_STRETCHES, None))
 }
 
 fn overlapping(segments: &[AsrSegmentDraft], segment: &AsrSegmentDraft) -> bool {

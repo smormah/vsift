@@ -284,10 +284,12 @@ fn heard(source: &SourceSegment, covered: TimeRange, words: &str) -> Built<AsrTr
     };
     let (segments, language, warnings) =
         validate_chunk_output(&chunk, covered, source.range(), output)?.into_parts();
+    let merged = merge_chunks(&[segments]);
     Ok(AsrTranscription {
         run,
         language,
-        segments: merge_chunks(&[segments]).segments,
+        segments: merged.segments,
+        unplaced: merged.unplaced,
         warnings,
     })
 }

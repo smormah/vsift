@@ -431,6 +431,11 @@ const SEEDS: &[Seed] = &[
         Origin::Copy(TRANSCRIPT_RECORD_EXAMPLES),
     ),
     seed(
+        Target::TranscriptRecord,
+        "F01-words-no-segment-holds.json",
+        Origin::Copy(TRANSCRIPT_RECORD_EXAMPLES),
+    ),
+    seed(
         Target::FfprobeMetadata,
         "F11-excessive-streams.json",
         Origin::Copy("fixtures/corpus/generated"),
@@ -804,6 +809,7 @@ fn well_formed_seeds_are_accepted() -> TestResult {
             "F01-kept-in-an-unreadable-part.json",
         ),
         (Target::TranscriptRecord, "F01-untranscribed-carried.json"),
+        (Target::TranscriptRecord, "F01-words-no-segment-holds.json"),
         (Target::FfprobeMetadata, "two-streams-rotated.json"),
         (Target::FfprobeMetadata, "audio-only-unknown-codec.json"),
         (Target::TranscriptCursor, "transcript-get-next-cursor.txt"),
@@ -1206,6 +1212,7 @@ fn the_local_asr_record_seed_is_the_encoded_f01_revision() -> TestResult {
             run,
             language,
             segments: merged.segments,
+            unplaced: merged.unplaced,
             warnings,
         },
         splice: None,

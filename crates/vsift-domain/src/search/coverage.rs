@@ -41,6 +41,20 @@
 //! the text a revision keeps there ([`crate::EarlierTextRule`]) is covered by
 //! that text and nothing else of the part is.
 //!
+//! **Words that no segment holds (#359).** A window a run transcribed covers
+//! what it read, but not a stretch where the recogniser wrote words that were
+//! rejected and are in no segment ([`TranscriptRevision::unplaced`]): the run
+//! read the audio and has nothing to show for those words, so an agent that
+//! searched for them would read "no hit" as "not said". Such a stretch is
+//! covered only by a segment of the revision (its own words, or text it kept)
+//! or by a window the run found silent, and otherwise is listed as
+//! untranscribed. Stretches shorter than the merge's tolerance are never
+//! recorded ([`crate::SEAM_COVERAGE_TOLERANCE_MICROS`]), so a recording whose
+//! rejected segments left only noise is covered whole, as it was. A later
+//! retranscription keeps such a stretch untranscribed where the revision it
+//! supersedes did, by the same record as a part some run could not read
+//! ([`TranscriptRevision::carried_untranscribed`]).
+//!
 //! No-speech ranges never contain a segment of the revision.
 
 use crate::{
@@ -260,6 +274,20 @@ fn revision_coverage(
     // has, its own, carried, or kept where its run could not read (#353).
     let mut covered = own.covered();
     covered.extend(segments.iter().copied());
+    // Where the run wrote words that no segment holds (#359) it read the audio
+    // and has nothing to show for it, so the window it read does not cover that
+    // stretch, unless a segment of the revision does, or a window the run found
+    // silent (the words are then the recogniser's, over audio with no signal).
+    let unplaced = subtract(
+        &merged(revision.unplaced().iter().copied().map(span).collect()),
+        &merged(
+            own.quiet
+                .iter()
+                .chain(&segments)
+                .copied()
+                .collect::<Vec<Span>>(),
+        ),
+    );
     // What an earlier revision covers is counted only outside the windows this
     // run examined, an unusable one included (the run replaced what the
     // earlier revision said there, so its windows no longer back anything
@@ -298,7 +326,7 @@ fn revision_coverage(
     } else {
         CoverageBasis::LocalAsr
     };
-    (basis, merged(covered), no_speech)
+    (basis, subtract(&merged(covered), &unplaced), no_speech)
 }
 
 /// What an inherited revision's provenance claims to cover of `source`: a

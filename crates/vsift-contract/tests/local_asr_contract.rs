@@ -29,13 +29,13 @@ use vsift_contract::{
     JobData, JobPresentation, JobResumeData, LOCAL_ASR_MODEL_REMEDIATION,
     LOCAL_ASR_TOOLS_REMEDIATION, LifecycleResponse, NO_AUDIO_STREAM_REMEDIATION,
     NO_TRANSCRIPT_REMEDIATION, OperationResponse, PROVIDER_CHUNKS_REJECTED_WARNING,
-    ProgressEventResponse, ProgressReport, RESUMED_FROM_CHECKPOINT_WARNING, RetranscribeJob,
-    SUPERSEDED_REMEDIATION, SessionJobData, SessionState, SessionStatusData, StatusData,
-    TerminalEventResponse, TranscriptEvidenceStream, TranscriptPageData,
-    TranscriptRetranscribeData, TranscriptRevisionData, UNKNOWN_JOB_REMEDIATION,
-    UNKNOWN_REVISION_REMEDIATION, UNPINNED_MODEL_REMEDIATION, finish_retranscription,
-    job_warning_messages, local_asr_failure_summary, local_asr_verification_summary,
-    retranscription_gaps, transcript_warning_messages,
+    PROVIDER_SEGMENTS_UNPLACED_WARNING, ProgressEventResponse, ProgressReport,
+    RESUMED_FROM_CHECKPOINT_WARNING, RetranscribeJob, SUPERSEDED_REMEDIATION, SessionJobData,
+    SessionState, SessionStatusData, StatusData, TerminalEventResponse, TranscriptEvidenceStream,
+    TranscriptPageData, TranscriptRetranscribeData, TranscriptRevisionData,
+    UNKNOWN_JOB_REMEDIATION, UNKNOWN_REVISION_REMEDIATION, UNPINNED_MODEL_REMEDIATION,
+    finish_retranscription, job_warning_messages, local_asr_failure_summary,
+    local_asr_verification_summary, retranscription_gaps, transcript_warning_messages,
 };
 use vsift_domain::{
     AsrChunkOutcome, AsrChunkRecord, AsrDecodingProfile, AsrModel, AsrModelProfile, AsrProvider,
@@ -178,6 +178,7 @@ fn f01_revisions() -> Built<(TranscriptRevision, TranscriptRevision)> {
             run: whole,
             language,
             segments: merged.segments,
+            unplaced: merged.unplaced,
             warnings,
         },
         splice: None,
@@ -203,6 +204,7 @@ fn f01_revisions() -> Built<(TranscriptRevision, TranscriptRevision)> {
             )?,
             language: None,
             segments: Vec::new(),
+            unplaced: Vec::new(),
             warnings,
         },
         splice: Some(RevisionSplice {
@@ -1019,6 +1021,11 @@ fn a_run_without_an_unusable_chunk_is_presented_exactly_as_before() -> TestResul
                 .get("unusable_chunks")
                 .is_none()
         );
+        assert!(
+            value["data"]["revision"]["local_asr"]
+                .get("unplaced_ranges")
+                .is_none()
+        );
         assert!(retranscription_gaps(revision).is_empty());
     }
     // And the frozen example, byte for byte, is still what is produced.
@@ -1028,6 +1035,130 @@ fn a_run_without_an_unusable_chunk_is_presented_exactly_as_before() -> TestResul
         &second,
     ))?;
     assert_eq!(response, load("examples/transcript-retranscribe.json")?);
+    Ok(())
+}
+
+/// One segment of the stand-in recogniser's answer, in milliseconds into the
+/// chunk.
+fn answered(start_ms: u64, end_ms: u64, words: &str) -> Built<ProviderSegment> {
+    Ok(ProviderSegment {
+        start: ChunkTime::from_millis(start_ms).ok_or("time")?,
+        end: ChunkTime::from_millis(end_ms).ok_or("time")?,
+        text: Some(CueText::new(words.to_owned(), words.to_owned())?),
+        tokens: Vec::new(),
+    })
+}
+
+/// An answer with words in the middle of it that cannot be placed: two segments
+/// kept, 0.6 to 0.9 s and 3.0 to 3.5 s into the chunk, and between them one at
+/// 1.0 s whose range is empty. The rejected segment is counted and its words
+/// are in no segment, so they may lie anywhere from 1.0 s to where the next
+/// segment starts, 3.0 s.
+fn words_that_no_segment_holds() -> Built<ProviderChunkOutput> {
+    Ok(ProviderChunkOutput {
+        language: LanguageTag::parse("en").ok(),
+        segments: vec![
+            answered(600, 900, "words that were placed")?,
+            answered(1_000, 1_000, "words nobody could place")?,
+            answered(3_000, 3_500, "more words that were placed")?,
+        ],
+    })
+}
+
+/// #359: a run in which the recogniser wrote words that were rejected between
+/// two segments it kept is still a complete result (the chunk was read and the
+/// run did what it does), but the revision lists where those words may lie
+/// (`local_asr.unplaced_ranges`), the warning says what that means for a search
+/// in the one place the count could not, and every schema accepts it. A
+/// rejection that leaves no such stretch is presented as it always was.
+#[tokio::test]
+async fn words_that_no_segment_holds_are_listed_and_the_run_stays_complete() -> TestResult {
+    let recogniser = StandInRecogniser {
+        first: Some(words_that_no_segment_holds()?),
+        rest_described: true,
+    };
+    let (source, outcome) = transcribe_stand_in(55, 0, &recogniser).await?;
+    let transcription = outcome.map_err(|failure| format!("the run failed: {failure:?}"))?;
+    let revision = stand_in_revision(&source, 1, transcription, None)?;
+    assert_eq!(revision.unplaced(), [range(SECOND, 3 * SECOND)?]);
+
+    let response = finish_retranscription(retranscribe_response(&revision, None)?, &revision);
+    let value = serde_json::to_value(&response)?;
+    validate("operation-response.schema.json", &value)?;
+    validate("transcript-retranscribe-data.schema.json", &value["data"])?;
+    // Complete: nothing was left unread, so no gap and no `partial`.
+    assert_eq!(value["status"], "complete");
+    assert!(value["coverage"].is_null());
+    assert!(value["data"].get("untranscribed_ranges").is_none());
+    assert_eq!(
+        value["data"]["revision"]["local_asr"]["unplaced_ranges"],
+        serde_json::json!([{"from_us": 1_000_000, "to_us": 3_000_000}])
+    );
+    // The count is as it was, and the warning says what the count cannot.
+    assert_eq!(
+        value["data"]["revision"]["warnings"],
+        serde_json::json!([{
+            "code": "provider_segments_rejected",
+            "count": 1,
+            "first_cue": 1,
+            "excluded_cues": true,
+        }])
+    );
+    let warnings = value["warnings"].as_array().ok_or("no warnings")?;
+    assert!(warnings.contains(&Value::from(PROVIDER_SEGMENTS_UNPLACED_WARNING)));
+    assert!(!warnings.contains(&Value::from(
+        "Some recognised segments had times outside their audio and were not used."
+    )));
+    assert_example("transcript-retranscribe.unplaced.json", &value)?;
+
+    // The stream form carries the same result as its terminal event.
+    let event = serde_json::to_value(TerminalEventResponse::new(finish_retranscription(
+        retranscribe_response(&revision, None)?,
+        &revision,
+    )))?;
+    validate("terminal-event.schema.json", &event)?;
+
+    // A search of the revision counts the stretch as untranscribed.
+    let coverage = vsift_domain::SearchCoverage::of(&revision, None);
+    assert_eq!(coverage.untranscribed(), [range(SECOND, 3 * SECOND)?]);
+
+    // A rejected segment that leaves no stretch (nothing follows it) is the
+    // count it always was, and the plain warning.
+    let trailing = ProviderChunkOutput {
+        language: LanguageTag::parse("en").ok(),
+        segments: vec![
+            answered(600, 900, "words that were placed")?,
+            answered(3_000, 3_500, "more words that were placed")?,
+            answered(5_000, 5_000, "a stray last word")?,
+        ],
+    };
+    let recogniser = StandInRecogniser {
+        first: Some(trailing),
+        rest_described: true,
+    };
+    let (source, outcome) = transcribe_stand_in(55, 0, &recogniser).await?;
+    let revision = stand_in_revision(
+        &source,
+        1,
+        outcome.map_err(|failure| format!("the run failed: {failure:?}"))?,
+        None,
+    )?;
+    assert!(revision.unplaced().is_empty());
+    let value = serde_json::to_value(finish_retranscription(
+        retranscribe_response(&revision, None)?,
+        &revision,
+    ))?;
+    assert!(
+        value["data"]["revision"]["local_asr"]
+            .get("unplaced_ranges")
+            .is_none()
+    );
+    assert_eq!(
+        value["warnings"],
+        serde_json::json!([
+            "Some recognised segments had times outside their audio and were not used."
+        ])
+    );
     Ok(())
 }
 

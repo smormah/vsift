@@ -132,6 +132,11 @@ fn frozen_examples_render_as_readable_text() -> TestResult {
             "transcript-retranscribe.partial.json",
             "transcript-retranscribe-partial",
         ),
+        (
+            CommandName::TranscriptRetranscribe,
+            "transcript-retranscribe.unplaced.json",
+            "transcript-retranscribe-unplaced",
+        ),
         (CommandName::Search, "search.json", "search"),
         (
             CommandName::SetupPlan,

@@ -214,6 +214,11 @@ fn push_revision(text: &mut TerminalText, revision: &TranscriptRevision) {
                 .push_fixed(" with an unusable answer");
         }
         text.push_fixed(")").end_line();
+        push_ranges(
+            text,
+            "Words the recogniser wrote that no segment holds may lie in these stretches (a search counts them as not transcribed):",
+            &run.unplaced_ranges,
+        );
     }
     if let Some(supersedes) = &revision.supersedes {
         text.push_fixed("Supersedes: ")

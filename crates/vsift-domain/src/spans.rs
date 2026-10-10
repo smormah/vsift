@@ -5,6 +5,8 @@
 //! has no two spans that overlap or touch, which is the form both
 //! [`subtract`] and the readers of a coverage list expect.
 
+use std::collections::BTreeMap;
+
 use crate::{MediaTime, TimeRange};
 
 /// A half-open span in microseconds; always `start < end` where built here.
@@ -108,9 +110,79 @@ pub(crate) fn subtract(spans: &[Span], removed: &[Span]) -> Vec<Span> {
     result
 }
 
+/// A growing set of spans, kept merged as spans are added, that answers which
+/// parts of a span it does not cover.
+///
+/// The seam merge asks that of every segment it dropped, against a set that
+/// grows as it restores some of them, and a run can hold hundreds of thousands
+/// of segments (1,024 chunks of up to 256 each). Rebuilding a merged list and
+/// subtracting from it for each would be quadratic; keeping the spans in a
+/// tree makes both the insertion and the question logarithmic in the number
+/// of spans plus the number of spans touched.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct SpanSet {
+    /// Start to end, disjoint and never touching, so every span is maximal.
+    spans: BTreeMap<u64, u64>,
+}
+
+impl SpanSet {
+    /// Adds `span`, joining every span it overlaps or touches.
+    pub(crate) fn insert(&mut self, (start, end): Span) {
+        if start >= end {
+            return;
+        }
+        let (mut start, mut end) = (start, end);
+        if let Some((&before_start, &before_end)) = self.spans.range(..=start).next_back()
+            && before_end >= start
+        {
+            start = before_start;
+            end = end.max(before_end);
+            self.spans.remove(&before_start);
+        }
+        while let Some((&next_start, &next_end)) = self.spans.range(start..=end).next() {
+            end = end.max(next_end);
+            self.spans.remove(&next_start);
+        }
+        self.spans.insert(start, end);
+    }
+
+    /// The parts of `(start, end)` that no span of the set covers, in start
+    /// order.
+    pub(crate) fn gaps_within(&self, (start, end): Span) -> Vec<Span> {
+        if start >= end {
+            return Vec::new();
+        }
+        let mut gaps = Vec::new();
+        let mut cursor = start;
+        // The span that starts at or before `start` may reach into it; every
+        // later span that matters starts inside it.
+        let first = self
+            .spans
+            .range(..=start)
+            .next_back()
+            .map_or(start, |(&span_start, _)| span_start);
+        for (&span_start, &span_end) in self.spans.range(first..end) {
+            if span_end <= cursor {
+                continue;
+            }
+            if span_start > cursor {
+                gaps.push((cursor, span_start));
+            }
+            cursor = cursor.max(span_end);
+            if cursor >= end {
+                return gaps;
+            }
+        }
+        if cursor < end {
+            gaps.push((cursor, end));
+        }
+        gaps
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{join_nearest, merged, overlaps_any, subtract};
+    use super::{SpanSet, join_nearest, merged, overlaps_any, subtract};
 
     #[test]
     fn overlap_means_sharing_more_than_a_point() {
@@ -188,5 +260,53 @@ mod tests {
             assert_eq!(merged(joined.clone()), joined);
             assert!(subtract(&spans, &joined).is_empty(), "{limit}");
         }
+    }
+
+    /// The set is the merged list of what was inserted, whatever the order and
+    /// the overlaps, and its gaps are the subtraction of that list.
+    #[test]
+    fn a_span_set_agrees_with_merging_and_subtracting_lists() {
+        let mut inserted: Vec<(u64, u64)> = Vec::new();
+        let mut set = SpanSet::default();
+        // A fixed pseudo-random walk, so the test needs no generator and a
+        // failure repeats.
+        let mut state = 0x2545_f491_4f6c_dd1d_u64;
+        for step in 0..400_u64 {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            let start = state % 500;
+            let length = 1 + (state >> 20) % 12;
+            set.insert((start, start + length));
+            inserted.push((start, start + length));
+            let list = merged(inserted.clone());
+            let probe_start = (state >> 32) % 520;
+            let probe = (probe_start, probe_start + 1 + (state >> 40) % 60);
+            assert_eq!(
+                set.gaps_within(probe),
+                subtract(&[probe], &list),
+                "step {step}, probe {probe:?}"
+            );
+        }
+        // Nothing, and nothing over a degenerate span.
+        assert_eq!(SpanSet::default().gaps_within((5, 9)), vec![(5, 9)]);
+        assert!(set.gaps_within((7, 7)).is_empty());
+        assert!(set.gaps_within((9, 7)).is_empty());
+    }
+
+    /// Spans that touch or overlap become one, so a gap is never reported
+    /// between two spans that meet.
+    #[test]
+    fn spans_that_meet_are_one_span() {
+        let mut set = SpanSet::default();
+        set.insert((10, 20));
+        set.insert((20, 30));
+        assert_eq!(set.gaps_within((10, 30)), Vec::<(u64, u64)>::new());
+        set.insert((40, 50));
+        set.insert((5, 45));
+        assert_eq!(set.gaps_within((0, 60)), vec![(0, 5), (50, 60)]);
+        set.insert((0, 0));
+        set.insert((9, 3));
+        assert_eq!(set.gaps_within((0, 60)), vec![(0, 5), (50, 60)]);
     }
 }

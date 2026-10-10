@@ -240,9 +240,9 @@ pub use text::{
 };
 pub use transcript::{
     MEDIA_TOOLS_FOR_TRANSCRIPT_REMEDIATION, NO_TRANSCRIPT_REMEDIATION,
-    PROVIDER_CHUNKS_REJECTED_WARNING, RetranscribeJob, SourceSegmentData, TranscriptPageData,
-    TranscriptRetranscribeData, TranscriptRevisionData, TranscriptSegmentData,
-    finish_retranscription, retranscription_gaps, transcript_rejection_summary,
-    transcript_warning_messages,
+    PROVIDER_CHUNKS_REJECTED_WARNING, PROVIDER_SEGMENTS_UNPLACED_WARNING, RetranscribeJob,
+    SourceSegmentData, TranscriptPageData, TranscriptRetranscribeData, TranscriptRevisionData,
+    TranscriptSegmentData, finish_retranscription, retranscription_gaps,
+    transcript_rejection_summary, transcript_warning_messages,
 };
 pub use verification::media_tool_verification_summary;

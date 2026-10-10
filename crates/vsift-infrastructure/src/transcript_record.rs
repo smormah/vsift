@@ -286,6 +286,7 @@ impl StoredTranscript {
             replaced_range: None,
             inherited: Vec::new(),
             carried_untranscribed: Vec::new(),
+            unplaced: Vec::new(),
             language: optional_language(self.language).ok()?,
             segments,
             warnings,
@@ -369,6 +370,15 @@ struct StoredAsrTranscript {
     /// are apart, records nothing.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     carried_untranscribed: Vec<StoredRange>,
+    /// The stretches of this record's own run where the recogniser wrote words
+    /// that were rejected and that no segment holds (#359), in start order and
+    /// merged. Written only when there is any, so every other record is written
+    /// exactly as before; a release before it reads the member as damage. Only
+    /// a run that rejected a segment with words, with another segment after it
+    /// and nothing kept over the stretch, has it, and a record of a chain whose
+    /// base had one may also carry `carried_untranscribed`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    unplaced_ranges: Vec<StoredRange>,
     language: Option<String>,
     warnings: Vec<StoredWarning>,
     segments: Vec<StoredAsrEntry>,
@@ -561,6 +571,12 @@ impl StoredAsrTranscript {
                 .copied()
                 .map(StoredRange::from_domain)
                 .collect(),
+            unplaced_ranges: revision
+                .unplaced()
+                .iter()
+                .copied()
+                .map(StoredRange::from_domain)
+                .collect(),
             language: revision.language().map(|tag| tag.as_str().to_owned()),
             warnings: stored_warnings(revision.warnings()),
             segments: revision
@@ -598,6 +614,10 @@ impl StoredAsrTranscript {
         for range in self.carried_untranscribed {
             carried_untranscribed.push(stored_range(range.start_us, range.end_us)?);
         }
+        let mut unplaced = Vec::with_capacity(self.unplaced_ranges.len());
+        for range in self.unplaced_ranges {
+            unplaced.push(stored_range(range.start_us, range.end_us)?);
+        }
         TranscriptRevision::new(TranscriptRevisionParts {
             id: TranscriptRevisionId::parse(self.revision_id).ok()?,
             number: NonZeroU32::new(self.revision)?,
@@ -608,6 +628,7 @@ impl StoredAsrTranscript {
             replaced_range,
             inherited,
             carried_untranscribed,
+            unplaced,
             language: optional_language(self.language).ok()?,
             segments,
             warnings: domain_warnings(self.warnings)?,
