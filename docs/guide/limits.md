@@ -41,10 +41,13 @@ real meetings, accents or noisy rooms, so every accuracy figure below says what 
 - **A stretch can be left without a transcript (0.2.1 and later; 0.2.0 fails the whole run instead,
   [L-145](../planning/known-limits.md#l-145)).** When the recogniser's answer for a 30-second stretch cannot be
   placed in that stretch of audio, VSift leaves the stretch out, keeps the rest and says so: the result is
-  `partial` and lists the stretch as not transcribed. A recording with long pauses can have a few. A word said in
-  such a stretch cannot be found. Transcribing just that stretch again may cover it (the audio is then cut at other
-  points), and a transcript you supply covers it. If most stretches fail, the command fails
-  instead ([troubleshooting](troubleshooting.md#missing_capability-a-tool-or-model-is-missing)).
+  `partial` and lists the stretch as not transcribed by that run. A recording with long pauses can have a few. When you
+  were re-transcribing a recording that already had a transcript, the words it had inside such a stretch are kept; a word
+  said there that no transcript has cannot be found. Transcribing just that stretch again may cover it (the audio is
+  then cut at other points), and a transcript file you supply can. If most stretches fail, the command fails
+  instead ([troubleshooting](troubleshooting.md#missing_capability-a-tool-or-model-is-missing)). **A worker `job run`
+  or `job batch` request does not report this:** its retranscribe step is `complete` either way, and the revision the
+  step names holds the warning (`transcript get --revision`).
 
 ## The pictures: screen changes and frames
 

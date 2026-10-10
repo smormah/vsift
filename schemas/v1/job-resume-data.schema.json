@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://vsift.dev/schemas/v1/job-resume-data.schema.json",
   "title": "VSift job.resume data v1",
-  "description": "The data member of a complete job.resume result (P10 PR 3): job is the job after the run (job-data.schema.json, normally succeeded), and outcome the retranscription it committed, exactly as transcript.retranscribe reports it (transcript-retranscribe-data.schema.json; outcome.job.resumed says whether checkpoints were continued, outcome.job.replayed that the revision is an earlier commit returned again). The envelope names the operation_id the result is recorded under. Validate the envelope with operation-response.schema.json.",
+  "description": "The data member of a complete (or, since 0.2.1, partial) job.resume result (P10 PR 3): job is the job after the run (job-data.schema.json, normally succeeded), and outcome the retranscription it committed, exactly as transcript.retranscribe reports it (transcript-retranscribe-data.schema.json; outcome.job.resumed says whether checkpoints were continued, outcome.job.replayed that the revision is an earlier commit returned again). The envelope names the operation_id the result is recorded under. Validate the envelope with operation-response.schema.json.",
   "type": "object",
   "additionalProperties": false,
   "required": ["job", "outcome"],

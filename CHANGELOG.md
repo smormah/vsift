@@ -81,22 +81,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - **A recording with pauses is no longer thrown away when one 30-second stretch cannot be transcribed (#353, the main fix proposed for `0.2.1`; the register's entry is [L-145](docs/planning/known-limits.md#l-145), which this change does not edit).** The first real recording tried with
   `0.2.0` (a 34:36 screencast of slides and live coding, one speaker, long pauses while the speaker typed) failed as `MISSING_CAPABILITY` (`output_validation`, `malformed_output`)
   after 65 of its 83 chunks were saved, committed nothing, and left the job `resumable: true` although a resume could never succeed. The cause was one chunk, 27:05 to 27:35, in which
-  one segment did not fit its audio. **Three defects, three fixes (ADR 0017, note of 2026-10-10; proposed, the maintainer confirms by merging):**
+  one segment did not fit its audio. **Four fixes (ADR 0017, note of 2026-10-10; proposed, the maintainer confirms by merging):**
   1. **A chunk whose answer cannot be used is a recorded gap, not a failed run.** A chunk whose recognised output the rules refuse as a whole is recorded with a new outcome,
      `unusable`, never as `silent` or `no_audio` (which would say nothing was said). The run commits the other chunks and answers `partial` (exit 0): the envelope's `coverage`
-     lists the gap with the published reason `untranscribed_range`, `data.untranscribed_ranges` lists the same ranges, `revision.local_asr.unusable_chunks` counts the chunks and the new
+     lists the part of the range this run did not transcribe with the published reason `untranscribed_range`, `data.untranscribed_ranges` lists the same ranges, `revision.local_asr.unusable_chunks` counts the chunks and the new
      warning `provider_chunks_rejected` names the first; a `search` reports the window as untranscribed, never as no speech. **The run still fails when most of the chunks the recogniser
      answered are unusable** (more than half; chunks never given to it do not count; one of two is partial, a lone chunk fails), and it stops as soon as that is certain.
-  2. **The quarter rule no longer fails a sparse chunk for one rejected segment.** With fewer than four text segments the rejected ones are dropped and counted under
-     `provider_segments_rejected` and the rest are kept (every segment rejected still makes the chunk unusable); from four segments on the rule is exactly what it was.
-  3. **The failure says what failed.** The code stays `MISSING_CAPABILITY`. The remediation names the reason (`too_many_rejected_segments`), how many chunks and where the first is
-     (position, `H:MM:SS` and microseconds), says the tool works and this recording's speech could not be transcribed reliably, and points to `ingest --transcript`; it no longer tells to
-     retry with a larger range or reinstall whisper.cpp, which could not help. `error.affected_ids` names the job, and the job ends `failed` at once (`resumable: false`).
+  2. **The quarter rule no longer fails a sparse chunk for one rejected segment.** With fewer than four text segments at most one rejected segment is tolerated: it is dropped and counted under
+     `provider_segments_rejected` and the rest are kept (two or more rejected, or every segment rejected, still makes the chunk unusable); from four segments on the rule is exactly what it was.
+     The two meet without an inversion: a usable chunk never becomes unusable because a valid segment was added.
+  3. **An unreadable part keeps the text the session already had there.** When a range retranscription could not read part of its range, the new revision carries the segments of the
+     revision it supersedes that lie wholly inside that part, as they were, instead of deleting them (a bounded run over an imported transcript used to lose its cue there); the run's own text
+     replaces everything else in the range, as before. The result lists the whole part as not transcribed by this run, and a `search` counts the kept text as transcribed, so the two lists
+     differ where text was kept. A run that could not read a chunk no longer says `no_speech_recognised`.
+  4. **The failure says what failed, and no more than is known.** The code stays `MISSING_CAPABILITY`. The remediation names the reason (`too_many_rejected_segments`), how many chunks and where the first is
+     (position, `H:MM:SS` and microseconds), and says the tool works. After more than three chunks it says this recording's speech could not be transcribed reliably and points to `ingest --transcript`;
+     after three or fewer it says this stretch could not be transcribed and tells to try a slightly different range with `--from` and `--to`, or `ingest --transcript`. It never says a larger range will
+     not help, and it no longer tells to reinstall whisper.cpp, which could not help; the setup check, which transcribes a clip of its own, has its own text and still says to reinstall. A recogniser
+     swapped during the run is reported as `model_changed`, not as unusable answers. `error.affected_ids` names the job, and the job ends `failed` at once (`resumable: false`).
   **Added, all optional and only present when there is a gap:** the chunk outcome `unusable` and the warning `provider_chunks_rejected` in the revision and the retained bundle
-  record, `local_asr.unusable_chunks`, `data.untranscribed_ranges` and the `partial` status of `transcript retranscribe` and `job resume`; a run with no such chunk is written and
+  record, the job checkpoint kind `unusable`, `local_asr.unusable_chunks`, `data.untranscribed_ranges` and the `partial` status of `transcript retranscribe` and `job resume`; a run with no such chunk is written and
   presented exactly as before. **Rolling back:** a revision that holds an `unusable` chunk (or its warning) is read as damaged by `0.2.0` and earlier (`INTEGRITY_FAILURE`), as for
   a trimmed end (L-130); no other revision is affected. **Not proven:** no real recording was used (it is commercial), and which kind of segment whisper.cpp rejected there is not
-  known; the two thresholds are proposals, not measured on real recordings. The agent skill is unchanged; a worker `job run` step with gaps is still `complete` there.
+  known; the three thresholds are proposals, not measured on real recordings, and the kept-text rule has no test over a real decode. The agent skill is unchanged. **A worker `job run` or `job batch` step is
+  still `complete` with `coverage` null when its run had unusable chunks** (the worker schema has no member for gaps, deliberately for this release): a supervisor that reads only the request's result is
+  not told, and reads the revision the step names (`transcript get --revision`: the warning and `revision.local_asr.unusable_chunks`) to find out.
 
 ## [0.2.0] - 2026-10-09
 

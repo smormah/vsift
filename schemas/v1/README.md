@@ -246,11 +246,15 @@ checkpoint (the job and the retranscription), and the interrupted run's failure
 (`CANCELLED`, the session and job in `affected_ids`, a remediation whose `command` is
 `vsift job resume <job>`). All four are checked by `vsift-contract`'s
 `local_asr_contract`. `transcript-retranscribe.partial.json` and
-`retranscribe-unusable-output.json` (0.2.1, #353) describe a 55 s stand-in recording of two
-chunks: a `partial` retranscription whose second chunk's answer could not be used (its range
-untranscribed, not silent), and the `MISSING_CAPABILITY` failure of a run in which most chunks'
-answers were unusable (the job in `affected_ids`, the reason, the counts and the first
-chunk in the remediation). Both are checked by `local_asr_contract`. `session status` (whose data has no separate schema) adds, since
+`retranscribe-unusable-output.json` and `retranscribe-unusable-output.short-range.json` (0.2.1, #353)
+describe stand-in recordings, made by the application's own run in `local_asr_contract` and not written
+by hand: a `partial` retranscription of a 55 s recording of two chunks whose second chunk's answer could
+not be used (its range untranscribed by that run, not silent), the `MISSING_CAPABILITY` failure of a run
+over an 83-chunk recording (the first three chunks silent) that stopped at the 41st answer because most
+answers were unusable (the job in `affected_ids`, the reason, the counts and the first chunk in the
+remediation, which then points to a supplied transcript), and the same failure of a run over a 55 s
+recording of two chunks (a few answers, so the remediation also suggests a slightly different range).
+All three are checked by `local_asr_contract`. `session status` (whose data has no separate schema) adds, since
 P10 PR 3, `jobs` (at most 16 of `job_id`, `kind`, `state`, `live_owner`, `resumable`,
 `resumable_reason`, the members of `job-data.schema.json` with the same meaning) and
 `jobs_truncated`.

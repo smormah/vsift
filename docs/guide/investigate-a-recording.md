@@ -80,11 +80,14 @@ one and keeps the old ones; the revision id says which you are reading.
 with words whose times cannot be placed in that audio, which happens in a recording with long pauses (live
 coding, a speaker who stops to type). VSift does not throw the rest away: it keeps what it could transcribe,
 leaves that stretch without a transcript and says so. The result ends with `Status: partial`, a line
-`Not transcribed (…)` lists the stretch in microseconds, and a warning explains it. `search` lists the same
-stretch as not transcribed, so a word said there cannot be found, and VSift never reports such a stretch as
-silence. Transcribing just that stretch again (`--from` and `--to` of the stretch) cuts the audio at other points
-and may cover it, and so does a transcript you already have (`vsift ingest <video> --transcript <file>`). If most
-stretches fail like this the command fails instead, and says why
+`Not transcribed by this run (…)` lists the stretch in microseconds, and a warning explains it. If you were
+re-transcribing a recording that already had a transcript (one you imported, or an earlier run), the words that
+transcript had inside such a stretch are **kept** as they were, not deleted; the line still lists the whole stretch,
+because that is what this run did not transcribe. `search` lists as not transcribed only what has no words, so a word
+said there and not kept cannot be found, and VSift never reports such a stretch as silence. Transcribing just that
+stretch again (`--from` and `--to` of the stretch) cuts the audio at other points and may cover it, and a transcript file
+you already have can supply it (`vsift ingest <video> --transcript <file>`). If most stretches fail like this the
+command fails instead, and says why
 ([troubleshooting](troubleshooting.md#missing_capability-a-tool-or-model-is-missing)).
 
 **Expect mistakes.** Recognition is a machine's best guess, tested here on a synthetic voice only. It can

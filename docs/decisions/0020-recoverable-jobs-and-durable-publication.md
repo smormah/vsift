@@ -485,6 +485,15 @@ Two additions to sections 4 and 5, proposed with [ADR 0017's note of the same da
   domain's rules refused the answer as a whole (decoded range and reason, under the payload's digest). A resume reuses it and does not ask the recogniser again.
   The rule for a `recognised` checkpoint is unchanged (S-08): output the rules now reject is discarded and recognised again. A release before this one reads the new
   kind as an unusable checkpoint and redoes the chunk, so nothing breaks on a roll back.
+- **A run checks the model's identity before it judges the answers.** A recogniser swapped while the run was in progress (the executable or the model file replaced) made the
+  answers those of two models, so the run reports `model_changed`, a failure a retry can fix, and not that most answers were unusable, which ends the job. The order matters
+  here and only here: `model_changed` is an ordinary retryable failure of the job, an unusable-answers failure is not.
+- **What a supervisor sees when a worker step could not read part of a recording.** In `job run` and `job batch`, a `retranscribe` step whose run had unusable chunks is
+  still `complete` with `coverage: null`, as is the request: its outputs name the revision, the generation and the chunks reused, and the worker schema has no member for
+  gaps. This is deliberate for 0.2.1 (the worker schema is unchanged) and means a supervisor that reads only the request's result is not told that part of the recording was
+  not transcribed. It can tell by reading the revision the step names, `transcript get --revision <revision_id>`, whose data carries the warning
+  `provider_chunks_rejected` and `revision.local_asr.unusable_chunks`. The direct commands (`transcript retranscribe`, `job resume`) answer `partial`. A contract test pins the
+  step's shape and stops compiling if a member for gaps is added, so the change is made on purpose in a later release, with the schema and these words.
 
 ## Consequences
 
