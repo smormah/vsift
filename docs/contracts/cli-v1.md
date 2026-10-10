@@ -101,12 +101,33 @@ source bytes, committed generation, `process_crash_consistent` publication (or
 `os_crash_durable` in a durable worker workspace, P11) and an RFC 3339 expiry.
 Without `--transcript` it does not start FFmpeg, setup, transcription or indexing;
 supplied-transcript import is described in the next section. The source must be an
-absolute local path to a regular file. A folder, a named pipe (FIFO) or a device file
+absolute local path to a regular file (a relative path is read from the folder the command
+was run in). A named pipe (FIFO) or a device file
 is refused as `INVALID_SOURCE` at once: since P14 PR 7 (#264) the file type is read
 from a handle opened without waiting, so a pipe that nothing writes to is a refusal, not a
-hang (it used to block `ingest` until the process was killed). A UNIX socket cannot be
+hang (it used to block `ingest` until the process was killed). So is a folder on Linux and
+macOS, which open it and find it is no regular file; **on Windows, which refuses to open a folder
+as a file, a folder is `STORAGE_IO`, as in `0.2.0`, and since `0.2.1` carries a remediation that says it
+is a folder** (see the next paragraph). A UNIX socket cannot be
 opened at all and ends as `STORAGE_IO` with the generic storage remediation (known limit
 L-127); tests pin the pipe, the device and the socket.
+**A path that names no file, names a folder (Windows), or may not be read keeps `STORAGE_IO` (exit 7) and, since
+`0.2.1` (#369), says which.** A name that is not a file, or a folder on the way to it that does not exist (the
+commonest first mistake: a mistyped name, or a command run from another folder, since a relative path is read from the
+folder the command was run in), answered `STORAGE_IO` with an empty `remediation` in `0.2.0`. The code, the fixed
+message, `retryable` and the exit status are unchanged, because changing a published failure code is not additive within v1
+(known limit L-127); the `remediation` carries one fixed-prose entry that says what happened. For a path that names no file
+it says that no file is at the path, that nothing was read or copied and no storage failed (the code is the closest published
+one), that a relative path is read from the folder the command was run in, to check the spelling and the folders or give the
+full path, and, for an agent, to ask the user for the path instead of guessing (example
+[`ingest-source-not-found.json`](../../schemas/v1/examples/ingest-source-not-found.json)). For a folder it says it is a
+folder and to name the file itself (example
+[`ingest-source-is-folder.json`](../../schemas/v1/examples/ingest-source-is-folder.json)). For a file the operating system
+refused to open it says the account VSift runs as may not read it, to report that to the user and not to change permissions
+(example [`ingest-source-access-denied.json`](../../schemas/v1/examples/ingest-source-access-denied.json)). The three texts
+name no path. Only what the operating system names plainly is told apart: any other failure to open a path stays
+`STORAGE_IO` with no remediation. A supplied transcript's path (`--transcript`) is answered alike. A link as the file itself
+is the case below, unchanged.
 **A source over the 20 GiB limit is refused as `INVALID_SOURCE` (exit 3), whatever the free space,** and nothing is
 copied: the size limit is the first refusal, and the room check below does not look at a source the limit refuses. This is
 the answer 0.1.0 gave. The first release candidate (`0.2.0-rc.1`) gave `STORAGE_IO` to a source that was both over the
@@ -284,7 +305,8 @@ reason and, where known, the line, for example `The supplied transcript was reje
 command and requires no authority. See
 [`transcript-rejected.json`](../../schemas/v1/examples/transcript-rejected.json). A
 missing FFmpeg/FFprobe is `MISSING_CAPABILITY` with a remediation explaining that
-import needs them but not Whisper; an unreadable sidecar is `STORAGE_IO`, and a
+import needs them but not Whisper; an unreadable sidecar is `STORAGE_IO` (since `0.2.1` a sidecar path that names no file,
+names a folder or may not be read carries the remediation of its cause, as the source's path does, #369), and a
 non-regular or unsafe sidecar path is `INVALID_SOURCE`, as for source media.
 
 **Automatic media-tool preflight.** Before the first media stage of an operation that
@@ -645,7 +667,11 @@ confidence and provenance, under new `segment_id`s and with `carried_from` namin
 revision and segment that first produced them; the recognised segments fill the range
 (except for text kept inside a part the run could not read, above).
 Every earlier revision stays readable with `transcript get --revision`, so an older
-citation always resolves. A run that recognises no speech still commits a revision
+citation always resolves: `handoff check --session` accepts a `segment_id` of any committed revision, the superseded
+ones included, and a retained bundle holds the record of every revision (`superseded_ids_cli_contract`, #372). The
+risk of an older id is meaning, not acceptance: an id of a segment the run replaced still resolves, and names the
+text the run replaced, so after a range retranscription read the range again and cite the newest revision's ids.
+A run that recognises no speech still commits a revision
 (no new segment, warning `no_speech_recognised`) so the attempt is on record.
 
 `data`
@@ -2431,9 +2457,9 @@ against an older copy of the schema ignores it.
 | C-05 | bounded/sanitized output and broken stdout/stderr behavior |
 | C-06 | strict bounded JSON decoding and schema/identifier rejection, including the P11 job request (`vsift-contract` `request` tests, `worker_contract`, fuzz targets `job_request` and `job_batch_line`), the recorded steps and results of a request record (`recorded_steps_and_results_read_back_exactly`, fuzz target `request_record`) and `handoff check` (P13 PR 5: the `handoff` unit tests, `handoff_contract`, `handoff_differential` against `jsonschema`, `handoff_cli_contract` through the binary, fuzz target `handoff_check`) |
 | C-07 | checked time/range/crop invariants and property tests |
-| C-08 | schema examples and old-reader/additive-v1 compatibility, including the `setup check` `local_asr` object (`setup_local_asr_contract`, `engine_setup_local_asr`), a segment's `display_text` and `display_label` (`vsift-contract` `text` tests, `display_text_makes_hidden_characters_visible_and_keeps_text_raw`, and SEC-T02's `sec_t02_adversarial_evidence` through the binary) and the P11 event kinds (`worker_events_contract`: a reader that knows only `evidence` and `terminal` skips `progress`, `lifecycle` and `result` and still sees a contiguous sequence) |
+| C-08 | schema examples and old-reader/additive-v1 compatibility, including the `setup check` `local_asr` object (`setup_local_asr_contract`, `engine_setup_local_asr`), a segment's `display_text` and `display_label` (`vsift-contract` `text` tests, `display_text_makes_hidden_characters_visible_and_keeps_text_raw`, and SEC-T02's `sec_t02_adversarial_evidence` through the binary), the failure remediation of an `ingest` path that names no file, a folder or a file that may not be read (`storage_contract`, `source_path_cli_contract`, #369) and the P11 event kinds (`worker_events_contract`: a reader that knows only `evidence` and `terminal` skips `progress`, `lifecycle` and `result` and still sees a contiguous sequence) |
 | C-09 | legal job and cancellation terminal transitions (`vsift-domain` `job` tests over the whole state graph; `job` use-case tests of cancellation serialized with the commit); the public job commands, `--operation-id` and interruptions through the binary (`job_cli_contract`, `interrupt_cli_contract`, the job examples in `local_asr_contract`); `job run` through the binary: results and events against their schemas, replay, conflict, busy, refusals, sentinels and shutdown (`job_run_cli_contract`), and the request path through the engine (`engine_worker`); `job batch` through the binary: events, summary, limits, O-02, O-03, X-08 and O-04 (`job_batch_cli_contract`), and the batch through the engine (`engine_batch`, opt-in `engine_batch_tools`) |
-| C-10 | unknown confidence, speaker metadata, time normalization, requested/actual timing, imported-transcript offset conversion, local-ASR provenance and carried segments (`local_asr_contract`, `local_asr_store`) |
+| C-10 | unknown confidence, speaker metadata, time normalization, requested/actual timing, imported-transcript offset conversion, local-ASR provenance and carried segments (`local_asr_contract`, `local_asr_store`), and that an id of a superseded revision still resolves in a read, a handoff check and a retained bundle (`superseded_ids_cli_contract`) |
 
 These tests establish the public boundary only. Provider execution, filesystem
 durability, media correctness, concurrency, and load guarantees belong to later

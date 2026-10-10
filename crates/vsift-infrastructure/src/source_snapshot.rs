@@ -12,7 +12,7 @@ use cap_fs_ext::{FollowSymlinks, OpenOptionsFollowExt};
 use cap_std::fs::{Dir, File, OpenOptions};
 use sha2::{Digest, Sha256};
 use vsift_application::{
-    ForegroundSessionPort, NeverCancelled, OpenSessionError, SessionStorageError,
+    ForegroundSessionPort, NeverCancelled, OpenSessionError, SessionStorageError, SourcePathFault,
     StageCancellation, StagedSessionSource,
 };
 use vsift_domain::{OperationId, SessionId, SourceId};
@@ -457,7 +457,7 @@ impl SourceSnapshot {
     pub fn original_changed(&self, source_path: &Path) -> Result<bool, SourceError> {
         let (mut file, _) = match open_source(source_path) {
             Ok(opened) => opened,
-            Err(SourceError::Io(error)) if error.kind() == std::io::ErrorKind::NotFound => {
+            Err(SourceError::Path(SourcePathFault::NotFound)) => {
                 return Ok(true);
             }
             Err(error) => return Err(error),
@@ -567,6 +567,7 @@ pub(crate) fn open_session_error(error: SourceError) -> OpenSessionError {
             OpenSessionError::SourceNoRoom
         }
         SourceError::Io(_) => OpenSessionError::SourceIo,
+        SourceError::Path(fault) => OpenSessionError::SourcePath(fault),
         SourceError::SymbolicLink => OpenSessionError::SourceIsLink,
         // A copy that ran out of time says nothing about the source: it was
         // slow to read, or the root slow to write (#325). The code a host
@@ -586,6 +587,12 @@ pub(crate) fn open_session_error(error: SourceError) -> OpenSessionError {
 ///
 /// Shared by source staging and supplied-transcript import so every
 /// caller-selected input passes the same path policy.
+///
+/// A failure to reach the file is classified here, where the path is still in
+/// hand, and not by the callers: an `Io` failure later in a staging (the
+/// private copy, a read) can also say "not found" about a file that is `VSift`'s
+/// own, and that must never be told to a person as "no file is at the path you
+/// gave" (#369).
 pub(crate) fn open_source(path: &Path) -> Result<(File, cap_std::fs::Metadata), SourceError> {
     if !path.is_absolute() || !is_local_path(path) {
         return Err(SourceError::InvalidPath);
@@ -595,12 +602,12 @@ pub(crate) fn open_source(path: &Path) -> Result<(File, cap_std::fs::Metadata), 
         return Err(SourceError::InvalidPath);
     }
     let parent = path.parent().ok_or(SourceError::InvalidPath)?;
-    let canonical_parent = std::fs::canonicalize(parent).map_err(SourceError::Io)?;
+    let canonical_parent = std::fs::canonicalize(parent).map_err(source_path_failure)?;
     if !is_local_path(&canonical_parent) {
         return Err(SourceError::InvalidPath);
     }
     let directory = Dir::open_ambient_dir(canonical_parent, cap_std::ambient_authority())
-        .map_err(SourceError::Io)?;
+        .map_err(source_path_failure)?;
     // A link is classified from the directory entry before anything is opened,
     // as the worker's input root does: opening it without following fails with
     // a platform-specific error that would otherwise reach the caller as a
@@ -618,14 +625,15 @@ pub(crate) fn open_source(path: &Path) -> Result<(File, cap_std::fs::Metadata), 
     let file = directory
         .open_with(Path::new(name), &options)
         .map_err(|error| {
-            // The swap case: whatever made the open fail, a link is a link.
-            if directory
-                .symlink_metadata(Path::new(name))
-                .is_ok_and(|entry| entry.file_type().is_symlink())
-            {
-                SourceError::SymbolicLink
-            } else {
-                SourceError::Io(error)
+            // Looked at again, as the entry is now: the swap case (whatever
+            // made the open fail, a link is a link) and a folder, which
+            // Windows refuses to open as a file and reports as a denied
+            // access, so the kind of the failure alone would call it a
+            // permission problem.
+            match directory.symlink_metadata(Path::new(name)) {
+                Ok(entry) if entry.file_type().is_symlink() => SourceError::SymbolicLink,
+                Ok(entry) if entry.is_dir() => SourceError::Path(SourcePathFault::IsFolder),
+                _ => source_path_failure(error),
             }
         })?;
     let metadata = file.metadata().map_err(SourceError::Io)?;
@@ -633,6 +641,30 @@ pub(crate) fn open_source(path: &Path) -> Result<(File, cap_std::fs::Metadata), 
         return Err(SourceError::NotRegularFile);
     }
     Ok((file, metadata))
+}
+
+/// What the operating system said about a path it could not reach, when it
+/// said it plainly; `None` for every other kind, which stays an I/O failure.
+///
+/// "Not a directory" is "not found" for a person: a part of the path that
+/// should be a folder is a file, so no file is at that path.
+const fn source_path_fault(kind: std::io::ErrorKind) -> Option<SourcePathFault> {
+    match kind {
+        std::io::ErrorKind::NotFound | std::io::ErrorKind::NotADirectory => {
+            Some(SourcePathFault::NotFound)
+        }
+        std::io::ErrorKind::PermissionDenied => Some(SourcePathFault::AccessDenied),
+        _ => None,
+    }
+}
+
+/// Reports a failure to reach the selected path as the fault the system named,
+/// or as an untyped I/O failure when it named none (see [`source_path_fault`]).
+fn source_path_failure(error: std::io::Error) -> SourceError {
+    match source_path_fault(error.kind()) {
+        Some(fault) => SourceError::Path(fault),
+        None => SourceError::Io(error),
+    }
 }
 
 /// Opens without waiting, so that naming a named pipe is a refusal and not a hang.
@@ -879,6 +911,12 @@ pub enum SourceError {
     IdentityFailure,
     /// Filesystem access failed.
     Io(std::io::Error),
+    /// The selected path could not be opened, and the operating system named
+    /// why: no file is there, it is a folder, or reading it is not allowed
+    /// (#369). Only the open of the selected path makes this; every later
+    /// filesystem failure of a staging is [`Self::Io`]. It is reported as the
+    /// published `STORAGE_IO` code with a remediation (known limit L-127).
+    Path(SourcePathFault),
     /// The caller cancelled the copy; its partial private file was removed.
     Cancelled,
 }
@@ -901,6 +939,7 @@ impl fmt::Display for SourceError {
                 formatter.write_str("source identity could not be represented")
             }
             Self::Io(_) => formatter.write_str("source filesystem operation failed"),
+            Self::Path(fault) => fault.fmt(formatter),
             Self::Cancelled => formatter.write_str("source staging was cancelled"),
         }
     }
@@ -929,13 +968,15 @@ mod tests {
     };
 
     use vsift_application::{
-        InitializeSessionStorage, InitializeSessionStorageRequest, NeverCancelled, OpenSessionError,
+        InitializeSessionStorage, InitializeSessionStorageRequest, NeverCancelled,
+        OpenSessionError, SourcePathFault,
     };
     use vsift_domain::{DurabilityRequirement, OperationId, SessionId};
 
     use super::{
         MAX_SOURCE_BYTES, MAX_SOURCE_READ_DURATION, SourceContainer, SourceError, SourceSnapshot,
-        copy_until, open_session_error, open_source, read_deadline,
+        copy_until, open_session_error, open_source, read_deadline, source_path_failure,
+        source_path_fault,
     };
     use crate::FilesystemSessionStore;
 
@@ -1208,5 +1249,145 @@ mod tests {
             open_session_error(SourceError::TooLarge),
             OpenSessionError::InvalidSource
         );
+    }
+
+    /// #369: only what the operating system names plainly is told apart. A
+    /// missing name and a folder on the way that is not a folder are both "no
+    /// file is at that path"; a refusal is a refusal; every other kind stays
+    /// the untyped I/O failure it was, because a cause the system did not name
+    /// would be a remediation that is not true.
+    #[test]
+    fn only_the_kinds_the_system_names_plainly_are_told_apart() {
+        for kind in [ErrorKind::NotFound, ErrorKind::NotADirectory] {
+            assert_eq!(
+                source_path_fault(kind),
+                Some(SourcePathFault::NotFound),
+                "{kind:?}"
+            );
+        }
+        assert_eq!(
+            source_path_fault(ErrorKind::PermissionDenied),
+            Some(SourcePathFault::AccessDenied)
+        );
+        for kind in [
+            ErrorKind::Other,
+            ErrorKind::UnexpectedEof,
+            ErrorKind::StorageFull,
+            ErrorKind::AlreadyExists,
+            ErrorKind::InvalidInput,
+            ErrorKind::TimedOut,
+        ] {
+            assert_eq!(source_path_fault(kind), None, "{kind:?}");
+            assert!(
+                matches!(
+                    source_path_failure(IoError::from(kind)),
+                    SourceError::Io(error) if error.kind() == kind
+                ),
+                "{kind:?}"
+            );
+        }
+        assert!(matches!(
+            source_path_failure(IoError::from(ErrorKind::PermissionDenied)),
+            SourceError::Path(SourcePathFault::AccessDenied)
+        ));
+    }
+
+    /// #369: a path fault reaches the open-session use case as itself, and an
+    /// I/O failure later in a staging stays untyped even when it says "not
+    /// found": a private file of `VSift`'s own that vanished is not "no file is
+    /// at the path you gave".
+    #[test]
+    fn a_path_fault_is_reported_as_itself_and_a_later_not_found_is_not_one() {
+        for fault in SourcePathFault::ALL {
+            assert_eq!(
+                open_session_error(SourceError::Path(fault)),
+                OpenSessionError::SourcePath(fault),
+                "{fault}"
+            );
+        }
+        assert_eq!(
+            open_session_error(SourceError::Io(IoError::from(ErrorKind::NotFound))),
+            OpenSessionError::SourceIo
+        );
+    }
+
+    /// #369: a missing file, a missing folder on the way and a folder on the
+    /// way that is a file are all "no file is at that path", found where the
+    /// path is opened.
+    #[test]
+    fn a_path_that_names_no_file_is_not_found_whatever_is_missing() -> TestResult {
+        let root = OwnedRoot::new()?;
+        let present = root.0.join("present.mp4");
+        fs::write(&present, stand_in(1))?;
+        for path in [
+            root.0.join("not-there.mp4"),
+            root.0.join("no-folder").join("not-there.mp4"),
+            present.join("not-there.mp4"),
+        ] {
+            let Err(error) = open_source(&path) else {
+                return Err("a path that names no file was opened".into());
+            };
+            assert!(
+                matches!(error, SourceError::Path(SourcePathFault::NotFound)),
+                "{error:?}"
+            );
+        }
+        // The one that is there is opened.
+        assert!(open_source(&present).is_ok());
+        Ok(())
+    }
+
+    /// #369: a folder is told apart from a refusal where the system refuses to
+    /// open it (Windows, which reports a denied access) and is no regular file
+    /// where the system opens it (Linux and macOS: `INVALID_SOURCE`, the answer
+    /// each platform has always given, and neither changes).
+    #[test]
+    fn a_folder_is_a_folder_where_it_cannot_be_opened_and_no_regular_file_where_it_can()
+    -> TestResult {
+        let root = OwnedRoot::new()?;
+        let folder = root.0.join("a-folder");
+        fs::create_dir(&folder)?;
+        let Err(error) = open_source(&folder) else {
+            return Err("a folder was opened as a source".into());
+        };
+        #[cfg(windows)]
+        assert!(
+            matches!(error, SourceError::Path(SourcePathFault::IsFolder)),
+            "{error:?}"
+        );
+        #[cfg(not(windows))]
+        assert!(matches!(error, SourceError::NotRegularFile), "{error:?}");
+        Ok(())
+    }
+
+    /// #369: a file the account may not read is told apart from a missing one.
+    /// Unix only: a Windows account cannot be denied a file it just made
+    /// without changing its access list, which a test does not do; the
+    /// classification of the kind is checked above for every platform. An
+    /// account that reads anything (root) cannot be refused, so the test says
+    /// it checked nothing there.
+    #[cfg(unix)]
+    #[test]
+    fn a_file_that_may_not_be_read_is_access_denied() -> TestResult {
+        use std::os::unix::fs::PermissionsExt as _;
+
+        let root = OwnedRoot::new()?;
+        let locked = root.0.join("locked.mp4");
+        fs::write(&locked, stand_in(1))?;
+        fs::set_permissions(&locked, fs::Permissions::from_mode(0o000))?;
+        if fs::File::open(&locked).is_ok() {
+            eprintln!(
+                "SKIPPED: this account can read a file with no permissions; the test checks nothing here"
+            );
+            return Ok(());
+        }
+        let Err(error) = open_source(&locked) else {
+            return Err("a file that may not be read was opened".into());
+        };
+        assert!(
+            matches!(error, SourceError::Path(SourcePathFault::AccessDenied)),
+            "{error:?}"
+        );
+        Ok(())
     }
 }

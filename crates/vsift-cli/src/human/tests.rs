@@ -357,6 +357,18 @@ fn frozen_failures_render_as_message_remediation_and_command() -> TestResult {
         ("storage-not-private.json", "failure-storage-not-private"),
         ("session-root-unowned.json", "failure-session-root-unowned"),
         ("ingest-copy-too-slow.json", "failure-ingest-copy-too-slow"),
+        (
+            "ingest-source-not-found.json",
+            "failure-ingest-source-not-found",
+        ),
+        (
+            "ingest-source-is-folder.json",
+            "failure-ingest-source-is-folder",
+        ),
+        (
+            "ingest-source-access-denied.json",
+            "failure-ingest-source-access-denied",
+        ),
         ("frame-get.busy.json", "failure-frame-get-busy"),
         (
             "media-tool-verification-failed.json",

@@ -1,19 +1,22 @@
 //! Conformance of the refusal of an existing folder other accounts can access,
-//! of the refusal of a session root `VSift` did not create, and of a source
-//! copy that was too slow, against the published v1 envelope schema and their
-//! examples.
+//! of the refusal of a session root `VSift` did not create, of a source copy
+//! that was too slow, and of a source path that names no file, a folder or a
+//! file that may not be read, against the published v1 envelope schema and
+//! their examples.
 //!
 //! The first example is the result an agent receives when `setup configure`
 //! meets a per-user configuration folder that inherited access for other
 //! accounts; the second, when `session list` meets a `--session-root` folder
 //! that holds no `VSift` ownership marker; the third, when `ingest` could not
-//! copy the video within the ten-minute limit.
+//! copy the video within the ten-minute limit; the last three, when `ingest`
+//! could not open the path it was given (#369).
 
 use std::{fs, io, path::PathBuf};
 
 use serde_json::Value;
 use vsift_contract::{
-    CommandName, OperationResponse, PrivateFolder, SOURCE_COPY_TOO_SLOW_REMEDIATION,
+    CommandName, OperationResponse, PrivateFolder, SOURCE_ACCESS_DENIED_REMEDIATION,
+    SOURCE_COPY_TOO_SLOW_REMEDIATION, SOURCE_IS_FOLDER_REMEDIATION, SOURCE_NOT_FOUND_REMEDIATION,
     TerminalEventResponse, UNOWNED_SESSION_ROOT_REMEDIATION, non_private_folder_summary,
 };
 use vsift_domain::FailureCode;
@@ -91,6 +94,52 @@ fn a_source_copy_that_was_too_slow_matches_the_example() -> TestResult {
     assert_eq!(value["error"]["retryable"], false);
     let event = serde_json::to_value(TerminalEventResponse::new(response))?;
     validate("terminal-event.schema.json", &event)?;
+    Ok(())
+}
+
+/// The answers to a path that could not be opened as a source (#369): the
+/// failure code is the one 0.2.0 gave all of them, `STORAGE_IO`, with its fixed
+/// message and `retryable` false, and the remediation says which of the three
+/// it is. v1 only grew: nothing of the envelope changed, and the remediation is
+/// the member that was empty.
+#[test]
+fn a_source_path_that_could_not_be_opened_matches_its_examples() -> TestResult {
+    for (summary, example) in [
+        (
+            SOURCE_NOT_FOUND_REMEDIATION,
+            "examples/ingest-source-not-found.json",
+        ),
+        (
+            SOURCE_IS_FOLDER_REMEDIATION,
+            "examples/ingest-source-is-folder.json",
+        ),
+        (
+            SOURCE_ACCESS_DENIED_REMEDIATION,
+            "examples/ingest-source-access-denied.json",
+        ),
+    ] {
+        let response = OperationResponse::<Value>::failure_with_remediation(
+            CommandName::Ingest.identifier(),
+            FailureCode::StorageIo,
+            summary.to_owned(),
+        );
+        let value = serde_json::to_value(&response)?;
+        validate("operation-response.schema.json", &value)?;
+        assert_eq!(value, load(example)?, "{example}");
+        assert_eq!(value["error"]["code"], "STORAGE_IO");
+        assert_eq!(
+            value["error"]["message"],
+            "Storage or output I/O prevented completion."
+        );
+        assert_eq!(value["error"]["retryable"], false);
+        assert_eq!(
+            value["error"]["remediation"][0]["required_authority"],
+            "none"
+        );
+        assert!(value["error"]["remediation"][0]["command"].is_null());
+        let event = serde_json::to_value(TerminalEventResponse::new(response))?;
+        validate("terminal-event.schema.json", &event)?;
+    }
     Ok(())
 }
 

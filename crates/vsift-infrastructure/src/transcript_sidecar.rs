@@ -58,6 +58,7 @@ pub fn read_supplied_transcript(
         SourceError::NotRegularFile => SuppliedTranscriptError::NotRegularFile,
         SourceError::SymbolicLink => SuppliedTranscriptError::SymbolicLink,
         SourceError::Io(_) => SuppliedTranscriptError::Io,
+        SourceError::Path(fault) => SuppliedTranscriptError::SourcePath(fault),
         _ => SuppliedTranscriptError::InvalidPath,
     })?;
     read_opened_transcript(file, metadata.len())

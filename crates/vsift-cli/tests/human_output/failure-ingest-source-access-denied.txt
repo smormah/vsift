@@ -1,0 +1,2 @@
+Error: Storage or output I/O prevented completion. (STORAGE_IO)
+Fix: The operating system did not let VSift open the file at the path you gave, or a folder on the way to it, so nothing was read or copied. The account VSift runs as is not allowed to read it (the code is the closest published one). Report this to the user: they can give that account permission to read it, or copy the file to a folder that account can read and name the copy. Do not change permissions yourself. Then run the command again.

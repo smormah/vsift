@@ -312,7 +312,13 @@ folder is not VSift's and what to do; it is checked by `storage_contract` and by
 the copy of the video into the session took longer than the ten-minute limit (#325):
 `INVALID_SOURCE`, as it always was, with the remediation that says the copy was slow and the
 video was not judged; it is checked by `storage_contract` and by a unit test of the CLI, which
-builds it from the typed cause. `frame-get.busy.json` is the `frame get` failure when another
+builds it from the typed cause. `ingest-source-not-found.json`, `ingest-source-is-folder.json` and
+`ingest-source-access-denied.json` are the `ingest` failures when the path it was given names no file (a mistyped
+name, a command run from another folder), names a folder (Windows; Linux and macOS answer `INVALID_SOURCE`, unchanged)
+or is a file the operating system refused to open for reading (#369): `STORAGE_IO`, the code and message 0.2.0
+gave, with one remediation entry that says which of the three it is where it had an empty `remediation`; no field is
+added. They are checked by `storage_contract` and by a unit test of the CLI, which builds each from the typed cause,
+and `source_path_cli_contract` runs the binary. `frame-get.busy.json` is the `frame get` failure when another
 request holds the session or the root's share of the machine's capacity (#342): `BUSY`, with
 `retryable` true, as it always was, and, since 0.2.1, one remediation entry and `retry_after_ms`
 2000 where it had an empty `remediation` and a null hint; no field is added (the failure shape

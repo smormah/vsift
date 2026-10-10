@@ -13,8 +13,8 @@ use vsift_application::{
     IdentifierGenerationError, JobRunError, JobStoreError, LIVE_JOB_RETRY_AFTER,
     LocalAsrVerificationFailure, ManagedLifecycleRefusal, MediaToolFailure,
     MediaToolPreflightFailure, OpenSessionError, PlanAcceptanceError, SessionStorageError,
-    SourceProbeError, TranscriptBuildError, TranscriptQueryError, VisualExtensionStop,
-    VisualIndexBuildError, VisualSamplingError,
+    SourcePathFault, SourceProbeError, TranscriptBuildError, TranscriptQueryError,
+    VisualExtensionStop, VisualIndexBuildError, VisualSamplingError,
 };
 use vsift_contract::PrivateFolder;
 
@@ -390,7 +390,9 @@ impl EngineError {
             Self::ManagedStorageUnavailable
             | Self::WorkingDirectoryUnavailable
             | Self::TranscriptSource(
-                TranscriptSourceError::Io | TranscriptSourceError::SymbolicLink,
+                TranscriptSourceError::Io
+                | TranscriptSourceError::SourcePath(_)
+                | TranscriptSourceError::SymbolicLink,
             )
             | Self::Executable(ExecutableRejection::Uninspectable) => FailureCode::StorageIo,
             Self::UnrestrictedCleanRejected
@@ -1089,17 +1091,19 @@ impl From<IdentifierGenerationError> for EngineError {
 
 /// Public code for a failed session open.
 ///
-/// Three causes keep a published code that is not what happened, because a
+/// Several causes keep a published code that is not what happened, because a
 /// published code does not change within v1 (known limit L-127); each has a
 /// remediation that says what did: a copy that ran out of time is not an
-/// invalid source (#325), and a link and a root with no room are not storage
-/// failures (#265, #266).
+/// invalid source (#325), and a link, a root with no room, and a path that
+/// names no file, names a folder or may not be read are not storage failures
+/// (#265, #266, #369).
 const fn open_session_failure_code(error: OpenSessionError) -> FailureCode {
     match error {
         OpenSessionError::InvalidSource | OpenSessionError::SourceCopyTooSlow => {
             FailureCode::InvalidSource
         }
         OpenSessionError::SourceIo
+        | OpenSessionError::SourcePath(_)
         | OpenSessionError::SourceIsLink
         | OpenSessionError::SourceNoRoom => FailureCode::StorageIo,
         OpenSessionError::InvalidClock => FailureCode::InvalidArgument,
@@ -1159,6 +1163,11 @@ pub enum TranscriptSourceError {
     NotRegularFile,
     /// The file could not be read.
     Io,
+    /// The path could not be opened and the operating system said why: no file
+    /// is there, it is a folder, or reading it is not allowed (#369); reported
+    /// as the code `Io` always gave, `STORAGE_IO`, with a remediation that
+    /// says what happened.
+    SourcePath(SourcePathFault),
     /// The transcript's own final path component is a link, which is not
     /// followed (#265); reported as the 0.1.0 code, `STORAGE_IO`.
     SymbolicLink,
@@ -1166,12 +1175,17 @@ pub enum TranscriptSourceError {
 
 impl fmt::Display for TranscriptSourceError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(match self {
-            Self::InvalidPath => "supplied transcript path is invalid",
-            Self::NotRegularFile => "supplied transcript is not a regular file",
-            Self::Io => "supplied transcript could not be read",
-            Self::SymbolicLink => "supplied transcript is a link, which is not followed",
-        })
+        match self {
+            Self::InvalidPath => formatter.write_str("supplied transcript path is invalid"),
+            Self::NotRegularFile => {
+                formatter.write_str("supplied transcript is not a regular file")
+            }
+            Self::Io => formatter.write_str("supplied transcript could not be read"),
+            Self::SourcePath(fault) => write!(formatter, "supplied transcript: {fault}"),
+            Self::SymbolicLink => {
+                formatter.write_str("supplied transcript is a link, which is not followed")
+            }
+        }
     }
 }
 
@@ -1443,7 +1457,7 @@ impl From<&ExecutableResolutionError> for ExecutableRejection {
 
 #[cfg(test)]
 mod tests {
-    use vsift_application::{OpenSessionError, SessionStorageError};
+    use vsift_application::{OpenSessionError, SessionStorageError, SourcePathFault};
     use vsift_domain::FailureCode;
     use vsift_infrastructure::{SessionStoreOpenError, UserDependencyConfigError};
 
@@ -1626,6 +1640,22 @@ mod tests {
             EngineError::OpenSession(OpenSessionError::SourceIo).failure_code(),
             FailureCode::StorageIo
         );
+        // #369: a path that names no file, a folder or a file that may not be
+        // read keeps the code 0.2.0 gave it, for the video and for a supplied
+        // transcript; the remediation says what happened (L-127).
+        for fault in SourcePathFault::ALL {
+            assert_eq!(
+                EngineError::OpenSession(OpenSessionError::SourcePath(fault)).failure_code(),
+                FailureCode::StorageIo,
+                "{fault}"
+            );
+            assert_eq!(
+                EngineError::TranscriptSource(super::TranscriptSourceError::SourcePath(fault))
+                    .failure_code(),
+                FailureCode::StorageIo,
+                "{fault}"
+            );
+        }
         // #325: a copy that outran its time keeps the code it always had, the
         // one of an invalid source (v1 is additive only); its remediation says
         // the copy was slow and the video was not judged (L-127).

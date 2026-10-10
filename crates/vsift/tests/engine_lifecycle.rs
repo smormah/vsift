@@ -28,8 +28,8 @@ use vsift::{
     MediaToolSelection, MediaToolVerification, MediaToolVerificationRequest, ModelSelection,
     ModelVerification, OperationId, RuntimeDependency, RuntimeReadiness, SessionId,
     SessionLifetime, SessionListEntry, SessionPhase, SessionRootError, SessionRootLocation,
-    SetupCheckRequest, SourceRetention, SuppliedTranscriptRequest, TranscriptSourceError,
-    UserConfigurationLocation,
+    SetupCheckRequest, SourcePathFault, SourceRetention, SuppliedTranscriptRequest,
+    TranscriptSourceError, UserConfigurationLocation,
 };
 
 use vsift_contract::DependencyLookup;
@@ -436,9 +436,13 @@ async fn requests_the_engine_cannot_honour_fail_before_any_work() -> TestResult 
             durability: vsift::DurabilityRequirement::Ephemeral,
         })
         .await;
+    // #369: a path that names no file is a typed cause of its own now, and its
+    // public code is the one it always had.
     assert_eq!(
         transcript,
-        Err(EngineError::TranscriptSource(TranscriptSourceError::Io))
+        Err(EngineError::TranscriptSource(
+            TranscriptSourceError::SourcePath(SourcePathFault::NotFound)
+        ))
     );
     assert_eq!(
         transcript.map_err(|error| error.failure_code()),

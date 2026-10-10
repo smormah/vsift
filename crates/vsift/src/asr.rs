@@ -791,6 +791,7 @@ pub(crate) const fn snapshot_storage_error(error: &SourceError) -> SessionStorag
         | SourceError::Deadline
         | SourceError::ChangedDuringStage
         | SourceError::Cancelled
+        | SourceError::Path(_)
         | SourceError::Io(_) => SessionStorageError::Io,
     }
 }

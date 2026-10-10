@@ -32,6 +32,9 @@ Plan: `docs/planning/release-0.2.1.md`. **Increments done, release not done: not
   #374 only if it can be verified (its effect is not verified; nothing is claimed). **The designs are NOT decided (a design pass is under way); #359's fix is being written.**
 - **rc.2 needs:** the changes with regression tests; a new skill and a new agent-trial freeze; hosted evidence once, on rc.2 (nothing from rc.1 is reused); agent batches 2 and 3 once, on the maintainer's go and allowances; the decisions on the four waivers; the version-number question.
   **Not done:** all of that, then the stable `0.2.1` (its checklist is not written) and its publish, then the work-record change that deletes the entries that closed.
+- **"Answers" (PR 2 of the design in #376; not merged by the session that wrote it) is done in code, tests and documents: #369** (`ingest` of a path that names no file, a folder on Windows
+  or a file the account may not read keeps `STORAGE_IO` and exit 7 and its remediation says which; the path after `--transcript` too) **and a test for #372** (an id of a superseded revision still resolves in `transcript get --revision`,
+  `handoff check --session` and a retained bundle; no behaviour changed). **Not done there:** the skill's two sentences for #372 and the skill text for #369 (the cut), the register entries below, and every other pull request of the design.
 - **Meanwhile** `0.2.0` stays published, is not deprecated and has both defects; `latest` is `0.2.0`, `next` is `0.2.1-rc.1`. Nothing is announced.
 
 ## Open for the maintainer
@@ -46,6 +49,10 @@ Plan: `docs/planning/release-0.2.1.md`. **Increments done, release not done: not
 - **RQ-05 on the release's own tag lacks** the Ubuntu and Windows ASR gates and the durable path (the third candidate's runs stand in `prior`): dispatch `P07 local ASR`, `P14 load`, `P14 runbook walk` at `v0.2.0` or accept (31.5 item 2); `P14 compatibility` was not dispatched at `v0.2.0` (item 3).
 - **The claims rung stays `candidate`.** Moving it makes CL-201 to CL-209 stale unless each is used or deleted: six could be used on passed evidence (CL-202, 203, 204, 205, 207, 209), three cannot (CL-201 needs RQ-17, CL-206 RQ-16, CL-208 RQ-14: waived); that is yours (31.5 item 4).
 - **Close #17**; #312 fix or accept; **#340's additive JSON hint (option 2):** still wanted? The MSRV policy is undecided; `Guide` is not a required check.
+- **From the Answers pull request:** (1) **a folder named as the source is `STORAGE_IO` on Windows and `INVALID_SOURCE` on Linux and macOS**; the contract text had said `INVALID_SOURCE` for both, and it now says what each does. Aligning Windows
+  would change a published answer on that platform, so it was not done: align or keep? (2) **Register entries to write** (`known-limits.md`, not touched by that pull request; the next free number is L-155 after #375): the platform difference above;
+  a locked file (a Windows sharing violation) and any other failure to open a path the system does not name plainly still answer `STORAGE_IO` with no remediation; a failed `ingest` still creates the session root (the engine provisions it before it opens
+  the source; harmless, left as the design says); the refused-file test and the folder test for Linux and macOS were compiled and linted for Linux, not run. (3) #369 closes with the merge and a passing hosted run on Linux and macOS.
 
 ## Later: the work list (not in 0.2.1; none of it blocks anything)
 
@@ -59,7 +66,7 @@ Plan: `docs/planning/release-0.2.1.md`. **Increments done, release not done: not
 
 ## Tracked issues and gates
 
-- **Fixed on `main`, closed on GitHub, not released:** #353 (L-145), #340 (L-142), #342, #345. **For 0.2.1 / rc.2, open:** #359 (L-149, high; fix being written), #365 (L-150), #366 (L-151), #367 (L-152), #368 (L-153), #370 (L-154), #369, #371, #372, #373, #349 (skill wording;
+- **Fixed on `main`, closed on GitHub, not released:** #353 (L-145), #340 (L-142), #342, #345. **For 0.2.1 / rc.2, open:** #359 (L-149, high; fix being written), #365 (L-150), #366 (L-151), #367 (L-152), #368 (L-153), #370 (L-154), **#369 (fixed) and #372 (its test is written) in the Answers pull request, not merged**, #371, #373, #349 (skill wording;
   in rc.1's skill, issue still open), **#374 (to be verified; no register entry)**. **Open, other:** #361 (L-146), #362 (L-147), #363, #351 (L-144), #17, #219, #224 (L-095, L-139), #188, #232, #246 (deferred), #258, #263, #272 (residual accepted, L-122),
   #312 (L-135), #314 (fixed in rc.2 of 0.2.0; L-136), #316 (hosted runners scarce), #336, #322 (the floor is in; the pin stays, L-137), #325, #334, #337; #128 (watch); flaky tests #253 (Windows kill test) and #268
   (macOS SIGTERM test): comment with the run link and rerun the job. #321 is closed.

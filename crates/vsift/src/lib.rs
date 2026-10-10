@@ -167,9 +167,9 @@ pub use vsift_application::{
     LocalAsrVerificationSource, LocalAsrVerifier, MediaToolCheck, MediaToolFailure,
     MediaToolPreflightFailure, MediaToolVerification, MediaToolVerifier, ModelVerification,
     OpenSessionError, OpenSessionOutcome, PlanAcceptanceError, RecognizerIdentity, Resumability,
-    RuntimeDiagnosis, SessionStorageError, SetupProfile, SourceProbeError, SpeechPcm,
-    SpeechRecognitionError, SpeechRecognizer, TranscriptBuildError, TranscriptQueryError,
-    UnusableChunk, UnusableChunks,
+    RuntimeDiagnosis, SessionStorageError, SetupProfile, SourcePathFault, SourceProbeError,
+    SpeechPcm, SpeechRecognitionError, SpeechRecognizer, TranscriptBuildError,
+    TranscriptQueryError, UnusableChunk, UnusableChunks,
 };
 /// Visual-candidate values that appear in this API.
 pub use vsift_application::{
