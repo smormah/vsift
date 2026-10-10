@@ -617,9 +617,12 @@ cue as an ordinary segment with its original alignment and `carried_from`; it do
 **A part left unread stays untranscribed through later runs** (since `0.2.1`). A revision keeps the provenance only of the
 runs whose text it carries, so the run of a revision that left a part unread may not be in a later revision at all, and an
 earlier run's windows (or an imported file, which covers the whole source) would be counted over the part. So a spliced
-revision records, in its stored record (`carried_untranscribed`, [`bundle-transcript-record.schema.json`](../../schemas/v1/bundle-transcript-record.schema.json);
-omitted when there is none, so every other record is written as before), what its superseded revision did not cover outside the
-range it replaced, and a search never counts an earlier run's window over it. After the run above, a `retranscribe --from 0
+revision records, in its stored record (`carried_untranscribed`, [`bundle-transcript-record.schema.json`](../../schemas/v1/bundle-transcript-record.schema.json)),
+the parts its superseded revision did not cover, outside the range it replaced, that a window or file it carries would otherwise
+be counted over, and a search never counts an earlier run's window over them. Nothing else is recorded: a chain in which no run
+left a part unread (a retranscription after another, with a gap between them, included) writes no member and every record is
+written as before; **only a session whose chain holds an `unusable` chunk has one, and a release before `0.2.1` reads such a
+record as damaged** (`INTEGRITY_FAILURE`). After the run above, a `retranscribe --from 0
 --to 8s` leaves 10 to 12 s and 14 to 35 s untranscribed, as before it, and so does every later run far from them, until a run reads
 them. The search can still say less than the runs read (a run none of whose text a revision carries is not counted), never
 more. The decisions are recorded in [ADR 0017](../decisions/0017-local-asr-through-whisper-cpp.md), note of 2026-10-10.

@@ -545,17 +545,26 @@ transcribed by this run (`untranscribed_ranges`, the envelope's `coverage`), the
 words said there cannot be found), and a `search` of the revision counts the kept text as transcribed (so for the example above it lists 10 to 12 s and 14 to 35 s, not 10 to 35 s). A run that could not read a chunk also no
 longer claims `no_speech_recognised`: that statement is about the whole range, and the run has not heard that there was none.
 
-**8. A part some run could not read stays untranscribed through every later run, and the revision records it.** (A decision for the maintainer to confirm; it adds an optional member to the stored record, so it is
+**8. A part some run could not read stays untranscribed through every later run, and the revision records it where that matters.** (A decision for the maintainer to confirm; it adds an optional member to the stored record, so it is
 stated here as a change to the record and not only to a search.) A revision keeps the provenance only of the runs whose text it carries (`inherited`). A second review showed what follows: after a run leaves 10 to 35 s unread, a
 later run over 0 to 8 s carries the earlier text from the whole-source run (or from the imported file), whose windows, or the file's whole source, were then counted over the part the intermediate run had left, so a search
 said the whole source was transcribed. The run that left the part is not in the later revision (it may have no text to carry), so nothing in the record said so. **The rule** (the module documentation of the coverage): a revision
 covers an instant only where it holds a segment or a run it still records read the audio, and an earlier run's window is never counted inside a range a later run replaced, nor inside a part the superseded revision did
-not itself cover. To make the second half computable, **each spliced revision records what its superseded revision did not cover outside the range it replaced** (`TranscriptRevision::carried_untranscribed`, the optional
-record member `carried_untranscribed`, at most 1,024 ranges; where there would be more, the nearest are joined, which marks more untranscribed and never less). It is written only when it is not empty, so every record whose
-chain never left a part unread is written as before; and it is validated when a record is read (in order, merged, inside the source, outside the replaced range). Records written before this change have none, and
-are read as they were, with the coverage they had: the derivation never trusts an absent list to mean "covered". The coverage can still understate (a run none of whose text a revision carries is not counted), never overstate; a test over
-every chain of up to three retranscriptions from a grid of ranges and chunk answers, from three starting points, checks by an independent count that no second is claimed that no recorded run read. A rollback reads such a record
-as damaged, like the `unusable` chunk the chain holds.
+not itself cover. To make the second half computable, **a spliced revision records the parts its superseded revision did not cover, outside the range it replaced, that a window or file it carries would otherwise be counted over**
+(`TranscriptRevision::carried_untranscribed`, the optional record member `carried_untranscribed`, at most 1,024 ranges; where there would be more, the nearest on each side of the replaced range are joined, never across it, which marks
+more untranscribed and never less).
+
+*Only what is needed is recorded* (a third review found that the first version recorded all that the superseded revision left untranscribed, including parts no run ever examined, and so wrote the member for chains that never had an unusable
+chunk, such as one range retranscription after another with a gap between them; the previous release reads such a record as damaged, which the rollback statement below denied). The member is a mask over what the carried windows and files claim, so
+a part that nothing carried claims needs none: a window claims only what a run examined, and a part some run examined and the revision does not cover was left by a run that could not read it (an unusable chunk), or is masked by a record
+that exists for such a part. A chain that began with a range, or whose runs are apart, or in which every chunk was read, records nothing and is written as it always was. A test checks both halves over every chain of up to three retranscriptions from a grid of
+ranges and chunk answers from five starting points (two that began with a range, one whole-source run with an unusable chunk, one without, one imported file): a chain with no unusable chunk never has the member, and a search says the same as it would
+with everything recorded.
+
+It is validated when a record is read (in order, merged, inside the source, outside the replaced range). Records written before this change have none, and are read as they were, with the coverage they had: the derivation never trusts an absent
+list to mean "covered". The coverage can still understate (a run none of whose text a revision carries is not counted), never overstate; a test over those chains checks by an independent count that no second is claimed that no recorded run read.
+**Rolling back:** a record with the member is read as damaged by `0.2.0` and earlier, and only a session whose chain holds an `unusable` chunk has one.
+
 
 **A swapped recogniser and a resumed job.** The recogniser's identity is read before the first chunk and after the last (and, now, before a failure on the answers is reported), not before each chunk, so a swap during a run is
 detected when the run ends. Checkpoints written after the swap are stored under the recognition key of the model the run started with, so if the original model is put back and the job resumed, they are reused: a
@@ -579,9 +588,10 @@ with the schema and these words, in a later release.
 ### Rolling back
 
 A revision that holds an unusable chunk stores the outcome `unusable` and the warning `provider_chunks_rejected`, which every release before this one decodes as damage
-(`INTEGRITY_FAILURE`), as L-130 records for a trimmed end, and a revision spliced from one that left a part untranscribed stores the member `carried_untranscribed`, which
-those releases read as damage too (a chain that holds such a part holds an `unusable` chunk, so the session was affected already). Only a session that holds such a revision is affected: every
-other revision is written byte for byte as before. A run that had such a chunk would have failed on the release before. Use the newer version, or discard the session.
+(`INTEGRITY_FAILURE`), as L-130 records for a trimmed end, and a revision spliced from one that left a part some run could not read, under a window or file it carries, stores the member
+`carried_untranscribed`, which those releases read as damage too. **Only a session whose chain holds an `unusable` chunk has such a revision**: the member is written only for a part such a chunk left (decision 8), and a chain that
+never had one, such as one range retranscription after another, is written byte for byte as before and is read by the release before. Every other revision is written as before. A run that had such a chunk would have
+failed on the release before. Use the newer version, or discard the session.
 
 ### Evidence, and what is not proven
 

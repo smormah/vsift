@@ -94,9 +94,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
      revision keeps, whole and as it was, each segment of the revision it supersedes that reaches into that part and that none of the run's own text overlaps (a bounded run over an imported
      transcript used to lose its cue there, and a cue that crossed the part's edge by a microsecond was lost with it); the run's own text replaces everything else in the range, as before. The result
      lists the whole part as not transcribed by this run, and a `search` counts the kept text as transcribed, so the two lists differ where text was kept. A part some run could not read is also no
-     longer reported as transcribed by a later run far from it: each spliced revision records what its superseded revision did not cover outside the range it replaced (the optional stored-record
-     member `carried_untranscribed`, written only when there is any), because a revision keeps only the provenance of the runs whose text it carries and the earlier run's windows, or an imported file's
-     whole source, were counted over the part. A run that could not read a chunk no longer says `no_speech_recognised`.
+     longer reported as transcribed by a later run far from it: a spliced revision records the parts its superseded revision did not cover, outside the range it replaced, that a window or file it carries
+     would otherwise be counted over (the optional stored-record member `carried_untranscribed`, written only when there is any: a chain with no unusable chunk never has it), because a revision keeps only
+     the provenance of the runs whose text it carries and the earlier run's windows, or an imported file's whole source, were counted over the part. A run that could not read a chunk no longer says
+     `no_speech_recognised`.
   4. **The failure says what failed, and no more than is known.** The code stays `MISSING_CAPABILITY`. The remediation names the reason (`too_many_rejected_segments`), how many chunks and where the first is
      (position, `H:MM:SS` and microseconds), and says the tool works. After more than three chunks it says most of the speech the run covered could not be transcribed reliably and points to `ingest --transcript`;
      after three or fewer it says this stretch could not be transcribed and tells to try a slightly different range with `--from` and `--to`, or `ingest --transcript`. It never says a larger range will
@@ -105,9 +106,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
      swapped during the run is reported as `model_changed`, not as unusable answers. `error.affected_ids` names the job, and the job ends `failed` at once (`resumable: false`).
   **Added, all optional and only present when there is a gap:** the chunk outcome `unusable` and the warning `provider_chunks_rejected` in the revision and the retained bundle
   record, the stored-record member `carried_untranscribed` (`bundle-transcript-record.schema.json`), the job checkpoint kind `unusable`, `local_asr.unusable_chunks`, `data.untranscribed_ranges` and the `partial`
-  status of `transcript retranscribe` and `job resume`; a run with no such chunk, and a chain that never left a part unread, is written and
+  status of `transcript retranscribe` and `job resume`; a run with no such chunk, and a chain that never had one (a range retranscription after another, with a gap between them, included), is written and
   presented exactly as before. **Rolling back:** a revision that holds an `unusable` chunk, its warning or `carried_untranscribed` is read as damaged by `0.2.0` and earlier (`INTEGRITY_FAILURE`), as for
-  a trimmed end (L-130); no other revision is affected. **Not proven:** no real recording was used (it is commercial), and which kind of segment whisper.cpp rejected there is not
+  a trimmed end (L-130); only a session whose chain holds an `unusable` chunk has any of them, and no other revision is affected. **Not proven:** no real recording was used (it is commercial), and which kind of segment whisper.cpp rejected there is not
   known; the three thresholds are proposals, not measured on real recordings, and the kept-text rule has no test over a real decode. The agent skill is unchanged. **A worker `job run` or `job batch` step is
   still `complete` with `coverage` null when its run had unusable chunks** (the worker schema has no member for gaps, deliberately for this release): a supervisor that reads only the request's result is
   not told, and reads the revision the step names (`transcript get --revision`: the warning and `revision.local_asr.unusable_chunks`) to find out. **A limit this does not remove:** a recogniser swapped

@@ -190,7 +190,8 @@ These files are the machine-readable public v1 boundary:
   version, `1` for an import and `2` for a local-ASR revision (with its run, what it
   superseded, inherited provenance and carried segments and, since 0.2.1 and only when there
   is any, `carried_untranscribed`: what the superseded revision did not cover outside the
-  range it replaced), and its text is untrusted
+  range it replaced and an inherited run or file would be counted over; only a chain with an
+  unusable chunk has any), and its text is untrusted
   and unsanitized (P07).
 
 The `--events jsonl` stream is a sequence of events with a contiguous `sequence`

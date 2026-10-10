@@ -253,7 +253,7 @@
       }
     },
     "v2": {
-      "description": "Version 2: a revision produced by local speech recognition (transcript retranscribe). It records its run, what it superseded and replaced, the provenance it inherited, and each segment either as recognised by its run or as carried from an earlier revision. inherited is omitted when the record carries nothing, and carried_untranscribed (since 0.2.1) when the superseded revision covered everything outside the replaced range.",
+      "description": "Version 2: a revision produced by local speech recognition (transcript retranscribe). It records its run, what it superseded and replaced, the provenance it inherited, and each segment either as recognised by its run or as carried from an earlier revision. inherited is omitted when the record carries nothing, and carried_untranscribed (since 0.2.1) when no part the superseded revision left untranscribed lies under a run or file this record inherits.",
       "type": "object",
       "additionalProperties": false,
       "required": [
@@ -352,7 +352,7 @@
           ]
         },
         "carried_untranscribed": {
-          "description": "Since 0.2.1 (#353): what the superseded revision did not cover outside replaced_range, in start order, merged, inside the source and never overlapping replaced_range. A search of the superseded revision listed these ranges as untranscribed; this revision records them because it keeps the provenance only of the runs whose text it carries, and an earlier run's windows, or an imported file, are not counted over a part that revision left untranscribed. Omitted when empty, so a record whose chain never left a part untranscribed is written as before.",
+          "description": "Since 0.2.1 (#353): the parts outside replaced_range that the superseded revision did not cover and that a window or file this revision carries (inherited) would otherwise be counted over, in start order, merged, inside the source and never overlapping replaced_range. A search of the superseded revision listed these ranges as untranscribed; this revision records them because it keeps the provenance only of the runs whose text it carries, and an earlier run's windows, or an imported file, are not counted over a part that revision left untranscribed. A part nothing inherited claims is not recorded. Omitted when empty, which is every record whose chain holds no unusable chunk, so such a record is written as before and is read by a release before 0.2.1; a release before it reads this member as damage.",
           "type": "array",
           "minItems": 1,
           "maxItems": 1024,
