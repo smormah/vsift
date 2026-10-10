@@ -103,8 +103,12 @@ two clients and need RQ-15, the clean-install round. **That round ran on the fir
 ([P14 plan](p14-qualification.md) section 27). GPT-6-Astra met the review tier's gates, and Claude Sonnet 5.5
 and GPT-6-Sol the compact tier's. **Claude Opus 5.5's review tier missed two gates** (4 of 6 mechanically; 1 of
 3 on the blurred banner; [L-139](known-limits.md#l-139)). The maintainer decided on 2026-10-07 to fix that in
-the skill and to cut a third candidate, `0.2.0-rc.3`: the round is repeated on it, and that repeat decides
-whether the statements that need RQ-15 (CL-201, CL-202, CL-204, CL-205) can be used.
+the skill and to cut a third candidate, `0.2.0-rc.3`. **The round was repeated on it on 2026-10-08 and all four
+models met every gate** (34 of 34 runs passed fully; Claude Opus 5.5 passed the blurred banner 3 of 3 and the
+journey 6 of 6), so RQ-15 is `passed` for `0.2.0-rc.3` ([P14 plan](p14-qualification.md) section 29). That is
+three runs per scenario: a small sample, not a proof ([L-095](known-limits.md#l-095) and L-139 stay in the
+register). The statements that need RQ-15 (CL-201, CL-202, CL-204, CL-205) are still not used: each needs its
+other evidence items too, and the claims rung is moved by the ledger follow-up, not here.
 
 **Runtimes.** Installing through a package manager needs Node.js 22 or later, or Bun 1.2 or later, to run the
 launcher; the native archive needs neither.

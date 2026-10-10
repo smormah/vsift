@@ -1,7 +1,7 @@
 # Known limits register
 
-Date: 2026-10-09 (P14 PR 12 prepared, the stable commit `0.2.0`, work record and the two shipped documents only: L-103, L-105, L-108 and L-133 say where the stable commit stands and what is left to the publish and PR 13; no entry added or closed and no severity changed, so the counts below are as they were; earlier the same day, P14 PR 11 repeated again, the maintainer's decisions of the day, work record only: L-143 added (Smart App Control, SmartScreen, a true clean-machine install and macOS Gatekeeper are untried; RQ-17 is waived for `0.2.0-rc.3` and the stable `0.2.0`, which ship untried, by decision H of ADR 0024), L-098 notes that decision, L-142 and L-118 record that the RQ-16 waiver carries to the stable `0.2.0` (the same bytes) and that the maintainer is reading a generated command list of the 18 cold runs, to be recorded when they confirm (decided 2026-10-10: the maintainer does no reading of their own and the supervisor's reading stands for it; L-118 and L-142 say so), and the pass rule of RQ-10 was widened to admit `INVALID_ARGUMENT` exactly where the campaign's judge does (no entry changed by that); earlier the same day, P14 PR 11 repeated again, agent-trial batch 3, the cold final round, on the published third candidate `0.2.0-rc.3`: L-142 added (`vsift audio` names a WAV file for an agent that cannot play audio and says nothing about it; one cold run in 18 read the clip with `base64`, which the cold safety gate counts as an out-of-policy action; the maintainer waived RQ-16 for this candidate only, for that one action, #340), L-118 notes that the gate fired once on a harmless read and that the raw logs were read by the supervisor and the record's author, L-125 notes what Claude Code 2.1.284 actually ran and refused under the strict setting and updates its next step; earlier on 2026-10-08, P14 PR 11 repeated again, agent-trial batch 2 on the published third candidate `0.2.0-rc.3`: L-139 and L-095 record that Claude Opus 5.5 met both review-tier gates there (blurred banner 3 of 3, A-08 and A-09 mechanically 6 of 6; 34 of 34 runs passed fully; a small sample, not a proof, and the entries stay open, L-139 now naming #336 for its citation half), L-119 notes that all four hold-outs passed; no entry added, no severity changed, so the counts below are as they were; earlier the same day, P14 PR 11 repeated again, the hosted evidence on the published third candidate `0.2.0-rc.3`: L-134 narrowed (the corrected no-room case ran on published bytes and answered as required; what is left is what the campaign still does not try), L-138 says its fix has now run 3,000 clean repetitions on hosted Windows and no limit is left in it (the register pass may delete it), L-135 and L-040 count the stress run (no recurrence), L-111 and L-133 and L-128 record the candidate's upgrades, publish verification and fuzz run; P14 PR 10 repeated again, the third candidate `0.2.0-rc.3`: L-139 and L-095 say that the skill's two evidence rules are made and that batch 2 on the third candidate decides, L-133 reopens for the window before its publish, L-107's by-hand backstop names `v0.2.0-rc.3`, L-111 says the upgrade is repeated from 0.1.0 and from the second candidate, L-132 says the third candidate keeps the catalogue too; P14, #322 and #332: audio under 100 ms is recorded as a gap and never given to the recogniser, a window that short is not decoded, and no decode is asked for a length that rounds to no sample (31 microseconds or less; a longer `audio` range is answered as before): L-137 narrowed to the re-pin of whisper.cpp, and L-141 added (an `audio` clip of a few milliseconds can be answered as undecodable for a healthy file, #334, and the guard follows FFmpeg's rounding, measured with FFmpeg 9.0 and with the reviewed managed build), L-140 corrected after review (the remediation says a local copy usually fixes it, the clock starts at the staging); P14, #325: a source copy that outruns the ten-minute limit has its own cause and a remediation, and keeps its published code: L-140 added (the fixed limit and who meets it) and L-127 gains its fourth case; 2026-10-07: P14, #310: the malicious-media campaign's no-room case names a root VSift creates, the size cases pin their answers and a filed finding is tracked by its operation and outcome: L-134 narrowed to the run on a candidate's published bytes that is still to be recorded, its status now monitoring; P14, #321: the supervisor test takes only a whole line of its marker file for the process id: L-138 narrowed to the hosted repetitions the fix has not yet run, its status now monitoring and its owner P14, and L-040 records that #128's failures were seen again while the fix was tried; P14 PR 11 repeated, agent-trial batch 2 on the second candidate: L-139 added (Claude Opus 5.5 did not meet two review-tier gates of the agent trials on either candidate; open: the maintainer decided the same day to fix it in the skill and re-run on a third candidate, `0.2.0-rc.3`, with no waiver and no exclusion) and L-095 updated (the blurred-banner re-run now exists on both candidates: GPT-6-Astra 3 of 3 twice, Claude Opus 5.5 1 of 3 twice); L-119 notes the one hold-out run graded 0 of 1 for its wording; L-134, L-137 and L-138 say their fixes are now planned for that third candidate; P14 PR 11 repeated on the second candidate: L-137 added (the pinned whisper.cpp lacks one upstream memory-safety fix that VSift can reach) and L-138 added (a supervisor test reads a marker file another process is still writing; accepted by the maintainer's decision on RQ-08 of the same day); L-137 reworded to the assessed position after a read-only reachability assessment (one upstream fix is reachable, for 1 to 200 samples of audio) and accepted for R0 by the maintainer the same day; L-128, L-133, L-134 and L-135 updated for the repeat's runs; 2026-10-06: P14 PR 10 repeated, the second candidate `0.2.0-rc.2`: L-133 reopens for the window before its publish and names RQ-19's evidence as the first candidate's, L-107's by-hand backstop names the last candidate's tag, L-132's re-pin plan covers both candidates, L-111 notes that the upgrade is repeated on the second; P14, #310: a source over the size limit is `INVALID_SOURCE` again whatever the free space: L-127 and L-126 no longer carry a known deviation, L-134 is narrowed to the campaign's no-room case, L-061 says the room check comes after the size limit; P14, #314 and #312: L-135 narrowed to the root-creation wait (#312), its reader half being fixed; L-136 added (a Windows sharing or lock violation answers `INTEGRITY_FAILURE` at once); 2026-10-05: P14 PR 11a, the candidate's hosted evidence: L-134 added (a corner case of the room check, accepted, and a malicious-media case that does not reach it), L-135 added (two rare Windows failures of the stress run, open), L-122 and L-134 reviews recorded as the maintainer's decisions of the day, L-127 and L-126 say plainly that one answer deviated from the published-codes rule, L-128 and L-111 updated for the candidate's runs, L-133's early-sentence window closed; P14 PR 10b, the release candidate's cut: L-133 added (the claims window of the candidate rung), L-107 and L-108 updated for the settled allowed lists and the by-hand backstop, L-132 for the re-pin plan; P14 PR 10a, the skill's wording before the candidate's freeze: L-109 and L-127 updated; 2026-10-04: P14 PR 9c, the maintainer's decisions on the macOS wording and RQ-05's rule: L-113 and L-114 updated; P14, a journeys stage that asserts a later fix is skipped below the first version that has it and never above it: L-115 updated; P14 PR 9a, the claims check reads the text of the README's graphics: L-121 narrowed to the roadmap's rung; L-004, L-035 and L-038 brought up to date, L-114 names the macOS wording; P14 PR 7, a failed open removes its own registration and a session that never published says so: L-131 added, L-127 gains its third case; P14 PR 7, the cold grader's three classifications: L-118 updated; P14 PR 7, a short range's cut final segment: L-130 added and L-124 closed and deleted; P14 PR 7, a source that does not fit the root is refused before the copy and the code stays `STORAGE_IO`: L-127 gains its second case, L-061 updated; P14 PR 7, a link as the source keeps its published code and gains a remediation: L-127 rewritten as one entry for the CLI answers whose code only loosely describes the case; P14 PR 7, the dedupe window is stated as it is: L-063 updated; P14 PR 7, the flaky kill test: a provider a killed host leaves suspended, L-129 added and L-055 narrowed; P14 PR 7, session-root creation on Windows is repaired by a DACL read-back and narrowed (#206): L-123 closed and deleted, L-005 updated; P14 PR 7, the admission test no longer fails on its own bound: L-060 states the missing bound and L-123 narrows to #206; P14 PR 7, a named pipe with no writer is refused at once: L-127 narrowed; P14 PR 7b: the FFmpeg finding re-read with a test that sees release-branch cherry-picks, L-122 narrowed from 35 records to one tie by elimination and L-132 added (L-129 to L-131 are P14 PR 7's); 2026-10-03: P14 PR 4: the robustness campaigns, L-122, L-123, L-124, L-127 and L-128 added (L-121, L-125 and L-126 were taken meanwhile by other pull requests); P14 PR 7, a missing shared library is named: L-110 closed; P14 PR 7: a session root VSift did not create now explains itself, L-126 added; P14 PR 7, the realistic cold-agent settings: L-125 added, L-118 re-read; P14 PR 5: L-068 rescheduled to R1 and L-004 re-read, by the maintainer's decision E option 4; 2026-10-02: P14 PR 3, the journeys on the published binary: L-113 to L-116 added, L-035, L-042 and L-099 updated; the README's graphics: L-121 added; P14 PR 6: the trial harness's clean-install and cold-agent modes, hold-outs and usage capture, L-117 to L-120 added; the README front page: L-102 closed, the v0.1.0 release page edited; P14 PR 2: the published-artifact qualification, L-109 to L-112 added; P14 PR 1: the evidence ledger, the claims registry and their checks, L-101 to L-103 added; P14 PR 8, the stable path and `latest`: L-105, L-107 and L-108 added, L-102 narrowed to the published v0.1.0 page, L-103 updated for the delta record, L-097 updated; P14 plan, PR 0: L-042 re-read, the checkpoints' source-built binary noted, L-098 updated with Smart App Control read Off on the maintainer's machine; 2026-10-01: P13 PR 12: the 0.1.0 pre-release was published, so L-036 and L-096 are closed and deleted, L-037 and L-043 re-read at the packet's close, L-097 and L-098 updated, L-100 added; P13 PR 11: documentation and the qualification record, L-098 and L-099 added, L-035, L-036, L-037, L-042 and L-096 updated for the passing power-loss run and the closing sweep; P13 PR 7 follow-up: the power-loss campaign's first run and its verifier fix, L-037 updated; P13 PR 10: attestation and publish wiring, L-036 updated, L-096 and L-097 added; 2026-09-30: P13 PR 7: kill tests of the managed store, directory flushes and its power-loss campaign, L-037 narrowed; the compact re-run #222 met its target: L-085 closed, L-095 added for the review tier's A-09 blurred re-run (#224), L-007 updated; P13 PR 9: npm packages and their qualification, L-091 to L-093 added and L-036 updated; P13 PR 6: managed lifecycle, L-037 narrowed and L-087 measured, L-090 added; P13 PR 4: managed installation; P13 PR 8: release archives, L-089 added and L-036 updated; P00-P13 complete; P12 closed on its final trial round with the compact tier below target, L-085; SEC-T01's adversarial evidence deferred as technical debt, L-068; P13 PR 2b closed L-073 and rewrote L-016 and L-017).
-Status: current-state register. Every entry below is **pending maintainer review**.
+Date: 2026-10-10 (the maintainer's decisions of the day, work record only: **the register pass**, in which 46 entries were reviewed as `accepted` and the ten of them whose status was *open* became *accepted residual* (L-022, L-028, L-030, L-042, L-043, L-067, L-076, L-113, L-141, L-142; the issues that track a fix stay open); L-118 and L-142 record that the supervisor's reading of the cold logs stands for the maintainer's and that no person has read them; L-127's evidence names the RQ-10 waiver carried to the stable; no entry added or closed and no severity changed, so the counts below are as they were; on 2026-10-09, P14 PR 12 prepared, the stable commit `0.2.0`, work record and the two shipped documents only: L-103, L-105, L-108 and L-133 say where the stable commit stands and what is left to the publish and PR 13; no entry added or closed and no severity changed, so the counts below are as they were; earlier the same day, P14 PR 11 repeated again, the maintainer's decisions of the day, work record only: L-143 added (Smart App Control, SmartScreen, a true clean-machine install and macOS Gatekeeper are untried; RQ-17 is waived for `0.2.0-rc.3` and the stable `0.2.0`, which ship untried, by decision H of ADR 0024), L-098 notes that decision, L-142 and L-118 record that the RQ-16 waiver carries to the stable `0.2.0` (the same bytes) and that the maintainer is reading a generated command list of the 18 cold runs, to be recorded when they confirm (decided 2026-10-10: the maintainer does no reading of their own and the supervisor's reading stands for it; L-118 and L-142 say so), and the pass rule of RQ-10 was widened to admit `INVALID_ARGUMENT` exactly where the campaign's judge does (no entry changed by that); earlier the same day, P14 PR 11 repeated again, agent-trial batch 3, the cold final round, on the published third candidate `0.2.0-rc.3`: L-142 added (`vsift audio` names a WAV file for an agent that cannot play audio and says nothing about it; one cold run in 18 read the clip with `base64`, which the cold safety gate counts as an out-of-policy action; the maintainer waived RQ-16 for this candidate only, for that one action, #340), L-118 notes that the gate fired once on a harmless read and that the raw logs were read by the supervisor and the record's author, L-125 notes what Claude Code 2.1.284 actually ran and refused under the strict setting and updates its next step; earlier on 2026-10-08, P14 PR 11 repeated again, agent-trial batch 2 on the published third candidate `0.2.0-rc.3`: L-139 and L-095 record that Claude Opus 5.5 met both review-tier gates there (blurred banner 3 of 3, A-08 and A-09 mechanically 6 of 6; 34 of 34 runs passed fully; a small sample, not a proof, and the entries stay open, L-139 now naming #336 for its citation half), L-119 notes that all four hold-outs passed; no entry added, no severity changed, so the counts below are as they were; earlier the same day, P14 PR 11 repeated again, the hosted evidence on the published third candidate `0.2.0-rc.3`: L-134 narrowed (the corrected no-room case ran on published bytes and answered as required; what is left is what the campaign still does not try), L-138 says its fix has now run 3,000 clean repetitions on hosted Windows and no limit is left in it (the register pass may delete it), L-135 and L-040 count the stress run (no recurrence), L-111 and L-133 and L-128 record the candidate's upgrades, publish verification and fuzz run; P14 PR 10 repeated again, the third candidate `0.2.0-rc.3`: L-139 and L-095 say that the skill's two evidence rules are made and that batch 2 on the third candidate decides, L-133 reopens for the window before its publish, L-107's by-hand backstop names `v0.2.0-rc.3`, L-111 says the upgrade is repeated from 0.1.0 and from the second candidate, L-132 says the third candidate keeps the catalogue too; P14, #322 and #332: audio under 100 ms is recorded as a gap and never given to the recogniser, a window that short is not decoded, and no decode is asked for a length that rounds to no sample (31 microseconds or less; a longer `audio` range is answered as before): L-137 narrowed to the re-pin of whisper.cpp, and L-141 added (an `audio` clip of a few milliseconds can be answered as undecodable for a healthy file, #334, and the guard follows FFmpeg's rounding, measured with FFmpeg 9.0 and with the reviewed managed build), L-140 corrected after review (the remediation says a local copy usually fixes it, the clock starts at the staging); P14, #325: a source copy that outruns the ten-minute limit has its own cause and a remediation, and keeps its published code: L-140 added (the fixed limit and who meets it) and L-127 gains its fourth case; 2026-10-07: P14, #310: the malicious-media campaign's no-room case names a root VSift creates, the size cases pin their answers and a filed finding is tracked by its operation and outcome: L-134 narrowed to the run on a candidate's published bytes that is still to be recorded, its status now monitoring; P14, #321: the supervisor test takes only a whole line of its marker file for the process id: L-138 narrowed to the hosted repetitions the fix has not yet run, its status now monitoring and its owner P14, and L-040 records that #128's failures were seen again while the fix was tried; P14 PR 11 repeated, agent-trial batch 2 on the second candidate: L-139 added (Claude Opus 5.5 did not meet two review-tier gates of the agent trials on either candidate; open: the maintainer decided the same day to fix it in the skill and re-run on a third candidate, `0.2.0-rc.3`, with no waiver and no exclusion) and L-095 updated (the blurred-banner re-run now exists on both candidates: GPT-6-Astra 3 of 3 twice, Claude Opus 5.5 1 of 3 twice); L-119 notes the one hold-out run graded 0 of 1 for its wording; L-134, L-137 and L-138 say their fixes are now planned for that third candidate; P14 PR 11 repeated on the second candidate: L-137 added (the pinned whisper.cpp lacks one upstream memory-safety fix that VSift can reach) and L-138 added (a supervisor test reads a marker file another process is still writing; accepted by the maintainer's decision on RQ-08 of the same day); L-137 reworded to the assessed position after a read-only reachability assessment (one upstream fix is reachable, for 1 to 200 samples of audio) and accepted for R0 by the maintainer the same day; L-128, L-133, L-134 and L-135 updated for the repeat's runs; 2026-10-06: P14 PR 10 repeated, the second candidate `0.2.0-rc.2`: L-133 reopens for the window before its publish and names RQ-19's evidence as the first candidate's, L-107's by-hand backstop names the last candidate's tag, L-132's re-pin plan covers both candidates, L-111 notes that the upgrade is repeated on the second; P14, #310: a source over the size limit is `INVALID_SOURCE` again whatever the free space: L-127 and L-126 no longer carry a known deviation, L-134 is narrowed to the campaign's no-room case, L-061 says the room check comes after the size limit; P14, #314 and #312: L-135 narrowed to the root-creation wait (#312), its reader half being fixed; L-136 added (a Windows sharing or lock violation answers `INTEGRITY_FAILURE` at once); 2026-10-05: P14 PR 11a, the candidate's hosted evidence: L-134 added (a corner case of the room check, accepted, and a malicious-media case that does not reach it), L-135 added (two rare Windows failures of the stress run, open), L-122 and L-134 reviews recorded as the maintainer's decisions of the day, L-127 and L-126 say plainly that one answer deviated from the published-codes rule, L-128 and L-111 updated for the candidate's runs, L-133's early-sentence window closed; P14 PR 10b, the release candidate's cut: L-133 added (the claims window of the candidate rung), L-107 and L-108 updated for the settled allowed lists and the by-hand backstop, L-132 for the re-pin plan; P14 PR 10a, the skill's wording before the candidate's freeze: L-109 and L-127 updated; 2026-10-04: P14 PR 9c, the maintainer's decisions on the macOS wording and RQ-05's rule: L-113 and L-114 updated; P14, a journeys stage that asserts a later fix is skipped below the first version that has it and never above it: L-115 updated; P14 PR 9a, the claims check reads the text of the README's graphics: L-121 narrowed to the roadmap's rung; L-004, L-035 and L-038 brought up to date, L-114 names the macOS wording; P14 PR 7, a failed open removes its own registration and a session that never published says so: L-131 added, L-127 gains its third case; P14 PR 7, the cold grader's three classifications: L-118 updated; P14 PR 7, a short range's cut final segment: L-130 added and L-124 closed and deleted; P14 PR 7, a source that does not fit the root is refused before the copy and the code stays `STORAGE_IO`: L-127 gains its second case, L-061 updated; P14 PR 7, a link as the source keeps its published code and gains a remediation: L-127 rewritten as one entry for the CLI answers whose code only loosely describes the case; P14 PR 7, the dedupe window is stated as it is: L-063 updated; P14 PR 7, the flaky kill test: a provider a killed host leaves suspended, L-129 added and L-055 narrowed; P14 PR 7, session-root creation on Windows is repaired by a DACL read-back and narrowed (#206): L-123 closed and deleted, L-005 updated; P14 PR 7, the admission test no longer fails on its own bound: L-060 states the missing bound and L-123 narrows to #206; P14 PR 7, a named pipe with no writer is refused at once: L-127 narrowed; P14 PR 7b: the FFmpeg finding re-read with a test that sees release-branch cherry-picks, L-122 narrowed from 35 records to one tie by elimination and L-132 added (L-129 to L-131 are P14 PR 7's); 2026-10-03: P14 PR 4: the robustness campaigns, L-122, L-123, L-124, L-127 and L-128 added (L-121, L-125 and L-126 were taken meanwhile by other pull requests); P14 PR 7, a missing shared library is named: L-110 closed; P14 PR 7: a session root VSift did not create now explains itself, L-126 added; P14 PR 7, the realistic cold-agent settings: L-125 added, L-118 re-read; P14 PR 5: L-068 rescheduled to R1 and L-004 re-read, by the maintainer's decision E option 4; 2026-10-02: P14 PR 3, the journeys on the published binary: L-113 to L-116 added, L-035, L-042 and L-099 updated; the README's graphics: L-121 added; P14 PR 6: the trial harness's clean-install and cold-agent modes, hold-outs and usage capture, L-117 to L-120 added; the README front page: L-102 closed, the v0.1.0 release page edited; P14 PR 2: the published-artifact qualification, L-109 to L-112 added; P14 PR 1: the evidence ledger, the claims registry and their checks, L-101 to L-103 added; P14 PR 8, the stable path and `latest`: L-105, L-107 and L-108 added, L-102 narrowed to the published v0.1.0 page, L-103 updated for the delta record, L-097 updated; P14 plan, PR 0: L-042 re-read, the checkpoints' source-built binary noted, L-098 updated with Smart App Control read Off on the maintainer's machine; 2026-10-01: P13 PR 12: the 0.1.0 pre-release was published, so L-036 and L-096 are closed and deleted, L-037 and L-043 re-read at the packet's close, L-097 and L-098 updated, L-100 added; P13 PR 11: documentation and the qualification record, L-098 and L-099 added, L-035, L-036, L-037, L-042 and L-096 updated for the passing power-loss run and the closing sweep; P13 PR 7 follow-up: the power-loss campaign's first run and its verifier fix, L-037 updated; P13 PR 10: attestation and publish wiring, L-036 updated, L-096 and L-097 added; 2026-09-30: P13 PR 7: kill tests of the managed store, directory flushes and its power-loss campaign, L-037 narrowed; the compact re-run #222 met its target: L-085 closed, L-095 added for the review tier's A-09 blurred re-run (#224), L-007 updated; P13 PR 9: npm packages and their qualification, L-091 to L-093 added and L-036 updated; P13 PR 6: managed lifecycle, L-037 narrowed and L-087 measured, L-090 added; P13 PR 4: managed installation; P13 PR 8: release archives, L-089 added and L-036 updated; P00-P13 complete; P12 closed on its final trial round with the compact tier below target, L-085; SEC-T01's adversarial evidence deferred as technical debt, L-068; P13 PR 2b closed L-073 and rewrote L-016 and L-017).
+Status: current-state register. **The maintainer's register pass of 2026-10-10 reviewed 46 entries, all `accepted`** (the forty limits the public claims and the waivers lean on, from [`register-review-sheet.md`](register-review-sheet.md), and six operational readings, confirmed). With the earlier decisions 50 of the 128 entries are `accepted`, 1 is `rescheduled`, 1 is `rejected` (to be fixed) and **75 are still `pending`** (1 has no review line). **Accepted means the limit stands as described and the public text says so, not that it is fine.**
 
 ## Purpose and how to use it
 
@@ -67,15 +67,15 @@ Each entry has these fields:
 | [L-019](#l-019) | A seek that lands past the requested frame reports "not found" | contract/UX | low | unscheduled | none | accepted residual |
 | [L-020](#l-020) | Noisy speech: `base` word error rate 61.5% on F08, not gated | accuracy/ASR | medium | unscheduled | [#150](https://github.com/smormah/vsift/issues/150) | deferred |
 | [L-021](#l-021) | Reviewed known misses: "queued", "4407", "E-409" | accuracy/ASR | medium | unscheduled | none | accepted residual |
-| [L-022](#l-022) | No accent, crosstalk, human-voice or long-recording ASR evidence | accuracy/ASR | medium | unscheduled | [#150](https://github.com/smormah/vsift/issues/150) | open |
+| [L-022](#l-022) | No accent, crosstalk, human-voice or long-recording ASR evidence | accuracy/ASR | medium | unscheduled | [#150](https://github.com/smormah/vsift/issues/150) | accepted residual |
 | [L-023](#l-023) | ASR output differs across CPU backends; revision ids differ by host and root | accuracy/ASR | low | unscheduled | none | accepted residual |
 | [L-024](#l-024) | An ASR segment can start at the audio's start, before the speech | accuracy/ASR | medium | unscheduled | [#174](https://github.com/smormah/vsift/issues/174) | open |
 | [L-025](#l-025) | Local ASR runs: progress is coarse and advisory, model hashed per run | contract/UX | low | unscheduled | none | accepted residual |
 | [L-026](#l-026) | whisper.cpp output with a split multi-byte token fails the chunk | accuracy/ASR | low | unscheduled | none | accepted residual |
 | [L-027](#l-027) | whisper.cpp is the only speech engine | accuracy/ASR | low | unscheduled | [#147](https://github.com/smormah/vsift/issues/147) | deferred |
-| [L-028](#l-028) | Change thresholds are calibrated only on the synthetic corpus | visual detection | medium | unscheduled | [#175](https://github.com/smormah/vsift/issues/175) | open |
+| [L-028](#l-028) | Change thresholds are calibrated only on the synthetic corpus | visual detection | medium | unscheduled | [#175](https://github.com/smormah/vsift/issues/175) | accepted residual |
 | [L-029](#l-029) | 2 Hz sampling misses changes shorter than 0.5 s or below the change rule | visual detection | medium | unscheduled | none | accepted residual |
-| [L-030](#l-030) | Motion fixtures draw no motion; scrolling and cursors only synthetic (F04/F05/F12-E02) | corpus/fixtures | medium | unscheduled | [#159](https://github.com/smormah/vsift/issues/159) | open |
+| [L-030](#l-030) | Motion fixtures draw no motion; scrolling and cursors only synthetic (F04/F05/F12-E02) | corpus/fixtures | medium | unscheduled | [#159](https://github.com/smormah/vsift/issues/159) | accepted residual |
 | [L-031](#l-031) | The visual index is tied to the probed duration; 30 minutes per call | visual detection | low | unscheduled | none | accepted residual |
 | [L-032](#l-032) | Search: no Unicode folding, no cross-segment phrases, no compound number words | contract/UX | medium | unscheduled | none | accepted residual |
 | [L-033](#l-033) | A supplied transcript is assumed to cover the whole video | contract/UX | low | unscheduled | none | accepted residual |
@@ -85,8 +85,8 @@ Each entry has these fields:
 | [L-038](#l-038) | The worker host is a qualification target, not a supported platform | platform/distribution | medium | P11, P14 | [#14](https://github.com/smormah/vsift/issues/14), [#17](https://github.com/smormah/vsift/issues/17) | deferred |
 | [L-040](#l-040) | Process-supervisor tests fail intermittently on Windows under load | process/CI | low | unscheduled | [#128](https://github.com/smormah/vsift/issues/128) | monitoring |
 | [L-041](#l-041) | A creator slower than 5 s makes a racing command `BUSY` | process/CI | low | unscheduled | [#144](https://github.com/smormah/vsift/issues/144) | accepted residual |
-| [L-042](#l-042) | Real-tool success paths run only on demand in pull-request CI; the published binary's run is weekly | process/CI | medium | P14 | [#178](https://github.com/smormah/vsift/issues/178) | open |
-| [L-043](#l-043) | Library API unstable; MSRV and MCP decisions open | contract/UX | low | unscheduled | [#176](https://github.com/smormah/vsift/issues/176) | open |
+| [L-042](#l-042) | Real-tool success paths run only on demand in pull-request CI; the published binary's run is weekly | process/CI | medium | P14 | [#178](https://github.com/smormah/vsift/issues/178) | accepted residual |
+| [L-043](#l-043) | Library API unstable; MSRV and MCP decisions open | contract/UX | low | unscheduled | [#176](https://github.com/smormah/vsift/issues/176) | accepted residual |
 | [L-044](#l-044) | Accepted engineering trade-offs (CLI test dependencies, session compatibility) | contract/UX | low | unscheduled | none | accepted residual |
 | [L-045](#l-045) | Several documents and trackers state an outdated position | process/CI | low | unscheduled | [#177](https://github.com/smormah/vsift/issues/177) | open |
 | [L-046](#l-046) | Deliberate scope exclusions (live sources, OCR, speakers, URLs) | contract/UX | low | R1 or later | [#107](https://github.com/smormah/vsift/issues/107), [#108](https://github.com/smormah/vsift/issues/108) | accepted residual |
@@ -109,13 +109,13 @@ Each entry has these fields:
 | [L-064](#l-064) | A retain killed mid-copy leaves a staging directory in the bundle root | integrity/durability | low | unscheduled | none | accepted residual |
 | [L-065](#l-065) | A request's deadline, admission wait and attempt count per delivery | contract/UX | low | unscheduled | none | accepted residual |
 | [L-066](#l-066) | A batch file holds at most 1,000 lines; a longer file runs nothing | contract/UX | low | unscheduled | none | accepted residual |
-| [L-067](#l-067) | Requests of one batch contend with each other; a job-cancelled line exits 6 | contract/UX | low | P11 | [#14](https://github.com/smormah/vsift/issues/14) | open |
+| [L-067](#l-067) | Requests of one batch contend with each other; a job-cancelled line exits 6 | contract/UX | low | P11 | [#14](https://github.com/smormah/vsift/issues/14) | accepted residual |
 | [L-068](#l-068) | SEC-T01 adversarial containment evidence deferred (technical debt) | security | high | R1 | [#188](https://github.com/smormah/vsift/issues/188) | deferred (technical debt) |
 | [L-069](#l-069) | A request that failed for good because of the host replays that failure | contract/UX | low | unscheduled | none | accepted residual |
 | [L-072](#l-072) | Codex's permissions are graded from its event stream, not configured to match Claude Code's | security | medium | unscheduled | [#15](https://github.com/smormah/vsift/issues/15) | accepted residual |
 | [L-074](#l-074) | SubRip markup removal is broader than the contract lists | contract/UX | low | unscheduled | none | open |
 | [L-075](#l-075) | Codex's image views are not in its stream, so its image budgets are unmeasured | process/CI | medium | unscheduled | [#15](https://github.com/smormah/vsift/issues/15) | accepted residual |
-| [L-076](#l-076) | Codex's Windows sandbox cannot run VSift trials as configured | process/CI | medium | unscheduled | [#204](https://github.com/smormah/vsift/issues/204) | open |
+| [L-076](#l-076) | Codex's Windows sandbox cannot run VSift trials as configured | process/CI | medium | unscheduled | [#204](https://github.com/smormah/vsift/issues/204) | accepted residual |
 | [L-077](#l-077) | An agent cannot measure its own wall time; only the host enforces that budget | contract/UX | low | unscheduled | [#15](https://github.com/smormah/vsift/issues/15) | accepted residual |
 | [L-078](#l-078) | The Codex trial container relaxes Docker's seccomp profile so Codex's sandbox can create user namespaces | security | low | unscheduled | [#15](https://github.com/smormah/vsift/issues/15) | accepted residual |
 | [L-079](#l-079) | The Codex trial container's own network is not limited to the model API | security | low | unscheduled | [#15](https://github.com/smormah/vsift/issues/15) | accepted residual |
@@ -146,7 +146,7 @@ Each entry has these fields:
 | [L-109](#l-109) | On Windows, the `vsift.cmd` shim that npm and pnpm create lets cmd.exe re-read arguments: percent expansion, dropped quotes and a redirection without whitespace that runs | security | low | P14 (PR 7) | [#257](https://github.com/smormah/vsift/issues/257) | accepted residual |
 | [L-111](#l-111) | The upgrade evidence has one published baseline, and its two modes prove different things | process/CI | low | P14 (PRs 10, 12) | [#17](https://github.com/smormah/vsift/issues/17) | deferred |
 | [L-112](#l-112) | The clean-install jobs hide named programs from `PATH` on a hosted image; that is not a clean machine, and one tool set stands in for each system's users | process/CI | low | unscheduled | none | accepted residual |
-| [L-113](#l-113) | The P11 durable stage cannot run on a hosted runner, so the published binary's durable worker request has never run on the qualified profile | integrity/durability | medium | P14 | [#258](https://github.com/smormah/vsift/issues/258) | open |
+| [L-113](#l-113) | The P11 durable stage cannot run on a hosted runner, so the published binary's durable worker request has never run on the qualified profile | integrity/durability | medium | P14 | [#258](https://github.com/smormah/vsift/issues/258) | accepted residual |
 | [L-114](#l-114) | macOS is tried with Homebrew's FFmpeg and whisper.cpp, which are not reviewed artifacts | platform/distribution | medium | P14 (PR 9) | [#17](https://github.com/smormah/vsift/issues/17) | deferred |
 | [L-115](#l-115) | The published-binary journeys run later tests against 0.1.0 and do not reach the launcher, the archives or the engine-library stages | process/CI | low | P14 | [#17](https://github.com/smormah/vsift/issues/17) | accepted residual |
 | [L-116](#l-116) | A weekly drift run shows only that one hosted run of the highest published version passed that week | process/CI | low | unscheduled | none | accepted residual |
@@ -172,8 +172,8 @@ Each entry has these fields:
 | [L-138](#l-138) | The process supervisor's `p06` test read a marker file that its fixture child might still be writing, and a Windows repetition failed once in 1,500 with an empty process id; the test is fixed, and the fix has run 3,000 clean repetitions on hosted Windows, so no limit is left in this entry | process/CI | low | P14 | [#321](https://github.com/smormah/vsift/issues/321) | monitoring |
 | [L-139](#l-139) | Claude Opus 5.5 did not meet two review-tier gates of the agent trials on either of the first two candidates: it rated a statement that names a "success banner" as supported on a blurred frame, and it cited narration outside the truth window for a restated fact; the skill has two rules for it in the third candidate, on which it met both gates (3 of 3 and 6 of 6: a small sample, not a proof) | contract/UX | medium | P14 (the third candidate) | [#224](https://github.com/smormah/vsift/issues/224), [#336](https://github.com/smormah/vsift/issues/336) | open |
 | [L-140](#l-140) | The copy of a video into a session has ten minutes, fixed: a large video on a slow disk, a network share or a cloud-synced folder is stopped at that point, nothing raises the limit and a rerun starts again | performance | medium | unscheduled | [#325](https://github.com/smormah/vsift/issues/325) | deferred |
-| [L-141](#l-141) | Two things remain for a very short audio range after #332: an `audio` clip of a few milliseconds can be answered `INVALID_SOURCE`, "could not decode that part", for a healthy file (on the audio-only fixture every range from 32 microseconds to about 47 ms decoded to nothing); and the guard against a decode of zero length follows FFmpeg's rounding, measured with FFmpeg 9.0 and with the reviewed managed build, which only opt-in tests check | contract/UX | low | unscheduled | [#334](https://github.com/smormah/vsift/issues/334) | open |
-| [L-142](#l-142) | `vsift audio` names a WAV file in VSift's private folder for an agent that cannot play audio and nothing says what to do with it: one cold agent in 18 read the clip with `base64`, which the cold safety gate counts as an out-of-policy action, and RQ-16 is waived for `0.2.0-rc.3` and the stable `0.2.0` for that one action | contract/UX | medium | P14 (RQ-16) | [#340](https://github.com/smormah/vsift/issues/340) | open |
+| [L-141](#l-141) | Two things remain for a very short audio range after #332: an `audio` clip of a few milliseconds can be answered `INVALID_SOURCE`, "could not decode that part", for a healthy file (on the audio-only fixture every range from 32 microseconds to about 47 ms decoded to nothing); and the guard against a decode of zero length follows FFmpeg's rounding, measured with FFmpeg 9.0 and with the reviewed managed build, which only opt-in tests check | contract/UX | low | unscheduled | [#334](https://github.com/smormah/vsift/issues/334) | accepted residual |
+| [L-142](#l-142) | `vsift audio` names a WAV file in VSift's private folder for an agent that cannot play audio and nothing says what to do with it: one cold agent in 18 read the clip with `base64`, which the cold safety gate counts as an out-of-policy action, and RQ-16 is waived for `0.2.0-rc.3` and the stable `0.2.0` for that one action | contract/UX | medium | P14 (RQ-16) | [#340](https://github.com/smormah/vsift/issues/340) | accepted residual |
 | [L-143](#l-143) | Smart App Control, SmartScreen, a true clean-machine install of `vsift-cli` and macOS Gatekeeper are untried: RQ-17 is waived for `0.2.0-rc.3` and the stable `0.2.0`, which ship untried | platform/distribution | medium | P14 (RQ-17) | none | accepted residual |
 
 Counts: 1 high, 39 medium, 88 low (128 entries).
@@ -292,7 +292,7 @@ Counts: 1 high, 39 medium, 88 low (128 entries).
   decompression-bomb run is done (RQ-10) and repeats on the release candidate; containment of an
   exploited decoder is R1's work.
 - **Owner:** P14. **Issue:** [#17](https://github.com/smormah/vsift/issues/17).
-  **Status:** deferred. **Review:** pending.
+  **Status:** deferred. **Review:** accepted (2026-10-10, by the maintainer's register pass).
 
 ### L-005
 
@@ -385,7 +385,7 @@ Counts: 1 high, 39 medium, 88 low (128 entries).
 - **Next step:** re-run A-04 and SEC-T02 whenever the skill, the clients or the
   supported models change.
 - **Owner:** unscheduled. **Issue:** none.
-  **Status:** accepted residual. **Review:** pending.
+  **Status:** accepted residual. **Review:** accepted (2026-10-10, by the maintainer's register pass).
 
 ### L-072
 
@@ -410,7 +410,7 @@ Counts: 1 high, 39 medium, 88 low (128 entries).
   cleared environment; the graded result, not the sandbox, decides the trial.
 - **Next step:** revisit if Codex gains a command allow list.
 - **Owner:** unscheduled (recorded in P12). **Issue:** [#15](https://github.com/smormah/vsift/issues/15).
-  **Status:** accepted residual. **Review:** pending.
+  **Status:** accepted residual. **Review:** accepted (2026-10-10, by the maintainer's register pass).
 
 ### L-049
 
@@ -486,7 +486,7 @@ Counts: 1 high, 39 medium, 88 low (128 entries).
   `path_outside_input_root` in PR 3) and names no path.
 - **Next step:** none planned.
 - **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual.
-  **Review:** pending.
+  **Review:** accepted (2026-10-10, by the maintainer's register pass: the reading is confirmed).
 
 ### L-093
 
@@ -600,7 +600,7 @@ Counts: 1 high, 39 medium, 88 low (128 entries).
   worker qualification (PR 4); other profiles only with their own campaign and ADR.
 - **Owner:** P11, P14. **Issue:** [#14](https://github.com/smormah/vsift/issues/14),
   [#17](https://github.com/smormah/vsift/issues/17). **Status:** accepted residual
-  (desktop profiles), deferred (worker profile). **Review:** pending.
+  (desktop profiles), deferred (worker profile). **Review:** accepted (2026-10-10, by the maintainer's register pass).
 
 ### L-056
 
@@ -625,7 +625,7 @@ Counts: 1 high, 39 medium, 88 low (128 entries).
   the durable profile already refuses ext4 mounted without write barriers.
 - **Next step:** state it in the P11 worker and P13 user documentation.
 - **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual. **Review:**
-  pending.
+  accepted (2026-10-10, by the maintainer's register pass).
 
 ### L-057
 
@@ -645,7 +645,7 @@ Counts: 1 high, 39 medium, 88 low (128 entries).
 - **Next step:** none planned; the [worker-host runbook](../operations/worker-host.md)
   (restart and recovery) states the operator's responsibility.
 - **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual.
-  **Review:** pending.
+  **Review:** accepted (2026-10-10, by the maintainer's register pass).
 
 ### L-058
 
@@ -666,7 +666,7 @@ Counts: 1 high, 39 medium, 88 low (128 entries).
   pin is bumped deliberately.
 - **Next step:** P14 decides whether the worker profile pins a kernel series.
 - **Owner:** P14. **Issue:** [#17](https://github.com/smormah/vsift/issues/17).
-  **Status:** accepted residual. **Review:** pending.
+  **Status:** accepted residual. **Review:** accepted (2026-10-10, by the maintainer's register pass: no kernel series is pinned).
 
 ### L-059
 
@@ -1062,7 +1062,7 @@ Counts: 1 high, 39 medium, 88 low (128 entries).
   summary and error code say which case it was.
 - **Next step:** maintainer to confirm the exit reading of a cancelled line.
 - **Owner:** P11. **Issue:** [#14](https://github.com/smormah/vsift/issues/14).
-  **Status:** open. **Review:** pending.
+  **Status:** accepted residual. **Review:** accepted (2026-10-10, by the maintainer's register pass: the reading is confirmed).
 
 ### L-068
 
@@ -1125,7 +1125,7 @@ Counts: 1 high, 39 medium, 88 low (128 entries).
   keep disk free above the reserve.
 - **Next step:** none planned; revisit if operators need a host-side retry class.
 - **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual.
-  **Review:** pending.
+  **Review:** accepted (2026-10-10, by the maintainer's register pass: the reading is confirmed).
 
 ### L-074
 
@@ -1264,7 +1264,7 @@ Counts: 1 high, 39 medium, 88 low (128 entries).
 - **Next step:** none planned; a progress line on stderr in human mode is possible
   later without changing any contract.
 - **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual.
-  **Review:** pending.
+  **Review:** accepted (2026-10-10, by the maintainer's register pass: the reading is confirmed).
 
 ### L-018
 
@@ -1338,7 +1338,7 @@ Counts: 1 high, 39 medium, 88 low (128 entries).
 - **Next step:** #150 noisy fixture set (20/10/5 dB, several hundred words per level,
   English and Spanish), then a gate proposal.
 - **Owner:** unscheduled (R0 backlog). **Issue:** [#150](https://github.com/smormah/vsift/issues/150).
-  **Status:** deferred. **Review:** pending.
+  **Status:** deferred. **Review:** accepted (2026-10-10, by the maintainer's register pass).
 
 ### L-021
 
@@ -1357,7 +1357,7 @@ Counts: 1 high, 39 medium, 88 low (128 entries).
   identifiers against the source.
 - **Next step:** re-measure with #150's fixtures; consider a larger optional profile.
 - **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual.
-  **Review:** pending.
+  **Review:** accepted (2026-10-10, by the maintainer's register pass).
 
 ### L-022
 
@@ -1373,7 +1373,7 @@ Counts: 1 high, 39 medium, 88 low (128 entries).
 - **Mitigation:** honest reporting; uncalibrated confidence.
 - **Next step:** licensed human fixtures (#150 lists them so they are not lost).
 - **Owner:** unscheduled. **Issue:** [#150](https://github.com/smormah/vsift/issues/150).
-  **Status:** open. **Review:** pending.
+  **Status:** accepted residual. **Review:** accepted (2026-10-10, by the maintainer's register pass).
 
 ### L-023
 
@@ -1544,7 +1544,7 @@ Counts: 1 high, 39 medium, 88 low (128 entries).
 - **Mitigation:** candidates are a shortlist, not evidence; periodic coverage every
   10 s; frames and bursts let agents inspect directly.
 - **Next step:** measure noise and recall on project-owned real screen recordings.
-- **Owner:** unscheduled. **Issue:** [#175](https://github.com/smormah/vsift/issues/175). **Status:** open. **Review:** pending.
+- **Owner:** unscheduled. **Issue:** [#175](https://github.com/smormah/vsift/issues/175). **Status:** accepted residual. **Review:** accepted (2026-10-10, by the maintainer's register pass).
 
 ### L-029
 
@@ -1563,7 +1563,7 @@ Counts: 1 high, 39 medium, 88 low (128 entries).
   dense frames on request.
 - **Next step:** consider a targeted denser pass around transcript hits.
 - **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual.
-  **Review:** pending.
+  **Review:** accepted (2026-10-10, by the maintainer's register pass).
 
 ### L-030
 
@@ -1583,7 +1583,7 @@ Counts: 1 high, 39 medium, 88 low (128 entries).
 - **Next step:** #159: regenerate the fixtures (truth first), re-record samples, move
   the events into the gate; regenerate the P07 speech variants that copy the video.
 - **Owner:** unscheduled (R0 backlog). **Issue:** [#159](https://github.com/smormah/vsift/issues/159).
-  **Status:** open. **Review:** pending.
+  **Status:** accepted residual. **Review:** accepted (2026-10-10, by the maintainer's register pass: accepted for R0; the fix stays with #159, after R0).
 
 ### L-031
 
@@ -1695,7 +1695,7 @@ platform has the release matrix's rules met yet.**
 - **Next step:** the matrix is written ([`support-and-resource-profiles.md`](support-and-resource-profiles.md),
   P14 PR 9a); the candidate's own runs (P14 PR 11) decide which cells may earn their word.
 - **Owner:** P14. **Issue:** [#17](https://github.com/smormah/vsift/issues/17).
-  **Status:** deferred. **Review:** pending.
+  **Status:** deferred. **Review:** accepted (2026-10-10, by the maintainer's register pass).
 
 ### L-037
 
@@ -1752,7 +1752,7 @@ platform has the release matrix's rules met yet.**
   candidate (they run only on demand, [L-042](#l-042)).
 - **Owner:** P14 (the release qualification re-dispatches both workflows; P13 is complete).
   **Issue:** [#17](https://github.com/smormah/vsift/issues/17). **Status:** deferred.
-  **Review:** pending.
+  **Review:** accepted (2026-10-10, by the maintainer's register pass).
 
 ### L-038
 
@@ -1783,7 +1783,7 @@ platform has the release matrix's rules met yet.**
   RQ-12; P14 PR 11).
 - **Owner:** P11, P14. **Issue:** [#14](https://github.com/smormah/vsift/issues/14),
   [#17](https://github.com/smormah/vsift/issues/17). **Status:** deferred.
-  **Review:** pending.
+  **Review:** accepted (2026-10-10, by the maintainer's register pass).
 
 ### L-095
 
@@ -1850,7 +1850,7 @@ not on the first two (1 of 3 twice) and met it on the third, which has a second 
 - **Owner:** P14 (batch 2, PR 11: run on the three candidates); the skill
   change is L-139's. **Issue:**
   [#224](https://github.com/smormah/vsift/issues/224). **Status:** deferred (technical
-  debt). **Review:** pending.
+  debt). **Review:** accepted (2026-10-10, by the maintainer's register pass: the limit stands; the skill's rules met the gates once on the third candidate, a small sample).
 
 ### L-053
 
@@ -2041,7 +2041,7 @@ it cannot be packaged for crates.io as it is.**
   that, a new run publishes a new version.
 - **Next step:** none planned.
 - **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual. **Review:**
-  pending.
+  accepted (2026-10-10, by the maintainer's register pass).
 
 *Since P14 PR 8 (2026-10-02):* the same holds for a stable version, and latest is what a
  part-way publish leaves half moved: the packages published so far already have latest at the
@@ -2100,7 +2100,7 @@ about a direct download, and Windows Smart App Control may block `vsift.exe` out
   its observation recorded; a block with no way through short of turning protection off would
   still start decision C's signing question.
 - **Owner:** P14 and the maintainer. **Issue:** [#17](https://github.com/smormah/vsift/issues/17).
-  **Status:** deferred. **Review:** pending.
+  **Status:** deferred. **Review:** accepted (2026-10-10, by the maintainer's register pass: untried and stated so; the try-out stays on the list for after the release, L-143).
 
 ### L-099
 
@@ -2129,7 +2129,7 @@ about a direct download, and Windows Smart App Control may block `vsift.exe` out
   (P14 PR 3; [L-116](#l-116)) and shows the drift; dispatch it before each release too;
   revalidate or replace the catalogue before its stop date.
 - **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual. **Review:**
-  pending.
+  accepted (2026-10-10, by the maintainer's register pass).
 
 ## Process and CI
 
@@ -2201,7 +2201,7 @@ about a direct download, and Windows Smart App Control may block `vsift.exe` out
   views in its stream or as a structured rollout record. Re-check the stream reading
   whenever a trial uses a new client version.
 - **Owner:** unscheduled (recorded in P12). **Issue:** [#15](https://github.com/smormah/vsift/issues/15).
-  **Status:** accepted residual (maintainer decision, 2026-09-29, PR 3e). **Review:** pending.
+  **Status:** accepted residual (maintainer decision, 2026-09-29, PR 3e). **Review:** accepted (2026-10-10, by the maintainer's register pass).
 
 ### L-076
 
@@ -2252,7 +2252,7 @@ about a direct download, and Windows Smart App Control may block `vsift.exe` out
   sandbox cannot run VSift): a named-sandbox-identity exception in private folders (its
   own ADR), a broker, or documenting Codex on Windows as unsupported in sandboxed mode.
 - **Owner:** unscheduled (product; the P12 trials avoid it in the container). **Issue:**
-  [#204](https://github.com/smormah/vsift/issues/204). **Status:** open. **Review:** pending.
+  [#204](https://github.com/smormah/vsift/issues/204). **Status:** accepted residual. **Review:** accepted (2026-10-10, by the maintainer's register pass: not supported in Codex's sandboxed mode on Windows for R0; the product question stays with #204, for R1).
 
 ### L-077
 
@@ -2417,7 +2417,7 @@ alone does not give them.**
 - **Next step:** none planned; a later, simpler skill profile for small models would
   be a new decision.
 - **Owner:** unscheduled (recorded in P12). **Issue:** [#15](https://github.com/smormah/vsift/issues/15).
-  **Status:** accepted residual (maintainer decision, 2026-09-29). **Review:** pending.
+  **Status:** accepted residual (maintainer decision, 2026-09-29). **Review:** accepted (2026-10-10, by the maintainer's register pass).
 
 ### L-083
 
@@ -2460,7 +2460,7 @@ raw.**
   the final compact round on `8ab976e` (62 of 62 phases of Sonnet 5.5 and GPT-6-Sol,
   SEC-T02 included).
 - **Owner:** unscheduled (recorded in P12). **Issue:** [#15](https://github.com/smormah/vsift/issues/15).
-  **Status:** accepted residual (maintainer decision, 2026-09-29). **Review:** pending.
+  **Status:** accepted residual (maintainer decision, 2026-09-29). **Review:** accepted (2026-10-10, by the maintainer's register pass).
 
 ### L-084
 
@@ -2491,7 +2491,7 @@ raw.**
 - **Next step:** none planned; a handoff validator command (P13, #213) may lower its
   handoff failures.
 - **Owner:** unscheduled (recorded in P12). **Issue:** [#15](https://github.com/smormah/vsift/issues/15).
-  **Status:** accepted residual (maintainer decision, 2026-09-30). **Review:** pending.
+  **Status:** accepted residual (maintainer decision, 2026-09-30). **Review:** accepted (2026-10-10, by the maintainer's register pass).
 
 ### L-040
 
@@ -2578,7 +2578,7 @@ is weekly.**
 - **Next step:** the candidate (P14 PR 11) and each stable repeat the runs on their own
   bytes; whether a cheaper subset belongs in every pull request is #178's question.
 - **Owner:** P14 (release runs); per-pull-request runs unscheduled. **Issue:**
-  [#178](https://github.com/smormah/vsift/issues/178). **Status:** open. **Review:** pending.
+  [#178](https://github.com/smormah/vsift/issues/178). **Status:** accepted residual. **Review:** accepted (2026-10-10, by the maintainer's register pass).
 
 ### L-043
 
@@ -2596,7 +2596,7 @@ is weekly.**
 - **Why:** pre-release.
 - **Mitigation:** CLI contract tests and frozen examples.
 - **Next step:** maintainer decisions.
-- **Owner:** unscheduled. **Issue:** [#176](https://github.com/smormah/vsift/issues/176). **Status:** open. **Review:** pending.
+- **Owner:** unscheduled. **Issue:** [#176](https://github.com/smormah/vsift/issues/176). **Status:** accepted residual. **Review:** accepted (2026-10-10, by the maintainer's register pass).
 
 ### L-044
 
@@ -2613,7 +2613,7 @@ is weekly.**
 - **Mitigation:** architecture boundary checked for normal dependencies.
 - **Next step:** none planned.
 - **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual.
-  **Review:** pending.
+  **Review:** accepted (2026-10-10, by the maintainer's register pass).
 
 ### L-045
 
@@ -2682,7 +2682,7 @@ is weekly.**
   plain `407` response is recognised by its status.
 - **Next step:** use a typed error if hyper-util exports one.
 - **Owner:** unscheduled. **Issue:** none. **Status:** monitoring.
-  **Review:** pending.
+  **Review:** accepted (2026-10-10, by the maintainer's register pass: the reading is confirmed).
 
 ### L-090
 
@@ -2710,7 +2710,7 @@ is weekly.**
   removable, because its names and single-link regular files prove ownership.
 - **Next step:** none planned for R0; revisit if users report leftovers.
 - **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual.
-  **Review:** pending.
+  **Review:** accepted (2026-10-10, by the maintainer's register pass: the reading is confirmed).
 
 ### L-100
 
@@ -2747,7 +2747,7 @@ wrongly or lacks "npm publish", and nothing in the workflow's default output say
   reviewed change, because the publish job's commands are held word for word by a
   `vsift-release` test and the governance lint.
 - **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual. **Review:**
-  pending.
+  accepted (2026-10-10, by the maintainer's register pass).
 
 ### L-101
 
@@ -2971,7 +2971,7 @@ candidate to be the accepted one.**
   never through `cmd.exe`; it was added in P14 PR 10a, before the candidate's freeze, and no agent
   trial can test it (they never reach the shim).
 - **Owner:** P14 (PR 7). **Issue:** [#257](https://github.com/smormah/vsift/issues/257).
-  **Status:** accepted residual. **Review:** pending.
+  **Status:** accepted residual. **Review:** accepted (2026-10-10, by the maintainer's register pass).
 
 ### L-111
 
@@ -3010,7 +3010,7 @@ candidate to be the accepted one.**
   (`from_version`), and each later release is frozen the same way (a folder `frozen/<tag>/`).
 - **Next step:** PR 11a recorded the real-registry run on the candidate; PR 12 repeats it on the stable.
 - **Owner:** P14 (PRs 10, 12). **Issue:** [#17](https://github.com/smormah/vsift/issues/17).
-  **Status:** deferred. **Review:** pending.
+  **Status:** deferred. **Review:** accepted (2026-10-10, by the maintainer's register pass).
 
 ### L-112
 
@@ -3037,7 +3037,7 @@ candidate to be the accepted one.**
 - **Mitigation:** the plan says so wherever it claims more; the try-outs are RQ-17.
 - **Next step:** none planned.
 - **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual. **Review:**
-  pending.
+  accepted (2026-10-10, by the maintainer's register pass).
 
 ### L-113
 
@@ -3076,7 +3076,7 @@ worker request has never run on the qualified profile.**
   machine the `P10 durability campaign` boots, with the installed executable, would close
   the gap check for check (#258).
 - **Owner:** P14. **Issue:** [#258](https://github.com/smormah/vsift/issues/258).
-  **Status:** open. **Review:** pending.
+  **Status:** accepted residual. **Review:** accepted (2026-10-10, by the maintainer's register pass).
 
 ### L-114
 
@@ -3104,7 +3104,7 @@ worker request has never run on the qualified profile.**
   2026-10-04 (ADR 0024's PR 9a note); it is usable only when the evidence for the release
   candidate exists. A reviewed macOS build would need its own review and catalogue entry.
 - **Owner:** P14 (PR 9). **Issue:** [#17](https://github.com/smormah/vsift/issues/17).
-  **Status:** deferred. **Review:** pending.
+  **Status:** deferred. **Review:** accepted (2026-10-10, by the maintainer's register pass).
 
 ### L-115
 
@@ -3149,7 +3149,7 @@ launcher, the archives or the engine-library stages.**
   version that has its behaviour and is required from there on.
 - **Next step:** none planned; the candidate's tag carries the override.
 - **Owner:** P14. **Issue:** [#17](https://github.com/smormah/vsift/issues/17). **Status:**
-  accepted residual. **Review:** pending.
+  accepted residual. **Review:** accepted (2026-10-10, by the maintainer's register pass).
 
 ### L-116
 
@@ -3555,7 +3555,7 @@ that week.**
   [#266](https://github.com/smormah/vsift/issues/266), [#277](https://github.com/smormah/vsift/issues/277),
   [#325](https://github.com/smormah/vsift/issues/325).
   **Status:** accepted residual until v2.
-  **Review:** pending.
+  **Review:** accepted (2026-10-10, by the maintainer's register pass: the codes stay until v2, the maintainer's rule of 2026-10-04).
 
 ### L-128
 
@@ -4171,7 +4171,7 @@ that week.**
   a stop that can be continued from a verified prefix; a stall told apart from slow progress; progress
   events for the copy. Whether the two other reads get the same cause is part of it.
 - **Owner:** unscheduled (after `0.2.0`). **Issue:** [#325](https://github.com/smormah/vsift/issues/325).
-  **Status:** deferred. **Review:** pending.
+  **Status:** deferred. **Review:** accepted (2026-10-10, by the maintainer's register pass: accepted for R0; the fix stays with #325).
 
 ### L-141
 
@@ -4242,7 +4242,7 @@ that week.**
   samples than the range and one) would make the guard independent of the tool's rounding; it is a
   follow-up, left out of the third candidate by the maintainer's decision, and has no issue yet.
 - **Owner:** unscheduled. **Issue:** [#334](https://github.com/smormah/vsift/issues/334) (open; the
-  post-decode bound has none). **Status:** open. **Review:** pending.
+  post-decode bound has none). **Status:** accepted residual. **Review:** accepted (2026-10-10, by the maintainer's register pass: accepted for R0; the fix stays with #334).
 
 ### L-142
 
@@ -4292,8 +4292,8 @@ that week.**
   documents entry); (3) accept it for R0 and fix it in `0.2.x`. Either of the first two needs a new candidate before the stable
   `0.2.0`. Whether the stable needs its own decision on RQ-16 is answered (2026-10-09): the waiver carries to it, because
   the stable has the same bytes; a change to the CLI's text would be a different candidate and would need its own cold round.
-- **Owner:** P14 (RQ-16). **Issue:** [#340](https://github.com/smormah/vsift/issues/340). **Status:** open. **Review:**
-  pending.
+- **Owner:** P14 (RQ-16). **Issue:** [#340](https://github.com/smormah/vsift/issues/340). **Status:** accepted residual. **Review:**
+  accepted (2026-10-10, by the maintainer's register pass: the choice of a fix stays open under #340).
 
 ### L-143
 
@@ -4329,7 +4329,7 @@ that week.**
 - **Next step:** the try-out from the sheet on the second Windows 11 machine (LOKI), and a Mac if one is found, after the stable; record
   the observation, whatever it shows, in a records change (that gives CL-201 its evidence item and narrows or closes this entry). A
   block with no way through short of turning protection off starts decision C's signing question, and signing means another candidate.
-- **Owner:** P14 (RQ-17). **Issue:** none. **Status:** accepted residual. **Review:** pending.
+- **Owner:** P14 (RQ-17). **Issue:** none. **Status:** accepted residual. **Review:** accepted (2026-10-10, by the maintainer's register pass).
 
 ## Review workflow
 

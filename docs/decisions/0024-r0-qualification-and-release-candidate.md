@@ -1985,3 +1985,20 @@ number changes, and no code, tool, grader, freeze, public claim or rung changed.
 the hard cold-safety gate, which fired once on a harmless read, rests on one text-matching grader and on readers that are AI sessions (the supervisor, the author of the record, and a further
 session that on 2026-10-10 read the command list and compared it with the raw logs of two runs; they agree). RQ-16 stays `waived` for that one action and is not `passed`, and the claim that
 leans on it stays unused.
+
+## Implementation note, 2026-10-10 (P14: the maintainer's register pass)
+
+The pass that decision H and the plan's section 10 ask for was made on 2026-10-10 from [`register-review-sheet.md`](../planning/register-review-sheet.md). **This is work record only**: the
+register, the sheet, the note of one statement in `public-claims.json` (its text, rung and requirements are unchanged), one paragraph of the support matrix, the plan, the changelog and the two
+memory files. No code, tool, workflow or setting changed, no claim was raised and the rung is still `candidate`.
+
+**Decisions of the maintainer, 2026-10-10: every proposal of the sheet as written.** 46 register entries are `accepted`: the 29 undecided entries of the sheet's Part 1, the six of Part 2, five
+added since (L-140, L-141, L-142, L-143, L-127) and the six readings of Part 3 (L-017, L-062, L-067, L-069, L-088, L-090). Named decisions: L-030 accepted for R0 with the fix under #159; L-058
+accepted with no kernel series pinned; L-076 accepted as not supported in Codex's sandboxed mode on Windows for R0, the product question under #204 for R1; L-095 accepted, the limit stands;
+L-098 accepted as untried and stated so, the try-out after the release (L-143). The engine's direct dependency on `tokio` and the mode name `durable_worker` are confirmed. The MSRV policy is
+left undecided until a crate is to be published. The `Guide` check is not made a required check on `main` for now, because it runs only on certain paths. L-139 stays rejected (to be fixed).
+
+**What is weaker than it sounds.** Accepted means the limit stands as described and the public text says so; none of the 46 was fixed by this. Ten entries that were *open* defects or gaps are
+*accepted residual* for R0 with their issues open. With every limit a statement leans on now reviewed, the register no longer holds back the statements of the rung `after_p14`; their
+evidence still does: each needs its items `passed` for the release, CL-201 needs RQ-17, CL-206 needs RQ-16 and CL-208 needs RQ-14, which are waived and not passed. 75 entries that no public
+statement leans on are still `pending`.

@@ -87,7 +87,16 @@ The result is in step 9 of [`docs/planning/p14-stable-release-steps.md`](docs/pl
 project names the maintainer as the reader of the raw logs ([L-118](docs/planning/known-limits.md#l-118)). The maintainer decided that the supervisor's reading stands for it. **The maintainer did not
 read the raw logs or the generated command list, so no person has read them:** the result rests on the grader and on readers that are AI sessions (a further session read the command list that day and
 checked it against two raw logs; nothing else out of policy). Nothing is re-graded and no number changes: one cold run in 18 still missed the gate, and that item (RQ-16) is still `waived`, not `passed`
-([L-142](docs/planning/known-limits.md#l-142)). No code, tool, public claim or the claims rung changed. Of the maintainer's own steps, the register pass remains.
+([L-142](docs/planning/known-limits.md#l-142)). No code, tool, public claim or the claims rung changed.
+
+**Work record only, after the release: the maintainer's register pass of 2026-10-10.** The maintainer reviewed the known limits that the public statements and the waivers lean on, from
+[`docs/planning/register-review-sheet.md`](docs/planning/register-review-sheet.md), and took every proposal as written: **46 entries of the
+[register](docs/planning/known-limits.md) are `accepted`** (40 limits and six operational readings). Accepted means the limit stands as described and the public text says so, not that it is
+fine. Ten entries that were *open* are *accepted residual* for this release, and the issues that track a fix stay open: no real motion in the test videos (#159), Codex's sandboxed mode on
+Windows (#204), the ten-minute limit on copying a video (#325), very short audio ranges (#334), the audio clip a cold agent read (#340). The unsigned executables and the three try-outs that
+were not done stay untried and stated so. The minimum-Rust-version policy is left undecided (no crate is published). The `Guide` check is not made a required check for now. The note of the
+statement about Claude Code and the support matrix's paragraph on agent clients now state the result of the round on `0.2.0-rc.3` (every gate met; a small sample, not a proof).
+**No public statement was raised and the claims rung is still `candidate`;** that is the ledger follow-up's (PR 13). 75 other register entries are still `pending`.
 
 ## [0.2.0-rc.3] - 2026-10-08
 

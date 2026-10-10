@@ -2585,7 +2585,7 @@ Exit code 0: nothing is named. Passed for the third candidate: RQ-01 to RQ-09, R
 twenty items are waived, and each waiver's text says what it does not cover.** The checker treats a waived item as complete for any version and cannot see the limits above, so it would also pass for an
 `rc.4` and for the stable on these four items: the limits live in the decisions' texts and in this section, and a new candidate has to decide again.
 
-**Left open, for the maintainer:** the one pass over the register (28.4, 29.7; it now includes L-142 and L-143), including the stale wording of CL-204's note and the support matrix's paragraph on agent
+**Left open, for the maintainer:** the one pass over the register (28.4, 29.7; it now includes L-142 and L-143; **done 2026-10-10**, 30.6 item 4), including the stale wording of CL-204's note and the support matrix's paragraph on agent
 clients ("the repeat on the third candidate decides"); **the maintainer's own reading of the raw cold logs (L-118): the maintainer is reading a generated command list of the 18 runs, to be recorded when
 they confirm** (the supervisor's reading of all 18 is recorded, and is not theirs; **decided 2026-10-10: the maintainer does no reading of their own and the supervisor's stands for it, so no person has
 read the logs**: L-118 and the update at the end of `batch-3-reading-rc.3.md`); #340 (which option, or accept for `0.2.x`); closing #321; #312 (fix or accept); the Dependabot pull requests, the
@@ -2704,7 +2704,9 @@ evidence only; everything is measured on a synthetic corpus and a synthetic voic
    completeness check passes either way (a waived item is complete for any version), so what was decided is the wording of the ledger entry and of this plan.
 2. **Whether to move `next`** after the publish (L-108); both shipped documents are true either way.
 3. **Whether the stable's documents should say more or less about the first day for Yarn users** (the untagged case was not tried).
-4. The register pass, the reading of the cold logs (L-118; **decided 2026-10-10: the supervisor's reading stands for the maintainer's, 29.10**), #340, #312 and the re-pins, as in 29.10: unchanged and after the stable.
+4. The register pass (**done 2026-10-10:** 46 entries reviewed as `accepted`, every proposal of [`register-review-sheet.md`](register-review-sheet.md) taken as written; its result is at the top of that
+   sheet; the rung did not move), the reading of the cold logs (L-118; **decided 2026-10-10: the supervisor's reading stands for the maintainer's, 29.10**), #340, #312 and the re-pins, as in 29.10:
+   unchanged and after the stable.
 
 ### 30.7 What is weaker than it sounds
 
