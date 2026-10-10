@@ -49,7 +49,7 @@ whole; do not pipe it into `grep`, `head` or anything else.
 | `vsift setup repair` | free | Read-only diagnosis; it changes nothing. Its findings name `setup rollback` and `setup remove` commands: relay them to the user, never run them. |
 | `vsift setup remove` | never | Removes managed tools the user installed; the user's decision alone. |
 | `vsift setup rollback` | never | Changes which managed tool version every command uses; the user's decision alone. |
-| `vsift ingest` | free | Once per investigation, for the video (and transcript) the user named. Opening the same video again after its session expired is `explicit` (resume.md). |
+| `vsift ingest` | free | Once per investigation, for the video (and transcript) the user named. Opening the same video again is `explicit`: after its session expired (resume.md), or to add a transcript the user supplies. |
 | `vsift session list` | free | Read-only. |
 | `vsift session status` | free | Read-only; the first command after a context reset. |
 | `vsift session close` | free | Only your own session, and only as the user's lifecycle policy says. |
@@ -65,7 +65,7 @@ whole; do not pipe it into `grep`, `head` or anything else.
 | `vsift frame neighbours` | free | Counts as a refinement. |
 | `vsift frame burst` | free | `--max-frames` within the burst budget. |
 | `vsift crop` | free | Counts as a refinement and an image. |
-| `vsift audio` | free | For a human listener; you cannot hear it. |
+| `vsift audio` | free | For a human listener; you cannot hear it and its file tells you nothing: read speech with `transcript get`. |
 | `vsift bundle validate` | free | Read-only, on a bundle the user named or one you retained for them. |
 | `vsift handoff check` | free | Read-only; checks your draft report once before you send it, in one of the two forms under "Checking the draft". |
 | `vsift job status` | free | Read-only. |
@@ -177,9 +177,9 @@ On failure read `error.code`, `error.retryable`, `error.retry_after_ms` and
 
 | Code | What you do |
 | --- | --- |
-| `BUSY` | Wait `retry_after_ms`, retry once, then report the gap. |
+| `BUSY` | Wait `retry_after_ms` (run no program to wait), then run the same command once more; if it is still `BUSY`, report the gap. Run one command at a time, each after the last has returned. |
 | `INVALID_ARGUMENT` | Read the remediation, correct the request once; a `command` of `parse` means the command line itself is wrong: run the `--help` its remediation suggests, then correct the line against it and this file. |
-| `MISSING_CAPABILITY` | Quote the remediation to the user; continue on another path (transcript-only or visual-only) or go to REPORT with the gap. Never install. |
+| `MISSING_CAPABILITY` | Quote the remediation to the user; continue on another path (transcript-only or visual-only) or go to REPORT with the gap. Never install. If the remediation says the tool works but speech could not be transcribed (`too_many_rejected_segments`), nothing is missing: record a `transcript` gap (`transcript_unavailable`, code `MISSING_CAPABILITY`), give the reason and the job in `error.affected_ids` as VSift states them (do not guess), put the remediation in your own words (it is longer than a note), and tell the user a supplied SRT or WebVTT file would help. |
 | `CANCELLED` | For a transcription, follow resume.md. |
 | `DEADLINE_EXCEEDED` | Retry once with a smaller range; otherwise report the gap. |
 | `RESOURCE_LIMIT` | Use a smaller range or fewer frames, unless the remediation says there is no room (a session full of evidence): a smaller request cannot help then. Report the gap. |

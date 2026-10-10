@@ -14,6 +14,17 @@ test('with no input the highest published version is qualified against the first
   assert.equal(chooseVersions({ inputVersion: '', inputFromVersion: '', published: ['0.0.0', '0.1.0', '0.2.0-rc.1', '0.2.0'] }).version, '0.2.0');
 });
 
+test('a candidate of the next patch release, published after a stable one, is the highest version', () => {
+  // The registry as it stands once 0.2.1-rc.1 is on `next` and `latest` is still 0.2.0: the candidate sorts above its predecessor's
+  // stable release and below its own, so a run with no input qualifies the candidate and the upgrade baseline stays 0.1.0.
+  const published = ['0.0.0', '0.1.0', '0.2.0-rc.1', '0.2.0-rc.2', '0.2.0-rc.3', '0.2.0', '0.2.1-rc.1'];
+  assert.deepEqual(chooseVersions({ inputVersion: '', inputFromVersion: '', published }), { version: '0.2.1-rc.1', fromVersion: FIRST_RELEASE });
+  // The stable release of the patch, once it exists, outranks its candidate.
+  assert.equal(chooseVersions({ inputVersion: '', inputFromVersion: '', published: [...published, '0.2.1'] }).version, '0.2.1');
+  // The upgrade a person on `latest` does is a baseline a run may ask for by name.
+  assert.deepEqual(chooseVersions({ inputVersion: '0.2.1-rc.1', inputFromVersion: '0.2.0', published }), { version: '0.2.1-rc.1', fromVersion: '0.2.0' });
+});
+
 test('inputs are used when given, and must be published and plain versions', () => {
   const published = ['0.0.0', '0.1.0', '0.2.0-rc.1'];
   const chosen = chooseVersions({ inputVersion: ' 0.1.0 ', inputFromVersion: '0.0.0', published });

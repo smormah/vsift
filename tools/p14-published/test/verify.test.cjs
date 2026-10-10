@@ -129,6 +129,53 @@ test('a pre-release that moved latest, lost next or was deprecated fails', () =>
   assert.match(failures(verify.evaluateRelease(scripted))[0].detail, /declares scripts/);
 });
 
+/**
+ * The registry as it stands after the first candidate of a patch release is published while a stable release exists:
+ * `next` names the candidate and `latest` still names the stable release (0.2.1-rc.1 over 0.2.0). Before the stable
+ * release `latest` was the empty 0.0.0 placeholder, which every other fixture here carries.
+ */
+function candidateOverStable(version = '0.2.1-rc.1', stable = '0.2.0') {
+  const facts = goodFacts(version);
+  for (const name of PACKAGES) {
+    facts.packages[name].distTags = { latest: stable, next: version };
+    facts.packages[name].versions = ['0.0.0', '0.1.0', '0.2.0-rc.3', stable, version];
+  }
+  facts.latestRelease = `v${stable}`;
+  return facts;
+}
+
+test('a candidate published while a stable release is latest passes: next moves, latest and the GitHub latest release stay', () => {
+  const results = verify.evaluateRelease(candidateOverStable());
+  assert.deepEqual(failures(results), []);
+  const tags = results.filter((result) => /dist-tags a pre-release publish leaves/.test(result.name));
+  assert.equal(tags.length, PACKAGES.length);
+  for (const result of tags) {
+    assert.equal(result.detail, 'next 0.2.1-rc.1, latest 0.2.0');
+  }
+  const flags = results.find((result) => /^the release flags/.test(result.name));
+  assert.match(flags.detail, /pre-release true, GitHub's latest release v0\.2\.0$/);
+  // A pre-release has no stable checks: they name `latest` on all four packages, which a candidate must not move.
+  assert.deepEqual(verify.runStableChecks('pre-release', {}), []);
+});
+
+test('a candidate that moved latest, or was marked the latest release, fails even when a stable release exists', () => {
+  const moved = candidateOverStable();
+  moved.packages['@vsift/darwin-arm64'].distTags.latest = '0.2.1-rc.1';
+  assert.match(failures(verify.evaluateRelease(moved))[0].detail, /latest moved to the pre-release 0\.2\.1-rc\.1/);
+
+  const wrongTag = candidateOverStable();
+  wrongTag.packages['vsift-cli'].distTags.next = '0.2.0-rc.3';
+  assert.match(failures(verify.evaluateRelease(wrongTag))[0].detail, /next is 0\.2\.0-rc\.3, not 0\.2\.1-rc\.1/);
+
+  const unlisted = candidateOverStable();
+  unlisted.packages['@vsift/win32-x64'].distTags.latest = '0.2.9';
+  assert.match(failures(verify.evaluateRelease(unlisted))[0].detail, /latest is 0\.2\.9, which is not a published version/);
+
+  const marked = candidateOverStable();
+  marked.latestRelease = 'v0.2.1-rc.1';
+  assert.match(failures(verify.evaluateRelease(marked))[0].detail, /GitHub marks v0\.2\.1-rc\.1 as the latest release/);
+});
+
 test('provenance must name this repository, the Release workflow, the tag, its commit and a hosted builder', () => {
   const cases = {
     'predicate.buildDefinition.externalParameters.workflow.repository': ['https://github.com/someone/else', /repository/],

@@ -1,6 +1,6 @@
 # Installing VSift
 
-Status: user guide, updated 2026-10-09 (P14 PR 12, the release 0.2.0; P14 PR 10 repeated again, the third candidate; P14 PR 11c;
+Status: user guide, updated 2026-10-10 (section 7 on upgrading from a candidate of a later release: the cut of the patch release's candidate) and 2026-10-09 (P14 PR 12, the release 0.2.0; P14 PR 10 repeated again, the third candidate; P14 PR 11c;
 P14 PR 9a; written by P13 PR 11 and PR 12 for the published pre-release;
 [ADR 0023](../decisions/0023-r0-distribution-managed-installation-and-handoff-check.md)).
 **VSift 0.2.0 is the first release published under npm's `latest` dist-tag**, so `npm install vsift-cli` with no tag installs it.
@@ -446,8 +446,10 @@ folder.
 
 - **npm:** install again: `npm install --global vsift-cli` (likewise for
   pnpm and Bun; Yarn: `yarn add vsift-cli` again in the project). Someone who installed a
-  release candidate with `@next` is moved to 0.2.0 the same way, because `latest` is the higher
-  version; `@next` is not the way to get releases. The launcher and the
+  release candidate of 0.2.0 with `@next` is moved to 0.2.0 the same way, because `latest` is the higher
+  version. A candidate of a later release is newer than `latest`, so the same command installs the older
+  `latest` until that release is published: ask for the exact version to stay on the candidate
+  (`vsift-cli@<version>`). `@next` is not the way to get releases. The launcher and the
   platform package move together, because the launcher pins the platform packages to its
   own exact version; the launcher refuses a platform package of another version (exit 126).
 - **Archive:** extract the new archive over an empty folder and replace the old one, after

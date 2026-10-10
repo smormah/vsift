@@ -28,7 +28,7 @@ The table says which versions receive security fixes. It was a policy until `0.2
 | Version | What it is | Security fixes |
 | --- | --- | --- |
 | The newest `0.2.x` | The R0 release line, published under npm's `latest` tag (`0.2.0` is its only version so far) | Yes. A fix is released as a new patch version of the line (`0.2.1` and so on) with a security advisory. Only the newest patch of the line is fixed. |
-| `0.2.0-rc.N` | The release candidates, published under `next` and never announced (`0.2.0-rc.1` and `0.2.0-rc.2` are deprecated on npm) | No. The release replaces them. |
+| `0.2.0-rc.N`, `0.2.1-rc.N` | The release candidates, published under `next` and never announced (`0.2.0-rc.1` and `0.2.0-rc.2` are deprecated on npm) | No. The release replaces them. |
 | `0.1.0` | The first pre-release (2026-10-01) | No. Move to the newest release. |
 | The default branch | Source for building from the repository | Fixes land here first. |
 

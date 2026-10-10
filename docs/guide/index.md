@@ -1,6 +1,6 @@
 # VSift user guide
 
-<!-- guide-version: 0.2.0 -->
+<!-- guide-version: 0.2.1 -->
 
 VSift turns a video on your machine into **timestamped speech**, **the moments the screen changed** and
 **the exact frames and audio that prove them**, each with an id you can cite. You use it yourself, from a
@@ -8,10 +8,16 @@ terminal, or you let an AI assistant on your machine use it. Nothing is uploaded
 
 This guide teaches you to do things with it. It is written for anyone with a video, not only for programmers.
 
-**Checked against vsift 0.2.0**: the release `0.2.0` and the release candidate `0.2.0-rc.3` it was built from have
+**Checked against vsift 0.2.1**: the release candidate `0.2.1-rc.1` and the release that follows it are built from
 the same code, so this guide names the release, not the candidate. Where this guide says what a command prints, that
 is real output of that build on practice recordings from the repository, and the examples are re-run whenever the
-code changes ([how](#how-this-guide-is-kept-true)). The second candidate, `0.2.0-rc.2`, has the same commands and
+code changes ([how](#how-this-guide-is-kept-true)). The release `0.2.0`, which `npm install vsift-cli` installs until
+`0.2.1` is published, has the same commands and options and a few fixes fewer: a recording with a stretch of little
+recognisable speech could make the whole local transcription fail and keep nothing (where this guide says a stretch can
+be left without a transcript, `0.2.0` fails the whole run instead), the help of `audio` did not say that an AI assistant
+cannot listen to a clip, a `BUSY` answer from an evidence command carried no hint for when to try again, and the agent
+skill had older wording.
+The candidate `0.2.0-rc.3` is the same program as `0.2.0`. The second candidate, `0.2.0-rc.2`, has the same commands and
 options and a few fixes fewer (audio under a tenth of a second could reach the speech recogniser, an `audio` range of
 31 microseconds or less was answered with seconds of audio, a copy that ran out of time was called an invalid video
 with no explanation, and the agent skill lacked two evidence rules). The first candidate, `0.2.0-rc.1`, lacks two more

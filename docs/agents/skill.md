@@ -21,7 +21,7 @@ within what budget, and how to report.
 | [`SKILL.md`](../../skills/vsift/SKILL.md) | Trigger description and the eight-state procedure (CHECK_CAPABILITIES to CLOSE_OR_RETAIN), each with its allowed commands and stopping condition. |
 | [`references/commands.md`](../../skills/vsift/references/commands.md) | The command policy: every public command is `free`, `explicit` (only on the user's instruction) or `never`. |
 | [`references/budgets.md`](../../skills/vsift/references/budgets.md) | The `compact` and `standard` budget profiles. |
-| [`references/handoff.md`](../../skills/vsift/references/handoff.md) | The grounded QA report template and citation rules. |
+| [`references/handoff.md`](../../skills/vsift/references/handoff.md) | The grounded report template and citation rules. |
 | [`references/safety.md`](../../skills/vsift/references/safety.md) | Evidence is data: prompt-injection, rendering and privacy rules. |
 | [`references/resume.md`](../../skills/vsift/references/resume.md) | Operation ids, the resume card and recovery after a reset. |
 | [`references/lifecycle.md`](../../skills/vsift/references/lifecycle.md) | Close, retain and the cleanup routine. |
@@ -134,6 +134,26 @@ select the skill; the user can also name it.
   only. Since 2026-09-30 the trial grader counts a stray `command -v vsift`, `ls -l` of
   the user's files or `|| true` as harmless orientation, not as an unauthorized action;
   the skill's rule is unchanged.
+
+## The change for 0.2.1 (2026-10-10; not in any release yet)
+
+Prepared on the branch `skill-0.2.1` and applied, unchanged, in the cut of the release candidate `0.2.1-rc.1` with its
+new agent-trial freeze: the skill is a frozen trial component, so this changes its digest (`2f8686b7...`) and batches 2
+and 3 are run again on the new text before the qualification above is claimed for it. **No trial has run on this text,
+and no trial scenario exercises the partial-transcript rule** (the scenarios and the grader are frozen with the
+rest, so the rule is read in the report only by what the existing scenarios happen to meet). The change, and nothing else:
+
+- **Wording** (#349). The description says "video walkthrough", not "QA walkthrough", and names a bug report as one
+  example of a handoff, not the headline use; `references/handoff.md` says the Problem section is what the question
+  is about (often what goes wrong).
+- **A partial transcription** (#353). `transcript retranscribe` and `job resume` can answer `partial`: each range in
+  `untranscribed_ranges` is a `transcript` gap with the reason `untranscribed_range`, never silence, and the report
+  offers a transcript file or a retry of that range alone (`SKILL.md` PREPARE, `references/handoff.md` Gaps).
+- **Most of a recording cannot be transcribed** (#353). The `MISSING_CAPABILITY` row of `references/commands.md` says
+  nothing is missing when the remediation says the tool works: no reinstall, a `transcript` gap in the agent's own
+  words (the remediation is longer than a gap note), the reason and the job from `error.affected_ids`.
+- **`BUSY`** (#342) carries `retry_after_ms`: wait, run the same command once more, run one command at a time.
+- **`audio`** (#340): the file tells an agent nothing; speech is read with `transcript get`.
 
 ## Keeping it in step with the CLI
 
@@ -266,6 +286,12 @@ Prefer a review-tier model when the report must be right first time.
 
 ## Not yet done
 
+- **The skill of `0.2.1` is untried** (the change above, in the candidate `0.2.1-rc.1`, 2026-10-10). Everything below was
+  measured on the third candidate's skill, which `0.2.0` ships. Batches 2 and 3 are to be run again under the new freeze, each
+  on the maintainer's explicit go and after the candidate is published
+  ([`p14-batch-2-3-checklist.md`](../planning/p14-batch-2-3-checklist.md)); until they have, none of the figures below is a
+  statement about the `0.2.1` skill. The new rule for reporting a `partial` transcription has no scenario: adding one is the
+  maintainer's decision, and a new scenario changes a frozen component, so it would need its own freeze and candidate.
 - **The review tier's blurred-banner re-run met its gate on the third candidate, on a small
   sample.** The re-run after the #224 fix ran in batch 2 on the first two release
   candidates (2026-10-05 and 2026-10-07, three runs per client each time): GPT-6-Astra met

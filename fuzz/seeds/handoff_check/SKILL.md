@@ -1,6 +1,6 @@
 ---
 name: vsift
-description: Investigate a local video file (a screen recording, QA walkthrough or demo) with the VSift command-line tool and write a grounded, cited handoff. Use when the user asks what a local recording shows or says, where something happens in it, or to turn it into a bug report with timestamps and frames. Do not use for streaming URLs, for editing or converting video, or when the vsift command is not installed and the user has not asked for help setting it up.
+description: Investigate a local video file (a screen recording, video walkthrough or demo) with the VSift command-line tool and write a grounded, cited handoff. Use when the user asks what a local recording shows or says, where something happens in it, or for a cited summary, timeline or handoff of it with timestamps and frames (a bug report is one example). Do not use for streaming URLs, for editing or converting video, or when the vsift command is not installed and the user has not asked for help setting it up.
 ---
 
 # VSift video investigation
@@ -102,9 +102,10 @@ vsift ingest <video> --transcript <transcript> --transcript-offset <offset-us> -
 vsift transcript retranscribe <session> --operation-id <operation-id> --events jsonl | tail -n 1
 ```
 
-  The one line you read is the terminal event; its `result` is the answer. This can
-  take minutes. If your tool call times out or is interrupted, follow resume.md
-  (`job status`, then `job resume`); never start a second transcription.
+  The one line you read is the terminal event; its `result` is the answer. This can take
+  minutes. If your tool call times out or is interrupted, follow resume.md (`job status`, then
+  `job resume`); never start a second transcription. A `partial` answer is usable: each stretch
+  in its `untranscribed_ranges` has no transcript, so it is a gap, never silence (handoff.md).
 - No transcript and no working speech recognition: continue visually and record a
   transcript gap; tell the user a supplied SRT or WebVTT file would help.
 - **Stop when** the session is open and you know whether a transcript revision exists.
@@ -171,10 +172,9 @@ vsift crop <session> <evidence> --rect <rect> --json
   cut off, too small), any claim about its content rests on the transcript alone: mark it
   `partially_supported`, cite the transcript segment that says it, and do not cite those
   pixels as support. Unreadable pixels prove neither what is there nor that something is absent.
-- `vsift audio` makes a WAV clip for a human to hear; you cannot hear it. Cite a clip
-  only as "the audio for this range", never for what is said in it.
-- **Stop when** each claim you plan to make has evidence for or against it, or the
-  image budget is spent.
+- `vsift audio` makes a WAV clip for a human to hear; you cannot hear it (read speech with
+  `transcript get`). Cite a clip only as "the audio for this range", never for what is said in it.
+- **Stop when** each claim you plan to make has evidence for or against it, or the image budget is spent.
 
 ### 6. REFINE_OR_STOP
 

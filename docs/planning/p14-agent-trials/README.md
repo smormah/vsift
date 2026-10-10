@@ -6,15 +6,19 @@ set with the skill, 34 runs) has run on all three candidates; the first two runs
 second, `0.2.0-rc.2`, on 2026-10-07 (its records are in [`batch-2-rc.2/`](batch-2-rc.2/); its reading, with the maintainer's decision of the same day, is
 [batch-2-reading-rc.2.md](batch-2-reading-rc.2.md): Claude Opus 5.5's review tier missed two gates, the evidence item RQ-15 was `failed` for that
 candidate, nothing is re-graded, and the maintainer decided to improve the skill and cut a third candidate, `0.2.0-rc.3`). The third candidate was
-cut on 2026-10-08, and batch 2 ran on it the same day: its 34 records, summary and both clients' state are in [`batch-2/`](batch-2/), its reading is
+cut on 2026-10-08, and batch 2 ran on it the same day: its 34 records, summary and both clients' state are in [`batch-2-rc.3/`](batch-2-rc.3/), its reading is
 [batch-2-reading-rc.3.md](batch-2-reading-rc.3.md), **every gate is met as graded (34 of 34 runs passed fully), and RQ-15 is `passed` for `0.2.0-rc.3`**
 (a small sample, not a proof: the reading says what is weaker than it sounds). Batch 3 (the cold final round, RQ-16, 18 runs with no skill) ran on the same
-candidate on 2026-10-08: its 18 records, summary and both clients' state are in [`batch-3/`](batch-3/) and its reading is
+candidate on 2026-10-08: its 18 records, summary and both clients' state are in [`batch-3-rc.3/`](batch-3-rc.3/) and its reading is
 [batch-3-reading-rc.3.md](batch-3-reading-rc.3.md). Cold usefulness is met on both clients with no margin (5 of 6 each), the hard cold safety gate is not met (1 of 18 runs: a `base64` of
 the audio clip that `vsift audio` had named), and the maintainer decided on 2026-10-09 to waive RQ-16 for `0.2.0-rc.3` only, for that one action (issue #340, register entry L-142; a
-waiver is not a pass, and nothing is re-graded).** The freeze of both is committed for the third candidate (`batch-2/freeze.json` and `batch-3/freeze.json`, written at its
-cut by P14 PR 10 repeated again). **It is a new freeze on purpose: the skill gained two evidence rules, so the `skill` digest and the whole-freeze digest differ from the first
-two candidates'; the other six components are theirs.** A test fails every pull request that changes anything frozen
+waiver is not a pass, and nothing is re-graded).** `0.2.0` was built from that candidate's source, byte for byte the same skill. **The candidate of the patch release `0.2.1`,
+`0.2.1-rc.1`, was cut on 2026-10-10 with a new freeze, on purpose, and no batch has run on it: [`batch-2/`](batch-2/) and [`batch-3/`](batch-3/) hold only its
+`freeze.json` (the same bytes in both), and the third candidate's records moved aside to `batch-2-rc.3/` and `batch-3-rc.3/`.** The skill changed (the wording of #349, a partial
+transcription's gaps, a `BUSY` retry and the audio clip's text), so the `skill` digest and the whole-freeze digest differ from the third candidate's; the other six components
+(grader, scenarios, cold scenarios, hold-outs, settings, corpus truth) are theirs, byte for byte. **Batches 2 and 3 on the fourth candidate start only on the maintainer's explicit go
+and after the candidate is published**, one at a time ([the checklist](../p14-batch-2-3-checklist.md)); until they have run, RQ-15 and RQ-16 say nothing about the changed skill.
+A test fails every pull request that changes anything frozen
 until another candidate and a new freeze are decided on purpose, and pins the whole-freeze digest; batch 1's freeze is history and no longer holds. P14 PR 6 built the harness, the cold-agent mode, the hold-out scenarios and the campaign
 scripts; every batch spends the maintainer's Claude and Codex allowances and starts on the
 maintainer's explicit go. This folder is where the batches' bounded records land. The reading of
@@ -42,13 +46,18 @@ p14-agent-trials/
   batch-2-rc.2/   the counted set with the skill, on the SECOND candidate 0.2.0-rc.2 (ran 2026-10-07; history,
                   moved here when the third candidate was cut; its freeze.json is a copy of the file as it was)
   batch-2-reading-rc.2.md         the reading of batch-2-rc.2 and the maintainer's decision of 2026-10-07
-  batch-2/    the counted set with the skill, on the THIRD candidate 0.2.0-rc.3 (ran 2026-10-08: records/, state-claude.json,
-              state-codex.json, summary.json, SUMMARY.md and freeze.json; the freeze is the file the candidate was cut with)
-  batch-2-reading-rc.3.md         the reading of batch-2 (the third candidate): the gates against the earlier candidates, the usage-limit
+  batch-2-rc.3/   the counted set with the skill, on the THIRD candidate 0.2.0-rc.3 (ran 2026-10-08: records/, state-claude.json,
+                  state-codex.json, summary.json, SUMMARY.md and freeze.json; history, moved here when the fourth candidate was cut;
+                  its freeze.json is a copy of the file as it was)
+  batch-2-reading-rc.3.md         the reading of batch-2-rc.3 (the third candidate): the gates against the earlier candidates, the usage-limit
                                   check, what the Claude Opus reports did differently, and what is weaker than it sounds
-  batch-3/    the cold final round (no skill), on the THIRD candidate 0.2.0-rc.3 (ran 2026-10-08, 18 counted runs; the freeze is the file the candidate was cut with)
-  batch-3-reading-rc.3.md         the reading of batch-3: the gates against the 0.1.0 baseline, the cold finding and the maintainer's decision of
+  batch-3-rc.3/   the cold final round (no skill), on the THIRD candidate 0.2.0-rc.3 (ran 2026-10-08, 18 counted runs; history, moved here
+                  when the fourth candidate was cut; its freeze.json is a copy of the file as it was)
+  batch-3-reading-rc.3.md         the reading of batch-3-rc.3: the gates against the 0.1.0 baseline, the cold finding and the maintainer's decision of
                                   2026-10-09, the read of the raw logs, what the cold agents struggled with, and what is weaker than it sounds
+  batch-2/    the FOURTH candidate 0.2.1-rc.1 (cut 2026-10-10): holds only freeze.json, the file the candidate was cut with; the batch has
+              not run (it starts on the maintainer's go, after the candidate is published, and writes its records, state files and summary here)
+  batch-3/    the same for the cold final round: only freeze.json (the same bytes as batch-2's), no batch run yet
     records/<trial>-<client>-p1.json   one bounded record (at most 64 KiB) per counted or invalid trial
     state-claude.json, state-codex.json  the plan and every attempt of each client (run identifiers,
                                          trial identifiers, outcomes; no path, prompt or name)
