@@ -199,6 +199,7 @@ async fn speech_clips_are_transcribed_through_the_real_adapters() -> TestResult 
                 ),
                 AsrChunkOutcome::Silent { .. } => "silent".to_owned(),
                 AsrChunkOutcome::NoAudio => "no_audio".to_owned(),
+                AsrChunkOutcome::Unusable { .. } => "unusable".to_owned(),
             })
             .collect();
         let text = transcription

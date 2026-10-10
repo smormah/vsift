@@ -169,6 +169,7 @@ pub use vsift_application::{
     OpenSessionError, OpenSessionOutcome, PlanAcceptanceError, RecognizerIdentity, Resumability,
     RuntimeDiagnosis, SessionStorageError, SetupProfile, SourceProbeError, SpeechPcm,
     SpeechRecognitionError, SpeechRecognizer, TranscriptBuildError, TranscriptQueryError,
+    UnusableChunk, UnusableChunks,
 };
 /// Visual-candidate values that appear in this API.
 pub use vsift_application::{

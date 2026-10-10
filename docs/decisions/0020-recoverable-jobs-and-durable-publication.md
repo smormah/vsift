@@ -472,6 +472,34 @@ another process holds without read sharing (os errors 32 and 33): it is answered
 and a later release should retry it and then report with the same code. It is recorded as known limit L-136 and
 was not seen in any campaign.
 
+## Note: a job whose failure can only repeat ends at once, and a checkpoint can hold a verdict (#353, 2026-10-10)
+
+Two additions to sections 4 and 5, proposed with [ADR 0017's note of the same date](0017-local-asr-through-whisper-cpp.md#2026-10-10-note-a-chunk-whose-answer-cannot-be-used-is-a-recorded-gap-not-a-failed-run-353).
+
+- **A failure that a resume can only repeat fails the job at once.** When a run fails because the recogniser's answers were unusable for most of the chunks it answered,
+  the job does not wait for the poison rule's third identical failure: the attempt records the failure with its first unusable chunk and the job ends as `failed`
+  (checkpoints removed). `job status` then says `resumable: false` with `resumable_reason: failed`, `job resume` refuses with `INVALID_ARGUMENT`, and the same
+  `transcript retranscribe` command starts the job anew in a new epoch. Every other failure is classified as before: the retry table, the poison rule and the attempt
+  limit are unchanged. Before this, such a job stayed `resumable: true` and a resume could only fail the same way.
+- **A chunk checkpoint can be an `unusable` verdict.** Besides `no_audio`, `silent` and `recognised`, a checkpoint can record that the recogniser answered and the
+  domain's rules refused the answer as a whole (decoded range and reason, under the payload's digest). A resume reuses it and does not ask the recogniser again.
+  The rule for a `recognised` checkpoint is unchanged (S-08): output the rules now reject is discarded and recognised again. A release before this one reads the new
+  kind as an unusable checkpoint and redoes the chunk, so nothing breaks on a roll back.
+- **A run checks the model's identity before it judges the answers.** A recogniser swapped while the run was in progress (the executable or the model file replaced) made the
+  answers those of two models, so the run reports `model_changed`, a failure a retry can fix, and not that most answers were unusable, which ends the job. The order matters
+  here and only here: `model_changed` is an ordinary retryable failure of the job, an unusable-answers failure is not. **A limit that this does not remove:** the identity is read
+  before the first chunk and after the last, not before each one (a per-chunk read hashes the model every time), so a swap is found when the run ends, and the checkpoints written
+  after the swap are stored under the recognition key of the model the run started with. If that model is put back and the job resumed, they are reused: a stored `recognised` output
+  of the other model would be committed under the original model's provenance (the limit of such checkpoints before this change), and a stored `unusable` verdict of it makes the
+  resumed run fail as unusable answers, which ends the job as failed, after which the same command starts it afresh and works. A fix (end the job on `model_changed`, or check the
+  identity per chunk) changes a published behaviour or a cost, and is left for the register, not made in a patch release.
+- **What a supervisor sees when a worker step could not read part of a recording.** In `job run` and `job batch`, a `retranscribe` step whose run had unusable chunks is
+  still `complete` with `coverage: null`, as is the request: its outputs name the revision, the generation and the chunks reused, and the worker schema has no member for
+  gaps. This is deliberate for 0.2.1 (the worker schema is unchanged) and means a supervisor that reads only the request's result is not told that part of the recording was
+  not transcribed. It can tell by reading the revision the step names, `transcript get --revision <revision_id>`, whose data carries the warning
+  `provider_chunks_rejected` and `revision.local_asr.unusable_chunks`. The direct commands (`transcript retranscribe`, `job resume`) answer `partial`. A contract test pins the
+  step's shape and stops compiling if a member for gaps is added, so the change is made on purpose in a later release, with the schema and these words.
+
 ## Consequences
 
 - PR 1 changes no public contract. Warm reads no longer grow with the chain; every

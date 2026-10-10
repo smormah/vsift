@@ -202,6 +202,9 @@ enum Fault {
     /// Sets the shared flag, then fails with this error: a provider that
     /// died of the same console interrupt that cancelled the caller.
     RaisesAndFails(SpeechRecognitionError),
+    /// Answers with segments that start after the chunk's audio ends, so
+    /// nothing in the answer can be placed and the chunk is unusable (#353).
+    Garbage,
 }
 
 /// A deterministic recognizer: chunk `i` always says the same words.
@@ -251,6 +254,18 @@ fn words(chunk: &PlannedChunk) -> Result<ProviderChunkOutput, SpeechRecognitionE
     })
 }
 
+/// An answer the domain's rules refuse as a whole: one segment that starts a
+/// second after the chunk's audio ends.
+fn garbage(chunk: &PlannedChunk) -> Result<ProviderChunkOutput, SpeechRecognitionError> {
+    let mut output = words(chunk)?;
+    let past = chunk.window().duration_micros() / 1_000 + 1_000;
+    for segment in &mut output.segments {
+        segment.start = ChunkTime::from_millis(past).ok_or(SpeechRecognitionError::Io)?;
+        segment.end = ChunkTime::from_millis(past + 2_000).ok_or(SpeechRecognitionError::Io)?;
+    }
+    Ok(output)
+}
+
 impl SpeechRecognizer for FakeRecognizer {
     fn identity(
         &self,
@@ -279,6 +294,7 @@ impl SpeechRecognizer for FakeRecognizer {
                 self.flag.store(true, Ordering::SeqCst);
                 Err(error)
             }
+            Some(Fault::Garbage) => garbage(chunk),
             None => words(chunk),
         };
         std::future::ready(answer)
@@ -1515,6 +1531,159 @@ async fn three_identical_failures_at_one_chunk_poison_the_job() -> TestResult {
     let restarted = harness.run(&resolved, None).await?;
     assert!(!restarted.report.resumed);
     assert_eq!(harness.record(&resolved.spec.job_id)?.epoch, 1);
+    Ok(())
+}
+
+/// #353: a chunk whose answer is unusable is a recorded gap of the committed
+/// revision. A run interrupted after it resumes from its checkpoints without
+/// asking the recognizer about it again, and commits the revision an
+/// uninterrupted run commits, the gap included.
+#[tokio::test]
+async fn an_unusable_chunk_resumes_as_a_gap_without_being_asked_again() -> TestResult {
+    let control = {
+        let harness = Harness::new()?;
+        harness.recognizer.fault_at(1, Fault::Garbage);
+        harness.request(None, None).await??
+    };
+    let outcomes: Vec<_> = {
+        let vsift_domain::TranscriptProvenance::LocalAsr(run) = control.revision.provenance()
+        else {
+            return Err("not a local-ASR revision".into());
+        };
+        run.chunks()
+            .iter()
+            .map(vsift_domain::AsrChunkRecord::outcome)
+            .collect()
+    };
+    assert!(matches!(
+        outcomes.as_slice(),
+        [
+            vsift_domain::AsrChunkOutcome::Transcribed { .. },
+            vsift_domain::AsrChunkOutcome::Unusable { .. },
+            vsift_domain::AsrChunkOutcome::Transcribed { .. },
+            vsift_domain::AsrChunkOutcome::Transcribed { .. },
+            vsift_domain::AsrChunkOutcome::Transcribed { .. },
+        ]
+    ));
+    assert_eq!(
+        control
+            .revision
+            .warnings()
+            .as_slice()
+            .iter()
+            .map(|warning| (warning.kind(), warning.count(), warning.first_cue()))
+            .collect::<Vec<_>>(),
+        [(
+            vsift_domain::TranscriptWarningKind::ProviderChunksRejected,
+            1,
+            2
+        )]
+    );
+
+    // The same run, interrupted at chunk 3 after chunks 0 to 2 were stored.
+    let harness = Harness::new()?;
+    harness.recognizer.fault_at(1, Fault::Garbage);
+    harness
+        .recognizer
+        .fault_at(3, Fault::Fails(SpeechRecognitionError::Deadline));
+    let resolved = harness.resolve(None)?;
+    assert!(harness.run(&resolved, None).await.is_err());
+    assert_eq!(
+        harness.record(&resolved.spec.job_id)?.state,
+        JobState::Interrupted
+    );
+    assert_eq!(harness.checkpoints(&resolved.spec.job_id)?, 3);
+    // The recognizer would now hear chunk 1 as speech. It is not asked.
+    harness.recognizer.clear();
+    let recognised = harness.recognizer.calls.load(Ordering::SeqCst);
+    let resumed = harness.run(&resolved, None).await?;
+    assert_eq!(resumed.report.chunks_reused, 3);
+    assert_eq!(resumed.report.checkpoints_discarded, 0);
+    assert_eq!(
+        harness.recognizer.calls.load(Ordering::SeqCst) - recognised,
+        2
+    );
+    assert_eq!(resumed.revision, control.revision);
+    assert_eq!(harness.checkpoints(&resolved.spec.job_id)?, 0);
+    Ok(())
+}
+
+/// #353: when most chunks are unusable the job fails at once and says so. It is
+/// not left resumable, because a resume reads the same verdicts from its
+/// checkpoints and can only fail again; before, it stayed resumable until the
+/// poison rule's third failure. Nothing is committed, and the same request run
+/// again starts the job anew.
+#[tokio::test]
+async fn most_chunks_unusable_end_the_job_at_the_first_failure() -> TestResult {
+    let harness = Harness::new()?;
+    for chunk in 0..3 {
+        harness.recognizer.fault_at(chunk, Fault::Garbage);
+    }
+    let resolved = harness.resolve(None)?;
+    let failure = harness.run(&resolved, None).await;
+    let Err(JobRunError::Asr { failure, .. }) = failure else {
+        return Err(format!("not a recognition failure: {failure:?}").into());
+    };
+    let AsrFailureReason::MalformedOutput(unusable) = failure.failure.reason else {
+        return Err("not the unusable-chunks failure".into());
+    };
+    // Judged after the third of five chunks: three unusable of at most five.
+    assert_eq!(
+        (unusable.unusable, unusable.answered, unusable.planned),
+        (3, 3, 5)
+    );
+    assert_eq!(unusable.first.index, 0);
+    assert_eq!(unusable.first.window, range(0, 30 * SECOND)?);
+    assert_eq!(failure.chunk, Some(0));
+    assert_eq!(failure.failure.stage, AsrStage::OutputValidation);
+
+    let record = harness.record(&resolved.spec.job_id)?;
+    assert_eq!(record.state, JobState::Failed);
+    assert_eq!(record.attempt, 1);
+    assert_eq!(
+        record.failures,
+        [vsift_domain::AttemptFailure {
+            chunk: Some(0),
+            code: FailureCode::MissingCapability,
+        }]
+    );
+    assert_eq!(harness.checkpoints(&resolved.spec.job_id)?, 0);
+    assert_eq!(harness.publishes()?, 0);
+    let refused = super::resumable_request(&harness.store, &session()?, &resolved.spec.job_id, NOW);
+    assert_eq!(
+        refused,
+        Err(JobRunError::NotResumable {
+            job: resolved.spec.job_id.clone(),
+            state: JobState::Failed
+        })
+    );
+    // `job status` therefore says it failed, not that it can be resumed.
+    let resumability = super::Resumability::of(JobState::Failed, JobLiveness::Unowned, true);
+    assert!(!resumability.resumable());
+
+    // The same request, run again, starts a new epoch from nothing.
+    harness.recognizer.clear();
+    let restarted = harness.run(&resolved, None).await?;
+    assert!(!restarted.report.resumed);
+    assert_eq!(harness.record(&resolved.spec.job_id)?.epoch, 1);
+    Ok(())
+}
+
+/// A failure that can be resumed stays resumable: only the failure that can
+/// only repeat ends the job at once.
+#[tokio::test]
+async fn an_unusable_chunk_that_does_not_end_the_run_leaves_a_later_failure_resumable() -> TestResult
+{
+    let harness = Harness::new()?;
+    harness.recognizer.fault_at(0, Fault::Garbage);
+    harness
+        .recognizer
+        .fault_at(2, Fault::Fails(SpeechRecognitionError::Deadline));
+    let resolved = harness.resolve(None)?;
+    assert!(harness.run(&resolved, None).await.is_err());
+    let record = harness.record(&resolved.spec.job_id)?;
+    assert_eq!(record.state, JobState::Interrupted);
+    assert_eq!(harness.checkpoints(&resolved.spec.job_id)?, 2);
     Ok(())
 }
 

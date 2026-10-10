@@ -11,14 +11,16 @@
 //! revision 2 retranscribes 5.5-6 s, where the clip is silent, so it carries
 //! revision 1's segment and records a silent chunk and no new speech.
 
-use std::{fs, io, num::NonZeroU16, num::NonZeroU32, path::PathBuf};
+use std::{fs, future::Future, io, num::NonZeroU16, num::NonZeroU32, path::PathBuf};
 
 use jsonschema::{Retrieve, Uri};
 use serde_json::Value;
 use vsift_application::{
-    AsrFailure, AsrFailureReason, AsrRevisionRequest, AsrStage, AsrTranscription,
-    LocalAsrVerificationFailure, Resumability, RevisionSplice, TranscriptPageRequest,
-    build_asr_revision, page_transcript, whole_file_source_segment,
+    AsrCancellation, AsrFailure, AsrFailureReason, AsrRevisionRequest, AsrStage, AsrTranscription,
+    LocalAsrVerificationFailure, RecognizerIdentity, Resumability, RevisionSplice,
+    SpeechAudioError, SpeechAudioSource, SpeechPcm, SpeechRecognitionError, SpeechRecognizer,
+    TranscribeRangeRequest, TranscriptPageRequest, UnusableChunk, UnusableChunks,
+    build_asr_revision, page_transcript, transcribe_range, whole_file_source_segment,
 };
 use vsift_contract::{
     CANCELLATION_TOO_LATE_WARNING, CHECKPOINT_DISCARDED_WARNING, CommandName,
@@ -26,21 +28,22 @@ use vsift_contract::{
     JOB_INTERRUPTED_REMEDIATION, JOB_NOT_RESUMABLE_REMEDIATION, JOB_SESSION_NOT_OPEN_REMEDIATION,
     JobData, JobPresentation, JobResumeData, LOCAL_ASR_MODEL_REMEDIATION,
     LOCAL_ASR_TOOLS_REMEDIATION, LifecycleResponse, NO_AUDIO_STREAM_REMEDIATION,
-    NO_TRANSCRIPT_REMEDIATION, OperationResponse, ProgressEventResponse, ProgressReport,
-    RESUMED_FROM_CHECKPOINT_WARNING, RetranscribeJob, SUPERSEDED_REMEDIATION, SessionJobData,
-    SessionState, SessionStatusData, StatusData, TerminalEventResponse, TranscriptEvidenceStream,
-    TranscriptPageData, TranscriptRetranscribeData, TranscriptRevisionData,
-    UNKNOWN_JOB_REMEDIATION, UNKNOWN_REVISION_REMEDIATION, UNPINNED_MODEL_REMEDIATION,
+    NO_TRANSCRIPT_REMEDIATION, OperationResponse, PROVIDER_CHUNKS_REJECTED_WARNING,
+    ProgressEventResponse, ProgressReport, RESUMED_FROM_CHECKPOINT_WARNING, RetranscribeJob,
+    SUPERSEDED_REMEDIATION, SessionJobData, SessionState, SessionStatusData, StatusData,
+    TerminalEventResponse, TranscriptEvidenceStream, TranscriptPageData,
+    TranscriptRetranscribeData, TranscriptRevisionData, UNKNOWN_JOB_REMEDIATION,
+    UNKNOWN_REVISION_REMEDIATION, UNPINNED_MODEL_REMEDIATION, finish_retranscription,
     job_warning_messages, local_asr_failure_summary, local_asr_verification_summary,
-    transcript_warning_messages,
+    retranscription_gaps, transcript_warning_messages,
 };
 use vsift_domain::{
     AsrChunkOutcome, AsrChunkRecord, AsrDecodingProfile, AsrModel, AsrModelProfile, AsrProvider,
     AsrProviderBuild, AsrRun, AsrRunParts, AttemptFailure, ChunkPlan, ChunkTime, CueText,
     FailureCode, JobId, JobKind, JobState, LanguageTag, MediaTime, OperationId, PageLimit,
-    ProgressStage, ProgressUpdate, ProviderChunkOutput, ProviderOutputError, ProviderSegment,
-    ProviderToken, ProviderTokenKind, SessionId, Sha256Hex, SourceId, SourceSegment,
-    StorageGeneration, TimeRange, TranscriptRevision, TranscriptRevisionError,
+    PlannedChunk, ProgressStage, ProgressUpdate, ProviderChunkOutput, ProviderOutputError,
+    ProviderSegment, ProviderToken, ProviderTokenKind, SessionId, Sha256Hex, SourceId,
+    SourceSegment, StorageGeneration, TimeRange, TranscriptRevision, TranscriptRevisionError,
     TranscriptRevisionId, TranscriptWarningKind, TranscriptWarnings, merge_chunks, plan_chunks,
     validate_chunk_output,
 };
@@ -540,7 +543,16 @@ fn every_local_asr_failure_is_a_schema_valid_bounded_failure() -> TestResult {
             FailureCode::MissingCapability,
         ),
         (
-            AsrFailureReason::MalformedOutput(ProviderOutputError::InvalidTokenProbability),
+            AsrFailureReason::MalformedOutput(UnusableChunks {
+                unusable: 4,
+                answered: 5,
+                planned: 8,
+                first: UnusableChunk {
+                    index: 0,
+                    window: range(0, 30 * SECOND)?,
+                    error: ProviderOutputError::InvalidTokenProbability,
+                },
+            }),
             FailureCode::MissingCapability,
         ),
         (
@@ -630,9 +642,575 @@ fn published_local_asr_examples_validate_against_their_schemas() -> TestResult {
     Ok(())
 }
 
+// ------------------------------------------------ #353: unusable chunks
+
+/// The audio of a recording that is silent for its first `quiet` chunks and
+/// speech after them, as a decoder would hand it over.
+struct Recording {
+    quiet: u32,
+}
+
+impl SpeechAudioSource for Recording {
+    fn speech_pcm(
+        &self,
+        chunk: &PlannedChunk,
+    ) -> impl Future<Output = Result<SpeechPcm, SpeechAudioError>> + Send {
+        let level = if chunk.index() < self.quiet { 0 } else { 3_000 };
+        std::future::ready(
+            usize::try_from(chunk.window().duration_micros() / 1_000 * 16)
+                .map_err(|_| SpeechAudioError::ResourceLimit)
+                .map(|count| SpeechPcm {
+                    actual_start: chunk.window().start(),
+                    samples: vec![level; count],
+                }),
+        )
+    }
+}
+
+/// A recogniser that answers the first chunk with `first` (the recorded F01
+/// output) or, when it has none, with a segment that starts after the chunk's
+/// audio ends, which no rule can place: what whisper.cpp did for the recording
+/// of #353. Every other chunk it answers with one segment six seconds in when
+/// `rest_described` and with the unplaceable one otherwise.
+struct StandInRecogniser {
+    first: Option<ProviderChunkOutput>,
+    rest_described: bool,
+}
+
+impl SpeechRecognizer for StandInRecogniser {
+    fn identity(
+        &self,
+    ) -> impl Future<Output = Result<RecognizerIdentity, SpeechRecognitionError>> + Send {
+        std::future::ready(recognizer_identity().map_err(|_| SpeechRecognitionError::Io))
+    }
+
+    fn recognize(
+        &self,
+        chunk: &PlannedChunk,
+        _pcm: &SpeechPcm,
+    ) -> impl Future<Output = Result<ProviderChunkOutput, SpeechRecognitionError>> + Send {
+        let answer = match (&self.first, chunk.index()) {
+            (Some(output), 0) => Ok(output.clone()),
+            (None, 0) => answer_after_the_audio(chunk),
+            _ if self.rest_described => answer_six_seconds_in(chunk),
+            _ => answer_after_the_audio(chunk),
+        };
+        std::future::ready(answer)
+    }
+}
+
+/// One segment of two seconds, six seconds into the chunk.
+fn answer_six_seconds_in(
+    chunk: &PlannedChunk,
+) -> Result<ProviderChunkOutput, SpeechRecognitionError> {
+    let words = format!("words in chunk {}", chunk.index());
+    Ok(ProviderChunkOutput {
+        language: LanguageTag::parse("en").ok(),
+        segments: vec![ProviderSegment {
+            start: ChunkTime::from_millis(6_000).ok_or(SpeechRecognitionError::Io)?,
+            end: ChunkTime::from_millis(8_000).ok_or(SpeechRecognitionError::Io)?,
+            text: Some(CueText::new(words.clone(), words).map_err(|_| SpeechRecognitionError::Io)?),
+            tokens: Vec::new(),
+        }],
+    })
+}
+
+fn answer_after_the_audio(
+    chunk: &PlannedChunk,
+) -> Result<ProviderChunkOutput, SpeechRecognitionError> {
+    let words = "words that cannot be placed".to_owned();
+    let past = chunk.window().duration_micros() / 1_000 + 1_000;
+    Ok(ProviderChunkOutput {
+        language: LanguageTag::parse("en").ok(),
+        segments: vec![ProviderSegment {
+            start: ChunkTime::from_millis(past).ok_or(SpeechRecognitionError::Io)?,
+            end: ChunkTime::from_millis(past + 2_000).ok_or(SpeechRecognitionError::Io)?,
+            text: Some(CueText::new(words.clone(), words).map_err(|_| SpeechRecognitionError::Io)?),
+            tokens: Vec::new(),
+        }],
+    })
+}
+
+fn recognizer_identity() -> Built<RecognizerIdentity> {
+    Ok(RecognizerIdentity {
+        provider: AsrProviderBuild::new(AsrProvider::WhisperCpp, Sha256Hex::parse(WHISPER_SHA256)?),
+        model: AsrModel::new(AsrModelProfile::Base, Sha256Hex::parse(BASE_MODEL_SHA256)?),
+        decoding: AsrDecodingProfile::R0V1,
+        threads: NonZeroU16::new(4).ok_or("zero")?,
+    })
+}
+
+struct NotCancelled;
+
+impl AsrCancellation for NotCancelled {
+    fn is_cancelled(&self) -> bool {
+        false
+    }
+}
+
+/// A run over the whole of a `seconds`-long stand-in recording made by the
+/// application's own use case, with the fakes above: what its numbers are is
+/// what the code gives, not what a document says.
+async fn transcribe_stand_in(
+    seconds: u64,
+    quiet: u32,
+    recogniser: &StandInRecogniser,
+) -> Built<(SourceSegment, Result<AsrTranscription, AsrFailure>)> {
+    let source_id = SourceId::from_sha256(&"0123456789abcdef".repeat(4))?;
+    let source = whole_file_source_segment(&source_id, MediaTime::from_micros(seconds * SECOND))?;
+    let outcome = transcribe_range(
+        TranscribeRangeRequest {
+            source_segment: &source,
+            range: source.range(),
+            plan: ChunkPlan::R0,
+            audio_stream: 1,
+            expected: &recognizer_identity()?,
+        },
+        &Recording { quiet },
+        recogniser,
+        &NotCancelled,
+    )
+    .await;
+    Ok((source, outcome))
+}
+
+/// The revision the run `transcription` over the whole of `source` makes as
+/// revision `number`, superseding `base` when there is one (the whole source
+/// is replaced, but for text kept inside a gap).
+fn stand_in_revision(
+    source: &SourceSegment,
+    number: u32,
+    transcription: AsrTranscription,
+    base: Option<&TranscriptRevision>,
+) -> Built<TranscriptRevision> {
+    Ok(build_asr_revision(AsrRevisionRequest {
+        session_id: &SessionId::parse(SESSION)?,
+        source_id: &SourceId::from_sha256(&"0123456789abcdef".repeat(4))?,
+        source_segment: source,
+        number: NonZeroU32::new(number).ok_or("zero")?,
+        transcription,
+        splice: base.map(|base| RevisionSplice {
+            base,
+            replaced_range: source.range(),
+        }),
+    })?)
+}
+
+/// A 55 s recording of two chunks, the first transcribed from the recorded F01
+/// output and the second unusable: what a recogniser's answer that cannot be
+/// placed in its audio leaves behind, made by `transcribe_range`. (The
+/// recording is a stand-in: the F01 clip's own output over a longer source, so
+/// the example needs no real one.)
+async fn unusable_chunk_revision() -> Built<TranscriptRevision> {
+    let recogniser = StandInRecogniser {
+        first: Some(recorded_f01_output()?),
+        rest_described: false,
+    };
+    let (source, outcome) = transcribe_stand_in(55, 0, &recogniser).await?;
+    let transcription = outcome.map_err(|failure| format!("the run failed: {failure:?}"))?;
+    stand_in_revision(&source, 1, transcription, None)
+}
+
+/// What a run over the 2,080 s stand-in recording (83 chunks) gives when its
+/// first three chunks are silent and the recogniser's answer for every other
+/// chunk cannot be placed in its audio: the run stops as soon as it is certain
+/// that more than half of the chunks it answered are unusable.
+async fn most_chunks_unusable_failure() -> Built<AsrFailure> {
+    let recogniser = StandInRecogniser {
+        first: None,
+        rest_described: false,
+    };
+    let (_, outcome) = transcribe_stand_in(2_080, 3, &recogniser).await?;
+    Ok(outcome.err().ok_or("the run was expected to fail")?)
+}
+
+/// The same failure of a run over a short range: 55 s, two chunks, neither of
+/// whose answers can be placed.
+async fn short_range_failure() -> Built<AsrFailure> {
+    let recogniser = StandInRecogniser {
+        first: None,
+        rest_described: false,
+    };
+    let (_, outcome) = transcribe_stand_in(55, 0, &recogniser).await?;
+    Ok(outcome.err().ok_or("the run was expected to fail")?)
+}
+
+/// #353: a run in which the recogniser's answer for one chunk could not be used
+/// commits its revision and answers `partial`: the envelope's coverage lists
+/// the chunk's untranscribed range (what its neighbour's overlap did not
+/// transcribe) under the published reason `untranscribed_range`, the data lists
+/// the same range and counts the chunk, and the warning names it. It is a
+/// success: the status says what is missing, and it validates against the
+/// published schemas.
+#[tokio::test]
+async fn a_run_with_an_unusable_chunk_is_a_partial_result_that_names_its_gap() -> TestResult {
+    let revision = unusable_chunk_revision().await?;
+    let response = finish_retranscription(retranscribe_response(&revision, None)?, &revision);
+    let value = serde_json::to_value(&response)?;
+    validate("operation-response.schema.json", &value)?;
+    validate("transcript-retranscribe-data.schema.json", &value["data"])?;
+    assert_eq!(value["status"], "partial");
+    assert!(value["error"].is_null());
+    // The chunk's own 25-55 s window less the first 5 s the first chunk heard
+    // (it ends at 30 s).
+    assert_eq!(
+        value["coverage"],
+        serde_json::json!({
+            "truncated": true,
+            "gaps": ["30000000-55000000"],
+            "reasons": ["untranscribed_range"],
+        })
+    );
+    assert_eq!(
+        value["data"]["untranscribed_ranges"],
+        serde_json::json!([{"from_us": 30_000_000, "to_us": 55_000_000}])
+    );
+    let run = &value["data"]["revision"]["local_asr"];
+    assert_eq!(run["chunk_count"], 2);
+    assert_eq!(run["transcribed_chunks"], 1);
+    assert_eq!(run["unusable_chunks"], 1);
+    assert_eq!(run["silent_chunks"], 0);
+    assert_eq!(
+        value["data"]["revision"]["warnings"],
+        serde_json::json!([{
+            "code": "provider_chunks_rejected",
+            "count": 1,
+            "first_cue": 2,
+            "excluded_cues": true,
+        }])
+    );
+    assert!(
+        value["warnings"]
+            .as_array()
+            .ok_or("no warnings")?
+            .contains(&Value::from(PROVIDER_CHUNKS_REJECTED_WARNING))
+    );
+    assert_eq!(
+        retranscription_gaps(&revision),
+        [range(30 * SECOND, 55 * SECOND)?]
+    );
+    assert_example("transcript-retranscribe.partial.json", &value)?;
+
+    // The stream form carries the same result as its terminal event.
+    let event = serde_json::to_value(TerminalEventResponse::new(finish_retranscription(
+        retranscribe_response(&revision, None)?,
+        &revision,
+    )))?;
+    validate("terminal-event.schema.json", &event)?;
+    assert_eq!(event["result"]["status"], "partial");
+
+    // A search of the revision reports the same range as untranscribed, with
+    // the same reason, and the recording's end as nothing was examined there.
+    let coverage = vsift_domain::SearchCoverage::of(&revision, None);
+    assert_eq!(coverage.untranscribed(), [range(30 * SECOND, 55 * SECOND)?]);
+    assert!(coverage.no_speech().is_empty());
+    Ok(())
+}
+
+/// #353: a run that could not read part of the range it replaced keeps what the
+/// earlier revision had there, and says so. A 55 s stand-in recording is
+/// transcribed in full (revision 1: the recorded F01 speech in the first
+/// chunk's first seconds, one segment in the second chunk), then again with the
+/// first chunk unusable (revision 2). The result lists the whole of the part
+/// that run did not transcribe, 0-25 s, because that is what the run did; the
+/// words revision 1 had in it are kept as they were, carried from revision 1,
+/// so a search of revision 2 still finds them and reports only what lies
+/// around them as untranscribed. The two lists differ on purpose, and the
+/// warning says why.
+#[tokio::test]
+async fn text_kept_in_an_unreadable_part_is_listed_as_not_transcribed_by_the_run() -> TestResult {
+    let source_id = SourceId::from_sha256(&"0123456789abcdef".repeat(4))?;
+    let source = whole_file_source_segment(&source_id, MediaTime::from_micros(55 * SECOND))?;
+    let described = StandInRecogniser {
+        first: Some(recorded_f01_output()?),
+        rest_described: true,
+    };
+    let (_, whole) = transcribe_stand_in(55, 0, &described).await?;
+    let first = stand_in_revision(&source, 1, whole.map_err(|f| format!("{f:?}"))?, None)?;
+    let unreadable_start = StandInRecogniser {
+        first: None,
+        rest_described: true,
+    };
+    let (_, again) = transcribe_stand_in(55, 0, &unreadable_start).await?;
+    let second = stand_in_revision(
+        &source,
+        2,
+        again.map_err(|f| format!("{f:?}"))?,
+        Some(&first),
+    )?;
+
+    // The first chunk's window (0-30 s) less the second's (25-55 s).
+    let not_transcribed = [range(0, 25 * SECOND)?];
+    assert_eq!(retranscription_gaps(&second), not_transcribed);
+    let kept: Vec<TimeRange> = second
+        .segments()
+        .iter()
+        .filter(|segment| segment.carried_from().is_some())
+        .map(vsift_domain::TranscriptSegment::range)
+        .collect();
+    assert!(!kept.is_empty(), "revision 1's speech was not kept");
+    assert!(
+        kept.iter()
+            .all(|range| range.end().as_micros() <= 25 * SECOND)
+    );
+    assert!(
+        second
+            .segments()
+            .iter()
+            .any(|segment| segment.carried_from().is_none()),
+        "the second chunk's own words are missing"
+    );
+
+    let response = finish_retranscription(retranscribe_response(&second, None)?, &second);
+    let value = serde_json::to_value(&response)?;
+    validate("operation-response.schema.json", &value)?;
+    validate("transcript-retranscribe-data.schema.json", &value["data"])?;
+    assert_eq!(value["status"], "partial");
+    assert_eq!(value["coverage"]["gaps"], serde_json::json!(["0-25000000"]));
+    assert_eq!(
+        value["data"]["untranscribed_ranges"],
+        serde_json::json!([{"from_us": 0, "to_us": 25_000_000}])
+    );
+    assert_eq!(
+        value["data"]["revision"]["carried_segment_count"],
+        kept.len()
+    );
+    let warnings = value["warnings"].as_array().ok_or("no warnings")?;
+    assert!(warnings.contains(&Value::from(PROVIDER_CHUNKS_REJECTED_WARNING)));
+    assert!(
+        PROVIDER_CHUNKS_REJECTED_WARNING
+            .contains("kept whole as it was, unless this run's own text overlaps it")
+    );
+
+    // A search of the revision counts the kept words as transcribed: it lists
+    // less than the run did not transcribe, and nothing under the kept words.
+    let coverage = vsift_domain::SearchCoverage::of(&second, None);
+    assert!(!coverage.untranscribed().is_empty());
+    assert_ne!(coverage.untranscribed(), not_transcribed);
+    for gap in coverage.untranscribed() {
+        assert!(gap.end().as_micros() <= 25 * SECOND, "{gap:?}");
+        for kept in &kept {
+            assert!(
+                gap.end() <= kept.start() || kept.end() <= gap.start(),
+                "{gap:?} overlaps the kept words at {kept:?}"
+            );
+        }
+    }
+    Ok(())
+}
+
+/// A run with no unusable chunk is presented exactly as it always was: the
+/// complete result, `coverage` null, and none of the members #353 added.
+#[test]
+fn a_run_without_an_unusable_chunk_is_presented_exactly_as_before() -> TestResult {
+    let (first, second) = f01_revisions()?;
+    for (revision, requested) in [
+        (&first, None),
+        (&second, Some(range(5_500_000, 6 * SECOND)?)),
+    ] {
+        let response =
+            finish_retranscription(retranscribe_response(revision, requested)?, revision);
+        let value = serde_json::to_value(&response)?;
+        assert_eq!(value["status"], "complete");
+        assert!(value["coverage"].is_null());
+        assert!(value["data"].get("untranscribed_ranges").is_none());
+        assert!(
+            value["data"]["revision"]["local_asr"]
+                .get("unusable_chunks")
+                .is_none()
+        );
+        assert!(retranscription_gaps(revision).is_empty());
+    }
+    // And the frozen example, byte for byte, is still what is produced.
+    let (_, second) = f01_revisions()?;
+    let response = serde_json::to_value(finish_retranscription(
+        retranscribe_response(&second, Some(range(5_500_000, 6 * SECOND)?))?,
+        &second,
+    ))?;
+    assert_eq!(response, load("examples/transcript-retranscribe.json")?);
+    Ok(())
+}
+
+/// The failure response of `failure`, as `transcript retranscribe` answers it
+/// for the job `JOB`.
+fn unusable_output_response(failure: AsrFailure) -> Built<Value> {
+    let response = OperationResponse::failure_with_remediation(
+        "transcript.retranscribe",
+        FailureCode::MissingCapability,
+        local_asr_failure_summary(failure),
+    )
+    .with_affected_ids(&[JOB]);
+    let value = serde_json::to_value(&response)?;
+    validate("operation-response.schema.json", &value)?;
+    validate(
+        "terminal-event.schema.json",
+        &serde_json::to_value(TerminalEventResponse::new(response))?,
+    )?;
+    Ok(value)
+}
+
+/// #353: the failure of a run whose recogniser answered unusably for most
+/// chunks keeps its published code, names the job in `affected_ids`, and says in
+/// its remediation which reason, how many chunks and where the first one is;
+/// the job it names is failed, not resumable. The numbers are those of the
+/// application's own run over an 83-chunk stand-in recording whose first three
+/// chunks are silent: it stops at the 41st answer, the first moment it is
+/// certain that more than half of the answers are unusable.
+#[tokio::test]
+async fn most_chunks_unusable_is_a_truthful_failure_with_its_job() -> TestResult {
+    let failure = most_chunks_unusable_failure().await?;
+    assert_eq!(
+        failure,
+        AsrFailure {
+            stage: AsrStage::OutputValidation,
+            reason: AsrFailureReason::MalformedOutput(UnusableChunks {
+                unusable: 41,
+                answered: 41,
+                planned: 83,
+                first: UnusableChunk {
+                    index: 3,
+                    window: range(75 * SECOND, 105 * SECOND)?,
+                    error: ProviderOutputError::TooManyRejectedSegments,
+                },
+            }),
+        }
+    );
+    let value = unusable_output_response(failure)?;
+    // The published code and its safe message are unchanged.
+    assert_eq!(value["status"], "failed");
+    assert_eq!(value["error"]["code"], "MISSING_CAPABILITY");
+    assert_eq!(value["error"]["affected_ids"], serde_json::json!([JOB]));
+    let summary = value["error"]["remediation"][0]["summary"]
+        .as_str()
+        .ok_or("no remediation")?;
+    for named in [
+        "(malformed_output)",
+        "too_many_rejected_segments",
+        "41 of the 41 audio chunks",
+        "chunk 4 of 83",
+        "0:01:15 to 0:01:45",
+        "75000000 to 105000000 microseconds",
+        "could not be transcribed reliably",
+        "ingest --transcript <file>",
+    ] {
+        assert!(summary.contains(named), "{named}: {summary}");
+    }
+    assert!(!summary.contains("different range"), "{summary}");
+    assert_example("retranscribe-unusable-output.json", &value)?;
+
+    // The job is failed, so `job status` says it cannot be resumed, with the
+    // chunk and code of the failure.
+    let data = f01_job(
+        JobState::Failed,
+        Resumability::Failed,
+        None,
+        Some(AttemptFailure {
+            chunk: Some(3),
+            code: FailureCode::MissingCapability,
+        }),
+        0,
+    )?;
+    let status = serde_json::to_value(OperationResponse::complete("job.status", &data)?)?;
+    validate("operation-response.schema.json", &status)?;
+    validate("job-data.schema.json", &status["data"])?;
+    assert_eq!(status["data"]["state"], "failed");
+    assert_eq!(status["data"]["resumable"], false);
+    assert_eq!(status["data"]["resumable_reason"], "failed");
+    assert_eq!(status["data"]["failure"]["code"], "MISSING_CAPABILITY");
+    Ok(())
+}
+
+/// #353: when only a few chunks were answered, the same failure does not claim
+/// the whole recording could not be transcribed: it says the stretch could not
+/// be read and that a slightly different range, which cuts the audio at other
+/// points, may work, beside the transcript the user can supply. The numbers are
+/// those of the application's own run over a 55 s stand-in recording.
+#[tokio::test]
+async fn few_chunks_unusable_says_the_stretch_could_not_be_read() -> TestResult {
+    let failure = short_range_failure().await?;
+    assert_eq!(
+        failure,
+        AsrFailure {
+            stage: AsrStage::OutputValidation,
+            reason: AsrFailureReason::MalformedOutput(UnusableChunks {
+                unusable: 2,
+                answered: 2,
+                planned: 2,
+                first: UnusableChunk {
+                    index: 0,
+                    window: range(0, 30 * SECOND)?,
+                    error: ProviderOutputError::TooManyRejectedSegments,
+                },
+            }),
+        }
+    );
+    let value = unusable_output_response(failure)?;
+    assert_eq!(value["error"]["code"], "MISSING_CAPABILITY");
+    let summary = value["error"]["remediation"][0]["summary"]
+        .as_str()
+        .ok_or("no remediation")?;
+    for named in [
+        "2 of the 2 audio chunks",
+        "chunk 1 of 2",
+        "This stretch of the recording could not be transcribed.",
+        "Try a slightly different range with --from and --to",
+        "ingest --transcript <file>",
+    ] {
+        assert!(summary.contains(named), "{named}: {summary}");
+    }
+    assert!(!summary.contains("reliably"), "{summary}");
+    assert!(!summary.contains("will not change"), "{summary}");
+    assert_example("retranscribe-unusable-output.short-range.json", &value)?;
+    Ok(())
+}
+
+/// Every warning kind has exactly one published code in each schema that lists
+/// them, in the domain's order, so a new kind cannot be written to a record
+/// that its schema does not know.
+#[test]
+fn every_warning_kind_is_published_in_each_schema_that_lists_them() -> TestResult {
+    let identifiers: Vec<&str> = TranscriptWarningKind::ALL
+        .into_iter()
+        .map(TranscriptWarningKind::identifier)
+        .collect();
+    assert_eq!(identifiers.len(), 13);
+    let revision = load("transcript-revision.schema.json")?;
+    let listed: Vec<&str> =
+        revision["properties"]["warnings"]["items"]["properties"]["code"]["enum"]
+            .as_array()
+            .ok_or("no code enum")?
+            .iter()
+            .filter_map(Value::as_str)
+            .collect();
+    assert_eq!(listed, identifiers);
+    let record = load("bundle-transcript-record.schema.json")?;
+    let stored: Vec<&str> = record["$defs"]["v2"]["properties"]["warnings"]["items"]["properties"]
+        ["kind"]["enum"]
+        .as_array()
+        .ok_or("no kind enum")?
+        .iter()
+        .filter_map(Value::as_str)
+        .collect();
+    assert_eq!(stored, identifiers);
+    assert_eq!(
+        record["$defs"]["v2"]["properties"]["warnings"]["maxItems"],
+        u64::try_from(identifiers.len())?
+    );
+    // The most warnings a revision can carry is one per kind.
+    assert_eq!(
+        revision["properties"]["warnings"]["maxItems"],
+        u64::try_from(identifiers.len())?
+    );
+    Ok(())
+}
+
 // ------------------------------------------------ P10 PR 3: the job surface
 
-/// Compares `value` with the frozen example `name`.
+/// Compares `value` with the frozen example `name`: the parsed JSON values, not
+/// the bytes. Member order and white space of an example are not part of the
+/// contract (a consumer reads JSON), and the examples are formatted for a person
+/// to read, so a change of either is not a change of what the example says; a
+/// change of any value, member or sentence is.
 fn assert_example(name: &str, value: &Value) -> TestResult {
     assert_eq!(*value, load(&format!("examples/{name}"))?, "{name}");
     Ok(())

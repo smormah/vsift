@@ -240,6 +240,7 @@ pub fn build_imported_revision(
         supersedes: None,
         replaced_range: None,
         inherited: Vec::new(),
+        carried_untranscribed: Vec::new(),
         language: transcript.language().cloned(),
         segments,
         warnings,

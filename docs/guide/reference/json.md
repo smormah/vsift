@@ -302,7 +302,7 @@ The content of a retained bundle artifact whose bundle.json kind is transcript_r
 | `source_segment.end_us` | integer | yes | at least 1 |
 | `source_segment.state` | "closed" | yes |  |
 | `origin` | constant "local_asr" | yes |  |
-| `run` | object | yes | One local-ASR run: provider build and model by SHA-256, profiles, the chunk plan, recognizer threads, the decoded audio stream and every planned chunk in order with its outcome. Chunks must be exactly the plan of the range they cover; a transcribed or silent chunk records its observed decoded audio range, a chunk with no audio records none. A silent chunk was not given to the recognizer: every 20 ms frame was below -50 dBFS, or, since 0.2.0-rc.3, it held less than 100 ms of decoded audio whatever its level (its range is then shorter than 100000 microseconds). A chunk with no audio had none decoded in its window: the audio track holds none there, or, since 0.2.0-rc.3, the window is shorter than 100000 microseconds and is not decoded. |
+| `run` | object | yes | One local-ASR run: provider build and model by SHA-256, profiles, the chunk plan, recognizer threads, the decoded audio stream and every planned chunk in order with its outcome. Chunks must be exactly the plan of the range they cover; a transcribed, silent or unusable chunk records its observed decoded audio range, a chunk with no audio records none. A silent chunk was not given to the recognizer: every 20 ms frame was below -50 dBFS, or, since 0.2.0-rc.3, it held less than 100 ms of decoded audio whatever its level (its range is then shorter than 100000 microseconds). A chunk with no audio had none decoded in its window: the audio track holds none there, or, since 0.2.0-rc.3, the window is shorter than 100000 microseconds and is not decoded. Since 0.2.1 an unusable chunk was decoded and given to the recognizer, and its answer could not be used as a whole (every segment was rejected, more than a quarter of at least four were, or the output broke a structural rule); it records its observed decoded audio range like a silent one, has no transcript from this run and is not silence. A record holds the outcome unusable, and the warning provider_chunks_rejected, only when the run had such a chunk, and releases before 0.2.1 read both as damage. |
 | `run.provider` | "whisper_cpp" | yes |  |
 | `run.executable_sha256` | string | yes | pattern `^[0-9a-f]{64}$` |
 | `run.model_profile` | "base" \| "base_q5_1" \| "unreviewed" | yes |  |
@@ -316,7 +316,7 @@ The content of a retained bundle artifact whose bundle.json kind is transcript_r
 | `run.chunks[].index` | integer | yes | 0 to 1023 |
 | `run.chunks[].start_us` | integer | yes | at least 0 |
 | `run.chunks[].end_us` | integer | yes | at least 1 |
-| `run.chunks[].outcome` | "transcribed" \| "silent" \| "no_audio" | yes |  |
+| `run.chunks[].outcome` | "transcribed" \| "silent" \| "no_audio" \| "unusable" | yes |  |
 | `run.chunks[].audio` | object or null | yes |  |
 | `run.chunks[].audio.start_us` | integer | yes | at least 0 |
 | `run.chunks[].audio.end_us` | integer | yes | at least 1 |
@@ -324,6 +324,9 @@ The content of a retained bundle artifact whose bundle.json kind is transcript_r
 | `replaced_range` | object or null | yes |  |
 | `replaced_range.start_us` | integer | yes | at least 0 |
 | `replaced_range.end_us` | integer | yes | at least 1 |
+| `carried_untranscribed` | array of object | no | Since 0.2.1 (#353): the parts outside replaced_range that the superseded revision did not cover and that a window or file this revision carries (inherited) would otherwise be counted over, in start order, merged, inside the source and never overlapping replaced_range. A search of the superseded revision listed these ranges as untranscribed; this revision records them because it keeps the provenance only of the runs whose text it carries, and an earlier run's windows, or an imported file, are not counted over a part that revision left untranscribed. A part nothing inherited claims is not recorded. Omitted when empty, which is every record whose chain holds no unusable chunk, so such a record is written as before and is read by a release before 0.2.1; a release before it reads this member as damage.; 1 to 1024 items |
+| `carried_untranscribed[].start_us` | integer | yes | at least 0 |
+| `carried_untranscribed[].end_us` | integer | yes | at least 1 |
 | `inherited` | array of object | no | 1 to 256 items |
 | `inherited[].revision_id` | string | yes | pattern `^trv_[a-z0-9]{16,64}$` |
 | `inherited[].language` | string or null | yes | pattern `^[A-Za-z][A-Za-z0-9-]{0,34}$` |
@@ -334,7 +337,7 @@ The content of a retained bundle artifact whose bundle.json kind is transcript_r
 | `inherited[].provenance.imported.sidecar` | object | yes | Identity of the exact supplied bytes that were parsed. |
 | `inherited[].provenance.imported.sidecar.sha256` | string | yes | pattern `^[0-9a-f]{64}$` |
 | `inherited[].provenance.imported.sidecar.bytes` | integer | yes | 1 to 8388608 |
-| `inherited[].provenance.local_asr` | object | yes | One local-ASR run: provider build and model by SHA-256, profiles, the chunk plan, recognizer threads, the decoded audio stream and every planned chunk in order with its outcome. Chunks must be exactly the plan of the range they cover; a transcribed or silent chunk records its observed decoded audio range, a chunk with no audio records none. A silent chunk was not given to the recognizer: every 20 ms frame was below -50 dBFS, or, since 0.2.0-rc.3, it held less than 100 ms of decoded audio whatever its level (its range is then shorter than 100000 microseconds). A chunk with no audio had none decoded in its window: the audio track holds none there, or, since 0.2.0-rc.3, the window is shorter than 100000 microseconds and is not decoded. |
+| `inherited[].provenance.local_asr` | object | yes | One local-ASR run: provider build and model by SHA-256, profiles, the chunk plan, recognizer threads, the decoded audio stream and every planned chunk in order with its outcome. Chunks must be exactly the plan of the range they cover; a transcribed, silent or unusable chunk records its observed decoded audio range, a chunk with no audio records none. A silent chunk was not given to the recognizer: every 20 ms frame was below -50 dBFS, or, since 0.2.0-rc.3, it held less than 100 ms of decoded audio whatever its level (its range is then shorter than 100000 microseconds). A chunk with no audio had none decoded in its window: the audio track holds none there, or, since 0.2.0-rc.3, the window is shorter than 100000 microseconds and is not decoded. Since 0.2.1 an unusable chunk was decoded and given to the recognizer, and its answer could not be used as a whole (every segment was rejected, more than a quarter of at least four were, or the output broke a structural rule); it records its observed decoded audio range like a silent one, has no transcript from this run and is not silence. A record holds the outcome unusable, and the warning provider_chunks_rejected, only when the run had such a chunk, and releases before 0.2.1 read both as damage. |
 | `inherited[].provenance.local_asr.provider` | "whisper_cpp" | yes |  |
 | `inherited[].provenance.local_asr.executable_sha256` | string | yes | pattern `^[0-9a-f]{64}$` |
 | `inherited[].provenance.local_asr.model_profile` | "base" \| "base_q5_1" \| "unreviewed" | yes |  |
@@ -348,13 +351,13 @@ The content of a retained bundle artifact whose bundle.json kind is transcript_r
 | `inherited[].provenance.local_asr.chunks[].index` | integer | yes | 0 to 1023 |
 | `inherited[].provenance.local_asr.chunks[].start_us` | integer | yes | at least 0 |
 | `inherited[].provenance.local_asr.chunks[].end_us` | integer | yes | at least 1 |
-| `inherited[].provenance.local_asr.chunks[].outcome` | "transcribed" \| "silent" \| "no_audio" | yes |  |
+| `inherited[].provenance.local_asr.chunks[].outcome` | "transcribed" \| "silent" \| "no_audio" \| "unusable" | yes |  |
 | `inherited[].provenance.local_asr.chunks[].audio` | object or null | yes |  |
 | `inherited[].provenance.local_asr.chunks[].audio.start_us` | integer | yes | at least 0 |
 | `inherited[].provenance.local_asr.chunks[].audio.end_us` | integer | yes | at least 1 |
 | `language` | string or null | yes | pattern `^[A-Za-z][A-Za-z0-9-]{0,34}$` |
-| `warnings` | array of object | yes | at most 12 items |
-| `warnings[].kind` | "empty_cues_skipped" \| "markup_removed" \| "speaker_label_discarded" \| "overlapping_cues" \| "cues_outside_source" \| "cues_crossing_source_boundary" \| "provider_segments_rejected" \| "provider_end_trimmed" \| "non_speech_markers_removed" \| "seam_duplicates_removed" \| "silent_chunks_skipped" \| "no_speech_recognised" | yes |  |
+| `warnings` | array of object | yes | at most 13 items |
+| `warnings[].kind` | "empty_cues_skipped" \| "markup_removed" \| "speaker_label_discarded" \| "overlapping_cues" \| "cues_outside_source" \| "cues_crossing_source_boundary" \| "provider_segments_rejected" \| "provider_end_trimmed" \| "non_speech_markers_removed" \| "seam_duplicates_removed" \| "silent_chunks_skipped" \| "no_speech_recognised" \| "provider_chunks_rejected" | yes |  |
 | `warnings[].count` | integer | yes | 1 to 4294967295 |
 | `warnings[].first_cue` | integer | yes | 1 to 4294967295 |
 | `segments` | array of object or object | yes | Every segment of the revision in ordinal order; empty when the run recognised no speech and nothing was carried.; 0 to 20000 items |
@@ -852,7 +855,7 @@ This schema also holds 10 conditional rules (a member that is required, or fixed
 
 **VSift job.resume data v1** ([the schema](../../../schemas/v1/job-resume-data.schema.json))
 
-The data member of a complete job.resume result (P10 PR 3): job is the job after the run (job-data.schema.json, normally succeeded), and outcome the retranscription it committed, exactly as transcript.retranscribe reports it (transcript-retranscribe-data.schema.json; outcome.job.resumed says whether checkpoints were continued, outcome.job.replayed that the revision is an earlier commit returned again). The envelope names the operation_id the result is recorded under. Validate the envelope with operation-response.schema.json.
+The data member of a complete (or, since 0.2.1, partial) job.resume result (P10 PR 3): job is the job after the run (job-data.schema.json, normally succeeded), and outcome the retranscription it committed, exactly as transcript.retranscribe reports it (transcript-retranscribe-data.schema.json; outcome.job.resumed says whether checkpoints were continued, outcome.job.replayed that the revision is an earlier commit returned again). The envelope names the operation_id the result is recorded under. Validate the envelope with operation-response.schema.json.
 
 | Member | Type | Required | Notes |
 | --- | --- | --- | --- |
@@ -1363,7 +1366,7 @@ The data member of the complete terminal result that ends a transcript.get --eve
 
 **VSift transcript.retranscribe data v1** ([the schema](../../../schemas/v1/transcript-retranscribe-data.schema.json))
 
-The data member of a complete transcript.retranscribe result: the new local-ASR revision, committed and now the session's newest. Validate the envelope with operation-response.schema.json. requested_range is the range the caller asked for (null for the whole source); the revision's replaced_range is that range widened to whole segments of the superseded revision. recognised_segment_count is how many of the revision's segments this run recognised; the rest were carried from earlier revisions. The segments themselves are read with transcript get --revision <revision.revision_id>, as a page or an evidence stream. job describes the recoverable job behind the result (P10, ADR 0020): job_id derives from the session and the request's operation key, so rerunning the same request finds the same job; resumed says an interrupted run of it was continued, chunks_reused how many chunks came from its private checkpoints, and replayed that the revision is an earlier commit returned again for a retry with the same operation id, without a new generation. Resume information is never written into the revision, which is the same as an uninterrupted run's.
+The data member of a complete (or, since 0.2.1, partial) transcript.retranscribe result: the new local-ASR revision, committed and now the session's newest. Validate the envelope with operation-response.schema.json. requested_range is the range the caller asked for (null for the whole source); the revision's replaced_range is that range widened to whole segments of the superseded revision. recognised_segment_count is how many of the revision's segments this run recognised; the rest were carried from earlier revisions. The segments themselves are read with transcript get --revision <revision.revision_id>, as a page or an evidence stream. job describes the recoverable job behind the result (P10, ADR 0020): job_id derives from the session and the request's operation key, so rerunning the same request finds the same job; resumed says an interrupted run of it was continued, chunks_reused how many chunks came from its private checkpoints, and replayed that the revision is an earlier commit returned again for a retry with the same operation id, without a new generation. Resume information is never written into the revision, which is the same as an uninterrupted run's. untranscribed_ranges (since 0.2.1, present only when the run left a part of its range untranscribed) lists the parts of the run's own range that this run did not transcribe because the recognizer's answer for them was unusable (revision.local_asr.unusable_chunks counts the chunks, the warning provider_chunks_rejected names the first). Text of the superseded revision that reaches into such a part, and that none of the run's own text overlaps, is kept whole in the new revision as it was (carried, with its original provenance), so a search of the revision may list less as untranscribed than this list does; any other word said there cannot be found. At most 100 ranges in start order, and the result is then partial, with the same ranges as coverage.gaps and the reason untranscribed_range.
 
 | Member | Type | Required | Notes |
 | --- | --- | --- | --- |
@@ -1375,6 +1378,9 @@ The data member of a complete transcript.retranscribe result: the new local-ASR 
 | `revision.alignment` | object | no |  |
 | `revision.alignment.origin` | constant "local_asr" | no |  |
 | `recognised_segment_count` | integer | yes | 0 to 20000 |
+| `untranscribed_ranges` | array of object | no | 1 to 100 items |
+| `untranscribed_ranges[].from_us` | integer | yes | at least 0 |
+| `untranscribed_ranges[].to_us` | integer | yes | at least 1 |
 | `job` | object | yes |  |
 | `job.job_id` | string | yes | pattern `^job_[a-z0-9]{16,64}$` |
 | `job.resumed` | boolean | yes |  |
@@ -1408,12 +1414,12 @@ Identity, alignment and outcome of one immutable transcript revision. Warnings a
 | `sidecar.bytes` | integer | yes | 1 to 8388608 |
 | `language` | string or null | yes | pattern `^[A-Za-z][A-Za-z0-9-]{0,34}$` |
 | `segment_count` | integer | yes | Segments in the revision. At least one for an import; a local-ASR run that recognised no speech records a revision with none of its own (warning no_speech_recognised).; 0 to 20000 |
-| `warnings` | array of object | yes | at most 12 items |
-| `warnings[].code` | "empty_cues_skipped" \| "markup_removed" \| "speaker_label_discarded" \| "overlapping_cues" \| "cues_outside_source" \| "cues_crossing_source_boundary" \| "provider_segments_rejected" \| "provider_end_trimmed" \| "non_speech_markers_removed" \| "seam_duplicates_removed" \| "silent_chunks_skipped" \| "no_speech_recognised" | yes |  |
+| `warnings` | array of object | yes | at most 13 items |
+| `warnings[].code` | "empty_cues_skipped" \| "markup_removed" \| "speaker_label_discarded" \| "overlapping_cues" \| "cues_outside_source" \| "cues_crossing_source_boundary" \| "provider_segments_rejected" \| "provider_end_trimmed" \| "non_speech_markers_removed" \| "seam_duplicates_removed" \| "silent_chunks_skipped" \| "no_speech_recognised" \| "provider_chunks_rejected" | yes |  |
 | `warnings[].count` | integer | yes | at least 1 |
 | `warnings[].first_cue` | integer | yes | at least 1 |
 | `warnings[].excluded_cues` | boolean | yes |  |
-| `local_asr` | object | no | The local-ASR run that produced the revision's own segments: provider build and model by SHA-256, the pinned model profile and decoding profile, the chunk plan, recognizer threads, the decoded audio stream, the source range its chunks covered, and how many chunks were transcribed, silent (not transcribed: every 20 ms frame below -50 dBFS, or, since 0.2.0-rc.3, less than 100 ms of decoded audio whatever its level) or had no audio (none was decoded in the window: the audio track holds none there, or, since 0.2.0-rc.3, the window is shorter than 100 ms and is not decoded). |
+| `local_asr` | object | no | The local-ASR run that produced the revision's own segments: provider build and model by SHA-256, the pinned model profile and decoding profile, the chunk plan, recognizer threads, the decoded audio stream, the source range its chunks covered, and how many chunks were transcribed, silent (not transcribed: every 20 ms frame below -50 dBFS, or, since 0.2.0-rc.3, less than 100 ms of decoded audio whatever its level), had no audio (none was decoded in the window: the audio track holds none there, or, since 0.2.0-rc.3, the window is shorter than 100 ms and is not decoded) or were unusable. An unusable chunk (unusable_chunks, present only when it is not zero, since 0.2.1) was given to the recognizer and its answer could not be used as a whole: every segment was rejected, more than a quarter of at least four were, or the output broke a structural rule. It has no transcript from this run and is not silence: a search reports its window as untranscribed, never as no speech, and the warning provider_chunks_rejected counts such chunks. |
 | `local_asr.provider` | "whisper_cpp" | yes |  |
 | `local_asr.executable_sha256` | string | yes | pattern `^[0-9a-f]{64}$` |
 | `local_asr.model_profile` | "base" \| "base_q5_1" | yes |  |
@@ -1430,11 +1436,12 @@ Identity, alignment and outcome of one immutable transcript revision. Warnings a
 | `local_asr.transcribed_chunks` | integer | yes | 0 to 1024 |
 | `local_asr.silent_chunks` | integer | yes | 0 to 1024 |
 | `local_asr.no_audio_chunks` | integer | yes | 0 to 1024 |
+| `local_asr.unusable_chunks` | integer | no | Chunks whose recognised output was unusable as a whole. Absent when there are none, so a revision with none is presented exactly as before 0.2.1.; 1 to 1024 |
 | `supersedes` | string or null | no | The revision this one superseded (the session's newest when the run started), or null when the session had no transcript.; pattern `^trv_[a-z0-9]{16,64}$` |
-| `replaced_range` | object or null | no | The range of the superseded revision this one replaced: the requested range widened to whole segments of that revision, or the whole source. Null without a superseded revision. |
+| `replaced_range` | object or null | no | The range of the superseded revision this one replaced: the requested range widened to whole segments of that revision, or the whole source. Null without a superseded revision. Segments of the superseded revision inside it are replaced by the run's own, except (since 0.2.1) those that reach into a part of it that the run could not read (a chunk with the outcome unusable that no neighbouring chunk covers) and that none of the run's own text overlaps, which are carried whole as they were. |
 | `replaced_range.from_us` | integer | yes | at least 0 |
 | `replaced_range.to_us` | integer | yes | at least 1 |
-| `carried_segment_count` | integer | no | Segments carried unchanged from earlier revisions (each names its origin in carried_from); segment_count minus this is what the run recognised.; 0 to 20000 |
+| `carried_segment_count` | integer | no | Segments carried unchanged from earlier revisions (each names its origin in carried_from), including, since 0.2.1, text kept where it reaches into a part of the replaced range that the run could not read; segment_count minus this is what the run recognised.; 0 to 20000 |
 
 This schema also holds 1 conditional rule (a member that is required, or fixed, when another has a given value); read [the schema](../../../schemas/v1/transcript-revision.schema.json) for it.
 

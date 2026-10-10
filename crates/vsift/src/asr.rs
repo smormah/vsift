@@ -239,7 +239,11 @@ impl Engine {
     /// newest, and so the default of `transcript get`; every earlier revision
     /// stays readable by identity. A run that hears no speech still commits a
     /// revision recording its chunk outcomes, with a `no_speech_recognised`
-    /// warning.
+    /// warning. A chunk whose recognised output cannot be used is recorded as
+    /// an unusable gap and the run goes on (the revision's chunk outcomes and
+    /// its warning `provider_chunks_rejected` say so); only when most of the
+    /// chunks the recogniser answered are unusable does the run fail, with
+    /// [`EngineError::LocalAsrOutputUnusable`] (#353).
     ///
     /// The run is a recoverable job (P10, ADR 0020). Its identity derives
     /// from the request, so rerunning the same request after an interruption
@@ -263,7 +267,9 @@ impl Engine {
     /// storage failure (including a source copy that changed), the same job
     /// running in another process, or a range another revision changed.
     /// Nothing is committed on failure, and the job stays resumable unless
-    /// the error says otherwise. A cancellation by the caller before the
+    /// the error says otherwise (a poisoned chunk, used-up attempts, a
+    /// superseded range, or unusable answers for most chunks, which a resume
+    /// could only repeat, end it as failed). A cancellation by the caller before the
     /// commit is [`EngineError::JobInterrupted`], naming the job to resume; a
     /// `job cancel` from another process is noticed within
     /// [`vsift_infrastructure::JOB_CANCEL_POLL`], stops the running provider

@@ -191,7 +191,7 @@ pub struct LocalAsrSetupStatus {
 
 #[cfg(test)]
 mod tests {
-    use vsift_domain::{ProviderOutputError, ReviewedAsrModel};
+    use vsift_domain::{MediaTime, ProviderOutputError, ReviewedAsrModel, TimeRange};
 
     use super::{
         LocalAsrCheckFailure, LocalAsrCheckOutcome, LocalAsrModelStatus, LocalAsrNotRunReason,
@@ -199,6 +199,7 @@ mod tests {
     };
     use crate::{
         AsrFailure, AsrFailureReason, AsrStage, LocalAsrVerificationFailure, ModelVerification,
+        UnusableChunk, UnusableChunks,
     };
 
     #[test]
@@ -229,11 +230,23 @@ mod tests {
     }
 
     #[test]
-    fn every_failure_names_a_check_and_a_reason() {
+    fn every_failure_names_a_check_and_a_reason() -> Result<(), Box<dyn std::error::Error>> {
         let transcription = LocalAsrCheckFailure::Verification(
             LocalAsrVerificationFailure::Transcription(AsrFailure {
                 stage: AsrStage::OutputValidation,
-                reason: AsrFailureReason::MalformedOutput(ProviderOutputError::TooManySegments),
+                reason: AsrFailureReason::MalformedOutput(UnusableChunks {
+                    unusable: 1,
+                    answered: 1,
+                    planned: 1,
+                    first: UnusableChunk {
+                        index: 0,
+                        window: TimeRange::new(
+                            MediaTime::from_micros(0),
+                            MediaTime::from_micros(5_000_000),
+                        )?,
+                        error: ProviderOutputError::TooManySegments,
+                    },
+                }),
             }),
         );
         for (failure, check, reason) in [
@@ -269,6 +282,7 @@ mod tests {
             assert_eq!((failure.check(), failure.reason()), (check, reason));
             assert_eq!(LocalAsrCheckOutcome::Failed(failure).identifier(), "failed");
         }
+        Ok(())
     }
 
     #[test]

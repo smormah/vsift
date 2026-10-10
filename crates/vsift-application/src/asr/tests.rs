@@ -13,17 +13,17 @@ use vsift_domain::{
     AsrChunkOutcome, AsrDecodingProfile, AsrModel, AsrModelProfile, AsrProvider, AsrProviderBuild,
     ChunkPlan, ChunkTime, ConfidenceOrigin, CueSource, CueText, CueTiming, ImportedCue,
     LanguageTag, MediaTime, ParsedTranscript, PlannedChunk, ProviderChunkOutput,
-    ProviderOutputError, ProviderSegment, ProviderToken, ProviderTokenKind, SegmentOrigin,
-    SessionId, Sha256Hex, SidecarIdentity, SourceId, SourceSegment, SourceSegmentId, TimeRange,
-    TranscriptFormat, TranscriptOffset, TranscriptProvenance, TranscriptRevision,
+    ProviderOutputError, ProviderSegment, ProviderToken, ProviderTokenKind, SearchCoverage,
+    SegmentOrigin, SessionId, Sha256Hex, SidecarIdentity, SourceId, SourceSegment, SourceSegmentId,
+    TimeRange, TranscriptFormat, TranscriptOffset, TranscriptProvenance, TranscriptRevision,
     TranscriptRevisionError, TranscriptWarningKind, TranscriptWarnings,
 };
 
 use super::{
     AsrCancellation, AsrFailure, AsrFailureReason, AsrRevisionRequest, AsrStage, AsrTranscription,
     RecognizerIdentity, RevisionSplice, SpeechAudioError, SpeechAudioSource, SpeechPcm,
-    SpeechRecognitionError, SpeechRecognizer, TranscribeRangeRequest, build_asr_revision,
-    transcribe_range,
+    SpeechRecognitionError, SpeechRecognizer, TranscribeRangeRequest, UnusableChunk,
+    UnusableChunks, build_asr_revision, transcribe_range,
 };
 use crate::{
     ImportedRevisionRequest, SuppliedTranscript, TranscriptBuildError, build_imported_revision,
@@ -338,13 +338,26 @@ async fn port_failures_are_typed_by_stage() -> TestResult {
         output.segments.push(earlier);
         Ok(output)
     };
+    // Every chunk's answer is unusable, so the run fails; it is known to fail
+    // as soon as the second of the three chunks is judged (two unusable of at
+    // most three answered), and the third is never asked.
     assert_eq!(
         run(&audio, &malformed, &Flag(&NEVER)).await?,
         Err(AsrFailure {
             stage: AsrStage::OutputValidation,
-            reason: AsrFailureReason::MalformedOutput(ProviderOutputError::OutOfOrderSegments),
+            reason: AsrFailureReason::MalformedOutput(UnusableChunks {
+                unusable: 2,
+                answered: 2,
+                planned: 3,
+                first: UnusableChunk {
+                    index: 0,
+                    window: range(0, 30 * SECOND)?,
+                    error: ProviderOutputError::OutOfOrderSegments,
+                },
+            }),
         })
     );
+    assert_eq!(malformed.calls.load(Ordering::SeqCst), 2);
     Ok(())
 }
 
@@ -444,6 +457,432 @@ async fn silent_chunks_are_skipped_and_recorded_as_gaps() -> TestResult {
         [(TranscriptWarningKind::SilentChunksSkipped, 2, 2)]
     );
     assert_eq!(transcription.segments.len(), 1);
+    Ok(())
+}
+
+// ------------------------------------------------ #353: unusable chunks
+
+/// A source of ten R0 chunks (25 s apart, the last 30 s long).
+fn ten_chunk_source() -> Built<SourceSegment> {
+    Ok(SourceSegment::whole_file(
+        SourceSegmentId::parse("sgm_0123456789abcdef")?,
+        MediaTime::from_micros(255 * SECOND),
+    )?)
+}
+
+/// What a recognizer answers when it did not describe the audio: its one
+/// segment starts after the chunk's audio ends, so nothing in it can be placed
+/// and every segment of the chunk is rejected.
+fn after_the_audio(chunk: &PlannedChunk) -> Result<ProviderChunkOutput, SpeechRecognitionError> {
+    let mut output = one_segment(chunk)?;
+    let past = chunk.window().duration_micros() / 1_000 + 1_000;
+    for segment in &mut output.segments {
+        segment.start = ChunkTime::from_millis(past).ok_or(SpeechRecognitionError::Io)?;
+        segment.end = ChunkTime::from_millis(past + 2_000).ok_or(SpeechRecognitionError::Io)?;
+    }
+    Ok(output)
+}
+
+fn unusable_in_chunk_four(
+    chunk: &PlannedChunk,
+) -> Result<ProviderChunkOutput, SpeechRecognitionError> {
+    if chunk.index() == 4 {
+        after_the_audio(chunk)
+    } else {
+        one_segment(chunk)
+    }
+}
+
+fn unusable_before_chunk_five(
+    chunk: &PlannedChunk,
+) -> Result<ProviderChunkOutput, SpeechRecognitionError> {
+    if chunk.index() < 5 {
+        after_the_audio(chunk)
+    } else {
+        one_segment(chunk)
+    }
+}
+
+fn unusable_before_chunk_six(
+    chunk: &PlannedChunk,
+) -> Result<ProviderChunkOutput, SpeechRecognitionError> {
+    if chunk.index() < 6 {
+        after_the_audio(chunk)
+    } else {
+        one_segment(chunk)
+    }
+}
+
+fn unusable_in_the_first_chunk(
+    chunk: &PlannedChunk,
+) -> Result<ProviderChunkOutput, SpeechRecognitionError> {
+    if chunk.index() == 0 {
+        after_the_audio(chunk)
+    } else {
+        one_segment(chunk)
+    }
+}
+
+fn unusable_in_chunk_seven(
+    chunk: &PlannedChunk,
+) -> Result<ProviderChunkOutput, SpeechRecognitionError> {
+    if chunk.index() == 7 {
+        after_the_audio(chunk)
+    } else {
+        one_segment(chunk)
+    }
+}
+
+/// Transcribes `requested` of `source` with `recognizer`'s answers.
+async fn transcribe_with(
+    source: &SourceSegment,
+    requested: TimeRange,
+    audio: &FakeAudio,
+    recognizer: &FakeRecognizer,
+) -> Built<Result<AsrTranscription, AsrFailure>> {
+    let expected = identity(DIGEST)?;
+    Ok(transcribe_range(
+        TranscribeRangeRequest {
+            source_segment: source,
+            range: requested,
+            plan: ChunkPlan::R0,
+            audio_stream: 1,
+            expected: &expected,
+        },
+        audio,
+        recognizer,
+        &Flag(&NEVER),
+    )
+    .await)
+}
+
+fn outcomes_of(transcription: &AsrTranscription) -> Vec<AsrChunkOutcome> {
+    transcription
+        .run
+        .chunks()
+        .iter()
+        .map(vsift_domain::AsrChunkRecord::outcome)
+        .collect()
+}
+
+fn warning_tuples(transcription: &AsrTranscription) -> Vec<(TranscriptWarningKind, u32, u32)> {
+    transcription
+        .warnings
+        .as_slice()
+        .iter()
+        .map(|warning| (warning.kind(), warning.count(), warning.first_cue()))
+        .collect()
+}
+
+/// #353: one chunk of ten whose answer cannot be placed in its audio is a
+/// recorded gap, not a failed run. The nine others are kept, the unusable
+/// chunk's window is untranscribed (not silent) and is counted under its own
+/// warning, and nothing about the nine others differs from a run without it.
+#[tokio::test]
+async fn one_unusable_chunk_of_ten_is_a_recorded_gap_and_the_run_is_kept() -> TestResult {
+    let source = ten_chunk_source()?;
+    let audio = FakeAudio::new(Vec::new());
+    let mut recognizer = FakeRecognizer::new(identity(DIGEST)?);
+    recognizer.output = unusable_in_chunk_four;
+    let transcription = transcribe_with(&source, source.range(), &audio, &recognizer).await??;
+
+    // Every chunk was given to the recognizer, and none was asked twice.
+    assert_eq!(recognizer.calls.load(Ordering::SeqCst), 10);
+    let outcomes = outcomes_of(&transcription);
+    assert_eq!(outcomes.len(), 10);
+    for (index, outcome) in outcomes.iter().enumerate() {
+        let start = u64::try_from(index)? * 25 * SECOND;
+        let window = range(start, (start + 30 * SECOND).min(255 * SECOND))?;
+        if index == 4 {
+            assert_eq!(*outcome, AsrChunkOutcome::Unusable { audio: window });
+        } else {
+            assert_eq!(*outcome, AsrChunkOutcome::Transcribed { audio: window });
+        }
+    }
+    // The other nine chunks' segments are all there.
+    assert_eq!(transcription.segments.len(), 9);
+    assert!(
+        transcription
+            .segments
+            .iter()
+            .all(|merged| merged.chunk != 4)
+    );
+    // Counted by chunk, first at chunk ordinal 5; no silence is claimed.
+    assert_eq!(
+        warning_tuples(&transcription),
+        [(TranscriptWarningKind::ProviderChunksRejected, 1, 5)]
+    );
+
+    // As a revision, the window is untranscribed, which a search reports; the
+    // parts of it the neighbours' overlaps transcribed are covered.
+    let session = SessionId::parse("ses_0123456789abcdef")?;
+    let source_id = SourceId::from_sha256(DIGEST)?;
+    let revision = build_asr_revision(AsrRevisionRequest {
+        session_id: &session,
+        source_id: &source_id,
+        source_segment: &source,
+        number: NonZeroU32::MIN,
+        transcription,
+        splice: None,
+    })?;
+    let coverage = vsift_domain::SearchCoverage::of(&revision, None);
+    assert_eq!(
+        coverage.untranscribed(),
+        [range(105 * SECOND, 125 * SECOND)?]
+    );
+    assert!(coverage.no_speech().is_empty());
+    Ok(())
+}
+
+/// #353: the run fails only when MORE than half of the chunks the recognizer
+/// answered are unusable. Five of ten is a partial run; six of ten is not, and
+/// the run stops as soon as that is certain instead of recognising the rest.
+#[tokio::test]
+async fn exactly_half_unusable_is_a_partial_run_and_more_than_half_fails_early() -> TestResult {
+    let source = ten_chunk_source()?;
+    let audio = FakeAudio::new(Vec::new());
+
+    let mut half = FakeRecognizer::new(identity(DIGEST)?);
+    half.output = unusable_before_chunk_five;
+    let kept = transcribe_with(&source, source.range(), &audio, &half).await??;
+    assert_eq!(half.calls.load(Ordering::SeqCst), 10);
+    assert_eq!(
+        warning_tuples(&kept),
+        [(TranscriptWarningKind::ProviderChunksRejected, 5, 1)]
+    );
+    assert_eq!(kept.segments.len(), 5);
+
+    let mut most = FakeRecognizer::new(identity(DIGEST)?);
+    most.output = unusable_before_chunk_six;
+    let failed = transcribe_with(&source, source.range(), &audio, &most).await?;
+    assert_eq!(
+        failed,
+        Err(AsrFailure {
+            stage: AsrStage::OutputValidation,
+            reason: AsrFailureReason::MalformedOutput(UnusableChunks {
+                // Judged after the sixth chunk: six unusable of at most ten,
+                // and the four still to come could not bring them to a half.
+                unusable: 6,
+                answered: 6,
+                planned: 10,
+                first: UnusableChunk {
+                    index: 0,
+                    window: range(0, 30 * SECOND)?,
+                    error: ProviderOutputError::TooManyRejectedSegments,
+                },
+            }),
+        })
+    );
+    // The four chunks after the sixth were never given to the recognizer.
+    assert_eq!(most.calls.load(Ordering::SeqCst), 6);
+    Ok(())
+}
+
+/// #353: only chunks the recognizer answered count in the share. Silence and
+/// missing audio say nothing about it, so a recording that is mostly quiet is
+/// judged by the few chunks that had speech, as the failure it is for.
+#[tokio::test]
+async fn chunks_never_given_to_the_recognizer_are_not_answers() -> TestResult {
+    let source = ten_chunk_source()?;
+    // Six quiet chunks and four with speech; one of the four is unusable. One
+    // of four answered is a quarter: a partial run, though it is a tenth of
+    // all the chunks and would be under any share of them.
+    let mut answers = vec![Audio::Silence; 6];
+    answers.extend([Audio::Speech; 4]);
+    let audio = FakeAudio::new(answers);
+    let mut recognizer = FakeRecognizer::new(identity(DIGEST)?);
+    recognizer.output = unusable_in_chunk_seven;
+    let kept = transcribe_with(&source, source.range(), &audio, &recognizer).await??;
+    assert_eq!(recognizer.calls.load(Ordering::SeqCst), 4);
+    assert_eq!(
+        warning_tuples(&kept),
+        [
+            (TranscriptWarningKind::SilentChunksSkipped, 6, 1),
+            (TranscriptWarningKind::ProviderChunksRejected, 1, 8),
+        ]
+    );
+
+    // Nine quiet chunks and one with speech whose answer is unusable: the only
+    // chunk the recognizer answered is unusable, so the run fails, though one
+    // chunk in ten is nothing like most of them.
+    let mut answers = vec![Audio::Silence; 9];
+    answers.push(Audio::Speech);
+    let audio = FakeAudio::new(answers);
+    let mut garbage = FakeRecognizer::new(identity(DIGEST)?);
+    garbage.output = after_the_audio;
+    let failed = transcribe_with(&source, source.range(), &audio, &garbage).await?;
+    assert_eq!(
+        failed.map_err(|failure| failure.reason),
+        Err(AsrFailureReason::MalformedOutput(UnusableChunks {
+            unusable: 1,
+            answered: 1,
+            planned: 10,
+            first: UnusableChunk {
+                index: 9,
+                window: range(225 * SECOND, 255 * SECOND)?,
+                error: ProviderOutputError::TooManyRejectedSegments,
+            },
+        }))
+    );
+    Ok(())
+}
+
+/// #353: with few chunks the other chunk is the evidence. One unusable chunk of
+/// two is a partial run, since the other was answered by the same recognizer;
+/// a lone chunk that cannot be placed fails the run, as it always did.
+#[tokio::test]
+async fn one_unusable_chunk_of_two_is_partial_and_a_lone_one_fails() -> TestResult {
+    let source = source()?;
+    let audio = FakeAudio::new(Vec::new());
+    let mut recognizer = FakeRecognizer::new(identity(DIGEST)?);
+    recognizer.output = unusable_in_the_first_chunk;
+    // 0 s to 55 s is two chunks.
+    let two = transcribe_with(&source, range(0, 55 * SECOND)?, &audio, &recognizer).await??;
+    assert_eq!(
+        outcomes_of(&two),
+        [
+            AsrChunkOutcome::Unusable {
+                audio: range(0, 30 * SECOND)?,
+            },
+            AsrChunkOutcome::Transcribed {
+                audio: range(25 * SECOND, 55 * SECOND)?,
+            },
+        ]
+    );
+    assert_eq!(
+        warning_tuples(&two),
+        [(TranscriptWarningKind::ProviderChunksRejected, 1, 1)]
+    );
+    // 0 s to 20 s is one chunk.
+    let lone = transcribe_with(&source, range(0, 20 * SECOND)?, &audio, &recognizer).await?;
+    assert!(
+        matches!(
+            lone,
+            Err(AsrFailure {
+                stage: AsrStage::OutputValidation,
+                reason: AsrFailureReason::MalformedOutput(UnusableChunks {
+                    unusable: 1,
+                    answered: 1,
+                    planned: 1,
+                    ..
+                }),
+            })
+        ),
+        "{lone:?}"
+    );
+    Ok(())
+}
+
+/// A run in which no chunk is unusable is what it was: no unusable outcome and
+/// no new warning, whatever else the run holds.
+#[tokio::test]
+async fn a_run_without_an_unusable_chunk_records_nothing_about_them() -> TestResult {
+    let source = ten_chunk_source()?;
+    let mut answers = vec![Audio::Speech; 10];
+    answers[3] = Audio::Silence;
+    answers[6] = Audio::Nothing;
+    let audio = FakeAudio::new(answers);
+    let recognizer = FakeRecognizer::new(identity(DIGEST)?);
+    let transcription = transcribe_with(&source, source.range(), &audio, &recognizer).await??;
+    assert!(
+        outcomes_of(&transcription)
+            .iter()
+            .all(|outcome| !matches!(outcome, AsrChunkOutcome::Unusable { .. }))
+    );
+    assert_eq!(
+        warning_tuples(&transcription),
+        [(TranscriptWarningKind::SilentChunksSkipped, 2, 4)]
+    );
+    Ok(())
+}
+
+/// What the recognizer answers when the audio holds nothing but a marker.
+fn only_a_marker(chunk: &PlannedChunk) -> Result<ProviderChunkOutput, SpeechRecognitionError> {
+    let mut output = one_segment(chunk)?;
+    for segment in &mut output.segments {
+        segment.text = Some(
+            CueText::new("[BLANK_AUDIO]".to_owned(), "[BLANK_AUDIO]".to_owned())
+                .map_err(|_| SpeechRecognitionError::Io)?,
+        );
+    }
+    Ok(output)
+}
+
+/// A chunk that could not be read and one that held only a marker.
+fn unusable_then_a_marker(
+    chunk: &PlannedChunk,
+) -> Result<ProviderChunkOutput, SpeechRecognitionError> {
+    if chunk.index() == 0 {
+        after_the_audio(chunk)
+    } else {
+        only_a_marker(chunk)
+    }
+}
+
+/// #353: "no speech was recognised" is a claim about the whole range, so a run
+/// that could not use its answer for some of the audio does not make it: it
+/// has not heard that there was none. A run that read all of it still does.
+#[tokio::test]
+async fn a_run_that_could_not_read_a_chunk_does_not_claim_there_was_no_speech() -> TestResult {
+    /// The warnings of the revision a run over two chunks (0-55 s) yields.
+    async fn warning_kinds(recognizer: FakeRecognizer) -> Built<Vec<TranscriptWarningKind>> {
+        let source = source()?;
+        let audio = FakeAudio::new(Vec::new());
+        let transcription =
+            transcribe_with(&source, range(0, 55 * SECOND)?, &audio, &recognizer).await??;
+        assert!(transcription.segments.is_empty());
+        let revision = build_asr_revision(AsrRevisionRequest {
+            session_id: &SessionId::parse("ses_0123456789abcdef")?,
+            source_id: &SourceId::from_sha256(DIGEST)?,
+            source_segment: &source,
+            number: NonZeroU32::MIN,
+            transcription,
+            splice: None,
+        })?;
+        Ok(revision
+            .warnings()
+            .as_slice()
+            .iter()
+            .map(|warning| warning.kind())
+            .collect())
+    }
+
+    let mut mixed = FakeRecognizer::new(identity(DIGEST)?);
+    mixed.output = unusable_then_a_marker;
+    let kinds = warning_kinds(mixed).await?;
+    assert!(kinds.contains(&TranscriptWarningKind::ProviderChunksRejected));
+    assert!(
+        !kinds.contains(&TranscriptWarningKind::NoSpeechRecognised),
+        "{kinds:?}"
+    );
+
+    let mut heard_nothing = FakeRecognizer::new(identity(DIGEST)?);
+    heard_nothing.output = only_a_marker;
+    let kinds = warning_kinds(heard_nothing).await?;
+    assert!(!kinds.contains(&TranscriptWarningKind::ProviderChunksRejected));
+    assert!(kinds.contains(&TranscriptWarningKind::NoSpeechRecognised));
+    Ok(())
+}
+
+/// #353: the verdict on the answers is not reached before the model has been
+/// checked. A recognizer that was swapped while the run was in progress made
+/// the answers meaningless, so the run reports the swap, which the user can act
+/// on, and not that the answers could not be used.
+#[tokio::test]
+async fn a_model_swapped_during_a_run_is_reported_before_unusable_answers() -> TestResult {
+    let audio = FakeAudio::new(Vec::new());
+    let mut recognizer = FakeRecognizer::new(identity(DIGEST)?);
+    recognizer.output = after_the_audio;
+    if let Ok(mut identities) = recognizer.identities.lock() {
+        identities.push(identity(OTHER_DIGEST)?);
+    }
+    assert_eq!(
+        run(&audio, &recognizer, &Flag(&NEVER)).await?,
+        Err(AsrFailure {
+            stage: AsrStage::RecognizerIdentity,
+            reason: AsrFailureReason::ModelChanged,
+        })
+    );
     Ok(())
 }
 
@@ -937,6 +1376,151 @@ async fn whole_source_retranscription_replaces_everything() -> TestResult {
     );
     assert!(revision.inherited().is_empty());
     assert_eq!(revision.supersedes(), Some(base.id()));
+    Ok(())
+}
+
+/// #353: a range run that could not read one of its chunks must not delete the
+/// text the session already had in that part of the range. An imported
+/// transcript has cues at 5, 12, 40 and 60 s; re-transcribing 10-65 s plans
+/// the chunks 10-40 s and 35-65 s, and the first is unusable. The part of the
+/// range only that chunk covers (10-35 s) keeps the cue at 12 s, as imported,
+/// with its original provenance; the cues at 40 and 60 s are in the part the
+/// second chunk transcribed, so what the run heard there replaces them, as it
+/// always did; the cue at 5 s was never in the range.
+#[tokio::test]
+#[allow(
+    clippy::too_many_lines,
+    reason = "One scenario: the revision, its provenance, its warning and its coverage"
+)]
+async fn a_range_run_keeps_the_earlier_text_of_a_chunk_it_could_not_read() -> TestResult {
+    let session = SessionId::parse("ses_0123456789abcdef")?;
+    let source_id = SourceId::from_sha256(DIGEST)?;
+    let base = imported_base(&session, &source_id)?;
+    let source = base.source_segment().clone();
+    let replaced = base.snap_to_segments(range(10 * SECOND, 65 * SECOND)?);
+    assert_eq!(replaced, range(10 * SECOND, 65 * SECOND)?);
+
+    let audio = FakeAudio::new(Vec::new());
+    let mut recognizer = FakeRecognizer::new(identity(DIGEST)?);
+    recognizer.output = unusable_in_the_first_chunk;
+    let transcription = transcribe_with(&source, replaced, &audio, &recognizer).await??;
+    assert_eq!(
+        outcomes_of(&transcription),
+        [
+            AsrChunkOutcome::Unusable {
+                audio: range(10 * SECOND, 40 * SECOND)?,
+            },
+            AsrChunkOutcome::Transcribed {
+                audio: range(35 * SECOND, 65 * SECOND)?,
+            },
+        ]
+    );
+    let revision = build_asr_revision(AsrRevisionRequest {
+        session_id: &session,
+        source_id: &source_id,
+        source_segment: &source,
+        number: NonZeroU32::new(2).ok_or("zero")?,
+        transcription,
+        splice: Some(RevisionSplice {
+            base: &base,
+            replaced_range: replaced,
+        }),
+    })?;
+
+    // The cue at 12 s is kept; the cues at 40 and 60 s were replaced by what
+    // the second chunk heard.
+    assert_eq!(
+        texts(&revision),
+        [
+            (5, "imported cue 1".to_owned()),
+            (12, "imported cue 2".to_owned()),
+            (41, "words of chunk 1".to_owned()),
+        ]
+    );
+    let kept = &revision.segments()[1];
+    assert_eq!(kept.range(), base.segments()[1].range());
+    let origin = kept.carried_from().ok_or("not carried")?;
+    assert_eq!(origin.revision(), base.id());
+    assert_eq!(origin.segment(), base.segments()[1].id());
+    assert!(matches!(
+        revision.segment_provenance(kept),
+        TranscriptProvenance::Imported { .. }
+    ));
+    assert_eq!(revision.inherited().len(), 1);
+    assert_eq!(revision.replaced_range(), Some(replaced));
+
+    // The revision says what it did not do: one chunk could not be used, and
+    // the run does not claim to have heard that there was no speech.
+    let warnings: Vec<_> = revision
+        .warnings()
+        .as_slice()
+        .iter()
+        .map(|warning| (warning.kind(), warning.count(), warning.first_cue()))
+        .collect();
+    assert_eq!(
+        warnings,
+        [(TranscriptWarningKind::ProviderChunksRejected, 1, 1)]
+    );
+
+    // The kept cue is covered, as supplied text; the rest of the part of the
+    // range that no chunk transcribed is not.
+    let coverage = SearchCoverage::of(&revision, None);
+    assert_eq!(
+        coverage.transcribed(),
+        [
+            range(0, 10 * SECOND)?,
+            range(12 * SECOND, 14 * SECOND)?,
+            range(35 * SECOND, 70 * SECOND)?,
+        ]
+    );
+    assert_eq!(
+        coverage.untranscribed(),
+        [
+            range(10 * SECOND, 12 * SECOND)?,
+            range(14 * SECOND, 35 * SECOND)?,
+        ]
+    );
+    assert!(coverage.no_speech().is_empty());
+    // What the run itself did not transcribe is the same ranges, from the run.
+    assert_eq!(revision_gaps(&revision), [range(10 * SECOND, 35 * SECOND)?]);
+    Ok(())
+}
+
+/// The part of the revision's range that its own run left unread.
+fn revision_gaps(revision: &TranscriptRevision) -> Vec<TimeRange> {
+    match revision.provenance() {
+        TranscriptProvenance::LocalAsr(run) => run.unusable_gaps(),
+        TranscriptProvenance::Imported { .. } => Vec::new(),
+    }
+}
+
+/// #353: when every chunk of the range is read, nothing of the earlier text
+/// is kept inside it, as before: the gap rule changes nothing for a run that
+/// has no gap.
+#[tokio::test]
+async fn a_range_run_without_a_gap_replaces_the_earlier_text_as_before() -> TestResult {
+    let session = SessionId::parse("ses_0123456789abcdef")?;
+    let source_id = SourceId::from_sha256(DIGEST)?;
+    let base = imported_base(&session, &source_id)?;
+    let source = base.source_segment().clone();
+    let replaced = base.snap_to_segments(range(10 * SECOND, 65 * SECOND)?);
+    let revision = build_asr_revision(AsrRevisionRequest {
+        session_id: &session,
+        source_id: &source_id,
+        source_segment: &source,
+        number: NonZeroU32::new(2).ok_or("zero")?,
+        transcription: transcribe(&source, replaced).await?,
+        splice: Some(RevisionSplice {
+            base: &base,
+            replaced_range: replaced,
+        }),
+    })?;
+    let kept: Vec<_> = texts(&revision)
+        .into_iter()
+        .filter(|(_, text)| text.starts_with("imported"))
+        .collect();
+    assert_eq!(kept, [(5, "imported cue 1".to_owned())]);
+    assert!(revision_gaps(&revision).is_empty());
     Ok(())
 }
 

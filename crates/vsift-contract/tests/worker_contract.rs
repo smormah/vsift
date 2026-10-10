@@ -349,6 +349,71 @@ fn a_partial_run_matches_its_frozen_example() -> TestResult {
     Ok(())
 }
 
+/// #353, pinned as it is in 0.2.1: a `retranscribe` step reports the revision
+/// it committed and nothing about that revision's gaps. When the recogniser's
+/// answer for some chunks of the step's run could not be used, the revision
+/// carries them (chunks with an `unusable` outcome, the warning
+/// `provider_chunks_rejected`) and `transcript retranscribe` answers
+/// `partial` for them, but the step, and so the request, stays `complete` with
+/// `coverage: null`: a supervisor reading `job run` or `job batch` is not told,
+/// and learns of the gaps by reading the revision the step names.
+///
+/// The step's outputs cannot say it, which the destructuring below enforces:
+/// adding a member for the gaps stops this test compiling, so the change is
+/// made on purpose, with the schema and the documentation that describe it
+/// (`docs/contracts/cli-v1.md`, ADR 0017 and 0020 notes).
+#[test]
+fn a_retranscribe_step_is_complete_whatever_its_revision_could_not_read() -> TestResult {
+    let outputs = StepOutputs::Retranscribe {
+        revision_id: TranscriptRevisionId::parse("trv_1f2e3d4c5b6a79880f1e2d3c4b5a6978")?,
+        generation: StorageGeneration::from_value(2),
+        chunks_reused: 0,
+    };
+    let StepOutputs::Retranscribe {
+        revision_id: _,
+        generation: _,
+        chunks_reused: _,
+    } = &outputs
+    else {
+        return Err("the outputs are not a retranscription's".into());
+    };
+    let request = frozen_request()?;
+    let result = WorkResult::new(WorkResultParts {
+        operation_id: request.operation_id(),
+        request_digest: request.digest(),
+        origin: ResultOrigin::Fresh,
+        attempt: NonZeroU32::MIN,
+        session_id: Some(&SessionId::parse(SESSION)?),
+        source_id: Some(&SourceId::parse(F01_SOURCE)?),
+        publication: Some(PublicationGuarantee::OsCrashDurable),
+        lifecycle: Some(LifecycleResponse::durable_worker(EXPIRES_AT.to_owned())),
+        steps: vec![StepResult::finished(
+            &outputs,
+            timing(21_530, 180),
+            Some(&JobId::parse(JOB)?),
+        )],
+        failure: None,
+        controls: controls()?,
+    })?;
+    assert_eq!(result.status(), vsift_domain::OperationStatus::Complete);
+    let response = job_run(&result)?;
+    validate("operation-response.schema.json", &response)?;
+    validate("job-result.schema.json", &response["data"])?;
+    assert_eq!(response["status"], "complete");
+    assert!(response["coverage"].is_null());
+    let step = &response["data"]["steps"][0];
+    assert_eq!(step["status"], "complete");
+    assert!(step["coverage"].is_null());
+    let members: Vec<&str> = step["outputs"]
+        .as_object()
+        .ok_or("no outputs")?
+        .keys()
+        .map(String::as_str)
+        .collect();
+    assert_eq!(members, ["chunks_reused", "generation", "revision_id"]);
+    Ok(())
+}
+
 /// A step that fails ends the request: the steps after it did not start,
 /// and the request's failure names the step.
 #[test]

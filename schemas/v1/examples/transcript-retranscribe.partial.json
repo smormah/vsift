@@ -1,0 +1,91 @@
+{
+  "command": "transcript.retranscribe",
+  "coverage": {
+    "gaps": [
+      "30000000-55000000"
+    ],
+    "reasons": [
+      "untranscribed_range"
+    ],
+    "truncated": true
+  },
+  "data": {
+    "job": {
+      "chunks_reused": 0,
+      "job_id": "job_8d3e1f0a2b4c6d8e0f1a2b3c4d5e6f70",
+      "replayed": false,
+      "resumed": false
+    },
+    "recognised_segment_count": 1,
+    "requested_range": null,
+    "revision": {
+      "alignment": {
+        "origin": "local_asr"
+      },
+      "carried_segment_count": 0,
+      "language": "en",
+      "local_asr": {
+        "audio_stream": 1,
+        "chunk_count": 2,
+        "covered_range": {
+          "from_us": 0,
+          "to_us": 55000000
+        },
+        "decoding_profile": "r0-v1",
+        "executable_sha256": "95e3c0b0e778ad9499eb0125f97c1dcf437dd9eb4ea77050b043574f93c2631d",
+        "model_profile": "base",
+        "model_sha256": "60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe",
+        "no_audio_chunks": 0,
+        "overlap_us": 5000000,
+        "provider": "whisper_cpp",
+        "silent_chunks": 0,
+        "threads": 4,
+        "transcribed_chunks": 1,
+        "unusable_chunks": 1,
+        "window_us": 30000000
+      },
+      "replaced_range": null,
+      "revision": 1,
+      "revision_id": "trv_a5ed9a081a2068b75c956f9befbb4fd4",
+      "segment_count": 1,
+      "sidecar": null,
+      "source_id": "src_sha256_0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      "source_segments": [
+        {
+          "end_us": 55000000,
+          "index": 0,
+          "source_segment_id": "sgm_02f1ec5104b39a416aa8182970f01c81",
+          "start_us": 0,
+          "state": "closed"
+        }
+      ],
+      "supersedes": null,
+      "warnings": [
+        {
+          "code": "provider_chunks_rejected",
+          "count": 1,
+          "excluded_cues": true,
+          "first_cue": 2
+        }
+      ]
+    },
+    "session_id": "ses_0123456789abcdef0123456789abcdef",
+    "untranscribed_ranges": [
+      {
+        "from_us": 30000000,
+        "to_us": 55000000
+      }
+    ]
+  },
+  "error": null,
+  "lifecycle": {
+    "expires_at": "2026-09-25T00:00:00Z",
+    "mode": "ephemeral"
+  },
+  "operation_id": "op_4f0c2b8e9a1d3c5e7f60718293a4b5c6",
+  "schema_version": "1",
+  "status": "partial",
+  "warnings": [
+    "For some audio the recogniser's answer could not be used, so this run did not transcribe it: the result lists those time ranges as untranscribed. It is not silence. Earlier text that reaches into them is kept whole as it was, unless this run's own text overlaps it; any other words said there cannot be found. Transcribing just that range again (transcript retranscribe with --from and --to) cuts the audio at other points and may cover it, and a transcript file you already have can supply it: open the video with ingest --transcript."
+  ]
+}

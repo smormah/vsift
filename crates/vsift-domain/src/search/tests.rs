@@ -92,6 +92,7 @@ fn imported(duration: u64, texts: &[&str]) -> Built<TranscriptRevision> {
         supersedes: None,
         replaced_range: None,
         inherited: Vec::new(),
+        carried_untranscribed: Vec::new(),
         language: None,
         segments,
         warnings: TranscriptWarnings::default(),
@@ -156,6 +157,7 @@ fn local_asr(
         supersedes: None,
         replaced_range: None,
         inherited: Vec::new(),
+        carried_untranscribed: Vec::new(),
         language: None,
         segments: built,
         warnings: TranscriptWarnings::default(),
@@ -489,6 +491,7 @@ fn a_spliced_revision_carrying_supplied_text_is_mixed() -> TestResult {
         supersedes: Some(base.clone()),
         replaced_range: Some(range(20 * SECOND, 30 * SECOND)?),
         inherited: vec![InheritedRevision::new(base, imported_provenance()?, None)],
+        carried_untranscribed: Vec::new(),
         language: None,
         segments: vec![carried],
         warnings: TranscriptWarnings::default(),
@@ -498,6 +501,669 @@ fn a_spliced_revision_carrying_supplied_text_is_mixed() -> TestResult {
     assert_eq!(coverage.transcribed(), [range(0, 100 * SECOND)?]);
     assert!(coverage.is_complete());
     assert_eq!(coverage.no_speech(), [range(20 * SECOND, 30 * SECOND)?]);
+    Ok(())
+}
+
+/// #353: a window whose recognised output was unusable was examined and is not
+/// covered, and it is not no speech either: the recognizer may have been given
+/// speech it could not place. What the neighbouring windows (which overlap it
+/// by five seconds) transcribed stays covered.
+#[test]
+fn an_unusable_window_is_untranscribed_not_silent() -> TestResult {
+    // Chunks [0,30) transcribed, [25,55) unusable, [50,70) transcribed.
+    let asr = run(
+        range(0, 70 * SECOND)?,
+        &[
+            AsrChunkOutcome::Transcribed {
+                audio: range(0, 30 * SECOND)?,
+            },
+            AsrChunkOutcome::Unusable {
+                audio: range(25 * SECOND, 55 * SECOND)?,
+            },
+            AsrChunkOutcome::Transcribed {
+                audio: range(50 * SECOND, 70 * SECOND)?,
+            },
+        ],
+    )?;
+    let revision = local_asr(
+        asr,
+        &[
+            (0, 2 * SECOND, 3 * SECOND, "first words"),
+            (2, 60 * SECOND, 62 * SECOND, "last words"),
+        ],
+        &[0, 25 * SECOND, 50 * SECOND],
+    )?;
+    let coverage = SearchCoverage::of(&revision, None);
+    assert_eq!(coverage.basis(), CoverageBasis::LocalAsr);
+    assert_eq!(
+        coverage.transcribed(),
+        [range(0, 30 * SECOND)?, range(50 * SECOND, 70 * SECOND)?]
+    );
+    // The middle of the unusable window, and the tail nothing examined.
+    assert_eq!(
+        coverage.untranscribed(),
+        [
+            range(30 * SECOND, 50 * SECOND)?,
+            range(70 * SECOND, 100 * SECOND)?
+        ]
+    );
+    assert!(coverage.no_speech().is_empty());
+    assert!(!coverage.is_complete());
+
+    // Beside a silent neighbour, the unusable window is still not no speech,
+    // and what the silent window overlaps of it is silent.
+    let asr = run(
+        range(0, 70 * SECOND)?,
+        &[
+            AsrChunkOutcome::Silent {
+                audio: range(0, 30 * SECOND)?,
+            },
+            AsrChunkOutcome::Unusable {
+                audio: range(25 * SECOND, 55 * SECOND)?,
+            },
+            AsrChunkOutcome::Transcribed {
+                audio: range(50 * SECOND, 70 * SECOND)?,
+            },
+        ],
+    )?;
+    let revision = local_asr(
+        asr,
+        &[(2, 60 * SECOND, 62 * SECOND, "last words")],
+        &[0, 25 * SECOND, 50 * SECOND],
+    )?;
+    let coverage = SearchCoverage::of(&revision, None);
+    assert_eq!(
+        coverage.untranscribed(),
+        [
+            range(30 * SECOND, 50 * SECOND)?,
+            range(70 * SECOND, 100 * SECOND)?
+        ]
+    );
+    assert_eq!(coverage.no_speech(), [range(0, 30 * SECOND)?]);
+    Ok(())
+}
+
+type Spliced = Result<TranscriptRevision, crate::TranscriptRevisionError>;
+
+/// A revision that supersedes a four-chunk run over 0-100 s (chunk windows start
+/// at 0, 25, 50 and 75 s, and every one was read) with a run of its own over
+/// `own_range`. Times are microseconds.
+struct Splice<'a> {
+    own_range: TimeRange,
+    own_outcomes: &'a [AsrChunkOutcome],
+    /// Segments carried from the earlier run: its chunk, start and end.
+    carried: &'a [(u32, u64, u64)],
+    /// Segments the run wrote itself: its chunk, start and end.
+    written: &'a [(u32, u64, u64)],
+    /// What the superseded revision did not cover outside the range.
+    carried_untranscribed: &'a [(u64, u64)],
+}
+
+impl Splice<'_> {
+    /// `Err` inside is the revision's own refusal of what it is given.
+    fn build(&self) -> Built<Spliced> {
+        let base_run = run(
+            range(0, 100 * SECOND)?,
+            &[
+                AsrChunkOutcome::Transcribed {
+                    audio: range(0, 30 * SECOND)?,
+                },
+                AsrChunkOutcome::Transcribed {
+                    audio: range(25 * SECOND, 55 * SECOND)?,
+                },
+                AsrChunkOutcome::Transcribed {
+                    audio: range(50 * SECOND, 80 * SECOND)?,
+                },
+                AsrChunkOutcome::Transcribed {
+                    audio: range(75 * SECOND, 100 * SECOND)?,
+                },
+            ],
+        )?;
+        let own_run = run(self.own_range, self.own_outcomes)?;
+        let base = TranscriptRevisionId::parse("trv_1111111111111111")?;
+        // (start, end, chunk, carried: the position among the carried ones).
+        let mut placed: Vec<(u64, u64, u32, Option<u32>)> = Vec::new();
+        for (index, &(chunk, start, end)) in (1_u32..).zip(self.carried) {
+            placed.push((start, end, chunk, Some(index)));
+        }
+        for &(chunk, start, end) in self.written {
+            placed.push((start, end, chunk, None));
+        }
+        placed.sort_unstable();
+        let mut segments = Vec::new();
+        for (ordinal, &(start, end, chunk, carried)) in (1_u32..).zip(&placed) {
+            let audio_start = match carried {
+                Some(_) => u64::from(chunk) * 25 * SECOND,
+                None => match own_run.chunks().get(usize::try_from(chunk)?) {
+                    Some(record) => record.chunk().window().start().as_micros(),
+                    None => return Err("no such chunk of the run".into()),
+                },
+            };
+            let segment = TranscriptSegment::new(TranscriptSegmentParts {
+                id: TranscriptSegmentId::parse(format!("tsg_{ordinal:016x}"))?,
+                ordinal: NonZeroU32::new(ordinal).ok_or("zero")?,
+                range: range(start, end)?,
+                text: CueText::new("words".to_owned(), "words".to_owned())?,
+                speaker: None,
+                confidence: Confidence::unknown(),
+                origin: SegmentOrigin::Asr {
+                    chunk,
+                    provider_start: ChunkTime::from_micros(start - audio_start),
+                    provider_end: ChunkTime::from_micros(end - audio_start),
+                    trimmed: ProviderEndTrim::Unchanged,
+                },
+            });
+            segments.push(match carried {
+                Some(index) => segment.with_carried_from(CarriedFrom::new(
+                    base.clone(),
+                    TranscriptSegmentId::parse(format!("tsg_1{index:015x}"))?,
+                )),
+                None => segment,
+            });
+        }
+        let mut unread = Vec::new();
+        for &(start, end) in self.carried_untranscribed {
+            unread.push(range(start, end)?);
+        }
+        Ok(TranscriptRevision::new(TranscriptRevisionParts {
+            id: TranscriptRevisionId::parse("trv_2222222222222222")?,
+            number: NonZeroU32::new(2).ok_or("zero")?,
+            source_id: SourceId::from_sha256(DIGEST)?,
+            source_segment: source_segment(100 * SECOND)?,
+            provenance: TranscriptProvenance::LocalAsr(own_run),
+            supersedes: Some(base.clone()),
+            replaced_range: Some(self.own_range),
+            inherited: if self.carried.is_empty() {
+                Vec::new()
+            } else {
+                vec![InheritedRevision::new(
+                    base,
+                    TranscriptProvenance::LocalAsr(base_run),
+                    None,
+                )]
+            },
+            carried_untranscribed: unread,
+            language: None,
+            segments,
+            warnings: TranscriptWarnings::default(),
+        }))
+    }
+}
+
+/// The revision of a run that re-examined 20-50 s as a single chunk whose answer
+/// was unusable, carrying the earlier segments `(earlier chunk, start s, end
+/// s)`.
+fn spliced_over_an_unusable_window(carried: &[(u32, u64, u64)]) -> Built<Spliced> {
+    spliced_over(
+        range(20 * SECOND, 50 * SECOND)?,
+        &[AsrChunkOutcome::Unusable {
+            audio: range(20 * SECOND, 50 * SECOND)?,
+        }],
+        carried,
+    )
+}
+
+/// Like [`spliced_over_an_unusable_window`], for a run that re-examined
+/// `own_range` as the chunks `own_outcomes` and wrote no text. Times in seconds.
+fn spliced_over(
+    own_range: TimeRange,
+    own_outcomes: &[AsrChunkOutcome],
+    carried: &[(u32, u64, u64)],
+) -> Built<Spliced> {
+    let in_micros: Vec<(u32, u64, u64)> = carried
+        .iter()
+        .map(|&(chunk, start, end)| (chunk, start * SECOND, end * SECOND))
+        .collect();
+    Splice {
+        own_range,
+        own_outcomes,
+        carried: &in_micros,
+        written: &[],
+        carried_untranscribed: &[],
+    }
+    .build()
+}
+
+/// The two-chunk run of 20-75 s of these tests: 20-50 s unusable, 45-75 s read
+/// (transcribed, or silent). Its gap is 20-45 s.
+fn read_after_an_unusable_window(
+    read: fn(TimeRange) -> AsrChunkOutcome,
+) -> Built<[AsrChunkOutcome; 2]> {
+    Ok([
+        AsrChunkOutcome::Unusable {
+            audio: range(20 * SECOND, 50 * SECOND)?,
+        },
+        read(range(45 * SECOND, 75 * SECOND)?),
+    ])
+}
+
+const fn transcribed(audio: TimeRange) -> AsrChunkOutcome {
+    AsrChunkOutcome::Transcribed { audio }
+}
+
+const fn silent(audio: TimeRange) -> AsrChunkOutcome {
+    AsrChunkOutcome::Silent { audio }
+}
+
+/// #353: text the earlier revision had inside a gap of the run (a part of its
+/// range that its unusable chunks left unread, no neighbour covering it) is
+/// kept, and covered, as itself; the rest of the gap stays untranscribed. A
+/// carried segment that lies in the replaced range anywhere else is refused:
+/// the run's own text replaced it.
+#[test]
+fn text_kept_inside_an_unusable_gap_is_covered_and_the_rest_of_the_gap_is_not() -> TestResult {
+    // A segment of the earlier chunk 1 (25-55 s), at 30-32 s, inside the gap.
+    let revision = spliced_over_an_unusable_window(&[(0, 5, 7), (1, 30, 32)])??;
+    let coverage = SearchCoverage::of(&revision, None);
+    assert_eq!(
+        coverage.transcribed(),
+        [
+            range(0, 20 * SECOND)?,
+            range(30 * SECOND, 32 * SECOND)?,
+            range(50 * SECOND, 100 * SECOND)?
+        ]
+    );
+    assert_eq!(
+        coverage.untranscribed(),
+        [
+            range(20 * SECOND, 30 * SECOND)?,
+            range(32 * SECOND, 50 * SECOND)?
+        ]
+    );
+    assert!(coverage.no_speech().is_empty());
+    // The kept text is what a search finds there.
+    assert_eq!(
+        revision
+            .segments()
+            .iter()
+            .filter(|segment| segment.carried_from().is_some())
+            .count(),
+        2
+    );
+
+    // A segment that crosses the edge of the replaced range itself is never
+    // carried: a range is widened to whole segments, so none does.
+    let across_the_range = spliced_over_an_unusable_window(&[(1, 48, 52)])?;
+    assert_eq!(
+        across_the_range,
+        Err(crate::TranscriptRevisionError::InvalidCarriedSegment)
+    );
+    Ok(())
+}
+
+/// #353: earlier text in the part of the range the run read is replaced by what
+/// it read, so a carried segment there that touches no gap is refused.
+#[test]
+fn earlier_text_wholly_in_what_the_run_read_is_refused() -> TestResult {
+    let own = range(20 * SECOND, 75 * SECOND)?;
+    let outcomes = read_after_an_unusable_window(transcribed)?;
+    // 60-62 s lies in the replaced range, where the run read the audio itself.
+    assert_eq!(
+        spliced_over(own, &outcomes, &[(2, 60, 62)])?,
+        Err(crate::TranscriptRevisionError::InvalidCarriedSegment)
+    );
+    // 45-47 s starts where the gap ends: it touches the gap at one point only.
+    assert_eq!(
+        spliced_over(own, &outcomes, &[(1, 45, 47)])?,
+        Err(crate::TranscriptRevisionError::InvalidCarriedSegment)
+    );
+    Ok(())
+}
+
+/// #353, the rule for text that crosses the edge of a gap: the gap's edge is the
+/// edge of a neighbouring window, so a sentence there is read only in part, and
+/// a run replaces what it read in full. Text that reaches into a gap is kept
+/// whole, by however little it does, when none of the run's own text overlaps
+/// it, and it is covered, so the part of the gap it lies in is not untranscribed.
+#[test]
+fn earlier_text_that_crosses_the_edge_of_a_gap_is_kept_whole_and_covered() -> TestResult {
+    let own = range(20 * SECOND, 75 * SECOND)?;
+    for (label, outcomes) in [
+        ("read", read_after_an_unusable_window(transcribed)?),
+        ("silent", read_after_an_unusable_window(silent)?),
+    ] {
+        // One microsecond, one second, and nearly the end of the earlier chunk.
+        for end in [45 * SECOND + 1, 46 * SECOND, 54 * SECOND] {
+            let revision = Splice {
+                own_range: own,
+                own_outcomes: &outcomes,
+                carried: &[(1, 30 * SECOND, end)],
+                written: &[],
+                carried_untranscribed: &[],
+            }
+            .build()?
+            .map_err(|error| format!("{label} {end}: {error:?}"))?;
+            assert_eq!(revision.segments().len(), 1, "{label} {end}");
+            let coverage = SearchCoverage::of(&revision, None);
+            // The kept text is covered whole and so is the window the run
+            // read: what is left of the gap is the part before the text.
+            assert_eq!(
+                coverage.untranscribed(),
+                [range(20 * SECOND, 30 * SECOND)?],
+                "{label} {end}"
+            );
+        }
+    }
+    Ok(())
+}
+
+/// #353: when the run's own text overlaps text that crosses a gap's edge, the
+/// run has heard the same words and its text replaces the earlier text, as it
+/// replaces any other. Text the run's own text only touches is not overlapped.
+#[test]
+fn earlier_text_that_the_runs_own_text_overlaps_is_replaced() -> TestResult {
+    let own = range(20 * SECOND, 75 * SECOND)?;
+    let outcomes = read_after_an_unusable_window(transcribed)?;
+    // The run's chunk 1 (audio from 45 s) wrote 46-47 s. The earlier segment
+    // 44 s to 46 s plus one microsecond overlaps it by that microsecond.
+    let overlapped = Splice {
+        own_range: own,
+        own_outcomes: &outcomes,
+        carried: &[(1, 44 * SECOND, 46 * SECOND + 1)],
+        written: &[(1, 46 * SECOND, 47 * SECOND)],
+        carried_untranscribed: &[],
+    }
+    .build()?;
+    assert_eq!(
+        overlapped,
+        Err(crate::TranscriptRevisionError::InvalidCarriedSegment)
+    );
+    // Ending where the run's text starts, it only touches it and is kept.
+    let touching = Splice {
+        own_range: own,
+        own_outcomes: &outcomes,
+        carried: &[(1, 44 * SECOND, 46 * SECOND)],
+        written: &[(1, 46 * SECOND, 47 * SECOND)],
+        carried_untranscribed: &[],
+    }
+    .build()??;
+    assert_eq!(touching.segments().len(), 2);
+    Ok(())
+}
+
+/// #353: an earlier run's windows are not counted over a part the superseded
+/// revision did not cover. The revision records those parts, and the windows of
+/// the earlier run it still carries text from, which cover the whole source
+/// here, are counted outside them only.
+#[test]
+fn an_earlier_window_is_not_counted_over_what_the_superseded_revision_left_untranscribed()
+-> TestResult {
+    let outcomes = [AsrChunkOutcome::Transcribed {
+        audio: range(60 * SECOND, 70 * SECOND)?,
+    }];
+    let build = |unread: &[(u64, u64)]| -> Built<TranscriptRevision> {
+        Ok(Splice {
+            own_range: range(60 * SECOND, 70 * SECOND)?,
+            own_outcomes: &outcomes,
+            carried: &[(0, 5 * SECOND, 7 * SECOND), (3, 80 * SECOND, 82 * SECOND)],
+            written: &[],
+            carried_untranscribed: unread,
+        }
+        .build()??)
+    };
+    // Without the record, the earlier run's windows cover every instant.
+    let overstated = SearchCoverage::of(&build(&[])?, None);
+    assert!(overstated.is_complete());
+    // With it, the part stays untranscribed, however far from the run's range.
+    let revision = build(&[(10 * SECOND, 35 * SECOND)])?;
+    let coverage = SearchCoverage::of(&revision, None);
+    assert_eq!(coverage.untranscribed(), [range(10 * SECOND, 35 * SECOND)?]);
+    assert_eq!(
+        coverage.transcribed(),
+        [range(0, 10 * SECOND)?, range(35 * SECOND, 100 * SECOND)?]
+    );
+    assert!(coverage.no_speech().is_empty());
+    Ok(())
+}
+
+/// #353: what a revision records is validated whole, because a stored record is
+/// rebuilt through the constructor: the parts are in order, merged, inside the
+/// source and outside the replaced range, there are at most
+/// `MAX_CARRIED_UNTRANSCRIBED` of them, and only a spliced revision has any.
+#[test]
+fn what_a_revision_records_as_untranscribed_is_validated() -> TestResult {
+    let outcomes = [AsrChunkOutcome::Transcribed {
+        audio: range(60 * SECOND, 70 * SECOND)?,
+    }];
+    let build = |unread: &[(u64, u64)]| -> Built<Spliced> {
+        Splice {
+            own_range: range(60 * SECOND, 70 * SECOND)?,
+            own_outcomes: &outcomes,
+            carried: &[(0, 5 * SECOND, 7 * SECOND)],
+            written: &[],
+            carried_untranscribed: unread,
+        }
+        .build()
+    };
+    let invalid = Err(crate::TranscriptRevisionError::InvalidSupersession);
+    let ok = |unread: &[(u64, u64)]| build(unread).map(|built| built.is_ok());
+    assert!(ok(&[
+        (10 * SECOND, 20 * SECOND),
+        (30 * SECOND, 40 * SECOND)
+    ])?);
+    // Overlapping the replaced range, or reaching into it from either side.
+    for bad in [
+        &[(65 * SECOND, 80 * SECOND)][..],
+        &[(50 * SECOND, 61 * SECOND)],
+        &[(50 * SECOND, 100 * SECOND)],
+        // Not in order, overlapping, touching, or outside the source.
+        &[(30 * SECOND, 40 * SECOND), (10 * SECOND, 20 * SECOND)],
+        &[(10 * SECOND, 25 * SECOND), (20 * SECOND, 30 * SECOND)],
+        &[(10 * SECOND, 20 * SECOND), (20 * SECOND, 30 * SECOND)],
+        &[(90 * SECOND, 101 * SECOND)],
+    ] {
+        assert_eq!(build(bad)?, invalid, "{bad:?}");
+    }
+    // At most MAX_CARRIED_UNTRANSCRIBED: one more than that, each a microsecond
+    // long and apart from the next, inside the source and in order, fails only
+    // for its number.
+    let most = u64::try_from(crate::MAX_CARRIED_UNTRANSCRIBED)?;
+    let listed = |count: u64| -> Vec<(u64, u64)> {
+        (0..count).map(|index| (index * 2, index * 2 + 1)).collect()
+    };
+    assert!(ok(&listed(most))?);
+    assert_eq!(build(&listed(most + 1))?, invalid);
+    // An import is not spliced: it records nothing.
+    let mut parts = imported_parts()?;
+    parts.carried_untranscribed = vec![range(SECOND, 2 * SECOND)?];
+    assert_eq!(TranscriptRevision::new(parts), invalid);
+    Ok(())
+}
+
+/// The parts of a one-cue import of a 100 s source.
+fn imported_parts() -> Built<TranscriptRevisionParts> {
+    Ok(TranscriptRevisionParts {
+        id: TranscriptRevisionId::parse("trv_0123456789abcdef")?,
+        number: NonZeroU32::MIN,
+        source_id: SourceId::from_sha256(DIGEST)?,
+        source_segment: source_segment(100 * SECOND)?,
+        provenance: imported_provenance()?,
+        supersedes: None,
+        replaced_range: None,
+        inherited: Vec::new(),
+        carried_untranscribed: Vec::new(),
+        language: None,
+        segments: vec![cue_segment(1, SECOND, 2 * SECOND, "words")?],
+        warnings: TranscriptWarnings::default(),
+    })
+}
+
+/// #353: what a revision that supersedes this one over a range must record is
+/// the parts outside the range that a search of this one lists as untranscribed
+/// **and that what it carries from would otherwise be counted over**: a file
+/// claims the whole source, a run the windows it read. Nothing else is
+/// recorded, because nothing else changes what a search says, so a chain that
+/// never left a part unread records nothing.
+#[test]
+fn what_a_revision_must_record_is_what_the_inherited_provenance_would_be_counted_over() -> TestResult
+{
+    let revision = spliced_over_an_unusable_window(&[(0, 5, 7)])??;
+    assert_eq!(
+        SearchCoverage::of(&revision, None).untranscribed(),
+        [range(20 * SECOND, 50 * SECOND)?]
+    );
+    // What the earlier run read, 0-100 s, claims all of it.
+    let read_everywhere = revision.inherited();
+    for (replaced, expected) in [
+        // Far from the part: all of it.
+        (
+            range(60 * SECOND, 70 * SECOND)?,
+            vec![range(20 * SECOND, 50 * SECOND)?],
+        ),
+        // Inside it: the two sides.
+        (
+            range(30 * SECOND, 40 * SECOND)?,
+            vec![
+                range(20 * SECOND, 30 * SECOND)?,
+                range(40 * SECOND, 50 * SECOND)?,
+            ],
+        ),
+        // Over an end of it, or all of it: what is left, or nothing.
+        (
+            range(10 * SECOND, 25 * SECOND)?,
+            vec![range(25 * SECOND, 50 * SECOND)?],
+        ),
+        (range(0, 100 * SECOND)?, Vec::new()),
+    ] {
+        assert_eq!(
+            revision.carried_untranscribed_for(replaced, read_everywhere),
+            expected
+        );
+    }
+    let replaced = range(60 * SECOND, 70 * SECOND)?;
+    let entry = |provenance: TranscriptProvenance| -> Built<InheritedRevision> {
+        Ok(InheritedRevision::new(
+            TranscriptRevisionId::parse("trv_3333333333333333")?,
+            provenance,
+            None,
+        ))
+    };
+    // Nothing inherited, nothing to count over it: nothing is recorded.
+    assert!(revision.carried_untranscribed_for(replaced, &[]).is_empty());
+    // A run whose windows lie elsewhere claims nothing of it.
+    let elsewhere = entry(TranscriptProvenance::LocalAsr(run(
+        range(60 * SECOND, 70 * SECOND)?,
+        &[AsrChunkOutcome::Transcribed {
+            audio: range(60 * SECOND, 70 * SECOND)?,
+        }],
+    )?))?;
+    assert!(
+        revision
+            .carried_untranscribed_for(range(0, 10 * SECOND)?, &[elsewhere])
+            .is_empty()
+    );
+    // A run that read 30-100 s claims the part of it from 30 s on, and only that.
+    let from_thirty = entry(TranscriptProvenance::LocalAsr(run(
+        range(30 * SECOND, 100 * SECOND)?,
+        &[
+            AsrChunkOutcome::Transcribed {
+                audio: range(30 * SECOND, 60 * SECOND)?,
+            },
+            AsrChunkOutcome::Transcribed {
+                audio: range(55 * SECOND, 85 * SECOND)?,
+            },
+            AsrChunkOutcome::Transcribed {
+                audio: range(80 * SECOND, 100 * SECOND)?,
+            },
+        ],
+    )?))?;
+    assert_eq!(
+        revision.carried_untranscribed_for(replaced, &[from_thirty]),
+        [range(30 * SECOND, 50 * SECOND)?]
+    );
+    // An imported file claims the whole source.
+    let file = entry(imported_provenance()?)?;
+    assert_eq!(
+        revision.carried_untranscribed_for(replaced, &[file]),
+        [range(20 * SECOND, 50 * SECOND)?]
+    );
+    Ok(())
+}
+
+/// #353: where more parts than the bound would be recorded, the nearest on each
+/// side of the replaced range are joined, never across it. A short range inside
+/// a part splits it in two, ten seconds apart, the nearest pair there is; they
+/// were joined, the join overlapped the range, and the revision refused its own
+/// record, so the range could never be retranscribed.
+#[test]
+fn joining_to_the_bound_never_crosses_the_replaced_range() -> TestResult {
+    // Chunks 0 and 2 of four are unusable: 0-25 s and 55-75 s are unread.
+    let read = |from: u64, to: u64| -> Built<AsrChunkOutcome> {
+        Ok(AsrChunkOutcome::Transcribed {
+            audio: range(from * SECOND, to * SECOND)?,
+        })
+    };
+    let base = local_asr(
+        run(
+            range(0, 100 * SECOND)?,
+            &[
+                AsrChunkOutcome::Unusable {
+                    audio: range(0, 30 * SECOND)?,
+                },
+                read(25, 55)?,
+                AsrChunkOutcome::Unusable {
+                    audio: range(50 * SECOND, 80 * SECOND)?,
+                },
+                read(75, 100)?,
+            ],
+        )?,
+        &[],
+        &[],
+    )?;
+    assert_eq!(
+        SearchCoverage::of(&base, None).untranscribed(),
+        [range(0, 25 * SECOND)?, range(55 * SECOND, 75 * SECOND)?]
+    );
+    let file = [InheritedRevision::new(
+        TranscriptRevisionId::parse("trv_3333333333333333")?,
+        imported_provenance()?,
+        None,
+    )];
+    // 60-70 s lies inside the second part. With room for three, nothing is joined.
+    let replaced = range(60 * SECOND, 70 * SECOND)?;
+    let recorded =
+        |limit: usize| super::coverage::carried_untranscribed_for(&base, replaced, &file, limit);
+    assert_eq!(
+        recorded(3),
+        [
+            range(0, 25 * SECOND)?,
+            range(55 * SECOND, 60 * SECOND)?,
+            range(70 * SECOND, 75 * SECOND)?
+        ]
+    );
+    // With room for two, the nearest pair is the two pieces the range splits,
+    // which are kept apart: the first part and the piece before the range join.
+    let two = recorded(2);
+    assert_eq!(
+        two,
+        [range(0, 60 * SECOND)?, range(70 * SECOND, 75 * SECOND)?]
+    );
+    // What is recorded overlaps nothing the range holds.
+    assert!(
+        two.iter()
+            .all(|part| part.end() <= replaced.start() || part.start() >= replaced.end())
+    );
+    Ok(())
+}
+
+/// #353: an earlier revision's coverage is never counted inside the windows a
+/// run examined, an unusable one included. The run replaced what the earlier
+/// revision said there, so counting it would report as transcribed a part that
+/// now has no words (coverage may understate, never overstate).
+#[test]
+fn an_unusable_window_does_not_inherit_the_coverage_of_the_revision_it_replaced() -> TestResult {
+    let revision = spliced_over_an_unusable_window(&[(0, 5, 7)])??;
+    let coverage = SearchCoverage::of(&revision, None);
+    assert_eq!(
+        coverage.transcribed(),
+        [range(0, 20 * SECOND)?, range(50 * SECOND, 100 * SECOND)?]
+    );
+    assert_eq!(coverage.untranscribed(), [range(20 * SECOND, 50 * SECOND)?]);
+    // Asked only about the run's own range, the answer is the same: this is
+    // what `transcript retranscribe` reports as its gaps.
+    let own = SearchCoverage::of(&revision, Some(range(20 * SECOND, 50 * SECOND)?));
+    assert_eq!(own.untranscribed(), [range(20 * SECOND, 50 * SECOND)?]);
+    assert!(own.transcribed().is_empty());
     Ok(())
 }
 

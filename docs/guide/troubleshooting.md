@@ -191,6 +191,20 @@ On Ubuntu 24.04 `vsift setup plan --profile desktop` lets VSift install reviewed
 and accept the plan. A tool that is present but "failed VSift's media-tool check" is a different problem: it is
 an FFmpeg that starts and does the wrong thing, so install a standard build. [Install guide, section 5](../operations/install.md#5-install-ffmpeg-ffprobe-whispercpp-and-the-speech-model).
 
+**`MISSING_CAPABILITY` from `transcript retranscribe` when `setup check` is fine.** If the `Fix:` line begins
+`Local speech recognition failed at the output_validation step (malformed_output)` and names
+`too_many_rejected_segments`, nothing is missing: VSift checked the tools on a built-in clip before it ran, and they
+work. But whisper.cpp's answers for most of what it was given could not be placed in its audio, so VSift will not
+present them as a transcript. The line says how many 30-second chunks failed and where the first is, in
+microseconds, the unit of `--from` and `--to`, and what it says to do next depends on how many chunks were answered.
+If it says **this stretch of the recording could not be transcribed** (three chunks or fewer), try a slightly
+different range with `--from` and `--to`, which cuts the audio at other points and may work. If it says **most of the
+speech this run covered could not be transcribed reliably** (more than three), use a transcript you already have:
+`vsift ingest <video> --transcript <file>` with an SRT or WebVTT file. Either way that transcript file needs no speech
+recognition. Nothing was committed, the job is marked failed and not resumable, and the same command run again
+starts it from the beginning. (A recording in which only a stretch or two fail is not this: it finishes as `partial`,
+with those stretches listed as not transcribed. Before `0.2.1` a single such stretch failed the whole run.)
+
 ## `INTEGRITY_FAILURE`: what is stored is not what VSift wrote
 
 Two causes cover nearly every case.

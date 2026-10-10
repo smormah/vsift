@@ -21,8 +21,10 @@
 use std::{collections::HashSet, error::Error, fmt, num::NonZeroU32};
 
 use crate::{
-    AsrChunkOutcome, AsrRun, ChunkTime, Confidence, ConfidenceOrigin, MediaTime, PageLimit,
-    SourceId, SourceSegmentId, SpeakerLabel, TimeRange, TranscriptRevisionId, TranscriptSegmentId,
+    AsrChunkOutcome, AsrRun, ChunkTime, Confidence, ConfidenceOrigin, EarlierTextRule, MediaTime,
+    PageLimit, SourceId, SourceSegmentId, SpeakerLabel, TimeRange, TranscriptRevisionId,
+    TranscriptSegmentId,
+    spans::{Span, merged, overlaps_any, span},
 };
 
 /// Largest supplied transcript file accepted for import.
@@ -381,9 +383,40 @@ pub enum TranscriptWarningKind {
     /// so the revision holds no new segment there. The attempt is still
     /// recorded, with every chunk's outcome, rather than discarded.
     NoSpeechRecognised,
+    /// Local ASR: the recognizer's answer for some chunks could not be used as
+    /// a whole (every segment of the chunk was rejected, more than a quarter of
+    /// at least four, or the output broke a structural rule), so those chunks
+    /// have no transcript from the recognizer and are recorded as unusable
+    /// gaps, not as silence (#353). The count is of chunks and the first
+    /// affected ordinal is a chunk's, as for the other chunk-level kinds.
+    ///
+    /// It is its own kind because the other chunk-level one, `silent_chunks_
+    /// skipped`, says that nothing was there to recognise, which would be false
+    /// of speech the recognizer could not place. A revision that holds it is
+    /// unreadable by the releases before it (they decode an unknown kind as
+    /// damage); only a revision with an unusable chunk holds it.
+    ProviderChunksRejected,
 }
 
 impl TranscriptWarningKind {
+    /// Every kind, in declaration order: the order of the published schemas'
+    /// `code` enumerations, which a test holds to this list.
+    pub const ALL: [Self; 13] = [
+        Self::EmptyCuesSkipped,
+        Self::MarkupRemoved,
+        Self::SpeakerLabelDiscarded,
+        Self::OverlappingCues,
+        Self::CuesOutsideSource,
+        Self::CuesCrossingSourceBoundary,
+        Self::ProviderSegmentsRejected,
+        Self::ProviderEndTrimmed,
+        Self::NonSpeechMarkersRemoved,
+        Self::SeamDuplicatesRemoved,
+        Self::SilentChunksSkipped,
+        Self::NoSpeechRecognised,
+        Self::ProviderChunksRejected,
+    ];
+
     /// Stable machine-readable identifier.
     #[must_use]
     pub const fn identifier(self) -> &'static str {
@@ -400,6 +433,7 @@ impl TranscriptWarningKind {
             Self::SeamDuplicatesRemoved => "seam_duplicates_removed",
             Self::SilentChunksSkipped => "silent_chunks_skipped",
             Self::NoSpeechRecognised => "no_speech_recognised",
+            Self::ProviderChunksRejected => "provider_chunks_rejected",
         }
     }
 
@@ -415,6 +449,7 @@ impl TranscriptWarningKind {
                 | Self::NonSpeechMarkersRemoved
                 | Self::SeamDuplicatesRemoved
                 | Self::SilentChunksSkipped
+                | Self::ProviderChunksRejected
         )
     }
 
@@ -432,6 +467,7 @@ impl TranscriptWarningKind {
                 | Self::SeamDuplicatesRemoved
                 | Self::SilentChunksSkipped
                 | Self::NoSpeechRecognised
+                | Self::ProviderChunksRejected
         )
     }
 }
@@ -881,7 +917,9 @@ impl TranscriptProvenance {
 /// The revision and segment a carried segment's text was first produced in.
 ///
 /// A bounded retranscription copies the segments of the revision it
-/// supersedes that lie outside the replaced range (ADR 0017). The copy gets a
+/// supersedes that lie outside the replaced range, and those wholly inside a
+/// part of it that the run could not read ([`AsrRun::unusable_gaps`], ADR
+/// 0017). The copy gets a
 /// new identity in the new revision, so evidence already indexed under the
 /// older revision is never overwritten, and names the segment it came from so
 /// a citation can be followed back. It always names the revision that
@@ -1092,6 +1130,12 @@ pub struct TranscriptRevisionParts {
     /// Provenance of every revision whose segments this one carries; empty
     /// unless the revision is spliced from the one it supersedes.
     pub inherited: Vec<InheritedRevision>,
+    /// The parts outside `replaced_range` that the superseded revision did not
+    /// cover and that a window or file this revision carries would otherwise be
+    /// counted over (#353), in start order and merged; empty unless the
+    /// revision is spliced from one that left such a part untranscribed. See
+    /// [`TranscriptRevision::carried_untranscribed`].
+    pub carried_untranscribed: Vec<TimeRange>,
     /// Declared or detected language, if known.
     pub language: Option<LanguageTag>,
     /// Segments in start order.
@@ -1099,6 +1143,15 @@ pub struct TranscriptRevisionParts {
     /// Import or recognition warnings.
     pub warnings: TranscriptWarnings,
 }
+
+/// The most ranges a revision records as carried untranscribed.
+///
+/// A run plans at most [`crate::MAX_PLANNED_CHUNKS`] chunks, so a run leaves at most
+/// 512 gaps; the parts of earlier runs add to those. The list is bounded so a
+/// stored record is, and where it would be longer the nearest ranges are joined
+/// ([`TranscriptRevision::carried_untranscribed_for`]): joining marks more of the
+/// source untranscribed, never less.
+pub const MAX_CARRIED_UNTRANSCRIBED: usize = 1_024;
 
 /// One immutable transcript revision for one source segment.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -1111,6 +1164,7 @@ pub struct TranscriptRevision {
     supersedes: Option<TranscriptRevisionId>,
     replaced_range: Option<TimeRange>,
     inherited: Vec<InheritedRevision>,
+    carried_untranscribed: Vec<TimeRange>,
     language: Option<LanguageTag>,
     segments: Vec<TranscriptSegment>,
     warnings: TranscriptWarnings,
@@ -1124,9 +1178,11 @@ impl TranscriptRevision {
     /// and a local-ASR segment's range must be its chunk's decoded start plus
     /// the provider's times (or the audio end when trimmed). A segment carried
     /// from an earlier revision is checked against that revision's inherited
-    /// provenance and must lie wholly outside the replaced range. Stored
-    /// revisions are rebuilt through this constructor too, so a modified
-    /// record cannot bypass the rules that produced it.
+    /// provenance and must lie where [`EarlierTextRule::carries`] says: outside
+    /// the replaced range, or inside it where the revision's own run could not
+    /// read and wrote no text over it. Stored revisions are rebuilt through
+    /// this constructor too, so a modified record cannot bypass the rules that
+    /// produced it.
     ///
     /// A local-ASR revision may hold no segment at all: a run that heard no
     /// speech is still recorded, with every chunk's outcome. An import must
@@ -1150,6 +1206,22 @@ impl TranscriptRevision {
             run.validate_within(&parts.source_segment)?;
         }
         validate_inherited(&parts)?;
+        validate_carried_untranscribed(&parts, bounds)?;
+        // What the run could not read and wrote nothing over keeps the text the
+        // superseded revision had there, so a carried segment may lie in the
+        // replaced range (#353).
+        let rule = match (&parts.provenance, parts.replaced_range) {
+            (TranscriptProvenance::LocalAsr(run), Some(replaced)) => Some(EarlierTextRule::new(
+                replaced,
+                run,
+                parts
+                    .segments
+                    .iter()
+                    .filter(|segment| segment.carried_from.is_none())
+                    .map(|segment| segment.range),
+            )),
+            _ => None,
+        };
         let mut identities = HashSet::with_capacity(parts.segments.len());
         let mut carried_identities = HashSet::new();
         let mut previous_start = bounds.start();
@@ -1170,9 +1242,9 @@ impl TranscriptRevision {
                 None => &parts.provenance,
                 Some(carried) => {
                     if !carried_identities.insert(carried.segment.clone())
-                        || parts
-                            .replaced_range
-                            .is_none_or(|replaced| segment.intersects(replaced))
+                        || !rule
+                            .as_ref()
+                            .is_some_and(|rule| rule.carries(segment.range))
                     {
                         return Err(TranscriptRevisionError::InvalidCarriedSegment);
                     }
@@ -1207,6 +1279,7 @@ impl TranscriptRevision {
             supersedes: parts.supersedes,
             replaced_range: parts.replaced_range,
             inherited: parts.inherited,
+            carried_untranscribed: parts.carried_untranscribed,
             language: parts.language,
             segments: parts.segments,
             warnings: parts.warnings,
@@ -1265,6 +1338,51 @@ impl TranscriptRevision {
     #[must_use]
     pub fn inherited(&self) -> &[InheritedRevision] {
         &self.inherited
+    }
+
+    /// The parts outside the replaced range that the superseded revision did
+    /// not cover and that an inherited run or file would otherwise be counted
+    /// over, in start order and merged (#353). Empty for a revision that is not
+    /// spliced, for one whose superseded revision covered all of its source,
+    /// and for any chain in which no run left a part unread: only a part that
+    /// some run read but could not use, under a window or file this revision
+    /// still carries, needs it.
+    ///
+    /// This is what lets coverage stay true along a chain. A revision keeps the
+    /// provenance only of the runs whose text it carries, so the run of an
+    /// intermediate revision that could not read a part is not in a later
+    /// revision at all, and the earlier runs' windows would be counted over the
+    /// part (an imported file covers the whole source). Such a revision
+    /// therefore records those parts, and coverage never counts an earlier
+    /// window over them. A part this revision's own run reads is covered by
+    /// that run, and text it keeps is covered by the text.
+    #[must_use]
+    pub fn carried_untranscribed(&self) -> &[TimeRange] {
+        &self.carried_untranscribed
+    }
+
+    /// What a revision that supersedes this one over `replaced`, carrying text
+    /// from `inherited`, must record as
+    /// [`carried_untranscribed`](Self::carried_untranscribed): the parts outside
+    /// `replaced` that a search of this revision lists as untranscribed and that
+    /// the claims of `inherited` (a file the whole source, a run the windows it
+    /// read) would otherwise cover, at most [`MAX_CARRIED_UNTRANSCRIBED`] of
+    /// them. Parts nothing inherited claims are not recorded, because they
+    /// change nothing a search says. Where there would be more than the bound,
+    /// the nearest on each side of `replaced` are joined, never across it, which
+    /// marks more of the source untranscribed and never less.
+    #[must_use]
+    pub fn carried_untranscribed_for(
+        &self,
+        replaced: TimeRange,
+        inherited: &[InheritedRevision],
+    ) -> Vec<TimeRange> {
+        crate::search::carried_untranscribed_for(
+            self,
+            replaced,
+            inherited,
+            MAX_CARRIED_UNTRANSCRIBED,
+        )
     }
 
     /// The provenance that produced `segment`'s text and timing: the
@@ -1414,6 +1532,43 @@ fn validate_inherited(parts: &TranscriptRevisionParts) -> Result<(), TranscriptR
             run.validate_within(&parts.source_segment)
                 .map_err(|_| invalid)?;
         }
+    }
+    Ok(())
+}
+
+/// What a spliced revision records as untranscribed outside its replaced range
+/// is in order, merged, inside the source, outside the replaced range and no
+/// longer than [`MAX_CARRIED_UNTRANSCRIBED`]; only a spliced revision has any.
+fn validate_carried_untranscribed(
+    parts: &TranscriptRevisionParts,
+    bounds: TimeRange,
+) -> Result<(), TranscriptRevisionError> {
+    if parts.carried_untranscribed.is_empty() {
+        return Ok(());
+    }
+    let invalid = TranscriptRevisionError::InvalidSupersession;
+    let Some(replaced) = parts.replaced_range else {
+        return Err(invalid);
+    };
+    if parts.carried_untranscribed.len() > MAX_CARRIED_UNTRANSCRIBED {
+        return Err(invalid);
+    }
+    let listed: Vec<Span> = parts
+        .carried_untranscribed
+        .iter()
+        .copied()
+        .map(span)
+        .collect();
+    if merged(listed.clone()) != listed
+        || parts
+            .carried_untranscribed
+            .iter()
+            .any(|range| range.start() < bounds.start() || range.end() > bounds.end())
+        || listed
+            .iter()
+            .any(|&entry| overlaps_any(&[span(replaced)], entry))
+    {
+        return Err(invalid);
     }
     Ok(())
 }
@@ -1822,6 +1977,7 @@ mod tests {
             supersedes: None,
             replaced_range: None,
             inherited: Vec::new(),
+            carried_untranscribed: Vec::new(),
             language: None,
             segments,
             warnings: TranscriptWarnings::default(),
@@ -1849,6 +2005,7 @@ mod tests {
             supersedes: None,
             replaced_range: None,
             inherited: Vec::new(),
+            carried_untranscribed: Vec::new(),
             language: None,
             segments: revision.segments().to_vec(),
             warnings: TranscriptWarnings::default(),

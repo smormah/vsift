@@ -5,7 +5,11 @@
 //! fixed first sentence, so an agent can act on them without parsing free
 //! text. None contains a path, provider output or transcript text.
 
-use vsift_application::{AsrFailure, AsrFailureReason, LocalAsrVerificationFailure};
+use std::borrow::Cow;
+
+use vsift_application::{
+    AsrFailure, AsrFailureReason, LocalAsrVerificationFailure, UnusableChunks,
+};
 use vsift_domain::ProviderOutputError;
 
 /// Remediation when `FFmpeg`, `FFprobe` or whisper.cpp is missing.
@@ -118,20 +122,163 @@ const WHISPER_REMEDY: &str = "Nothing was committed. Reinstall the reviewed whis
 const MEDIA_TOOL_REMEDY: &str = "Nothing was changed. Reinstall FFmpeg and FFprobe from a trusted build or register a working pair with setup configure, then retry.";
 
 /// The prose for a recognition that failed during `setup check`. It is the
-/// request's, except for segments that mostly did not fit their audio: the clip
-/// is a whole, reviewed one with no range to widen, so a tool that cannot
-/// transcribe it is the problem and reinstalling it is the answer.
-const fn verification_prose(reason: AsrFailureReason) -> (&'static str, &'static str) {
-    match reason {
-        AsrFailureReason::MalformedOutput(ProviderOutputError::TooManyRejectedSegments) => (
-            "whisper.cpp ran on the clip, but most of the segments it returned did not fit the clip's audio.",
+/// request's, except where the request's prose would be false for the check:
+/// the clip is a whole, reviewed one that a working tool transcribes, so a tool
+/// that cannot is the problem and reinstalling it is the answer. There is no
+/// range to change and no recording to blame, so it names neither a chunk's
+/// position nor `--from` and `--to`, for any reason.
+fn verification_prose(reason: AsrFailureReason) -> (Cow<'static, str>, &'static str) {
+    let AsrFailureReason::MalformedOutput(UnusableChunks {
+        unusable,
+        answered,
+        first,
+        ..
+    }) = reason
+    else {
+        return failure_prose(reason);
+    };
+    match first.error {
+        ProviderOutputError::TooManyRejectedSegments => (
+            Cow::Borrowed(
+                "whisper.cpp ran on the clip, but most of the segments it returned did not fit the clip's audio.",
+            ),
             WHISPER_REMEDY,
         ),
-        other => failure_prose(other),
+        ProviderOutputError::TooManySegments
+        | ProviderOutputError::TooManyTokens
+        | ProviderOutputError::OutOfOrderSegments
+        | ProviderOutputError::InvalidTokenProbability => (
+            Cow::Owned(format!(
+                "The reason is {}: whisper.cpp ran on the clip, but {unusable} of the {answered} audio chunks it had answered had output VSift could not use ({}).",
+                first.error.identifier(),
+                refused_answer(first.error),
+            )),
+            WHISPER_REMEDY,
+        ),
     }
 }
 
-const fn failure_prose(reason: AsrFailureReason) -> (&'static str, &'static str) {
+/// The most chunks a failed run may have had answered for its prose to treat
+/// the failure as one stretch of the recording that could not be read. The run
+/// judges the chunks the recognizer answered, and with so few of them (three
+/// chunks are at most 80 seconds of audio, and a majority of three is two) it
+/// cannot tell a bad stretch from a bad recording. A different range cuts the
+/// audio at other points, and a chunk's result depends on where it is cut, so
+/// trying one is a reasonable next step. With more answers than this, most of
+/// them unusable, the failure is about most of the speech the run covered, and
+/// the prose does not suggest a range.
+///
+/// Why the answered chunks and not the planned ones or their share. The share
+/// of a failed run is always above a half, so it tells nothing more; a plan
+/// counts the quiet chunks, which say nothing about the recogniser (a long
+/// recording with four stretches of speech, all unusable, plans many chunks and
+/// answers four); and the answered chunks are the stretches of speech the run
+/// had evidence about. What the prose says is about what the run covered
+/// ("most of the speech this run covered"), which is the recording only when
+/// the run was over the whole of it.
+const FEW_ANSWERED_CHUNKS: u32 = 3;
+
+/// The next step of a run whose recognizer answered for most of the chunks with
+/// segments that could not be placed in their audio (#353), when there are
+/// many of them. It does not tell to reinstall whisper.cpp, because
+/// `VSift`'s own check of the tool passed before the run and the tool is not
+/// what is wrong with this audio. What helps is a transcript the user has, which
+/// needs no recognition. It does not say that a different range will not work
+/// either, because with this many answers it has not been tried and is not
+/// established either way.
+const SUPPLIED_TRANSCRIPT_REMEDY: &str = "Nothing was committed. Use a transcript you already have instead: open the video with ingest --transcript <file> (SubRip or WebVTT), which needs no speech recognition.";
+
+/// The next step of the same failure when only a few chunks were answered: the
+/// stretch could not be read, a slightly different range cuts the audio
+/// elsewhere and may work, and a transcript the user has still needs no
+/// recognition.
+const SHORT_STRETCH_REMEDY: &str = "Nothing was committed. Try a slightly different range with --from and --to, which cuts the audio at other points and may work, or use a transcript you already have: open the video with ingest --transcript <file> (SubRip or WebVTT), which needs no speech recognition.";
+
+/// What it is about an answer that the rules refuse, for the chunks a failure
+/// names.
+const fn refused_answer(error: ProviderOutputError) -> &'static str {
+    match error {
+        ProviderOutputError::TooManyRejectedSegments => {
+            "their segments were empty, ran backwards, started at or after the audio's end, ended beyond the 30-second window the recogniser works in, or lay outside the video"
+        }
+        ProviderOutputError::OutOfOrderSegments => "their segments were not in time order",
+        ProviderOutputError::InvalidTokenProbability => "their scores were not numbers from 0 to 1",
+        ProviderOutputError::TooManySegments => "they had more than 256 segments",
+        ProviderOutputError::TooManyTokens => "a segment had more than 512 tokens",
+    }
+}
+
+/// A source time as `H:MM:SS`, whole seconds rounded down.
+fn clock(micros: u64) -> String {
+    let seconds = micros / 1_000_000;
+    format!(
+        "{}:{:02}:{:02}",
+        seconds / 3_600,
+        seconds % 3_600 / 60,
+        seconds % 60
+    )
+}
+
+/// The prose of a run that failed because most of the chunks the recognizer
+/// answered were unusable (#353): which reason, how many chunks and the first
+/// one, by position and by source time in the unit of `--from` and `--to`.
+///
+/// Numbers only: no path, no provider output and no transcript text. For the
+/// rejected-segments reason it says what is true and no more: the tool works,
+/// and either one stretch could not be read (a few chunks were answered, so a
+/// slightly different range is worth trying, as is a transcript the user
+/// supplies) or most of the speech the run covered could not be transcribed reliably (many
+/// were, so it points to the supplied transcript only). For a structural fault
+/// the recognizer itself is the suspect, and reinstalling it stays the next
+/// step.
+fn unusable_chunks_prose(details: UnusableChunks) -> (Cow<'static, str>, &'static str) {
+    let UnusableChunks {
+        unusable,
+        answered,
+        planned,
+        first,
+    } = details;
+    let (from, to) = (
+        first.window.start().as_micros(),
+        first.window.end().as_micros(),
+    );
+    let explanation = format!(
+        "The reason is {}: whisper.cpp ran, but {unusable} of the {answered} audio chunks it had answered when the run stopped had output VSift could not use ({}). The first is chunk {} of {planned}, {} to {} ({from} to {to} microseconds, the unit of --from and --to).",
+        first.error.identifier(),
+        refused_answer(first.error),
+        first.index.saturating_add(1),
+        clock(from),
+        clock(to),
+    );
+    match first.error {
+        ProviderOutputError::TooManyRejectedSegments if answered <= FEW_ANSWERED_CHUNKS => (
+            Cow::Owned(format!(
+                "{explanation} The tool itself works: VSift's own check of it passed before this run. This stretch of the recording could not be transcribed."
+            )),
+            SHORT_STRETCH_REMEDY,
+        ),
+        ProviderOutputError::TooManyRejectedSegments => (
+            Cow::Owned(format!(
+                "{explanation} The tool itself works: VSift's own check of it passed before this run. Most of the speech this run covered could not be transcribed reliably."
+            )),
+            SUPPLIED_TRANSCRIPT_REMEDY,
+        ),
+        ProviderOutputError::TooManySegments
+        | ProviderOutputError::TooManyTokens
+        | ProviderOutputError::OutOfOrderSegments
+        | ProviderOutputError::InvalidTokenProbability => (Cow::Owned(explanation), WHISPER_REMEDY),
+    }
+}
+
+fn failure_prose(reason: AsrFailureReason) -> (Cow<'static, str>, &'static str) {
+    if let AsrFailureReason::MalformedOutput(details) = reason {
+        return unusable_chunks_prose(details);
+    }
+    let (explanation, next_step) = fixed_prose(reason);
+    (Cow::Borrowed(explanation), next_step)
+}
+
+const fn fixed_prose(reason: AsrFailureReason) -> (&'static str, &'static str) {
     match reason {
         AsrFailureReason::InvalidRange => (
             "The requested range lies outside the video.",
@@ -182,16 +329,10 @@ const fn failure_prose(reason: AsrFailureReason) -> (&'static str, &'static str)
             "whisper.cpp's output was not the documented JSON.",
             WHISPER_REMEDY,
         ),
-        // A range whose recognised segments mostly did not fit the audio it was
-        // given (#274): the tool ran and answered, and a short range cut
-        // mid-speech is the usual cause, so the first step is a larger range.
-        // It is also the only signal of a recogniser answering with garbage for
-        // a whole run, so the reinstall hint stays, behind the whole-video
-        // retry.
-        AsrFailureReason::MalformedOutput(ProviderOutputError::TooManyRejectedSegments) => (
-            "whisper.cpp ran, but most of the segments it returned did not fit the audio it was given (they were empty, ran backwards, started at or after the audio's end, or lay outside the video).",
-            "Nothing was committed. A range that ends mid-speech can cause this, so retry with a larger range, or without --from and --to to recognise the whole video. Reinstall the reviewed whisper.cpp v1.9.2 CLI or register a working build with setup configure whisper --executable <path> only if the whole video fails the same way.",
-        ),
+        // The run-level failure of most chunks' output being unusable has its
+        // own prose, built from its numbers ([`unusable_chunks_prose`], #353);
+        // this is the plain one a caller without them would get, and the one
+        // the compiler needs for the match to be exhaustive.
         AsrFailureReason::MalformedOutput(_) => (
             "whisper.cpp's output broke VSift's rules for recognised text, such as out-of-order segments or invalid scores.",
             WHISPER_REMEDY,
@@ -213,8 +354,11 @@ const fn failure_prose(reason: AsrFailureReason) -> (&'static str, &'static str)
 
 #[cfg(test)]
 mod tests {
-    use vsift_application::{AsrFailure, AsrFailureReason, AsrStage, LocalAsrVerificationFailure};
-    use vsift_domain::{ProviderOutputError, TranscriptRevisionError};
+    use vsift_application::{
+        AsrFailure, AsrFailureReason, AsrStage, LocalAsrVerificationFailure, UnusableChunk,
+        UnusableChunks,
+    };
+    use vsift_domain::{MediaTime, ProviderOutputError, TimeRange, TranscriptRevisionError};
 
     use super::{
         LOCAL_ASR_MODEL_REMEDIATION, LOCAL_ASR_TOOLS_REMEDIATION, NO_AUDIO_STREAM_REMEDIATION,
@@ -222,101 +366,304 @@ mod tests {
         local_asr_verification_summary,
     };
 
-    const REASONS: [AsrFailureReason; 18] = [
-        AsrFailureReason::InvalidRange,
-        AsrFailureReason::TooManyChunks,
-        AsrFailureReason::ModelChanged,
-        AsrFailureReason::ModelUnavailable,
-        AsrFailureReason::UnpinnedModel,
-        AsrFailureReason::Cancelled,
-        AsrFailureReason::Deadline,
-        AsrFailureReason::Busy,
-        AsrFailureReason::ResourceLimit,
-        AsrFailureReason::AbnormalTermination,
-        AsrFailureReason::AudioUnavailable,
-        AsrFailureReason::ProviderFailed,
-        AsrFailureReason::UnparseableOutput,
-        AsrFailureReason::MalformedOutput(ProviderOutputError::TooManySegments),
-        AsrFailureReason::MalformedOutput(ProviderOutputError::TooManyRejectedSegments),
-        AsrFailureReason::Workspace,
-        AsrFailureReason::Io,
-        AsrFailureReason::InvalidRun(TranscriptRevisionError::InvalidAsrRun),
-    ];
+    type Built<T> = Result<T, Box<dyn std::error::Error>>;
 
-    /// #274: recognised segments that mostly did not fit their audio are, for a
-    /// request, most likely a range cut mid-speech, so the answer says to widen
-    /// the range first; it is also the only signal of a recogniser answering with
-    /// garbage for a whole run, so the reinstall step stays, behind the
-    /// whole-video retry. Any other malformed output still says to reinstall.
+    const SECOND: u64 = 1_000_000;
+
+    /// The failure of a run whose first unusable chunk was chunk 66 of 83, the
+    /// window 27:05 to 27:35, for `error`.
+    fn most_unusable(error: ProviderOutputError) -> Built<AsrFailureReason> {
+        Ok(AsrFailureReason::MalformedOutput(UnusableChunks {
+            unusable: 43,
+            answered: 66,
+            planned: 83,
+            first: UnusableChunk {
+                index: 65,
+                window: TimeRange::new(
+                    MediaTime::from_micros(1_625 * SECOND),
+                    MediaTime::from_micros(1_655 * SECOND),
+                )?,
+                error,
+            },
+        }))
+    }
+
+    /// Every reason, with the failure of most chunks unusable once for each
+    /// reason it can name, and once with the largest numbers it can carry.
+    fn reasons() -> Built<Vec<AsrFailureReason>> {
+        let mut reasons = vec![
+            AsrFailureReason::InvalidRange,
+            AsrFailureReason::TooManyChunks,
+            AsrFailureReason::ModelChanged,
+            AsrFailureReason::ModelUnavailable,
+            AsrFailureReason::UnpinnedModel,
+            AsrFailureReason::Cancelled,
+            AsrFailureReason::Deadline,
+            AsrFailureReason::Busy,
+            AsrFailureReason::ResourceLimit,
+            AsrFailureReason::AbnormalTermination,
+            AsrFailureReason::AudioUnavailable,
+            AsrFailureReason::ProviderFailed,
+            AsrFailureReason::UnparseableOutput,
+            AsrFailureReason::Workspace,
+            AsrFailureReason::Io,
+            AsrFailureReason::InvalidRun(TranscriptRevisionError::InvalidAsrRun),
+        ];
+        for error in ProviderOutputError::ALL {
+            reasons.push(most_unusable(error)?);
+        }
+        reasons.push(AsrFailureReason::MalformedOutput(UnusableChunks {
+            unusable: 1_024,
+            answered: 1_024,
+            planned: 1_024,
+            first: UnusableChunk {
+                index: 1_023,
+                window: TimeRange::new(
+                    MediaTime::from_micros(14_000 * SECOND),
+                    MediaTime::from_micros(14_400 * SECOND),
+                )?,
+                error: ProviderOutputError::TooManyRejectedSegments,
+            },
+        }));
+        Ok(reasons)
+    }
+
+    /// The same failure with the number of chunks the recognizer had answered
+    /// when the run stopped: `unusable` of `answered`, the first being chunk 1
+    /// of `planned`.
+    fn answered_chunks(
+        unusable: u32,
+        answered: u32,
+        planned: u32,
+        error: ProviderOutputError,
+    ) -> Built<AsrFailureReason> {
+        Ok(AsrFailureReason::MalformedOutput(UnusableChunks {
+            unusable,
+            answered,
+            planned,
+            first: UnusableChunk {
+                index: 0,
+                window: TimeRange::new(
+                    MediaTime::from_micros(0),
+                    MediaTime::from_micros(30 * SECOND),
+                )?,
+                error,
+            },
+        }))
+    }
+
+    /// The prose of a failed run, in a form the assertions below can search.
+    fn run_summary(reason: AsrFailureReason) -> String {
+        local_asr_failure_summary(AsrFailure {
+            stage: AsrStage::OutputValidation,
+            reason,
+        })
+    }
+
+    /// #353: a run in which most chunks' answers were refused for segments that
+    /// could not be placed in their audio says what is true. The tool works, so
+    /// it does not tell to reinstall it. With many chunks answered it says that
+    /// most of the speech the run covered could not be transcribed reliably and points to a
+    /// transcript the user supplies, and does not say that another range helps
+    /// or that it does not: that is not established. It names the reason, the
+    /// numbers and the first chunk by position and by the source time `--from`
+    /// and `--to` take.
     #[test]
-    fn segments_that_did_not_fit_their_audio_say_to_widen_the_range_before_reinstalling() {
-        let stage = AsrStage::OutputValidation;
-        let fit = local_asr_failure_summary(AsrFailure {
-            stage,
-            reason: AsrFailureReason::MalformedOutput(ProviderOutputError::TooManyRejectedSegments),
+    fn rejected_segments_say_the_tool_works_and_point_to_a_supplied_transcript() -> Built<()> {
+        let summary = local_asr_failure_summary(AsrFailure {
+            stage: AsrStage::OutputValidation,
+            reason: most_unusable(ProviderOutputError::TooManyRejectedSegments)?,
         });
-        assert!(fit.contains("(malformed_output)"), "{fit}");
-        assert!(fit.contains("did not fit the audio"), "{fit}");
-        // Every way a segment is rejected is named.
-        for kind in [
+        // The stage and reason of every failure, in the fixed first sentence.
+        assert!(
+            summary.starts_with(
+                "Local speech recognition failed at the output_validation step (malformed_output)."
+            ),
+            "{summary}"
+        );
+        for named in [
+            "too_many_rejected_segments",
+            "43 of the 66 audio chunks",
+            "chunk 66 of 83",
+            "0:27:05 to 0:27:35",
+            "1625000000 to 1655000000 microseconds",
+            // Every way a segment is refused is named.
             "empty",
             "ran backwards",
             "started at or after the audio's end",
+            "ended beyond the 30-second window the recogniser works in",
             "outside the video",
+            // What is true, and the way through.
+            "The tool itself works",
+            "could not be transcribed reliably",
+            "ingest --transcript <file>",
+            "needs no speech recognition",
+            "Nothing was committed",
         ] {
-            assert!(fit.contains(kind), "{kind}: {fit}");
+            assert!(summary.contains(named), "{named}: {summary}");
         }
-        // The first step is a larger range or the whole video, and the
-        // reinstall step comes after it and only on a whole-video failure.
-        assert!(
-            matches!(
-                (
-                    fit.find("without --from and --to"),
-                    fit.find("Reinstall the reviewed whisper.cpp")
-                ),
-                (Some(retry), Some(reinstall)) if retry < reinstall
-            ),
-            "{fit}"
-        );
-        assert!(
-            fit.contains("only if the whole video fails the same way"),
-            "{fit}"
-        );
-        assert!(!fit.contains("nothing needs reinstalling"), "{fit}");
-        let broken = local_asr_failure_summary(AsrFailure {
-            stage,
-            reason: AsrFailureReason::MalformedOutput(ProviderOutputError::OutOfOrderSegments),
-        });
-        assert!(
-            broken.contains("Reinstall the reviewed whisper.cpp"),
-            "{broken}"
-        );
-        assert!(!broken.contains("only if"), "{broken}");
+        // The #274 answer is gone, and so is any claim about a range: with
+        // this many answers it is not established either way.
+        for old in [
+            "retry with a larger range",
+            "without --from and --to",
+            "Reinstall the reviewed whisper.cpp",
+            "setup configure whisper",
+            "only if the whole video fails",
+            "ends mid-speech",
+            "will not change that",
+            "different range",
+            "larger range",
+            "This stretch",
+        ] {
+            assert!(!summary.contains(old), "{old}: {summary}");
+        }
+        // It is the same prose for a run over the whole video or a range.
+        assert!(!summary.contains(['/', '\\']));
+        assert!(summary.len() <= 1_024, "{}", summary.len());
+        Ok(())
+    }
+
+    /// #353: what the prose says depends on what is known. With three chunks
+    /// answered or fewer the run cannot tell a bad stretch from a bad
+    /// recording: it says the stretch could not be read, that a slightly
+    /// different range cuts the audio elsewhere and may work, and that a
+    /// transcript the user has needs no recognition. With four or more it says
+    /// the speech could not be transcribed reliably and names only the
+    /// transcript. Neither says that a range will not help, which no run has
+    /// established, and neither says to reinstall the tool.
+    #[test]
+    fn the_next_step_depends_on_how_many_chunks_were_answered() -> Built<()> {
+        let rejected = ProviderOutputError::TooManyRejectedSegments;
+        for (unusable, answered, planned) in
+            [(1, 1, 1), (2, 2, 3), (2, 3, 3), (3, 3, 5), (2, 3, 83)]
+        {
+            let summary = run_summary(answered_chunks(unusable, answered, planned, rejected)?);
+            for named in [
+                "This stretch of the recording could not be transcribed.",
+                "Try a slightly different range with --from and --to",
+                "may work",
+                "ingest --transcript <file>",
+                "The tool itself works",
+            ] {
+                assert!(
+                    summary.contains(named),
+                    "{unusable}/{answered}/{planned}: {named}: {summary}"
+                );
+            }
+            for never in [
+                "will not change that",
+                "larger range",
+                "could not be transcribed reliably",
+                "Reinstall the reviewed whisper.cpp",
+            ] {
+                assert!(
+                    !summary.contains(never),
+                    "{unusable}/{answered}/{planned}: {never}: {summary}"
+                );
+            }
+        }
+        for (unusable, answered, planned) in
+            [(3, 4, 4), (3, 5, 83), (41, 41, 83), (1_024, 1_024, 1_024)]
+        {
+            let summary = run_summary(answered_chunks(unusable, answered, planned, rejected)?);
+            for named in [
+                "Most of the speech this run covered could not be transcribed reliably.",
+                "ingest --transcript <file>",
+                "The tool itself works",
+            ] {
+                assert!(
+                    summary.contains(named),
+                    "{unusable}/{answered}/{planned}: {named}: {summary}"
+                );
+            }
+            for never in [
+                "will not change that",
+                "larger range",
+                "different range",
+                "Try a slightly",
+                "This stretch",
+                "Reinstall the reviewed whisper.cpp",
+            ] {
+                assert!(
+                    !summary.contains(never),
+                    "{unusable}/{answered}/{planned}: {never}: {summary}"
+                );
+            }
+            assert!(summary.len() <= 1_024, "{}", summary.len());
+        }
+        Ok(())
+    }
+
+    /// A structural fault in most chunks' answers means the recognizer itself
+    /// misbehaves, so it keeps its own reason and the reinstall step, and does
+    /// not claim the tool works or tell to supply a transcript.
+    #[test]
+    fn structural_faults_keep_the_reinstall_step() -> Built<()> {
+        for error in [
+            ProviderOutputError::OutOfOrderSegments,
+            ProviderOutputError::InvalidTokenProbability,
+            ProviderOutputError::TooManySegments,
+            ProviderOutputError::TooManyTokens,
+        ] {
+            let broken = local_asr_failure_summary(AsrFailure {
+                stage: AsrStage::OutputValidation,
+                reason: most_unusable(error)?,
+            });
+            assert!(broken.contains(error.identifier()), "{broken}");
+            assert!(broken.contains("(malformed_output)"), "{broken}");
+            assert!(broken.contains("chunk 66 of 83"), "{broken}");
+            assert!(
+                broken.contains("Reinstall the reviewed whisper.cpp"),
+                "{broken}"
+            );
+            assert!(!broken.contains("The tool itself works"), "{broken}");
+            assert!(!broken.contains("--transcript"), "{broken}");
+        }
+        Ok(())
     }
 
     /// The setup check transcribes a whole, built-in clip: there is no range to
-    /// widen, so the same reason says to reinstall the tool.
+    /// change and no recording to blame, so every reason of a failed check says
+    /// to reinstall the tool, whatever it says for a run, and none names a
+    /// chunk's position, `--from` or `--to`, a range or a transcript to supply.
     #[test]
-    fn the_setup_check_never_tells_to_widen_a_range() {
-        let summary = local_asr_verification_summary(LocalAsrVerificationFailure::Transcription(
-            AsrFailure {
-                stage: AsrStage::OutputValidation,
-                reason: AsrFailureReason::MalformedOutput(
-                    ProviderOutputError::TooManyRejectedSegments,
-                ),
-            },
-        ));
-        assert!(
-            summary.contains("Reinstall the reviewed whisper.cpp"),
-            "{summary}"
-        );
-        assert!(!summary.contains("--from"), "{summary}");
-        assert!(!summary.contains("larger range"), "{summary}");
+    fn the_setup_check_never_names_a_range_a_chunk_or_a_supplied_transcript() -> Built<()> {
+        for error in ProviderOutputError::ALL {
+            for (unusable, answered, planned) in [(1, 1, 1), (2, 3, 3), (4, 4, 6), (41, 41, 83)] {
+                let summary = local_asr_verification_summary(
+                    LocalAsrVerificationFailure::Transcription(AsrFailure {
+                        stage: AsrStage::OutputValidation,
+                        reason: answered_chunks(unusable, answered, planned, error)?,
+                    }),
+                );
+                let named = format!("{error:?}: {summary}");
+                assert!(
+                    summary.contains("Reinstall the reviewed whisper.cpp"),
+                    "{named}"
+                );
+                for never in [
+                    "--from",
+                    "--to",
+                    "range",
+                    "chunk 1 of",
+                    "microseconds",
+                    "--transcript",
+                    "The tool itself works",
+                    "This stretch",
+                    "reliably",
+                ] {
+                    assert!(!summary.contains(never), "{never}: {named}");
+                }
+                assert!(summary.len() <= 1_024, "{named}");
+            }
+        }
+        Ok(())
     }
 
     #[test]
-    fn every_failure_names_its_stage_and_reason_within_the_schema_bound() {
-        for reason in REASONS {
+    fn every_failure_names_its_stage_and_reason_within_the_schema_bound() -> Built<()> {
+        for reason in reasons()? {
             for stage in [
                 AsrStage::Planning,
                 AsrStage::RecognizerIdentity,
@@ -361,5 +708,6 @@ mod tests {
         ] {
             assert!(constant.len() <= 1024);
         }
+        Ok(())
     }
 }

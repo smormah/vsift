@@ -97,7 +97,10 @@ threads and audio stream are recorded in every run's provenance.
   is replaced whole (`replaced_range`); a range in a gap is unchanged. Segments of the
   newest revision outside the replaced range are **carried** with their original
   text, timing, speaker, confidence and origin, and the run's segments fill the range.
-  A whole-source run replaces everything (`replaced_range` is the source).
+  A whole-source run replaces everything (`replaced_range` is the source). One
+  exception, added for #353 (see the 2026-10-10 note): text of the newest revision
+  that reaches into a part of the range that the run could not read, and that none
+  of the run's own text overlaps, is carried too.
 - Carried segments get new identities in the new revision, so records already indexed
   under an older revision are never overwritten, and name their origin in
   `carried_from` (revision and segment identity). They always name the revision that
@@ -105,7 +108,9 @@ threads and audio stream are recorded in every run's provenance.
   `inherited`, the provenance of every revision it carries from, so every carried
   segment is still re-checked against the rule that produced it (an import's offset
   and cue timing, or a run's chunk audio and provider times), and must lie wholly
-  outside the replaced range.
+  outside the replaced range, or be kept by the rule of the 2026-10-10 note
+  (reaching into a part of it that the revision's own run could not read, and not
+  overlapped by the run's own text).
 - The revision identity is derived from the session, revision number, `local_asr`,
   the run fingerprint (provider, model, profiles, plan, threads, stream), the covered
   range and the superseded revision; segment identities from the revision and ordinal.
@@ -419,3 +424,195 @@ managed build (FFmpeg `n9.0.1-11-ge47273f4d9-20260831`, hosted run 37719064583 o
 FFmpeg pin 31, 32 and 62 microseconds; they are the only check of it and the one to run when FFmpeg is refreshed (L-132). A bound
 after the decode (no more samples than the range and one) would make the rule independent of the tool; it is a follow-up,
 not part of the third candidate (L-141).
+
+## 2026-10-10 note: a chunk whose answer cannot be used is a recorded gap, not a failed run (#353)
+
+**Proposed for the maintainer to confirm by merging this change.** It supersedes the part of section 2 that failed a chunk when more than a quarter
+of its segments were rejected and the part of section 8 that made any such chunk fail the run, and it amends the 2026-10-04 note's last
+sentence (the failure of "a chunk whose segments mostly do not fit their audio ... remains the only signal of a recogniser answering with
+garbage for a whole run").
+
+### What happened
+
+(Known limit [L-145](../planning/known-limits.md#l-145).) The first real recording tried with the stable `0.2.0` (a 34:36 English screencast of slides and live coding, one speaker, long pauses while
+the speaker types) failed as `MISSING_CAPABILITY`, step `output_validation`, reason `malformed_output`, after 65 of 83 chunks were saved.
+Nothing was committed. The cause was one 30-second chunk, 27:05 to 27:35, which held a few segments of which one was rejected. Three
+defects stacked:
+
+1. **One unusable chunk failed the whole run.** The 82 usable chunks were thrown away, and because the chunk fails the same way every time, a resume
+   could never get past it.
+2. **The quarter rule weighed nothing in a sparse chunk.** With three or fewer text segments, one rejected segment is already more than a quarter,
+   so a chunk was failed for having a single rejection beside any number of kept segments. The note of 2026-10-04 says a long run hides a
+   rejection "because one rejected segment among many is under the quarter threshold"; that holds for dense speech and not for a recording with pauses,
+   where whether a rejection is a warning or the loss of the transcript depended only on where the chunk boundaries fell.
+3. **The failure did not say what failed.** The code is `MISSING_CAPABILITY` and the capability was present; the remediation was the #274 text (retry with a
+   larger range, then reinstall whisper.cpp), which cannot help; the failure named no job, chunk or time; and the job stayed `resumable: true`.
+
+The same audio transcribed when the chunk was cut five seconds earlier or later, and the rest of the recording, about 150 other chunk windows, transcribed.
+
+### The decisions
+
+**1. A chunk whose answer cannot be used is a recorded gap, with an outcome of its own.** `AsrChunkOutcome::Unusable`, stored and presented as `unusable`.
+A chunk becomes one when the output rules refuse its answer as a whole: every text segment rejected, two or more rejected of fewer than four, more than a quarter
+of at least four rejected (decision 3), or a structural fault (out-of-order segments, a score outside 0 to 1, oversized output). It is a decoded chunk, so it records its decoded range like a
+silent one. It is never recorded as `silent` or `no_audio`: those say nothing was there to recognise, which would be false of speech the
+recogniser could not place, and a search would report the window as "no speech" instead of untranscribed. The merge treats it as a chunk that heard nothing, so
+speech that a neighbour heard in the overlap is kept. The run counts such chunks under a new warning, `provider_chunks_rejected` (count of chunks, first chunk
+ordinal).
+
+**2. A run fails only when most of the chunks the recogniser answered are unusable.** `unusable_chunks_end_the_run`: more than half
+(`UNUSABLE_CHUNK_SHARE_DENOMINATOR = 2`). It was chosen like this.
+
+- *More than half,* because what the rule is for (a recogniser that answers with garbage, such as one run on audio it cannot read) fails most chunks, and a real
+  recording with pauses fails few: 1 of 83 here. A broken recogniser is also caught by the check VSift runs on a reviewed clip before it touches the user's video.
+- *Chunks that were never given to the recogniser do not count.* Silent chunks, chunks under 100 ms and chunks with no audio say nothing about it. A recording that is
+  mostly quiet is judged by the few chunks that had speech.
+- *A strict majority.* One bad chunk of two is a partial run: the other chunk was answered by the same recogniser, build and model on audio of the same recording, which
+  shows it works, and the one unproven chunk is reported as a gap. Every answered chunk unusable always fails, so a lone chunk that cannot be placed (a short range)
+  still fails as it always did, and the failure says why.
+- *The verdict is known as soon as it cannot change,* so a recogniser that answers with garbage is not run to the end of a long recording: the run stops when the
+  unusable chunks are more than half of the chunks answered plus all that remain. The result is the verdict the full run would give, reached sooner.
+- *Consecutive failures were considered and not taken as a second rule.* A stretch of typing or music can have several unusable chunks in a row, and chunks overlap by
+  five seconds, so adjacent chunks are not independent samples; only the share of answered chunks separates a broken recogniser from such a stretch.
+
+**3. The quarter rule judges a share only where a share means something, and the cut-over is monotonic.** `MIN_SEGMENTS_FOR_REJECTION_RATIO = 4`. With four or more text
+segments the rule is exactly what it was (more than a quarter rejected makes the chunk unusable), so a chunk of dense speech is judged as before and every chunk that
+passed before passes the same way. With one to three text segments **at most one rejected segment is tolerated**: it is dropped and counted under
+`provider_segments_rejected`, and the others are kept; two or more rejected, or every text segment rejected whatever the count, make the chunk unusable. The allowance of one
+is what keeps the rule monotonic across the minimum. Tolerating any number of rejections below four (failing only a chunk of which all were rejected) would keep two rejected
+segments among three and fail the same chunk when a valid fourth segment was added (two of four is over a quarter): more evidence would make the chunk worse. "At most one,
+then a quarter" has no such inversion: for every segment count from one to sixteen, a usable chunk stays usable when a valid segment is added, and an unusable one stays
+unusable when another segment is rejected or a rejected one is added. A property test checks every pair of counts up to sixteen against the rule in closed form. *Why four:*
+below it a share means nothing (one rejection beside two kept segments is a third), and four is the smallest count from which the quarter rule alone agrees with the
+allowance for every count above it (one rejection of four is exactly a quarter and is tolerated; a search over the counts in a test finds that four, and no smaller number, is
+that point). A segment with only whitespace or a marker such as `[BLANK_AUDIO]` is removed
+and counted as a marker, not a rejection, and is not a text segment. The reasons a segment is rejected (empty or reversed range, start at or after the audio's end, an end
+beyond the padded window, outside the source) are unchanged.
+
+**4. A run with gaps is `partial`.** The revision is committed. `transcript retranscribe` and `job resume` answer `status: partial` (exit 0, as for a search with gaps),
+the envelope's `coverage` lists the gaps as `<from_us>-<to_us>` with the reason `untranscribed_range`, and the data gain `untranscribed_ranges` and
+`revision.local_asr.unusable_chunks`. A gap is the part of an unusable chunk's window that no neighbour's window transcribed or found silent. The result lists the whole gap,
+because it states what **this run** did not transcribe. A later `search` of the revision lists less where text was kept in a gap (decision 7): the coverage rule is shared with
+the search and never counts an earlier revision's windows inside a window this run examined, so a replaced part is never reported as covered, but it does count text the revision
+kept as transcribed. The result's list and the search's list therefore differ exactly where kept text lies, and the warning says so. A run with no gap is presented exactly as
+before: status `complete`, `coverage` null, none of the new members.
+
+*Why the reason is the published `untranscribed_range` and not a new value.* It is honest (the range has no transcript), it is the reason a search gives for the same
+range, and the agent skill copies reasons from results into its handoff from a closed list, so a new reason would break an agent that follows the skill as released. What is
+specific to this cause is in the data, the chunk outcome and the warning.
+
+**5. The failure says what is true, and a job that cannot succeed is not resumable.** When a run fails because most answers were unusable, the code stays
+`MISSING_CAPABILITY` (a published code does not change within v1; the remediation carries the fix). The remediation keeps the first sentence ("failed at the
+`output_validation` step (`malformed_output`)"), then names the reason (`too_many_rejected_segments` or the structural one), how many chunks of how many had been answered
+when the run stopped, and the first by position, by `H:MM:SS` and in microseconds, the unit of `--from` and `--to`; the envelope's `affected_ids` names the job.
+For rejected segments it says the tool works (VSift's own check passed before the run) and then says only what the numbers establish. With **more than three** chunks
+answered (`FEW_ANSWERED_CHUNKS = 3`; most of many answers unusable is a statement about most of the speech the run covered, not about one stretch; the run's range, not the recording, is what it can speak of) it says that most of the speech the run covered could not be
+transcribed reliably and tells to use a transcript the user has with `ingest --transcript`. With **three or fewer** answered (the run cannot tell a bad stretch from a bad
+recording, and a different range cuts the audio at other points, which changes what a chunk contains) it says that this stretch of the recording could not be transcribed
+and tells to try a slightly different range with `--from` and `--to`, or the same transcript. Neither text says that another range will not help (no run has established
+that) and the second says only that it may. For a structural fault the recogniser itself is the suspect and the reinstall step
+stays. The job ends as `failed` at once, so `job status` says `resumable: false` (`resumable_reason: failed`) and `job resume` refuses; the same command run again starts
+the job anew. Before, it stayed resumable until the poison rule's third identical failure, which a resume could only repeat. The setup check's verification of the built-in
+clip has its own text for every reason, which names no chunk, range or `--from`/`--to` (the clip is whole and reviewed; the tool is the suspect) and ends with the reinstall step.
+The model identity is checked before the verdict on the answers, so a recogniser swapped during the run is reported as `model_changed` (which a retry can fix) and not as
+unusable answers (the answers of two models are not the evidence of either).
+
+**6. Checkpoints keep a verdict, not the refused answer.** A job's checkpoint for an unusable chunk is a new kind, `unusable` (decoded range and reason), so a resume neither
+asks the recogniser about the chunk again nor brings a refused answer back. A `recognised` checkpoint is unchanged: stored output that the rules now reject is still damaged
+or forged and is discarded and recognised again (S-08). A checkpoint of the new kind that a release before this one finds is an unusable checkpoint to it, which it discards
+and redoes, so it is safe to roll back.
+
+**7. An unreadable part keeps the text the session already had there (refined after a second review).** (A decision for the maintainer to confirm.) A range retranscription replaces whole segments of the
+newest revision with what the run transcribes. When the run could not read part of its range, replacing the old segments there would delete text the session had, and the
+user who asked for a better transcript would end up with none for that stretch: a bounded retranscription of 10 to 65 s over an imported transcript with cues at 5, 12, 40
+and 60 s, whose first chunk (10 to 40 s) is unusable and whose second (35 to 65 s) is read, would lose the cue at 12 s. **The rule, in one sentence** (`EarlierTextRule`): a segment of the
+superseded revision that lies in the replaced range is **kept**, whole and with its original provenance and `carried_from`, when it reaches into a part of the range the run could not read (a gap, decision 4)
+and none of the text the run itself wrote overlaps it; every other segment in the range is replaced, and a segment outside the range is carried as always. So the cue at 12 s is kept, the cues at 40 and
+60 s (inside the part the second chunk read) are replaced by what it heard, and the cue at 5 s was never in the range.
+
+*What this decides, and why.* The first version of the rule kept only a segment wholly inside a gap, and a review found that a cue that crossed the gap's edge by a single microsecond was deleted, nearly fifteen
+seconds of it in audio nobody read again. The edge of a gap is the edge of a neighbouring chunk's window, so a sentence there is read only in part, and a run replaces what it read in full and no more. Three cases follow.
+(i) The run's own text overlaps the segment: the run has heard the same words, and its text replaces the segment, as it replaces any other (the overlap is strict: text that only touches the segment does not replace it).
+(ii) The run read the audio past the edge and found it quiet or empty, and wrote nothing over the segment: the segment is **kept whole**. The alternatives were to drop it, which deletes text on the strength of the edge of a
+window beside an unread one (the chunk overlap exists so that a neighbour answers for a sentence at an edge, and here the neighbour is the unread one), or to keep it by a fraction or a tolerance, which is a number with no derivation and a
+cliff at it. Keeping errs towards the text the session had; the cost is that earlier text may remain over audio a run read as empty, which only a run that reads the whole of it can settle. (iii) The segment lies wholly where the run
+read: it is replaced, by text or by silence, as before. The rule has one known cost: where the run's own text overlaps a segment that is mostly in the gap (a fragment of its tail heard by the neighbour), the
+head of the sentence is lost with it; the alternative, keeping both, repeats the words.
+
+The rule is the domain's, applied by the use case that builds the revision, by the revision's validation (so a stored record cannot place a carried segment where the rule would not, and cannot drop one where it would
+keep it), and by the coverage; and it applies to a whole-source retranscription over an earlier revision as to a bounded one. What is said about it: the result lists the **whole** gap as not
+transcribed by this run (`untranscribed_ranges`, the envelope's `coverage`), the warning says what the rule is (earlier text that reaches into the gap is kept whole, unless this run's own text overlaps it; any other
+words said there cannot be found), and a `search` of the revision counts the kept text as transcribed (so for the example above it lists 10 to 12 s and 14 to 35 s, not 10 to 35 s). A run that could not read a chunk also no
+longer claims `no_speech_recognised`: that statement is about the whole range, and the run has not heard that there was none.
+
+**8. A part some run could not read stays untranscribed through every later run, and the revision records it where that matters.** (A decision for the maintainer to confirm; it adds an optional member to the stored record, so it is
+stated here as a change to the record and not only to a search.) A revision keeps the provenance only of the runs whose text it carries (`inherited`). A second review showed what follows: after a run leaves 10 to 35 s unread, a
+later run over 0 to 8 s carries the earlier text from the whole-source run (or from the imported file), whose windows, or the file's whole source, were then counted over the part the intermediate run had left, so a search
+said the whole source was transcribed. The run that left the part is not in the later revision (it may have no text to carry), so nothing in the record said so. **The rule** (the module documentation of the coverage): a revision
+covers an instant only where it holds a segment or a run it still records read the audio, and an earlier run's window is never counted inside a range a later run replaced, nor inside a part the superseded revision did
+not itself cover. To make the second half computable, **a spliced revision records the parts its superseded revision did not cover, outside the range it replaced, that a window or file it carries would otherwise be counted over**
+(`TranscriptRevision::carried_untranscribed`, the optional record member `carried_untranscribed`, at most 1,024 ranges; where there would be more, the nearest on each side of the replaced range are joined, never across it, which marks
+more untranscribed and never less).
+
+*Only what is needed is recorded* (a third review found that the first version recorded all that the superseded revision left untranscribed, including parts no run ever examined, and so wrote the member for chains that never had an unusable
+chunk, such as one range retranscription after another with a gap between them; the previous release reads such a record as damaged, which the rollback statement below denied). The member is a mask over what the carried windows and files claim, so
+a part that nothing carried claims needs none: a window claims only what a run examined, and a part some run examined and the revision does not cover was left by a run that could not read it (an unusable chunk), or is masked by a record
+that exists for such a part. A chain that began with a range, or whose runs are apart, or in which every chunk was read, records nothing and is written as it always was. A test checks both halves over every chain of up to three retranscriptions from a grid of
+ranges and chunk answers from five starting points (two that began with a range, one whole-source run with an unusable chunk, one without, one imported file): a chain with no unusable chunk never has the member, and a search says the same as it would
+with everything recorded.
+
+It is validated when a record is read (in order, merged, inside the source, outside the replaced range). Records written before this change have none, and are read as they were, with the coverage they had: the derivation never trusts an absent
+list to mean "covered". The coverage can still understate (a run none of whose text a revision carries is not counted), never overstate; a test over those chains checks by an independent count that no second is claimed that no recorded run read.
+**Rolling back:** a record with the member is read as damaged by `0.2.0` and earlier, and only a session whose chain holds an `unusable` chunk has one.
+
+
+**A swapped recogniser and a resumed job.** The recogniser's identity is read before the first chunk and after the last (and, now, before a failure on the answers is reported), not before each chunk, so a swap during a run is
+detected when the run ends. Checkpoints written after the swap are stored under the recognition key of the model the run started with, so if the original model is put back and the job resumed, they are reused: a
+`recognised` output of the swapped model would be committed under the original model's provenance (a limit of the checkpoints from before this change), and an `unusable` verdict of it makes the resumed run fail as
+unusable answers, ending the job as failed, after which the same command starts it afresh and works. Not changed here: a per-chunk identity check hashes the model for every chunk, and ending the job on `model_changed` changes
+a published behaviour; it is listed for the register.
+
+### What does not change
+
+The chunk plan, the 100 ms floor, the silence rule, the other warnings, the field names and shapes of v1 (this adds optional members), the failure codes, and the
+verification of the built-in clip.
+
+**What a worker supervisor sees (`job run`, `job batch`).** A `retranscribe` step reports the revision it committed and the job behind it, and nothing about that revision's
+gaps: its status is `complete` and its `coverage` is null even when some chunks of its run were unusable, and so is the request's. This is deliberate for 0.2.1, to keep the
+worker schema unchanged, and it means a supervisor that reads only `job run` is **not told** that part of a recording was not transcribed. It can tell by reading the
+revision the step names: `transcript get --revision <revision_id>` shows the warning `provider_chunks_rejected` and the count of chunks with an unusable answer
+(`revision.local_asr.unusable_chunks`), and a `search` of the session lists the ranges. `transcript retranscribe`, `job resume` and the other direct commands do answer
+`partial`. A test pins the step's shape (`worker_contract`), and the destructuring in it stops compiling if a member for the gaps is added, so the change is made on purpose,
+with the schema and these words, in a later release.
+
+### Rolling back
+
+A revision that holds an unusable chunk stores the outcome `unusable` and the warning `provider_chunks_rejected`, which every release before this one decodes as damage
+(`INTEGRITY_FAILURE`), as L-130 records for a trimmed end, and a revision spliced from one that left a part some run could not read, under a window or file it carries, stores the member
+`carried_untranscribed`, which those releases read as damage too. **Only a session whose chain holds an `unusable` chunk has such a revision**: the member is written only for a part such a chunk left (decision 8), and a chain that
+never had one, such as one range retranscription after another, is written byte for byte as before and is read by the release before. Every other revision is written as before. A run that had such a chunk would have
+failed on the release before. Use the newer version, or discard the session.
+
+### Evidence, and what is not proven
+
+Tests at the lowest layer that shows each rule: the domain (segment-count boundaries and the monotonic rule for every count up to sixteen, empty text as a marker, the
+strict-majority threshold and its edges, a run's gaps, `EarlierTextRule` over a table of earlier segments (wholly in the gap, a microsecond past its edge, across it over no
+text, overlapped by the run's text by a microsecond, touching it, wholly in what was read, outside the range, across the range's edge), coverage of an unusable window and of a
+replaced one, text kept across a gap's edge and covered, an earlier window not counted over what the superseded revision left untranscribed and the record's validation, the
+span arithmetic), the application (one chunk of ten, exactly half and more than half, early stop, silent chunks not counted, one of two, the job failing at once and not resumable,
+a resume that does not ask again, the review scenario of text kept in an unreadable part, no `no_speech_recognised` beside an unusable chunk, a model swapped during the run, and
+chains of runs: the review's whole-source chain and the same chain over an imported file, three runs with different unread parts, a later run that reads the unread part, a chain
+with no unread part, the microsecond straddler, the run's own text over a straddler, and every chain of up to three retranscriptions from a grid of ranges and chunk answers from
+three starting points against an independent count of what was read), the checkpoint and revision records (round trips, damaged records, a record of kept text and the same record
+with the chunk changed, a record of a chain with its list of untranscribed parts and the forged forms of it), the contract (the partial result, the kept text listed as not
+transcribed by the run, the unchanged complete result, the failure's prose on both sides of the three-answer boundary and for the setup check, a worker step pinned as
+`complete`, every schema; the failure and partial examples are produced by the application's own run over a stand-in recording, not written by hand), and the human output with
+snapshots.
+
+**Not proven:** no real recording was used (the recording is commercial and cannot be shared); the tests build the shape from recorded-style provider output. Which kind of
+segment whisper.cpp returned for 27:05 to 27:35 (empty, reversed, or at or after the audio's end) is unknown, and the fix does not depend on it: with a single rejected
+segment beside kept ones it is kept out, and with only rejected segments the chunk is a gap. The three constants (`MIN_SEGMENTS_FOR_REJECTION_RATIO`,
+`UNUSABLE_CHUNK_SHARE_DENOMINATOR`, `FEW_ANSWERED_CHUNKS`) are proposals, chosen as above, not measured on a corpus of real recordings (the follow-up issue on real media in
+the test set stands). The kept-text rule has no test over a real decode: the engine's opt-in tests that decode real speech do not exercise it. The chain test's count of what was read is the author's
+reading of what a run read, independent of the code it checks but not of the rules; and no session written by `0.2.0` with several revisions was read by this code, only the rule that a record with no
+`carried_untranscribed` is read as before. The rule's choice for text over audio the run read as empty (kept) is a judgement, not a measurement.

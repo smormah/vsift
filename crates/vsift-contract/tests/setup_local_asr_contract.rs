@@ -13,11 +13,12 @@ use vsift_application::{
     AsrFailure, AsrFailureReason, AsrStage, LocalAsrCheckFailure, LocalAsrCheckOutcome,
     LocalAsrModelStatus, LocalAsrNotRunReason, LocalAsrSetupStatus, LocalAsrVerificationFailure,
     LocalAsrVerificationSource, ManagedPlanAvailability, RuntimeDiagnosis, SetupProfile,
+    UnusableChunk, UnusableChunks,
 };
 use vsift_contract::{DependencyLookup, SetupCheckResponse};
 use vsift_domain::{
-    DependencyState, DependencyStatus, ProviderOutputError, ReviewedAsrModel, RuntimeDependency,
-    RuntimeReadiness, TranscriptRevisionError,
+    DependencyState, DependencyStatus, MediaTime, ProviderOutputError, ReviewedAsrModel,
+    RuntimeDependency, RuntimeReadiness, TimeRange, TranscriptRevisionError,
 };
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -31,25 +32,42 @@ const STAGES: [AsrStage; 6] = [
     AsrStage::Assembly,
 ];
 
-const REASONS: [AsrFailureReason; 17] = [
-    AsrFailureReason::InvalidRange,
-    AsrFailureReason::TooManyChunks,
-    AsrFailureReason::ModelChanged,
-    AsrFailureReason::ModelUnavailable,
-    AsrFailureReason::UnpinnedModel,
-    AsrFailureReason::Cancelled,
-    AsrFailureReason::Deadline,
-    AsrFailureReason::Busy,
-    AsrFailureReason::ResourceLimit,
-    AsrFailureReason::AudioUnavailable,
-    AsrFailureReason::ProviderFailed,
-    AsrFailureReason::UnparseableOutput,
-    AsrFailureReason::MalformedOutput(ProviderOutputError::TooManySegments),
-    AsrFailureReason::AbnormalTermination,
-    AsrFailureReason::Workspace,
-    AsrFailureReason::Io,
-    AsrFailureReason::InvalidRun(TranscriptRevisionError::InvalidAsrRun),
-];
+/// Every failure reason a verification can report; `malformed_output` is built
+/// from a run whose first chunk was unusable (#353), and still serializes as
+/// the one published reason of that name.
+fn reasons() -> Result<Vec<AsrFailureReason>, Box<dyn std::error::Error>> {
+    Ok(vec![
+        AsrFailureReason::InvalidRange,
+        AsrFailureReason::TooManyChunks,
+        AsrFailureReason::ModelChanged,
+        AsrFailureReason::ModelUnavailable,
+        AsrFailureReason::UnpinnedModel,
+        AsrFailureReason::Cancelled,
+        AsrFailureReason::Deadline,
+        AsrFailureReason::Busy,
+        AsrFailureReason::ResourceLimit,
+        AsrFailureReason::AudioUnavailable,
+        AsrFailureReason::ProviderFailed,
+        AsrFailureReason::UnparseableOutput,
+        AsrFailureReason::MalformedOutput(UnusableChunks {
+            unusable: 1,
+            answered: 1,
+            planned: 1,
+            first: UnusableChunk {
+                index: 0,
+                window: TimeRange::new(
+                    MediaTime::from_micros(0),
+                    MediaTime::from_micros(5_000_000),
+                )?,
+                error: ProviderOutputError::TooManySegments,
+            },
+        }),
+        AsrFailureReason::AbnormalTermination,
+        AsrFailureReason::Workspace,
+        AsrFailureReason::Io,
+        AsrFailureReason::InvalidRun(TranscriptRevisionError::InvalidAsrRun),
+    ])
+}
 
 const MODELS: [LocalAsrModelStatus; 5] = [
     LocalAsrModelStatus::NotSelected,
@@ -99,7 +117,7 @@ fn response(local_asr: LocalAsrSetupStatus) -> Result<Value, serde_json::Error> 
 }
 
 /// Every verification outcome `setup check` can report.
-fn outcomes() -> Vec<LocalAsrCheckOutcome> {
+fn outcomes() -> Result<Vec<LocalAsrCheckOutcome>, Box<dyn std::error::Error>> {
     let mut outcomes = vec![
         LocalAsrCheckOutcome::Verified(LocalAsrVerificationSource::Recorded),
         LocalAsrCheckOutcome::Verified(LocalAsrVerificationSource::RanNow),
@@ -116,7 +134,7 @@ fn outcomes() -> Vec<LocalAsrCheckOutcome> {
         ));
     }
     for stage in STAGES {
-        for reason in REASONS {
+        for reason in reasons()? {
             outcomes.push(LocalAsrCheckOutcome::Failed(
                 LocalAsrCheckFailure::Verification(LocalAsrVerificationFailure::Transcription(
                     AsrFailure { stage, reason },
@@ -132,7 +150,7 @@ fn outcomes() -> Vec<LocalAsrCheckOutcome> {
     ] {
         outcomes.push(LocalAsrCheckOutcome::NotRun(reason));
     }
-    outcomes
+    Ok(outcomes)
 }
 
 fn schema_enum(
@@ -186,7 +204,7 @@ fn a_verified_setup_matches_the_frozen_example() -> TestResult {
 fn every_model_status_and_outcome_is_schema_valid_and_consistent() -> TestResult {
     let validator = validator()?;
     for model in MODELS {
-        for verification in outcomes() {
+        for verification in outcomes()? {
             let value = response(LocalAsrSetupStatus {
                 model,
                 verification,
@@ -236,7 +254,7 @@ fn schema_enums_are_exactly_the_emitted_identifiers() -> TestResult {
     let mut reasons = BTreeSet::new();
     let mut not_run = BTreeSet::new();
     let mut sources = BTreeSet::new();
-    for outcome in outcomes() {
+    for outcome in outcomes()? {
         match outcome {
             LocalAsrCheckOutcome::Verified(source) => {
                 sources.insert(source.identifier().to_owned());

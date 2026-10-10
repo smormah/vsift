@@ -159,6 +159,10 @@ const ATTESTATION_TESTS: &str = "crates/vsift-infrastructure/src/host_attestatio
 /// The committed example job records and checkpoints (P11 PR 1, issue #180),
 /// pinned to the encoder by `vsift-infrastructure`'s `job_record_examples`.
 const JOB_EXAMPLES: &str = "crates/vsift-infrastructure/tests/data/jobs";
+/// The committed example transcript records of #353, pinned to the encoder by
+/// `vsift-infrastructure`'s `local_asr_store`.
+const TRANSCRIPT_RECORD_EXAMPLES: &str =
+    "crates/vsift-infrastructure/tests/data/transcript_records";
 /// The committed example worker request records (P11 PR 3), pinned to the
 /// store's encoder and the contract's recorded form by `vsift`'s
 /// `request_record_examples`.
@@ -244,6 +248,11 @@ const SEEDS: &[Seed] = &[
     seed(
         Target::ChunkCheckpoint,
         "checkpoint.silent.json",
+        Origin::Copy(JOB_EXAMPLES),
+    ),
+    seed(
+        Target::ChunkCheckpoint,
+        "checkpoint.unusable.json",
         Origin::Copy(JOB_EXAMPLES),
     ),
     seed(
@@ -410,6 +419,16 @@ const SEEDS: &[Seed] = &[
         Target::TranscriptRecord,
         "bundle-transcript-record.asr.json",
         Origin::Copy("schemas/v1/examples"),
+    ),
+    seed(
+        Target::TranscriptRecord,
+        "F01-kept-in-an-unreadable-part.json",
+        Origin::Copy(TRANSCRIPT_RECORD_EXAMPLES),
+    ),
+    seed(
+        Target::TranscriptRecord,
+        "F01-untranscribed-carried.json",
+        Origin::Copy(TRANSCRIPT_RECORD_EXAMPLES),
     ),
     seed(
         Target::FfprobeMetadata,
@@ -780,6 +799,11 @@ fn well_formed_seeds_are_accepted() -> TestResult {
         (Target::WhisperFullJson, "F09.base.json"),
         (Target::TranscriptRecord, "bundle-transcript-record.json"),
         (Target::TranscriptRecord, "F01-local-asr-v2.json"),
+        (
+            Target::TranscriptRecord,
+            "F01-kept-in-an-unreadable-part.json",
+        ),
+        (Target::TranscriptRecord, "F01-untranscribed-carried.json"),
         (Target::FfprobeMetadata, "two-streams-rotated.json"),
         (Target::FfprobeMetadata, "audio-only-unknown-codec.json"),
         (Target::TranscriptCursor, "transcript-get-next-cursor.txt"),
@@ -820,6 +844,7 @@ fn well_formed_seeds_are_accepted() -> TestResult {
         (Target::RequestRecord, "request-record.ended.json"),
         (Target::ChunkCheckpoint, "checkpoint.recognised.json"),
         (Target::ChunkCheckpoint, "checkpoint.silent.json"),
+        (Target::ChunkCheckpoint, "checkpoint.unusable.json"),
         (Target::HandoffCheck, "SKILL.md"),
         (Target::HandoffCheck, "draft-with-findings.md"),
         (Target::SetupPlan, "setup-plan.unavailable.json"),

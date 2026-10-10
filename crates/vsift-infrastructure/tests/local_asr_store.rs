@@ -268,6 +268,271 @@ fn a_quantized_profile_run_round_trips_as_base_q5_1() -> TestResult {
     Ok(())
 }
 
+/// #353: a revision with a chunk whose recognised output was unusable stores
+/// the outcome `unusable` with its decoded range and the warning
+/// `provider_chunks_rejected`, conforms to the published record schema and
+/// decodes to the same revision. Every other record is written as before, so
+/// only a session that holds such a chunk is unreadable by an earlier release
+/// (which reads an unknown outcome as damage), as the record's schema says.
+#[test]
+fn an_unusable_chunk_round_trips_and_conforms_to_the_record_schema() -> TestResult {
+    let session = SessionId::parse(EXAMPLE_SESSION)?;
+    let source_id = SourceId::parse(F01_SPEECH_SOURCE)?;
+    let source = whole_file_source_segment(&source_id, MediaTime::from_micros(55 * SECOND))?;
+    let planned = plan_chunks(source.id(), source.range(), ChunkPlan::R0)?;
+    let outcomes = [
+        AsrChunkOutcome::Silent {
+            audio: planned[0].window(),
+        },
+        AsrChunkOutcome::Unusable {
+            audio: planned[1].window(),
+        },
+    ];
+    let run = AsrRun::new(AsrRunParts {
+        provider: AsrProviderBuild::new(AsrProvider::WhisperCpp, Sha256Hex::parse(WHISPER_SHA256)?),
+        model: AsrModel::new(AsrModelProfile::Base, Sha256Hex::parse(BASE_MODEL_SHA256)?),
+        decoding: AsrDecodingProfile::R0V1,
+        plan: ChunkPlan::R0,
+        threads: NonZeroU16::new(4).ok_or("zero")?,
+        audio_stream: 1,
+        chunks: planned
+            .into_iter()
+            .zip(outcomes)
+            .map(|(chunk, outcome)| AsrChunkRecord::new(chunk, outcome))
+            .collect(),
+    })?;
+    let mut warnings = TranscriptWarnings::default();
+    warnings.add(
+        TranscriptWarningKind::SilentChunksSkipped,
+        1,
+        NonZeroU32::MIN,
+    );
+    warnings.add(
+        TranscriptWarningKind::ProviderChunksRejected,
+        1,
+        NonZeroU32::new(2).ok_or("zero")?,
+    );
+    let revision = build_asr_revision(AsrRevisionRequest {
+        session_id: &session,
+        source_id: &source_id,
+        source_segment: &source,
+        number: NonZeroU32::MIN,
+        transcription: AsrTranscription {
+            run,
+            language: None,
+            segments: Vec::new(),
+            warnings,
+        },
+        splice: None,
+    })?;
+    let encoded = encode_transcript_record(&revision)?;
+    let value: serde_json::Value = serde_json::from_slice(&encoded)?;
+    assert_eq!(value["run"]["chunks"][0]["outcome"], "silent");
+    assert_eq!(value["run"]["chunks"][1]["outcome"], "unusable");
+    assert_eq!(
+        value["run"]["chunks"][1]["audio"],
+        serde_json::json!({"start_us": 25_000_000, "end_us": 55_000_000})
+    );
+    assert!(
+        value["warnings"]
+            .as_array()
+            .ok_or("no warnings")?
+            .iter()
+            .any(|warning| warning["kind"] == "provider_chunks_rejected" && warning["count"] == 1)
+    );
+    assert!(conforms_to_record_schema(&value)?);
+    assert_eq!(decode_transcript_record(&encoded)?, revision);
+
+    // An unusable chunk is a decoded chunk: without its decoded range, or with
+    // one that is not in the chunk's window, the record is damaged.
+    let mut without_audio = value.clone();
+    without_audio["run"]["chunks"][1]["audio"] = serde_json::Value::Null;
+    assert_eq!(
+        decode_transcript_record(&serde_json::to_vec(&without_audio)?),
+        Err(SessionStorageError::IntegrityFailure)
+    );
+    Ok(())
+}
+
+/// #353: text the earlier revision had inside a part of the replaced range
+/// that the run could not read is carried into the new revision, and the
+/// stored record reads back. The rule is checked again on reading: a record
+/// whose chunk is changed to one that was read leaves the carried segment
+/// inside a range the run replaced, which is damage, not a different revision.
+#[test]
+fn text_kept_in_an_unreadable_part_round_trips_and_is_checked_on_reading() -> TestResult {
+    let (first, _) = f01_revisions()?;
+    let source = first.source_segment().clone();
+    // 1-2 s cuts the first revision's 0-5.26 s segment, so the range widens to
+    // all of it; the run could not read it, so the segment is kept.
+    let replaced = first.snap_to_segments(range(SECOND, 2 * SECOND)?);
+    assert_eq!(replaced, range(0, 5_260_000)?);
+    let mut warnings = TranscriptWarnings::default();
+    warnings.add(
+        TranscriptWarningKind::ProviderChunksRejected,
+        1,
+        NonZeroU32::MIN,
+    );
+    let kept = build_asr_revision(AsrRevisionRequest {
+        session_id: &SessionId::parse(EXAMPLE_SESSION)?,
+        source_id: &SourceId::parse(F01_SPEECH_SOURCE)?,
+        source_segment: &source,
+        number: NonZeroU32::new(2).ok_or("zero")?,
+        transcription: AsrTranscription {
+            run: run(
+                &source,
+                replaced,
+                AsrChunkOutcome::Unusable { audio: replaced },
+            )?,
+            language: None,
+            segments: Vec::new(),
+            warnings,
+        },
+        splice: Some(RevisionSplice {
+            base: &first,
+            replaced_range: replaced,
+        }),
+    })?;
+    assert_eq!(kept.segments().len(), 1);
+    assert!(kept.segments()[0].carried_from().is_some());
+    assert_eq!(kept.replaced_range(), Some(replaced));
+
+    let encoded = encode_transcript_record(&kept)?;
+    let value: serde_json::Value = serde_json::from_slice(&encoded)?;
+    assert!(conforms_to_record_schema(&value)?);
+    assert_eq!(decode_transcript_record(&encoded)?, kept);
+    // The record is committed as a fuzz seed, so the fuzzer starts from a
+    // valid record of this kind.
+    assert!(
+        fs::read(
+            repository("crates/vsift-infrastructure/tests/data/transcript_records")
+                .join("F01-kept-in-an-unreadable-part.json")
+        )? == encoded,
+        "regenerate the committed record: the encoder no longer writes its bytes"
+    );
+
+    for read_instead in ["transcribed", "silent"] {
+        let mut changed = value.clone();
+        changed["run"]["chunks"][0]["outcome"] = serde_json::Value::from(read_instead);
+        assert_eq!(
+            decode_transcript_record(&serde_json::to_vec(&changed)?),
+            Err(SessionStorageError::IntegrityFailure),
+            "{read_instead}"
+        );
+    }
+    Ok(())
+}
+
+/// #353: a revision spliced from one that left a part untranscribed records the
+/// part (`carried_untranscribed`), because it keeps the provenance only of the
+/// runs whose text it carries and the first run's window would otherwise be
+/// counted over it. The record round trips, conforms to the published schema
+/// and is checked on reading: the parts are in order, merged, inside the source
+/// and outside the replaced range.
+#[test]
+fn what_an_earlier_revision_left_untranscribed_is_recorded_and_checked_on_reading() -> TestResult {
+    let (first, _) = f01_revisions()?;
+    let source = first.source_segment().clone();
+    let session = SessionId::parse(EXAMPLE_SESSION)?;
+    let source_id = SourceId::parse(F01_SPEECH_SOURCE)?;
+    let splice = |base: &TranscriptRevision,
+                  number: u32,
+                  replaced: TimeRange,
+                  outcome: AsrChunkOutcome|
+     -> Built<TranscriptRevision> {
+        Ok(build_asr_revision(AsrRevisionRequest {
+            session_id: &session,
+            source_id: &source_id,
+            source_segment: &source,
+            number: NonZeroU32::new(number).ok_or("zero")?,
+            transcription: AsrTranscription {
+                run: run(&source, replaced, outcome)?,
+                language: None,
+                segments: Vec::new(),
+                warnings: TranscriptWarnings::default(),
+            },
+            splice: Some(RevisionSplice {
+                base,
+                replaced_range: replaced,
+            }),
+        })?)
+    };
+    // 5.5-6 s could not be read, and there was no text there to keep.
+    let unread = range(5_500_000, 6 * SECOND)?;
+    let second = splice(
+        &first,
+        2,
+        unread,
+        AsrChunkOutcome::Unusable { audio: unread },
+    )?;
+    assert!(second.carried_untranscribed().is_empty());
+    // A later run over 5.3-5.4 s, far from it, silent.
+    let quiet = range(5_300_000, 5_400_000)?;
+    let third = splice(&second, 3, quiet, AsrChunkOutcome::Silent { audio: quiet })?;
+    assert_eq!(third.carried_untranscribed(), [unread]);
+
+    let encoded = encode_transcript_record(&third)?;
+    let value: serde_json::Value = serde_json::from_slice(&encoded)?;
+    assert_eq!(
+        value["carried_untranscribed"],
+        serde_json::json!([{"start_us": 5_500_000, "end_us": 6_000_000}])
+    );
+    assert!(conforms_to_record_schema(&value)?);
+    assert_eq!(decode_transcript_record(&encoded)?, third);
+    // A revision that records nothing is written without the member, as before.
+    let before: serde_json::Value = serde_json::from_slice(&encode_transcript_record(&second)?)?;
+    assert!(before.get("carried_untranscribed").is_none());
+    // The record is committed as a fuzz seed.
+    assert!(
+        fs::read(
+            repository("crates/vsift-infrastructure/tests/data/transcript_records")
+                .join("F01-untranscribed-carried.json")
+        )? == encoded,
+        "regenerate the committed record: the encoder no longer writes its bytes"
+    );
+
+    for (label, listed) in [
+        (
+            "into the replaced range",
+            serde_json::json!([{"start_us": 5_350_000, "end_us": 6_000_000}]),
+        ),
+        (
+            "beyond the source",
+            serde_json::json!([{"start_us": 5_500_000, "end_us": 7_000_000}]),
+        ),
+        (
+            "out of order",
+            serde_json::json!([
+                {"start_us": 5_500_000, "end_us": 5_700_000},
+                {"start_us": 1_000_000, "end_us": 2_000_000}
+            ]),
+        ),
+        (
+            "touching",
+            serde_json::json!([
+                {"start_us": 5_500_000, "end_us": 5_700_000},
+                {"start_us": 5_700_000, "end_us": 6_000_000}
+            ]),
+        ),
+    ] {
+        let mut changed = value.clone();
+        changed["carried_untranscribed"] = listed;
+        assert_eq!(
+            decode_transcript_record(&serde_json::to_vec(&changed)?),
+            Err(SessionStorageError::IntegrityFailure),
+            "{label}"
+        );
+    }
+    // A record of a revision that is not spliced carries none.
+    let mut plain: serde_json::Value = serde_json::from_slice(&encode_transcript_record(&first)?)?;
+    plain["carried_untranscribed"] = serde_json::json!([{"start_us": 1, "end_us": 2}]);
+    assert_eq!(
+        decode_transcript_record(&serde_json::to_vec(&plain)?),
+        Err(SessionStorageError::IntegrityFailure)
+    );
+    Ok(())
+}
+
 /// Strict decoding re-checks every carried segment against its inherited
 /// provenance and the replaced range.
 #[test]

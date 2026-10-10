@@ -178,6 +178,9 @@ enum StoredWarningKind {
     SeamDuplicatesRemoved,
     SilentChunksSkipped,
     NoSpeechRecognised,
+    /// Written only by a revision with an unusable chunk (#353): the releases
+    /// before it read the kind as damage, as they read the outcome.
+    ProviderChunksRejected,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -282,6 +285,7 @@ impl StoredTranscript {
             supersedes: None,
             replaced_range: None,
             inherited: Vec::new(),
+            carried_untranscribed: Vec::new(),
             language: optional_language(self.language).ok()?,
             segments,
             warnings,
@@ -354,6 +358,17 @@ struct StoredAsrTranscript {
     replaced_range: Option<StoredRange>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     inherited: Vec<StoredInherited>,
+    /// What the superseded revision did not cover outside `replaced_range` and
+    /// that a window or file this revision carries would otherwise be counted
+    /// over (#353). It is written only when there is any, so every other
+    /// record is written exactly as before. A release before it reads the
+    /// member as damage, as it reads an `unusable` chunk. Only a part a run
+    /// could not use is ever under such a window or file, so only a session
+    /// whose chain holds an `unusable` chunk has such a record; a test checks it
+    /// for every chain of a grid, and one that began with a range, or whose runs
+    /// are apart, records nothing.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    carried_untranscribed: Vec<StoredRange>,
     language: Option<String>,
     warnings: Vec<StoredWarning>,
     segments: Vec<StoredAsrEntry>,
@@ -493,6 +508,11 @@ enum StoredChunkOutcome {
     Transcribed,
     Silent,
     NoAudio,
+    /// The recognizer's answer for the chunk could not be used (#353). It
+    /// carries its decoded range, like `silent`. A release before this one
+    /// reads the name as damage, so a revision stores it only when the run had
+    /// such a chunk, and every other revision is written exactly as before.
+    Unusable,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -535,6 +555,12 @@ impl StoredAsrTranscript {
                 .iter()
                 .map(StoredInherited::from_domain)
                 .collect(),
+            carried_untranscribed: revision
+                .carried_untranscribed()
+                .iter()
+                .copied()
+                .map(StoredRange::from_domain)
+                .collect(),
             language: revision.language().map(|tag| tag.as_str().to_owned()),
             warnings: stored_warnings(revision.warnings()),
             segments: revision
@@ -568,6 +594,10 @@ impl StoredAsrTranscript {
             Some(range) => Some(stored_range(range.start_us, range.end_us)?),
             None => None,
         };
+        let mut carried_untranscribed = Vec::with_capacity(self.carried_untranscribed.len());
+        for range in self.carried_untranscribed {
+            carried_untranscribed.push(stored_range(range.start_us, range.end_us)?);
+        }
         TranscriptRevision::new(TranscriptRevisionParts {
             id: TranscriptRevisionId::parse(self.revision_id).ok()?,
             number: NonZeroU32::new(self.revision)?,
@@ -577,6 +607,7 @@ impl StoredAsrTranscript {
             supersedes,
             replaced_range,
             inherited,
+            carried_untranscribed,
             language: optional_language(self.language).ok()?,
             segments,
             warnings: domain_warnings(self.warnings)?,
@@ -626,6 +657,9 @@ impl StoredAsrRun {
                             (StoredChunkOutcome::Silent, Some(audio))
                         }
                         AsrChunkOutcome::NoAudio => (StoredChunkOutcome::NoAudio, None),
+                        AsrChunkOutcome::Unusable { audio } => {
+                            (StoredChunkOutcome::Unusable, Some(audio))
+                        }
                     };
                     StoredChunk {
                         index: record.chunk().index(),
@@ -652,6 +686,7 @@ impl StoredAsrRun {
                 }
                 (StoredChunkOutcome::Silent, Some(audio)) => AsrChunkOutcome::Silent { audio },
                 (StoredChunkOutcome::NoAudio, None) => AsrChunkOutcome::NoAudio,
+                (StoredChunkOutcome::Unusable, Some(audio)) => AsrChunkOutcome::Unusable { audio },
                 _ => return None,
             };
             chunks.push(AsrChunkRecord::new(
@@ -989,6 +1024,7 @@ impl StoredWarningKind {
             TranscriptWarningKind::SeamDuplicatesRemoved => Self::SeamDuplicatesRemoved,
             TranscriptWarningKind::SilentChunksSkipped => Self::SilentChunksSkipped,
             TranscriptWarningKind::NoSpeechRecognised => Self::NoSpeechRecognised,
+            TranscriptWarningKind::ProviderChunksRejected => Self::ProviderChunksRejected,
         }
     }
 
@@ -1006,6 +1042,7 @@ impl StoredWarningKind {
             Self::SeamDuplicatesRemoved => TranscriptWarningKind::SeamDuplicatesRemoved,
             Self::SilentChunksSkipped => TranscriptWarningKind::SilentChunksSkipped,
             Self::NoSpeechRecognised => TranscriptWarningKind::NoSpeechRecognised,
+            Self::ProviderChunksRejected => TranscriptWarningKind::ProviderChunksRejected,
         }
     }
 }

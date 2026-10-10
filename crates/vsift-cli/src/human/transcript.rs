@@ -64,6 +64,16 @@ pub(super) fn push_retranscription(text: &mut TerminalText, data: &Retranscripti
     text.push_fixed("Segments recognised now: ")
         .push_unsigned(data.recognised_segment_count)
         .end_line();
+    // Earlier text can only be kept where there was an earlier revision.
+    push_ranges(
+        text,
+        if data.revision.supersedes.is_some() {
+            "Not transcribed by this run (the answer for these parts could not be used; earlier text that reaches into them, if any, is kept, and any other words said there cannot be found):"
+        } else {
+            "Not transcribed by this run (the answer for these parts could not be used; words said there cannot be found):"
+        },
+        &data.untranscribed_ranges,
+    );
     let job = &data.job;
     text.push_fixed("Job: ")
         .push_value(&job.job_id)
@@ -117,12 +127,12 @@ pub(super) fn search(envelope: &Envelope<Search>) -> Result<RenderedText, TooLar
     text.end_line();
     push_ranges(
         &mut text,
-        "Not transcribed (words said there cannot be found): ",
+        "Not transcribed (words said there cannot be found):",
         &coverage.untranscribed_ranges,
     );
     push_ranges(
         &mut text,
-        "Transcribed without speech: ",
+        "Transcribed without speech:",
         &coverage.no_speech_ranges,
     );
     if coverage.ranges_truncated {
@@ -197,8 +207,13 @@ fn push_revision(text: &mut TerminalText, revision: &TranscriptRevision) {
             .push_unsigned(run.silent_chunks)
             .push_fixed(" silent, ")
             .push_unsigned(run.no_audio_chunks)
-            .push_fixed(" without audio)")
-            .end_line();
+            .push_fixed(" without audio");
+        if run.unusable_chunks > 0 {
+            text.push_fixed(", ")
+                .push_unsigned(run.unusable_chunks)
+                .push_fixed(" with an unusable answer");
+        }
+        text.push_fixed(")").end_line();
     }
     if let Some(supersedes) = &revision.supersedes {
         text.push_fixed("Supersedes: ")

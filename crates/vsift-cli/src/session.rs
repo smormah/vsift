@@ -21,7 +21,8 @@ use vsift_contract::{
     LifecycleResponse, ListedSession, OpenData, OperationResponse, PageData, RequestDurability,
     RetranscribeJob, SessionJobData, SessionState, SessionStatusData, StatusData,
     TranscriptEvidenceStream, TranscriptPageData, TranscriptRetranscribeData, WorkspaceData,
-    WorkspaceInitOutcome, job_warning_messages, transcript_warning_messages,
+    WorkspaceInitOutcome, finish_retranscription, job_warning_messages,
+    transcript_warning_messages,
 };
 
 use crate::{
@@ -330,12 +331,15 @@ pub(crate) async fn retranscribe(
         })
         .await?;
     let presented = retranscription(&outcome)?;
-    Ok(
+    // `partial` when the recognizer's answer for some chunks could not be used
+    // (#353), the complete result it always was otherwise.
+    Ok(finish_retranscription(
         response(CommandName::TranscriptRetranscribe, &presented.data)?
             .with_operation_id(outcome.job().operation_id())
             .with_lifecycle(presented.lifecycle)
             .with_warnings(&presented.warnings),
-    )
+        outcome.revision(),
+    ))
 }
 
 /// Reads one bounded page of a session's transcript as one result.

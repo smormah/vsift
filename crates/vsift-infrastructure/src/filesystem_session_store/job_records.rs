@@ -17,8 +17,8 @@ use vsift_domain::{
     AttemptFailure, CheckpointOutcome, ChunkCheckpoint, ChunkTime, CueText, FailureCode, JobId,
     JobKind, JobState, LanguageTag, MAX_JOB_ATTEMPTS, MAX_PLANNED_CHUNKS, MAX_PROVIDER_SEGMENTS,
     MAX_PROVIDER_TOKENS, MediaTime, OperationId, OperationKey, ProviderChunkOutput,
-    ProviderSegment, ProviderToken, ProviderTokenKind, RecognitionKey, SessionId, Sha256Hex,
-    StorageGeneration, TimeRange, TranscriptRevisionId,
+    ProviderOutputError, ProviderSegment, ProviderToken, ProviderTokenKind, RecognitionKey,
+    SessionId, Sha256Hex, StorageGeneration, TimeRange, TranscriptRevisionId,
 };
 
 use super::{MetadataVersion, STORAGE_SCHEMA_VERSION, sha256_hex, stored::parse_versioned_json};
@@ -378,6 +378,13 @@ pub(super) fn encode_checkpoint(checkpoint: &ChunkCheckpoint) -> Option<Vec<u8>>
     let (outcome, audio, payload) = match checkpoint.outcome() {
         CheckpointOutcome::NoAudio => ("no_audio", None, None),
         CheckpointOutcome::Silent { audio } => ("silent", Some(StoredRange::of(*audio)), None),
+        // The reason travels as the payload, under its own digest like any
+        // other, so a damaged one is an unusable checkpoint and is redone.
+        CheckpointOutcome::Unusable { audio, error } => (
+            "unusable",
+            Some(StoredRange::of(*audio)),
+            Some(error.identifier().to_owned()),
+        ),
         CheckpointOutcome::Recognised { audio, output } => {
             let stored = StoredOutput {
                 language: output.language.as_ref().map(|tag| tag.as_str().to_owned()),
@@ -444,6 +451,15 @@ pub(super) fn decode_checkpoint(bytes: &[u8], ordinal: u32) -> Option<ChunkCheck
             CheckpointOutcome::Recognised {
                 audio: audio.range()?,
                 output: decode_output(&payload)?,
+            }
+        }
+        ("unusable", Some(audio), Some(payload)) => {
+            if stored.payload_sha256.as_deref() != Some(sha256_hex(payload.as_bytes()).as_str()) {
+                return None;
+            }
+            CheckpointOutcome::Unusable {
+                audio: audio.range()?,
+                error: ProviderOutputError::parse(&payload)?,
             }
         }
         _ => return None,
@@ -549,8 +565,8 @@ pub fn encode_chunk_checkpoint(checkpoint: &ChunkCheckpoint) -> Option<Vec<u8>> 
 mod tests {
     use vsift_domain::{
         CheckpointOutcome, ChunkCheckpoint, ChunkTime, CueText, LanguageTag, MediaTime,
-        PlannedChunk, ProviderChunkOutput, ProviderSegment, ProviderToken, ProviderTokenKind,
-        RecognitionKey, Sha256Hex, SourceSegmentId, TimeRange,
+        PlannedChunk, ProviderChunkOutput, ProviderOutputError, ProviderSegment, ProviderToken,
+        ProviderTokenKind, RecognitionKey, Sha256Hex, SourceSegmentId, TimeRange,
     };
 
     use super::{decode_checkpoint, encode_checkpoint};
@@ -608,6 +624,64 @@ mod tests {
         let bytes = encode_checkpoint(&checkpoint).ok_or("not encoded")?;
         assert_eq!(decode_checkpoint(&bytes, 1), Some(checkpoint));
         assert_eq!(decode_checkpoint(&bytes, 2), None);
+        Ok(())
+    }
+
+    /// #353: the verdict that a chunk's answer was unusable, with its reason,
+    /// round-trips for every reason, and a damaged one is an unusable
+    /// checkpoint (discarded and redone), never taken for a verdict.
+    #[test]
+    fn an_unusable_verdict_round_trips_and_a_damaged_one_is_refused() -> TestResult {
+        let window = TimeRange::new(
+            MediaTime::from_micros(25_000_000),
+            MediaTime::from_micros(55_000_000),
+        )?;
+        let chunk = PlannedChunk::new(SourceSegmentId::parse("sgm_0123456789abcdef")?, 1, window);
+        for error in ProviderOutputError::ALL {
+            let checkpoint = ChunkCheckpoint::new(
+                RecognitionKey::new(Sha256Hex::parse("a".repeat(64))?),
+                &chunk,
+                CheckpointOutcome::Unusable {
+                    audio: window,
+                    error,
+                },
+            );
+            let bytes = encode_checkpoint(&checkpoint).ok_or("not encoded")?;
+            assert_eq!(decode_checkpoint(&bytes, 2), Some(checkpoint), "{error:?}");
+        }
+        let bytes = encode_checkpoint(&ChunkCheckpoint::new(
+            RecognitionKey::new(Sha256Hex::parse("a".repeat(64))?),
+            &chunk,
+            CheckpointOutcome::Unusable {
+                audio: window,
+                error: ProviderOutputError::TooManyRejectedSegments,
+            },
+        ))
+        .ok_or("not encoded")?;
+        let text = String::from_utf8(bytes)?;
+        // A reason that was changed after it was stored, or that names no
+        // reason; a payload that does not match its digest; a verdict stored
+        // as another kind.
+        for (label, damaged) in [
+            (
+                "another reason",
+                text.replace("too_many_rejected_segments", "too_many_tokens"),
+            ),
+            (
+                "no reason",
+                text.replace("too_many_rejected_segments", "malformed_output"),
+            ),
+            (
+                "wrong digest",
+                text.replace("\"payload_sha256\":\"", "\"payload_sha256\":\"0"),
+            ),
+            (
+                "wrong kind",
+                text.replace("\"outcome\":\"unusable\"", "\"outcome\":\"silent\""),
+            ),
+        ] {
+            assert_eq!(decode_checkpoint(damaged.as_bytes(), 2), None, "{label}");
+        }
         Ok(())
     }
 

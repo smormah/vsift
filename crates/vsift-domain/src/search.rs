@@ -55,6 +55,7 @@ mod tests;
 
 use std::{error::Error, fmt};
 
+pub(crate) use coverage::carried_untranscribed_for;
 pub use coverage::{CoverageBasis, SearchCoverage};
 
 use crate::{PageLimit, TimeRange, TranscriptRevision, TranscriptSegment};
