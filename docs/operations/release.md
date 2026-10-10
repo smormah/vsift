@@ -574,7 +574,9 @@ green about the wrong thing.
   `v<X.Y.Z>-rc.<N>` tag of the same `X.Y.Z` (6.8) and its candidate commit that tag's commit;
   its verdict is `allowed`; and the run it names is that run. It does not compare the files
   again: the plan job did that, from the full history, and an enforced plan that failed it
-  published nothing. **The artifact lives seven days.** After that the check fails, never
+  published nothing. It reads the artifact with the job's own token (`contents: read` and
+  `attestations: read` were enough to list the run's artifacts and download this one, in the
+  pull request run 38009140561). **The artifact lives seven days.** After that the check fails, never
   passes, and says where the same record was copied: the evidence ledger's `release_delta`
   (6.7). So the verification of the stable version is dispatched within seven days of its
   publish, and a run after that cannot be green.
