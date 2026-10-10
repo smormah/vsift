@@ -72,7 +72,7 @@ All four were decisions about `0.2.0-rc.3`'s evidence and were carried to `0.2.0
 
 ## The order of steps
 
-1. **Merge the cut only when the supervisor can tag and publish at once** (the guide, the changelog and the skill guide name `0.2.1-rc.1` before it is on npm; 6.14 step 0.1 lists the pages).
+1. **Merge the cut only when the supervisor can tag and publish at once** (repository pages such as the guide, the changelog and the skill guide name `0.2.1-rc.1` before it is on npm; 6.14 step 0.1 lists them).
 2. **Tag, dry run, publish, approve, check from outside** (6.14 steps 1 to 4: the supervisor tags and dispatches, the maintainer approves the `release` environment).
 3. **The verification and hosted checks of the published bytes** (6.14 step 5), then the source-built campaigns at the tag, one after another and staggered (runner shortage, #316, shows as queueing).
 4. **Agent batches 2 and 3**, on the maintainer's go, under the committed freeze (`freeze check` must say `nothing frozen has changed`); a miss is a finding, never an edit to the grader, the skill or a scenario.
@@ -101,4 +101,4 @@ All four were decisions about `0.2.0-rc.3`'s evidence and were carried to `0.2.0
 - **A session with a gap cannot be read by `0.2.0` or earlier** (it reads as damaged), so going back after using a gap session loses it.
 - **6.14 has not been run.** Its commands are 6.12's with new numbers; what is new or untried is reading `latest` as `0.2.0` instead of the placeholder at every step, GitHub's latest release as `v0.2.0` (it was a 404), the sixteen-value integrity
   loop and the supervisor's and the maintainer's split.
-- **The window of L-133 reopens for the guide's first page, the changelog and the skill guide**, which name the candidate between the merge and the publish; the README, the installation guide, the launcher's README and the security policy are worded to be true both ways.
+- **The window of L-133 reopens for repository pages** (the guide's first page, the changelog, the skill guide, the trial documents, this plan and the runbook), which name the candidate between the merge and the publish; the README, the installation guide, the launcher's README and the security policy are worded to be true both ways.

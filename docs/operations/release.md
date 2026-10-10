@@ -1940,8 +1940,8 @@ and decides everything marked "open" in [`release-0.2.1.md`](../planning/release
 
 **0. Before the tag (about fifteen minutes; only item 6 can change anything, and the maintainer does it).**
 
-1. **Merge the pull request only when the supervisor can tag and publish at once.** The pages that name `0.2.1-rc.1` before it is on npm are the guide's first page, the changelog, the skill guide, the batch checklist
-   and this runbook; the README, the installation guide, the launcher's README and the security policy are worded so that they are true both before and after the publish (the installation guide's and the launcher's
+1. **Merge the pull request only when the supervisor can tag and publish at once.** Repository pages name `0.2.1-rc.1` before it is on npm (the guide's first page, the changelog, the skill guide, the trial documents, the plan
+   and this runbook); the README, the installation guide, the launcher's README and the security policy are worded so that they are true both before and after the publish (the installation guide's and the launcher's
    README's "it names `0.2.0-rc.3` ... or a later candidate or release" is true whether `next` names the third candidate or this one), which is why this cut opens a smaller window than
    [L-133](../planning/known-limits.md#l-133) describes. Merge nothing else: from the moment the tag exists until the stable release is published **nothing may change on `main` but the work record, the
    installation guide and the launcher's README** (6.8 lists them exactly), and the same holds from this merge to the tag. No Dependabot pull request, no workflow edit, no dependency bump, no change to a

@@ -3714,7 +3714,7 @@ that week.**
   `P14 verify release` passed, and the stable commit, closed on 2026-10-09 with the publish of `0.2.0`; **a fifth, narrower one opens with the merge of the cut of `0.2.1-rc.1`
   (2026-10-10) and closes when that candidate is published and its `P14 verify release` has passed: this time the README, the installation guide, the launcher's README and the security
   policy were worded to be true both before and after the publish, so only repository pages that name the candidate say it before it exists: the guide's first page, the changelog,
-  the skill guide, the batch checklist and the runbook**). (2) The README and its graphic `roadmap.svg` are not among
+  the skill guide, the trial documents, the plan and the runbook**). (2) The README and its graphic `roadmap.svg` are not among
   the documents the stable commit may change, so they kept the candidate wording from the cut until the ledger follow-up: the front page told a reader to install with
   `@next` and said a release candidate was under qualification while `latest` was `0.2.0`, from 2026-10-09 until **2026-10-10 (P14 PR 13b), which corrected the README's
   text and install block, the skill guide, the security policy, the development guide and the release runbook, removed CL-101 from the registry (no document says it) and

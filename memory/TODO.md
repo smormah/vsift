@@ -20,7 +20,7 @@ platform is called "supported": the claims rung is still `candidate`. **Complete
 - **The first real recording found a high-severity defect the day after the release (2026-10-10): #353, L-145. It is fixed on `main` and not released; `0.2.0` is still affected.** A recording whose 30-second chunk
   holds few recognised segments, one of them rejected, makes `transcript retranscribe` fail the whole run as `MISSING_CAPABILITY` and commit nothing; `job resume` fails the same way. Every accuracy figure so far came from a
   synthetic corpus (L-022). **P14 stays complete and `0.2.0` stays published and is not deprecated.** The workarounds stand (a supplied transcript, or ranges that avoid the failing window); the README and the install guide say so.
-- **The LOKI try-out (RQ-17) is still available** (`docs/planning/rq-17-tryout-sheet.md`): it would give CL-201 its evidence, and until it is done the Windows row stays untried. `roadmap.svg` and the README's badge wait for the README design session (L-121).
+- **The LOKI try-out (RQ-17) is still available** (`docs/planning/rq-17-tryout-sheet.md`, being updated in another pull request; this cut does not touch it): it would give CL-201 its evidence, and until it is done the Windows row stays untried. `roadmap.svg` and the README's badge wait for the README design session (L-121).
 
 ## Next: the patch release 0.2.1 (the maintainer's decision of 2026-10-10): the first candidate is CUT, NOT TAGGED OR PUBLISHED
 
