@@ -587,6 +587,15 @@ the error's remediation text says. A fix is planned for 0.2.1. Until then, eithe
 (`vsift transcript retranscribe <session> --from <microseconds> --to <microseconds>`) and move a range's edges by a few seconds if one fails,
 which can get past the chunk. This was found with the first real recording tried; every accuracy figure before it came from a synthetic corpus.
 
+**Known issue in 0.2.0 and in the 0.2.1-rc.1 release candidate: a transcript made by `vsift transcript retranscribe` can be missing up to a few seconds of speech where two pieces meet, and nothing says so**
+([#359](https://github.com/smormah/vsift/issues/359), [L-149](../planning/known-limits.md#l-149)). VSift recognises speech in 30-second pieces that
+overlap by 5 seconds, and merges them. On both real recordings tried, a sentence broke off at the end of one piece and resumed several seconds later at some of
+the seams, and the words between are missing from the transcript (the cause is read from the code, not yet confirmed with the recogniser's own output). `vsift search` and the transcription
+result still report the whole range as transcribed, and no warning gives a time, so a missing word reads as "nothing was said". A fix is planned for 0.2.1. Until then, check a transcript you rely on against the recording where the pieces meet: the overlaps are
+5 seconds long and start every 25 seconds, counted from the start of the range you transcribed (at 0:25, 0:50, 1:15 and so on for a whole recording), and a sentence that breaks
+off near one is the sign. Or give VSift a transcript (`vsift ingest ./recording.mp4 --transcript ./recording.vtt`), which skips local recognition. Transcribing a range with
+`--from` and `--to` does not avoid it, because a range has seams of its own.
+
 **`INTEGRITY_FAILURE` right after `--session-root <folder>`.** If the folder already exists and
 VSift did not create it (an empty folder you made with `mkdir`, say), VSift never adopts it and
 leaves it untouched. The error's remediation says so: name a `--session-root` path that does not
