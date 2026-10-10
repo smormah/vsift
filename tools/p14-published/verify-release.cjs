@@ -15,8 +15,11 @@
 // The only credential in reach is the job's default read-only token, which only
 // `gh` sees. Nothing is published, tagged or changed. A stable version also
 // needs two checks (the candidate-to-stable delta, read from P14 PR 8's
-// `release-delta.json`, and `latest` on all four packages); until they are
-// registered, after the stable tag, a stable version fails here by name.
+// `release-delta.json` in the publish run's `publish-plan` artifact while GitHub
+// keeps it, and `latest` on all four packages with the GitHub release marked
+// latest); they are registered in lib/verify.cjs (`STABLE_CHECKS`), and a stable
+// version whose check is not registered fails here by name. A pre-release is not
+// asked for either.
 
 const fs = require('node:fs');
 const path = require('node:path');
@@ -42,6 +45,7 @@ const {
   downloadAssets,
   expectedAssets,
   gh,
+  githubStableReaders,
   npmReadEnvironment,
   npmView,
   parseVersion,
@@ -193,7 +197,7 @@ async function main() {
   } catch {
     // The disagreement is already a failed check above; nothing stable is claimed.
   }
-  const context = { facts, version, env, work, releaseRunId: releaseRunId(facts.packages) };
+  const context = { facts, version, env, work, releaseRunId: releaseRunId(facts.packages), readers: githubStableReaders(env, work) };
   for (const result of runStableChecks(channel, context, STABLE_CHECKS)) {
     await recorder.check(result.name, () => {
       if (!result.ok) {

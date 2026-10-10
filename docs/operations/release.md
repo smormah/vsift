@@ -560,18 +560,34 @@ tag's commit and a GitHub-hosted builder), runs `npm audit signatures`, runs `gh
 verify` on all ten release files and all four tarballs, checks the checksums and GitHub's own
 digest of each file, and checks the release's flags and its ten file names. It has
 `contents: read` and `attestations: read`, no secret and no OIDC token, and cannot change
-anything. A pull request that changes the workflow or `tools/p14-published/` runs it too. A
-stable version fails it by name for now: the two checks it adds (the delta between the
-candidate and the stable release, which reads the `release-delta.json` of 6.7 from the Release
-run's `publish-plan` artifact, and `latest` on all four packages) are registered in
-`tools/p14-published/lib/verify.cjs`, and a verification that skipped them would be green
-about the wrong thing. **They are registered after the stable tag, not before:** a change to
-`tools/` between the candidate and the stable commit is refused by 6.8, and the workflow is
-dispatched from `main` (`gh workflow run p14-verify-release.yml --ref main -f version=<the
-stable version>`), so the code that runs is `main`'s at that moment, not the tag's. The
-registration is a small pull request after the stable publish, and it has to land **within
-seven days of it**, while the Release run's `publish-plan` artifact (the check's input) still
-exists. Run 36969577300 verified 0.1.0: ten of ten files and four of four tarballs
+anything. A pull request that changes the workflow or `tools/p14-published/` runs it too.
+
+**A stable version is asked for two more checks**, which `tools/p14-published/lib/verify.cjs`
+registers by name. A pre-release is asked for neither, and a stable version whose required
+check is not registered fails by name, because a verification that skipped them would be
+green about the wrong thing.
+
+- **The delta check** reads `release-delta.json` (6.7) from the `publish-plan` artifact of
+  the Release run that npm's provenance names, and requires: the record's stable version is
+  the one verified, and its stable commit is the commit of the tag, of the GitHub release's
+  tag and of npm's provenance on all four packages; its candidate is the highest
+  `v<X.Y.Z>-rc.<N>` tag of the same `X.Y.Z` (6.8) and its candidate commit that tag's commit;
+  its verdict is `allowed`; and the run it names is that run. It does not compare the files
+  again: the plan job did that, from the full history, and an enforced plan that failed it
+  published nothing. **The artifact lives seven days.** After that the check fails, never
+  passes, and says where the same record was copied: the evidence ledger's `release_delta`
+  (6.7). So the verification of the stable version is dispatched within seven days of its
+  publish, and a run after that cannot be green.
+- **The `latest` check** requires `latest` to be the version on all four packages (and the
+  version to be published), and the GitHub release of its tag to be not a draft, not a
+  pre-release and the release GitHub calls the latest.
+
+They were registered **after the stable tag, not before** (P14 PR 13a): a change to `tools/`
+between the candidate and the stable commit is refused by 6.8, and the workflow is dispatched
+from `main` (`gh workflow run p14-verify-release.yml --ref main -f version=<the stable
+version>`), so the code that runs is `main`'s at that moment, not the tag's. Their
+tests (`tools/p14-published/test/verify.test.cjs`) run on the values of the real 0.2.0
+publish. Run 36969577300 verified 0.1.0: ten of ten files and four of four tarballs
 attested, the provenance of all four packages read, and `npm audit signatures` verified the two
 packages a Linux runner installs (the launcher and `@vsift/linux-x64`, npm 10.9.9; the count
 npm reports depends on its version, which is why the provenance check reads all four packages
@@ -747,7 +763,9 @@ An enforced stable plan that passes also writes `release-delta.json` into the pl
 the comparison of the candidate with the stable release, in the shape of the evidence
 ledger's `release_delta` record (the versions and commits of both, the verdict, this run's id and the date). Copy it
 into `docs/planning/p14-evidence-ledger.json` after the publish (the follow-up, P14 PR 13);
-nothing copies it for you ([L-103](../planning/known-limits.md#l-103)).
+nothing copies it for you ([L-103](../planning/known-limits.md#l-103)). `P14 verify release`
+reads the same file from the run's artifact (6.4), but only while GitHub keeps it, seven days,
+so the copy in the ledger is the only record after that.
 
 A plan that fails a guard starts with `## Publish plan: REFUSED, nothing is published`, then
 "Refused because:" and one line per failed guard, for example:
@@ -856,7 +874,9 @@ not skip an item because the candidate's publish went well.
 5. Re-run the hosted qualification on the stable release's bytes (ADR 0024 decision A) and put the
    run's link, the commands' output and anything that failed or was re-run in the evidence
    ledger, with the plan's `release-delta.json` as the `release_delta` of the carried items
-   (download the run's `publish-plan` artifact within its 7 days).
+   (download the run's `publish-plan` artifact within its 7 days). `P14 verify release` for the
+   stable version, dispatched from `main` within those seven days, must be all green, and its
+   delta check and its `latest` check (6.4) must be among the passes.
 
 **What changes for users.** From the moment the four packages are published, `npm install
 vsift-cli`, `npx vsift-cli`, `pnpm dlx vsift-cli`, `bunx vsift-cli` and `yarn dlx` without a
