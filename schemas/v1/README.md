@@ -93,7 +93,11 @@ These files are the machine-readable public v1 boundary:
   adds `local_asr` (the run), `supersedes`, `replaced_range` and
   `carried_segment_count`; an import never has those members. Since 0.2.1 `local_asr`
   also has `unusable_chunks`, present only when not zero (chunks whose recognised answer
-  could not be used as a whole), and the warning code `provider_chunks_rejected` counts them (#353);
+  could not be used as a whole), and the warning code `provider_chunks_rejected` counts them (#353),
+  and `unplaced_ranges`, present only when there is any: the stretches where the recogniser wrote
+  words that no segment holds (a rejected segment's words, which the warning
+  `provider_segments_rejected` counts without a time), which a search does not count as
+  transcribed (#359);
 - `transcript-retranscribe-data.schema.json` â the `data` member of a complete
   `transcript.retranscribe` result: the new local-ASR revision, the requested range,
   how many segments the run recognised (P07 increment 3b) and `job`, the recoverable
@@ -191,7 +195,9 @@ These files are the machine-readable public v1 boundary:
   superseded, inherited provenance and carried segments and, since 0.2.1 and only when there
   is any, `carried_untranscribed`: what the superseded revision did not cover outside the
   range it replaced and an inherited run or file would be counted over; only a chain with an
-  unusable chunk has any), and its text is untrusted
+  unusable chunk, or a run with unplaced words, has any, and `unplaced_ranges`, the stretches
+  of the record's own run where the recogniser wrote words that no segment holds, #359), and
+  its text is untrusted
   and unsanitized (P07).
 
 The `--events jsonl` stream is a sequence of events with a contiguous `sequence`

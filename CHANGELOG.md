@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### What changes, in plain English
+
+**If you transcribe a long recording (#359; found on two real recordings; in `0.2.0` and `0.2.1-rc.1`; meant for the second candidate of `0.2.1`).**
+VSift recognises speech in 30-second chunks that overlap by five seconds and joins them. Where two chunks met, the join could drop a whole segment whose words ran past the
+end of its neighbour, and the words after that end were then in neither chunk's output: a sentence broke off and resumed seconds later in the middle of a phrase, with no warning, and
+`search` still called the stretch transcribed. Now a segment that carries more than half a second that no kept segment covers is kept, at either edge of a chunk and along a chain of
+chunks, and a test over generated layouts holds the rule. The price is that where the two chunks wrote the overlap differently the same words can appear twice (VSift trims a repeat only
+where at least two leading words match exactly); a run in which nothing was lost is joined exactly as before. The cause was worked out from the times in the report and reproduced in the domain with
+them, not seen in the recogniser's own output of the recordings, which stay on the maintainer's machine; the fix has not been tried on them.
+
+**Words the recogniser wrote that VSift could not place.** The recogniser sometimes writes words whose times do not fit its audio; they are dropped and counted (`provider_segments_rejected`), and the count has no time.
+Now, when such a segment has a word in it, starts inside its audio and is followed there by another segment, the revision lists the stretch where its words may lie (`local_asr.unplaced_ranges`: from where it starts to where the next
+segment starts, an upper bound), less what kept words cover, if that is more than half a second; the run is still `complete`, and `search` lists the stretch as not transcribed unless a kept segment or a window found silent
+covers it. **This adds one optional member to the stored transcript record, and `0.2.0` and earlier and `0.2.1-rc.1` read a record that has it as damaged** (it is written only when there is any; a rejected segment with words
+is routine on real speech, so a session written by this version may hold one without anything having gone wrong; nothing written by an earlier release changes).
+
 ### Changed
 
 - **Work record, register and a known-issue note only; nothing that ships changes, and nothing is fixed: the findings of the maintainer's live testing on two real recordings, and the plan for a second candidate of `0.2.1`.** A new known limit,
@@ -14,6 +30,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   [L-150](docs/planning/known-limits.md#l-150) to [L-154](docs/planning/known-limits.md#l-154) (#365, #366, #367, #368, #370: how an agent reads a transcript, checks a long report, shortlists screens, asks a whole-recording question and asks for a frame
   while a transcription runs). The README and the installation guide carry a known-issue note for L-149 with the workarounds. `0.2.1-rc.1`, published on 2026-10-10 under `next`, is superseded: the maintainer decided on 2026-10-11 to put #359 and the larger findings into
   `0.2.1` and to cut a second candidate, `0.2.1-rc.2`; the plan ([`release-0.2.1.md`](docs/planning/release-0.2.1.md)) lists what it needs and the decisions still open, among them the version number.
+- **`merge_chunks` (domain, [ADR 0017](docs/decisions/0017-local-asr-through-whisper-cpp.md), note of 2026-10-11).** A guard between rules 2 and 3 restores every segment that rules 1 and 2 dropped whose time is covered by no kept
+  segment beyond `SEAM_COVERAGE_TOLERANCE_MICROS` (0.5 s, the edge margin, the largest value that cannot let speech beyond a window's edge be taken for a copy); `MergedTranscript` and `ChunkSegments` gained `unplaced`, `ValidatedChunk`
+  gained `unplaced()`, `AsrTranscription` gained `unplaced`, and a revision gained `unplaced()` and the parts field `unplaced` (a new `TranscriptRevisionParts` field; these are types of the internal crates, which the `vsift` engine does not re-export).
+- **Contract (additive, v1).** The revision summary's `local_asr` gained `unplaced_ranges` (only when there is any); the stored record gained `unplaced_ranges` (only when there is any); the warning `provider_segments_rejected` has new fixed
+  prose in the envelope when the revision lists such a stretch (the typed warning, its code and its count are unchanged); `search` lists such a stretch in `untranscribed_ranges`. New example
+  `schemas/v1/examples/transcript-retranscribe.unplaced.json`. No new code, reason or outcome: the published `untranscribed_range` is reused, so the agent skill (frozen) needs no change.
+- **Tests.** The issue's timings as a domain test, its mirror at a right edge, a chain of three chunks, a segment longer than the overlap that starts at a window edge, the margin at 0.4 s and 0.6 s, the tolerance found by search,
+  a property over generated chunk layouts (nothing a chunk heard is lost, nothing invented, a run that lost nothing merges as before, what is reported unplaced is uncovered), the same for the stretches of unplaced words
+  (validation, merge, revision record, coverage, chains of runs in the application's invariant test, contract, record, fuzz seed, human snapshot). The opt-in real-tool stage `p07_local_asr_multi_chunk_seam` also holds the 9.25 s sentence
+  that starts at the second chunk's window to the rule; **it needs the real tools and was not run here.**
 
 For the second candidate of `0.2.1` (the maintainer's decision of 2026-10-11). Nothing here is published, and the register entries stay open until the release.
 

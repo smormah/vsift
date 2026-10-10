@@ -91,6 +91,17 @@ you already have can supply it (`vsift ingest <video> --transcript <file>`). If 
 command fails instead, and says why
 ([troubleshooting](troubleshooting.md#missing_capability-a-tool-or-model-is-missing)).
 
+**Where two chunks meet, and words the recogniser wrote that VSift could not place (0.2.1 and later,
+[L-149](../planning/known-limits.md#l-149)).** The recogniser works on 30-second chunks that overlap by five seconds
+and VSift joins them. Up to `0.2.0` and `0.2.1-rc.1` it could drop the end of a sentence where two chunks met, with no
+warning, and `search` still called the stretch transcribed; it no longer does: whatever a chunk heard that no kept
+words cover (more than half a second of it) is kept, even if that means the same words appear twice, because a
+repeat you can see is better than a hole you cannot. Separately, the recogniser sometimes writes words whose times do
+not fit its audio (an empty or backwards range, say). Those words are dropped and counted (`provider_segments_rejected`),
+and when one sits between two things the recogniser did place, the result lists the stretch where it may lie under
+`Words the recogniser wrote that no segment holds may lie in these stretches`. The run is still `complete`, because it read
+everything; but `search` lists that stretch as not transcribed, so a word said there cannot be found and you are told.
+
 **Expect mistakes.** Recognition is a machine's best guess, tested here on a synthetic voice only. It can
 mishear names and numbers and does worse with noise ([limits](limits.md)). Search for a number
 the way it is written and also the way it might be misheard, and check anything you will rely on against

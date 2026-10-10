@@ -216,6 +216,16 @@ recognition. Nothing was committed, the job is marked failed and not resumable, 
 starts it from the beginning. (A recording in which only a stretch or two fail is not this: it finishes as `partial`,
 with those stretches listed as not transcribed. Before `0.2.1` a single such stretch failed the whole run.)
 
+**A sentence breaks off where two 30-second chunks meet and carries on in the middle of a phrase, or `search` is `partial`
+for a stretch of a recording whose run was `complete`.** The first is the defect of [L-149](../planning/known-limits.md#l-149) in `0.2.0` and
+`0.2.1-rc.1`: the transcript lost the end of a copy at a join and `search` called the stretch transcribed. Upgrade and
+run `vsift transcript retranscribe` again over that part (`--from` and `--to` a minute either side); the new run keeps
+every word either chunk heard and may repeat a few where the chunks wrote the overlap differently. The second is the
+stretch the revision lists under `local_asr.unplaced_ranges` (in `vsift transcript get`, as `Words the recogniser wrote
+that no segment holds may lie in these stretches`): the recogniser wrote words there whose times could not be placed,
+so VSift dropped them and says where they may lie. Transcribing just that stretch again may cover it (the audio is then
+cut at other points), and a transcript file you supply can (`vsift ingest <video> --transcript <file>`).
+
 ## `INTEGRITY_FAILURE`: what is stored is not what VSift wrote
 
 Two causes cover nearly every case.

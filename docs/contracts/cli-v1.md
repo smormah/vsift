@@ -649,6 +649,56 @@ record as damaged** (`INTEGRITY_FAILURE`). After the run above, a `retranscribe 
 them. The search can still say less than the runs read (a run none of whose text a revision carries is not counted), never
 more. The decisions are recorded in [ADR 0017](../decisions/0017-local-asr-through-whisper-cpp.md), note of 2026-10-10.
 
+**Where two chunks meet, nothing a chunk heard is lost (since `0.2.1`, #359,
+[ADR 0017](../decisions/0017-local-asr-through-whisper-cpp.md), note of 2026-10-11).** Chunks are 30-second windows that
+overlap by five seconds, and the run merges what each recognised into one transcript. Up to `0.2.0` and `0.2.1-rc.1` the merge
+could drop a segment whole because the neighbouring chunk had a segment that spanned its midpoint, although the dropped
+one ran past the neighbour's end (into audio only its own chunk heard) or began before it; the words in the part the kept
+segment did not have were then in no segment, and `search` still listed the stretch as transcribed. **The rule now**, in one
+sentence: every instant of every segment that any chunk's validated output holds is covered by a kept segment, but for at most
+half a second in one stretch (the tolerance, `SEAM_COVERAGE_TOLERANCE_MICROS`, which is the edge margin and the largest value that
+cannot let speech beyond a window's edge be taken for a copy), or the words are repeated by a kept segment (the existing rule that
+removes a seam duplicate). A dropped segment that carries more than that is **restored**, whole, with its own range and
+alignment; where the two chunks wrote the overlap with the same leading words (two or more, exactly), the repeated words are
+trimmed from the later copy and counted under `seam_duplicates_removed`, as before, and where they wrote it differently the same
+words are in the transcript twice: **a repeat is visible, a hole is not**, so the fix errs towards repeats. A run in which the
+earlier rules lost nothing beyond the tolerance is merged exactly as before (a test checks that against the earlier rules over
+generated layouts), so its segments, warnings and stored record are unchanged. Nothing new is reported for what the merge
+restores, because nothing is missing: there is no new warning, outcome or reason for it.
+
+**Words the recogniser wrote that no segment holds (since `0.2.1`, #359).** A segment whose times cannot be placed in its audio is
+rejected (`provider_segments_rejected`), as before; the count carries no time, so a reader could not tell where words may be
+missing. When a rejected segment (one with a letter or digit in its text) starts inside its chunk's audio and another segment of the
+chunk starts after it inside the audio, **the stretch from the rejected segment's start (the earlier of its two times, if it is
+reversed) to the start of the next segment is where its words may lie**: an upper bound, because the words took part of it. The run
+lists such a stretch, less everything any kept segment of any chunk covers, **if what is left is longer than the tolerance**, as the
+revision's `local_asr.unplaced_ranges` (`{from_us, to_us}`, in start order, merged, at most 1,024; present only when there is any, in
+the revision summary of every command that presents one, so `transcript retranscribe`, `job resume`, `transcript get` and `search`).
+A rejected segment with no letter or digit, one that starts at or after its audio's end (the recogniser works in a window
+padded to 30 s and what it writes there is not about the audio), and the last segment of a chunk (nothing after it bounds the
+words, and the overlap exists for what lies at a chunk's end) are only counted, as before. **The run's status is not changed:**
+it is `complete`, `coverage` is `null`, and `data.untranscribed_ranges` is absent, because the run read everything; the changed
+warning prose says what the list means. A later `search` of the revision **does not count such a stretch as transcribed**: it lists it in
+`transcript_coverage.untranscribed_ranges` and in the envelope's `coverage` with the published reason `untranscribed_range`
+(status `partial` for a search whose range includes it), unless a segment of the revision covers it (its own words, or earlier
+text it kept) or a window the run found silent does; a search of a range that does not include it is as complete as before. A
+later retranscription far from the stretch keeps it untranscribed by the same record as a part some run could not read
+(`carried_untranscribed`, above); one over the stretch replaces it with what it reads. When the revision has such a stretch,
+the warning `provider_segments_rejected` has this fixed prose in the envelope's `warnings` (in place of the plain one):
+"Some recognised segments had times outside their audio and were not used, and for some of them the recogniser wrote words that no
+kept segment holds. The revision lists the stretches where those words may lie (local_asr.unplaced_ranges, an upper bound: the
+words took part of each), and a search counts them as untranscribed, so a word said there cannot be found. Transcribing just that range
+again (transcript retranscribe with --from and --to) cuts the audio at other points and may cover it, and a transcript file you
+already have can supply it: open the video with ingest --transcript."; example
+[`transcript-retranscribe.unplaced.json`](../../schemas/v1/examples/transcript-retranscribe.unplaced.json). A revision with none is
+presented exactly as before. **Rolling back:** the stored record has the optional member `unplaced_ranges`
+([`bundle-transcript-record.schema.json`](../../schemas/v1/bundle-transcript-record.schema.json)), written only when there is
+any; `0.2.0` and earlier, **and `0.2.1-rc.1`**, read a record that has it as damaged (`INTEGRITY_FAILURE`), and a chain whose
+earlier revision had one may also record `carried_untranscribed`, which they read as damage too. Unlike an `unusable` chunk
+(which failed the run before), a rejected segment with words between two segments is routine on real speech, so a session written by
+this version may hold the member without anything having gone wrong. Use the newer version, or discard the session; nothing
+written by an earlier release is changed.
+
 **The run fails only when most of the chunks the recogniser answered are unusable** (more than half; chunks that were
 never given to it, silent or without audio, are not counted; a lone answered chunk that is unusable fails, one of two
 does not). The failure is below. The run stops as soon as the verdict cannot change, so a recogniser that answers with
@@ -683,7 +733,7 @@ transcript: see the unusable chunk above) and, since P10 PR 2, `job` (below). A 
 `local_asr`, `sidecar: null`, `local_asr` (provider and model by SHA-256, the pinned
 profile, decoding profile `r0-v1`, chunk plan, threads, audio stream, covered range and
 chunk counts: `transcribed_chunks`, `silent_chunks`, `no_audio_chunks` and, only when not zero,
-`unusable_chunks`), `supersedes`, `replaced_range` and `carried_segment_count`. A local-ASR
+`unusable_chunks`, and, only when there is any, `unplaced_ranges`), `supersedes`, `replaced_range` and `carried_segment_count`. A local-ASR
 segment has `alignment` with its chunk, the chunk's decoded audio range, the provider's
 chunk-relative times, whether the end was trimmed, and the recognizer; `cue` is `null`
 and confidence is the mean token probability, `provider_uncalibrated` (example
@@ -1320,7 +1370,11 @@ and `reasons` holds distinct identifiers (`untranscribed_range`, plus
 `gap_list_truncated` beyond 100 gaps). Such a result has status `partial`, the fixed
 warning `Part of the searched range has no transcript, so words said there cannot be
 found; ...`, and exits 0 like any supported partial result. A complete search has
-`coverage: {"truncated": false, "gaps": [], "reasons": []}`.
+`coverage: {"truncated": false, "gaps": [], "reasons": []}`. Since `0.2.1` (#359) a stretch
+that the revision lists in `local_asr.unplaced_ranges` (words the recogniser wrote that no
+segment holds, above) is in `untranscribed_ranges` and not in `transcribed_ranges`, unless a
+segment of the revision, or a window the run found silent, covers it: the window the run
+transcribed does not.
 
 **Paging.** Pass `next_cursor` back with the same session, query (any spelling that
 normalises to the same words), range and revision. It is bound to the revision, the

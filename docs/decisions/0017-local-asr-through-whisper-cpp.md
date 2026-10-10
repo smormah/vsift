@@ -616,3 +616,116 @@ segment beside kept ones it is kept out, and with only rejected segments the chu
 the test set stands). The kept-text rule has no test over a real decode: the engine's opt-in tests that decode real speech do not exercise it. The chain test's count of what was read is the author's
 reading of what a run read, independent of the code it checks but not of the rules; and no session written by `0.2.0` with several revisions was read by this code, only the rule that a record with no
 `carried_untranscribed` is read as before. The rule's choice for text over audio the run read as empty (kept) is a judgement, not a measurement.
+
+## 2026-10-11 note: merging chunks can no longer drop speech at a seam, and words that no segment holds are reported (#359)
+
+**Proposed for the maintainer to confirm by merging this change.** It supersedes the claim, in the 2026-09-25 note and in the merge's own comment, that a segment cut by a chunk edge may be
+replaced by a neighbour's segment that spans its midpoint "so speech is never lost" (a segment that spans the midpoint can end before the cut one does), and it adds to section 3 (the seam
+merge). It is meant for the second candidate of `0.2.1`; `0.2.0` and `0.2.1-rc.1` are affected.
+
+### What happened
+
+(Issue #359.) On two real recordings, which stay on the maintainer's machine (a 17:34 spoken walkthrough, 42 chunks, 171 segments, and the 34:36 lecture of #353),
+a sentence broke off at the end of one chunk's last kept segment and resumed seconds later in mid-phrase, with no warning, while `search` reported the whole video transcribed. In the first row of the
+report: the earlier chunk (window 0 to 30 s) ends with a segment 22.32 to 29.50 s, which ends exactly 0.5 s before its window does, so the edge margin (`SEAM_EDGE_MICROS`, 0.5 s) does not call it cut; the later
+chunk (window 25 to 55 s) starts with 25.00 to 32.44 s, which starts at its window's edge and so is cut. Rule 2 asks whether the earlier chunk has an uncut segment that spans the cut one's midpoint
+(28.72 s); it has, so the later segment was dropped whole and the earlier one kept, and the 2.94 s from 29.50 to 32.44 s, past the end of the earlier segment and in audio the earlier chunk never heard
+beyond 30 s, were in neither chunk's output. The mirror at a right edge is the same with the roles swapped. Rule 1 could do the same (a copy is dropped when its owner has *any* segment that overlaps it, however little).
+**The cause is inferred** from the timings in the report and from the code: the raw output of the chunks concerned is not available. It is reproduced, though: the issue's own timings, run through the merge as it was, give
+exactly the loss the report names (the new test fails on the old rules), so the mechanism is established even if the recogniser behaviour that produced those timings is not.
+
+A second thing in the same report: rejected segments (`provider_segments_rejected`: 3 of 264 and 8 of about 179 text segments on the two recordings) are dropped with a count and no time, so each leaves a
+possible hole that no result reports.
+
+### The decisions
+
+**1. A guard on rules 1 and 2: a dropped segment that carries speech no kept segment has is restored.** The maintainer's notes recommended, for a patch release, Option A (a neighbour segment replaces
+a cut one only when it also reaches the cut segment's far end within a small tolerance, with rule 3 trimming the repeated leading words) over Option B (decide ownership by time and keep only the later
+segment's words after the earlier one's end). **Option B was not taken because the data it needs are not kept**: a `ProviderToken` holds a token's kind and probability and no time, so the words after a
+given instant cannot be told apart in a segment (whisper.cpp's own output has an offset for each token, which the adapter does not read and the checkpoint does not store; reading and storing them is a larger change to an
+adapter and a stored checkpoint, and trusting per-token times a larger risk, for a patch release). **Option A is realised in its global form.** Its local form (look at the one neighbour segment that was chosen) would still have to be
+backed by a check of everything kept, since that neighbour may not be all that covers the cut segment, and rule 1 drops by a different test altogether. So after rules 1 and 2 the merge asks, for each
+segment they dropped, in start order and against a set that grows as segments are restored: is more than the tolerance of its time, in one stretch, covered by no kept segment? If so it is restored,
+whole, with its own range and alignment (`restore_lost_speech`). Rule 3 then trims the leading words that the two copies share (two or more, exactly: `MIN_SEAM_DUPLICATE_WORDS`), as before. This is
+Option A with its test applied to what is kept and not to one neighbour; it handles both edges, a chain of three or more chunks, a segment that spans the whole overlap, and rule 1's drops, by one rule. Its properties, each held by a test:
+
+- **Nothing a chunk heard is lost beyond the tolerance, and nothing is invented.** Over generated layouts (up to five chunks of the R0 plan, segments hugging the window edges, rejected segments among them) every
+  validated segment of every chunk is covered by kept segments except for stretches no longer than the tolerance, every kept segment is a validated segment, and the output is in start order
+  (`no_layout_of_chunks_loses_speech_at_a_seam`). A copy that rule 3 drops has its words in the segment it repeats, so the guarantee is stated for time and, where rule 3 acts, for words (rule 3 decides about words, not
+  time). A fixed sweep over the same layouts (`the_generated_layouts_reach_the_guard`) shows that the guard acts in a real share of them and leaves a real share alone, so the property is not vacuous; and with the guard
+  disabled the property, the sweep and seven other new tests fail (checked by mutation).
+- **A run that lost nothing is merged exactly as before.** The property also compares `merge_chunks` with rules 1 to 3 alone whenever the guard restores nothing, which is every layout in
+  which rules 1 and 2 lost at most the tolerance; so such a run's segments, warnings and stored record are unchanged. (A local Option A would not have this property: it keeps a segment whenever its
+  neighbour falls short, even where another kept segment covers what the neighbour does not.)
+- **It errs towards repeats.** Where the two chunks recognised the overlap with the same leading words, rule 3 trims the later copy and counts `seam_duplicates_removed`; where they wrote it differently
+  (another word, another order) the words are in the transcript twice. A repeat is visible; a hole is not. Rule 3 still compares only the last kept segment of the earlier chunk with the first of the later
+  one, and only exact leading words: the issue's secondary point 3 (finding repeats that differ by a word) is **not** done, and a recording with many seams will have repeats that a reader can see. It is a limit to register,
+  not a regression: before this change the same overlaps lost words.
+
+**The tolerance, `SEAM_COVERAGE_TOLERANCE_MICROS`, is 0.5 s, and it is the edge margin, derived.** (The constant's rustdoc has the derivation.) The earlier chunk's segment that stands for a cut one is not
+itself cut, so it ends at least one margin before its window's end `W`; whatever the dropped segment carries beyond it is tolerated for at most the tolerance, so it ends no later than `W - margin + tolerance`.
+That is at or before `W`, the audio the earlier chunk heard too, exactly when the tolerance is at most the margin; one microsecond more would let a segment that runs past `W`, into audio only the later chunk
+heard, lose the part beyond it. So the margin is the largest tolerance with that guarantee. A test finds it by binary search over the R0 plan, at both edges
+(`the_tolerance_is_the_largest_that_never_loses_speech_beyond_a_window_edge`), so a change to the margin moves it with it, and a second test holds the boundary (exactly the tolerance is left, a microsecond more is restored).
+It is also all that is needed, because the margin already decides how near its window's end a recogniser's last segment may be before it is called cut. The overlap (5 s) does not enter the bound: what limits what a
+neighbour heard is its window's edge, and the bound is the same for every plan. **What it costs:** up to half a second at the end of a dropped copy can be words the kept segment's recogniser did not write down (one word at a
+normal speaking rate), with no sign; the old rules lost that and everything after the neighbour's end with it. The 0.58 s hole of recording A (one missing word, which the screen showed) is of that size, which is why the
+tolerance is stated as the size of what is knowingly left and not as zero: zero would restore nearly every copy, because two recognisers' ends for one sentence are rarely equal, and the repeats would swamp the reader.
+
+**2. Words that no segment holds are reported with their time, without calling the run partial.** The options weighed (the contract is additive only and the frozen skill copies gap reasons from a closed list, so
+the published `untranscribed_range` is reused and no new reason word exists):
+
+- **(a) Every uncovered rejected stretch is a coverage gap and the run is `partial`.** One channel, the same as #353, and the skill already handles it. But rejected segments with words are routine on real
+  speech (both recordings had some), so `partial` would be the usual answer to a transcription and a status that is nearly always set says little; and a stretch is an upper bound (below), often a
+  pause with one short word in it, so the alarm is out of proportion. A re-run gives the same.
+- **(b) The run stays `complete`; the stretches are listed with their times in a new optional member, and a search never counts them as transcribed.** The user of `retranscribe` is told where, once; the
+  place where an agent reads "no hit" as "not said" (`search`) is where the stretch is untranscribed and the result `partial`. **This is what is implemented.**
+- **(c) A duration threshold.** Used inside (b): a stretch no longer than the tolerance is not recorded. The figure is the one the merge already leaves uncovered at the end of a kept copy (it would be inconsistent to report half a second
+  of rejected words while leaving that much of a kept segment silently), so no second constant has to be defended; it is a convention for consistency with the guard and **not a measurement of how long junk is**. It removes the stretches of
+  a few hundred milliseconds that make up most of what "junk" would be, and not longer ones; a lost word of that length is not reported.
+
+*What a stretch is.* A rejected segment names a time its audio cannot hold, so it cannot say how long its words took. The recogniser wrote its segments in order, so words that start at `from` end before the next segment it
+wrote begins: the stretch runs from the earlier of the segment's two times (a reversed segment's end may be its true start) to the next segment's start in provider order, a marker included (it says that what follows is not speech).
+It is an upper bound, not a measurement. It is listed only when the segment has a letter or digit in its text (punctuation is not a word), starts inside its chunk's audio (words placed after the audio ended are not about the audio:
+the recogniser works in a window padded to 30 s, and by the same reasoning as a trimmed end, "an end past the audio says nothing about the audio's content"), and is followed there by another segment (a last segment has nothing to
+bound its words, a stretch to the audio's end would report a silent tail as untranscribed, and what lies at a chunk's end is also in the next chunk's first seconds, which is what the overlap is for). **Nothing is said for the others, and
+they stay counted: this is a limit and not a claim that nothing was lost.** The real rejected segments of the two recordings are probably in good part of the kinds left unreported (a segment placed after its audio, a stray last word; their
+shapes are unknown), in which case this reports little. It was chosen to say only what the data allow, and the cost is that a hole of those kinds remains a count with no time.
+
+*What is recorded and where.* `merge_chunks` returns the stretches, less what any kept segment of any chunk covers, where what is left is longer than the tolerance (`MergedTranscript::unplaced`, at most 1,024; where there would be more
+the nearest are joined, which marks more and never less). They are stored on the revision (`TranscriptRevision::unplaced`, the record member `unplaced_ranges`), validated on reading (in order, merged, inside the source and inside the range the
+run covered; an import has none), presented in the revision summary (`local_asr.unplaced_ranges`) and in the human text, and **counted by coverage**: a stretch is not covered by the window the run read, only by a segment of the revision (its own
+words, or earlier text it kept) or by a window the run found silent (words written over audio with no signal are the recogniser's, not a loss). The rule of #353 that keeps a part untranscribed through later runs
+(`carried_untranscribed`) needs nothing new: a later revision records, as before, every part that its superseded revision lists as untranscribed and that a window or file it carries would be counted over, and that now includes these stretches. A test
+(`no_chain_of_runs_makes_search_claim_what_no_run_read`, now with a chunk that writes such words) checks it for every chain of up to three retranscriptions against an independent count.
+
+*The recommendation* is (b) with (c), as implemented. (a) is a small change if the maintainer prefers a single channel at the cost of an almost always `partial` answer: `finish_retranscription` would add the stretches to the gaps.
+**The weakest points of (b):** a `search` over a whole recording lists every such stretch as untranscribed, and its fixed warning ("Run transcript retranscribe to transcribe them") does not say that a re-run may give the same
+stretches; and how many real recordings have how many stretches is **not known** (no recording was used), so the alarm in `search` may be larger than hoped.
+
+**3. Compatibility, stated exactly.** A transcription whose chunks have no seam loss and no uncovered rejected stretch is stored and presented byte for byte as before (the F01 frozen examples and records are unchanged; the property above
+holds the merge). The new record member `unplaced_ranges` is optional, written only when non-empty and validated on read; the presentation's `local_asr.unplaced_ranges` is written only when non-empty; `ChunkSegments`,
+`MergedTranscript`, `ValidatedChunk`, `AsrTranscription`, `TranscriptRevisionParts` and `TranscriptRevision` each gained a member (types of the internal crates, which the `vsift` engine does not re-export; the published JSON contract is
+additive). **Rolling back.** `0.2.0` and earlier, **and `0.2.1-rc.1`** (all read a stored record strictly), read a record that has `unplaced_ranges` as damaged (`INTEGRITY_FAILURE`), and so a revision whose chain records
+`carried_untranscribed` because of it. Unlike the `unusable` chunk of #353, which failed the run on the release before, **a rejected segment with words between two segments succeeded on `0.2.0`**: so a session written by this version may
+hold the member without anything having gone wrong, and rolling back to `0.2.0` or `rc.1` makes such a session unreadable. Nothing already written is rewritten. Use the newer version, or discard the session. This is the one stored-format
+addition of the change; a design with none (the stretches derived when read) was looked for and does not exist, because the times of a rejected segment are in no stored record.
+
+### What does not change
+
+The chunk plan, the output rules and which segments are rejected (a rejected segment is still counted exactly as before), the quarter rule, the unusable-chunk channel, the failure codes, the published gap reason
+(`untranscribed_range`), the agent skill (frozen), every warning kind, code and count, the checkpoint format, and the status of a run (`complete` unless a chunk was unusable). Rules 1 to 3 are unchanged; the guard is a step
+between 2 and 3.
+
+### Evidence, and what is not proven
+
+Tests at the lowest layer that shows each rule: the domain (the report's first row with its own timings, its mirror at a right edge, a chain of three chunks, a segment longer than the overlap that starts at a window edge and one 0.4 s and 0.6 s after it,
+the edge margin at 0.4 s and 0.6 s, the tolerance by search and at its boundary, the property over generated layouts and its sweep, the span set against list arithmetic, the stretches of a rejected segment and the cases that mark nothing, the merge's reporting,
+the revision's validation and its coverage), the application (chains of runs), the record (round trip, schema, forged forms, the fuzz seed), the contract (the new example, produced by the application's own run over a stand-in recording; a `search` that is
+`partial` over a stretch; the unchanged frozen examples) and the human text with a snapshot. The opt-in real-tool stage `p07_local_asr_multi_chunk_seam` holds the 9.25 s sentence that starts at the second chunk's window to the rule, for a binary from the second
+candidate on (an older published binary is not held to it).
+
+**Not proven:** no real recording was used, and **the opt-in real-tool stage was not run in the session that wrote this** (it needs ffmpeg, whisper.cpp and a model). The cause is a reading of the timings, reproduced in the merge; that it is what happened on the
+two recordings is not shown, and a listener's check of the holes on them (the issue's last item) has not been done and stays with the maintainer. The tolerance is derived, not measured; how many repeats real recordings gain from the guard is unknown
+(a synthetic corpus of short sentences does not show seams); the share of real recordings that have unplaced stretches, and their sizes, are unknown, and taking "to the next segment" as the stretch is a reading of what the data can say, not an
+observation of what the recogniser does. The guard's work is linear in the segments with a logarithmic factor (a tree of spans, no list rebuilt per segment); a test merges 128 chunks of dense speech and holds the rule, and one unoptimised run at the bound of 1,024 chunks (256,000 synthetic segments) took 7 s, 1.3 s of it the guard; nothing was measured on real output.

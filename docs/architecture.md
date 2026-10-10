@@ -198,7 +198,9 @@ re-derive every segment's range. A revision spliced from the one it supersedes a
 holds `inherited` provenance and carried segments (`carried_from`), each checked
 against the provenance that produced it, and may hold no segment when the run heard
 no speech. The domain `asr` module owns chunk planning, provider-output validation,
-silence and the seam merge, and `TranscriptRevision::snap_to_segments` owns how a
+silence and the seam merge (whose guard restores any segment that the earlier rules dropped
+and that carries speech no kept segment has, and which reports the stretches where rejected
+words may lie, #359), and `TranscriptRevision::snap_to_segments` owns how a
 bounded range widens to whole segments. The application's `transcribe_range` drives
 the `SpeechAudioSource` and `SpeechRecognizer` ports, refuses unpinned models and
 checks the recognizer's identity before and after a run; `build_asr_revision` splices
