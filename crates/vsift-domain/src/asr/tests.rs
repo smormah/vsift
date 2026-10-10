@@ -549,18 +549,39 @@ fn a_chunk_whose_every_segment_is_rejected_is_unusable() -> TestResult {
     Ok(())
 }
 
-/// The quarter rule applies from `MIN_SEGMENTS_FOR_REJECTION_RATIO` text
-/// segments, and below it the rejected ones are dropped and counted. At the
-/// minimum the rule is exactly what it always was.
+/// Below `MIN_SEGMENTS_FOR_REJECTION_RATIO` text segments one rejected segment
+/// is dropped and counted and two are not tolerated; from the minimum on the
+/// rule is the quarter rule it always was.
 #[test]
 fn the_quarter_rule_applies_from_four_text_segments() -> TestResult {
     assert_eq!(MIN_SEGMENTS_FOR_REJECTION_RATIO, 4);
-    // Below the minimum: kept, whatever the share, unless nothing is kept.
+    // Below the minimum: one rejection is dropped and counted, whatever the
+    // share, and two or more are not tolerated.
     assert_eq!(judged(&[true, false])?, Ok((1, 1)));
     assert_eq!(judged(&[false, true])?, Ok((1, 1)));
     assert_eq!(judged(&[true, true, false])?, Ok((2, 1)));
-    assert_eq!(judged(&[false, true, false])?, Ok((1, 2)));
-    assert_eq!(judged(&[false, false, true])?, Ok((1, 2)));
+    for two_rejected in [[false, true, false], [false, false, true]] {
+        assert_eq!(
+            judged(&two_rejected)?,
+            Err(ProviderOutputError::TooManyRejectedSegments),
+            "{two_rejected:?}"
+        );
+    }
+    // A valid segment added to a chunk that is not usable does not make it
+    // usable, and one added to a usable chunk does not make it unusable (the
+    // rule was not monotonic once: `[rejected, ok, rejected]` was kept and
+    // `[rejected, ok, rejected, ok]` failed it).
+    assert_eq!(
+        judged(&[false, true, false, true])?,
+        Err(ProviderOutputError::TooManyRejectedSegments)
+    );
+    assert_eq!(
+        judged(&[false, true, false, true, true])?,
+        Err(ProviderOutputError::TooManyRejectedSegments)
+    );
+    assert_eq!(judged(&[false, true, true])?, Ok((2, 1)));
+    assert_eq!(judged(&[false, true, true, true])?, Ok((3, 1)));
+    assert_eq!(judged(&[false, true, true, true, true])?, Ok((4, 1)));
     // At the minimum one rejection is exactly a quarter and is tolerated; two
     // are not.
     assert_eq!(judged(&[true, true, true, false])?, Ok((3, 1)));
@@ -595,44 +616,140 @@ fn the_quarter_rule_applies_from_four_text_segments() -> TestResult {
     Ok(())
 }
 
-/// Why the minimum is 4: it is the smallest count in which one rejection is no
-/// more than the share the rule allows, so it is where the rule starts to
-/// weigh a share and one below it is where a single rejection already exceeds
-/// it. Moving either constant without the other breaks this.
+/// The rule says: every segment rejected is unusable; otherwise more than one
+/// rejected is unusable below the minimum and more than a quarter from it on.
+/// The same rule in closed form, to compare it with.
+const fn closed_form(segments: u32, rejected: u32) -> bool {
+    rejected == segments || (rejected >= 2 && rejected * 4 > segments)
+}
+
+/// The quarter rule alone, as it was before #353.
+const fn quarter_rule_alone(segments: u32, rejected: u32) -> bool {
+    rejected == segments || rejected * 4 > segments
+}
+
+/// #353, monotonic: for every segment count and rejected count up to sixteen,
+/// another valid segment never turns a usable chunk unusable, another
+/// rejection never turns an unusable chunk usable, and neither does a rejected
+/// segment that is added (it raises both counts). The rule was once not
+/// monotonic below the minimum: two rejections were kept among three segments
+/// and failed among four.
 #[test]
-fn the_minimum_is_the_smallest_count_that_tolerates_one_rejection() {
-    let shares_one_rejection = |segments: u32| segments >= MIN_SEGMENTS_FOR_REJECTION_RATIO;
-    for segments in 1..=64_u32 {
-        // Under the old rule alone, one rejection beside kept segments fails
-        // exactly when it is more than a quarter of them.
-        let more_than_a_quarter = 4 > segments;
-        assert_eq!(
-            shares_one_rejection(segments),
-            !more_than_a_quarter,
-            "{segments} segments"
-        );
+fn the_rejection_rule_is_monotonic_for_every_count_up_to_sixteen() {
+    let rule = super::rejections_make_chunk_unusable;
+    for segments in 1..=16_u32 {
+        for rejected in 0..=segments {
+            let unusable = rule(segments, rejected);
+            // One more valid segment.
+            if segments < 16 {
+                assert!(
+                    unusable || !rule(segments + 1, rejected),
+                    "{rejected} of {segments} is usable but {rejected} of {} is not",
+                    segments + 1
+                );
+            }
+            // One valid segment turned into a rejected one.
+            if rejected < segments {
+                assert!(
+                    !unusable || rule(segments, rejected + 1),
+                    "{rejected} of {segments} is unusable but {} of {segments} is not",
+                    rejected + 1
+                );
+            }
+            // One more rejected segment.
+            if segments < 16 {
+                assert!(
+                    !unusable || rule(segments + 1, rejected + 1),
+                    "{rejected} of {segments} is unusable but {} of {} is not",
+                    rejected + 1,
+                    segments + 1
+                );
+            }
+            // The closed form is the rule.
+            assert_eq!(unusable, closed_form(segments, rejected));
+        }
+    }
+    // Nothing said is not a rejection.
+    assert!(!rule(0, 0));
+}
+
+/// What the rule tolerates, by segment count: the most rejected segments a
+/// chunk can have and still be usable. A single rejection never costs a chunk
+/// that has another segment; two cost it below eight segments; the share
+/// grows by one for every four segments after that.
+#[test]
+fn the_rule_tolerates_the_documented_number_of_rejections() {
+    let rule = super::rejections_make_chunk_unusable;
+    let tolerated = |segments: u32| {
+        (0..segments)
+            .rev()
+            .find(|rejected| !rule(segments, *rejected))
+            .unwrap_or(0)
+    };
+    let expected = [0, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4];
+    for (segments, expected) in (1..=16_u32).zip(expected) {
+        assert_eq!(tolerated(segments), expected, "{segments} segments");
+    }
+}
+
+/// Why the minimum is 4, found by search and not assumed: it is the smallest
+/// count from which the quarter rule alone (what #353 found failing sparse
+/// chunks) and the rule agree for every count above it. Below it the quarter
+/// rule alone tolerates no rejection at all, and the rule tolerates one. If the
+/// rule's boundary moves, this fails.
+#[test]
+fn the_minimum_is_where_the_quarter_rule_alone_starts_to_agree() {
+    let rule = super::rejections_make_chunk_unusable;
+    let agrees = |segments: u32| {
+        (0..=segments)
+            .all(|rejected| rule(segments, rejected) == quarter_rule_alone(segments, rejected))
+    };
+    let first_always_agreeing = (1..=64_u32)
+        .find(|from| (*from..=64).all(agrees))
+        .unwrap_or(u32::MAX);
+    assert_eq!(first_always_agreeing, MIN_SEGMENTS_FOR_REJECTION_RATIO);
+    // And what they differ in below it: one rejection.
+    for segments in 2..MIN_SEGMENTS_FOR_REJECTION_RATIO {
+        assert!(quarter_rule_alone(segments, 1), "{segments}");
+        assert!(!rule(segments, 1), "{segments}");
+        assert!(rule(segments, 2), "{segments}");
     }
 }
 
 /// Empty or marker-only text is removed and counted as a marker, never as a
-/// rejection, and does not count as a text segment: it cannot lift a chunk to
-/// the minimum.
+/// rejection, and does not count as a text segment: it can neither lift a
+/// chunk to the minimum nor dilute the share of rejections.
 #[test]
 fn a_text_that_is_a_marker_does_not_count_as_a_segment() -> TestResult {
     let planned = chunk(0, 0, 10 * SECOND)?;
     let mut blank = provider_segment(1_500, 2_500, "ignored")?;
     blank.text = None;
-    let marker = provider_segment(2_600, 2_900, "[BLANK_AUDIO]")?;
-    // One kept and two rejected text segments with two markers among them:
-    // three text segments, so below the minimum, and the kept one stays. Had
-    // the markers counted, four segments with two rejected would fail it.
-    let segments = vec![
+    // One kept and two rejected text segments, with five markers among them.
+    // Three text segments: two rejected are not tolerated below the minimum.
+    // Had the five markers counted, two of eight would be a quarter, which is
+    // tolerated, and the chunk would be kept.
+    let mut segments = vec![
         provider_segment(1_000, 1_400, "kept")?,
         blank,
-        marker,
+        provider_segment(2_600, 2_900, "[BLANK_AUDIO]")?,
+        provider_segment(2_950, 3_000, "(music)")?,
         provider_segment(3_000, 3_000, "empty range")?,
+        provider_segment(3_100, 3_200, "[Applause]")?,
+        provider_segment(3_300, 3_400, "[Music]")?,
         provider_segment(4_000, 3_000, "reversed")?,
     ];
+    assert_eq!(
+        validate_chunk_output(
+            &planned,
+            planned.window(),
+            planned.window(),
+            output(segments.clone())
+        ),
+        Err(ProviderOutputError::TooManyRejectedSegments)
+    );
+    // With only one rejection among them the chunk is kept, and the markers are
+    // counted as markers.
+    segments.remove(4);
     let validated = validate_chunk_output(
         &planned,
         planned.window(),
@@ -649,8 +766,8 @@ fn a_text_that_is_a_marker_does_not_count_as_a_segment() -> TestResult {
     assert_eq!(
         warnings,
         [
-            (TranscriptWarningKind::ProviderSegmentsRejected, 2),
-            (TranscriptWarningKind::NonSpeechMarkersRemoved, 2),
+            (TranscriptWarningKind::ProviderSegmentsRejected, 1),
+            (TranscriptWarningKind::NonSpeechMarkersRemoved, 5),
         ]
     );
     Ok(())
@@ -1821,6 +1938,57 @@ fn an_unusable_chunk_is_recorded_and_holds_no_segment() -> TestResult {
         TranscriptRevision::new(parts),
         Err(TranscriptRevisionError::OriginMismatch)
     );
+    Ok(())
+}
+
+/// #353: the gaps of a run are what its unusable chunks leave unread: the
+/// windows of the unusable chunks less the windows of every chunk that was
+/// answered (transcribed, silent or without audio), because the five seconds
+/// two neighbours share are read by whichever of them was answered.
+#[test]
+fn the_gaps_of_a_run_are_its_unusable_windows_less_the_answered_ones() -> TestResult {
+    let transcribed = |start: u64, end: u64| -> Built<AsrChunkOutcome> {
+        Ok(AsrChunkOutcome::Transcribed {
+            audio: range(start * SECOND, end * SECOND)?,
+        })
+    };
+    let unusable = |start: u64, end: u64| -> Built<AsrChunkOutcome> {
+        Ok(AsrChunkOutcome::Unusable {
+            audio: range(start * SECOND, end * SECOND)?,
+        })
+    };
+    // The plan of the test run is the windows 0-30, 25-55 and 50-70 s.
+    let none = run(&[
+        transcribed(0, 30)?,
+        transcribed(25, 55)?,
+        transcribed(50, 70)?,
+    ])?;
+    assert_eq!(none.unusable_gaps(), []);
+    // The middle chunk alone: both neighbours read their own five seconds of it.
+    let middle = run(&[transcribed(0, 30)?, unusable(25, 55)?, transcribed(50, 70)?])?;
+    assert_eq!(middle.unusable_gaps(), [range(30 * SECOND, 50 * SECOND)?]);
+    // The first chunk alone, its neighbour without audio still an answer.
+    let first = run(&[
+        unusable(0, 30)?,
+        AsrChunkOutcome::NoAudio,
+        AsrChunkOutcome::NoAudio,
+    ])?;
+    assert_eq!(first.unusable_gaps(), [range(0, 25 * SECOND)?]);
+    // A silent neighbour is an answer too: the shared seconds are not a gap.
+    let beside_silence = run(&[
+        unusable(0, 30)?,
+        AsrChunkOutcome::Silent {
+            audio: range(25 * SECOND, 55 * SECOND)?,
+        },
+        transcribed(50, 70)?,
+    ])?;
+    assert_eq!(beside_silence.unusable_gaps(), [range(0, 25 * SECOND)?]);
+    // Two unusable neighbours leave one gap, merged, with nothing inside it.
+    let both = run(&[unusable(0, 30)?, unusable(25, 55)?, transcribed(50, 70)?])?;
+    assert_eq!(both.unusable_gaps(), [range(0, 50 * SECOND)?]);
+    // Nothing answered: the whole range.
+    let all = run(&[unusable(0, 30)?, unusable(25, 55)?, unusable(50, 70)?])?;
+    assert_eq!(all.unusable_gaps(), [range(0, 70 * SECOND)?]);
     Ok(())
 }
 

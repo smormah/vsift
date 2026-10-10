@@ -1103,6 +1103,20 @@ impl TranscriptSegment {
     pub fn intersects(&self, window: TimeRange) -> bool {
         self.range.start() < window.end() && self.range.end() > window.start()
     }
+
+    /// Whether the segment lies wholly inside one of `windows`.
+    ///
+    /// This is the one place that decides which text of a superseded revision a
+    /// run that could not read part of its range keeps there
+    /// ([`AsrRun::unusable_gaps`], #353): the application keeps such a segment
+    /// when it builds the revision, the revision accepts it as carried when it
+    /// is validated, and coverage counts it as transcribed.
+    #[must_use]
+    pub fn lies_within_any(&self, windows: &[TimeRange]) -> bool {
+        windows
+            .iter()
+            .any(|window| window.start() <= self.range.start() && self.range.end() <= window.end())
+    }
 }
 
 /// Every field of a [`TranscriptRevision`], validated together.
@@ -1158,7 +1172,9 @@ impl TranscriptRevision {
     /// and a local-ASR segment's range must be its chunk's decoded start plus
     /// the provider's times (or the audio end when trimmed). A segment carried
     /// from an earlier revision is checked against that revision's inherited
-    /// provenance and must lie wholly outside the replaced range. Stored
+    /// provenance and must lie wholly outside the replaced range, or wholly
+    /// inside a part of it that the revision's own run did not re-transcribe
+    /// ([`AsrRun::unusable_gaps`]), where the run kept the text it had. Stored
     /// revisions are rebuilt through this constructor too, so a modified
     /// record cannot bypass the rules that produced it.
     ///
@@ -1184,6 +1200,13 @@ impl TranscriptRevision {
             run.validate_within(&parts.source_segment)?;
         }
         validate_inherited(&parts)?;
+        // The parts of the replaced range the run did not re-transcribe: text
+        // the superseded revision had wholly inside one is kept, so a carried
+        // segment may lie there (#353).
+        let kept_gaps = match &parts.provenance {
+            TranscriptProvenance::LocalAsr(run) => run.unusable_gaps(),
+            TranscriptProvenance::Imported { .. } => Vec::new(),
+        };
         let mut identities = HashSet::with_capacity(parts.segments.len());
         let mut carried_identities = HashSet::new();
         let mut previous_start = bounds.start();
@@ -1204,9 +1227,9 @@ impl TranscriptRevision {
                 None => &parts.provenance,
                 Some(carried) => {
                     if !carried_identities.insert(carried.segment.clone())
-                        || parts
-                            .replaced_range
-                            .is_none_or(|replaced| segment.intersects(replaced))
+                        || parts.replaced_range.is_none_or(|replaced| {
+                            segment.intersects(replaced) && !segment.lies_within_any(&kept_gaps)
+                        })
                     {
                         return Err(TranscriptRevisionError::InvalidCarriedSegment);
                     }

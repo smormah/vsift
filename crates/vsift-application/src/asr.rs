@@ -682,6 +682,12 @@ where
         // with garbage is therefore not run to the end of a long recording.
         let done = u32::try_from(completed).unwrap_or(u32::MAX);
         if let Some(failure) = gathered.failure(planned, done) {
+            // The identity check that closes every run comes first: a model or
+            // executable swapped during the run can answer with garbage, and the
+            // failure is then `model_changed`, not "the tool works" with a job
+            // that can no longer be resumed.
+            stop_if_cancelled(cancellation, AsrStage::RecognizerIdentity)?;
+            ensure_identity(recognizer, request.expected).await?;
             return Err(failure);
         }
     }
@@ -1134,12 +1140,17 @@ impl Assembled<'_> {
 /// With a [`RevisionSplice`] the result is a complete revision (D3): every
 /// segment of the superseded revision outside the replaced range is carried
 /// with its original text, timing and provenance, and the run's segments fill
-/// the range. Carried segments get new identities in this revision, so the
+/// the range, except where the run could not read the audio: a segment of the
+/// superseded revision that lies wholly inside a part of the range that the
+/// run left unread ([`AsrRun::unusable_gaps`]) is carried too, because a run
+/// that failed to read a stretch must not delete what the session already had
+/// there (#353). Carried segments get new identities in this revision, so the
 /// superseded revision's records stay valid and are never overwritten, and
 /// each names the revision and segment that first produced it
 /// ([`CarriedFrom`]). A run that recognised no speech still yields a revision
 /// (with no new segment and a [`TranscriptWarningKind::NoSpeechRecognised`]
-/// warning), so the attempt and its chunk outcomes are recorded.
+/// warning, unless some of its audio was unusable: it has not heard that there
+/// was none), so the attempt and its chunk outcomes are recorded.
 ///
 /// # Errors
 ///
@@ -1187,8 +1198,16 @@ pub fn build_asr_revision(
         ],
     ))
     .map_err(|_| TranscriptBuildError::Invalid(TranscriptRevisionError::InvalidIdentity))?;
+    let gaps = run.unusable_gaps();
+    let any_unusable = run
+        .chunks()
+        .iter()
+        .any(|record| matches!(record.outcome(), AsrChunkOutcome::Unusable { .. }));
     let mut warnings = transcription.warnings;
-    if transcription.segments.is_empty() {
+    // "No speech was recognised" is a statement about the whole range, so it is
+    // made only by a run that read all of it: a run that could not use its
+    // answer for some audio has not heard that there was none (#353).
+    if transcription.segments.is_empty() && !any_unusable {
         warnings.add(
             TranscriptWarningKind::NoSpeechRecognised,
             1,
@@ -1196,7 +1215,7 @@ pub fn build_asr_revision(
         );
     }
     let (mut assembled, inherited) = match request.splice {
-        Some(splice) => carried_segments(splice)?,
+        Some(splice) => carried_segments(splice, &gaps)?,
         None => (Vec::new(), Vec::new()),
     };
     assembled.extend(transcription.segments.into_iter().map(Assembled::Own));
@@ -1269,17 +1288,27 @@ fn identified_segments(
     Ok(segments)
 }
 
-/// The superseded revision's segments outside the replaced range, each naming
+/// The superseded revision's segments that the new revision keeps, each naming
 /// its originating revision and segment, and the provenance of every revision
 /// they originate in, in order of first use.
-fn carried_segments(
-    splice: RevisionSplice<'_>,
-) -> Result<(Vec<Assembled<'_>>, Vec<InheritedRevision>), TranscriptBuildError> {
+///
+/// Those are the segments outside the replaced range, and, inside it, the
+/// segments that lie wholly inside one of the run's `gaps`: the parts of the
+/// range no chunk transcribed or found quiet because the recogniser's answer
+/// for them was unusable (#353). A run that could not read a stretch must not
+/// delete the text the session already had there, so that text is kept as it
+/// was, with its original provenance; text inside a part the run did transcribe
+/// (or found silent) is replaced, as before, and so is a segment that reaches
+/// out of a gap into such a part, because the run's own text covers it there.
+fn carried_segments<'a>(
+    splice: RevisionSplice<'a>,
+    gaps: &[TimeRange],
+) -> Result<(Vec<Assembled<'a>>, Vec<InheritedRevision>), TranscriptBuildError> {
     let base = splice.base;
     let mut carried = Vec::new();
     let mut inherited: Vec<InheritedRevision> = Vec::new();
     for segment in base.segments() {
-        if segment.intersects(splice.replaced_range) {
+        if segment.intersects(splice.replaced_range) && !segment.lies_within_any(gaps) {
             continue;
         }
         let (origin, source) = match segment.carried_from() {

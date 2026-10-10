@@ -29,12 +29,18 @@
 //!   not covered: the report can understate coverage, never overstate it. That
 //!   holds for an unusable window of the revision's own run too: an earlier
 //!   revision's windows, which its replaced segments no longer back, are not
-//!   counted over it.
+//!   counted over it. What the revision does hold there is counted: a segment
+//!   it carries from the earlier revision that lies wholly inside the run's own
+//!   unusable gaps ([`AsrRun::unusable_gaps`]) was kept because the run could
+//!   not replace it (#353), and its own range is covered. The rest of the gap
+//!   stays untranscribed, which is true: the run did not read it and the
+//!   revision holds no text there.
 //!
 //! No-speech ranges never contain a segment of the revision.
 
 use crate::{
-    AsrChunkOutcome, AsrRun, MediaTime, TimeRange, TranscriptProvenance, TranscriptRevision,
+    AsrChunkOutcome, AsrRun, TimeRange, TranscriptProvenance, TranscriptRevision,
+    spans::{Span, merged, span, subtract, to_range, to_ranges},
 };
 
 /// Where the words of a searched revision came from, which says how far its
@@ -156,65 +162,9 @@ impl SearchCoverage {
     }
 }
 
-/// A half-open span in microseconds; always `start < end` where built here.
-type Span = (u64, u64);
-
-fn span(range: TimeRange) -> Span {
-    (range.start().as_micros(), range.end().as_micros())
-}
-
-fn to_range((start, end): Span) -> Option<TimeRange> {
-    TimeRange::new(MediaTime::from_micros(start), MediaTime::from_micros(end)).ok()
-}
-
-fn to_ranges(spans: &[Span]) -> Vec<TimeRange> {
-    spans.iter().copied().filter_map(to_range).collect()
-}
-
 fn intersection((start, end): Span, (other_start, other_end): Span) -> Option<Span> {
     let (start, end) = (start.max(other_start), end.min(other_end));
     (start < end).then_some((start, end))
-}
-
-/// Sorts `spans` and merges every overlapping or touching pair.
-fn merged(mut spans: Vec<Span>) -> Vec<Span> {
-    spans.retain(|(start, end)| start < end);
-    spans.sort_unstable();
-    let mut result: Vec<Span> = Vec::with_capacity(spans.len());
-    for (start, end) in spans {
-        match result.last_mut() {
-            Some(last) if start <= last.1 => last.1 = last.1.max(end),
-            _ => result.push((start, end)),
-        }
-    }
-    result
-}
-
-/// The merged spans of `spans` minus every span of `removed` (both merged).
-fn subtract(spans: &[Span], removed: &[Span]) -> Vec<Span> {
-    let mut result = Vec::new();
-    for &(start, end) in spans {
-        let mut cursor = start;
-        for &(removed_start, removed_end) in removed {
-            if removed_end <= cursor {
-                continue;
-            }
-            if removed_start >= end {
-                break;
-            }
-            if removed_start > cursor {
-                result.push((cursor, removed_start));
-            }
-            cursor = cursor.max(removed_end);
-            if cursor >= end {
-                break;
-            }
-        }
-        if cursor < end {
-            result.push((cursor, end));
-        }
-    }
-    result
 }
 
 fn clip(spans: &[Span], bounds: Span) -> Vec<Span> {
@@ -301,6 +251,17 @@ fn revision_coverage(
     // earlier revision said there, so its windows no longer back anything
     // inside them.
     let own_examined = own.examined();
+    // The one exception: text the earlier revision had inside a gap of this
+    // run was kept, as it was, because the run could not replace it (#353). Its
+    // own range is covered, and nothing else of the gap is.
+    let gaps = run.unusable_gaps();
+    let retained: Vec<Span> = revision
+        .segments()
+        .iter()
+        .filter(|segment| segment.carried_from().is_some() && segment.lies_within_any(&gaps))
+        .map(|segment| span(segment.range()))
+        .collect();
+    covered.extend(retained);
     let mut heard = own.transcribed;
     let mut quiet = own.quiet;
     let mut supplied = false;

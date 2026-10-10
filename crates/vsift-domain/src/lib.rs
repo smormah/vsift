@@ -16,6 +16,7 @@ mod provisioning;
 mod retry;
 mod search;
 mod session;
+mod spans;
 mod storage;
 mod timeline;
 mod transcript;

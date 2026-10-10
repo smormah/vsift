@@ -29,6 +29,7 @@ use std::{
 use crate::{
     Confidence, ConfidenceOrigin, CueText, LanguageTag, MediaTime, ProviderEndTrim, SourceSegment,
     SourceSegmentId, TimeRange, TranscriptRevisionError, TranscriptWarningKind, TranscriptWarnings,
+    spans::{merged, span, subtract, to_ranges},
 };
 
 /// Sample rate of the speech PCM contract: mono signed 16-bit at 16 kHz.
@@ -110,23 +111,31 @@ pub const MIN_RECOGNITION_MICROS: u64 = 100_000;
 /// A chunk is unusable when more than one in this many of its text segments is
 /// rejected ([`validate_chunk_output`]): a quarter.
 const REJECTED_SEGMENT_SHARE_DENOMINATOR: u32 = 4;
-/// The fewest text segments a chunk must have for the rejected share to be
-/// judged at all (#353). Below it, rejected segments are dropped and counted
-/// and the others are kept, unless every one of them is rejected.
+/// The text-segment count from which the quarter rule alone judges a chunk
+/// (#353). Below it a chunk tolerates **at most one** rejected segment, which is
+/// dropped and counted while the others are kept; two or more rejected make it
+/// unusable, as does every segment rejected, at any size.
 ///
-/// Why 4. The rule fails a chunk when more than a quarter of its text segments
-/// is rejected, which is a statement about a share only where one rejected
-/// segment can be a share of no more than a quarter. With 1 to 3 text
-/// segments a single rejected one is already more than a quarter (1 of 3 is a
-/// third), so the rule was weighing nothing: it failed a chunk for having one
-/// rejection, beside any number of kept segments. Four is the smallest count
-/// in which one rejection is exactly a quarter and is tolerated, so it is the
-/// least at which the rule has ever measured a share. From four segments on
-/// the rule is the one it was, unchanged: a chunk of dense speech is judged as
-/// before, and every chunk that passed before passes the same way. A real
-/// recording with long pauses has chunks of two or three segments, and one
-/// segment whose times do not fit its audio (empty, backwards, at or after the
-/// audio's end) is routine there (#353).
+/// Why 4, derived. The rule fails a chunk when more than a quarter of its text
+/// segments is rejected. A single rejected segment is a quarter or less of the
+/// chunk only from four segments on (1 of 4 is exactly a quarter; 1 of 3 is a
+/// third), so four is the smallest count at which the quarter rule alone
+/// tolerates one rejection. Below it the quarter rule alone tolerated none: it
+/// failed a chunk for one rejection beside any number of kept segments, which
+/// is the defect. The rule now tolerates one there by decision, so the rule is
+/// the same for every count at or above four, and for one, two and three
+/// segments it is "one rejection is not enough". Both sides agree at four
+/// (the quarter rule tolerates one, the allowance tolerates one), so the rule
+/// is monotonic: a chunk that is usable stays usable when a valid segment is
+/// added, and an unusable one stays unusable when a rejection is added. A test
+/// finds the constant by search and checks that property for every count up to
+/// sixteen.
+///
+/// From four segments on the rule is the one it was, unchanged, so a chunk of
+/// dense speech is judged as before and every chunk that passed before passes
+/// the same way. A real recording with long pauses has chunks of two or three
+/// segments, and one segment whose times do not fit its audio (empty,
+/// backwards, at or after the audio's end) is routine there.
 ///
 /// A chunk whose every text segment is rejected is unusable whatever its size:
 /// nothing the recogniser said about it can be placed in its audio.
@@ -607,10 +616,10 @@ pub enum AsrChunkOutcome {
     NoAudio,
     /// Audio was decoded and given to the recognizer, and what it answered
     /// could not be used for this chunk as a whole ([`validate_chunk_output`]
-    /// refused it): every text segment was rejected, more than a quarter were
-    /// among at least [`MIN_SEGMENTS_FOR_REJECTION_RATIO`], or the output
-    /// broke a structural rule. The window has no transcript from this chunk
-    /// (#353).
+    /// refused it): every text segment was rejected, two or more were among
+    /// fewer than [`MIN_SEGMENTS_FOR_REJECTION_RATIO`], more than a quarter
+    /// were among at least that many, or the output broke a structural rule.
+    /// The window has no transcript from this chunk (#353).
     ///
     /// This is a gap that is not a quiet one, and it is never recorded as
     /// [`Self::Silent`] or [`Self::NoAudio`]: those say that nothing was there
@@ -772,6 +781,35 @@ impl AsrRun {
         TimeRange::new(first.chunk.window.start(), last.chunk.window.end()).ok()
     }
 
+    /// The parts of the run's range that no chunk of it transcribed or found
+    /// quiet, because the chunks that cover them were unusable
+    /// ([`AsrChunkOutcome::Unusable`]) and no neighbouring chunk, which overlaps
+    /// them by five seconds, covers them: in start order, merged, empty when the
+    /// run had no unusable chunk (#353).
+    ///
+    /// These are the ranges the run did not re-transcribe, and the rule for the
+    /// text the superseded revision had in them is stated here once, for the
+    /// application that builds a revision and the domain that validates it: a
+    /// segment of the superseded revision that lies wholly inside one of them
+    /// is kept, as it was and with its original provenance, even though it is
+    /// inside the replaced range; every other segment inside the replaced range
+    /// is replaced by what the run transcribed there.
+    #[must_use]
+    pub fn unusable_gaps(&self) -> Vec<TimeRange> {
+        let mut covered = Vec::new();
+        let mut unusable = Vec::new();
+        for record in &self.chunks {
+            let window = span(record.chunk.window);
+            match record.outcome {
+                AsrChunkOutcome::Unusable { .. } => unusable.push(window),
+                AsrChunkOutcome::Transcribed { .. }
+                | AsrChunkOutcome::Silent { .. }
+                | AsrChunkOutcome::NoAudio => covered.push(window),
+            }
+        }
+        to_ranges(&subtract(&merged(unusable), &merged(covered)))
+    }
+
     /// Checks that the run belongs to, and lies inside, `source`.
     pub(crate) fn validate_within(
         &self,
@@ -860,9 +898,9 @@ pub enum ProviderOutputError {
     OutOfOrderSegments,
     /// A token probability is not a finite number in `[0, 1]`.
     InvalidTokenProbability,
-    /// Every text segment of the chunk, or, with at least
-    /// [`MIN_SEGMENTS_FOR_REJECTION_RATIO`] of them, more than a quarter, had a
-    /// range that could not be placed in its decoded audio.
+    /// Every text segment of the chunk, or two or more of fewer than
+    /// [`MIN_SEGMENTS_FOR_REJECTION_RATIO`], or more than a quarter of at least
+    /// that many, had a range that could not be placed in its decoded audio.
     TooManyRejectedSegments,
 }
 
@@ -1087,8 +1125,8 @@ pub(crate) fn asr_source_range(
 /// [`MIN_SEGMENTS_FOR_REJECTION_RATIO`] text segments, when more than a quarter
 /// are, because the provider evidently did not describe this audio. With fewer
 /// segments than that a share means nothing (one rejection beside two kept
-/// segments is a third), so the rejected ones are dropped and counted and the
-/// rest are kept (#353).
+/// segments is a third), so **one** rejected segment is dropped and counted and
+/// the rest are kept, and two or more fail the chunk (#353).
 ///
 /// A segment that starts inside the audio and **ends past it, as far as the
 /// padded 30 s window the recogniser works in**, is cut to the audio end and
@@ -1193,15 +1231,28 @@ pub fn validate_chunk_output(
 }
 
 /// Whether `rejected` of `considered` text segments make a chunk unusable
-/// ([`validate_chunk_output`]): all of them, or, from
-/// [`MIN_SEGMENTS_FOR_REJECTION_RATIO`] segments on, more than a quarter.
+/// ([`validate_chunk_output`]): all of them; or, below
+/// [`MIN_SEGMENTS_FOR_REJECTION_RATIO`] segments, more than one; or, from that
+/// count on, more than a quarter.
+///
+/// It is monotonic in both arguments, which is what makes it safe to reason
+/// about: another valid segment never turns a usable chunk unusable, and
+/// another rejection never turns an unusable one usable. (A rule that judged
+/// the share below the minimum, or only the count, would not be: with two
+/// rejections, `[rejected, ok, rejected]` would be kept and `[rejected, ok,
+/// rejected, ok]` would fail.) A test checks it for every pair up to sixteen
+/// segments.
 const fn rejections_make_chunk_unusable(considered: u32, rejected: u32) -> bool {
     if considered == 0 {
         return false;
     }
-    rejected == considered
-        || (considered >= MIN_SEGMENTS_FOR_REJECTION_RATIO
-            && rejected.saturating_mul(REJECTED_SEGMENT_SHARE_DENOMINATOR) > considered)
+    if rejected == considered {
+        return true;
+    }
+    if considered < MIN_SEGMENTS_FOR_REJECTION_RATIO {
+        return rejected > 1;
+    }
+    rejected.saturating_mul(REJECTED_SEGMENT_SHARE_DENOMINATOR) > considered
 }
 
 /// Whether `unusable` of the `answered` chunks of a run end it: the run fails

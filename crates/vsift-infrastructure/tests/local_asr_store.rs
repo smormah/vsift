@@ -354,6 +354,75 @@ fn an_unusable_chunk_round_trips_and_conforms_to_the_record_schema() -> TestResu
     Ok(())
 }
 
+/// #353: text the earlier revision had inside a part of the replaced range
+/// that the run could not read is carried into the new revision, and the
+/// stored record reads back. The rule is checked again on reading: a record
+/// whose chunk is changed to one that was read leaves the carried segment
+/// inside a range the run replaced, which is damage, not a different revision.
+#[test]
+fn text_kept_in_an_unreadable_part_round_trips_and_is_checked_on_reading() -> TestResult {
+    let (first, _) = f01_revisions()?;
+    let source = first.source_segment().clone();
+    // 1-2 s cuts the first revision's 0-5.26 s segment, so the range widens to
+    // all of it; the run could not read it, so the segment is kept.
+    let replaced = first.snap_to_segments(range(SECOND, 2 * SECOND)?);
+    assert_eq!(replaced, range(0, 5_260_000)?);
+    let mut warnings = TranscriptWarnings::default();
+    warnings.add(
+        TranscriptWarningKind::ProviderChunksRejected,
+        1,
+        NonZeroU32::MIN,
+    );
+    let kept = build_asr_revision(AsrRevisionRequest {
+        session_id: &SessionId::parse(EXAMPLE_SESSION)?,
+        source_id: &SourceId::parse(F01_SPEECH_SOURCE)?,
+        source_segment: &source,
+        number: NonZeroU32::new(2).ok_or("zero")?,
+        transcription: AsrTranscription {
+            run: run(
+                &source,
+                replaced,
+                AsrChunkOutcome::Unusable { audio: replaced },
+            )?,
+            language: None,
+            segments: Vec::new(),
+            warnings,
+        },
+        splice: Some(RevisionSplice {
+            base: &first,
+            replaced_range: replaced,
+        }),
+    })?;
+    assert_eq!(kept.segments().len(), 1);
+    assert!(kept.segments()[0].carried_from().is_some());
+    assert_eq!(kept.replaced_range(), Some(replaced));
+
+    let encoded = encode_transcript_record(&kept)?;
+    let value: serde_json::Value = serde_json::from_slice(&encoded)?;
+    assert!(conforms_to_record_schema(&value)?);
+    assert_eq!(decode_transcript_record(&encoded)?, kept);
+    // The record is committed as a fuzz seed, so the fuzzer starts from a
+    // valid record of this kind.
+    assert!(
+        fs::read(
+            repository("crates/vsift-infrastructure/tests/data/transcript_records")
+                .join("F01-kept-in-an-unreadable-part.json")
+        )? == encoded,
+        "regenerate the committed record: the encoder no longer writes its bytes"
+    );
+
+    for read_instead in ["transcribed", "silent"] {
+        let mut changed = value.clone();
+        changed["run"]["chunks"][0]["outcome"] = serde_json::Value::from(read_instead);
+        assert_eq!(
+            decode_transcript_record(&serde_json::to_vec(&changed)?),
+            Err(SessionStorageError::IntegrityFailure),
+            "{read_instead}"
+        );
+    }
+    Ok(())
+}
+
 /// Strict decoding re-checks every carried segment against its inherited
 /// provenance and the replaced range.
 #[test]
