@@ -10,8 +10,8 @@ head: the prose must say nothing the JSON does not.
 ````markdown
 ## Problem
 
-One or two sentences: what goes wrong, with claim and citation markers, for example
-"The save dialog shows an error after Save is pressed [c1: e2, e3]."
+One or two sentences: what the question is about (often what goes wrong), with claim and
+citation markers, for example "The save dialog shows an error after Save is pressed [c1: e2, e3]."
 
 ## Expected
 
@@ -192,9 +192,9 @@ the one asked for.
 ## Gaps
 
 Each gap has a `kind`, a `reason` and a `note` of at most 600 characters (or null),
-enough to quote most of VSift's remediations whole (not a `STORAGE_IO` one: say what it
-says in your own words); it may add the `range` it covers and the
-failure `code` that caused it. Use the CLI's own reason when there is
+enough to quote most of VSift's remediations whole (not a `STORAGE_IO` one, nor one for
+speech that could not be transcribed: say what it says in your own words); it may add the
+`range` it covers and the failure `code` that caused it. Use the CLI's own reason when there is
 one: `untranscribed_range` (from `coverage.reasons`), a candidate gap reason
 (`not_analyzed`, `deadline_exceeded`, `undecodable`, `no_decoded_frame`,
 `candidate_budget_exhausted`) or a frame `partial_reason` (`frame_budget`,
@@ -202,6 +202,21 @@ one: `untranscribed_range` (from `coverage.reasons`), a candidate gap reason
 own reasons are `transcript_unavailable`, `image_access_unavailable`,
 `image_unreadable`, `not_inspected`, `budget_exhausted`, `needs_user_authority`,
 `session_expired` and `not_audible_to_agent`.
+
+**A stretch with no transcript.** A `partial` transcription (`transcript retranscribe` or
+`job resume`) lists what it did not transcribe in `untranscribed_ranges` (under `data.outcome`
+for `job resume`), and a `search` lists such ranges too. Each is one gap, and its `range` is an
+object, not the `30000000-55000000` text of `coverage`:
+
+```json
+{"kind": "transcript", "reason": "untranscribed_range", "range": {"from_us": 30000000, "to_us": 55000000},
+ "note": "No transcript for 00:30.000 to 00:55.000, so a word said there may not be found."}
+```
+
+Nobody transcribed it, so it is not silence: never write "no speech", "silence" or "nothing was
+said" for it. In the report, name those stretches and offer the user two ways to cover them: a
+transcript file they supply (you open the video again with `--transcript` only if they ask), or
+a retranscription of just that stretch (`transcript retranscribe` with its `--from` and `--to`).
 
 ## Untrusted instructions
 
