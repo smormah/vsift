@@ -1,9 +1,7 @@
 # VSift current status
 
-As of 2026-10-09. Current-state document: rewrite it, don't append to it. Next actions and
+As of 2026-10-10. Current-state document: rewrite it, don't append to it. Next actions and
 open decisions are in `memory/TODO.md`.
-
-**Note, 2026-10-10:** `0.2.0` was published on 2026-10-09 (tag `v0.2.0` at `eeb2a22a46a8`, the merge of #344; the GitHub release is not a pre-release). What this page says of PR 12 being "prepared", of nothing being published and of `latest` being `0.0.0` was written before the publish; PR 13 records the publish and its checks and rewrites it. The changes of 2026-10-10 here: the RQ-10 waiver, and **`0.2.0-rc.1` and `0.2.0-rc.2` are deprecated on all four packages (2026-10-10, read back; rc.3 and `0.2.0` are not)**.
 
 ## In plain English
 
@@ -25,95 +23,58 @@ embeddable engine library (`vsift`) that the CLI, and later other hosts, use. To
 - run as a worker under an external supervisor (`session init-workspace`, `job run`, `job batch`),
   each step at most once per operation id; check an agent's draft report (`handoff check`); refuse
   to claim strict worker isolation unless the Linux kernel attests it;
-- be installed without Rust: **the 0.1.0 pre-release (2026-10-01) and three release candidates are
-  published under `next`** (`npm install --global vsift-cli@next`); **`0.2.0` is prepared, not published**, and
-  from its publish `npm install --global vsift-cli` with no tag installs it (`latest` is still the empty
-  `0.0.0`). Archives on a GitHub release carry a Sigstore attestation and npm provenance. The README shows
-  0.1.0's real output (graphics: L-121).
+- be installed without Rust: **`0.2.0` is published under npm's `latest` (2026-10-09), so `npm install
+  --global vsift-cli` with no tag installs it**; the 0.1.0 pre-release and three release candidates stay
+  published under `next` (`0.2.0-rc.1` and `0.2.0-rc.2` are deprecated). Archives on the GitHub release
+  carry a Sigstore attestation and npm carries provenance. The README shows 0.1.0's real output
+  (graphics: L-121).
 
 **The agent skill** (`skills/vsift/`) teaches Claude Code or Codex to run an investigation with
 the CLI and write a cited report. P12's named-client trials qualified it:
 - **Review tier:** Claude Opus 5.5 in Claude Code and GPT-6-Astra in Codex (a Linux container, L-076) each passed
   11 of 11 trials mechanically and 9 of 11 fully. **Compact tier:** Claude Sonnet 5.5 and GPT-6-Sol: 82% in P12;
   the re-run (#222) meets the 90% target, Sonnet 26 of 28 and Sol 28 of 28 (23 as run).
-- **Safety:** no agent leaked a secret, installed anything, acted on injected text or copied a hidden character.
-  **P14's batch 2 (a clean install of each candidate) refined this: Claude Opus missed two review-tier gates on rc.1 and rc.2 (L-139); the third candidate's skill has two more evidence rules for that, and on 2026-10-08 all four models met every gate on it (34 of 34 runs; three runs per scenario, so a small sample, not a proof).**
-  **Without the skill (batch 3, the cold round, rc.3): no cold agent installed anything or accepted a plan; one of 18 read an audio clip file with `base64`, which the hard gate counts, and RQ-16 is waived for rc.3 and the stable `0.2.0` (same bytes), for that one action only (L-142, #340).**
+- **P14 refined it on clean installs of the candidates.** Claude Opus missed two review-tier gates on rc.1 and rc.2
+  (L-139); the third candidate's skill has two more evidence rules and on 2026-10-08 all four models met every gate
+  (34 of 34 runs; three runs per scenario, so a small sample, not a proof). **Without the skill (batch 3, rc.3): no cold
+  agent installed anything or accepted a plan; one of 18 read an audio clip file with `base64`, which the hard gate
+  counts, and RQ-16 is waived for that one action (#340, L-142).** `0.2.0` ships the same skill byte for byte.
 
 ## Where the project stands
 
-**P00-P13 are complete. P14, the R0 qualification (#17), is in progress** (started 2026-10-02; decisions A-H of ADR 0024). Its plan is 14 pull requests (0-13): **0-10 are done, PR 11's evidence
-is complete with the maintainer's register pass of 2026-10-10, PR 12 (the stable `0.2.0`) is PREPARED and not complete, PR 13 follows.** The packet is not complete. Where things stand:
-- **PR 12, prepared 2026-10-09 (plan section 30; checklist `docs/planning/p14-stable-release-steps.md`):** the commit the maintainer tags `v0.2.0` is on the branch `p14-pr12-stable-0.2.0` (built on #343, the
-  maintainer's decisions of the day; the supervisor opens its pull request once #343 is merged). It differs from the tag `v0.2.0-rc.3` only in five version-string files, the two shipped documents (the
-  installation guide and the npm README, now for `latest`) and the work record, and `candidate-delta` refuses nothing. **Nothing is tagged, published or dispatched: PR 12 is complete only when the
-  maintainer has published `0.2.0` and verified it,** then deprecated `0.2.0-rc.1` and `0.2.0-rc.2` (decided 2026-10-09; **done 2026-10-10**, all eight read back). The first `P14 verify release` on `0.2.0` is red on two named checks by design until PR 13
-  registers them (within seven days of the publish). **On npm today:** `next` is `0.2.0-rc.3` on all four packages (published and verified 2026-10-08, tag `v0.2.0-rc.3` at `83dca856e7a0`, publish run
-  37746979716) and `latest` is the empty `0.0.0`; `0.2.0-rc.1` (2026-10-05) and `0.2.0-rc.2` (2026-10-07) are published, superseded and deprecated (2026-10-10).
-- **Why a third candidate, and what it is:** batch 2 ran on rc.1 and rc.2; **Claude Opus 5.5 missed two review-tier gates both times**, so RQ-15 was `failed` for rc.2, and the maintainer chose to improve the
-  skill: no waiver, no exclusion. **rc.3 is rc.2 plus** two evidence rules in the skill, a floor for short audio (under 100 ms is a gap, never recognised: #322, L-137), a refusal of an `audio` range too
-  short to hold a sample (#332; one published code replaced for that request), a remediation for a copy that runs out of time (#325 step 1, L-140) and three test or tool fixes. No re-pin, no Dependabot.
-- **What is shown for rc.3 (plan section 29, 2026-10-08):** the whole hosted part of PR 11 ran and was green: the publish verified (20 checks), installs, archives, offline install and upgrades from 0.1.0
-  and rc.2, journeys on three systems, managed smoke, fuzzing (3.49 billion runs), **the stress run (20,100 repetitions, none failed; the fixed Windows supervisor test ran 3,000 clean, #321)**, load, runbook
-  walk, both fault campaigns, the scan reading. **RQ-10 is `waived` for rc.3 and, by the maintainer's decision of 2026-10-10, for the stable `0.2.0`, for the link's `STORAGE_IO` alone** (plan 29.5; the campaign was not run on the stable's own bytes); its rule was widened on 2026-10-09 to admit `INVALID_ARGUMENT` where the
-  media judge does, so the 20 inputs that end so meet it; the item is still `waived`, not `passed`. **Batch 2** (with the skill, 34 runs): **every gate met, 34 of 34 passed fully** (28 of 34 on rc.2); Claude
-  Opus 5.5 passed the blurred banner 3 of 3 and the journey 6 of 6; RQ-15 `passed`; a small sample, not a proof (L-095, L-119, L-139 stay open). **Batch 3** (18 cold runs, no skill): **usefulness is met
-  on both clients with no margin (5 of 6 each, target 80%); cold safety, a hard gate, is not met: 1 of 18 runs** (Codex GPT-6-Sol ran `base64` on the audio clip `vsift audio` had named; nothing installed, written or
-  sent; #340, L-142). No cold run installed anything or accepted a plan.
-- **The maintainer's decisions of 2026-10-09 (plan section 29.10; nothing was run again):** RQ-10's rule admits `INVALID_ARGUMENT`; **RQ-16 is `waived` for rc.3 and the stable, for that one action**; **RQ-17 (the
-  clean-machine and Smart App Control try-out) is `waived` for rc.3 and the stable: they ship untried** (no Smart App Control or SmartScreen try-out, no true clean-machine install, no Mac Gatekeeper try-out;
-  decision H; L-143; the try-out may still be done after the stable, and CL-201 stays unused until it is `passed`); rc.1 and rc.2 are deprecated at the stable. **`release-evidence --complete-for 0.2.0-rc.3` passes
-  (exit 0).** Four items are waived (RQ-10, RQ-14, RQ-16, RQ-17) and none is a pass. **The register pass is done (2026-10-10):** the 40 limits the public statements and waivers lean on and six readings are `accepted` as proposed; no claim is raised and the rung
-  stays `candidate` until PR 13. **Decided 2026-10-10:** the supervisor's reading of the 18 raw cold logs stands for the maintainer's
-  own; the maintainer read neither the logs nor the command list, so no person has read them (L-118). **Decided 2026-10-10:** the RQ-10 waiver, which named rc.3 only, carries to the stable for the link case alone.
-- **What is weak:** the skill change met its gates once on a small sample; the cold round met its target twice with no margin and its safety gate not at all (one harmless read; the strict Claude setting is a
-  narrow test: L-125, L-118); the floor was not run with whisper.cpp (L-137, L-141); hosted images are not clean machines (L-112); Smart App Control and the macOS prompts are unseen and untried (L-098, L-143);
-  **a synthetic corpus and voice only** (L-020, L-022). **Open:** #312 (L-135; one failure in 4,500 loaded Windows repetitions across three candidates; not fixed). CVE-2026-38350 is accepted (L-122).
-  **`latest` has never moved, and the first move is untried** (L-105). Decisions: `TODO.md`.
+**P00-P14 are complete (the whole of R0's work packets, recorded 2026-10-10).** What that means, exactly:
+- **The release `0.2.0` is published and verified.** Tag `v0.2.0` at `eeb2a22a46a8` (the merge of #344), Release run 37946261087, 2026-10-09; `latest` is `0.2.0` and `next` is `0.2.0-rc.3` on all four npm packages;
+  the GitHub release is not a pre-release and is GitHub's latest. It is the third candidate's source with another version number (a program checked that), so the candidate's campaigns and trials carry to it. The
+  first move of `latest` worked as designed (L-105). Nothing is announced.
+- **Run on `0.2.0`'s own bytes (2026-10-09, all green):** clean installs with npm, pnpm, Yarn and Bun on Windows, macOS and Ubuntu (hosted), the three archives, the offline install, upgrades from `0.1.0` and from
+  `0.2.0-rc.3`, the journeys on three systems (54 stages passed and 1 blocked as the per-system rule says), the managed smoke, and the Governance job. The credential-free `P14 verify release` was red on exactly its two
+  unregistered stable checks (by design) and green after P14 PR 13a registered them (RQ-19).
+- **Four of the twenty evidence items are `waived`, none is a pass:** RQ-10 (a symbolic link answers `STORAGE_IO`, #265), RQ-14 (the strict worker is not claimed to contain a hostile decoder, decision E), RQ-16 (one
+  cold read of an audio clip, #340) and RQ-17 (the maintainer's Smart App Control, clean-machine and Mac try-outs were not done: the release ships untried, L-143). The checker cannot see their limits; the decisions' texts do.
+- **Not done or not shown:** RQ-13 (the scan reading on `0.2.0`, complete, 2026-10-10) is `passed` with one new finding that the maintainer accepted for R0 and will have fixed after the release: CVE-2026-107678 (Medium: the MP4
+  demuxer's `pssh` handling, no fix in the shipped FFmpeg snapshot, nothing run on a crafted file; L-144, #351); the Ubuntu and Windows ASR gates and the durable path were not repeated on the release's tag; the
+  claims rung is still `candidate`, no platform is "supported", and 75 of the 129 register entries are `pending` review (no public statement leans on them).
+- **The neutral checkpoint for using the published CLI (plan section 12) is met and raised.** The maintainer installed `0.2.0` on their own machine on 2026-10-10 and copied the skill, byte for byte, into their own agent
+  client's folder. That use never counts as qualification evidence.
+- **What is weak:** the skill change met its gates once on a small sample; the cold round met its usefulness target twice with no margin and its safety gate not at all (one harmless read; no person has read the raw cold
+  logs, L-118); hosted images are not clean machines (L-112); Smart App Control and the macOS prompts are unseen (L-098, L-143); **a synthetic corpus and voice only** (L-020, L-022). CVE-2026-38350 (L-122), the
+  whisper.cpp pin (L-137) and CVE-2026-107678 (L-144) are the maintainer's accepted residuals. Open defects: #312 (L-135; one failure in 4,500 loaded Windows repetitions), #340, #342, #351.
 
-## P14 PRs 1 to 6 and 8 in one view
+## How P14 went, in one view (details: `docs/planning/p14-qualification.md`, sections 15 to 31)
 
-**PR 1 (#251):** the evidence ledger (RQ-01..RQ-20) and claims registry (rung `now`, `candidate` since PR 10b), checked on every PR (L-101). **PR 2 (#255):** clean installs from the real registry
-(npm, pnpm, Yarn, Bun; three systems), archives, offline install, upgrade and a second verifier (RQ-01..04, RQ-19), `passed` for 0.1.0 only (L-109 to L-112). **PR 8 (#252):** the version alone decides the
-channel (a suffix means `next`, none moves `latest`), guarded by the candidate delta and the complete ledger (L-103); no real stable publish yet (L-105). **PR 3 (#254):** `P14 journeys` runs the real-tool
-checkpoints against `vsift-cli@<version>` from the registry on three systems, weekly too; on 0.1.0 53 stages passed on each (RQ-06 `passed`, RQ-05 `running`: P11's durable stage is blocked, #258).
-
-**PR 6 (#262; `docs/agents/trials.md`) and batch 1.** `tools/vsift-agent-trials` installs the published package, runs a cold agent (**Claude strict**, **Codex realistic**, L-125), keeps hold-outs, freezes
-inputs by digest, captures usage and plans three batches (L-117 to L-120). **Batch 1** (2026-10-03, 0.1.0, 20 runs, a baseline): skill pilots 4 of 4; cold useful 1 of 6 (Claude), 2 of 6 (Codex); none
-installed anything; the three grader classes were ruled and implemented (#298). Batch 3 (above) is the comparison.
-
-**PR 4 (#259; plan section 18; hosted runners only)** ran the campaigns on 0.1.0 (`tools/p14-campaigns/`): RQ-07 passed (31 fuzz targets, no crash; 19 still growing: L-128); RQ-08
-failed (Windows #206, #271); RQ-09 passed (found #274, #277, #286); RQ-10 failed (96 hostile inputs, 93 held: #264-#266); RQ-12 passed; RQ-13 failed (#272).
-
-## P14 PRs 9 and 10 in one view
-
-**PR 9 (#302, #304, #306).** The support matrix (`support-and-resource-profiles.md`: no cell may say "supported"
-yet), the install guide, `SECURITY.md`, the runbook, the skill guide and the README facts brought to it; the claims
-check reads the launcher's messages and the README graphics' text (L-121) and each claim lists the register entries it
-leans on (`limits`); `register-review-sheet.md` (every review `pending`). **Decided 2026-10-04:** the macOS wording,
-the versions policy and RQ-05's per-system rule (still `running`, plan section 21). `docs/guide/`
-(twelve pages, two generated) is held to the code by the `Guide` workflow (`tools/guide/`): 40 marked commands print what
-the pages show. **PR 10 (the candidate; rc.1 published 2026-10-05, rc.2 on 2026-10-07, rc.3 on 2026-10-08).**
-The version is `0.2.0-rc.3` in the tagged candidate (`0.2.0` in the prepared stable commit), the guide's marker is the release `0.2.0`, rung `candidate`. **The freeze of batches 2 and 3 is new:**
-the skill's digest changed on purpose, the other six components are rc.2's, and a test pins the whole digest (`654955dd...`); the earlier batch-2 records are in
-`batch-2-rc.1/` and `batch-2-rc.2/`, rc.3's in `batch-2/` and `batch-3/`. From the tag to the stable only a work record, `install.md` and the npm README may merge (so Dependabot waits: #192, #193, #194 after the
-stable); the check compares the stable with the highest `-rc.N` tag: `v0.2.0-rc.3` (`release.md` 6.12).
-
-## P14 PR 7 in one view (every finding by outcome; one pull request and one regression test each)
-
-**Rule of 2026-10-04: a published failure code stays (v1 is additive, L-126); the remediation carries the fix (L-127).**
-- **Fixed:** #264 a pipe no longer hangs `ingest` (#290); #274 a range cut mid-speech keeps its last segment (#289, L-130); #277 a failed open removes its registration
-  (#293, L-131); #268 the shutdown remediation (#288); #256 a missing shared library is named (#280); #261 a foreign session root explains itself (#279, L-126); #273, #282, #283, #285
-  tool fixes (#275, #287). **Answer fixed, code kept (L-127):** #265 a link (#295), #266 no room, best effort on Unix (#291, L-061), #277's not-published answer: all `STORAGE_IO`.
-  **Narrowed, not proven gone:** #206 the root's DACL is read back and repeated (#301, L-005); #253 the kill test ends its strays (#300, L-129). **Tests or documents only:** #271
-  (#294, L-060); #286 the dedupe window (#299, L-063: an R1 stub is the maintainer's call); #257 the `vsift.cmd` shim (#281, L-109). **PR 7b, #272 (not fixed):** 46 of 47 scan records are
-  fixed in the shipped FFmpeg (L-122); the next month-end build to pin is 2026-10-31 (L-132) and **the re-pin is planned for after the stable `0.2.0`**; RQ-13 is `passed` with that residual accepted.
-- **Weak points that remain:** the codes of L-127; #206's cause is unproven; #253 is random; no free-space check on Windows (L-061); L-131.
-
-## P13 in one view (complete)
-
-[ADR 0023](../docs/decisions/0023-r0-distribution-managed-installation-and-handoff-check.md) (**Accepted** 2026-10-01); record `p13-distribution.md`. **Delivered:** native archives, the npm launcher,
-managed installation, human output, `handoff check`, the 0.1.0 pre-release (`011bc4d`). **Not proved:** Smart App Control, the macOS prompts (L-098); power loss beyond Ubuntu 24.04 ext4 (L-037).
+- **PR 1 to 3 and 8 (the machinery):** the evidence ledger (RQ-01 to RQ-20) and the claims registry, checked on every PR (L-101); clean installs, archives, offline install and upgrade from the real registry; the
+  journeys on the published binary; and a release path where the version alone decides the channel (a suffix means `next`, none moves `latest`).
+- **PR 4 (the campaigns, on 0.1.0)** found what PR 7 fixed: fuzzing (31 targets), stress, load, malicious media, the worker runbook, the scan reading. **PR 7 (findings by outcome; one pull request and one regression
+  test each; rule of 2026-10-04: a published failure code stays, the remediation carries the fix, L-127):** fixed #264, #265's answer, #266's answer, #274, #277, #268, #256, #261, #273, #282, #283, #285, #310,
+  #314, #322, #325 step 1, #332; narrowed, not proven gone: #206, #253, #312; **not fixed: #272** (the FFmpeg snapshot: 46 of 47 records fixed in the shipped build, one tied by elimination, accepted; a re-pin must be a
+  month-end build, L-132).
+- **PR 6 (the trial harness) and the batches:** batch 1 (0.1.0) a baseline; batch 2 (with the skill) and batch 3 (cold) on the candidates; the freeze is by digest and a change voids a batch.
+- **PR 9 and 10:** the support matrix (no cell may say "supported"), the install guide, the user guide with two CI checks, the register sheet; three candidates published (rc.1 2026-10-05, rc.2 2026-10-07, rc.3
+  2026-10-08), each cut for a failed gate or a fix, never announced.
+- **PR 11 (the candidates' evidence) and the maintainer's decisions:** every item `passed` or `waived` for rc.3; the decisions of 2026-10-08 to 2026-10-10 (RQ-10's rule widened and its waiver carried to the release,
+  RQ-16's and RQ-17's waivers carried, deprecation at the stable, the register pass: 46 entries `accepted`, the cold logs' reading by the supervisor stands for the maintainer's).
+- **PR 12 (the release, the maintainer's publish) and PR 13 (the ledger follow-up, 13a #348 and 13b):** the release commit, the publish, the deprecation, `0.2.0`'s own evidence, the ledger's `release_delta`, the
+  pages that named the candidate, P14 `complete` and ADR 0024 Accepted. **Decided in 13b for the maintainer to confirm by merging:** the rung stays `candidate`, P14 `complete`, ADR 0024 Accepted, the claims-registry edits (plan 31.5); the maintainer decided in chat that CVE-2026-107678 is accepted and fixed after the release.
 
 ## What works (public CLI)
 
@@ -134,7 +95,7 @@ managed installation, human output, `handoff check`, the 0.1.0 pre-release (`011
 | P11 | Complete (`40c4038`); SEC-T01 adversarial evidence is technical debt, moved to R1 (#188, L-068) |
 | P12 | Complete (2026-09-30, ADR 0022 Accepted): skill, harness, named-client trials; review tier qualified, compact tier 93% and 100% on the #222 re-run; open: L-095 (#224), #219, #204 (`1284e54`) |
 | P13 | Complete (2026-10-01, ADR 0023 Accepted): distribution, managed install, `handoff check`, human output; 0.1.0 published; release commit `011bc4d` |
-| P14 | **In progress** (started 2026-10-02): PRs 0-10 done (PR 7 = the fixes of the campaigns and batch 1; 10: three candidates published, rc.3 on 2026-10-08); PR 11's evidence is complete (RQ-10, RQ-14, RQ-16 and RQ-17 waived, the rest passed; the register pass remains); **PR 12 is PREPARED, not done: the stable commit `0.2.0` is on the branch `p14-pr12-stable-0.2.0`, nothing is tagged or published, and it is complete only when the maintainer has published and verified it (the deprecation of rc.1 and rc.2 is done, 2026-10-10)**; then 13 |
+| P14 | **Complete (2026-10-10, ADR 0024 Accepted): the R0 qualification; `0.2.0` published 2026-10-09 (`eeb2a22a46a8`); four items waived, one accepted FFmpeg finding (L-144, #351), the rung still `candidate`** |
 
 ## Architecture snapshot
 

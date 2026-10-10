@@ -7,12 +7,16 @@ sections 1 and 2, decisions B, C, D and H5; P14 PR 8,
 [ADR 0024](../decisions/0024-r0-qualification-and-release-candidate.md) decisions A and B,
 the stable release and the release candidate). **0.1.0 was published with it on 2026-10-01**
 (section 6; the record is [`p13-distribution.md`](../planning/p13-distribution.md), "First
-publish"). **The stable path (section 6.7) has been built and tested but has never run
-against the real services: no stable version is published, and `latest` is still the empty
-`0.0.0` placeholder on all four packages.** The exact steps for the first release candidate,
-`0.2.0-rc.1`, are section 6.10 (published on 2026-10-05); those for the second,
-`0.2.0-rc.2`, are section 6.11 (published on 2026-10-07); **those for the third, `0.2.0-rc.3`,
-which replaces both, are section 6.12, the one to follow now.** The workflow described here builds, checks and
+publish"). **The stable path (section 6.7) ran against the real services for the first time
+on 2026-10-09: the stable release `0.2.0` is published under `latest` on all four packages
+(publish run 37946261087), and `next` still names the third candidate, `0.2.0-rc.3`. What
+happened, and what it showed, is section 6.13.** The exact steps for the first release
+candidate, `0.2.0-rc.1`, are section 6.10 (published on 2026-10-05); those for the second,
+`0.2.0-rc.2`, are section 6.11 (published on 2026-10-07); those for the third, `0.2.0-rc.3`,
+are section 6.12 (published on 2026-10-08); the checklist of the stable release `0.2.0` was
+[`p14-stable-release-steps.md`](../planning/p14-stable-release-steps.md). Sections 6.10 to 6.12 are the
+record of those publishes and a model for the next one, not instructions for a version that
+is already published. The workflow described here builds, checks and
 packages the archives, assembles the npm packages and runs their qualification (section 5),
 and on every run writes the publish plan and shows it (a dry run). It publishes only when the maintainer
 dispatches it on a release tag with `dry_run` cleared and then approves the protected
@@ -712,8 +716,8 @@ matched.
 
 ### 6.7 The stable release (P14 PR 8; first used for `0.2.0`, P14 PR 12)
 
-**This path has never run against the real services** (known limit
-[L-105](../planning/known-limits.md#l-105)). It is built so that a mistake stops before
+**This path ran against the real services for the first time on 2026-10-09, for `0.2.0`
+(section 6.13; known limit [L-105](../planning/known-limits.md#l-105)).** It is built so that a mistake stops before
 anything is published, and so that the one thing the workflow cannot take back, moving
 `latest`, needs a published and accepted release candidate, a plan that passed every guard,
 a dispatch on the tag, and your approval. It is the same workflow, dispatch, environment
@@ -785,10 +789,10 @@ not skip an item because the candidate's publish went well.
 
 1. **Trusted publishers are still saved** on all four packages (6.2 step 6: npmjs.com, each
    package's Settings, a saved Trusted Publisher entry listed with the values of the table,
-   **npm publish** allowed, **npm dist-tag** not). `--tag latest` is part of `npm publish`,
-   but it has never gone through trusted publishing (only `--tag next` has), so this is the
-   one setting a first stable publish can still find wrong ([L-100](../planning/known-limits.md#l-100),
-   [L-105](../planning/known-limits.md#l-105)).
+   **npm publish** allowed, **npm dist-tag** not). `--tag latest` is part of `npm publish`; it
+   went through trusted publishing for `0.2.0` (6.13), so these entries are known to accept
+   it, but they stay the one setting a stable publish depends on that no dry run can read
+   ([L-100](../planning/known-limits.md#l-100), [L-105](../planning/known-limits.md#l-105)).
 2. **The `release` environment and the tag ruleset** are as 6.2 steps 3 and 4 say (read-only
    `gh api repos/smormah/vsift/environments/release` and `.../rulesets`), and fork-pull-request
    approval is "all external contributors".
@@ -998,8 +1002,8 @@ whatever the check answers (56 checks in all). Run it with `bash tools/vsift-rel
 .github/workflows/release.yml` (Linux, or Git Bash on Windows); the Rust test
 `publish_steps` runs it on Linux in CI. No real service is contacted. It cannot prove that
 npm's trusted publishing accepts `--tag latest`, or that `gh release edit --latest` marks a
-draft latest on GitHub: those are what the first stable publish tests
-([L-105](../planning/known-limits.md#l-105)).
+draft latest on GitHub: those were what the first stable publish tested, and both held
+(section 6.13, [L-105](../planning/known-limits.md#l-105)).
 
 ### 6.10 The first release candidate, `0.2.0-rc.1`: the exact steps (P14 PR 10c)
 
@@ -1557,7 +1561,7 @@ write down both run ids this time (step 6).**
 | How the upgrade runs are dispatched | two, the second waits | **one after another:** never more than one waiting (step 5) |
 | The candidate the stable release is compared with | `v0.2.0-rc.2` | **`v0.2.0-rc.3`**, the highest candidate tag (6.8) |
 | `release-evidence --complete-for` | failed on 17 of 20 items | fails on 16 of the 20 items until PR 11 is repeated (plan section 28.3): **do not run it as a gate now** |
-| After the publish | optionally deprecate the first candidate | optionally deprecate the second (and the first, if it was not) (step 7) |
+| After the publish | optionally deprecate the first candidate | nothing: the maintainer decided on 2026-10-09 to deprecate `0.2.0-rc.1` and `0.2.0-rc.2` at the stable release, not before (step 7) |
 
 **0. Before you start (about fifteen minutes; only the settings step can change anything).**
 
@@ -1795,23 +1799,14 @@ the settings and the corpus truth are byte-identical to theirs. `prepare` refuse
 batch runs against one version, so do not copy their state files back. Batch 3 still takes `-AllowGraderChange`, for the reason the
 checklist gives (the grader changed between batch 1 and batch 2, on 2026-10-04; it has not changed since).
 
-**7. Optional, once step 5's runs have finished: deprecate the second candidate.** `next` already points at the third, so a new install
-gets it; deprecating `0.2.0-rc.2` makes npm print a warning to anyone who still pins it. It is reversible and it is your choice, and it
-needs your npm login with two-factor authentication. **Do it after step 5's runs finish, not before:** the upgrade job installs
-`0.2.0-rc.2` by its exact version and a deprecated version prints a warning on install.
-
-```console
-npm deprecate "vsift-cli@0.2.0-rc.2" "Superseded by 0.2.0-rc.3. Install vsift-cli@next."
-npm deprecate "@vsift/win32-x64@0.2.0-rc.2" "Superseded by 0.2.0-rc.3. Install vsift-cli@next."
-npm deprecate "@vsift/darwin-arm64@0.2.0-rc.2" "Superseded by 0.2.0-rc.3. Install vsift-cli@next."
-npm deprecate "@vsift/linux-x64@0.2.0-rc.2" "Superseded by 0.2.0-rc.3. Install vsift-cli@next."
-```
-
-The same four commands with `0.2.0-rc.1` do it for the first candidate, if you did not deprecate it after the second (the repository
-does not record whether you did; `npm view vsift-cli@0.2.0-rc.1 deprecated` prints the message if so, and nothing if not). An empty
-message (`npm deprecate "vsift-cli@0.2.0-rc.2" ""`) removes a deprecation. You may also edit the earlier release pages' notes to say that
-they are superseded by `v0.2.0-rc.3` (`gh release edit v0.2.0-rc.2 --repo smormah/vsift --notes-file <the file>`); neither is a condition
-of anything.
+**7. Deprecating the earlier candidates: decided on 2026-10-09 (at the stable release, not before) and done on 2026-10-10.** This step was
+written as optional and before the stable release; the maintainer decided otherwise. `0.2.0-rc.1` and `0.2.0-rc.2` were deprecated on all
+four packages after the stable release `0.2.0` was published and checked, with the message `Superseded by 0.2.0. Install vsift-cli.`
+(eight `npm deprecate` commands, the maintainer's login and second factor; read back with `npm view <package>@<version> deprecated`), and
+`0.2.0-rc.3` and `0.2.0` were not deprecated. Section 6.13 and step 9 of
+[`p14-stable-release-steps.md`](../planning/p14-stable-release-steps.md) have the commands and the result. An empty message
+(`npm deprecate "vsift-cli@0.2.0-rc.2" ""`) removes a deprecation. Do not deprecate a candidate before the runs that install it by its exact
+version have finished: the upgrade job installs a version by number, and a deprecated version prints a warning on install.
 
 **If something fails.**
 
@@ -1837,3 +1832,45 @@ change. **Policy, not impossibility:** GitHub lets you delete a release page or 
 page, the tag and the attestations name each other. **What is reversible:** `next` (`npm dist-tag add vsift-cli@0.2.0-rc.2 next`, for each
 package, two-factor authentication; the workflow never does it), the notes, and a deprecation (`npm deprecate <package>@<version> ""`
 removes it).
+
+### 6.13 The stable release `0.2.0`: what happened (P14 PR 12 and PR 13, 2026-10-09 and 2026-10-10)
+
+The maintainer's steps for this release were not a section of this runbook but a planning page,
+[`p14-stable-release-steps.md`](../planning/p14-stable-release-steps.md), because this file could not change between the third candidate
+and the tag (6.8). That page is 6.7 written out with this release's numbers; it is the model for the next stable version, and this
+section records what happened when it was followed and what the real services showed. **`0.2.0` is built from the same source as
+`0.2.0-rc.3`: the stable commit differs from the tag `v0.2.0-rc.3` only in five version-string files, the two shipped documents and the work
+record (6.8).** The tag is `v0.2.0` at `eeb2a22a46a85ab10a456f2ab5d6a62e292836c5` (the merge of #344).
+
+| Step | What happened |
+| --- | --- |
+| Dry run on the tag | `workflow_dispatch` on `v0.2.0` with `dry_run` set, 2026-10-09 14:23 UTC, run 37943856631, green in about 19 minutes: `attest` and `publish` skipped, all six guards `passed`. |
+| The real dispatch | The same dispatch with `dry_run` cleared, 14:43 UTC, run 37946261087, which is the run npm's provenance names. The plan and `attest` finished at 14:54. `attestation-subjects.sha256` and `release-assets.sha256` were identical to the dry run's, and the plan's `release-delta.json` was kept (it is the ledger's `release_delta`). |
+| The six guards | Stable version; accepted candidate (against `v0.2.0-rc.3` at `83dca856e7a0`: 5 version-string, 2 shipped-document and 77 work-record files differ, nothing else); registry read; candidate published on all four packages; `latest` moves forward (`0.0.0` on all four); evidence ledger (complete for `0.2.0-rc.3`). All `passed`. |
+| The approval | The maintainer approved the `release` environment; the `publish` job started at 16:57 UTC and ended at 17:00 UTC. |
+| `--tag latest` under trusted publishing | **It was accepted.** The four `npm publish ... --tag latest --provenance --ignore-scripts` commands ran in order (`@vsift/darwin-arm64`, `@vsift/win32-x64`, `@vsift/linux-x64`, `vsift-cli`) in 22 seconds, each signed a provenance statement and each printed `+ package@0.2.0`; no `ENEEDAUTH`, and no bootstrap token existed. |
+| npm's read-back of `latest` | **It took about two and a half minutes**: the job polled five times, 30 seconds apart (it allows ten), before `latest` read `0.2.0` on all four packages. `next` read `0.2.0-rc.3` on all four throughout. |
+| The GitHub release | Created as a draft with ten assets and published at 17:00:34 UTC with `--latest`: not a draft, not a pre-release, and GitHub's own latest release read `v0.2.0` at the first attempt. |
+
+**Checked from outside, after the publish:** `latest` is `0.2.0` and `next` is `0.2.0-rc.3` on all four packages;
+a clean `npm install vsift-cli` with no tag installs `0.2.0` and `vsift --version` prints `vsift 0.2.0 (eeb2a22a46a8)`; `npm audit
+signatures` reports 4 verified registry signatures and 4 verified attestations; `gh attestation verify` passes for 14 of 14 files (the ten
+release files and the four npm tarballs, with `--source-ref refs/tags/v0.2.0`); the registry's tarballs equal the plan's checksums; the
+integrity values of `0.2.0-rc.1`, `0.2.0-rc.2` and `0.2.0-rc.3` (twelve values) were unchanged. **The hosted checks were then run on `0.2.0`'s own
+bytes** (2026-10-09): `P14 published artifacts` twice (from `0.1.0` and from `0.2.0-rc.3`, runs 37999883603 and 38000209110), `P14 journeys`
+(37999886382), `P13 managed smoke` (37999889647) and `P14 scan reading` (38007675152, read on 2026-10-10: `p14-scan-reading-2026-10-10.md`).
+**`P14 verify release`'s first run on `0.2.0` (37999880619) was red on exactly the two checks a stable version adds, "not registered yet",
+by design** (20 other checks passed); P14 PR 13a (#348) registered them in `tools/p14-published/lib/verify.cjs`, and the run that records
+RQ-19 for `0.2.0` is `P14 verify release` run 38013937541 (2026-10-10, from `main` at `6ca2f3c`: 22 checks passed, the two that a stable version adds among them). **The two checks read `release-delta.json` from the publish run's `publish-plan` artifact, which GitHub
+keeps seven days (until 2026-10-16 for this release), so the verification of a stable version is dispatched within seven days of its publish**;
+after that the delta check fails by name and points at the evidence ledger's `release_delta`, where the record was copied on 2026-10-10.
+
+**Deprecation.** On 2026-10-10 `0.2.0-rc.1` and `0.2.0-rc.2` were deprecated on all four packages with the message `Superseded by 0.2.0.
+Install vsift-cli.` (6.12 step 7; the maintainer's login and second factor; read back with `npm view <package>@<version> deprecated`), and
+`0.2.0-rc.3` and `0.2.0` were not. **`next` was not moved** and the workflow never moves it ([L-108](../planning/known-limits.md#l-108)):
+`vsift-cli@next` still installs `0.2.0-rc.3`, and whether to move it is the maintainer's open choice.
+
+**What was not tried, and is not shown.** Yarn's behaviour for an untagged `yarn add vsift-cli` inside its one-day hold (the hosted jobs
+installed `vsift-cli@0.2.0` by exact version after the documented exemption, and Yarn did hold the 5.6-hour-old version back); the weekly
+`P07 local ASR` gates, `P14 load` and `P14 runbook walk` on the stable release's own tag (they are the candidate's, carried); and everything the
+stable release ships untried (the maintainer's try-outs, RQ-17, [L-143](../planning/known-limits.md#l-143)). Nothing here announces anything.

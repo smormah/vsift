@@ -1,6 +1,6 @@
 # The stable release `0.2.0`: the maintainer's steps (P14 PR 12)
 
-Status: **prepared 2026-10-09 (P14 PR 12); nothing here has been run.** This is the maintainer's checklist for tagging,
+Status: **prepared 2026-10-09 (P14 PR 12) and followed on 2026-10-09 and 2026-10-10; `release.md` 6.13 records what happened and what the real services showed.** It is kept as the model for the next stable version. This was the maintainer's checklist for tagging,
 publishing and checking `0.2.0`. It is a planning page, not a section of [`release.md`](../operations/release.md), because
 `release.md` may not change between the third candidate and the stable release (6.8 lists what may). The rule is
 `release.md` 6.7; this page is 6.7 written out with this release's real numbers, the way 6.10 to 6.12 are for the
@@ -635,3 +635,5 @@ rung until PR 13, so CL-201 to CL-209 stay unused.
 3. **What to do about Yarn on the first day** beyond the note in `install.md`, the launcher's README and the release notes (nothing was tried: Yarn's behaviour for an untagged
    `yarn add vsift-cli` inside the one-day hold is not known; with an exact version it said "quarantined" on 0.1.0).
 4. **#340** (the audio clip a cold agent cannot use) and the other findings listed in the work record: a change to the CLI's text is a new candidate or a `0.2.x`.
+
+**What was done (2026-10-10, P14 PR 13b).** The ledger follow-up of section 11 was made in two pull requests: P14 PR 13a registered the two stable checks, and P14 PR 13b recorded `0.2.0`'s own evidence, copied `release_delta`, updated the pages listed above (the root `README.md`, `docs/agents/skill.md`, `docs/development.md`, `docs/operations/release.md` 6.12 step 7 and the new 6.13, `SECURITY.md`; `roadmap.svg` was left, L-121; `docs/guide/limits.md`, the delivery-governance page and three sentences of `install.md` were updated too), recorded P14 `complete` and accepted ADR 0024 (plan section 31). The claims rung stayed `candidate`: the open points above are answered or still open in plan 31.5.

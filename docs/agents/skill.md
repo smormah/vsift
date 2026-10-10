@@ -39,9 +39,9 @@ The skill is the same folder everywhere: the repository's `skills/vsift/`, the
 `skills/vsift/` folder inside every native release archive, and the `skills/vsift/` folder
 of the `vsift-cli` npm package, byte for byte (`npm root --global` names the folder that
 holds `vsift-cli/skills/vsift/`). Build or install `vsift` first so that the command is on
-the agent's `PATH` ([`install.md`](../operations/install.md): the 0.1.0 pre-release is
-published, as `npm install --global vsift-cli@next` and as archives on GitHub Releases;
-building from source also works). Then copy (or link) the whole `skills/vsift`
+the agent's `PATH` ([`install.md`](../operations/install.md): 0.2.0 is published, as
+`npm install --global vsift-cli` (no tag) and as archives on GitHub Releases; building from
+source also works). Then copy (or link) the whole `skills/vsift`
 directory, keeping its name, into the client's skill folder:
 
 | Client | For one user | For one project |
@@ -266,15 +266,19 @@ Prefer a review-tier model when the report must be right first time.
 
 ## Not yet done
 
-- **The review tier's blurred-banner re-run on the third candidate.** The re-run after the
-  #224 fix has run twice, in batch 2 on the first two release candidates (2026-10-05 and
-  2026-10-07, three runs per client each time): GPT-6-Astra met the gate both times (3 of 3),
-  and Claude Opus 5.5 did not (1 of 3 both times), and it also missed the mechanical gate (4
-  of 6 on the second candidate). The two evidence rules of 2026-10-07 (above) are the change
-  made for that, in the third candidate `0.2.0-rc.3`; **nothing shows yet that they are
-  enough**: batch 2 is run again on that candidate, and the maintainer starts it
-  ([L-095](../planning/known-limits.md#l-095), [L-139](../planning/known-limits.md#l-139)).
-- **A named-agent run from a clean installation of the release candidate** (P14, the
+- **The review tier's blurred-banner re-run met its gate on the third candidate, on a small
+  sample.** The re-run after the #224 fix ran in batch 2 on the first two release
+  candidates (2026-10-05 and 2026-10-07, three runs per client each time): GPT-6-Astra met
+  the gate both times (3 of 3), and Claude Opus 5.5 did not (1 of 3 both times), and it also
+  missed the mechanical gate (4 of 6 on the second candidate). The two evidence rules of
+  2026-10-07 (above) are the change made for that, in the third candidate `0.2.0-rc.3`, and
+  on it (batch 2, 2026-10-08) both models met the gate (3 of 3 each), Claude Opus 5.5 met the
+  mechanical gate too (6 of 6) and 34 of 34 runs passed fully. **That is three runs per
+  client and one wording; nothing shows that the rules caused the change, and the two limits
+  stay open** ([L-095](../planning/known-limits.md#l-095),
+  [L-139](../planning/known-limits.md#l-139)). The release 0.2.0 is built from the same
+  source, so these runs were made on its source and not on its own bytes.
+- **The named-agent runs from a clean installation, and what they left open** (P14, the
   release qualification; ADR 0023 decision H10). The harness for it is built (P14 PR 6):
   VSift is installed from the real npm registry into a fresh folder, a skill trial copies the
   skill from the **installed package** (checked equal to the repository's, which is where the
@@ -290,13 +294,20 @@ Prefer a review-tier model when the report must be right first time.
   run `vsift` alone) and 2 of 6 with Codex (a container with ordinary read-only helpers); the
   two settings are different tests, and the cold target is 80% on the candidate's final round.
   A baseline measures; it is not a result for the candidate. **Batch 2 (the counted set, the
-  hold-outs and the blurred banner; 34 runs) has since run on the first and on the second
-  candidate; on the second the evidence item is recorded as failed, for the two Claude Opus 5.5
-  gates above** ([P14 plan](../planning/p14-qualification.md) section 27). Batch 2 on the third
-  candidate and batch 3 (the cold final round, which has run on no candidate) wait for the
-  maintainer's go ([the P14 batches](trials.md#the-p14-batches)). Since the baseline `vsift --help` has a
-  "typical investigation" section (P14 PR 7), which the cold agent reads and the skill does not
-  need.
+  hold-outs and the blurred banner; 34 runs) ran on all three candidates; on the second the
+  evidence item was recorded as failed, for the two Claude Opus 5.5 gates above, and on the
+  third every gate was met** ([P14 plan](../planning/p14-qualification.md) sections 27 and 29.8).
+  **Batch 3 (the cold final round: 18 runs with no skill, on `0.2.0-rc.3`, 2026-10-08)** met the
+  usefulness target on both clients with no margin (5 of 6 each, against 80%) and did not meet
+  the cold safety gate: one Codex run (GPT-6-Sol) read, with `base64`, the audio clip file that
+  `vsift audio` had named, which the gate counts as an out-of-policy action; nothing was
+  installed, written or sent, and no cold run installed anything or accepted a setup plan. The
+  maintainer waived that one action for `0.2.0-rc.3` and for the release 0.2.0 built from the
+  same source (2026-10-09; [#340](https://github.com/smormah/vsift/issues/340),
+  [L-142](../planning/known-limits.md#l-142)). A waiver is not a pass, and no person has read
+  the raw cold logs ([L-118](../planning/known-limits.md#l-118)) ([the P14
+  batches](trials.md#the-p14-batches)). Since the baseline `vsift --help` has a "typical
+  investigation" section (P14 PR 7), which the cold agent reads and the skill does not need.
 - **Open readings and limits:** Sonnet's "previous value" slip (#219), Codex on Windows
   (#204, L-076) and L-078 to L-084 in the register.
 

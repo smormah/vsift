@@ -2,7 +2,7 @@
 
 This page lists the limits a user is likely to meet, so you can judge what to trust. Each one links to its
 entry in the [known-limits register](../planning/known-limits.md), which is the full record and the
-authority. VSift is a pre-release: this page describes it as it is, not as it will be.
+authority. This page describes VSift 0.2.0 as it is, not as it will be.
 
 The short version: **VSift is tested on synthetic videos and a synthetic voice only.** Nobody has yet run it on
 real meetings, accents or noisy rooms, so every accuracy figure below says what was measured, on what.

@@ -1,10 +1,13 @@
 # ADR 0024: R0 qualification and the release candidate
 
-- Status: **Proposed** (2026-10-02). This is the P14 plan. The maintainer **confirmed all
+- Status: **Accepted** (2026-10-10, with P14's completion: the maintainer's merge of the
+  change that records P14 `complete` is the acceptance, as ADR 0021, ADR 0022 and ADR 0023
+  were accepted at their packets' completion; see the
+  [completion note](#implementation-note-2026-10-10-p14-pr-13b-the-stable-release-020-is-recorded-and-p14-is-complete)
+  at the end). Proposed 2026-10-02: this was the P14 plan, and the maintainer **confirmed all
   eight decisions, A to H, on 2026-10-02, exactly as recommended**, and started P14 that
-  day: the delivery ledger marks it `in_progress` (governance rule 10 was met by the
-  maintainer's word). The ADR itself stays Proposed until P14 completes, when it becomes
-  Accepted, as ADR 0021, ADR 0022 and ADR 0023 did.
+  day (governance rule 10 was met by the maintainer's word). Every note below is as it was
+  written, and none changes a decision.
 - Date: 2026-10-02
 - Tracking: [P14 / issue #17](https://github.com/smormah/vsift/issues/17)
 - Refines: [ADR 0005](0005-r0-scope-and-qualification-profiles.md) (public support begins
@@ -2002,3 +2005,31 @@ left undecided until a crate is to be published. The `Guide` check is not made a
 *accepted residual* for R0 with their issues open. With every limit a statement leans on now reviewed, the register no longer holds back the statements of the rung `after_p14`; their
 evidence still does: each needs its items `passed` for the release, CL-201 needs RQ-17, CL-206 needs RQ-16 and CL-208 needs RQ-14, which are waived and not passed. 75 entries that no public
 statement leans on are still `pending`.
+
+## Implementation note, 2026-10-10 (P14 PR 13b: the stable release `0.2.0` is recorded and P14 is complete)
+
+This is the completion note of P14, and **this ADR is Accepted with it**: the header of the ADR and its decision text said it stays Proposed until P14 completes, when it becomes Accepted
+(as ADR 0021, ADR 0022 and ADR 0023 did), and the plan's PR 13 row lists "ADR 0024 Accepted" among the follow-up's work. The maintainer's merge of the change that records P14 `complete` is
+the acceptance. **This is work record and pages only:** no code, tool, workflow, schema, skill, grader, scenario, setting, `freeze.json` or public claim changed, the claims rung is still
+`candidate`, and nothing was dispatched, tagged, published or deprecated by the session that wrote it. Every earlier note of this ADR stands as it was written.
+
+**What the change records** (the evidence is in plan section 31): the hosted checks on `0.2.0`'s own bytes (published artifacts from `0.1.0` and from `0.2.0-rc.3`, the journeys on three systems, the
+managed smoke, the credential-free verification and the Governance job at the stable commit); the ledger's own entries for `0.2.0` for the items whose stable rule is `repeat`; the recorded
+`release_delta` that lets the carried items count for the release; the delivery ledger's `complete` for P14 with the stable release commit `eeb2a22a46a8` as its commit and a verification summary;
+the register (L-105 records what the first move of `latest` did: trusted publishing accepted `--tag latest`, the release was marked latest, npm took about two and a half minutes);
+the pages that still named the candidate or `@next`; and the neutral checkpoint for using the published CLI, which the maintainer has already used on their own machine (plan 31.4).
+
+**Decided in this change** (item 1 by the maintainer in chat on 2026-10-10; items 2 to 4 inside the change, for the maintainer to confirm or overrule by merging it; none of these is a decision of decisions A to H):
+
+1. **RQ-13 (the scan reading) is recorded `passed` for `0.2.0`, with one new finding named and accepted: the maintainer's decision of 2026-10-10 (in chat).** The reading of the day was completed by the third candidate's method (plan 31.2, [`p14-scan-reading-2026-10-10.md`](../planning/p14-scan-reading-2026-10-10.md)) and agrees with 2026-10-08 in every particular but one: nine FFmpeg records were published on 2026-10-08, after that reading, and **one is a new finding, CVE-2026-107678 (Medium; the MP4 demuxer's `pssh` handling; the shipped snapshot has no fix; VSift enables the `mov` demuxer)**. The maintainer **accepted it for R0 and decided to fix it after the stable release**, as L-122 and L-137 were accepted: register entry L-144 (`accepted residual`, `accepted (2026-10-10)`), issue [#351](https://github.com/smormah/vsift/issues/351); at the re-pin to the 2026-10-31 month-end build (L-132) look for an upstream fix or cherry-pick one, and add a malformed-MP4 `pssh` case to the malicious-media campaign so that its effect on VSift's child is measured. It is not high or critical, so the plan's rule (no open high or critical finding on a supported path) is not breached by it. The ledger entry says what it does not prove: an unfixed reachable FFmpeg record exists and is accepted, nothing was run on a crafted file, the project's code host was not read and its pull request 24593 is unread.
+2. **The rung stays `candidate`.** The plan says PR 13 moves it to `after_p14`; the check makes that a wording decision (every statement of the rung must be used or deleted, and three of the nine cannot
+   be used because RQ-14, RQ-16 and RQ-17 are waived, not passed), and no public wording is the session's to write (31.5 item 4). Four statements whose words left the documents were removed from the
+   registry (NC-004, NC-005, NC-014 and CL-101) and one file name was registered for the release runbook (NC-810); this only narrows what may be said.
+3. **RQ-05 is recorded on the journeys run alone** (the Ubuntu and Windows ASR gates and the durable path were not repeated on the stable release's tag; the third candidate's runs of them, for the same
+   program source, are in `prior`, and RQ-09 and RQ-12 carry): 31.5 item 2.
+4. **Four register entries (L-103, L-105, L-108, L-133) no longer name P14 as their owner** now that it is complete, and L-103 and L-105 are `monitoring`; none was closed and no severity changed; one entry was added, L-144 (item 1), and accepted by the maintainer.
+
+**What is weaker than it sounds.** A waived item is not a pass, and four of the twenty are waived for a release that nobody else has tried (no Smart App Control, SmartScreen, clean-machine or
+Gatekeeper try-out; one cold agent read an audio clip file it was not meant to; no person has read the raw cold logs). The evidence is one day's hosted runs of a synthetic corpus. Complete is a
+statement about the ledger and the checker, not about readiness: no platform is called supported and nothing is announced. 75 of the 129 register entries are still `pending` review, and no public
+statement leans on them.

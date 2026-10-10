@@ -21,15 +21,15 @@ These documents do not certify that the planned mitigations have shipped.
 
 ## Supported versions
 
-VSift has published a 0.x pre-release (0.1.0, 2026-10-01) and no stable release. Until a stable release, security fixes are applied to the default branch only, and a pre-release is not a supported version.
+VSift 0.2.0, published on 2026-10-09 under npm's `latest` tag, is the version that receives security fixes. The 0.1.0 pre-release (2026-10-01) and the release candidates are published but are not a supported version: they receive none.
 
-The table says which versions receive security fixes from the day the R0 release, `0.2.0`, is published. Until then it describes a policy, not a release, and it changes nothing about `0.1.0`. It is about security fixes, not about platforms: which machines VSift has been shown to work on is in the [support matrix](docs/planning/support-and-resource-profiles.md).
+The table says which versions receive security fixes. It was a policy until `0.2.0` was published, and it is the practice from that day. It is about security fixes, not about platforms: which machines VSift has been shown to work on is in the [support matrix](docs/planning/support-and-resource-profiles.md).
 
 | Version | What it is | Security fixes |
 | --- | --- | --- |
-| The newest `0.2.x` | The R0 release line, published under npm's `latest` tag | Yes. A fix is released as a new patch version of the line (`0.2.1` and so on) with a security advisory. Only the newest patch of the line is fixed. |
-| `0.2.0-rc.N` | A release candidate, published under `next` and never announced | No. The release replaces it. |
-| `0.1.0` | The first pre-release, published under `next` | No. Move to the newest release. |
+| The newest `0.2.x` | The R0 release line, published under npm's `latest` tag (`0.2.0` is its only version so far) | Yes. A fix is released as a new patch version of the line (`0.2.1` and so on) with a security advisory. Only the newest patch of the line is fixed. |
+| `0.2.0-rc.N` | The release candidates, published under `next` and never announced (`0.2.0-rc.1` and `0.2.0-rc.2` are deprecated on npm) | No. The release replaces them. |
+| `0.1.0` | The first pre-release (2026-10-01) | No. Move to the newest release. |
 | The default branch | Source for building from the repository | Fixes land here first. |
 
 Fixes are made as soon as practical and without a promised delay (see [Reporting a vulnerability](#reporting-a-vulnerability)). Software the project does not control, such as FFmpeg, whisper.cpp and your operating system, is patched by its publishers; the [known-limits register](docs/planning/known-limits.md) records what is known about the builds VSift reviews.
