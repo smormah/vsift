@@ -36,6 +36,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   `after_p14` would make the nine statements of that rung stale unless each is used or deleted (plan 31.5 item 4).
 - **The two handoff files** (`memory/`) say that R0's packets are complete and what remains open.
 
+### Fixed
+
+- **A trial-harness test no longer fails when Windows loses the race of starting the stand-in client; the harness is unchanged** (P14, #345; one test file and this
+  entry only). `claude_code_gets_one_settings_source_in_a_trusted_workspace` failed once, in a plain full-workspace run on Windows, with "the client did not start: no
+  thread belonging to the child was found", and passed 3 of 3 on its own and in the next full run. **Where the race is:** in the harness, not in the test. `run` starts the
+  client suspended inside a Job Object (`process-wrap`'s `JobObject`) and then resumes it by taking a snapshot of every thread on the machine and resuming those owned by
+  the client's process; when it resumes none, `process-wrap` ends the client and reports that message. The test asks nothing unusual of the start, so any test that starts
+  the stand-in client can meet it. The client has not run when this happens, so starting it again is safe. **Change:** the test starts the client through `run_started`,
+  which tries again, at most five times with 100 ms between, and only when the failure carries that message; every other failure (a refused root, a missing executable, a
+  client that fails after it started) ends at once, and a race lost five times in a row is reported as itself. Three new tests hold the retry without a second process: a
+  start that loses the race twice is tried a third time, a start that loses it every time ends at the bound, and four other failures are tried once (the first two fail when
+  the retry is removed, the third when it is made unconditional). **Why not in `run`:** `tools/vsift-agent-trials/src` is part of the agent trials' frozen grader (`freeze check` digests every
+  file of it: a one-line change to `run.rs` makes it answer "grader changed since the freeze", checked for this change), so the same retry inside `run`, which would also
+  protect a real trial, needs a decision about the freeze and is not made here. **What is shown:** with `process-wrap` changed on a scratch copy outside the repository to
+  report that message at random on 20 starts in 100, the test as it was failed 22 of 100 runs, all with this message, and the test as it is now 0 of 100; the fixed test then
+  passed 200 of 200 runs of `cargo test -p vsift-agent-trials --locked --test run_stub claude_code_gets_one_settings_source_in_a_trusted_workspace -- --exact` on a Windows
+  11 machine, and 1,200 of 1,200 with 40 busy processes on its 40 logical processors and 12 runs at once. **What is not shown:** the failure itself was not reproduced, before
+  or after the change: the test as it was passed 1,200 of 1,200 runs under that load, and 3,200 Job Object starts of the stand-in client from 32 tasks at once under the same
+  load did not fail once, so what in Windows leaves the thread out of the snapshot is not known, and the retry is evidence of a repair for a failure seen once, not of a
+  measured rate. The other tests that call `run` (the rest of `run_stub.rs` and `prepare_modes.rs`) meet the same race at the same rate and are unchanged, and a real trial
+  that meets it stops with the same message and no run record. No known limit is added: the product is untouched, and a recurrence goes to the register as #345 asks.
+
 ## [0.2.0] - 2026-10-09
 
 **This is the release: the first VSift published under npm's `latest`, so `npm install vsift-cli` with no tag installs it.** It is the version
