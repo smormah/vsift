@@ -165,8 +165,17 @@ fn verification_prose(reason: AsrFailureReason) -> (Cow<'static, str>, &'static 
 /// cannot tell a bad stretch from a bad recording. A different range cuts the
 /// audio at other points, and a chunk's result depends on where it is cut, so
 /// trying one is a reasonable next step. With more answers than this, most of
-/// them unusable, the failure is about the recording's speech as a whole, and
+/// them unusable, the failure is about most of the speech the run covered, and
 /// the prose does not suggest a range.
+///
+/// Why the answered chunks and not the planned ones or their share. The share
+/// of a failed run is always above a half, so it tells nothing more; a plan
+/// counts the quiet chunks, which say nothing about the recogniser (a long
+/// recording with four stretches of speech, all unusable, plans many chunks and
+/// answers four); and the answered chunks are the stretches of speech the run
+/// had evidence about. What the prose says is about what the run covered
+/// ("most of the speech this run covered"), which is the recording only when
+/// the run was over the whole of it.
 const FEW_ANSWERED_CHUNKS: u32 = 3;
 
 /// The next step of a run whose recognizer answered for most of the chunks with
@@ -218,7 +227,7 @@ fn clock(micros: u64) -> String {
 /// rejected-segments reason it says what is true and no more: the tool works,
 /// and either one stretch could not be read (a few chunks were answered, so a
 /// slightly different range is worth trying, as is a transcript the user
-/// supplies) or the recording's speech could not be transcribed reliably (many
+/// supplies) or most of the speech the run covered could not be transcribed reliably (many
 /// were, so it points to the supplied transcript only). For a structural fault
 /// the recognizer itself is the suspect, and reinstalling it stays the next
 /// step.
@@ -250,7 +259,7 @@ fn unusable_chunks_prose(details: UnusableChunks) -> (Cow<'static, str>, &'stati
         ),
         ProviderOutputError::TooManyRejectedSegments => (
             Cow::Owned(format!(
-                "{explanation} The tool itself works: VSift's own check of it passed before this run. This recording's speech could not be transcribed reliably."
+                "{explanation} The tool itself works: VSift's own check of it passed before this run. Most of the speech this run covered could not be transcribed reliably."
             )),
             SUPPLIED_TRANSCRIPT_REMEDY,
         ),
@@ -454,7 +463,7 @@ mod tests {
     /// #353: a run in which most chunks' answers were refused for segments that
     /// could not be placed in their audio says what is true. The tool works, so
     /// it does not tell to reinstall it. With many chunks answered it says that
-    /// the recording's speech could not be transcribed reliably and points to a
+    /// most of the speech the run covered could not be transcribed reliably and points to a
     /// transcript the user supplies, and does not say that another range helps
     /// or that it does not: that is not established. It names the reason, the
     /// numbers and the first chunk by position and by the source time `--from`
@@ -559,7 +568,7 @@ mod tests {
         {
             let summary = run_summary(answered_chunks(unusable, answered, planned, rejected)?);
             for named in [
-                "This recording's speech could not be transcribed reliably.",
+                "Most of the speech this run covered could not be transcribed reliably.",
                 "ingest --transcript <file>",
                 "The tool itself works",
             ] {

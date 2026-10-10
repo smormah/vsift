@@ -977,7 +977,10 @@ async fn text_kept_in_an_unreadable_part_is_listed_as_not_transcribed_by_the_run
     );
     let warnings = value["warnings"].as_array().ok_or("no warnings")?;
     assert!(warnings.contains(&Value::from(PROVIDER_CHUNKS_REJECTED_WARNING)));
-    assert!(PROVIDER_CHUNKS_REJECTED_WARNING.contains("kept as it was"));
+    assert!(
+        PROVIDER_CHUNKS_REJECTED_WARNING
+            .contains("kept whole as it was, unless this run's own text overlaps it")
+    );
 
     // A search of the revision counts the kept words as transcribed: it lists
     // less than the run did not transcribe, and nothing under the kept words.
@@ -1203,7 +1206,11 @@ fn every_warning_kind_is_published_in_each_schema_that_lists_them() -> TestResul
 
 // ------------------------------------------------ P10 PR 3: the job surface
 
-/// Compares `value` with the frozen example `name`.
+/// Compares `value` with the frozen example `name`: the parsed JSON values, not
+/// the bytes. Member order and white space of an example are not part of the
+/// contract (a consumer reads JSON), and the examples are formatted for a person
+/// to read, so a change of either is not a change of what the example says; a
+/// change of any value, member or sentence is.
 fn assert_example(name: &str, value: &Value) -> TestResult {
     assert_eq!(*value, load(&format!("examples/{name}"))?, "{name}");
     Ok(())

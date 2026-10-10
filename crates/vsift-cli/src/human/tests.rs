@@ -79,6 +79,33 @@ fn render(command: CommandName, value: &Value) -> Result<String, Box<dyn std::er
     Ok(text)
 }
 
+/// #353: the list of what a run did not transcribe says that earlier text is
+/// kept only when there was an earlier revision to keep it from. A first run has
+/// nothing to keep; a run over an earlier revision says what the rule is, and
+/// that there may be none, because the result does not count what was kept.
+#[test]
+fn the_untranscribed_label_speaks_of_earlier_text_only_after_an_earlier_revision() -> TestResult {
+    let first = example("transcript-retranscribe.partial.json")?;
+    assert!(first["data"]["revision"]["supersedes"].is_null());
+    let text = render(CommandName::TranscriptRetranscribe, &first)?;
+    assert!(
+        text.contains("Not transcribed by this run (the answer for these parts could not be used; words said there cannot be found):\n"),
+        "{text}"
+    );
+    assert!(!text.contains("earlier text"), "{text}");
+
+    let mut spliced = first;
+    spliced["data"]["revision"]["supersedes"] = Value::from("trv_2222222222222222");
+    let text = render(CommandName::TranscriptRetranscribe, &spliced)?;
+    assert!(
+        text.contains("earlier text that reaches into them, if any, is kept"),
+        "{text}"
+    );
+    // The label ends in the colon, with no space before the line break.
+    assert!(!text.contains(": \n"), "{text}");
+    Ok(())
+}
+
 /// Every frozen example of a PR 2a command renders; its snapshot is the
 /// text a person reads.
 #[test]

@@ -8,7 +8,7 @@ Segments carried from earlier revisions: 0
 Revision warning: provider_chunks_rejected (count 1, first at cue 2)
 Requested range: the whole source
 Segments recognised now: 1
-Not transcribed by this run (the answer for these parts could not be used; earlier text there is kept, any other words said there cannot be found):
+Not transcribed by this run (the answer for these parts could not be used; words said there cannot be found):
   00:00:30.000000 to 00:00:55.000000 (--from 30000000 --to 55000000)
 Job: job_8d3e1f0a2b4c6d8e0f1a2b3c4d5e6f70 (not resumed, chunks reused: 0)
 Read its segments: vsift transcript get ses_0123456789abcdef0123456789abcdef --revision trv_a5ed9a081a2068b75c956f9befbb4fd4
@@ -16,4 +16,4 @@ Read its segments: vsift transcript get ses_0123456789abcdef0123456789abcdef --r
 Status: partial (the warnings below say what is missing)
 Operation: op_4f0c2b8e9a1d3c5e7f60718293a4b5c6
 Lifecycle: ephemeral, expires 2026-09-25T00:00:00Z
-Warning: For some audio the recogniser's answer could not be used, so this run did not transcribe it: the result lists those time ranges as untranscribed. It is not silence. Text an earlier transcript already had inside them is kept as it was; any other words said there cannot be found. Transcribing just that range again (transcript retranscribe with --from and --to) cuts the audio at other points and may cover it, and a transcript file you already have can supply it: open the video with ingest --transcript.
+Warning: For some audio the recogniser's answer could not be used, so this run did not transcribe it: the result lists those time ranges as untranscribed. It is not silence. Earlier text that reaches into them is kept whole as it was, unless this run's own text overlaps it; any other words said there cannot be found. Transcribing just that range again (transcript retranscribe with --from and --to) cuts the audio at other points and may cover it, and a transcript file you already have can supply it: open the video with ingest --transcript.

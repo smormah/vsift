@@ -64,9 +64,14 @@ pub(super) fn push_retranscription(text: &mut TerminalText, data: &Retranscripti
     text.push_fixed("Segments recognised now: ")
         .push_unsigned(data.recognised_segment_count)
         .end_line();
+    // Earlier text can only be kept where there was an earlier revision.
     push_ranges(
         text,
-        "Not transcribed by this run (the answer for these parts could not be used; earlier text there is kept, any other words said there cannot be found):",
+        if data.revision.supersedes.is_some() {
+            "Not transcribed by this run (the answer for these parts could not be used; earlier text that reaches into them, if any, is kept, and any other words said there cannot be found):"
+        } else {
+            "Not transcribed by this run (the answer for these parts could not be used; words said there cannot be found):"
+        },
         &data.untranscribed_ranges,
     );
     let job = &data.job;

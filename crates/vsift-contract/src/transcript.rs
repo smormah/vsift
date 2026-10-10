@@ -603,13 +603,15 @@ impl TranscriptPageData {
 
 /// Fixed prose of the warning `provider_chunks_rejected`: some audio was given
 /// to the recognizer and what it answered could not be used, so this run did
-/// not transcribe it. It says what that is not (silence), what happened to text
-/// an earlier revision had there (kept, as it was), and what can cover the
-/// rest, which the typed warning cannot: a retranscription of just that range
-/// cuts the audio at other points (a chunk's result depends on where it is
-/// cut), and a transcript file the user has needs no recognition. It claims
-/// neither that such a file exists nor that it covers the range.
-pub const PROVIDER_CHUNKS_REJECTED_WARNING: &str = "For some audio the recogniser's answer could not be used, so this run did not transcribe it: the result lists those time ranges as untranscribed. It is not silence. Text an earlier transcript already had inside them is kept as it was; any other words said there cannot be found. Transcribing just that range again (transcript retranscribe with --from and --to) cuts the audio at other points and may cover it, and a transcript file you already have can supply it: open the video with ingest --transcript.";
+/// not transcribe it. It says what that is not (silence), exactly what
+/// happened to text an earlier revision had there (the rule of
+/// `EarlierTextRule`: text that reaches into those parts is kept whole as it
+/// was, unless this run's own text overlaps it), and what can cover the rest,
+/// which the typed warning cannot: a retranscription of just that range cuts
+/// the audio at other points (a chunk's result depends on where it is cut),
+/// and a transcript file the user has needs no recognition. It claims neither
+/// that such a file exists nor that it covers the range.
+pub const PROVIDER_CHUNKS_REJECTED_WARNING: &str = "For some audio the recogniser's answer could not be used, so this run did not transcribe it: the result lists those time ranges as untranscribed. It is not silence. Earlier text that reaches into them is kept whole as it was, unless this run's own text overlaps it; any other words said there cannot be found. Transcribing just that range again (transcript retranscribe with --from and --to) cuts the audio at other points and may cover it, and a transcript file you already have can supply it: open the video with ingest --transcript.";
 
 /// Fixed prose for the envelope `warnings` of an import, one per warning kind.
 ///
