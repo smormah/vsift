@@ -5,7 +5,7 @@ Current-state handoff, rewritten in every change; history: git, `CHANGELOG.md`, 
 ## Now (2026-10-09)
 
 **Note, 2026-10-10:** `0.2.0` was published on 2026-10-09 (tag `v0.2.0` at `eeb2a22a46a8`, the merge of #344; the GitHub release is not a pre-release). What this page says of PR 12 being "prepared", of nothing being published and of `latest` being `0.0.0` was written before the publish; PR 13 records the publish and its checks and rewrites it. The changes of 2026-10-10 here: the RQ-10 waiver, and **`0.2.0-rc.1` and `0.2.0-rc.2` are deprecated on all four packages (2026-10-10, read back; rc.3 and `0.2.0` are not)**.
-**P00-P13 are complete. P14 (R0 qualification, #17) is in progress.** Its plan has 14 pull requests (0-13): 0-10 are done, 11's evidence is complete (the maintainer's register pass and reading of the cold logs remain), **12 (the stable `0.2.0`) is PREPARED and not complete**, 13 follows. Plan:
+**P00-P13 are complete. P14 (R0 qualification, #17) is in progress.** Its plan has 14 pull requests (0-13): 0-10 are done, 11's evidence is complete (the maintainer's register pass remains), **12 (the stable `0.2.0`) is PREPARED and not complete**, 13 follows. Plan:
 `p14-qualification.md` (sections 15-30); ADR 0024 stays Proposed until P14 completes.
 - **PR 12 is prepared, not done.** The commit the maintainer will tag `v0.2.0` is on the branch `p14-pr12-stable-0.2.0`, built on #343 (the maintainer's decisions of 2026-10-09, not yet on `main`); the
   supervisor opens its pull request after #343 merges. It differs from the tag `v0.2.0-rc.3` only in: the version text of five files (`0.2.0-rc.3` becomes `0.2.0`), the two shipped documents
@@ -40,7 +40,7 @@ observed (or waived: used for RQ-17). #246 waits. **2026-10-07/08:** improve the
 - **Move `next` after the publish?** (L-108.) The workflow never does; both shipped documents are true either way. What Yarn 4 does with an untagged `yarn add vsift-cli` during its one-day hold is not known.
 - **The register pass** over `register-review-sheet.md` (every review `pending` but L-137 and L-138 accepted, L-139 rejected = to be fixed; L-142 and L-143 are new). L-139 and L-095 record rc.3's result and stay
   open; L-138 describes no live limit and L-134 is narrowed. Also whether `Guide` becomes a required check, and CL-204's note and the matrix paragraph.
-- **Confirm the reading of the 18 cold logs** (L-118): the maintainer is reading a generated command list; to be recorded when they confirm. **#340:** which option (help text only, an additive JSON hint, or
+- **The reading of the 18 cold logs is decided (2026-10-10):** the supervisor's reading stands for the maintainer's; no person has read the logs (L-118). **#340:** which option (help text only, an additive JSON hint, or
   accept and fix in `0.2.x`); a change to the CLI's text is a new candidate or a `0.2.x`. **Close #321** (3,000 clean hosted repetitions). #312: fix or accept.
 - **After the stable:** the Dependabot pull requests (#192, #193, #194), the whisper.cpp re-pin (#322, L-137) with FFmpeg's (#272, L-132; next month-end build 2026-10-31), the RQ-17 try-out on LOKI and a Mac
   (`rq-17-tryout-sheet.md`; it would give CL-201 its evidence), `roadmap.svg` (L-121).

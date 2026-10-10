@@ -2587,7 +2587,8 @@ twenty items are waived, and each waiver's text says what it does not cover.** T
 
 **Left open, for the maintainer:** the one pass over the register (28.4, 29.7; it now includes L-142 and L-143), including the stale wording of CL-204's note and the support matrix's paragraph on agent
 clients ("the repeat on the third candidate decides"); **the maintainer's own reading of the raw cold logs (L-118): the maintainer is reading a generated command list of the 18 runs, to be recorded when
-they confirm** (the supervisor's reading of all 18 is recorded, and is not theirs); #340 (which option, or accept for `0.2.x`); closing #321; #312 (fix or accept); the Dependabot pull requests, the
+they confirm** (the supervisor's reading of all 18 is recorded, and is not theirs; **decided 2026-10-10: the maintainer does no reading of their own and the supervisor's stands for it, so no person has
+read the logs**: L-118 and the update at the end of `batch-3-reading-rc.3.md`); #340 (which option, or accept for `0.2.x`); closing #321; #312 (fix or accept); the Dependabot pull requests, the
 whisper.cpp and FFmpeg re-pins and the README graphics, all after the stable.
 
 **Decided inside this plan, for the maintainer to confirm or overrule.**
@@ -2607,7 +2608,8 @@ whisper.cpp and FFmpeg re-pins and the README graphics, all after the stable.
 - **The rule of RQ-10 was widened after the result.** The judge's behaviour did not change, and the rule now says what the judge always did; but a rule changed after a run is a rule the run did not have
   to meet, and this record says so. The item is not `passed` on it.
 - **The supervisor's reading of the cold logs is not the maintainer's.** The gate that fired once, on a harmless read, rests on one grader and two readers who are not the maintainer, until the maintainer
-  confirms.
+  confirms. **Since 2026-10-10 that is how it stays:** the maintainer decided to rely on the supervisor's reading and read neither the raw logs nor the command list, so the gate rests on the grader and on
+  readers that are AI sessions (a further session read the command list that day and checked it against two raw logs; nothing else out of policy).
 
 ## 30. PR 12: the stable release commit `0.2.0` is prepared (2026-10-09)
 
@@ -2702,7 +2704,7 @@ evidence only; everything is measured on a synthetic corpus and a synthetic voic
    completeness check passes either way (a waived item is complete for any version), so what was decided is the wording of the ledger entry and of this plan.
 2. **Whether to move `next`** after the publish (L-108); both shipped documents are true either way.
 3. **Whether the stable's documents should say more or less about the first day for Yarn users** (the untagged case was not tried).
-4. The register pass, the reading of the cold logs (L-118), #340, #312 and the re-pins, as in 29.10: unchanged and after the stable.
+4. The register pass, the reading of the cold logs (L-118; **decided 2026-10-10: the supervisor's reading stands for the maintainer's, 29.10**), #340, #312 and the re-pins, as in 29.10: unchanged and after the stable.
 
 ### 30.7 What is weaker than it sounds
 

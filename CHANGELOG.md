@@ -83,6 +83,12 @@ is still open: the ledger follow-up (PR 13) remains.
 names) and `0.2.0` are not deprecated on any of the four, and no tag moved. Nothing was unpublished: both candidates stay installable by exact version, with a warning. On the maintainer's instruction a session typed the commands in the maintainer's own terminal, under the maintainer's npm login, and the maintainer approved each of the eight writes with the second factor.
 The result is in step 9 of [`docs/planning/p14-stable-release-steps.md`](docs/planning/p14-stable-release-steps.md). The packet P14 is still open: PR 13 remains.
 
+**Work record only, after the release: the maintainer's decision of 2026-10-10 on the reading of the cold logs.** The safety result of the 18 runs with no skill is graded from command text, and the
+project names the maintainer as the reader of the raw logs ([L-118](docs/planning/known-limits.md#l-118)). The maintainer decided that the supervisor's reading stands for it. **The maintainer did not
+read the raw logs or the generated command list, so no person has read them:** the result rests on the grader and on readers that are AI sessions (a further session read the command list that day and
+checked it against two raw logs; nothing else out of policy). Nothing is re-graded and no number changes: one cold run in 18 still missed the gate, and that item (RQ-16) is still `waived`, not `passed`
+([L-142](docs/planning/known-limits.md#l-142)). No code, tool, public claim or the claims rung changed. Of the maintainer's own steps, the register pass remains.
+
 ## [0.2.0-rc.3] - 2026-10-08
 
 **This is a release candidate, under qualification.** It is the third candidate for `0.2.0`, the release that ships R0

@@ -24,7 +24,7 @@ that one action and nothing else. A waiver is not a pass.
 **Who reads this.** The numbers are the frozen grader's, computed by `vsift-agent-trials summarize` into [`batch-3/SUMMARY.md`](batch-3/SUMMARY.md), and
 **nothing is re-graded**. The reading of the raw logs, the gap list and the comparison with the baseline are the readings of the supervisor and of the pull
 request's author; the only decision in this record is the maintainer's of 2026-10-09, quoted below. The maintainer's own reading of the raw logs is not
-recorded here (see "The raw logs").
+recorded here (see "The raw logs"); **on 2026-10-10 the maintainer decided that the supervisor's reading stands for it** (the update at the end).
 
 ## As the grader graded it
 
@@ -246,3 +246,8 @@ supervisor's reading of the raw logs stands for L-118's reading by the maintaine
 `waived` for `0.2.0-rc.3`); the RQ-16 waiver carries to the stable `0.2.0` (the same bytes), for the same one action; the deprecation of `0.2.0-rc.1` and `0.2.0-rc.2` is at the stable, not before; RQ-17 is
 `waived` for `0.2.0-rc.3` and the stable (shipped untried, L-143). Still open: the register pass, #340, and the maintainer's own reading of the raw logs, which is pending (the maintainer is reading a generated
 command list of the 18 runs, to be recorded when they confirm). This reading is otherwise as it was written.
+
+**Update, 2026-10-10: the maintainer relies on the supervisor's reading.** "The raw logs" above leaves to the maintainer whether the supervisor's reading stands in for the reading by the maintainer that
+L-118 and the checklist name. The maintainer decided that it does. **The maintainer did not read the raw logs or the generated command list of the 18 runs, so no person has read them;** the readers are the
+supervisor and the author of this record, who agree, and the frozen grader. On 2026-10-10 a further session read the generated command list of the 18 runs and compared it with the raw logs of two runs (run-cfd6262e and run-59a1b31c): the lists matched call for call and it found nothing else out of policy; that is a third reading by an AI session, not a person's.
+Nothing is re-graded and no number changes: cold safety is still not met (1 of 18), RQ-16 is still `waived` for that one action, and the limits of a read of command text stand as written above.

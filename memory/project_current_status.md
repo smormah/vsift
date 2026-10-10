@@ -43,7 +43,7 @@ the CLI and write a cited report. P12's named-client trials qualified it:
 ## Where the project stands
 
 **P00-P13 are complete. P14, the R0 qualification (#17), is in progress** (started 2026-10-02; decisions A-H of ADR 0024). Its plan is 14 pull requests (0-13): **0-10 are done, PR 11's evidence
-is complete (the maintainer's register pass and reading of the cold logs remain), PR 12 (the stable `0.2.0`) is PREPARED and not complete, PR 13 follows.** The packet is not complete. Where things stand:
+is complete (the maintainer's register pass remains), PR 12 (the stable `0.2.0`) is PREPARED and not complete, PR 13 follows.** The packet is not complete. Where things stand:
 - **PR 12, prepared 2026-10-09 (plan section 30; checklist `docs/planning/p14-stable-release-steps.md`):** the commit the maintainer tags `v0.2.0` is on the branch `p14-pr12-stable-0.2.0` (built on #343, the
   maintainer's decisions of the day; the supervisor opens its pull request once #343 is merged). It differs from the tag `v0.2.0-rc.3` only in five version-string files, the two shipped documents (the
   installation guide and the npm README, now for `latest`) and the work record, and `candidate-delta` refuses nothing. **Nothing is tagged, published or dispatched: PR 12 is complete only when the
@@ -63,8 +63,8 @@ is complete (the maintainer's register pass and reading of the cold logs remain)
 - **The maintainer's decisions of 2026-10-09 (plan section 29.10; nothing was run again):** RQ-10's rule admits `INVALID_ARGUMENT`; **RQ-16 is `waived` for rc.3 and the stable, for that one action**; **RQ-17 (the
   clean-machine and Smart App Control try-out) is `waived` for rc.3 and the stable: they ship untried** (no Smart App Control or SmartScreen try-out, no true clean-machine install, no Mac Gatekeeper try-out;
   decision H; L-143; the try-out may still be done after the stable, and CL-201 stays unused until it is `passed`); rc.1 and rc.2 are deprecated at the stable. **`release-evidence --complete-for 0.2.0-rc.3` passes
-  (exit 0).** Four items are waived (RQ-10, RQ-14, RQ-16, RQ-17) and none is a pass. **Still to do:** the register pass; the maintainer's own reading of the raw cold logs (they are reading a generated command
-  list of the 18 runs; to be recorded when they confirm). **Decided 2026-10-10:** the RQ-10 waiver, which named rc.3 only, carries to the stable for the link case alone.
+  (exit 0).** Four items are waived (RQ-10, RQ-14, RQ-16, RQ-17) and none is a pass. **Still to do:** the register pass. **Decided 2026-10-10:** the supervisor's reading of the 18 raw cold logs stands for the maintainer's
+  own; the maintainer read neither the logs nor the command list, so no person has read them (L-118). **Decided 2026-10-10:** the RQ-10 waiver, which named rc.3 only, carries to the stable for the link case alone.
 - **What is weak:** the skill change met its gates once on a small sample; the cold round met its target twice with no margin and its safety gate not at all (one harmless read; the strict Claude setting is a
   narrow test: L-125, L-118); the floor was not run with whisper.cpp (L-137, L-141); hosted images are not clean machines (L-112); Smart App Control and the macOS prompts are unseen and untried (L-098, L-143);
   **a synthetic corpus and voice only** (L-020, L-022). **Open:** #312 (L-135; one failure in 4,500 loaded Windows repetitions across three candidates; not fixed). CVE-2026-38350 is accepted (L-122).

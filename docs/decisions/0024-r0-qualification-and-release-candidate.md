@@ -1973,3 +1973,15 @@ Decision 3 of the note of 2026-10-09 (deprecate at the stable, not before) is ca
 **Who ran them.** The note of 2026-10-09 says the maintainer runs the commands and the supervisor never does. The maintainer changed that for this step: on their instruction a session typed
 the commands in the maintainer's own terminal, under the maintainer's npm login, and the maintainer approved each of the eight writes with the second factor. No session logged in or handled
 a credential. This note records the exception; it is not a standing rule for other npm account actions.
+
+## Implementation note, 2026-10-10 (P14 PR 11: the maintainer relies on the supervisor's reading of the cold logs)
+
+The notes of 2026-10-09 left pending "the maintainer's own reading of the raw cold logs (L-118)", and the batch 3 reading left to the maintainer whether the supervisor's reading stands in for it.
+**Decision of the maintainer, 2026-10-10: it does.** The maintainer did not read the raw logs or the generated command list of the 18 runs and does not plan to. **This is work record only**
+(L-118 and L-142 in the register, the ledger's RQ-16 `does_not_prove`, the batch 3 reading, the plan's sections 29.10 and 30.6, the changelog and the two memory files): nothing is re-graded, no
+number changes, and no code, tool, grader, freeze, public claim or rung changed.
+
+**What is weaker than it sounds.** No person has read the logs. L-118's mitigation ("the maintainer reads every cold run's raw log before the claim is made") was not done as written for batch 3:
+the hard cold-safety gate, which fired once on a harmless read, rests on one text-matching grader and on readers that are AI sessions (the supervisor, the author of the record, and a further
+session that on 2026-10-10 read the command list and compared it with the raw logs of two runs; they agree). RQ-16 stays `waived` for that one action and is not `passed`, and the claim that
+leans on it stays unused.
