@@ -1,10 +1,10 @@
 # RQ-17 try-out sheet: Smart App Control and a clean Windows 11 machine
 
-Status: **prepared 2026-10-05 (P14 PR 11b), moved to the second candidate on 2026-10-06 (P14 PR 10 repeated) and to the third on 2026-10-08 (P14 PR 10 repeated again); nothing on it has been done on any candidate.** **Decided 2026-10-09: RQ-17 is `waived` for `0.2.0-rc.3` and the stable `0.2.0`, which ship untried (decision H of ADR 0024; [L-143](known-limits.md#l-143)). The sheet is no longer a step before the stable; it stays available for a try-out after it, and the observation, whatever it shows, is recorded in a later records change.** It is for the maintainer, on a second,
+Status: **prepared 2026-10-05 (P14 PR 11b), moved to the second candidate on 2026-10-06 (P14 PR 10 repeated), to the third on 2026-10-08 (P14 PR 10 repeated again) and to the stable release `0.2.0` on 2026-10-10; nothing on it has been done on any candidate or on the stable.** **Decided 2026-10-09: RQ-17 is `waived` for `0.2.0-rc.3` and the stable `0.2.0`, and the stable shipped untried (decision H of ADR 0024; [L-143](known-limits.md#l-143); the plan's section 29.10). The sheet is no longer a step before a release. It stays the way to do the try-out afterwards, on the published `0.2.0`.** What an observation is used for: it is recorded, whatever it shows, in a later records change (this sheet records nothing itself). It is the evidence that the ledger entry for RQ-17 asks for, and it gives the claim CL-201 the evidence it names. Whether RQ-17 then moves from `waived` to `passed` is the maintainer's decision, and it can move only if the item's own rule in the [evidence ledger](p14-evidence-ledger.json) is met (an observation recorded, whatever it shows: decision H). A waiver is not a pass: CL-201 requires RQ-17 to be `passed` and stays unused until then. The sheet is for the maintainer, on a second,
 clean, wipeable Windows 11 machine (called **LOKI** below; the plan's unknowns table records it, 2026-10-02), with a
 person at the console: every installer needs one. It is evidence item **RQ-17** of the
-[evidence ledger](p14-evidence-ledger.json), against the published release candidate `0.2.0-rc.3`. The plan is
-[`p14-qualification.md`](p14-qualification.md) sections 8, 10 and 14; the decisions are
+evidence ledger, against the published stable release `0.2.0`. The plan is
+[`p14-qualification.md`](p14-qualification.md) sections 8, 10, 14 and 29.10; the decisions are
 [ADR 0024](../decisions/0024-r0-qualification-and-release-candidate.md) decisions C and H.
 
 **Never print, type into a document, photograph or paste LOKI's sign-in details, and write no account name, e-mail address or
@@ -16,13 +16,14 @@ real machine name in any observation.** Say "LOKI". Crop screenshots to the wind
 - **Decision H (accepted 2026-10-02): a try-out blocks the stable release only until an observation is recorded, whatever it
   shows.** A blocked file, a warning, a pass and "could not be done" are all observations. Untried hardware is stated, never
   hidden. Nothing in this sheet can fail it by showing a bad result. (On 2026-10-09 the maintainer used the provision for an
-  item that is not done: RQ-17 is `waived` and the stable ships untried, so nothing here blocks the stable any more.)
+  item that is not done: RQ-17 is `waived` and the stable `0.2.0` was published untried, so nothing here blocked it.)
 - **Decision C's trigger.** If Smart App Control (or Gatekeeper, which this sheet cannot try) **blocks an npm-installed VSift on
-  a default machine with no way through short of turning protection off**, you then choose, before the stable release,
+  a default machine with no way through short of turning protection off**, you then choose
   between a **documented limitation** (`install.md` section 4 already says Smart App Control may block it) and **signing**
   (certificate or signing service fees, key custody, a new secret in the release workflow, new lint rules, about a week).
-  Signing changes the release workflow, which is code, so it means another candidate (`0.2.0-rc.4`) and the repeats that
-  come with one. The sheet only collects the facts; it decides nothing.
+  The waiver does not remove this trigger: it still applies to what a try-out after the stable shows. Signing changes the
+  release workflow, which is code, so it would be a new release, `0.2.1` or later, with its own candidate and the repeats that
+  come with one (`release.md` section 6.5), not `0.2.0`. The sheet only collects the facts; it decides nothing.
 - **What it cannot show.** Another machine's policy (AppLocker, App Control for Business, a corporate proxy), a Mac (no
   Mac is available, so the macOS Gatekeeper try-out ships as "untried", decision H and the plan), or that a user's recording
   works: the practice recording is synthetic.
@@ -46,11 +47,11 @@ real machine name in any observation.** Say "LOKI". Crop screenshots to the wind
 
 | Item | Value |
 | --- | --- |
-| The release | `0.2.0-rc.3`, a pre-release: <https://github.com/smormah/vsift/releases/tag/v0.2.0-rc.3> |
-| What `vsift --version` must print | `vsift 0.2.0-rc.3 (<the first 12 digits of the tag's commit, as the release page shows it>)` |
-| The Windows archive | `vsift-0.2.0-rc.3-x86_64-pc-windows-msvc.tar.gz`; its size is on the release page, and its checksum is the line for it in the release's `SHA256SUMS` (neither is known before the publish; the first candidate's archive was 3,957,058 bytes, and the second's is on its own release page) |
+| The release | `0.2.0`, the stable release (not a pre-release), published 2026-10-09: <https://github.com/smormah/vsift/releases/tag/v0.2.0>. The tag `v0.2.0` is at commit `eeb2a22a46a85ab10a456f2ab5d6a62e292836c5`, and `0.2.0` is npm's `latest` on all four packages |
+| What `vsift --version` must print | `vsift 0.2.0 (eeb2a22a46a8)` (the version, and the first 12 digits of the tag's commit) |
+| The Windows archive | `vsift-0.2.0-x86_64-pc-windows-msvc.tar.gz`, 3,957,701 bytes as the release lists it; its checksum is the line for it in the release's `SHA256SUMS`, which lists the three archives (the release has 10 files) |
 | Node.js | version 22 or later; the hosted runs used 22.23.3 with npm 10.9.9 (from <https://nodejs.org>; check the installer against the checksums on that site if you wish) |
-| The npm command | `npm install --global vsift-cli@next` (always with `@next`: a plain `vsift-cli` is the empty `0.0.0` placeholder) |
+| The npm command | `npm install --global vsift-cli`, with no tag: `0.2.0` is `latest` (Part 1 step 2 says what to do if npm reports `0.0.0`). Do not add `@next`: it names the earlier candidate `0.2.0-rc.3`, which this try-out is not about |
 | Part 3 only: the tools | below, with sizes and SHA-256 |
 | Part 3 only: the practice recording | `F04-speech.mp4` (140 KB) and `F04-speech.srt`, links in [the guide's first investigation](../guide/first-investigation.md#2-get-the-practice-files) |
 | A place to write | print this file, or copy it to a text editor on LOKI; hand the filled copy back (it is not committed as it is) |
@@ -101,11 +102,14 @@ This is the path most people take, and the one a clean machine tests: nothing of
 2. **Install VSift** and time it:
 
    ```powershell
-   npm install --global vsift-cli@next
+   npm install --global vsift-cli
    ```
 
    Expected: a few seconds, `added 2 packages` or similar, no warnings about scripts (no package runs one). Write down
    exactly what npm printed if it differs.
+
+   If npm installs `vsift-cli` at `0.0.0` (the empty placeholder that was `latest` before `0.2.0`; a registry mirror that
+   has not caught up can do this), write that down and install the exact version instead: `npm install --global vsift-cli@0.2.0`.
 
 3. **Run it.**
 
@@ -113,12 +117,12 @@ This is the path most people take, and the one a clean machine tests: nothing of
    vsift --version
    ```
 
-   Expected: `vsift 0.2.0-rc.3 (<the first 12 digits of the tag's commit>)`.
+   Expected: `vsift 0.2.0 (eeb2a22a46a8)`.
 
    **If PowerShell says that running scripts is disabled** (about `vsift.ps1`): that is Windows' default execution policy on a
    client, and it also affects `npm` itself, so it may have stopped you earlier. Copy the message exactly. Then, **only after
    writing it down**, use one of these and write which one you used: (a) the **one marked exception**: `cmd /c vsift --version`
-   (a plain `--version` through the `.cmd` shim, no text from anywhere else); (b) `npx vsift-cli@next --version`; (c) the
+   (a plain `--version` through the `.cmd` shim, no text from anywhere else); (b) `npx vsift-cli --version`; (c) the
    normal user-level fix, `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`, which is a change to LOKI's settings and the
    maintainer's call. A user meets this on a default machine; `install.md` does not mention it yet.
 
@@ -167,7 +171,7 @@ This is the path most people take, and the one a clean machine tests: nothing of
    ```powershell
    mkdir C:\vsift-check; cd C:\vsift-check
    Set-Content package.json '{"private": true}'
-   npm install vsift-cli@next
+   npm install vsift-cli
    npm audit signatures
    npx vsift --version
    ```
@@ -191,17 +195,17 @@ Use a **fresh folder** for each way, so one result cannot colour the next. Re-re
 2. Check the checksum, as `install.md` section 3 step 2 says; the two hashes must be equal, case aside:
 
    ```powershell
-   (Get-FileHash -Algorithm SHA256 .\vsift-0.2.0-rc.3-x86_64-pc-windows-msvc.tar.gz).Hash
+   (Get-FileHash -Algorithm SHA256 .\vsift-0.2.0-x86_64-pc-windows-msvc.tar.gz).Hash
    Select-String 'x86_64-pc-windows-msvc' .\SHA256SUMS
    ```
 
 3. Look at the download mark, then extract with the **Windows** `tar` (not Git's):
 
    ```powershell
-   Get-Item .\vsift-0.2.0-rc.3-x86_64-pc-windows-msvc.tar.gz -Stream *
-   Get-Content .\vsift-0.2.0-rc.3-x86_64-pc-windows-msvc.tar.gz -Stream Zone.Identifier
-   C:\Windows\System32\tar.exe -xzf .\vsift-0.2.0-rc.3-x86_64-pc-windows-msvc.tar.gz
-   Get-Item .\vsift-0.2.0-rc.3-x86_64-pc-windows-msvc\vsift.exe -Stream *
+   Get-Item .\vsift-0.2.0-x86_64-pc-windows-msvc.tar.gz -Stream *
+   Get-Content .\vsift-0.2.0-x86_64-pc-windows-msvc.tar.gz -Stream Zone.Identifier
+   C:\Windows\System32\tar.exe -xzf .\vsift-0.2.0-x86_64-pc-windows-msvc.tar.gz
+   Get-Item .\vsift-0.2.0-x86_64-pc-windows-msvc\vsift.exe -Stream *
    ```
 
    Expected: the archive has a `Zone.Identifier` stream (`ZoneId=3`). **Whether the extracted `vsift.exe` has one depends on
@@ -209,10 +213,10 @@ Use a **fresh folder** for each way, so one result cannot colour the next. Re-re
 4. Run it, from PowerShell:
 
    ```powershell
-   .\vsift-0.2.0-rc.3-x86_64-pc-windows-msvc\vsift.exe --version
+   .\vsift-0.2.0-x86_64-pc-windows-msvc\vsift.exe --version
    ```
 
-   Expected if nothing blocks it: `vsift 0.2.0-rc.3 (<the first 12 digits of the tag's commit>)`. **If a window appears** ("Windows protected your PC", or a
+   Expected if nothing blocks it: `vsift 0.2.0 (eeb2a22a46a8)`. **If a window appears** ("Windows protected your PC", or a
    Smart App Control message): write the exact title and text, whether **More info** and **Run anyway** exist, and what
    happens when you use them; photograph or screenshot it. `install.md` section 4 says SmartScreen offers **More info**, then
    **Run anyway**, and that Smart App Control offers no way through; this is where that is seen for the first time.
@@ -221,10 +225,10 @@ Use a **fresh folder** for each way, so one result cannot colour the next. Re-re
 **2b. A command-line download** (no Internet mark is expected): in a new folder,
 
 ```powershell
-curl.exe -L -O https://github.com/smormah/vsift/releases/download/v0.2.0-rc.3/vsift-0.2.0-rc.3-x86_64-pc-windows-msvc.tar.gz
-Get-Item .\vsift-0.2.0-rc.3-x86_64-pc-windows-msvc.tar.gz -Stream *
-C:\Windows\System32\tar.exe -xzf .\vsift-0.2.0-rc.3-x86_64-pc-windows-msvc.tar.gz
-.\vsift-0.2.0-rc.3-x86_64-pc-windows-msvc\vsift.exe --version
+curl.exe -L -O https://github.com/smormah/vsift/releases/download/v0.2.0/vsift-0.2.0-x86_64-pc-windows-msvc.tar.gz
+Get-Item .\vsift-0.2.0-x86_64-pc-windows-msvc.tar.gz -Stream *
+C:\Windows\System32\tar.exe -xzf .\vsift-0.2.0-x86_64-pc-windows-msvc.tar.gz
+.\vsift-0.2.0-x86_64-pc-windows-msvc\vsift.exe --version
 ```
 
 Check the checksum as in 2a step 2 (the file is the same). Write down whether the run differed from 2a. If it did not,
@@ -310,17 +314,17 @@ table matched what was there, and that the practice files and the registered too
 
 Hand the filled copy (observations, the exact texts, cropped screenshots without names) to the supervisor. They are recorded as
 **RQ-17**: one entry per way in (npm, browser archive, command-line archive) with the Smart App Control state **at the time**,
-the exact text, and the date; `install.md` section 4 and `known-limits.md` L-098 are then rewritten from what was seen, not
+the exact text, and the date; `install.md` section 4 and `known-limits.md` L-098 and L-143 are then rewritten from what was seen, not
 from Microsoft's and Apple's documentation, and the plan's Windows row says what was seen. The outcomes:
 
 | What you saw | What follows |
 | --- | --- |
 | Smart App Control was Off all along | Recorded as that: it says nothing about On. Say so in the matrix ("untried") and decide whether to find a machine where it is On |
 | Smart App Control On or in evaluation and **nothing blocked** | Recorded; `install.md` section 4's "expects to be blocked" is rewritten to what was observed |
-| Smart App Control **blocked** `vsift.exe` by every way in, with no way through short of turning it off | **Decision C's trigger.** Stop; tell the supervisor; you choose between the documented limitation and signing (and so another candidate) |
+| Smart App Control **blocked** `vsift.exe` by every way in, with no way through short of turning it off | **Decision C's trigger.** Stop; tell the supervisor; you choose between the documented limitation and signing (and so a new release, `0.2.1` or later; `0.2.0` is published and does not change) |
 | A SmartScreen warning with **Run anyway** | Matches `install.md`; recorded with the exact text |
 | A SmartScreen or Defender stop with no way through, or a detection naming the file | Tell the supervisor at once; do not use a workaround; recorded exactly, and not read as a verdict on the file until it has been looked at |
-| An execution-policy refusal of the npm `vsift.ps1` shim | A finding for `install.md` section 2 (a documentation change, which is allowed before the stable release) |
+| An execution-policy refusal of the npm `vsift.ps1` shim | A finding for `install.md` section 2 (a documentation change) |
 | Something not on this list | Recorded as seen |
 
 **What this sheet does not cover:** macOS (no Mac; Gatekeeper ships as untried), another user's policy, a second Windows
