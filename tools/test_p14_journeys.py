@@ -48,6 +48,12 @@ class VersionTests(unittest.TestCase):
         with self.assertRaises(Failure):
             journeys.highest_published([])
 
+    def test_a_candidate_of_the_next_patch_is_the_highest_while_latest_is_a_stable_release(self) -> None:
+        # The registry once 0.2.1-rc.1 is on `next` and `latest` is still 0.2.0: no input picks the candidate.
+        published = ["0.0.0", "0.1.0", "0.2.0-rc.1", "0.2.0-rc.2", "0.2.0-rc.3", "0.2.0", "0.2.1-rc.1"]
+        self.assertEqual(journeys.highest_published(published), "0.2.1-rc.1")
+        self.assertEqual(journeys.highest_published([*published, "0.2.1"]), "0.2.1")
+
     def test_text_that_is_not_a_version_is_refused_before_a_command_sees_it(self) -> None:
         for text in ["", "v0.1.0", "0.1", "0.1.0; rm -rf /", "$(touch pwned)", "0.1.0 ",
                      "latest", "0.1.0\n--registry=http://127.0.0.1", "0.1.0-", "01.2.3"]:
