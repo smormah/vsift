@@ -1049,6 +1049,15 @@ Options:
       --revision <REVISION>
           Revision to read (a `trv_` identity); defaults to the newest
 
+      --view <VIEW>
+          Which answer to give. `brief` keeps each item's ids, times and text (a candidate's reasons and hash) and leaves out what every item repeats, so a page is a fraction of the size; read the full view for everything else
+
+          Possible values:
+          - full:  Every field of every item: the answer every release gave (the default)
+          - brief: Each item without what the answer already states once: the revision's hashes, source and model details (or the index's source and size). It shapes the --json answer (readable text is the same for both), and --events jsonl refuses it, because a stream's records are complete evidence
+
+          [default: full]
+
   -h, --help
           Print help (see a summary with '-h')
 ```
@@ -1154,6 +1163,15 @@ Options:
       --revision <REVISION>
           Revision to search (a `trv_` identity); defaults to the newest
 
+      --view <VIEW>
+          Which answer to give. `brief` keeps each item's ids, times and text (a candidate's reasons and hash) and leaves out what every item repeats, so a page is a fraction of the size; read the full view for everything else
+
+          Possible values:
+          - full:  Every field of every item: the answer every release gave (the default)
+          - brief: Each item without what the answer already states once: the revision's hashes, source and model details (or the index's source and size). It shapes the --json answer (readable text is the same for both), and --events jsonl refuses it, because a stream's records are complete evidence
+
+          [default: full]
+
   -h, --help
           Print help (see a summary with '-h')
 ```
@@ -1204,6 +1222,15 @@ Options:
           - strict-linux: The strict Linux worker boundary: accepted only when the kernel attests a cgroup v2 with CPU, memory and process limits, a read-only root and no network but loopback; otherwise `ISOLATION_UNAVAILABLE` before any work
 
           [default: process-only]
+
+      --view <VIEW>
+          Which answer to give. `brief` keeps each item's ids, times and text (a candidate's reasons and hash) and leaves out what every item repeats, so a page is a fraction of the size; read the full view for everything else
+
+          Possible values:
+          - full:  Every field of every item: the answer every release gave (the default)
+          - brief: Each item without what the answer already states once: the revision's hashes, source and model details (or the index's source and size). It shapes the --json answer (readable text is the same for both), and --events jsonl refuses it, because a stream's records are complete evidence
+
+          [default: full]
 
   -h, --help
           Print help (see a summary with '-h')

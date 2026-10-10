@@ -32,6 +32,7 @@ The `error.code` of a failed result is one of these (the schema's own list). Wha
 - [bundle-evidence-record.schema.json](#bundle-evidence-recordschemajson): VSift retained bundle evidence record v1
 - [bundle-transcript-record.schema.json](#bundle-transcript-recordschemajson): VSift retained bundle transcript record v1
 - [bundle-visual-index-record.schema.json](#bundle-visual-index-recordschemajson): VSift retained bundle visual-index record v1
+- [candidates-brief-data.schema.json](#candidates-brief-dataschemajson): VSift candidates data, brief view v1
 - [candidates-data.schema.json](#candidates-dataschemajson): VSift candidates data v1
 - [candidates-stream-data.schema.json](#candidates-stream-dataschemajson): VSift candidates JSON Lines terminal data v1
 - [config.schema.json](#configschemajson): VSift user configuration v1
@@ -50,6 +51,7 @@ The `error.code` of a failed result is one of these (the schema's own list). Wha
 - [operation-response.schema.json](#operation-responseschemajson): VSift operation terminal response v1
 - [progress-event.schema.json](#progress-eventschemajson): VSift JSONL progress event v1
 - [result-event.schema.json](#result-eventschemajson): VSift JSONL result event v1
+- [search-brief-data.schema.json](#search-brief-dataschemajson): VSift search data, brief view v1
 - [search-data.schema.json](#search-dataschemajson): VSift search data v1
 - [search-stream-data.schema.json](#search-stream-dataschemajson): VSift search JSON Lines terminal data v1
 - [setup-check-response.schema.json](#setup-check-responseschemajson): VSift setup.check response v1
@@ -61,11 +63,14 @@ The `error.code` of a failed result is one of these (the schema's own list). Wha
 - [setup-repair.schema.json](#setup-repairschemajson): VSift setup repair data v1
 - [setup-rollback.schema.json](#setup-rollbackschemajson): VSift setup rollback data v1
 - [terminal-event.schema.json](#terminal-eventschemajson): VSift JSONL terminal event v1
+- [transcript-get-brief-data.schema.json](#transcript-get-brief-dataschemajson): VSift transcript.get data, brief view v1
 - [transcript-get-data.schema.json](#transcript-get-dataschemajson): VSift transcript.get data v1
 - [transcript-get-stream-data.schema.json](#transcript-get-stream-dataschemajson): VSift transcript.get JSON Lines terminal data v1
 - [transcript-retranscribe-data.schema.json](#transcript-retranscribe-dataschemajson): VSift transcript.retranscribe data v1
 - [transcript-revision.schema.json](#transcript-revisionschemajson): VSift transcript revision summary v1
+- [transcript-segment-brief.schema.json](#transcript-segment-briefschemajson): VSift transcript segment, brief view v1
 - [transcript-segment.schema.json](#transcript-segmentschemajson): VSift transcript segment evidence record v1
+- [visual-candidate-brief.schema.json](#visual-candidate-briefschemajson): VSift visual candidate, brief view v1
 - [visual-candidate.schema.json](#visual-candidateschemajson): VSift visual candidate v1
 - [workspace-data.schema.json](#workspace-dataschemajson): VSift session.init-workspace data v1
 
@@ -443,6 +448,54 @@ The content of a session or retained bundle artifact whose kind is visual_index_
 | `windows[].start_us` | integer | yes | at least 0 |
 | `windows[].end_us` | integer | yes | at least 1 |
 | `windows[].state` | constant "undecodable" | yes |  |
+
+### candidates-brief-data.schema.json
+
+**VSift candidates data, brief view v1** ([the schema](../../../schemas/v1/candidates-brief-data.schema.json))
+
+The data member of a complete or partial candidates result asked for with --view brief (0.2.1): candidates-data.schema.json with each item reduced to visual-candidate-brief.schema.json, a view member that is always brief and item_constants, which holds once what the full view repeats on every candidate of the index. The requested range, the index, the coverage with every typed gap and the cursor are the full page's own: what was and was not analysed is never left out. Validate the envelope with operation-response.schema.json: its coverage member is truncated, and its status partial, exactly when coverage.gaps is not empty. The view is refused with --events jsonl. Pass next_cursor back with the same session, range and view to continue; it never analyses anything.
+
+| Member | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `session_id` | string | yes | pattern `^ses_[a-z0-9]{16,64}$` |
+| `view` | constant "brief" | yes |  |
+| `range` | object | yes |  |
+| `range.from_us` | integer | yes | at least 0 |
+| `range.to_us` | integer | yes | at least 1 |
+| `index` | object | yes | The committed visual-index revision the page was read from. Each call that analyses anything commits a new revision holding every window of the one before it unchanged, so candidate identities never change. |
+| `index.index_id` | string | yes | pattern `^vix_[a-z0-9]{16,64}$` |
+| `index.number` | integer | yes | 1 to 64 |
+| `index.profile` | constant "r0-visual-v1" | yes |  |
+| `index.duration_us` | integer | yes | The video's probed duration; windows and coverage are clipped to it.; at least 1 |
+| `index.window_us` | constant 60000000 | yes |  |
+| `index.sample_interval_us` | constant 500000 | yes | Decoded frames are sampled at least this far apart (2 Hz). |
+| `index.coverage_interval_us` | constant 10000000 | yes | Every cell of this length that holds a decoded frame has at least one candidate. |
+| `item_constants` | object | yes | What every candidate of this index has in the full view, stated once: the same values the full view repeats on each item. source_id and source_segment_id name the video and its whole-file segment; stream_index is the sampled video stream; displayed_dimensions is the orientation-correct size of the frames; analysis is the profile and the size of the grey samples compared (no image is kept). |
+| `item_constants.source_id` | string | yes | pattern `^src_sha256_[0-9a-f]{64}$` |
+| `item_constants.source_segment_id` | string | yes | pattern `^sgm_[a-z0-9]{16,64}$` |
+| `item_constants.stream_index` | integer | yes | 0 to 4294967295 |
+| `item_constants.displayed_dimensions` | object | yes |  |
+| `item_constants.displayed_dimensions.width` | integer | yes | at least 1 |
+| `item_constants.displayed_dimensions.height` | integer | yes | at least 1 |
+| `item_constants.analysis` | object | yes |  |
+| `item_constants.analysis.profile` | constant "r0-visual-v1" | yes |  |
+| `item_constants.analysis.width` | constant 128 | yes |  |
+| `item_constants.analysis.height` | constant 72 | yes |  |
+| `coverage` | object | yes |  |
+| `coverage.searched_range` | object | yes | The requested range clipped to the video. |
+| `coverage.searched_range.from_us` | integer | yes | at least 0 |
+| `coverage.searched_range.to_us` | integer | yes | at least 1 |
+| `coverage.analyzed` | array of object | yes | Parts of searched_range that analysed windows cover, merged and in start order. no_decoded_frame and candidate_budget_exhausted gaps lie inside them.; at most 100 items |
+| `coverage.analyzed[].from_us` | integer | yes | at least 0 |
+| `coverage.analyzed[].to_us` | integer | yes | at least 1 |
+| `coverage.gaps` | array of object | yes | Every typed gap of searched_range in start order; touching gaps of one reason are merged, except budget gaps, which stay per window.; at most 100 items |
+| `coverage.gaps[].from_us` | integer | yes | at least 0 |
+| `coverage.gaps[].to_us` | integer | yes | at least 1 |
+| `coverage.gaps[].reason` | "not_analyzed" \| "deadline_exceeded" \| "undecodable" \| "no_decoded_frame" \| "candidate_budget_exhausted" | yes | not_analyzed: not analysed yet; call candidates again for the range. deadline_exceeded: the window's decode timed out in this call; a later call retries it. undecodable: the media tools could not decode the window (recorded, not retried). no_decoded_frame: a 10 s cell of an analysed window without a decoded frame. candidate_budget_exhausted: the window changed more often than its 32-candidate budget; dropped_candidates says how many change candidates were dropped. |
+| `coverage.gaps[].dropped_candidates` | integer | yes | Change candidates dropped by the window's budget; 0 for every other reason.; 0 to 65535 |
+| `coverage.ranges_truncated` | boolean | yes | True when analyzed or gaps held more than 100 entries and only the first 100 are listed. |
+| `items` | array of object, see [visual-candidate-brief.schema.json](#visual-candidate-briefschemajson) | yes | at most 100 items |
+| `next_cursor` | string or null | yes | 1 to 512 characters |
 
 ### candidates-data.schema.json
 
@@ -967,6 +1020,44 @@ One worker request's complete result in a job.batch --events jsonl stream (P11, 
 | `line` | integer or null | yes | 1 to 1000 |
 | `result` | object, see [job-result.schema.json](#job-resultschemajson) | yes |  |
 
+### search-brief-data.schema.json
+
+**VSift search data, brief view v1** ([the schema](../../../schemas/v1/search-brief-data.schema.json))
+
+The data member of a complete or partial search result asked for with --view brief (0.2.1): search-data.schema.json with each item reduced to transcript-segment-brief.schema.json and a view member that is always brief. The parallel hits (segment_id and how it matched), the normalised query, the requested range, the cursor and transcript_coverage are the full page's own, and the revision block holds once what the full view repeats on every item. Validate the envelope with operation-response.schema.json: its coverage member is truncated, and its status partial, exactly when transcript_coverage.untranscribed_ranges is not empty. The view is refused with --events jsonl. Pass next_cursor back with the same session, query, range, revision and view to continue.
+
+| Member | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `session_id` | string | yes | pattern `^ses_[a-z0-9]{16,64}$` |
+| `view` | constant "brief" | yes |  |
+| `revision` | object, see [transcript-revision.schema.json](#transcript-revisionschemajson) | yes |  |
+| `query` | object | yes |  |
+| `query.terms` | array of string | yes | The normalised query words, in query order: lowercase letters and digits, with a decimal point only between digits.; 1 to 16 items; each: 1 to 1024 characters |
+| `range` | object or null | yes |  |
+| `range.from_us` | integer | yes | at least 0 |
+| `range.to_us` | integer | yes | at least 1 |
+| `items` | array of object, see [transcript-segment-brief.schema.json](#transcript-segment-briefschemajson) | yes | at most 100 items |
+| `hits` | array of object | yes | at most 100 items |
+| `hits[].segment_id` | string | yes | pattern `^tsg_[a-z0-9]{16,64}$` |
+| `hits[].match` | "phrase" \| "all_terms" | yes | phrase: the query words joined without spaces equal consecutive segment words joined without spaces. all_terms: every query word is a segment word, in any order. |
+| `next_cursor` | string or null | yes | 1 to 512 characters |
+| `transcript_coverage` | object | yes |  |
+| `transcript_coverage.basis` | "supplied_transcript" \| "local_asr" \| "mixed" | yes | supplied_transcript: a supplied SubRip or WebVTT file, taken to cover the whole source but not verified to be complete. local_asr: local speech recognition only; covered ranges are those it examined. mixed: local speech recognition of part of the source spliced into supplied text elsewhere. |
+| `transcript_coverage.scope` | constant "transcript_text" | yes | What search (and, since 0.2.1, transcript get, which reuses this definition) reads: transcript text only; on-screen text is not searched. |
+| `transcript_coverage.searched_range` | object or null | yes | The requested range (or the whole source) clipped to the source; null when the requested range lies wholly outside it. |
+| `transcript_coverage.searched_range.from_us` | integer | yes | at least 0 |
+| `transcript_coverage.searched_range.to_us` | integer | yes | at least 1 |
+| `transcript_coverage.transcribed_ranges` | array of object | yes | at most 100 items |
+| `transcript_coverage.transcribed_ranges[].from_us` | integer | yes | at least 0 |
+| `transcript_coverage.transcribed_ranges[].to_us` | integer | yes | at least 1 |
+| `transcript_coverage.untranscribed_ranges` | array of object | yes | at most 100 items |
+| `transcript_coverage.untranscribed_ranges[].from_us` | integer | yes | at least 0 |
+| `transcript_coverage.untranscribed_ranges[].to_us` | integer | yes | at least 1 |
+| `transcript_coverage.no_speech_ranges` | array of object | yes | Transcribed ranges where local recognition found no audible signal, no audio or, since 0.2.0-rc.3, less than 100 ms of audio; never overlapping a segment.; at most 100 items |
+| `transcript_coverage.no_speech_ranges[].from_us` | integer | yes | at least 0 |
+| `transcript_coverage.no_speech_ranges[].to_us` | integer | yes | at least 1 |
+| `transcript_coverage.ranges_truncated` | boolean | yes | True when a range list held more than 100 ranges and only its first 100, in start order, are listed. |
+
 ### search-data.schema.json
 
 **VSift search data v1** ([the schema](../../../schemas/v1/search-data.schema.json))
@@ -989,7 +1080,7 @@ The data member of a complete or partial search result: one bounded page of the 
 | `next_cursor` | string or null | yes | 1 to 512 characters |
 | `transcript_coverage` | object | yes |  |
 | `transcript_coverage.basis` | "supplied_transcript" \| "local_asr" \| "mixed" | yes | supplied_transcript: a supplied SubRip or WebVTT file, taken to cover the whole source but not verified to be complete. local_asr: local speech recognition only; covered ranges are those it examined. mixed: local speech recognition of part of the source spliced into supplied text elsewhere. |
-| `transcript_coverage.scope` | constant "transcript_text" | yes | What search reads: transcript text only; on-screen text is not searched. |
+| `transcript_coverage.scope` | constant "transcript_text" | yes | What search (and, since 0.2.1, transcript get, which reuses this definition) reads: transcript text only; on-screen text is not searched. |
 | `transcript_coverage.searched_range` | object or null | yes | The requested range (or the whole source) clipped to the source; null when the requested range lies wholly outside it. |
 | `transcript_coverage.searched_range.from_us` | integer | yes | at least 0 |
 | `transcript_coverage.searched_range.to_us` | integer | yes | at least 1 |
@@ -1026,7 +1117,7 @@ The data member of the complete or partial terminal result that ends a search --
 | `next_cursor` | string or null | yes | 1 to 512 characters |
 | `transcript_coverage` | object | yes |  |
 | `transcript_coverage.basis` | "supplied_transcript" \| "local_asr" \| "mixed" | yes | supplied_transcript: a supplied SubRip or WebVTT file, taken to cover the whole source but not verified to be complete. local_asr: local speech recognition only; covered ranges are those it examined. mixed: local speech recognition of part of the source spliced into supplied text elsewhere. |
-| `transcript_coverage.scope` | constant "transcript_text" | yes | What search reads: transcript text only; on-screen text is not searched. |
+| `transcript_coverage.scope` | constant "transcript_text" | yes | What search (and, since 0.2.1, transcript get, which reuses this definition) reads: transcript text only; on-screen text is not searched. |
 | `transcript_coverage.searched_range` | object or null | yes | The requested range (or the whole source) clipped to the source; null when the requested range lies wholly outside it. |
 | `transcript_coverage.searched_range.from_us` | integer | yes | at least 0 |
 | `transcript_coverage.searched_range.to_us` | integer | yes | at least 1 |
@@ -1333,11 +1424,44 @@ The last line of every --events jsonl stream; exactly one per stream. Its sequen
 | `result.coverage` | any | yes |  |
 | `result.lifecycle` | any | yes |  |
 
+### transcript-get-brief-data.schema.json
+
+**VSift transcript.get data, brief view v1** ([the schema](../../../schemas/v1/transcript-get-brief-data.schema.json))
+
+The data member of a complete or partial transcript.get result asked for with --view brief (0.2.1): transcript-get-data.schema.json with each item reduced to transcript-segment-brief.schema.json and a view member that is always brief. Everything else is the full page's own: the revision block holds once what the full view repeats on every item (revision_id, source_id, source_segment_id, the recognizer's digests, model and decoding profiles), and transcript_coverage says which parts of the range a transcript covers, exactly as in the full view. Validate the envelope with operation-response.schema.json: its coverage member is truncated, and its status partial, exactly when transcript_coverage.untranscribed_ranges is not empty. The view is refused with --events jsonl. Pass next_cursor back with the same session, range, revision and view to continue.
+
+| Member | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `session_id` | string | yes | pattern `^ses_[a-z0-9]{16,64}$` |
+| `view` | constant "brief" | yes |  |
+| `revision` | object, see [transcript-revision.schema.json](#transcript-revisionschemajson) | yes |  |
+| `range` | object | yes |  |
+| `range.from_us` | integer | yes | at least 0 |
+| `range.to_us` | integer | yes | at least 1 |
+| `items` | array of object, see [transcript-segment-brief.schema.json](#transcript-segment-briefschemajson) | yes | at most 100 items |
+| `next_cursor` | string or null | yes | 1 to 512 characters |
+| `transcript_coverage` | object | yes |  |
+| `transcript_coverage.basis` | "supplied_transcript" \| "local_asr" \| "mixed" | yes | supplied_transcript: a supplied SubRip or WebVTT file, taken to cover the whole source but not verified to be complete. local_asr: local speech recognition only; covered ranges are those it examined. mixed: local speech recognition of part of the source spliced into supplied text elsewhere. |
+| `transcript_coverage.scope` | constant "transcript_text" | yes | What search (and, since 0.2.1, transcript get, which reuses this definition) reads: transcript text only; on-screen text is not searched. |
+| `transcript_coverage.searched_range` | object or null | yes | The requested range (or the whole source) clipped to the source; null when the requested range lies wholly outside it. |
+| `transcript_coverage.searched_range.from_us` | integer | yes | at least 0 |
+| `transcript_coverage.searched_range.to_us` | integer | yes | at least 1 |
+| `transcript_coverage.transcribed_ranges` | array of object | yes | at most 100 items |
+| `transcript_coverage.transcribed_ranges[].from_us` | integer | yes | at least 0 |
+| `transcript_coverage.transcribed_ranges[].to_us` | integer | yes | at least 1 |
+| `transcript_coverage.untranscribed_ranges` | array of object | yes | at most 100 items |
+| `transcript_coverage.untranscribed_ranges[].from_us` | integer | yes | at least 0 |
+| `transcript_coverage.untranscribed_ranges[].to_us` | integer | yes | at least 1 |
+| `transcript_coverage.no_speech_ranges` | array of object | yes | Transcribed ranges where local recognition found no audible signal, no audio or, since 0.2.0-rc.3, less than 100 ms of audio; never overlapping a segment.; at most 100 items |
+| `transcript_coverage.no_speech_ranges[].from_us` | integer | yes | at least 0 |
+| `transcript_coverage.no_speech_ranges[].to_us` | integer | yes | at least 1 |
+| `transcript_coverage.ranges_truncated` | boolean | yes | True when a range list held more than 100 ranges and only its first 100, in start order, are listed. |
+
 ### transcript-get-data.schema.json
 
 **VSift transcript.get data v1** ([the schema](../../../schemas/v1/transcript-get-data.schema.json))
 
-The data member of a complete transcript.get result: one bounded page of the segments that intersect [range.from_us, range.to_us), in start order. Validate the envelope with operation-response.schema.json. Pass next_cursor back with the same session and range to continue; it is rejected for any other query, session or revision, or after the session expires.
+The data member of a complete transcript.get result: one bounded page of the segments that intersect [range.from_us, range.to_us), in start order. transcript_coverage (0.2.1) says which parts of the requested range a transcript covers, by the rule search uses: nothing read in an untranscribed range means nothing was transcribed there, not that nothing was said. Validate the envelope with operation-response.schema.json: its coverage member is null, and its status complete, unless transcript_coverage.untranscribed_ranges is not empty, when coverage lists those ranges and the status is partial. Pass next_cursor back with the same session and range to continue; it is rejected for any other query, session or revision, or after the session expires.
 
 | Member | Type | Required | Notes |
 | --- | --- | --- | --- |
@@ -1348,12 +1472,28 @@ The data member of a complete transcript.get result: one bounded page of the seg
 | `range.to_us` | integer | yes | at least 1 |
 | `items` | array of object, see [transcript-segment.schema.json](#transcript-segmentschemajson) | yes | at most 100 items |
 | `next_cursor` | string or null | yes | 1 to 512 characters |
+| `transcript_coverage` | object | no | The coverage of the whole requested range, the same on every page of one request, as search reports it: always present since 0.2.1, but not listed in required, because answers of the published 0.1.0 (kept valid against this schema by the compatibility test) have none. |
+| `transcript_coverage.basis` | "supplied_transcript" \| "local_asr" \| "mixed" | yes | supplied_transcript: a supplied SubRip or WebVTT file, taken to cover the whole source but not verified to be complete. local_asr: local speech recognition only; covered ranges are those it examined. mixed: local speech recognition of part of the source spliced into supplied text elsewhere. |
+| `transcript_coverage.scope` | constant "transcript_text" | yes | What search (and, since 0.2.1, transcript get, which reuses this definition) reads: transcript text only; on-screen text is not searched. |
+| `transcript_coverage.searched_range` | object or null | yes | The requested range (or the whole source) clipped to the source; null when the requested range lies wholly outside it. |
+| `transcript_coverage.searched_range.from_us` | integer | yes | at least 0 |
+| `transcript_coverage.searched_range.to_us` | integer | yes | at least 1 |
+| `transcript_coverage.transcribed_ranges` | array of object | yes | at most 100 items |
+| `transcript_coverage.transcribed_ranges[].from_us` | integer | yes | at least 0 |
+| `transcript_coverage.transcribed_ranges[].to_us` | integer | yes | at least 1 |
+| `transcript_coverage.untranscribed_ranges` | array of object | yes | at most 100 items |
+| `transcript_coverage.untranscribed_ranges[].from_us` | integer | yes | at least 0 |
+| `transcript_coverage.untranscribed_ranges[].to_us` | integer | yes | at least 1 |
+| `transcript_coverage.no_speech_ranges` | array of object | yes | Transcribed ranges where local recognition found no audible signal, no audio or, since 0.2.0-rc.3, less than 100 ms of audio; never overlapping a segment.; at most 100 items |
+| `transcript_coverage.no_speech_ranges[].from_us` | integer | yes | at least 0 |
+| `transcript_coverage.no_speech_ranges[].to_us` | integer | yes | at least 1 |
+| `transcript_coverage.ranges_truncated` | boolean | yes | True when a range list held more than 100 ranges and only its first 100, in start order, are listed. |
 
 ### transcript-get-stream-data.schema.json
 
 **VSift transcript.get JSON Lines terminal data v1** ([the schema](../../../schemas/v1/transcript-get-stream-data.schema.json))
 
-The data member of the complete terminal result that ends a transcript.get --events jsonl stream. It is the page of transcript-get-data.schema.json without its items: the page's segments were the preceding evidence events, in start order, and record_count says how many there were. Pass next_cursor back with the same session and range to stream the next page; null means the range is exhausted.
+The data member of the complete terminal result that ends a transcript.get --events jsonl stream. It is the page of transcript-get-data.schema.json without its items: the page's segments were the preceding evidence events, in start order, and record_count says how many there were. transcript_coverage (0.2.1) is the page's own: the coverage of the whole requested range, and when part of it has no transcript the terminal result is partial with its envelope coverage listing those ranges, as for the page. Pass next_cursor back with the same session and range to stream the next page; null means the range is exhausted.
 
 | Member | Type | Required | Notes |
 | --- | --- | --- | --- |
@@ -1364,6 +1504,22 @@ The data member of the complete terminal result that ends a transcript.get --eve
 | `range.to_us` | integer | yes | at least 1 |
 | `record_count` | integer | yes | 0 to 100 |
 | `next_cursor` | string or null | yes | 1 to 512 characters |
+| `transcript_coverage` | object | no | The coverage of the whole requested range, the same on every page of one request: always present since 0.2.1, but not listed in required, because answers of the published 0.1.0 (kept valid against this schema by the compatibility test) have none. |
+| `transcript_coverage.basis` | "supplied_transcript" \| "local_asr" \| "mixed" | yes | supplied_transcript: a supplied SubRip or WebVTT file, taken to cover the whole source but not verified to be complete. local_asr: local speech recognition only; covered ranges are those it examined. mixed: local speech recognition of part of the source spliced into supplied text elsewhere. |
+| `transcript_coverage.scope` | constant "transcript_text" | yes | What search (and, since 0.2.1, transcript get, which reuses this definition) reads: transcript text only; on-screen text is not searched. |
+| `transcript_coverage.searched_range` | object or null | yes | The requested range (or the whole source) clipped to the source; null when the requested range lies wholly outside it. |
+| `transcript_coverage.searched_range.from_us` | integer | yes | at least 0 |
+| `transcript_coverage.searched_range.to_us` | integer | yes | at least 1 |
+| `transcript_coverage.transcribed_ranges` | array of object | yes | at most 100 items |
+| `transcript_coverage.transcribed_ranges[].from_us` | integer | yes | at least 0 |
+| `transcript_coverage.transcribed_ranges[].to_us` | integer | yes | at least 1 |
+| `transcript_coverage.untranscribed_ranges` | array of object | yes | at most 100 items |
+| `transcript_coverage.untranscribed_ranges[].from_us` | integer | yes | at least 0 |
+| `transcript_coverage.untranscribed_ranges[].to_us` | integer | yes | at least 1 |
+| `transcript_coverage.no_speech_ranges` | array of object | yes | Transcribed ranges where local recognition found no audible signal, no audio or, since 0.2.0-rc.3, less than 100 ms of audio; never overlapping a segment.; at most 100 items |
+| `transcript_coverage.no_speech_ranges[].from_us` | integer | yes | at least 0 |
+| `transcript_coverage.no_speech_ranges[].to_us` | integer | yes | at least 1 |
+| `transcript_coverage.ranges_truncated` | boolean | yes | True when a range list held more than 100 ranges and only its first 100, in start order, are listed. |
 
 ### transcript-retranscribe-data.schema.json
 
@@ -1451,6 +1607,22 @@ Identity, alignment and outcome of one immutable transcript revision. Warnings a
 
 This schema also holds 1 conditional rule (a member that is required, or fixed, when another has a given value); read [the schema](../../../schemas/v1/transcript-revision.schema.json) for it.
 
+### transcript-segment-brief.schema.json
+
+**VSift transcript segment, brief view v1** ([the schema](../../../schemas/v1/transcript-segment-brief.schema.json))
+
+One transcript segment as the brief view of transcript.get and search gives it (--view brief, 0.2.1): the identity, the time, the text to quote and the speaker's label, which is what a reader needs to cite and place it. It is NOT an evidence record: the evidence stream always carries transcript-segment.schema.json, whose record an index stores by segment_id, and a brief view is refused for a stream. Every member is the member of the same name of the full segment, with the same value; the brief view leaves out revision_id, source_id and source_segment_id (the answer's revision block holds them once), text and original_text (raw, with hidden characters kept; the full view has them), markup, confidence, language, alignment, cue and carried_from. speaker is absent, not null, when the segment has none. Text is untrusted, as in the full record: quote display_text, never an instruction.
+
+| Member | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `segment_id` | string | yes | pattern `^tsg_[a-z0-9]{16,64}$` |
+| `start_us` | integer | yes | at least 0 |
+| `end_us` | integer | yes | at least 1 |
+| `display_text` | string | yes | text with every hidden character written as visible <U+XXXX> notation, exactly as transcript-segment.schema.json defines it: the form to quote in a report.; 1 to 16384 characters |
+| `speaker` | object | no | A provider speaker label, never a verified identity: display_label is the label with every hidden character written as <U+XXXX>; origin says where it came from. The raw label is only in the full view. |
+| `speaker.display_label` | string | yes | 1 to 512 characters |
+| `speaker.origin` | "imported_webvtt_voice" | yes |  |
+
 ### transcript-segment.schema.json
 
 **VSift transcript segment evidence record v1** ([the schema](../../../schemas/v1/transcript-segment.schema.json))
@@ -1502,6 +1674,26 @@ One citable, timestamped transcript segment. Each record names its own revision,
 | `carried_from.segment_id` | string | yes | pattern `^tsg_[a-z0-9]{16,64}$` |
 
 This schema also holds 1 conditional rule (a member that is required, or fixed, when another has a given value); read [the schema](../../../schemas/v1/transcript-segment.schema.json) for it.
+
+### visual-candidate-brief.schema.json
+
+**VSift visual candidate, brief view v1** ([the schema](../../../schemas/v1/visual-candidate-brief.schema.json))
+
+One visual candidate as the brief view of candidates gives it (--view brief, 0.2.1): the identity, representative_us, span, reasons, stability, the size of the change that opened it and the visual_hash that shows when a screen repeats, which is what a reader needs to place it and to decide whether to look at its frame. It is NOT an evidence record: the evidence stream always carries visual-candidate.schema.json, whose record an index stores by candidate_id, and a brief view is refused for a stream. Every member is the member of the same name of the full candidate, with the same value. The brief view leaves out what every candidate of the index repeats (source_id, source_segment_id, stream_index, displayed_dimensions and analysis: the answer's item_constants hold them once), the window (its ordinal is representative_us divided by the index's window_us, rounded down), and change_window and sample_count, which the full view still gives. change is absent, not null, for a first frame or a periodic sample, which no change opened. Candidates are evidence assistance, not evidence: the original frames are authoritative.
+
+| Member | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `candidate_id` | string | yes | Derived from the session, source, stream, analysis profile, window and representative time, so it never changes when later windows are analysed.; pattern `^vcd_[a-z0-9]{16,64}$` |
+| `representative_us` | integer | yes | at least 0 |
+| `span` | object | yes |  |
+| `span.from_us` | integer | yes | at least 0 |
+| `span.to_us` | integer | yes | at least 1 |
+| `reasons` | array of "first_frame" \| "visual_change" \| "motion_start" \| "settled_after_motion" \| "periodic_coverage" | yes | Why the candidate was proposed, as visual-candidate.schema.json defines each reason.; 1 to 5 items; items are unique |
+| `stability` | "settled" \| "transient" \| "in_motion" \| "open_at_window_end" | yes |  |
+| `change` | object | no | The size of the change that opened the candidate, as visual-candidate.schema.json defines it; absent when no observed change opened it. |
+| `change.changed_blocks` | integer | yes | 0 to 144 |
+| `change.max_block_delta` | integer | yes | 0 to 255 |
+| `visual_hash` | string | yes | A 64-bit difference hash of the representative frame as 16 lowercase hexadecimal digits: a similarity key that shows when a screen repeats, not a security digest.; pattern `^[0-9a-f]{16}$` |
 
 ### visual-candidate.schema.json
 

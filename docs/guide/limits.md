@@ -42,7 +42,8 @@ real meetings, accents or noisy rooms, so every accuracy figure below says what 
   [L-145](../planning/known-limits.md#l-145)).** When the recogniser's answer for a 30-second stretch cannot be
   placed in that stretch of audio, VSift leaves the stretch out, keeps the rest and says so: the result is
   `partial` and lists the stretch as not transcribed by that run, and it stays listed through every later run, however
-  far from it, until a run reads it. A recording with long pauses can have a few. When you were re-transcribing a recording
+  far from it, until a run reads it. A `transcript get` and a `search` over a range that includes the stretch are `partial`
+  too and list it, so an empty page there is never a silence. A recording with long pauses can have a few. When you were re-transcribing a recording
   that already had a transcript, the words it had that reach into such a stretch are kept whole (unless the new words
   overlap them); a word said there that no transcript has cannot be found. Transcribing just that stretch again may cover it (the audio is
   then cut at other points), and a transcript file you supply can. If most stretches fail, the command fails

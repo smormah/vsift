@@ -396,7 +396,54 @@ first carries a fixed remediation naming `ingest --transcript` and `transcript
 retranscribe`, the last one naming where revision identities come from. A malformed
 `--revision` is a parse error. `transcript get` never runs a provider. With `--events
 jsonl` the page is streamed as one evidence event per segment followed by one
-terminal event (below).
+terminal event (below). Since `0.2.1` the page also takes `--view brief` ("Views of a
+read", below) and always states its coverage (next paragraph).
+
+**Coverage (`transcript_coverage`, added in `0.2.1`, #373).** A read of a range shows
+the words a transcript holds there, so an empty page can mean silence or a part nobody
+transcribed, and a reader that cannot tell them apart takes a gap for absence. Every
+`transcript get` therefore states what a transcript covers of the range it was asked
+for, by the rule `search` uses
+(`vsift_domain::SearchCoverage::of`, one function for both commands, so no range is
+covered for one and not for the other): `data.transcript_coverage` is exactly the
+`transcript_coverage` of a `search` over the same revision and range (see "P08
+transcript search": `basis`, `scope`, `searched_range`, `transcribed_ranges`,
+`untranscribed_ranges`, `no_speech_ranges`, `ranges_truncated`). It describes the
+whole requested range, not the page: every page of one request states the same coverage.
+The member is **always present** on `transcript get` from `0.2.1` and in the terminal
+data of its `--events jsonl` stream, in both views.
+
+- **The status says it too.** The result is `partial`, and still exits 0, exactly when
+  `untranscribed_ranges` is not empty: the envelope `coverage` then holds
+  `truncated: true`, the gaps as `"<from_us>-<to_us>"` (merged, clipped to the request
+  and to the video, at most 100) and the reason `untranscribed_range` (plus
+  `gap_list_truncated` beyond 100), and one fixed warning says what a gap is not: `Part
+  of the requested range has no transcript, so reading it shows no words there; that
+  does not mean none were said. ...` The stream's terminal event is `partial` in the same
+  way. **A complete read is unchanged:** its status is `complete` and its envelope
+  `coverage` is `null`, as it always was (`search`, which always states its envelope
+  coverage, shows `truncated: false` instead); only the new member is added to `data`,
+  and the same member without it is byte for byte what the published `0.1.0` wrote
+  (the frozen examples are held to this).
+- **What counts as covered** is `search`'s rule, so it holds the same limits. An imported
+  transcript covers the whole video (`basis: supplied_transcript`, completeness not
+  verified): a read of a range with no cue is complete. For local recognition a part is
+  covered where a run it still records transcribed it or found it quiet (a quiet part is
+  `no_speech_ranges`, not a gap), or where the revision holds a segment, including text
+  an earlier revision had inside a stretch a later run could not read (kept whole, #353,
+  so a read of the kept words is complete and a read of the unreadable stretch around
+  them lists only what they leave open); a part a run could not read stays untranscribed
+  through every later retranscription until a run reads it (`carried_untranscribed`).
+  A range that starts or ends inside a gap lists only its own part of it; a range past
+  the end of the video is clipped to it; one wholly outside it has `searched_range:
+  null`, nothing to cover and is complete.
+- **A gap is not a failure.** The read still returns every segment the revision holds in
+  the range, and a `partial` read is usable: its gaps are gaps, never evidence of
+  silence. Silence the recogniser found is `no_speech_ranges`. A gap is a part nobody
+  transcribed, or whose answer from the recogniser could not be used (#353); the
+  `untranscribed_ranges` of the `transcript retranscribe` that left it name the part the
+  run did not transcribe, which can be more than a later read lists where earlier text
+  was kept.
 
 **Display text (`display_text`, added to v1 on 2026-09-29).** `text` and
 `original_text` are the payload: they keep every character as written, including
@@ -447,7 +494,9 @@ page or a bundle. `vsift transcript get <session> --from <us> --to <us> [--limit
    ([`terminal-event.schema.json`](../../schemas/v1/terminal-event.schema.json)) whose
    complete `result.data` is the page without its items
    ([`transcript-get-stream-data.schema.json`](../../schemas/v1/transcript-get-stream-data.schema.json)):
-   `session_id`, `revision`, `range`, `record_count` and `next_cursor`.
+   `session_id`, `revision`, `range`, `record_count`, `next_cursor` and, since `0.2.1`,
+   `transcript_coverage`, with the status and envelope `coverage` of `--json` (a read over
+   a gap ends `partial` and exits 0, above).
 
 Every line is one complete JSON object and a newline, with `schema_version: "1"`, its
 `event` kind, `sequence` (0, 1, 2, ... across the whole stream; the terminal event's
@@ -462,7 +511,7 @@ example [`transcript-get.events.jsonl`](../../schemas/v1/examples/transcript-get
 ```json
 {"schema_version":"1","event":"evidence","sequence":0,"command":"transcript.get","operation_id":null,"record_type":"transcript_segment","key":"tsg_e88330d57e140d6e7e2ed4447950c5b8","record":{"segment_id":"tsg_e88330d57e140d6e7e2ed4447950c5b8","revision_id":"trv_663ae41bbedc740b651fe61999d395b0","start_us":1000000,"end_us":4000000,"text":"This synthetic sidecar is aligned with\nan explicit 500 millisecond offset.",...}}
 {"schema_version":"1","event":"evidence","sequence":1,"command":"transcript.get","operation_id":null,"record_type":"transcript_segment","key":"tsg_f9644c630cd9023d38e2eb89741c9b7e","record":{"segment_id":"tsg_f9644c630cd9023d38e2eb89741c9b7e","revision_id":"trv_663ae41bbedc740b651fe61999d395b0","start_us":5000000,"end_us":9000000,"text":"Dialog R-17 is displayed now.",...}}
-{"schema_version":"1","event":"terminal","sequence":2,"command":"transcript.get","operation_id":null,"result":{"schema_version":"1","command":"transcript.get","operation_id":null,"status":"complete","data":{"next_cursor":"v1|ses_0123456789abcdef0123456789abcdef|1|06ff...9b04|2|1790294400000000","range":{"from_us":0,"to_us":12000000},"record_count":2,"revision":{...},"session_id":"ses_0123456789abcdef0123456789abcdef"},"warnings":[],"error":null,"coverage":null,"lifecycle":{"mode":"ephemeral","expires_at":"2026-09-25T00:00:00Z"}}}
+{"schema_version":"1","event":"terminal","sequence":2,"command":"transcript.get","operation_id":null,"result":{"schema_version":"1","command":"transcript.get","operation_id":null,"status":"complete","data":{"next_cursor":"v1|ses_0123456789abcdef0123456789abcdef|1|06ff...9b04|2|1790294400000000","range":{"from_us":0,"to_us":12000000},"record_count":2,"revision":{...},"session_id":"ses_0123456789abcdef0123456789abcdef","transcript_coverage":{"basis":"supplied_transcript","scope":"transcript_text",...}},"warnings":[],"error":null,"coverage":null,"lifecycle":{"mode":"ephemeral","expires_at":"2026-09-25T00:00:00Z"}}}
 ```
 
 How a consumer reads it:
@@ -1409,7 +1458,9 @@ found; ...`, and exits 0 like any supported partial result. A complete search ha
 that the revision lists in `local_asr.unplaced_ranges` (words the recogniser wrote that no
 segment holds, above) is in `untranscribed_ranges` and not in `transcribed_ranges`, unless a
 segment of the revision, or a window the run found silent, covers it: the window the run
-transcribed does not.
+transcribed does not. Since `0.2.1` `transcript get` states the same `transcript_coverage`
+for its range, by the same function, and is `partial` over the same gaps (above, "Coverage
+(`transcript_coverage`...)"); it keeps `coverage: null` when the range is complete.
 
 **Paging.** Pass `next_cursor` back with the same session, query (any spelling that
 normalises to the same words), range and revision. It is bound to the revision, the
@@ -1541,6 +1592,95 @@ the same answer as the evidence commands' (see "P09 frames", below). `RESOURCE_L
 for a record over 8 MiB or a 65th index record. `INTEGRITY_FAILURE` or
 `UNSUPPORTED_SCHEMA` for a stored record that fails verification or a source copy that
 changed during the call.
+
+### Views of a read (`--view`, 0.2.1)
+
+```console
+vsift transcript get ses_0123456789abcdef --from 0 --to 120000000 --limit 50 --view brief --json
+vsift search ses_0123456789abcdef --query "invoice 4407" --view brief --json
+vsift candidates ses_0123456789abcdef --from 0 --to 300000000 --limit 50 --view brief --json
+```
+
+**Why.** About half of every transcript segment (and of every visual candidate) is what
+every item of its revision (or index) repeats: the two SHA-256 digests, the source and
+source-segment identities, the model and decoding profiles, the provider, the displayed
+size. The answer already says them once, in its revision (or index) block. On the committed
+examples a page of 50 transcript segments is about 54,000 to 57,000 characters on one line
+(#365: a client saved such a page, read only its first 43,000 characters and lost nine
+items and the page's `next_cursor`, with no error from VSift). The brief view is the same
+page without the repeats.
+
+`transcript get`, `search` and `candidates` take `--view full|brief`. **`full` is the
+default and is the answer every release gave** (for `transcript get` plus its new
+`transcript_coverage`, above): a request that does not name a view, or names `full`, has
+the same bytes; it has no `view` member. `brief` adds `data.view: "brief"` (the only
+view that names itself) and reduces each item:
+
+| Command | A brief item holds | It leaves out | Where the left-out values are |
+| --- | --- | --- | --- |
+| `transcript get`, `search` | `segment_id`, `start_us`, `end_us`, `display_text` and, when the segment has one, `speaker` as `display_label` and `origin` | `revision_id`, `source_id`, `source_segment_id` | the answer's `revision` block: `revision_id`, `source_id`, `source_segments[0].source_segment_id` |
+| | | the recognizer's digests, model and decoding profiles, provider, the chunk's index and times (`alignment`) | `revision.local_asr` (the run) for what is the run's; the chunk's own times only in the full view |
+| | | `text`, `original_text` and the raw speaker `label` (hidden characters kept raw), `markup`, `confidence`, `language`, `cue`, `carried_from` | the full view only |
+| `candidates` | `candidate_id`, `representative_us`, `span`, `reasons`, `stability`, `visual_hash` and, when a change opened it, `change` | `source_id`, `source_segment_id`, `stream_index`, `displayed_dimensions`, `analysis` | the answer's `item_constants`, once (a member the brief answer adds, with the same values the full view repeats on every item) |
+| | | `window` | derived: `ordinal` is `representative_us` divided by `index.window_us`, rounded down; `from_us` is `ordinal * window_us` and `to_us` the smaller of the next window's start and `index.duration_us` |
+| | | `change_window` and `sample_count` | the full view only |
+
+An item with nothing to say names none: `speaker` and `change` are absent from a brief
+item that has none, where the full item has `null`.
+
+**The views cannot drift.** A brief answer is made from the full one: each brief item
+is projected from the full item (and `item_constants` from the same code that builds the
+full item's fields), and every other member of `data` (the revision or index block, the
+range, `query` and `hits`, the cursor, the coverage with every typed gap) and of the
+envelope (`status`, `warnings`, `coverage`, `lifecycle`) is the full answer's, value for
+value. Contract tests hold every example to it: every member of a brief item is a member
+of the full item with an equal value, and the brief view never leaves out a gap (a
+`partial` search, read or candidates page is `partial` with the same coverage in both).
+A brief item quotes `display_text` and `display_label` only: the form a report quotes,
+with every hidden character written as `<U+XXXX>`; the raw `text` is not in the brief
+answer at all.
+
+**Never a stream, never a record.** The records of `--events jsonl` are published
+evidence that an indexer upserts by `key`, and a reduced record under the same key would
+replace a complete one. So **`--view brief` with `--events jsonl` is refused** before
+anything is read or analysed (for `candidates`, before any window is decoded): one
+terminal failure event with `INVALID_ARGUMENT` and the remediation `The brief view leaves
+fields out of each item, and the records of an --events jsonl stream are published
+evidence that an index stores by key, so a reduced record would replace a complete one.
+Nothing was read. Ask for the stream without --view, or ask for the brief view with
+--json.` `--view full` streams as it always has. A stored record, a retained bundle and
+a stream are never brief: the view is a presentation of a result, nothing more.
+
+- **Cursors** are not bound to the view: a `next_cursor` of one view continues in the
+  other (the query, session, revision, range and expiry bind it, as before).
+- **Readable text** (no `--json`) is the same for both views: it is written from the
+  full answer, and it never repeated the digests, identities and profiles per item (the
+  revision block states them once), so `--view brief` is accepted and changes nothing
+  there. The view shapes the JSON.
+- **Size** (the committed examples, a page of 50 items on one line, compact JSON):
+  transcript segments 57,256 to 9,471 characters (about a sixth; the item 1,109 to 153,
+  with a carried segment), 35,511 to 9,251 for imported cues (the item 684 to 159);
+  `search` 33,223 to 8,088; `candidates` 31,980 to 12,718 (the item 625 to 233). The
+  brief page grows with the text it quotes: a longer segment is a longer item in either
+  view.
+- **Schemas.** [`transcript-get-brief-data.schema.json`](../../schemas/v1/transcript-get-brief-data.schema.json)
+  (example [`transcript-get.brief.json`](../../schemas/v1/examples/transcript-get.brief.json)),
+  [`search-brief-data.schema.json`](../../schemas/v1/search-brief-data.schema.json)
+  ([`search.brief.json`](../../schemas/v1/examples/search.brief.json)),
+  [`candidates-brief-data.schema.json`](../../schemas/v1/candidates-brief-data.schema.json)
+  ([`candidates.brief.json`](../../schemas/v1/examples/candidates.brief.json) and
+  [`candidates.partial.brief.json`](../../schemas/v1/examples/candidates.partial.brief.json)),
+  with the item schemas
+  [`transcript-segment-brief.schema.json`](../../schemas/v1/transcript-segment-brief.schema.json)
+  and [`visual-candidate-brief.schema.json`](../../schemas/v1/visual-candidate-brief.schema.json).
+  A brief item is **not** an evidence record: `transcript-segment.schema.json` and
+  `visual-candidate.schema.json` stay the schemas of every record.
+- **Compatibility.** `--view` is a new option; the default answer of every command is
+  unchanged. A release before `0.2.1` given `--view` answers it as an unknown argument
+  (`INVALID_ARGUMENT`, command `parse`: the option is new), and nothing it stores
+  differs. The agent skill of `0.2.0` and the one frozen for the `0.2.1` candidate do not
+  use the option and work as they did; a skill can use `--view brief` only after a skill
+  change (its guard fails any command the parser does not accept).
 
 ### P09 frames
 
@@ -2501,12 +2641,18 @@ metadata, not verified human identity.
 ## Pagination
 
 Candidate, transcript and search pages default to 20 items and accept 1 through 100.
+The maximum is a bound, not a recommendation: a page of 100 full transcript segments is
+about 100,000 characters on one line, more than some clients read in one call (#365), so
+an agent budget asks for 20 (or, in the brief view, up to 50), as the typical-investigation
+help says ("Ask for small pages"). Lowering the maximum would refuse requests that are
+valid today, so it stays 100.
 A candidate cursor's generation is the state of the windows its own range touches, not
 the index revision, so analysing other windows does not invalidate it.
 Continuation cursors are opaque, local tokens of at most 512 bytes. They contain no filesystem paths or
 credentials and are bound to session, canonical-query digest, immutable generation,
 last item, and expiry. A cursor from another query/session/generation or an expired
-cursor is rejected rather than silently restarted.
+cursor is rejected rather than silently restarted. A cursor is not bound to the `--view`
+of the call that issued it (`0.2.1`, "Views of a read"): it continues in either view.
 
 ## Configuration and compatibility
 
@@ -2529,17 +2675,25 @@ unknown or missing fields, invalid enums, more than 1,048,576 input bytes, and n
 deeper than 64 containers (a P11 job request or batch line: 65,536 bytes and 16 levels).
 Within major v1, readers must ignore additive response
 fields; producers must not reinterpret or remove existing fields without a new major.
-Additive response fields so far: the `setup check` `local_asr` object (P07), and a
-transcript segment's `display_text` and its speaker's `display_label` (2026-09-29).
-An added member is always present from the version that adds it and is listed as
-required in the v1 schema, so a current reader can rely on it, **unless this contract
-says it is written only when it has something to say** (it is then optional in the
-schema, and absent otherwise, so a response with nothing to say is exactly what it was
+Additive response fields so far: the `setup check` `local_asr` object (P07), a
+transcript segment's `display_text` and its speaker's `display_label` (2026-09-29), and,
+in `0.2.1`, `transcript get`'s `transcript_coverage` (also in its stream's terminal
+data), the `view` and `item_constants` members of the brief answers (the option `--view`
+is itself an addition: an older release answers it as an unknown argument) and the
+optional members below. An added member is always present from the version that adds it
+and is listed as `required` in the v1 schema when every answer the project has published
+still validates with it required, so a current reader can rely on it, **unless this
+contract says it is written only when it has something to say** (it is then optional in
+the schema, and absent otherwise, so a response with nothing to say is exactly what it was
 before); a reader written against an older copy of the schema ignores it. The optional
 members so far are `local_asr.unusable_chunks` and the `untranscribed_ranges` of a
 retranscription (0.2.1, #353), and `local_asr.unplaced_ranges` (the second candidate of
 0.2.1, #359); in the stored record, `carried_untranscribed` (#353) and `unplaced_ranges`
-(#359), which an older release reads as damage.
+(#359), which an older release reads as damage. A member added after the published
+`0.1.0` to an answer that release already wrote (`transcript_coverage` of `transcript
+get`) is a declared property but not `required`: `published_compatibility` holds the
+current schemas to `0.1.0`'s own examples, and a required member would fail them. The
+producer emits it every time, and a test pins that.
 
 ## Contract-test traceability
 
@@ -2552,7 +2706,7 @@ retranscription (0.2.1, #353), and `local_asr.unplaced_ranges` (the second candi
 | C-05 | bounded/sanitized output and broken stdout/stderr behavior |
 | C-06 | strict bounded JSON decoding and schema/identifier rejection, including the P11 job request (`vsift-contract` `request` tests, `worker_contract`, fuzz targets `job_request` and `job_batch_line`), the recorded steps and results of a request record (`recorded_steps_and_results_read_back_exactly`, fuzz target `request_record`) and `handoff check` (P13 PR 5: the `handoff` unit tests, `handoff_contract`, `handoff_differential` against `jsonschema`, `handoff_cli_contract` through the binary, fuzz target `handoff_check`) |
 | C-07 | checked time/range/crop invariants and property tests |
-| C-08 | schema examples and old-reader/additive-v1 compatibility, including the `setup check` `local_asr` object (`setup_local_asr_contract`, `engine_setup_local_asr`), a segment's `display_text` and `display_label` (`vsift-contract` `text` tests, `display_text_makes_hidden_characters_visible_and_keeps_text_raw`, and SEC-T02's `sec_t02_adversarial_evidence` through the binary), the failure remediation of an `ingest` path that names no file, a folder or a file that may not be read (`storage_contract`, `source_path_cli_contract`, #369) and the P11 event kinds (`worker_events_contract`: a reader that knows only `evidence` and `terminal` skips `progress`, `lifecycle` and `result` and still sees a contiguous sequence) |
+| C-08 | schema examples and old-reader/additive-v1 compatibility, including the `setup check` `local_asr` object (`setup_local_asr_contract`, `engine_setup_local_asr`), a segment's `display_text` and `display_label` (`vsift-contract` `text` tests, `display_text_makes_hidden_characters_visible_and_keeps_text_raw`, and SEC-T02's `sec_t02_adversarial_evidence` through the binary), the failure remediation of an `ingest` path that names no file, a folder or a file that may not be read (`storage_contract`, `source_path_cli_contract`, #369) and the P11 event kinds (`worker_events_contract`: a reader that knows only `evidence` and `terminal` skips `progress`, `lifecycle` and `result` and still sees a contiguous sequence), the `0.2.1` views and coverage of a read (the brief answers are a projection of the full ones and match their frozen examples: `transcript_contract`, `local_asr_contract`, `search_contract`, `candidates_contract`; a complete read and a stream are what `0.1.0` published but for `transcript_coverage`: `a_complete_read_is_what_was_published_but_for_the_new_member`, `a_stream_is_what_was_published_but_for_the_new_terminal_member`; the brief view is refused for a stream before anything is read or analysed, through the binary: `transcript_cli_contract`, `search_cli_contract`, `candidates_cli_contract`; a read over a gap is `partial` as a search is: `a_read_over_a_gap_is_partial_and_names_the_gap`, `a_read_and_a_search_agree_on_every_range`, `a_read_over_a_gap_is_partial_as_a_search_over_it_is`) |
 | C-09 | legal job and cancellation terminal transitions (`vsift-domain` `job` tests over the whole state graph; `job` use-case tests of cancellation serialized with the commit); the public job commands, `--operation-id` and interruptions through the binary (`job_cli_contract`, `interrupt_cli_contract`, the job examples in `local_asr_contract`); `job run` through the binary: results and events against their schemas, replay, conflict, busy, refusals, sentinels and shutdown (`job_run_cli_contract`), and the request path through the engine (`engine_worker`); `job batch` through the binary: events, summary, limits, O-02, O-03, X-08 and O-04 (`job_batch_cli_contract`), and the batch through the engine (`engine_batch`, opt-in `engine_batch_tools`) |
 | C-10 | unknown confidence, speaker metadata, time normalization, requested/actual timing, imported-transcript offset conversion, local-ASR provenance and carried segments (`local_asr_contract`, `local_asr_store`), and that an id of a superseded revision still resolves in a read, a handoff check and a retained bundle (`superseded_ids_cli_contract`) |
 
