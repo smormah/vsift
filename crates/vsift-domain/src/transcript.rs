@@ -915,7 +915,9 @@ impl TranscriptProvenance {
 /// The revision and segment a carried segment's text was first produced in.
 ///
 /// A bounded retranscription copies the segments of the revision it
-/// supersedes that lie outside the replaced range (ADR 0017). The copy gets a
+/// supersedes that lie outside the replaced range, and those wholly inside a
+/// part of it that the run could not read ([`AsrRun::unusable_gaps`], ADR
+/// 0017). The copy gets a
 /// new identity in the new revision, so evidence already indexed under the
 /// older revision is never overwritten, and names the segment it came from so
 /// a citation can be followed back. It always names the revision that

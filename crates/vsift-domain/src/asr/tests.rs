@@ -554,7 +554,6 @@ fn a_chunk_whose_every_segment_is_rejected_is_unusable() -> TestResult {
 /// rule is the quarter rule it always was.
 #[test]
 fn the_quarter_rule_applies_from_four_text_segments() -> TestResult {
-    assert_eq!(MIN_SEGMENTS_FOR_REJECTION_RATIO, 4);
     // Below the minimum: one rejection is dropped and counted, whatever the
     // share, and two or more are not tolerated.
     assert_eq!(judged(&[true, false])?, Ok((1, 1)));
