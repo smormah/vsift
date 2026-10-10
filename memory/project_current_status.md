@@ -68,9 +68,9 @@ the CLI and write a cited report. P12's named-client trials qualified it:
   the harness itself unchanged). **Not done:** the skill's wording (#349, which can change only with a new agent-trial freeze in the candidate's cut), the `0.2.1-rc.1` cut, its hosted evidence, the agent batches 2
   and 3 re-run on the candidate (the maintainer's go and allowances), and the stable cut and its publish. **P14 stays complete; `0.2.0` stays published, is not deprecated and has the defect:** the README and the
   install guide say so and give the workarounds (a supplied transcript, or ranges that avoid the failing stretch). Every accuracy figure so far is from a synthetic corpus with dense speech (L-022); this is the
-  first real one. The fix's own decisions left three limits for the register (L-146, L-147, L-148).
+  first real one. The fix's own decisions left three limits for the register (L-146, #361; L-147, #362; L-148).
 - **What is weak:** the skill change met its gates once on a small sample; the cold round met its usefulness target twice with no margin and its safety gate not at all (one harmless read; no person has read the raw cold
-  logs, L-118); hosted images are not clean machines (L-112); Smart App Control and the macOS prompts are unseen (L-098, L-143); **a synthetic corpus and voice only** (L-020, L-022), which the first real recording showed to matter (#353). CVE-2026-38350 (L-122), the
+  logs, L-118); hosted images are not clean machines (L-112); Smart App Control and the macOS prompts are unseen (L-098, L-143); **a synthetic corpus and voice only** (L-020, L-022), which the first real recording showed to matter (#353; a small freely licensed real-media test set is #363). CVE-2026-38350 (L-122), the
   whisper.cpp pin (L-137) and CVE-2026-107678 (L-144) are the maintainer's accepted residuals. Open defects: **#353 (L-145, high: real recordings with pauses; fixed on `main`, not released)**, #312 (L-135; one failure in 4,500 loaded Windows repetitions), #351; #340 and #342 are fixed on `main`, not released.
 
 ## How P14 went, in one view (details: `docs/planning/p14-qualification.md`, sections 15 to 31)

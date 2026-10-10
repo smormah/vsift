@@ -42,9 +42,9 @@ This is a patch release, not a work packet. **Increments done, release not done:
 ## Open for the maintainer
 
 - **L-145's review is `pending`:** confirm its severity (high by the rubric's second line, read for the investigate-a-video journey); say whether plan section 12's and 31.4's wording is amended. **L-146, L-147 and L-148
-  are new (from the ADR notes of the #353 fix) and `pending`:** L-146 (a model swapped during a run: checkpoints written after the swap sit under the original model's key; low), L-147 (a worker's `retranscribe` step is
-  `complete` with `coverage` null when chunks were unreadable; medium, a schema change in a later release) and L-148 (two costs of keeping earlier text inside an unreadable stretch; low): confirm each severity reading,
-  and say whether L-146 and L-147 get an issue (none is filed).
+  are new (from the ADR notes of the #353 fix) and `pending`:** L-146 (a model swapped during a run: checkpoints written after the swap sit under the original model's key; low; #361), L-147 (a worker's `retranscribe` step is
+  `complete` with `coverage` null when chunks were unreadable; medium, a schema change in a later release; #362) and L-148 (two costs of keeping earlier text inside an unreadable stretch; low): confirm each severity reading
+  (their issues, #361 and #362, are filed).
 - **RQ-05 on the release's own tag lacks** the Ubuntu and Windows ASR gates and the durable path (the third candidate's runs stand in `prior`; RQ-09 and RQ-12 carry): dispatch `P07 local ASR`, `P14 load`, `P14
   runbook walk` at `v0.2.0` or accept (31.5 item 2). **`P14 compatibility` was not dispatched at `v0.2.0`** (item 3).
 - **The claims rung stays `candidate`.** Moving it to `after_p14` makes CL-201 to CL-209 stale unless each is used or deleted: six could be used on passed evidence (CL-202, 203, 204, 205, 207, 209) and three cannot
@@ -55,7 +55,7 @@ This is a patch release, not a work packet. **Increments done, release not done:
 ## Later: the work list (not in 0.2.1; none of it blocks anything)
 
 - **Findings and tests:** #337 (a branch dispatch of the release workflow is refused only after the builds), #325 (a slow copy fails after ten minutes: L-140), #334 (a few-millisecond `audio` range: L-141), #312,
-  #309, the `release.md` tidy (6.10 to 6.12 are records of past publishes), and real media for the test set (freely licensed recordings with pauses, typing, music, several speakers; #353 says it needs its own issue, not filed).
+  #309, the `release.md` tidy (6.10 to 6.12 are records of past publishes), and #363 (a small freely licensed real-media test set, with pauses, typing, music and several speakers, and an opt-in campaign on it; not for 0.2.1).
 - **Re-pins:** FFmpeg (a month-end build; the next is 2026-10-31, L-132) with whisper.cpp (#322, L-137); the Dependabot pull requests #192, #193 and #194. **#351 (CVE-2026-107678, L-144, accepted):** look for the upstream fix when the build is chosen or cherry-pick one, re-run the ancestry tool, and add a malformed-MP4 `pssh` case to the malicious-media campaign.
 - **The README design session** (`roadmap.svg`, the badges and the graphics, within the claims ladder: L-121) and any promotion, which the maintainer starts (ADR 0024 decision G).
 - **From the cold round (none filed):** `--limit` help says 1 to 100 where the budget is 50; the no-transcript answer is `INVALID_ARGUMENT` with a true remediation (L-127's family). **R1 options:** a stub per ended
@@ -64,7 +64,7 @@ This is a patch release, not a work packet. **Increments done, release not done:
 
 ## Tracked issues and gates
 
-- **Fixed on `main`, closed on GitHub, not released:** #353 (L-145, high; open in the register until `0.2.1` is published), #340 (L-142), #342, #345. **Open, in 0.2.1:** #349. **Open, other:** #351 (L-144), #17, #219, #224 (L-095, L-139), #188, #232, #246 (deferred), #258, #263, #272 (residual accepted, L-122),
+- **Fixed on `main`, closed on GitHub, not released:** #353 (L-145, high; open in the register until `0.2.1` is published), #340 (L-142), #342, #345. **Open, in 0.2.1:** #349. **Open, other:** #361 (L-146), #362 (L-147), #363 (real-media test set), #351 (L-144), #17, #219, #224 (L-095, L-139), #188, #232, #246 (deferred), #258, #263, #272 (residual accepted, L-122),
   #312 (L-135), #314 (fixed in rc.2; L-136), #316 (hosted runners scarce), #321, #336, #322 (the floor is in; the pin stays, L-137), #325, #334, #337; #128 (watch); flaky tests #253 (Windows kill test) and #268
   (macOS SIGTERM test): comment with the run link and rerun the job.
 - **A change after the stable release may touch any file**, but a new version is a new candidate: the code, the skill and the shipped documents are frozen at a candidate's cut (`release.md` 6.8 binds the next stable
