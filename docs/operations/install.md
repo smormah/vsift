@@ -575,6 +575,16 @@ process group, which would deliver the signal twice ([L-091](../planning/known-l
 
 ## 12. Problems
 
+**Known issue in 0.2.0: `vsift transcript retranscribe` of a whole recording fails as `MISSING_CAPABILITY` although speech
+recognition works** ([#353](https://github.com/smormah/vsift/issues/353), [L-145](../planning/known-limits.md#l-145)). Speech is
+recognised in 30-second chunks. If one chunk of a real recording holds very little recognised speech (a long pause while the speaker types
+is enough) and one of its few segments is rejected as unusable, VSift fails the whole run and keeps no chunk, and `vsift job resume`
+fails at the same chunk. `vsift setup check` still says everything is in place, and reinstalling whisper.cpp does not help, whatever
+the error's remediation text says. A fix is planned for 0.2.1. Until then, either give VSift a transcript
+(`vsift ingest ./recording.mp4 --transcript ./recording.vtt`), which skips local recognition, or transcribe in ranges
+(`vsift transcript retranscribe <session> --from <microseconds> --to <microseconds>`) and move a range's edges by a few seconds if one fails,
+which can get past the chunk. This was found with the first real recording tried; every accuracy figure before it came from a synthetic corpus.
+
 **`INTEGRITY_FAILURE` right after `--session-root <folder>`.** If the folder already exists and
 VSift did not create it (an empty folder you made with `mkdir`, say), VSift never adopts it and
 leaves it untouched. The error's remediation says so: name a `--session-root` path that does not
