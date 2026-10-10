@@ -32,7 +32,7 @@ register entries L-146 (a model swapped during a run), L-147 (a worker host's `r
 ## The evidence the candidate needs
 
 The staleness rule of the evidence ledger (ADR 0024) lets an entry recorded for an earlier version count only if nothing in its item's scope changed since. Nothing was edited to make it pass or fail:
-**`release-evidence --complete-for 0.2.1-rc.1` names 15 of the 20 items** (RQ-01 to RQ-09, RQ-11, RQ-12, RQ-13, RQ-15, RQ-18 and RQ-19: each is `passed` for `0.2.0` or `0.2.0-rc.3`, and 55 to 248 files in its
+**`release-evidence --complete-for 0.2.1-rc.1` names 15 of the 20 items** (RQ-01 to RQ-09, RQ-11, RQ-12, RQ-13, RQ-15, RQ-18 and RQ-19: each is `passed` for `0.2.0` or `0.2.0-rc.3`, and about 55 to 250 files in its
 scope changed since; the exact output is in the pull request that cut the candidate). **It does not name RQ-10, RQ-14, RQ-16 and RQ-17, which are `waived`, or RQ-20 (the check itself)**, and that is the danger:
 a waiver does not expire by itself, so the check would pass those four for `0.2.1` without a single decision about them (next section).
 
