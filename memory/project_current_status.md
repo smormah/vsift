@@ -15,7 +15,8 @@ embeddable engine library (`vsift`) that the CLI, and later other hosts, use. To
   survives kills and, on Ubuntu 24.04 with ext4, power loss);
 - copy a video into a private, disposable session; import an SRT or WebVTT transcript with it,
   aligned by an offset; or transcribe the speech itself with whisper.cpp (`transcript
-  retranscribe`), continue an interrupted transcription, and report, resume or cancel that work;
+  retranscribe`), continue an interrupted transcription, and report, resume or cancel that work (**known defect, high: a real recording whose 30-second chunk has little speech and one rejected
+  segment fails the whole run and keeps nothing, #353, L-145; the fix is planned for 0.2.1**);
 - return timestamped transcript segments, search them, list the moments where the screen changed,
   and return exact frames, neighbours, bursts, crops and WAV clips;
 - manage the session's lifetime and retention, validate retained bundles, stop a long command
@@ -53,12 +54,19 @@ the CLI and write a cited report. P12's named-client trials qualified it:
   cold read of an audio clip, #340) and RQ-17 (the maintainer's Smart App Control, clean-machine and Mac try-outs were not done: the release ships untried, L-143). The checker cannot see their limits; the decisions' texts do.
 - **Not done or not shown:** RQ-13 (the scan reading on `0.2.0`, complete, 2026-10-10) is `passed` with one new finding that the maintainer accepted for R0 and will have fixed after the release: CVE-2026-107678 (Medium: the MP4
   demuxer's `pssh` handling, no fix in the shipped FFmpeg snapshot, nothing run on a crafted file; L-144, #351); the Ubuntu and Windows ASR gates and the durable path were not repeated on the release's tag; the
-  claims rung is still `candidate`, no platform is "supported", and 75 of the 129 register entries are `pending` review (no public statement leans on them).
-- **The neutral checkpoint for using the published CLI (plan section 12) is met and raised.** The maintainer installed `0.2.0` on their own machine on 2026-10-10 and copied the skill, byte for byte, into their own agent
-  client's folder. That use never counts as qualification evidence.
+  claims rung is still `candidate`, no platform is "supported", and 76 of the 130 register entries are `pending` review (no public statement leans on the pending ones).
+- **The neutral checkpoint for using the published CLI (plan section 12) was met when P14 was recorded complete, and the trial has started.** The maintainer installed `0.2.0` on their own machine on 2026-10-10,
+  copied the skill, byte for byte, into their own agent client's folder and is testing real recordings. That use never counts as qualification evidence. **Section 12's condition (no open high-severity limit
+  blocks the investigate-a-video journey) is not true while L-145 is open**; the plan's text, which names L-068 as the only high entry, is not edited by this change.
+- **The first real recording found a high-severity defect on 2026-10-10: #353, L-145 (open, not begun).** A 34-minute screencast with long pauses failed `transcript retranscribe` as `MISSING_CAPABILITY` and kept
+  nothing: one 30-second chunk with few recognised segments, one of them rejected, trips the quarter rule, and the application has no outcome for an unusable chunk but failing the run; `job resume` fails the
+  same way, the job stays `resumable`, and the error's remediation is #274's, which is wrong here. The 30-second windows five seconds either side transcribed; the recording cannot be committed and no session has reproduced it. The
+  maintainer's decision of the same day: **`0.2.1` carries everything waiting** (#353, #340 the audio text, #342, #345, #349), as separate fixes, then `0.2.1-rc.1` (the skill changes only with the new freeze in
+  that cut, as at rc.3), its hosted evidence, the agent batches 2 and 3 re-run on the candidate on the maintainer's go, and the stable. **P14 stays complete and `0.2.0` stays published and is not deprecated.**
+  Every accuracy figure so far is from a synthetic corpus with dense speech (L-022); this is the first real one.
 - **What is weak:** the skill change met its gates once on a small sample; the cold round met its usefulness target twice with no margin and its safety gate not at all (one harmless read; no person has read the raw cold
-  logs, L-118); hosted images are not clean machines (L-112); Smart App Control and the macOS prompts are unseen (L-098, L-143); **a synthetic corpus and voice only** (L-020, L-022). CVE-2026-38350 (L-122), the
-  whisper.cpp pin (L-137) and CVE-2026-107678 (L-144) are the maintainer's accepted residuals. Open defects: #312 (L-135; one failure in 4,500 loaded Windows repetitions), #340, #342, #351.
+  logs, L-118); hosted images are not clean machines (L-112); Smart App Control and the macOS prompts are unseen (L-098, L-143); **a synthetic corpus and voice only** (L-020, L-022), which the first real recording showed to matter (#353). CVE-2026-38350 (L-122), the
+  whisper.cpp pin (L-137) and CVE-2026-107678 (L-144) are the maintainer's accepted residuals. Open defects: **#353 (L-145, high: real recordings with pauses)**, #312 (L-135; one failure in 4,500 loaded Windows repetitions), #340, #342, #351.
 
 ## How P14 went, in one view (details: `docs/planning/p14-qualification.md`, sections 15 to 31)
 
@@ -95,7 +103,7 @@ the CLI and write a cited report. P12's named-client trials qualified it:
 | P11 | Complete (`40c4038`); SEC-T01 adversarial evidence is technical debt, moved to R1 (#188, L-068) |
 | P12 | Complete (2026-09-30, ADR 0022 Accepted): skill, harness, named-client trials; review tier qualified, compact tier 93% and 100% on the #222 re-run; open: L-095 (#224), #219, #204 (`1284e54`) |
 | P13 | Complete (2026-10-01, ADR 0023 Accepted): distribution, managed install, `handoff check`, human output; 0.1.0 published; release commit `011bc4d` |
-| P14 | **Complete (2026-10-10, ADR 0024 Accepted): the R0 qualification; `0.2.0` published 2026-10-09 (`eeb2a22a46a8`); four items waived, one accepted FFmpeg finding (L-144, #351), the rung still `candidate`** |
+| P14 | **Complete (2026-10-10, ADR 0024 Accepted): the R0 qualification; `0.2.0` published 2026-10-09 (`eeb2a22a46a8`); four items waived, one accepted FFmpeg finding (L-144, #351), the rung still `candidate`; a high finding came after it (#353, L-145), with `0.2.1` planned** |
 
 ## Architecture snapshot
 
