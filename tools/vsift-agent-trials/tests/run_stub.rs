@@ -26,7 +26,7 @@ use vsift_agent_trials::{
     record::{MAX_RECORD_BYTES, write_record},
     roots::RootPolicy,
     run::{
-        CODEX_WINDOWS_SANDBOX, RunRequest, client_arguments, client_environment,
+        CODEX_WINDOWS_SANDBOX, RunRecord, RunRequest, client_arguments, client_environment,
         codex_writable_root, phase_prompt, run,
     },
     scenario::Scenario,
@@ -372,6 +372,143 @@ fn trials_created_in_parallel_never_share_a_root() -> TestResult {
     Ok(())
 }
 
+/// What `run` reports when Windows loses the race of starting a client
+/// inside its Job Object (issue #345). Its text is `process-wrap`'s own
+/// (`resume_threads` in version 10.0, pinned by `Cargo.lock`), which `run`
+/// passes on as "the client did not start: ...".
+///
+/// `run` creates the client suspended, puts it in a Job Object and then
+/// resumes it by taking a snapshot of every thread on the machine and
+/// resuming the ones owned by the client's process. When it resumes none,
+/// `process-wrap` ends the client and reports this. The client has not run by
+/// then, so nothing it would write exists and starting it again is safe. The
+/// failure belongs to one start, not to the client or to what the test asks
+/// of it: it was seen once, in a full workspace run on Windows, and the same
+/// test passed on its own and in the next full run. Why the snapshot held no
+/// thread to resume is not shown; the failure was not reproduced (see
+/// `CHANGELOG.md`).
+const WINDOWS_START_RACE: &str = "no thread belonging to the child was found";
+
+/// How many times a client start is tried when it loses that race. Every
+/// attempt takes a new snapshot, so the failures do not depend on each other;
+/// five is far more than a failure seen once needs and still ends within a
+/// second when the cause is not a race at all.
+const START_ATTEMPTS: u32 = 5;
+
+/// The pause between two attempts, so the machine can settle before the next
+/// snapshot.
+const START_PAUSE: Duration = Duration::from_millis(100);
+
+/// Whether `error` is the Windows start race, and nothing else. A start that
+/// fails for any other reason (the executable is missing, a root is refused,
+/// the client's own setup is wrong) is a real failure and is never retried.
+fn is_windows_start_race(error: &TrialError) -> bool {
+    matches!(error, TrialError::Process(message) if message.contains(WINDOWS_START_RACE))
+}
+
+/// Calls `attempt` until it does not lose the Windows start race, at most
+/// `attempts` times, with `pause` between two calls. The result of the last
+/// call is returned as it is, so a race that is lost every time is still
+/// reported with its own message.
+async fn start_with_retries<T, Attempt, Pending>(
+    attempts: u32,
+    pause: Duration,
+    mut attempt: Attempt,
+) -> Result<T, TrialError>
+where
+    Attempt: FnMut() -> Pending,
+    Pending: Future<Output = Result<T, TrialError>>,
+{
+    let mut made = 1;
+    loop {
+        match attempt().await {
+            Err(error) if made < attempts && is_windows_start_race(&error) => {
+                made += 1;
+                tokio::time::sleep(pause).await;
+            }
+            outcome => return outcome,
+        }
+    }
+}
+
+/// `run`, started again when the client's start loses the Windows race.
+///
+/// The harness's `run` is not changed: its source is part of the frozen
+/// grader of the agent trials, so the retry lives in the test that needs it.
+async fn run_started(request: &RunRequest) -> Result<RunRecord, TrialError> {
+    start_with_retries(START_ATTEMPTS, START_PAUSE, || run(request)).await
+}
+
+/// The error `run` returns when a start loses the race: its own words around
+/// the dependency's message.
+fn lost_start_race() -> TrialError {
+    TrialError::Process(format!(
+        "the client did not start: {}",
+        io::Error::other(WINDOWS_START_RACE)
+    ))
+}
+
+#[tokio::test]
+async fn a_client_start_that_loses_the_windows_race_is_tried_again() -> TestResult {
+    let calls = AtomicU64::new(0);
+    let started = start_with_retries(START_ATTEMPTS, Duration::ZERO, || {
+        let call = calls.fetch_add(1, Ordering::Relaxed) + 1;
+        async move {
+            if call < 3 {
+                Err(lost_start_race())
+            } else {
+                Ok(call)
+            }
+        }
+    })
+    .await?;
+    assert_eq!(started, 3, "the third attempt is the one that started");
+    assert_eq!(calls.load(Ordering::Relaxed), 3);
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_client_start_that_loses_the_race_every_time_stops_at_the_bound() -> TestResult {
+    let calls = AtomicU64::new(0);
+    let outcome: Result<(), TrialError> =
+        start_with_retries(START_ATTEMPTS, Duration::ZERO, || {
+            calls.fetch_add(1, Ordering::Relaxed);
+            async { Err(lost_start_race()) }
+        })
+        .await;
+    let error = outcome.err().ok_or("a lost race was reported as a start")?;
+    assert!(is_windows_start_race(&error), "{error}");
+    assert_eq!(calls.load(Ordering::Relaxed), u64::from(START_ATTEMPTS));
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_start_that_fails_for_any_other_reason_is_not_tried_again() -> TestResult {
+    let others: [fn() -> TrialError; 4] = [
+        || TrialError::Process("the client did not start: Access is denied.".to_owned()),
+        || TrialError::Process("waiting for the client failed: broken pipe".to_owned()),
+        || TrialError::Refused("the client home holds skills".to_owned()),
+        || TrialError::Invalid("the scenario is not valid".to_owned()),
+    ];
+    for other in others {
+        let message = other().to_string();
+        assert!(!is_windows_start_race(&other()), "{message}");
+        let calls = AtomicU64::new(0);
+        let outcome: Result<(), TrialError> =
+            start_with_retries(START_ATTEMPTS, Duration::ZERO, || {
+                calls.fetch_add(1, Ordering::Relaxed);
+                async move { Err(other()) }
+            })
+            .await;
+        let error = outcome
+            .err()
+            .ok_or("a failed start was reported as a start")?;
+        assert_eq!(error.to_string(), message);
+        assert_eq!(calls.load(Ordering::Relaxed), 1, "{message}");
+    }
+    Ok(())
+}
+
 #[tokio::test]
 async fn claude_code_gets_one_settings_source_in_a_trusted_workspace() -> TestResult {
     let trial = Trial::new("A-01-f01-missing-tools")?;
@@ -386,7 +523,7 @@ async fn claude_code_gets_one_settings_source_in_a_trusted_workspace() -> TestRe
     )?;
     trial.behave(&json!({"exit_code": 0}), "")?;
     let request = trial.request(ClientKind::ClaudeCode, Duration::from_secs(60));
-    let record = run(&request).await?;
+    let record = run_started(&request).await?;
     // One source of permission rules: the trusted workspace's project
     // settings, never a second copy through `--settings`.
     let arguments: Vec<String> = serde_json::from_value(trial.invocation()?["arguments"].clone())?;
