@@ -35,11 +35,11 @@ use config::{ConfigLayer, EffectiveConfig, HostPolicy};
 use human::HumanDetail;
 use output::{JsonLines, OutputError, OutputMode, OutputWriter, ProcessExit};
 use vsift::{
-    Cancellation, DEFAULT_LOCAL_ASR_CHECK_BUDGET, Engine, EngineConfig, EngineError, EnginePorts,
-    EvaluatedSetupPlan, ExecutableSelections, FailureCode, HostIsolation, IsolationProfile,
-    ManagedRootLocation, OpenSessionError, PlanAcceptanceError, ProgressObserver, SessionRootError,
-    SessionRootLocation, SetupCheckRequest, SetupPlanRequest, TranscriptSourceError,
-    UserConfigurationLocation, attest_host_isolation,
+    ADMISSION_RETRY_AFTER, Cancellation, DEFAULT_LOCAL_ASR_CHECK_BUDGET, Engine, EngineConfig,
+    EngineError, EnginePorts, EvaluatedSetupPlan, ExecutableSelections, FailureCode, HostIsolation,
+    IsolationProfile, ManagedRootLocation, OpenSessionError, PlanAcceptanceError, ProgressObserver,
+    SessionRootError, SessionRootLocation, SetupCheckRequest, SetupPlanRequest,
+    TranscriptSourceError, UserConfigurationLocation, attest_host_isolation,
 };
 use vsift_contract::{
     ADMISSION_BUSY_REMEDIATION, ADMISSION_CAPACITY_REMEDIATION, ARTIFACT_DIRECTORY_REMEDIATION,
@@ -607,6 +607,25 @@ impl CommandFailure {
             suggested_command,
             data: None,
         }
+    }
+
+    /// A failure that is another request holding what a media command needs
+    /// (#342): the remediation says so, and the retry hint is the admission
+    /// one, [`ADMISSION_RETRY_AFTER`] (two seconds), which `job run` already
+    /// reports after its whole admission wait and a worker request reports
+    /// for every busy step.
+    ///
+    /// Each command decides which of its typed causes are this, rather than
+    /// the engine's conversion above deciding for every command: the engine
+    /// reports a busy session store the same way for `session close`, which
+    /// answers `BUSY` for as long as a transcription of minutes runs in the
+    /// session, and two seconds would be the wrong thing to tell that
+    /// caller. The hint is a first retry. It does not predict how long other
+    /// work runs; the remediation says what to do when it stays busy.
+    pub(crate) fn contention(code: FailureCode, summary: String) -> Self {
+        Self::with_remediation(code, summary).with_retry_after_ms(
+            u64::try_from(ADMISSION_RETRY_AFTER.as_millis()).unwrap_or(u64::MAX),
+        )
     }
 
     /// The remediation summary, for tests of the failures built here.

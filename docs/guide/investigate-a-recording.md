@@ -292,9 +292,13 @@ evd_e2f79e72…  audio 00:00:00.000000 to 00:00:03.000000 (--from 0 --to 3000000
   WAV 16000 Hz, mono, s16le, 96044 bytes, sha256 d7e6f3b2…
   File (audio/wav):
     <file path>
+  This clip is for a person or a speech tool to play; a coding agent cannot listen to it, so an agent reads what was said with vsift transcript get.
 
 Lifecycle: ephemeral, expires 2026-10-05T17:21:00Z
 ```
+
+The clip is for you to play (or to hand to a speech tool of your own). An AI assistant cannot listen to it: it
+reads what was said from the transcript, so the output says so on the line under the path.
 
 The frames and crops are PNG files you can open anywhere. On Windows the path may start with `\\?\`
 (the form Windows uses for long paths); some programs refuse it, and the output then says how to copy the

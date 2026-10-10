@@ -9,16 +9,17 @@
 use vsift::{
     AudioClipRequest, Cancellation, CropEvidenceRequest, Engine, EngineError, EvidenceMediaError,
     EvidenceResults, FailureCode, FrameBurstRequest, FrameGetRequest, FrameNeighboursRequest,
-    FrameSelection, FrameTarget,
+    FrameSelection, FrameTarget, SessionStorageError, SourceProbeError,
 };
 use vsift_contract::{
     AUDIO_RANGE_REMEDIATION, AUDIO_RANGE_START_REMEDIATION, AUDIO_RANGE_TOO_SHORT_REMEDIATION,
     AudioEvidenceStream, BURST_RANGE_REMEDIATION, CROP_OUTSIDE_REMEDIATION, DeliveredEvidenceFile,
     EVIDENCE_BUDGET_REMEDIATION, EVIDENCE_KIND_REMEDIATION, EVIDENCE_PATH_REMEDIATION,
     EVIDENCE_TOOLS_REMEDIATION, EvidencePresentation, EvidencePresentationError,
-    FrameEvidenceStream, LifecycleResponse, NO_AUDIO_CLIP_REMEDIATION, NO_FRAMES_REMEDIATION,
-    OperationResponse, UNDECODABLE_EVIDENCE_REMEDIATION, UNKNOWN_CANDIDATE_REMEDIATION,
-    UNKNOWN_EVIDENCE_REMEDIATION, audio_response, frame_response, frame_selection_summary,
+    FrameEvidenceStream, LifecycleResponse, MEDIA_BUSY_REMEDIATION, NO_AUDIO_CLIP_REMEDIATION,
+    NO_FRAMES_REMEDIATION, OperationResponse, UNDECODABLE_EVIDENCE_REMEDIATION,
+    UNKNOWN_CANDIDATE_REMEDIATION, UNKNOWN_EVIDENCE_REMEDIATION, audio_response, frame_response,
+    frame_selection_summary,
 };
 
 use crate::{
@@ -37,12 +38,36 @@ enum Medium {
     Sound,
 }
 
+/// Whether the failure is another request holding what an evidence command
+/// needs (#342).
+///
+/// Three typed causes, one answer. The media adapter never waits for the
+/// root's capacity, so its probe and its extraction each report contention
+/// at once ([`SourceProbeError::Busy`], [`EvidenceMediaError::Busy`]); and
+/// the session store reports a lock another request holds (the session's, or
+/// its writer lock at the commit) or the capacity the commit itself reserves
+/// as [`SessionStorageError::Busy`]. All three have the published code
+/// `BUSY`, and the caller does the same for each: wait, then run the command
+/// again. Nothing is committed in any of them, because evidence is published
+/// in one generation.
+const fn is_contention(error: &EngineError) -> bool {
+    matches!(
+        error,
+        EngineError::EvidenceMedia(EvidenceMediaError::Busy)
+            | EngineError::SourceProbe(SourceProbeError::Busy)
+            | EngineError::Storage(SessionStorageError::Busy)
+    )
+}
+
 /// Maps an evidence failure to its code and remediation.
 ///
 /// Evidence-specific causes are matched first: the generic mapping would
 /// describe a missing media tool in terms of transcript import, and a missing
 /// audio stream in terms of speech recognition.
 fn evidence_failure(error: EngineError, medium: Medium) -> CommandFailure {
+    if is_contention(&error) {
+        return CommandFailure::contention(error.failure_code(), MEDIA_BUSY_REMEDIATION.to_owned());
+    }
     let remediation = match (&error, medium) {
         (EngineError::MediaToolUnavailable(_), _) => Some(EVIDENCE_TOOLS_REMEDIATION),
         (EngineError::EvidenceBudgetExhausted, _) => Some(EVIDENCE_BUDGET_REMEDIATION),
@@ -299,10 +324,102 @@ pub(crate) async fn audio_stream(
 
 #[cfg(test)]
 mod tests {
-    use vsift::{EngineError, FailureCode};
-    use vsift_contract::{AUDIO_RANGE_START_REMEDIATION, AUDIO_RANGE_TOO_SHORT_REMEDIATION};
+    use vsift::{
+        ADMISSION_RETRY_AFTER, EngineError, EvidenceMediaError, FailureCode, SessionStorageError,
+        SourceProbeError,
+    };
+    use vsift_contract::{
+        AUDIO_RANGE_START_REMEDIATION, AUDIO_RANGE_TOO_SHORT_REMEDIATION, CommandName,
+        MEDIA_BUSY_REMEDIATION,
+    };
 
     use super::{Medium, evidence_failure};
+    use crate::{OutputMode, OutputWriter, ProcessExit, write_command_failure};
+
+    /// #342: every typed cause of contention an evidence command can meet is
+    /// `BUSY` (the code it always had) with the remediation and the admission
+    /// retry hint, for a picture and for a clip alike; other storage failures
+    /// and other media failures keep what they had.
+    #[test]
+    fn contention_on_an_evidence_command_is_busy_with_a_remediation_and_a_retry_hint()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let hint = u64::try_from(ADMISSION_RETRY_AFTER.as_millis())?;
+        assert_eq!(hint, 2_000);
+        for error in [
+            EngineError::EvidenceMedia(EvidenceMediaError::Busy),
+            EngineError::SourceProbe(SourceProbeError::Busy),
+            EngineError::Storage(SessionStorageError::Busy),
+        ] {
+            for medium in [Medium::Picture, Medium::Sound] {
+                let failure = evidence_failure(error.clone(), medium);
+                assert_eq!(failure.code, FailureCode::Busy, "{error}");
+                assert!(failure.code.retryable(), "{error}");
+                assert_eq!(failure.summary(), Some(MEDIA_BUSY_REMEDIATION), "{error}");
+                assert_eq!(failure.retry_after_ms, Some(hint), "{error}");
+            }
+        }
+
+        for error in [
+            EngineError::Storage(SessionStorageError::Io),
+            EngineError::Storage(SessionStorageError::IntegrityFailure),
+            EngineError::SourceProbe(SourceProbeError::Deadline),
+            EngineError::EvidenceMedia(EvidenceMediaError::Deadline),
+            EngineError::EvidenceMedia(EvidenceMediaError::Cancelled),
+        ] {
+            let failure = evidence_failure(error.clone(), Medium::Picture);
+            assert_ne!(failure.summary(), Some(MEDIA_BUSY_REMEDIATION), "{error}");
+            assert_eq!(failure.retry_after_ms, None, "{error}");
+        }
+        Ok(())
+    }
+
+    /// #342: what `frame get` prints for a refused request, as `--json` and
+    /// for a person, is the published example; the exit status is the
+    /// retryable class (4), as it was.
+    #[test]
+    fn a_busy_frame_get_answers_the_published_example_and_exits_with_the_retryable_class()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let example: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../../schemas/v1/examples/frame-get.busy.json"),
+        )?)?;
+        let busy = || {
+            evidence_failure(
+                EngineError::Storage(SessionStorageError::Busy),
+                Medium::Picture,
+            )
+        };
+
+        let mut stdout = Vec::new();
+        let mut stderr = Vec::new();
+        let mut writer = OutputWriter::new(&mut stdout, &mut stderr);
+        let written =
+            write_command_failure(&mut writer, OutputMode::Json, CommandName::FrameGet, busy());
+        assert_eq!(written, ProcessExit::Retryable);
+        assert_eq!(written.code(), 4);
+        assert!(stderr.is_empty());
+        let value: serde_json::Value = serde_json::from_slice(&stdout)?;
+        assert_eq!(value, example);
+
+        let mut stdout = Vec::new();
+        let mut stderr = Vec::new();
+        let mut writer = OutputWriter::new(&mut stdout, &mut stderr);
+        let written = write_command_failure(
+            &mut writer,
+            OutputMode::Human,
+            CommandName::FrameGet,
+            busy(),
+        );
+        assert_eq!(written, ProcessExit::Retryable);
+        assert!(stdout.is_empty());
+        assert_eq!(
+            String::from_utf8(stderr)?,
+            format!(
+                "Error: The requested operation is temporarily busy. (BUSY)\nFix: {MEDIA_BUSY_REMEDIATION}\nRetry after: 2000 ms\n"
+            )
+        );
+        Ok(())
+    }
 
     /// #332: an audio range whose length rounds to no sample is the caller's
     /// range to change, `INVALID_ARGUMENT`, with a remediation that says how

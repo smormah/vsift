@@ -1319,9 +1319,11 @@ copy. `MISSING_CAPABILITY` when FFmpeg or FFprobe is missing (only when windows 
 analysed; the remediation says Whisper is not needed), the preflight fails or FFmpeg
 cannot run on a window. `DEADLINE_EXCEEDED`, `BUSY` or `CANCELLED` only when the call
 analysed nothing and nothing of the range was analysed before; otherwise the result is
-`partial`. `RESOURCE_LIMIT` for a record over 8 MiB or a 65th index record.
-`INTEGRITY_FAILURE` or `UNSUPPORTED_SCHEMA` for a stored record that fails verification
-or a source copy that changed during the call.
+`partial`. **Since `0.2.1` that `BUSY` carries a remediation and `retry_after_ms` 2000**,
+the same answer as the evidence commands' (see "P09 frames", below). `RESOURCE_LIMIT`
+for a record over 8 MiB or a 65th index record. `INTEGRITY_FAILURE` or
+`UNSUPPORTED_SCHEMA` for a stored record that fails verification or a source copy that
+changed during the call.
 
 ### P09 frames
 
@@ -1464,6 +1466,28 @@ video. `STORAGE_IO` when a delivered path is not valid UTF-8 (remediation: use a
 `--session-root` whose path is). `DEADLINE_EXCEEDED`, `BUSY` or `CANCELLED` only when
 nothing was extracted.
 
+**`BUSY` for these commands** (`frame get`, `frame neighbours`, `frame burst`, `crop`,
+`audio`) means another request holds what the command needs, and nothing was committed:
+the root's share of the machine's capacity (the media probe and the extraction each
+reserve one unit and never wait; see "Weighted admission" under
+[P11 worker workspaces, admission and isolation](#p11-worker-workspaces-admission-and-isolation)),
+or the session store (the session itself, or its writer lock and capacity at the commit). **Since
+`0.2.1`** it carries the same two additions every other admission `BUSY` has: one
+`remediation` entry (fixed prose: another VSift request is using this session or its
+root's share of the capacity; wait for `retry_after_ms`, then run the same command
+again; a transcription or a visual analysis can hold the capacity for minutes, so if it
+stays busy wait for that work to end; running the commands for one session one at a
+time avoids it) and `retry_after_ms` 2000, the admission retry hint
+(`ADMISSION_RETRY_AFTER`). Before `0.2.1` the same answer had an empty `remediation`
+and a null `retry_after_ms`. The code, `retryable: true`, the message and exit status
+4 are unchanged, and no field is added: the published failure shape already has both
+(example [`frame-get.busy.json`](../../schemas/v1/examples/frame-get.busy.json)). The
+hint is a first retry, not a prediction of how long other work runs, which the engine
+does not know. The other `BUSY` answers keep their own text and hint
+(a job running elsewhere, a managed installation, an admission wait that ended); a
+transcription that finds the capacity in use keeps its own remediation and has no
+`retry_after_ms`.
+
 Without `--json` these commands print readable text since P13 PR 2b, each delivered
 path whole on its own line ("Human-readable text" under "Output protocol").
 
@@ -1533,6 +1557,19 @@ range, so two requests clipped to the same range share one clip. `--events jsonl
 writes one `audio_evidence` event, then the terminal event
 ([`audio-stream-data.schema.json`](../../schemas/v1/audio-stream-data.schema.json)).
 Whisper is not needed; clips are decoded by FFmpeg.
+
+**Who a clip is for (#340, since `0.2.1`).** A clip is for a person to play, or for a
+speech tool of their own; a coding agent cannot listen to it, and reading its bytes
+(`base64`, for example) gives the agent nothing. It reads speech through the transcript
+(`transcript get`, `search`). Two pieces of text say so, and neither is a JSON field:
+`audio --help` (the one-line summary the root help lists, and a longer paragraph in
+`--help`), and one sentence of the readable result, on the line under the clip's path:
+"This clip is for a person or a speech tool to play; a coding agent cannot listen to it,
+so an agent reads what was said with vsift transcript get." A frame and a crop, which
+are images an agent opens, carry no such sentence. The `--json` result and the
+`--events jsonl` stream are unchanged: an agent that runs `audio --json` without reading
+the help is told nothing by them; a hint in the result itself would be an additive optional
+field with its schema, and none is added.
 
 A damaged or cut-short part of a source is `INVALID_SOURCE` with nothing committed and
 a remediation that names `candidates` for finding undecodable parts; the decodable

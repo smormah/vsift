@@ -81,6 +81,46 @@ fn help_carries_the_typical_investigation_and_the_operator_note()
     Ok(())
 }
 
+/// #340: an agent that has only the help learns, before it runs `audio`, that
+/// the clip is for a person or a speech tool, that a coding agent cannot
+/// listen to it, and that the transcript is how it reads speech. The one-line
+/// summary says it where the root help lists the command; `audio -h` and
+/// `audio --help` say it again, and the long form says what reading the
+/// file's bytes gives.
+#[test]
+fn audio_help_says_a_coding_agent_cannot_listen_and_reads_the_transcript()
+-> Result<(), Box<dyn std::error::Error>> {
+    let needles = [
+        "for a person or a speech tool to play",
+        "a coding agent cannot listen to it",
+        "transcript get",
+    ];
+
+    let root = String::from_utf8(run(&["--help"])?.stdout)?;
+    let listed = root
+        .lines()
+        .find(|line| line.trim_start().starts_with("audio "))
+        .ok_or("the root help does not list audio")?;
+    for needle in needles {
+        assert!(listed.contains(needle), "root help: {needle}: {listed}");
+    }
+
+    for flag in ["-h", "--help"] {
+        let output = run(&["audio", flag])?;
+        assert!(output.status.success(), "{flag}");
+        let text = String::from_utf8(output.stdout)?;
+        for needle in needles {
+            assert!(text.contains(needle), "audio {flag}: missing {needle}");
+        }
+    }
+    let long = String::from_utf8(run(&["audio", "--help"])?.stdout)?;
+    assert!(
+        long.contains("reading the file's bytes (for example with base64) tells it nothing"),
+        "{long}"
+    );
+    Ok(())
+}
+
 #[test]
 fn help_and_version_publish_the_r0_namespace() -> Result<(), Box<dyn std::error::Error>> {
     let help = run(&["--help"])?;

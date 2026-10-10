@@ -1,0 +1,24 @@
+{
+  "schema_version": "1",
+  "command": "frame.get",
+  "operation_id": null,
+  "status": "failed",
+  "data": null,
+  "warnings": [],
+  "error": {
+    "code": "BUSY",
+    "message": "The requested operation is temporarily busy.",
+    "retryable": true,
+    "retry_after_ms": 2000,
+    "affected_ids": [],
+    "remediation": [
+      {
+        "summary": "Another VSift request is using this session, or this session root's share of the machine's capacity, so this command could not finish. Nothing was committed. Wait for retry_after_ms, then run the same command again. A transcription or a visual analysis can hold the capacity for minutes: if it is still busy, wait for that work to end. Running the commands for one session one at a time avoids it.",
+        "required_authority": "none",
+        "command": null
+      }
+    ]
+  },
+  "coverage": null,
+  "lifecycle": null
+}

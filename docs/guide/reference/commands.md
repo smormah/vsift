@@ -35,7 +35,7 @@
 - [vsift frame get](#vsift-frame-get): Extract the frame a time or a visual candidate names
 - [vsift frame neighbours](#vsift-frame-neighbours): Extract consecutive frames on each side of an earlier frame
 - [vsift frame burst](#vsift-frame-burst): Extract distinct frames at evenly spaced times over a range
-- [vsift audio](#vsift-audio): Extract a bounded source audio range
+- [vsift audio](#vsift-audio): Extract a bounded audio clip for a person or a speech tool to play; a coding agent cannot listen to it and reads speech with transcript get
 - [vsift crop](#vsift-crop): Crop an orientation-correct evidence image
 - [vsift bundle](#vsift-bundle): Validate portable evidence bundles
 - [vsift bundle validate](#vsift-bundle-validate): Validate a bundle as bounded data without executing its contents
@@ -65,7 +65,7 @@ Commands:
   search      Search timestamped transcript evidence
   candidates  Page through visual evidence candidates
   frame       Extract or navigate source-grounded frames
-  audio       Extract a bounded source audio range
+  audio       Extract a bounded audio clip for a person or a speech tool to play; a coding agent cannot listen to it and reads speech with transcript get
   crop        Crop an orientation-correct evidence image
   bundle      Validate portable evidence bundles
   job         Execute or inspect recoverable worker jobs
@@ -1399,10 +1399,12 @@ Options:
 
 ## vsift audio
 
-Extract a bounded source audio range.
+Extract a bounded audio clip for a person or a speech tool to play; a coding agent cannot listen to it and reads speech with transcript get.
 
 ```text
-Extract a bounded source audio range
+Extract a bounded audio clip for a person or a speech tool to play; a coding agent cannot listen to it and reads speech with transcript get.
+
+The clip is a WAV file of at most 30 seconds, written into the session's private folder. A person plays it, or hands it to a speech tool of their own. A coding agent cannot listen to it, and reading the file's bytes (for example with base64) tells it nothing: what was said is in the transcript, which vsift transcript get reads.
 
 Usage: vsift audio [OPTIONS] --from <FROM> --to <TO> <SESSION>
 

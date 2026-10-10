@@ -295,7 +295,12 @@ folder is not VSift's and what to do; it is checked by `storage_contract` and by
 the copy of the video into the session took longer than the ten-minute limit (#325):
 `INVALID_SOURCE`, as it always was, with the remediation that says the copy was slow and the
 video was not judged; it is checked by `storage_contract` and by a unit test of the CLI, which
-builds it from the typed cause.
+builds it from the typed cause. `frame-get.busy.json` is the `frame get` failure when another
+request holds the session or the root's share of the machine's capacity (#342): `BUSY`, with
+`retryable` true, as it always was, and, since 0.2.1, one remediation entry and `retry_after_ms`
+2000 where it had an empty `remediation` and a null hint; no field is added (the failure shape
+already has both). `crop`, `audio` and `candidates` answer the same way. It is checked by
+`navigation_contract` and by a unit test of the CLI, which builds it from the typed cause.
 
 The Rust types that produce these documents live in the `vsift-contract` crate
 (`crates/vsift-contract`), which every VSift host uses so they all emit identical JSON.

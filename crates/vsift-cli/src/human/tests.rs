@@ -11,12 +11,13 @@ use std::{env, fs, path::PathBuf};
 use serde_json::{Value, json};
 use vsift::RuntimeDependency;
 use vsift_contract::{
-    CommandName, ConfiguredModelResponse, ConfiguredSelectionResponse, OperationResponse,
-    is_hidden_character,
+    CommandName, ConfiguredModelResponse, ConfiguredSelectionResponse, MEDIA_BUSY_REMEDIATION,
+    OperationResponse, is_hidden_character,
 };
 
 use super::{
-    HumanDetail, failure::render_failure, render_host, render_value, result, text::DisplayText,
+    HumanDetail, evidence, failure::render_failure, render_host, render_value, result,
+    text::DisplayText,
 };
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -316,6 +317,7 @@ fn frozen_failures_render_as_message_remediation_and_command() -> TestResult {
         ("storage-not-private.json", "failure-storage-not-private"),
         ("session-root-unowned.json", "failure-session-root-unowned"),
         ("ingest-copy-too-slow.json", "failure-ingest-copy-too-slow"),
+        ("frame-get.busy.json", "failure-frame-get-busy"),
         (
             "media-tool-verification-failed.json",
             "failure-media-tool-verification",
@@ -335,6 +337,60 @@ fn frozen_failures_render_as_message_remediation_and_command() -> TestResult {
         "{}",
         cancelled.as_str()
     );
+    Ok(())
+}
+
+/// #342: a media command refused because another request holds its session
+/// or the root's capacity tells a person what to do and when: the message and
+/// code, the fix line (wait, run it again, one command at a time) and the
+/// retry hint, in that order.
+#[test]
+fn a_busy_media_command_prints_its_fix_and_its_retry_hint() -> TestResult {
+    let rendered = render_failure(&example("frame-get.busy.json")?, None)?;
+    let lines: Vec<&str> = rendered.as_str().lines().collect();
+    assert_eq!(
+        lines,
+        [
+            "Error: The requested operation is temporarily busy. (BUSY)",
+            &format!("Fix: {MEDIA_BUSY_REMEDIATION}"),
+            "Retry after: 2000 ms",
+        ]
+    );
+    Ok(())
+}
+
+/// #340: the human text of an audio result says, on the line under the clip's
+/// path, who the clip is for and how an agent reads speech. A frame and a
+/// crop are images an agent can open, so they say nothing of the kind.
+#[test]
+fn an_audio_clip_says_who_it_is_for_under_its_path() -> TestResult {
+    let text = render(CommandName::Audio, &example("audio.json")?)?;
+    let lines: Vec<&str> = text.lines().collect();
+    let label = lines
+        .iter()
+        .position(|line| *line == "  File (audio/wav):")
+        .ok_or("the clip's file is missing")?;
+    assert!(
+        lines[label + 1].starts_with("    /vsift-session-root/"),
+        "{text}"
+    );
+    assert_eq!(lines[label + 2], evidence::AUDIO_LISTENER_NOTE);
+    assert_eq!(text.matches("cannot listen").count(), 1, "{text}");
+    for needle in [
+        "for a person or a speech tool to play",
+        "a coding agent cannot listen to it",
+        "vsift transcript get",
+    ] {
+        assert!(evidence::AUDIO_LISTENER_NOTE.contains(needle), "{needle}");
+    }
+
+    for (command, file) in [
+        (CommandName::FrameGet, "frame-get.json"),
+        (CommandName::Crop, "crop.json"),
+    ] {
+        let images = render(command, &example(file)?)?;
+        assert!(!images.contains("cannot listen"), "{file}");
+    }
     Ok(())
 }
 

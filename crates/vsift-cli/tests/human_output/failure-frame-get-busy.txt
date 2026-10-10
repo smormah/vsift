@@ -1,0 +1,3 @@
+Error: The requested operation is temporarily busy. (BUSY)
+Fix: Another VSift request is using this session, or this session root's share of the machine's capacity, so this command could not finish. Nothing was committed. Wait for retry_after_ms, then run the same command again. A transcription or a visual analysis can hold the capacity for minutes: if it is still busy, wait for that work to end. Running the commands for one session one at a time avoids it.
+Retry after: 2000 ms

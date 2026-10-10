@@ -41,15 +41,16 @@ use vsift_application::{
     extract_neighbours,
 };
 use vsift_contract::{
-    AudioEvidenceStream, DeliveredEvidenceFile, EvidencePresentation, EvidencePresentationError,
-    EvidenceStream, FrameEvidenceStream, LifecycleResponse, audio_response, frame_response,
-    partial_evidence_warning,
+    AudioEvidenceStream, CommandName, DeliveredEvidenceFile, EvidencePresentation,
+    EvidencePresentationError, EvidenceStream, FrameEvidenceStream, LifecycleResponse,
+    MEDIA_BUSY_REMEDIATION, OperationResponse, TerminalEventResponse, audio_response,
+    frame_response, partial_evidence_warning,
 };
 use vsift_domain::{
     AudioRange, BurstCount, BurstRange, CropRect, EvidenceMediaKind, EvidenceProfile,
-    EvidenceRecord, FrameDimensions, FrameListing, FrameSelection, FrameTolerance, ListedFrame,
-    ListingTail, MediaTime, NeighbourCount, PartialReason, SessionId, Sha256Hex, SourceCheck,
-    SourceId, TimeBase, TimeRange,
+    EvidenceRecord, FailureCode, FrameDimensions, FrameListing, FrameSelection, FrameTolerance,
+    ListedFrame, ListingTail, MediaTime, NeighbourCount, PartialReason, SessionId, Sha256Hex,
+    SourceCheck, SourceId, TimeBase, TimeRange,
 };
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -930,5 +931,48 @@ async fn the_audio_stream_is_one_clip_then_the_terminal_event() -> TestResult {
     let mut too_many = json["data"].clone();
     too_many["items"] = Value::Array(vec![json["data"]["items"][0].clone(); 2]);
     assert!(!is_valid("audio-data.schema.json", &too_many)?);
+    Ok(())
+}
+
+/// #342: a media command refused because another request holds its session or
+/// the root's capacity answers `BUSY` with a remediation and a retry hint.
+/// v1 adds only these two (the failure's published shape already has both
+/// fields), so the code, its `retryable` flag and its message are the ones
+/// the same refusal always had, and the answer is the published example, as
+/// a result and as a terminal event.
+#[test]
+fn a_busy_media_command_carries_a_remediation_and_a_retry_hint() -> TestResult {
+    let response = OperationResponse::<Value>::failure_with_remediation(
+        CommandName::FrameGet.identifier(),
+        FailureCode::Busy,
+        MEDIA_BUSY_REMEDIATION.to_owned(),
+    )
+    .with_retry_after(2_000);
+    let value = serde_json::to_value(&response)?;
+    validate("operation-response.schema.json", &value)?;
+    assert_eq!(value, load("examples/frame-get.busy.json")?);
+    assert_eq!(value["error"]["code"], "BUSY");
+    assert_eq!(value["error"]["retryable"], true);
+    assert_eq!(value["error"]["retry_after_ms"], 2_000);
+    assert_eq!(
+        value["error"]["message"],
+        "The requested operation is temporarily busy."
+    );
+    let event = serde_json::to_value(TerminalEventResponse::new(response))?;
+    validate("terminal-event.schema.json", &event)?;
+
+    // The text says what is true: wait and retry, the long work that can
+    // hold the capacity, and the one-at-a-time way to avoid it. It is short
+    // enough for an agent's handoff to quote whole in a gap note.
+    for needle in [
+        "retry_after_ms",
+        "run the same command again",
+        "A transcription or a visual analysis can hold the capacity for minutes",
+        "one at a time",
+        "Nothing was committed.",
+    ] {
+        assert!(MEDIA_BUSY_REMEDIATION.contains(needle), "{needle}");
+    }
+    assert!(MEDIA_BUSY_REMEDIATION.chars().count() <= 480);
     Ok(())
 }
