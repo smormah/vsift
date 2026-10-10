@@ -10,6 +10,9 @@
 //!   are checked against the chunk's decoded audio, never clamped silently;
 //! - that a chunk with no audible signal, or with less than 100 ms of audio,
 //!   is recorded as a gap rather than given to the recognizer;
+//! - that a chunk whose recognised output cannot be used is a gap too, never a
+//!   failed run, unless most of the run's answered chunks are
+//!   ([`unusable_chunks_end_the_run`]);
 //! - how the overlapping chunks are merged back into one ordered transcript
 //!   without losing or doubling speech at a seam (T-03).
 //!
@@ -104,6 +107,33 @@ pub const MIN_RECOGNITION_SAMPLES: usize = 1_600;
 /// so a range of a few microseconds was recognised as seconds of speech
 /// (#332). Judging the request makes the answer the same for every decoder.
 pub const MIN_RECOGNITION_MICROS: u64 = 100_000;
+/// A chunk is unusable when more than one in this many of its text segments is
+/// rejected ([`validate_chunk_output`]): a quarter.
+const REJECTED_SEGMENT_SHARE_DENOMINATOR: u32 = 4;
+/// The fewest text segments a chunk must have for the rejected share to be
+/// judged at all (#353). Below it, rejected segments are dropped and counted
+/// and the others are kept, unless every one of them is rejected.
+///
+/// Why 4. The rule fails a chunk when more than a quarter of its text segments
+/// is rejected, which is a statement about a share only where one rejected
+/// segment can be a share of no more than a quarter. With 1 to 3 text
+/// segments a single rejected one is already more than a quarter (1 of 3 is a
+/// third), so the rule was weighing nothing: it failed a chunk for having one
+/// rejection, beside any number of kept segments. Four is the smallest count
+/// in which one rejection is exactly a quarter and is tolerated, so it is the
+/// least at which the rule has ever measured a share. From four segments on
+/// the rule is the one it was, unchanged: a chunk of dense speech is judged as
+/// before, and every chunk that passed before passes the same way. A real
+/// recording with long pauses has chunks of two or three segments, and one
+/// segment whose times do not fit its audio (empty, backwards, at or after the
+/// audio's end) is routine there (#353).
+///
+/// A chunk whose every text segment is rejected is unusable whatever its size:
+/// nothing the recogniser said about it can be placed in its audio.
+pub const MIN_SEGMENTS_FOR_REJECTION_RATIO: u32 = 4;
+/// A run fails when more than one in this many of the chunks the recogniser
+/// answered is unusable ([`unusable_chunks_end_the_run`]): a half, so "most".
+pub const UNUSABLE_CHUNK_SHARE_DENOMINATOR: u32 = 2;
 const MICROS_PER_SECOND: u64 = 1_000_000;
 const SHA256_HEX_LENGTH: usize = 64;
 
@@ -575,6 +605,27 @@ pub enum AsrChunkOutcome {
     /// so there is no decoded range to record, and this outcome, which has
     /// none, is the one that says so.
     NoAudio,
+    /// Audio was decoded and given to the recognizer, and what it answered
+    /// could not be used for this chunk as a whole ([`validate_chunk_output`]
+    /// refused it): every text segment was rejected, more than a quarter were
+    /// among at least [`MIN_SEGMENTS_FOR_REJECTION_RATIO`], or the output
+    /// broke a structural rule. The window has no transcript from this chunk
+    /// (#353).
+    ///
+    /// This is a gap that is not a quiet one, and it is never recorded as
+    /// [`Self::Silent`] or [`Self::NoAudio`]: those say that nothing was there
+    /// to recognise, and here there may have been speech that the recognizer
+    /// could not place. So a search reports the window as untranscribed, where
+    /// a quiet one is reported as no speech, and a reader is not told a
+    /// spoken passage was silence. `audio` is the decoded range, as for the
+    /// other outcomes that decoded audio. A run in which most chunks that the
+    /// recognizer answered are unusable fails instead
+    /// ([`unusable_chunks_end_the_run`]), so a revision holds this outcome
+    /// only for a recognizer that described most of its audio.
+    Unusable {
+        /// Observed first decoded sample to last decoded sample.
+        audio: TimeRange,
+    },
 }
 
 /// One chunk of a run and its outcome.
@@ -795,6 +846,10 @@ pub struct ProviderChunkOutput {
 }
 
 /// Why a chunk's provider output could not be used at all.
+///
+/// Such a chunk is an unusable chunk ([`AsrChunkOutcome::Unusable`]), not a
+/// failed run; whether enough chunks are unusable to fail the run is decided by
+/// [`unusable_chunks_end_the_run`].
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ProviderOutputError {
     /// More than [`MAX_PROVIDER_SEGMENTS`] segments.
@@ -805,12 +860,22 @@ pub enum ProviderOutputError {
     OutOfOrderSegments,
     /// A token probability is not a finite number in `[0, 1]`.
     InvalidTokenProbability,
-    /// More than a quarter of the chunk's text segments, or all of them, had
-    /// ranges that could not be placed in its decoded audio.
+    /// Every text segment of the chunk, or, with at least
+    /// [`MIN_SEGMENTS_FOR_REJECTION_RATIO`] of them, more than a quarter, had a
+    /// range that could not be placed in its decoded audio.
     TooManyRejectedSegments,
 }
 
 impl ProviderOutputError {
+    /// Every reason, in declaration order.
+    pub const ALL: [Self; 5] = [
+        Self::TooManySegments,
+        Self::TooManyTokens,
+        Self::OutOfOrderSegments,
+        Self::InvalidTokenProbability,
+        Self::TooManyRejectedSegments,
+    ];
+
     /// Stable machine-readable identifier.
     #[must_use]
     pub const fn identifier(self) -> &'static str {
@@ -821,6 +886,14 @@ impl ProviderOutputError {
             Self::InvalidTokenProbability => "invalid_token_probability",
             Self::TooManyRejectedSegments => "too_many_rejected_segments",
         }
+    }
+
+    /// Parses a stable identifier, as a stored checkpoint holds it.
+    #[must_use]
+    pub fn parse(identifier: &str) -> Option<Self> {
+        Self::ALL
+            .into_iter()
+            .find(|reason| reason.identifier() == identifier)
     }
 }
 
@@ -1009,10 +1082,15 @@ pub(crate) fn asr_source_range(
 /// Structural faults fail the whole chunk: out-of-order segments, a token
 /// probability that is not a finite number in `[0, 1]`, or oversized output.
 /// A segment whose range is empty or reversed, starts at or after the decoded
-/// audio end, or would leave `source`, is rejected and counted; if more than a
-/// quarter of the text segments (or all of them) are rejected, the chunk
-/// fails, because the provider evidently did not describe this audio. A
-/// segment that starts inside the audio and **ends past it, as far as the
+/// audio end, or would leave `source`, is rejected and counted. The chunk
+/// fails when **every** text segment is rejected, or, with at least
+/// [`MIN_SEGMENTS_FOR_REJECTION_RATIO`] text segments, when more than a quarter
+/// are, because the provider evidently did not describe this audio. With fewer
+/// segments than that a share means nothing (one rejection beside two kept
+/// segments is a third), so the rejected ones are dropped and counted and the
+/// rest are kept (#353).
+///
+/// A segment that starts inside the audio and **ends past it, as far as the
 /// padded 30 s window the recogniser works in**, is cut to the audio end and
 /// counted, keeping the raw provider end: a recogniser's end timestamps are
 /// predicted, not measured, and a range cut mid-speech makes it run on
@@ -1022,12 +1100,14 @@ pub(crate) fn asr_source_range(
 /// window (or, for audio that fills it, more than a second past the audio, the
 /// bound 0.1.0 applied) is not a time of this audio and rejects the segment.
 /// Whole-segment non-speech markers and empty segments are removed and
-/// counted. Confidence is the mean probability of text tokens,
+/// counted; an empty *text* is a marker, not a rejection, and never counts
+/// towards the share. Confidence is the mean probability of text tokens,
 /// `provider_uncalibrated`.
 ///
 /// # Errors
 ///
-/// Returns the [`ProviderOutputError`] that makes the chunk unusable.
+/// Returns the [`ProviderOutputError`] that makes the chunk unusable. The run
+/// decides what an unusable chunk costs it ([`unusable_chunks_end_the_run`]).
 pub fn validate_chunk_output(
     chunk: &PlannedChunk,
     audio: TimeRange,
@@ -1087,7 +1167,7 @@ pub fn validate_chunk_output(
             trimmed: trim,
         });
     }
-    if considered > 0 && (rejected == considered || rejected.saturating_mul(4) > considered) {
+    if rejections_make_chunk_unusable(considered, rejected) {
         return Err(ProviderOutputError::TooManyRejectedSegments);
     }
     let mut warnings = TranscriptWarnings::default();
@@ -1110,6 +1190,54 @@ pub fn validate_chunk_output(
         segments,
         warnings,
     })
+}
+
+/// Whether `rejected` of `considered` text segments make a chunk unusable
+/// ([`validate_chunk_output`]): all of them, or, from
+/// [`MIN_SEGMENTS_FOR_REJECTION_RATIO`] segments on, more than a quarter.
+const fn rejections_make_chunk_unusable(considered: u32, rejected: u32) -> bool {
+    if considered == 0 {
+        return false;
+    }
+    rejected == considered
+        || (considered >= MIN_SEGMENTS_FOR_REJECTION_RATIO
+            && rejected.saturating_mul(REJECTED_SEGMENT_SHARE_DENOMINATOR) > considered)
+}
+
+/// Whether `unusable` of the `answered` chunks of a run end it: the run fails
+/// when more than half of the chunks the recognizer answered are unusable
+/// ([`UNUSABLE_CHUNK_SHARE_DENOMINATOR`]), because it then evidently did not
+/// describe this audio (T-05). Otherwise the unusable chunks are recorded as
+/// gaps ([`AsrChunkOutcome::Unusable`]) and the run goes on (#353).
+///
+/// `answered` counts every chunk that was given to the recognizer and answered,
+/// usable or not. A chunk that was never given to it (silent, too short, no
+/// audio) says nothing about the recognizer and is not in it.
+///
+/// How the threshold was chosen:
+///
+/// - **More than half**, because the failure the rule is for (a recognizer that
+///   answers with garbage, such as one run on audio it cannot read) fails most
+///   chunks, while a recording with pauses and typing fails few: the real
+///   recording that found #353 failed 1 chunk of 83. One chunk that cannot be
+///   placed must not cost the 82 that can.
+/// - **A strict majority, not a half**, so that a run of two chunks of which one
+///   is unusable is a partial run, not a failure: the other chunk was answered
+///   by the same recognizer, build and model on audio of the same recording,
+///   which shows the recognizer works. The one chunk that is unproven is
+///   reported as a gap. A run whose every answered chunk is unusable fails
+///   whatever its size, so a single chunk the recognizer cannot describe (a
+///   short range) still fails, as it always did.
+/// - **Consecutive failures are not a second rule.** A recording with a long
+///   stretch of typing or music can have several unusable chunks in a row, and
+///   chunks overlap by five seconds, so adjacent chunks are not independent
+///   samples. Only the share of the answered chunks separates a broken
+///   recognizer from such a stretch.
+///
+/// This is a maintainer decision to confirm (ADR 0017, note of 2026-10-10).
+#[must_use]
+pub const fn unusable_chunks_end_the_run(unusable: u32, answered: u32) -> bool {
+    unusable.saturating_mul(UNUSABLE_CHUNK_SHARE_DENOMINATOR) > answered
 }
 
 /// Whether text is only bracketed non-speech markers, such as `[BLANK_AUDIO]`,
@@ -1201,9 +1329,11 @@ pub const fn is_below_recognition_floor(samples: &[i16]) -> bool {
 
 /// One chunk's accepted segments, the input of [`merge_chunks`].
 ///
-/// A chunk that was not recognised (silent, too short or with no audio) takes
-/// part with no segments: it still owns its core, so nothing from a neighbour
-/// is attributed into its time.
+/// A chunk that was not recognised (silent, too short or with no audio), or
+/// whose recognised output was unusable, takes part with no segments: it still
+/// owns its core, so nothing from a neighbour is attributed into its time, and
+/// a neighbour's copy of speech that falls in it is kept, because the owner
+/// heard nothing there.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ChunkSegments {
     /// The planned chunk.

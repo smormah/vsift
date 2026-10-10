@@ -191,7 +191,7 @@ fn hit_data(page: &SearchPresentation<'_>) -> Vec<SearchHitData> {
 }
 
 /// The first [`MAX_COVERAGE_RANGES`] of `ranges`, in start order.
-fn bounded(ranges: &[TimeRange]) -> Vec<RangeData> {
+pub(crate) fn bounded(ranges: &[TimeRange]) -> Vec<RangeData> {
     ranges
         .iter()
         .take(MAX_COVERAGE_RANGES)
@@ -202,7 +202,7 @@ fn bounded(ranges: &[TimeRange]) -> Vec<RangeData> {
 /// The envelope coverage of a search: truncated when part of the searched
 /// range has no transcript (`gaps`, merged and in start order), with the
 /// gaps as `<from_us>-<to_us>`.
-fn envelope_coverage(gaps: &[TimeRange]) -> CoverageResponse {
+pub(crate) fn envelope_coverage(gaps: &[TimeRange]) -> CoverageResponse {
     let mut reasons = Vec::new();
     if !gaps.is_empty() {
         reasons.push(UNTRANSCRIBED_REASON.to_owned());

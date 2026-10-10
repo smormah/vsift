@@ -32,11 +32,12 @@ pub use asr::{
     AsrProviderBuild, AsrRun, AsrRunParts, AsrSegmentDraft, ChunkPlan, ChunkPlanError,
     ChunkSegments, ChunkTime, DigestError, MAX_CHUNK_WINDOW_MICROS, MAX_PLANNED_CHUNKS,
     MAX_PROVIDER_SEGMENTS, MAX_PROVIDER_TOKENS, MIN_RECOGNITION_MICROS, MIN_RECOGNITION_SAMPLES,
-    MergedSegment, MergedTranscript, PROVIDER_END_TOLERANCE_MICROS, PlannedChunk,
-    ProviderChunkOutput, ProviderOutputError, ProviderSegment, ProviderToken, ProviderTokenKind,
-    ReviewedAsrModel, SPEECH_SAMPLE_RATE, Sha256Hex, ValidatedChunk, decoded_audio_range,
+    MIN_SEGMENTS_FOR_REJECTION_RATIO, MergedSegment, MergedTranscript,
+    PROVIDER_END_TOLERANCE_MICROS, PlannedChunk, ProviderChunkOutput, ProviderOutputError,
+    ProviderSegment, ProviderToken, ProviderTokenKind, ReviewedAsrModel, SPEECH_SAMPLE_RATE,
+    Sha256Hex, UNUSABLE_CHUNK_SHARE_DENOMINATOR, ValidatedChunk, decoded_audio_range,
     is_below_recognition_floor, is_silent_pcm, merge_chunks, plan_chunks, rounds_to_no_pcm_sample,
-    validate_chunk_output,
+    unusable_chunks_end_the_run, validate_chunk_output,
 };
 pub use checkpoint::{CheckpointOutcome, ChunkCheckpoint, RecognitionKey};
 pub use evidence::{

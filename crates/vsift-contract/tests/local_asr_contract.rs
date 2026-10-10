@@ -18,7 +18,7 @@ use serde_json::Value;
 use vsift_application::{
     AsrFailure, AsrFailureReason, AsrRevisionRequest, AsrStage, AsrTranscription,
     LocalAsrVerificationFailure, Resumability, RevisionSplice, TranscriptPageRequest,
-    build_asr_revision, page_transcript, whole_file_source_segment,
+    UnusableChunk, UnusableChunks, build_asr_revision, page_transcript, whole_file_source_segment,
 };
 use vsift_contract::{
     CANCELLATION_TOO_LATE_WARNING, CHECKPOINT_DISCARDED_WARNING, CommandName,
@@ -26,13 +26,14 @@ use vsift_contract::{
     JOB_INTERRUPTED_REMEDIATION, JOB_NOT_RESUMABLE_REMEDIATION, JOB_SESSION_NOT_OPEN_REMEDIATION,
     JobData, JobPresentation, JobResumeData, LOCAL_ASR_MODEL_REMEDIATION,
     LOCAL_ASR_TOOLS_REMEDIATION, LifecycleResponse, NO_AUDIO_STREAM_REMEDIATION,
-    NO_TRANSCRIPT_REMEDIATION, OperationResponse, ProgressEventResponse, ProgressReport,
-    RESUMED_FROM_CHECKPOINT_WARNING, RetranscribeJob, SUPERSEDED_REMEDIATION, SessionJobData,
-    SessionState, SessionStatusData, StatusData, TerminalEventResponse, TranscriptEvidenceStream,
-    TranscriptPageData, TranscriptRetranscribeData, TranscriptRevisionData,
-    UNKNOWN_JOB_REMEDIATION, UNKNOWN_REVISION_REMEDIATION, UNPINNED_MODEL_REMEDIATION,
+    NO_TRANSCRIPT_REMEDIATION, OperationResponse, PROVIDER_CHUNKS_REJECTED_WARNING,
+    ProgressEventResponse, ProgressReport, RESUMED_FROM_CHECKPOINT_WARNING, RetranscribeJob,
+    SUPERSEDED_REMEDIATION, SessionJobData, SessionState, SessionStatusData, StatusData,
+    TerminalEventResponse, TranscriptEvidenceStream, TranscriptPageData,
+    TranscriptRetranscribeData, TranscriptRevisionData, UNKNOWN_JOB_REMEDIATION,
+    UNKNOWN_REVISION_REMEDIATION, UNPINNED_MODEL_REMEDIATION, finish_retranscription,
     job_warning_messages, local_asr_failure_summary, local_asr_verification_summary,
-    transcript_warning_messages,
+    retranscription_gaps, transcript_warning_messages,
 };
 use vsift_domain::{
     AsrChunkOutcome, AsrChunkRecord, AsrDecodingProfile, AsrModel, AsrModelProfile, AsrProvider,
@@ -540,7 +541,16 @@ fn every_local_asr_failure_is_a_schema_valid_bounded_failure() -> TestResult {
             FailureCode::MissingCapability,
         ),
         (
-            AsrFailureReason::MalformedOutput(ProviderOutputError::InvalidTokenProbability),
+            AsrFailureReason::MalformedOutput(UnusableChunks {
+                unusable: 4,
+                answered: 5,
+                planned: 8,
+                first: UnusableChunk {
+                    index: 0,
+                    window: range(0, 30 * SECOND)?,
+                    error: ProviderOutputError::InvalidTokenProbability,
+                },
+            }),
             FailureCode::MissingCapability,
         ),
         (
@@ -627,6 +637,284 @@ fn published_local_asr_examples_validate_against_their_schemas() -> TestResult {
             .insert("unreviewed".to_owned(), Value::Bool(true));
         assert!(validate(schema, &extended).is_err(), "{schema}");
     }
+    Ok(())
+}
+
+// ------------------------------------------------ #353: unusable chunks
+
+/// A 55 s recording of two chunks, the first transcribed from the recorded F01
+/// output and the second unusable: what a recogniser's answer that cannot be
+/// placed in its audio leaves behind. (The recording is a stand-in: the F01
+/// clip's own output over a longer source, so the example needs no real one.)
+fn unusable_chunk_revision() -> Built<TranscriptRevision> {
+    let session = SessionId::parse(SESSION)?;
+    let source_id = SourceId::from_sha256(&"0123456789abcdef".repeat(4))?;
+    let source = whole_file_source_segment(&source_id, MediaTime::from_micros(55 * SECOND))?;
+    let planned = plan_chunks(source.id(), source.range(), ChunkPlan::R0)?;
+    let [first, second] = planned.as_slice() else {
+        return Err("a 55 s source is two chunks".into());
+    };
+    let heard = first.window();
+    let validated = validate_chunk_output(first, heard, source.range(), recorded_f01_output()?)?;
+    let (segments, language, mut warnings) = validated.into_parts();
+    let merged = merge_chunks(&[
+        segments,
+        vsift_domain::ChunkSegments {
+            chunk: second.clone(),
+            segments: Vec::new(),
+        },
+    ]);
+    warnings.add(
+        TranscriptWarningKind::ProviderChunksRejected,
+        1,
+        NonZeroU32::new(second.ordinal().get()).ok_or("zero")?,
+    );
+    let run = AsrRun::new(AsrRunParts {
+        provider: AsrProviderBuild::new(AsrProvider::WhisperCpp, Sha256Hex::parse(WHISPER_SHA256)?),
+        model: AsrModel::new(AsrModelProfile::Base, Sha256Hex::parse(BASE_MODEL_SHA256)?),
+        decoding: AsrDecodingProfile::R0V1,
+        plan: ChunkPlan::R0,
+        threads: NonZeroU16::new(4).ok_or("zero")?,
+        audio_stream: 1,
+        chunks: vec![
+            AsrChunkRecord::new(first.clone(), AsrChunkOutcome::Transcribed { audio: heard }),
+            AsrChunkRecord::new(
+                second.clone(),
+                AsrChunkOutcome::Unusable {
+                    audio: second.window(),
+                },
+            ),
+        ],
+    })?;
+    Ok(build_asr_revision(AsrRevisionRequest {
+        session_id: &session,
+        source_id: &source_id,
+        source_segment: &source,
+        number: NonZeroU32::MIN,
+        transcription: AsrTranscription {
+            run,
+            language,
+            segments: merged.segments,
+            warnings,
+        },
+        splice: None,
+    })?)
+}
+
+/// #353: a run in which the recogniser's answer for one chunk could not be used
+/// commits its revision and answers `partial`: the envelope's coverage lists
+/// the chunk's untranscribed range (what its neighbour's overlap did not
+/// transcribe) under the published reason `untranscribed_range`, the data lists
+/// the same range and counts the chunk, and the warning names it. It is a
+/// success: the status says what is missing, and it validates against the
+/// published schemas.
+#[test]
+fn a_run_with_an_unusable_chunk_is_a_partial_result_that_names_its_gap() -> TestResult {
+    let revision = unusable_chunk_revision()?;
+    let response = finish_retranscription(retranscribe_response(&revision, None)?, &revision);
+    let value = serde_json::to_value(&response)?;
+    validate("operation-response.schema.json", &value)?;
+    validate("transcript-retranscribe-data.schema.json", &value["data"])?;
+    assert_eq!(value["status"], "partial");
+    assert!(value["error"].is_null());
+    // The chunk's own 25-55 s window less the first 5 s the first chunk heard
+    // (it ends at 30 s).
+    assert_eq!(
+        value["coverage"],
+        serde_json::json!({
+            "truncated": true,
+            "gaps": ["30000000-55000000"],
+            "reasons": ["untranscribed_range"],
+        })
+    );
+    assert_eq!(
+        value["data"]["untranscribed_ranges"],
+        serde_json::json!([{"from_us": 30_000_000, "to_us": 55_000_000}])
+    );
+    let run = &value["data"]["revision"]["local_asr"];
+    assert_eq!(run["chunk_count"], 2);
+    assert_eq!(run["transcribed_chunks"], 1);
+    assert_eq!(run["unusable_chunks"], 1);
+    assert_eq!(run["silent_chunks"], 0);
+    assert_eq!(
+        value["data"]["revision"]["warnings"],
+        serde_json::json!([{
+            "code": "provider_chunks_rejected",
+            "count": 1,
+            "first_cue": 2,
+            "excluded_cues": true,
+        }])
+    );
+    assert!(
+        value["warnings"]
+            .as_array()
+            .ok_or("no warnings")?
+            .contains(&Value::from(PROVIDER_CHUNKS_REJECTED_WARNING))
+    );
+    assert_eq!(
+        retranscription_gaps(&revision),
+        [range(30 * SECOND, 55 * SECOND)?]
+    );
+    assert_example("transcript-retranscribe.partial.json", &value)?;
+
+    // The stream form carries the same result as its terminal event.
+    let event = serde_json::to_value(TerminalEventResponse::new(finish_retranscription(
+        retranscribe_response(&revision, None)?,
+        &revision,
+    )))?;
+    validate("terminal-event.schema.json", &event)?;
+    assert_eq!(event["result"]["status"], "partial");
+
+    // A search of the revision reports the same range as untranscribed, with
+    // the same reason, and the recording's end as nothing was examined there.
+    let coverage = vsift_domain::SearchCoverage::of(&revision, None);
+    assert_eq!(coverage.untranscribed(), [range(30 * SECOND, 55 * SECOND)?]);
+    assert!(coverage.no_speech().is_empty());
+    Ok(())
+}
+
+/// A run with no unusable chunk is presented exactly as it always was: the
+/// complete result, `coverage` null, and none of the members #353 added.
+#[test]
+fn a_run_without_an_unusable_chunk_is_presented_exactly_as_before() -> TestResult {
+    let (first, second) = f01_revisions()?;
+    for (revision, requested) in [
+        (&first, None),
+        (&second, Some(range(5_500_000, 6 * SECOND)?)),
+    ] {
+        let response =
+            finish_retranscription(retranscribe_response(revision, requested)?, revision);
+        let value = serde_json::to_value(&response)?;
+        assert_eq!(value["status"], "complete");
+        assert!(value["coverage"].is_null());
+        assert!(value["data"].get("untranscribed_ranges").is_none());
+        assert!(
+            value["data"]["revision"]["local_asr"]
+                .get("unusable_chunks")
+                .is_none()
+        );
+        assert!(retranscription_gaps(revision).is_empty());
+    }
+    // And the frozen example, byte for byte, is still what is produced.
+    let (_, second) = f01_revisions()?;
+    let response = serde_json::to_value(finish_retranscription(
+        retranscribe_response(&second, Some(range(5_500_000, 6 * SECOND)?))?,
+        &second,
+    ))?;
+    assert_eq!(response, load("examples/transcript-retranscribe.json")?);
+    Ok(())
+}
+
+/// #353: the failure of a run whose recogniser answered unusably for most
+/// chunks keeps its published code, names the job in `affected_ids`, and says in
+/// its remediation which reason, how many chunks and where the first one is;
+/// the job it names is failed, not resumable.
+#[test]
+fn most_chunks_unusable_is_a_truthful_failure_with_its_job() -> TestResult {
+    let failure = AsrFailure {
+        stage: AsrStage::OutputValidation,
+        reason: AsrFailureReason::MalformedOutput(UnusableChunks {
+            unusable: 42,
+            answered: 42,
+            planned: 83,
+            first: UnusableChunk {
+                index: 3,
+                window: range(75 * SECOND, 105 * SECOND)?,
+                error: ProviderOutputError::TooManyRejectedSegments,
+            },
+        }),
+    };
+    let response = OperationResponse::failure_with_remediation(
+        "transcript.retranscribe",
+        FailureCode::MissingCapability,
+        local_asr_failure_summary(failure),
+    )
+    .with_affected_ids(&[JOB]);
+    let value = serde_json::to_value(&response)?;
+    validate("operation-response.schema.json", &value)?;
+    validate(
+        "terminal-event.schema.json",
+        &serde_json::to_value(TerminalEventResponse::new(response))?,
+    )?;
+    // The published code and its safe message are unchanged.
+    assert_eq!(value["status"], "failed");
+    assert_eq!(value["error"]["code"], "MISSING_CAPABILITY");
+    assert_eq!(value["error"]["affected_ids"], serde_json::json!([JOB]));
+    let summary = value["error"]["remediation"][0]["summary"]
+        .as_str()
+        .ok_or("no remediation")?;
+    for named in [
+        "(malformed_output)",
+        "too_many_rejected_segments",
+        "42 of the 42 audio chunks",
+        "chunk 4 of 83",
+        "0:01:15 to 0:01:45",
+        "75000000 to 105000000 microseconds",
+        "ingest --transcript <file>",
+    ] {
+        assert!(summary.contains(named), "{named}: {summary}");
+    }
+    assert_example("retranscribe-unusable-output.json", &value)?;
+
+    // The job is failed, so `job status` says it cannot be resumed, with the
+    // chunk and code of the failure.
+    let data = f01_job(
+        JobState::Failed,
+        Resumability::Failed,
+        None,
+        Some(AttemptFailure {
+            chunk: Some(3),
+            code: FailureCode::MissingCapability,
+        }),
+        0,
+    )?;
+    let status = serde_json::to_value(OperationResponse::complete("job.status", &data)?)?;
+    validate("operation-response.schema.json", &status)?;
+    validate("job-data.schema.json", &status["data"])?;
+    assert_eq!(status["data"]["state"], "failed");
+    assert_eq!(status["data"]["resumable"], false);
+    assert_eq!(status["data"]["resumable_reason"], "failed");
+    assert_eq!(status["data"]["failure"]["code"], "MISSING_CAPABILITY");
+    Ok(())
+}
+
+/// Every warning kind has exactly one published code in each schema that lists
+/// them, in the domain's order, so a new kind cannot be written to a record
+/// that its schema does not know.
+#[test]
+fn every_warning_kind_is_published_in_each_schema_that_lists_them() -> TestResult {
+    let identifiers: Vec<&str> = TranscriptWarningKind::ALL
+        .into_iter()
+        .map(TranscriptWarningKind::identifier)
+        .collect();
+    assert_eq!(identifiers.len(), 13);
+    let revision = load("transcript-revision.schema.json")?;
+    let listed: Vec<&str> =
+        revision["properties"]["warnings"]["items"]["properties"]["code"]["enum"]
+            .as_array()
+            .ok_or("no code enum")?
+            .iter()
+            .filter_map(Value::as_str)
+            .collect();
+    assert_eq!(listed, identifiers);
+    let record = load("bundle-transcript-record.schema.json")?;
+    let stored: Vec<&str> = record["$defs"]["v2"]["properties"]["warnings"]["items"]["properties"]
+        ["kind"]["enum"]
+        .as_array()
+        .ok_or("no kind enum")?
+        .iter()
+        .filter_map(Value::as_str)
+        .collect();
+    assert_eq!(stored, identifiers);
+    assert_eq!(
+        record["$defs"]["v2"]["properties"]["warnings"]["maxItems"],
+        u64::try_from(identifiers.len())?
+    );
+    // The most warnings a revision can carry is one per kind.
+    assert_eq!(
+        revision["properties"]["warnings"]["maxItems"],
+        u64::try_from(identifiers.len())?
+    );
     Ok(())
 }
 

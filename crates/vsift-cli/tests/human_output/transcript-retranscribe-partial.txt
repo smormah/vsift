@@ -1,0 +1,19 @@
+New transcript revision of session ses_0123456789abcdef0123456789abcdef
+Revision 1: trv_a5ed9a081a2068b75c956f9befbb4fd4 (local_asr, language en, segments in all: 1)
+Local ASR: whisper_cpp, model base, decoding r0-v1, 4 threads
+  Model sha256: 60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe
+  Executable sha256: 95e3c0b0e778ad9499eb0125f97c1dcf437dd9eb4ea77050b043574f93c2631d
+  Chunks: 2 (1 transcribed, 0 silent, 0 without audio, 1 with an unusable answer)
+Segments carried from earlier revisions: 0
+Revision warning: provider_chunks_rejected (count 1, first at cue 2)
+Requested range: the whole source
+Segments recognised now: 1
+Not transcribed (the recogniser's answer for these parts could not be used; words said there cannot be found): 
+  00:00:30.000000 to 00:00:55.000000 (--from 30000000 --to 55000000)
+Job: job_8d3e1f0a2b4c6d8e0f1a2b3c4d5e6f70 (not resumed, chunks reused: 0)
+Read its segments: vsift transcript get ses_0123456789abcdef0123456789abcdef --revision trv_a5ed9a081a2068b75c956f9befbb4fd4
+
+Status: partial (the warnings below say what is missing)
+Operation: op_4f0c2b8e9a1d3c5e7f60718293a4b5c6
+Lifecycle: ephemeral, expires 2026-09-25T00:00:00Z
+Warning: For some audio the recogniser's answer could not be used, so that audio has no transcript from this run: the result lists its time ranges as untranscribed, and words said there cannot be found. It is not silence. Transcribing just that range again (transcript retranscribe with --from and --to) cuts the audio at other points and may cover it; a transcript you already have covers it too: open the video with ingest --transcript.

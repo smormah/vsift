@@ -238,8 +238,10 @@ pub use text::{
     is_hidden_character, render_hidden_characters, sanitize_untrusted_text, terminal_safe_text,
 };
 pub use transcript::{
-    MEDIA_TOOLS_FOR_TRANSCRIPT_REMEDIATION, NO_TRANSCRIPT_REMEDIATION, RetranscribeJob,
-    SourceSegmentData, TranscriptPageData, TranscriptRetranscribeData, TranscriptRevisionData,
-    TranscriptSegmentData, transcript_rejection_summary, transcript_warning_messages,
+    MEDIA_TOOLS_FOR_TRANSCRIPT_REMEDIATION, NO_TRANSCRIPT_REMEDIATION,
+    PROVIDER_CHUNKS_REJECTED_WARNING, RetranscribeJob, SourceSegmentData, TranscriptPageData,
+    TranscriptRetranscribeData, TranscriptRevisionData, TranscriptSegmentData,
+    finish_retranscription, retranscription_gaps, transcript_rejection_summary,
+    transcript_warning_messages,
 };
 pub use verification::media_tool_verification_summary;

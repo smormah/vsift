@@ -268,6 +268,92 @@ fn a_quantized_profile_run_round_trips_as_base_q5_1() -> TestResult {
     Ok(())
 }
 
+/// #353: a revision with a chunk whose recognised output was unusable stores
+/// the outcome `unusable` with its decoded range and the warning
+/// `provider_chunks_rejected`, conforms to the published record schema and
+/// decodes to the same revision. Every other record is written as before, so
+/// only a session that holds such a chunk is unreadable by an earlier release
+/// (which reads an unknown outcome as damage), as the record's schema says.
+#[test]
+fn an_unusable_chunk_round_trips_and_conforms_to_the_record_schema() -> TestResult {
+    let session = SessionId::parse(EXAMPLE_SESSION)?;
+    let source_id = SourceId::parse(F01_SPEECH_SOURCE)?;
+    let source = whole_file_source_segment(&source_id, MediaTime::from_micros(55 * SECOND))?;
+    let planned = plan_chunks(source.id(), source.range(), ChunkPlan::R0)?;
+    let outcomes = [
+        AsrChunkOutcome::Silent {
+            audio: planned[0].window(),
+        },
+        AsrChunkOutcome::Unusable {
+            audio: planned[1].window(),
+        },
+    ];
+    let run = AsrRun::new(AsrRunParts {
+        provider: AsrProviderBuild::new(AsrProvider::WhisperCpp, Sha256Hex::parse(WHISPER_SHA256)?),
+        model: AsrModel::new(AsrModelProfile::Base, Sha256Hex::parse(BASE_MODEL_SHA256)?),
+        decoding: AsrDecodingProfile::R0V1,
+        plan: ChunkPlan::R0,
+        threads: NonZeroU16::new(4).ok_or("zero")?,
+        audio_stream: 1,
+        chunks: planned
+            .into_iter()
+            .zip(outcomes)
+            .map(|(chunk, outcome)| AsrChunkRecord::new(chunk, outcome))
+            .collect(),
+    })?;
+    let mut warnings = TranscriptWarnings::default();
+    warnings.add(
+        TranscriptWarningKind::SilentChunksSkipped,
+        1,
+        NonZeroU32::MIN,
+    );
+    warnings.add(
+        TranscriptWarningKind::ProviderChunksRejected,
+        1,
+        NonZeroU32::new(2).ok_or("zero")?,
+    );
+    let revision = build_asr_revision(AsrRevisionRequest {
+        session_id: &session,
+        source_id: &source_id,
+        source_segment: &source,
+        number: NonZeroU32::MIN,
+        transcription: AsrTranscription {
+            run,
+            language: None,
+            segments: Vec::new(),
+            warnings,
+        },
+        splice: None,
+    })?;
+    let encoded = encode_transcript_record(&revision)?;
+    let value: serde_json::Value = serde_json::from_slice(&encoded)?;
+    assert_eq!(value["run"]["chunks"][0]["outcome"], "silent");
+    assert_eq!(value["run"]["chunks"][1]["outcome"], "unusable");
+    assert_eq!(
+        value["run"]["chunks"][1]["audio"],
+        serde_json::json!({"start_us": 25_000_000, "end_us": 55_000_000})
+    );
+    assert!(
+        value["warnings"]
+            .as_array()
+            .ok_or("no warnings")?
+            .iter()
+            .any(|warning| warning["kind"] == "provider_chunks_rejected" && warning["count"] == 1)
+    );
+    assert!(conforms_to_record_schema(&value)?);
+    assert_eq!(decode_transcript_record(&encoded)?, revision);
+
+    // An unusable chunk is a decoded chunk: without its decoded range, or with
+    // one that is not in the chunk's window, the record is damaged.
+    let mut without_audio = value.clone();
+    without_audio["run"]["chunks"][1]["audio"] = serde_json::Value::Null;
+    assert_eq!(
+        decode_transcript_record(&serde_json::to_vec(&without_audio)?),
+        Err(SessionStorageError::IntegrityFailure)
+    );
+    Ok(())
+}
+
 /// Strict decoding re-checks every carried segment against its inherited
 /// provenance and the replaced range.
 #[test]

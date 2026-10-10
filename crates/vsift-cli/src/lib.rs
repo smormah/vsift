@@ -715,7 +715,10 @@ fn local_asr_remediation(error: &EngineError) -> Option<String> {
         EngineError::LocalAsrVerificationFailed(failure) => {
             Some(local_asr_verification_summary(*failure))
         }
-        EngineError::LocalAsrFailed(failure) => Some(local_asr_failure_summary(*failure)),
+        EngineError::LocalAsrFailed(failure)
+        | EngineError::LocalAsrOutputUnusable { failure, .. } => {
+            Some(local_asr_failure_summary(*failure))
+        }
         EngineError::NoAudioStream => Some(NO_AUDIO_STREAM_REMEDIATION.to_owned()),
         EngineError::TranscriptUnavailable => Some(NO_TRANSCRIPT_REMEDIATION.to_owned()),
         EngineError::TranscriptRevisionNotFound => Some(UNKNOWN_REVISION_REMEDIATION.to_owned()),

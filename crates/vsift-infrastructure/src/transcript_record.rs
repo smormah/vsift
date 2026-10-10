@@ -178,6 +178,9 @@ enum StoredWarningKind {
     SeamDuplicatesRemoved,
     SilentChunksSkipped,
     NoSpeechRecognised,
+    /// Written only by a revision with an unusable chunk (#353): the releases
+    /// before it read the kind as damage, as they read the outcome.
+    ProviderChunksRejected,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -493,6 +496,11 @@ enum StoredChunkOutcome {
     Transcribed,
     Silent,
     NoAudio,
+    /// The recognizer's answer for the chunk could not be used (#353). It
+    /// carries its decoded range, like `silent`. A release before this one
+    /// reads the name as damage, so a revision stores it only when the run had
+    /// such a chunk, and every other revision is written exactly as before.
+    Unusable,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -626,6 +634,9 @@ impl StoredAsrRun {
                             (StoredChunkOutcome::Silent, Some(audio))
                         }
                         AsrChunkOutcome::NoAudio => (StoredChunkOutcome::NoAudio, None),
+                        AsrChunkOutcome::Unusable { audio } => {
+                            (StoredChunkOutcome::Unusable, Some(audio))
+                        }
                     };
                     StoredChunk {
                         index: record.chunk().index(),
@@ -652,6 +663,7 @@ impl StoredAsrRun {
                 }
                 (StoredChunkOutcome::Silent, Some(audio)) => AsrChunkOutcome::Silent { audio },
                 (StoredChunkOutcome::NoAudio, None) => AsrChunkOutcome::NoAudio,
+                (StoredChunkOutcome::Unusable, Some(audio)) => AsrChunkOutcome::Unusable { audio },
                 _ => return None,
             };
             chunks.push(AsrChunkRecord::new(
@@ -989,6 +1001,7 @@ impl StoredWarningKind {
             TranscriptWarningKind::SeamDuplicatesRemoved => Self::SeamDuplicatesRemoved,
             TranscriptWarningKind::SilentChunksSkipped => Self::SilentChunksSkipped,
             TranscriptWarningKind::NoSpeechRecognised => Self::NoSpeechRecognised,
+            TranscriptWarningKind::ProviderChunksRejected => Self::ProviderChunksRejected,
         }
     }
 
@@ -1006,6 +1019,7 @@ impl StoredWarningKind {
             Self::SeamDuplicatesRemoved => TranscriptWarningKind::SeamDuplicatesRemoved,
             Self::SilentChunksSkipped => TranscriptWarningKind::SilentChunksSkipped,
             Self::NoSpeechRecognised => TranscriptWarningKind::NoSpeechRecognised,
+            Self::ProviderChunksRejected => TranscriptWarningKind::ProviderChunksRejected,
         }
     }
 }

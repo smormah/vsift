@@ -13,7 +13,7 @@
 
 use std::fmt;
 
-use crate::{PlannedChunk, ProviderChunkOutput, Sha256Hex, TimeRange};
+use crate::{PlannedChunk, ProviderChunkOutput, ProviderOutputError, Sha256Hex, TimeRange};
 
 /// Longest decoded audio a checkpoint may claim beyond its chunk's window.
 ///
@@ -72,6 +72,23 @@ pub enum CheckpointOutcome {
         /// The recognizer's raw, unvalidated output.
         output: ProviderChunkOutput,
     },
+    /// Audio was decoded and recognised, and the domain's output rules refused
+    /// the answer as a whole
+    /// ([`AsrChunkOutcome::Unusable`](crate::AsrChunkOutcome::Unusable), #353).
+    ///
+    /// The verdict is stored, not the output: a resumed run must neither send
+    /// the chunk to the recognizer again nor bring a rejected answer back as a
+    /// [`Self::Recognised`] one. That kind stays what it was (output that
+    /// passed validation when it was stored, so one the rules now reject is a
+    /// damaged or forged checkpoint, which is discarded and recognised again).
+    /// The reason is kept so that a run that fails for its unusable chunks can
+    /// say why the first one was.
+    Unusable {
+        /// Observed decoded source range.
+        audio: TimeRange,
+        /// Why the output was refused.
+        error: ProviderOutputError,
+    },
 }
 
 impl CheckpointOutcome {
@@ -82,6 +99,7 @@ impl CheckpointOutcome {
             Self::NoAudio => "no_audio",
             Self::Silent { .. } => "silent",
             Self::Recognised { .. } => "recognised",
+            Self::Unusable { .. } => "unusable",
         }
     }
 }
@@ -164,7 +182,9 @@ impl ChunkCheckpoint {
         let window = chunk.window();
         let plausible = match &self.outcome {
             CheckpointOutcome::NoAudio => true,
-            CheckpointOutcome::Silent { audio } | CheckpointOutcome::Recognised { audio, .. } => {
+            CheckpointOutcome::Silent { audio }
+            | CheckpointOutcome::Recognised { audio, .. }
+            | CheckpointOutcome::Unusable { audio, .. } => {
                 audio.start() < window.end()
                     && audio.end() > window.start()
                     && audio.duration_micros()
@@ -180,7 +200,9 @@ impl ChunkCheckpoint {
 #[cfg(test)]
 mod tests {
     use super::{CheckpointOutcome, ChunkCheckpoint, RecognitionKey};
-    use crate::{MediaTime, PlannedChunk, Sha256Hex, SourceSegmentId, TimeRange};
+    use crate::{
+        MediaTime, PlannedChunk, ProviderOutputError, Sha256Hex, SourceSegmentId, TimeRange,
+    };
 
     type TestResult = Result<(), Box<dyn std::error::Error>>;
 
@@ -216,6 +238,44 @@ mod tests {
             audio: window(25, 55)?,
         };
         assert_eq!(silent.identifier(), "silent");
+        Ok(())
+    }
+
+    /// #353: the verdict "the answer was unusable" is a checkpoint of its own
+    /// kind, bound to its run, chunk and plausible audio like the others, and
+    /// every reason it can hold has an identifier that parses back.
+    #[test]
+    fn an_unusable_chunk_is_a_checkpoint_of_its_own_kind() -> TestResult {
+        let second = 1_000_000;
+        let chunk = PlannedChunk::new(
+            SourceSegmentId::parse("sgm_0123456789abcdef")?,
+            3,
+            window(75 * second, 105 * second)?,
+        );
+        for error in ProviderOutputError::ALL {
+            let checkpoint = ChunkCheckpoint::new(
+                key('a')?,
+                &chunk,
+                CheckpointOutcome::Unusable {
+                    audio: window(75 * second, 105 * second)?,
+                    error,
+                },
+            );
+            assert_eq!(checkpoint.outcome().identifier(), "unusable");
+            assert!(checkpoint.belongs_to(&key('a')?, &chunk));
+            assert!(!checkpoint.belongs_to(&key('b')?, &chunk));
+            assert_eq!(ProviderOutputError::parse(error.identifier()), Some(error));
+        }
+        assert_eq!(ProviderOutputError::parse("malformed_output"), None);
+        let implausible = ChunkCheckpoint::new(
+            key('a')?,
+            &chunk,
+            CheckpointOutcome::Unusable {
+                audio: window(0, 30 * second)?,
+                error: ProviderOutputError::TooManyRejectedSegments,
+            },
+        );
+        assert!(!implausible.belongs_to(&key('a')?, &chunk));
         Ok(())
     }
 

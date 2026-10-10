@@ -501,6 +501,165 @@ fn a_spliced_revision_carrying_supplied_text_is_mixed() -> TestResult {
     Ok(())
 }
 
+/// #353: a window whose recognised output was unusable was examined and is not
+/// covered, and it is not no speech either: the recognizer may have been given
+/// speech it could not place. What the neighbouring windows (which overlap it
+/// by five seconds) transcribed stays covered.
+#[test]
+fn an_unusable_window_is_untranscribed_not_silent() -> TestResult {
+    // Chunks [0,30) transcribed, [25,55) unusable, [50,70) transcribed.
+    let asr = run(
+        range(0, 70 * SECOND)?,
+        &[
+            AsrChunkOutcome::Transcribed {
+                audio: range(0, 30 * SECOND)?,
+            },
+            AsrChunkOutcome::Unusable {
+                audio: range(25 * SECOND, 55 * SECOND)?,
+            },
+            AsrChunkOutcome::Transcribed {
+                audio: range(50 * SECOND, 70 * SECOND)?,
+            },
+        ],
+    )?;
+    let revision = local_asr(
+        asr,
+        &[
+            (0, 2 * SECOND, 3 * SECOND, "first words"),
+            (2, 60 * SECOND, 62 * SECOND, "last words"),
+        ],
+        &[0, 25 * SECOND, 50 * SECOND],
+    )?;
+    let coverage = SearchCoverage::of(&revision, None);
+    assert_eq!(coverage.basis(), CoverageBasis::LocalAsr);
+    assert_eq!(
+        coverage.transcribed(),
+        [range(0, 30 * SECOND)?, range(50 * SECOND, 70 * SECOND)?]
+    );
+    // The middle of the unusable window, and the tail nothing examined.
+    assert_eq!(
+        coverage.untranscribed(),
+        [
+            range(30 * SECOND, 50 * SECOND)?,
+            range(70 * SECOND, 100 * SECOND)?
+        ]
+    );
+    assert!(coverage.no_speech().is_empty());
+    assert!(!coverage.is_complete());
+
+    // Beside a silent neighbour, the unusable window is still not no speech,
+    // and what the silent window overlaps of it is silent.
+    let asr = run(
+        range(0, 70 * SECOND)?,
+        &[
+            AsrChunkOutcome::Silent {
+                audio: range(0, 30 * SECOND)?,
+            },
+            AsrChunkOutcome::Unusable {
+                audio: range(25 * SECOND, 55 * SECOND)?,
+            },
+            AsrChunkOutcome::Transcribed {
+                audio: range(50 * SECOND, 70 * SECOND)?,
+            },
+        ],
+    )?;
+    let revision = local_asr(
+        asr,
+        &[(2, 60 * SECOND, 62 * SECOND, "last words")],
+        &[0, 25 * SECOND, 50 * SECOND],
+    )?;
+    let coverage = SearchCoverage::of(&revision, None);
+    assert_eq!(
+        coverage.untranscribed(),
+        [
+            range(30 * SECOND, 50 * SECOND)?,
+            range(70 * SECOND, 100 * SECOND)?
+        ]
+    );
+    assert_eq!(coverage.no_speech(), [range(0, 30 * SECOND)?]);
+    Ok(())
+}
+
+/// #353: an earlier revision's coverage is never counted inside the windows a
+/// run examined, an unusable one included. The run replaced what the earlier
+/// revision said there, so counting it would report as transcribed a part that
+/// now has no words (coverage may understate, never overstate).
+#[test]
+fn an_unusable_window_does_not_inherit_the_coverage_of_the_revision_it_replaced() -> TestResult {
+    let base_run = run(
+        range(0, 100 * SECOND)?,
+        &[
+            AsrChunkOutcome::Transcribed {
+                audio: range(0, 30 * SECOND)?,
+            },
+            AsrChunkOutcome::Transcribed {
+                audio: range(25 * SECOND, 55 * SECOND)?,
+            },
+            AsrChunkOutcome::Transcribed {
+                audio: range(50 * SECOND, 80 * SECOND)?,
+            },
+            AsrChunkOutcome::Transcribed {
+                audio: range(75 * SECOND, 100 * SECOND)?,
+            },
+        ],
+    )?;
+    let base = TranscriptRevisionId::parse("trv_1111111111111111")?;
+    let carried = TranscriptSegment::new(TranscriptSegmentParts {
+        id: TranscriptSegmentId::parse("tsg_0000000000000001")?,
+        ordinal: NonZeroU32::MIN,
+        range: range(5 * SECOND, 7 * SECOND)?,
+        text: CueText::new("earlier words".to_owned(), "earlier words".to_owned())?,
+        speaker: None,
+        confidence: Confidence::unknown(),
+        origin: SegmentOrigin::Asr {
+            chunk: 0,
+            provider_start: ChunkTime::from_micros(5 * SECOND),
+            provider_end: ChunkTime::from_micros(7 * SECOND),
+            trimmed: ProviderEndTrim::Unchanged,
+        },
+    })
+    .with_carried_from(CarriedFrom::new(
+        base.clone(),
+        TranscriptSegmentId::parse("tsg_1111111111111111")?,
+    ));
+    // This run re-examined 20-50 s as one chunk, and its answer was unusable.
+    let own_run = run(
+        range(20 * SECOND, 50 * SECOND)?,
+        &[AsrChunkOutcome::Unusable {
+            audio: range(20 * SECOND, 50 * SECOND)?,
+        }],
+    )?;
+    let revision = TranscriptRevision::new(TranscriptRevisionParts {
+        id: TranscriptRevisionId::parse("trv_2222222222222222")?,
+        number: NonZeroU32::new(2).ok_or("zero")?,
+        source_id: SourceId::from_sha256(DIGEST)?,
+        source_segment: source_segment(100 * SECOND)?,
+        provenance: TranscriptProvenance::LocalAsr(own_run),
+        supersedes: Some(base.clone()),
+        replaced_range: Some(range(20 * SECOND, 50 * SECOND)?),
+        inherited: vec![InheritedRevision::new(
+            base,
+            TranscriptProvenance::LocalAsr(base_run),
+            None,
+        )],
+        language: None,
+        segments: vec![carried],
+        warnings: TranscriptWarnings::default(),
+    })?;
+    let coverage = SearchCoverage::of(&revision, None);
+    assert_eq!(
+        coverage.transcribed(),
+        [range(0, 20 * SECOND)?, range(50 * SECOND, 100 * SECOND)?]
+    );
+    assert_eq!(coverage.untranscribed(), [range(20 * SECOND, 50 * SECOND)?]);
+    // Asked only about the run's own range, the answer is the same: this is
+    // what `transcript retranscribe` reports as its gaps.
+    let own = SearchCoverage::of(&revision, Some(range(20 * SECOND, 50 * SECOND)?));
+    assert_eq!(own.untranscribed(), [range(20 * SECOND, 50 * SECOND)?]);
+    assert!(own.transcribed().is_empty());
+    Ok(())
+}
+
 /// Text built from words that normalise to themselves, joined by the
 /// separators the rules treat specially.
 fn text_strategy() -> impl Strategy<Value = String> {

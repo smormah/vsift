@@ -6,7 +6,10 @@
 //! decision about that output (validation, silence, seams) is the domain's;
 //! this module sequences the stages, checks the recognizer's identity before
 //! and after the run so output from two different models is never mixed, and
-//! stops at the first typed failure without producing anything. Only a model
+//! stops at the first typed failure without producing anything. A chunk whose
+//! answer is unusable is not such a failure: it is a recorded gap, and the run
+//! fails only when most of the chunks the recognizer answered are
+//! ([`unusable_chunks_end_the_run`], #353). Only a model
 //! identified as a reviewed pinned profile may run (maintainer decision D5).
 //! [`build_asr_revision`] then identifies the result as a transcript revision,
 //! splicing it into the revision it supersedes when the run covered only part
@@ -23,7 +26,7 @@ use vsift_domain::{
     TranscriptProvenance, TranscriptRevision, TranscriptRevisionError, TranscriptRevisionId,
     TranscriptRevisionParts, TranscriptSegment, TranscriptSegmentParts, TranscriptWarningKind,
     TranscriptWarnings, ValidatedChunk, decoded_audio_range, is_below_recognition_floor,
-    is_silent_pcm, merge_chunks, plan_chunks, validate_chunk_output,
+    is_silent_pcm, merge_chunks, plan_chunks, unusable_chunks_end_the_run, validate_chunk_output,
 };
 
 use crate::{
@@ -248,8 +251,11 @@ pub enum AsrFailureReason {
     ProviderFailed,
     /// The recognizer's output could not be parsed.
     UnparseableOutput,
-    /// The recognizer's output violated the domain's output rules.
-    MalformedOutput(ProviderOutputError),
+    /// The recognizer's answers broke the domain's output rules for most of
+    /// the chunks it answered ([`unusable_chunks_end_the_run`]), so it
+    /// evidently did not describe this audio. One chunk that does is not this:
+    /// it is a recorded gap ([`AsrChunkOutcome::Unusable`], #353).
+    MalformedOutput(UnusableChunks),
     /// The recognizer ended abnormally, usually because memory ran out.
     AbnormalTermination,
     /// The private work directory could not be used.
@@ -285,6 +291,52 @@ impl AsrFailureReason {
             Self::InvalidRun(_) => "invalid_run",
         }
     }
+
+    /// Whether running the same job again can only fail the same way, so the
+    /// job ends instead of staying resumable (#353).
+    ///
+    /// A recognizer whose answers are unusable for most chunks is such a case:
+    /// the verdict of each chunk is kept in the job's checkpoints, the rules
+    /// that judge an answer are deterministic, and the same audio is given to
+    /// the same recognizer, so a resume reads the same verdicts and reaches the
+    /// same failure. Saying the job is resumable would send the caller into a
+    /// loop with no way out but the poison rule's three attempts. The same
+    /// request, run again, starts a new epoch from nothing.
+    #[must_use]
+    pub const fn cannot_succeed_on_resume(self) -> bool {
+        matches!(self, Self::MalformedOutput(_))
+    }
+}
+
+/// One chunk whose recognised output could not be used, as a failure that
+/// reports a run's unusable chunks names it.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct UnusableChunk {
+    /// Zero-based position of the chunk in the run's plan.
+    pub index: u32,
+    /// The chunk's planned source-time window.
+    pub window: TimeRange,
+    /// Why the recognizer's answer for it was refused.
+    pub error: ProviderOutputError,
+}
+
+/// What a run that failed because most of its answered chunks were unusable
+/// says about them: how many, out of how many, and the first.
+///
+/// The first is named because it is where a reader starts looking, in the
+/// recording and in the transcript. It is the first in time, and its reason is
+/// the reason the failure reports.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct UnusableChunks {
+    /// Chunks whose answer was unusable when the run stopped.
+    pub unusable: u32,
+    /// Chunks the recognizer had answered when the run stopped, the unusable
+    /// ones included. Chunks that were never given to it are not counted.
+    pub answered: u32,
+    /// Chunks in the run's plan, whether or not the run got to them.
+    pub planned: u32,
+    /// The first unusable chunk.
+    pub first: UnusableChunk,
 }
 
 /// A typed local ASR failure: where it happened and why.
@@ -369,7 +421,8 @@ pub struct AsrTranscription {
     pub language: Option<LanguageTag>,
     /// Merged segments in source start order.
     pub segments: Vec<MergedSegment>,
-    /// Rejections, trims, removed markers, silent chunks and seam duplicates.
+    /// Rejections, trims, removed markers, silent chunks, unusable chunks and
+    /// seam duplicates.
     pub warnings: TranscriptWarnings,
 }
 
@@ -390,9 +443,16 @@ pub struct AsrTranscription {
 /// as a gap, and so, without being decoded, is a chunk whose window is under
 /// 100 ms ([`PlannedChunk::is_below_recognition_floor`]). A range that is all
 /// gaps is a run that heard nothing, not a failure ([`build_asr_revision`]).
-/// Nothing is
-/// returned unless every chunk succeeded: a failure or cancellation discards
-/// all work, so a caller never commits part of a run.
+///
+/// A chunk whose recognised output the domain's rules refuse as a whole is a
+/// gap too ([`AsrChunkOutcome::Unusable`]), counted under the warning
+/// `provider_chunks_rejected` and never recorded as silence. It fails the run
+/// only when more than half of the chunks the recognizer answered are like it
+/// ([`unusable_chunks_end_the_run`]): the failure is then
+/// [`AsrFailureReason::MalformedOutput`], naming how many and the first.
+///
+/// Nothing is returned unless the run finished: a failure or cancellation
+/// discards all work, so a caller never commits part of a run.
 ///
 /// # Errors
 ///
@@ -548,6 +608,12 @@ enum ChunkResult {
         audio: TimeRange,
         validated: ValidatedChunk,
     },
+    /// Recognised output the domain's rules refused as a whole: a gap that was
+    /// not quiet, and not a failure unless most chunks are (#353).
+    Unusable {
+        audio: TimeRange,
+        error: ProviderOutputError,
+    },
 }
 
 async fn run_chunks<A, R, C, K>(
@@ -580,12 +646,8 @@ where
     let mut completed = 0_u64;
 
     let mut usage = CheckpointUse::default();
-    let mut records = Vec::with_capacity(chunks.len());
-    let mut merge_input = Vec::with_capacity(chunks.len());
-    let mut warnings = TranscriptWarnings::default();
-    let mut languages = Vec::new();
-    let mut gaps = 0_u32;
-    let mut first_gap = None;
+    let planned = u32::try_from(chunks.len()).unwrap_or(u32::MAX);
+    let mut gathered = Gathered::with_capacity(chunks.len());
     for chunk in chunks {
         let index = chunk.index();
         let at_chunk = |failure: AsrFailure| AsrRunFailure {
@@ -612,34 +674,23 @@ where
             }
             result
         };
-        match result {
-            ChunkResult::Gap(outcome) => {
-                gaps = gaps.saturating_add(1);
-                first_gap.get_or_insert(chunk.ordinal());
-                records.push(AsrChunkRecord::new(chunk.clone(), outcome));
-                merge_input.push(empty_chunk(chunk));
-            }
-            ChunkResult::Transcribed { audio, validated } => {
-                records.push(AsrChunkRecord::new(
-                    chunk,
-                    AsrChunkOutcome::Transcribed { audio },
-                ));
-                let (segments, language, chunk_warnings) = validated.into_parts();
-                warnings.extend(&chunk_warnings);
-                languages.push(language);
-                merge_input.push(segments);
-            }
-        }
+        gathered.take(chunk, result);
         completed = completed.saturating_add(1);
         report(completed);
+        // The verdict is a share of the answered chunks, so it is known as soon
+        // as no chunk still to come could change it. A recognizer that answers
+        // with garbage is therefore not run to the end of a long recording.
+        let done = u32::try_from(completed).unwrap_or(u32::MAX);
+        if let Some(failure) = gathered.failure(planned, done) {
+            return Err(failure);
+        }
     }
-    if let Some(first) = first_gap {
-        warnings.add(TranscriptWarningKind::SilentChunksSkipped, gaps, first);
-    }
+    gathered.count_gaps();
     stop_if_cancelled(cancellation, AsrStage::RecognizerIdentity)?;
     ensure_identity(recognizer, request.expected).await?;
 
-    let merged = merge_chunks(&merge_input);
+    let merged = merge_chunks(&gathered.merge_input);
+    let mut warnings = gathered.warnings;
     warnings.extend(&merged.warnings);
     let run = AsrRun::new(AsrRunParts {
         provider: request.expected.provider.clone(),
@@ -648,13 +699,13 @@ where
         plan: request.plan,
         threads: request.expected.threads,
         audio_stream: request.audio_stream,
-        chunks: records,
+        chunks: gathered.records,
     })
     .map_err(|error| AsrFailure::at(AsrStage::Assembly, AsrFailureReason::InvalidRun(error)))?;
     Ok((
         AsrTranscription {
             run,
-            language: agreed_language(languages),
+            language: agreed_language(gathered.languages),
             segments: merged.segments,
             warnings,
         },
@@ -690,7 +741,9 @@ fn reuse_checkpoint<K: ChunkCheckpoints>(
     let result = if checkpoint.belongs_to(scope.key, chunk) {
         match checkpoint.into_outcome() {
             CheckpointOutcome::NoAudio => Some(ChunkResult::Gap(AsrChunkOutcome::NoAudio)),
-            CheckpointOutcome::Silent { .. } | CheckpointOutcome::Recognised { .. }
+            CheckpointOutcome::Silent { .. }
+            | CheckpointOutcome::Recognised { .. }
+            | CheckpointOutcome::Unusable { .. }
                 if chunk.is_below_recognition_floor() =>
             {
                 None
@@ -698,10 +751,17 @@ fn reuse_checkpoint<K: ChunkCheckpoints>(
             CheckpointOutcome::Silent { audio } => {
                 Some(ChunkResult::Gap(AsrChunkOutcome::Silent { audio }))
             }
+            // Stored output passed the rules when it was stored, so one they
+            // now reject is damaged or forged: it is removed and recognised
+            // again, never taken for the chunk's verdict. The verdict of an
+            // answer that was refused has a kind of its own, below (#353).
             CheckpointOutcome::Recognised { audio, output } => {
                 validate_chunk_output(chunk, audio, bounds, output)
                     .ok()
                     .map(|validated| ChunkResult::Transcribed { audio, validated })
+            }
+            CheckpointOutcome::Unusable { audio, error } => {
+                Some(ChunkResult::Unusable { audio, error })
             }
         }
     } else {
@@ -770,22 +830,34 @@ where
         .await
         .map_err(|error| AsrFailure::at(AsrStage::Recognition, error.into()))?;
     let raw = output.clone();
-    let validated = validate_chunk_output(chunk, decoded, bounds, output).map_err(|error| {
-        AsrFailure::at(
-            AsrStage::OutputValidation,
-            AsrFailureReason::MalformedOutput(error),
-        )
-    })?;
-    Ok((
-        ChunkResult::Transcribed {
-            audio: decoded,
-            validated,
+    // An answer the rules refuse as a whole is this chunk's verdict, not the
+    // run's failure: whether the run fails is a share of all its chunks, judged
+    // by the caller (#353). The verdict is stored so a resume neither asks the
+    // recognizer about the chunk again nor takes the refused answer for good.
+    Ok(
+        match validate_chunk_output(chunk, decoded, bounds, output) {
+            Ok(validated) => (
+                ChunkResult::Transcribed {
+                    audio: decoded,
+                    validated,
+                },
+                CheckpointOutcome::Recognised {
+                    audio: decoded,
+                    output: raw,
+                },
+            ),
+            Err(error) => (
+                ChunkResult::Unusable {
+                    audio: decoded,
+                    error,
+                },
+                CheckpointOutcome::Unusable {
+                    audio: decoded,
+                    error,
+                },
+            ),
         },
-        CheckpointOutcome::Recognised {
-            audio: decoded,
-            output: raw,
-        },
-    ))
+    )
 }
 
 /// Refuses a range outside the source and an unpinned model, then cuts the
@@ -842,6 +914,120 @@ fn stop_if_cancelled<C: AsrCancellation>(
         return Err(AsrFailure::at(stage, AsrFailureReason::Cancelled));
     }
     Ok(())
+}
+
+/// What a run has made of its chunks so far: their records, what the merge
+/// will need, the warnings that are counted per chunk and how many chunks the
+/// recognizer answered, and how many of those answers were unusable.
+struct Gathered {
+    records: Vec<AsrChunkRecord>,
+    merge_input: Vec<vsift_domain::ChunkSegments>,
+    warnings: TranscriptWarnings,
+    languages: Vec<Option<LanguageTag>>,
+    gaps: u32,
+    first_gap: Option<NonZeroU32>,
+    answered: u32,
+    unusable: u32,
+    first: Option<UnusableChunk>,
+    first_unusable_ordinal: Option<NonZeroU32>,
+}
+
+impl Gathered {
+    fn with_capacity(chunks: usize) -> Self {
+        Self {
+            records: Vec::with_capacity(chunks),
+            merge_input: Vec::with_capacity(chunks),
+            warnings: TranscriptWarnings::default(),
+            languages: Vec::new(),
+            gaps: 0,
+            first_gap: None,
+            answered: 0,
+            unusable: 0,
+            first: None,
+            first_unusable_ordinal: None,
+        }
+    }
+
+    /// Records what `chunk` became.
+    fn take(&mut self, chunk: PlannedChunk, result: ChunkResult) {
+        match result {
+            ChunkResult::Gap(outcome) => {
+                self.gaps = self.gaps.saturating_add(1);
+                self.first_gap.get_or_insert(chunk.ordinal());
+                self.records
+                    .push(AsrChunkRecord::new(chunk.clone(), outcome));
+                self.merge_input.push(empty_chunk(chunk));
+            }
+            ChunkResult::Transcribed { audio, validated } => {
+                self.answered = self.answered.saturating_add(1);
+                self.records.push(AsrChunkRecord::new(
+                    chunk,
+                    AsrChunkOutcome::Transcribed { audio },
+                ));
+                let (segments, language, chunk_warnings) = validated.into_parts();
+                self.warnings.extend(&chunk_warnings);
+                self.languages.push(language);
+                self.merge_input.push(segments);
+            }
+            ChunkResult::Unusable { audio, error } => {
+                self.answered = self.answered.saturating_add(1);
+                self.unusable = self.unusable.saturating_add(1);
+                self.first.get_or_insert(UnusableChunk {
+                    index: chunk.index(),
+                    window: chunk.window(),
+                    error,
+                });
+                self.first_unusable_ordinal.get_or_insert(chunk.ordinal());
+                self.records.push(AsrChunkRecord::new(
+                    chunk.clone(),
+                    AsrChunkOutcome::Unusable { audio },
+                ));
+                // It owns its core like any chunk, with nothing heard in it, so
+                // a neighbour's copy of speech that falls there is kept.
+                self.merge_input.push(empty_chunk(chunk));
+            }
+        }
+    }
+
+    /// Counts the chunks that were recorded as gaps, quiet or not, under their
+    /// warnings.
+    fn count_gaps(&mut self) {
+        if let Some(first) = self.first_gap {
+            self.warnings
+                .add(TranscriptWarningKind::SilentChunksSkipped, self.gaps, first);
+        }
+        if let Some(first) = self.first_unusable_ordinal {
+            self.warnings.add(
+                TranscriptWarningKind::ProviderChunksRejected,
+                self.unusable,
+                first,
+            );
+        }
+    }
+
+    /// The failure of the run, if it is certain by now: `done` of `planned`
+    /// chunks are finished, and the unusable ones are already more than half
+    /// of every chunk the recognizer could still have answered
+    /// ([`unusable_chunks_end_the_run`] over the answered ones plus all that
+    /// remain). With none left, that is the final verdict.
+    fn failure(&self, planned: u32, done: u32) -> Option<AsrRunFailure> {
+        let first = self.first?;
+        let remaining = planned.saturating_sub(done);
+        unusable_chunks_end_the_run(self.unusable, self.answered.saturating_add(remaining)).then(
+            || AsrRunFailure {
+                failure: AsrFailure::at(
+                    AsrStage::OutputValidation,
+                    AsrFailureReason::MalformedOutput(UnusableChunks {
+                        unusable: self.unusable,
+                        answered: self.answered,
+                        planned,
+                        first,
+                    }),
+                ),
+                chunk: Some(first.index),
+            },
+        )
+    }
 }
 
 const fn empty_chunk(chunk: PlannedChunk) -> vsift_domain::ChunkSegments {

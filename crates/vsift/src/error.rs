@@ -110,6 +110,18 @@ pub enum EngineError {
     LocalAsrVerificationFailed(LocalAsrVerificationFailure),
     /// Local speech recognition failed at a typed stage; nothing was committed.
     LocalAsrFailed(AsrFailure),
+    /// Local speech recognition failed because the recognizer's answers were
+    /// unusable for most of the chunks it answered (#353); nothing was
+    /// committed and the job ended as failed, not resumable: a resume would
+    /// read the same verdicts from its checkpoints. The failure's reason is
+    /// [`AsrFailureReason::MalformedOutput`], which carries how many chunks and
+    /// the first one. Hosts report the job in `affected_ids`.
+    LocalAsrOutputUnusable {
+        /// The failed job, which `job status` reports as failed.
+        job: JobId,
+        /// Stage and reason, the numbers included.
+        failure: AsrFailure,
+    },
     /// The source has no audio stream the media adapter decodes.
     NoAudioStream,
     /// The requested range extends past the end of the source.
@@ -447,7 +459,9 @@ impl EngineError {
             Self::LocalAsrVerificationFailed(failure) => {
                 local_asr_verification_failure_code(*failure)
             }
-            Self::LocalAsrFailed(failure) => asr_failure_code(*failure),
+            Self::LocalAsrFailed(failure) | Self::LocalAsrOutputUnusable { failure, .. } => {
+                asr_failure_code(*failure)
+            }
             Self::SourceProbe(error) => probe_failure_code(*error),
         }
     }
@@ -739,7 +753,9 @@ impl fmt::Display for EngineError {
                     other.identifier()
                 ),
             },
-            Self::LocalAsrFailed(failure) => failure.fmt(formatter),
+            Self::LocalAsrFailed(failure) | Self::LocalAsrOutputUnusable { failure, .. } => {
+                failure.fmt(formatter)
+            }
             Self::NoAudioStream => formatter.write_str("the source has no decodable audio stream"),
             Self::RangeOutsideSource => {
                 formatter.write_str("the requested range extends past the end of the source")
@@ -859,7 +875,9 @@ impl Error for EngineError {
             Self::TranscriptSource(error) => Some(error),
             Self::TranscriptRejected(error) => Some(error),
             Self::TranscriptQuery(error) => Some(error),
-            Self::LocalAsrFailed(error) => Some(error),
+            Self::LocalAsrFailed(error) | Self::LocalAsrOutputUnusable { failure: error, .. } => {
+                Some(error)
+            }
             Self::SourceProbe(error) => Some(error),
             Self::TranscriptAssembly(error) => Some(error),
             Self::SearchQueryRejected(error) => Some(error),
@@ -933,6 +951,7 @@ impl EngineError {
             | Self::IdempotencyConflict { job }
             | Self::JobCancelled { job }
             | Self::RetranscriptionSuperseded { job }
+            | Self::LocalAsrOutputUnusable { job, .. }
             | Self::JobNotResumable { job, .. }
             | Self::JobInterrupted { job, .. }
             | Self::JobSessionNotOpen { job, .. } => Some(job),
@@ -993,6 +1012,14 @@ impl From<JobRunError> for EngineError {
             JobRunError::NotResumable { job, state } => Self::JobNotResumable { job, state },
             JobRunError::Cancelled { job } => Self::JobCancelled { job },
             JobRunError::Superseded { job } => Self::RetranscriptionSuperseded { job },
+            JobRunError::Asr { job, failure }
+                if failure.failure.reason.cannot_succeed_on_resume() =>
+            {
+                Self::LocalAsrOutputUnusable {
+                    job,
+                    failure: failure.failure,
+                }
+            }
             JobRunError::Asr { failure, .. } => Self::LocalAsrFailed(failure.failure),
             JobRunError::Assembly(error) => Self::TranscriptAssembly(error),
             JobRunError::Storage(error) => Self::Storage(error),
@@ -1706,12 +1733,26 @@ mod tests {
         clippy::too_many_lines,
         reason = "One table of every local-ASR failure"
     )]
-    fn local_asr_failures_map_to_existing_codes() {
+    fn local_asr_failures_map_to_existing_codes() -> Result<(), Box<dyn std::error::Error>> {
         use vsift_application::{
-            AsrFailure, AsrFailureReason, AsrStage, LocalAsrVerificationFailure,
+            AsrFailure, AsrFailureReason, AsrStage, LocalAsrVerificationFailure, UnusableChunk,
+            UnusableChunks,
         };
-        use vsift_domain::{ProviderOutputError, TranscriptRevisionError};
+        use vsift_domain::{MediaTime, ProviderOutputError, TimeRange, TranscriptRevisionError};
 
+        let most_unusable = AsrFailureReason::MalformedOutput(UnusableChunks {
+            unusable: 3,
+            answered: 5,
+            planned: 8,
+            first: UnusableChunk {
+                index: 0,
+                window: TimeRange::new(
+                    MediaTime::from_micros(0),
+                    MediaTime::from_micros(30_000_000),
+                )?,
+                error: ProviderOutputError::OutOfOrderSegments,
+            },
+        });
         for (reason, code) in [
             (AsrFailureReason::InvalidRange, FailureCode::InvalidArgument),
             (AsrFailureReason::TooManyChunks, FailureCode::ResourceLimit),
@@ -1747,10 +1788,9 @@ mod tests {
                 AsrFailureReason::UnparseableOutput,
                 FailureCode::MissingCapability,
             ),
-            (
-                AsrFailureReason::MalformedOutput(ProviderOutputError::OutOfOrderSegments),
-                FailureCode::MissingCapability,
-            ),
+            // The published code stays when most chunks' answers are unusable
+            // (#353): the remediation, not a new code, says what is true.
+            (most_unusable, FailureCode::MissingCapability),
             (AsrFailureReason::Workspace, FailureCode::StorageIo),
             (AsrFailureReason::Io, FailureCode::MissingCapability),
             (
@@ -1823,6 +1863,81 @@ mod tests {
         ] {
             assert_eq!(error.failure_code(), code);
         }
+        Ok(())
+    }
+
+    /// #353: a run that failed because most chunks' answers were unusable is
+    /// its own error, which names its job (hosts put it in `affected_ids`) and
+    /// keeps the published code; every other recognition failure of a run still
+    /// converts as before and names no job.
+    #[test]
+    fn most_chunks_unusable_names_its_job_and_keeps_the_published_code()
+    -> Result<(), Box<dyn std::error::Error>> {
+        use vsift_application::{
+            AsrFailure, AsrFailureReason, AsrRunFailure, AsrStage, JobRunError, UnusableChunk,
+            UnusableChunks,
+        };
+        use vsift_domain::{JobId, MediaTime, ProviderOutputError, SessionId, TimeRange};
+
+        let job = JobId::parse("job_0123456789abcdef")?;
+        let session = SessionId::parse("ses_0123456789abcdef")?;
+        let reason = AsrFailureReason::MalformedOutput(UnusableChunks {
+            unusable: 6,
+            answered: 6,
+            planned: 10,
+            first: UnusableChunk {
+                index: 0,
+                window: TimeRange::new(
+                    MediaTime::from_micros(0),
+                    MediaTime::from_micros(30_000_000),
+                )?,
+                error: ProviderOutputError::TooManyRejectedSegments,
+            },
+        });
+        let run_failure = JobRunError::Asr {
+            job: job.clone(),
+            failure: AsrRunFailure {
+                failure: AsrFailure {
+                    stage: AsrStage::OutputValidation,
+                    reason,
+                },
+                chunk: Some(0),
+            },
+        };
+        for error in [
+            EngineError::from(run_failure.clone()),
+            EngineError::from_job_run(run_failure.clone(), &session),
+        ] {
+            assert!(
+                matches!(&error, EngineError::LocalAsrOutputUnusable { job: named, .. } if *named == job),
+                "{error:?}"
+            );
+            assert_eq!(error.failure_code(), FailureCode::MissingCapability);
+            assert_eq!(error.affected_job(), Some(&job));
+            assert_eq!(error.retry_after_ms(), None);
+        }
+        // The retry policy and the poison rule decide by the same code.
+        assert_eq!(
+            job_failure_code(&run_failure),
+            FailureCode::MissingCapability
+        );
+        assert!(run_failure.cannot_succeed_on_resume());
+        // Another recognition failure keeps its error, and no job.
+        let deadline = JobRunError::Asr {
+            job: job.clone(),
+            failure: AsrRunFailure {
+                failure: AsrFailure {
+                    stage: AsrStage::Recognition,
+                    reason: AsrFailureReason::Deadline,
+                },
+                chunk: Some(1),
+            },
+        };
+        assert!(!deadline.cannot_succeed_on_resume());
+        let converted = EngineError::from(deadline);
+        assert!(matches!(converted, EngineError::LocalAsrFailed(_)));
+        assert_eq!(converted.affected_job(), None);
+        Ok(())
     }
 
     /// ADR 0019: evidence failures reuse existing public codes.

@@ -381,9 +381,40 @@ pub enum TranscriptWarningKind {
     /// so the revision holds no new segment there. The attempt is still
     /// recorded, with every chunk's outcome, rather than discarded.
     NoSpeechRecognised,
+    /// Local ASR: the recognizer's answer for some chunks could not be used as
+    /// a whole (every segment of the chunk was rejected, more than a quarter of
+    /// at least four, or the output broke a structural rule), so those chunks
+    /// have no transcript from the recognizer and are recorded as unusable
+    /// gaps, not as silence (#353). The count is of chunks and the first
+    /// affected ordinal is a chunk's, as for the other chunk-level kinds.
+    ///
+    /// It is its own kind because the other chunk-level one, `silent_chunks_
+    /// skipped`, says that nothing was there to recognise, which would be false
+    /// of speech the recognizer could not place. A revision that holds it is
+    /// unreadable by the releases before it (they decode an unknown kind as
+    /// damage); only a revision with an unusable chunk holds it.
+    ProviderChunksRejected,
 }
 
 impl TranscriptWarningKind {
+    /// Every kind, in declaration order: the order of the published schemas'
+    /// `code` enumerations, which a test holds to this list.
+    pub const ALL: [Self; 13] = [
+        Self::EmptyCuesSkipped,
+        Self::MarkupRemoved,
+        Self::SpeakerLabelDiscarded,
+        Self::OverlappingCues,
+        Self::CuesOutsideSource,
+        Self::CuesCrossingSourceBoundary,
+        Self::ProviderSegmentsRejected,
+        Self::ProviderEndTrimmed,
+        Self::NonSpeechMarkersRemoved,
+        Self::SeamDuplicatesRemoved,
+        Self::SilentChunksSkipped,
+        Self::NoSpeechRecognised,
+        Self::ProviderChunksRejected,
+    ];
+
     /// Stable machine-readable identifier.
     #[must_use]
     pub const fn identifier(self) -> &'static str {
@@ -400,6 +431,7 @@ impl TranscriptWarningKind {
             Self::SeamDuplicatesRemoved => "seam_duplicates_removed",
             Self::SilentChunksSkipped => "silent_chunks_skipped",
             Self::NoSpeechRecognised => "no_speech_recognised",
+            Self::ProviderChunksRejected => "provider_chunks_rejected",
         }
     }
 
@@ -415,6 +447,7 @@ impl TranscriptWarningKind {
                 | Self::NonSpeechMarkersRemoved
                 | Self::SeamDuplicatesRemoved
                 | Self::SilentChunksSkipped
+                | Self::ProviderChunksRejected
         )
     }
 
@@ -432,6 +465,7 @@ impl TranscriptWarningKind {
                 | Self::SeamDuplicatesRemoved
                 | Self::SilentChunksSkipped
                 | Self::NoSpeechRecognised
+                | Self::ProviderChunksRejected
         )
     }
 }

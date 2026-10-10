@@ -247,6 +247,11 @@ const SEEDS: &[Seed] = &[
         Origin::Copy(JOB_EXAMPLES),
     ),
     seed(
+        Target::ChunkCheckpoint,
+        "checkpoint.unusable.json",
+        Origin::Copy(JOB_EXAMPLES),
+    ),
+    seed(
         Target::Mountinfo,
         "ext4-and-proc.txt",
         Origin::InlineIn(MOUNTINFO_TESTS),
@@ -820,6 +825,7 @@ fn well_formed_seeds_are_accepted() -> TestResult {
         (Target::RequestRecord, "request-record.ended.json"),
         (Target::ChunkCheckpoint, "checkpoint.recognised.json"),
         (Target::ChunkCheckpoint, "checkpoint.silent.json"),
+        (Target::ChunkCheckpoint, "checkpoint.unusable.json"),
         (Target::HandoffCheck, "SKILL.md"),
         (Target::HandoffCheck, "draft-with-findings.md"),
         (Target::SetupPlan, "setup-plan.unavailable.json"),

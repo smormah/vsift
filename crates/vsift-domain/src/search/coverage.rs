@@ -15,12 +15,21 @@
 //! - **Local ASR:** every chunk window of the run was examined. A window whose
 //!   audio was transcribed, or found silent, or had no audio at all, is
 //!   covered; a part of the video no run examined is not. Silent and audio-less
-//!   windows that no transcribed window overlaps are reported as no speech.
+//!   windows that no transcribed window overlaps are reported as no speech. A
+//!   window whose recognised output was unusable
+//!   ([`AsrChunkOutcome::Unusable`]) is examined but **not covered**, and is not
+//!   no speech either: the recognizer may have been given speech it could not
+//!   place, so a word said there cannot be found (#353). The parts of it that a
+//!   neighbouring window, which overlaps it by five seconds, transcribed are
+//!   covered by that window.
 //! - **Spliced revision:** the revision's own run covers the range it replaced;
 //!   outside that range, each revision whose segments it carries contributes
 //!   its own coverage by the same rules. A run whose segments were all replaced
 //!   is no longer recorded in the revision, so what only it examined counts as
-//!   not covered: the report can understate coverage, never overstate it.
+//!   not covered: the report can understate coverage, never overstate it. That
+//!   holds for an unusable window of the revision's own run too: an earlier
+//!   revision's windows, which its replaced segments no longer back, are not
+//!   counted over it.
 //!
 //! No-speech ranges never contain a segment of the revision.
 
@@ -215,19 +224,62 @@ fn clip(spans: &[Span], bounds: Span) -> Vec<Span> {
         .collect()
 }
 
-/// The windows of `run`'s chunks, split into those it transcribed and those
-/// it found silent or without audio.
-fn run_windows(run: &AsrRun) -> (Vec<Span>, Vec<Span>) {
-    let mut transcribed = Vec::new();
-    let mut quiet = Vec::new();
+/// The windows of `run`'s chunks, split into those it transcribed, those it
+/// found silent or without audio, and those whose recognised output was
+/// unusable.
+struct RunWindows {
+    transcribed: Vec<Span>,
+    quiet: Vec<Span>,
+    unusable: Vec<Span>,
+}
+
+impl RunWindows {
+    /// Every window the run examined, whatever came of it. An earlier
+    /// revision's coverage is never counted inside these: the run replaced
+    /// what that revision said there.
+    fn examined(&self) -> Vec<Span> {
+        merged(
+            self.transcribed
+                .iter()
+                .chain(&self.quiet)
+                .chain(&self.unusable)
+                .copied()
+                .collect(),
+        )
+    }
+
+    /// The windows the run covers: what it transcribed or found quiet.
+    fn covered(&self) -> Vec<Span> {
+        merged(
+            self.transcribed
+                .iter()
+                .chain(&self.quiet)
+                .copied()
+                .collect(),
+        )
+    }
+}
+
+fn run_windows(run: &AsrRun) -> RunWindows {
+    let mut windows = RunWindows {
+        transcribed: Vec::new(),
+        quiet: Vec::new(),
+        unusable: Vec::new(),
+    };
     for record in run.chunks() {
         let window = span(record.chunk().window());
         match record.outcome() {
-            AsrChunkOutcome::Transcribed { .. } => transcribed.push(window),
-            AsrChunkOutcome::Silent { .. } | AsrChunkOutcome::NoAudio => quiet.push(window),
+            AsrChunkOutcome::Transcribed { .. } => windows.transcribed.push(window),
+            AsrChunkOutcome::Silent { .. } | AsrChunkOutcome::NoAudio => {
+                windows.quiet.push(window);
+            }
+            AsrChunkOutcome::Unusable { .. } => windows.unusable.push(window),
         }
     }
-    (merged(transcribed), merged(quiet))
+    windows.transcribed = merged(windows.transcribed);
+    windows.quiet = merged(windows.quiet);
+    windows.unusable = merged(windows.unusable);
+    windows
 }
 
 /// The basis, transcribed spans and no-speech spans of a whole revision,
@@ -242,24 +294,28 @@ fn revision_coverage(
         }
         TranscriptProvenance::LocalAsr(run) => run,
     };
-    let (own_transcribed, own_quiet) = run_windows(run);
-    let own_covered = merged(own_transcribed.iter().chain(&own_quiet).copied().collect());
-    let mut covered = own_covered.clone();
-    let mut heard = own_transcribed;
-    let mut quiet = own_quiet;
+    let own = run_windows(run);
+    let mut covered = own.covered();
+    // What an earlier revision covers is counted only outside the windows this
+    // run examined, an unusable one included: the run replaced what the
+    // earlier revision said there, so its windows no longer back anything
+    // inside them.
+    let own_examined = own.examined();
+    let mut heard = own.transcribed;
+    let mut quiet = own.quiet;
     let mut supplied = false;
     for inherited in revision.inherited() {
         match inherited.provenance() {
             TranscriptProvenance::Imported { .. } => {
                 supplied = true;
-                covered.extend(subtract(&[source], &own_covered));
+                covered.extend(subtract(&[source], &own_examined));
             }
             TranscriptProvenance::LocalAsr(inherited_run) => {
-                let (transcribed, silent) = run_windows(inherited_run);
-                covered.extend(subtract(&transcribed, &own_covered));
-                covered.extend(subtract(&silent, &own_covered));
-                heard.extend(subtract(&transcribed, &own_covered));
-                quiet.extend(subtract(&silent, &own_covered));
+                let earlier = run_windows(inherited_run);
+                covered.extend(subtract(&earlier.transcribed, &own_examined));
+                covered.extend(subtract(&earlier.quiet, &own_examined));
+                heard.extend(subtract(&earlier.transcribed, &own_examined));
+                quiet.extend(subtract(&earlier.quiet, &own_examined));
             }
         }
     }

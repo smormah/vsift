@@ -139,6 +139,10 @@ pub(crate) struct LocalAsrRun {
     pub(crate) transcribed_chunks: u64,
     pub(crate) silent_chunks: u64,
     pub(crate) no_audio_chunks: u64,
+    /// Absent from a revision with no unusable chunk, and from every result
+    /// written before 0.2.1.
+    #[serde(default)]
+    pub(crate) unusable_chunks: u64,
 }
 
 /// One transcript segment, without its raw text.
@@ -208,6 +212,10 @@ pub(crate) struct Retranscription {
     pub(crate) requested_range: Option<Range>,
     pub(crate) revision: TranscriptRevision,
     pub(crate) recognised_segment_count: u64,
+    /// Parts of the run's range that no chunk transcribed: absent when there
+    /// are none (#353).
+    #[serde(default)]
+    pub(crate) untranscribed_ranges: Vec<Range>,
     pub(crate) job: RetranscriptionJob,
 }
 

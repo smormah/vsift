@@ -64,6 +64,11 @@ pub(super) fn push_retranscription(text: &mut TerminalText, data: &Retranscripti
     text.push_fixed("Segments recognised now: ")
         .push_unsigned(data.recognised_segment_count)
         .end_line();
+    push_ranges(
+        text,
+        "Not transcribed (the recogniser's answer for these parts could not be used; words said there cannot be found): ",
+        &data.untranscribed_ranges,
+    );
     let job = &data.job;
     text.push_fixed("Job: ")
         .push_value(&job.job_id)
@@ -197,8 +202,13 @@ fn push_revision(text: &mut TerminalText, revision: &TranscriptRevision) {
             .push_unsigned(run.silent_chunks)
             .push_fixed(" silent, ")
             .push_unsigned(run.no_audio_chunks)
-            .push_fixed(" without audio)")
-            .end_line();
+            .push_fixed(" without audio");
+        if run.unusable_chunks > 0 {
+            text.push_fixed(", ")
+                .push_unsigned(run.unusable_chunks)
+                .push_fixed(" with an unusable answer");
+        }
+        text.push_fixed(")").end_line();
     }
     if let Some(supersedes) = &revision.supersedes {
         text.push_fixed("Supersedes: ")

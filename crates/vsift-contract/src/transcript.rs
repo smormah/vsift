@@ -23,12 +23,15 @@
 use serde::Serialize;
 use vsift_domain::{
     AlignmentOrigin, AsrChunkOutcome, AsrRun, JobId, MAX_CUE_TEXT_BYTES, ProviderEndTrim,
-    SegmentOrigin, SessionId, SourceSegment, TimeRange, TranscriptImportError, TranscriptOffset,
-    TranscriptProvenance, TranscriptRejection, TranscriptRevision, TranscriptSegment,
-    TranscriptWarningKind,
+    SearchCoverage, SegmentOrigin, SessionId, SourceSegment, TimeRange, TranscriptImportError,
+    TranscriptOffset, TranscriptProvenance, TranscriptRejection, TranscriptRevision,
+    TranscriptSegment, TranscriptWarningKind,
 };
 
-use crate::{ConfidenceResponse, render_hidden_characters, sanitize_untrusted_text};
+use crate::{
+    ConfidenceResponse, OperationResponse, render_hidden_characters, sanitize_untrusted_text,
+    search::{bounded, envelope_coverage},
+};
 
 /// Every character sanitization can replace grows from at most one byte to
 /// three (U+FFFD), so this budget never truncates a domain-bounded cue.
@@ -144,6 +147,10 @@ struct LocalAsrRunData {
     transcribed_chunks: usize,
     silent_chunks: usize,
     no_audio_chunks: usize,
+    /// Present only when not zero, so a revision with no unusable chunk is
+    /// presented exactly as it was before the outcome existed (#353).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    unusable_chunks: Option<usize>,
 }
 
 impl LocalAsrRunData {
@@ -171,6 +178,10 @@ impl LocalAsrRunData {
             }),
             silent_chunks: count(|outcome| matches!(outcome, AsrChunkOutcome::Silent { .. })),
             no_audio_chunks: count(|outcome| matches!(outcome, AsrChunkOutcome::NoAudio)),
+            unusable_chunks: Some(count(|outcome| {
+                matches!(outcome, AsrChunkOutcome::Unusable { .. })
+            }))
+            .filter(|unusable| *unusable > 0),
         }
     }
 }
@@ -451,6 +462,11 @@ pub struct TranscriptRetranscribeData {
     requested_range: Option<RangeData>,
     revision: TranscriptRevisionData,
     recognised_segment_count: usize,
+    /// The parts of the run's own range the recognizer's answers left without a
+    /// transcript (#353), bounded like a search's. Absent when there are none,
+    /// so a run without a gap is presented exactly as before.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    untranscribed_ranges: Vec<RangeData>,
     job: RetranscribeJobData,
 }
 
@@ -496,6 +512,7 @@ impl TranscriptRetranscribeData {
                 .iter()
                 .filter(|segment| segment.carried_from().is_none())
                 .count(),
+            untranscribed_ranges: bounded(&retranscription_gaps(revision)),
             job: RetranscribeJobData {
                 job_id: job.job_id.as_str().to_owned(),
                 resumed: job.resumed,
@@ -504,6 +521,52 @@ impl TranscriptRetranscribeData {
             },
         }
     }
+}
+
+/// The parts of a retranscription's own range that no chunk transcribed, in
+/// start order and merged: the windows whose recognised output was unusable
+/// ([`AsrChunkOutcome::Unusable`]) less what a neighbouring window, which
+/// overlaps it by five seconds, transcribed or found silent.
+///
+/// It is what a search of that range reports as untranscribed, because it is
+/// the same rule ([`SearchCoverage`]), asked only about the run's range: what
+/// lies outside it is not this run's to report. An imported revision, or a run
+/// with no unusable chunk, has none.
+#[must_use]
+pub fn retranscription_gaps(revision: &TranscriptRevision) -> Vec<TimeRange> {
+    let TranscriptProvenance::LocalAsr(run) = revision.provenance() else {
+        return Vec::new();
+    };
+    run.covered_range()
+        .map(|covered| {
+            SearchCoverage::of(revision, Some(covered))
+                .untranscribed()
+                .to_vec()
+        })
+        .unwrap_or_default()
+}
+
+/// Completes a retranscription's response: with no unusable window it is the
+/// complete result it always was, unchanged; with one it is `partial`, a
+/// success that exits 0, and its envelope `coverage` lists the gaps as
+/// `<from_us>-<to_us>` with the reason `untranscribed_range`, the reason a
+/// search gives for the same ranges (#353).
+///
+/// The reason is deliberately the published one and not a new value: the range
+/// is untranscribed, which is exactly what `untranscribed_range` says, and a
+/// reader that already acts on it needs to learn nothing. What is specific to
+/// this cause is in `data` (`untranscribed_ranges`, `local_asr.unusable_chunks`)
+/// and in the warning `provider_chunks_rejected`.
+#[must_use]
+pub fn finish_retranscription(
+    response: OperationResponse<serde_json::Value>,
+    revision: &TranscriptRevision,
+) -> OperationResponse<serde_json::Value> {
+    let gaps = retranscription_gaps(revision);
+    if gaps.is_empty() {
+        return response;
+    }
+    response.with_coverage(envelope_coverage(&gaps))
 }
 
 /// Data of a `transcript.get` result: one bounded page of segments.
@@ -538,6 +601,14 @@ impl TranscriptPageData {
         }
     }
 }
+
+/// Fixed prose of the warning `provider_chunks_rejected`: some audio was given
+/// to the recognizer and what it answered could not be used, so it has no
+/// transcript. It says what the gap is not (silence) and what can cover it,
+/// which the typed warning cannot: a retranscription of just that range cuts
+/// the audio at other points (a chunk's result depends on where it is cut), and
+/// a transcript the user has needs no recognition.
+pub const PROVIDER_CHUNKS_REJECTED_WARNING: &str = "For some audio the recogniser's answer could not be used, so that audio has no transcript from this run: the result lists its time ranges as untranscribed, and words said there cannot be found. It is not silence. Transcribing just that range again (transcript retranscribe with --from and --to) cuts the audio at other points and may cover it; a transcript you already have covers it too: open the video with ingest --transcript.";
 
 /// Fixed prose for the envelope `warnings` of an import, one per warning kind.
 ///
@@ -586,6 +657,7 @@ pub fn transcript_warning_messages(revision: &TranscriptRevision) -> Vec<&'stati
             TranscriptWarningKind::NoSpeechRecognised => {
                 "No speech was recognised in the transcribed range; the revision records the attempt without new segments there."
             }
+            TranscriptWarningKind::ProviderChunksRejected => PROVIDER_CHUNKS_REJECTED_WARNING,
         })
         .collect()
 }

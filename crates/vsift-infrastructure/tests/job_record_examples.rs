@@ -15,8 +15,8 @@ use vsift_application::{JobCommit, JobRecord, JobRequest, job_id, retranscribe_r
 use vsift_domain::{
     AttemptFailure, CheckpointOutcome, ChunkCheckpoint, ChunkTime, CueText, FailureCode, JobState,
     LanguageTag, MediaTime, OperationId, OperationKey, PlannedChunk, ProviderChunkOutput,
-    ProviderSegment, ProviderToken, ProviderTokenKind, RecognitionKey, SessionId, Sha256Hex,
-    SourceSegmentId, StorageGeneration, TimeRange, TranscriptRevisionId,
+    ProviderOutputError, ProviderSegment, ProviderToken, ProviderTokenKind, RecognitionKey,
+    SessionId, Sha256Hex, SourceSegmentId, StorageGeneration, TimeRange, TranscriptRevisionId,
 };
 use vsift_infrastructure::{
     decode_chunk_checkpoint, decode_job_record, encode_chunk_checkpoint, encode_job_record,
@@ -143,6 +143,19 @@ fn silent() -> Built<ChunkCheckpoint> {
     ))
 }
 
+/// The verdict of a chunk whose recognised answer could not be used as a
+/// whole (#353): its decoded range and why.
+fn unusable() -> Built<ChunkCheckpoint> {
+    Ok(ChunkCheckpoint::new(
+        RecognitionKey::new(Sha256Hex::parse(RECOGNITION_KEY)?),
+        &chunk()?,
+        CheckpointOutcome::Unusable {
+            audio: range(0, 30_000_000)?,
+            error: ProviderOutputError::TooManyRejectedSegments,
+        },
+    ))
+}
+
 /// Compares `encoded` with the committed example, or rewrites it.
 fn matches_example(name: &str, encoded: &[u8]) -> Built<()> {
     let path = examples().join(name);
@@ -177,6 +190,7 @@ fn the_example_checkpoints_are_what_a_run_stores() -> Built<()> {
     for (name, checkpoint) in [
         ("checkpoint.recognised.json", recognised()?),
         ("checkpoint.silent.json", silent()?),
+        ("checkpoint.unusable.json", unusable()?),
     ] {
         let encoded = encode_chunk_checkpoint(&checkpoint).ok_or("not encoded")?;
         matches_example(name, &encoded)?;

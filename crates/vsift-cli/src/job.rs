@@ -10,7 +10,7 @@ use vsift::{
 };
 use vsift_contract::{
     CANCELLATION_TOO_LATE_WARNING, CommandName, JobData, JobPresentation, JobResumeData,
-    OperationResponse,
+    OperationResponse, finish_retranscription,
 };
 
 use crate::{CommandFailure, command::JobIdentityArguments, session::retranscription};
@@ -90,8 +90,11 @@ pub(crate) async fn resume(
         .await?;
     let presented = retranscription(report.outcome())?;
     let data = JobResumeData::new(job_data(report.status()), presented.data);
-    Ok(complete(CommandName::JobResume, &data)?
-        .with_operation_id(report.outcome().job().operation_id())
-        .with_lifecycle(presented.lifecycle)
-        .with_warnings(&presented.warnings))
+    Ok(finish_retranscription(
+        complete(CommandName::JobResume, &data)?
+            .with_operation_id(report.outcome().job().operation_id())
+            .with_lifecycle(presented.lifecycle)
+            .with_warnings(&presented.warnings),
+        report.outcome().revision(),
+    ))
 }

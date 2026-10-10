@@ -14,8 +14,9 @@
 //!    checkpoints and the audio, assembles the revision, verifies the source
 //!    again and commits under a deterministic operation id. Busy contention
 //!    is retried at most twice with full-jitter backoff; other failures end
-//!    the call with the job resumable, unless its chunk is poisoned or its
-//!    attempts are used up.
+//!    the call with the job resumable, unless its chunk is poisoned, its
+//!    attempts are used up or the failure can only repeat (most chunks'
+//!    answers were unusable, #353), which end it as failed.
 //!
 //! A commit that finds the session moved on re-reads its head. If the newest
 //! revision is still the base, the commit is retried against the new
@@ -296,6 +297,28 @@ impl fmt::Display for JobRunError {
 impl Error for JobRunError {}
 
 impl JobRunError {
+    /// Whether running the job again can only fail the same way, so the job
+    /// ends as failed instead of staying resumable (#353): the recognizer's
+    /// answers were unusable for most chunks, which the job's own checkpoints
+    /// would give again. `job status` then says the job failed, not that it can
+    /// be resumed.
+    #[must_use]
+    pub const fn cannot_succeed_on_resume(&self) -> bool {
+        match self {
+            Self::Asr { failure, .. } => failure.failure.reason.cannot_succeed_on_resume(),
+            Self::Busy { .. }
+            | Self::IdempotencyConflict { .. }
+            | Self::NotResumable { .. }
+            | Self::Cancelled { .. }
+            | Self::Superseded { .. }
+            | Self::Assembly(_)
+            | Self::Storage(_)
+            | Self::Job(_)
+            | Self::Key(_)
+            | Self::AdmissionBusy { .. } => false,
+        }
+    }
+
     /// The job the failure concerns, when there is one.
     #[must_use]
     pub const fn job(&self) -> Option<&JobId> {
@@ -458,8 +481,9 @@ where
 ///
 /// A cancellation requested through the job cancels it. Otherwise the
 /// failure is recorded with its chunk: the job fails for a superseded range,
-/// used-up attempts or a poisoned chunk, and is interrupted (resumable)
-/// otherwise. Returns the backoff before an automatic retry, or the error
+/// used-up attempts, a poisoned chunk or a failure that can only repeat
+/// ([`JobRunError::cannot_succeed_on_resume`]), and is interrupted
+/// (resumable) otherwise. Returns the backoff before an automatic retry, or the error
 /// that ends the call.
 fn settle_failure<S, A, R, C, T>(
     run: &RetranscriptionRun<'_>,
@@ -489,6 +513,7 @@ where
     let mut history = owner.record().failures.clone();
     history.push(failure);
     let ends = matches!(error, JobRunError::Superseded { .. })
+        || error.cannot_succeed_on_resume()
         || owner.record().attempt >= vsift_domain::MAX_JOB_ATTEMPTS
         || vsift_domain::poisoned_chunk(&history).is_some();
     let change = if ends {

@@ -100,6 +100,11 @@ fn frozen_examples_render_as_readable_text() -> TestResult {
             "transcript-retranscribe.json",
             "transcript-retranscribe",
         ),
+        (
+            CommandName::TranscriptRetranscribe,
+            "transcript-retranscribe.partial.json",
+            "transcript-retranscribe-partial",
+        ),
         (CommandName::Search, "search.json", "search"),
         (
             CommandName::SetupPlan,
@@ -313,6 +318,10 @@ fn frozen_failures_render_as_message_remediation_and_command() -> TestResult {
         (
             "retranscribe-cancelled.json",
             "failure-retranscribe-cancelled",
+        ),
+        (
+            "retranscribe-unusable-output.json",
+            "failure-retranscribe-unusable-output",
         ),
         ("storage-not-private.json", "failure-storage-not-private"),
         ("session-root-unowned.json", "failure-session-root-unowned"),

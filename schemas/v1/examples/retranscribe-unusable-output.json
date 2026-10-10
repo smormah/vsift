@@ -1,0 +1,26 @@
+{
+  "command": "transcript.retranscribe",
+  "coverage": null,
+  "data": null,
+  "error": {
+    "affected_ids": [
+      "job_8d3e1f0a2b4c6d8e0f1a2b3c4d5e6f70"
+    ],
+    "code": "MISSING_CAPABILITY",
+    "message": "A required local capability is unavailable.",
+    "remediation": [
+      {
+        "command": null,
+        "required_authority": "none",
+        "summary": "Local speech recognition failed at the output_validation step (malformed_output). The reason is too_many_rejected_segments: whisper.cpp ran, but 42 of the 42 audio chunks it had answered when the run stopped had output VSift could not use (their segments were empty, ran backwards, started at or after the audio's end or lay outside the video). The first is chunk 4 of 83, 0:01:15 to 0:01:45 (75000000 to 105000000 microseconds, the unit of --from and --to). The tool itself works: VSift's own check of it passed before this run. This recording's speech could not be transcribed reliably. Nothing was committed. A larger range, or reinstalling whisper.cpp, will not change that. Use a transcript you already have instead: open the video with ingest --transcript <file> (SubRip or WebVTT), which needs no speech recognition."
+      }
+    ],
+    "retry_after_ms": null,
+    "retryable": false
+  },
+  "lifecycle": null,
+  "operation_id": null,
+  "schema_version": "1",
+  "status": "failed",
+  "warnings": []
+}
