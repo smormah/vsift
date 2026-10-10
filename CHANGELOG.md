@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- **Work record, register and a known-issue note only; nothing that ships changes, and nothing is fixed: the findings of the maintainer's live testing on two real recordings, and the plan for a second candidate of `0.2.1`.** A new known limit,
+  [L-149](docs/planning/known-limits.md#l-149) (high, open, issue [#359](https://github.com/smormah/vsift/issues/359)): merging the overlapping 30-second pieces of a transcription can drop speech at a seam with no warning, and the result
+  still says the whole range was transcribed. The cause is inferred from the source and the timings, not confirmed with the recogniser's own output, and it is in `0.2.0` and in `0.2.1-rc.1`. Five more, all medium and open:
+  [L-150](docs/planning/known-limits.md#l-150) to [L-154](docs/planning/known-limits.md#l-154) (#365, #366, #367, #368, #370: how an agent reads a transcript, checks a long report, shortlists screens, asks a whole-recording question and asks for a frame
+  while a transcription runs). The README and the installation guide carry a known-issue note for L-149 with the workarounds. `0.2.1-rc.1`, published on 2026-10-10 under `next`, is superseded: the maintainer decided on 2026-10-11 to put #359 and the larger findings into
+  `0.2.1` and to cut a second candidate, `0.2.1-rc.2`; the plan ([`release-0.2.1.md`](docs/planning/release-0.2.1.md)) lists what it needs and the decisions still open, among them the version number.
+
 ## [0.2.1-rc.1] - 2026-10-10
 
 **This is a release candidate, under qualification.** It is the first candidate for `0.2.1`, the patch release after `0.2.0` (the maintainer decided on
