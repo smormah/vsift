@@ -1834,7 +1834,7 @@ not on the first two (1 of 3 twice) and met it on the third, which has a second 
     3 of 3 after 1 of 3 twice is a threshold met, not a rate and not a proof of the cause.**
 - **Evidence:** the [qualification record](p12-agent-qualification.md) (strong tier
   and the maintainer's review); ADR 0022's note "the P12 debt fixes"; for the re-run,
-  [`p14-agent-trials/batch-2/SUMMARY.md`](p14-agent-trials/batch-2/SUMMARY.md) and
+  [`p14-agent-trials/batch-2-rc.3/SUMMARY.md`](p14-agent-trials/batch-2-rc.3/SUMMARY.md) and
   [`batch-2-reading-rc.3.md`](p14-agent-trials/batch-2-reading-rc.3.md) (the third candidate),
   [`batch-2-rc.2/SUMMARY.md`](p14-agent-trials/batch-2-rc.2/SUMMARY.md) and
   [`batch-2-reading-rc.2.md`](p14-agent-trials/batch-2-reading-rc.2.md) (the second
@@ -4043,7 +4043,7 @@ that week.**
   - **Not affected, in the same batch:** GPT-6-Astra in Codex met both gates (6 of 6 and 3 of 3, on both
     candidates), and the compact tier (Claude Sonnet 5.5, 5 of 5 on `0.2.0-rc.2`) has no blurred-banner
     scenario and passed A-08 and A-09 in all four of its runs.
-- **Evidence:** [`p14-agent-trials/batch-2/SUMMARY.md`](p14-agent-trials/batch-2/SUMMARY.md) and the records
+- **Evidence:** [`p14-agent-trials/batch-2-rc.3/SUMMARY.md`](p14-agent-trials/batch-2-rc.3/SUMMARY.md) and the records
   beside it, with [`batch-2-reading-rc.3.md`](p14-agent-trials/batch-2-reading-rc.3.md) (the third candidate: the
   gates, and what the Opus reports do differently); [`p14-agent-trials/batch-2-rc.2/SUMMARY.md`](p14-agent-trials/batch-2-rc.2/SUMMARY.md) and the
   records beside it (moved from `batch-2/` when the third candidate was cut); [`batch-2-reading-rc.2.md`](p14-agent-trials/batch-2-reading-rc.2.md) (cases B and
@@ -4254,7 +4254,7 @@ that week.**
   maintainer on 2026-10-10: the supervisor's reading of the 18 raw logs stands for the maintainer's own;** the maintainer did not read
   the raw logs or the generated command list, so no person has read them ([L-118](#l-118)).
 - **Evidence:** [#340](https://github.com/smormah/vsift/issues/340);
-  `docs/planning/p14-agent-trials/batch-3/records/run-cfd6262e-codex-p1.json` (call 9) and `batch-3/SUMMARY.md`;
+  `docs/planning/p14-agent-trials/batch-3-rc.3/records/run-cfd6262e-codex-p1.json` (call 9) and `batch-3-rc.3/SUMMARY.md`;
   [`batch-3-reading-rc.3.md`](p14-agent-trials/batch-3-reading-rc.3.md); [plan section 29.9](p14-qualification.md); the cold
   safety rules in [`trials.md`](../agents/trials.md) ("Cold-agent mode"); `skills/vsift/SKILL.md` for the sentence the skill has.
 - **Impact:** medium by the rubric: an agent that uses `audio` without the skill meets it in normal use, and the statement

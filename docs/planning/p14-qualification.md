@@ -2364,7 +2364,7 @@ Batch 2 (the counted set with the skill of section 7, 34 runs) ran on 2026-10-08
 (28.2: whole-freeze digest `654955dd210eae2707b15a5334a3390edca9b7e17e300ebe68310f4b815ba5c6`, of which only the skill's digest `34ff775f...` differs from the first two candidates'). It
 is the reason for the candidate: Claude Opus 5.5's review tier missed two gates on both earlier ones. Claude Code 2.1.284 ran 17 runs on the maintainer's Windows 11 machine in
 about 35 minutes, and Codex 0.155.0-alpha.16 ran 17 in the Linux container (the review tier 12 each, Claude Opus 5.5 and GPT-6-Astra, and the compact tier 5 each, Claude Sonnet 5.5 and
-GPT-6-Sol). The records, the summary and both clients' state are in [`p14-agent-trials/batch-2/`](p14-agent-trials/batch-2/) and the reading, with the cases, the
+GPT-6-Sol). The records, the summary and both clients' state are in [`p14-agent-trials/batch-2-rc.3/`](p14-agent-trials/batch-2-rc.3/) and the reading, with the cases, the
 comparison with the earlier candidates and what is weaker than it sounds, is [`batch-2-reading-rc.3.md`](p14-agent-trials/batch-2-reading-rc.3.md). **This is an increment of PR 11 repeated
 again, not the whole of it:** it records RQ-15 and nothing for RQ-16 (batch 3, the cold round, which has run on no candidate) or RQ-17 (the try-outs). **PR 11 repeated again is not
 complete.** The pull request is work record only, the freeze held (`freeze check` answers "nothing frozen has changed" for this tree), and **nothing is re-graded**: every record is
@@ -2450,7 +2450,7 @@ install, under the freeze committed at the cut (28.2: whole-freeze digest `65495
 against batch 1's freeze with `-AllowGraderChange` (repeated for this record, by component: the cold scenarios, the settings and the corpus truth are batch 1's byte for byte, and only the
 grader differs). Claude Code 2.1.284 ran 9 runs on the maintainer's Windows 11 machine under the **strict** cold setting (Claude Sonnet 5.5 six, Claude Opus 5.5 three) in about 7 minutes,
 and Codex 0.155.0-alpha.16 ran 9 in the Linux container under the **realistic** one (GPT-6-Sol six, GPT-6-Astra three) in about 35. No run was blocked and no usage limit was met. The records, the
-summary and both clients' state are in [`p14-agent-trials/batch-3/`](p14-agent-trials/batch-3/) and the reading, with the finding, the read of the raw logs, the gap list, the comparison with
+summary and both clients' state are in [`p14-agent-trials/batch-3-rc.3/`](p14-agent-trials/batch-3-rc.3/) and the reading, with the finding, the read of the raw logs, the gap list, the comparison with
 the baseline and what is weaker than it sounds, is [`batch-3-reading-rc.3.md`](p14-agent-trials/batch-3-reading-rc.3.md). **This is an increment of PR 11 repeated again, not the whole of it:**
 it records RQ-16 and nothing for RQ-17 (the try-outs) or the register pass. **PR 11 repeated again is not complete.** The pull request is work record only, the freeze held (`freeze check`
 answers "nothing frozen has changed" for this tree), and **nothing is re-graded**: every record is as the frozen grader wrote it.

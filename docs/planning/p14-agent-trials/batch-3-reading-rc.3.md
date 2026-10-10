@@ -1,9 +1,15 @@
 # Batch 3 reading on the third candidate (run 2026-10-08, decision 2026-10-09, 0.2.0-rc.3)
 
+**History (2026-10-10).** This is the reading of batch 3 **on the third candidate** `0.2.0-rc.3`, the source the release `0.2.0` was
+built from; the maintainer's waiver of 2026-10-09 below was for that candidate and for `0.2.0` only. The candidate for the patch release,
+`0.2.1-rc.1`, changes the skill on purpose, so its batch 3 runs under a new freeze and RQ-16 is a new question for it. This batch's
+records, summary and state moved from `batch-3/` to [`batch-3-rc.3/`](batch-3-rc.3/) so that `batch-3/` is free for the repeat. Nothing
+below was re-graded.
+
 Batch 3 is the cold final round (evidence item RQ-16, plan section 7): an agent with the `vsift` command on its `PATH` and nothing else, no skill, no
 documents, no `AGENTS.md`, run against the published third candidate `0.2.0-rc.3` (tag `v0.2.0-rc.3` at `83dca856e7a00fc9a71c87baae99f0b1d401dd31`) from a
 clean install: every record names the registry's integrity for the two installed packages, the launcher's digest check and the version line
-`vsift 0.2.0-rc.3 (83dca856e7a0)`. It ran under the freeze committed in the candidate, `batch-3/freeze.json` (whole-freeze digest
+`vsift 0.2.0-rc.3 (83dca856e7a0)`. It ran under the freeze committed in the candidate, `batch-3-rc.3/freeze.json` (a copy of the file as it was; whole-freeze digest
 `654955dd210eae2707b15a5334a3390edca9b7e17e300ebe68310f4b815ba5c6`); `freeze check` answers "nothing frozen has changed" for this tree. Because the cold
 rounds are compared with the baseline, the campaign checks batch 3's cold components against **batch 1's** freeze and needs `-AllowGraderChange` to accept the
 grader's change (the supervisor reports it was given): I repeated that check for this reading, component by component, and the cold scenarios, the settings
@@ -11,7 +17,7 @@ and the corpus truth are byte for byte batch 1's, and only the grader differs (t
 Codex 0.155.0-alpha.16 in the Linux container under the **realistic** one (ordinary read-only helpers, inside the container's sandbox). 18 counted runs, 9
 per client: the compact tier 6 each (Claude Sonnet 5.5, GPT-6-Sol) and the review tier 3 each (Claude Opus 5.5, GPT-6-Astra), that is two runs of each of
 the three cold scenarios per compact model and one run of each per review model. Both halves finished with **no blocked run and no usage-limit wait**, and the whole batch took
-about 42 minutes (21:19 to 22:01 on 2026-10-08). The records, the summary and both clients' state are in [`batch-3/`](batch-3/); the baseline is
+about 42 minutes (21:19 to 22:01 on 2026-10-08). The records, the summary and both clients' state are in [`batch-3-rc.3/`](batch-3-rc.3/); the baseline is
 [batch-1-reading.md](batch-1-reading.md).
 
 **In plain words.** In 17 of 18 runs the agent took no out-of-policy action, and in 16 of 18 its report passed the usefulness check: the agents read
@@ -21,7 +27,7 @@ in one run an agent ran `base64` on the audio clip that `vsift audio` had named,
 `vsift`.** Nothing was installed, written or sent, and the report was correct. The maintainer decided on 2026-10-09 to waive the item for this candidate for
 that one action and nothing else. A waiver is not a pass.
 
-**Who reads this.** The numbers are the frozen grader's, computed by `vsift-agent-trials summarize` into [`batch-3/SUMMARY.md`](batch-3/SUMMARY.md), and
+**Who reads this.** The numbers are the frozen grader's, computed by `vsift-agent-trials summarize` into [`batch-3-rc.3/SUMMARY.md`](batch-3-rc.3/SUMMARY.md), and
 **nothing is re-graded**. The reading of the raw logs, the gap list and the comparison with the baseline are the readings of the supervisor and of the pull
 request's author; the only decision in this record is the maintainer's of 2026-10-09, quoted below. The maintainer's own reading of the raw logs is not
 recorded here (see "The raw logs"); **on 2026-10-10 the maintainer decided that the supervisor's reading stands for it** (the update at the end).

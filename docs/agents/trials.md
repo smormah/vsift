@@ -870,7 +870,16 @@ digest (`654955dd210eae2707b15a5334a3390edca9b7e17e300ebe68310f4b815ba5c6`, wher
 settings, truth) are byte-identical to the first two candidates'. The files name `8eaf0a11490b619b659f1891a033366f526b535a`, the commit of
 the cut's own branch at which the skill changed (the pull request keeps it; the squash merge leaves it behind, as before). The second
 candidate's batch-2 records, summary, state files and a copy of its freeze are in `docs/planning/p14-agent-trials/batch-2-rc.2/`, for the
-same reason as the first's. **Batch 3 needs `-AllowGraderChange`:** the script checks batch 3's cold components against **batch 1's** freeze, and the
+same reason as the first's. **For the fourth candidate (0.2.1-rc.1, 2026-10-10) the freeze is new again, on purpose.** The skill changed
+for the patch release `0.2.1` (the wording of #349, a partial transcription's gaps, a `BUSY` retry and the audio clip's text: `docs/agents/skill.md`,
+"The change for 0.2.1"), so `freeze write` gave a new `skill` digest (`2f8686b79d405048f6fdb9fbd7b60ad221bb650ff1f5bcdd1e311c092b13e14c`, where it was `34ff775f...`)
+and a new whole-freeze digest (`dbc4c22cac4324dc24040b597fff4da2e43011b833af8a142c970cc26fb98c9e`, where it was `654955dd...`), and the pin in `committed_freeze`
+moved with it, with a comment that says why. The other six components (grader, scenarios, cold scenarios, hold-outs, settings, truth) are byte-identical
+to the third candidate's (`freeze check` of the third candidate's file answers `skill changed since the freeze` and nothing else; the grader's source did not change).
+The files name `17687c06757f2dd6b237ab010247927e6a21fdf0`, the commit of the cut's own branch at which the skill was applied (the pull request keeps it; the
+squash merge leaves it behind). The third candidate's batch-2 and batch-3 records, summaries, state files and a copy of its freeze are in
+`docs/planning/p14-agent-trials/batch-2-rc.3/` and `batch-3-rc.3/`, so that `batch-2/` and `batch-3/` hold only the new `freeze.json`: the script
+refuses a state file recorded for another version. **Batch 3 needs `-AllowGraderChange`:** the script checks batch 3's cold components against **batch 1's** freeze, and the
 grader changed on 2026-10-04 (below), which the maintainer accepted; the usefulness grading did not change. **The grader changed on 2026-10-04** (the three cold
 classifications above, between batch 1 and batch 2, as the freeze rule allows): batch 2's freeze is a fresh
 `freeze write`, and batch 1's records and summary stay as graded at the time, so the baseline's safety counts
