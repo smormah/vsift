@@ -6,6 +6,58 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.2.1-rc.1] - 2026-10-10
+
+**This is a release candidate, under qualification.** It is the first candidate for `0.2.1`, the patch release after `0.2.0` (the maintainer decided on
+2026-10-10 that `0.2.1` carries everything that was waiting). It is cut in this change and is **not tagged or published here**: when the maintainer
+publishes it, it goes to npm under the tag `next` and never under `latest` (`latest` stays `0.2.0` on all four packages), it is not announced, and it
+is no statement of support or stability. **`0.2.0` stays published and is not deprecated, and it is still affected by
+[L-145](docs/planning/known-limits.md#l-145) until `0.2.1` is published.** No evidence is recorded for this candidate: the hosted checks, and agent-trial
+batches 2 and 3 under the new freeze, are still to be run, and the plan says what is open ([`release-0.2.1.md`](docs/planning/release-0.2.1.md)). The release
+runbook for this candidate is [`release.md`](docs/operations/release.md) section 6.14.
+
+### What changed since 0.2.0, in plain English
+
+**If you transcribe a recording with long pauses ([#353](https://github.com/smormah/vsift/issues/353), [L-145](docs/planning/known-limits.md#l-145), the reason for the release).**
+In `0.2.0` a recording whose 30-second stretch held few recognised pieces of text, one of them rejected, made `transcript retranscribe` fail the whole run as
+`MISSING_CAPABILITY` and keep nothing; `job resume` failed the same way, and the error did not say what had failed. The first real recording tried on `0.2.0`
+(a 34-minute screencast) showed it. Now a stretch whose answer cannot be used is a recorded gap: the run finishes as `partial`, says which stretches it did not
+transcribe, and a `search` reports them as not transcribed, never as silence; one rejected piece in a stretch with fewer than four is tolerated and the rest kept;
+text the session already had inside an unreadable stretch is kept; and when most of the recording cannot be transcribed the run still fails, but names the
+reason, how many stretches and where, and does not leave the job resumable. The change is additive (new optional members), and **a session that holds such a gap cannot be read by `0.2.0` or earlier**
+(it reads as damaged). It is shown by tests on stand-in recordings, not on the recording that found it.
+
+**If you let an AI assistant use VSift through its skill.** The skill's text changed ([#349](https://github.com/smormah/vsift/issues/349), [#353](https://github.com/smormah/vsift/issues/353),
+[#342](https://github.com/smormah/vsift/issues/342), [#340](https://github.com/smormah/vsift/issues/340)): it says "video walkthrough" (a bug report is one example of a handoff, not the only use);
+a `partial` transcription's untranscribed stretches are gaps with the reason `untranscribed_range`, never silence, and the report offers the user a transcript file or a retry of that stretch; when most of a
+recording cannot be transcribed but the tool works, nothing is missing and the agent does not reinstall anything; a `BUSY` answer is retried once with the same command, one command at a time; and an audio clip
+tells an agent nothing (speech is read with `transcript get`). **The skill is a frozen trial component, so this candidate has a new agent-trial freeze** and the two agent batches must be run again on it
+(`docs/planning/p14-agent-trials/`). No trial has run on the new text, and no trial scenario exercises the new partial-transcript rule.
+
+**If you use `vsift audio` or the evidence commands.** `audio --help` and the readable result of `audio` say that a coding agent cannot listen to a clip ([#340](https://github.com/smormah/vsift/issues/340)); a `BUSY`
+from `frame get`, `frame neighbours`, `frame burst`, `crop`, `audio` and `candidates` now carries `retry_after_ms` 2000 and a remediation ([#342](https://github.com/smormah/vsift/issues/342)). No command, option or
+JSON field was added for either; the `--json` result of `audio` is unchanged.
+
+**What you do not see.** A flaky Windows test of the trial harness retries a start race ([#345](https://github.com/smormah/vsift/issues/345); the harness is unchanged, so a real trial can still meet the race).
+
+**What is not in this candidate.** No FFmpeg or whisper.cpp re-pin ([#351](https://github.com/smormah/vsift/issues/351), [L-132](docs/planning/known-limits.md#l-132), [L-137](docs/planning/known-limits.md#l-137),
+[L-144](docs/planning/known-limits.md#l-144)), no dependency update, and none of #337, #325, #334 or the real-media test set ([#363](https://github.com/smormah/vsift/issues/363)).
+
+### What this cut itself does
+
+- **The version** is `0.2.1-rc.1` in the five files that hold it (`Cargo.toml`, `Cargo.lock`, `fuzz/Cargo.toml`, `fuzz/Cargo.lock`, `npm/vsift-cli/package.json`), and only there; each is the `0.2.0` file with the version text replaced.
+- **The skill change** (one commit, prepared on the branch `skill-0.2.1`) is cherry-picked unchanged; `skill_contract` passes.
+- **A new agent-trial freeze, on purpose:** the `skill` digest and the whole-freeze digest are new, the other six components are the third candidate's byte for byte; the third candidate's records moved to
+  `batch-2-rc.3/` and `batch-3-rc.3/`, and `batch-2/` and `batch-3/` hold only the new `freeze.json` ([`docs/agents/trials.md`](docs/agents/trials.md), "The freeze (P14)").
+- **The guide** names the release `0.2.1` (the marker, the two generated reference pages' first line and the first page's paragraph); the examples run against this build and match (the four speech examples were not run locally).
+- **Public text changed only where `0.2.1-rc.1` on `next` would make it false or misleading:** the installation guide's upgrade note (a candidate of a later release is newer than `latest`, so a plain install of `latest` gives the older build),
+  the README's "three release candidates" (of `0.2.0`) and the security policy's candidate row (`0.2.1-rc.N` too). Nothing announces the candidate, the known-issue note about #353 stays, and no claim is raised.
+- **Tests for the first candidate published while a stable release is `latest`** (it was the empty `0.0.0` placeholder for every earlier candidate): the verification tool's candidate case, the choice of the highest version, and the Python
+  journeys' choice. No production code changed.
+- **The runbook** is [`release.md`](docs/operations/release.md) 6.14, and the plan for the release is [`release-0.2.1.md`](docs/planning/release-0.2.1.md).
+
+The entries below are the detail of what was merged to `main` since `0.2.0`, by kind.
+
 ### Fixed
 
 - **`vsift audio` now says that an AI agent cannot listen to a clip ([#340](https://github.com/smormah/vsift/issues/340), [L-142](docs/planning/known-limits.md#l-142)).** In the batch-3 cold round one agent was
@@ -15,7 +67,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   example, tells an agent nothing; what was said is in the transcript); and the readable result of `audio` has one sentence on the line under the clip's path: "This clip is for a person or a speech tool to play; a coding agent
   cannot listen to it, so an agent reads what was said with vsift transcript get." A frame and a crop, which are images, say nothing of the kind. **Text only: the `--json` result and
   the `--events jsonl` stream are unchanged**, so an agent that runs `audio --json` without reading the help is told nothing by them (a hint in the JSON would be an additive optional field; none is added).
-  The agent skill already says it and is not changed. **Tests:** the renderer's snapshots and a test that the sentence is on the line under the path of `audio` and under no frame or crop; the help of the root and of
+  The agent skill already said that a clip is for a person and was not changed by that pull request (the candidate's cut adds the pointer to `transcript get`, above). **Tests:** the renderer's snapshots and a test that the sentence is on the line under the path of `audio` and under no frame or crop; the help of the root and of
   `audio`, in short and long form, through the binary.
 - **A `BUSY` from `frame get`, `frame neighbours`, `frame burst`, `crop`, `audio` and `candidates` now says what to do and when ([#342](https://github.com/smormah/vsift/issues/342)).** The answer when another
   request holds the session or the root's share of the machine's capacity (the media probe, the extraction, a window of visual analysis, the session's writer lock) had an empty `remediation` and a null
@@ -109,7 +161,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   status of `transcript retranscribe` and `job resume`; a run with no such chunk, and a chain that never had one (a range retranscription after another, with a gap between them, included), is written and
   presented exactly as before. **Rolling back:** a revision that holds an `unusable` chunk, its warning or `carried_untranscribed` is read as damaged by `0.2.0` and earlier (`INTEGRITY_FAILURE`), as for
   a trimmed end (L-130); only a session whose chain holds an `unusable` chunk has any of them, and no other revision is affected. **Not proven:** no real recording was used (it is commercial), and which kind of segment whisper.cpp rejected there is not
-  known; the three thresholds are proposals, not measured on real recordings, and the kept-text rule has no test over a real decode. The agent skill is unchanged. **A worker `job run` or `job batch` step is
+  known; the three thresholds are proposals, not measured on real recordings, and the kept-text rule has no test over a real decode. The agent skill was unchanged by that pull request (the candidate's cut changes it, above). **A worker `job run` or `job batch` step is
   still `complete` with `coverage` null when its run had unusable chunks** (the worker schema has no member for gaps, deliberately for this release): a supervisor that reads only the request's result is
   not told, and reads the revision the step names (`transcript get --revision`: the warning and `revision.local_asr.unusable_chunks`) to find out. **A limit this does not remove:** a recogniser swapped
   during a run is found when the run ends, and the checkpoints written after the swap are stored under the key of the model it started with, so putting the original model back and resuming reuses them
