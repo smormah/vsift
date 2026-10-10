@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- **`P14 verify release` now verifies a stable release in full (P14 PR 13a, 2026-10-10; a tool and its tests, nothing that ships changes).** Its two stable checks, which
+  `0.2.0` could not be verified without and which were left unregistered until the stable tag on purpose, are registered in `tools/p14-published/lib/verify.cjs`.
+  `stable: candidate-to-stable-delta` reads `release-delta.json` from the `publish-plan` artifact of the Release run that npm's provenance names, and requires the stable
+  version and commit to be the ones the tag, the GitHub release and npm's provenance of all four packages name, the candidate to be the highest `-rc.N` tag of the same
+  `X.Y.Z` at that tag's commit, the verdict to be `allowed` and the record to be that run's. `stable: latest-on-all-four-packages` requires `latest` to be the version on all
+  four packages and the GitHub release to be published, not a pre-release and GitHub's latest. A pre-release is asked for neither. **The delta check can only pass while GitHub
+  keeps the artifact, seven days after the publish** (until 2026-10-16 for `0.2.0`); after that it fails by name and points at the evidence ledger's `release_delta`, never passes
+  without its input ([L-103](docs/planning/known-limits.md#l-103)). Their tests use the values of the real `0.2.0` publish and no network.
+
 ## [0.2.0] - 2026-10-09
 
 **This is the release: the first VSift published under npm's `latest`, so `npm install vsift-cli` with no tag installs it.** It is the version

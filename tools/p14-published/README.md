@@ -14,7 +14,7 @@ credential in reach is the job's default read-only GitHub token, which only `gh`
 | `offline-install.cjs` | RQ-03 | The real reviewed artifacts fetched by the published binary's own plan, then `setup install --artifact-dir` in a container with no network; the tamper, missing-file and relative-folder refusals |
 | `upgrade.cjs` | RQ-04 | Install the from-version, make sessions and a configuration, upgrade, compare, and walk `install.md` section 8. `--mode registry` (real registry) or `--mode local` (a loopback registry serving the pull request's own build) |
 | `assemble-local-packages.cjs` | RQ-04 | The four packages of the local mode: the checkout's launcher, the published platform packages as a skeleton, the pull request's executables |
-| `verify-release.cjs` | RQ-19 | The second verification of a publish: dist-tags, npm provenance, signatures, attestations, checksums, release flags and files |
+| `verify-release.cjs` | RQ-19 | The second verification of a publish: dist-tags, npm provenance, signatures, attestations, checksums, release flags and files; for a stable version also the candidate-to-stable delta (read from the publish run's `publish-plan` artifact, which GitHub keeps seven days) and `latest` on all four packages |
 
 `lib/` holds the shared pieces, each with a test: `scrub.cjs` (the scrubbed `PATH`), `hostile.cjs`
 (the hostile names and arguments), `sec02.cjs` (planted tools), `verify.cjs` (the rules of RQ-19 and
