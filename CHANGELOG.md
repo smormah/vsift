@@ -78,7 +78,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   load did not fail once, so what in Windows leaves the thread out of the snapshot is not known, and the retry is evidence of a repair for a failure seen once, not of a
   measured rate. The other tests that call `run` (the rest of `run_stub.rs` and `prepare_modes.rs`) meet the same race at the same rate and are unchanged, and a real trial
   that meets it stops with the same message and no run record. No known limit is added: the product is untouched, and a recurrence goes to the register as #345 asks.
-- **A recording with pauses is no longer thrown away when one 30-second stretch cannot be transcribed (#353, the main fix proposed for `0.2.1`; the register's entry is [L-145](docs/planning/known-limits.md#l-145), which this change does not edit).** The first real recording tried with
+- **A recording with pauses is no longer thrown away when one 30-second stretch cannot be transcribed (#353, the main fix proposed for `0.2.1`; the register's entry is [L-145](docs/planning/known-limits.md#l-145), which stays open until `0.2.1` is published, because `0.2.0` still has the defect).** The first real recording tried with
   `0.2.0` (a 34:36 screencast of slides and live coding, one speaker, long pauses while the speaker typed) failed as `MISSING_CAPABILITY` (`output_validation`, `malformed_output`)
   after 65 of its 83 chunks were saved, committed nothing, and left the job `resumable: true` although a resume could never succeed. The cause was one chunk, 27:05 to 27:35, in which
   one segment did not fit its audio. **Four fixes (ADR 0017, note of 2026-10-10; proposed, the maintainer confirms by merging):**
