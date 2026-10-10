@@ -46,7 +46,8 @@ JSON field was added for either; the `--json` result of `audio` is unchanged.
 ### What this cut itself does
 
 - **The version** is `0.2.1-rc.1` in the five files that hold it (`Cargo.toml`, `Cargo.lock`, `fuzz/Cargo.toml`, `fuzz/Cargo.lock`, `npm/vsift-cli/package.json`), and only there; each is the `0.2.0` file with the version text replaced.
-- **The skill change** (one commit, prepared on the branch `skill-0.2.1`) is cherry-picked unchanged; `skill_contract` passes.
+- **The skill change** (one commit, prepared on the branch `skill-0.2.1`) is cherry-picked unchanged. **The `handoff_check` fuzz seed** (`fuzz/seeds/handoff_check/SKILL.md`) is a byte-for-byte copy of the skill and follows it:
+  the skill commit alone left it stale and the fuzz replay test failed ("SKILL.md no longer matches its origin") until it was copied.
 - **A new agent-trial freeze, on purpose:** the `skill` digest and the whole-freeze digest are new, the other six components are the third candidate's byte for byte; the third candidate's records moved to
   `batch-2-rc.3/` and `batch-3-rc.3/`, and `batch-2/` and `batch-3/` hold only the new `freeze.json` ([`docs/agents/trials.md`](docs/agents/trials.md), "The freeze (P14)").
 - **The guide** names the release `0.2.1` (the marker, the two generated reference pages' first line and the first page's paragraph); the examples run against this build and match (the four speech examples were not run locally).

@@ -26,7 +26,8 @@ embeddable engine library (`vsift`) that the CLI, and later other hosts, use. To
   to claim strict worker isolation unless the Linux kernel attests it;
 - be installed without Rust: **`0.2.0` is published under npm's `latest` (2026-10-09), so `npm install
   --global vsift-cli` with no tag installs it**; the 0.1.0 pre-release and three release candidates stay
-  published under `next` (`0.2.0-rc.1` and `0.2.0-rc.2` are deprecated). Archives on the GitHub release
+  published (`next` names `0.2.0-rc.3`; `0.2.0-rc.1` and `0.2.0-rc.2` are deprecated; a candidate of `0.2.1`, once
+  published, moves `next` and leaves `latest` at `0.2.0`). Archives on the GitHub release
   carry a Sigstore attestation and npm carries provenance. The README shows 0.1.0's real output
   (graphics: L-121).
 
@@ -63,13 +64,17 @@ the CLI and write a cited report. P12's named-client trials qualified it:
   and the application had no outcome for an unusable chunk but failing the run; `job resume` failed the same way, the job stayed `resumable`, and the error's remediation was #274's, which was wrong here. **On `main`
   an unusable chunk is a recorded gap and the run answers `partial`, listing the stretch as not transcribed; the quarter rule tolerates one rejected segment in a chunk of fewer than four; the failure that remains
   (most answered chunks unusable) says which reason, how many chunks and where, and the job is not resumable.** This is shown by tests on stand-in recordings, not on the recording that found it (it cannot be committed).
-- **The patch release `0.2.1` (the maintainer's decision of 2026-10-10: it carries everything waiting). The code fixes are merged to `main`; the release is not made.** Merged: #353 (above), #340 and #342 (`audio`'s
-  help and readable result say an agent cannot listen to a clip, which left the JSON as it was; the evidence commands' `BUSY` has a retry hint and a remediation) and #345 (a flaky Windows test of the trial harness,
-  the harness itself unchanged). **Not done:** the skill's wording (#349, which can change only with a new agent-trial freeze in the candidate's cut), the `0.2.1-rc.1` cut, its hosted evidence, the agent batches 2
-  and 3 re-run on the candidate (the maintainer's go and allowances), and the stable cut and its publish. **P14 stays complete; `0.2.0` stays published, is not deprecated and has the defect:** the README and the
-  install guide say so and give the workarounds (a supplied transcript, or ranges that avoid the failing stretch). Every accuracy figure so far is from a synthetic corpus with dense speech (L-022); this is the
-  first real one. The fix's own decisions left three limits for the register (L-146, #361; L-147, #362; L-148).
-- **What is weak:** the skill change met its gates once on a small sample; the cold round met its usefulness target twice with no margin and its safety gate not at all (one harmless read; no person has read the raw cold
+- **The patch release `0.2.1` (the maintainer's decision of 2026-10-10: it carries everything waiting). The code fixes are merged to `main`; the first candidate, `0.2.1-rc.1`, is CUT and NOT TAGGED OR PUBLISHED; the
+  release is not made.** Merged to `main`: #353 (above), #340 and #342 (`audio`'s help and readable result say an agent cannot listen to a clip, which left the JSON as it was; the evidence commands' `BUSY` has a retry hint and a
+  remediation) and #345 (a flaky Windows test of the trial harness, the harness itself unchanged). **The cut (one pull request, `docs/planning/release-0.2.1.md` is its plan) adds:** the version `0.2.1-rc.1` in the five files that hold
+  it; the skill change of #349 with the partial-transcript, `BUSY` and audio-clip rules (applied unchanged) and the fuzz seed copy that follows it; **a new agent-trial freeze** (the skill's digest is new, the other six components are the
+  third candidate's); the guide's marker `0.2.1`; the runbook `release.md` 6.14, which is the first for a candidate published while `latest` is a stable version (`0.2.0`, not the empty placeholder: three places assumed it and are
+  corrected, `install.md` section 7, 6.4's comment and the 404 once expected from GitHub's latest release, now `v0.2.0`; the tools and the workflow read the registry as it is, and new tests hold that); and public text changed only where
+  `next` naming the candidate would be false or misleading. **Increment done: the cut. Not done:** the merge and publish (the supervisor tags and dispatches, the maintainer approves the `release` environment), the hosted evidence at the
+  tag, **the agent batches 2 and 3 under the new freeze (the maintainer's go and allowances)**, the decisions on the four waivers (the completeness check does not name waived items, so none is asked for by itself), the stable cut and its
+  publish. **P14 stays complete; `0.2.0` stays published, is not deprecated and has the defect:** the README and the install guide say so and give the workarounds (a supplied transcript, or ranges that avoid the failing stretch).
+  Every accuracy figure so far is from a synthetic corpus with dense speech (L-022); this is the first real one. The fix's own decisions left three limits for the register (L-146, #361; L-147, #362; L-148).
+- **What is weak:** **the `0.2.1` skill is untried and no trial scenario exercises its new partial-transcript rule**; `release.md` 6.14 has not been run; the third candidate's skill change met its gates once on a small sample; the cold round met its usefulness target twice with no margin and its safety gate not at all (one harmless read; no person has read the raw cold
   logs, L-118); hosted images are not clean machines (L-112); Smart App Control and the macOS prompts are unseen (L-098, L-143); **a synthetic corpus and voice only** (L-020, L-022), which the first real recording showed to matter (#353; a small freely licensed real-media test set is #363). CVE-2026-38350 (L-122), the
   whisper.cpp pin (L-137) and CVE-2026-107678 (L-144) are the maintainer's accepted residuals. Open defects: **#353 (L-145, high: real recordings with pauses; fixed on `main`, not released)**, #312 (L-135; one failure in 4,500 loaded Windows repetitions), #351; #340 and #342 are fixed on `main`, not released.
 
@@ -108,7 +113,7 @@ the CLI and write a cited report. P12's named-client trials qualified it:
 | P11 | Complete (`40c4038`); SEC-T01 adversarial evidence is technical debt, moved to R1 (#188, L-068) |
 | P12 | Complete (2026-09-30, ADR 0022 Accepted): skill, harness, named-client trials; review tier qualified, compact tier 93% and 100% on the #222 re-run; open: L-095 (#224), #219, #204 (`1284e54`) |
 | P13 | Complete (2026-10-01, ADR 0023 Accepted): distribution, managed install, `handoff check`, human output; 0.1.0 published; release commit `011bc4d` |
-| P14 | **Complete (2026-10-10, ADR 0024 Accepted): the R0 qualification; `0.2.0` published 2026-10-09 (`eeb2a22a46a8`); four items waived, one accepted FFmpeg finding (L-144, #351), the rung still `candidate`; a high finding came after it (#353, L-145), fixed on `main` and not released: `0.2.1` is being prepared** |
+| P14 | **Complete (2026-10-10, ADR 0024 Accepted): the R0 qualification; `0.2.0` published 2026-10-09 (`eeb2a22a46a8`); four items waived, one accepted FFmpeg finding (L-144, #351), the rung still `candidate`; a high finding came after it (#353, L-145), fixed on `main` and not released: the first candidate of `0.2.1` is cut, not published** |
 
 ## Architecture snapshot
 
