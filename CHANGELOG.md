@@ -8,6 +8,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- **Work record and register only, nothing that ships changes: a new known limit, [L-145](docs/planning/known-limits.md#l-145) (high, open, issue #353), and the plan for the patch release `0.2.1`.** The first real
+  recording tried on `0.2.0` showed that `vsift transcript retranscribe` fails the whole run, and keeps nothing, when one 30-second chunk holds few recognised segments and one of them is rejected; nothing is fixed
+  in this change. `0.2.1` is to carry the fix with the other waiting items (#340, #342, #345, #349); `0.2.0` stays published.
 - **`P14 verify release` now verifies a stable release in full (P14 PR 13a, 2026-10-10; a tool and its tests, nothing that ships changes).** Its two stable checks, which
   `0.2.0` could not be verified without and which were left unregistered until the stable tag on purpose, are registered in `tools/p14-published/lib/verify.cjs`.
   `stable: candidate-to-stable-delta` reads `release-delta.json` from the `publish-plan` artifact of the Release run that npm's provenance names, and requires the stable
