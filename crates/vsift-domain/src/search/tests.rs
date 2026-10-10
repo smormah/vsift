@@ -988,15 +988,22 @@ fn imported_parts() -> Built<TranscriptRevisionParts> {
     })
 }
 
-/// #353: what a revision that supersedes this one over a range records is what
-/// a search of this one lists as untranscribed outside the range.
+/// #353: what a revision that supersedes this one over a range must record is
+/// the parts outside the range that a search of this one lists as untranscribed
+/// **and that what it carries from would otherwise be counted over**: a file
+/// claims the whole source, a run the windows it read. Nothing else is
+/// recorded, because nothing else changes what a search says, so a chain that
+/// never left a part unread records nothing.
 #[test]
-fn untranscribed_outside_is_what_a_search_lists_there() -> TestResult {
+fn what_a_revision_must_record_is_what_the_inherited_provenance_would_be_counted_over() -> TestResult
+{
     let revision = spliced_over_an_unusable_window(&[(0, 5, 7)])??;
     assert_eq!(
         SearchCoverage::of(&revision, None).untranscribed(),
         [range(20 * SECOND, 50 * SECOND)?]
     );
+    // What the earlier run read, 0-100 s, claims all of it.
+    let read_everywhere = revision.inherited();
     for (replaced, expected) in [
         // Far from the part: all of it.
         (
@@ -1018,8 +1025,124 @@ fn untranscribed_outside_is_what_a_search_lists_there() -> TestResult {
         ),
         (range(0, 100 * SECOND)?, Vec::new()),
     ] {
-        assert_eq!(revision.untranscribed_outside(replaced), expected);
+        assert_eq!(
+            revision.carried_untranscribed_for(replaced, read_everywhere),
+            expected
+        );
     }
+    let replaced = range(60 * SECOND, 70 * SECOND)?;
+    let entry = |provenance: TranscriptProvenance| -> Built<InheritedRevision> {
+        Ok(InheritedRevision::new(
+            TranscriptRevisionId::parse("trv_3333333333333333")?,
+            provenance,
+            None,
+        ))
+    };
+    // Nothing inherited, nothing to count over it: nothing is recorded.
+    assert!(revision.carried_untranscribed_for(replaced, &[]).is_empty());
+    // A run whose windows lie elsewhere claims nothing of it.
+    let elsewhere = entry(TranscriptProvenance::LocalAsr(run(
+        range(60 * SECOND, 70 * SECOND)?,
+        &[AsrChunkOutcome::Transcribed {
+            audio: range(60 * SECOND, 70 * SECOND)?,
+        }],
+    )?))?;
+    assert!(
+        revision
+            .carried_untranscribed_for(range(0, 10 * SECOND)?, &[elsewhere])
+            .is_empty()
+    );
+    // A run that read 30-100 s claims the part of it from 30 s on, and only that.
+    let from_thirty = entry(TranscriptProvenance::LocalAsr(run(
+        range(30 * SECOND, 100 * SECOND)?,
+        &[
+            AsrChunkOutcome::Transcribed {
+                audio: range(30 * SECOND, 60 * SECOND)?,
+            },
+            AsrChunkOutcome::Transcribed {
+                audio: range(55 * SECOND, 85 * SECOND)?,
+            },
+            AsrChunkOutcome::Transcribed {
+                audio: range(80 * SECOND, 100 * SECOND)?,
+            },
+        ],
+    )?))?;
+    assert_eq!(
+        revision.carried_untranscribed_for(replaced, &[from_thirty]),
+        [range(30 * SECOND, 50 * SECOND)?]
+    );
+    // An imported file claims the whole source.
+    let file = entry(imported_provenance()?)?;
+    assert_eq!(
+        revision.carried_untranscribed_for(replaced, &[file]),
+        [range(20 * SECOND, 50 * SECOND)?]
+    );
+    Ok(())
+}
+
+/// #353: where more parts than the bound would be recorded, the nearest on each
+/// side of the replaced range are joined, never across it. A short range inside
+/// a part splits it in two, ten seconds apart, the nearest pair there is; they
+/// were joined, the join overlapped the range, and the revision refused its own
+/// record, so the range could never be retranscribed.
+#[test]
+fn joining_to_the_bound_never_crosses_the_replaced_range() -> TestResult {
+    // Chunks 0 and 2 of four are unusable: 0-25 s and 55-75 s are unread.
+    let read = |from: u64, to: u64| -> Built<AsrChunkOutcome> {
+        Ok(AsrChunkOutcome::Transcribed {
+            audio: range(from * SECOND, to * SECOND)?,
+        })
+    };
+    let base = local_asr(
+        run(
+            range(0, 100 * SECOND)?,
+            &[
+                AsrChunkOutcome::Unusable {
+                    audio: range(0, 30 * SECOND)?,
+                },
+                read(25, 55)?,
+                AsrChunkOutcome::Unusable {
+                    audio: range(50 * SECOND, 80 * SECOND)?,
+                },
+                read(75, 100)?,
+            ],
+        )?,
+        &[],
+        &[],
+    )?;
+    assert_eq!(
+        SearchCoverage::of(&base, None).untranscribed(),
+        [range(0, 25 * SECOND)?, range(55 * SECOND, 75 * SECOND)?]
+    );
+    let file = [InheritedRevision::new(
+        TranscriptRevisionId::parse("trv_3333333333333333")?,
+        imported_provenance()?,
+        None,
+    )];
+    // 60-70 s lies inside the second part. With room for three, nothing is joined.
+    let replaced = range(60 * SECOND, 70 * SECOND)?;
+    let recorded =
+        |limit: usize| super::coverage::carried_untranscribed_for(&base, replaced, &file, limit);
+    assert_eq!(
+        recorded(3),
+        [
+            range(0, 25 * SECOND)?,
+            range(55 * SECOND, 60 * SECOND)?,
+            range(70 * SECOND, 75 * SECOND)?
+        ]
+    );
+    // With room for two, the nearest pair is the two pieces the range splits,
+    // which are kept apart: the first part and the piece before the range join.
+    let two = recorded(2);
+    assert_eq!(
+        two,
+        [range(0, 60 * SECOND)?, range(70 * SECOND, 75 * SECOND)?]
+    );
+    // What is recorded overlaps nothing the range holds.
+    assert!(
+        two.iter()
+            .all(|part| part.end() <= replaced.start() || part.start() >= replaced.end())
+    );
     Ok(())
 }
 

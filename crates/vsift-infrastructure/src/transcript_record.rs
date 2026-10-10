@@ -358,11 +358,15 @@ struct StoredAsrTranscript {
     replaced_range: Option<StoredRange>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     inherited: Vec<StoredInherited>,
-    /// What the superseded revision did not cover outside `replaced_range`
-    /// (#353), written only when there is any, so that every other record is
-    /// written exactly as before. A release before it reads the member as
-    /// damage, as it reads an `unusable` chunk, and only a session whose
-    /// chain holds a chunk of that kind has such a record.
+    /// What the superseded revision did not cover outside `replaced_range` and
+    /// that a window or file this revision carries would otherwise be counted
+    /// over (#353). It is written only when there is any, so every other
+    /// record is written exactly as before. A release before it reads the
+    /// member as damage, as it reads an `unusable` chunk. Only a part a run
+    /// could not use is ever under such a window or file, so only a session
+    /// whose chain holds an `unusable` chunk has such a record; a test checks it
+    /// for every chain of a grid, and one that began with a range, or whose runs
+    /// are apart, records nothing.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     carried_untranscribed: Vec<StoredRange>,
     language: Option<String>,

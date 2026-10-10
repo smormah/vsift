@@ -22,9 +22,9 @@ use std::{collections::HashSet, error::Error, fmt, num::NonZeroU32};
 
 use crate::{
     AsrChunkOutcome, AsrRun, ChunkTime, Confidence, ConfidenceOrigin, EarlierTextRule, MediaTime,
-    PageLimit, SearchCoverage, SourceId, SourceSegmentId, SpeakerLabel, TimeRange,
-    TranscriptRevisionId, TranscriptSegmentId,
-    spans::{Span, join_nearest, merged, overlaps_any, span, subtract, to_ranges},
+    PageLimit, SourceId, SourceSegmentId, SpeakerLabel, TimeRange, TranscriptRevisionId,
+    TranscriptSegmentId,
+    spans::{Span, merged, overlaps_any, span},
 };
 
 /// Largest supplied transcript file accepted for import.
@@ -1131,8 +1131,9 @@ pub struct TranscriptRevisionParts {
     /// unless the revision is spliced from the one it supersedes.
     pub inherited: Vec<InheritedRevision>,
     /// The parts outside `replaced_range` that the superseded revision did not
-    /// cover (#353), in start order and merged; empty unless the revision is
-    /// spliced from one that left a part untranscribed. See
+    /// cover and that a window or file this revision carries would otherwise be
+    /// counted over (#353), in start order and merged; empty unless the
+    /// revision is spliced from one that left such a part untranscribed. See
     /// [`TranscriptRevision::carried_untranscribed`].
     pub carried_untranscribed: Vec<TimeRange>,
     /// Declared or detected language, if known.
@@ -1148,7 +1149,7 @@ pub struct TranscriptRevisionParts {
 /// A run plans at most [`crate::MAX_PLANNED_CHUNKS`] chunks, so a run leaves at most
 /// 512 gaps; the parts of earlier runs add to those. The list is bounded so a
 /// stored record is, and where it would be longer the nearest ranges are joined
-/// ([`TranscriptRevision::untranscribed_outside`]): joining marks more of the
+/// ([`TranscriptRevision::carried_untranscribed_for`]): joining marks more of the
 /// source untranscribed, never less.
 pub const MAX_CARRIED_UNTRANSCRIBED: usize = 1_024;
 
@@ -1340,42 +1341,48 @@ impl TranscriptRevision {
     }
 
     /// The parts outside the replaced range that the superseded revision did
-    /// not cover, in start order and merged (#353): what a search of the
-    /// superseded revision listed as untranscribed there. Empty for a revision
-    /// that is not spliced, and for one whose superseded revision covered all
-    /// of its source.
+    /// not cover and that an inherited run or file would otherwise be counted
+    /// over, in start order and merged (#353). Empty for a revision that is not
+    /// spliced, for one whose superseded revision covered all of its source,
+    /// and for any chain in which no run left a part unread: only a part that
+    /// some run read but could not use, under a window or file this revision
+    /// still carries, needs it.
     ///
     /// This is what lets coverage stay true along a chain. A revision keeps the
     /// provenance only of the runs whose text it carries, so the run of an
     /// intermediate revision that could not read a part is not in a later
     /// revision at all, and the earlier runs' windows would be counted over the
-    /// part (an imported file covers the whole source). Each revision
-    /// therefore records what its superseded revision did not cover, and
-    /// coverage never counts an earlier window over it. A part this revision's
-    /// own run reads is covered by that run, and text it keeps is covered by
-    /// the text.
+    /// part (an imported file covers the whole source). Such a revision
+    /// therefore records those parts, and coverage never counts an earlier
+    /// window over them. A part this revision's own run reads is covered by
+    /// that run, and text it keeps is covered by the text.
     #[must_use]
     pub fn carried_untranscribed(&self) -> &[TimeRange] {
         &self.carried_untranscribed
     }
 
-    /// What a revision that supersedes this one over `replaced` records as
-    /// [`carried_untranscribed`](Self::carried_untranscribed): the parts of
-    /// this revision's source that a search of it lists as untranscribed and
-    /// that lie outside `replaced`, at most [`MAX_CARRIED_UNTRANSCRIBED`] of
-    /// them. Where there would be more, the two nearest are joined until there
-    /// are no more than that, which marks more of the source untranscribed and
-    /// never less.
+    /// What a revision that supersedes this one over `replaced`, carrying text
+    /// from `inherited`, must record as
+    /// [`carried_untranscribed`](Self::carried_untranscribed): the parts outside
+    /// `replaced` that a search of this revision lists as untranscribed and that
+    /// the claims of `inherited` (a file the whole source, a run the windows it
+    /// read) would otherwise cover, at most [`MAX_CARRIED_UNTRANSCRIBED`] of
+    /// them. Parts nothing inherited claims are not recorded, because they
+    /// change nothing a search says. Where there would be more than the bound,
+    /// the nearest on each side of `replaced` are joined, never across it, which
+    /// marks more of the source untranscribed and never less.
     #[must_use]
-    pub fn untranscribed_outside(&self, replaced: TimeRange) -> Vec<TimeRange> {
-        let untranscribed: Vec<Span> = SearchCoverage::of(self, None)
-            .untranscribed()
-            .iter()
-            .copied()
-            .map(span)
-            .collect();
-        let outside = subtract(&untranscribed, &[span(replaced)]);
-        to_ranges(&join_nearest(outside, MAX_CARRIED_UNTRANSCRIBED))
+    pub fn carried_untranscribed_for(
+        &self,
+        replaced: TimeRange,
+        inherited: &[InheritedRevision],
+    ) -> Vec<TimeRange> {
+        crate::search::carried_untranscribed_for(
+            self,
+            replaced,
+            inherited,
+            MAX_CARRIED_UNTRANSCRIBED,
+        )
     }
 
     /// The provenance that produced `segment`'s text and timing: the

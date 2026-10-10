@@ -33,9 +33,10 @@
 //! that audio, and an earlier run's window is never counted inside a range a
 //! later run replaced (the later run's own windows are counted there) nor
 //! inside a part the superseded revision did not itself cover
-//! ([`TranscriptRevision::carried_untranscribed`], recorded by each spliced
-//! revision because a revision keeps the provenance only of the runs whose text
-//! it carries). So a part some run could not read stays untranscribed through
+//! ([`TranscriptRevision::carried_untranscribed`], recorded by a spliced
+//! revision wherever a window or file it carries would be counted over such a
+//! part, because a revision keeps the provenance only of the runs whose text it
+//! carries). So a part some run could not read stays untranscribed through
 //! every later retranscription, however far from it, until a run reads it; and
 //! the text a revision keeps there ([`crate::EarlierTextRule`]) is covered by
 //! that text and nothing else of the part is.
@@ -43,8 +44,9 @@
 //! No-speech ranges never contain a segment of the revision.
 
 use crate::{
-    AsrChunkOutcome, AsrRun, TimeRange, TranscriptProvenance, TranscriptRevision,
-    spans::{Span, merged, span, subtract, to_range, to_ranges},
+    AsrChunkOutcome, AsrRun, InheritedRevision, TimeRange, TranscriptProvenance,
+    TranscriptRevision,
+    spans::{Span, join_nearest, merged, span, subtract, to_range, to_ranges},
 };
 
 /// Where the words of a searched revision came from, which says how far its
@@ -276,15 +278,14 @@ fn revision_coverage(
     let mut quiet = own.quiet;
     let mut supplied = false;
     for inherited in revision.inherited() {
+        covered.extend(subtract(
+            &claims(inherited.provenance(), source),
+            &not_counted,
+        ));
         match inherited.provenance() {
-            TranscriptProvenance::Imported { .. } => {
-                supplied = true;
-                covered.extend(subtract(&[source], &not_counted));
-            }
+            TranscriptProvenance::Imported { .. } => supplied = true,
             TranscriptProvenance::LocalAsr(inherited_run) => {
                 let earlier = run_windows(inherited_run);
-                covered.extend(subtract(&earlier.transcribed, &not_counted));
-                covered.extend(subtract(&earlier.quiet, &not_counted));
                 heard.extend(subtract(&earlier.transcribed, &not_counted));
                 quiet.extend(subtract(&earlier.quiet, &not_counted));
             }
@@ -298,4 +299,51 @@ fn revision_coverage(
         CoverageBasis::LocalAsr
     };
     (basis, merged(covered), no_speech)
+}
+
+/// What an inherited revision's provenance claims to cover of `source`: a
+/// supplied file the whole of it, a run the windows it read.
+fn claims(provenance: &TranscriptProvenance, source: Span) -> Vec<Span> {
+    match provenance {
+        TranscriptProvenance::Imported { .. } => vec![source],
+        TranscriptProvenance::LocalAsr(run) => run_windows(run).covered(),
+    }
+}
+
+/// What a revision that supersedes `base` over `replaced`, carrying text from
+/// `inherited`, must record as untranscribed (#353): the parts outside
+/// `replaced` that a search of `base` lists as untranscribed **and that the
+/// inherited provenance would otherwise be counted over**, at most `limit` of
+/// them.
+///
+/// Only those parts are recorded because only they change what a search says: the
+/// record is a mask over what the inherited runs and files claim, so a part none
+/// of them claims (one no run examined, in a chain that began with a range) needs
+/// no mask and is not recorded, and a chain that never left a part unread
+/// records nothing and is written as it always was. Where there would be more
+/// than `limit` parts, the nearest on each side of `replaced` are joined, never
+/// across it, which marks more untranscribed and never less.
+pub(crate) fn carried_untranscribed_for(
+    base: &TranscriptRevision,
+    replaced: TimeRange,
+    inherited: &[InheritedRevision],
+    limit: usize,
+) -> Vec<TimeRange> {
+    let source = span(base.source_segment().range());
+    let replaced = span(replaced);
+    let untranscribed: Vec<Span> = SearchCoverage::of(base, None)
+        .untranscribed()
+        .iter()
+        .copied()
+        .map(span)
+        .collect();
+    let claimed = merged(
+        inherited
+            .iter()
+            .flat_map(|entry| claims(entry.provenance(), source))
+            .collect(),
+    );
+    let outside = subtract(&untranscribed, &[replaced]);
+    let masked = subtract(&outside, &subtract(&outside, &claimed));
+    to_ranges(&join_nearest(masked, limit, Some(replaced)))
 }

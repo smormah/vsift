@@ -1150,8 +1150,10 @@ impl Assembled<'_> {
 /// overlaps is carried too, because a run that failed to read a stretch must
 /// not delete what the session already had there ([`EarlierTextRule`], #353).
 /// The revision also records what the superseded revision left untranscribed
-/// outside the range ([`TranscriptRevision::carried_untranscribed`]), which its
-/// coverage needs and no run it carries tells. Carried segments get new
+/// outside the range where a window or file it carries would be counted over it
+/// ([`TranscriptRevision::carried_untranscribed`]), which its coverage needs and
+/// no run it carries tells; a chain that left no part unread records nothing.
+/// Carried segments get new
 /// identities in this revision, so the
 /// superseded revision's records stay valid and are never overwritten, and
 /// each names the revision and segment that first produced it
@@ -1233,8 +1235,13 @@ pub fn build_asr_revision(
             );
             let (carried, inherited) = carried_segments(splice, &rule)?;
             // What the superseded revision left untranscribed outside this
-            // run's range stays so: its run may not be recorded here at all.
-            let untranscribed = splice.base.untranscribed_outside(splice.replaced_range);
+            // run's range stays so wherever a window or file this revision
+            // carries would otherwise be counted over it; the run that left it
+            // may not be recorded here at all. Nothing else is recorded, so a
+            // chain that never left a part unread is written as it always was.
+            let untranscribed = splice
+                .base
+                .carried_untranscribed_for(splice.replaced_range, &inherited);
             (carried, inherited, untranscribed)
         }
         None => (Vec::new(), Vec::new(), Vec::new()),

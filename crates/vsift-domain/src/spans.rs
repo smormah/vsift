@@ -50,12 +50,24 @@ pub(crate) fn overlaps_any(spans: &[Span], (start, end): Span) -> bool {
 /// covers everything the input did and the stretches between the spans it
 /// joined, so a list bounded this way describes more than it was given, never
 /// less.
-pub(crate) fn join_nearest(mut spans: Vec<Span>, limit: usize) -> Vec<Span> {
+///
+/// Two spans on opposite sides of `keep_apart` are never joined: `spans` holds
+/// none that overlaps it, and a join across it would. When only such a pair is
+/// left the list is returned longer than `limit`, which a caller that gives a
+/// `limit` of at least two for a range it keeps apart never meets.
+pub(crate) fn join_nearest(
+    mut spans: Vec<Span>,
+    limit: usize,
+    keep_apart: Option<Span>,
+) -> Vec<Span> {
     let limit = limit.max(1);
     while spans.len() > limit {
         let nearest = spans
             .windows(2)
             .enumerate()
+            .filter(|(_, pair)| {
+                keep_apart.is_none_or(|(start, end)| !(pair[0].1 <= start && end <= pair[1].0))
+            })
             .min_by_key(|(_, pair)| pair[1].0.saturating_sub(pair[0].1))
             .map(|(index, _)| index);
         let Some(index) = nearest else {
@@ -116,18 +128,49 @@ mod tests {
     #[test]
     fn the_nearest_spans_are_joined_until_the_list_is_short_enough() {
         let spans = vec![(0, 1), (10, 11), (12, 13), (30, 31)];
-        assert_eq!(join_nearest(spans.clone(), 4), spans);
+        assert_eq!(join_nearest(spans.clone(), 4, None), spans);
         // The nearest pair is (10, 11) and (12, 13), a stretch of one.
         assert_eq!(
-            join_nearest(spans.clone(), 3),
+            join_nearest(spans.clone(), 3, None),
             vec![(0, 1), (10, 13), (30, 31)]
         );
         // Then (0, 1) and (10, 13), nine apart, are nearer than the last, 17 away.
-        assert_eq!(join_nearest(spans.clone(), 2), vec![(0, 13), (30, 31)]);
-        assert_eq!(join_nearest(spans.clone(), 1), vec![(0, 31)]);
+        assert_eq!(
+            join_nearest(spans.clone(), 2, None),
+            vec![(0, 13), (30, 31)]
+        );
+        assert_eq!(join_nearest(spans.clone(), 1, None), vec![(0, 31)]);
         // A limit of nothing still leaves one, and an empty list stays empty.
-        assert_eq!(join_nearest(spans, 0), vec![(0, 31)]);
-        assert_eq!(join_nearest(Vec::new(), 3), Vec::new());
+        assert_eq!(join_nearest(spans, 0, None), vec![(0, 31)]);
+        assert_eq!(join_nearest(Vec::new(), 3, None), Vec::new());
+    }
+
+    /// A range kept apart is never crossed: the nearest pair is the two spans a
+    /// short range splits, and they are not joined, whatever the limit. Without
+    /// the range the same list does join them, and the join overlaps it.
+    #[test]
+    fn spans_on_either_side_of_a_range_kept_apart_are_never_joined() {
+        // A range 60-70 splits the span 55-75 into 55-60 and 70-75, ten apart.
+        let spans = vec![(0, 25), (55, 60), (70, 75), (105, 125), (155, 175)];
+        let kept_apart = Some((60, 70));
+        let crossed = join_nearest(spans.clone(), 4, None);
+        assert!(crossed.contains(&(55, 75)), "{crossed:?}");
+        let joined = join_nearest(spans.clone(), 4, kept_apart);
+        assert_eq!(joined, vec![(0, 60), (70, 75), (105, 125), (155, 175)]);
+        for limit in [3, 2] {
+            let joined = join_nearest(spans.clone(), limit, kept_apart);
+            assert!(joined.len() <= limit, "{limit}: {joined:?}");
+            assert!(
+                joined.iter().all(|&(start, end)| end <= 60 || start >= 70),
+                "{limit}: {joined:?}"
+            );
+            assert!(subtract(&spans, &joined).is_empty(), "{limit}");
+        }
+        // With one span a side and a limit of one, nothing can be joined.
+        assert_eq!(
+            join_nearest(vec![(0, 10), (80, 90)], 1, Some((20, 70))),
+            vec![(0, 10), (80, 90)]
+        );
     }
 
     /// Joining only adds: every instant of the input is in the output, the
@@ -140,7 +183,7 @@ mod tests {
                 .collect(),
         );
         for limit in [1_usize, 2, 5, 17, 49, 50, 80] {
-            let joined = join_nearest(spans.clone(), limit);
+            let joined = join_nearest(spans.clone(), limit, None);
             assert!(joined.len() <= limit.max(1));
             assert_eq!(merged(joined.clone()), joined);
             assert!(subtract(&spans, &joined).is_empty(), "{limit}");

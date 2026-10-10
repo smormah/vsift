@@ -15,7 +15,7 @@ use vsift_domain::{
     ParsedTranscript, PlannedChunk, ProviderChunkOutput, ProviderSegment, SearchCoverage,
     SessionId, Sha256Hex, SidecarIdentity, SourceId, SourceSegment, SourceSegmentId, TimeRange,
     TranscriptFormat, TranscriptOffset, TranscriptProvenance, TranscriptRevision,
-    TranscriptWarnings, plan_chunks,
+    TranscriptRevisionParts, TranscriptWarnings, plan_chunks,
 };
 
 use super::{
@@ -200,6 +200,80 @@ impl Chain {
             revisions: vec![revision],
             read,
         })
+    }
+
+    /// A chain that starts with a run over `from` to `to` seconds of a source
+    /// with no earlier revision, which covers only its range.
+    async fn bounded(from: u64, to: u64, answers: &[Answer]) -> Built<Self> {
+        let (session, source_id, source) = Self::parts()?;
+        let transcription = transcribe(&source, range(from, to)?, answers)
+            .await?
+            .ok_or("the first run failed")?;
+        let revision = build_asr_revision(AsrRevisionRequest {
+            session_id: &session,
+            source_id: &source_id,
+            source_segment: &source,
+            number: NonZeroU32::MIN,
+            transcription,
+            splice: None,
+        })?;
+        let read = read_by_the_run_of(&revision);
+        Ok(Self {
+            session,
+            source_id,
+            source,
+            revisions: vec![revision],
+            read,
+        })
+    }
+
+    /// Whether a run of the chain read a chunk and could not use its answer.
+    fn holds_an_unusable_chunk(&self) -> bool {
+        self.revisions.iter().any(|revision| {
+            matches!(revision.provenance(), TranscriptProvenance::LocalAsr(run)
+            if run.chunks().iter().any(|record| {
+                matches!(record.outcome(), AsrChunkOutcome::Unusable { .. })
+            }))
+        })
+    }
+
+    /// The newest revision as it was written before the record of untranscribed
+    /// parts was narrowed: with all that its superseded revision left
+    /// untranscribed outside the replaced range, whether or not anything
+    /// carried would be counted over it. `None` for a first revision.
+    fn newest_with_the_whole_record(&self) -> Built<Option<TranscriptRevision>> {
+        let [.., base, newest] = self.revisions.as_slice() else {
+            return Ok(None);
+        };
+        let Some(replaced) = newest.replaced_range() else {
+            return Ok(None);
+        };
+        let mut whole = Vec::new();
+        for gap in SearchCoverage::of(base, None).untranscribed() {
+            if gap.start() < replaced.start() {
+                whole.push(TimeRange::new(
+                    gap.start(),
+                    gap.end().min(replaced.start()),
+                )?);
+            }
+            if gap.end() > replaced.end() {
+                whole.push(TimeRange::new(gap.start().max(replaced.end()), gap.end())?);
+            }
+        }
+        Ok(Some(TranscriptRevision::new(TranscriptRevisionParts {
+            id: newest.id().clone(),
+            number: NonZeroU32::new(newest.number()).ok_or("zero")?,
+            source_id: newest.source_id().clone(),
+            source_segment: newest.source_segment().clone(),
+            provenance: newest.provenance().clone(),
+            supersedes: newest.supersedes().cloned(),
+            replaced_range: newest.replaced_range(),
+            inherited: newest.inherited().to_vec(),
+            carried_untranscribed: whole,
+            language: newest.language().cloned(),
+            segments: newest.segments().to_vec(),
+            warnings: newest.warnings().clone(),
+        })?))
     }
 
     /// A chain that starts with an imported transcript whose cues are `cues`,
@@ -559,6 +633,10 @@ async fn no_chain_of_runs_makes_search_claim_what_no_run_read() -> TestResult {
         Chain::local(&[Answer::Words; 3]).await?,
         Chain::local(&[Answer::Unplaceable, Answer::Words, Answer::Words]).await?,
         Chain::imported(&[(5, 7), (12, 14), (20, 36), (34, 36), (56, 58)])?,
+        // Chains that began with a range, of which most of the source was
+        // never examined.
+        Chain::bounded(0, 20, &[]).await?,
+        Chain::bounded(30, 60, &[]).await?,
     ];
     let mut checked = 0_u32;
     let mut with_unread_parts = 0_u32;
@@ -580,6 +658,27 @@ async fn no_chain_of_runs_makes_search_claim_what_no_run_read() -> TestResult {
         );
         // Text is covered.
         assert!(chain.text()?.is_subset(&transcribed));
+        // Nothing is recorded as untranscribed in a chain in which no run could
+        // not use an answer: the record exists for the parts such a run left
+        // under a window or file that a later revision still carries.
+        if !chain.holds_an_unusable_chunk() {
+            assert!(
+                chain.newest()?.carried_untranscribed().is_empty(),
+                "revision {} records {:?} in a chain with no unusable chunk",
+                chain.newest()?.number(),
+                chain.newest()?.carried_untranscribed()
+            );
+        }
+        // And what a search says is the same as if everything that the
+        // superseded revision left untranscribed had been recorded.
+        if let Some(whole) = chain.newest_with_the_whole_record()? {
+            assert_eq!(
+                SearchCoverage::of(chain.newest()?, None),
+                SearchCoverage::of(&whole, None),
+                "revision {}",
+                whole.number()
+            );
+        }
         checked += 1;
         with_unread_parts += u32::from(!untranscribed.is_empty());
         with_kept_text += u32::from(chain.kept_text()?);
@@ -709,5 +808,47 @@ async fn a_cue_over_the_runs_own_text_is_replaced_and_one_beside_it_or_over_noth
     // (A chunk read as silent is the same, which the domain's rule test checks:
     // beside an unusable chunk it cannot be run here, because a silent chunk is
     // not an answer, and one unusable answer of one fails the run.)
+    Ok(())
+}
+
+/// The reviewer's chain: a retranscription over a range, then one over another
+/// range apart from it, every chunk read. Nothing of the source between or
+/// beyond was ever examined, and no earlier window claims it, so the revision
+/// records nothing: it is written as it always was, and a release before 0.2.1
+/// still reads it.
+#[tokio::test]
+async fn ranges_apart_record_nothing_and_cover_what_was_read() -> TestResult {
+    let mut chain = Chain::bounded(0, 10, &[]).await?;
+    assert!(chain.step(20, 30, &[]).await?);
+    assert!(chain.newest()?.carried_untranscribed().is_empty());
+    let (transcribed, untranscribed) = chain.coverage()?;
+    assert_eq!(transcribed, union(&[seconds(0..10), seconds(20..30)]));
+    assert_eq!(untranscribed, union(&[seconds(10..20), seconds(30..70)]));
+    assert!(chain.step(40, 50, &[Answer::Nothing]).await?);
+    assert!(chain.newest()?.carried_untranscribed().is_empty());
+    // Over an imported file, with every run read, there is nothing unread to record.
+    let mut file = Chain::imported(&[(5, 7), (40, 42)])?;
+    assert!(file.step(10, 20, &[]).await?);
+    assert!(file.step(30, 38, &[Answer::Nothing]).await?);
+    assert!(file.newest()?.carried_untranscribed().is_empty());
+    assert!(file.coverage()?.1.is_empty());
+    Ok(())
+}
+
+/// A part some run could not use is recorded under what a later revision
+/// carries, and only then: the same chain with the first run's answer unusable
+/// records the part that the file would otherwise be counted over.
+#[tokio::test]
+async fn an_unread_part_under_a_carried_file_is_the_one_thing_that_is_recorded() -> TestResult {
+    let mut chain = Chain::imported(&[(5, 7), (12, 14), (40, 42)])?;
+    assert!(
+        chain
+            .step(10, 65, &[Answer::Unplaceable, Answer::Words])
+            .await?
+    );
+    assert!(chain.holds_an_unusable_chunk());
+    // The file is carried (the cue at 5 s), and claims the whole source.
+    assert!(chain.step(0, 3, &[Answer::Words]).await?);
+    assert!(!chain.newest()?.carried_untranscribed().is_empty());
     Ok(())
 }
