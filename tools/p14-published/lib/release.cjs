@@ -86,6 +86,47 @@ function tagOf(version) {
   return `v${version}`;
 }
 
+/** What every candidate tag of a stable version starts with: `v0.2.0-rc.` for `0.2.0`. */
+function candidateTagPrefix(stableVersion) {
+  expect(isStable(stableVersion), `${stableVersion} is not a stable version, so it has no candidate tags`);
+  return `v${stableVersion}-rc.`;
+}
+
+/**
+ * The accepted candidate of a stable version: the highest-numbered
+ * `v<X.Y.Z>-rc.<N>` among `tags`, for the stable version's own `X.Y.Z` and a
+ * positive `N` written without a leading zero. Any other tag is ignored, never
+ * read as a candidate. This is the rule of `vsift-release candidate-delta`
+ * (tools/vsift-release/src/candidate.rs, `candidate_tags`; release.md 6.8),
+ * restated here because the check that reads the delta record must name the
+ * same candidate that the plan job compared with, from the tags alone.
+ *
+ * @param {string} stableVersion for example `0.2.0`
+ * @param {string[]} tags tag names, in any order
+ * @returns {{tag: string, version: string} | null} `null` when no candidate tag exists
+ */
+function acceptedCandidateTag(stableVersion, tags) {
+  const prefix = candidateTagPrefix(stableVersion);
+  // The number is held as a BigInt because the tool this mirrors reads a u64, and a tag of
+  // `rc.99999999999999999999` must be ignored by both rather than rounded by one.
+  const limit = 2n ** 64n - 1n;
+  let best = null;
+  for (const tag of tags) {
+    if (!tag.startsWith(prefix)) {
+      continue;
+    }
+    const digits = tag.slice(prefix.length);
+    if (!/^[1-9][0-9]*$/.test(digits) || BigInt(digits) > limit) {
+      continue;
+    }
+    const number = BigInt(digits);
+    if (best === null || number > best.number) {
+      best = { number, tag };
+    }
+  }
+  return best === null ? null : { tag: best.tag, version: best.tag.slice(1) };
+}
+
 /** The name of the archive for a target. */
 function archiveName(version, archiveTarget) {
   return `vsift-${version}-${archiveTarget}.tar.gz`;
@@ -195,6 +236,112 @@ function downloadAssets(version, directory, patterns = [], env = githubEnvironme
   succeed('gh', args, env, { timeout: 600_000 });
 }
 
+// ---------------------------------------------------------------- what the stable checks read from GitHub
+
+/** The artifact the Release workflow's plan job uploads (release.yml, `name: publish-plan`); GitHub keeps it 7 days. */
+const PLAN_ARTIFACT = 'publish-plan';
+/** The record an enforced stable plan writes into that artifact (tools/vsift-release/src/publish.rs, `RELEASE_DELTA`). */
+const RELEASE_DELTA_FILE = 'release-delta.json';
+/** The record is a few hundred bytes; a file this large is not it, and is not read. */
+const MAXIMUM_RELEASE_DELTA_BYTES = 64 * 1024;
+
+/**
+ * Whether a run's artifact listing holds the named artifact, and whether it is
+ * still there. GitHub keeps an expired artifact in the listing with
+ * `expired: true` and refuses its download, so the listing, not a failed
+ * download, is how an expiry is told apart from a mistake.
+ *
+ * @param {string} text one JSON object per line, `{"name": ..., "expired": ...}`, as the `gh api --jq` of
+ *   `readReleaseDelta` prints them
+ * @param {string} name the artifact's name
+ * @returns {'available' | 'expired' | 'absent'}
+ */
+function parseArtifactListing(text, name) {
+  const entries = text
+    .split(/\r?\n/)
+    .filter((line) => line.trim() !== '')
+    .map((line) => {
+      try {
+        return JSON.parse(line);
+      } catch {
+        throw new QualificationError(`a line of the artifact listing is not JSON: ${JSON.stringify(line.slice(0, 120))}`);
+      }
+    })
+    .filter((entry) => entry !== null && typeof entry === 'object' && entry.name === name);
+  if (entries.length === 0) {
+    return 'absent';
+  }
+  return entries.some((entry) => entry.expired === false) ? 'available' : 'expired';
+}
+
+/**
+ * Reads `release-delta.json` out of the `publish-plan` artifact of a Release
+ * run, with `gh` and the job's read-only token: it lists the run's artifacts,
+ * and downloads the artifact only when it is there and not expired.
+ *
+ * @param {string} runId the Release run (digits)
+ * @param {string} directory an empty folder the artifact is unpacked into
+ * @param {(args: string[]) => string} runGh runs `gh` and returns what it printed; a failure throws
+ * @returns {{state: 'found', text: string} | {state: 'expired' | 'no-artifact' | 'no-record'}}
+ */
+function readReleaseDelta(runId, directory, runGh) {
+  expect(/^[0-9]+$/.test(runId), `${JSON.stringify(runId)} is not a workflow run id`);
+  const state = parseArtifactListing(
+    runGh(['api', `repos/${REPOSITORY}/actions/runs/${runId}/artifacts`, '--paginate', '--jq', '.artifacts[] | {name, expired}']),
+    PLAN_ARTIFACT,
+  );
+  if (state !== 'available') {
+    return { state: state === 'expired' ? 'expired' : 'no-artifact' };
+  }
+  runGh(['run', 'download', runId, '--repo', REPOSITORY, '--name', PLAN_ARTIFACT, '--dir', directory]);
+  const file = path.join(directory, RELEASE_DELTA_FILE);
+  let stat;
+  try {
+    stat = fs.lstatSync(file);
+  } catch {
+    return { state: 'no-record' };
+  }
+  expect(stat.isFile(), `${RELEASE_DELTA_FILE} in the ${PLAN_ARTIFACT} artifact is not a regular file`);
+  expect(stat.size <= MAXIMUM_RELEASE_DELTA_BYTES, `${RELEASE_DELTA_FILE} in the ${PLAN_ARTIFACT} artifact is ${stat.size} bytes, far larger than the record`);
+  return { state: 'found', text: fs.readFileSync(file, 'utf8') };
+}
+
+/** The tag names that start with `prefix` (`v0.2.0-rc.`), from GitHub's own list of tag references. */
+function listTagsWithPrefix(prefix, runGh) {
+  expect(/^v[0-9]+\.[0-9]+\.[0-9]+-rc\.$/.test(prefix), `${JSON.stringify(prefix)} is not the start of a candidate tag`);
+  const lines = runGh(['api', `repos/${REPOSITORY}/git/matching-refs/tags/${prefix}`, '--paginate', '--jq', '.[].ref']);
+  return lines
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.startsWith('refs/tags/'))
+    .map((line) => line.slice('refs/tags/'.length));
+}
+
+/** The commit a tag names, peeled through an annotated tag, the way `gatherFacts` reads the stable tag's. */
+function commitOfTag(tag, runGh) {
+  const sha = runGh(['api', `repos/${REPOSITORY}/commits/${tag}`, '--jq', '.sha']).trim();
+  expect(/^[0-9a-f]{40}$/.test(sha), `the tag ${tag} does not name a commit (${JSON.stringify(sha.slice(0, 60))})`);
+  return sha;
+}
+
+/**
+ * What the stable checks of lib/verify.cjs read from GitHub, for a verification
+ * run: `gh` with the job's read-only token and nothing else of a secret kind.
+ * The checks are given this object, never `gh` itself, so their tests need no
+ * network.
+ *
+ * @param {object} env the scrubbed environment of the run
+ * @param {string} work the run's scratch folder
+ */
+function githubStableReaders(env, work) {
+  const runGh = (args) => succeed('gh', args, githubEnvironment(env), { timeout: 180_000 }).stdout;
+  return {
+    releaseDelta: (runId) => readReleaseDelta(runId, path.join(work, `release-plan-${runId}`), runGh),
+    tagsWithPrefix: (prefix) => listTagsWithPrefix(prefix, runGh),
+    commitOfTag: (tag) => commitOfTag(tag, runGh),
+  };
+}
+
 // ---------------------------------------------------------------- npm
 
 /** The environment `npm` runs in for a read of the public registry: no token, no setting of the runner's. */
@@ -232,19 +379,28 @@ function npmView(spec, field, env, work) {
 module.exports = {
   ARCHIVE_TARGETS,
   PACKAGES,
+  PLAN_ARTIFACT,
+  RELEASE_DELTA_FILE,
+  acceptedCandidateTag,
   archiveName,
+  candidateTagPrefix,
   checkArchiveChecksum,
   checkChecksums,
+  commitOfTag,
   compareVersions,
   downloadAssets,
   expectedAssets,
   gh,
+  githubStableReaders,
   highestVersion,
   isStable,
+  listTagsWithPrefix,
   npmReadEnvironment,
   npmView,
+  parseArtifactListing,
   parseChecksums,
   parseVersion,
+  readReleaseDelta,
   tagOf,
   tarballName,
   verifyAttestation,

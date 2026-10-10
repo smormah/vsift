@@ -29,7 +29,7 @@ version can never be taken back.
 | Guards in the plan | two | six, one of them the evidence ledger for `0.2.0-rc.3` |
 | The tag and the commit it names | `v0.2.0-rc.3` at `83dca856e7a0` | `v0.2.0` at the merge commit of the pull request that carries P14 PR 12 |
 | What `vsift --version` prints | `vsift 0.2.0-rc.3 (83dca856e7a0)` | `vsift 0.2.0 (<the first 12 digits of the stable commit>)` |
-| What `P14 verify release` does | all green | **red on exactly two named checks until PR 13 registers them** (step 10); that is the design, not a finding |
+| What `P14 verify release` does | all green | **red on exactly two named checks until P14 PR 13a registers them** (that was the design, not a finding); **all green after it, within seven days of the publish** (steps 10 and 11) |
 | Deprecating the earlier candidates | optional, after the verification runs | **decided 2026-10-09: part of this release, at the stable, not before** (step 9); it replaces 6.12 step 7 |
 | Who gets it by default | `@next` users | everyone who installs `vsift-cli` with no tag; **Yarn 4 users a day later** (`npmMinimalAgeGate`) |
 
@@ -564,10 +564,12 @@ share a concurrency group, one runs and one may wait, and **a newer waiting run 
 gh workflow run p14-verify-release.yml --repo smormah/vsift --ref main -f version=0.2.0
 ```
 
-**Expect this run to be red on exactly two checks:** `stable: candidate-to-stable-delta` and `stable: latest-on-all-four-packages`, each "not registered yet:
-it goes into STABLE_CHECKS (tools/p14-published/lib/verify.cjs) after the stable tag". That is the design (`release.md` 6.4; a stable version is not verified
-without them); every other check of the run (the four packages' dist-tags and provenance, `npm audit signatures`, the attestations of ten files and four tarballs, the
-checksums, the release's flags and its ten file names) must be green. Any other red check is a finding.
+**Expect this run to be all green, from P14 PR 13a on** (the pull request that registered the two stable checks; `release.md` 6.4): `stable: candidate-to-stable-delta`
+and `stable: latest-on-all-four-packages` must be among the passes, with every other check of the run (the four packages' dist-tags and provenance, `npm audit
+signatures`, the attestations of ten files and four tarballs, the checksums, the release's flags and its ten file names). Any red check is a finding.
+**Dispatch it within seven days of the publish** (the delta check reads `release-delta.json` from the publish run's `publish-plan` artifact, which GitHub keeps until
+2026-10-16 14:54 UTC for the publish run 37946261087): after that the delta check fails by name, says so, and points at the ledger's `release_delta`, and the run cannot
+be green. Before PR 13a the run was red on exactly those two checks, each "not registered yet", which was the design (a stable version is not verified without them).
 
 ```console
 gh workflow run p14-journeys.yml --repo smormah/vsift --ref main -f version=0.2.0
@@ -596,9 +598,10 @@ gh workflow run p14-published-artifacts.yml --repo smormah/vsift --ref main -f v
 **Within seven days of the publish** (the publish run's `publish-plan` artifact, kept in `plan-publish/`, expires then; `P14 verify release` fetches the record from it):
 
 1. **Register the two stable checks** in `STABLE_CHECKS` (`tools/p14-published/lib/verify.cjs`): `candidate-to-stable-delta`, which reads `release-delta.json` from the
-   Release run npm's provenance names (`context.releaseRunId`), and `latest-on-all-four-packages` (with the release marked latest). It is a small pull request that
-   changes `tools/` and its tests (`tools/p14-published/test/verify.test.cjs` now expects the registry to be empty), allowed once the stable is published
-   (`release.md` 6.8 binds only until then). Then dispatch `P14 verify release` for `0.2.0` again: **this** run, all green, is the RQ-19 evidence for the release.
+   Release run npm's provenance names (`context.releaseRunId`), and `latest-on-all-four-packages` (with the release marked latest). **Done: P14 PR 13a (2026-10-10),**
+   a small pull request that changed `tools/` and its tests (`tools/p14-published/test/verify.test.cjs` expected the registry to be empty; it now expects the two names and
+   holds both checks to the values of the real publish), allowed once the stable is published (`release.md` 6.8 binds only until then). Then dispatch `P14 verify release`
+   for `0.2.0` again, **within seven days of the publish** (step 10): **this** run, all green, is the RQ-19 evidence for the release.
 2. **Copy `plan-publish/release-delta.json` into `docs/planning/p14-evidence-ledger.json`** as `release_delta` (nothing copies it for you: L-103).
 
 **PR 13, the ledger follow-up** (governance rule 9; the supervisor builds it, you merge it; plan 9 and `implementation-work-packets.md`):
