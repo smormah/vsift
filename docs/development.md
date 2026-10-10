@@ -649,8 +649,8 @@ node tools/guide/check-examples.cjs --binary target/debug/vsift
   for the first identifier of that kind an earlier command printed on the same page;
   `<candidate:3>` picks the third. A placeholder with no value yet fails the check rather than
   being guessed.
-- **A version bump re-checks the guide.** The guide names a release (`0.2.0`), not a
-  candidate: `0.2.0-rc.1`, `0.2.0-rc.2`, `0.2.0-rc.3` and `0.2.0` are the same release to these tools, so the stable commit
+- **A version bump re-checks the guide.** The guide names a release (`0.2.1`), not a
+  candidate: `0.2.1-rc.1` and `0.2.1` are the same release to these tools (and `0.2.0-rc.1` to `0.2.0-rc.3` and `0.2.0` were another), so the stable commit
   needs no guide change, which matters because it may differ from its accepted candidate only in
   version-string files, shipped documents and the work record, and the generated reference pages,
   which name the release, are in none of them ([release process, 6.8](operations/release.md)).
