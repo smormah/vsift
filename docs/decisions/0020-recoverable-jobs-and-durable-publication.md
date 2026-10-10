@@ -472,6 +472,20 @@ another process holds without read sharing (os errors 32 and 33): it is answered
 and a later release should retry it and then report with the same code. It is recorded as known limit L-136 and
 was not seen in any campaign.
 
+## Note: a job whose failure can only repeat ends at once, and a checkpoint can hold a verdict (#353, 2026-10-10)
+
+Two additions to sections 4 and 5, proposed with [ADR 0017's note of the same date](0017-local-asr-through-whisper-cpp.md#2026-10-10-note-a-chunk-whose-answer-cannot-be-used-is-a-recorded-gap-not-a-failed-run-353).
+
+- **A failure that a resume can only repeat fails the job at once.** When a run fails because the recogniser's answers were unusable for most of the chunks it answered,
+  the job does not wait for the poison rule's third identical failure: the attempt records the failure with its first unusable chunk and the job ends as `failed`
+  (checkpoints removed). `job status` then says `resumable: false` with `resumable_reason: failed`, `job resume` refuses with `INVALID_ARGUMENT`, and the same
+  `transcript retranscribe` command starts the job anew in a new epoch. Every other failure is classified as before: the retry table, the poison rule and the attempt
+  limit are unchanged. Before this, such a job stayed `resumable: true` and a resume could only fail the same way.
+- **A chunk checkpoint can be an `unusable` verdict.** Besides `no_audio`, `silent` and `recognised`, a checkpoint can record that the recogniser answered and the
+  domain's rules refused the answer as a whole (decoded range and reason, under the payload's digest). A resume reuses it and does not ask the recogniser again.
+  The rule for a `recognised` checkpoint is unchanged (S-08): output the rules now reject is discarded and recognised again. A release before this one reads the new
+  kind as an unusable checkpoint and redoes the chunk, so nothing breaks on a roll back.
+
 ## Consequences
 
 - PR 1 changes no public contract. Warm reads no longer grow with the chain; every

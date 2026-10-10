@@ -38,6 +38,13 @@ real meetings, accents or noisy rooms, so every accuracy figure below says what 
 - **The confidence figure is the recogniser's own** and is not a probability. VSift marks it as uncalibrated.
 - **Speech recognition prints nothing until it is finished** ([L-017](../planning/known-limits.md#l-017)), and a long
   recording takes many minutes. Press Ctrl-C to stop; running it again continues.
+- **A stretch can be left without a transcript (0.2.1 and later; 0.2.0 fails the whole run instead,
+  [L-145](../planning/known-limits.md#l-145)).** When the recogniser's answer for a 30-second stretch cannot be
+  placed in that stretch of audio, VSift leaves the stretch out, keeps the rest and says so: the result is
+  `partial` and lists the stretch as not transcribed. A recording with long pauses can have a few. A word said in
+  such a stretch cannot be found. Transcribing just that stretch again may cover it (the audio is then cut at other
+  points), and a transcript you supply covers it. If most stretches fail, the command fails
+  instead ([troubleshooting](troubleshooting.md#missing_capability-a-tool-or-model-is-missing)).
 
 ## The pictures: screen changes and frames
 

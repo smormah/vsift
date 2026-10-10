@@ -75,6 +75,18 @@ recording, add `--from` and `--to` in microseconds.
 A **revision** is one version of the transcript. Recognising again, or importing a file, makes a new
 one and keeps the old ones; the revision id says which you are reading.
 
+**When a stretch could not be transcribed (0.2.1 and later; 0.2.0 fails the whole run instead,
+[L-145](../planning/known-limits.md#l-145)).** Now and then the recogniser answers for a 30-second stretch
+with words whose times cannot be placed in that audio, which happens in a recording with long pauses (live
+coding, a speaker who stops to type). VSift does not throw the rest away: it keeps what it could transcribe,
+leaves that stretch without a transcript and says so. The result ends with `Status: partial`, a line
+`Not transcribed (…)` lists the stretch in microseconds, and a warning explains it. `search` lists the same
+stretch as not transcribed, so a word said there cannot be found, and VSift never reports such a stretch as
+silence. Transcribing just that stretch again (`--from` and `--to` of the stretch) cuts the audio at other points
+and may cover it, and so does a transcript you already have (`vsift ingest <video> --transcript <file>`). If most
+stretches fail like this the command fails instead, and says why
+([troubleshooting](troubleshooting.md#missing_capability-a-tool-or-model-is-missing)).
+
 **Expect mistakes.** Recognition is a machine's best guess, tested here on a synthetic voice only. It can
 mishear names and numbers and does worse with noise ([limits](limits.md)). Search for a number
 the way it is written and also the way it might be misheard, and check anything you will rely on against

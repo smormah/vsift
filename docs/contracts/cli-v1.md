@@ -562,6 +562,46 @@ would be stored in the revision, where earlier releases read an unknown value as
 (`INTEGRITY_FAILURE`), and nothing a caller does differs between a quiet tenth of a second
 and a short one. The cost is that `silent` and `no_audio` each name two conditions.
 
+**A chunk whose answer the recogniser gave and VSift cannot use is a recorded gap too, with an
+outcome of its own, `unusable` (since `0.2.1`, #353,
+[ADR 0017](../decisions/0017-local-asr-through-whisper-cpp.md), note of 2026-10-10).** The chunk was
+given to the recogniser, so it is neither `silent` nor `no_audio`, and recording it as one of them would
+say that nothing was said where speech may have been. It is the chunk whose answer the output rules
+refuse as a whole: every text segment of it has a range that cannot be placed in its audio (empty,
+backwards, at or after the audio's end, beyond the padded window or outside the video), or, **from four
+text segments on**, more than a quarter does, or its output broke a structural rule (segments out of
+order, a score outside 0 to 1, more than 256 segments or 512 tokens). With one to three text segments the
+rejected ones are dropped and counted under `provider_segments_rejected` and the rest are kept, so one
+rejected segment beside kept ones no longer costs the chunk (before `0.2.1` it failed the whole run).
+Whitespace and markers such as `[BLANK_AUDIO]` are not text segments. An `unusable` chunk records its
+decoded range like a `silent` one, counts under the warning **`provider_chunks_rejected`** (count of
+chunks, `first_cue` the first chunk's 1-based ordinal), appears in `local_asr.unusable_chunks` (present only
+when not zero), and is reported as **untranscribed, never as no speech**: the part of its window that no
+neighbouring window (they overlap by five seconds) transcribed or found silent is in a search's
+`transcript_coverage.untranscribed_ranges`, and a word said there cannot be found. A segment a neighbour
+heard in the overlap is kept.
+
+**A run with such a gap is `partial`**, a success that exits 0: the revision is committed, `status` is `partial`,
+the envelope's `coverage` is `{"truncated": true, "gaps": ["<from_us>-<to_us>", ...], "reasons":
+["untranscribed_range"]}` (at most 100 gaps; `gap_list_truncated` is added past that, as for a search), and
+`data.untranscribed_ranges` lists the same ranges as `{from_us, to_us}` (present only when there is a gap). The
+reason is the published `untranscribed_range` of a search, not a new one: the range is untranscribed, and what is specific to
+this cause is the outcome, the count and the warning. The warning's fixed prose says that transcribing just the gap again
+(`--from` and `--to` of the gap, which a retranscription leaves as it is, since it holds no segment) cuts the audio at other points
+and may cover it, and that a supplied transcript covers it too; the first rests on one real recording, where a chunk cut a few
+seconds earlier or later transcribed. A run with no such chunk is `complete`, with `coverage` `null` and
+none of these members, exactly as before; example
+[`transcript-retranscribe.partial.json`](../../schemas/v1/examples/transcript-retranscribe.partial.json).
+
+**The run fails only when most of the chunks the recogniser answered are unusable** (more than half; chunks that were
+never given to it, silent or without audio, are not counted; a lone answered chunk that is unusable fails, one of two
+does not). The failure is below. The run stops as soon as the verdict cannot change, so a recogniser that answers with
+garbage is not run to the end of a long recording.
+
+**Rolling back.** A revision that holds an `unusable` chunk or the warning `provider_chunks_rejected` is read as damaged
+by a release before `0.2.1` (`INTEGRITY_FAILURE`), as for a trimmed end (below); only a session that holds such a
+revision is affected, and every other revision is written exactly as before. Use the newer version, or discard the session.
+
 **Revisions.** Every run commits one new, immutable, complete revision, numbered after
 the newest, which becomes the default for `transcript get`. With a range, and an
 earlier revision, the range is first widened to whole segments of the newest revision
@@ -577,10 +617,12 @@ citation always resolves. A run that recognises no speech still commits a revisi
 ([`transcript-retranscribe-data.schema.json`](../../schemas/v1/transcript-retranscribe-data.schema.json),
 example [`transcript-retranscribe.json`](../../schemas/v1/examples/transcript-retranscribe.json))
 holds `session_id`, `requested_range` (null for the whole video), the new `revision`,
-`recognised_segment_count` and, since P10 PR 2, `job` (below). A local-ASR revision summary has `alignment.origin`
+`recognised_segment_count`, `untranscribed_ranges` (since `0.2.1`, only when part of the range has no
+transcript: see the unusable chunk above) and, since P10 PR 2, `job` (below). A local-ASR revision summary has `alignment.origin`
 `local_asr`, `sidecar: null`, `local_asr` (provider and model by SHA-256, the pinned
 profile, decoding profile `r0-v1`, chunk plan, threads, audio stream, covered range and
-chunk counts), `supersedes`, `replaced_range` and `carried_segment_count`. A local-ASR
+chunk counts: `transcribed_chunks`, `silent_chunks`, `no_audio_chunks` and, only when not zero,
+`unusable_chunks`), `supersedes`, `replaced_range` and `carried_segment_count`. A local-ASR
 segment has `alignment` with its chunk, the chunk's decoded audio range, the provider's
 chunk-relative times, whether the end was trimmed, and the recognizer; `cue` is `null`
 and confidence is the mean token probability, `provider_uncalibrated` (example
@@ -596,14 +638,21 @@ which failed a short range as `MISSING_CAPABILITY`. The sanity bound is the wind
 the chunk's start), or one second past audio that fills it, whichever is later (the second
 0.1.0 allowed every chunk, so every revision it stored still reads): an end beyond it is not
 a time of this audio and rejects the segment, as does a segment that starts at or after the
-audio's end, is empty, or runs backwards (`provider_segments_rejected`). A run whose
-recognised segments mostly do not fit their audio still fails as `MISSING_CAPABILITY` (stage
+audio's end, is empty, or runs backwards (`provider_segments_rejected`). A run in which
+most of the chunks the recogniser answered are unusable (above) still fails as `MISSING_CAPABILITY` (stage
 `output_validation`, reason `malformed_output`; the published code does not change within v1)
-and it is the only signal of a recogniser answering with garbage for a whole run. Since PR 7
-its remediation names the ways a segment is rejected (empty, backwards, starting at or after
-the audio's end, outside the video), says a range that ends mid-speech can cause it, and
-tells to retry with a larger range or the whole video; it says to reinstall whisper.cpp only
-if the whole video fails the same way.
+and it is the signal of a recogniser answering with garbage for a whole run. **Since `0.2.1`** its
+remediation says what is true: after the fixed first sentence it names the reason (`too_many_rejected_segments`, or the
+structural one), how many chunks of how many had been answered when the run stopped, and the first unusable chunk by
+position (`chunk 66 of 83`), by `H:MM:SS` and in microseconds, the unit of `--from` and `--to`; `error.affected_ids` names the
+job. For `too_many_rejected_segments` it says the tool works (VSift's own check of it passed before the run), that
+this recording's speech could not be transcribed reliably, that a larger range or a reinstall will not change that, and
+to use a transcript the user has: `ingest --transcript <file>`. (Before `0.2.1` it told to retry with a larger range and
+to reinstall whisper.cpp, which could not help; example
+[`retranscribe-unusable-output.json`](../../schemas/v1/examples/retranscribe-unusable-output.json).) For a structural fault
+the recogniser is the suspect and the reinstall step stays. **The job ends `failed` at once** (`job status`: `resumable: false`,
+`resumable_reason: failed`; `job resume` refuses), because a resume would read the same verdicts from its checkpoints; the same
+`transcript retranscribe` command starts it anew.
 **Rolling back.** A revision written with a trimmed end more than one second past its audio
 (possible only from this version on) is read as damaged by 0.1.0: its stored record fails
 `TranscriptRevision::new` with `AlignmentMismatch`, which a load reports as
@@ -669,7 +718,7 @@ neither contains a path, provider output or transcript text.
 
 | Condition | Code |
 | --- | --- |
-| FFmpeg, FFprobe or whisper-cli not found; no model registered; model unreadable; model not a reviewed pinned profile; whisper-cli failed, produced unparseable or malformed output (times outside its audio, invalid scores) or could not start; the model or executable changed during the run; the preflight transcript missed its words | `MISSING_CAPABILITY` |
+| FFmpeg, FFprobe or whisper-cli not found; no model registered; model unreadable; model not a reviewed pinned profile; whisper-cli failed, produced unparseable output or could not start; its output was unusable for most of the chunks it answered (times outside their audio, invalid scores; `0.2.1`: the remediation says which, how many and where, and the job is failed, not resumable); the model or executable changed during the run; the preflight transcript missed its words | `MISSING_CAPABILITY` |
 | Empty or reversed range; range past the end of the video; video with no decodable audio stream; closed or expired session | `INVALID_ARGUMENT` |
 | Audio stream present but undecodable | `INVALID_SOURCE` |
 | Output over its bounds, more than 1,024 chunks, a record over 24 MiB, or whisper-cli ended abnormally (usually out of memory) | `RESOURCE_LIMIT` |
@@ -681,8 +730,9 @@ neither contains a path, provider output or transcript text.
 
 A failed attempt leaves the job resumable: the next run of the same command continues
 it. It fails for good only when one chunk failed three times with the same code, after
-16 attempts, or when its range was superseded; the same command then starts it again
-from nothing.
+16 attempts, when its range was superseded, or (since `0.2.1`) at once when the
+recogniser's answers were unusable for most chunks, which a resume could only repeat; the same
+command then starts it again from nothing.
 
 ### P10 recoverable jobs
 

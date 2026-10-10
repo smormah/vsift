@@ -419,3 +419,110 @@ managed build (FFmpeg `n9.0.1-11-ge47273f4d9-20260831`, hosted run 37719064583 o
 FFmpeg pin 31, 32 and 62 microseconds; they are the only check of it and the one to run when FFmpeg is refreshed (L-132). A bound
 after the decode (no more samples than the range and one) would make the rule independent of the tool; it is a follow-up,
 not part of the third candidate (L-141).
+
+## 2026-10-10 note: a chunk whose answer cannot be used is a recorded gap, not a failed run (#353)
+
+**Proposed for the maintainer to confirm by merging this change.** It supersedes the part of section 2 that failed a chunk when more than a quarter
+of its segments were rejected and the part of section 8 that made any such chunk fail the run, and it amends the 2026-10-04 note's last
+sentence (the failure of "a chunk whose segments mostly do not fit their audio ... remains the only signal of a recogniser answering with
+garbage for a whole run").
+
+### What happened
+
+(Known limit [L-145](../planning/known-limits.md#l-145).) The first real recording tried with the stable `0.2.0` (a 34:36 English screencast of slides and live coding, one speaker, long pauses while
+the speaker types) failed as `MISSING_CAPABILITY`, step `output_validation`, reason `malformed_output`, after 65 of 83 chunks were saved.
+Nothing was committed. The cause was one 30-second chunk, 27:05 to 27:35, which held a few segments of which one was rejected. Three
+defects stacked:
+
+1. **One unusable chunk failed the whole run.** The 82 usable chunks were thrown away, and because the chunk fails the same way every time, a resume
+   could never get past it.
+2. **The quarter rule weighed nothing in a sparse chunk.** With three or fewer text segments, one rejected segment is already more than a quarter,
+   so a chunk was failed for having a single rejection beside any number of kept segments. The note of 2026-10-04 says a long run hides a
+   rejection "because one rejected segment among many is under the quarter threshold"; that holds for dense speech and not for a recording with pauses,
+   where whether a rejection is a warning or the loss of the transcript depended only on where the chunk boundaries fell.
+3. **The failure did not say what failed.** The code is `MISSING_CAPABILITY` and the capability was present; the remediation was the #274 text (retry with a
+   larger range, then reinstall whisper.cpp), which cannot help; the failure named no job, chunk or time; and the job stayed `resumable: true`.
+
+The same audio transcribed when the chunk was cut five seconds earlier or later, and the rest of the recording, about 150 other chunk windows, transcribed.
+
+### The decisions
+
+**1. A chunk whose answer cannot be used is a recorded gap, with an outcome of its own.** `AsrChunkOutcome::Unusable`, stored and presented as `unusable`.
+A chunk becomes one when the output rules refuse its answer as a whole: every text segment rejected, more than a quarter of at least four rejected
+(decision 3), or a structural fault (out-of-order segments, a score outside 0 to 1, oversized output). It is a decoded chunk, so it records its decoded range like a
+silent one. It is never recorded as `silent` or `no_audio`: those say nothing was there to recognise, which would be false of speech the
+recogniser could not place, and a search would report the window as "no speech" instead of untranscribed. The merge treats it as a chunk that heard nothing, so
+speech that a neighbour heard in the overlap is kept. The run counts such chunks under a new warning, `provider_chunks_rejected` (count of chunks, first chunk
+ordinal).
+
+**2. A run fails only when most of the chunks the recogniser answered are unusable.** `unusable_chunks_end_the_run`: more than half
+(`UNUSABLE_CHUNK_SHARE_DENOMINATOR = 2`). It was chosen like this.
+
+- *More than half,* because what the rule is for (a recogniser that answers with garbage, such as one run on audio it cannot read) fails most chunks, and a real
+  recording with pauses fails few: 1 of 83 here. A broken recogniser is also caught by the check VSift runs on a reviewed clip before it touches the user's video.
+- *Chunks that were never given to the recogniser do not count.* Silent chunks, chunks under 100 ms and chunks with no audio say nothing about it. A recording that is
+  mostly quiet is judged by the few chunks that had speech.
+- *A strict majority.* One bad chunk of two is a partial run: the other chunk was answered by the same recogniser, build and model on audio of the same recording, which
+  shows it works, and the one unproven chunk is reported as a gap. Every answered chunk unusable always fails, so a lone chunk that cannot be placed (a short range)
+  still fails as it always did, and the failure says why.
+- *The verdict is known as soon as it cannot change,* so a recogniser that answers with garbage is not run to the end of a long recording: the run stops when the
+  unusable chunks are more than half of the chunks answered plus all that remain. The result is the verdict the full run would give, reached sooner.
+- *Consecutive failures were considered and not taken as a second rule.* A stretch of typing or music can have several unusable chunks in a row, and chunks overlap by
+  five seconds, so adjacent chunks are not independent samples; only the share of answered chunks separates a broken recogniser from such a stretch.
+
+**3. The quarter rule judges a share only where a share means something.** `MIN_SEGMENTS_FOR_REJECTION_RATIO = 4`. With four or more text segments the rule is exactly
+what it was (more than a quarter rejected makes the chunk unusable), so a chunk of dense speech is judged as before and every chunk that passed before passes the same
+way. With one to three text segments the rejected ones are dropped, counted under `provider_segments_rejected` and the others kept; a chunk whose every text
+segment is rejected is unusable whatever its size. Four is the smallest count in which one rejection is exactly a quarter and is tolerated: below it a
+single rejection already exceeded the quarter, so the rule failed a chunk for having one. A segment with only whitespace or a marker such as `[BLANK_AUDIO]` is removed
+and counted as a marker, not a rejection, and is not a text segment. The reasons a segment is rejected (empty or reversed range, start at or after the audio's end, an end
+beyond the padded window, outside the source) are unchanged.
+
+**4. A run with gaps is `partial`.** The revision is committed. `transcript retranscribe` and `job resume` answer `status: partial` (exit 0, as for a search with gaps),
+the envelope's `coverage` lists the gaps as `<from_us>-<to_us>` with the reason `untranscribed_range`, and the data gain `untranscribed_ranges` and
+`revision.local_asr.unusable_chunks`. A gap is the part of an unusable chunk's window that no neighbour's window transcribed or found silent: the same ranges a later
+`search` of the revision reports as untranscribed (the coverage rule is shared, and it never counts an earlier revision's windows inside a window this run examined, so a
+replaced part is never reported as covered). A run with no gap is presented exactly as before: status `complete`, `coverage` null, none of the new members.
+
+*Why the reason is the published `untranscribed_range` and not a new value.* It is honest (the range has no transcript), it is the reason a search gives for the same
+range, and the agent skill copies reasons from results into its handoff from a closed list, so a new reason would break an agent that follows the skill as released. What is
+specific to this cause is in the data, the chunk outcome and the warning.
+
+**5. The failure says what is true, and a job that cannot succeed is not resumable.** When a run fails because most answers were unusable, the code stays
+`MISSING_CAPABILITY` (a published code does not change within v1; the remediation carries the fix). The remediation keeps the first sentence ("failed at the
+`output_validation` step (`malformed_output`)"), then names the reason (`too_many_rejected_segments` or the structural one), how many chunks of how many had been answered
+when the run stopped, and the first by position, by `H:MM:SS` and in microseconds, the unit of `--from` and `--to`; the envelope's `affected_ids` names the job.
+For rejected segments it says the tool works (VSift's own check passed before the run), that this recording's speech could not be transcribed reliably, and that a
+larger range or a reinstall will not change that, and tells to use a transcript the user has with `ingest --transcript`. For a structural fault the recogniser itself is
+the suspect and the reinstall step stays. The job ends as `failed` at once, so `job status` says `resumable: false` (`resumable_reason: failed`) and `job resume` refuses;
+the same command run again starts the job anew. Before, it stayed resumable until the poison rule's third identical failure, which a resume could only repeat. The setup
+check's verification of the built-in clip keeps its remediation (reinstall) for this reason.
+
+**6. Checkpoints keep a verdict, not the refused answer.** A job's checkpoint for an unusable chunk is a new kind, `unusable` (decoded range and reason), so a resume neither
+asks the recogniser about the chunk again nor brings a refused answer back. A `recognised` checkpoint is unchanged: stored output that the rules now reject is still damaged
+or forged and is discarded and recognised again (S-08). A checkpoint of the new kind that a release before this one finds is an unusable checkpoint to it, which it discards
+and redoes, so it is safe to roll back.
+
+### What does not change
+
+The chunk plan, the 100 ms floor, the silence rule, the other warnings, the field names and shapes of v1 (this adds optional members), the failure codes, the verification
+of the built-in clip, and the result of a worker `job run` step (a `retranscribe` step with gaps is still `complete` there; its revision, `search` and `transcript get` show
+the gaps).
+
+### Rolling back
+
+A revision that holds an unusable chunk stores the outcome `unusable` and the warning `provider_chunks_rejected`, which every release before this one decodes as damage
+(`INTEGRITY_FAILURE`), as L-130 records for a trimmed end. Only a session that holds such a revision is affected: every other revision is written byte for byte as before.
+A run that had such a chunk would have failed on the release before. Use the newer version, or discard the session.
+
+### Evidence, and what is not proven
+
+Tests at the lowest layer that shows each rule: the domain (segment-count boundaries, empty text as a marker, the strict-majority threshold and its edges, coverage of an
+unusable window and of a replaced one), the application (one chunk of ten, exactly half and more than half, early stop, silent chunks not counted, one of two, the job
+failing at once and not resumable, a resume that does not ask again), the checkpoint and revision records (round trips, damaged records), the contract (the partial result,
+the unchanged complete result, the failure's prose, every schema), and the human output with snapshots.
+
+**Not proven:** no real recording was used (the recording is commercial and cannot be shared); the tests build the shape from recorded-style provider output. Which kind of
+segment whisper.cpp returned for 27:05 to 27:35 (empty, reversed, or at or after the audio's end) is unknown, and the fix does not depend on it: with a single rejected
+segment beside kept ones it is kept out, and with only rejected segments the chunk is a gap. The two constants are proposals, chosen as above, not measured on a corpus of
+real recordings (the follow-up issue on real media in the test set stands).

@@ -91,12 +91,17 @@ These files are the machine-readable public v1 boundary:
   alignment origin and offset, sidecar identity and typed warnings (P07). A
   local-ASR revision (origin `local_asr`, P07 increment 3b) has `sidecar: null` and
   adds `local_asr` (the run), `supersedes`, `replaced_range` and
-  `carried_segment_count`; an import never has those members;
+  `carried_segment_count`; an import never has those members. Since 0.2.1 `local_asr`
+  also has `unusable_chunks`, present only when not zero (chunks whose recognised answer
+  could not be used as a whole), and the warning code `provider_chunks_rejected` counts them (#353);
 - `transcript-retranscribe-data.schema.json` â the `data` member of a complete
   `transcript.retranscribe` result: the new local-ASR revision, the requested range,
   how many segments the run recognised (P07 increment 3b) and `job`, the recoverable
   job behind it (`job_id`, `resumed`, `chunks_reused`, `replayed`; P10 PR 2). Its
-  envelope names the `operation_id` the result is recorded under;
+  envelope names the `operation_id` the result is recorded under. Since 0.2.1 the
+  result is `partial` when part of the range has no transcript, with
+  `untranscribed_ranges` (present only then) and the envelope's `coverage`
+  listing the same ranges under the reason `untranscribed_range` (#353);
 - `job-data.schema.json` â the `data` member of a complete `job.status` or `job.cancel`
   result (P10 PR 3): one recoverable job's `job_id`, `session_id`, `kind`, `state`,
   `live_owner`, `resumable` and `resumable_reason`, the `operation_id` a retry should
@@ -240,7 +245,12 @@ warning `cancellation_too_late`), the `job resume` that committed revision 2 fro
 checkpoint (the job and the retranscription), and the interrupted run's failure
 (`CANCELLED`, the session and job in `affected_ids`, a remediation whose `command` is
 `vsift job resume <job>`). All four are checked by `vsift-contract`'s
-`local_asr_contract`. `session status` (whose data has no separate schema) adds, since
+`local_asr_contract`. `transcript-retranscribe.partial.json` and
+`retranscribe-unusable-output.json` (0.2.1, #353) describe a 55 s stand-in recording of two
+chunks: a `partial` retranscription whose second chunk's answer could not be used (its range
+untranscribed, not silent), and the `MISSING_CAPABILITY` failure of a run in which most chunks'
+answers were unusable (the job in `affected_ids`, the reason, the counts and the first
+chunk in the remediation). Both are checked by `local_asr_contract`. `session status` (whose data has no separate schema) adds, since
 P10 PR 3, `jobs` (at most 16 of `job_id`, `kind`, `state`, `live_owner`, `resumable`,
 `resumable_reason`, the members of `job-data.schema.json` with the same meaning) and
 `jobs_truncated`.
