@@ -66,7 +66,7 @@ pub(super) fn push_retranscription(text: &mut TerminalText, data: &Retranscripti
         .end_line();
     push_ranges(
         text,
-        "Not transcribed (the recogniser's answer for these parts could not be used; words said there cannot be found): ",
+        "Not transcribed by this run (the answer for these parts could not be used; earlier text there is kept, any other words said there cannot be found):",
         &data.untranscribed_ranges,
     );
     let job = &data.job;
@@ -122,12 +122,12 @@ pub(super) fn search(envelope: &Envelope<Search>) -> Result<RenderedText, TooLar
     text.end_line();
     push_ranges(
         &mut text,
-        "Not transcribed (words said there cannot be found): ",
+        "Not transcribed (words said there cannot be found):",
         &coverage.untranscribed_ranges,
     );
     push_ranges(
         &mut text,
-        "Transcribed without speech: ",
+        "Transcribed without speech:",
         &coverage.no_speech_ranges,
     );
     if coverage.ranges_truncated {

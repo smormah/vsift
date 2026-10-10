@@ -86,6 +86,6 @@
   "schema_version": "1",
   "status": "partial",
   "warnings": [
-    "For some audio the recogniser's answer could not be used, so that audio has no transcript from this run: the result lists its time ranges as untranscribed, and words said there cannot be found. It is not silence. Transcribing just that range again (transcript retranscribe with --from and --to) cuts the audio at other points and may cover it; a transcript you already have covers it too: open the video with ingest --transcript."
+    "For some audio the recogniser's answer could not be used, so this run did not transcribe it: the result lists those time ranges as untranscribed. It is not silence. Text an earlier transcript already had inside them is kept as it was; any other words said there cannot be found. Transcribing just that range again (transcript retranscribe with --from and --to) cuts the audio at other points and may cover it, and a transcript file you already have can supply it: open the video with ingest --transcript."
   ]
 }

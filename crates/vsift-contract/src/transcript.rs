@@ -23,9 +23,9 @@
 use serde::Serialize;
 use vsift_domain::{
     AlignmentOrigin, AsrChunkOutcome, AsrRun, JobId, MAX_CUE_TEXT_BYTES, ProviderEndTrim,
-    SearchCoverage, SegmentOrigin, SessionId, SourceSegment, TimeRange, TranscriptImportError,
-    TranscriptOffset, TranscriptProvenance, TranscriptRejection, TranscriptRevision,
-    TranscriptSegment, TranscriptWarningKind,
+    SegmentOrigin, SessionId, SourceSegment, TimeRange, TranscriptImportError, TranscriptOffset,
+    TranscriptProvenance, TranscriptRejection, TranscriptRevision, TranscriptSegment,
+    TranscriptWarningKind,
 };
 
 use crate::{
@@ -523,40 +523,39 @@ impl TranscriptRetranscribeData {
     }
 }
 
-/// The parts of a retranscription's own range that no chunk transcribed, in
-/// start order and merged: the windows whose recognised output was unusable
-/// ([`AsrChunkOutcome::Unusable`]) less what a neighbouring window, which
-/// overlaps it by five seconds, transcribed or found silent.
+/// The parts of a retranscription's own range that this run did not
+/// transcribe, in start order and merged: the windows whose recognised output
+/// was unusable ([`AsrChunkOutcome::Unusable`]) less what a neighbouring
+/// window, which overlaps it by five seconds, transcribed or found silent
+/// ([`AsrRun::unusable_gaps`]).
 ///
-/// It is what a search of that range reports as untranscribed, because it is
-/// the same rule ([`SearchCoverage`]), asked only about the run's range: what
-/// lies outside it is not this run's to report. An imported revision, or a run
-/// with no unusable chunk, has none.
+/// This is a statement about the run, not about what the session can now
+/// find: text the superseded revision had wholly inside such a part is kept as
+/// it was, so a search of the new revision may still cover some of it
+/// ([`SearchCoverage`](vsift_domain::SearchCoverage) counts that text), which
+/// is why the two lists can differ. Listing the whole part here is the true
+/// answer to "what did this run not re-transcribe". An imported revision, or a
+/// run with no unusable chunk, has none.
 #[must_use]
 pub fn retranscription_gaps(revision: &TranscriptRevision) -> Vec<TimeRange> {
-    let TranscriptProvenance::LocalAsr(run) = revision.provenance() else {
-        return Vec::new();
-    };
-    run.covered_range()
-        .map(|covered| {
-            SearchCoverage::of(revision, Some(covered))
-                .untranscribed()
-                .to_vec()
-        })
-        .unwrap_or_default()
+    match revision.provenance() {
+        TranscriptProvenance::LocalAsr(run) => run.unusable_gaps(),
+        TranscriptProvenance::Imported { .. } => Vec::new(),
+    }
 }
 
 /// Completes a retranscription's response: with no unusable window it is the
 /// complete result it always was, unchanged; with one it is `partial`, a
-/// success that exits 0, and its envelope `coverage` lists the gaps as
-/// `<from_us>-<to_us>` with the reason `untranscribed_range`, the reason a
-/// search gives for the same ranges (#353).
+/// success that exits 0, and its envelope `coverage` lists the parts this run
+/// did not transcribe as `<from_us>-<to_us>` with the reason
+/// `untranscribed_range` (#353).
 ///
-/// The reason is deliberately the published one and not a new value: the range
-/// is untranscribed, which is exactly what `untranscribed_range` says, and a
-/// reader that already acts on it needs to learn nothing. What is specific to
+/// The reason is deliberately the published one and not a new value: the run
+/// left the range untranscribed, which is what `untranscribed_range` says, and
+/// a reader that already acts on it needs to learn nothing. What is specific to
 /// this cause is in `data` (`untranscribed_ranges`, `local_asr.unusable_chunks`)
-/// and in the warning `provider_chunks_rejected`.
+/// and in the warning `provider_chunks_rejected`, which also says that earlier
+/// text inside those parts was kept.
 #[must_use]
 pub fn finish_retranscription(
     response: OperationResponse<serde_json::Value>,
@@ -603,12 +602,14 @@ impl TranscriptPageData {
 }
 
 /// Fixed prose of the warning `provider_chunks_rejected`: some audio was given
-/// to the recognizer and what it answered could not be used, so it has no
-/// transcript. It says what the gap is not (silence) and what can cover it,
-/// which the typed warning cannot: a retranscription of just that range cuts
-/// the audio at other points (a chunk's result depends on where it is cut), and
-/// a transcript the user has needs no recognition.
-pub const PROVIDER_CHUNKS_REJECTED_WARNING: &str = "For some audio the recogniser's answer could not be used, so that audio has no transcript from this run: the result lists its time ranges as untranscribed, and words said there cannot be found. It is not silence. Transcribing just that range again (transcript retranscribe with --from and --to) cuts the audio at other points and may cover it; a transcript you already have covers it too: open the video with ingest --transcript.";
+/// to the recognizer and what it answered could not be used, so this run did
+/// not transcribe it. It says what that is not (silence), what happened to text
+/// an earlier revision had there (kept, as it was), and what can cover the
+/// rest, which the typed warning cannot: a retranscription of just that range
+/// cuts the audio at other points (a chunk's result depends on where it is
+/// cut), and a transcript file the user has needs no recognition. It claims
+/// neither that such a file exists nor that it covers the range.
+pub const PROVIDER_CHUNKS_REJECTED_WARNING: &str = "For some audio the recogniser's answer could not be used, so this run did not transcribe it: the result lists those time ranges as untranscribed. It is not silence. Text an earlier transcript already had inside them is kept as it was; any other words said there cannot be found. Transcribing just that range again (transcript retranscribe with --from and --to) cuts the audio at other points and may cover it, and a transcript file you already have can supply it: open the video with ingest --transcript.";
 
 /// Fixed prose for the envelope `warnings` of an import, one per warning kind.
 ///

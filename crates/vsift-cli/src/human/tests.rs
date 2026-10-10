@@ -323,6 +323,10 @@ fn frozen_failures_render_as_message_remediation_and_command() -> TestResult {
             "retranscribe-unusable-output.json",
             "failure-retranscribe-unusable-output",
         ),
+        (
+            "retranscribe-unusable-output.short-range.json",
+            "failure-retranscribe-unusable-output-short-range",
+        ),
         ("storage-not-private.json", "failure-storage-not-private"),
         ("session-root-unowned.json", "failure-session-root-unowned"),
         ("ingest-copy-too-slow.json", "failure-ingest-copy-too-slow"),
