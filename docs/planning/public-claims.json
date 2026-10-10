@@ -394,7 +394,7 @@
       "text": "Claude Code on Windows 11 with Claude Opus 5.5 and Claude Sonnet 5.5 is qualified",
       "requires": ["RQ-15"],
       "limits": ["L-007", "L-082", "L-083", "L-095"],
-      "note": "Qualified only on the system it was trialled on, from a clean install of the published package. The round ran on 0.2.0-rc.2 on 2026-10-07 and Claude Opus 5.5's review tier missed two gates (mechanical 4 of 6, blurred banner 1 of 3: RQ-15 is failed, L-139); the repeat on the third candidate decides whether this statement can be used."
+      "note": "Qualified only on the system it was trialled on, from a clean install of the published package. The round ran on 0.2.0-rc.2 on 2026-10-07 and Claude Opus 5.5's review tier missed two gates (mechanical 4 of 6, blurred banner 1 of 3: RQ-15 is failed for that candidate, L-139). The skill was changed and the round was repeated on the third candidate, 0.2.0-rc.3, on 2026-10-08: all four models met every gate (34 of 34 runs; Claude Opus 5.5 passed the blurred banner 3 of 3 and the journey 6 of 6) and RQ-15 is passed for it. That is three runs per scenario, a small sample and not a proof (L-095 and L-139 stay in the register). The statement stays unused until the rung is moved."
     },
     {
       "kind": "claim",

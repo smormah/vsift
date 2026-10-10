@@ -549,6 +549,11 @@ The second prints two empty brackets. An empty message (`npm deprecate "vsift-cl
 `0.2.0-rc.1` or `0.2.0-rc.2` (their baselines are `0.1.0` and `0.2.0-rc.3`), so the order does not matter to them. You may also edit the earlier release
 pages' notes to say that they are superseded by `v0.2.0` (`gh release edit v0.2.0-rc.3 --repo smormah/vsift --notes-file <the file>`); that is not a condition of anything.
 
+**Done on 2026-10-10.** Before it, `latest` was `0.2.0` and `next` was `0.2.0-rc.3` on all four packages and no version was deprecated. After it, the first check prints the message
+`Superseded by 0.2.0. Install vsift-cli.` for all eight (`0.2.0-rc.1` and `0.2.0-rc.2` on each of the four packages), and `0.2.0-rc.3` and `0.2.0` print an empty answer on all four packages
+(the second check, widened from `vsift-cli` to the four). The tags did not move. On the maintainer's instruction a session typed the commands in the maintainer's own terminal, under the maintainer's npm login, and the maintainer approved each of the eight writes with the second factor;
+that is an exception to "the supervisor never runs these" above, made by the maintainer for this step. The earlier release pages' notes were not edited.
+
 ## 10. The hosted checks of the published bytes (dispatched from `main`; none of them can publish)
 
 These are the evidence of PR 13 (the ledger's `repeat` items RQ-01 to RQ-06 and RQ-19). Each is one dispatch. Runs of one workflow dispatched from `main`

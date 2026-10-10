@@ -1962,3 +1962,43 @@ ledger entry keeps its decision date (2026-10-08) and gains a dated sentence, an
 **What is weaker than it sounds.** RQ-10 is `waived`, not `passed`, for the candidate and for the stable. The malicious-media campaign was not run on the stable's own bytes (the item's stable
 gate is `carry`); the decision rests on the stable being the candidate's source with another version number. Three of the four waived items (RQ-10, RQ-16, RQ-17) are now waived for the stable
 by name, and the completeness check cannot see the limits of any of them, so the limits are only as strong as these texts.
+
+## Implementation note, 2026-10-10 (P14 PR 12: `0.2.0-rc.1` and `0.2.0-rc.2` are deprecated)
+
+Decision 3 of the note of 2026-10-09 (deprecate at the stable, not before) is carried out. **This is work record only.** On 2026-10-10, after `0.2.0` was published and checked (`latest` was
+`0.2.0` and `next` was `0.2.0-rc.3` on all four packages, and no version was deprecated), the eight `npm deprecate` commands of the checklist's step 9 were run. Read back with `npm view
+<package>@<version> deprecated`: `0.2.0-rc.1` and `0.2.0-rc.2` carry "Superseded by 0.2.0. Install vsift-cli." on `vsift-cli`, `@vsift/win32-x64`, `@vsift/darwin-arm64` and `@vsift/linux-x64`;
+`0.2.0-rc.3` and `0.2.0` are not deprecated on any of the four; no tag moved and nothing was unpublished.
+
+**Who ran them.** The note of 2026-10-09 says the maintainer runs the commands and the supervisor never does. The maintainer changed that for this step: on their instruction a session typed
+the commands in the maintainer's own terminal, under the maintainer's npm login, and the maintainer approved each of the eight writes with the second factor. No session logged in or handled
+a credential. This note records the exception; it is not a standing rule for other npm account actions.
+
+## Implementation note, 2026-10-10 (P14 PR 11: the maintainer relies on the supervisor's reading of the cold logs)
+
+The notes of 2026-10-09 left pending "the maintainer's own reading of the raw cold logs (L-118)", and the batch 3 reading left to the maintainer whether the supervisor's reading stands in for it.
+**Decision of the maintainer, 2026-10-10: it does.** The maintainer did not read the raw logs or the generated command list of the 18 runs and does not plan to. **This is work record only**
+(L-118 and L-142 in the register, the ledger's RQ-16 `does_not_prove`, the batch 3 reading, the plan's sections 29.10 and 30.6, the changelog and the two memory files): nothing is re-graded, no
+number changes, and no code, tool, grader, freeze, public claim or rung changed.
+
+**What is weaker than it sounds.** No person has read the logs. L-118's mitigation ("the maintainer reads every cold run's raw log before the claim is made") was not done as written for batch 3:
+the hard cold-safety gate, which fired once on a harmless read, rests on one text-matching grader and on readers that are AI sessions (the supervisor, the author of the record, and a further
+session that on 2026-10-10 read the command list and compared it with the raw logs of two runs; they agree). RQ-16 stays `waived` for that one action and is not `passed`, and the claim that
+leans on it stays unused.
+
+## Implementation note, 2026-10-10 (P14: the maintainer's register pass)
+
+The pass that decision H and the plan's section 10 ask for was made on 2026-10-10 from [`register-review-sheet.md`](../planning/register-review-sheet.md). **This is work record only**: the
+register, the sheet, the note of one statement in `public-claims.json` (its text, rung and requirements are unchanged), one paragraph of the support matrix, the plan, the changelog and the two
+memory files. No code, tool, workflow or setting changed, no claim was raised and the rung is still `candidate`.
+
+**Decisions of the maintainer, 2026-10-10: every proposal of the sheet as written.** 46 register entries are `accepted`: the 29 undecided entries of the sheet's Part 1, the six of Part 2, five
+added since (L-140, L-141, L-142, L-143, L-127) and the six readings of Part 3 (L-017, L-062, L-067, L-069, L-088, L-090). Named decisions: L-030 accepted for R0 with the fix under #159; L-058
+accepted with no kernel series pinned; L-076 accepted as not supported in Codex's sandboxed mode on Windows for R0, the product question under #204 for R1; L-095 accepted, the limit stands;
+L-098 accepted as untried and stated so, the try-out after the release (L-143). The engine's direct dependency on `tokio` and the mode name `durable_worker` are confirmed. The MSRV policy is
+left undecided until a crate is to be published. The `Guide` check is not made a required check on `main` for now, because it runs only on certain paths. L-139 stays rejected (to be fixed).
+
+**What is weaker than it sounds.** Accepted means the limit stands as described and the public text says so; none of the 46 was fixed by this. Ten entries that were *open* defects or gaps are
+*accepted residual* for R0 with their issues open. With every limit a statement leans on now reviewed, the register no longer holds back the statements of the rung `after_p14`; their
+evidence still does: each needs its items `passed` for the release, CL-201 needs RQ-17, CL-206 needs RQ-16 and CL-208 needs RQ-14, which are waived and not passed. 75 entries that no public
+statement leans on are still `pending`.

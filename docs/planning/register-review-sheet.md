@@ -5,6 +5,24 @@ is a decision aid and decides nothing: every "proposed" below is a recommendatio
 nothing in the [register](known-limits.md) changes until the maintainer writes a review on the entry.
 Three items the maintainer decided on 2026-10-04 (the macOS wording, the supported-versions policy and how
 RQ-05 can pass) are marked below; **every register review is still `pending`.**
+
+**Result, 2026-10-10: the maintainer made the pass, and every proposal below was taken as written.** The rows are left as they were prepared (some are out of date where they speak of
+the candidates or of the rung `now`); the decisions are on the entries of the [register](known-limits.md), each with `accepted (2026-10-10, by the maintainer's register pass ...)`:
+
+- **Part 1:** the 29 undecided entries are `accepted` (L-068 was already rescheduled to R1). The five rows that asked for a decision: **L-030** accepted for R0, the fix stays with #159; **L-058**
+  accepted, no kernel series is pinned; **L-076** accepted as not supported in Codex's sandboxed mode on Windows for R0, the product question stays with #204 for R1; **L-095** accepted, the
+  limit stands (the skill's rules met the gates once on the third candidate, a small sample); **L-098** accepted as untried and stated so, the try-out stays for after the release (L-143).
+- **Part 2:** L-109, L-111, L-112, L-113, L-114 and L-115 are `accepted`. L-122 was accepted on 2026-10-05 and L-139 rejected (to be fixed) on 2026-10-07; neither changed.
+- **Added since this sheet was written, reviewed in the same pass:** L-140 (the fix stays with #325), L-141 (#334), L-142 (the choice of a fix stays open under #340), L-143 and L-127 (the
+  codes stay until v2) are `accepted`.
+- **Part 3:** the readings of L-017, L-062, L-067, L-069, L-088 and L-090 are confirmed (their entries are `accepted`), and so are the two that are not register entries: the engine's direct
+  dependency on `tokio`, and `lifecycle.mode` `durable_worker` for every session of a worker workspace. **The MSRV policy is left undecided:** it is needed before a crate is published, and R0
+  publishes none.
+- **Settled alongside:** CL-204's note and the support matrix's paragraph on agent clients now state the result of the repeat on the third candidate. **The `Guide` check is not made a
+  required check on `main` for now:** it runs only when certain paths change, and a required check that does not run blocks a pull request; it would first need to run on every pull request.
+
+Ten entries whose status was *open* are *accepted residual* now (L-022, L-028, L-030, L-042, L-043, L-067, L-076, L-113, L-141, L-142); the issues that track a fix stay open. No claim was
+raised and the rung did not move: that is the ledger follow-up's (PR 13). 75 other entries of the register are still `pending`; no public statement leans on them.
 Source: [P14 plan](p14-qualification.md) section 6 (the thirty entries) and section 10 ("Register and
 readings"), [ADR 0024](../decisions/0024-r0-qualification-and-release-candidate.md) decision H.
 
