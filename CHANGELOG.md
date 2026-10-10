@@ -6,6 +6,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- **`vsift audio` now says that an AI agent cannot listen to a clip ([#340](https://github.com/smormah/vsift/issues/340), [L-142](docs/planning/known-limits.md#l-142)).** In the batch-3 cold round one agent was
+  given the path of a WAV file by `audio` and read its bytes with `base64` (426,728 characters into its context), because nothing said that a clip is for a person. The one-line summary
+  the root help lists for `audio` now reads "Extract a bounded audio clip for a person or a speech tool to play; a coding agent cannot listen to it and reads speech with transcript get";
+  `audio --help` adds a paragraph (a WAV file of at most 30 seconds in the session's private folder; a person plays it or hands it to a speech tool; reading its bytes, `base64` for
+  example, tells an agent nothing; what was said is in the transcript); and the readable result of `audio` has one sentence on the line under the clip's path: "This clip is for a person or a speech tool to play; a coding agent
+  cannot listen to it, so an agent reads what was said with vsift transcript get." A frame and a crop, which are images, say nothing of the kind. **Text only: the `--json` result and
+  the `--events jsonl` stream are unchanged**, so an agent that runs `audio --json` without reading the help is told nothing by them (a hint in the JSON would be an additive optional field; none is added).
+  The agent skill already says it and is not changed. **Tests:** the renderer's snapshots and a test that the sentence is on the line under the path of `audio` and under no frame or crop; the help of the root and of
+  `audio`, in short and long form, through the binary.
+- **A `BUSY` from `frame get`, `frame neighbours`, `frame burst`, `crop`, `audio` and `candidates` now says what to do and when ([#342](https://github.com/smormah/vsift/issues/342)).** The answer when another
+  request holds the session or the root's share of the machine's capacity (the media probe, the extraction, a window of visual analysis, the session's writer lock) had an empty `remediation` and a null
+  `retry_after_ms`, so a cold agent that retried the same call two commands later had nothing to go on. It now has one remediation entry (another VSift request is using this session or its root's share of the
+  capacity; wait for `retry_after_ms`, then run the same command again; a transcription or a visual analysis can hold the capacity for minutes, so if it stays busy wait for that work; running the commands for one session one at
+  a time avoids it) and `retry_after_ms` 2000, the admission retry hint every other admission `BUSY` already carries (`ADMISSION_RETRY_AFTER`). **The code `BUSY`, `retryable: true`, the message and exit
+  status 4 are unchanged, and no field is added** (the published failure shape has both); new example `frame-get.busy.json`. The 2000 is a first retry, not a prediction: the engine does not know how long the other work runs. Other `BUSY` answers are not changed:
+  a job running elsewhere, a managed installation and an admission wait that ended already had their own text and hint; a transcription that finds the capacity in use keeps its own remediation and still has no `retry_after_ms`.
+  **Tests:** the typed causes map to the answer for a picture, a clip and `candidates`, and other failures keep what they had (CLI); the answer is the published example, as `--json` and for a person, with exit status 4 (CLI); the example validates against the v1
+  schemas as a result and a terminal event (contract); the renderer prints the fix and the retry line (snapshot). **A real run:** twelve `frame get` processes started at once against one session on Windows (debug build, the corpus clip F01): three answered, nine answered `BUSY` with exit status 4, and each of those nine was the published example. **Not shown:** which typed cause each refusal was (the answer is the same for the three); no run on Linux or macOS; no run with a transcription or a visual analysis holding the capacity.
+
 ### Changed
 
 - **Work record and register only, nothing that ships changes: a new known limit, [L-145](docs/planning/known-limits.md#l-145) (high, open, issue #353), and the plan for the patch release `0.2.1`.** The first real

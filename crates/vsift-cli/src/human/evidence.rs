@@ -35,6 +35,13 @@ const INEXACT_PATH_NOTE: &str = "Note: a path above is not shown exactly (it hol
      or hidden characters, shown replaced or as <U+XXXX>, or is too long for a line); read it \
      with --json.";
 
+/// Written under an audio clip's path: who the clip is for (#340). A coding
+/// agent is handed the path of a WAV file it cannot play; in the cold round
+/// that found this, one agent read the file's bytes with `base64` instead.
+/// The sentence says in one line, where the path is read, what `audio --help`
+/// says at more length.
+pub(super) const AUDIO_LISTENER_NOTE: &str = "  This clip is for a person or a speech tool to play; a coding agent cannot listen to it, so an agent reads what was said with vsift transcript get.";
+
 /// The heading of the files, which say how long they stay valid.
 const FILES_HEADING: &str =
     "Evidence (each file is valid while the session exists; retain the session to keep it):";
@@ -350,6 +357,7 @@ pub(super) fn audio(envelope: &Envelope<AudioData>) -> Result<RenderedText, TooL
             .iter()
             .any(|item| item.evidence_id == file.evidence_id)
     });
+    text.push_fixed(AUDIO_LISTENER_NOTE).end_line();
     paths.push_notes(&mut text);
     push_outcome(&mut text, envelope);
     text.finish()

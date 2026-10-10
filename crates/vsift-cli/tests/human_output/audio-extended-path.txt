@@ -11,6 +11,7 @@ evd_2b904387059d0b66eb69130b67f40e12  audio 00:00:00.000000 to 00:00:01.000000 (
   WAV 16000 Hz, mono, s16le, 91 bytes, sha256 b1353420280edb8eba808885917b8e07cf0f0d0392c03dba8de4f9ea85c09a66
   File (audio/wav):
     \\?\C:\dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\artifact.png
+  This clip is for a person or a speech tool to play; a coding agent cannot listen to it, so an agent reads what was said with vsift transcript get.
 
 Note: a path starting with \\?\ is in Windows' extended-length form. It is exact, but some programs refuse it: copy the file out with PowerShell's Copy-Item -LiteralPath '<path>' <destination>, or use a --session-root of at most 125 characters to get plain paths.
 

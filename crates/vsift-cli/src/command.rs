@@ -121,7 +121,14 @@ pub(crate) enum Command {
     Candidates(CandidatesArguments),
     /// Extract or navigate source-grounded frames.
     Frame(FrameArguments),
-    /// Extract a bounded source audio range.
+    /// Extract a bounded audio clip for a person or a speech tool to play; a
+    /// coding agent cannot listen to it and reads speech with transcript get.
+    ///
+    /// The clip is a WAV file of at most 30 seconds, written into the
+    /// session's private folder. A person plays it, or hands it to a speech
+    /// tool of their own. A coding agent cannot listen to it, and reading the
+    /// file's bytes (for example with base64) tells it nothing: what was said
+    /// is in the transcript, which vsift transcript get reads.
     Audio(AudioArguments),
     /// Crop an orientation-correct evidence image.
     Crop(CropArguments),

@@ -95,6 +95,19 @@ pub const CROP_OUTSIDE_REMEDIATION: &str = "The crop rectangle must lie wholly i
 /// Remediation when a delivered file's path cannot be written as JSON text.
 pub const EVIDENCE_PATH_REMEDIATION: &str = "The evidence was committed, but the session folder's path is not valid UTF-8, so its files cannot be named in JSON. Run the command again with --session-root set to a folder whose path is valid UTF-8.";
 
+/// Remediation when a command that works on one session's media (`frame`,
+/// `crop`, `audio`, `candidates`) was refused because another request holds
+/// the session or the session root's share of the machine's capacity (#342).
+///
+/// The code stays `BUSY` and `retryable` stays true; v1 adds only this text
+/// and a `retry_after_ms` (the admission retry hint, two seconds). The text
+/// says what is true of every typed cause the commands map to it: the
+/// capacity is the root's, not one session's, and a transcription or a visual
+/// analysis can hold all of it for minutes, so the hint is a first retry and
+/// not a promise that one retry is enough. Fixed prose; it names no path,
+/// session or time.
+pub const MEDIA_BUSY_REMEDIATION: &str = "Another VSift request is using this session, or this session root's share of the machine's capacity, so this command could not finish. Nothing was committed. Wait for retry_after_ms, then run the same command again. A transcription or a visual analysis can hold the capacity for minutes: if it is still busy, wait for that work to end. Running the commands for one session one at a time avoids it.";
+
 /// Remediation when no displayed frame satisfies a frame request, chosen by
 /// the typed reason (ADR 0019 decision 2).
 #[must_use]
