@@ -667,10 +667,18 @@ fn what_a_record_lists_as_unplaced_is_checked_on_reading() -> TestResult {
         decode_transcript_record(&serde_json::to_vec(&outside)?),
         Err(SessionStorageError::IntegrityFailure)
     );
-    // Not an empty list: the member is omitted, never written empty.
+    // Not an empty list: the member is omitted, never written empty. The schema
+    // refuses an empty list and the decoder reads it as no stretch, on purpose
+    // (as for `carried_untranscribed`): a reader does not refuse a record whose
+    // only fault is a list that says nothing.
     let mut empty = value.clone();
     empty["unplaced_ranges"] = serde_json::json!([]);
     assert!(!conforms_to_record_schema(&empty)?);
+    assert!(
+        decode_transcript_record(&serde_json::to_vec(&empty)?)?
+            .unplaced()
+            .is_empty()
+    );
     // An import is not a run: its record has no such member.
     let mut import: serde_json::Value = serde_json::from_slice(&fs::read(repository(
         "schemas/v1/examples/bundle-transcript-record.json",

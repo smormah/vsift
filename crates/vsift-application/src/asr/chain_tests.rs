@@ -49,9 +49,16 @@ enum Answer {
     /// usable, and the words are in no segment (#359). Where they may lie is the
     /// two seconds from 1.0 s to 3.0 s.
     Unplaced,
+    /// A rejected segment at 0 ms whose end is beyond the padded window, and a
+    /// kept one at 3.0 s: the words of the first lie, at most, in the first
+    /// three seconds of the audio (#359).
+    RunsOnFromTheStart,
 }
 
-struct Audio<'a>(&'a [Answer]);
+/// The fake audio of a run: the chunks answering `answers`, each decoded from
+/// `early_us` microseconds before its window starts (the first sample of a real
+/// decode may be at an earlier frame boundary than the window asked for).
+struct Audio<'a>(&'a [Answer], u64);
 
 impl SpeechAudioSource for Audio<'_> {
     fn speech_pcm(
@@ -67,7 +74,9 @@ impl SpeechAudioSource for Audio<'_> {
             usize::try_from(chunk.window().duration_micros().min(4 * SECOND) / 1_000 * 16)
                 .map_err(|_| SpeechAudioError::ResourceLimit)
                 .map(|count| SpeechPcm {
-                    actual_start: chunk.window().start(),
+                    actual_start: MediaTime::from_micros(
+                        chunk.window().start().as_micros().saturating_sub(self.1),
+                    ),
                     samples: vec![level; count],
                 }),
         )
@@ -114,6 +123,10 @@ fn output(
             provider_segment(600, 900, &words)?,
             provider_segment(1_000, 900, "words nobody placed")?,
             provider_segment(3_000, 3_500, &format!("{words} again"))?,
+        ],
+        Answer::RunsOnFromTheStart => vec![
+            provider_segment(0, 40_000, "words that run on past the window")?,
+            provider_segment(3_000, 3_500, &words)?,
         ],
         Answer::Nothing | Answer::Silence => Vec::new(),
     };
@@ -486,6 +499,17 @@ async fn transcribe(
     requested: TimeRange,
     answers: &[Answer],
 ) -> Built<Option<super::AsrTranscription>> {
+    transcribe_decoded_early(source, requested, answers, 0).await
+}
+
+/// [`transcribe`] with every chunk decoded from `early_us` microseconds before
+/// its window starts.
+async fn transcribe_decoded_early(
+    source: &SourceSegment,
+    requested: TimeRange,
+    answers: &[Answer],
+    early_us: u64,
+) -> Built<Option<super::AsrTranscription>> {
     let expected = identity()?;
     Ok(transcribe_range(
         TranscribeRangeRequest {
@@ -495,7 +519,7 @@ async fn transcribe(
             audio_stream: 1,
             expected: &expected,
         },
-        &Audio(answers),
+        &Audio(answers, early_us),
         &Recogniser(answers),
         &NotCancelled,
     )
@@ -1000,5 +1024,43 @@ async fn later_runs_neither_hide_nor_keep_words_that_no_segment_holds() -> TestR
     let (transcribed, untranscribed) = file.coverage()?;
     assert!(untranscribed.is_superset(&seconds(1..3)));
     assert!(transcribed.is_disjoint(&seconds(1..3)));
+    Ok(())
+}
+
+/// #359 (review): a run whose audio was decoded from before its window must
+/// still build its revision. The first sample of a real decode can be at an
+/// earlier frame boundary than the window asked for, and a segment kept from
+/// such audio is not checked against the window; a stretch of rejected words
+/// that started in that audio used to start before the window, which a stored
+/// revision refuses, so a run in which every chunk had been transcribed failed
+/// at the end. The stretch is cut at the window's start, and the revision holds
+/// it.
+#[tokio::test]
+async fn a_run_whose_audio_began_before_its_window_still_builds_its_revision() -> TestResult {
+    let (session, source_id, source) = Chain::parts()?;
+    for (early_us, expected_end) in [(0, 13 * SECOND), (20_000, 13 * SECOND - 20_000)] {
+        let transcription = transcribe_decoded_early(
+            &source,
+            range(10, 40)?,
+            &[Answer::RunsOnFromTheStart],
+            early_us,
+        )
+        .await?
+        .ok_or("the run failed")?;
+        let expected = TimeRange::new(
+            MediaTime::from_micros(10 * SECOND),
+            MediaTime::from_micros(expected_end),
+        )?;
+        assert_eq!(transcription.unplaced, [expected], "{early_us} us early");
+        let revision = build_asr_revision(AsrRevisionRequest {
+            session_id: &session,
+            source_id: &source_id,
+            source_segment: &source,
+            number: NonZeroU32::MIN,
+            transcription,
+            splice: None,
+        })?;
+        assert_eq!(revision.unplaced(), [expected], "{early_us} us early");
+    }
     Ok(())
 }

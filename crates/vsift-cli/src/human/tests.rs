@@ -109,7 +109,8 @@ fn the_untranscribed_label_speaks_of_earlier_text_only_after_an_earlier_revision
 /// #359: a revision can list up to 1,024 stretches where words that no segment
 /// holds may lie, and the text prints at most 100 of them, as a search prints at
 /// most 100 of each kind of range, then says how many more there are and where
-/// to read them. Each stretch is called an upper bound.
+/// to read them. The label says in plain words what a stretch is: the longest
+/// the missing words could cover.
 #[test]
 fn many_unplaced_stretches_are_cut_where_a_search_cuts_its_ranges() -> TestResult {
     let mut value = example("transcript-retranscribe.unplaced.json")?;
@@ -128,7 +129,20 @@ fn many_unplaced_stretches_are_cut_where_a_search_cuts_its_ranges() -> TestResul
         text.contains("  and 30 more (use --json for all of them)\n"),
         "{text}"
     );
-    assert!(text.contains("each is an upper bound"), "{text}");
+    assert!(
+        text.contains("Each stretch is the longest they could cover (they probably took less)"),
+        "{text}"
+    );
+    // The label is for a reader who is not a developer.
+    for jargon in ["recogniser", "segment", "upper bound"] {
+        let label = text
+            .lines()
+            .find(|line| line.starts_with("Speech was heard"));
+        assert!(
+            label.is_some_and(|line| !line.contains(jargon)),
+            "{jargon}: {text}"
+        );
+    }
     check_snapshot("transcript-retranscribe-unplaced-many", &text)?;
     // One short of the cut prints them all and says nothing of more.
     value["data"]["revision"]["local_asr"]["unplaced_ranges"] = Value::Array(

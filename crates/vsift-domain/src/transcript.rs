@@ -24,6 +24,7 @@ use crate::{
     AsrChunkOutcome, AsrRun, ChunkTime, Confidence, ConfidenceOrigin, EarlierTextRule, MediaTime,
     PageLimit, SourceId, SourceSegmentId, SpeakerLabel, TimeRange, TranscriptRevisionId,
     TranscriptSegmentId,
+    asr::unplaced_limits,
     spans::{Span, merged, overlaps_any, span},
 };
 
@@ -1619,7 +1620,9 @@ fn validate_carried_untranscribed(
 /// What a local-ASR revision records as unplaced is in order, merged (no two
 /// stretches overlap or touch), inside the source and inside the range its own
 /// run covered, and no longer than [`MAX_UNPLACED_STRETCHES`]; an import has
-/// none.
+/// none. "Inside" is [`crate::asr::unplaced_limits`], the definition the run's
+/// own validation of a chunk applies with the chunk's window, so a stretch that
+/// a run makes is one that this accepts.
 ///
 /// It is not checked against the segments: a stretch is what the run's kept
 /// segments left, but a list bounded by joining the nearest stretches may run
@@ -1642,14 +1645,15 @@ fn validate_unplaced(
     if parts.unplaced.len() > MAX_UNPLACED_STRETCHES {
         return Err(invalid);
     }
+    let Some(limits) = unplaced_limits(covered, bounds) else {
+        return Err(invalid);
+    };
     let listed: Vec<Span> = parts.unplaced.iter().copied().map(span).collect();
     if merged(listed.clone()) != listed
-        || parts.unplaced.iter().any(|stretch| {
-            stretch.start() < bounds.start()
-                || stretch.end() > bounds.end()
-                || stretch.start() < covered.start()
-                || stretch.end() > covered.end()
-        })
+        || parts
+            .unplaced
+            .iter()
+            .any(|stretch| stretch.start() < limits.start() || stretch.end() > limits.end())
     {
         return Err(invalid);
     }

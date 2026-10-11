@@ -216,7 +216,7 @@ fn push_revision(text: &mut TerminalText, revision: &TranscriptRevision) {
         text.push_fixed(")").end_line();
         push_ranges_cut_at(
             text,
-            "Words the recogniser wrote that no segment holds may lie in these stretches (each is an upper bound: the words took part of it; a search counts the stretch as not transcribed):",
+            "Speech was heard in these stretches, but its words could not be placed in time and are missing from the transcript. Each stretch is the longest they could cover (they probably took less), and a search counts it as not transcribed. A transcript file for the video, if you have one, can fill them in (ingest the video again with --transcript):",
             &run.unplaced_ranges,
             MAX_PRINTED_STRETCHES,
         );

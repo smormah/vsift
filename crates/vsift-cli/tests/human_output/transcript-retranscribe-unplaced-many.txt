@@ -4,7 +4,7 @@ Local ASR: whisper_cpp, model base, decoding r0-v1, 4 threads
   Model sha256: 60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe
   Executable sha256: 95e3c0b0e778ad9499eb0125f97c1dcf437dd9eb4ea77050b043574f93c2631d
   Chunks: 2 (2 transcribed, 0 silent, 0 without audio)
-Words the recogniser wrote that no segment holds may lie in these stretches (each is an upper bound: the words took part of it; a search counts the stretch as not transcribed):
+Speech was heard in these stretches, but its words could not be placed in time and are missing from the transcript. Each stretch is the longest they could cover (they probably took less), and a search counts it as not transcribed. A transcript file for the video, if you have one, can fill them in (ingest the video again with --transcript):
   00:00:01.000000 to 00:00:03.000000 (--from 1000000 --to 3000000)
   00:00:11.000000 to 00:00:13.000000 (--from 11000000 --to 13000000)
   00:00:21.000000 to 00:00:23.000000 (--from 21000000 --to 23000000)

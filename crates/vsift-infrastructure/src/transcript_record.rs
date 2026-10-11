@@ -378,7 +378,13 @@ struct StoredAsrTranscript {
     /// exactly as before; a release before it reads the member as damage. Only
     /// a run that rejected a segment with words, with another segment after it
     /// and nothing kept over the stretch, has it, and a record of a chain whose
-    /// base had one may also carry `carried_untranscribed`.
+    /// base had one may also carry `carried_untranscribed`. **This decoder is
+    /// more lenient than the schema, on purpose**: the schema asks for at least
+    /// one stretch, and an empty list is read here as no stretch, as it is for
+    /// `carried_untranscribed`, because a reader should not refuse a record whose
+    /// only fault is a list that says nothing. What a list may hold (order,
+    /// merging, bounds, count) is the revision's own validation on reading, not
+    /// the decoder's.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     unplaced_ranges: Vec<StoredRange>,
     language: Option<String>,

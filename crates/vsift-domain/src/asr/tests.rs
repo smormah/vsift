@@ -1822,6 +1822,37 @@ fn what_a_dropped_segment_carries_beyond_the_tolerance_is_restored_and_no_more()
 /// The merge input of one generated layout.
 struct Generated {
     chunks: Vec<ChunkSegments>,
+    /// Each planned chunk with the audio it was decoded over, as a run records it.
+    records: Vec<AsrChunkRecord>,
+}
+
+/// What the segments of a generated layout say.
+#[derive(Clone, Copy)]
+enum Words<'a> {
+    /// Every segment has words of its own, so the repeat rule never acts.
+    Unique,
+    /// Two or three words from a vocabulary of two, chosen by these seeds (each
+    /// below 16), so that neighbouring chunks repeat each other and the repeat
+    /// rule acts.
+    Repeated(&'a [u8]),
+}
+
+/// The words of segment `number` of chunk `chunk`.
+fn words_of(words: Words<'_>, chunk: u32, number: usize) -> String {
+    const VOCABULARY: [&str; 2] = ["alpha", "beta"];
+    let Words::Repeated(seeds) = words else {
+        return format!("c{chunk}s{number}");
+    };
+    let place = usize::try_from(chunk).unwrap_or(0) * 8 + number;
+    let seed = seeds.get(place % seeds.len().max(1)).copied().unwrap_or(0);
+    let bit = |position: u32| usize::from((seed >> position) & 1);
+    (0..2 + bit(3))
+        .map(|position| {
+            let index = bit(u32::try_from(position).unwrap_or(0));
+            VOCABULARY.get(index).copied().unwrap_or("alpha")
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 /// One chunk's generated answer: the delay before its first segment, then
@@ -1844,7 +1875,13 @@ fn chunk_answer() -> impl Strategy<Value = ChunkAnswer> {
             0_u64..4_000
         ],
         prop::collection::vec((200_u64..14_000, 0_u64..3_000), 0..7),
-        prop::collection::vec(0_u64..30_000, 0..3),
+        // A rejected segment right at the start of the audio (a reversed one at
+        // 1 ms, one that ends beyond the window at 2 and 5 ms), where an
+        // earlier first sample puts its stretch before the window, or anywhere.
+        prop::collection::vec(
+            prop_oneof![Just(1_u64), Just(2), Just(5), 0_u64..30_000],
+            0..3,
+        ),
     )
 }
 
@@ -1862,10 +1899,32 @@ fn rejected_by_kind(start: u64) -> Built<ProviderSegment> {
 /// answers. `None` when a chunk's answer is unusable under the output rules,
 /// which no case is about.
 fn generated(total_ms: u64, answers: &[ChunkAnswer]) -> Built<Option<Generated>> {
-    let planned = plan_chunks(&segment_id()?, range(0, total_ms * 1_000)?, ChunkPlan::R0)?;
-    let mut chunks = Vec::new();
+    generated_with(0, total_ms, answers, 0, Words::Unique)
+}
+
+/// [`generated`] for a run that starts at `from_ms`, with the audio of every chunk
+/// decoded from `early_ms` milliseconds before its window starts (the decoder's
+/// first sample may be at an earlier frame boundary than the window asked for;
+/// the first chunk of a run from 0 cannot start before 0), and with the given
+/// words.
+fn generated_with(
+    from_ms: u64,
+    total_ms: u64,
+    answers: &[ChunkAnswer],
+    early_ms: u64,
+    words: Words<'_>,
+) -> Built<Option<Generated>> {
+    let planned = plan_chunks(
+        &segment_id()?,
+        range(from_ms * 1_000, total_ms * 1_000)?,
+        ChunkPlan::R0,
+    )?;
+    let (mut chunks, mut records) = (Vec::new(), Vec::new());
     for (planned, (delay, shape, junk)) in planned.iter().zip(answers) {
-        let window_ms = planned.window().duration_micros() / 1_000;
+        let window = planned.window();
+        let window_ms = window.duration_micros() / 1_000;
+        let start = window.start().as_micros().saturating_sub(early_ms * 1_000);
+        let audio = range(start, start + window.duration_micros())?;
         let mut provider = Vec::new();
         let mut cursor = *delay;
         for (number, (length, gap)) in shape.iter().enumerate() {
@@ -1875,7 +1934,7 @@ fn generated(total_ms: u64, answers: &[ChunkAnswer]) -> Built<Option<Generated>>
             let end = (cursor + length).min(window_ms);
             provider.push((
                 cursor,
-                provider_segment(cursor, end, &format!("c{}s{number}", planned.index()))?,
+                provider_segment(cursor, end, &words_of(words, planned.index(), number))?,
             ));
             cursor = end + gap;
         }
@@ -1885,7 +1944,7 @@ fn generated(total_ms: u64, answers: &[ChunkAnswer]) -> Built<Option<Generated>>
         provider.sort_by_key(|(start, _)| *start);
         let validated = validate_chunk_output(
             planned,
-            planned.window(),
+            audio,
             range(0, 600 * SECOND)?,
             output(provider.into_iter().map(|(_, segment)| segment).collect()),
         );
@@ -1893,8 +1952,49 @@ fn generated(total_ms: u64, answers: &[ChunkAnswer]) -> Built<Option<Generated>>
             return Ok(None);
         };
         chunks.push(validated.into_parts().0);
+        records.push(AsrChunkRecord::new(
+            planned.clone(),
+            AsrChunkOutcome::Transcribed { audio },
+        ));
     }
-    Ok(Some(Generated { chunks }))
+    Ok(Some(Generated { chunks, records }))
+}
+
+/// The parts of the revision a run over `generated` would store if it kept no
+/// segment and listed `unplaced`, over a source `total_ms` long: what a stored
+/// revision makes of the stretches a merge reports.
+fn parts_listing(
+    generated: &Generated,
+    total_ms: u64,
+    unplaced: &[TimeRange],
+) -> Built<TranscriptRevisionParts> {
+    let run = AsrRun::new(AsrRunParts {
+        provider: AsrProviderBuild::new(AsrProvider::WhisperCpp, Sha256Hex::parse(DIGEST)?),
+        model: AsrModel::new(AsrModelProfile::Base, Sha256Hex::parse(DIGEST)?),
+        decoding: AsrDecodingProfile::R0V1,
+        plan: ChunkPlan::R0,
+        threads: NonZeroU16::MIN,
+        audio_stream: 1,
+        chunks: generated.records.clone(),
+    })?;
+    Ok(TranscriptRevisionParts {
+        id: TranscriptRevisionId::parse("trv_0123456789abcdef")?,
+        number: NonZeroU32::MIN,
+        source_id: SourceId::from_sha256(DIGEST)?,
+        source_segment: SourceSegment::whole_file(
+            segment_id()?,
+            MediaTime::from_micros(total_ms * 1_000),
+        )?,
+        provenance: TranscriptProvenance::LocalAsr(run),
+        supersedes: None,
+        replaced_range: None,
+        inherited: Vec::new(),
+        carried_untranscribed: Vec::new(),
+        unplaced: unplaced.to_vec(),
+        language: None,
+        segments: Vec::new(),
+        warnings: TranscriptWarnings::default(),
+    })
 }
 
 /// The longest stretch of `segment` that no segment of `kept` covers.
@@ -1938,9 +2038,13 @@ proptest! {
     })]
 
     /// #359: over generated layouts of up to five chunks of the R0 plan, with
-    /// segments hugging the window edges and rejected segments of every kind
-    /// among them (words and no words are not generated: every rejected segment
-    /// has words):
+    /// segments hugging the window edges, the audio of a chunk decoded from up
+    /// to 40 ms before its window (an earlier frame boundary; the run may start
+    /// anywhere in its first 20 s, so that the first chunk is early too), and rejected
+    /// segments of every kind among them (words and no words are not generated:
+    /// every rejected segment has words). **Every segment has words of its own
+    /// here, so the repeat rule (rule 3) never acts in this property**; the
+    /// next one lets it act.
     ///
     /// - **no stretch longer than the tolerance of the union of every validated
     ///   segment is covered by no kept segment** (and so none of any one
@@ -1950,15 +2054,22 @@ proptest! {
     ///   that merge left no hole longer than the tolerance, this one gives the
     ///   very same segments and warnings, and where it did, this one keeps
     ///   every segment that one kept, in the same order, and adds only
-    ///   segments (it restores, it never removes);
+    ///   segments (it restores, it never removes; **that holds where the repeat
+    ///   rule does not act**, and
+    ///   `the_guard_can_expose_a_segment_to_the_repeat_rule_that_the_old_merge_kept`
+    ///   is a case where it does);
     /// - whatever the merge reports as unplaced is uncovered, long enough to
-    ///   report, and inside the (joined) stretches the chunks gave.
+    ///   report, and inside the (joined) stretches the chunks gave, **and a
+    ///   stored revision accepts it** (the producer and the check of a stored
+    ///   revision share one definition of where a stretch may lie).
     #[test]
     fn no_layout_of_chunks_loses_speech_at_a_seam(
         total_ms in 31_000_u64..=130_000,
         answers in prop::collection::vec(chunk_answer(), 5),
+        from_ms in 0_u64..=20_000,
+        early_ms in 0_u64..=40,
     ) {
-        let Ok(Some(layout)) = generated(total_ms, &answers) else {
+        let Ok(Some(layout)) = generated_with(from_ms, total_ms, &answers, early_ms, Words::Unique) else {
             return Ok(());
         };
         let chunks = &layout.chunks;
@@ -2027,7 +2138,114 @@ proptest! {
             prop_assert!(candidates.iter().any(|(from, until)| *from <= start && end <= *until));
         }
         prop_assert!(merged_transcript.unplaced.windows(2).all(|pair| pair[0].end() < pair[1].start()));
+        // A stored revision accepts what the merge reports, whatever the audio's
+        // first sample was.
+        let accepted = parts_listing(&layout, total_ms, &merged_transcript.unplaced)
+            .is_ok_and(|parts| TranscriptRevision::new(parts).is_ok());
+        prop_assert!(
+            accepted,
+            "a stored revision refuses the stretches {:?}",
+            merged_transcript.unplaced
+        );
     }
+
+    /// #359: the same layouts with a small vocabulary, so that the repeat rule
+    /// (rule 3) acts. The guard's guarantee is on time **before** that rule, and
+    /// the rule decides by words, so what holds after it is weaker, and this is
+    /// the true statement of it:
+    ///
+    /// - before the rule, no stretch of the union longer than the tolerance is
+    ///   covered by no kept segment;
+    /// - what the rule takes away is only a segment whose words a kept segment
+    ///   repeats (they occur, in order, inside it);
+    /// - so every stretch of the union longer than the tolerance that no kept
+    ///   segment covers is covered by segments that the rule dropped as repeats,
+    ///   except for pieces of at most the tolerance: **no word is lost, but a
+    ///   stretch of time can be left, which the earlier merge did not leave where
+    ///   it kept that segment** (the register has it as L-157).
+    #[test]
+    fn with_repeated_words_every_hole_is_time_whose_words_a_kept_segment_repeats(
+        total_ms in 31_000_u64..=130_000,
+        answers in prop::collection::vec(chunk_answer(), 5),
+        seeds in prop::collection::vec(0_u8..16, 40),
+    ) {
+        let Ok(Some(layout)) = generated_with(0, total_ms, &answers, 0, Words::Repeated(&seeds)) else {
+            return Ok(());
+        };
+        let chunks = &layout.chunks;
+        let before_the_rule = guarded_keep(chunks);
+        let mut before_spans = SpanSet::default();
+        for &(index, position) in &before_the_rule {
+            if let Some(segment) = chunks.get(index).and_then(|chunk| chunk.segments.get(position)) {
+                before_spans.insert(span(segment.range()));
+            }
+        }
+        for (start, end) in holes_of_the_union(chunks, &before_spans) {
+            prop_assert!(end - start <= SEAM_COVERAGE_TOLERANCE_MICROS);
+        }
+        let merged_transcript = merge_chunks(chunks);
+        let repeats = dropped_by_the_repeat_rule(chunks, &before_the_rule, &merged_transcript);
+        let kept_words: Vec<Vec<String>> = merged_transcript
+            .segments
+            .iter()
+            .map(|kept| super::normalized_words(kept.segment.text().text()))
+            .collect();
+        let mut dropped_time = SpanSet::default();
+        for dropped in &repeats {
+            let words = super::normalized_words(dropped.text().text());
+            let repeated = words.len() >= 2
+                && kept_words
+                    .iter()
+                    .any(|kept| kept.windows(words.len()).any(|window| window == words.as_slice()));
+            prop_assert!(
+                repeated,
+                "the repeat rule dropped {:?}, whose words no kept segment repeats",
+                words
+            );
+            dropped_time.insert(span(dropped.range()));
+        }
+        let kept = kept_spans(&merged_transcript.segments);
+        for hole in holes_of_the_union(chunks, &kept) {
+            if hole.1 - hole.0 > SEAM_COVERAGE_TOLERANCE_MICROS {
+                for (start, end) in dropped_time.gaps_within(hole) {
+                    prop_assert!(end - start <= SEAM_COVERAGE_TOLERANCE_MICROS);
+                }
+            }
+        }
+    }
+}
+
+/// What rules 1 and 2 and the guard keep, before the repeat rule: the
+/// `(chunk, position)` of each segment.
+fn guarded_keep(chunks: &[ChunkSegments]) -> BTreeSet<(usize, usize)> {
+    let mut kept = super::keep_by_rules_one_and_two(chunks);
+    super::restore_lost_speech(chunks, &mut kept);
+    kept
+}
+
+/// The segments that were kept before the repeat rule and are not in `merged`:
+/// the ones that rule dropped.
+fn dropped_by_the_repeat_rule<'a>(
+    chunks: &'a [ChunkSegments],
+    before_the_rule: &BTreeSet<(usize, usize)>,
+    merged_transcript: &super::MergedTranscript,
+) -> Vec<&'a super::AsrSegmentDraft> {
+    before_the_rule
+        .iter()
+        .filter_map(|&(index, position)| {
+            chunks
+                .get(index)?
+                .segments
+                .get(position)
+                .map(|s| (index, s))
+        })
+        .filter(|(index, segment)| {
+            !merged_transcript.segments.iter().any(|kept| {
+                usize::try_from(kept.chunk) == Ok(*index) && kept.segment.range() == segment.range()
+            })
+        })
+        .map(|(_, segment)| segment)
+        .collect()
 }
 
 /// The property above is not vacuous: over a fixed pseudo-random sweep of the
@@ -2075,6 +2293,92 @@ fn the_generated_layouts_reach_the_guard() -> TestResult {
     assert!(acted > 100, "{acted}");
     assert!(left_alone > 100, "{left_alone}");
     assert!(unplaced > 20, "{unplaced}");
+    Ok(())
+}
+
+/// The repeated-vocabulary property is not vacuous either: over a fixed
+/// pseudo-random sweep of its layouts the repeat rule drops segments that the
+/// guard had kept in a real share of them, and in some of those it leaves a
+/// stretch longer than the tolerance in no kept segment (the case of L-157).
+#[test]
+fn the_repeated_vocabulary_layouts_reach_the_repeat_rule() -> TestResult {
+    let mut state = 0x2545_f491_4f6c_dd1d_u64;
+    let mut next = |bound: u64| {
+        state ^= state << 13;
+        state ^= state >> 7;
+        state ^= state << 17;
+        state % bound
+    };
+    let (mut dropped, mut left_a_hole) = (0_u32, 0_u32);
+    for _ in 0..3_000 {
+        let total_ms = 31_000 + next(99_000);
+        let answers: Vec<ChunkAnswer> = (0..5)
+            .map(|_| {
+                let delay =
+                    [0, 300, 450, 500, 600, next(4_000)][usize::try_from(next(6)).unwrap_or(0)];
+                let shape = (0..next(7))
+                    .map(|_| (200 + next(13_800), next(3_000)))
+                    .collect();
+                let junk = (0..next(3)).map(|_| next(30_000)).collect();
+                (delay, shape, junk)
+            })
+            .collect();
+        let seeds: Vec<u8> = (0..40)
+            .map(|_| u8::try_from(next(16)).unwrap_or(0))
+            .collect();
+        let Some(layout) = generated_with(0, total_ms, &answers, 0, Words::Repeated(&seeds))?
+        else {
+            continue;
+        };
+        let before_the_rule = guarded_keep(&layout.chunks);
+        let merged_transcript = merge_chunks(&layout.chunks);
+        let repeats =
+            dropped_by_the_repeat_rule(&layout.chunks, &before_the_rule, &merged_transcript);
+        dropped += u32::from(!repeats.is_empty());
+        let kept = kept_spans(&merged_transcript.segments);
+        left_a_hole += u32::from(
+            holes_of_the_union(&layout.chunks, &kept)
+                .iter()
+                .any(|(start, end)| end - start > SEAM_COVERAGE_TOLERANCE_MICROS),
+        );
+    }
+    assert!(dropped > 100, "{dropped}");
+    assert!(left_a_hole > 50, "{left_a_hole}");
+    Ok(())
+}
+
+/// A stretch never leaves its chunk's window, even when the audio was decoded
+/// from before it (#359, review): the decoder's first sample may be at an
+/// earlier frame boundary than the window asked for, and a kept segment from
+/// such audio is not checked against the window. A run over 10 to 40 s whose
+/// audio began 20 ms early, with a rejected segment at 0 ms that ends beyond the
+/// padded window and a kept one at 3 s, would otherwise list 9.98 to 12.98 s,
+/// which a stored revision refuses, after every chunk had been transcribed.
+#[test]
+fn a_stretch_never_starts_before_its_chunks_window_when_the_audio_does() -> TestResult {
+    let planned = chunk(0, 10 * SECOND, 40 * SECOND)?;
+    let audio = range(10 * SECOND - 20_000, 40 * SECOND - 20_000)?;
+    let validated = validate_chunk_output(
+        &planned,
+        audio,
+        range(0, 70 * SECOND)?,
+        output(vec![
+            provider_segment(0, 40_000, "words that run on past the padded window")?,
+            provider_segment(3_000, 3_500, "kept words")?,
+        ]),
+    )?;
+    assert_eq!(validated.unplaced(), [range(10 * SECOND, 12_980_000)?]);
+    // Audio that starts with its window is as it was.
+    let validated = validate_chunk_output(
+        &planned,
+        planned.window(),
+        range(0, 70 * SECOND)?,
+        output(vec![
+            provider_segment(0, 40_000, "words that run on past the padded window")?,
+            provider_segment(3_000, 3_500, "kept words")?,
+        ]),
+    )?;
+    assert_eq!(validated.unplaced(), [range(10 * SECOND, 13 * SECOND)?]);
     Ok(())
 }
 
@@ -2206,6 +2510,114 @@ fn the_guard_restores_the_segment_that_covers_most_and_then_stops() -> TestResul
         &[(0, 0)],
     )?;
     assert_eq!(kept, [(0, 0), (0, 1)]);
+    Ok(())
+}
+
+/// A dropped segment that lies inside one the guard has already restored is not
+/// restored too (#359, review): the kept segment 10 to 20 s leaves a hole of
+/// 10 s (20 to 30 s), with four dropped segments over it, X 20 to 24 s, W 21 to
+/// 23.5 s, V 24 to 26 s and U 26 to 30 s. X and U overlap the hole most (4 s)
+/// and X starts first, so X is restored, then U; W lies wholly inside X, so the
+/// piece of the hole that is left (24 to 26 s) does not overlap it and it is
+/// skipped; V closes that piece. It fails when a candidate is restored without
+/// asking whether it overlaps what is still a hole (W is restored too).
+#[test]
+fn a_dropped_segment_inside_one_already_restored_is_skipped() -> TestResult {
+    let kept = after_the_guard(
+        &[
+            (0, 10 * SECOND, 20 * SECOND),
+            (0, 20 * SECOND, 24 * SECOND),
+            (0, 21 * SECOND, 23_500_000),
+            (0, 24 * SECOND, 26 * SECOND),
+            (0, 26 * SECOND, 30 * SECOND),
+        ],
+        &[(0, 0)],
+    )?;
+    assert_eq!(kept, [(0, 0), (0, 1), (0, 3), (0, 4)]);
+    Ok(())
+}
+
+/// What the order pins (#359, review): the segment that overlaps a hole **most**
+/// is restored first, and not the one that starts first. Over the hole 20 to
+/// 30 s (after the kept 10 to 20 s) the dropped A, 20 to 21 s, starts first and
+/// B, 20.5 to 30 s, overlaps most. Most-overlapping-first restores B alone, and
+/// what is left of the hole (20 to 20.5 s) is within the tolerance; start order
+/// would restore A and then B too, which writes the words of 20.5 to 21 s twice.
+/// The reversed order is pinned by the test above; this one pins the choice
+/// against plain start order. (In a reviewer's synthetic simulation, plain start
+/// order gave 21,031 duplicated words against 18,339: the simulation is not in
+/// the repository, so these figures are not reproducible from it.)
+#[test]
+fn the_guard_takes_the_most_overlapping_segment_first_and_not_the_first_to_start() -> TestResult {
+    let kept = after_the_guard(
+        &[
+            (0, 10 * SECOND, 20 * SECOND),
+            (0, 20 * SECOND, 21 * SECOND),
+            (0, 20_500_000, 30 * SECOND),
+        ],
+        &[(0, 0)],
+    )?;
+    assert_eq!(kept, [(0, 0), (0, 2)]);
+    Ok(())
+}
+
+/// The guard can expose a segment to the repeat rule that the old merge kept
+/// (#359, review), and the time hole then grows where no word is lost. Chunk 0
+/// (window 0 to 30 s) has 20.0 to 26.9 s "one two three" and 27.0 to 29.5 s
+/// "alpha beta gamma"; chunk 1 (window 25 to 55 s) has 28.0 to 33.0 s "beta
+/// gamma". The old merge keeps 20.0 to 26.9 s and 28.0 to 33.0 s and leaves 27
+/// to 28 s (1 s) in no segment. The guard restores "alpha beta gamma" (it covers
+/// that hole), and then the repeat rule finds that the later copy's words are
+/// inside it and drops 28.0 to 33.0 s: the words "beta gamma" are still there,
+/// once, but 29.5 to 33.0 s (3.5 s) is now in no segment. This pins the
+/// behaviour as it is; the register has it as L-157.
+#[test]
+fn the_guard_can_expose_a_segment_to_the_repeat_rule_that_the_old_merge_kept() -> TestResult {
+    let window_0 = (0, 30 * SECOND);
+    let window_1 = (25 * SECOND, 55 * SECOND);
+    let first = with(
+        with(
+            empty(0, window_0)?,
+            draft(0, window_0, 20 * SECOND, 26_900_000, "one two three")?,
+        ),
+        draft(0, window_0, 27 * SECOND, 29_500_000, "alpha beta gamma")?,
+    );
+    let second = draft(1, window_1, 28 * SECOND, 33 * SECOND, "beta gamma")?;
+    let chunks = [first, second];
+    let ranges = |merged_transcript: &super::MergedTranscript| -> Vec<(u64, u64)> {
+        merged_transcript
+            .segments
+            .iter()
+            .map(|kept| {
+                (
+                    kept.segment.range().start().as_micros(),
+                    kept.segment.range().end().as_micros(),
+                )
+            })
+            .collect()
+    };
+    let old = previous_merge_as_transcript(&chunks);
+    assert_eq!(
+        ranges(&old),
+        [(20 * SECOND, 26_900_000), (28 * SECOND, 33 * SECOND)]
+    );
+    let new = merge_chunks(&chunks);
+    assert_eq!(
+        ranges(&new),
+        [(20 * SECOND, 26_900_000), (27 * SECOND, 29_500_000)]
+    );
+    // The old merge's hole was 1 s (27 to 28 s); the new one's is 3.5 s, and the
+    // words of the segment that was dropped are in a kept one.
+    let kept = kept_spans(&new.segments);
+    assert_eq!(
+        kept.gaps_within((29_500_000, 33 * SECOND)),
+        [(29_500_000, 33 * SECOND)]
+    );
+    assert!(
+        new.segments
+            .iter()
+            .any(|kept| kept.segment.text().text().contains("beta gamma"))
+    );
     Ok(())
 }
 
@@ -2387,8 +2799,10 @@ fn each_kind_of_rejected_segment_leaves_the_stretch_it_can_or_none() -> TestResu
     type Kind<'a> = (&'a str, (u64, u64, &'a str), Vec<(u64, u64)>);
     let window = (0, 30 * SECOND);
     let table: [Kind; 7] = [
-        // The empty range says nothing about where its words lie, and a
-        // recogniser writes text with an empty range in silence.
+        // The empty range says nothing about where its words lie, and text that a
+        // recogniser writes for silence would list the silence as untranscribed
+        // (whether whisper.cpp gives such text an empty range has not been
+        // checked on real output; the cost is registered as L-158).
         ("empty", (2_000, 2_000, "words nobody placed"), vec![]),
         // A reversed range keeps its start: from there to the next segment.
         (

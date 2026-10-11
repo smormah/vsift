@@ -67,10 +67,14 @@ const SEAM_EDGE_MICROS: u64 = 500_000;
 /// recognised for the same speech, and drops the other. Wherever a stretch of
 /// the union longer than this is covered by no kept segment, the guard restores
 /// dropped segments over it, and a stretch no longer than this is left. So the
-/// transcript has no hole longer than this in speech that any chunk wrote words
-/// for, except where the repeat rule dropped a segment whose words a kept
-/// segment has (rule 3), or the speech was never written by any chunk. The
-/// guarantee is on the union and not on each dropped segment because a bound per
+/// transcript has no hole longer than this in the time of any segment that a
+/// chunk's validated output holds, except where the repeat rule dropped a
+/// segment whose words a kept segment has (rule 3, which runs after the guard
+/// and decides by words, so it can leave a longer stretch of time where no word
+/// is lost). **Words in a rejected segment were written but sit outside the
+/// union, because their time could not be placed: they are not covered by this
+/// guarantee but reported by [`MergedTranscript::unplaced`], where they can be
+/// placed at all.** The guarantee is on the union and not on each dropped segment because a bound per
 /// segment stacks (two dropped copies, each leaving up to this much at ends that
 /// face each other, would leave twice this). The same length is the shortest
 /// stretch of rejected words that [`merge_chunks`] reports as
@@ -1305,6 +1309,7 @@ pub fn validate_chunk_output(
         .iter()
         .map(|segment| segment.start)
         .collect();
+    let limits = unplaced_limits(chunk.window(), source);
     for (position, segment) in output.segments.into_iter().enumerate() {
         let Some(text) = segment
             .text
@@ -1323,13 +1328,15 @@ pub fn validate_chunk_output(
             .filter(|range| range.start() >= source.start() && range.end() <= source.end())
         else {
             rejected = rejected.saturating_add(1);
-            unplaced.extend(unplaced_stretch(
-                audio,
-                source,
-                &text,
-                (segment.start, segment.end),
-                starts.get(position + 1).copied(),
-            ));
+            unplaced.extend(limits.and_then(|limits| {
+                unplaced_stretch(
+                    audio,
+                    limits,
+                    &text,
+                    (segment.start, segment.end),
+                    starts.get(position + 1).copied(),
+                )
+            }));
             continue;
         };
         if trim == ProviderEndTrim::TrimmedToAudioEnd {
@@ -1389,12 +1396,16 @@ pub fn validate_chunk_output(
 /// - its text has no letter or digit: punctuation alone is not a word, so
 ///   nothing a reader could look for is lost;
 /// - its range is empty (`start` equals `end`): an empty range says nothing
-///   about where its words lie, and recognisers write text with an empty range
-///   in silence (a "Thank you." at 0 s before speech that begins at 20 s would
-///   otherwise report twenty seconds as untranscribed, and turn a search of an
-///   ordinary recording `partial`). A reversed range (`end` before `start`) is a
-///   fault of a segment that did state a start, and keeps its stretch, from that
-///   start;
+///   about where its words lie. Recognisers are known to write text for
+///   silence, and the stretch to the next segment of such text at the start of
+///   a chunk that speaks only from 20 s would be twenty seconds reported as
+///   untranscribed, which would turn a search of an ordinary recording
+///   `partial`; **whether whisper.cpp writes such text with an empty range has
+///   not been checked on real output**, so this is a decision made to avoid that
+///   alarm, and its cost is that words in such a segment are dropped with no
+///   sign beyond the count (L-158 in `docs/planning/known-limits.md`). A reversed range (`end` before `start`) is
+///   a fault of a segment that did state a start, and keeps its stretch, from
+///   that start;
 /// - it starts at or after the audio's end: words the recogniser places after
 ///   the audio ended are not about the audio, as an end past it is not evidence
 ///   that speech continued there ([`TranscriptWarningKind::ProviderEndTrimmed`]),
@@ -1410,9 +1421,13 @@ pub fn validate_chunk_output(
 /// The bound has a cliff. A next segment 0.1 s before the audio's end gives a
 /// stretch of nearly all that is left of the chunk; one at or after the audio's
 /// end gives none. Both follow from "up to the next thing the recogniser wrote".
+///
+/// The stretch is cut to `limits` ([`unplaced_limits`]): the audio that was
+/// decoded can begin a frame before the chunk's window, and a stretch that
+/// reached out of the window would be one that a stored revision refuses.
 fn unplaced_stretch(
     audio: TimeRange,
-    source: TimeRange,
+    limits: TimeRange,
     text: &CueText,
     (start, end): (ChunkTime, ChunkTime),
     next: Option<ChunkTime>,
@@ -1429,8 +1444,28 @@ fn unplaced_stretch(
     let first = audio.start().as_micros().checked_add(from)?;
     let last = audio.start().as_micros().checked_add(until)?;
     TimeRange::new(
-        MediaTime::from_micros(first.max(source.start().as_micros())),
-        MediaTime::from_micros(last.min(source.end().as_micros())),
+        MediaTime::from_micros(first.max(limits.start().as_micros())),
+        MediaTime::from_micros(last.min(limits.end().as_micros())),
+    )
+    .ok()
+}
+
+/// Where a stretch of unplaced words may lie, given the range it must stay in
+/// (`within`) and the source (#359): inside both, or nowhere.
+///
+/// This is the one definition of what a stored revision accepts. The producer
+/// ([`validate_chunk_output`]) applies it with the chunk's window, and the check
+/// of a stored revision ([`crate::transcript`], `validate_unplaced`) applies it
+/// with the range its whole run covers, which holds every chunk's window; so a
+/// stretch that the first makes is, by construction, one that the second
+/// accepts. The window is the limit and not the decoded audio because the audio
+/// of a chunk may begin at an earlier frame boundary than its window does
+/// ([`decoded_audio_range`]), and a segment kept from it is not checked against
+/// the window.
+pub(crate) fn unplaced_limits(within: TimeRange, source: TimeRange) -> Option<TimeRange> {
+    TimeRange::new(
+        within.start().max(source.start()),
+        within.end().min(source.end()),
     )
     .ok()
 }
@@ -1670,10 +1705,14 @@ enum Side {
 ///    edge and along a chain of chunks. **It judges by time and not by words**, so
 ///    it can restore a copy whose words the kept neighbour also has, and then the
 ///    same words stand twice where nothing was lost; a repeat can be seen, a hole
-///    cannot, and the trade is made on purpose. A run in which the union has no
-///    such hole is merged exactly as rules 1 to 3 alone merge it (a test holds
-///    that against a frozen copy of them), but a run in which no words were
-///    lost may still be changed, because words and time are not the same.
+///    cannot, and the trade is made on purpose. Where rules 1 to 3 alone leave
+///    no such hole in the union, the result is theirs (a test holds that against
+///    a frozen copy of them); where they leave one, the guard adds segments to
+///    what rules 1 and 2 keep. A run in which no words were lost may still be
+///    changed, because words and time are not the same, and **rule 3, which runs
+///    after the guard, can then drop a segment that the earlier merge kept**
+///    (a restored segment can contain the words of a later copy that carries new
+///    time), so "only adds" holds where rule 3 does not act.
 /// 3. At each seam, the last kept segment of the earlier chunk and the first
 ///    kept segment of the later one are compared when their times overlap. If
 ///    the earlier one's normalised words end with at least two words the later
