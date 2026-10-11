@@ -1,7 +1,7 @@
 # The patch release 0.2.1: the plan
 
 Status: a plan, rewritten on 2026-10-11 after the maintainer's live testing on real recordings. **`0.2.1` does not exist. Its first candidate, `0.2.1-rc.1`, was published on 2026-10-10 under npm's `next`
-and is SUPERSEDED; a second candidate, `0.2.1-rc.2`, is to be cut. Nothing new for it is merged yet: the fix of #359 is pull request #377 (open) and the designs of the larger changes are not decided.**
+and is SUPERSEDED; a second candidate, `0.2.1-rc.2`, is to be cut. Merged for it so far: the fix of #359 (#377) and the Answers pull request (#378); the designs of the larger changes are not decided.**
 Nothing here is evidence: the evidence ledger holds nothing for any `0.2.1` candidate. It decides nothing for the maintainer: every decision it lists as open is open, and the designs of the larger changes
 below are not decided. The runbook is [`release.md`](../operations/release.md) section 6.14, the current position is in `memory/project_current_status.md`, and the register entries are
 [L-145](known-limits.md#l-145) to [L-154](known-limits.md#l-154), [L-155](known-limits.md#l-155) to [L-160](known-limits.md#l-160) (the limits #359's fix leaves) and [L-142](known-limits.md#l-142).
@@ -23,10 +23,10 @@ ride along.** **It is a patch release, not a work packet.** P00 to P14 stay comp
 
 | Version | State |
 | --- | --- |
-| `0.2.0` | Published 2026-10-09; npm `latest`; not deprecated. Has L-145 (fixed on `main`, not released) and L-149 (the fix is pull request #377, open). |
+| `0.2.0` | Published 2026-10-09; npm `latest`; not deprecated. Has L-145 (fixed on `main`, not released) and L-149 (fixed on `main` by #377, not released). |
 | `0.2.1-rc.1` | **Published 2026-10-10** (tag `v0.2.1-rc.1` at `cb8cb3a`; Release run 38084137607; a GitHub pre-release; npm `next` on all four packages). `P14 verify release` (run 38086846526) passed: `next 0.2.1-rc.1, latest 0.2.0`, GitHub's latest release `v0.2.0`. It carries the fix of #353, the changes of #340, #342 and #345 and the first new skill, **and it has L-149 too** (`merge_chunks` is the same code as in `0.2.0`). **Superseded by rc.2; not deprecated.** |
 | rc.1's hosted evidence | **Stopped on purpose, by the supervisor session, on the maintainer's decision of 2026-10-11 to put #359 into `0.2.1`:** that changes the transcription code, so the evidence gathered on rc.1 is obsolete. The supervisor session stopped the hosted-evidence agent and cancelled the hosted campaign runs it had dispatched for rc.1 (the 8 cancelled runs below); what had already finished stays as history. Of the 14 hosted runs started after the publish, 6 finished green (`P14 verify release`, `P13 managed smoke`, `P14 compatibility`, `P14 scan reading`, `P14 runbook walk`, `P14 malicious media`) and 8 were cancelled (`P14 published artifacts`, `P14 journeys`, `Fuzz`, `P14 stress`, `P14 load`, `P07 local ASR`, `P13 managed power loss`, `P10 durability campaign`). **None of them is recorded in the ledger as evidence for rc.1 or for `0.2.1`, and the cancelled ones show nothing.** Agent batches 2 and 3 were not run on rc.1; they are run once, on rc.2. |
-| `main` | Has everything rc.1 has (it was rc.1's commit, `cb8cb3a`, when this was written) and nothing for the findings below; #359's fix is pull request #377, open. |
+| `main` | Has everything rc.1 has (it was rc.1's commit, `cb8cb3a`, when this was written) and, since then, #359's fix (#377) and the Answers pull request (#378); nothing for the larger findings below (the reads pull request, #379, is open and separate). |
 | `0.2.1-rc.2` | Planned, not started. |
 
 ## What is in it
@@ -44,7 +44,7 @@ ride along.** **It is a patch release, not a work packet.** P00 to P14 stay comp
 
 | Issue | Register | The finding | What the issue proposes (for decision) |
 | --- | --- | --- | --- |
-| [#359](https://github.com/smormah/vsift/issues/359) | [L-149](known-limits.md#l-149), high | speech at a chunk seam can be dropped with no warning and the coverage still says "transcribed" | keep a cut segment whose range reaches beyond its replacement, or decide ownership by time; report what merging and validation dropped as ranges with times; trim near-duplicates at seams. **The fix is pull request #377 (open, not merged): a guard on the union of the chunks' segments (half a second) and a report of the stretches where words that no segment holds may lie, with the limits L-155 to L-160; the issue's third point (duplicates) is not done.** Needs an ADR 0017 note, domain and contract tests (the first row's timings and the mirror case), `cli-v1.md` and a listener's check on the two recordings |
+| [#359](https://github.com/smormah/vsift/issues/359) | [L-149](known-limits.md#l-149), high | speech at a chunk seam can be dropped with no warning and the coverage still says "transcribed" | keep a cut segment whose range reaches beyond its replacement, or decide ownership by time; report what merging and validation dropped as ranges with times; trim near-duplicates at seams. **The fix is on `main` (#377): a guard on the union of the chunks' segments (half a second) and a report of the stretches where words that no segment holds may lie, with the limits L-155 to L-160; the issue's third point (duplicates) is not done.** Needs an ADR 0017 note, domain and contract tests (the first row's timings and the mirror case), `cli-v1.md` and a listener's check on the two recordings |
 | [#365](https://github.com/smormah/vsift/issues/365) | [L-150](known-limits.md#l-150) | each `transcript get` and `search` item repeats about 850 characters; a page of 50 is about 54,000 characters and an agent client lost items and the cursor | an additive opt-in compact form without the per-revision constants; a page size in the skill that fits; settle the `--limit` help (1 to 100 against a budget of 50) |
 | [#366](https://github.com/smormah/vsift/issues/366) | [L-151](known-limits.md#l-151) | `handoff check` cannot take a long report on Windows (both skill forms use the command line) | a way to give the check a report that is not on the command line, or a check of the `vsift-handoff` block alone, or a stated size limit; measure the failing lengths first |
 | [#367](https://github.com/smormah/vsift/issues/367) | [L-152](known-limits.md#l-152) | `candidates` on a long recording runs past a client's tool limit with no output and is too dense to page | a way to ask only for real screen changes; progress or an expected time; skill guidance for long recordings |
@@ -68,7 +68,7 @@ register entries L-146 (a model swapped during a run), L-147 (a worker host's `r
 
 ## What rc.2 needs
 
-1. **The changes above, each its own pull request with regression tests at the lowest useful layer.** #359 first (its fix is pull request #377, open); the larger designs after the design pass; the small ones. A public contract
+1. **The changes above, each its own pull request with regression tests at the lowest useful layer.** #359 first (its fix is on `main`, #377); the larger designs after the design pass; the small ones. A public contract
    change needs its schema, example, human renderer and `cli-v1.md` in the same pull request, and the register entry stays until the release.
 2. **A new skill and a new agent-trial freeze.** The skill changes again (at least #371 to #373, and probably #365 to #368 and #370), so its digest changes, the freeze is cut again and its fuzz seed copy follows byte for byte
    ([`docs/agents/trials.md`](../agents/trials.md), "The freeze (P14)"). The rc.1 freeze is not reused.
@@ -120,7 +120,7 @@ All four were decisions about `0.2.0-rc.3`'s evidence and were carried to `0.2.0
 
 ## The order of steps
 
-1. **Write the changes** (above), #359 first (pull request #377, open), each merged on its own with its regression tests; **the work record and register are kept current as each merges.**
+1. **Write the changes** (above), #359 first (merged, #377), each merged on its own with its regression tests; **the work record and register are kept current as each merges.**
 2. **Cut rc.2** and **merge the cut only when the supervisor can tag and publish at once** (repository pages such as the guide, the changelog and the skill guide name `0.2.1-rc.2` before it is on npm; 6.14 step 0.1 lists them).
    A public page that the stable commit may not change (the README is one) is corrected before the cut and not after it, because the stable commit is compared with the highest `v0.2.1-rc.N` tag; the known-issue notes about `0.2.0` and
    `0.2.1-rc.1` stay true as they are.
@@ -153,14 +153,14 @@ All four were decisions about `0.2.0-rc.3`'s evidence and were carried to `0.2.0
 ## What is weaker than it sounds
 
 - **The fix of #353 is shown by stand-ins.** The recording that found it cannot be committed; the thresholds are proposals; the kept-text rule has no test over a real decode.
-- **The fix of #359 exists (pull request #377, open) and its cause is still inferred.** It is shown by tests built from the issue's timings and by a reviewer's synthetic simulation, not on a real recording: the opt-in real-tool stage was not run, no listener's check
+- **The fix of #359 is on `main` (#377) and its cause is still inferred.** It is shown by tests built from the issue's timings and by a reviewer's synthetic simulation, not on a real recording: the opt-in real-tool stage was not run, no listener's check
   has been done on the two recordings, which stay on the maintainer's machine, the half second is derived for one configuration and not measured, and the guard trades holes for repeats (L-155) and leaves L-156 to L-159. A second real recording is the test that matters, and the real-media test set that would repeat it (#363) is not in this release.
 - **The live testing is the maintainer's, on two recordings, on Windows 11 with npm, driven by one client (Claude Code).** Every finding of 2026-10-10 is an observation of that setup; none was checked again on `0.2.1-rc.1`, and the figures
   (page sizes, minutes, tokens) are the agents' and the clients' as the issues report them.
 - **The skill change is a hypothesis, and it changes again.** The first change is untried, the grader matches text and cannot read a negation, and the batches are small (three runs per scenario).
 - **Every earlier result is for an earlier version.** The ledger's `passed` entries, the third candidate's batches and the scan reading are for `0.2.0` or `0.2.0-rc.3`; rc.1's program differed from `0.2.0`'s in 31 source files of
   `crates/`, and rc.2's will differ in more.
-- **A session with a gap cannot be read by `0.2.0` or earlier** (it reads as damaged), and **a session holding the new record member `unplaced_ranges` (#359, L-160) cannot be read by `0.2.0`, `0.2.1-rc.1` or earlier** (every revision of such a session fails as damaged, as do `handoff check --session` and `bundle validate`), so going back after using either loses the session.
+- **A session with a gap cannot be read by `0.2.0` or earlier** (it reads as damaged), and **a revision holding the new record member `unplaced_ranges` (#359, L-160) is read as damaged by `0.2.0`, `0.2.1-rc.1` and earlier**: they read newest first, so if the newest revision of a session holds it nothing of the session can be read, and if only an older one does the newest reads normally and the older ones are refused (by id, in `handoff check --session` and in `bundle validate`); so going back after using either loses the session, or part of it.
 - **6.14 ran once, for rc.1:** the Release run and the verification passed. What the run showed about the runbook (steps that were wrong or are missing) is not recorded in this plan; ask the person who ran it before rc.2.
 - **The window of L-133 reopens for repository pages** (the guide's first page, the changelog, the skill guide, the trial documents, this plan and the runbook), which name the candidate between the merge of its cut and its
   publish; the README, the installation guide, the launcher's README and the security policy are worded to be true both ways.
