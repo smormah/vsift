@@ -60,17 +60,20 @@ fn the_committed_freezes_still_hold() -> TestResult {
 /// visible: changing this constant is the decision to cut another candidate and write a new freeze
 /// (`docs/operations/release.md` section 6.8), and it shows in the diff of a test, not only of a data file.
 ///
-/// The fourth candidate's freeze is new on purpose (`0.2.1-rc.1`, 2026-10-10): the agent skill changed for the
-/// patch release `0.2.1`, which the maintainer decided on 2026-10-10 should carry everything that was waiting
-/// (the wording of #349, a partial transcription's gaps, a `BUSY` retry and the audio clip's text), so the
-/// `skill` component and with it this digest changed, `34ff775f...` to `2f8686b7...` and `654955dd...` to the
-/// value below. The other six components are the ones the third candidate was frozen with, byte for byte.
-/// The third candidate's whole-freeze digest was
-/// `654955dd210eae2707b15a5334a3390edca9b7e17e300ebe68310f4b815ba5c6` (a copy of that file is kept in
-/// `batch-2-rc.3/` and `batch-3-rc.3/`); the first two candidates' was
+/// The fifth candidate's freeze is new on purpose (`0.2.1-rc.2`, 2026-10-11): the agent skill changed again
+/// for the patch release `0.2.1` (the brief view, the coverage of a read, five-minute `candidates` ranges,
+/// `BUSY` while a transcription runs, the newest ids after a range retranscription, a long report checked in
+/// two parts, `session list` paging and whole recordings out of scope: `docs/agents/skill.md`, "Since the first
+/// candidate"), so the `skill` component and with it this digest changed, `2f8686b7...` to `256b4840...` and
+/// `dbc4c22c...` to the value below. The other six components are the ones the third and fourth candidates were
+/// frozen with, byte for byte. The fourth candidate's whole-freeze digest was
+/// `dbc4c22cac4324dc24040b597fff4da2e43011b833af8a142c970cc26fb98c9e`; no batch ran under it, so no copy of
+/// that file was kept beside records, and it stays in the history of `main` (`0.2.1-rc.1`, `cb8cb3a`). The third
+/// candidate's was `654955dd210eae2707b15a5334a3390edca9b7e17e300ebe68310f4b815ba5c6` (a copy of that file is kept
+/// in `batch-2-rc.3/` and `batch-3-rc.3/`); the first two candidates' was
 /// `1e89b5cc488e7245d1a6d63ec8809c1f8a5c137ee87f5ed05f9b692c2af6e392` (copies in `batch-2-rc.1/` and
 /// `batch-2-rc.2/`).
-const CUT_FREEZE_SHA256: &str = "dbc4c22cac4324dc24040b597fff4da2e43011b833af8a142c970cc26fb98c9e";
+const CUT_FREEZE_SHA256: &str = "a48567ac403149561019344cae58e137ae5bce5eb55a022e73cb2143ea60f6ea";
 
 #[test]
 fn the_committed_freezes_are_the_ones_written_at_the_cut() -> TestResult {
