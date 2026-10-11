@@ -86,6 +86,7 @@
       ]
     },
     "transcript_coverage": {
+      "description": "What a transcript covers of the range a command was asked about: the searched range of a search, or, since 0.2.1, the requested range of a transcript get, by one rule. A word said in an untranscribed range cannot be found by a search and is not shown by a read: an empty page there is a gap, never evidence of silence.",
       "type": "object",
       "additionalProperties": false,
       "required": [
@@ -103,11 +104,11 @@
           "enum": ["supplied_transcript", "local_asr", "mixed"]
         },
         "scope": {
-          "description": "What search (and, since 0.2.1, transcript get, which reuses this definition) reads: transcript text only; on-screen text is not searched.",
+          "description": "What the command looks at: transcript text only. On-screen text is neither searched nor read.",
           "const": "transcript_text"
         },
         "searched_range": {
-          "description": "The requested range (or the whole source) clipped to the source; null when the requested range lies wholly outside it.",
+          "description": "The requested range (the whole source for a search with no range) clipped to the source; null when the requested range lies wholly outside it. For a transcript get it is the range of the read, and every page of one request states the same coverage.",
           "oneOf": [
             { "type": "null" },
             { "$ref": "#/$defs/range" }

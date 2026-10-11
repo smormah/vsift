@@ -22,9 +22,10 @@ use vsift_contract::{
 };
 use vsift_domain::{
     CueSource, CueText, CueTiming, FailureCode, ImportedCue, MediaTime, PageLimit,
-    ParsedTranscript, PublicationGuarantee, SessionId, SessionLifetime, SidecarIdentity, SourceId,
-    SpeakerLabel, StorageGeneration, TimeRange, TranscriptFormat, TranscriptImportError,
-    TranscriptOffset, TranscriptRejection, TranscriptRevision, TranscriptWarnings,
+    ParsedTranscript, PublicationGuarantee, SearchCoverage, SessionId, SessionLifetime,
+    SidecarIdentity, SourceId, SpeakerLabel, StorageGeneration, TimeRange, TranscriptFormat,
+    TranscriptImportError, TranscriptOffset, TranscriptRejection, TranscriptRevision,
+    TranscriptWarnings,
 };
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -174,7 +175,14 @@ fn page_response(
     let cursor = page.next_cursor.map(|cursor| cursor.encode());
     Ok(OperationResponse::complete(
         "transcript.get",
-        &TranscriptPageData::new(&session, revision, range, &segments, cursor.as_deref()),
+        &TranscriptPageData::new(&TranscriptPresentation {
+            session_id: &session,
+            revision,
+            range,
+            segments: &segments,
+            next_cursor: cursor.as_deref(),
+            coverage: &page.coverage,
+        }),
     )?
     .with_lifecycle(LifecycleResponse::ephemeral(EXPIRES_AT.to_owned())))
 }
@@ -522,6 +530,7 @@ fn view_response(
             range,
             segments: &segments,
             next_cursor: cursor.as_deref(),
+            coverage: &page.coverage,
         },
         LifecycleResponse::ephemeral(EXPIRES_AT.to_owned()),
         view,
@@ -763,11 +772,14 @@ fn the_stream_states_the_coverage_its_page_does() -> TestResult {
     let range = micros(0, 12_000_000)?;
     let session = SessionId::parse(SESSION)?;
     let stream = TranscriptEvidenceStream::new(
-        &session,
-        &revision,
-        range,
-        &revision.segments()[..2],
-        None,
+        &TranscriptPresentation {
+            session_id: &session,
+            revision: &revision,
+            range,
+            segments: &revision.segments()[..2],
+            next_cursor: None,
+            coverage: &SearchCoverage::of(&revision, Some(range)),
+        },
         LifecycleResponse::ephemeral(EXPIRES_AT.to_owned()),
     )?;
     let terminal = serde_json::to_value(stream.terminal())?;

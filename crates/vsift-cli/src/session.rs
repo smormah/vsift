@@ -342,11 +342,23 @@ pub(crate) async fn retranscribe(
     ))
 }
 
+fn presentation(excerpt: &TranscriptExcerpt) -> TranscriptPresentation<'_> {
+    TranscriptPresentation {
+        session_id: excerpt.session().session_id(),
+        revision: excerpt.revision(),
+        range: excerpt.range(),
+        segments: excerpt.segments(),
+        next_cursor: excerpt.next_cursor(),
+        coverage: excerpt.coverage(),
+    }
+}
+
 /// Reads one bounded page of a session's transcript as one result, in `view`.
 ///
 /// The result is `partial` when part of the requested range has no transcript
-/// (#373): the contract decides that from the same rule `search` uses, so a
-/// read over a gap is never taken for a read of a silence.
+/// (#373): the engine's read states the coverage by the rule `search` uses, and
+/// the contract presents it, so a read over a gap is never taken for a read of
+/// a silence.
 pub(crate) fn transcript_get(
     engine: &Engine,
     arguments: TranscriptGetArguments,
@@ -354,18 +366,8 @@ pub(crate) fn transcript_get(
 ) -> Result<Response, CommandFailure> {
     let excerpt = read_transcript(engine, arguments)?;
     let lifecycle = session_lifecycle(excerpt.session().lifetime())?;
-    transcript_get_response(
-        &TranscriptPresentation {
-            session_id: excerpt.session().session_id(),
-            revision: excerpt.revision(),
-            range: excerpt.range(),
-            segments: excerpt.segments(),
-            next_cursor: excerpt.next_cursor(),
-        },
-        lifecycle,
-        view,
-    )
-    .map_err(|_| CommandFailure::from(FailureCode::Internal))
+    transcript_get_response(&presentation(&excerpt), lifecycle, view)
+        .map_err(|_| CommandFailure::from(FailureCode::Internal))
 }
 
 /// Reads one bounded page of a session's transcript as an evidence stream:
@@ -380,15 +382,8 @@ pub(crate) fn transcript_stream(
     crate::read_view::refuse_brief_stream(arguments.read_view)?;
     let excerpt = read_transcript(engine, arguments)?;
     let lifecycle = session_lifecycle(excerpt.session().lifetime())?;
-    TranscriptEvidenceStream::new(
-        excerpt.session().session_id(),
-        excerpt.revision(),
-        excerpt.range(),
-        excerpt.segments(),
-        excerpt.next_cursor(),
-        lifecycle,
-    )
-    .map_err(|_| CommandFailure::from(FailureCode::Internal))
+    TranscriptEvidenceStream::new(&presentation(&excerpt), lifecycle)
+        .map_err(|_| CommandFailure::from(FailureCode::Internal))
 }
 
 /// Executes one visible P05 session operation.

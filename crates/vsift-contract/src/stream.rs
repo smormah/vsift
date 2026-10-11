@@ -13,14 +13,14 @@
 //! same stream for the same page.
 
 use serde::Serialize;
-use vsift_domain::{SearchCoverage, SessionId, TimeRange, TranscriptRevision, TranscriptSegment};
+use vsift_domain::{TranscriptRevision, TranscriptSegment};
 
 use crate::{
     AudioEvidenceData, CONTRACT_VERSION, CommandName, FrameEvidenceData, LifecycleResponse,
     OperationResponse, TerminalEventResponse, TranscriptRevisionData, TranscriptSegmentData,
     VisualCandidateData,
     search::TranscriptCoverageData,
-    transcript::{RangeData, finish_transcript_read},
+    transcript::{RangeData, TranscriptPresentation, finish_transcript_read},
 };
 
 /// One published JSON Lines event kind, written to the event's `event` field.
@@ -291,8 +291,9 @@ pub trait EvidenceStream {
 ///
 /// It is the page's metadata without its items: the items were the preceding
 /// evidence events, and `record_count` says how many there were so a reader
-/// can prove it received all of them. `transcript_coverage` is the page's
-/// own (#373): a stream that read over a gap ends `partial`, as the page does.
+/// can prove it received all of them. `transcript_coverage` is the coverage of
+/// the whole requested range, not of the page (#373): a stream that read over a
+/// gap ends `partial`, as the `--json` result does.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct TranscriptStreamData {
     session_id: String,
@@ -316,39 +317,38 @@ pub struct TranscriptEvidenceStream {
 }
 
 impl TranscriptEvidenceStream {
-    /// Presents one page read from `revision` as an evidence stream.
+    /// Presents one page of a revision as an evidence stream.
+    ///
+    /// The coverage of the requested range, and so whether the terminal result
+    /// is `partial`, is the page's own ([`TranscriptPresentation::coverage`]),
+    /// as for the `--json` result.
     ///
     /// # Errors
     ///
     /// Returns the serialization error when the terminal data cannot be
     /// represented as JSON.
     pub fn new(
-        session_id: &SessionId,
-        revision: &TranscriptRevision,
-        range: TimeRange,
-        segments: &[TranscriptSegment],
-        next_cursor: Option<&str>,
+        page: &TranscriptPresentation<'_>,
         lifecycle: LifecycleResponse,
     ) -> Result<Self, serde_json::Error> {
         let command = CommandName::TranscriptGet;
         let records: Vec<_> = (0_u64..)
-            .zip(segments)
+            .zip(page.segments)
             .map(|(sequence, segment)| {
-                EvidenceEventResponse::transcript_segment(sequence, command, revision, segment)
+                EvidenceEventResponse::transcript_segment(sequence, command, page.revision, segment)
             })
             .collect();
-        let coverage = SearchCoverage::of(revision, Some(range));
         let data = TranscriptStreamData {
-            session_id: session_id.as_str().to_owned(),
-            revision: TranscriptRevisionData::new(revision),
-            range: RangeData::new(range),
+            session_id: page.session_id.as_str().to_owned(),
+            revision: TranscriptRevisionData::new(page.revision),
+            range: RangeData::new(page.range),
             record_count: records.len(),
-            next_cursor: next_cursor.map(str::to_owned),
-            transcript_coverage: TranscriptCoverageData::new(&coverage),
+            next_cursor: page.next_cursor.map(str::to_owned),
+            transcript_coverage: TranscriptCoverageData::new(page.coverage),
         };
         let result = finish_transcript_read(
             OperationResponse::complete(command.identifier(), &data)?.with_lifecycle(lifecycle),
-            &coverage,
+            page.coverage,
         );
         let terminal_sequence = u64::try_from(records.len()).unwrap_or(u64::MAX);
         Ok(Self {

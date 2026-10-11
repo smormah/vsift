@@ -6,6 +6,10 @@
   "data": {
     "items": [
       {
+        "carried_from": {
+          "revision_id": "trv_7936f6da2eecbf52108c4e6c9f96660e",
+          "segment_id": "tsg_24c8830a6279bc594180301086f2281b"
+        },
         "display_text": "The service status is healthy and the build is 2048.",
         "end_us": 5260000,
         "segment_id": "tsg_bd0c6294394b4b5520684dc9814e1c03",

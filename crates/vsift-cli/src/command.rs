@@ -116,6 +116,10 @@ pub(crate) enum Command {
     /// Read or revise timestamped transcript evidence.
     Transcript(TranscriptArguments),
     /// Search timestamped transcript evidence.
+    ///
+    /// Over a part of the range that was not transcribed the answer is partial
+    /// and names the part: a word said there cannot be found, and that is not
+    /// evidence that none was said.
     Search(SearchArguments),
     /// Page through visual evidence candidates.
     Candidates(CandidatesArguments),
@@ -548,6 +552,9 @@ pub(crate) struct TranscriptArguments {
 #[derive(Debug, Subcommand)]
 pub(crate) enum TranscriptCommand {
     /// Read timestamped text from a bounded range.
+    ///
+    /// Over a part of the range that was not transcribed the answer is partial
+    /// and names the part: an empty page there is a gap, not a silence.
     Get(TranscriptGetArguments),
     /// Transcribe the session's speech locally with whisper.cpp into a new
     /// revision: the whole video, or one range of it.
@@ -592,9 +599,11 @@ impl ViewArgument {
 /// once so the three commands cannot describe it differently.
 #[derive(Args, Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub(crate) struct ReadView {
-    /// Which answer to give. `brief` keeps each item's ids, times and text (a
-    /// candidate's reasons and hash) and leaves out what every item repeats, so
-    /// a page is a fraction of the size; read the full view for everything else.
+    /// Which answer to give. `brief` keeps each item's ids, times and
+    /// `display_text` (a candidate's reasons and hash) and leaves out what the
+    /// items of a revision or index repeat; those members stay once on the
+    /// revision block (or in `item_constants`), so a page is a fraction of the
+    /// size. Read the full view for everything else.
     #[arg(long = "view", value_enum, default_value_t)]
     pub view: ViewArgument,
 }
@@ -610,7 +619,8 @@ pub(crate) struct TranscriptGetArguments {
     /// Exclusive source-timeline end in microseconds.
     #[arg(long)]
     pub to: u64,
-    /// Segments per page, 1 through 100; defaults to 20.
+    /// Segments per page, 1 through 100; defaults to 20. The maximum stays 100;
+    /// full segments are large, and --view brief makes a long page smaller.
     #[arg(long, value_parser = clap::value_parser!(u16).range(1..=100))]
     pub limit: Option<u16>,
     /// Opaque continuation token returned by the previous page of the same query.
@@ -659,7 +669,8 @@ pub(crate) struct SearchArguments {
     /// Exclusive source-timeline end in microseconds; requires --from.
     #[arg(long, requires = "from")]
     pub to: Option<u64>,
-    /// Hits per page, 1 through 100; defaults to 20.
+    /// Hits per page, 1 through 100; defaults to 20. The maximum stays 100;
+    /// full items are large, and --view brief makes a long page smaller.
     #[arg(long, value_parser = clap::value_parser!(u16).range(1..=100))]
     pub limit: Option<u16>,
     /// Opaque continuation token returned by the previous page of the same search.
@@ -685,7 +696,8 @@ pub(crate) struct CandidatesArguments {
     /// of the video is clipped to it.
     #[arg(long)]
     pub to: u64,
-    /// Candidates per page, 1 through 100; defaults to 20.
+    /// Candidates per page, 1 through 100; defaults to 20. The maximum stays
+    /// 100; full items are large, and --view brief makes a long page smaller.
     #[arg(long, value_parser = clap::value_parser!(u16).range(1..=100))]
     pub limit: Option<u16>,
     /// Opaque continuation token returned by the previous page of the same

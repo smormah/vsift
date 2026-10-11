@@ -12,10 +12,10 @@ use std::{error::Error, fmt, future::Future, num::NonZeroU32};
 use sha2::{Digest, Sha256};
 use vsift_domain::{
     Confidence, CursorError, CursorToken, MediaTime, PageLimit, ParsedTranscript, QueryDigest,
-    SegmentOrigin, SessionId, SidecarIdentity, SourceId, SourceSegment, SourceSegmentId, TimeRange,
-    TranscriptImportError, TranscriptOffset, TranscriptProvenance, TranscriptRevision,
-    TranscriptRevisionError, TranscriptRevisionId, TranscriptRevisionParts, TranscriptSegment,
-    TranscriptSegmentId, TranscriptSegmentParts, align_imported_cues,
+    SearchCoverage, SegmentOrigin, SessionId, SidecarIdentity, SourceId, SourceSegment,
+    SourceSegmentId, TimeRange, TranscriptImportError, TranscriptOffset, TranscriptProvenance,
+    TranscriptRevision, TranscriptRevisionError, TranscriptRevisionId, TranscriptRevisionParts,
+    TranscriptSegment, TranscriptSegmentId, TranscriptSegmentParts, align_imported_cues,
 };
 
 use crate::session::SourcePathFault;
@@ -288,13 +288,20 @@ pub struct TranscriptPageRequest {
     pub cursor: Option<String>,
 }
 
-/// One bounded page of transcript segments.
+/// One bounded page of transcript segments with the coverage of the range
+/// that was read.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct TranscriptPage<'a> {
     /// Segments in ordinal order.
     pub segments: Vec<&'a TranscriptSegment>,
     /// Token for the next page, absent on the last page.
     pub next_cursor: Option<CursorToken>,
+    /// What the requested range's transcript covers and does not (#373): the
+    /// coverage of the whole range, the same on every page of one request,
+    /// computed by the rule a search uses ([`SearchCoverage::of`]). An empty
+    /// page over a part nobody transcribed is a gap, not a silence, and this
+    /// is how a host tells the two apart.
+    pub coverage: SearchCoverage,
 }
 
 /// Why a transcript page request was rejected.
@@ -362,6 +369,7 @@ pub fn page_transcript<'a>(
     Ok(TranscriptPage {
         segments: slice.segments,
         next_cursor,
+        coverage: SearchCoverage::of(revision, Some(request.range)),
     })
 }
 
@@ -440,8 +448,8 @@ mod tests {
 
     use vsift_domain::{
         CueSource, CueText, CueTiming, CursorError, CursorToken, ImportedCue, MediaTime, PageLimit,
-        ParsedTranscript, SessionId, SidecarIdentity, SourceId, TimeRange, TranscriptFormat,
-        TranscriptOffset, TranscriptRevision, TranscriptWarnings,
+        ParsedTranscript, SearchCoverage, SessionId, SidecarIdentity, SourceId, TimeRange,
+        TranscriptFormat, TranscriptOffset, TranscriptRevision, TranscriptWarnings,
     };
 
     use super::{
@@ -563,6 +571,38 @@ mod tests {
                 "tsg_49c33566f7c37a138f67ce1941e7f561",
             ]
         );
+        Ok(())
+    }
+
+    /// #373: a page states the coverage of the whole requested range, clipped to
+    /// the source, and it is the same on every page of one request: the first
+    /// page of a range does not look more complete than the last. A host gets it
+    /// from the read, never from the presentation.
+    #[test]
+    fn every_page_states_the_coverage_of_the_whole_requested_range() -> TestResult {
+        let session_id = session("0123456789abcdef")?;
+        let revision = revision(&session_id, 0)?;
+        // The source lasts 60 s; the range runs past it.
+        let requested = range(2_500_000, 90_000_000)?;
+        let mut request = TranscriptPageRequest {
+            range: requested,
+            limit: PageLimit::new(2)?,
+            cursor: None,
+        };
+        let expected = SearchCoverage::of(&revision, Some(requested));
+        assert_eq!(expected.searched(), Some(range(2_500_000, 60_000_000)?));
+        let mut pages = 0;
+        loop {
+            let page = page_transcript(&session_id, &revision, &request, EXPIRES, NOW)?;
+            assert_eq!(page.coverage, expected);
+            assert!(page.coverage.is_complete());
+            pages += 1;
+            match page.next_cursor {
+                Some(cursor) => request.cursor = Some(cursor.encode()),
+                None => break,
+            }
+        }
+        assert!(pages > 1, "the range spans several pages");
         Ok(())
     }
 

@@ -733,11 +733,44 @@ async fn the_brief_view_is_refused_for_a_stream_before_the_session_is_read() -> 
     Ok(())
 }
 
+/// What a recogniser heard in a chunk: from and to in milliseconds into it,
+/// and the words.
+type Spoken<'a> = (u64, u64, &'a str);
+
 /// A local-ASR revision of a 55 s source whose first chunk (0-30 s) was
 /// transcribed, "Dialog R-17 is displayed now." at 1-4 s, and whose second
 /// (25-55 s) the recogniser answered with something that could not be used
 /// (#353): 30-55 s has no transcript.
 fn with_unusable_chunk(session_id: &SessionId, source_id: &SourceId) -> Built<TranscriptRevision> {
+    unusable_second_chunk(
+        session_id,
+        source_id,
+        &[(1_000, 4_000, "Dialog R-17 is displayed now.")],
+    )
+}
+
+/// [`with_unusable_chunk`] with three segments in the transcribed chunk, at 1, 8
+/// and 15 s, so that a page of one segment is one of three.
+fn with_unusable_chunk_three_segments(
+    session_id: &SessionId,
+    source_id: &SourceId,
+) -> Built<TranscriptRevision> {
+    unusable_second_chunk(
+        session_id,
+        source_id,
+        &[
+            (1_000, 4_000, "Dialog R-17 is displayed now."),
+            (8_000, 11_000, "The second thing is said here."),
+            (15_000, 18_000, "The third thing is said here."),
+        ],
+    )
+}
+
+fn unusable_second_chunk(
+    session_id: &SessionId,
+    source_id: &SourceId,
+    spoken: &[Spoken<'_>],
+) -> Built<TranscriptRevision> {
     let source = vsift_application::whole_file_source_segment(
         source_id,
         MediaTime::from_micros(55 * SECOND),
@@ -773,20 +806,21 @@ fn with_unusable_chunk(session_id: &SessionId, source_id: &SourceId) -> Built<Tr
             ),
         ],
     })?;
-    let output = ProviderChunkOutput {
-        language: None,
-        segments: vec![ProviderSegment {
-            start: ChunkTime::from_millis(1_000).ok_or("time")?,
-            end: ChunkTime::from_millis(4_000).ok_or("time")?,
-            text: Some(CueText::new(
-                "Dialog R-17 is displayed now.".to_owned(),
-                "Dialog R-17 is displayed now.".to_owned(),
-            )?),
+    let mut provider_segments = Vec::new();
+    for (start, end, words) in spoken {
+        provider_segments.push(ProviderSegment {
+            start: ChunkTime::from_millis(*start).ok_or("time")?,
+            end: ChunkTime::from_millis(*end).ok_or("time")?,
+            text: Some(CueText::new((*words).to_owned(), (*words).to_owned())?),
             tokens: vec![ProviderToken {
                 kind: ProviderTokenKind::Text,
                 probability: 0.75,
             }],
-        }],
+        });
+    }
+    let output = ProviderChunkOutput {
+        language: None,
+        segments: provider_segments,
     };
     let (segments, language, warnings) =
         validate_chunk_output(&first, first.window(), source.range(), output)?.into_parts();
@@ -946,7 +980,12 @@ fn assert_stream_and_text_reads_of_a_gap(
     let human = vsift(root, &get(session, "0", &end, &[]))?;
     assert_eq!(human.status.code(), Some(0));
     let human = String::from_utf8(human.stdout)?;
-    assert!(human.contains("Not transcribed (words said there cannot be found):"));
+    assert!(
+        human.contains(
+            "Not transcribed (no words are read there; that does not mean none were said):"
+        ),
+        "{human}"
+    );
     assert!(human.contains("Status: partial"), "{human}");
     Ok(())
 }
@@ -978,6 +1017,101 @@ async fn a_read_over_a_gap_is_partial_as_a_search_over_it_is() -> TestResult {
         let session = seed_session(&root, case.build).await?;
         let read = assert_json_reads_of_a_gap(&root, &session, &case)?;
         assert_stream_and_text_reads_of_a_gap(&root, &session, &case, &read)?;
+    }
+    Ok(())
+}
+
+/// #373: the status is the range's, not the page's and not the stream's
+/// window. A 55 s recording with a gap at 30-55 s and three segments, read at
+/// `--limit 1`, is three pages and every one is `partial` with the whole gap
+/// (a page over the first segment does not look complete because its own span is
+/// covered); and the stream's terminal event judges the requested range, not the
+/// whole source: complete below the gap, `partial` with only its own part of it
+/// where the range crosses or lies in it.
+#[tokio::test]
+async fn status_does_not_depend_on_the_page_or_on_the_stream() -> TestResult {
+    let root = OwnedRoot::new()?;
+    let session = seed_session(&root, with_unusable_chunk_three_segments).await?;
+
+    let mut cursor: Option<String> = None;
+    let mut seen = Vec::new();
+    loop {
+        let mut extra = vec!["--limit", "1", "--json"];
+        if let Some(cursor) = cursor.as_deref() {
+            extra.extend(["--cursor", cursor]);
+        }
+        let output = vsift(&root, &get(&session, "0", "55000000", &extra))?;
+        assert_eq!(output.status.code(), Some(0));
+        let page = read_json(&output)?;
+        assert_eq!(page["status"], "partial", "page {}", seen.len() + 1);
+        assert_eq!(
+            page["coverage"]["gaps"],
+            serde_json::json!(["30000000-55000000"])
+        );
+        assert_eq!(
+            page["data"]["transcript_coverage"]["untranscribed_ranges"],
+            serde_json::json!([{"from_us": 30_000_000, "to_us": 55_000_000}])
+        );
+        let items = page["data"]["items"].as_array().ok_or("items")?;
+        assert_eq!(items.len(), 1);
+        seen.push(items[0]["segment_id"].as_str().ok_or("id")?.to_owned());
+        match page["data"]["next_cursor"].as_str() {
+            Some(next) => cursor = Some(next.to_owned()),
+            None => break,
+        }
+    }
+    assert_eq!(seen.len(), 3, "three pages of one segment");
+    assert_eq!(
+        seen.iter().collect::<std::collections::BTreeSet<_>>().len(),
+        3,
+        "no segment twice"
+    );
+
+    for (from, to, status, gaps) in [
+        // Below the gap: complete, whatever the revision holds elsewhere.
+        ("0", "20000000", "complete", serde_json::Value::Null),
+        // Inside it: only the part asked for.
+        (
+            "31000000",
+            "40000000",
+            "partial",
+            serde_json::json!(["31000000-40000000"]),
+        ),
+        // Across its start.
+        (
+            "20000000",
+            "35000000",
+            "partial",
+            serde_json::json!(["30000000-35000000"]),
+        ),
+    ] {
+        let events = vsift(
+            &root,
+            &get(&session, from, to, &["--events", "jsonl", "--limit", "2"]),
+        )?;
+        assert_eq!(events.status.code(), Some(0), "{from}-{to}");
+        let text = String::from_utf8(events.stdout)?;
+        let lines: Vec<Value> = text
+            .lines()
+            .map(serde_json::from_str)
+            .collect::<Result<_, _>>()?;
+        let terminal = lines.last().ok_or("empty stream")?;
+        validate("terminal-event.schema.json", terminal)?;
+        assert_eq!(terminal["result"]["status"], status, "{from}-{to}");
+        if gaps.is_null() {
+            assert!(terminal["result"]["coverage"].is_null(), "{from}-{to}");
+        } else {
+            assert_eq!(terminal["result"]["coverage"]["gaps"], gaps, "{from}-{to}");
+        }
+        // The member judges the same requested range.
+        assert_eq!(
+            terminal["result"]["data"]["transcript_coverage"]["searched_range"],
+            serde_json::json!({
+                "from_us": from.parse::<u64>()?,
+                "to_us": to.parse::<u64>()?
+            }),
+            "{from}-{to}"
+        );
     }
     Ok(())
 }

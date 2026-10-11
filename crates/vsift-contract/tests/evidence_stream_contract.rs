@@ -199,25 +199,20 @@ fn page(
     let segments: Vec<_> = page.segments.into_iter().cloned().collect();
     let next_cursor = page.next_cursor.map(|cursor| cursor.encode());
     let lifecycle = || LifecycleResponse::ephemeral(EXPIRES_AT.to_owned());
+    let presentation = TranscriptPresentation {
+        session_id: &session,
+        revision,
+        range,
+        segments: &segments,
+        next_cursor: next_cursor.as_deref(),
+        coverage: &page.coverage,
+    };
     let json = serde_json::to_value(transcript_get_response(
-        &TranscriptPresentation {
-            session_id: &session,
-            revision,
-            range,
-            segments: &segments,
-            next_cursor: next_cursor.as_deref(),
-        },
+        &presentation,
         lifecycle(),
         ResultView::Full,
     )?)?;
-    let stream = TranscriptEvidenceStream::new(
-        &session,
-        revision,
-        range,
-        &segments,
-        next_cursor.as_deref(),
-        lifecycle(),
-    )?;
+    let stream = TranscriptEvidenceStream::new(&presentation, lifecycle())?;
     let mut lines = stream
         .records()
         .iter()
