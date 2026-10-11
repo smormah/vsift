@@ -34,20 +34,25 @@ Nothing here is published, and nothing changes in the skill, which is a frozen t
 **If you read a transcript or a search with an AI assistant, the pages are a fraction of the size (#365).** `transcript get`, `search` and
 `candidates` take a new option, `--view full|brief`. `full` is the default and is the answer every release gave. `brief` leaves out of each item what every item of one revision (or one visual index) repeats:
 the two SHA-256 digests, the source and source-segment identities, the model and decoding profiles, the provider, the displayed size. The answer states them once, in its revision block (for candidates, in a new
-`item_constants` member). A brief transcript segment is its identity, its times, its `display_text` (the form a report quotes, with hidden characters shown) and a speaker's `display_label`; a brief candidate is its
-identity, `representative_us`, `span`, `reasons`, `stability`, the size of the change that opened it and its `visual_hash`. **On the committed examples a page of 50 segments falls from about 57,000 characters to about
-9,500 (a carried segment of a local transcription; about 35,500 to 9,300 for imported cues), a page of 50 search hits from about 33,000 to 8,100, and a page of 50 candidates from about 32,000 to 12,700**
-(an item from 1,109 to 153, 639 to 136 and 625 to 233 characters). The brief answer is made from the full one, so a member of a brief item is the member of the full item with the same value, and it never
+`item_constants` member), **except that a segment carried into a spliced revision keeps `carried_from`**: it was first produced by another revision's run, so the revision block does not describe it, and the brief item
+says which revision to read it from. A brief transcript segment is its identity, its times, its `display_text` (the form a report quotes, with hidden characters shown), a speaker's `display_label` and, on a carried segment,
+`carried_from`; a brief candidate is its identity, `representative_us`, `span`, `reasons`, `stability`, the size of the change that opened it and its `visual_hash`. **Measured on the committed examples, a page of 50, by repeating each
+example's items (and, for `search`, its hits) to 50: transcript segments of a local transcription fall from 51,156 to 9,471 characters (18.5%) and, with a carried segment, from 57,256 to 15,571 (27.2%); imported cues from 35,511 to 9,251 (26.1%);
+a search from 36,702 to 11,567 (31.5%); candidates from 31,980 to 12,718 (39.8%).** The design's bar of "under a quarter" is met for `transcript get` on a local transcription whose segments are not carried, and not for the others. The brief
+answer is made from the full one, so a member of a brief item is the member of the full item with the same value, and it never
 leaves out a gap: coverage, status and warnings are the full answer's. **The brief view is refused with `--events jsonl`** (`INVALID_ARGUMENT`, with a remediation that says why, before anything is read or analysed):
 the records of a stream are published evidence that an index stores by key, and a reduced record would replace a complete one; stored records, retained bundles and streams are never brief. Readable text (no `--json`)
 is the same for both views, and a cursor of one view continues in the other. An older release given `--view` answers that it is an unknown option; nothing it stores differs.
-No filter, progress events or parallel windows were added to `candidates` (#367 asked for them; they wait for a measurement on a real recording).
+No filter, progress events or parallel windows were added to `candidates` (#367 asked for them; they wait for a measurement on a real recording), so **#365's closing evidence also needs the skill change and #367's complaint is untouched.**
 
 **If you read a transcript over a part nobody transcribed (#373).** `transcript get` now states what a transcript covers of the range it was asked for, with a new member
-`transcript_coverage` (always present, also in the terminal data of `--events jsonl`), computed by the same rule `search` uses. The read is `partial` (exit 0) exactly when part of the range has no transcript, with the
-envelope `coverage` listing the gaps and a fixed warning that a gap is not a silence; the readable text lists them too. A complete read keeps `coverage: null`, and its `--json` is what `0.1.0` wrote but for the one new
-member. **This changes the status of an existing answer** for a revision with an uncovered range (a range-only transcription of a video with no earlier transcript, or a transcription with an unusable stretch, #353), which
-`search` already reported as `partial`. The schema lists the member as a property and not as `required`, because answers of the published `0.1.0` have none and the compatibility test keeps them valid.
+`transcript_coverage` (always present, also in the terminal data of `--events jsonl`), computed by the same rule `search` uses, in the application's read (`Engine::transcript` gives it to a library host as
+`excerpt.coverage()`) and presented by the contract. The read is `partial` (exit 0) exactly when part of the range has no transcript, with the
+envelope `coverage` listing the gaps and a fixed warning that a gap is not a silence; the readable text lists them too, in a read's own words. A complete read keeps `coverage: null`, and its `--json` is what `0.1.0` wrote but for the one new
+member. **This changes the status of an existing answer** for a revision with an uncovered range, which `search` already reported as `partial`. Three causes can leave one: (1) a range-only transcription of a video with no earlier
+transcript; (2) a transcription with an unusable stretch (#353), or a later run elsewhere that leaves a stretch an earlier run could not read still unread; and (3) **a range retranscription that replaces every segment of the first run,
+which carries nothing from it, so the first run's windows are forgotten ([L-033](docs/planning/known-limits.md#l-033)): a 12 s run with one segment at 1-4 s is complete, and after retranscribing 2-3 s (which snaps to 1-4 s) it reads
+`partial` over 0-12 s with the gaps 0-1 s and 4-12 s.** Those gaps are false gaps (the first run did read them), never a false silence. The schema lists the member as a property and not as `required`, because answers of the published `0.1.0` have none and the compatibility test keeps them valid.
 
 ### Added
 

@@ -1004,7 +1004,9 @@ Options:
 Read timestamped text from a bounded range.
 
 ```text
-Read timestamped text from a bounded range
+Read timestamped text from a bounded range.
+
+Over a part of the range that was not transcribed the answer is partial and names the part: an empty page there is a gap, not a silence.
 
 Usage: vsift transcript get [OPTIONS] --from <FROM> --to <TO> <SESSION>
 
@@ -1029,7 +1031,7 @@ Options:
           Exclusive source-timeline end in microseconds
 
       --limit <LIMIT>
-          Segments per page, 1 through 100; defaults to 20
+          Segments per page, 1 through 100; defaults to 20. The maximum stays 100; full segments are large, and --view brief makes a long page smaller
 
       --session-root <SESSION_ROOT>
           For operators who run a worker host; an agent leaves it out. Explicit private disposable-session root; defaults to the per-user cache
@@ -1050,7 +1052,7 @@ Options:
           Revision to read (a `trv_` identity); defaults to the newest
 
       --view <VIEW>
-          Which answer to give. `brief` keeps each item's ids, times and text (a candidate's reasons and hash) and leaves out what every item repeats, so a page is a fraction of the size; read the full view for everything else
+          Which answer to give. `brief` keeps each item's ids, times and `display_text` (a candidate's reasons and hash) and leaves out what the items of a revision or index repeat; those members stay once on the revision block (or in `item_constants`), so a page is a fraction of the size. Read the full view for everything else
 
           Possible values:
           - full:  Every field of every item: the answer every release gave (the default)
@@ -1115,7 +1117,9 @@ Options:
 Search timestamped transcript evidence.
 
 ```text
-Search timestamped transcript evidence
+Search timestamped transcript evidence.
+
+Over a part of the range that was not transcribed the answer is partial and names the part: a word said there cannot be found, and that is not evidence that none was said.
 
 Usage: vsift search [OPTIONS] --query <QUERY> <SESSION>
 
@@ -1155,7 +1159,7 @@ Options:
           [default: process-only]
 
       --limit <LIMIT>
-          Hits per page, 1 through 100; defaults to 20
+          Hits per page, 1 through 100; defaults to 20. The maximum stays 100; full items are large, and --view brief makes a long page smaller
 
       --cursor <CURSOR>
           Opaque continuation token returned by the previous page of the same search
@@ -1164,7 +1168,7 @@ Options:
           Revision to search (a `trv_` identity); defaults to the newest
 
       --view <VIEW>
-          Which answer to give. `brief` keeps each item's ids, times and text (a candidate's reasons and hash) and leaves out what every item repeats, so a page is a fraction of the size; read the full view for everything else
+          Which answer to give. `brief` keeps each item's ids, times and `display_text` (a candidate's reasons and hash) and leaves out what the items of a revision or index repeat; those members stay once on the revision block (or in `item_constants`), so a page is a fraction of the size. Read the full view for everything else
 
           Possible values:
           - full:  Every field of every item: the answer every release gave (the default)
@@ -1206,7 +1210,7 @@ Options:
           Exclusive source-timeline end in microseconds; a range past the end of the video is clipped to it
 
       --limit <LIMIT>
-          Candidates per page, 1 through 100; defaults to 20
+          Candidates per page, 1 through 100; defaults to 20. The maximum stays 100; full items are large, and --view brief makes a long page smaller
 
       --session-root <SESSION_ROOT>
           For operators who run a worker host; an agent leaves it out. Explicit private disposable-session root; defaults to the per-user cache
@@ -1224,7 +1228,7 @@ Options:
           [default: process-only]
 
       --view <VIEW>
-          Which answer to give. `brief` keeps each item's ids, times and text (a candidate's reasons and hash) and leaves out what every item repeats, so a page is a fraction of the size; read the full view for everything else
+          Which answer to give. `brief` keeps each item's ids, times and `display_text` (a candidate's reasons and hash) and leaves out what the items of a revision or index repeat; those members stay once on the revision block (or in `item_constants`), so a page is a fraction of the size. Read the full view for everything else
 
           Possible values:
           - full:  Every field of every item: the answer every release gave (the default)

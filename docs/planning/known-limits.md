@@ -1661,10 +1661,19 @@ Counts: 3 high, 48 medium, 94 low (145 entries).
 - **What:** a supplied SRT/WebVTT file is taken to cover the whole source; its
   completeness is not verified, so a region it does not cover is not reported as
   untranscribed. For spliced local-ASR revisions coverage can be understated (never
-  overstated).
+  overstated). **One case, found in review of the 0.2.1 reads (#373):** a range
+  retranscription that replaces every segment of the first run carries nothing from it, so the
+  revision no longer records that run's windows and what only that run read is counted as not
+  transcribed. A 12 s whole-video run with one segment at 1-4 s is complete over 0-12 s; after
+  retranscribing 2-3 s, which snaps outward to 1-4 s, the revision is `partial` over 0-12 s with the
+  gaps 0-1 s and 4-12 s, in a `search` and, since the reads change, in a `transcript get`. The
+  gaps are false (the first run did read them) and are never a false silence.
 - **Evidence:** [ADR 0018](../decisions/0018-visual-candidate-index-and-transcript-search.md)
-  decision 7.
-- **Impact:** with a partial supplied transcript, "no hit" may be read as "not said".
+  decision 7; the contract test `replacing_every_segment_of_the_first_run_leaves_a_false_gap_never_a_false_silence`
+  (`crates/vsift-contract/tests/local_asr_contract.rs`).
+- **Impact:** with a partial supplied transcript, "no hit" may be read as "not said". A false gap may
+  send an agent to retranscribe a stretch for nothing, or make it report a read as `partial` that was
+  complete; it cannot make a gap look like a silence.
 - **Why:** VSift cannot know what the author left out.
 - **Mitigation:** `basis: supplied_transcript` is reported.
 - **Next step:** none planned.
@@ -4475,7 +4484,8 @@ that week.**
   compiling if a member for gaps is added, so the change can only be made on purpose, with the schema and the words.
 - **What a supervisor sees, and how to tell:** `complete` for the step and for the request, with no coverage and no warning in the result, so a supervisor that reads only `job run` or `job batch` is **not told** that part of a
   recording was not transcribed. It can tell by reading the revision the step names: `transcript get --revision <revision_id>` shows the warning `provider_chunks_rejected` (the count of chunks and the first one) and
-  `revision.local_asr.unusable_chunks`, and a `search` of the session lists the ranges as untranscribed (`transcript_coverage.untranscribed_ranges`). How often: whenever a worker transcribes a recording in which a chunk is
+  `revision.local_asr.unusable_chunks`, and, **since the 0.2.1 reads change (#373), a `transcript get` over a range that includes the stretch answers `partial` with the gaps** (`coverage`, `transcript_coverage.untranscribed_ranges`), as a `search`
+  of the session does. How often: whenever a worker transcribes a recording in which a chunk is
   unusable, which is the case [L-145](#l-145) found (1 chunk of 83 on the one real recording) and which a recording with pauses can have. Before `0.2.1` such a step failed; the new case exists only with the fix.
 - **Evidence:** [ADR 0017](../decisions/0017-local-asr-through-whisper-cpp.md), note of 2026-10-10 ("What a worker supervisor sees"); [ADR 0020](../decisions/0020-recoverable-jobs-and-durable-publication.md), the note of the same date;
   [`cli-v1.md`](../contracts/cli-v1.md) ("A `retranscribe` step does not report gaps (0.2.1)"); [`limits.md`](../guide/limits.md); the contract test above.
@@ -4602,11 +4612,10 @@ that week.**
 - **Impact: medium. The rubric line applied is the second one** ("slow calls, a missing convenience", with a workaround). The first line (wrong evidence presented as verified) was considered and not applied: nothing false is
   said, and the cursor that was lost is the thing the agent noticed was missing. Workaround: ask for smaller pages (the agent's own recovery was about 22 items), at the cost of more calls.
 - **Why:** not examined; the issue records the item shape and the page size, not why they were chosen.
-- **Mitigation:** smaller pages, at the agent's own judgement; nothing in the product or the skill says so yet.
-- **Next step:** the maintainer decided on 2026-10-11 that it rides along in `0.2.1` (the second candidate); **the design is not decided.** The issue proposes an additive, opt-in compact form for `transcript get` and `search`
-  that leaves the per-revision constants out of each item (they stay in the revision block) with the skill asking for it, a page size in the skill that fits a client's limit until then, and settling the `--limit` help.
-  A new optional flag or member is an additive change to the v1 contract, which bears on the version number (open, [`release-0.2.1.md`](release-0.2.1.md)). **Evidence to close (from the issue):** a contract test and a schema
-  for the compact form; a measured page size in characters for a page of 50 in both forms; the skill change with its freeze.
+- **Mitigation:** smaller pages, at the agent's own judgement; **since the Reads change, `--view brief` on `transcript get`, `search` and `candidates` (see `cli-v1.md`, "Views of a read") returns the same ids, times and text in about a fifth to two fifths of the characters (measured below); the frozen skill does not use it yet, and its `standard` budget still asks for 50 in the full view.**
+- **Next step:** the maintainer decided on 2026-10-11 that it rides along in `0.2.1` (the second candidate) and that the version stays `0.2.1`. **Built (the Reads change; the issue stays open):** the opt-in brief view, its schemas and examples, contract and binary tests, the `--limit` help settled in wording
+  (the maximum stays 100) and a measured page size in both forms (a page of 50, by repeating the examples' items: 51,156 to 9,471 characters for transcript segments of a local transcription, 57,256 to 15,571 with a carried segment, 35,511 to 9,251 for imported cues, 36,702 to 11,567 for a search, 31,980 to 12,718 for candidates;
+  the design's "under a quarter" is met only for the first). **Still to do before the issue closes:** the skill change with its freeze (the skill must ask for the brief view and a page size that fits), and one real run that shows a client reading a page of 50 with its cursor (counts only).
 - **Owner:** the `0.2.1` release (second candidate). **Issue:** [#365](https://github.com/smormah/vsift/issues/365). **Status:** open. **Review:** pending.
 
 ### L-151
@@ -4651,11 +4660,10 @@ that week.**
 - **Impact: medium. The rubric line applied is the second one** (slow calls, a missing convenience, with a workaround: frame times chosen from the transcript or at fixed intervals, which both agents did). The answer is honest
   (`partial`, with the reason and the dropped count), so the first line does not apply.
 - **Why:** not examined; the issue records the behaviour on two recordings.
-- **Mitigation:** the agent's own choice of frame times; the `partial` answer says what was dropped.
-- **Next step:** the maintainer decided on 2026-10-11 that it rides along in `0.2.1` (the second candidate); **the design is not decided.** The issue proposes a way to ask only for moments where the screen really changes
-  (leaving out periodic entries, or one entry per run of equal `visual_hash`), progress events or a stated expected time for the first analysis, and skill guidance for long recordings. A new option is an additive change to
-  the v1 contract (the version question is open, [`release-0.2.1.md`](release-0.2.1.md)). **Evidence to close (from the issue):** a measured number of calls and of characters to shortlist the screens of a 15 to 30 minute
-  recording, before and after; a contract test for whatever is added.
+- **Mitigation:** the agent's own choice of frame times; the `partial` answer says what was dropped; **since the Reads change, `candidates --view brief` makes each candidate about 40% of the characters (a page of 50: 31,980 to 12,718 on the committed example), which does not shorten the first call or thin the list; the frozen skill does not use it yet.**
+- **Next step:** the maintainer decided on 2026-10-11 that it rides along in `0.2.1` (the second candidate) and that the version stays `0.2.1`. **Built (the Reads change; the issue stays open):** the brief view of `candidates` only. **Not built, by decision:** a filter (periodic entries, or one entry per run of equal `visual_hash`),
+  progress events and parallel windows: they wait for the maintainer's counts on a real recording (candidates per minute by reason, seconds per minute of video). **Untouched, and the issue's complaint:** the first call over 120 s with no output, and a list too dense to page. **Evidence to close (from the issue):** a measured number of calls and of characters to shortlist the screens of a 15 to 30 minute
+  recording, before and after (only the maintainer's recordings can give it); a contract test for whatever is added; the skill guidance for long recordings, with its freeze.
 - **Owner:** the `0.2.1` release (second candidate). **Issue:** [#367](https://github.com/smormah/vsift/issues/367). **Status:** open. **Review:** pending.
 
 ### L-153

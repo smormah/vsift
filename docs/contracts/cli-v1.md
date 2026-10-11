@@ -403,15 +403,29 @@ read", below) and always states its coverage (next paragraph).
 the words a transcript holds there, so an empty page can mean silence or a part nobody
 transcribed, and a reader that cannot tell them apart takes a gap for absence. Every
 `transcript get` therefore states what a transcript covers of the range it was asked
-for, by the rule `search` uses
-(`vsift_domain::SearchCoverage::of`, one function for both commands, so no range is
-covered for one and not for the other): `data.transcript_coverage` is exactly the
-`transcript_coverage` of a `search` over the same revision and range (see "P08
-transcript search": `basis`, `scope`, `searched_range`, `transcribed_ranges`,
-`untranscribed_ranges`, `no_speech_ranges`, `ranges_truncated`). It describes the
-whole requested range, not the page: every page of one request states the same coverage.
-The member is **always present** on `transcript get` from `0.2.1` and in the terminal
-data of its `--events jsonl` stream, in both views.
+for, by the rule `search` uses (`vsift_domain::SearchCoverage::of`, one function for both
+commands, so no range is covered for one and not for the other, and run by the
+application's transcript read, so a library host that calls `Engine::transcript` gets it
+from the excerpt (`coverage()`) and the contract only presents it): `data.transcript_coverage`
+has the shape of the `transcript_coverage` of a `search` over the same revision and range
+(see "P08 transcript search") with a read's meaning: `basis` says where the words came
+from, `scope` is `transcript_text` (on-screen text is not read), `searched_range` is the
+requested range clipped to the video (`null` when it lies wholly outside it),
+`transcribed_ranges`, `untranscribed_ranges` and `no_speech_ranges` split that range,
+and `ranges_truncated` says a list was cut at 100. It describes the whole requested
+range, not the page: every page of one request states the same coverage, and an empty
+page over `untranscribed_ranges` is a gap, never evidence of silence. The member is
+**always present** on `transcript get` from `0.2.1` and in the terminal data of its
+`--events jsonl` stream, in both views.
+
+**Size.** On the committed examples the member is 232 to 259 characters (an imported
+transcript, a local transcription, a read over one gap) and the envelope `coverage` is
+`null` or about 80. It grows with the number of ranges, each list cut at 100
+(`ranges_truncated`): measured on a stand-in recording of 1,020 chunks with 255 gaps, the
+member is 12,719 characters, the envelope `coverage` 2,460 and the warning 217, and a page
+with no segment 16,706 in all (the contract test `every_gap_is_listed_and_a_long_list_says_it_was_cut`).
+That is about 15 KB a page in the worst case, repeated on every page of the request, and far
+under the one mebibyte result budget.
 
 - **The status says it too.** The result is `partial`, and still exits 0, exactly when
   `untranscribed_ranges` is not empty: the envelope `coverage` then holds
@@ -436,7 +450,15 @@ data of its `--events jsonl` stream, in both views.
   through every later retranscription until a run reads it (`carried_untranscribed`).
   A range that starts or ends inside a gap lists only its own part of it; a range past
   the end of the video is clipped to it; one wholly outside it has `searched_range:
-  null`, nothing to cover and is complete.
+  null`, nothing to cover and is complete. **A read can be `partial` for a third reason
+  besides a range-only transcription and an unusable stretch:** a range retranscription
+  that replaces every segment of the first run carries nothing from it, the revision no
+  longer records that run's windows, and what only that run read is counted as not
+  transcribed (a 12 s run with one segment at 1-4 s is complete over 0-12 s; after
+  retranscribing 2-3 s, which snaps to 1-4 s, it reads `partial` with the gaps 0-1 s and
+  4-12 s, as `search` reports them). Such a gap is false (the first run did read it) and
+  is never a false silence: the rule errs toward a gap
+  ([L-033](../planning/known-limits.md#l-033)).
 - **A gap is not a failure.** The read still returns every segment the revision holds in
   the range, and a `partial` read is usable: its gaps are gaps, never evidence of
   silence. Silence the recogniser found is `no_speech_ranges`. A gap is a part nobody
@@ -527,7 +549,9 @@ How a consumer reads it:
   `--revision`, and a consumer that wants only one revision filters on
   `record.revision_id` against the terminal event's `revision.revision_id`.
 - **End of stream.** The stream is complete only when its terminal event has been
-  read. Its `result.status` says whether the operation succeeded, and on success
+  read. Its `result.status` says whether the operation succeeded (`complete`, or
+  `partial` for a read over a part of the range that was not transcribed, which is a
+  success too, and exits 0), and on success
   `record_count` must equal the number of evidence events received and the terminal
   `sequence`; a gap in `sequence` or a missing terminal event (for example a closed
   pipe) means the stream is incomplete. Records already upserted remain valid because
@@ -537,8 +561,10 @@ How a consumer reads it:
   Cursor rules are those of `--json`.
 - **Failures and empty pages.** A request that fails (bad range, cursor or session,
   no transcript) writes only one terminal failure event with `sequence: 0`, exactly as
-  before. A valid range that no segment intersects writes one complete terminal event
-  with `record_count: 0`.
+  before. A valid range that no segment intersects writes one terminal event with
+  `record_count: 0`: `complete` where the transcript covers the range, and `partial`,
+  with the gaps in `transcript_coverage` and the envelope `coverage`, over a part that was
+  not transcribed (an empty stream there is a gap, not a silence).
 - **Unknown events.** Within v1 new event kinds may appear before the terminal event
   (P11 added `progress`, `lifecycle` and `result`; see "P11 worker contracts and
   events" below). Dispatch on `event`, skip a kind you do not know and still count
@@ -1604,11 +1630,13 @@ vsift candidates ses_0123456789abcdef --from 0 --to 300000000 --limit 50 --view 
 **Why.** About half of every transcript segment (and of every visual candidate) is what
 every item of its revision (or index) repeats: the two SHA-256 digests, the source and
 source-segment identities, the model and decoding profiles, the provider, the displayed
-size. The answer already says them once, in its revision (or index) block. On the committed
-examples a page of 50 transcript segments is about 54,000 to 57,000 characters on one line
-(#365: a client saved such a page, read only its first 43,000 characters and lost nine
-items and the page's `next_cursor`, with no error from VSift). The brief view is the same
-page without the repeats.
+size. The answer already says them once, in its revision (or index) block, **except for a
+segment carried into a spliced revision, which keeps the recognizer, alignment and language
+of the revision that first produced it and so names that revision (`carried_from`)**. On
+the committed examples a page of 50 transcript segments is about 51,000 to 57,000
+characters on one line (#365: a client saved such a page, read only its first 43,000
+characters and lost nine items and the page's `next_cursor`, with no error from VSift). The
+brief view is the same page without the repeats.
 
 `transcript get`, `search` and `candidates` take `--view full|brief`. **`full` is the
 default and is the answer every release gave** (for `transcript get` plus its new
@@ -1618,15 +1646,16 @@ view that names itself) and reduces each item:
 
 | Command | A brief item holds | It leaves out | Where the left-out values are |
 | --- | --- | --- | --- |
-| `transcript get`, `search` | `segment_id`, `start_us`, `end_us`, `display_text` and, when the segment has one, `speaker` as `display_label` and `origin` | `revision_id`, `source_id`, `source_segment_id` | the answer's `revision` block: `revision_id`, `source_id`, `source_segments[0].source_segment_id` |
-| | | the recognizer's digests, model and decoding profiles, provider, the chunk's index and times (`alignment`) | `revision.local_asr` (the run) for what is the run's; the chunk's own times only in the full view |
-| | | `text`, `original_text` and the raw speaker `label` (hidden characters kept raw), `markup`, `confidence`, `language`, `cue`, `carried_from` | the full view only |
+| `transcript get`, `search` | `segment_id`, `start_us`, `end_us`, `display_text` and, when the segment has one, `speaker` as `display_label` and `origin`; **on a carried segment, `carried_from`** (the revision and segment its text was first produced in) | `revision_id`, `source_id`, `source_segment_id` | the answer's `revision` block: `revision_id`, `source_id`, `source_segments[0].source_segment_id` |
+| | | the recognizer's digests, model and decoding profiles, provider, the chunk's index and times (`alignment`) | `revision.local_asr` for the revision's own run. **A carried segment's `alignment` and `language` are those of the revision that produced it, not of the revision block's run, so for such a segment `carried_from` says where to read them (`transcript get --revision`), and the full view gives them** |
+| | | `text`, `original_text` and the raw speaker `label` (hidden characters kept raw), `markup`, `confidence`, `language`, `cue` | the full view only |
 | `candidates` | `candidate_id`, `representative_us`, `span`, `reasons`, `stability`, `visual_hash` and, when a change opened it, `change` | `source_id`, `source_segment_id`, `stream_index`, `displayed_dimensions`, `analysis` | the answer's `item_constants`, once (a member the brief answer adds, with the same values the full view repeats on every item) |
 | | | `window` | derived: `ordinal` is `representative_us` divided by `index.window_us`, rounded down; `from_us` is `ordinal * window_us` and `to_us` the smaller of the next window's start and `index.duration_us` |
 | | | `change_window` and `sample_count` | the full view only |
 
 An item with nothing to say names none: `speaker` and `change` are absent from a brief
-item that has none, where the full item has `null`.
+item that has none, where the full item has `null`, and `carried_from` is absent from a
+segment that is not carried, as it is in the full view.
 
 **The views cannot drift.** A brief answer is made from the full one: each brief item
 is projected from the full item (and `item_constants` from the same code that builds the
@@ -1657,12 +1686,23 @@ a stream are never brief: the view is a presentation of a result, nothing more.
   full answer, and it never repeated the digests, identities and profiles per item (the
   revision block states them once), so `--view brief` is accepted and changes nothing
   there. The view shapes the JSON.
-- **Size** (the committed examples, a page of 50 items on one line, compact JSON):
-  transcript segments 57,256 to 9,471 characters (about a sixth; the item 1,109 to 153,
-  with a carried segment), 35,511 to 9,251 for imported cues (the item 684 to 159);
-  `search` 33,223 to 8,088; `candidates` 31,980 to 12,718 (the item 625 to 233). The
-  brief page grows with the text it quotes: a longer segment is a longer item in either
-  view.
+- **Size.** Measured on the committed examples, a page of 50, compact JSON, as one
+  line, **by repeating each example's `items` to 50 and, for `search`, its `hits` to 50
+  too** (a hit is 70 characters); the examples' segments are short, and the brief page
+  grows with the text it quotes. Characters, full page to brief page (the share the brief
+  page is of the full page), and one item:
+
+  | Answer | Full | Brief | One item |
+  | --- | --- | --- | --- |
+  | `transcript get`, local transcription, a segment that is not carried | 51,156 | 9,471 (18.5%) | 987 to 153 |
+  | `transcript get`, local transcription, a carried segment (`carried_from` kept) | 57,256 | 15,571 (27.2%) | 1,109 to 275 |
+  | `transcript get`, imported cues | 35,511 | 9,251 (26.1%) | 684 to 159 |
+  | `search` (50 items and 50 hits) | 36,702 | 11,567 (31.5%) | 639 to 136 |
+  | `candidates` | 31,980 | 12,718 (39.8%) | 625 to 233 |
+
+  The design's bar of "under a quarter" is met for `transcript get` on local
+  transcription only where a segment is not carried (and its item, 15.5%); the other
+  answers are a quarter to two fifths of the full page.
 - **Schemas.** [`transcript-get-brief-data.schema.json`](../../schemas/v1/transcript-get-brief-data.schema.json)
   (example [`transcript-get.brief.json`](../../schemas/v1/examples/transcript-get.brief.json)),
   [`search-brief-data.schema.json`](../../schemas/v1/search-brief-data.schema.json)
@@ -2643,9 +2683,12 @@ metadata, not verified human identity.
 Candidate, transcript and search pages default to 20 items and accept 1 through 100.
 The maximum is a bound, not a recommendation: a page of 100 full transcript segments is
 about 100,000 characters on one line, more than some clients read in one call (#365), so
-an agent budget asks for 20 (or, in the brief view, up to 50), as the typical-investigation
-help says ("Ask for small pages"). Lowering the maximum would refuse requests that are
-valid today, so it stays 100.
+an agent budget asks for a small page, as the typical-investigation help says ("Ask for
+small pages"); the `--limit` help of the three commands now says the maximum stays 100 and
+that `--view brief` makes a long page smaller. **The frozen agent skill is out of step until
+its change:** its `standard` budget asks for 50 per page in the full view, which is the page
+size the issue found too large, and it does not know `--view brief`. Lowering the maximum
+would refuse requests that are valid today, so it stays 100.
 A candidate cursor's generation is the state of the windows its own range touches, not
 the index revision, so analysing other windows does not invalidate it.
 Continuation cursors are opaque, local tokens of at most 512 bytes. They contain no filesystem paths or

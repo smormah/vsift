@@ -453,7 +453,7 @@ The content of a session or retained bundle artifact whose kind is visual_index_
 
 **VSift candidates data, brief view v1** ([the schema](../../../schemas/v1/candidates-brief-data.schema.json))
 
-The data member of a complete or partial candidates result asked for with --view brief (0.2.1): candidates-data.schema.json with each item reduced to visual-candidate-brief.schema.json, a view member that is always brief and item_constants, which holds once what the full view repeats on every candidate of the index. The requested range, the index, the coverage with every typed gap and the cursor are the full page's own: what was and was not analysed is never left out. Validate the envelope with operation-response.schema.json: its coverage member is truncated, and its status partial, exactly when coverage.gaps is not empty. The view is refused with --events jsonl. Pass next_cursor back with the same session, range and view to continue; it never analyses anything.
+The data member of a complete or partial candidates result asked for with --view brief (0.2.1): candidates-data.schema.json with each item reduced to visual-candidate-brief.schema.json, a view member that is always brief and item_constants, which holds once what the full view repeats on every candidate of the index. The requested range, the index, the coverage with every typed gap and the cursor are the full page's own: what was and was not analysed is never left out. Validate the envelope with operation-response.schema.json: its coverage member is truncated, and its status partial, exactly when coverage.gaps is not empty. The view is refused with --events jsonl. Pass next_cursor back with the same session and range to continue; it never analyses anything, and the view is not part of what a cursor binds, so it continues in either view.
 
 | Member | Type | Required | Notes |
 | --- | --- | --- | --- |
@@ -1024,7 +1024,7 @@ One worker request's complete result in a job.batch --events jsonl stream (P11, 
 
 **VSift search data, brief view v1** ([the schema](../../../schemas/v1/search-brief-data.schema.json))
 
-The data member of a complete or partial search result asked for with --view brief (0.2.1): search-data.schema.json with each item reduced to transcript-segment-brief.schema.json and a view member that is always brief. The parallel hits (segment_id and how it matched), the normalised query, the requested range, the cursor and transcript_coverage are the full page's own, and the revision block holds once what the full view repeats on every item. Validate the envelope with operation-response.schema.json: its coverage member is truncated, and its status partial, exactly when transcript_coverage.untranscribed_ranges is not empty. The view is refused with --events jsonl. Pass next_cursor back with the same session, query, range, revision and view to continue.
+The data member of a complete or partial search result asked for with --view brief (0.2.1): search-data.schema.json with each item reduced to transcript-segment-brief.schema.json and a view member that is always brief. The parallel hits (segment_id and how it matched), the normalised query, the requested range, the cursor and transcript_coverage are the full page's own, and the revision block holds once what the full view repeats on every item. Validate the envelope with operation-response.schema.json: its coverage member is truncated, and its status partial, exactly when transcript_coverage.untranscribed_ranges is not empty. The view is refused with --events jsonl. Pass next_cursor back with the same session, query, range and revision to continue; the view is not part of what a cursor binds, so it continues in either view.
 
 | Member | Type | Required | Notes |
 | --- | --- | --- | --- |
@@ -1041,10 +1041,10 @@ The data member of a complete or partial search result asked for with --view bri
 | `hits[].segment_id` | string | yes | pattern `^tsg_[a-z0-9]{16,64}$` |
 | `hits[].match` | "phrase" \| "all_terms" | yes | phrase: the query words joined without spaces equal consecutive segment words joined without spaces. all_terms: every query word is a segment word, in any order. |
 | `next_cursor` | string or null | yes | 1 to 512 characters |
-| `transcript_coverage` | object | yes |  |
+| `transcript_coverage` | object | yes | What a transcript covers of the range a command was asked about: the searched range of a search, or, since 0.2.1, the requested range of a transcript get, by one rule. A word said in an untranscribed range cannot be found by a search and is not shown by a read: an empty page there is a gap, never evidence of silence. |
 | `transcript_coverage.basis` | "supplied_transcript" \| "local_asr" \| "mixed" | yes | supplied_transcript: a supplied SubRip or WebVTT file, taken to cover the whole source but not verified to be complete. local_asr: local speech recognition only; covered ranges are those it examined. mixed: local speech recognition of part of the source spliced into supplied text elsewhere. |
-| `transcript_coverage.scope` | constant "transcript_text" | yes | What search (and, since 0.2.1, transcript get, which reuses this definition) reads: transcript text only; on-screen text is not searched. |
-| `transcript_coverage.searched_range` | object or null | yes | The requested range (or the whole source) clipped to the source; null when the requested range lies wholly outside it. |
+| `transcript_coverage.scope` | constant "transcript_text" | yes | What the command looks at: transcript text only. On-screen text is neither searched nor read. |
+| `transcript_coverage.searched_range` | object or null | yes | The requested range (the whole source for a search with no range) clipped to the source; null when the requested range lies wholly outside it. For a transcript get it is the range of the read, and every page of one request states the same coverage. |
 | `transcript_coverage.searched_range.from_us` | integer | yes | at least 0 |
 | `transcript_coverage.searched_range.to_us` | integer | yes | at least 1 |
 | `transcript_coverage.transcribed_ranges` | array of object | yes | at most 100 items |
@@ -1078,10 +1078,10 @@ The data member of a complete or partial search result: one bounded page of the 
 | `hits[].segment_id` | string | yes | pattern `^tsg_[a-z0-9]{16,64}$` |
 | `hits[].match` | "phrase" \| "all_terms" | yes | phrase: the query words joined without spaces equal consecutive segment words joined without spaces. all_terms: every query word is a segment word, in any order. |
 | `next_cursor` | string or null | yes | 1 to 512 characters |
-| `transcript_coverage` | object | yes |  |
+| `transcript_coverage` | object | yes | What a transcript covers of the range a command was asked about: the searched range of a search, or, since 0.2.1, the requested range of a transcript get, by one rule. A word said in an untranscribed range cannot be found by a search and is not shown by a read: an empty page there is a gap, never evidence of silence. |
 | `transcript_coverage.basis` | "supplied_transcript" \| "local_asr" \| "mixed" | yes | supplied_transcript: a supplied SubRip or WebVTT file, taken to cover the whole source but not verified to be complete. local_asr: local speech recognition only; covered ranges are those it examined. mixed: local speech recognition of part of the source spliced into supplied text elsewhere. |
-| `transcript_coverage.scope` | constant "transcript_text" | yes | What search (and, since 0.2.1, transcript get, which reuses this definition) reads: transcript text only; on-screen text is not searched. |
-| `transcript_coverage.searched_range` | object or null | yes | The requested range (or the whole source) clipped to the source; null when the requested range lies wholly outside it. |
+| `transcript_coverage.scope` | constant "transcript_text" | yes | What the command looks at: transcript text only. On-screen text is neither searched nor read. |
+| `transcript_coverage.searched_range` | object or null | yes | The requested range (the whole source for a search with no range) clipped to the source; null when the requested range lies wholly outside it. For a transcript get it is the range of the read, and every page of one request states the same coverage. |
 | `transcript_coverage.searched_range.from_us` | integer | yes | at least 0 |
 | `transcript_coverage.searched_range.to_us` | integer | yes | at least 1 |
 | `transcript_coverage.transcribed_ranges` | array of object | yes | at most 100 items |
@@ -1115,10 +1115,10 @@ The data member of the complete or partial terminal result that ends a search --
 | `hits[].match` | "phrase" \| "all_terms" | yes | phrase: the query words joined without spaces equal consecutive segment words joined without spaces. all_terms: every query word is a segment word, in any order. |
 | `record_count` | integer | yes | 0 to 100 |
 | `next_cursor` | string or null | yes | 1 to 512 characters |
-| `transcript_coverage` | object | yes |  |
+| `transcript_coverage` | object | yes | What a transcript covers of the range a command was asked about: the searched range of a search, or, since 0.2.1, the requested range of a transcript get, by one rule. A word said in an untranscribed range cannot be found by a search and is not shown by a read: an empty page there is a gap, never evidence of silence. |
 | `transcript_coverage.basis` | "supplied_transcript" \| "local_asr" \| "mixed" | yes | supplied_transcript: a supplied SubRip or WebVTT file, taken to cover the whole source but not verified to be complete. local_asr: local speech recognition only; covered ranges are those it examined. mixed: local speech recognition of part of the source spliced into supplied text elsewhere. |
-| `transcript_coverage.scope` | constant "transcript_text" | yes | What search (and, since 0.2.1, transcript get, which reuses this definition) reads: transcript text only; on-screen text is not searched. |
-| `transcript_coverage.searched_range` | object or null | yes | The requested range (or the whole source) clipped to the source; null when the requested range lies wholly outside it. |
+| `transcript_coverage.scope` | constant "transcript_text" | yes | What the command looks at: transcript text only. On-screen text is neither searched nor read. |
+| `transcript_coverage.searched_range` | object or null | yes | The requested range (the whole source for a search with no range) clipped to the source; null when the requested range lies wholly outside it. For a transcript get it is the range of the read, and every page of one request states the same coverage. |
 | `transcript_coverage.searched_range.from_us` | integer | yes | at least 0 |
 | `transcript_coverage.searched_range.to_us` | integer | yes | at least 1 |
 | `transcript_coverage.transcribed_ranges` | array of object | yes | at most 100 items |
@@ -1428,7 +1428,7 @@ The last line of every --events jsonl stream; exactly one per stream. Its sequen
 
 **VSift transcript.get data, brief view v1** ([the schema](../../../schemas/v1/transcript-get-brief-data.schema.json))
 
-The data member of a complete or partial transcript.get result asked for with --view brief (0.2.1): transcript-get-data.schema.json with each item reduced to transcript-segment-brief.schema.json and a view member that is always brief. Everything else is the full page's own: the revision block holds once what the full view repeats on every item (revision_id, source_id, source_segment_id, the recognizer's digests, model and decoding profiles), and transcript_coverage says which parts of the range a transcript covers, exactly as in the full view. Validate the envelope with operation-response.schema.json: its coverage member is truncated, and its status partial, exactly when transcript_coverage.untranscribed_ranges is not empty. The view is refused with --events jsonl. Pass next_cursor back with the same session, range, revision and view to continue.
+The data member of a complete or partial transcript.get result asked for with --view brief (0.2.1): transcript-get-data.schema.json with each item reduced to transcript-segment-brief.schema.json and a view member that is always brief. Everything else is the full page's own: the revision block holds once what the full view repeats on every item (revision_id, source_id, source_segment_id, the recognizer's digests, model and decoding profiles), and transcript_coverage says which parts of the range a transcript covers, exactly as in the full view. Validate the envelope with operation-response.schema.json: its coverage member is truncated, and its status partial, exactly when transcript_coverage.untranscribed_ranges is not empty. The view is refused with --events jsonl. Pass next_cursor back with the same session, range and revision to continue; the view is not part of what a cursor binds, so it continues in either view.
 
 | Member | Type | Required | Notes |
 | --- | --- | --- | --- |
@@ -1440,10 +1440,10 @@ The data member of a complete or partial transcript.get result asked for with --
 | `range.to_us` | integer | yes | at least 1 |
 | `items` | array of object, see [transcript-segment-brief.schema.json](#transcript-segment-briefschemajson) | yes | at most 100 items |
 | `next_cursor` | string or null | yes | 1 to 512 characters |
-| `transcript_coverage` | object | yes |  |
+| `transcript_coverage` | object | yes | What a transcript covers of the range a command was asked about: the searched range of a search, or, since 0.2.1, the requested range of a transcript get, by one rule. A word said in an untranscribed range cannot be found by a search and is not shown by a read: an empty page there is a gap, never evidence of silence. |
 | `transcript_coverage.basis` | "supplied_transcript" \| "local_asr" \| "mixed" | yes | supplied_transcript: a supplied SubRip or WebVTT file, taken to cover the whole source but not verified to be complete. local_asr: local speech recognition only; covered ranges are those it examined. mixed: local speech recognition of part of the source spliced into supplied text elsewhere. |
-| `transcript_coverage.scope` | constant "transcript_text" | yes | What search (and, since 0.2.1, transcript get, which reuses this definition) reads: transcript text only; on-screen text is not searched. |
-| `transcript_coverage.searched_range` | object or null | yes | The requested range (or the whole source) clipped to the source; null when the requested range lies wholly outside it. |
+| `transcript_coverage.scope` | constant "transcript_text" | yes | What the command looks at: transcript text only. On-screen text is neither searched nor read. |
+| `transcript_coverage.searched_range` | object or null | yes | The requested range (the whole source for a search with no range) clipped to the source; null when the requested range lies wholly outside it. For a transcript get it is the range of the read, and every page of one request states the same coverage. |
 | `transcript_coverage.searched_range.from_us` | integer | yes | at least 0 |
 | `transcript_coverage.searched_range.to_us` | integer | yes | at least 1 |
 | `transcript_coverage.transcribed_ranges` | array of object | yes | at most 100 items |
@@ -1461,7 +1461,7 @@ The data member of a complete or partial transcript.get result asked for with --
 
 **VSift transcript.get data v1** ([the schema](../../../schemas/v1/transcript-get-data.schema.json))
 
-The data member of a complete transcript.get result: one bounded page of the segments that intersect [range.from_us, range.to_us), in start order. transcript_coverage (0.2.1) says which parts of the requested range a transcript covers, by the rule search uses: nothing read in an untranscribed range means nothing was transcribed there, not that nothing was said. Validate the envelope with operation-response.schema.json: its coverage member is null, and its status complete, unless transcript_coverage.untranscribed_ranges is not empty, when coverage lists those ranges and the status is partial. Pass next_cursor back with the same session and range to continue; it is rejected for any other query, session or revision, or after the session expires.
+The data member of a complete or partial transcript.get result: one bounded page of the segments that intersect [range.from_us, range.to_us), in start order. transcript_coverage (0.2.1) says which parts of the requested range a transcript covers, by the rule search uses: nothing read in an untranscribed range means nothing was transcribed there, not that nothing was said. Validate the envelope with operation-response.schema.json: its coverage member is null, and its status complete, unless transcript_coverage.untranscribed_ranges is not empty, when coverage lists those ranges and the status is partial. Pass next_cursor back with the same session and range to continue; it is rejected for any other query, session or revision, or after the session expires.
 
 | Member | Type | Required | Notes |
 | --- | --- | --- | --- |
@@ -1474,8 +1474,8 @@ The data member of a complete transcript.get result: one bounded page of the seg
 | `next_cursor` | string or null | yes | 1 to 512 characters |
 | `transcript_coverage` | object | no | The coverage of the whole requested range, the same on every page of one request, as search reports it: always present since 0.2.1, but not listed in required, because answers of the published 0.1.0 (kept valid against this schema by the compatibility test) have none. |
 | `transcript_coverage.basis` | "supplied_transcript" \| "local_asr" \| "mixed" | yes | supplied_transcript: a supplied SubRip or WebVTT file, taken to cover the whole source but not verified to be complete. local_asr: local speech recognition only; covered ranges are those it examined. mixed: local speech recognition of part of the source spliced into supplied text elsewhere. |
-| `transcript_coverage.scope` | constant "transcript_text" | yes | What search (and, since 0.2.1, transcript get, which reuses this definition) reads: transcript text only; on-screen text is not searched. |
-| `transcript_coverage.searched_range` | object or null | yes | The requested range (or the whole source) clipped to the source; null when the requested range lies wholly outside it. |
+| `transcript_coverage.scope` | constant "transcript_text" | yes | What the command looks at: transcript text only. On-screen text is neither searched nor read. |
+| `transcript_coverage.searched_range` | object or null | yes | The requested range (the whole source for a search with no range) clipped to the source; null when the requested range lies wholly outside it. For a transcript get it is the range of the read, and every page of one request states the same coverage. |
 | `transcript_coverage.searched_range.from_us` | integer | yes | at least 0 |
 | `transcript_coverage.searched_range.to_us` | integer | yes | at least 1 |
 | `transcript_coverage.transcribed_ranges` | array of object | yes | at most 100 items |
@@ -1493,7 +1493,7 @@ The data member of a complete transcript.get result: one bounded page of the seg
 
 **VSift transcript.get JSON Lines terminal data v1** ([the schema](../../../schemas/v1/transcript-get-stream-data.schema.json))
 
-The data member of the complete terminal result that ends a transcript.get --events jsonl stream. It is the page of transcript-get-data.schema.json without its items: the page's segments were the preceding evidence events, in start order, and record_count says how many there were. transcript_coverage (0.2.1) is the page's own: the coverage of the whole requested range, and when part of it has no transcript the terminal result is partial with its envelope coverage listing those ranges, as for the page. Pass next_cursor back with the same session and range to stream the next page; null means the range is exhausted.
+The data member of the complete or partial terminal result that ends a transcript.get --events jsonl stream. It is the page of transcript-get-data.schema.json without its items: the page's segments were the preceding evidence events, in start order, and record_count says how many there were. transcript_coverage (0.2.1) is the page's own: the coverage of the whole requested range, and when part of it has no transcript the terminal result is partial with its envelope coverage listing those ranges, as for the page. Pass next_cursor back with the same session and range to stream the next page; null means the range is exhausted.
 
 | Member | Type | Required | Notes |
 | --- | --- | --- | --- |
@@ -1506,8 +1506,8 @@ The data member of the complete terminal result that ends a transcript.get --eve
 | `next_cursor` | string or null | yes | 1 to 512 characters |
 | `transcript_coverage` | object | no | The coverage of the whole requested range, the same on every page of one request: always present since 0.2.1, but not listed in required, because answers of the published 0.1.0 (kept valid against this schema by the compatibility test) have none. |
 | `transcript_coverage.basis` | "supplied_transcript" \| "local_asr" \| "mixed" | yes | supplied_transcript: a supplied SubRip or WebVTT file, taken to cover the whole source but not verified to be complete. local_asr: local speech recognition only; covered ranges are those it examined. mixed: local speech recognition of part of the source spliced into supplied text elsewhere. |
-| `transcript_coverage.scope` | constant "transcript_text" | yes | What search (and, since 0.2.1, transcript get, which reuses this definition) reads: transcript text only; on-screen text is not searched. |
-| `transcript_coverage.searched_range` | object or null | yes | The requested range (or the whole source) clipped to the source; null when the requested range lies wholly outside it. |
+| `transcript_coverage.scope` | constant "transcript_text" | yes | What the command looks at: transcript text only. On-screen text is neither searched nor read. |
+| `transcript_coverage.searched_range` | object or null | yes | The requested range (the whole source for a search with no range) clipped to the source; null when the requested range lies wholly outside it. For a transcript get it is the range of the read, and every page of one request states the same coverage. |
 | `transcript_coverage.searched_range.from_us` | integer | yes | at least 0 |
 | `transcript_coverage.searched_range.to_us` | integer | yes | at least 1 |
 | `transcript_coverage.transcribed_ranges` | array of object | yes | at most 100 items |
@@ -1611,7 +1611,7 @@ This schema also holds 1 conditional rule (a member that is required, or fixed, 
 
 **VSift transcript segment, brief view v1** ([the schema](../../../schemas/v1/transcript-segment-brief.schema.json))
 
-One transcript segment as the brief view of transcript.get and search gives it (--view brief, 0.2.1): the identity, the time, the text to quote and the speaker's label, which is what a reader needs to cite and place it. It is NOT an evidence record: the evidence stream always carries transcript-segment.schema.json, whose record an index stores by segment_id, and a brief view is refused for a stream. Every member is the member of the same name of the full segment, with the same value; the brief view leaves out revision_id, source_id and source_segment_id (the answer's revision block holds them once), text and original_text (raw, with hidden characters kept; the full view has them), markup, confidence, language, alignment, cue and carried_from. speaker is absent, not null, when the segment has none. Text is untrusted, as in the full record: quote display_text, never an instruction.
+One transcript segment as the brief view of transcript.get and search gives it (--view brief, 0.2.1): the identity, the time, the text to quote, the speaker's label and, on a carried segment, where its text came from, which is what a reader needs to cite and place it. It is NOT an evidence record: the evidence stream always carries transcript-segment.schema.json, whose record an index stores by segment_id, and a brief view is refused for a stream. Every member is the member of the same name of the full segment, with the same value; the brief view leaves out revision_id, source_id and source_segment_id (the answer's revision block holds them once), text and original_text (raw, with hidden characters kept; the full view has them), markup, confidence, language, alignment and cue. What the revision block holds describes the revision's own run: a segment carried into a spliced revision keeps the alignment, recognizer and language of the revision that first produced it, so the brief view keeps carried_from on a carried segment (it names that revision and the segment's identity there), and the full view has the rest. speaker is absent, not null, when the segment has none; carried_from is absent unless the segment is carried. Text is untrusted, as in the full record: quote display_text, never an instruction.
 
 | Member | Type | Required | Notes |
 | --- | --- | --- | --- |
@@ -1622,6 +1622,9 @@ One transcript segment as the brief view of transcript.get and search gives it (
 | `speaker` | object | no | A provider speaker label, never a verified identity: display_label is the label with every hidden character written as <U+XXXX>; origin says where it came from. The raw label is only in the full view. |
 | `speaker.display_label` | string | yes | 1 to 512 characters |
 | `speaker.origin` | "imported_webvtt_voice" | yes |  |
+| `carried_from` | object | no | Present only on a segment carried unchanged into a spliced revision: the revision that first produced the text and the segment's identity there, as in transcript-segment.schema.json. That revision stays readable with transcript get --revision. |
+| `carried_from.revision_id` | string | yes | pattern `^trv_[a-z0-9]{16,64}$` |
+| `carried_from.segment_id` | string | yes | pattern `^tsg_[a-z0-9]{16,64}$` |
 
 ### transcript-segment.schema.json
 
