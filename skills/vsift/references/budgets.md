@@ -48,11 +48,18 @@ the elapsed time. Add
   crop it first or report the gap.
 - Never page through the whole transcript or all candidates "to be safe"; search
   first and read windows around hits.
-- Ask for `--view brief` on every `transcript get`, `search` and `candidates`: the same page is
-  a fraction of the size, with the same ids, times, `display_text`, coverage and gaps. Without it
-  a page is never longer than 20, on either profile: a page of 50 transcript segments is over
-  50,000 characters, and a client cut one at about 43,000 with no error, losing items and the
-  `next_cursor`. With it, `standard` may use 50.
+- Ask for `--view brief` on every `transcript get`, `search` and `candidates`: each item is
+  smaller, with the same ids, times, `display_text`, coverage and gaps. Without it a page is
+  never longer than 20, on either profile; with it, `standard` may use 50. The brief view is
+  not always a small page: it keeps the revision block whole, and after a transcription that
+  left many stretches of words no segment holds (`revision.local_asr.unplaced_ranges`) that
+  block alone is up to about 45,000 characters, in either view.
+- A client can cut a long answer without any error: one cut a page at about 43,000 characters
+  and lost items and the `next_cursor`. The CLI writes `status` before `data` and the gaps
+  after it (the envelope's `coverage` after `data`, `transcript_coverage` after the items), so
+  a cut answer can say `partial` and show no gap. If an answer ends before `lifecycle`, its
+  last member, or looks cut, read a smaller range (the brief view, a smaller `--limit`)
+  before you trust it.
 - Ask `candidates` for at most 5 minutes per call (300000000 microseconds), and with a
   transcript around its spans, not across the video.
 - **A whole long recording is not what these profiles are sized for.** A summary or a timeline

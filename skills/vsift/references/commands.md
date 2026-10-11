@@ -58,7 +58,7 @@ whole; do not pipe it into `grep`, `head` or anything else.
 | `vsift session clean` | explicit | Removes every expired session of the root, not only yours. `--expired --dry-run` is read-only and may run freely to show what would be removed. |
 | `vsift session init-workspace` | never | Worker-host setup, not an investigation step. |
 | `vsift transcript get` | free | Bounded pages. |
-| `vsift transcript retranscribe` | free | Only when the session has no usable transcript or a range needs checking; always with `--operation-id`. |
+| `vsift transcript retranscribe` | free | Only when the session has no usable transcript or a range needs checking (for a stretch a `partial` read lists: once, and only if the question needs it, see handoff.md); always with `--operation-id`. |
 | `vsift search` | free | Literal words, never a pattern. |
 | `vsift candidates` | free | Shortlist only. |
 | `vsift frame get` | free | Counts against the image budget when you open the image. |
@@ -212,7 +212,13 @@ A gap caused by a failure may carry its code in `gaps[].code`.
 - `--limit` is 1 to 100 (default 20) for `transcript get`, `search` and `candidates`. Ask for
   20, or 50 on `standard` with `--view brief` (budgets.md): a page of 50 transcript segments in
   the full view is over 50,000 characters, more than some clients read in one call (one cut
-  such a page and lost items and the `next_cursor`, with no error from VSift).
+  such a page at about 43,000 characters and lost items and the `next_cursor`, with no error
+  from VSift). The CLI writes the envelope as `schema_version`, `command`, `operation_id`,
+  `status`, `data`, `warnings`, `error`, `coverage`, `lifecycle`, and `data`'s members in
+  alphabetical order, so a cut answer can show `status` `partial` and none of the gaps (the
+  envelope's `coverage` and `data.transcript_coverage` come after the items). An answer that
+  ends before `lifecycle` was cut: read a smaller range (the brief view, a smaller `--limit`)
+  before you trust it.
 - `--view brief` (`transcript get`, `search` and `candidates`, with `--json`) leaves out of each
   item what the answer states once, in its `revision` block (`item_constants` for `candidates`).
   A segment keeps `segment_id`, `start_us`, `end_us` and `display_text` (and `speaker` with its
@@ -220,6 +226,9 @@ A gap caused by a failure may carry its code in `gaps[].code`.
   `stability` and `visual_hash`. A segment carried from an earlier revision keeps `carried_from`.
   The revision's id is `revision.revision_id` of the answer, and `data.view` says `brief`.
   Nothing else changes: coverage, gaps, `next_cursor` and the status are the full view's.
+  The revision block stays whole, so the brief view is not always a small page: after a
+  transcription that left many stretches of words no segment holds, the block alone is up to
+  about 45,000 characters (`revision.local_asr.unplaced_ranges`), in either view.
 - `candidates` analyses at most 30 minutes of video per call; call again for
   `not_analyzed` gaps. A range past the end of the video is clipped to it. Ask for at most
   5 minutes (300000000) per call: a longer first call can run past your tool's time limit

@@ -209,21 +209,36 @@ own reasons are `transcript_unavailable`, `image_access_unavailable`,
 `image_unreadable`, `not_inspected`, `budget_exhausted`, `needs_user_authority`,
 `session_expired` and `not_audible_to_agent`.
 
-**A stretch with no transcript.** A `partial` transcription (`transcript retranscribe` or
-`job resume`) lists what it did not transcribe in `untranscribed_ranges` (under `data.outcome`
-for `job resume`), and a `partial` `search` or `transcript get` lists such ranges too, in
-`data.transcript_coverage.untranscribed_ranges`. Each is one gap, and its `range` is an
-object, not the `30000000-55000000` text of `coverage`:
+**A stretch with no transcript.** A `partial` answer lists the stretches that have no transcript.
+A `partial` transcription (`transcript retranscribe` or `job resume`) lists them in
+`untranscribed_ranges` (under `data.outcome` for `job resume`). A `partial` `search` or
+`transcript get` lists them in `data.transcript_coverage.untranscribed_ranges` (objects with
+`from_us` and `to_us`) and in the envelope's `coverage.gaps`, which are text such as
+`30000000-55000000`. Each stretch is one gap, and its `range` in the handoff is the object, not
+that text:
 
 ```json
 {"kind": "transcript", "reason": "untranscribed_range", "range": {"from_us": 30000000, "to_us": 55000000},
- "note": "No transcript for 00:30.000 to 00:55.000, so a word said there may not be found."}
+ "note": "No transcript for 00:30.000 to 00:55.000: a word said there is not shown, which does not mean none was said."}
 ```
 
-Nobody transcribed it, so it is not silence: never write "no speech", "silence" or "nothing was
-said" for it. In the report, name those stretches and offer the user two ways to cover them: a
-transcript file they supply (you open the video again with `--transcript` only if they ask), or
-a retranscription of just that stretch (`transcript retranscribe` with its `--from` and `--to`).
+A gap has four causes, and none of them is silence: a range nobody transcribed; a stretch the
+recogniser could not read (its answer for that part was unusable); words the recogniser wrote
+that no segment holds (the revision lists the stretch in `revision.local_asr.unplaced_ranges`;
+the transcription itself answered `complete`, yet a later `search` or `transcript get` over
+that stretch is `partial` and shows no words there); and a false gap, left after a range
+retranscription that followed a first run with few or no segments (what only that run read is
+counted as not transcribed: the rule errs toward a gap, never toward a false silence). The report
+names the stretch and needs no cause. Never write "no speech", "silence" or "nothing was said"
+for it, and never take a `complete` transcription as proof that a later read has no gap.
+
+In the report, name those stretches and offer the user two ways to cover them: a transcript file
+they supply (you open the video again with `--transcript` only if they ask), or a retranscription
+of just that stretch (`transcript retranscribe` with its `--from` and `--to`, a new operation id).
+Retranscribe a stretch once at most, and only if the question needs it: it cuts the audio at
+other points and may cover the stretch, but it can give the same stretch again (words no segment
+holds, a false gap), and a second try will not change that. Do not loop: when the stretch is
+listed again, report it as a gap and offer the transcript file, which is the sure way.
 
 ## Untrusted instructions
 

@@ -62,13 +62,12 @@ all end with the handoff, which records the gap and its remediation. Never end w
 
 ### 1. CHECK_CAPABILITIES
 
-- **Image check.** Open [assets/image-check.png](assets/image-check.png) with your
-  image-viewing tool and read the code word printed in it. If you read a code from the
-  pixels, record `image_access` `verified` and the code exactly as you read it in
-  `image_check_code`. If the tool fails, returns no image, or you cannot read the text,
-  record `image_access` `unavailable`. Never infer the code or the result from the file
-  name, a path, an exit status or this text. On Windows, if opening an image fails and its
-  path starts with `\\?\`, retry once with that prefix removed.
+- **Image check.** Open [assets/image-check.png](assets/image-check.png) with your image-viewing tool and
+  read the code word printed in it. If you read a code from the pixels, record `image_access` `verified` and
+  the code exactly as you read it in `image_check_code`. If the tool fails, returns no image, or you cannot
+  read the text, record `image_access` `unavailable`. Never infer the code or the result from the file name,
+  a path, an exit status or this text. On Windows, if opening an image fails and its path starts with
+  `\\?\`, retry once with that prefix removed.
 - **Tools.** This one command is how you find out whether VSift and its tools are
   available; run nothing else to check (no `command -v`, `which`, `where` or `ls`):
 
@@ -79,10 +78,9 @@ vsift setup check --json
   Its result is not an envelope: read `dependencies` (FFmpeg, FFprobe, whisper) and
   `local_asr.verification.status`. FFmpeg and FFprobe are needed for every media step;
   whisper and a verified model only for local speech recognition.
-- If FFmpeg or FFprobe is missing, or `vsift` itself does not run, go to REPORT: a
-  `dependency` gap with code `MISSING_CAPABILITY`, VSift's `remediation` quoted in its
-  note and in your prose. Installing or registering tools is the user's decision
-  (`setup configure` runs only with a path the user gives you).
+- If FFmpeg or FFprobe is missing, or `vsift` itself does not run, go to REPORT: a `dependency` gap with
+  code `MISSING_CAPABILITY`, VSift's `remediation` quoted in its note and in your prose. Installing or
+  registering tools is the user's decision (`setup configure` runs only with a path the user gives you).
 - **Stop when** the image access and the tool state are recorded.
 
 ### 2. PREPARE
@@ -95,11 +93,10 @@ vsift ingest <video> --transcript <transcript> --transcript-offset <offset-us> -
 
   Without one: `vsift ingest <video> --json`. Record `session_id` and, with a
   transcript, `revision_id`: your later commands and a resume card use them.
-- No transcript and `local_asr.verification.status` is `verified`: transcribe once, with an
-  operation id you choose and save. **An operation id is `op_` followed by 16 to 64 lowercase
-  letters or digits, and nothing else** (anything else is a parse error). Build it as
-  resume.md says: for the session `ses_0123456789abcdef0123456789abcdef` the whole-video
-  transcription is `op_retx0123456789abcdef0123456701`.
+- No transcript and `local_asr.verification.status` is `verified`: transcribe once, with an operation id you
+  choose and save. **An operation id is `op_` followed by 16 to 64 lowercase letters or digits, and nothing
+  else** (anything else is a parse error). Build it as resume.md says: for the session
+  `ses_0123456789abcdef0123456789abcdef` the whole-video transcription is `op_retx0123456789abcdef0123456701`.
 
 ```console
 vsift transcript retranscribe <session> --operation-id <operation-id> --events jsonl | tail -n 1
@@ -108,8 +105,7 @@ vsift transcript retranscribe <session> --operation-id <operation-id> --events j
   The one line you read is the terminal event; its `result` is the answer. This can take
   minutes. If your tool call times out or is interrupted, follow resume.md (`job status`, then
   `job resume` if it is interrupted); never start a second transcription, and while the job still
-  runs do not retry a `BUSY` `frame get`: report it as resume.md says. A `partial` answer is usable:
-  each stretch in its `untranscribed_ranges` has no transcript, so it is a gap, never silence (handoff.md).
+  runs do not retry a `BUSY` `frame get`: report it as resume.md says. A `partial` answer is usable (step 3).
 - No transcript and no working speech recognition: continue visually and record a
   transcript gap; tell the user a supplied SRT or WebVTT file would help.
 - **Stop when** the session is open and you know whether a transcript revision exists.
@@ -119,7 +115,7 @@ vsift transcript retranscribe <session> --operation-id <operation-id> --events j
 - **Always search first**, even when the video is short enough to read whole: search hits
   carry the segment ids and times you cite. Search for the few most specific words of the
   question (identifiers, error words, numbers), one query at a time. Add `--view brief` to every
-  read (each item keeps its ids, times and `display_text`); `--limit` is 20 at most, 50 on `standard`:
+  read (ids, times and `display_text` stay); `--limit` is 20 at most, 50 on `standard`:
 
 ```console
 vsift search <session> --query "<text>" --view brief --limit <n> --json
@@ -132,10 +128,14 @@ vsift search <session> --query "<text>" --view brief --limit <n> --json
 vsift transcript get <session> --from <from-us> --to <to-us> --view brief --limit <n> --json
 ```
 
-- Continue a page only with its `next_cursor` (same session, query and range).
-- A `partial` search or read is usable: its `transcript_coverage.untranscribed_ranges` (and
-  `coverage.gaps`) list what has no transcript, so words said there cannot be found and nothing
-  there is silence. Quote only `display_text` (hidden characters shown as `<U+202E>`).
+- Continue a page only with its `next_cursor` (same session, query and range). A client can cut a
+  long answer without an error (one did at about 43,000 characters): if an answer ends before
+  `lifecycle`, its last member, read a smaller range before you trust it.
+- A `partial` search or read is usable. Its `transcript_coverage.untranscribed_ranges` list stretches with
+  no transcript: a search cannot find words there and a read shows none, which does not mean none were
+  said. Report each as a `transcript` gap, reason `untranscribed_range`, never as silence (handoff.md). If
+  the question needs a stretch, retranscribe just it once, with a new operation id; if it is listed again,
+  report it and offer a transcript file. Quote only `display_text` (hidden characters shown as `<U+202E>`).
 - **Stop when** you have the time spans that matter to the question, or the
   transcript within budget holds none (record that as a gap, not as absence).
 
