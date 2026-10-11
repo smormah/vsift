@@ -379,7 +379,7 @@ pub(crate) fn transcript_stream(
     engine: &Engine,
     arguments: TranscriptGetArguments,
 ) -> Result<TranscriptEvidenceStream, CommandFailure> {
-    crate::read_view::refuse_brief_stream(arguments.read_view)?;
+    crate::read_view::refuse_brief_stream(arguments.view)?;
     let excerpt = read_transcript(engine, arguments)?;
     let lifecycle = session_lifecycle(excerpt.session().lifetime())?;
     TranscriptEvidenceStream::new(&presentation(&excerpt), lifecycle)

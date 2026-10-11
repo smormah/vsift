@@ -9,6 +9,12 @@
 //! items, so a page of fifty fits where a page of fifty full items did not
 //! (a client that saved a 54,000-character page and read only its first
 //! 43,000 lost nine items and the page's cursor, with no error from `VSift`).
+//! On the committed examples a brief page of fifty is a fifth to two fifths of
+//! the full page. **It shrinks the items and nothing else:** the revision (or
+//! index) block, the coverage and the warnings are the same in both views, and
+//! a revision that lists many stretches of words no segment holds
+//! (`local_asr.unplaced_ranges`, up to 1,024 and about 45 KB) is as large in
+//! one view as in the other.
 //!
 //! **A view is a presentation, never a different result.** Both views are made
 //! from the one full item, so a brief item can only hold fields the full item

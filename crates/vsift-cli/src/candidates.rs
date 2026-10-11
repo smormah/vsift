@@ -104,7 +104,7 @@ pub(crate) async fn candidates_stream(
     arguments: CandidatesArguments,
     cancellation: &Cancellation,
 ) -> Result<CandidatesEvidenceStream, CommandFailure> {
-    crate::read_view::refuse_brief_stream(arguments.read_view)?;
+    crate::read_view::refuse_brief_stream(arguments.view)?;
     let results = run(engine, arguments, cancellation).await?;
     CandidatesEvidenceStream::new(&presentation(&results), lifecycle(&results)?)
         .map_err(|_| CommandFailure::from(FailureCode::Internal))

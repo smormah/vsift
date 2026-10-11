@@ -403,7 +403,7 @@ where
                     write_evidence_stream(&mut writer, operation, result)
                 }
                 TranscriptCommand::Get(arguments) => {
-                    let view = read_view::presented_view(mode, arguments.read_view);
+                    let view = read_view::presented_view(mode, arguments.view);
                     let result = session::transcript_get(&engine, arguments, view);
                     write_session_result(&mut writer, mode, operation, result)
                 }
@@ -444,7 +444,7 @@ where
             write_evidence_stream(&mut writer, CommandName::Search, result)
         }
         Command::Search(arguments) => {
-            let view = read_view::presented_view(mode, arguments.read_view);
+            let view = read_view::presented_view(mode, arguments.view);
             let result = search::search(&engine, arguments, view);
             write_session_result(&mut writer, mode, CommandName::Search, result)
         }
@@ -453,7 +453,7 @@ where
             write_evidence_stream(&mut writer, CommandName::Candidates, result)
         }
         Command::Candidates(arguments) => {
-            let view = read_view::presented_view(mode, arguments.read_view);
+            let view = read_view::presented_view(mode, arguments.view);
             let result = candidates::candidates(&engine, arguments, view, &cancellation).await;
             write_session_result(&mut writer, mode, CommandName::Candidates, result)
         }

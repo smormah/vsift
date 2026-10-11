@@ -35,6 +35,8 @@ use vsift_domain::{
     analyse_window,
 };
 
+mod common;
+
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 type Built<T> = Result<T, Box<dyn std::error::Error>>;
 
@@ -664,9 +666,13 @@ fn the_brief_result_is_a_projection_of_the_full_result() -> TestResult {
     Ok(())
 }
 
-/// A brief candidate is under half the characters of the full candidate on the
-/// committed example (about 290 against 620), and a brief page of fifty
-/// candidates is a fraction of the full page.
+/// A brief candidate is well under half the characters of the full candidate
+/// on the committed example (195 to 262 against 578 to 662, 233 against 625 on
+/// average), and the brief page
+/// of fifty (the example's items repeated to fifty, `common::page_of_fifty`) is
+/// under 45% of the full page: 31,980 and 12,718 characters, 39.8%. Adding back
+/// what the brief view leaves out (`sample_count` and `change_window`, about 55
+/// characters a candidate, or more) fails it.
 #[test]
 fn a_brief_candidate_is_a_fraction_of_the_full_candidate() -> TestResult {
     let page = f02_page()?;
@@ -684,6 +690,14 @@ fn a_brief_candidate_is_a_fraction_of_the_full_candidate() -> TestResult {
     assert!(
         brief_size * 2 < full_size,
         "brief candidates are {brief_size} characters, full ones {full_size}"
+    );
+    let (full_page, brief_page) = (
+        common::page_of_fifty(&page.json)?,
+        common::page_of_fifty(&page.brief)?,
+    );
+    assert!(
+        brief_page * 20 < full_page * 9,
+        "{brief_page} of {full_page}"
     );
     Ok(())
 }

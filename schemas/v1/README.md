@@ -85,7 +85,7 @@ These files are the machine-readable public v1 boundary:
 - `ingest-data.schema.json` â the `data` member of a complete `ingest` result; its
   optional `transcript` member is present only when a supplied transcript was
   imported (P07);
-- `transcript-get-data.schema.json` â the `data` member of a complete
+- `transcript-get-data.schema.json` â the `data` member of a complete or partial
   `transcript.get` result: one bounded page with its continuation cursor (P07). Since
   0.2.1 it also has `transcript_coverage` (what a transcript covers of the requested
   range, `search`'s coverage member: #373): always emitted, but a declared property and

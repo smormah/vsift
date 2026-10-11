@@ -28,6 +28,8 @@ use vsift_domain::{
     TranscriptWarnings,
 };
 
+mod common;
+
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
 const SESSION: &str = "ses_0123456789abcdef0123456789abcdef";
@@ -603,6 +605,19 @@ fn the_brief_page_is_a_projection_of_the_full_page() -> TestResult {
         brief["data"]["revision"]["source_segments"][0]["source_segment_id"],
         full_items[0]["source_segment_id"]
     );
+    Ok(())
+}
+
+/// #365: the brief page of fifty imported cues (the committed example's items
+/// repeated to fifty, `common::page_of_fifty`) is under three tenths of the full
+/// page: 35,511 and 9,251 characters, 26.1%.
+#[test]
+fn a_brief_page_of_fifty_imported_cues_has_the_measured_share() -> TestResult {
+    let revision = f10_revision()?;
+    let range = micros(0, 12_000_000)?;
+    let full = common::page_of_fifty(&view_response(&revision, range, 2, ResultView::Full)?)?;
+    let brief = common::page_of_fifty(&view_response(&revision, range, 2, ResultView::Brief)?)?;
+    assert!(brief * 10 < full * 3, "{brief} of {full}");
     Ok(())
 }
 

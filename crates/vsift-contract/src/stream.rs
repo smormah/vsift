@@ -320,8 +320,8 @@ impl TranscriptEvidenceStream {
     /// Presents one page of a revision as an evidence stream.
     ///
     /// The coverage of the requested range, and so whether the terminal result
-    /// is `partial`, is the page's own ([`TranscriptPresentation::coverage`]),
-    /// as for the `--json` result.
+    /// is `partial`, is that of the whole requested range, not of the page
+    /// ([`TranscriptPresentation::coverage`]), as for the `--json` result.
     ///
     /// # Errors
     ///

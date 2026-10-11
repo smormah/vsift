@@ -134,6 +134,6 @@
   "schema_version": "1",
   "status": "partial",
   "warnings": [
-    "Part of the requested range has no transcript, so reading it shows no words there; that does not mean none were said. coverage and transcript_coverage list the gaps. Run transcript retranscribe to transcribe them."
+    "Part of the requested range has no transcript here, so reading it shows no words there; that does not mean none were said. The parts are listed as not transcribed, and the rest of this answer is usable. If you need what was said there, transcribing just that range again (transcript retranscribe with --from and --to) may fill it; if it gives the same stretch, a transcript file you already have is the sure way: open the video with ingest --transcript."
   ]
 }

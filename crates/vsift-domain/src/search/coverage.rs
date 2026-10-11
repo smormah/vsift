@@ -7,6 +7,11 @@
 //! speech at all. Search looks at transcript text only; on-screen text is out
 //! of its scope.
 //!
+//! `transcript get` uses the same rule (#373): the application's transcript read
+//! gives a read the coverage of the range it reads by [`SearchCoverage::of`], so
+//! a read and a search over one range name the same gaps. The type keeps the
+//! name it was written under; it is not search's alone.
+//!
 //! Coverage is derived from the revision's own provenance:
 //!
 //! - **Supplied transcript:** `VSift` cannot know which parts of the video a

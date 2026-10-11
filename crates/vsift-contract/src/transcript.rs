@@ -722,7 +722,16 @@ impl From<&TranscriptPageData> for TranscriptBriefPageData {
 /// The fields borrow the engine's typed result (`Engine::transcript`), so every
 /// host presents the same page identically, and the coverage of the range comes
 /// from the same place as the segments: the application's transcript read, not
-/// this crate. A presentation therefore cannot say `complete` over a gap.
+/// this crate. [`transcript_get_response`] makes a `partial` answer of any gap the
+/// coverage names, and `Engine::transcript` gives it the coverage of the range it
+/// read, so that route cannot say `complete` over a gap **when the coverage is the
+/// range's own**. Nothing here checks that: the type holds a
+/// [`SearchCoverage`] and a range separately, so a caller that builds the data
+/// and an `OperationResponse::complete` itself, or passes another range's
+/// coverage, can still say `complete` over a gap. A cross-check of
+/// `coverage.searched()` against `range` was left out, because the contract has
+/// no error to answer a mismatch with and a new one would change the signature
+/// (a search's presentation trusts its coverage in the same way).
 #[derive(Clone, Debug)]
 pub struct TranscriptPresentation<'a> {
     /// Session that was read.
@@ -741,8 +750,19 @@ pub struct TranscriptPresentation<'a> {
 }
 
 /// Fixed warning of a transcript read whose range is not fully transcribed
-/// (#373): says what a gap is not (a silence), in the words of a read.
-pub const UNTRANSCRIBED_READ_WARNING: &str = "Part of the requested range has no transcript, so reading it shows no words there; that does not mean none were said. coverage and transcript_coverage list the gaps. Run transcript retranscribe to transcribe them.";
+/// (#373): says what a gap is not (a silence), in the words of a read, and that
+/// the rest of the answer is usable.
+///
+/// It is written to be true for every cause of a gap, and so not to tell a
+/// reader to start a long job: a range nobody transcribed, a stretch the
+/// recogniser could not read, words that no segment holds, and a false gap left
+/// where a retranscription followed a first run with few or no segments (L-033) are
+/// all gaps, and retranscribing just the range may fill any of them but may
+/// also give the same stretch back (L-159), in which case only a transcript
+/// file supplied with `ingest --transcript` fills it. It names no member of the
+/// JSON, because the readable text prints it too. `search` has its own, older
+/// warning (published, unchanged).
+pub const UNTRANSCRIBED_READ_WARNING: &str = "Part of the requested range has no transcript here, so reading it shows no words there; that does not mean none were said. The parts are listed as not transcribed, and the rest of this answer is usable. If you need what was said there, transcribing just that range again (transcript retranscribe with --from and --to) may fill it; if it gives the same stretch, a transcript file you already have is the sure way: open the video with ingest --transcript.";
 
 /// The complete `transcript.get` result for one page in `view`.
 ///

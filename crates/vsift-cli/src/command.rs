@@ -595,19 +595,6 @@ impl ViewArgument {
     }
 }
 
-/// The `--view` option of `transcript get`, `search` and `candidates`, defined
-/// once so the three commands cannot describe it differently.
-#[derive(Args, Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub(crate) struct ReadView {
-    /// Which answer to give. `brief` keeps each item's ids, times and
-    /// `display_text` (a candidate's reasons and hash) and leaves out what the
-    /// items of a revision or index repeat; those members stay once on the
-    /// revision block (or in `item_constants`), so a page is a fraction of the
-    /// size. Read the full view for everything else.
-    #[arg(long = "view", value_enum, default_value_t)]
-    pub view: ViewArgument,
-}
-
 /// Bounded, pageable transcript read.
 #[derive(Args, Debug)]
 pub(crate) struct TranscriptGetArguments {
@@ -629,8 +616,13 @@ pub(crate) struct TranscriptGetArguments {
     /// Revision to read (a `trv_` identity); defaults to the newest.
     #[arg(long)]
     pub revision: Option<TranscriptRevisionId>,
-    #[command(flatten)]
-    pub read_view: ReadView,
+    /// Which answer to give. `brief` keeps each segment's ids, times and
+    /// `display_text` (and `carried_from` on a carried segment) and leaves out
+    /// what the segments of a revision repeat; those members stay once in the
+    /// revision block, which is the same in both views, so each segment is
+    /// smaller. Read the full view for everything else.
+    #[arg(long = "view", value_enum, default_value_t)]
+    pub view: ViewArgument,
 }
 
 /// Local speech recognition of a session, whole or over one range.
@@ -679,8 +671,13 @@ pub(crate) struct SearchArguments {
     /// Revision to search (a `trv_` identity); defaults to the newest.
     #[arg(long)]
     pub revision: Option<TranscriptRevisionId>,
-    #[command(flatten)]
-    pub read_view: ReadView,
+    /// Which answer to give. `brief` keeps each found segment's ids, times and
+    /// `display_text` (and `carried_from` on a carried segment) and leaves out
+    /// what the segments of a revision repeat; those members stay once in the
+    /// revision block, which is the same in both views, so each segment is
+    /// smaller. Read the full view for everything else.
+    #[arg(long = "view", value_enum, default_value_t)]
+    pub view: ViewArgument,
 }
 
 /// Visual-candidate page request; missing windows of the range are analysed
@@ -704,8 +701,13 @@ pub(crate) struct CandidatesArguments {
     /// range; a call with a cursor never analyses anything.
     #[arg(long)]
     pub cursor: Option<String>,
-    #[command(flatten)]
-    pub read_view: ReadView,
+    /// Which answer to give. `brief` keeps each candidate's id, time, span,
+    /// reasons, stability, the size of the change that opened it and its hash,
+    /// and leaves out what every candidate of the index repeats; those members
+    /// stay once in `item_constants` and the index block, so each candidate is
+    /// smaller. Read the full view for everything else.
+    #[arg(long = "view", value_enum, default_value_t)]
+    pub view: ViewArgument,
 }
 
 /// Frame namespace arguments.

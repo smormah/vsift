@@ -9,7 +9,7 @@
 use vsift::FailureCode;
 use vsift_contract::{BRIEF_VIEW_STREAM_REMEDIATION, ResultView};
 
-use crate::{CommandFailure, command::ReadView, output::OutputMode};
+use crate::{CommandFailure, command::ViewArgument, output::OutputMode};
 
 /// The view an answer is built in: the one asked for in `--json`, and the full
 /// one in readable text.
@@ -19,10 +19,10 @@ use crate::{CommandFailure, command::ReadView, output::OutputMode};
 /// item), so there it is the same for both views; `--view` shapes the JSON.
 /// `--events jsonl` never reaches this: a stream is always full, and the brief
 /// view is refused for it by [`refuse_brief_stream`].
-pub(crate) const fn presented_view(mode: OutputMode, requested: ReadView) -> ResultView {
+pub(crate) const fn presented_view(mode: OutputMode, requested: ViewArgument) -> ResultView {
     match mode {
         OutputMode::Human => ResultView::Full,
-        OutputMode::Json | OutputMode::JsonLines => requested.view.result_view(),
+        OutputMode::Json | OutputMode::JsonLines => requested.result_view(),
     }
 }
 
@@ -31,8 +31,8 @@ pub(crate) const fn presented_view(mode: OutputMode, requested: ReadView) -> Res
 /// index stores by key, and a reduced record under a key would replace a
 /// complete one (#365). The answer is the usual one terminal failure event,
 /// `INVALID_ARGUMENT`, whose remediation says why.
-pub(crate) fn refuse_brief_stream(requested: ReadView) -> Result<(), CommandFailure> {
-    match requested.view.result_view() {
+pub(crate) fn refuse_brief_stream(requested: ViewArgument) -> Result<(), CommandFailure> {
+    match requested.result_view() {
         ResultView::Full => Ok(()),
         ResultView::Brief => Err(CommandFailure::with_remediation(
             FailureCode::InvalidArgument,

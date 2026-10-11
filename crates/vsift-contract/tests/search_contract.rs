@@ -32,6 +32,8 @@ use vsift_domain::{
     TranscriptRevision, TranscriptWarnings, merge_chunks, plan_chunks, validate_chunk_output,
 };
 
+mod common;
+
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 type Built<T> = Result<T, Box<dyn std::error::Error>>;
 
@@ -677,6 +679,21 @@ fn is_projection_of(brief: &Value, full: &Value) -> bool {
         }
         (brief, full) => brief == full,
     }
+}
+
+/// #365: the brief search page of fifty (the committed example's items and
+/// hits repeated to fifty, `common::page_of_fifty`) is under a third of the full
+/// page: 36,702 and 11,567 characters, 31.5%. Adding back what the brief view
+/// leaves out of an item fails it.
+#[test]
+fn a_brief_search_page_of_fifty_is_under_a_third_of_the_full_page() -> TestResult {
+    let page = search(&f10_revision()?, "R-17", None, 20)?;
+    let (full, brief) = (
+        common::page_of_fifty(&page.json)?,
+        common::page_of_fifty(&page.brief)?,
+    );
+    assert!(brief * 3 < full, "{brief} of {full}");
+    Ok(())
 }
 
 /// #365: the brief result is its frozen example. The full result names no view,

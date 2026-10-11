@@ -7,13 +7,19 @@
 //! `fixtures/corpus/transcripts/F10.srt` with the explicit +500 ms offset, the
 //! same page as `examples/transcript-get.json` in its `--json` form.
 
-use std::{collections::BTreeSet, fs, io, num::NonZeroU32, path::PathBuf};
+use std::{
+    collections::BTreeSet,
+    fs, io,
+    num::{NonZeroU16, NonZeroU32},
+    path::PathBuf,
+};
 
 use jsonschema::{Retrieve, Uri};
 use serde_json::Value;
 use vsift_application::{
-    ImportedRevisionRequest, SuppliedTranscript, TranscriptPageRequest, build_imported_revision,
-    page_transcript,
+    AsrRevisionRequest, AsrTranscription, ImportedRevisionRequest, SuppliedTranscript,
+    TranscriptPageRequest, build_asr_revision, build_imported_revision, page_transcript,
+    whole_file_source_segment,
 };
 use vsift_contract::{
     CommandName, EventKind, EvidenceRecordType, LifecycleResponse, OperationResponse, ResultView,
@@ -21,9 +27,11 @@ use vsift_contract::{
     transcript_get_response,
 };
 use vsift_domain::{
-    CueSource, CueText, CueTiming, FailureCode, ImportedCue, MediaTime, PageLimit,
-    ParsedTranscript, SessionId, SidecarIdentity, SourceId, TimeRange, TranscriptFormat,
-    TranscriptOffset, TranscriptRevision, TranscriptWarnings,
+    AsrChunkOutcome, AsrChunkRecord, AsrDecodingProfile, AsrModel, AsrModelProfile, AsrProvider,
+    AsrProviderBuild, AsrRun, AsrRunParts, ChunkPlan, CueSource, CueText, CueTiming, FailureCode,
+    ImportedCue, MediaTime, PageLimit, ParsedTranscript, SessionId, Sha256Hex, SidecarIdentity,
+    SourceId, TimeRange, TranscriptFormat, TranscriptOffset, TranscriptRevision,
+    TranscriptWarnings, plan_chunks,
 };
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -334,6 +342,115 @@ fn records_are_the_page_items_then_one_terminal_event() -> TestResult {
         assert!(
             terminal["result"][member] == page.json[member],
             "terminal result {member} differs from the page result"
+        );
+    }
+    Ok(())
+}
+
+/// A local-recognition revision of a 55 s recording with no segment, whose
+/// first chunk (0-30 s) was transcribed and whose second (25-55 s) could not be
+/// read: 30-55 s has no transcript.
+fn revision_with_a_gap() -> Result<TranscriptRevision, Box<dyn std::error::Error>> {
+    let session = SessionId::parse(SESSION)?;
+    let source_id = SourceId::from_sha256(&"0123456789abcdef".repeat(4))?;
+    let source = whole_file_source_segment(&source_id, MediaTime::from_micros(55_000_000))?;
+    let digest = Sha256Hex::parse("ab".repeat(32))?;
+    let planned = plan_chunks(source.id(), source.range(), ChunkPlan::R0)?;
+    assert_eq!(planned.len(), 2);
+    let run = AsrRun::new(AsrRunParts {
+        provider: AsrProviderBuild::new(AsrProvider::WhisperCpp, digest.clone()),
+        model: AsrModel::new(AsrModelProfile::Base, digest),
+        decoding: AsrDecodingProfile::R0V1,
+        plan: ChunkPlan::R0,
+        threads: NonZeroU16::new(4).ok_or("zero")?,
+        audio_stream: 1,
+        chunks: planned
+            .into_iter()
+            .enumerate()
+            .map(|(index, chunk)| {
+                let audio = chunk.window();
+                let outcome = if index == 0 {
+                    AsrChunkOutcome::Transcribed { audio }
+                } else {
+                    AsrChunkOutcome::Unusable { audio }
+                };
+                AsrChunkRecord::new(chunk, outcome)
+            })
+            .collect(),
+    })?;
+    Ok(build_asr_revision(AsrRevisionRequest {
+        session_id: &session,
+        source_id: &source_id,
+        source_segment: &source,
+        number: NonZeroU32::MIN,
+        transcription: AsrTranscription {
+            run,
+            language: None,
+            segments: Vec::new(),
+            unplaced: Vec::new(),
+            warnings: TranscriptWarnings::default(),
+        },
+        splice: None,
+    })?)
+}
+
+/// #373: the terminal event of a stream states the coverage and the status of
+/// the range that was asked for, as the page does, **not** of the whole
+/// recording. The recording's gap is 30-55 s: a stream of 0-25 s is complete
+/// whatever lies beyond it, one that reaches into the gap lists only its own
+/// part, and one that runs past the end of the video is clipped to it.
+#[test]
+fn a_stream_states_the_coverage_and_status_of_its_own_range() -> TestResult {
+    let revision = revision_with_a_gap()?;
+    let second = 1_000_000;
+    for (from, to, gaps) in [
+        (0, 25, vec![]),
+        (0, 30, vec![]),
+        (0, 31, vec!["30000000-31000000"]),
+        (20, 40, vec!["30000000-40000000"]),
+        (40, 50, vec!["40000000-50000000"]),
+        (54, 60, vec!["54000000-55000000"]),
+    ] {
+        let page = page(&revision, from * second, to * second, 100, None)?;
+        let lines = parsed(&page.lines)?;
+        let terminal = &lines.last().ok_or("terminal missing")?["result"];
+        validate(
+            "terminal-event.schema.json",
+            lines.last().ok_or("terminal")?,
+        )?;
+        let label = format!("{from}-{to} s");
+        let named: Vec<&str> = terminal["coverage"]["gaps"]
+            .as_array()
+            .map(|gaps| gaps.iter().filter_map(Value::as_str).collect())
+            .unwrap_or_default();
+        assert_eq!(named, gaps, "{label}");
+        if gaps.is_empty() {
+            assert_eq!(terminal["status"], "complete", "{label}");
+            assert!(terminal["coverage"].is_null(), "{label}");
+        } else {
+            assert_eq!(terminal["status"], "partial", "{label}");
+        }
+        let untranscribed: Vec<String> =
+            terminal["data"]["transcript_coverage"]["untranscribed_ranges"]
+                .as_array()
+                .ok_or("no untranscribed list")?
+                .iter()
+                .map(|range| format!("{}-{}", range["from_us"], range["to_us"]))
+                .collect();
+        assert_eq!(untranscribed, gaps, "{label}");
+        // The searched range is the range asked for, clipped to the video.
+        assert_eq!(
+            terminal["data"]["transcript_coverage"]["searched_range"]["to_us"],
+            to.min(55) * second,
+            "{label}"
+        );
+        // And the page says the same, member for member.
+        for member in ["status", "warnings", "error", "coverage", "lifecycle"] {
+            assert_eq!(terminal[member], page.json[member], "{label}: {member}");
+        }
+        assert_eq!(
+            terminal["data"]["transcript_coverage"], page.json["data"]["transcript_coverage"],
+            "{label}"
         );
     }
     Ok(())
