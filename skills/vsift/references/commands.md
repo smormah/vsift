@@ -159,16 +159,21 @@ report would end the quoting and the rest would run as commands):
 '@ | vsift handoff check --json
 ```
 
-**Size.** The check reads at most 64 KiB and refuses a longer draft (`INVALID_ARGUMENT`: shorten
-the report), so a report is never longer than that. The shell can fail first, before `vsift`
-runs. On Windows through Claude Code a report of about 5,500 characters passed in Git Bash and
-one of about 15,000 in PowerShell; one of about 15,000 never reached `vsift` from Git Bash and
-one of about 70,000 never started from PowerShell. So for a report over 5,500 characters make two
-calls, each in the form for your shell: first everything above the `vsift-handoff` block as
-`<report>` (its result lists `handoff_block_missing`, which is expected, and any finding about the
-text: a path, a web link, a hidden character), then the block alone, from its opening fence to
-its closing fence (its result is the schema and the rules). Fix what either reports, then send
-the whole message. The two calls are one check.
+**Size.** The check reads at most 64 KiB: a report longer than that cannot be checked (the answer
+is `INVALID_ARGUMENT`), so shorten it. The shell can fail first, before `vsift` runs. On Windows
+through Claude Code a report of about 5,500 characters passed in Git Bash and one of about 15,000
+in PowerShell; one of about 15,000 never reached `vsift` from Git Bash and one of about 70,000
+never started from PowerShell. You cannot count characters (no `wc`), so when the report is long
+(about 5,500 characters or more) or you are unsure, make two calls, each in the form for your
+shell. The two parts are the text above the `vsift-handoff` block, then the block alone, from its
+opening fence to its closing fence; never cut inside the JSON. If a part is still over about
+5,500 characters, shorten the report.
+
+- The text part is expected to answer `handoff_block_missing`: ignore that one. What matters are
+  its other findings (a path, a web link, a hidden character), each with its `line` in the report.
+- The block part answers the schema and the rules (`pointer` names the member); a `line` in it
+  counts from the block's first line (the opening fence), not from the report's.
+- Fix what either part reports, then send the whole message. The two calls are one check.
 
 The result is `data.valid`. When it is false, fix each item of `data.errors` (its
 `pointer` names the JSON member, its `line` the line of your report, `allowed` the words
@@ -194,7 +199,7 @@ On failure read `error.code`, `error.retryable`, `error.retry_after_ms` and
 
 | Code | What you do |
 | --- | --- |
-| `BUSY` | Wait `retry_after_ms` (run no program to wait), then run the same command once more; if it is still `BUSY`, report the gap. Run one command at a time, each after the last has returned. **Not for a `frame get` while a transcription you started may still run** (your tool call timed out): it can stay `BUSY` for minutes, so do not retry it; run `vsift job status <job> --json` once and follow "A transcription that is still running" in [resume.md](resume.md). |
+| `BUSY` | Wait `retry_after_ms` (run no program to wait), then run the same command once more; if it is still `BUSY`, report the gap. Run one command at a time, each after the last has returned. **Not for a `frame get`, `frame burst` or `candidates` after your tool call timed out on a transcription** (or on a `candidates` call, which keeps running in the background): it can stay `BUSY` for as long as that runs, so do not retry it; `vsift session status <session> --json` lists the job; follow "A transcription that is still running" in [resume.md](resume.md). |
 | `INVALID_ARGUMENT` | Read the remediation, correct the request once; a `command` of `parse` means the command line itself is wrong: run the `--help` its remediation suggests, then correct the line against it and this file. |
 | `MISSING_CAPABILITY` | Quote the remediation to the user; continue on another path (transcript-only or visual-only) or go to REPORT with the gap. Never install. If the remediation says the tool works but speech could not be transcribed (`too_many_rejected_segments`), nothing is missing: record a `transcript` gap (`transcript_unavailable`, code `MISSING_CAPABILITY`), give the reason and the job in `error.affected_ids` as VSift states them (do not guess), put the remediation in your own words (it is longer than a note), and tell the user a supplied SRT or WebVTT file would help. |
 | `CANCELLED` | For a transcription, follow resume.md. |
@@ -211,16 +216,19 @@ A gap caused by a failure may carry its code in `gaps[].code`.
 
 - `--limit` is 1 to 100 (default 20) for `transcript get`, `search` and `candidates`. Ask for
   20, or 50 on `standard` with `--view brief` (budgets.md): a page of 50 transcript segments in
-  the full view is over 50,000 characters, more than some clients read in one call (one cut
-  such a page at about 43,000 characters and lost items and the `next_cursor`, with no error
-  from VSift). The CLI writes the envelope as `schema_version`, `command`, `operation_id`,
+  the full view is about 35,000 to 57,000 characters, more than some clients read in one call
+  (one cut such a page at about 43,000 characters and lost items and the `next_cursor`, with no
+  error from VSift). The CLI writes the envelope as `schema_version`, `command`, `operation_id`,
   `status`, `data`, `warnings`, `error`, `coverage`, `lifecycle`, and `data`'s members in
   alphabetical order, so a cut answer can show `status` `partial` and none of the gaps (the
   envelope's `coverage` and `data.transcript_coverage` come after the items). An answer that
-  ends before `lifecycle` was cut: read a smaller range (the brief view, a smaller `--limit`)
-  before you trust it.
+  stops before the final `lifecycle` member was cut: ask again with `--limit 5`; if it still
+  stops, report the read as incomplete (a `transcript` gap, reason `not_inspected`) instead of
+  trusting it. A smaller range does not help when the revision block alone is large (below).
 - `--view brief` (`transcript get`, `search` and `candidates`, with `--json`) leaves out of each
-  item what the answer states once, in its `revision` block (`item_constants` for `candidates`).
+  item what the answer states once, in its `revision` block (`item_constants` for `candidates`),
+  and detail a citation does not need (`text`, `original_text`, `confidence`, `language`,
+  `markup`, `cue`; for a candidate `window`, `change_window` and `sample_count`).
   A segment keeps `segment_id`, `start_us`, `end_us` and `display_text` (and `speaker` with its
   `display_label`); a candidate keeps `candidate_id`, `representative_us`, `span`, `reasons`,
   `stability` and `visual_hash`. A segment carried from an earlier revision keeps `carried_from`.
@@ -230,9 +238,10 @@ A gap caused by a failure may carry its code in `gaps[].code`.
   transcription that left many stretches of words no segment holds, the block alone is up to
   about 45,000 characters (`revision.local_asr.unplaced_ranges`), in either view.
 - `candidates` analyses at most 30 minutes of video per call; call again for
-  `not_analyzed` gaps. A range past the end of the video is clipped to it. Ask for at most
-  5 minutes (300000000) per call: a longer first call can run past your tool's time limit
-  with no output.
+  `not_analyzed` gaps. A range past the end of the video is clipped to it. Ask for one range of
+  at most 5 minutes per call (`--to` at most 300000000 after `--from`): a longer first call can
+  run past your tool's time limit with no output. `data.coverage.gaps` of the answer are objects
+  with a `reason`; the envelope's `coverage.gaps` are only text.
 - `session list` and `session clean --expired --dry-run` return one page per call, often one
   session or none: pass `next_cursor` back as `--cursor` until it is null.
 - `frame get --at` takes the first frame at or after the time within 1 s by default;

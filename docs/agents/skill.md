@@ -158,78 +158,104 @@ rest, so the rule is read in the report only by what the existing scenarios happ
 
 ### Since the first candidate: the second candidate `0.2.1-rc.2` (2026-10-11; prepared, not cut)
 
-Prepared on the branch `skill-0.2.1-rc2`, one commit on top of the Reads change (the brief view and the coverage of a
-read, `reads-brief-view-and-coverage`), and applied in the cut of the second candidate with a new freeze: the skill is a
-frozen trial component, so its digest changes again and batches 2 and 3 run again on this text. **Nothing in it has been
-run by an agent, and no frozen scenario exercises most of it** (see the end of this section). The change, and nothing else:
+Prepared on the branch `skill-0.2.1-rc2` (more than one commit: the later ones follow the independent reviews) on top of the
+Reads change (the brief view and the coverage of a read, now on `main`), and applied by the cut of the second candidate as
+one change with a new freeze: the skill is a frozen trial component, so its digest changes again and batches 2 and 3 run
+again on this text. **Nothing in it has been run by an agent, and no frozen scenario exercises most of it** (see the end of
+this section). The change, and nothing else:
 
 - **A whole recording is out of scope** (#368, the maintainer's decision of 2026-10-11 for this release line). The
   description no longer offers "a cited summary, timeline or handoff" and says that a summary or timeline of the whole of a
-  long recording is beyond the skill's budgets; `SKILL.md` ("Before you start") and `references/budgets.md` say what to do
-  (say so, offer the stretch the user names, ask before starting) and that a user who has already bounded the work (a
-  stretch, or what to hand back when the budget runs out) gets the budget spent on it, ending `partial` with the resume
-  card. The second half is there because `A-02` asks for "every change ... in the whole recording" and tells the agent
-  to stop with a resume card when the budget runs out, and `SEC-T02` asks for a summary of a 12-second clip: neither may
-  become a refusal.
+  long recording is beyond the skill's budgets. `SKILL.md` ("Before you start") and `references/budgets.md` say what to do for
+  one over 5 minutes: if the user named a stretch, or what to hand back when the budget runs out, start, and end `partial`
+  with the resume card if it runs out; if not, say so, offer a stretch or a question and ask before any command (nothing was
+  started, so no report is needed: this does not break "every stop ends in REPORT"). `budgets.md` says how the length is
+  known (the user, `source_segments[].end_us` with a transcript, `index.duration_us` from `candidates`; `ingest` reports no
+  duration without a transcript). The first half is there because `A-02` asks for "every change ... in the whole recording"
+  and tells the agent to stop with a resume card when the budget runs out, and `SEC-T02` asks for a summary of a 12-second
+  clip: neither may become a refusal, and `A-02` must still end `partial` with a card.
 - **The brief view** (#365). Every `transcript get`, `search` and `candidates` form carries `--view brief` (`SKILL.md`
-  steps 3 and 4, `commands.md` forms and limits, `resume.md`). A brief item keeps its ids, times and `display_text`; the
+  steps 3 and 4, `commands.md` forms and limits, `resume.md`). A brief item keeps its ids, times and `display_text` (and leaves
+  out more than what the revision block says once: also `text`, `confidence`, `language`, `markup` and the rest); the
   revision's id is `revision.revision_id` of the answer (`handoff.md`, Citations). The refusal with `--events jsonl` is in
   `commands.md`. **Page sizes:** the profile table keeps `20` and `50` (the trial grader reads them and checks every
-  `--limit` against them, so `compact` cannot be told 50); `budgets.md` says a full-view page is never longer than 20 on
-  either profile and that `standard` uses 50 only with `--view brief`. **The text does not promise a small page:** the
-  brief view keeps the revision block whole, which after a transcription with many stretches of words no segment holds
-  (`revision.local_asr.unplaced_ranges`, up to 1,024) is up to about 45,000 characters in either view. A client can also
-  cut a long answer without an error (one did at about 43,000 characters) and the CLI writes the gaps after `status`
-  (the envelope's `coverage` after `data`, `transcript_coverage` after the items), so `SKILL.md` step 3, `commands.md` and
-  `budgets.md` say that an answer ending before `lifecycle`, the last member, was cut and a smaller range is read before
-  it is trusted. The member order is what the CLI writes today, not part of the contract.
+  `--limit` against them, so `compact` cannot be told 50); `budgets.md` says to ask for pages of 20 at most without the brief
+  view, on either profile, and that `standard` may use 50 with it (an ask of the skill, not a property of the CLI).
+  **The text does not promise a small page:** the brief view keeps the revision block whole, which after a transcription with
+  many stretches of words no segment holds (`revision.local_asr.unplaced_ranges`, up to 1,024) is up to about 45,000
+  characters in either view, and a full page of 50 segments is about 35,000 to 57,000. A client can cut a long answer without
+  an error (one did at about 43,000 characters), and the CLI writes the gaps after `status` (the envelope's `coverage` after
+  `data`, `transcript_coverage` after the items; the order is what the CLI writes today, not part of the contract). So an
+  answer that stops before the final `lifecycle` member is asked again with `--limit 5`, and if it still stops the read is
+  reported as incomplete instead of being trusted (`SKILL.md` step 3, `commands.md`, `budgets.md`). "Read a smaller range"
+  was the first wording; it cannot converge when the revision block alone is cut.
 - **Coverage of a read** (#373, #359). `transcript get` now states `transcript_coverage` and answers `partial` over a
   gap, as `search` does. A `partial` read or search is usable; its `transcript_coverage.untranscribed_ranges` list the
   stretches with no transcript (the envelope's `coverage.gaps` are the same stretches as text); a search cannot find
   words there and a read shows none, which does not mean none were said, so the agent reports each as a `transcript`
-  gap with the reason `untranscribed_range` (the object ranges, not the text) and never as silence. `handoff.md` names
-  the four causes in plain words: a range nobody transcribed, a stretch the recogniser could not read, words the
-  recogniser wrote that no segment holds (`revision.local_asr.unplaced_ranges`: the transcription itself answered
-  `complete`, but a later read or search over the stretch is `partial`, #377) and a false gap after a range
-  retranscription that followed a first run with few or no segments ([L-033](../planning/known-limits.md#l-033)). The
-  skill does not run `transcript retranscribe` for a gap unconditionally: only if the question needs the stretch, once,
-  with a new operation id; if the stretch is listed again it stops and offers a transcript file, which is the sure way.
+  gap with the reason `untranscribed_range` (the object ranges, not the text) and never as silence; more than about 10
+  stretches are one gap with no `range` and the count in its note, because the handoff holds at most 50 gaps and
+  `transcript_coverage` lists up to 100 ranges. `handoff.md` names the four causes in plain words: a range nobody
+  transcribed, a stretch the recogniser could not read, words the recogniser wrote that no segment holds
+  (`revision.local_asr.unplaced_ranges`: the transcription itself answered `complete`, but a later read or search over the
+  stretch is `partial`, #377) and a false gap after a range retranscription that followed a first run with few or no
+  segments ([L-033](../planning/known-limits.md#l-033)). The skill does not run `transcript retranscribe` for a gap
+  unconditionally: only if the question needs the stretches, **once, with one range that covers them** and a new operation
+  id (a first wording said "once per stretch", and the review reproduced that each per-stretch run uncovers the previous
+  one, so it chases stretches); if a stretch is still listed, the agent reports it and offers a transcript file, the sure way.
   Nothing in the skill quotes the read warning ("Part of the requested range has no transcript here, ..."), so its new
   wording changes nothing here.
-- **`candidates` on a long recording** (#367). At most 5 minutes (300000000) per call, the brief view, around the
-  transcript's spans when there is a transcript (not across the video), and in 5-minute ranges from where the question
-  points when there is not (the old "page candidates over the whole video" is gone). No filter and no progress events
-  exist, and the text does not mention any.
-- **`BUSY` while a transcription runs** (#370). After a tool call that timed out, a `frame get` can stay `BUSY` for as
-  long as the job runs: it is not retried, `job status` is read once, and a job that still runs ends in REPORT with a
-  `visual` gap (`not_inspected`, code `BUSY`) and the resume card (`SKILL.md` PREPARE, `commands.md` `BUSY` row,
-  `resume.md` "A transcription that is still running", `handoff.md` Status). The text names no cause: which resource held
-  the refusal is not known ([L-154](../planning/known-limits.md#l-154)).
-- **New ids after a range retranscription** (#372). The unchanged segments get new ids too; an older id still resolves
-  but can name text the run replaced, so the agent reads the range again and cites the ids it reads then (`SKILL.md` step
-  6, `handoff.md` Citations). The skill's `handoff check` forms pass no `--session`, so the check never looked at ids.
-- **Report size** (#366). A report is at most 64 KiB (the most the check reads, which refuses a longer draft); about 5,500
-  characters passed in Git Bash and about 15,000 in PowerShell, so a report over 5,500 characters is checked in two calls
-  of the same literal forms, the text and then the block alone (`SKILL.md` REPORT, `commands.md` "Checking the draft").
+- **`candidates` on a long recording** (#367). One range of at most 5 minutes per call (`--to` at most 300000000 after
+  `--from`), the brief view, only around the transcript's spans when there is a transcript, and one range of at most 5
+  minutes at a time from where the question points when there is not (the old "page candidates over the whole video" is
+  gone). The partial `candidates` gaps are `data.coverage.gaps` (objects with a reason); the envelope's `coverage.gaps` are
+  text. No filter and no progress events exist, and the text does not mention any.
+- **`BUSY` while a transcription runs** (#370). After a tool call that timed out, a `frame get`, `frame burst` or
+  `candidates` call can stay `BUSY` for as long as the job runs (the review reproduced all three): none is retried. The
+  job's id is not known after a timeout, so `resume.md` ("A transcription that is still running") gives one order:
+  `session status` (its `jobs`), then `job status`, then REPORT with a `visual` gap (`not_inspected`, code `BUSY`) and the
+  resume card, handling a `failure` that is null and a timed-out `candidates` call that keeps running in the background
+  (`SKILL.md` PREPARE, `commands.md` `BUSY` row, `handoff.md` Status). `resume.md` step 5 no longer says to wait and ask
+  again. The text names no cause: which resource held the refusal is not known ([L-154](../planning/known-limits.md#l-154)).
+  The four lists of when to give a resume card now agree (`resume.md`, `handoff.md` twice, `SKILL.md`).
+- **New ids after a range retranscription** (#372). Every segment of the new revision gets a new id, those outside the
+  range too; an older id still resolves but one inside the replaced range can name text the run replaced, so the agent reads
+  the range again and cites the ids it returns now, not any it cited from it before (`SKILL.md` step 6, `handoff.md`
+  Citations). The skill's `handoff check` forms pass no `--session`, so the check never looked at ids.
+- **Report size** (#366). A report over 64 KiB cannot be checked: it is shortened. About 5,500 characters passed in Git Bash
+  and about 15,000 in PowerShell, and the agent cannot count (no `wc`), so when the report is long (about 5,500 characters or
+  more) or the agent is unsure, it checks two parts of the same literal forms: the text above the `vsift-handoff` block, then
+  the block (`SKILL.md` REPORT, `commands.md` "Checking the draft"). The text part is expected to answer
+  `handoff_block_missing`, only its other findings matter, and a `line` in the block part counts from the block's first line.
   The sizes are what the issue saw, not a measurement through the pinned client; no form, flag or file was added.
 - **`session list` and `session clean --expired --dry-run` pages** (#371). The `--cursor <n>` forms are allowed, and the
   agent continues until `next_cursor` is null (`commands.md`, `lifecycle.md`).
+- **The REPORT checklist keeps its trial-driven safety clauses.** The first commit shortened the checklist to five lines and
+  moved clauses to `safety.md` and `handoff.md`; the review pointed out that two of them come from compact-tier trial runs
+  (ADR 0022, defects 15 and 16) and that `handoff check` flags `https://` and `www.` but not a defanged `hxxps://`, so
+  `SKILL.md` again says: evidence only in code spans or blocks and never as the agent's own words, a web address only as
+  `hxxps://...` in a code span of the Markdown and never in the JSON (which describes the link), no other address, no Markdown
+  link, absolute path, drive letter or home folder, and a retained bundle is "the folder you named". The PowerShell reminders
+  that only a parse error would teach (`--rect "10,20,300,80"` quoted, `--query=-17`) are back in the last paragraph.
 
-**What moved, so that `SKILL.md` stays at 300 lines (no rule was dropped):** the PowerShell and hyphen-query quoting
-sentences moved from the end of `SKILL.md` to `commands.md` ("Allowed command forms"); the REPORT "Before you send"
-checklist went from nine lines to five and now points at `safety.md` and `handoff.md` "Before you send it", which hold the
-remaining rules (the Markdown link and the retained bundle's name moved into the latter); the sentence on how an expired
-session or an exhausted budget is reported moved to `handoff.md` "Status" (it is also in `resume.md` and `budgets.md`); and
-the sentence on a remediation's `command` became a pointer to `safety.md` rule 9, which says it in full. Three
-paragraphs of `SKILL.md` (the image check, the missing-tools bullet and the operation-id bullet) were rewrapped to a wider
-line with no word changed, to make room for the cut-off and gap sentences of step 3.
+**What moved, so that `SKILL.md` stays at 300 lines (the skill as a whole lost no rule; `SKILL.md` alone gave up the
+following, each kept where it says):** the longer explanation of the optional handoff members (`handoff.md` "What the JSON
+must hold, and what it may"); the pointer sentence that listed what `handoff.md` shows (crop and audio citations, `gaps[].code`,
+`budget`, `resume`); the sentence on what `frame neighbours` and `frame burst` show (`budgets.md` "How to spend it",
+`commands.md` limits and `--help`); the phrase "name a tool, quote VSift's remediation" and the exact shape of a Markdown link
+(`safety.md` rule 6, `handoff.md` "Before you send it"); the sentence on how an expired session or an exhausted budget is
+reported (`handoff.md` "Status", also `resume.md` and `budgets.md`); the sentence on a remediation's `command` (its
+essential, "only if it is `free`", is still there, with `safety.md` rule 9); and `partial` as "a usable answer with a stated
+gap" in the closing paragraph (step 3 says it). Four paragraphs were rewrapped to a wider line with no word changed (the
+image check, the missing-tools bullet, the operation-id bullet and rule 3; `git diff --word-diff` shows it); the others that
+changed shape (the whole-recording paragraph, the candidates and claims bullets, the closing paragraph) changed words too.
 
 **Untried:** the scenarios and the grader are frozen, so no scenario exercises the whole-recording limit, a report over
-5,500 characters, a `BUSY` frame during a transcription, `session list` paging, a range retranscription's new ids, a
-`partial` read, an answer cut by the client, or a recording longer than a few minutes without a transcript. Every
-scenario that reads a transcript now runs the brief view, and the sentences above that the guard cannot test (the
-whole-recording limit, the `BUSY` rule, the two-part check, the 5-minute rule, the new ids, the retranscribe-once rule
-for a gap and the cut-answer rule) are text shipped, behaviour unmeasured, until a real run shows an agent following
+5,500 characters, a `BUSY` frame, burst or `candidates` call during a transcription, `session list` paging, a range
+retranscription's new ids, a `partial` read, an answer cut by the client, or a recording longer than a few minutes without a
+transcript. Every scenario that reads a transcript now runs the brief view, and the sentences above that the guard cannot
+test (the whole-recording limit, the `BUSY` rule, the two-part check, the 5-minute rule, the new ids, the retranscribe-once
+rule for a gap and the cut-answer rule) are text shipped, behaviour unmeasured, until a real run shows an agent following
 them.
 
 ## Keeping it in step with the CLI

@@ -48,25 +48,31 @@ the elapsed time. Add
   crop it first or report the gap.
 - Never page through the whole transcript or all candidates "to be safe"; search
   first and read windows around hits.
-- Ask for `--view brief` on every `transcript get`, `search` and `candidates`: each item is
-  smaller, with the same ids, times, `display_text`, coverage and gaps. Without it a page is
-  never longer than 20, on either profile; with it, `standard` may use 50. The brief view is
-  not always a small page: it keeps the revision block whole, and after a transcription that
-  left many stretches of words no segment holds (`revision.local_asr.unplaced_ranges`) that
-  block alone is up to about 45,000 characters, in either view.
+- Ask for `--view brief` on each `transcript get`, `search` and `candidates`: each item is
+  smaller, with the same ids, times, `display_text`, coverage and gaps. Ask for pages of 20
+  at most without it, on either profile; with it, `standard` may use 50 (these are what you
+  ask, not what the CLI allows). The brief view is not always a small page: it keeps the
+  revision block whole, and after a transcription that left many stretches of words no
+  segment holds (`revision.local_asr.unplaced_ranges`) that block alone is up to about
+  45,000 characters, in either view.
 - A client can cut a long answer without any error: one cut a page at about 43,000 characters
   and lost items and the `next_cursor`. The CLI writes `status` before `data` and the gaps
   after it (the envelope's `coverage` after `data`, `transcript_coverage` after the items), so
-  a cut answer can say `partial` and show no gap. If an answer ends before `lifecycle`, its
-  last member, or looks cut, read a smaller range (the brief view, a smaller `--limit`)
-  before you trust it.
-- Ask `candidates` for at most 5 minutes per call (300000000 microseconds), and with a
-  transcript around its spans, not across the video.
-- **A whole long recording is not what these profiles are sized for.** A summary or a timeline
-  of one needs every transcript segment and more screens than the image budget holds, and can
-  need more claims and citations than `handoff.schema.json` allows (50 and 100). Say so, offer
-  the stretch the user names, and ask before you start; if the user has bounded the work, spend
-  the budget on what they named and end `partial` with the resume card ([SKILL.md](../SKILL.md)).
+  a cut answer can say `partial` and show no gap. If the output stops before the final
+  `lifecycle` member (the last one), ask again with `--limit 5`; if it still stops, report the
+  read as incomplete instead of trusting it. A smaller range does not help when the revision
+  block alone is that large.
+- Ask `candidates` for one range of at most 5 minutes per call (`--to` at most 300000000
+  after `--from`), and with a transcript only around its spans, not across the video.
+- **A summary or timeline of a whole recording over 5 minutes does not fit these profiles.**
+  It needs every transcript segment and more screens than the image budget holds, and can
+  need more claims and citations than `handoff.schema.json` allows (50 and 100). If the user
+  named a stretch, or what to hand back when the budget runs out, start, spend the budget on
+  it and, if it runs out, end `partial` with the resume card. If not, say so, offer a stretch
+  or a question and ask before any command; no report is needed for that, since nothing was
+  started ([SKILL.md](../SKILL.md)). Judge the length by what the user says or, once a
+  session is open, by `source_segments[].end_us` (with a transcript) or `index.duration_us`
+  (the first `candidates` call); `ingest` reports no duration without a transcript.
 
 ## When a limit is reached
 

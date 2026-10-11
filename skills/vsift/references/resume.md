@@ -29,10 +29,10 @@ fails with `IDEMPOTENCY_CONFLICT`; that means "choose the next counter", not "re
 
 The handoff's `resume` object (see [../handoff.schema.json](../handoff.schema.json)),
 at most 2 KiB of JSON. Give it when the work was cut short and can continue: a budget
-limit ran out (`budget.exhausted`, a `budget_exhausted` gap), or a transcription was
+limit ran out (`budget.exhausted`, a `budget_exhausted` gap), a transcription was
 cancelled or interrupted with its finished chunks kept (a `cancelled` gap or code
-`CANCELLED`), or a transcription you started still runs (below). Leave it out when the task
-finished, and when the report is partial only
+`CANCELLED`), or a transcription you started still runs (a `BUSY` gap, below). Leave it
+out when the task finished, and when the report is partial only
 because a capability is missing (no image access, no speech recognition, a missing
 tool) or the session expired: another run cannot fix those by resuming. A card you do
 give is checked: it must name your session and evidence VSift holds. It looks exactly
@@ -127,29 +127,38 @@ vsift job status <job> --json
 vsift job resume <job> --events jsonl | tail -n 1
 ```
 
-   A job that another process is running answers `BUSY`: wait `retry_after_ms` and
-   ask again with `vsift job status`. If your tool call times out again, repeat this
-   step; the finished chunks are kept each time.
+   A job that another process is running answers `BUSY` to `job resume`: do not wait on it
+   by asking again; follow "A transcription that is still running" below. If your tool
+   call times out again, repeat this step; the finished chunks are kept each time.
 6. The same transcription command with the same `--operation-id` also continues an
    interrupted job, and returns the committed revision (`replayed`) once it finished.
 
 ## A transcription that is still running
 
 When your tool call timed out, the job may still run: a client can keep a timed-out command
-going in the background. While it runs, a `frame get` can answer `BUSY` for minutes. Do not
-retry it, and do not start or resume a second transcription. Run `vsift job status <job> --json`
-once and read `state`:
+going in the background. While it runs, a `frame get`, a `frame burst` and a `candidates` call
+all answer `BUSY` for minutes (a `candidates` call whose tool call timed out keeps running in
+the background too, and holds the same capacity). Do not retry them, and do not start or resume
+a second transcription. You do not know the job's id after a timeout, so, in this order:
 
-- A process holds the job (`live_owner` true, `state` `running`, `committing` or `cancelling`):
-  stop visual work and go to REPORT with status `partial`. Record a `visual` gap with the
-  reason `not_inspected` and the code `BUSY` for what you could not look at, and give the resume
-  card with the `job_id` and `vsift job status <job> --json` as its `next_command`. Tell the user
-  that the transcription is still running and that the frames wait for it. (Step 5 waits for
-  a job because that run has nothing else to do; a frame is not worth the calls.)
-- `interrupted`, or `resumable` true: continue it as in step 5 above.
-- `succeeded`: the job is over; ask for the frame again, once.
-- `failed` or `cancelled`: go to REPORT with its `failure.code`, as the failure table of
-  [commands.md](commands.md) says.
+1. `vsift session status <session> --json`: its `jobs` list the job (`job_id`, `state`,
+   `live_owner`, `resumable`).
+2. `vsift job status <job> --json` for that job, once, if there is one, to read `state` and `failure`.
+3. Act on what it says:
+   - A process holds the job (`live_owner` true: `state` `running`, `committing` or
+     `cancelling`): stop media work and go to REPORT with status `partial`. Record a `visual`
+     gap with the reason `not_inspected` and the code `BUSY` for what you could not look at,
+     and give the resume card with the `job_id` and `vsift job status <job> --json` as its
+     `next_command`. Tell the user that the transcription is still running and that the
+     frames wait for it. Do not spend calls waiting for it by asking again.
+   - No job has a live owner and it was a `candidates` call that timed out: that call is what
+     still runs; report the same gap and the card, with that `candidates` command as its
+     `next_command`.
+   - `interrupted`, or `resumable` true: continue it as in step 5 above.
+   - `succeeded`: the job is over; ask for the frame again, once.
+   - `failed` or `cancelled`: go to REPORT with the state and, if the job has one, its
+     `failure.code` (`failure` is null for some cancelled jobs), as the failure table of
+     [commands.md](commands.md) says.
 
 ## If the session expired or was closed
 
