@@ -10,7 +10,7 @@ that in the handoff (`budget.overrides`).
 | Images per step | 1 | 4 | Images you open before you next reason about them. |
 | Images in total | 6 | 24 | Every image you open or try to open, including the image check. |
 | Image bytes in total | 12 MiB | 48 MiB | The sum of `image.bytes` of the images you open. |
-| Page size | 20 | 50 | The `--limit` of `transcript get`, `search` and `candidates`. |
+| Page size | 20 | 50 | The `--limit` of `transcript get`, `search` and `candidates`: 50 only with `--view brief` (below). |
 | Tool calls | 30 | 80 | Every command and every image you open. |
 | Refinement depth | 2 | 4 | Refinements (neighbours, burst, crop, a new search term, a narrower window) in a row for one claim. |
 | Wall time | 15 min | 30 min | From your first command; a transcription counts too. The host measures and enforces it, not you (below). |
@@ -48,6 +48,31 @@ the elapsed time. Add
   crop it first or report the gap.
 - Never page through the whole transcript or all candidates "to be safe"; search
   first and read windows around hits.
+- Ask for `--view brief` on each `transcript get`, `search` and `candidates`: each item is
+  smaller, with the same ids, times, `display_text`, coverage and gaps. Ask for pages of 20
+  at most without it, on either profile; with it, `standard` may use 50 (these are what you
+  ask, not what the CLI allows). The brief view is not always a small page: it keeps the
+  revision block whole, and after a transcription that left many stretches of words no
+  segment holds (`revision.local_asr.unplaced_ranges`) that block alone is up to about
+  45,000 characters, in either view.
+- A client can cut a long answer without any error: one cut a page at about 43,000 characters
+  and lost items and the `next_cursor`. The CLI writes `status` before `data` and the gaps
+  after it (the envelope's `coverage` after `data`, `transcript_coverage` after the items), so
+  a cut answer can say `partial` and show no gap. If the output stops before the final
+  `lifecycle` member (the last one), ask again with `--limit 5`; if it still stops, report the
+  read as incomplete instead of trusting it. A smaller range does not help when the revision
+  block alone is that large.
+- Ask `candidates` for one range of at most 5 minutes per call (`--to` at most 300000000
+  after `--from`), and with a transcript only around its spans, not across the video.
+- **A summary or timeline of a whole recording over 5 minutes does not fit these profiles.**
+  It needs every transcript segment and more screens than the image budget holds, and can
+  need more claims and citations than `handoff.schema.json` allows (50 and 100). If the user
+  named a stretch, or what to hand back when the budget runs out, start, spend the budget on
+  it and, if it runs out, end `partial` with the resume card. If not, say so, offer a stretch
+  or a question and ask before any command; no report is needed for that, since nothing was
+  started ([SKILL.md](../SKILL.md)). Judge the length by what the user says or, once a
+  session is open, by `source_segments[].end_us` (with a transcript) or `index.duration_us`
+  (the first `candidates` call); `ingest` reports no duration without a transcript.
 
 ## When a limit is reached
 

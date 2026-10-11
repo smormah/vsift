@@ -12,11 +12,14 @@ cut on 2026-10-08, and batch 2 ran on it the same day: its 34 records, summary a
 candidate on 2026-10-08: its 18 records, summary and both clients' state are in [`batch-3-rc.3/`](batch-3-rc.3/) and its reading is
 [batch-3-reading-rc.3.md](batch-3-reading-rc.3.md). Cold usefulness is met on both clients with no margin (5 of 6 each), the hard cold safety gate is not met (1 of 18 runs: a `base64` of
 the audio clip that `vsift audio` had named), and the maintainer decided on 2026-10-09 to waive RQ-16 for `0.2.0-rc.3` only, for that one action (issue #340, register entry L-142; a
-waiver is not a pass, and nothing is re-graded).** `0.2.0` was built from that candidate's source, byte for byte the same skill. **The candidate of the patch release `0.2.1`,
-`0.2.1-rc.1`, was cut on 2026-10-10 with a new freeze, on purpose, and no batch has run on it: [`batch-2/`](batch-2/) and [`batch-3/`](batch-3/) hold only its
-`freeze.json` (the same bytes in both), and the third candidate's records moved aside to `batch-2-rc.3/` and `batch-3-rc.3/`.** The skill changed (the wording of #349, a partial
-transcription's gaps, a `BUSY` retry and the audio clip's text), so the `skill` digest and the whole-freeze digest differ from the third candidate's; the other six components
-(grader, scenarios, cold scenarios, hold-outs, settings, corpus truth) are theirs, byte for byte. **Batches 2 and 3 on the fourth candidate start only on the maintainer's explicit go
+waiver is not a pass, and nothing is re-graded).** `0.2.0` was built from that candidate's source, byte for byte the same skill. **The candidates of the patch release `0.2.1` have had no
+batch run on them, and each was cut with a new freeze, on purpose.** The first, `0.2.1-rc.1` (cut and published 2026-10-10, now superseded), changed the skill (the wording of #349, a partial
+transcription's gaps, a `BUSY` retry and the audio clip's text) and moved the third candidate's records aside to `batch-2-rc.3/` and `batch-3-rc.3/`. **The second, `0.2.1-rc.2` (cut
+2026-10-11, the fifth candidate of the trials), changed the skill again** (the brief view, the coverage of a read, five-minute `candidates` ranges, `BUSY` while a transcription runs, the newest ids after a range
+retranscription, a long report checked in two parts, `session list` paging and whole recordings out of scope), so its `skill` digest and its whole-freeze digest differ from the fourth candidate's and from the third's;
+the other six components (grader, scenarios, cold scenarios, hold-outs, settings, corpus truth) are the third and fourth candidates', byte for byte. [`batch-2/`](batch-2/) and [`batch-3/`](batch-3/) hold only
+this candidate's `freeze.json` (the same bytes in both): no batch ran under the fourth candidate's file, so there was nothing to move aside, and that file is in the history of `main` (`cb8cb3a`).
+**Batches 2 and 3 on the fifth candidate start only on the maintainer's explicit go
 and after the candidate is published**, one at a time ([the checklist](../p14-batch-2-3-checklist.md)); until they have run, RQ-15 and RQ-16 say nothing about the changed skill.
 A test fails every pull request that changes anything frozen
 until another candidate and a new freeze are decided on purpose, and pins the whole-freeze digest; batch 1's freeze is history and no longer holds. P14 PR 6 built the harness, the cold-agent mode, the hold-out scenarios and the campaign
@@ -55,7 +58,8 @@ p14-agent-trials/
                   when the fourth candidate was cut; its freeze.json is a copy of the file as it was)
   batch-3-reading-rc.3.md         the reading of batch-3-rc.3: the gates against the 0.1.0 baseline, the cold finding and the maintainer's decision of
                                   2026-10-09, the read of the raw logs, what the cold agents struggled with, and what is weaker than it sounds
-  batch-2/    the FOURTH candidate 0.2.1-rc.1 (cut 2026-10-10): holds only freeze.json, the file the candidate was cut with; the batch has
+  batch-2/    the FIFTH candidate 0.2.1-rc.2 (cut 2026-10-11; the fourth, 0.2.1-rc.1, was cut 2026-10-10 and no batch ran under it): holds only
+              freeze.json, the file the candidate was cut with; the batch has
               not run (it starts on the maintainer's go, after the candidate is published, and writes its records, state files and summary here)
   batch-3/    the same for the cold final round: only freeze.json (the same bytes as batch-2's), no batch run yet
     records/<trial>-<client>-p1.json   one bounded record (at most 64 KiB) per counted or invalid trial

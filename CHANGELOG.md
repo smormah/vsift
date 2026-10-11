@@ -6,9 +6,55 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
-### What changes, in plain English
+## [0.2.1-rc.2] - 2026-10-11
 
-**If you transcribe a long recording (#359; found on two real recordings; in `0.2.0` and `0.2.1-rc.1`; meant for the second candidate of `0.2.1`).**
+**This is a release candidate, under qualification.** It is the second candidate for `0.2.1`, the patch release after `0.2.0`, and it **supersedes the first, `0.2.1-rc.1`**, which was published on 2026-10-10 and has the silent
+transcription defect of [#359](https://github.com/smormah/vsift/issues/359) ([L-149](docs/planning/known-limits.md#l-149)). It is cut in this change and is **not tagged or published here**: when the maintainer publishes it, it goes to npm under
+the tag `next` and never under `latest` (`latest` stays `0.2.0` on all four packages), it is not announced, and it is no statement of support or stability. **`0.2.0` and `0.2.1-rc.1` stay published and are not deprecated, and `0.2.0` is still
+affected by [L-145](docs/planning/known-limits.md#l-145) and [L-149](docs/planning/known-limits.md#l-149) until `0.2.1` is published.** No evidence is recorded for this candidate: the hosted checks, and agent-trial batches 2 and 3 under the new
+freeze, are still to be run, nothing from `0.2.1-rc.1`'s stopped round counts, and the plan says what is open, among it the four waivers that the completeness check passes without a decision
+([`release-0.2.1.md`](docs/planning/release-0.2.1.md)). The release runbook for this candidate is [`release.md`](docs/operations/release.md) section 6.15.
+
+### What changed since 0.2.1-rc.1, in plain English
+
+**If you transcribe a long recording ([#359](https://github.com/smormah/vsift/issues/359), [L-149](docs/planning/known-limits.md#l-149), high).** Joining the 30-second pieces of a transcription could drop the end of a sentence at a seam, with no
+warning, and `search` still called the stretch transcribed; it was seen on both real recordings tried. Now the join keeps such a piece again, at the price of repeats, and the revision lists the stretches where words that no segment
+holds may lie, which `search` and `transcript get` call not transcribed. It is shown on stand-in layouts and not on a real recording, and what it leaves is registered ([L-155](docs/planning/known-limits.md#l-155) to [L-160](docs/planning/known-limits.md#l-160)).
+**A session written by this version can hold a new optional member, and `0.2.0` and `0.2.1-rc.1` read a revision that holds it as damaged**, so going back to either after using this version can lose the session, or part of it.
+
+**If you read a transcript or a search with an AI assistant ([#365](https://github.com/smormah/vsift/issues/365), [#367](https://github.com/smormah/vsift/issues/367), [#373](https://github.com/smormah/vsift/issues/373)).** `transcript get`, `search` and `candidates` take `--view brief`, which leaves out
+what every item repeats (about a fifth to two fifths of the size on the committed examples, a fifth for a local transcription's segments); the default answer is the one every release gave. `transcript get` now says what it covers of the range it was asked for, and is
+`partial` (exit 0) over a part nobody transcribed, as `search` already was.
+
+**If you give `ingest` a path that names no file, a folder, or a file you may not read ([#369](https://github.com/smormah/vsift/issues/369)).** The answer keeps its code and exit status and now says which of the three it is.
+
+**If you let an AI assistant use VSift through its skill.** The skill changed again, and **it is a frozen trial component, so this candidate has a new agent-trial freeze** (only the skill's digest moves). It now uses the brief view and pages of 50 only with it; reads a
+partial read or search as usable and reports each stretch with no transcript as a gap, never as silence; retranscribes a gap once, with one range; asks for `candidates` in ranges of at most 5 minutes; does not retry `frame get`, `frame burst` or `candidates`
+while a transcription runs; reads the range again after a range retranscription, because every segment of the new revision has a new id; checks a long report in two parts; continues `session list` pages until `next_cursor` is null; and says that a
+summary or timeline of a whole recording over 5 minutes is beyond its budgets unless the user bounds the work ([#368](https://github.com/smormah/vsift/issues/368), out of scope for this line). **Nothing in the new text has been run by an agent in a counted trial,
+and no frozen scenario exercises most of it.**
+
+**What is not in this candidate.** No FFmpeg or whisper.cpp re-pin ([#351](https://github.com/smormah/vsift/issues/351), [L-132](docs/planning/known-limits.md#l-132), [L-137](docs/planning/known-limits.md#l-137),
+[L-144](docs/planning/known-limits.md#l-144)), no dependency update, and none of #337, #325, #334 or the real-media test set ([#363](https://github.com/smormah/vsift/issues/363)); no way to give `handoff check` a report off the command line
+([#366](https://github.com/smormah/vsift/issues/366)), no `candidates` filter or progress events, no support for a whole-recording question, and nothing claimed about [#374](https://github.com/smormah/vsift/issues/374), which is not verified.
+
+### What this cut itself does
+
+- **The version** is `0.2.1-rc.2` in the five files that hold it (`Cargo.toml`, `Cargo.lock`, `fuzz/Cargo.toml`, `fuzz/Cargo.lock`, `npm/vsift-cli/package.json`), and only there; each is the `0.2.1-rc.1` file with the version text replaced (`Cargo.lock`: the eight lines of the workspace crates).
+- **The skill change** (one commit: the three commits of the branch `skill-0.2.1-rc2` applied unchanged) and its byte copy, the `handoff_check` fuzz seed (`fuzz/seeds/handoff_check/SKILL.md`), which follows the skill.
+- **A new agent-trial freeze, on purpose:** the `skill` digest (`256b4840...`, it was `2f8686b7...`) and the whole-freeze digest (`a48567ac...`, it was `dbc4c22c...`) are new, the other six components are the third and fourth candidates' byte for byte, and the pin in
+  the `committed_freeze` test moved with them. No batch ran under the first candidate's freeze, so no records moved aside; `batch-2/` and `batch-3/` hold only the new `freeze.json` ([`docs/agents/trials.md`](docs/agents/trials.md), "The freeze (P14)").
+- **The guide** still names the release `0.2.1` (the marker and the generated pages are unchanged); its first page now says that `0.2.1-rc.2` is the build it was checked against and what `0.2.1-rc.1` and `0.2.0` lack, and the development guide lists the new candidate.
+- **Public text is unchanged where `0.2.1-rc.2` on `next` leaves it true:** the README's and the installation guide's known-issue notes name the versions that have the defect (`0.2.0` and `0.2.1-rc.1`, which stays true), and the security policy's candidate row says `0.2.1-rc.N`.
+  Nothing announces the candidate and no claim is raised.
+- **The runbook** is [`release.md`](docs/operations/release.md) 6.15 (6.14 becomes the record of the first candidate), the plan for the release is [`release-0.2.1.md`](docs/planning/release-0.2.1.md), and the register's L-108 and L-133 say that the second candidate is cut.
+- **`vsift-release candidate-delta` was not run:** it compares a stable commit with its accepted candidate and refuses a pre-release tree. The evidence the candidate needs is the same 15 of 20 items as for the first candidate (the plan lists them).
+
+The entries below are the detail of what was merged to `main` since `0.2.1-rc.1`, by kind.
+
+### The detail, in plain English
+
+**If you transcribe a long recording (#359; found on two real recordings; in `0.2.0` and `0.2.1-rc.1`; fixed in `0.2.1-rc.2`).**
 VSift recognises speech in 30-second chunks that overlap by five seconds and joins them. Where two chunks met, the join could drop a whole segment whose words ran past the
 end of its neighbour, and the words after that end were then in neither chunk's output: a sentence broke off and resumed seconds later in the middle of a phrase, with no warning, and
 `search` still called the stretch transcribed. Now the join keeps a dropped segment again whenever, without it, a stretch of what the chunks wrote longer than half a second would be in no kept segment,
@@ -27,7 +73,7 @@ Transcribing just a listed stretch again may give the same stretch; a transcript
 is routine on real speech so a session written by this version may hold one without anything having gone wrong, and nothing written by an earlier release changes.
 
 **The reads pull request of the second `0.2.1` candidate** (the maintainer's decisions of 2026-10-11 from the design of the larger findings, pull request #376; the version stays `0.2.1`).
-Nothing here is published, and nothing changes in the skill, which is a frozen trial component and cannot use the new option until a skill change.
+The skill of this candidate uses the new option (its change is above).
 
 **If you read a transcript or a search with an AI assistant, the pages are a fraction of the size (#365).** `transcript get`, `search` and
 `candidates` take a new option, `--view full|brief`. `full` is the default and is the answer every release gave. `brief` leaves out of each item what every item of one revision (or one visual index) repeats:
@@ -82,7 +128,7 @@ the run read it and is `complete`, but a read over it shows no words and is `par
   (empty, reversed, past the audio, past the source, last in a chunk, before a marker or another rejected segment), a merge over about 1,900 stretches, the join against the search it replaced and over 200,000 spans, and the revision's validation, the record, coverage, chains of runs, the contract, the fuzz seed and human snapshots
   (one for more than 100 stretches), a run whose audio began before its window (domain, application and a property that a stored revision accepts what a merge reports), a second property with a two-word vocabulary where the repeat rule acts, and two more mutations of the guard caught (the skip of a segment inside one already restored, and the order against plain start order). The readable text's label for the stretches is in plain words. The opt-in real-tool stage `p07_local_asr_multi_chunk_seam` also holds the 9.25 s sentence that starts at the second chunk's window to the rule (one second, for a binary from `0.2.1-rc.2` on); **it needs the real tools and was not run.**
 
-For the second candidate of `0.2.1` (the maintainer's decision of 2026-10-11). Nothing here is published, and the register entries stay open until the release.
+For the second candidate of `0.2.1` (the maintainer's decision of 2026-10-11). Nothing here is published until the candidate is, and the register entries stay open until the release.
 
 **If you give `ingest` a path that names no file, a folder, or a file you may not read ([#369](https://github.com/smormah/vsift/issues/369)).** The commonest first mistake (a mistyped
 name, or a command run from another folder: a relative path is read from the folder the command was run in) answered `STORAGE_IO` with nothing in `remediation`, so nothing said the

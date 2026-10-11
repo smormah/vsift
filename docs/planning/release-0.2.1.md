@@ -1,11 +1,11 @@
 # The patch release 0.2.1: the plan
 
-Status: a plan, rewritten on 2026-10-11 after the maintainer's live testing on real recordings. **`0.2.1` does not exist. Its first candidate, `0.2.1-rc.1`, was published on 2026-10-10 under npm's `next`
-and is SUPERSEDED; a second candidate, `0.2.1-rc.2`, is to be cut. For it `main` has the fix of #359 (#377), the Answers change (#369 and #372, #378) and, with the Reads change (#365's brief view, #373's coverage on `transcript get` and the brief view of #367's candidates), the first
-of the larger changes; the skill, the cut and the evidence are to do. The maintainer decided on 2026-10-11 that the version stays `0.2.1`, that #368 is out of scope for this line, that `transcript get`
-over a part nobody transcribed answers `partial` as `search` does, and that the brief view is built on `transcript get`, `search` and `candidates`; the other designs are not decided.**
+Status: a plan, updated on 2026-10-11 at the cut of the second candidate, after the maintainer's live testing on real recordings. **`0.2.1` does not exist. Its first candidate, `0.2.1-rc.1`, was published on 2026-10-10 under npm's `next`
+and is SUPERSEDED; its second, `0.2.1-rc.2`, is CUT (2026-10-11) and is not tagged or published.** The cut contains the fix of #359 (#377), the Answers change (#369 and #372, #378), the Reads change (#365's brief view, #373's coverage on `transcript get` and the brief view of #367's candidates,
+#379), a second change to the agent skill with a new agent-trial freeze, and the version bump; the runbook for it is `release.md` 6.15. The maintainer decided on 2026-10-11 that the version stays `0.2.1`, that #368 is out of scope for this line, that `transcript get`
+over a part nobody transcribed answers `partial` as `search` does, and that the brief view is built on `transcript get`, `search` and `candidates`; **the designs of the other larger findings (#366, #367 beyond the brief view, #370, #371) are not built: the skill answers them in words only.**
 Nothing here is evidence: the evidence ledger holds nothing for any `0.2.1` candidate. It decides nothing for the maintainer: every decision it lists as open is open, and the designs of the larger changes
-below are decided only where it says so. The runbook is [`release.md`](../operations/release.md) section 6.14, the current position is in `memory/project_current_status.md`, and the register entries are
+below are decided only where it says so. The runbook is [`release.md`](../operations/release.md) section 6.15 (6.14 is the record of the first candidate), the current position is in `memory/project_current_status.md`, and the register entries are
 [L-145](known-limits.md#l-145) to [L-154](known-limits.md#l-154), [L-155](known-limits.md#l-155) to [L-160](known-limits.md#l-160) (the limits #359's fix leaves) and [L-142](known-limits.md#l-142).
 
 ## What this release is, and why
@@ -25,11 +25,11 @@ ride along.** **It is a patch release, not a work packet.** P00 to P14 stay comp
 
 | Version | State |
 | --- | --- |
-| `0.2.0` | Published 2026-10-09; npm `latest`; not deprecated. Has L-145 (fixed on `main`, not released) and L-149 (fixed on `main` by #377, not released). |
+| `0.2.0` | Published 2026-10-09; npm `latest`; not deprecated. Has L-145 (fixed on `main` and in the cut of rc.2, not released) and L-149 (fixed on `main` by #377 and in the cut of rc.2, not released). |
 | `0.2.1-rc.1` | **Published 2026-10-10** (tag `v0.2.1-rc.1` at `cb8cb3a`; Release run 38084137607; a GitHub pre-release; npm `next` on all four packages). `P14 verify release` (run 38086846526) passed: `next 0.2.1-rc.1, latest 0.2.0`, GitHub's latest release `v0.2.0`. It carries the fix of #353, the changes of #340, #342 and #345 and the first new skill, **and it has L-149 too** (`merge_chunks` is the same code as in `0.2.0`). **Superseded by rc.2; not deprecated.** |
 | rc.1's hosted evidence | **Stopped on purpose, by the supervisor session, on the maintainer's decision of 2026-10-11 to put #359 into `0.2.1`:** that changes the transcription code, so the evidence gathered on rc.1 is obsolete. The supervisor session stopped the hosted-evidence agent and cancelled the hosted campaign runs it had dispatched for rc.1 (the 8 cancelled runs below); what had already finished stays as history. Of the 14 hosted runs started after the publish, 6 finished green (`P14 verify release`, `P13 managed smoke`, `P14 compatibility`, `P14 scan reading`, `P14 runbook walk`, `P14 malicious media`) and 8 were cancelled (`P14 published artifacts`, `P14 journeys`, `Fuzz`, `P14 stress`, `P14 load`, `P07 local ASR`, `P13 managed power loss`, `P10 durability campaign`). **None of them is recorded in the ledger as evidence for rc.1 or for `0.2.1`, and the cancelled ones show nothing.** Agent batches 2 and 3 were not run on rc.1; they are run once, on rc.2. |
-| `main` | Has everything rc.1 has (it was rc.1's commit, `cb8cb3a`, when this was written), #359's fix (#377), the Answers change (#378) and, with the Reads change, #365's brief view, #373's coverage and the brief view of #367; nothing for the findings below that are still undecided. |
-| `0.2.1-rc.2` | Planned; its changes are being merged one pull request at a time; not cut. |
+| `main` | Has everything rc.1 has, #359's fix (#377), the Answers change (#378) and, with the Reads change (#379), #365's brief view, #373's coverage and the brief view of #367; with the merge of the cut it has the second skill, its freeze and the version `0.2.1-rc.2`; nothing for the findings below that are still undecided. |
+| `0.2.1-rc.2` | **Cut 2026-10-11, not tagged, not published** (the pull request titled "The release candidate 0.2.1-rc.2 ..."; its steps are `release.md` 6.15). The version text in the five files, the second skill as one commit, a new agent-trial freeze (the `skill` digest and the whole-freeze digest are new, the other six digests are the third and fourth candidates'; no batch ran under rc.1's freeze, so nothing moved aside), the runbook, this plan, the changelog and the work record. **Everything it needs is still to do: tag, dry run, publish, the hosted evidence once, agent batches 2 and 3 once (the maintainer's go), the four waivers' decisions, and the stable `0.2.1`.** |
 
 ## What is in it
 
@@ -62,6 +62,22 @@ ride along.** **It is a patch release, not a work packet.** P00 to P14 stay comp
 folder, and whether an ordinary terminal's `session list` and `session clean` see them was not tried. Verify first (after an agent session in the desktop app, run `vsift session list --json` in an ordinary terminal and
 compare); if it is confirmed, say it in the installation guide and the lifecycle text and let `setup check` or `session list` name the session root in use. It has no register entry until it is verified.
 
+**What the cut of rc.2 contains of that list, finding by finding (2026-10-11):**
+
+| Issue | In rc.2 | Not in rc.2 |
+| --- | --- | --- |
+| #359 | the fix (#377) and its limits L-155 to L-160 | the listener's check on the two recordings, a run on a real recording, the third point (duplicates) |
+| #365 | `--view brief` on `transcript get`, `search` and `candidates` (#379); the skill uses it (pages of 50 only in the brief view on the standard profile) | one real run that pages with a cursor; the skill's use of it is untried, so the issue stays open |
+| #366 | words only: the skill checks a report of about 5,500 characters or more in two parts (the text above the `vsift-handoff` block, then the block); no CLI change | a way to give the check a long report off the command line; the sizes are what the issue saw, not measured through the pinned client |
+| #367 | the brief view of `candidates` (#379); the skill asks for one range of at most 5 minutes per call | a filter, progress events, parallel windows (not built, by decision); the first-call silence and the list's density, with the maintainer's counts on a real recording |
+| #368 | out of scope for this line: the skill's description and a stated limit (a whole recording over 5 minutes is not summarised unless the user bounds the work) | any support for a whole-recording question |
+| #369 | built (#378): three fixed remediation texts for `STORAGE_IO` | a locked file and any other failure to open a path stay with no remediation; the Unix cases ran on Linux only in the type check |
+| #370 | words only: `frame get`, `frame burst` and `candidates` are not retried while a transcription runs; `session status`, `job status`, then a `visual` gap and the resume card | extracting frames meanwhile or a `BUSY` that names the job; no cause is named (L-154) |
+| #371 | words only: the `--cursor` forms in the skill and the rule to continue until `next_cursor` is null | page filling for `session list` (not built, by decision) |
+| #372 | a test (#378) that a superseded id still resolves; the skill says every segment of a range retranscription's revision has a new id | any behaviour change |
+| #373 | built (#379): `transcript_coverage` always on `transcript get`, `partial` over a gap; the skill reads a partial read or search as usable and reports each stretch as a gap | the false gaps after a range retranscription (L-033) |
+| #374 | nothing: it is to be verified | the verification, and any claim |
+
 **Not in `0.2.1`:** the FFmpeg and whisper.cpp re-pins ([#351](https://github.com/smormah/vsift/issues/351), CVE-2026-107678, [L-132](known-limits.md#l-132), [L-137](known-limits.md#l-137), [L-144](known-limits.md#l-144): the
 maintainer accepted it for R0 and decided to fix it after the release; the next month-end build is 2026-10-31), [#337](https://github.com/smormah/vsift/issues/337) (a branch dispatch of the release workflow is refused only after the
 builds), [#325](https://github.com/smormah/vsift/issues/325) (a slow copy fails after ten minutes, L-140), [#334](https://github.com/smormah/vsift/issues/334) (a few-millisecond `audio` range, L-141) and the small freely
@@ -70,23 +86,25 @@ register entries L-146 (a model swapped during a run), L-147 (a worker host's `r
 
 ## What rc.2 needs
 
-1. **The changes above, each its own pull request with regression tests at the lowest useful layer.** #359 first (its fix is on `main`, #377); the larger designs after the design pass; the small ones. A public contract
+1. **The changes above, each its own pull request with regression tests at the lowest useful layer.** Done for #359 (#377), #369 and #372 (#378) and #365, #367's brief view and #373 (#379); the skill's words for the rest are in the cut. A public contract
    change needs its schema, example, human renderer and `cli-v1.md` in the same pull request, and the register entry stays until the release.
-2. **A new skill and a new agent-trial freeze.** The skill changes again (at least #371 to #373, and probably #365 to #368 and #370), so its digest changes, the freeze is cut again and its fuzz seed copy follows byte for byte
-   ([`docs/agents/trials.md`](../agents/trials.md), "The freeze (P14)"). The rc.1 freeze is not reused.
-3. **The cut:** the version text in the five files, the runbook (`release.md` 6.14; see the last section for what is not known about how it ran), and the pages that name the candidate.
-4. **Hosted evidence, once, on rc.2.** The table below. Nothing from rc.1's runs carries over, and none of them was recorded.
-5. **Agent batches 2 and 3, once, on rc.2,** under the new freeze, on the maintainer's explicit go and allowances (below).
-6. **The decisions the check does not ask for:** the four waivers (below) and the version number (open decisions).
+2. **A new skill and a new agent-trial freeze: done in the cut.** The skill is one commit (the three commits of its branch, applied unchanged), its fuzz seed copy follows byte for byte, and `freeze write` gave `skill` `256b4840...` and the whole freeze `a48567ac...`; the other six digests are
+   the third and fourth candidates' ([`docs/agents/trials.md`](../agents/trials.md), "The freeze (P14)"). The rc.1 freeze is not reused. **The skill may change again after the cut's pull request is opened** (an uncounted smoke of the text is being read); if it does, the freeze is written again on purpose
+   and the cut is re-done before it is merged.
+3. **The cut: done by this change:** the version text in the five files, the runbook (`release.md` 6.15), and the pages that name the candidate. 6.14 ran once; what that run showed about its steps is not recorded (see the last section).
+4. **Hosted evidence, once, on rc.2.** The table below. Nothing from rc.1's runs carries over, and none of them was recorded. **To do.**
+5. **Agent batches 2 and 3, once, on rc.2,** under the new freeze, on the maintainer's explicit go and allowances (below). **To do.**
+6. **The decisions the check does not ask for:** the four waivers (below) and the deprecation of rc.1. The version number is decided (it stays `0.2.1`). **To do.**
 
 ## The evidence the candidate needs
 
 The staleness rule of the evidence ledger (ADR 0024) lets an entry recorded for an earlier version count only if nothing in its item's scope changed since. For rc.1 the check named 15 of the 20 items
 (RQ-01 to RQ-09, RQ-11, RQ-12, RQ-13, RQ-15, RQ-18 and RQ-19: each is `passed` for `0.2.0` or `0.2.0-rc.3`, and about 55 to 250 files in its scope changed since); **it did not name RQ-10, RQ-14, RQ-16 and RQ-17,
 which are `waived`, or RQ-20 (the check itself)**, and that is the danger: a waiver does not expire by itself, so the check passes those four for `0.2.1` without a single decision about them (next section). The
-list for rc.2 is recomputed at its cut; expect the same shape, with more files changed.
+list for rc.2 was recomputed at its cut (`release-evidence --complete-for 0.2.1-rc.2`, run as a reading and not as a gate): **the same 15 items, and the same waived ones not named**, with 90 to 130 files changed in the scope of each of them except RQ-13 and RQ-18, whose scopes include
+the documents (over 300 and over 160). A candidate writes no `release_delta`; `vsift-release candidate-delta` cannot be run for one (it compares a stable commit with its accepted candidate and refuses a pre-release tree); the stable plan will compare the stable commit with `v0.2.1-rc.2`.
 
-What is run, in the order of [`release.md`](../operations/release.md) 6.14 (everything hosted is read-only and spends hosted minutes; the repeat for `0.2.0`'s second candidate cost about 3,650 job-minutes and its third was of the
+What is run, in the order of [`release.md`](../operations/release.md) 6.15 (everything hosted is read-only and spends hosted minutes; the repeat for `0.2.0`'s second candidate cost about 3,650 job-minutes and its third was of the
 same order; the same parameters are used, so the figures compare):
 
 | Item | What | Where and when | Why it matters for this release |
@@ -123,11 +141,11 @@ All four were decisions about `0.2.0-rc.3`'s evidence and were carried to `0.2.0
 ## The order of steps
 
 1. **Write the changes** (above), #359 first (merged, #377), each merged on its own with its regression tests; **the work record and register are kept current as each merges.**
-2. **Cut rc.2** and **merge the cut only when the supervisor can tag and publish at once** (repository pages such as the guide, the changelog and the skill guide name `0.2.1-rc.2` before it is on npm; 6.14 step 0.1 lists them).
+2. **Cut rc.2: done by this change, which is merged only when the supervisor can tag and publish at once** (repository pages such as the guide, the changelog and the skill guide name `0.2.1-rc.2` before it is on npm; 6.15 step 0.1 lists them).
    A public page that the stable commit may not change (the README is one) is corrected before the cut and not after it, because the stable commit is compared with the highest `v0.2.1-rc.N` tag; the known-issue notes about `0.2.0` and
    `0.2.1-rc.1` stay true as they are.
-3. **Tag, dry run, publish, approve, check from outside** (6.14 steps 1 to 4: the supervisor tags and dispatches, the maintainer approves the `release` environment); the publish moves `next` from `0.2.1-rc.1` to `0.2.1-rc.2`.
-4. **The verification and hosted checks of the published bytes** (6.14 step 5), then the source-built campaigns at the tag, one after another and staggered (runner shortage, #316, shows as queueing).
+3. **Tag, dry run, publish, approve, check from outside** (6.15 steps 1 to 4: the supervisor tags and dispatches, the maintainer approves the `release` environment); the publish moves `next` from `0.2.1-rc.1` to `0.2.1-rc.2`.
+4. **The verification and hosted checks of the published bytes** (6.15 step 5), then the source-built campaigns at the tag, one after another and staggered (runner shortage, #316, shows as queueing).
 5. **Agent batches 2 and 3**, on the maintainer's go, under the committed freeze (`freeze check` must say `nothing frozen has changed`); a miss is a finding, never an edit to the grader, the skill or a scenario.
 6. **Record the evidence in the ledger** in a work-record pull request, from what the runs and `SUMMARY.md` computed; open an issue for any failed run before re-running (governance rule 14); decide each waiver (above).
 7. **The stable commit `0.2.1`**: the version text in the same five files, the launcher's README and the installation guide if they need it, and the work record, **and nothing else** (`release.md` 6.8; the check compares it with the highest `v0.2.1-rc.N` tag).
@@ -147,7 +165,7 @@ All four were decisions about `0.2.0-rc.3`'s evidence and were carried to `0.2.0
 - Add a scenario for a partial transcription, a seam loss or a whole-recording question to the agent trials (a new freeze and candidate), now or after `0.2.1`.
 - Confirm the severities of L-145 and L-149 (both high; L-149's reading of the rubric's first line is stated in its entry) and whether plan section 12's and 31.4's wording is amended; confirm L-146 to L-148, L-150 to L-154 and L-155 to L-160 (all `pending`).
 - Who does the listener's check of the holes on the two recordings (the evidence L-149 needs; the recordings stay on the maintainer's machine), and who verifies #374.
-- Whether to run the optional upgrade `0.2.0-rc.3` to `0.2.1-rc.2`, and whether to move `next` to `0.2.1` after it is published (the workflow never does; [L-108](known-limits.md#l-108)); until then `next` names the candidate.
+- Whether to run the optional upgrades `0.2.1-rc.1` to `0.2.1-rc.2` and `0.2.0-rc.3` to `0.2.1-rc.2` (6.15 step 5), and whether to move `next` to `0.2.1` after it is published (the workflow never does; [L-108](known-limits.md#l-108)); until then `next` names the candidate.
 - Whether `#340`'s additive JSON hint (a field in `audio`'s result) is still wanted; the cold round may inform it.
 - The claims rung stays `candidate`; nothing here raises it.
 
@@ -158,10 +176,12 @@ All four were decisions about `0.2.0-rc.3`'s evidence and were carried to `0.2.0
   has been done on the two recordings, which stay on the maintainer's machine, the half second is derived for one configuration and not measured, and the guard trades holes for repeats (L-155) and leaves L-156 to L-159. A second real recording is the test that matters, and the real-media test set that would repeat it (#363) is not in this release.
 - **The live testing is the maintainer's, on two recordings, on Windows 11 with npm, driven by one client (Claude Code).** Every finding of 2026-10-10 is an observation of that setup; none was checked again on `0.2.1-rc.1`, and the figures
   (page sizes, minutes, tokens) are the agents' and the clients' as the issues report them.
-- **The skill change is a hypothesis, and it changes again.** The first change is untried, the grader matches text and cannot read a negation, and the batches are small (three runs per scenario).
+- **The skill change is a hypothesis, and it may change once more.** Neither of its two changes has been run by a counted agent; no frozen scenario exercises most of the second (a whole-recording question, a report over 5,500 characters, a `BUSY` frame call during a transcription, `session list` paging,
+  the new ids after a range retranscription, a partial read, an answer cut by the client), the grader matches text and cannot read a negation, and the batches are small (three runs per scenario). An uncounted smoke of the second change is being read, and if it changes the skill the freeze is written again.
 - **Every earlier result is for an earlier version.** The ledger's `passed` entries, the third candidate's batches and the scan reading are for `0.2.0` or `0.2.0-rc.3`; rc.1's program differed from `0.2.0`'s in 31 source files of
   `crates/`, and rc.2's will differ in more.
 - **A session with a gap cannot be read by `0.2.0` or earlier** (it reads as damaged), and **a revision holding the new record member `unplaced_ranges` (#359, L-160) is read as damaged by `0.2.0`, `0.2.1-rc.1` and earlier**: they read newest first, so if the newest revision of a session holds it nothing of the session can be read, and if only an older one does the newest reads normally and the older ones are refused (by id, in `handoff check --session` and in `bundle validate`); so going back after using either loses the session, or part of it.
-- **6.14 ran once, for rc.1:** the Release run and the verification passed. What the run showed about the runbook (steps that were wrong or are missing) is not recorded in this plan; ask the person who ran it before rc.2.
+- **6.14 ran once, for rc.1:** the Release run and the verification passed. What the run showed about the runbook (steps that were wrong or are missing) is not recorded in this plan, and 6.15 is 6.14 with the numbers changed (twenty earlier integrity values and five tag commits instead of sixteen and four) and one correction found while writing it (the title of the cut's pull request,
+  which 6.14 named wrongly); ask the person who ran 6.14 before 6.15 is used.
 - **The window of L-133 reopens for repository pages** (the guide's first page, the changelog, the skill guide, the trial documents, this plan and the runbook), which name the candidate between the merge of its cut and its
   publish; the README, the installation guide, the launcher's README and the security policy are worded to be true both ways.
