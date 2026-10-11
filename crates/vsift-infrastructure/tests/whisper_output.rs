@@ -293,6 +293,7 @@ fn a_local_asr_revision_round_trips_through_record_version_2() -> TestResult {
             run,
             language,
             segments: merged.segments,
+            unplaced: merged.unplaced,
             warnings,
         },
         splice: None,

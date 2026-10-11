@@ -216,9 +216,20 @@ recognition. Nothing was committed, the job is marked failed and not resumable, 
 starts it from the beginning. (A recording in which only a stretch or two fail is not this: it finishes as `partial`,
 with those stretches listed as not transcribed. Before `0.2.1` a single such stretch failed the whole run.)
 
+**A sentence breaks off where two 30-second chunks meet and carries on in the middle of a phrase, or `search` is `partial`
+for a stretch of a recording whose run was `complete`.** The first is the defect of [L-149](../planning/known-limits.md#l-149) in `0.2.0` and
+`0.2.1-rc.1`: the transcript lost the end of a copy at a join and `search` called the stretch transcribed. From the second
+`0.2.1` candidate on, run `vsift transcript retranscribe` again over that part (`--from` and `--to` a minute either side);
+the new run is meant to close any hole longer than half a second in what the chunks wrote, and may repeat words where the
+chunks wrote the overlap differently (not yet checked on a real recording). The second is the stretch the revision lists
+under `local_asr.unplaced_ranges` (in the readable text, under a line that begins `Speech was heard in these stretches`): the
+recogniser wrote words there whose times could not be placed, so VSift dropped them and says
+where they may lie, as an upper bound. Transcribing just that stretch again cuts the audio at other points and may cover
+it, but may give the same stretch; a transcript file you supply is the sure remedy (`vsift ingest <video> --transcript <file>`).
+
 ## `INTEGRITY_FAILURE`: what is stored is not what VSift wrote
 
-Two causes cover nearly every case.
+Three causes cover nearly every case.
 
 - **A `--session-root` folder VSift did not create.** If you gave `--session-root` a folder that already existed,
   even an empty one you made yourself, VSift will not adopt it. Name a path that does not exist yet, or delete the
@@ -226,6 +237,12 @@ Two causes cover nearly every case.
   operator option that ordinary use never needs: leave it out and VSift uses its own private folder.
 - **A bundle that was changed or damaged** since it was saved. `bundle validate` names that. Restore the bundle from
   where it came from.
+- **A session written by a newer VSift and read by an older one.** `0.2.0`, earlier releases and `0.2.1-rc.1` read a
+  stored record strictly, and a session whose record has `unplaced_ranges` (words the recogniser wrote that no segment
+  holds, [L-149](../planning/known-limits.md#l-149)) is damage to them. They read the newest revision first: if that one
+  holds the member, nothing of the session can be read; if only an older revision does, the newest reads normally and the
+  older ones fail when asked for by id, in `handoff check --session` and in `bundle validate`. Nothing is wrong with the
+  session. Use the newer VSift, or discard it.
 
 ## Problems installing or starting VSift
 

@@ -24,6 +24,7 @@ use crate::{
     AsrChunkOutcome, AsrRun, ChunkTime, Confidence, ConfidenceOrigin, EarlierTextRule, MediaTime,
     PageLimit, SourceId, SourceSegmentId, SpeakerLabel, TimeRange, TranscriptRevisionId,
     TranscriptSegmentId,
+    asr::unplaced_limits,
     spans::{Span, merged, overlaps_any, span},
 };
 
@@ -1136,6 +1137,11 @@ pub struct TranscriptRevisionParts {
     /// revision is spliced from one that left such a part untranscribed. See
     /// [`TranscriptRevision::carried_untranscribed`].
     pub carried_untranscribed: Vec<TimeRange>,
+    /// The stretches of the revision's own run where the recogniser wrote words
+    /// that no segment holds (#359), in start order and merged; empty for an
+    /// import and for a run that rejected nothing it could not account for. See
+    /// [`TranscriptRevision::unplaced`].
+    pub unplaced: Vec<TimeRange>,
     /// Declared or detected language, if known.
     pub language: Option<LanguageTag>,
     /// Segments in start order.
@@ -1153,6 +1159,16 @@ pub struct TranscriptRevisionParts {
 /// source untranscribed, never less.
 pub const MAX_CARRIED_UNTRANSCRIBED: usize = 1_024;
 
+/// The most stretches a revision records as unplaced (#359).
+///
+/// A run plans at most [`crate::MAX_PLANNED_CHUNKS`] chunks, and a chunk is
+/// usable only while at most a quarter of its text segments are rejected, so a
+/// real run has a handful; the bound is for a recogniser that answers with
+/// something else. Where there would be more, the nearest are joined
+/// ([`crate::MergedTranscript::unplaced`] does it), which marks more of the run
+/// as holding words nobody placed and never less.
+pub const MAX_UNPLACED_STRETCHES: usize = 1_024;
+
 /// One immutable transcript revision for one source segment.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct TranscriptRevision {
@@ -1165,6 +1181,7 @@ pub struct TranscriptRevision {
     replaced_range: Option<TimeRange>,
     inherited: Vec<InheritedRevision>,
     carried_untranscribed: Vec<TimeRange>,
+    unplaced: Vec<TimeRange>,
     language: Option<LanguageTag>,
     segments: Vec<TranscriptSegment>,
     warnings: TranscriptWarnings,
@@ -1207,6 +1224,7 @@ impl TranscriptRevision {
         }
         validate_inherited(&parts)?;
         validate_carried_untranscribed(&parts, bounds)?;
+        validate_unplaced(&parts, bounds)?;
         // What the run could not read and wrote nothing over keeps the text the
         // superseded revision had there, so a carried segment may lie in the
         // replaced range (#353).
@@ -1280,6 +1298,7 @@ impl TranscriptRevision {
             replaced_range: parts.replaced_range,
             inherited: parts.inherited,
             carried_untranscribed: parts.carried_untranscribed,
+            unplaced: parts.unplaced,
             language: parts.language,
             segments: parts.segments,
             warnings: parts.warnings,
@@ -1345,8 +1364,9 @@ impl TranscriptRevision {
     /// over, in start order and merged (#353). Empty for a revision that is not
     /// spliced, for one whose superseded revision covered all of its source,
     /// and for any chain in which no run left a part unread: only a part that
-    /// some run read but could not use, under a window or file this revision
-    /// still carries, needs it.
+    /// some run read but could not use, or a stretch where it wrote words that no
+    /// segment holds ([`TranscriptRevision::unplaced`], #359), under a window or
+    /// file this revision still carries, needs it.
     ///
     /// This is what lets coverage stay true along a chain. A revision keeps the
     /// provenance only of the runs whose text it carries, so the run of an
@@ -1359,6 +1379,30 @@ impl TranscriptRevision {
     #[must_use]
     pub fn carried_untranscribed(&self) -> &[TimeRange] {
         &self.carried_untranscribed
+    }
+
+    /// The stretches of this revision's own run where the recogniser wrote
+    /// words that no segment holds, in start order and merged (#359): what
+    /// [`crate::MergedTranscript::unplaced`] found, kept so that a search can say
+    /// so. Empty for an import, for a revision whose run rejected no segment
+    /// with words that left such a stretch, and for every revision written
+    /// before the member existed.
+    ///
+    /// A rejected segment names a time its audio cannot hold, so its words are
+    /// in no segment; the count of such segments is the warning
+    /// `provider_segments_rejected`, which carries no time. Each stretch here is
+    /// where those words may lie (an upper bound: from where the rejected
+    /// segment says they start, never before, to where the next segment the
+    /// recogniser wrote begins), less everything a kept segment covers, and
+    /// longer than the tolerance ([`crate::SEAM_COVERAGE_TOLERANCE_MICROS`]). A
+    /// rejected segment whose range is empty, one with no word, one that starts
+    /// at or after the end of its audio and one that nothing follows in the
+    /// audio have none: they stay counted. Coverage does not count a stretch as
+    /// transcribed unless a segment of the revision or a window the run found
+    /// silent covers it: words said there cannot be found.
+    #[must_use]
+    pub fn unplaced(&self) -> &[TimeRange] {
+        &self.unplaced
     }
 
     /// What a revision that supersedes this one over `replaced`, carrying text
@@ -1567,6 +1611,49 @@ fn validate_carried_untranscribed(
         || listed
             .iter()
             .any(|&entry| overlaps_any(&[span(replaced)], entry))
+    {
+        return Err(invalid);
+    }
+    Ok(())
+}
+
+/// What a local-ASR revision records as unplaced is in order, merged (no two
+/// stretches overlap or touch), inside the source and inside the range its own
+/// run covered, and no longer than [`MAX_UNPLACED_STRETCHES`]; an import has
+/// none. "Inside" is [`crate::asr::unplaced_limits`], the definition the run's
+/// own validation of a chunk applies with the chunk's window, so a stretch that
+/// a run makes is one that this accepts.
+///
+/// It is not checked against the segments: a stretch is what the run's kept
+/// segments left, but a list bounded by joining the nearest stretches may run
+/// over a segment, and coverage already counts a segment as covering whatever
+/// is under it.
+fn validate_unplaced(
+    parts: &TranscriptRevisionParts,
+    bounds: TimeRange,
+) -> Result<(), TranscriptRevisionError> {
+    if parts.unplaced.is_empty() {
+        return Ok(());
+    }
+    let invalid = TranscriptRevisionError::InvalidAsrRun;
+    let TranscriptProvenance::LocalAsr(run) = &parts.provenance else {
+        return Err(invalid);
+    };
+    let Some(covered) = run.covered_range() else {
+        return Err(invalid);
+    };
+    if parts.unplaced.len() > MAX_UNPLACED_STRETCHES {
+        return Err(invalid);
+    }
+    let Some(limits) = unplaced_limits(covered, bounds) else {
+        return Err(invalid);
+    };
+    let listed: Vec<Span> = parts.unplaced.iter().copied().map(span).collect();
+    if merged(listed.clone()) != listed
+        || parts
+            .unplaced
+            .iter()
+            .any(|stretch| stretch.start() < limits.start() || stretch.end() > limits.end())
     {
         return Err(invalid);
     }
@@ -1978,6 +2065,7 @@ mod tests {
             replaced_range: None,
             inherited: Vec::new(),
             carried_untranscribed: Vec::new(),
+            unplaced: Vec::new(),
             language: None,
             segments,
             warnings: TranscriptWarnings::default(),
@@ -2006,6 +2094,7 @@ mod tests {
             replaced_range: None,
             inherited: Vec::new(),
             carried_untranscribed: Vec::new(),
+            unplaced: Vec::new(),
             language: None,
             segments: revision.segments().to_vec(),
             warnings: TranscriptWarnings::default(),

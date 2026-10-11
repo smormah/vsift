@@ -251,6 +251,7 @@ pub fn build_imported_revision(
         replaced_range: None,
         inherited: Vec::new(),
         carried_untranscribed: Vec::new(),
+        unplaced: Vec::new(),
         language: transcript.language().cloned(),
         segments,
         warnings,

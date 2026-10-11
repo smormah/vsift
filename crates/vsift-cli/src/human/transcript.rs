@@ -214,6 +214,12 @@ fn push_revision(text: &mut TerminalText, revision: &TranscriptRevision) {
                 .push_fixed(" with an unusable answer");
         }
         text.push_fixed(")").end_line();
+        push_ranges_cut_at(
+            text,
+            "Speech was heard in these stretches, but its words could not be placed in time and are missing from the transcript. Each stretch is the longest they could cover (they probably took less), and a search counts it as not transcribed. A transcript file for the video, if you have one, can fill them in (ingest the video again with --transcript):",
+            &run.unplaced_ranges,
+            MAX_PRINTED_STRETCHES,
+        );
     }
     if let Some(supersedes) = &revision.supersedes {
         text.push_fixed("Supersedes: ")
@@ -301,6 +307,30 @@ fn push_segment_details(text: &mut TerminalText, segment: &TranscriptSegment) {
             .push_value(&speaker.origin)
             .push_fixed("): ")
             .push_untrusted(&speaker.display_label, Placement::Inline)
+            .end_line();
+    }
+}
+
+/// How many stretches of unplaced words a revision's text lists, as many as a
+/// search lists of each kind of range: a revision can hold up to 1,024, and a
+/// terminal is no place for a page of them.
+const MAX_PRINTED_STRETCHES: usize = 100;
+
+/// [`push_ranges`] for at most `limit` ranges, with a line that says how many
+/// more there are and where to read them.
+fn push_ranges_cut_at(
+    text: &mut TerminalText,
+    label: &'static str,
+    ranges: &[super::view::Range],
+    limit: usize,
+) {
+    let shown = ranges.get(..limit).unwrap_or(ranges);
+    push_ranges(text, label, shown);
+    let more = ranges.len() - shown.len();
+    if more > 0 {
+        text.push_fixed("  and ")
+            .push_unsigned(u64::try_from(more).unwrap_or(u64::MAX))
+            .push_fixed(" more (use --json for all of them)")
             .end_line();
     }
 }

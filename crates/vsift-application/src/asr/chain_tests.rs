@@ -44,9 +44,21 @@ enum Answer {
     Nothing,
     /// The audio is silent: the recogniser is never asked.
     Silence,
+    /// Two segments, at 0.6 and 3.0 s into the chunk, and between them, at
+    /// 1.0 s, a rejected one that has words and a reversed range: the chunk is
+    /// usable, and the words are in no segment (#359). Where they may lie is the
+    /// two seconds from 1.0 s to 3.0 s.
+    Unplaced,
+    /// A rejected segment at 0 ms whose end is beyond the padded window, and a
+    /// kept one at 3.0 s: the words of the first lie, at most, in the first
+    /// three seconds of the audio (#359).
+    RunsOnFromTheStart,
 }
 
-struct Audio<'a>(&'a [Answer]);
+/// The fake audio of a run: the chunks answering `answers`, each decoded from
+/// `early_us` microseconds before its window starts (the first sample of a real
+/// decode may be at an earlier frame boundary than the window asked for).
+struct Audio<'a>(&'a [Answer], u64);
 
 impl SpeechAudioSource for Audio<'_> {
     fn speech_pcm(
@@ -62,7 +74,9 @@ impl SpeechAudioSource for Audio<'_> {
             usize::try_from(chunk.window().duration_micros().min(4 * SECOND) / 1_000 * 16)
                 .map_err(|_| SpeechAudioError::ResourceLimit)
                 .map(|count| SpeechPcm {
-                    actual_start: chunk.window().start(),
+                    actual_start: MediaTime::from_micros(
+                        chunk.window().start().as_micros().saturating_sub(self.1),
+                    ),
                     samples: vec![level; count],
                 }),
         )
@@ -95,28 +109,46 @@ fn output(
     chunk: &PlannedChunk,
     answer: Answer,
 ) -> Result<ProviderChunkOutput, SpeechRecognitionError> {
-    let start_ms = match answer {
-        Answer::Words => 1_000,
-        Answer::Unplaceable => chunk.window().duration_micros() / 1_000 + 1_000,
-        Answer::Nothing | Answer::Silence => {
-            return Ok(ProviderChunkOutput {
-                language: LanguageTag::parse("en").ok(),
-                segments: Vec::new(),
-            });
-        }
-    };
     let words = format!(
         "heard in the chunk at {}",
         chunk.window().start().as_micros()
     );
+    let segments = match answer {
+        Answer::Words => vec![provider_segment(1_000, 3_000, &words)?],
+        Answer::Unplaceable => {
+            let start_ms = chunk.window().duration_micros() / 1_000 + 1_000;
+            vec![provider_segment(start_ms, start_ms + 2_000, &words)?]
+        }
+        Answer::Unplaced => vec![
+            provider_segment(600, 900, &words)?,
+            provider_segment(1_000, 900, "words nobody placed")?,
+            provider_segment(3_000, 3_500, &format!("{words} again"))?,
+        ],
+        Answer::RunsOnFromTheStart => vec![
+            provider_segment(0, 40_000, "words that run on past the window")?,
+            provider_segment(3_000, 3_500, &words)?,
+        ],
+        Answer::Nothing | Answer::Silence => Vec::new(),
+    };
     Ok(ProviderChunkOutput {
         language: LanguageTag::parse("en").ok(),
-        segments: vec![ProviderSegment {
-            start: ChunkTime::from_millis(start_ms).ok_or(SpeechRecognitionError::Io)?,
-            end: ChunkTime::from_millis(start_ms + 2_000).ok_or(SpeechRecognitionError::Io)?,
-            text: Some(CueText::new(words.clone(), words).map_err(|_| SpeechRecognitionError::Io)?),
-            tokens: Vec::new(),
-        }],
+        segments,
+    })
+}
+
+fn provider_segment(
+    start_ms: u64,
+    end_ms: u64,
+    words: &str,
+) -> Result<ProviderSegment, SpeechRecognitionError> {
+    Ok(ProviderSegment {
+        start: ChunkTime::from_millis(start_ms).ok_or(SpeechRecognitionError::Io)?,
+        end: ChunkTime::from_millis(end_ms).ok_or(SpeechRecognitionError::Io)?,
+        text: Some(
+            CueText::new(words.to_owned(), words.to_owned())
+                .map_err(|_| SpeechRecognitionError::Io)?,
+        ),
+        tokens: Vec::new(),
     })
 }
 
@@ -192,7 +224,10 @@ impl Chain {
             transcription,
             splice: None,
         })?;
-        let read = read_by_the_run_of(&revision);
+        let mut read = read_by_the_run_of(&revision);
+        for second in unplaced_by_the_answers(&source, source.range(), answers)? {
+            read.remove(&second);
+        }
         Ok(Self {
             session,
             source_id,
@@ -217,7 +252,10 @@ impl Chain {
             transcription,
             splice: None,
         })?;
-        let read = read_by_the_run_of(&revision);
+        let mut read = read_by_the_run_of(&revision);
+        for second in unplaced_by_the_answers(&source, range(from, to)?, answers)? {
+            read.remove(&second);
+        }
         Ok(Self {
             session,
             source_id,
@@ -227,13 +265,16 @@ impl Chain {
         })
     }
 
-    /// Whether a run of the chain read a chunk and could not use its answer.
-    fn holds_an_unusable_chunk(&self) -> bool {
+    /// Whether a run of the chain read a chunk and could not use its answer,
+    /// or wrote words that no segment of its revision holds (#359): the two
+    /// things that leave a part of what a run read untranscribed.
+    fn holds_a_part_a_run_read_and_cannot_vouch_for(&self) -> bool {
         self.revisions.iter().any(|revision| {
-            matches!(revision.provenance(), TranscriptProvenance::LocalAsr(run)
-            if run.chunks().iter().any(|record| {
-                matches!(record.outcome(), AsrChunkOutcome::Unusable { .. })
-            }))
+            !revision.unplaced().is_empty()
+                || matches!(revision.provenance(), TranscriptProvenance::LocalAsr(run)
+                if run.chunks().iter().any(|record| {
+                    matches!(record.outcome(), AsrChunkOutcome::Unusable { .. })
+                }))
         })
     }
 
@@ -270,6 +311,7 @@ impl Chain {
             replaced_range: newest.replaced_range(),
             inherited: newest.inherited().to_vec(),
             carried_untranscribed: whole,
+            unplaced: newest.unplaced().to_vec(),
             language: newest.language().cloned(),
             segments: newest.segments().to_vec(),
             warnings: newest.warnings().clone(),
@@ -363,6 +405,12 @@ impl Chain {
             .copied()
             .collect();
         read.extend(read_by_the_run_of(&revision));
+        // Where the run wrote words that no segment holds, it read the audio
+        // and cannot vouch for it (#359): by the answers it was given, not by
+        // what the revision records.
+        for second in unplaced_by_the_answers(&self.source, replaced, answers)? {
+            read.remove(&second);
+        }
         read.extend(seconds_of(
             revision
                 .segments()
@@ -408,6 +456,28 @@ impl Chain {
     }
 }
 
+/// The whole seconds that a run over `requested` with the chunks answering
+/// `answers` wrote words in that no segment holds, by the answers alone: each
+/// chunk that answered [`Answer::Unplaced`] puts its rejected words between 1.0
+/// and 3.0 s into its window, and nothing kept lies there.
+fn unplaced_by_the_answers(
+    source: &SourceSegment,
+    requested: TimeRange,
+    answers: &[Answer],
+) -> Built<BTreeSet<u64>> {
+    let mut seconds = BTreeSet::new();
+    for (chunk, answer) in plan_chunks(source.id(), requested, ChunkPlan::R0)?
+        .iter()
+        .zip(answers)
+    {
+        if *answer == Answer::Unplaced {
+            let start = chunk.window().start().as_micros() / SECOND;
+            seconds.extend([start + 1, start + 2]);
+        }
+    }
+    Ok(seconds)
+}
+
 /// The seconds of the windows of `revision`'s own run that were read: the
 /// chunks transcribed or found quiet, not the unusable ones.
 fn read_by_the_run_of(revision: &TranscriptRevision) -> BTreeSet<u64> {
@@ -429,6 +499,17 @@ async fn transcribe(
     requested: TimeRange,
     answers: &[Answer],
 ) -> Built<Option<super::AsrTranscription>> {
+    transcribe_decoded_early(source, requested, answers, 0).await
+}
+
+/// [`transcribe`] with every chunk decoded from `early_us` microseconds before
+/// its window starts.
+async fn transcribe_decoded_early(
+    source: &SourceSegment,
+    requested: TimeRange,
+    answers: &[Answer],
+    early_us: u64,
+) -> Built<Option<super::AsrTranscription>> {
     let expected = identity()?;
     Ok(transcribe_range(
         TranscribeRangeRequest {
@@ -438,7 +519,7 @@ async fn transcribe(
             audio_stream: 1,
             expected: &expected,
         },
-        &Audio(answers),
+        &Audio(answers, early_us),
         &Recogniser(answers),
         &NotCancelled,
     )
@@ -618,7 +699,7 @@ async fn a_chain_without_an_unread_part_records_nothing_and_covers_the_source() 
 #[tokio::test]
 async fn no_chain_of_runs_makes_search_claim_what_no_run_read() -> TestResult {
     let ranges = [(0, 8), (10, 65), (30, 70), (5, 50)];
-    let patterns: [fn(usize) -> Vec<Answer>; 3] = [
+    let patterns: [fn(usize) -> Vec<Answer>; 4] = [
         |_| Vec::new(),
         |_| vec![Answer::Unplaceable],
         |chunks| {
@@ -628,10 +709,19 @@ async fn no_chain_of_runs_makes_search_claim_what_no_run_read() -> TestResult {
             }
             answers
         },
+        // The first chunk wrote words that no segment holds (#359).
+        |chunks| {
+            let mut answers = vec![Answer::Words; chunks];
+            if let Some(first) = answers.first_mut() {
+                *first = Answer::Unplaced;
+            }
+            answers
+        },
     ];
     let starts = [
         Chain::local(&[Answer::Words; 3]).await?,
         Chain::local(&[Answer::Unplaceable, Answer::Words, Answer::Words]).await?,
+        Chain::local(&[Answer::Words, Answer::Unplaced, Answer::Words]).await?,
         Chain::imported(&[(5, 7), (12, 14), (20, 36), (34, 36), (56, 58)])?,
         // Chains that began with a range, of which most of the source was
         // never examined.
@@ -641,6 +731,7 @@ async fn no_chain_of_runs_makes_search_claim_what_no_run_read() -> TestResult {
     let mut checked = 0_u32;
     let mut with_unread_parts = 0_u32;
     let mut with_kept_text = 0_u32;
+    let mut with_unplaced_words = 0_u32;
     let mut stack: Vec<Chain> = starts.to_vec();
     while let Some(chain) = stack.pop() {
         let (transcribed, untranscribed) = chain.coverage()?;
@@ -659,12 +750,13 @@ async fn no_chain_of_runs_makes_search_claim_what_no_run_read() -> TestResult {
         // Text is covered.
         assert!(chain.text()?.is_subset(&transcribed));
         // Nothing is recorded as untranscribed in a chain in which no run could
-        // not use an answer: the record exists for the parts such a run left
-        // under a window or file that a later revision still carries.
-        if !chain.holds_an_unusable_chunk() {
+        // not use an answer, or wrote words that no segment holds: the record
+        // exists for the parts such a run left under a window or file that a
+        // later revision still carries.
+        if !chain.holds_a_part_a_run_read_and_cannot_vouch_for() {
             assert!(
                 chain.newest()?.carried_untranscribed().is_empty(),
-                "revision {} records {:?} in a chain with no unusable chunk",
+                "revision {} records {:?} in a chain with no unusable chunk and no unplaced words",
                 chain.newest()?.number(),
                 chain.newest()?.carried_untranscribed()
             );
@@ -682,6 +774,7 @@ async fn no_chain_of_runs_makes_search_claim_what_no_run_read() -> TestResult {
         checked += 1;
         with_unread_parts += u32::from(!untranscribed.is_empty());
         with_kept_text += u32::from(chain.kept_text()?);
+        with_unplaced_words += u32::from(!chain.newest()?.unplaced().is_empty());
         if chain.revisions.len() >= 4 {
             continue;
         }
@@ -700,6 +793,7 @@ async fn no_chain_of_runs_makes_search_claim_what_no_run_read() -> TestResult {
     assert!(checked > 1_000, "{checked}");
     assert!(with_unread_parts > 100, "{with_unread_parts}");
     assert!(with_kept_text > 10, "{with_kept_text}");
+    assert!(with_unplaced_words > 100, "{with_unplaced_words}");
     Ok(())
 }
 
@@ -846,9 +940,127 @@ async fn an_unread_part_under_a_carried_file_is_the_one_thing_that_is_recorded()
             .step(10, 65, &[Answer::Unplaceable, Answer::Words])
             .await?
     );
-    assert!(chain.holds_an_unusable_chunk());
+    assert!(chain.holds_a_part_a_run_read_and_cannot_vouch_for());
     // The file is carried (the cue at 5 s), and claims the whole source.
     assert!(chain.step(0, 3, &[Answer::Words]).await?);
     assert!(!chain.newest()?.carried_untranscribed().is_empty());
+    Ok(())
+}
+
+/// #359: a chunk whose recogniser wrote words that were rejected (a reversed
+/// range) between two segments it kept is usable, and the run is not partial;
+/// but the words are in no segment, so the revision records where they may lie,
+/// from where the rejected segment starts to where the next one does, and a
+/// search does not count that stretch as transcribed. A run whose rejections
+/// leave nothing of the kind records nothing and is covered as before.
+#[tokio::test]
+async fn words_that_no_segment_holds_are_recorded_and_not_counted_as_transcribed() -> TestResult {
+    let chain = Chain::local(&[Answer::Unplaced, Answer::Words, Answer::Words]).await?;
+    let revision = chain.newest()?;
+    // Every chunk was read and none was unusable.
+    let TranscriptProvenance::LocalAsr(run) = revision.provenance() else {
+        return Err("a local revision".into());
+    };
+    assert!(
+        run.chunks()
+            .iter()
+            .all(|record| matches!(record.outcome(), AsrChunkOutcome::Transcribed { .. }))
+    );
+    // The rejected words started at 1.0 s and the next segment at 3.0 s.
+    assert_eq!(revision.unplaced(), [range(1, 3)?]);
+    // The rejection is counted, as it always was, and nothing else is.
+    let counted: Vec<_> = revision
+        .warnings()
+        .as_slice()
+        .iter()
+        .map(|warning| (warning.kind().identifier(), warning.count()))
+        .collect();
+    assert_eq!(counted, [("provider_segments_rejected", 1)]);
+    // A search does not count the stretch as transcribed, and says so only for
+    // the stretch.
+    let (transcribed, untranscribed) = chain.coverage()?;
+    assert_eq!(untranscribed, seconds(1..3));
+    assert_eq!(transcribed, union(&[seconds(0..1), seconds(3..70)]));
+    assert!(
+        SearchCoverage::of(revision, Some(range(5, 70)?)).is_complete(),
+        "a search clear of the stretch is complete"
+    );
+    // The same chain with every answer read cleanly records nothing.
+    let clean = Chain::local(&[Answer::Words; 3]).await?;
+    assert!(clean.newest()?.unplaced().is_empty());
+    assert!(clean.coverage()?.1.is_empty());
+    Ok(())
+}
+
+/// #359: a retranscription over the stretch replaces it, and one far from it
+/// leaves it untranscribed, as for a part some run could not read, because the
+/// earlier run's window, which the later revision still carries text from, would
+/// otherwise cover it again.
+#[tokio::test]
+async fn later_runs_neither_hide_nor_keep_words_that_no_segment_holds() -> TestResult {
+    // Over the stretch: the run reads it again and holds the words it hears.
+    let mut over = Chain::local(&[Answer::Unplaced, Answer::Words, Answer::Words]).await?;
+    assert!(over.step(0, 10, &[Answer::Words]).await?);
+    assert!(over.newest()?.unplaced().is_empty());
+    assert!(over.coverage()?.1.is_empty(), "{:?}", over.coverage()?.1);
+
+    // Far from it: the stretch stays untranscribed, and the revision records it.
+    let mut far = Chain::local(&[Answer::Unplaced, Answer::Words, Answer::Words]).await?;
+    assert!(far.step(40, 65, &[Answer::Words, Answer::Words]).await?);
+    assert!(far.newest()?.unplaced().is_empty());
+    assert_eq!(far.coverage()?.1, seconds(1..3));
+    assert_eq!(far.newest()?.carried_untranscribed(), [range(1, 3)?]);
+
+    // Over an imported file, which claims the whole source, the same: a run
+    // over 0-10 s that writes words nobody holds leaves 1-3 s untranscribed,
+    // and a run elsewhere does not bring it back. (It may say more: once the
+    // file's last cue is replaced, nothing carries the file, so what only it
+    // covered is no longer claimed, which is the understatement the coverage
+    // always allows.)
+    let mut file = Chain::imported(&[(5, 7), (40, 42)])?;
+    assert!(file.step(0, 10, &[Answer::Unplaced]).await?);
+    assert_eq!(file.coverage()?.1, seconds(1..3));
+    assert!(file.step(40, 65, &[Answer::Words]).await?);
+    let (transcribed, untranscribed) = file.coverage()?;
+    assert!(untranscribed.is_superset(&seconds(1..3)));
+    assert!(transcribed.is_disjoint(&seconds(1..3)));
+    Ok(())
+}
+
+/// #359 (review): a run whose audio was decoded from before its window must
+/// still build its revision. The first sample of a real decode can be at an
+/// earlier frame boundary than the window asked for, and a segment kept from
+/// such audio is not checked against the window; a stretch of rejected words
+/// that started in that audio used to start before the window, which a stored
+/// revision refuses, so a run in which every chunk had been transcribed failed
+/// at the end. The stretch is cut at the window's start, and the revision holds
+/// it.
+#[tokio::test]
+async fn a_run_whose_audio_began_before_its_window_still_builds_its_revision() -> TestResult {
+    let (session, source_id, source) = Chain::parts()?;
+    for (early_us, expected_end) in [(0, 13 * SECOND), (20_000, 13 * SECOND - 20_000)] {
+        let transcription = transcribe_decoded_early(
+            &source,
+            range(10, 40)?,
+            &[Answer::RunsOnFromTheStart],
+            early_us,
+        )
+        .await?
+        .ok_or("the run failed")?;
+        let expected = TimeRange::new(
+            MediaTime::from_micros(10 * SECOND),
+            MediaTime::from_micros(expected_end),
+        )?;
+        assert_eq!(transcription.unplaced, [expected], "{early_us} us early");
+        let revision = build_asr_revision(AsrRevisionRequest {
+            session_id: &session,
+            source_id: &source_id,
+            source_segment: &source,
+            number: NonZeroU32::MIN,
+            transcription,
+            splice: None,
+        })?;
+        assert_eq!(revision.unplaced(), [expected], "{early_us} us early");
+    }
     Ok(())
 }

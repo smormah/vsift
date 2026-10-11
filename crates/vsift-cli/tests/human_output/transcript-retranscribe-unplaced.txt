@@ -1,0 +1,18 @@
+New transcript revision of session ses_0123456789abcdef0123456789abcdef
+Revision 1: trv_a5ed9a081a2068b75c956f9befbb4fd4 (local_asr, language en, segments in all: 3)
+Local ASR: whisper_cpp, model base, decoding r0-v1, 4 threads
+  Model sha256: 60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe
+  Executable sha256: 95e3c0b0e778ad9499eb0125f97c1dcf437dd9eb4ea77050b043574f93c2631d
+  Chunks: 2 (2 transcribed, 0 silent, 0 without audio)
+Speech was heard in these stretches, but its words could not be placed in time and are missing from the transcript. Each stretch is the longest they could cover (they probably took less), and a search counts it as not transcribed. A transcript file for the video, if you have one, can fill them in (ingest the video again with --transcript):
+  00:00:01.000000 to 00:00:03.000000 (--from 1000000 --to 3000000)
+Segments carried from earlier revisions: 0
+Revision warning: provider_segments_rejected (count 1, first at cue 1)
+Requested range: the whole source
+Segments recognised now: 3
+Job: job_8d3e1f0a2b4c6d8e0f1a2b3c4d5e6f70 (not resumed, chunks reused: 0)
+Read its segments: vsift transcript get ses_0123456789abcdef0123456789abcdef --revision trv_a5ed9a081a2068b75c956f9befbb4fd4
+
+Operation: op_4f0c2b8e9a1d3c5e7f60718293a4b5c6
+Lifecycle: ephemeral, expires 2026-09-25T00:00:00Z
+Warning: Some recognised segments had times outside their audio and were not used, and for some of them the recogniser wrote words that no kept segment holds. The revision lists the stretches where those words may lie (local_asr.unplaced_ranges, an upper bound: the words took part of each), and a search counts them as untranscribed, so a word said there cannot be found. Transcribing just that range again (transcript retranscribe with --from and --to) cuts the audio at other points and may cover it, and a transcript file you already have can supply it: open the video with ingest --transcript.

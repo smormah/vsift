@@ -422,6 +422,11 @@ pub struct AsrTranscription {
     pub language: Option<LanguageTag>,
     /// Merged segments in source start order.
     pub segments: Vec<MergedSegment>,
+    /// The stretches where the recogniser wrote words that no segment holds
+    /// (#359), as [`vsift_domain::MergedTranscript::unplaced`] found them;
+    /// recorded on the revision, so that a search does not count the audio there
+    /// as transcribed.
+    pub unplaced: Vec<TimeRange>,
     /// Rejections, trims, removed markers, silent chunks, unusable chunks and
     /// seam duplicates.
     pub warnings: TranscriptWarnings,
@@ -717,6 +722,7 @@ where
             run,
             language: agreed_language(gathered.languages),
             segments: merged.segments,
+            unplaced: merged.unplaced,
             warnings,
         },
         usage,
@@ -1044,6 +1050,7 @@ const fn empty_chunk(chunk: PlannedChunk) -> vsift_domain::ChunkSegments {
     vsift_domain::ChunkSegments {
         chunk,
         segments: Vec::new(),
+        unplaced: Vec::new(),
     }
 }
 
@@ -1238,7 +1245,8 @@ pub fn build_asr_revision(
             // run's range stays so wherever a window or file this revision
             // carries would otherwise be counted over it; the run that left it
             // may not be recorded here at all. Nothing else is recorded, so a
-            // chain that never left a part unread is written as it always was.
+            // chain that never left a part unread, or words that no segment
+            // holds, is written as it always was.
             let untranscribed = splice
                 .base
                 .carried_untranscribed_for(splice.replaced_range, &inherited);
@@ -1260,6 +1268,7 @@ pub fn build_asr_revision(
         replaced_range: request.splice.map(|splice| splice.replaced_range),
         inherited,
         carried_untranscribed,
+        unplaced: transcription.unplaced,
         language: transcription.language,
         segments,
         warnings,

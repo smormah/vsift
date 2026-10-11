@@ -6,6 +6,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### What changes, in plain English
+
+**If you transcribe a long recording (#359; found on two real recordings; in `0.2.0` and `0.2.1-rc.1`; meant for the second candidate of `0.2.1`).**
+VSift recognises speech in 30-second chunks that overlap by five seconds and joins them. Where two chunks met, the join could drop a whole segment whose words ran past the
+end of its neighbour, and the words after that end were then in neither chunk's output: a sentence broke off and resumed seconds later in the middle of a phrase, with no warning, and
+`search` still called the stretch transcribed. Now the join keeps a dropped segment again whenever, without it, a stretch of what the chunks wrote longer than half a second would be in no kept segment,
+at either edge of a chunk and along a chain of chunks, and a test over generated layouts holds that rule. **The price is repeats, and VSift judges by time, not by words:** where the two chunks wrote the overlap
+differently the same words can appear twice, and a copy can be kept twice where no word was lost (VSift trims a repeat at one place only, and only where at least two leading words match exactly). In a synthetic
+simulation by a reviewer (not in the repository, and not measured on real recordings), lost words fell by about 98 per cent while repeated words rose several-fold, and the output often differed from the old join where the old join had lost no word. The step that removes repeated words can, rarely, drop a copy that runs on past the end of the one it repeats (its words stay, once, and the stretch it covered is then in no segment). Up to about half a second
+at the end of a copy (about a word) can still be missing, with no sign. The cause was worked out from the times in the report and reproduced in the domain with them, not seen in the recogniser's own output of the
+recordings, which stay on the maintainer's machine; the fix has not been tried on them, and the real-tool test that would try it on real speech has not been run.
+
+**Words the recogniser wrote that VSift could not place.** The recogniser sometimes writes words whose times do not fit its audio; they are dropped and counted (`provider_segments_rejected`), and the count has no time.
+Now, when such a segment has a word in it, a range that is not empty, and a start inside its audio, and the recogniser wrote another segment after it, the revision lists the stretch where its words may lie
+(`local_asr.unplaced_ranges`: from where it starts to where the next segment starts, an upper bound), less what kept words cover, if that is more than half a second; the run is still `complete`, and `search` lists the stretch
+as not transcribed unless a kept segment or a window found silent covers it. Other rejected segments (no word, an empty range, nothing after them in their audio, such as the last of a chunk) are only counted, so a loss there is still not listed.
+Transcribing just a listed stretch again may give the same stretch; a transcript file you already have (`ingest --transcript`) is the sure remedy.
+**This adds one optional member to the stored transcript record, and `0.2.0` and earlier and `0.2.1-rc.1` read a revision that has it as damaged**: they read newest first, so if the newest revision holds it they can read nothing of the session, and if only an older one does they read the newest normally and refuse the older ones (by id, in `handoff check --session` and in `bundle validate`). It is written only when there is any, a rejected segment with words
+is routine on real speech so a session written by this version may hold one without anything having gone wrong, and nothing written by an earlier release changes.
+
 ### Changed
 
 - **Work record, register and a known-issue note only; nothing that ships changes, and nothing is fixed: the findings of the maintainer's live testing on two real recordings, and the plan for a second candidate of `0.2.1`.** A new known limit,
@@ -14,6 +34,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   [L-150](docs/planning/known-limits.md#l-150) to [L-154](docs/planning/known-limits.md#l-154) (#365, #366, #367, #368, #370: how an agent reads a transcript, checks a long report, shortlists screens, asks a whole-recording question and asks for a frame
   while a transcription runs). The README and the installation guide carry a known-issue note for L-149 with the workarounds. `0.2.1-rc.1`, published on 2026-10-10 under `next`, is superseded: the maintainer decided on 2026-10-11 to put #359 and the larger findings into
   `0.2.1` and to cut a second candidate, `0.2.1-rc.2`; the plan ([`release-0.2.1.md`](docs/planning/release-0.2.1.md)) lists what it needs and the decisions still open, among them the version number.
+- **`merge_chunks` (domain, [ADR 0017](docs/decisions/0017-local-asr-through-whisper-cpp.md), note of 2026-10-11).** A guard between rules 2 and 3 restores segments that rules 1 and 2 dropped, whole, until no stretch of the union of all the
+  validated segments of all chunks that is longer than `SEAM_COVERAGE_TOLERANCE_MICROS` (0.5 s, the edge margin: the largest value for which a segment that runs past a neighbour window's edge is not lost beyond it, derived for one configuration and not measured on real speech)
+  is covered by no kept segment (a guarantee on the union, because one per segment stacks to twice the tolerance). It judges by time and not words, so it can keep a copy twice where no word was lost; the repeat rule (one pair per seam) is unchanged and can still drop a restored copy
+  that carries new time, and the guard can expose a segment to it that the earlier merge kept (registered, not changed: L-155 to L-157). The stretches of rejected words are cut to their chunk's window and the source by one definition that the check of a stored revision shares, so a run whose audio began a frame before its window no longer fails after every chunk was transcribed. `MergedTranscript` and `ChunkSegments` gained `unplaced`, `ValidatedChunk` gained `unplaced()`, `AsrTranscription` gained `unplaced`, and a revision gained `unplaced()` and the parts field `unplaced`
+  (types of the internal crates, which the `vsift` engine does not re-export). `join_nearest` (the join that bounds a list of stretches) is now near-linear: the first version took 185 s for 65,000 stretches.
+- **Contract (additive, v1).** The revision summary's `local_asr` gained `unplaced_ranges` (only when there is any); the stored record gained `unplaced_ranges` (only when there is any, and `carried_untranscribed` is also written for a chain whose earlier revision had one); the warning `provider_segments_rejected` has new fixed
+  prose in the envelope when the revision lists such a stretch (the typed warning, its code and its count are unchanged); `search` lists such a stretch in `untranscribed_ranges`; the readable text prints the first 100 stretches and how many more. New example
+  `schemas/v1/examples/transcript-retranscribe.unplaced.json`. No new code, reason or outcome: the published `untranscribed_range` and its search warning are reused unchanged, so the agent skill (frozen) needs no change.
+- **Tests.** The issue's timings as a domain test, its mirror at a right edge, a chain of three chunks, a segment longer than the overlap that starts at a window edge, the margin at 0.4 s and 0.6 s, the tolerance found by search and at its boundary, the layout in which the tolerance would stack,
+  a property over generated chunk layouts (every part of the union covered to within the tolerance, nothing invented, start order kept) and one against a frozen copy of the old merge (where it left no hole this one gives the same result, where it did this one only adds), four mutations of the guard each caught, every kind of rejected segment
+  (empty, reversed, past the audio, past the source, last in a chunk, before a marker or another rejected segment), a merge over about 1,900 stretches, the join against the search it replaced and over 200,000 spans, and the revision's validation, the record, coverage, chains of runs, the contract, the fuzz seed and human snapshots
+  (one for more than 100 stretches), a run whose audio began before its window (domain, application and a property that a stored revision accepts what a merge reports), a second property with a two-word vocabulary where the repeat rule acts, and two more mutations of the guard caught (the skip of a segment inside one already restored, and the order against plain start order). The readable text's label for the stretches is in plain words. The opt-in real-tool stage `p07_local_asr_multi_chunk_seam` also holds the 9.25 s sentence that starts at the second chunk's window to the rule (one second, for a binary from `0.2.1-rc.2` on); **it needs the real tools and was not run.**
 
 For the second candidate of `0.2.1` (the maintainer's decision of 2026-10-11). Nothing here is published, and the register entries stay open until the release.
 

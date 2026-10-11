@@ -143,6 +143,10 @@ pub(crate) struct LocalAsrRun {
     /// written before 0.2.1.
     #[serde(default)]
     pub(crate) unusable_chunks: u64,
+    /// Absent from a revision whose run left no words that no segment holds,
+    /// and from every result written before 0.2.1.
+    #[serde(default)]
+    pub(crate) unplaced_ranges: Vec<Range>,
 }
 
 /// One transcript segment, without its raw text.

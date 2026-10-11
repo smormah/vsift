@@ -90,7 +90,7 @@ impl TranscriptRevisionData {
                 None,
                 None,
                 Some(LocalAsrRevisionData {
-                    local_asr: LocalAsrRunData::new(run),
+                    local_asr: LocalAsrRunData::new(run, revision.unplaced()),
                     supersedes: revision.supersedes().map(|id| id.as_str().to_owned()),
                     replaced_range: revision.replaced_range().map(RangeData::new),
                     carried_segment_count: revision
@@ -151,10 +151,18 @@ struct LocalAsrRunData {
     /// presented exactly as it was before the outcome existed (#353).
     #[serde(skip_serializing_if = "Option::is_none")]
     unusable_chunks: Option<usize>,
+    /// The stretches where the recogniser wrote words that no segment holds
+    /// (#359), all of them (a revision records at most 1,024, which is why the
+    /// list is not cut as a search's is). Present only when there is any, so a
+    /// revision with none is presented exactly as before. A search of the
+    /// revision lists these stretches as untranscribed, unless a segment covers
+    /// them.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    unplaced_ranges: Vec<RangeData>,
 }
 
 impl LocalAsrRunData {
-    fn new(run: &AsrRun) -> Self {
+    fn new(run: &AsrRun, unplaced: &[TimeRange]) -> Self {
         let count = |wanted: fn(&AsrChunkOutcome) -> bool| {
             run.chunks()
                 .iter()
@@ -182,6 +190,7 @@ impl LocalAsrRunData {
                 matches!(outcome, AsrChunkOutcome::Unusable { .. })
             }))
             .filter(|unusable| *unusable > 0),
+            unplaced_ranges: unplaced.iter().copied().map(RangeData::new).collect(),
         }
     }
 }
@@ -613,6 +622,17 @@ impl TranscriptPageData {
 /// that such a file exists nor that it covers the range.
 pub const PROVIDER_CHUNKS_REJECTED_WARNING: &str = "For some audio the recogniser's answer could not be used, so this run did not transcribe it: the result lists those time ranges as untranscribed. It is not silence. Earlier text that reaches into them is kept whole as it was, unless this run's own text overlaps it; any other words said there cannot be found. Transcribing just that range again (transcript retranscribe with --from and --to) cuts the audio at other points and may cover it, and a transcript file you already have can supply it: open the video with ingest --transcript.";
 
+/// Fixed prose of the warning `provider_segments_rejected` when some of the
+/// segments it counts were words that no kept segment holds (#359): the
+/// revision lists where they may lie (`local_asr.unplaced_ranges`), which
+/// the count cannot. It says what a search does with those stretches (they are
+/// untranscribed, so a word said there cannot be found, which is the only way
+/// a reader can act on it), that the stretch is an upper bound (the words took
+/// part of it), and what can cover it: the same two things as for a chunk whose
+/// answer could not be used. It does not say the run is incomplete, because the
+/// run's status is not changed by it.
+pub const PROVIDER_SEGMENTS_UNPLACED_WARNING: &str = "Some recognised segments had times outside their audio and were not used, and for some of them the recogniser wrote words that no kept segment holds. The revision lists the stretches where those words may lie (local_asr.unplaced_ranges, an upper bound: the words took part of each), and a search counts them as untranscribed, so a word said there cannot be found. Transcribing just that range again (transcript retranscribe with --from and --to) cuts the audio at other points and may cover it, and a transcript file you already have can supply it: open the video with ingest --transcript.";
+
 /// Fixed prose for the envelope `warnings` of an import, one per warning kind.
 ///
 /// The typed warnings, with counts and the first affected cue, are in the
@@ -643,7 +663,11 @@ pub fn transcript_warning_messages(revision: &TranscriptRevision) -> Vec<&'stati
                 "Some supplied transcript cues cross the start or end of the source and were not imported."
             }
             TranscriptWarningKind::ProviderSegmentsRejected => {
-                "Some recognised segments had times outside their audio and were not used."
+                if revision.unplaced().is_empty() {
+                    "Some recognised segments had times outside their audio and were not used."
+                } else {
+                    PROVIDER_SEGMENTS_UNPLACED_WARNING
+                }
             }
             TranscriptWarningKind::ProviderEndTrimmed => {
                 "Some recognised segments ended after their audio and were cut at its end; a cut end is the audio's end, not evidence that speech continued there."

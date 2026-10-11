@@ -286,6 +286,7 @@ impl StoredTranscript {
             replaced_range: None,
             inherited: Vec::new(),
             carried_untranscribed: Vec::new(),
+            unplaced: Vec::new(),
             language: optional_language(self.language).ok()?,
             segments,
             warnings,
@@ -362,13 +363,30 @@ struct StoredAsrTranscript {
     /// that a window or file this revision carries would otherwise be counted
     /// over (#353). It is written only when there is any, so every other
     /// record is written exactly as before. A release before it reads the
-    /// member as damage, as it reads an `unusable` chunk. Only a part a run
-    /// could not use is ever under such a window or file, so only a session
-    /// whose chain holds an `unusable` chunk has such a record; a test checks it
-    /// for every chain of a grid, and one that began with a range, or whose runs
-    /// are apart, records nothing.
+    /// member as damage, as it reads an `unusable` chunk. Only a part that some
+    /// run read and cannot vouch for is ever under such a window or file: a part
+    /// a run could not use (an `unusable` chunk) or, since #359, a stretch where
+    /// a run wrote words that no segment holds (`unplaced_ranges`). So only a
+    /// session whose chain holds one of the two has such a record; a test checks
+    /// it for every chain of a grid, and a chain that began with a range, or
+    /// whose runs are apart, records nothing.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     carried_untranscribed: Vec<StoredRange>,
+    /// The stretches of this record's own run where the recogniser wrote words
+    /// that were rejected and that no segment holds (#359), in start order and
+    /// merged. Written only when there is any, so every other record is written
+    /// exactly as before; a release before it reads the member as damage. Only
+    /// a run that rejected a segment with words, with another segment after it
+    /// and nothing kept over the stretch, has it, and a record of a chain whose
+    /// base had one may also carry `carried_untranscribed`. **This decoder is
+    /// more lenient than the schema, on purpose**: the schema asks for at least
+    /// one stretch, and an empty list is read here as no stretch, as it is for
+    /// `carried_untranscribed`, because a reader should not refuse a record whose
+    /// only fault is a list that says nothing. What a list may hold (order,
+    /// merging, bounds, count) is the revision's own validation on reading, not
+    /// the decoder's.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    unplaced_ranges: Vec<StoredRange>,
     language: Option<String>,
     warnings: Vec<StoredWarning>,
     segments: Vec<StoredAsrEntry>,
@@ -561,6 +579,12 @@ impl StoredAsrTranscript {
                 .copied()
                 .map(StoredRange::from_domain)
                 .collect(),
+            unplaced_ranges: revision
+                .unplaced()
+                .iter()
+                .copied()
+                .map(StoredRange::from_domain)
+                .collect(),
             language: revision.language().map(|tag| tag.as_str().to_owned()),
             warnings: stored_warnings(revision.warnings()),
             segments: revision
@@ -598,6 +622,10 @@ impl StoredAsrTranscript {
         for range in self.carried_untranscribed {
             carried_untranscribed.push(stored_range(range.start_us, range.end_us)?);
         }
+        let mut unplaced = Vec::with_capacity(self.unplaced_ranges.len());
+        for range in self.unplaced_ranges {
+            unplaced.push(stored_range(range.start_us, range.end_us)?);
+        }
         TranscriptRevision::new(TranscriptRevisionParts {
             id: TranscriptRevisionId::parse(self.revision_id).ok()?,
             number: NonZeroU32::new(self.revision)?,
@@ -608,6 +636,7 @@ impl StoredAsrTranscript {
             replaced_range,
             inherited,
             carried_untranscribed,
+            unplaced,
             language: optional_language(self.language).ok()?,
             segments,
             warnings: domain_warnings(self.warnings)?,

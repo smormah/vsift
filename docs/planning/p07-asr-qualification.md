@@ -144,6 +144,12 @@ fix the `base_q5_1` seam stage passes and the `base` checkpoint and adapter test
 pass. The accuracy figures above come from single-chunk clips and the timing from a
 multi-chunk clip, so neither depends on the fix.
 
+A second seam finding came from real speech (#359, 2026-10-11; [ADR 0017](../decisions/0017-local-asr-through-whisper-cpp.md), note of 2026-10-11):
+a neighbour segment that spans a cut segment's midpoint can still end before the cut one does, and the words after its end were then in
+neither chunk. The synthetic corpus of short sentences does not show it. The merge now restores dropped segments until no stretch longer than half a
+second of what the chunks wrote is in no kept segment (it judges by time, so it can repeat words; ADR 0017 says what is and is not proven); the checkpoint's seam stage also holds
+the 9.25 s F07 sentence, which starts at the second chunk's window, to that rule within one second (not run when the change was made or revised).
+
 The checkpoint's whole-file stage still fails with `base_q5_1`, because it hears F05's
 "invoice" as "in voice" (a genuine recognition difference, visible in the table). The
 checkpoint's word checks are written for the default profile, so the workflow runs it
