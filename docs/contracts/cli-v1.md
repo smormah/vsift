@@ -451,18 +451,29 @@ under the one mebibyte result budget.
   A range that starts or ends inside a gap lists only its own part of it; a range past
   the end of the video is clipped to it; one wholly outside it has `searched_range:
   null`, nothing to cover and is complete. **A read can be `partial` for a third reason
-  besides a range-only transcription and an unusable stretch:** a range retranscription
+  besides a range-only transcription and an unusable stretch (and a fourth, below):** a range retranscription
   that replaces every segment of the first run carries nothing from it, the revision no
   longer records that run's windows, and what only that run read is counted as not
   transcribed (a 12 s run with one segment at 1-4 s is complete over 0-12 s; after
   retranscribing 2-3 s, which snaps to 1-4 s, it reads `partial` with the gaps 0-1 s and
   4-12 s, as `search` reports them). Such a gap is false (the first run did read it) and
   is never a false silence: the rule errs toward a gap
-  ([L-033](../planning/known-limits.md#l-033)).
+  ([L-033](../planning/known-limits.md#l-033)). **A fourth reason is words that no
+  segment holds (#359):** where the recogniser wrote words that were rejected and are
+  in no segment, the revision lists the stretch in `local_asr.unplaced_ranges` (above),
+  and the window the run transcribed does not cover it, so it is in
+  `untranscribed_ranges` unless a segment of the revision, or a window the run found
+  silent, covers it. A read over it is `partial` although the run that wrote the
+  revision was `complete`, and shows no words there; it is a gap, not a silence. The
+  stretch is an upper bound (the words took part of it), so a read can list more time
+  than was lost, and transcribing just the stretch again may give the same stretch; a
+  transcript file (`ingest --transcript`) is the sure remedy
+  ([L-159](../planning/known-limits.md#l-159)).
 - **A gap is not a failure.** The read still returns every segment the revision holds in
   the range, and a `partial` read is usable: its gaps are gaps, never evidence of
   silence. Silence the recogniser found is `no_speech_ranges`. A gap is a part nobody
-  transcribed, or whose answer from the recogniser could not be used (#353); the
+  transcribed, whose answer from the recogniser could not be used (#353), or where the
+  recogniser wrote words that no segment holds (#359); the
   `untranscribed_ranges` of the `transcript retranscribe` that left it name the part the
   run did not transcribe, which can be more than a later read lists where earlier text
   was kept.
@@ -768,8 +779,8 @@ longer than the tolerance**, as the revision's `local_asr.unplaced_ranges` (`{fr
 1,024, where there would be more the nearest are joined; present only when there is any, in the revision summary of every command
 that presents one, so `transcript retranscribe`, `job resume`, `transcript get` and `search`; the readable text prints the first 100
 and says how many more, **but the JSON carries the whole list in the revision block of every such result, up to 1,024 stretches,
-about 45 KB at the bound**; a client that limits what it reads should expect that, and the compact form under design for
-`transcript get` and `search` (#365) keeps the revision block, so it would not shrink it). The others are only counted, as before, and are **a limit and not a claim that nothing was lost**: a
+about 45 KB at the bound**; a client that limits what it reads should expect that, and the brief view of `transcript get`
+and `search` (`--view brief`, #365) keeps the revision block, so it does not shrink it). The others are only counted, as before, and are **a limit and not a claim that nothing was lost**: a
 segment with no letter or digit, one with an empty range, one that starts at or after its audio's end (the recogniser works in a
 window padded to 30 s and what it writes there is not about the audio), and one that nothing follows inside the audio (nothing
 bounds its words, and a stretch to the audio's end would list a silent tail as untranscribed; what lies at a chunk's end is also in
@@ -779,7 +790,7 @@ of the chunk, one at or after its end gives none. **The run's status is not chan
 `data.untranscribed_ranges` is absent, because the run read everything; the changed warning prose says what the list means. A later
 `search` of the revision **does not count such a stretch as transcribed**: it lists it in `transcript_coverage.untranscribed_ranges`
 and in the envelope's `coverage` with the published reason `untranscribed_range` (status `partial` for a search whose range
-includes it), unless a segment of the revision covers it (its own words, or earlier text it kept) or a window the run found silent
+includes it, and for a `transcript get` of such a range since the reads change, which uses the same rule), unless a segment of the revision covers it (its own words, or earlier text it kept) or a window the run found silent
 does; a search of a range that does not include it is as complete as before. That search's fixed warning, "Run transcript
 retranscribe to transcribe them", is published and unchanged and **does not fit this cause**: transcribing just the stretch again
 cuts the audio at other points and may cover it, and may give the same stretch; **supplying a transcript** the user has
@@ -1703,6 +1714,17 @@ a stream are never brief: the view is a presentation of a result, nothing more.
   The design's bar of "under a quarter" is met for `transcript get` on local
   transcription only where a segment is not carried (and its item, 15.5%); the other
   answers are a quarter to two fifths of the full page.
+
+  **The brief view does not shrink the revision block**, which it keeps whole: the block
+  is outside the items. It is a few hundred characters for most revisions, but a revision
+  whose run wrote words that no segment holds lists where they may lie in
+  `revision.local_asr.unplaced_ranges` (#359): each stretch is about 40 characters
+  (`{"from_us":…,"to_us":…}`, 36 to 44 by the size of the times) and a revision records
+  at most 1,024, so that member alone can add about 45 KB to a page in either view
+  ([L-159](../planning/known-limits.md#l-159)). The figures above are for revisions with
+  no such member. A client that limits what it reads should expect the block in the
+  brief view too; it is stated once per page, not once per item, and the readable text
+  prints at most 100 of the stretches.
 - **Schemas.** [`transcript-get-brief-data.schema.json`](../../schemas/v1/transcript-get-brief-data.schema.json)
   (example [`transcript-get.brief.json`](../../schemas/v1/examples/transcript-get.brief.json)),
   [`search-brief-data.schema.json`](../../schemas/v1/search-brief-data.schema.json)

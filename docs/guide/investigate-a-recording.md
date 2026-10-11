@@ -109,7 +109,7 @@ result lists the stretch where those words may lie, from where the dropped segme
 starts, under a line that begins `Speech was heard in these stretches`, which says each stretch is the longest the words could cover. The
 words took only part of it, and some are not listed at all (those with an empty range, or none after them). The run is still
 `complete`, because it read everything; but `search` lists that stretch as not transcribed, so a word said there cannot be
-found and you are told. Transcribing that stretch again may give the same stretch; a transcript file you already have
+found and you are told, and a `transcript get` over it is `partial` and lists it too. Transcribing that stretch again may give the same stretch; a transcript file you already have
 (`vsift ingest <video> --transcript <file>`) is the sure remedy.
 
 **Expect mistakes.** Recognition is a machine's best guess, tested here on a synthetic voice only. It can

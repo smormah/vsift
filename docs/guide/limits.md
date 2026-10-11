@@ -68,7 +68,7 @@ real meetings, accents or noisy rooms, so every accuracy figure below says what 
   inside the audio and is followed there by another segment, the revision lists the stretch from its start to the next
   segment's start (`local_asr.unplaced_ranges`) as where the words may lie, less what kept words cover, if that is more than half a second.
   The run stays `complete` (it read everything), and `search` lists the stretch as not transcribed: a word said there cannot
-  be found. Each stretch is an upper bound: the words took only part of it, so `search` can call more time untranscribed than
+  be found. A `transcript get` over the stretch answers `partial` and lists it too: it shows no words there, which is not a silence. Each stretch is an upper bound: the words took only part of it, so `search` can call more time untranscribed than
   was lost. Retranscribing just the stretch may give the same stretch; a transcript file you supply (`ingest --transcript`)
   is the sure remedy. A rejected segment with no word, one with an empty range, one that starts after its audio ends, and one
   that nothing follows in its audio (the last of a chunk, or of the last chunk) are only counted, so a loss there is not
