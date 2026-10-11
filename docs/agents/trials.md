@@ -879,7 +879,15 @@ to the third candidate's (`freeze check` of the third candidate's file answers `
 The files name `17687c06757f2dd6b237ab010247927e6a21fdf0`, the commit of the cut's own branch at which the skill was applied (the pull request keeps it; the
 squash merge leaves it behind). The third candidate's batch-2 and batch-3 records, summaries, state files and a copy of its freeze are in
 `docs/planning/p14-agent-trials/batch-2-rc.3/` and `batch-3-rc.3/`, so that `batch-2/` and `batch-3/` hold only the new `freeze.json`: the script
-refuses a state file recorded for another version. **Batch 3 needs `-AllowGraderChange`:** the script checks batch 3's cold components against **batch 1's** freeze, and the
+refuses a state file recorded for another version. **For the fifth candidate (0.2.1-rc.2, 2026-10-11) the freeze is new again, on purpose.** The skill changed
+again for the patch release (`docs/agents/skill.md`, "Since the first candidate": the brief view, the coverage of a read, five-minute `candidates` ranges, `BUSY` while a transcription runs,
+the newest ids after a range retranscription, a long report checked in two parts, `session list` paging, and whole recordings out of scope), so `freeze write` gave a new `skill` digest
+(`256b4840da185f9db1cef4f59389a7f24b78f6c524c02f0ba58f50798b0b4993`, where it was `2f8686b7...`) and a new whole-freeze digest (`a48567ac403149561019344cae58e137ae5bce5eb55a022e73cb2143ea60f6ea`, where it
+was `dbc4c22c...`), and the pin in `committed_freeze` moved with it, with a comment that says why. The other six components (grader, scenarios, cold scenarios, hold-outs, settings, truth) are
+byte-identical to the third and fourth candidates' (`freeze check` of the fourth candidate's file answers `skill changed since the freeze` and nothing else; the grader's source did not change).
+The files name `0f047a9cf12a983d19c2c0427654c7722cf1655c`, the commit of the cut's own branch at which the skill was applied (the pull request keeps it; the squash merge leaves it behind).
+**No batch ran under the fourth candidate's freeze, so there was nothing to move aside this time:** `batch-2/` and `batch-3/` hold only the new `freeze.json`, and the fourth candidate's file stays in the
+history of `main` (`cb8cb3a`). **Batch 3 needs `-AllowGraderChange`:** the script checks batch 3's cold components against **batch 1's** freeze, and the
 grader changed on 2026-10-04 (below), which the maintainer accepted; the usefulness grading did not change. **The grader changed on 2026-10-04** (the three cold
 classifications above, between batch 1 and batch 2, as the freeze rule allows): batch 2's freeze is a fresh
 `freeze write`, and batch 1's records and summary stay as graded at the time, so the baseline's safety counts

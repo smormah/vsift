@@ -156,12 +156,12 @@ rest, so the rule is read in the report only by what the existing scenarios happ
 - **`BUSY`** (#342) carries `retry_after_ms`: wait, run the same command once more, run one command at a time.
 - **`audio`** (#340): the file tells an agent nothing; speech is read with `transcript get`.
 
-### Since the first candidate: the second candidate `0.2.1-rc.2` (2026-10-11; prepared, not cut)
+### Since the first candidate: the second candidate `0.2.1-rc.2` (2026-10-11; cut, not yet published)
 
 Prepared on the branch `skill-0.2.1-rc2` (more than one commit: the later ones follow the independent reviews) on top of the
 Reads change (the brief view and the coverage of a read, now on `main`), and applied by the cut of the second candidate as
-one change with a new freeze: the skill is a frozen trial component, so its digest changes again and batches 2 and 3 run
-again on this text. **Nothing in it has been run by an agent, and no frozen scenario exercises most of it** (see the end of
+one commit with a new freeze (`skill` digest `256b4840...`, where the first candidate's was `2f8686b7...`): the skill is a frozen
+trial component, so its digest changed again and batches 2 and 3 run again on this text. **Nothing in it has been run by an agent, and no frozen scenario exercises most of it** (see the end of
 this section). The change, and nothing else:
 
 - **A whole recording is out of scope** (#368, the maintainer's decision of 2026-10-11 for this release line). The
@@ -390,7 +390,7 @@ Prefer a review-tier model when the report must be right first time.
 ## Not yet done
 
 - **The skill of `0.2.1` is untried** (the change above, in the candidate `0.2.1-rc.1`, 2026-10-10, and what changed
-  since, prepared for the second candidate `0.2.1-rc.2`). Everything below was
+  since, cut as the second candidate `0.2.1-rc.2`). Everything below was
   measured on the third candidate's skill, which `0.2.0` ships. Batches 2 and 3 are to be run again under the new freeze, each
   on the maintainer's explicit go and after the candidate is published
   ([`p14-batch-2-3-checklist.md`](../planning/p14-batch-2-3-checklist.md)); until they have, none of the figures below is a
