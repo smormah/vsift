@@ -244,7 +244,7 @@ fn half_transcribed_revision() -> Built<TranscriptRevision> {
 /// A local-ASR revision of a 12 s source whose one run transcribed its first
 /// 6 s and in which the recogniser wrote words that no segment holds (#359): two
 /// segments kept, at 0.6 to 0.9 s and 3.0 to 3.5 s, and between them, at 1.0 s,
-/// one rejected for an empty range.
+/// one rejected for a reversed range.
 fn revision_with_words_that_no_segment_holds() -> Built<TranscriptRevision> {
     let session = SessionId::parse(SESSION)?;
     let source_id = SourceId::from_sha256(DIGEST)?;
@@ -264,7 +264,7 @@ fn revision_with_words_that_no_segment_holds() -> Built<TranscriptRevision> {
         language: None,
         segments: vec![
             segment(600, 900, "the build is healthy")?,
-            segment(1_000, 1_000, "error code E-409")?,
+            segment(1_000, 900, "error code E-409")?,
             segment(3_000, 3_500, "and the queue is empty")?,
         ],
     };

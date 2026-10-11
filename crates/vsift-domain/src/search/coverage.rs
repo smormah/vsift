@@ -347,8 +347,9 @@ fn claims(provenance: &TranscriptProvenance, source: Span) -> Vec<Span> {
 /// Only those parts are recorded because only they change what a search says: the
 /// record is a mask over what the inherited runs and files claim, so a part none
 /// of them claims (one no run examined, in a chain that began with a range) needs
-/// no mask and is not recorded, and a chain that never left a part unread
-/// records nothing and is written as it always was. Where there would be more
+/// no mask and is not recorded, and a chain that never left a part unread, or
+/// words that no segment holds (#359), records nothing and is written as it
+/// always was. Where there would be more
 /// than `limit` parts, the nearest on each side of `replaced` are joined, never
 /// across it, which marks more untranscribed and never less.
 pub(crate) fn carried_untranscribed_for(

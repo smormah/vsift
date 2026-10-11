@@ -1051,7 +1051,7 @@ fn answered(start_ms: u64, end_ms: u64, words: &str) -> Built<ProviderSegment> {
 
 /// An answer with words in the middle of it that cannot be placed: two segments
 /// kept, 0.6 to 0.9 s and 3.0 to 3.5 s into the chunk, and between them one at
-/// 1.0 s whose range is empty. The rejected segment is counted and its words
+/// 1.0 s whose range is reversed (it ends at 0.9 s). The rejected segment is counted and its words
 /// are in no segment, so they may lie anywhere from 1.0 s to where the next
 /// segment starts, 3.0 s.
 fn words_that_no_segment_holds() -> Built<ProviderChunkOutput> {
@@ -1059,7 +1059,7 @@ fn words_that_no_segment_holds() -> Built<ProviderChunkOutput> {
         language: LanguageTag::parse("en").ok(),
         segments: vec![
             answered(600, 900, "words that were placed")?,
-            answered(1_000, 1_000, "words nobody could place")?,
+            answered(1_000, 900, "words nobody could place")?,
             answered(3_000, 3_500, "more words that were placed")?,
         ],
     })

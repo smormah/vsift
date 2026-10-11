@@ -767,10 +767,16 @@ fn seam(base: &Path, tools: &Tools, work: &Path) -> StageResult {
     // chunk's window does, so it runs 4 s past the first chunk's window (which
     // ends at 30 s) into audio only the second chunk heard. Whatever the
     // recogniser makes of the first chunk's copy of it, no stretch of it longer
-    // than the span tolerance may be in no kept segment: a merge that drops the
+    // than this stage's span tolerance (one second: twice the merge's 0.5 s,
+    // because the sentence's times come from how the clip was built and a
+    // recogniser starts and ends its segments a little inside them) may be in
+    // no kept segment: a merge that drops the
     // later chunk's first segment because the earlier chunk has one that spans
-    // its midpoint loses exactly that. (Not run in the session that added it:
-    // it needs the real tools.)
+    // its midpoint loses exactly that. (Not run in the session that added it or
+    // in the one that revised it: it needs the real tools. The guard promises
+    // nothing about audio that neither chunk's recogniser wrote a segment for,
+    // so a recogniser that skips part of the sentence fails this check too,
+    // for a reason that is not the merge's; read the segments before blaming it.)
     let sentence = expected
         .iter()
         .find(|utterance| utterance["fixture"] == "F07")

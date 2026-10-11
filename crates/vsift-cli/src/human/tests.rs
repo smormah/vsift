@@ -106,6 +106,47 @@ fn the_untranscribed_label_speaks_of_earlier_text_only_after_an_earlier_revision
     Ok(())
 }
 
+/// #359: a revision can list up to 1,024 stretches where words that no segment
+/// holds may lie, and the text prints at most 100 of them, as a search prints at
+/// most 100 of each kind of range, then says how many more there are and where
+/// to read them. Each stretch is called an upper bound.
+#[test]
+fn many_unplaced_stretches_are_cut_where_a_search_cuts_its_ranges() -> TestResult {
+    let mut value = example("transcript-retranscribe.unplaced.json")?;
+    let stretches: Vec<Value> = (0..130_u64)
+        .map(|index| {
+            serde_json::json!({
+                "from_us": 1_000_000 + index * 10_000_000,
+                "to_us": 3_000_000 + index * 10_000_000
+            })
+        })
+        .collect();
+    value["data"]["revision"]["local_asr"]["unplaced_ranges"] = Value::Array(stretches);
+    let text = render(CommandName::TranscriptRetranscribe, &value)?;
+    assert_eq!(text.matches("(--from ").count(), 100, "{text}");
+    assert!(
+        text.contains("  and 30 more (use --json for all of them)\n"),
+        "{text}"
+    );
+    assert!(text.contains("each is an upper bound"), "{text}");
+    check_snapshot("transcript-retranscribe-unplaced-many", &text)?;
+    // One short of the cut prints them all and says nothing of more.
+    value["data"]["revision"]["local_asr"]["unplaced_ranges"] = Value::Array(
+        (0..100_u64)
+            .map(|index| {
+                serde_json::json!({
+                    "from_us": 1_000_000 + index * 10_000_000,
+                    "to_us": 3_000_000 + index * 10_000_000
+                })
+            })
+            .collect(),
+    );
+    let text = render(CommandName::TranscriptRetranscribe, &value)?;
+    assert_eq!(text.matches("(--from ").count(), 100);
+    assert!(!text.contains(" more (use --json"), "{text}");
+    Ok(())
+}
+
 /// Every frozen example of a PR 2a command renders; its snapshot is the
 /// text a person reads.
 #[test]

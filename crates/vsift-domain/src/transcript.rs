@@ -1363,8 +1363,9 @@ impl TranscriptRevision {
     /// over, in start order and merged (#353). Empty for a revision that is not
     /// spliced, for one whose superseded revision covered all of its source,
     /// and for any chain in which no run left a part unread: only a part that
-    /// some run read but could not use, under a window or file this revision
-    /// still carries, needs it.
+    /// some run read but could not use, or a stretch where it wrote words that no
+    /// segment holds ([`TranscriptRevision::unplaced`], #359), under a window or
+    /// file this revision still carries, needs it.
     ///
     /// This is what lets coverage stay true along a chain. A revision keeps the
     /// provenance only of the runs whose text it carries, so the run of an
@@ -1390,12 +1391,14 @@ impl TranscriptRevision {
     /// in no segment; the count of such segments is the warning
     /// `provider_segments_rejected`, which carries no time. Each stretch here is
     /// where those words may lie (an upper bound: from where the rejected
-    /// segment says they start to where the next segment the recogniser wrote
-    /// begins), less everything a kept segment covers, and longer than the
-    /// tolerance that two recognisers' timestamps differ by
-    /// ([`crate::SEAM_COVERAGE_TOLERANCE_MICROS`]). Coverage does not count a
-    /// stretch as transcribed unless a segment of the revision or a window the
-    /// run found silent covers it: words said there cannot be found.
+    /// segment says they start, never before, to where the next segment the
+    /// recogniser wrote begins), less everything a kept segment covers, and
+    /// longer than the tolerance ([`crate::SEAM_COVERAGE_TOLERANCE_MICROS`]). A
+    /// rejected segment whose range is empty, one with no word, one that starts
+    /// at or after the end of its audio and one that nothing follows in the
+    /// audio have none: they stay counted. Coverage does not count a stretch as
+    /// transcribed unless a segment of the revision or a window the run found
+    /// silent covers it: words said there cannot be found.
     #[must_use]
     pub fn unplaced(&self) -> &[TimeRange] {
         &self.unplaced

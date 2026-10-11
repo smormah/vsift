@@ -363,11 +363,13 @@ struct StoredAsrTranscript {
     /// that a window or file this revision carries would otherwise be counted
     /// over (#353). It is written only when there is any, so every other
     /// record is written exactly as before. A release before it reads the
-    /// member as damage, as it reads an `unusable` chunk. Only a part a run
-    /// could not use is ever under such a window or file, so only a session
-    /// whose chain holds an `unusable` chunk has such a record; a test checks it
-    /// for every chain of a grid, and one that began with a range, or whose runs
-    /// are apart, records nothing.
+    /// member as damage, as it reads an `unusable` chunk. Only a part that some
+    /// run read and cannot vouch for is ever under such a window or file: a part
+    /// a run could not use (an `unusable` chunk) or, since #359, a stretch where
+    /// a run wrote words that no segment holds (`unplaced_ranges`). So only a
+    /// session whose chain holds one of the two has such a record; a test checks
+    /// it for every chain of a grid, and a chain that began with a range, or
+    /// whose runs are apart, records nothing.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     carried_untranscribed: Vec<StoredRange>,
     /// The stretches of this record's own run where the recogniser wrote words

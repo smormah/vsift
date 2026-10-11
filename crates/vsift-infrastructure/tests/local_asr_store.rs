@@ -541,7 +541,7 @@ fn what_an_earlier_revision_left_untranscribed_is_recorded_and_checked_on_readin
 }
 
 /// The revision of the F01 clip of #359's record: two segments kept, at 0.6 and
-/// 3.0 s, and between them one rejected for an empty range at 1.0 s, whose words
+/// 3.0 s, and between them one rejected for a reversed range at 1.0 s, whose words
 /// may lie from there to 3.0 s.
 fn revision_with_words_that_no_segment_holds() -> Built<TranscriptRevision> {
     let session = SessionId::parse(EXAMPLE_SESSION)?;
@@ -559,7 +559,7 @@ fn revision_with_words_that_no_segment_holds() -> Built<TranscriptRevision> {
         language: LanguageTag::parse("en").ok(),
         segments: vec![
             word(600, 900, "the build is healthy")?,
-            word(1_000, 1_000, "error code E-409")?,
+            word(1_000, 900, "error code E-409")?,
             word(3_000, 3_500, "and the queue is empty")?,
         ],
     };

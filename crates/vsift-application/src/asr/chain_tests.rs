@@ -45,7 +45,7 @@ enum Answer {
     /// The audio is silent: the recogniser is never asked.
     Silence,
     /// Two segments, at 0.6 and 3.0 s into the chunk, and between them, at
-    /// 1.0 s, a rejected one that has words and an empty range: the chunk is
+    /// 1.0 s, a rejected one that has words and a reversed range: the chunk is
     /// usable, and the words are in no segment (#359). Where they may lie is the
     /// two seconds from 1.0 s to 3.0 s.
     Unplaced,
@@ -112,7 +112,7 @@ fn output(
         }
         Answer::Unplaced => vec![
             provider_segment(600, 900, &words)?,
-            provider_segment(1_000, 1_000, "words nobody placed")?,
+            provider_segment(1_000, 900, "words nobody placed")?,
             provider_segment(3_000, 3_500, &format!("{words} again"))?,
         ],
         Answer::Nothing | Answer::Silence => Vec::new(),
@@ -923,7 +923,7 @@ async fn an_unread_part_under_a_carried_file_is_the_one_thing_that_is_recorded()
     Ok(())
 }
 
-/// #359: a chunk whose recogniser wrote words that were rejected (an empty
+/// #359: a chunk whose recogniser wrote words that were rejected (a reversed
 /// range) between two segments it kept is usable, and the run is not partial;
 /// but the words are in no segment, so the revision records where they may lie,
 /// from where the rejected segment starts to where the next one does, and a

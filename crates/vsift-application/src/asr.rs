@@ -1245,7 +1245,8 @@ pub fn build_asr_revision(
             // run's range stays so wherever a window or file this revision
             // carries would otherwise be counted over it; the run that left it
             // may not be recorded here at all. Nothing else is recorded, so a
-            // chain that never left a part unread is written as it always was.
+            // chain that never left a part unread, or words that no segment
+            // holds, is written as it always was.
             let untranscribed = splice
                 .base
                 .carried_untranscribed_for(splice.replaced_range, &inherited);
