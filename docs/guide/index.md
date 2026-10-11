@@ -8,15 +8,19 @@ terminal, or you let an AI assistant on your machine use it. Nothing is uploaded
 
 This guide teaches you to do things with it. It is written for anyone with a video, not only for programmers.
 
-**Checked against vsift 0.2.1**: the release candidate `0.2.1-rc.1` and the release that follows it are built from
+**Checked against vsift 0.2.1**: the release candidate `0.2.1-rc.2` and the release that follows it are built from
 the same code, so this guide names the release, not the candidate. Where this guide says what a command prints, that
 is real output of that build on practice recordings from the repository, and the examples are re-run whenever the
-code changes ([how](#how-this-guide-is-kept-true)). The release `0.2.0`, which `npm install vsift-cli` installs until
-`0.2.1` is published, has the same commands and options and a few fixes fewer: a recording with a stretch of little
+code changes ([how](#how-this-guide-is-kept-true)). The first candidate, `0.2.1-rc.1`, has the same commands and
+options except `--view` (on `transcript get`, `search` and `candidates`) and a few fixes fewer: where two pieces of a local
+transcription met, the end of a sentence could be lost with no warning, a `transcript get` over a part nobody
+transcribed did not say so, `ingest` of a path that names no file gave no hint what to do, and the agent skill had older wording.
+The release `0.2.0`, which `npm install vsift-cli` installs until `0.2.1` is published, has the same commands and
+options as `0.2.1-rc.1` and fewer fixes still: a recording with a stretch of little
 recognisable speech could make the whole local transcription fail and keep nothing (where this guide says a stretch can
 be left without a transcript, `0.2.0` fails the whole run instead), the help of `audio` did not say that an AI assistant
 cannot listen to a clip, a `BUSY` answer from an evidence command carried no hint for when to try again, and the agent
-skill had older wording.
+skill had older wording still.
 The candidate `0.2.0-rc.3` is the same program as `0.2.0`. The second candidate, `0.2.0-rc.2`, has the same commands and
 options and a few fixes fewer (audio under a tenth of a second could reach the speech recogniser, an `audio` range of
 31 microseconds or less was answered with seconds of audio, a copy that ran out of time was called an invalid video
