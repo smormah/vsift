@@ -215,7 +215,7 @@ One commit, last, with one new freeze, on the code that merged. `SKILL.md` is **
 - **Whether the capacity prediction for #370 is right:** it needs whisper.cpp and a second session; I could not run a transcription.
 - **Whether an agent reads a brief page of 50 to its cursor**, and how it follows the new text: one real run, counts only.
 - **What the trial grader needs for a long, no-truth or `complete`-within-budget scenario:** I read the scenario format and `trials.md`, not the grader source; a long fixture may need `-AllowGraderChange`.
-- **Whether `0.2.1-rc.1` is tagged and published:** the plan on `main` says it is cut and not tagged; the brief for this design calls the next candidate `rc.2`. Numbering and freeze history depend on it.
+- **Whether `0.2.1-rc.1` is tagged and published:** the plan on `main` says it is cut and not tagged; the brief for this design calls the next candidate `rc.2`. Numbering and freeze history depend on it. **Answered at the cut (2026-10-11):** `0.2.1-rc.1` was tagged and published on 2026-10-10 and is superseded; the next candidate is `0.2.1-rc.2`, cut on 2026-10-11 with a new freeze (no batch had run under rc.1's, so nothing moved aside).
 - **That a retained bundle holds every revision:** read from `retain_bundle`, not run; one test closes it (#372).
 - **How the fix for #359 changes coverage:** if it records new gaps in the revision, `SearchCoverage` (and so #373) reports them; not designed here.
 - **Sizes are from one committed example per command** (a 52-character segment; an imported transcript's items are 640 to 730 characters), not from real transcripts; real page sizes need the maintainer's two recordings.
