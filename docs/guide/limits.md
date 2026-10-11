@@ -77,9 +77,10 @@ real meetings, accents or noisy rooms, so every accuracy figure below says what 
   session; if only an older one does, they read the newest normally and refuse the older ones (by id, in `handoff check --session`
   and in `bundle validate`). Use the newer version, or discard the session.
 - **A stretch can be listed as not transcribed that the first run did read** ([L-033](../planning/known-limits.md#l-033)).
-  When a re-transcription of a range replaces every word the first run produced (a recording with one spoken stretch, say),
-  the new transcript carries nothing from the first run and no longer remembers that it had read the rest of the recording,
-  so a `transcript get` or a `search` of the whole recording lists that rest as not transcribed. The stretch is listed
+  When a re-transcription of a range follows a first run with few or no words (a recording with one spoken stretch, say, or
+  one in which the first run heard only silence), the new transcript carries nothing from the first run and no longer
+  remembers that it had read the rest of the recording, so a `transcript get` or a `search` of the whole recording lists that
+  rest as not transcribed, and the silence the first run found is not listed as silence any more. The stretch is listed
   wrongly and is never reported as silence: the safe error. Transcribing the stretch again, or the whole recording, clears it.
 
 ## The pictures: screen changes and frames

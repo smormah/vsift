@@ -422,19 +422,37 @@ page over `untranscribed_ranges` is a gap, never evidence of silence. The member
 transcript, a local transcription, a read over one gap) and the envelope `coverage` is
 `null` or about 80. It grows with the number of ranges, each list cut at 100
 (`ranges_truncated`): measured on a stand-in recording of 1,020 chunks with 255 gaps, the
-member is 12,719 characters, the envelope `coverage` 2,460 and the warning 217, and a page
-with no segment 16,706 in all (the contract test `every_gap_is_listed_and_a_long_list_says_it_was_cut`).
-That is about 15 KB a page in the worst case, repeated on every page of the request, and far
-under the one mebibyte result budget.
+member is 12,719 characters, the envelope `coverage` 2,460 and the warning 453, and a page
+with no segment 16,946 in all (the contract test `every_gap_is_listed_and_a_long_list_says_it_was_cut`).
+That is about 17 KB a page, repeated on every page of the request, **for the member, the
+envelope and the warning alone. It is not the whole worst case:** the revision block is
+another part of the page, and a revision that lists the most stretches of words that no
+segment holds (1,024 `local_asr.unplaced_ranges`, #359) has a block of about 45 KB. On
+the contract test's layout an **empty** page over such a revision is 56,810 characters in
+the full view and 56,825 in the brief view: revision block 45,190, `transcript_coverage`
+8,407, envelope `coverage` 2,394, the rest the warning and the envelope (a reviewer's
+layout measured 54,833; the test `the_worst_case_page_is_the_revision_block_plus_the_coverage_in_either_view`
+holds it between 50,000 and 65,000). The brief view saves nothing on such a page, since it
+keeps the revision block whole; a page with segments adds to it. All of it is far under the
+one mebibyte result budget, but a client that reads only the start of a page should know
+the order the CLI writes: the envelope is `schema_version`, `command`, `operation_id`,
+`status`, `data`, `warnings`, `error`, `coverage`, `lifecycle`, and the members of `data` in
+alphabetical order (`items`, then `revision`, then `transcript_coverage` last), so a client
+cut early still sees `status: partial` before `data`, and sees the gaps (the envelope
+`coverage`, and `data.transcript_coverage`) only after it; member order is not part of the
+contract, and the example files sort every member alphabetically. A client that limits what
+it reads should ask for a smaller page (`--limit`).
 
 - **The status says it too.** The result is `partial`, and still exits 0, exactly when
   `untranscribed_ranges` is not empty: the envelope `coverage` then holds
   `truncated: true`, the gaps as `"<from_us>-<to_us>"` (merged, clipped to the request
   and to the video, at most 100) and the reason `untranscribed_range` (plus
-  `gap_list_truncated` beyond 100), and one fixed warning says what a gap is not: `Part
-  of the requested range has no transcript, so reading it shows no words there; that
-  does not mean none were said. ...` The stream's terminal event is `partial` in the same
-  way. **A complete read is unchanged:** its status is `complete` and its envelope
+  `gap_list_truncated` beyond 100), and one fixed warning says what a gap is not and what can fill it: `Part
+  of the requested range has no transcript here, so reading it shows no words there; that
+  does not mean none were said. ...` It is true for every cause of a gap (below), so it
+  does not tell a reader to start a job: transcribing just the range may fill it, and if it
+  gives the same stretch a transcript file supplied with `ingest --transcript` is the sure way.
+  The stream's terminal event is `partial` in the same way. **A complete read is unchanged:** its status is `complete` and its envelope
   `coverage` is `null`, as it always was (`search`, which always states its envelope
   coverage, shows `truncated: false` instead); only the new member is added to `data`,
   and the same member without it is byte for byte what the published `0.1.0` wrote
@@ -452,11 +470,15 @@ under the one mebibyte result budget.
   the end of the video is clipped to it; one wholly outside it has `searched_range:
   null`, nothing to cover and is complete. **A read can be `partial` for a third reason
   besides a range-only transcription and an unusable stretch (and a fourth, below):** a range retranscription
-  that replaces every segment of the first run carries nothing from it, the revision no
+  after a first run with few or no segments (it replaces every segment the first run has,
+  or the first run has none) carries nothing from it, the revision no
   longer records that run's windows, and what only that run read is counted as not
   transcribed (a 12 s run with one segment at 1-4 s is complete over 0-12 s; after
   retranscribing 2-3 s, which snaps to 1-4 s, it reads `partial` with the gaps 0-1 s and
-  4-12 s, as `search` reports them). Such a gap is false (the first run did read it) and
+  4-12 s, as `search` reports them; a 55 s run that found only silence is silent over
+  0-55 s, and after retranscribing 5-10 s it reads `partial` with the gaps 0-5 s and
+  10-55 s and no `no_speech_ranges` at all, because the silence the first run found is
+  no longer recorded). Such a gap is false (the first run did read it) and
   is never a false silence: the rule errs toward a gap
   ([L-033](../planning/known-limits.md#l-033)). **A fourth reason is words that no
   segment holds (#359):** where the recogniser wrote words that were rejected and are
@@ -1644,8 +1666,8 @@ source-segment identities, the model and decoding profiles, the provider, the di
 size. The answer already says them once, in its revision (or index) block, **except for a
 segment carried into a spliced revision, which keeps the recognizer, alignment and language
 of the revision that first produced it and so names that revision (`carried_from`)**. On
-the committed examples a page of 50 transcript segments is about 51,000 to 57,000
-characters on one line (#365: a client saved such a page, read only its first 43,000
+the committed examples a page of 50 transcript segments is about 35,500 to 57,300
+characters on one line (the table below; #365: a client saved such a page, read only its first 43,000
 characters and lost nine items and the page's `next_cursor`, with no error from VSift). The
 brief view is the same page without the repeats.
 
@@ -1658,8 +1680,9 @@ view that names itself) and reduces each item:
 | Command | A brief item holds | It leaves out | Where the left-out values are |
 | --- | --- | --- | --- |
 | `transcript get`, `search` | `segment_id`, `start_us`, `end_us`, `display_text` and, when the segment has one, `speaker` as `display_label` and `origin`; **on a carried segment, `carried_from`** (the revision and segment its text was first produced in) | `revision_id`, `source_id`, `source_segment_id` | the answer's `revision` block: `revision_id`, `source_id`, `source_segments[0].source_segment_id` |
-| | | the recognizer's digests, model and decoding profiles, provider, the chunk's index and times (`alignment`) | `revision.local_asr` for the revision's own run. **A carried segment's `alignment` and `language` are those of the revision that produced it, not of the revision block's run, so for such a segment `carried_from` says where to read them (`transcript get --revision`), and the full view gives them** |
-| | | `text`, `original_text` and the raw speaker `label` (hidden characters kept raw), `markup`, `confidence`, `language`, `cue` | the full view only |
+| | | the recognizer's digests, model and decoding profiles and provider (`alignment`) | `revision.local_asr` for the revision's own run: it holds the run's provider, digests, profiles, plan and chunk counts, and nothing of where one segment lay. **A carried segment's `alignment` and `language` are those of the revision that produced it, not of the revision block's run, so for such a segment `carried_from` says where to read them (`transcript get --revision`), and the full view gives them** |
+| | | the segment's own place in its run: `chunk_index`, `chunk_audio_start_us`, `chunk_audio_end_us`, the provider's times (`provider_start_us`, `provider_end_us`) and `end_trimmed` (`alignment`), and `confidence` | the full view only: `revision.local_asr` does not hold them (it counts the chunks and their outcomes, not where each segment lay in one) |
+| | | `text`, `original_text` and the raw speaker `label` (hidden characters kept raw), `markup`, `language`, `cue` | the full view only |
 | `candidates` | `candidate_id`, `representative_us`, `span`, `reasons`, `stability`, `visual_hash` and, when a change opened it, `change` | `source_id`, `source_segment_id`, `stream_index`, `displayed_dimensions`, `analysis` | the answer's `item_constants`, once (a member the brief answer adds, with the same values the full view repeats on every item) |
 | | | `window` | derived: `ordinal` is `representative_us` divided by `index.window_us`, rounded down; `from_us` is `ordinal * window_us` and `to_us` the smaller of the next window's start and `index.duration_us` |
 | | | `change_window` and `sample_count` | the full view only |
@@ -1697,15 +1720,24 @@ a stream are never brief: the view is a presentation of a result, nothing more.
   full answer, and it never repeated the digests, identities and profiles per item (the
   revision block states them once), so `--view brief` is accepted and changes nothing
   there. The view shapes the JSON.
-- **Size.** Measured on the committed examples, a page of 50, compact JSON, as one
-  line, **by repeating each example's `items` to 50 and, for `search`, its `hits` to 50
-  too** (a hit is 70 characters); the examples' segments are short, and the brief page
-  grows with the text it quotes. Characters, full page to brief page (the share the brief
-  page is of the full page), and one item:
+- **Size.** Measured on the committed examples as compact JSON on one line, **taking
+  each example's full answer and the same answer in the brief view, repeating the
+  `items` of each in order until there are 50 and, for `search`, its `hits` to 50 too
+  (a hit is 70 characters), and counting the characters.** The helper that does exactly
+  that is `page_of_fifty` in `crates/vsift-contract/tests/common/mod.rs`, and four
+  contract tests hold the shares under the ceilings below (a quarter, three tenths, a
+  third, 45 per cent), so anyone can reproduce every figure and a field added back to a
+  brief item fails them. The examples' segments are short, and the brief page grows
+  with the text it quotes; they list no unplaced stretches (below). The rows are
+  `transcript-get.partial.json` (a local transcription, no carried segment),
+  `transcript-get.asr.json` (a spliced revision, whose one segment is carried),
+  `transcript-get.json` (imported cues), `search.json` and `candidates.json`.
+  Characters, full page to brief page (the share the brief page is of the full page),
+  and one item:
 
   | Answer | Full | Brief | One item |
   | --- | --- | --- | --- |
-  | `transcript get`, local transcription, a segment that is not carried | 51,156 | 9,471 (18.5%) | 987 to 153 |
+  | `transcript get`, local transcription, a segment that is not carried (`transcript-get.partial.json`) | 51,618 | 9,883 (19.1%) | 988 to 153 |
   | `transcript get`, local transcription, a carried segment (`carried_from` kept) | 57,256 | 15,571 (27.2%) | 1,109 to 275 |
   | `transcript get`, imported cues | 35,511 | 9,251 (26.1%) | 684 to 159 |
   | `search` (50 items and 50 hits) | 36,702 | 11,567 (31.5%) | 639 to 136 |

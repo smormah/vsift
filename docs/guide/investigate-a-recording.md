@@ -152,7 +152,8 @@ until it no longer appears.
 An assistant that reads through `--json` can add `--view brief` to `transcript get` and `search` (and to `candidates`,
 below) from 0.2.1: each item then holds only its id, its times and its text (a candidate: its id, time, reasons and
 hash), and what every item of a revision repeats (the hashes, source and model details) is stated once, so a page of 50
-is a fraction of the size. It changes nothing in what you read here, and it is refused with `--events jsonl`, whose
+is about a fifth to two fifths of the size (the part of the answer that describes the revision as a whole is the same in
+both, and can be large for a recording with many stretches VSift could not place). It changes nothing in what you read here, and it is refused with `--events jsonl`, whose
 records are always complete.
 
 ## 5. Find what changed on screen
