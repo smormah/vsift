@@ -150,6 +150,49 @@ pub struct OpenSessionOutcome {
     pub lifetime: SessionLifetime,
 }
 
+/// Why the path a caller named could not be opened as a file, in the three
+/// cases the operating system tells apart plainly (#369).
+///
+/// Every one of them is answered with the published code `STORAGE_IO`, which is
+/// what 0.2.0 gave for all of them: a published failure code is not changed
+/// within v1 (known limit L-127). The code says a disk failed, which is not what
+/// happened, so the cause travels in the typed value and the remediation says
+/// what is true. Any other failure to open a path stays an untyped I/O failure
+/// ([`OpenSessionError::SourceIo`], [`SuppliedTranscriptError::Io`]): guessing a
+/// cause the system did not name would be a remediation that is not true.
+///
+/// [`SuppliedTranscriptError::Io`]: crate::SuppliedTranscriptError::Io
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SourcePathFault {
+    /// No file is at the path: the name does not exist, or a folder on the way
+    /// to it does not exist or is not a folder. The most ordinary first mistake
+    /// (a mistyped name, a command run from another folder) lands here.
+    NotFound,
+    /// The path names a folder. Windows refuses to open a folder as a file, so
+    /// the open fails there; Linux and macOS open it and then find it is no
+    /// regular file, which is `INVALID_SOURCE` and never reaches this variant
+    /// (the answer each platform has always given, so neither changes).
+    IsFolder,
+    /// The operating system refused to open the file for reading: the account
+    /// running `VSift` is not allowed to read it.
+    AccessDenied,
+}
+
+impl SourcePathFault {
+    /// Every fault, in declaration order.
+    pub const ALL: [Self; 3] = [Self::NotFound, Self::IsFolder, Self::AccessDenied];
+}
+
+impl fmt::Display for SourcePathFault {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self {
+            Self::NotFound => "no file is at the selected path",
+            Self::IsFolder => "the selected path is a folder",
+            Self::AccessDenied => "the selected path could not be opened for reading",
+        })
+    }
+}
+
 /// Expected failure of a foreground session open.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum OpenSessionError {
@@ -159,6 +202,12 @@ pub enum OpenSessionError {
     InvalidSource,
     /// Source input could not be read.
     SourceIo,
+    /// The selected source path could not be opened, and the operating system
+    /// said why: no file is there, it is a folder, or reading it is not
+    /// allowed (#369). The published code stays `STORAGE_IO`, the one 0.2.0
+    /// gave, with a remediation that says what happened (known limit L-127:
+    /// changing a published failure code is not additive within v1).
+    SourcePath(SourcePathFault),
     /// The selected source's own final path component is a symbolic link (or
     /// another reparse-point link). The link is not followed and the caller
     /// names the file itself (#265). The published code stays `STORAGE_IO`, the
@@ -201,6 +250,7 @@ impl fmt::Display for OpenSessionError {
         match self {
             Self::InvalidSource => formatter.write_str("selected source is invalid"),
             Self::SourceIo => formatter.write_str("selected source could not be read"),
+            Self::SourcePath(fault) => fault.fmt(formatter),
             Self::SourceIsLink => {
                 formatter.write_str("selected source is a link, which is not followed")
             }

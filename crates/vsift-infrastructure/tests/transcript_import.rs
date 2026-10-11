@@ -12,7 +12,7 @@ use std::{
 };
 
 use proptest::prelude::{Just, Strategy, prop, prop_assert, prop_assert_eq, prop_oneof, proptest};
-use vsift_application::{SuppliedTranscriptError, whole_file_source_segment};
+use vsift_application::{SourcePathFault, SuppliedTranscriptError, whole_file_source_segment};
 use vsift_domain::{
     CueMarkup, LanguageTag, MAX_CUE_TEXT_BYTES, MAX_SUPPLIED_TRANSCRIPT_BYTES, MAX_TRANSCRIPT_CUES,
     MediaTime, ParsedTranscript, SourceId, SpeakerLabel, TranscriptFormat, TranscriptImportError,
@@ -610,9 +610,13 @@ fn supplied_paths_follow_the_source_path_policy() {
         read_supplied_transcript(Path::new("relative.srt")),
         Err(SuppliedTranscriptError::InvalidPath)
     );
+    // #369: a path that names no file is a typed cause of its own (reported as
+    // the `STORAGE_IO` that `Io` always was, with a remediation that says so).
     assert_eq!(
         read_supplied_transcript(&data("does-not-exist.srt")),
-        Err(SuppliedTranscriptError::Io)
+        Err(SuppliedTranscriptError::SourcePath(
+            SourcePathFault::NotFound
+        ))
     );
     assert_eq!(
         read_supplied_transcript(&data("untimed-text.srt")),

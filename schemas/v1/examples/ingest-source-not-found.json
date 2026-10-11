@@ -1,0 +1,24 @@
+{
+  "schema_version": "1",
+  "command": "ingest",
+  "operation_id": null,
+  "status": "failed",
+  "data": null,
+  "warnings": [],
+  "error": {
+    "code": "STORAGE_IO",
+    "message": "Storage or output I/O prevented completion.",
+    "retryable": false,
+    "retry_after_ms": null,
+    "affected_ids": [],
+    "remediation": [
+      {
+        "summary": "No file is at the path you gave, so nothing was read or copied. No storage failed (the code is the closest published one). A relative path is read from the folder the command was run in, which may not be the folder that holds the file; a folder on the path that does not exist gives the same answer. Check the spelling of the name and of the folders, or give the file's full path, and run the command again. If you do not know where the file is, ask the user for its full path instead of guessing.",
+        "required_authority": "none",
+        "command": null
+      }
+    ]
+  },
+  "coverage": null,
+  "lifecycle": null
+}

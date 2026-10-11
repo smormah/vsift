@@ -75,6 +75,40 @@ pub const UNOWNED_SESSION_ROOT_REMEDIATION: &str = "The VSift session_root folde
 /// storage failed. The first sentence is stable and the text names no path.
 pub const SOURCE_IS_LINK_REMEDIATION: &str = "The path you gave is a link, and VSift does not follow links. Nothing was read or copied, and no storage failed (the code is the closest published one). Name the file the link points to and run the command again with that path.";
 
+/// Remediation when the path given as a source (or a supplied transcript) names
+/// no file (#369): the name is mistyped, or the command was run from another
+/// folder than the one that holds the file.
+///
+/// The code stays `STORAGE_IO`, the one 0.2.0 gave and, within v1, the only one
+/// it may give (changing a published failure code is not additive; known limit
+/// L-127), so this text says what happened: no file is there, nothing was read
+/// and no storage failed, and a relative path is read from the folder the
+/// command ran in, which is the usual cause. It says to ask the user and not to
+/// guess, because an agent that cannot find a file is better off asking than
+/// searching a person's disk. The first sentence is stable and the text names
+/// no path.
+pub const SOURCE_NOT_FOUND_REMEDIATION: &str = "No file is at the path you gave, so nothing was read or copied. No storage failed (the code is the closest published one). A relative path is read from the folder the command was run in, which may not be the folder that holds the file; a folder on the path that does not exist gives the same answer. Check the spelling of the name and of the folders, or give the file's full path, and run the command again. If you do not know where the file is, ask the user for its full path instead of guessing.";
+
+/// Remediation when the path given as a source (or a supplied transcript) is a
+/// folder (#369).
+///
+/// Only Windows answers a folder with `STORAGE_IO`: it refuses to open a folder
+/// as a file. Linux and macOS open it, find it is no regular file and answer
+/// `INVALID_SOURCE`, as they always have, so neither answer changes (known limit
+/// L-127). This text is for the platform that has the published code
+/// `STORAGE_IO`; the first sentence is stable and the text names no path.
+pub const SOURCE_IS_FOLDER_REMEDIATION: &str = "The path you gave is a folder, not a file. Nothing was read or copied, and no storage failed (the code is the closest published one). VSift reads the one file you name and does not look inside folders. Name the file itself, with its full path or its path from the folder the command was run in, and run the command again. If you do not know which file the user means, ask the user.";
+
+/// Remediation when the operating system refused to open the path given as a
+/// source (or a supplied transcript) for reading (#369).
+///
+/// The code stays `STORAGE_IO`, the one 0.2.0 gave and the closest published
+/// one: nothing is damaged, but access was refused, which is a failure of
+/// access to storage. The text says it is the user's to change and not the
+/// agent's: giving permission on someone's files is not something to do on a
+/// guess. The first sentence is stable and the text names no path.
+pub const SOURCE_ACCESS_DENIED_REMEDIATION: &str = "The operating system did not let VSift open the file at the path you gave, or a folder on the way to it, so nothing was read or copied. The account VSift runs as is not allowed to read it (the code is the closest published one). Report this to the user: they can give that account permission to read it, or copy the file to a folder that account can read and name the copy. Do not change permissions yourself. Then run the command again.";
+
 /// Remediation when the session root's filesystem has no room for a copy of
 /// the source (#266), found before the copy from the source's size and the
 /// free space, or when a write ran out of space.
@@ -122,10 +156,60 @@ pub const SESSION_NOT_PUBLISHED_REMEDIATION: &str = "No published session has th
 #[cfg(test)]
 mod tests {
     use super::{
-        PrivateFolder, SESSION_NOT_PUBLISHED_REMEDIATION, SOURCE_COPY_TOO_SLOW_REMEDIATION,
-        SOURCE_IS_LINK_REMEDIATION, SOURCE_NO_ROOM_REMEDIATION, UNOWNED_SESSION_ROOT_REMEDIATION,
+        PrivateFolder, SESSION_NOT_PUBLISHED_REMEDIATION, SOURCE_ACCESS_DENIED_REMEDIATION,
+        SOURCE_COPY_TOO_SLOW_REMEDIATION, SOURCE_IS_FOLDER_REMEDIATION, SOURCE_IS_LINK_REMEDIATION,
+        SOURCE_NO_ROOM_REMEDIATION, SOURCE_NOT_FOUND_REMEDIATION, UNOWNED_SESSION_ROOT_REMEDIATION,
         non_private_folder_summary,
     };
+
+    /// #369: the three remediations of a path that could not be opened say what
+    /// is true, are bounded and pathless, and are told apart by their first
+    /// sentence, so an agent can act on one without parsing free text.
+    #[test]
+    fn the_source_path_remediations_are_stable_bounded_pathless_and_distinct() {
+        for (text, first_sentence) in [
+            (
+                SOURCE_NOT_FOUND_REMEDIATION,
+                "No file is at the path you gave,",
+            ),
+            (
+                SOURCE_IS_FOLDER_REMEDIATION,
+                "The path you gave is a folder, not a file.",
+            ),
+            (
+                SOURCE_ACCESS_DENIED_REMEDIATION,
+                "The operating system did not let VSift open the file at the path you gave",
+            ),
+        ] {
+            assert!(text.starts_with(first_sentence), "{text}");
+            assert!(
+                text.contains("nothing was read or copied")
+                    || text.contains("Nothing was read or copied"),
+                "{text}"
+            );
+            assert!(
+                text.contains("the code is the closest published one"),
+                "{text}"
+            );
+            // None of them says the video is damaged or unsupported, and none
+            // gives a command or an option to run.
+            for wrong in ["corrupt", "damaged", "invalid", "unsupported", "--"] {
+                assert!(!text.contains(wrong), "{wrong}: {text}");
+            }
+            assert!(text.len() <= 1024, "{} bytes", text.len());
+            assert!(!text.contains('\\') && !text.contains(":/"), "{text}");
+        }
+        // Only a path that names no file explains where a relative path is read
+        // from; only a permission refusal sends the person to the user.
+        assert!(SOURCE_NOT_FOUND_REMEDIATION.contains("folder the command was run in"));
+        assert!(SOURCE_NOT_FOUND_REMEDIATION.contains("full path"));
+        assert!(SOURCE_NOT_FOUND_REMEDIATION.contains("ask the user"));
+        assert!(SOURCE_NOT_FOUND_REMEDIATION.contains("No storage failed"));
+        assert!(SOURCE_IS_FOLDER_REMEDIATION.contains("does not look inside folders"));
+        assert!(SOURCE_ACCESS_DENIED_REMEDIATION.contains("Report this to the user"));
+        assert!(SOURCE_ACCESS_DENIED_REMEDIATION.contains("Do not change permissions yourself"));
+        assert!(!SOURCE_ACCESS_DENIED_REMEDIATION.contains("folder the command was run in"));
+    }
 
     #[test]
     fn the_link_remediation_is_stable_bounded_and_pathless() {

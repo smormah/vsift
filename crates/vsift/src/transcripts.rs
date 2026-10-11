@@ -232,6 +232,9 @@ fn transcript_source_error(error: SuppliedTranscriptError) -> EngineError {
             EngineError::TranscriptSource(TranscriptSourceError::NotRegularFile)
         }
         SuppliedTranscriptError::Io => EngineError::TranscriptSource(TranscriptSourceError::Io),
+        SuppliedTranscriptError::SourcePath(fault) => {
+            EngineError::TranscriptSource(TranscriptSourceError::SourcePath(fault))
+        }
         SuppliedTranscriptError::SymbolicLink => {
             EngineError::TranscriptSource(TranscriptSourceError::SymbolicLink)
         }

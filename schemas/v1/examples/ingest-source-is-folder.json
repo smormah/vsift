@@ -1,0 +1,24 @@
+{
+  "schema_version": "1",
+  "command": "ingest",
+  "operation_id": null,
+  "status": "failed",
+  "data": null,
+  "warnings": [],
+  "error": {
+    "code": "STORAGE_IO",
+    "message": "Storage or output I/O prevented completion.",
+    "retryable": false,
+    "retry_after_ms": null,
+    "affected_ids": [],
+    "remediation": [
+      {
+        "summary": "The path you gave is a folder, not a file. Nothing was read or copied, and no storage failed (the code is the closest published one). VSift reads the one file you name and does not look inside folders. Name the file itself, with its full path or its path from the folder the command was run in, and run the command again. If you do not know which file the user means, ask the user.",
+        "required_authority": "none",
+        "command": null
+      }
+    ]
+  },
+  "coverage": null,
+  "lifecycle": null
+}

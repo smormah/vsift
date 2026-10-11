@@ -111,7 +111,9 @@ Go through these, in order:
    VP9, AV1 or MPEG-4 and audio in AAC, MP3, Opus, Vorbis, FLAC or uncompressed PCM. An AVI, FLV or WMV file, or
    a video in another codec, is refused: re-save it as MP4 or MKV with your video editor or FFmpeg, then open the new
    file. Check that the file plays in an ordinary player.
-2. **Is it a regular file?** A folder, a named pipe or a device is refused. So is a link: name the file the link points to.
+2. **Is it a regular file?** A folder, a named pipe or a device is refused (a folder on Windows is reported under
+   [`STORAGE_IO`](#storage_io-a-file-could-not-be-read-or-written), with a line that says it is a folder). So is a link: name
+   the file the link points to.
 3. **Is it too big?** Over 20 GiB, or four hours, or very many streams, or pictures larger than 16 megapixels.
    [Limits](limits.md) has the numbers.
 4. **Did it take ten minutes and then fail?** Then nothing is wrong with the video, whatever the first line says.
@@ -131,15 +133,24 @@ Go through these, in order:
 ```console
 $ vsift ingest ./no-such-video.mp4
 Error: Storage or output I/O prevented completion. (STORAGE_IO)
+Fix: No file is at the path you gave, so nothing was read or copied. No storage failed (the code is the closest published one). A relative path is read from the folder the command was run in, which may not be the folder that holds the file; a folder on the path that does not exist gives the same answer. Check the spelling of the name and of the folders, or give the file's full path, and run the command again. If you do not know where the file is, ask the user for its full path instead of guessing.
 ```
 
-This one has no `Fix:` line, because VSift does not echo paths. In practice:
+The code says a file could not be read or written, which is not always what happened, so the `Fix:` line says what
+did. It never repeats your path (VSift does not echo paths), so you know which file it is about from the command you
+just ran. In practice:
 
-- **The path is wrong.** Check the spelling and the folder you are in. A relative path is read from your current
-  folder.
-- **The file cannot be read** (permissions, another program has it locked) or **the disk is full**: free some
-  space (a session holds a copy of the video, so it needs at least that much room, plus room for the frames) and
-  run it again.
+- **The path is wrong** (the commonest first mistake). The line begins "No file is at the path you gave". Check the
+  spelling and the folder you are in: a relative path is read from the folder you ran the command in, which may not
+  be the folder that holds the video. Give the full path if in doubt. The same goes for the path after
+  `--transcript`.
+- **The path is a folder.** On Windows the line begins "The path you gave is a folder, not a file". Name the video
+  file itself. (Linux and macOS call this an invalid source, [above](#invalid_source-the-video-or-the-transcript-cannot-be-used).)
+- **The file may not be read.** The line begins "The operating system did not let VSift open the file". Your account
+  needs permission to read it, or copy the file to a folder you own and open the copy.
+- **The file is locked by another program, or the disk is full.** Close the other program, or free some space (a
+  session holds a copy of the video, so it needs at least that much room, plus room for the frames) and run it
+  again. A full disk has a `Fix:` line of its own; a locked file may have none.
 - **A link where a file is expected.** Name the file itself.
 - **An id that does not exist.** A session id with a typo, or one that has been cleaned up, can end here: check
   `vsift session list`. An expired session cannot be used; open the video again.

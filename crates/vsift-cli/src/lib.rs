@@ -38,7 +38,7 @@ use vsift::{
     ADMISSION_RETRY_AFTER, Cancellation, DEFAULT_LOCAL_ASR_CHECK_BUDGET, Engine, EngineConfig,
     EngineError, EnginePorts, EvaluatedSetupPlan, ExecutableSelections, FailureCode, HostIsolation,
     IsolationProfile, ManagedRootLocation, OpenSessionError, PlanAcceptanceError, ProgressObserver,
-    SessionRootError, SessionRootLocation, SetupCheckRequest, SetupPlanRequest,
+    SessionRootError, SessionRootLocation, SetupCheckRequest, SetupPlanRequest, SourcePathFault,
     TranscriptSourceError, UserConfigurationLocation, attest_host_isolation,
 };
 use vsift_contract::{
@@ -51,13 +51,15 @@ use vsift_contract::{
     MANAGED_INSTALL_BUSY_REMEDIATION, MANAGED_STORAGE_REMEDIATION, MANAGED_UNAVAILABLE_REMEDIATION,
     MEDIA_TOOLS_FOR_TRANSCRIPT_REMEDIATION, NO_AUDIO_STREAM_REMEDIATION, NO_TRANSCRIPT_REMEDIATION,
     NO_VIDEO_STREAM_REMEDIATION, OperationResponse, SESSION_NOT_PUBLISHED_REMEDIATION,
-    SOURCE_COPY_TOO_SLOW_REMEDIATION, SOURCE_IS_LINK_REMEDIATION, SOURCE_NO_ROOM_REMEDIATION,
-    STALE_PLAN_REMEDIATION, SUPERSEDED_REMEDIATION, TerminalEventResponse, UNKNOWN_JOB_REMEDIATION,
-    UNKNOWN_REVISION_REMEDIATION, UNOWNED_SESSION_ROOT_REMEDIATION, UNPINNED_MODEL_REMEDIATION,
-    VISUAL_TOOLS_REMEDIATION, WORKSPACE_NOT_DURABLE_REMEDIATION,
-    WORKSPACE_POLICY_MISMATCH_REMEDIATION, WORKSPACE_ROOT_REMEDIATION, local_asr_failure_summary,
-    local_asr_verification_summary, managed_lifecycle_remediation, media_tool_verification_summary,
-    non_private_folder_summary, search_query_rejection_summary, transcript_rejection_summary,
+    SOURCE_ACCESS_DENIED_REMEDIATION, SOURCE_COPY_TOO_SLOW_REMEDIATION,
+    SOURCE_IS_FOLDER_REMEDIATION, SOURCE_IS_LINK_REMEDIATION, SOURCE_NO_ROOM_REMEDIATION,
+    SOURCE_NOT_FOUND_REMEDIATION, STALE_PLAN_REMEDIATION, SUPERSEDED_REMEDIATION,
+    TerminalEventResponse, UNKNOWN_JOB_REMEDIATION, UNKNOWN_REVISION_REMEDIATION,
+    UNOWNED_SESSION_ROOT_REMEDIATION, UNPINNED_MODEL_REMEDIATION, VISUAL_TOOLS_REMEDIATION,
+    WORKSPACE_NOT_DURABLE_REMEDIATION, WORKSPACE_POLICY_MISMATCH_REMEDIATION,
+    WORKSPACE_ROOT_REMEDIATION, local_asr_failure_summary, local_asr_verification_summary,
+    managed_lifecycle_remediation, media_tool_verification_summary, non_private_folder_summary,
+    search_query_rejection_summary, transcript_rejection_summary,
 };
 
 /// Parses the process arguments, executes one command, and returns its documented exit status.
@@ -778,6 +780,10 @@ fn worker_remediation(error: &EngineError) -> Option<String> {
         | EngineError::TranscriptSource(TranscriptSourceError::SymbolicLink) => {
             SOURCE_IS_LINK_REMEDIATION
         }
+        EngineError::OpenSession(OpenSessionError::SourcePath(fault))
+        | EngineError::TranscriptSource(TranscriptSourceError::SourcePath(fault)) => {
+            source_path_remediation(*fault)
+        }
         EngineError::OpenSession(OpenSessionError::SourceNoRoom) => SOURCE_NO_ROOM_REMEDIATION,
         EngineError::OpenSession(OpenSessionError::SourceCopyTooSlow) => {
             SOURCE_COPY_TOO_SLOW_REMEDIATION
@@ -791,6 +797,17 @@ fn worker_remediation(error: &EngineError) -> Option<String> {
         other => return install_remediation(other),
     };
     Some(summary.to_owned())
+}
+
+/// The fixed prose for a path that could not be opened as a source or a
+/// supplied transcript (#369). Each fault has its own text because each has its
+/// own fix; the code of all three stays the `STORAGE_IO` 0.2.0 gave (L-127).
+const fn source_path_remediation(fault: SourcePathFault) -> &'static str {
+    match fault {
+        SourcePathFault::NotFound => SOURCE_NOT_FOUND_REMEDIATION,
+        SourcePathFault::IsFolder => SOURCE_IS_FOLDER_REMEDIATION,
+        SourcePathFault::AccessDenied => SOURCE_ACCESS_DENIED_REMEDIATION,
+    }
 }
 
 /// Writes a result whose failure keeps what the command did (`setup
@@ -1129,16 +1146,103 @@ where
 
 #[cfg(test)]
 mod tests {
-    use vsift::{EngineError, EnginePorts, FailureCode, JobId, OpenSessionError};
+    use vsift::{
+        EngineError, EnginePorts, FailureCode, JobId, OpenSessionError, SourcePathFault,
+        TranscriptSourceError,
+    };
     use vsift_contract::{
         CommandName, IDEMPOTENCY_CONFLICT_REMEDIATION, JOB_BUSY_REMEDIATION,
-        SOURCE_COPY_TOO_SLOW_REMEDIATION, SOURCE_NO_ROOM_REMEDIATION,
+        SOURCE_ACCESS_DENIED_REMEDIATION, SOURCE_COPY_TOO_SLOW_REMEDIATION,
+        SOURCE_IS_FOLDER_REMEDIATION, SOURCE_NO_ROOM_REMEDIATION, SOURCE_NOT_FOUND_REMEDIATION,
     };
 
     use super::{
         CommandFailure, Interruption, OutputMode, OutputWriter, ProcessExit, execute_with,
         write_command_failure,
     };
+
+    /// #369: an ingest whose path names no file, names a folder, or may not be
+    /// read keeps the code 0.2.0 gave it, `STORAGE_IO`, and its exit status (7;
+    /// changing a published code is not additive within v1, known limit L-127),
+    /// and gains the remediation of its own cause. The video's path and a
+    /// supplied transcript's path are answered alike. The whole answer is the
+    /// published example, in JSON and for a person.
+    #[test]
+    fn a_source_path_that_could_not_be_opened_keeps_its_code_and_says_which_cause()
+    -> Result<(), Box<dyn std::error::Error>> {
+        for (fault, remediation, example) in [
+            (
+                SourcePathFault::NotFound,
+                SOURCE_NOT_FOUND_REMEDIATION,
+                "ingest-source-not-found.json",
+            ),
+            (
+                SourcePathFault::IsFolder,
+                SOURCE_IS_FOLDER_REMEDIATION,
+                "ingest-source-is-folder.json",
+            ),
+            (
+                SourcePathFault::AccessDenied,
+                SOURCE_ACCESS_DENIED_REMEDIATION,
+                "ingest-source-access-denied.json",
+            ),
+        ] {
+            let published: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(
+                std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                    .join("../../schemas/v1/examples")
+                    .join(example),
+            )?)?;
+            for error in [
+                EngineError::OpenSession(OpenSessionError::SourcePath(fault)),
+                EngineError::TranscriptSource(TranscriptSourceError::SourcePath(fault)),
+            ] {
+                assert_eq!(error.failure_code(), FailureCode::StorageIo, "{fault}");
+                let failure = || CommandFailure::from(error.clone());
+                assert_eq!(failure().summary(), Some(remediation), "{fault}");
+
+                let mut stdout = Vec::new();
+                let mut stderr = Vec::new();
+                let mut writer = OutputWriter::new(&mut stdout, &mut stderr);
+                let written = write_command_failure(
+                    &mut writer,
+                    OutputMode::Json,
+                    CommandName::Ingest,
+                    failure(),
+                );
+                assert_eq!(written, ProcessExit::StorageOrIo, "{fault}");
+                assert_eq!(written.code(), 7, "{fault}");
+                assert!(stderr.is_empty());
+                let value: serde_json::Value = serde_json::from_slice(&stdout)?;
+                assert_eq!(value, published, "{fault}");
+
+                let mut stdout = Vec::new();
+                let mut stderr = Vec::new();
+                let mut writer = OutputWriter::new(&mut stdout, &mut stderr);
+                let written = write_command_failure(
+                    &mut writer,
+                    OutputMode::Human,
+                    CommandName::Ingest,
+                    failure(),
+                );
+                assert_eq!(written, ProcessExit::StorageOrIo, "{fault}");
+                assert!(stdout.is_empty());
+                assert_eq!(
+                    String::from_utf8(stderr)?,
+                    format!(
+                        "Error: Storage or output I/O prevented completion. (STORAGE_IO)\nFix: {remediation}\n"
+                    ),
+                    "{fault}"
+                );
+            }
+        }
+
+        // The failure that has no typed cause is what it was: the same code and
+        // no remediation, so only a cause the system named gets a text.
+        let untyped = CommandFailure::from(EngineError::OpenSession(OpenSessionError::SourceIo));
+        assert_eq!(untyped.code, FailureCode::StorageIo);
+        assert_eq!(untyped.summary(), None);
+        Ok(())
+    }
 
     /// #266: an ingest whose source does not fit the session root's filesystem
     /// keeps the code the CLI path gave, `STORAGE_IO` (exit 7; changing a

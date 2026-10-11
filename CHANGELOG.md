@@ -15,6 +15,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   while a transcription runs). The README and the installation guide carry a known-issue note for L-149 with the workarounds. `0.2.1-rc.1`, published on 2026-10-10 under `next`, is superseded: the maintainer decided on 2026-10-11 to put #359 and the larger findings into
   `0.2.1` and to cut a second candidate, `0.2.1-rc.2`; the plan ([`release-0.2.1.md`](docs/planning/release-0.2.1.md)) lists what it needs and the decisions still open, among them the version number.
 
+For the second candidate of `0.2.1` (the maintainer's decision of 2026-10-11). Nothing here is published, and the register entries stay open until the release.
+
+**If you give `ingest` a path that names no file, a folder, or a file you may not read ([#369](https://github.com/smormah/vsift/issues/369)).** The commonest first mistake (a mistyped
+name, or a command run from another folder: a relative path is read from the folder the command was run in) answered `STORAGE_IO` with nothing in `remediation`, so nothing said the
+file was not found, and a tool told to stop and report the code stopped there. The code, the message and the exit status (7) are unchanged (a published failure code does not change within
+v1: [L-127](docs/planning/known-limits.md#l-127)); the `Fix:` line (the `remediation` entry in `--json`) now says what is true. Three texts, one for each cause the operating system
+names plainly: no file is at that path (check the spelling and the folders, or give the full path; an agent is told to ask the user instead of guessing); the path is a folder (only
+Windows answers `STORAGE_IO` for it, as in `0.2.0`; Linux and macOS answer `INVALID_SOURCE`, unchanged, with no text); the operating system refused to open the file (the user can give
+the account permission or copy the file; an agent does not change permissions). The path after `--transcript` is answered alike. Every other failure to open a path is as it was. The change is
+additive: a new text in a member that was empty, and three new examples
+([`ingest-source-not-found.json`](schemas/v1/examples/ingest-source-not-found.json), [`ingest-source-is-folder.json`](schemas/v1/examples/ingest-source-is-folder.json),
+[`ingest-source-access-denied.json`](schemas/v1/examples/ingest-source-access-denied.json)). A symbolic link as the file itself ([#265](https://github.com/smormah/vsift/issues/265)) is not touched.
+Shown by a unit test of each classification, the contract and CLI tests, and the binary on Windows; the refused-file case ran on Linux only in the type check (the test skips where the account reads anything).
+
+**A segment id of an earlier revision still resolves ([#372](https://github.com/smormah/vsift/issues/372)): pinned by a test, no behaviour change.** After a range `transcript retranscribe`
+the segments it carries unchanged get new ids (the old one is under `carried_from`). `superseded_ids_cli_contract` now shows through the binary that an id of the earlier revision still
+resolves: `transcript get --revision` returns it, `handoff check --session` accepts a citation of it (the replaced segment's too: the risk is meaning, not acceptance, so cite the newest
+revision's ids), and a retained bundle holds the record of both revisions.
+
 ## [0.2.1-rc.1] - 2026-10-10
 
 **This is a release candidate, under qualification.** It is the first candidate for `0.2.1`, the patch release after `0.2.0` (the maintainer decided on
