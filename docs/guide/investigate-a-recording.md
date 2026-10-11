@@ -94,13 +94,18 @@ command fails instead, and says why
 **Where two chunks meet, and words the recogniser wrote that VSift could not place (0.2.1 and later,
 [L-149](../planning/known-limits.md#l-149)).** The recogniser works on 30-second chunks that overlap by five seconds
 and VSift joins them. Up to `0.2.0` and `0.2.1-rc.1` it could drop the end of a sentence where two chunks met, with no
-warning, and `search` still called the stretch transcribed; it no longer does: whatever a chunk heard that no kept
-words cover (more than half a second of it) is kept, even if that means the same words appear twice, because a
-repeat you can see is better than a hole you cannot. Separately, the recogniser sometimes writes words whose times do
-not fit its audio (an empty or backwards range, say). Those words are dropped and counted (`provider_segments_rejected`),
-and when one sits between two things the recogniser did place, the result lists the stretch where it may lie under
-`Words the recogniser wrote that no segment holds may lie in these stretches`. The run is still `complete`, because it read
-everything; but `search` lists that stretch as not transcribed, so a word said there cannot be found and you are told.
+warning, and `search` still called the stretch transcribed. From the second `0.2.1` candidate on, whatever a chunk wrote
+that no kept words cover (more than half a second of it) is kept, even if that means the same words appear twice, because a
+repeat you can see is better than a hole you cannot. This is the intended behaviour and **has not yet been checked on a real
+recording**; up to about half a second at the end of a copy can still be missing. Separately, the recogniser sometimes writes
+words whose times do not fit its audio (a backwards range, say, or one that runs past its audio). Those words are dropped and
+counted (`provider_segments_rejected`), and when one has a word in it and the recogniser wrote something after it, the
+result lists the stretch where those words may lie, from where the dropped segment says it starts to where the next segment
+starts, under `Words the recogniser wrote that no segment holds may lie in these stretches`, which says each is an upper bound. The
+words took only part of it, and some are not listed at all (those with an empty range, or none after them). The run is still
+`complete`, because it read everything; but `search` lists that stretch as not transcribed, so a word said there cannot be
+found and you are told. Transcribing that stretch again may give the same stretch; a transcript file you already have
+(`vsift ingest <video> --transcript <file>`) is the sure remedy.
 
 **Expect mistakes.** Recognition is a machine's best guess, tested here on a synthetic voice only. It can
 mishear names and numbers and does worse with noise ([limits](limits.md)). Search for a number

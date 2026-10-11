@@ -194,11 +194,12 @@ These files are the machine-readable public v1 boundary:
   version, `1` for an import and `2` for a local-ASR revision (with its run, what it
   superseded, inherited provenance and carried segments and, since 0.2.1 and only when there
   is any, `carried_untranscribed`: what the superseded revision did not cover outside the
-  range it replaced and an inherited run or file would be counted over; only a chain with an
-  unusable chunk, or a run with unplaced words, has any, and `unplaced_ranges`, the stretches
-  of the record's own run where the recogniser wrote words that no segment holds, #359), and
-  its text is untrusted
-  and unsanitized (P07).
+  range it replaced and an inherited run or file would be counted over, which only a chain
+  with an unusable chunk or a stretch of unplaced words has; and, since the second candidate
+  of 0.2.1 (#359) and only when there is any, `unplaced_ranges`: the stretches of the
+  record's own run where the recogniser wrote words that no segment holds), and its text is
+  untrusted and unsanitized (P07). Releases before 0.2.1, and 0.2.1-rc.1, read a record that
+  has `unplaced_ranges` as damaged.
 
 The `--events jsonl` stream is a sequence of events with a contiguous `sequence`
 from 0: for `transcript.get`, one `evidence` event per segment and then one
@@ -263,7 +264,13 @@ over an 83-chunk recording (the first three chunks silent) that stopped at the 4
 answers were unusable (the job in `affected_ids`, the reason, the counts and the first chunk in the
 remediation, which then points to a supplied transcript), and the same failure of a run over a 55 s
 recording of two chunks (a few answers, so the remediation also suggests a slightly different range).
-All three are checked by `local_asr_contract`. `session status` (whose data has no separate schema) adds, since
+All three are checked by `local_asr_contract`. `transcript-retranscribe.unplaced.json` (#359, the second
+candidate of 0.2.1) is made the same way: a `complete` retranscription of a 55 s recording of two chunks
+whose first chunk's recogniser wrote words in a rejected segment (a reversed range, at 1.0 s) between two
+segments it kept, so the revision's `local_asr.unplaced_ranges` lists 1.0 to 3.0 s as where those words may
+lie (an upper bound) and the warning `provider_segments_rejected` has its longer fixed prose in the
+envelope; the run's status is unchanged and a `search` of the revision lists the stretch as untranscribed.
+It is checked by `local_asr_contract`. `session status` (whose data has no separate schema) adds, since
 P10 PR 3, `jobs` (at most 16 of `job_id`, `kind`, `state`, `live_owner`, `resumable`,
 `resumable_reason`, the members of `job-data.schema.json` with the same meaning) and
 `jobs_truncated`.

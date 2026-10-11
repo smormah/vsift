@@ -52,20 +52,26 @@ real meetings, accents or noisy rooms, so every accuracy figure below says what 
 - **Where two chunks meet, a word or two can still be missing or repeated (0.2.1 and later, [L-149](../planning/known-limits.md#l-149)).** The
   recogniser works on 30-second chunks that overlap by five seconds, and VSift joins them. Before this version it could
   drop the end of a sentence at a join, with no sign (found on two real recordings; it is in `0.2.0` and `0.2.1-rc.1`).
-  It no longer does: speech that a chunk heard is kept unless the kept words cover it to within half a second, so at
-  most about one word at the end of a copy can still be missing, and where the two chunks wrote the overlap
-  differently the same words can appear twice (VSift removes a repeat only when at least two words match exactly). **The
-  cost of the fix is repeats, never holes; both are in the transcript.** The cause was worked out from the times in a
-  report, not from the recogniser's own output of the recordings, and the fix has not been tried on them.
+  From the second `0.2.1` candidate on, speech that a chunk wrote is kept unless the kept words cover it to within half a
+  second, so up to about one word at the end of a copy can still be missing (with no sign), and where the two chunks wrote the
+  overlap differently the same words can appear twice. VSift looks for a repeat at one place only, the last kept segment of
+  the earlier chunk against the first of the later, and removes it only when at least two words match exactly, so a repeat
+  elsewhere, or one that differs by a word, stays. VSift judges by time, not by words, so it can also keep a copy twice where
+  nothing was lost. **The cost of the fix is repeats, not holes; both are in the transcript.** The cause was worked out from the
+  times in a report, not from the recogniser's own output of the recordings, and the fix has not been tried on them.
 - **Words the recogniser wrote that VSift could not place are listed, not found (0.2.1 and later, [L-149](../planning/known-limits.md#l-149)).** When
   the recogniser writes words whose times do not fit its audio (an empty or backwards range, or one that runs past the
   chunk), VSift drops them and counts them (`provider_segments_rejected`). If such a segment has a word in it, starts
   inside the audio and is followed there by another segment, the revision lists the stretch from its start to the next
   segment's start (`local_asr.unplaced_ranges`) as where the words may lie, less what kept words cover, if that is more than half a second.
   The run stays `complete` (it read everything), and `search` lists the stretch as not transcribed: a word said there cannot
-  be found. The stretch is an upper bound, usually a pause with a short word in it. A rejected segment with no word, one
-  that starts after its audio ends, and the last one of a chunk are only counted. The list is stored in the session
-  and **`0.2.0` and earlier, and `0.2.1-rc.1`, read a session that holds it as damaged** (`INTEGRITY_FAILURE`).
+  be found. Each stretch is an upper bound: the words took only part of it, so `search` can call more time untranscribed than
+  was lost. Retranscribing just the stretch may give the same stretch; a transcript file you supply (`ingest --transcript`)
+  is the sure remedy. A rejected segment with no word, one with an empty range, one that starts after its audio ends, and one
+  that nothing follows in its audio (the last of a chunk, or of the last chunk) are only counted, so a loss there is not
+  listed. The list is stored in the session and **`0.2.0` and earlier, and `0.2.1-rc.1`, read a session that holds it as
+  damaged** (`INTEGRITY_FAILURE`), every revision of it, and `handoff check --session` and `bundle validate` fail too. Use the newer
+  version, or discard the session.
 
 ## The pictures: screen changes and frames
 
