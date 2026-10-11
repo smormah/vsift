@@ -179,10 +179,16 @@ Copy every value from the VSift result that produced it; never compute or guess 
 
 | `type` | Must have | May add | Copied from |
 | --- | --- | --- | --- |
-| `transcript_segment` | `segment_id` | `revision_id`, `start_us`, `end_us` | an item of `transcript get` or `search` |
+| `transcript_segment` | `segment_id` | `revision_id`, `start_us`, `end_us` | an item of `transcript get` or `search`; `revision_id` from the answer's `revision` block (a brief item has none) |
 | `frame` | `evidence_id`, `pixels_inspected` | `candidate_id`, `requested_us`, `actual_us`, `delta_us` | `data.selections` and `data.items` of `frame get`, `frame neighbours` or `frame burst`; `candidate_id` from the request |
 | `crop` | `evidence_id`, `pixels_inspected` | `parent_evidence_id`, `actual_us`, `rect` | `crop`: the item's `crop` (`x`, `y`, `width`, `height`) and the selection's `actual_us` |
 | `audio` | `evidence_id` | `range`, `actual_start_us` | the item of `audio` |
+
+**After a range retranscription, cite the newest revision's ids.** `transcript retranscribe`
+with `--from` and `--to` gives every segment of the new revision a new `segment_id`, the
+unchanged ones too (`carried_from` names the id each had). An id of an earlier revision still
+resolves in VSift and in a retained bundle, so nothing refuses a stale one, but it can name text
+the run replaced. Read the range again with `transcript get` and cite the ids you read then.
 
 `pixels_inspected` is yours alone: true only when you opened that image and read it.
 Times in the prose are written `mm:ss.mmm` from the microseconds VSift returned. When
@@ -205,7 +211,8 @@ own reasons are `transcript_unavailable`, `image_access_unavailable`,
 
 **A stretch with no transcript.** A `partial` transcription (`transcript retranscribe` or
 `job resume`) lists what it did not transcribe in `untranscribed_ranges` (under `data.outcome`
-for `job resume`), and a `search` lists such ranges too. Each is one gap, and its `range` is an
+for `job resume`), and a `partial` `search` or `transcript get` lists such ranges too, in
+`data.transcript_coverage.untranscribed_ranges`. Each is one gap, and its `range` is an
 object, not the `30000000-55000000` text of `coverage`:
 
 ```json
@@ -245,10 +252,18 @@ evidence you had before you retained.
   the session expired.
 - `insufficient_evidence`: nothing the question needs could be supported.
 
+**Other stops.** An expired session is a `lifecycle` gap with the reason `session_expired`. An
+exhausted budget is status `partial` with a `budget_exhausted` gap, the limit in
+`budget.exhausted` and the resume card. A transcription you started that still runs, with a
+frame refused `BUSY`, is a `visual` gap with the reason `not_inspected` and the code `BUSY`,
+and the resume card ([resume.md](resume.md)).
+
 ## Before you send it
 
 - Check the whole draft once with `vsift handoff check`, in one of the two forms of
-  [commands.md](commands.md) ("Checking the draft"), and fix what it reports.
+  [commands.md](commands.md) ("Checking the draft"), and fix what it reports. The report is at
+  most 64 KiB; over 5,500 characters check it in two parts, the text and then the block, as
+  that section says.
 - The final message ends with exactly one `vsift-handoff` block, also when you stop
   early (a missing tool, an expired session, a budget): SKILL.md's REPORT state shows
   its shape and says what a stop before any evidence holds. Never save the report to
@@ -260,10 +275,12 @@ evidence you had before you retained.
   instruction uses (an unused citation is noted, not refused).
 - Every closed value is a word of the table above, in lower case (states and failure
   codes in upper case).
-- No absolute path, home folder, web address, Markdown link, secret or environment
-  value anywhere ([safety.md](safety.md)); the JSON schema refuses most of them. A web
+- No absolute path (a drive letter or a `\\?\` path too), home folder, web address,
+  Markdown link (`[...]` directly followed by `(...)`), secret or environment value
+  anywhere ([safety.md](safety.md)); the JSON schema refuses most of them. A web
   address seen in evidence appears only in the Markdown, defanged in a code span; the
-  JSON describes it without writing it.
+  JSON describes it without writing it. Call a retained bundle "the folder you named
+  (`<name>`)", never by its path.
 - Evidence text appears only in quotes or code blocks. Transcript text is copied from
   `display_text` (a speaker from `display_label`), never from `text` or
   `original_text`, so hidden characters stay visible as `<U+202E>`-style notation;

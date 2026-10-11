@@ -10,7 +10,7 @@ that in the handoff (`budget.overrides`).
 | Images per step | 1 | 4 | Images you open before you next reason about them. |
 | Images in total | 6 | 24 | Every image you open or try to open, including the image check. |
 | Image bytes in total | 12 MiB | 48 MiB | The sum of `image.bytes` of the images you open. |
-| Page size | 20 | 50 | The `--limit` of `transcript get`, `search` and `candidates`. |
+| Page size | 20 | 50 | The `--limit` of `transcript get`, `search` and `candidates`: 50 only with `--view brief` (below). |
 | Tool calls | 30 | 80 | Every command and every image you open. |
 | Refinement depth | 2 | 4 | Refinements (neighbours, burst, crop, a new search term, a narrower window) in a row for one claim. |
 | Wall time | 15 min | 30 min | From your first command; a transcription counts too. The host measures and enforces it, not you (below). |
@@ -48,6 +48,18 @@ the elapsed time. Add
   crop it first or report the gap.
 - Never page through the whole transcript or all candidates "to be safe"; search
   first and read windows around hits.
+- Ask for `--view brief` on every `transcript get`, `search` and `candidates`: the same page is
+  a fraction of the size, with the same ids, times, `display_text`, coverage and gaps. Without it
+  a page is never longer than 20, on either profile: a page of 50 transcript segments is over
+  50,000 characters, and a client cut one at about 43,000 with no error, losing items and the
+  `next_cursor`. With it, `standard` may use 50.
+- Ask `candidates` for at most 5 minutes per call (300000000 microseconds), and with a
+  transcript around its spans, not across the video.
+- **A whole long recording is not what these profiles are sized for.** A summary or a timeline
+  of one needs every transcript segment and more screens than the image budget holds, and can
+  need more claims and citations than `handoff.schema.json` allows (50 and 100). Say so, offer
+  the stretch the user names, and ask before you start; if the user has bounded the work, spend
+  the budget on what they named and end `partial` with the resume card ([SKILL.md](../SKILL.md)).
 
 ## When a limit is reached
 

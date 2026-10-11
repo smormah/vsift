@@ -73,7 +73,8 @@ select the skill; the user can also name it.
   6 images, one per step, 30 tool calls, pages of 20, two refinements per claim,
   bursts of 4 frames and 15 minutes; `standard` allows 24 images, 4 per step, 80 tool
   calls, pages of 50, four refinements, bursts of 12 and 30 minutes. The user may name
-  a profile or override a limit.
+  a profile or override a limit. (From the second candidate of `0.2.1`, a page of 50 is
+  for `--view brief` only: the full view stays at 20 on both profiles.)
 - **Permissions.** The skill never asks for broader tool permissions. Setup
   registration, renewal, retention, cleanup and job cancellation need the user's
   explicit instruction; managed installation, worker-host commands and any other
@@ -154,6 +155,63 @@ rest, so the rule is read in the report only by what the existing scenarios happ
   words (the remediation is longer than a gap note), the reason and the job from `error.affected_ids`.
 - **`BUSY`** (#342) carries `retry_after_ms`: wait, run the same command once more, run one command at a time.
 - **`audio`** (#340): the file tells an agent nothing; speech is read with `transcript get`.
+
+### Since the first candidate: the second candidate `0.2.1-rc.2` (2026-10-11; prepared, not cut)
+
+Prepared on the branch `skill-0.2.1-rc2`, one commit on top of the Reads change (the brief view and the coverage of a
+read, `reads-brief-view-and-coverage`), and applied in the cut of the second candidate with a new freeze: the skill is a
+frozen trial component, so its digest changes again and batches 2 and 3 run again on this text. **Nothing in it has been
+run by an agent, and no frozen scenario exercises most of it** (see the end of this section). The change, and nothing else:
+
+- **A whole recording is out of scope** (#368, the maintainer's decision of 2026-10-11 for this release line). The
+  description no longer offers "a cited summary, timeline or handoff" and says that a summary or timeline of the whole of a
+  long recording is beyond the skill's budgets; `SKILL.md` ("Before you start") and `references/budgets.md` say what to do
+  (say so, offer the stretch the user names, ask before starting) and that a user who has already bounded the work (a
+  stretch, or what to hand back when the budget runs out) gets the budget spent on it, ending `partial` with the resume
+  card. The second half is there because `A-02` asks for "every change ... in the whole recording" and tells the agent
+  to stop with a resume card when the budget runs out, and `SEC-T02` asks for a summary of a 12-second clip: neither may
+  become a refusal.
+- **The brief view** (#365). Every `transcript get`, `search` and `candidates` form carries `--view brief` (`SKILL.md`
+  steps 3 and 4, `commands.md` forms and limits, `resume.md`). A brief item keeps its ids, times and `display_text`; the
+  revision's id is `revision.revision_id` of the answer (`handoff.md`, Citations). The refusal with `--events jsonl` is in
+  `commands.md`. **Page sizes:** the profile table keeps `20` and `50` (the trial grader reads them and checks every
+  `--limit` against them, so `compact` cannot be told 50); `budgets.md` says a full-view page is never longer than 20 on
+  either profile and that `standard` uses 50 only with `--view brief`.
+- **Coverage of a read** (#373). `transcript get` now states `transcript_coverage` and answers `partial` over a gap, as
+  `search` does, so the existing sentence in step 3 is true of both: a `partial` read or search is usable, its
+  `transcript_coverage.untranscribed_ranges` (and the envelope's `coverage.gaps`) list what has no transcript, and a gap
+  is never silence (`handoff.md`, Gaps).
+- **`candidates` on a long recording** (#367). At most 5 minutes (300000000) per call, the brief view, around the
+  transcript's spans when there is a transcript (not across the video), and in 5-minute ranges from where the question
+  points when there is not (the old "page candidates over the whole video" is gone). No filter and no progress events
+  exist, and the text does not mention any.
+- **`BUSY` while a transcription runs** (#370). After a tool call that timed out, a `frame get` can stay `BUSY` for as
+  long as the job runs: it is not retried, `job status` is read once, and a job that still runs ends in REPORT with a
+  `visual` gap (`not_inspected`, code `BUSY`) and the resume card (`SKILL.md` PREPARE, `commands.md` `BUSY` row,
+  `resume.md` "A transcription that is still running", `handoff.md` Status). The text names no cause: which resource held
+  the refusal is not known ([L-154](../planning/known-limits.md#l-154)).
+- **New ids after a range retranscription** (#372). The unchanged segments get new ids too; an older id still resolves
+  but can name text the run replaced, so the agent reads the range again and cites the ids it reads then (`SKILL.md` step
+  6, `handoff.md` Citations). The skill's `handoff check` forms pass no `--session`, so the check never looked at ids.
+- **Report size** (#366). A report is at most 64 KiB (the most the check reads, which refuses a longer draft); about 5,500
+  characters passed in Git Bash and about 15,000 in PowerShell, so a report over 5,500 characters is checked in two calls
+  of the same literal forms, the text and then the block alone (`SKILL.md` REPORT, `commands.md` "Checking the draft").
+  The sizes are what the issue saw, not a measurement through the pinned client; no form, flag or file was added.
+- **`session list` and `session clean --expired --dry-run` pages** (#371). The `--cursor <n>` forms are allowed, and the
+  agent continues until `next_cursor` is null (`commands.md`, `lifecycle.md`).
+
+**What moved, so that `SKILL.md` stays at 300 lines (no rule was dropped):** the PowerShell and hyphen-query quoting
+sentences moved from the end of `SKILL.md` to `commands.md` ("Allowed command forms"); the REPORT "Before you send"
+checklist went from nine lines to five and now points at `safety.md` and `handoff.md` "Before you send it", which hold the
+remaining rules (the Markdown link and the retained bundle's name moved into the latter); the sentence on how an expired
+session or an exhausted budget is reported moved to `handoff.md` "Status" (it is also in `resume.md` and `budgets.md`); and
+the sentence on a remediation's `command` became a pointer to `safety.md` rule 9, which says it in full.
+
+**Untried:** the scenarios and the grader are frozen, so no scenario exercises the whole-recording limit, a report over
+5,500 characters, a `BUSY` frame during a transcription, `session list` paging, a range retranscription's new ids, or a
+recording longer than a few minutes without a transcript. Every scenario that reads a transcript now runs the brief view,
+and the five sentences above that the guard cannot test (the whole-recording limit, the `BUSY` rule, the two-part check,
+the 5-minute rule, the new ids) are text shipped, behaviour unmeasured, until a real run shows an agent following them.
 
 ## Keeping it in step with the CLI
 
@@ -286,7 +344,8 @@ Prefer a review-tier model when the report must be right first time.
 
 ## Not yet done
 
-- **The skill of `0.2.1` is untried** (the change above, in the candidate `0.2.1-rc.1`, 2026-10-10). Everything below was
+- **The skill of `0.2.1` is untried** (the change above, in the candidate `0.2.1-rc.1`, 2026-10-10, and what changed
+  since, prepared for the second candidate `0.2.1-rc.2`). Everything below was
   measured on the third candidate's skill, which `0.2.0` ships. Batches 2 and 3 are to be run again under the new freeze, each
   on the maintainer's explicit go and after the candidate is published
   ([`p14-batch-2-3-checklist.md`](../planning/p14-batch-2-3-checklist.md)); until they have, none of the figures below is a

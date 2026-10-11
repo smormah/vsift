@@ -31,7 +31,8 @@ The handoff's `resume` object (see [../handoff.schema.json](../handoff.schema.js
 at most 2 KiB of JSON. Give it when the work was cut short and can continue: a budget
 limit ran out (`budget.exhausted`, a `budget_exhausted` gap), or a transcription was
 cancelled or interrupted with its finished chunks kept (a `cancelled` gap or code
-`CANCELLED`). Leave it out when the task finished, and when the report is partial only
+`CANCELLED`), or a transcription you started still runs (below). Leave it out when the task
+finished, and when the report is partial only
 because a capability is missing (no image access, no speech recognition, a missing
 tool) or the session expired: another run cannot fix those by resuming. A card you do
 give is checked: it must name your session and evidence VSift holds. It looks exactly
@@ -97,7 +98,7 @@ budget is not yours.
    keeps for it), run one command:
 
 ```console
-vsift transcript get <session> --from <from-us> --to <to-us> --limit <n> --json
+vsift transcript get <session> --from <from-us> --to <to-us> --view brief --limit <n> --json
 vsift frame get <session> --at <us> --json
 ```
 
@@ -131,6 +132,24 @@ vsift job resume <job> --events jsonl | tail -n 1
    step; the finished chunks are kept each time.
 6. The same transcription command with the same `--operation-id` also continues an
    interrupted job, and returns the committed revision (`replayed`) once it finished.
+
+## A transcription that is still running
+
+When your tool call timed out, the job may still run: a client can keep a timed-out command
+going in the background. While it runs, a `frame get` can answer `BUSY` for minutes. Do not
+retry it, and do not start or resume a second transcription. Run `vsift job status <job> --json`
+once and read `state`:
+
+- A process holds the job (`live_owner` true, `state` `running`, `committing` or `cancelling`):
+  stop visual work and go to REPORT with status `partial`. Record a `visual` gap with the
+  reason `not_inspected` and the code `BUSY` for what you could not look at, and give the resume
+  card with the `job_id` and `vsift job status <job> --json` as its `next_command`. Tell the user
+  that the transcription is still running and that the frames wait for it. (Step 5 waits for
+  a job because that run has nothing else to do; a frame is not worth the calls.)
+- `interrupted`, or `resumable` true: continue it as in step 5 above.
+- `succeeded`: the job is over; ask for the frame again, once.
+- `failed` or `cancelled`: go to REPORT with its `failure.code`, as the failure table of
+  [commands.md](commands.md) says.
 
 ## If the session expired or was closed
 

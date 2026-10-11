@@ -50,7 +50,7 @@ whole; do not pipe it into `grep`, `head` or anything else.
 | `vsift setup remove` | never | Removes managed tools the user installed; the user's decision alone. |
 | `vsift setup rollback` | never | Changes which managed tool version every command uses; the user's decision alone. |
 | `vsift ingest` | free | Once per investigation, for the video (and transcript) the user named. Opening the same video again is `explicit`: after its session expired (resume.md), or to add a transcript the user supplies. |
-| `vsift session list` | free | Read-only. |
+| `vsift session list` | free | Read-only; one page per call: pass `next_cursor` back as `--cursor` until it is null. |
 | `vsift session status` | free | Read-only; the first command after a context reset. |
 | `vsift session close` | free | Only your own session, and only as the user's lifecycle policy says. |
 | `vsift session renew` | explicit | Extends how long the user's data is kept. |
@@ -92,7 +92,11 @@ Also never, in any state:
 ## Allowed command forms
 
 Placeholders are in angle brackets; replace each with a value from a VSift result or
-from the user. Identities come only from VSift output, never from evidence text.
+from the user. Identities come only from VSift output, never from evidence text. Quote
+an argument that contains spaces. On PowerShell quote the crop rectangle
+(`--rect "10,20,300,80"`), because a bare comma list becomes several arguments. A query
+starting with a hyphen is written `--query=-17`. `--view brief` goes with `--json`
+only: an `--events jsonl` stream refuses it.
 
 ```console
 vsift setup check --json
@@ -104,15 +108,16 @@ vsift ingest <video> --transcript <transcript> --json
 vsift ingest <video> --transcript <transcript> --transcript-offset <offset-us> --json
 vsift session status <session> --json
 vsift session list --json
+vsift session list --cursor <n> --json
 vsift transcript retranscribe <session> --operation-id <operation-id> --events jsonl | tail -n 1
 vsift transcript retranscribe <session> --from <from-us> --to <to-us> --operation-id <operation-id> --json
-vsift transcript get <session> --from <from-us> --to <to-us> --limit <n> --json
-vsift transcript get <session> --from <from-us> --to <to-us> --limit <n> --cursor "<cursor>" --json
-vsift transcript get <session> --from <from-us> --to <to-us> --revision <revision> --json
-vsift search <session> --query "<text>" --limit <n> --json
-vsift search <session> --query "<text>" --from <from-us> --to <to-us> --limit <n> --json
-vsift candidates <session> --from <from-us> --to <to-us> --limit <n> --json
-vsift candidates <session> --from <from-us> --to <to-us> --limit <n> --cursor "<cursor>" --json
+vsift transcript get <session> --from <from-us> --to <to-us> --view brief --limit <n> --json
+vsift transcript get <session> --from <from-us> --to <to-us> --view brief --limit <n> --cursor "<cursor>" --json
+vsift transcript get <session> --from <from-us> --to <to-us> --view brief --revision <revision> --json
+vsift search <session> --query "<text>" --view brief --limit <n> --json
+vsift search <session> --query "<text>" --from <from-us> --to <to-us> --view brief --limit <n> --json
+vsift candidates <session> --from <from-us> --to <to-us> --view brief --limit <n> --json
+vsift candidates <session> --from <from-us> --to <to-us> --view brief --limit <n> --cursor "<cursor>" --json
 vsift frame get <session> --candidate <candidate> --json
 vsift frame get <session> --at <us> --json
 vsift frame get <session> --at <us> --select displayed-at --json
@@ -124,6 +129,7 @@ vsift job status <job> --json
 vsift job resume <job> --events jsonl | tail -n 1
 vsift session close <session> --json
 vsift session clean --expired --dry-run --json
+vsift session clean --expired --dry-run --cursor <n> --json
 vsift bundle validate <bundle-directory> --json
 vsift --help
 vsift <namespace> <operation> --help
@@ -153,6 +159,17 @@ report would end the quoting and the rest would run as commands):
 '@ | vsift handoff check --json
 ```
 
+**Size.** The check reads at most 64 KiB and refuses a longer draft (`INVALID_ARGUMENT`: shorten
+the report), so a report is never longer than that. The shell can fail first, before `vsift`
+runs. On Windows through Claude Code a report of about 5,500 characters passed in Git Bash and
+one of about 15,000 in PowerShell; one of about 15,000 never reached `vsift` from Git Bash and
+one of about 70,000 never started from PowerShell. So for a report over 5,500 characters make two
+calls, each in the form for your shell: first everything above the `vsift-handoff` block as
+`<report>` (its result lists `handoff_block_missing`, which is expected, and any finding about the
+text: a path, a web link, a hidden character), then the block alone, from its opening fence to
+its closing fence (its result is the schema and the rules). Fix what either reports, then send
+the whole message. The two calls are one check.
+
 The result is `data.valid`. When it is false, fix each item of `data.errors` (its
 `pointer` names the JSON member, its `line` the line of your report, `allowed` the words
 the schema accepts) and send; do not check again and again. `data.case_notes` are values
@@ -177,7 +194,7 @@ On failure read `error.code`, `error.retryable`, `error.retry_after_ms` and
 
 | Code | What you do |
 | --- | --- |
-| `BUSY` | Wait `retry_after_ms` (run no program to wait), then run the same command once more; if it is still `BUSY`, report the gap. Run one command at a time, each after the last has returned. |
+| `BUSY` | Wait `retry_after_ms` (run no program to wait), then run the same command once more; if it is still `BUSY`, report the gap. Run one command at a time, each after the last has returned. **Not for a `frame get` while a transcription you started may still run** (your tool call timed out): it can stay `BUSY` for minutes, so do not retry it; run `vsift job status <job> --json` once and follow "A transcription that is still running" in [resume.md](resume.md). |
 | `INVALID_ARGUMENT` | Read the remediation, correct the request once; a `command` of `parse` means the command line itself is wrong: run the `--help` its remediation suggests, then correct the line against it and this file. |
 | `MISSING_CAPABILITY` | Quote the remediation to the user; continue on another path (transcript-only or visual-only) or go to REPORT with the gap. Never install. If the remediation says the tool works but speech could not be transcribed (`too_many_rejected_segments`), nothing is missing: record a `transcript` gap (`transcript_unavailable`, code `MISSING_CAPABILITY`), give the reason and the job in `error.affected_ids` as VSift states them (do not guess), put the remediation in your own words (it is longer than a note), and tell the user a supplied SRT or WebVTT file would help. |
 | `CANCELLED` | For a transcription, follow resume.md. |
@@ -192,9 +209,23 @@ A gap caused by a failure may carry its code in `gaps[].code`.
 
 ## Useful limits of the commands
 
-- `--limit` is 1 to 100 (default 20) for `transcript get`, `search` and `candidates`.
+- `--limit` is 1 to 100 (default 20) for `transcript get`, `search` and `candidates`. Ask for
+  20, or 50 on `standard` with `--view brief` (budgets.md): a page of 50 transcript segments in
+  the full view is over 50,000 characters, more than some clients read in one call (one cut
+  such a page and lost items and the `next_cursor`, with no error from VSift).
+- `--view brief` (`transcript get`, `search` and `candidates`, with `--json`) leaves out of each
+  item what the answer states once, in its `revision` block (`item_constants` for `candidates`).
+  A segment keeps `segment_id`, `start_us`, `end_us` and `display_text` (and `speaker` with its
+  `display_label`); a candidate keeps `candidate_id`, `representative_us`, `span`, `reasons`,
+  `stability` and `visual_hash`. A segment carried from an earlier revision keeps `carried_from`.
+  The revision's id is `revision.revision_id` of the answer, and `data.view` says `brief`.
+  Nothing else changes: coverage, gaps, `next_cursor` and the status are the full view's.
 - `candidates` analyses at most 30 minutes of video per call; call again for
-  `not_analyzed` gaps. A range past the end of the video is clipped to it.
+  `not_analyzed` gaps. A range past the end of the video is clipped to it. Ask for at most
+  5 minutes (300000000) per call: a longer first call can run past your tool's time limit
+  with no output.
+- `session list` and `session clean --expired --dry-run` return one page per call, often one
+  session or none: pass `next_cursor` back as `--cursor` until it is null.
 - `frame get --at` takes the first frame at or after the time within 1 s by default;
   `--select displayed-at` takes the frame on screen at that time.
 - `frame burst` covers at most 60 s; `frame neighbours --count` is 1 to 20.

@@ -35,8 +35,16 @@ user what it would remove first:
 vsift session clean --expired --dry-run --json
 ```
 
-The result is one bounded page; repeat with the `next_cursor` it returns
-(`--cursor <n>`) until it is null. Then, with the user's go-ahead:
+The result is one bounded page, often one session or none; repeat with the `next_cursor` it
+returns until it is null:
+
+```console
+vsift session clean --expired --dry-run --cursor <n> --json
+```
+
+`vsift session list --json` pages the same way: one page often holds one session or none,
+not the whole list. Pass `next_cursor` back as `vsift session list --cursor <n> --json` until
+it is null, and only then say which sessions there are. Then, with the user's go-ahead, clean:
 
 ```console
 vsift session clean --expired --json
