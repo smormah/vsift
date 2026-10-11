@@ -10,7 +10,7 @@ use vsift::{
 };
 use vsift_contract::{
     CandidatesEvidenceStream, CandidatesPresentation, LifecycleResponse, MEDIA_BUSY_REMEDIATION,
-    OperationResponse, candidates_response,
+    OperationResponse, ResultView, candidates_response_with_view,
 };
 
 use crate::{CommandFailure, command::CandidatesArguments, session::session_lifecycle};
@@ -81,24 +81,30 @@ fn lifecycle(results: &CandidatesResults) -> Result<LifecycleResponse, FailureCo
 }
 
 /// Pages a session's visual candidates, analysing missing windows first,
-/// and presents one page as one result.
+/// and presents one page as one result, in `view`.
 pub(crate) async fn candidates(
     engine: &Engine,
     arguments: CandidatesArguments,
+    view: ResultView,
     cancellation: &Cancellation,
 ) -> Result<OperationResponse<serde_json::Value>, CommandFailure> {
     let results = run(engine, arguments, cancellation).await?;
-    candidates_response(&presentation(&results), lifecycle(&results)?)
+    candidates_response_with_view(&presentation(&results), lifecycle(&results)?, view)
         .map_err(|_| CommandFailure::from(FailureCode::Internal))
 }
 
 /// Pages a session's visual candidates and presents one page as an evidence
 /// stream: the candidates, then the terminal event with the coverage.
+///
+/// A stream is always the full records; the brief view is refused before
+/// anything is analysed ([`crate::read_view::refuse_brief_stream`]), since analysing a
+/// range costs minutes and the answer would then be refused.
 pub(crate) async fn candidates_stream(
     engine: &Engine,
     arguments: CandidatesArguments,
     cancellation: &Cancellation,
 ) -> Result<CandidatesEvidenceStream, CommandFailure> {
+    crate::read_view::refuse_brief_stream(arguments.view)?;
     let results = run(engine, arguments, cancellation).await?;
     CandidatesEvidenceStream::new(&presentation(&results), lifecycle(&results)?)
         .map_err(|_| CommandFailure::from(FailureCode::Internal))

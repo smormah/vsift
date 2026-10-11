@@ -8,7 +8,7 @@ use vsift::{
     ManagedComponent, ManagedVersionKey, ManagedVersionKeyError, OperationId, RuntimeDependency,
     SessionId, SetupProfile, TranscriptRevisionId, VisualCandidateId,
 };
-use vsift_contract::CommandName;
+use vsift_contract::{CommandName, ResultView};
 
 /// The top-level help's worked example: what a first investigation runs, in
 /// order, for a reader (often an agent) that has only this help (P14 PR 7).
@@ -116,6 +116,10 @@ pub(crate) enum Command {
     /// Read or revise timestamped transcript evidence.
     Transcript(TranscriptArguments),
     /// Search timestamped transcript evidence.
+    ///
+    /// Over a part of the range that was not transcribed the answer is partial
+    /// and names the part: a word said there cannot be found, and that is not
+    /// evidence that none was said.
     Search(SearchArguments),
     /// Page through visual evidence candidates.
     Candidates(CandidatesArguments),
@@ -548,6 +552,9 @@ pub(crate) struct TranscriptArguments {
 #[derive(Debug, Subcommand)]
 pub(crate) enum TranscriptCommand {
     /// Read timestamped text from a bounded range.
+    ///
+    /// Over a part of the range that was not transcribed the answer is partial
+    /// and names the part: an empty page there is a gap, not a silence.
     Get(TranscriptGetArguments),
     /// Transcribe the session's speech locally with whisper.cpp into a new
     /// revision: the whole video, or one range of it.
@@ -564,6 +571,30 @@ impl TranscriptCommand {
     }
 }
 
+/// How much of each item a read answers with (#365).
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, ValueEnum)]
+pub(crate) enum ViewArgument {
+    /// Every field of every item: the answer every release gave (the default).
+    #[default]
+    Full,
+    /// Each item without what the answer already states once: the revision's
+    /// hashes, source and model details (or the index's source and size). It
+    /// shapes the --json answer (readable text is the same for both), and
+    /// --events jsonl refuses it, because a stream's records are complete
+    /// evidence.
+    Brief,
+}
+
+impl ViewArgument {
+    /// The contract's view this option names.
+    pub(crate) const fn result_view(self) -> ResultView {
+        match self {
+            Self::Full => ResultView::Full,
+            Self::Brief => ResultView::Brief,
+        }
+    }
+}
+
 /// Bounded, pageable transcript read.
 #[derive(Args, Debug)]
 pub(crate) struct TranscriptGetArguments {
@@ -575,7 +606,8 @@ pub(crate) struct TranscriptGetArguments {
     /// Exclusive source-timeline end in microseconds.
     #[arg(long)]
     pub to: u64,
-    /// Segments per page, 1 through 100; defaults to 20.
+    /// Segments per page, 1 through 100; defaults to 20. The maximum stays 100;
+    /// full segments are large, and --view brief makes a long page smaller.
     #[arg(long, value_parser = clap::value_parser!(u16).range(1..=100))]
     pub limit: Option<u16>,
     /// Opaque continuation token returned by the previous page of the same query.
@@ -584,6 +616,13 @@ pub(crate) struct TranscriptGetArguments {
     /// Revision to read (a `trv_` identity); defaults to the newest.
     #[arg(long)]
     pub revision: Option<TranscriptRevisionId>,
+    /// Which answer to give. `brief` keeps each segment's ids, times and
+    /// `display_text` (and `carried_from` on a carried segment) and leaves out
+    /// what the segments of a revision repeat; those members stay once in the
+    /// revision block, which is the same in both views, so each segment is
+    /// smaller. Read the full view for everything else.
+    #[arg(long = "view", value_enum, default_value_t)]
+    pub view: ViewArgument,
 }
 
 /// Local speech recognition of a session, whole or over one range.
@@ -622,7 +661,8 @@ pub(crate) struct SearchArguments {
     /// Exclusive source-timeline end in microseconds; requires --from.
     #[arg(long, requires = "from")]
     pub to: Option<u64>,
-    /// Hits per page, 1 through 100; defaults to 20.
+    /// Hits per page, 1 through 100; defaults to 20. The maximum stays 100;
+    /// full items are large, and --view brief makes a long page smaller.
     #[arg(long, value_parser = clap::value_parser!(u16).range(1..=100))]
     pub limit: Option<u16>,
     /// Opaque continuation token returned by the previous page of the same search.
@@ -631,6 +671,13 @@ pub(crate) struct SearchArguments {
     /// Revision to search (a `trv_` identity); defaults to the newest.
     #[arg(long)]
     pub revision: Option<TranscriptRevisionId>,
+    /// Which answer to give. `brief` keeps each found segment's ids, times and
+    /// `display_text` (and `carried_from` on a carried segment) and leaves out
+    /// what the segments of a revision repeat; those members stay once in the
+    /// revision block, which is the same in both views, so each segment is
+    /// smaller. Read the full view for everything else.
+    #[arg(long = "view", value_enum, default_value_t)]
+    pub view: ViewArgument,
 }
 
 /// Visual-candidate page request; missing windows of the range are analysed
@@ -646,13 +693,21 @@ pub(crate) struct CandidatesArguments {
     /// of the video is clipped to it.
     #[arg(long)]
     pub to: u64,
-    /// Candidates per page, 1 through 100; defaults to 20.
+    /// Candidates per page, 1 through 100; defaults to 20. The maximum stays
+    /// 100; full items are large, and --view brief makes a long page smaller.
     #[arg(long, value_parser = clap::value_parser!(u16).range(1..=100))]
     pub limit: Option<u16>,
     /// Opaque continuation token returned by the previous page of the same
     /// range; a call with a cursor never analyses anything.
     #[arg(long)]
     pub cursor: Option<String>,
+    /// Which answer to give. `brief` keeps each candidate's id, time, span,
+    /// reasons, stability, the size of the change that opened it and its hash,
+    /// and leaves out what every candidate of the index repeats; those members
+    /// stay once in `item_constants` and the index block, so each candidate is
+    /// smaller. Read the full view for everything else.
+    #[arg(long = "view", value_enum, default_value_t)]
+    pub view: ViewArgument,
 }
 
 /// Frame namespace arguments.

@@ -26,8 +26,17 @@
 //!   before the packets that produce them.
 //! - **Transcript:** [`TranscriptSegmentData`] (the published evidence
 //!   record), [`TranscriptRevisionData`], the `transcript.get` page
-//!   [`TranscriptPageData`], the `transcript.retranscribe` result
-//!   [`TranscriptRetranscribeData`], and fixed-prose warnings and remediation.
+//!   [`TranscriptPageData`] built from a [`TranscriptPresentation`] by
+//!   [`transcript_get_response`] (which also fills the envelope coverage and
+//!   the `partial` status when the range has untranscribed parts, #373), the
+//!   `transcript.retranscribe` result [`TranscriptRetranscribeData`], and
+//!   fixed-prose warnings and remediation.
+//! - **Views:** a [`ResultView`] asks `transcript.get`, `search` and
+//!   `candidates` for the full answer (the default, unchanged) or the brief
+//!   one ([`TranscriptBriefPageData`], [`SearchBriefData`],
+//!   [`CandidatesBriefData`]), which states once what every item of a
+//!   revision or index repeats. Each brief type is projected from its full
+//!   type, and a stream is never brief ([`BRIEF_VIEW_STREAM_REMEDIATION`]).
 //! - **Local ASR:** [`local_asr_failure_summary`] and
 //!   [`local_asr_verification_summary`], the fixed-prose remediation for a
 //!   failed retranscription or its automatic verification, and the fixed
@@ -120,6 +129,7 @@ mod stream;
 mod text;
 mod transcript;
 mod verification;
+mod view;
 mod work;
 mod workspace;
 
@@ -159,9 +169,10 @@ pub use workspace::{
 };
 
 pub use candidates::{
-    CANDIDATE_CURSOR_REMEDIATION, CandidatesData, CandidatesEvidenceStream, CandidatesPresentation,
-    CandidatesStreamData, NO_VIDEO_STREAM_REMEDIATION, VISUAL_COVERAGE_WARNING,
-    VISUAL_TOOLS_REMEDIATION, VisualCandidateData, candidates_response,
+    CANDIDATE_CURSOR_REMEDIATION, CandidatesBriefData, CandidatesData, CandidatesEvidenceStream,
+    CandidatesPresentation, CandidatesStreamData, NO_VIDEO_STREAM_REMEDIATION,
+    VISUAL_COVERAGE_WARNING, VISUAL_TOOLS_REMEDIATION, VisualCandidateData, candidates_response,
+    candidates_response_with_view,
 };
 pub use command::CommandName;
 pub use envelope::{
@@ -213,8 +224,9 @@ pub use navigation::{
     partial_evidence_warning,
 };
 pub use search::{
-    MAX_COVERAGE_RANGES, SearchData, SearchEvidenceStream, SearchPresentation, SearchStreamData,
-    UNTRANSCRIBED_SEARCH_WARNING, search_query_rejection_summary, search_response,
+    MAX_COVERAGE_RANGES, SearchBriefData, SearchData, SearchEvidenceStream, SearchPresentation,
+    SearchStreamData, UNTRANSCRIBED_SEARCH_WARNING, search_query_rejection_summary,
+    search_response, search_response_with_view,
 };
 pub use session::{
     BundleData, BundleSourceInclusion, CleanData, CleanItem, CleanItemOutcome, ListedSession,
@@ -241,8 +253,10 @@ pub use text::{
 pub use transcript::{
     MEDIA_TOOLS_FOR_TRANSCRIPT_REMEDIATION, NO_TRANSCRIPT_REMEDIATION,
     PROVIDER_CHUNKS_REJECTED_WARNING, PROVIDER_SEGMENTS_UNPLACED_WARNING, RetranscribeJob,
-    SourceSegmentData, TranscriptPageData, TranscriptRetranscribeData, TranscriptRevisionData,
-    TranscriptSegmentData, finish_retranscription, retranscription_gaps,
-    transcript_rejection_summary, transcript_warning_messages,
+    SourceSegmentData, TranscriptBriefPageData, TranscriptPageData, TranscriptPresentation,
+    TranscriptRetranscribeData, TranscriptRevisionData, TranscriptSegmentData,
+    UNTRANSCRIBED_READ_WARNING, finish_retranscription, retranscription_gaps,
+    transcript_get_response, transcript_rejection_summary, transcript_warning_messages,
 };
 pub use verification::media_tool_verification_summary;
+pub use view::{BRIEF_VIEW_STREAM_REMEDIATION, ResultView};

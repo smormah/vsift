@@ -26,6 +26,41 @@ Transcribing just a listed stretch again may give the same stretch; a transcript
 **This adds one optional member to the stored transcript record, and `0.2.0` and earlier and `0.2.1-rc.1` read a revision that has it as damaged**: they read newest first, so if the newest revision holds it they can read nothing of the session, and if only an older one does they read the newest normally and refuse the older ones (by id, in `handoff check --session` and in `bundle validate`). It is written only when there is any, a rejected segment with words
 is routine on real speech so a session written by this version may hold one without anything having gone wrong, and nothing written by an earlier release changes.
 
+**The reads pull request of the second `0.2.1` candidate** (the maintainer's decisions of 2026-10-11 from the design of the larger findings, pull request #376; the version stays `0.2.1`).
+Nothing here is published, and nothing changes in the skill, which is a frozen trial component and cannot use the new option until a skill change.
+
+**If you read a transcript or a search with an AI assistant, the pages are a fraction of the size (#365).** `transcript get`, `search` and
+`candidates` take a new option, `--view full|brief`. `full` is the default and is the answer every release gave. `brief` leaves out of each item what every item of one revision (or one visual index) repeats:
+the two SHA-256 digests, the source and source-segment identities, the model and decoding profiles, the provider, the displayed size. The answer states them once, in its revision block (for candidates, in a new
+`item_constants` member), **except that a segment carried into a spliced revision keeps `carried_from`**: it was first produced by another revision's run, so the revision block does not describe it, and the brief item
+says which revision to read it from. A brief transcript segment is its identity, its times, its `display_text` (the form a report quotes, with hidden characters shown), a speaker's `display_label` and, on a carried segment,
+`carried_from`; a brief candidate is its identity, `representative_us`, `span`, `reasons`, `stability`, the size of the change that opened it and its `visual_hash`. **Measured on the committed examples, a page of 50, by repeating each
+example's items (and, for `search`, its hits) to 50: transcript segments of a local transcription fall from 51,618 to 9,883 characters (19.1%) and, with a carried segment, from 57,256 to 15,571 (27.2%); imported cues from 35,511 to 9,251 (26.1%);
+a search from 36,702 to 11,567 (31.5%); candidates from 31,980 to 12,718 (39.8%).** The design's bar of "under a quarter" is met for `transcript get` on a local transcription whose segments are not carried, and not for the others. **The brief view does not shrink the revision block,
+which it keeps whole:** a revision that lists words no segment holds (`local_asr.unplaced_ranges`, above, up to 1,024 stretches) adds about 45 KB to a page in either view, and the figures are for revisions with none. The brief
+answer is made from the full one, so a member of a brief item is the member of the full item with the same value, and it never
+leaves out a gap: coverage, status and warnings are the full answer's. **The brief view is refused with `--events jsonl`** (`INVALID_ARGUMENT`, with a remediation that says why, before anything is read or analysed):
+the records of a stream are published evidence that an index stores by key, and a reduced record would replace a complete one; stored records, retained bundles and streams are never brief. Readable text (no `--json`)
+is the same for both views, and a cursor of one view continues in the other. An older release given `--view` answers that it is an unknown option; nothing it stores differs.
+No filter, progress events or parallel windows were added to `candidates` (#367 asked for them; they wait for a measurement on a real recording), so **#365's closing evidence also needs the skill change and #367's complaint is untouched.**
+
+**If you read a transcript over a part nobody transcribed (#373).** `transcript get` now states what a transcript covers of the range it was asked for, with a new member
+`transcript_coverage` (always present, also in the terminal data of `--events jsonl`), computed by the same rule `search` uses, in the application's read (`Engine::transcript` gives it to a library host as
+`excerpt.coverage()`) and presented by the contract. The read is `partial` (exit 0) exactly when part of the range has no transcript, with the
+envelope `coverage` listing the gaps and a fixed warning that a gap is not a silence; the readable text lists them too, in a read's own words. A complete read keeps `coverage: null`, and its `--json` is what `0.1.0` wrote but for the one new
+member. **This changes the status of an existing answer** for a revision with an uncovered range, which `search` already reported as `partial`. Four causes can leave one: (1) a range-only transcription of a video with no earlier
+transcript; (2) a transcription with an unusable stretch (#353), or a later run elsewhere that leaves a stretch an earlier run could not read still unread; (3) **a range retranscription after a first run with few or no segments** (it replaces every segment the first run has, or the first run has none, which is a run that found only silence),
+which carries nothing from it, so the first run's windows are forgotten ([L-033](docs/planning/known-limits.md#l-033)): a 12 s run with one segment at 1-4 s is complete, and after retranscribing 2-3 s (which snaps to 1-4 s) it reads
+`partial` over 0-12 s with the gaps 0-1 s and 4-12 s; a 55 s run that found only silence says silence for all of 0-55 s, and after retranscribing 5-10 s it reads `partial` over 0-55 s with the gaps 0-5 s and 10-55 s and no silence at all.** Those gaps are false gaps (the first run did read them), never a false silence; and (4) **a stretch where the recogniser wrote words that no segment holds (`local_asr.unplaced_ranges`, above, #359):**
+the run read it and is `complete`, but a read over it shows no words and is `partial`, as a search is; the stretch is an upper bound, so a read can list more time than was lost. **How often a read is `partial` is not known, and it may be often:** since the fix of #359 a rejected segment with words is routine on real speech (above), and each leaves a stretch that is listed; a `partial` read still exits 0, its answer is usable with the gap stated, and `search` already behaves the same. The read's warning is true for every cause: it says the listed parts have no transcript here, that the rest of the answer is usable, and that transcribing just the range may fill it and, if it gives the same stretch, a transcript file supplied with `ingest --transcript` is the sure way. The schema lists the member as a property and not as `required`, because answers of the published `0.1.0` have none and the compatibility test keeps them valid.
+
+### Added
+
+- `--view full|brief` on `transcript get`, `search` and `candidates`; the schemas `transcript-get-brief-data`, `search-brief-data`, `candidates-brief-data`, `transcript-segment-brief` and `visual-candidate-brief`
+  and their examples; `docs/contracts/cli-v1.md` ("Views of a read") and the note of 2026-10-11 in ADR 0008.
+- `transcript_coverage` on `transcript get` and its stream's terminal data, the status `partial` and the envelope `coverage` over a gap, the fixed warning `UNTRANSCRIBED_READ_WARNING`, the example
+  `transcript-get.partial.json`, and the readable text's list of the gaps.
+
 ### Changed
 
 - **Work record, register and a known-issue note only; nothing that ships changes, and nothing is fixed: the findings of the maintainer's live testing on two real recordings, and the plan for a second candidate of `0.2.1`.** A new known limit,

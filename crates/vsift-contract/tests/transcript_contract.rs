@@ -16,15 +16,19 @@ use vsift_application::{
     build_imported_revision, page_transcript,
 };
 use vsift_contract::{
-    LifecycleResponse, OpenData, OperationResponse, TerminalEventResponse, TranscriptPageData,
-    TranscriptSegmentData, transcript_rejection_summary, transcript_warning_messages,
+    LifecycleResponse, OpenData, OperationResponse, ResultView, TerminalEventResponse,
+    TranscriptEvidenceStream, TranscriptPageData, TranscriptPresentation, TranscriptSegmentData,
+    transcript_get_response, transcript_rejection_summary, transcript_warning_messages,
 };
 use vsift_domain::{
     CueSource, CueText, CueTiming, FailureCode, ImportedCue, MediaTime, PageLimit,
-    ParsedTranscript, PublicationGuarantee, SessionId, SessionLifetime, SidecarIdentity, SourceId,
-    SpeakerLabel, StorageGeneration, TimeRange, TranscriptFormat, TranscriptImportError,
-    TranscriptOffset, TranscriptRejection, TranscriptRevision, TranscriptWarnings,
+    ParsedTranscript, PublicationGuarantee, SearchCoverage, SessionId, SessionLifetime,
+    SidecarIdentity, SourceId, SpeakerLabel, StorageGeneration, TimeRange, TranscriptFormat,
+    TranscriptImportError, TranscriptOffset, TranscriptRejection, TranscriptRevision,
+    TranscriptWarnings,
 };
+
+mod common;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
@@ -173,7 +177,14 @@ fn page_response(
     let cursor = page.next_cursor.map(|cursor| cursor.encode());
     Ok(OperationResponse::complete(
         "transcript.get",
-        &TranscriptPageData::new(&session, revision, range, &segments, cursor.as_deref()),
+        &TranscriptPageData::new(&TranscriptPresentation {
+            session_id: &session,
+            revision,
+            range,
+            segments: &segments,
+            next_cursor: cursor.as_deref(),
+            coverage: &page.coverage,
+        }),
     )?
     .with_lifecycle(LifecycleResponse::ephemeral(EXPIRES_AT.to_owned())))
 }
@@ -455,5 +466,387 @@ fn display_text_makes_hidden_characters_visible_and_keeps_text_raw() -> TestResu
         plain["display_text"],
         "End of the synthetic imported transcript."
     );
+    Ok(())
+}
+
+// --- The views and the coverage of a read (0.2.1: #365 and #373) ---------------
+
+type Built<T> = Result<T, Box<dyn std::error::Error>>;
+
+/// Whether `brief` is a projection of `full`: every member of `brief`, at every
+/// depth, is a member of `full` with the same value, and an array is one when
+/// each of its elements is. The views cannot drift apart because a brief member
+/// is only ever a full member.
+fn is_projection_of(brief: &Value, full: &Value) -> bool {
+    match (brief, full) {
+        (Value::Object(brief), Value::Object(full)) => brief.iter().all(|(member, value)| {
+            full.get(member)
+                .is_some_and(|other| is_projection_of(value, other))
+        }),
+        (Value::Array(brief), Value::Array(full)) => {
+            brief.len() == full.len()
+                && brief
+                    .iter()
+                    .zip(full)
+                    .all(|(brief, full)| is_projection_of(brief, full))
+        }
+        (brief, full) => brief == full,
+    }
+}
+
+fn members(value: &Value) -> Built<Vec<&str>> {
+    Ok(value
+        .as_object()
+        .ok_or("not an object")?
+        .keys()
+        .map(String::as_str)
+        .collect())
+}
+
+/// One page of `revision` through `transcript_get_response`, as the CLI
+/// presents it, in `view`.
+fn view_response(
+    revision: &TranscriptRevision,
+    range: TimeRange,
+    limit: u16,
+    view: ResultView,
+) -> Built<Value> {
+    let session = SessionId::parse(SESSION)?;
+    let page = page_transcript(
+        &session,
+        revision,
+        &TranscriptPageRequest {
+            range,
+            limit: PageLimit::new(limit)?,
+            cursor: None,
+        },
+        CURSOR_EXPIRES_US,
+        NOW_US,
+    )?;
+    let segments: Vec<_> = page.segments.into_iter().cloned().collect();
+    let cursor = page.next_cursor.map(|cursor| cursor.encode());
+    Ok(serde_json::to_value(transcript_get_response(
+        &TranscriptPresentation {
+            session_id: &session,
+            revision,
+            range,
+            segments: &segments,
+            next_cursor: cursor.as_deref(),
+            coverage: &page.coverage,
+        },
+        LifecycleResponse::ephemeral(EXPIRES_AT.to_owned()),
+        view,
+    )?)?)
+}
+
+fn micros(from: u64, to: u64) -> Built<TimeRange> {
+    Ok(TimeRange::new(
+        MediaTime::from_micros(from),
+        MediaTime::from_micros(to),
+    )?)
+}
+
+/// #365: the brief page is the full page with each item reduced to what a
+/// reader cites and places. The envelope and every member outside the items are
+/// the full page's own, value for value; each brief item is a projection of its
+/// full item; the full answer names no view and the brief one says so.
+#[test]
+fn the_brief_page_is_a_projection_of_the_full_page() -> TestResult {
+    let revision = f10_revision()?;
+    let range = micros(0, 12_000_000)?;
+    let full = view_response(&revision, range, 2, ResultView::Full)?;
+    let brief = view_response(&revision, range, 2, ResultView::Brief)?;
+
+    validate("operation-response.schema.json", &brief)?;
+    validate("transcript-get-brief-data.schema.json", &brief["data"])?;
+    assert!(full["data"].get("view").is_none());
+    assert_eq!(brief["data"]["view"], "brief");
+    // The default view is the answer every release gave, plus the new member.
+    assert_eq!(
+        full,
+        serde_json::to_value(page_response(&revision, 0, 12_000_000, 2)?)?
+    );
+
+    for (member, value) in full.as_object().ok_or("not an object")? {
+        if member != "data" {
+            assert_eq!(&brief[member], value, "envelope member {member}");
+        }
+    }
+    for (member, value) in full["data"].as_object().ok_or("not an object")? {
+        if member != "items" {
+            assert_eq!(&brief["data"][member], value, "data member {member}");
+        }
+    }
+    let (full_items, brief_items) = (
+        full["data"]["items"].as_array().ok_or("items missing")?,
+        brief["data"]["items"].as_array().ok_or("items missing")?,
+    );
+    assert_eq!(full_items.len(), 2);
+    assert_eq!(brief_items.len(), full_items.len());
+    for (brief_item, full_item) in brief_items.iter().zip(full_items) {
+        validate("transcript-segment-brief.schema.json", brief_item)?;
+        assert!(is_projection_of(brief_item, full_item));
+        // An item with no speaker names none, rather than a null.
+        assert_eq!(
+            members(brief_item)?,
+            ["display_text", "end_us", "segment_id", "start_us"]
+        );
+    }
+    // What the brief item leaves out is in the revision block, once.
+    assert_eq!(
+        brief["data"]["revision"]["revision_id"],
+        full_items[0]["revision_id"]
+    );
+    assert_eq!(
+        brief["data"]["revision"]["source_id"],
+        full_items[0]["source_id"]
+    );
+    assert_eq!(
+        brief["data"]["revision"]["source_segments"][0]["source_segment_id"],
+        full_items[0]["source_segment_id"]
+    );
+    Ok(())
+}
+
+/// #365: the brief page of fifty imported cues (the committed example's items
+/// repeated to fifty, `common::page_of_fifty`) is under three tenths of the full
+/// page: 35,511 and 9,251 characters, 26.1%.
+#[test]
+fn a_brief_page_of_fifty_imported_cues_has_the_measured_share() -> TestResult {
+    let revision = f10_revision()?;
+    let range = micros(0, 12_000_000)?;
+    let full = common::page_of_fifty(&view_response(&revision, range, 2, ResultView::Full)?)?;
+    let brief = common::page_of_fifty(&view_response(&revision, range, 2, ResultView::Brief)?)?;
+    assert!(brief * 10 < full * 3, "{brief} of {full}");
+    Ok(())
+}
+
+/// #365: a page of fifty segments, the `standard` profile's page size, in
+/// both views. The brief page is a fraction of the full page (the issue: a
+/// client cut a 54,000-character page at about 43,000 and lost its last items
+/// and its cursor).
+#[test]
+fn a_brief_page_of_fifty_segments_is_a_fraction_of_the_full_page() -> TestResult {
+    let mut cues = Vec::new();
+    for ordinal in 1..=50_u32 {
+        let start = u64::from(ordinal) * 2_000_000;
+        let text = format!(
+            "Step {ordinal} of the walkthrough opens the settings page and checks the build."
+        );
+        cues.push(ImportedCue {
+            source: CueSource::new(
+                NonZeroU32::new(ordinal).ok_or("zero ordinal")?,
+                NonZeroU32::new(ordinal * 4).ok_or("zero line")?,
+            ),
+            timing: CueTiming::new(start, start + 1_800_000)?,
+            text: CueText::new(text.clone(), text)?,
+            speaker: None,
+        });
+    }
+    let supplied = SuppliedTranscript {
+        transcript: ParsedTranscript::new(
+            TranscriptFormat::Srt,
+            None,
+            cues,
+            TranscriptWarnings::default(),
+        )?,
+        sidecar: SidecarIdentity::new(F10_SRT_SHA256, F10_SRT_BYTES)?,
+    };
+    let revision = build_imported_revision(ImportedRevisionRequest {
+        session_id: &SessionId::parse(SESSION)?,
+        source_id: &SourceId::parse(F10_SOURCE)?,
+        source_duration: MediaTime::from_micros(120_000_000),
+        supplied: &supplied,
+        offset: TranscriptOffset::from_micros(0)?,
+        number: NonZeroU32::MIN,
+    })?;
+    let range = micros(0, 120_000_000)?;
+    let full = view_response(&revision, range, 50, ResultView::Full)?;
+    let brief = view_response(&revision, range, 50, ResultView::Brief)?;
+    assert_eq!(full["data"]["items"].as_array().map(Vec::len), Some(50));
+    assert_eq!(brief["data"]["items"].as_array().map(Vec::len), Some(50));
+    let (full_size, brief_size) = (
+        serde_json::to_string(&full)?.len(),
+        serde_json::to_string(&brief)?.len(),
+    );
+    assert!(
+        brief_size * 3 < full_size,
+        "a brief page of 50 is {brief_size} characters, the full page {full_size}"
+    );
+    Ok(())
+}
+
+/// A speaker is shown by its `display_label` and its origin, never its raw
+/// label; the text is `display_text`, with the hidden characters visible; the
+/// raw `text`, `original_text` and `label` are in the full view only.
+#[test]
+fn a_brief_item_quotes_display_text_and_the_display_label_only() -> TestResult {
+    let mut cues = f10_cues()?;
+    cues[0].text = CueText::new(
+        "Status: \u{202E}DELIAF\u{202C} build".to_owned(),
+        "Status: &#x202E;DELIAF&#x202C; build".to_owned(),
+    )?;
+    cues[1].speaker = Some(SpeakerLabel::parse("Admin\u{2066}istrator")?);
+    let supplied = SuppliedTranscript {
+        transcript: ParsedTranscript::new(
+            TranscriptFormat::WebVtt,
+            None,
+            cues,
+            TranscriptWarnings::default(),
+        )?,
+        sidecar: SidecarIdentity::new(F10_SRT_SHA256, F10_SRT_BYTES)?,
+    };
+    let revision = build_imported_revision(ImportedRevisionRequest {
+        session_id: &SessionId::parse(SESSION)?,
+        source_id: &SourceId::parse(F10_SOURCE)?,
+        source_duration: MediaTime::from_micros(12_000_000),
+        supplied: &supplied,
+        offset: TranscriptOffset::from_micros(500_000)?,
+        number: NonZeroU32::MIN,
+    })?;
+    let range = micros(0, 12_000_000)?;
+    let brief = view_response(&revision, range, 20, ResultView::Brief)?;
+    validate("transcript-get-brief-data.schema.json", &brief["data"])?;
+    let items = brief["data"]["items"].as_array().ok_or("items missing")?;
+    assert_eq!(
+        items[0]["display_text"],
+        "Status: <U+202E>DELIAF<U+202C> build"
+    );
+    assert_eq!(
+        items[1]["speaker"],
+        serde_json::json!({
+            "display_label": "Admin<U+2066>istrator",
+            "origin": "imported_webvtt_voice",
+        })
+    );
+    // The raw forms are not in the answer at all, anywhere.
+    let text = serde_json::to_string(&brief)?;
+    for raw in [
+        "\u{202E}",
+        "\u{2066}",
+        "\\u202e",
+        "\\u2066",
+        "original_text",
+    ] {
+        assert!(!text.contains(raw), "{raw:?} is in the brief answer");
+    }
+    // A brief item is a projection of the full item, speaker included.
+    let full = view_response(&revision, range, 20, ResultView::Full)?;
+    let full_items = full["data"]["items"].as_array().ok_or("items missing")?;
+    for (brief_item, full_item) in items.iter().zip(full_items) {
+        assert!(is_projection_of(brief_item, full_item));
+    }
+    Ok(())
+}
+
+/// #373: an imported transcript is taken to cover the whole source, so a read
+/// of a range with no cue in it is complete: it says what it covers and that
+/// the file's completeness is not verified (`basis`), and keeps `coverage`
+/// null as the answer always had. A range past the end of the video is
+/// clipped to it; one wholly outside it searches nothing and is complete.
+#[test]
+fn an_imported_transcript_covers_the_whole_source() -> TestResult {
+    let revision = f10_revision()?;
+    for (from, to, searched) in [
+        // No cue lies in 3.5-4.5 s (cues: 0.5-3.5, 4.5-8.5, 9-11 s).
+        (3_500_000, 4_500_000, Some((3_500_000, 4_500_000))),
+        // The source is 12 s long: the request is clipped to it.
+        (11_000_000, 20_000_000, Some((11_000_000, 12_000_000))),
+        // Wholly past the end: nothing to cover.
+        (20_000_000, 30_000_000, None),
+    ] {
+        let response = view_response(&revision, micros(from, to)?, 20, ResultView::Full)?;
+        validate("operation-response.schema.json", &response)?;
+        validate("transcript-get-data.schema.json", &response["data"])?;
+        assert_eq!(response["status"], "complete", "{from}-{to}");
+        assert!(response["coverage"].is_null(), "{from}-{to}");
+        assert_eq!(response["warnings"], serde_json::json!([]), "{from}-{to}");
+        let coverage = &response["data"]["transcript_coverage"];
+        assert_eq!(coverage["basis"], "supplied_transcript");
+        assert_eq!(coverage["scope"], "transcript_text");
+        assert_eq!(coverage["untranscribed_ranges"], serde_json::json!([]));
+        assert_eq!(coverage["no_speech_ranges"], serde_json::json!([]));
+        assert_eq!(coverage["ranges_truncated"], false);
+        if let Some((start, end)) = searched {
+            let range = serde_json::json!({"from_us": start, "to_us": end});
+            assert_eq!(coverage["searched_range"], range);
+            assert_eq!(coverage["transcribed_ranges"], serde_json::json!([range]));
+        } else {
+            assert!(coverage["searched_range"].is_null());
+            assert_eq!(coverage["transcribed_ranges"], serde_json::json!([]));
+        }
+    }
+    Ok(())
+}
+
+/// #373: the member is always there, on the page of any range and in the
+/// terminal data of the stream, and the stream's records are untouched by it.
+#[test]
+fn the_stream_states_the_coverage_its_page_does() -> TestResult {
+    let revision = f10_revision()?;
+    let range = micros(0, 12_000_000)?;
+    let session = SessionId::parse(SESSION)?;
+    let stream = TranscriptEvidenceStream::new(
+        &TranscriptPresentation {
+            session_id: &session,
+            revision: &revision,
+            range,
+            segments: &revision.segments()[..2],
+            next_cursor: None,
+            coverage: &SearchCoverage::of(&revision, Some(range)),
+        },
+        LifecycleResponse::ephemeral(EXPIRES_AT.to_owned()),
+    )?;
+    let terminal = serde_json::to_value(stream.terminal())?;
+    validate("terminal-event.schema.json", &terminal)?;
+    validate(
+        "transcript-get-stream-data.schema.json",
+        &terminal["result"]["data"],
+    )?;
+    let page = view_response(&revision, range, 2, ResultView::Full)?;
+    assert_eq!(
+        terminal["result"]["data"]["transcript_coverage"],
+        page["data"]["transcript_coverage"]
+    );
+    assert_eq!(terminal["result"]["status"], "complete");
+    // The records are the full segments, byte for byte, in every case.
+    for (record, segment) in stream.records().iter().zip(revision.segments()) {
+        let value = serde_json::to_value(record)?;
+        assert_eq!(
+            value["record"],
+            serde_json::to_value(TranscriptSegmentData::new(&revision, segment))?
+        );
+        assert_eq!(value["key"], value["record"]["segment_id"]);
+    }
+    Ok(())
+}
+
+/// The new members are listed in the published schemas, and a view the
+/// contract names is a view the brief schemas allow.
+#[test]
+fn the_published_schemas_describe_the_views_and_the_coverage() -> TestResult {
+    let brief = load("transcript-get-brief-data.schema.json")?;
+    assert_eq!(brief["properties"]["view"]["const"], "brief");
+    assert!(
+        brief["required"]
+            .as_array()
+            .ok_or("no required list")?
+            .contains(&Value::from("transcript_coverage"))
+    );
+    for view in ResultView::ALL {
+        // `full` is the absence of the member: only `brief` names itself.
+        assert_eq!(
+            brief["properties"]["view"]["const"] == view.identifier(),
+            view == ResultView::Brief
+        );
+    }
+    // The 0.1.0 answers have no coverage and stay valid against the schema:
+    // the member is always emitted, and the schema cannot require it.
+    let mut old = load("examples/transcript-get.json")?;
+    old["data"]
+        .as_object_mut()
+        .ok_or("data is not an object")?
+        .remove("transcript_coverage");
+    validate("transcript-get-data.schema.json", &old["data"])?;
     Ok(())
 }

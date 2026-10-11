@@ -107,7 +107,29 @@
         }
       ]
     },
-    "session_id": "ses_0123456789abcdef0123456789abcdef"
+    "session_id": "ses_0123456789abcdef0123456789abcdef",
+    "transcript_coverage": {
+      "basis": "local_asr",
+      "no_speech_ranges": [
+        {
+          "from_us": 5500000,
+          "to_us": 6000000
+        }
+      ],
+      "ranges_truncated": false,
+      "scope": "transcript_text",
+      "searched_range": {
+        "from_us": 0,
+        "to_us": 6000000
+      },
+      "transcribed_ranges": [
+        {
+          "from_us": 0,
+          "to_us": 6000000
+        }
+      ],
+      "untranscribed_ranges": []
+    }
   },
   "warnings": [],
   "error": null,

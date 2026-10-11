@@ -3,11 +3,13 @@
 use std::{ffi::OsStr, path::PathBuf};
 
 use vsift_application::{
-    SuppliedTranscriptError, TranscriptImportRequest, TranscriptPageRequest, page_transcript,
+    SuppliedTranscriptError, TranscriptImportRequest, TranscriptPage, TranscriptPageRequest,
+    page_transcript,
 };
 use vsift_domain::{
-    MediaTime, PageLimit, RuntimeDependency, SessionId, TimeRange, TranscriptImportError,
-    TranscriptOffset, TranscriptRevision, TranscriptRevisionId, TranscriptSegment,
+    MediaTime, PageLimit, RuntimeDependency, SearchCoverage, SessionId, TimeRange,
+    TranscriptImportError, TranscriptOffset, TranscriptRevision, TranscriptRevisionId,
+    TranscriptSegment,
 };
 use vsift_infrastructure::{
     ContainedFile, ExecutableResolutionError, ExecutableResolver, MediaProviderConformance,
@@ -49,6 +51,7 @@ pub struct TranscriptExcerpt {
     range: TimeRange,
     segments: Vec<TranscriptSegment>,
     next_cursor: Option<String>,
+    coverage: SearchCoverage,
 }
 
 impl TranscriptExcerpt {
@@ -80,6 +83,15 @@ impl TranscriptExcerpt {
     #[must_use]
     pub fn next_cursor(&self) -> Option<&str> {
         self.next_cursor.as_deref()
+    }
+
+    /// What the revision's transcript covers of the requested range (#373),
+    /// the coverage of the whole range and not of this page, by the rule
+    /// `search` uses. A host that reads the page tells a part nobody
+    /// transcribed from a silence with this: an empty page there is a gap.
+    #[must_use]
+    pub const fn coverage(&self) -> &SearchCoverage {
+        &self.coverage
     }
 }
 
@@ -133,14 +145,20 @@ impl Engine {
             now.saturating_mul(MICROS_PER_SECOND),
         )
         .map_err(EngineError::TranscriptQuery)?;
-        let segments = page.segments.into_iter().cloned().collect();
-        let next_cursor = page.next_cursor.map(|cursor| cursor.encode());
+        let TranscriptPage {
+            segments,
+            next_cursor,
+            coverage,
+        } = page;
+        let segments = segments.into_iter().cloned().collect();
+        let next_cursor = next_cursor.map(|cursor| cursor.encode());
         Ok(TranscriptExcerpt {
             session: SessionSnapshot::observe(&status, now),
             revision,
             range,
             segments,
             next_cursor,
+            coverage,
         })
     }
 

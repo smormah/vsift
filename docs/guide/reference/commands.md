@@ -1004,7 +1004,9 @@ Options:
 Read timestamped text from a bounded range.
 
 ```text
-Read timestamped text from a bounded range
+Read timestamped text from a bounded range.
+
+Over a part of the range that was not transcribed the answer is partial and names the part: an empty page there is a gap, not a silence.
 
 Usage: vsift transcript get [OPTIONS] --from <FROM> --to <TO> <SESSION>
 
@@ -1029,7 +1031,7 @@ Options:
           Exclusive source-timeline end in microseconds
 
       --limit <LIMIT>
-          Segments per page, 1 through 100; defaults to 20
+          Segments per page, 1 through 100; defaults to 20. The maximum stays 100; full segments are large, and --view brief makes a long page smaller
 
       --session-root <SESSION_ROOT>
           For operators who run a worker host; an agent leaves it out. Explicit private disposable-session root; defaults to the per-user cache
@@ -1048,6 +1050,15 @@ Options:
 
       --revision <REVISION>
           Revision to read (a `trv_` identity); defaults to the newest
+
+      --view <VIEW>
+          Which answer to give. `brief` keeps each segment's ids, times and `display_text` (and `carried_from` on a carried segment) and leaves out what the segments of a revision repeat; those members stay once in the revision block, which is the same in both views, so each segment is smaller. Read the full view for everything else
+
+          Possible values:
+          - full:  Every field of every item: the answer every release gave (the default)
+          - brief: Each item without what the answer already states once: the revision's hashes, source and model details (or the index's source and size). It shapes the --json answer (readable text is the same for both), and --events jsonl refuses it, because a stream's records are complete evidence
+
+          [default: full]
 
   -h, --help
           Print help (see a summary with '-h')
@@ -1106,7 +1117,9 @@ Options:
 Search timestamped transcript evidence.
 
 ```text
-Search timestamped transcript evidence
+Search timestamped transcript evidence.
+
+Over a part of the range that was not transcribed the answer is partial and names the part: a word said there cannot be found, and that is not evidence that none was said.
 
 Usage: vsift search [OPTIONS] --query <QUERY> <SESSION>
 
@@ -1146,13 +1159,22 @@ Options:
           [default: process-only]
 
       --limit <LIMIT>
-          Hits per page, 1 through 100; defaults to 20
+          Hits per page, 1 through 100; defaults to 20. The maximum stays 100; full items are large, and --view brief makes a long page smaller
 
       --cursor <CURSOR>
           Opaque continuation token returned by the previous page of the same search
 
       --revision <REVISION>
           Revision to search (a `trv_` identity); defaults to the newest
+
+      --view <VIEW>
+          Which answer to give. `brief` keeps each found segment's ids, times and `display_text` (and `carried_from` on a carried segment) and leaves out what the segments of a revision repeat; those members stay once in the revision block, which is the same in both views, so each segment is smaller. Read the full view for everything else
+
+          Possible values:
+          - full:  Every field of every item: the answer every release gave (the default)
+          - brief: Each item without what the answer already states once: the revision's hashes, source and model details (or the index's source and size). It shapes the --json answer (readable text is the same for both), and --events jsonl refuses it, because a stream's records are complete evidence
+
+          [default: full]
 
   -h, --help
           Print help (see a summary with '-h')
@@ -1188,7 +1210,7 @@ Options:
           Exclusive source-timeline end in microseconds; a range past the end of the video is clipped to it
 
       --limit <LIMIT>
-          Candidates per page, 1 through 100; defaults to 20
+          Candidates per page, 1 through 100; defaults to 20. The maximum stays 100; full items are large, and --view brief makes a long page smaller
 
       --session-root <SESSION_ROOT>
           For operators who run a worker host; an agent leaves it out. Explicit private disposable-session root; defaults to the per-user cache
@@ -1204,6 +1226,15 @@ Options:
           - strict-linux: The strict Linux worker boundary: accepted only when the kernel attests a cgroup v2 with CPU, memory and process limits, a read-only root and no network but loopback; otherwise `ISOLATION_UNAVAILABLE` before any work
 
           [default: process-only]
+
+      --view <VIEW>
+          Which answer to give. `brief` keeps each candidate's id, time, span, reasons, stability, the size of the change that opened it and its hash, and leaves out what every candidate of the index repeats; those members stay once in `item_constants` and the index block, so each candidate is smaller. Read the full view for everything else
+
+          Possible values:
+          - full:  Every field of every item: the answer every release gave (the default)
+          - brief: Each item without what the answer already states once: the revision's hashes, source and model details (or the index's source and size). It shapes the --json answer (readable text is the same for both), and --events jsonl refuses it, because a stream's records are complete evidence
+
+          [default: full]
 
   -h, --help
           Print help (see a summary with '-h')

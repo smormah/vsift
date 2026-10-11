@@ -216,7 +216,7 @@ recognition. Nothing was committed, the job is marked failed and not resumable, 
 starts it from the beginning. (A recording in which only a stretch or two fail is not this: it finishes as `partial`,
 with those stretches listed as not transcribed. Before `0.2.1` a single such stretch failed the whole run.)
 
-**A sentence breaks off where two 30-second chunks meet and carries on in the middle of a phrase, or `search` is `partial`
+**A sentence breaks off where two 30-second chunks meet and carries on in the middle of a phrase, or `search` or `transcript get` is `partial`
 for a stretch of a recording whose run was `complete`.** The first is the defect of [L-149](../planning/known-limits.md#l-149) in `0.2.0` and
 `0.2.1-rc.1`: the transcript lost the end of a copy at a join and `search` called the stretch transcribed. From the second
 `0.2.1` candidate on, run `vsift transcript retranscribe` again over that part (`--from` and `--to` a minute either side);

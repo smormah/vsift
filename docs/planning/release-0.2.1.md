@@ -1,9 +1,11 @@
 # The patch release 0.2.1: the plan
 
 Status: a plan, rewritten on 2026-10-11 after the maintainer's live testing on real recordings. **`0.2.1` does not exist. Its first candidate, `0.2.1-rc.1`, was published on 2026-10-10 under npm's `next`
-and is SUPERSEDED; a second candidate, `0.2.1-rc.2`, is to be cut. Merged for it so far: the fix of #359 (#377) and the Answers pull request (#378); the designs of the larger changes are not decided.**
+and is SUPERSEDED; a second candidate, `0.2.1-rc.2`, is to be cut. For it `main` has the fix of #359 (#377), the Answers change (#369 and #372, #378) and, with the Reads change (#365's brief view, #373's coverage on `transcript get` and the brief view of #367's candidates), the first
+of the larger changes; the skill, the cut and the evidence are to do. The maintainer decided on 2026-10-11 that the version stays `0.2.1`, that #368 is out of scope for this line, that `transcript get`
+over a part nobody transcribed answers `partial` as `search` does, and that the brief view is built on `transcript get`, `search` and `candidates`; the other designs are not decided.**
 Nothing here is evidence: the evidence ledger holds nothing for any `0.2.1` candidate. It decides nothing for the maintainer: every decision it lists as open is open, and the designs of the larger changes
-below are not decided. The runbook is [`release.md`](../operations/release.md) section 6.14, the current position is in `memory/project_current_status.md`, and the register entries are
+below are decided only where it says so. The runbook is [`release.md`](../operations/release.md) section 6.14, the current position is in `memory/project_current_status.md`, and the register entries are
 [L-145](known-limits.md#l-145) to [L-154](known-limits.md#l-154), [L-155](known-limits.md#l-155) to [L-160](known-limits.md#l-160) (the limits #359's fix leaves) and [L-142](known-limits.md#l-142).
 
 ## What this release is, and why
@@ -26,8 +28,8 @@ ride along.** **It is a patch release, not a work packet.** P00 to P14 stay comp
 | `0.2.0` | Published 2026-10-09; npm `latest`; not deprecated. Has L-145 (fixed on `main`, not released) and L-149 (fixed on `main` by #377, not released). |
 | `0.2.1-rc.1` | **Published 2026-10-10** (tag `v0.2.1-rc.1` at `cb8cb3a`; Release run 38084137607; a GitHub pre-release; npm `next` on all four packages). `P14 verify release` (run 38086846526) passed: `next 0.2.1-rc.1, latest 0.2.0`, GitHub's latest release `v0.2.0`. It carries the fix of #353, the changes of #340, #342 and #345 and the first new skill, **and it has L-149 too** (`merge_chunks` is the same code as in `0.2.0`). **Superseded by rc.2; not deprecated.** |
 | rc.1's hosted evidence | **Stopped on purpose, by the supervisor session, on the maintainer's decision of 2026-10-11 to put #359 into `0.2.1`:** that changes the transcription code, so the evidence gathered on rc.1 is obsolete. The supervisor session stopped the hosted-evidence agent and cancelled the hosted campaign runs it had dispatched for rc.1 (the 8 cancelled runs below); what had already finished stays as history. Of the 14 hosted runs started after the publish, 6 finished green (`P14 verify release`, `P13 managed smoke`, `P14 compatibility`, `P14 scan reading`, `P14 runbook walk`, `P14 malicious media`) and 8 were cancelled (`P14 published artifacts`, `P14 journeys`, `Fuzz`, `P14 stress`, `P14 load`, `P07 local ASR`, `P13 managed power loss`, `P10 durability campaign`). **None of them is recorded in the ledger as evidence for rc.1 or for `0.2.1`, and the cancelled ones show nothing.** Agent batches 2 and 3 were not run on rc.1; they are run once, on rc.2. |
-| `main` | Has everything rc.1 has (it was rc.1's commit, `cb8cb3a`, when this was written) and, since then, #359's fix (#377) and the Answers pull request (#378); nothing for the larger findings below (the reads pull request, #379, is open and separate). |
-| `0.2.1-rc.2` | Planned, not started. |
+| `main` | Has everything rc.1 has (it was rc.1's commit, `cb8cb3a`, when this was written), #359's fix (#377), the Answers change (#378) and, with the Reads change, #365's brief view, #373's coverage and the brief view of #367; nothing for the findings below that are still undecided. |
+| `0.2.1-rc.2` | Planned; its changes are being merged one pull request at a time; not cut. |
 
 ## What is in it
 
@@ -40,7 +42,7 @@ ride along.** **It is a patch release, not a work packet.** P00 to P14 stay comp
 | A flaky Windows test | #356 (#345) | the test retries the start race | the race is still in the harness's `run` (part of the frozen grader) |
 | The agent skill, first change | the cut of rc.1 (#349 and the three above) | "video walkthrough"; a partial transcription's stretches are gaps with the reason `untranscribed_range`; a `BUSY` is retried once; an audio clip tells an agent nothing | no trial has run on it and no scenario exercises the partial rule |
 
-**Decided on 2026-10-11 to go into `0.2.1` (rc.2); the design of each is NOT decided** (a design pass is under way; the issues' proposals are for decision):
+**Decided on 2026-10-11 to go into `0.2.1` (rc.2).** The design of #365, #373 and the brief part of #367 is decided and built (the Reads change); #368 is out of scope for this line; the others are for decision (the design of the second candidate is `release-0.2.1-findings-design.md`). What each issue proposed:
 
 | Issue | Register | The finding | What the issue proposes (for decision) |
 | --- | --- | --- | --- |
@@ -48,7 +50,7 @@ ride along.** **It is a patch release, not a work packet.** P00 to P14 stay comp
 | [#365](https://github.com/smormah/vsift/issues/365) | [L-150](known-limits.md#l-150) | each `transcript get` and `search` item repeats about 850 characters; a page of 50 is about 54,000 characters and an agent client lost items and the cursor | an additive opt-in compact form without the per-revision constants; a page size in the skill that fits; settle the `--limit` help (1 to 100 against a budget of 50) |
 | [#366](https://github.com/smormah/vsift/issues/366) | [L-151](known-limits.md#l-151) | `handoff check` cannot take a long report on Windows (both skill forms use the command line) | a way to give the check a report that is not on the command line, or a check of the `vsift-handoff` block alone, or a stated size limit; measure the failing lengths first |
 | [#367](https://github.com/smormah/vsift/issues/367) | [L-152](known-limits.md#l-152) | `candidates` on a long recording runs past a client's tool limit with no output and is too dense to page | a way to ask only for real screen changes; progress or an expected time; skill guidance for long recordings |
-| [#368](https://github.com/smormah/vsift/issues/368) | [L-153](known-limits.md#l-153) | a whole-recording question (summary, timeline) does not fit the budgets or the report's limits | first decide whether whole-recording questions are in scope for this line; then a procedure, a profile and schema limits that fit, or a description that says they are not |
+| [#368](https://github.com/smormah/vsift/issues/368) | [L-153](known-limits.md#l-153) | a whole-recording question (summary, timeline) does not fit the budgets or the report's limits | **decided 2026-10-11: out of scope for this line**; a description that says they are not, and a stated limit |
 | [#370](https://github.com/smormah/vsift/issues/370) | [L-154](known-limits.md#l-154) | `frame get` is `BUSY` while a transcription of the session runs | frames can be extracted meanwhile, or the `BUSY` names the job and the skill says to ask after it |
 
 **Smaller findings, also for rc.2 (no register entries: wording and skill-text findings, tracked by their issues):**
@@ -136,12 +138,11 @@ All four were decisions about `0.2.0-rc.3`'s evidence and were carried to `0.2.0
 
 ## Open decisions
 
-- **The version number (OPEN, nothing decided).** The larger changes may add new options or members to the v1 contract (a compact form of `transcript get` and `search`, a filter for `candidates`, a `transcript_coverage`
-  member for `transcript get`, a way to give `handoff check` a report). They are additive, which the v1 policy allows, but they are more than a patch: **the maintainer may prefer `0.3.0` to `0.2.1`.** A change of number renames
-  the candidate (`0.3.0-rc.1`, not `0.2.1-rc.2`), the five version files, the runbook, the changelog, the trial documents and the guide's marker, and every "planned for 0.2.1" in the README, the install guide, the register and this plan.
-  The note in the README and the install guide says "0.2.1" today because that is what the maintainer decided on 2026-10-11.
+- **The version number: decided on 2026-10-11, it stays `0.2.1`.** The larger changes add new options and members to the v1 contract (the `--view` option, a `transcript_coverage` member for `transcript get`; a way to give `handoff check` a
+  report is not decided). They are additive, which the v1 policy allows; a change of number would have renamed the candidate (`0.3.0-rc.1`), the five version files, the runbook, the changelog, the
+  trial documents, the guide's marker and every "planned for 0.2.1". It changes the status of one existing answer, a `transcript get` over a part nobody transcribed, which `search` already reported as `partial`.
 - Carry each of the four waivers, or not (above).
-- **Whether whole-recording questions are in scope for this release line** (the first question of #368), and what rc.2's skill says either way.
+- **What rc.2's skill says about whole-recording questions** (#368 is out of scope for this line, decided 2026-10-11): the description and a stated limit.
 - Whether to deprecate `0.2.1-rc.1` on npm now (it has L-149 and the first skill's untried rules) or at the stable release, as `0.2.0-rc.1` and `-rc.2` were deprecated (the earlier decision, for `0.2.0`, was at the stable release and no sooner), and `0.2.0-rc.3` with it.
 - Add a scenario for a partial transcription, a seam loss or a whole-recording question to the agent trials (a new freeze and candidate), now or after `0.2.1`.
 - Confirm the severities of L-145 and L-149 (both high; L-149's reading of the rubric's first line is stated in its entry) and whether plan section 12's and 31.4's wording is amended; confirm L-146 to L-148, L-150 to L-154 and L-155 to L-160 (all `pending`).

@@ -30,12 +30,14 @@ use vsift_contract::{
     LOCAL_ASR_TOOLS_REMEDIATION, LifecycleResponse, NO_AUDIO_STREAM_REMEDIATION,
     NO_TRANSCRIPT_REMEDIATION, OperationResponse, PROVIDER_CHUNKS_REJECTED_WARNING,
     PROVIDER_SEGMENTS_UNPLACED_WARNING, ProgressEventResponse, ProgressReport,
-    RESUMED_FROM_CHECKPOINT_WARNING, RetranscribeJob, SUPERSEDED_REMEDIATION, SessionJobData,
-    SessionState, SessionStatusData, StatusData, TerminalEventResponse, TranscriptEvidenceStream,
-    TranscriptPageData, TranscriptRetranscribeData, TranscriptRevisionData,
-    UNKNOWN_JOB_REMEDIATION, UNKNOWN_REVISION_REMEDIATION, UNPINNED_MODEL_REMEDIATION,
+    RESUMED_FROM_CHECKPOINT_WARNING, ResultView, RetranscribeJob, SUPERSEDED_REMEDIATION,
+    SearchPresentation, SessionJobData, SessionState, SessionStatusData, StatusData,
+    TerminalEventResponse, TranscriptEvidenceStream, TranscriptPageData, TranscriptPresentation,
+    TranscriptRetranscribeData, TranscriptRevisionData, UNKNOWN_JOB_REMEDIATION,
+    UNKNOWN_REVISION_REMEDIATION, UNPINNED_MODEL_REMEDIATION, UNTRANSCRIBED_READ_WARNING,
     finish_retranscription, job_warning_messages, local_asr_failure_summary,
-    local_asr_verification_summary, retranscription_gaps, transcript_warning_messages,
+    local_asr_verification_summary, retranscription_gaps, search_response, transcript_get_response,
+    transcript_warning_messages,
 };
 use vsift_domain::{
     AsrChunkOutcome, AsrChunkRecord, AsrDecodingProfile, AsrModel, AsrModelProfile, AsrProvider,
@@ -47,6 +49,8 @@ use vsift_domain::{
     TranscriptRevisionId, TranscriptWarningKind, TranscriptWarnings, merge_chunks, plan_chunks,
     validate_chunk_output,
 };
+
+mod common;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 type Built<T> = Result<T, Box<dyn std::error::Error>>;
@@ -331,7 +335,15 @@ fn job_failures_validate_with_their_hints() -> TestResult {
     Ok(())
 }
 
-fn page(revision: &TranscriptRevision) -> Built<(Vec<vsift_domain::TranscriptSegment>, TimeRange)> {
+/// The segments of `revision` in 0-6 s, that window and the coverage the
+/// application's read states for it.
+fn page(
+    revision: &TranscriptRevision,
+) -> Built<(
+    Vec<vsift_domain::TranscriptSegment>,
+    TimeRange,
+    vsift_domain::SearchCoverage,
+)> {
     let window = range(0, 6 * SECOND)?;
     let page = page_transcript(
         &SessionId::parse(SESSION)?,
@@ -344,20 +356,25 @@ fn page(revision: &TranscriptRevision) -> Built<(Vec<vsift_domain::TranscriptSeg
         CURSOR_EXPIRES_US,
         NOW_US,
     )?;
-    Ok((page.segments.into_iter().cloned().collect(), window))
+    Ok((
+        page.segments.into_iter().cloned().collect(),
+        window,
+        page.coverage,
+    ))
 }
 
 fn page_response(revision: &TranscriptRevision) -> Built<OperationResponse<Value>> {
-    let (segments, window) = page(revision)?;
+    let (segments, window, coverage) = page(revision)?;
     Ok(OperationResponse::complete(
         "transcript.get",
-        &TranscriptPageData::new(
-            &SessionId::parse(SESSION)?,
+        &TranscriptPageData::new(&TranscriptPresentation {
+            session_id: &SessionId::parse(SESSION)?,
             revision,
-            window,
-            &segments,
-            None,
-        ),
+            range: window,
+            segments: &segments,
+            next_cursor: None,
+            coverage: &coverage,
+        }),
     )?
     .with_lifecycle(LifecycleResponse::ephemeral(EXPIRES_AT.to_owned())))
 }
@@ -478,13 +495,16 @@ fn reading_a_spliced_revision_matches_the_frozen_example() -> TestResult {
 #[test]
 fn a_spliced_revision_streams_schema_valid_evidence() -> TestResult {
     let (_, second) = f01_revisions()?;
-    let (segments, window) = page(&second)?;
+    let (segments, window, coverage) = page(&second)?;
     let stream = TranscriptEvidenceStream::new(
-        &SessionId::parse(SESSION)?,
-        &second,
-        window,
-        &segments,
-        None,
+        &TranscriptPresentation {
+            session_id: &SessionId::parse(SESSION)?,
+            revision: &second,
+            range: window,
+            segments: &segments,
+            next_cursor: None,
+            coverage: &coverage,
+        },
         LifecycleResponse::ephemeral(EXPIRES_AT.to_owned()),
     )?;
     for record in stream.records() {
@@ -508,10 +528,17 @@ fn local_asr_revisions_and_segments_satisfy_their_schemas() -> TestResult {
     validate("transcript-revision.schema.json", &summary)?;
     assert_eq!(summary["local_asr"]["transcribed_chunks"], 1);
     assert_eq!(summary["replaced_range"], Value::Null);
-    let (segments, window) = page(&first)?;
+    let (segments, window, coverage) = page(&first)?;
     let response = serde_json::to_value(OperationResponse::complete(
         "transcript.get",
-        &TranscriptPageData::new(&SessionId::parse(SESSION)?, &first, window, &segments, None),
+        &TranscriptPageData::new(&TranscriptPresentation {
+            session_id: &SessionId::parse(SESSION)?,
+            revision: &first,
+            range: window,
+            segments: &segments,
+            next_cursor: None,
+            coverage: &coverage,
+        }),
     )?)?;
     let item = &response["data"]["items"][0];
     validate("transcript-segment.schema.json", item)?;
@@ -1598,5 +1625,1121 @@ fn session_status_lists_jobs_additively() -> TestResult {
     ] {
         assert!(job_data["properties"].get(member).is_some(), "{member}");
     }
+    Ok(())
+}
+
+// ------------------------------------------ 0.2.1: the views and the coverage
+
+/// Whether `brief` is a projection of `full`: every member of `brief`, at every
+/// depth, is a member of `full` with the same value, and an array is one when
+/// each of its elements is.
+fn is_projection_of(brief: &Value, full: &Value) -> bool {
+    match (brief, full) {
+        (Value::Object(brief), Value::Object(full)) => brief.iter().all(|(member, value)| {
+            full.get(member)
+                .is_some_and(|other| is_projection_of(value, other))
+        }),
+        (Value::Array(brief), Value::Array(full)) => {
+            brief.len() == full.len()
+                && brief
+                    .iter()
+                    .zip(full)
+                    .all(|(brief, full)| is_projection_of(brief, full))
+        }
+        (brief, full) => brief == full,
+    }
+}
+
+/// The segments a `transcript get` of `window` reads from `revision`, and the
+/// coverage the application's read states for the window.
+fn segments_in(
+    revision: &TranscriptRevision,
+    window: TimeRange,
+) -> Built<(
+    Vec<vsift_domain::TranscriptSegment>,
+    vsift_domain::SearchCoverage,
+)> {
+    let page = page_transcript(
+        &SessionId::parse(SESSION)?,
+        revision,
+        &TranscriptPageRequest {
+            range: window,
+            limit: PageLimit::new(100)?,
+            cursor: None,
+        },
+        CURSOR_EXPIRES_US,
+        NOW_US,
+    )?;
+    Ok((page.segments.into_iter().cloned().collect(), page.coverage))
+}
+
+/// `transcript get` of `window` of `revision` in `view`, as the CLI presents it.
+fn get(revision: &TranscriptRevision, window: TimeRange, view: ResultView) -> Built<Value> {
+    let session = SessionId::parse(SESSION)?;
+    let (segments, coverage) = segments_in(revision, window)?;
+    Ok(serde_json::to_value(transcript_get_response(
+        &TranscriptPresentation {
+            session_id: &session,
+            revision,
+            range: window,
+            segments: &segments,
+            next_cursor: None,
+            coverage: &coverage,
+        },
+        LifecycleResponse::ephemeral(EXPIRES_AT.to_owned()),
+        view,
+    )?)?)
+}
+
+/// The gaps a read names in its envelope, as `<from_us>-<to_us>`; none when it
+/// states no coverage.
+fn gaps_of(response: &Value) -> Built<Vec<String>> {
+    if response["coverage"].is_null() {
+        return Ok(Vec::new());
+    }
+    response["coverage"]["gaps"]
+        .as_array()
+        .ok_or("no gap list")?
+        .iter()
+        .map(|gap| Ok(gap.as_str().ok_or("gap is not text")?.to_owned()))
+        .collect()
+}
+
+/// #365: the brief view of the spliced revision is its frozen brief example
+/// and a projection of the frozen full example. The carried segment keeps
+/// `carried_from`, because the revision block describes the revision's own run
+/// and a carried segment's recognizer, alignment and language are those of the
+/// revision that first produced it; the rest of its provenance is the full
+/// view's. Even so an item is under a third of the full item (1,109 characters
+/// in the full view of the committed example), and a segment that is not carried
+/// is under a quarter of it.
+#[test]
+fn the_brief_view_of_a_spliced_revision_matches_its_frozen_example() -> TestResult {
+    let (_, second) = f01_revisions()?;
+    let window = range(0, 6 * SECOND)?;
+    let brief = get(&second, window, ResultView::Brief)?;
+    validate("operation-response.schema.json", &brief)?;
+    validate("transcript-get-brief-data.schema.json", &brief["data"])?;
+    assert_example("transcript-get.brief.json", &brief)?;
+
+    let full = get(&second, window, ResultView::Full)?;
+    assert_example("transcript-get.asr.json", &full)?;
+    let (brief_item, full_item) = (&brief["data"]["items"][0], &full["data"]["items"][0]);
+    validate("transcript-segment-brief.schema.json", brief_item)?;
+    assert!(is_projection_of(brief_item, full_item));
+    // The carried segment names where its text came from, as the full item
+    // does, and the revision block names the revision it supersedes.
+    assert_eq!(brief_item["carried_from"], full_item["carried_from"]);
+    assert_eq!(
+        brief["data"]["revision"]["supersedes"],
+        full_item["carried_from"]["revision_id"]
+    );
+    // What the full view repeats is not in the brief item: the recognizer's
+    // digests, the profiles and the chunk's own times stay in the full view, and
+    // the run's own in the revision block.
+    for member in ["alignment", "language", "confidence", "markup", "text"] {
+        assert!(brief_item.get(member).is_none(), "{member}");
+    }
+    assert_eq!(
+        brief["data"]["revision"]["local_asr"]["model_sha256"],
+        full_item["alignment"]["model_sha256"]
+    );
+    let size = |item: &Value| -> Result<usize, serde_json::Error> {
+        Ok(serde_json::to_string(item)?.len())
+    };
+    assert!(
+        size(brief_item)? * 3 < size(full_item)?,
+        "a brief item is {} characters, the full item {}",
+        size(brief_item)?,
+        size(full_item)?
+    );
+
+    // The first revision's segment is not carried: it has no `carried_from` in
+    // either view and its brief item is under a quarter of the full item.
+    let window = range(0, 6 * SECOND)?;
+    let (first, _) = f01_revisions()?;
+    let (brief_first, full_first) = (
+        get(&first, window, ResultView::Brief)?,
+        get(&first, window, ResultView::Full)?,
+    );
+    let (brief_item, full_item) = (
+        &brief_first["data"]["items"][0],
+        &full_first["data"]["items"][0],
+    );
+    assert!(brief_item.get("carried_from").is_none());
+    assert!(is_projection_of(brief_item, full_item));
+    assert!(
+        size(brief_item)? * 4 < size(full_item)?,
+        "a brief item is {} characters, the full item {}",
+        size(brief_item)?,
+        size(full_item)?
+    );
+    Ok(())
+}
+
+/// #365: the page sizes the documents state, measured the way they say (the
+/// committed example's items repeated to fifty, `common::page_of_fifty`). On a
+/// local transcription whose segments are not carried (the partial example) the
+/// brief page of fifty is under a quarter of the full page, as the design asked
+/// (51,378 and 9,643 characters, 18.8%); with a carried segment (the spliced
+/// example) `carried_from` stays and the page is under three tenths (57,256 and
+/// 15,571, 27.2%). Adding back what the brief view leaves out of an item (the
+/// three identities, say) fails the first by a wide margin.
+#[tokio::test]
+async fn a_brief_page_of_fifty_local_segments_has_the_measured_share_of_the_full_page() -> TestResult
+{
+    let revision = unusable_chunk_revision().await?;
+    let window = range(0, 55 * SECOND)?;
+    let full = common::page_of_fifty(&get(&revision, window, ResultView::Full)?)?;
+    let brief = common::page_of_fifty(&get(&revision, window, ResultView::Brief)?)?;
+    assert!(brief * 4 < full, "{brief} of {full}");
+
+    let (_, second) = f01_revisions()?;
+    let window = range(0, 6 * SECOND)?;
+    let full = common::page_of_fifty(&get(&second, window, ResultView::Full)?)?;
+    let brief = common::page_of_fifty(&get(&second, window, ResultView::Brief)?)?;
+    assert!(brief * 10 < full * 3, "{brief} of {full}");
+    Ok(())
+}
+
+/// A complete session's read is what `0.1.0` published for it, member for
+/// member, but for the one added member: the page and the stream's records of
+/// the frozen examples are the current output without `transcript_coverage`.
+#[test]
+fn a_complete_read_is_what_was_published_but_for_the_new_member() -> TestResult {
+    let (_, second) = f01_revisions()?;
+    let mut page = get(&second, range(0, 6 * SECOND)?, ResultView::Full)?;
+    assert_eq!(page["status"], "complete");
+    assert!(page["coverage"].is_null());
+    assert!(page["data"].get("view").is_none());
+    page["data"]
+        .as_object_mut()
+        .ok_or("data is not an object")?
+        .remove("transcript_coverage")
+        .ok_or("the new member is missing")?;
+    let published: Value = serde_json::from_str(&fs::read_to_string(repository(
+        "schemas/v1/frozen/v0.1.0/examples/transcript-get.asr.json",
+    ))?)?;
+    assert_eq!(page, published);
+    Ok(())
+}
+
+/// #373: over a gap a read is `partial`, as a search over it is, and says
+/// where the gap is. The 55 s stand-in recording's second chunk could not be
+/// read, so 30-55 s has no transcript: a read of it shows no words, which is
+/// not a read of silence. Both views, the page and the stream say the same,
+/// and `transcript get` and `search` report the same coverage for the range.
+#[tokio::test]
+async fn a_read_over_a_gap_is_partial_and_names_the_gap() -> TestResult {
+    let revision = unusable_chunk_revision().await?;
+    let window = range(0, 55 * SECOND)?;
+    let full = get(&revision, window, ResultView::Full)?;
+    let brief = get(&revision, window, ResultView::Brief)?;
+
+    for response in [&full, &brief] {
+        validate("operation-response.schema.json", response)?;
+        assert_eq!(response["status"], "partial");
+        assert!(response["error"].is_null());
+        assert_eq!(
+            response["coverage"],
+            serde_json::json!({
+                "truncated": true,
+                "gaps": ["30000000-55000000"],
+                "reasons": ["untranscribed_range"],
+            })
+        );
+        assert_eq!(
+            response["warnings"],
+            serde_json::json!([UNTRANSCRIBED_READ_WARNING])
+        );
+        let coverage = &response["data"]["transcript_coverage"];
+        assert_eq!(coverage["basis"], "local_asr");
+        assert_eq!(
+            coverage["untranscribed_ranges"],
+            serde_json::json!([{"from_us": 30_000_000, "to_us": 55_000_000}])
+        );
+        assert_eq!(
+            coverage["transcribed_ranges"],
+            serde_json::json!([{"from_us": 0, "to_us": 30_000_000}])
+        );
+    }
+    validate("transcript-get-data.schema.json", &full["data"])?;
+    validate("transcript-get-brief-data.schema.json", &brief["data"])?;
+    // The frozen example is this read: a 55 s stand-in recording whose second
+    // chunk could not be read.
+    assert_example("transcript-get.partial.json", &full)?;
+    // The brief view states the gap exactly as the full one does.
+    for member in ["status", "warnings", "error", "coverage", "lifecycle"] {
+        assert_eq!(brief[member], full[member], "{member}");
+    }
+    assert_eq!(
+        brief["data"]["transcript_coverage"],
+        full["data"]["transcript_coverage"]
+    );
+    // The page still holds what was read: the words of the first chunk.
+    assert!(!full["data"]["items"].as_array().ok_or("items")?.is_empty());
+
+    // The stream ends in the same status, coverage and member.
+    let (segments, coverage) = segments_in(&revision, window)?;
+    let stream = TranscriptEvidenceStream::new(
+        &TranscriptPresentation {
+            session_id: &SessionId::parse(SESSION)?,
+            revision: &revision,
+            range: window,
+            segments: &segments,
+            next_cursor: None,
+            coverage: &coverage,
+        },
+        LifecycleResponse::ephemeral(EXPIRES_AT.to_owned()),
+    )?;
+    let terminal = serde_json::to_value(stream.terminal())?;
+    validate("terminal-event.schema.json", &terminal)?;
+    validate(
+        "transcript-get-stream-data.schema.json",
+        &terminal["result"]["data"],
+    )?;
+    for member in ["status", "warnings", "error", "coverage", "lifecycle"] {
+        assert_eq!(terminal["result"][member], full[member], "{member}");
+    }
+    assert_eq!(
+        terminal["result"]["data"]["transcript_coverage"],
+        full["data"]["transcript_coverage"]
+    );
+    // Its records are the page items, the gap notwithstanding.
+    for (record, item) in stream
+        .records()
+        .iter()
+        .zip(full["data"]["items"].as_array().ok_or("items")?)
+    {
+        assert_eq!(&serde_json::to_value(record)?["record"], item);
+    }
+
+    // One rule: a search over the same revision and range reports the same.
+    let search_coverage = vsift_domain::SearchCoverage::of(&revision, Some(window));
+    let query = vsift_domain::SearchQuery::parse("words")?;
+    let searched = serde_json::to_value(search_response(
+        &SearchPresentation {
+            session_id: &SessionId::parse(SESSION)?,
+            revision: &revision,
+            query: &query,
+            range: Some(window),
+            hits: Vec::new(),
+            next_cursor: None,
+            coverage: &search_coverage,
+        },
+        LifecycleResponse::ephemeral(EXPIRES_AT.to_owned()),
+    )?)?;
+    assert_eq!(searched["status"], full["status"]);
+    assert_eq!(searched["coverage"], full["coverage"]);
+    assert_eq!(
+        searched["data"]["transcript_coverage"],
+        full["data"]["transcript_coverage"]
+    );
+    Ok(())
+}
+
+/// #359 and #373: a stretch where the recogniser wrote words that no segment
+/// holds (`local_asr.unplaced_ranges`) is a gap of a read too. The run read the
+/// audio and is `complete`, but a read over the stretch shows no words there and
+/// must not look like a read of silence: it is `partial`, lists the stretch with
+/// the published reason and states it in `transcript_coverage`, as a search does.
+/// The brief view keeps the revision block and so the list of stretches, and
+/// states the same gap. A read clear of the stretch is complete.
+#[tokio::test]
+async fn a_read_over_words_that_no_segment_holds_is_partial_and_names_the_stretch() -> TestResult {
+    let recogniser = StandInRecogniser {
+        first: Some(words_that_no_segment_holds()?),
+        rest_described: true,
+    };
+    let (source, outcome) = transcribe_stand_in(55, 0, &recogniser).await?;
+    let revision = stand_in_revision(
+        &source,
+        1,
+        outcome.map_err(|failure| format!("the run failed: {failure:?}"))?,
+        None,
+    )?;
+    let stretch = [range(SECOND, 3 * SECOND)?];
+    assert_eq!(revision.unplaced(), stretch);
+
+    // Ten seconds that hold the two kept segments and the stretch between them.
+    let window = range(0, 10 * SECOND)?;
+    let full = get(&revision, window, ResultView::Full)?;
+    let brief = get(&revision, window, ResultView::Brief)?;
+    for response in [&full, &brief] {
+        validate("operation-response.schema.json", response)?;
+        assert_eq!(response["status"], "partial");
+        assert_eq!(
+            response["coverage"],
+            serde_json::json!({
+                "truncated": true,
+                "gaps": ["1000000-3000000"],
+                "reasons": ["untranscribed_range"],
+            })
+        );
+        assert!(
+            response["warnings"]
+                .as_array()
+                .ok_or("no warnings")?
+                .contains(&Value::from(UNTRANSCRIBED_READ_WARNING))
+        );
+        let coverage = &response["data"]["transcript_coverage"];
+        assert_eq!(
+            coverage["untranscribed_ranges"],
+            serde_json::json!([{"from_us": 1_000_000, "to_us": 3_000_000}])
+        );
+        assert_eq!(
+            coverage["transcribed_ranges"],
+            serde_json::json!([
+                {"from_us": 0, "to_us": 1_000_000},
+                {"from_us": 3_000_000, "to_us": 10_000_000},
+            ])
+        );
+        // What was kept is read, on both sides of the stretch; the revision
+        // block, which both views keep, lists where the rejected words may lie.
+        assert_eq!(response["data"]["items"].as_array().map(Vec::len), Some(2));
+        assert_eq!(
+            response["data"]["revision"]["local_asr"]["unplaced_ranges"],
+            serde_json::json!([{"from_us": 1_000_000, "to_us": 3_000_000}])
+        );
+    }
+    validate("transcript-get-data.schema.json", &full["data"])?;
+    validate("transcript-get-brief-data.schema.json", &brief["data"])?;
+    for member in ["status", "warnings", "error", "coverage", "lifecycle"] {
+        assert_eq!(brief[member], full[member], "{member}");
+    }
+    assert!(is_projection_of(
+        &brief["data"]["items"],
+        &full["data"]["items"]
+    ));
+
+    // One rule: a search over the same range reports the same stretch.
+    assert_eq!(
+        vsift_domain::SearchCoverage::of(&revision, Some(window)).untranscribed(),
+        stretch
+    );
+
+    // A page over the stretch alone holds no words, and says why: a gap, not a
+    // silence.
+    let over = get(&revision, range(SECOND, 2 * SECOND)?, ResultView::Full)?;
+    assert_eq!(over["status"], "partial");
+    assert_eq!(gaps_of(&over)?, ["1000000-2000000"]);
+    assert_eq!(over["data"]["items"].as_array().map(Vec::len), Some(0));
+
+    // Clear of the stretch, within what was transcribed, a read is complete.
+    let clear = get(&revision, range(3 * SECOND, 10 * SECOND)?, ResultView::Full)?;
+    assert_eq!(clear["status"], "complete");
+    assert!(clear["coverage"].is_null());
+    assert_eq!(clear["data"]["items"].as_array().map(Vec::len), Some(1));
+    Ok(())
+}
+
+/// #373: the answer is about the range asked for. A range that ends where the
+/// gap begins is complete and keeps `coverage` null; one that starts or ends
+/// inside the gap lists only its own part of it; one that runs past the end of
+/// the video is clipped to it; one wholly outside it has nothing to cover.
+#[tokio::test]
+async fn a_read_lists_only_the_gap_inside_the_range_it_asked_for() -> TestResult {
+    let revision = unusable_chunk_revision().await?;
+    for (from, to, gaps) in [
+        // The gap is 30-55 s; the recording is 55 s long.
+        (0, 25, vec![]),
+        (0, 30, vec![]),
+        (0, 31, vec!["30000000-31000000"]),
+        (20, 40, vec!["30000000-40000000"]),
+        (40, 50, vec!["40000000-50000000"]),
+        (30, 55, vec!["30000000-55000000"]),
+        (54, 60, vec!["54000000-55000000"]),
+        (55, 56, vec![]),
+        (100, 200, vec![]),
+    ] {
+        let window = range(from * SECOND, to * SECOND)?;
+        for view in ResultView::ALL {
+            let response = get(&revision, window, view)?;
+            validate("operation-response.schema.json", &response)?;
+            let named = gaps_of(&response)?;
+            assert_eq!(named, gaps, "{from}-{to} s, {}", view.identifier());
+            if gaps.is_empty() {
+                assert_eq!(response["status"], "complete", "{from}-{to} s");
+                assert!(response["coverage"].is_null(), "{from}-{to} s");
+                assert_eq!(response["warnings"], serde_json::json!([]), "{from}-{to} s");
+            } else {
+                assert_eq!(response["status"], "partial", "{from}-{to} s");
+            }
+            // The member says the same in either case.
+            let listed: Vec<String> =
+                response["data"]["transcript_coverage"]["untranscribed_ranges"]
+                    .as_array()
+                    .ok_or("no list")?
+                    .iter()
+                    .map(|gap| {
+                        format!(
+                            "{}-{}",
+                            gap["from_us"].as_u64().unwrap_or_default(),
+                            gap["to_us"].as_u64().unwrap_or_default()
+                        )
+                    })
+                    .collect();
+            assert_eq!(listed, gaps, "{from}-{to} s");
+        }
+    }
+    Ok(())
+}
+
+/// A range that holds no segment is complete where the transcript covers it
+/// and says what the recogniser found there: a quiet stretch is `no_speech`,
+/// not a gap.
+#[test]
+fn a_quiet_stretch_is_not_a_gap() -> TestResult {
+    let (_, second) = f01_revisions()?;
+    let response = get(&second, range(5_500_000, 6 * SECOND)?, ResultView::Full)?;
+    assert_eq!(response["status"], "complete");
+    assert!(response["coverage"].is_null());
+    assert_eq!(response["data"]["items"], serde_json::json!([]));
+    let coverage = &response["data"]["transcript_coverage"];
+    assert_eq!(coverage["untranscribed_ranges"], serde_json::json!([]));
+    assert_eq!(
+        coverage["no_speech_ranges"],
+        serde_json::json!([{"from_us": 5_500_000, "to_us": 6_000_000}])
+    );
+    Ok(())
+}
+
+/// #353 and #373: earlier text kept inside a stretch the run could not read is
+/// text, and covers where it is, as it does for a search: a read of the kept
+/// words is complete, and a read of the whole unreadable stretch lists only
+/// what the kept words do not cover, which is less than the run did not
+/// transcribe.
+#[tokio::test]
+async fn text_kept_in_an_unreadable_stretch_covers_where_it_is() -> TestResult {
+    let source_id = SourceId::from_sha256(&"0123456789abcdef".repeat(4))?;
+    let source = whole_file_source_segment(&source_id, MediaTime::from_micros(55 * SECOND))?;
+    let described = StandInRecogniser {
+        first: Some(recorded_f01_output()?),
+        rest_described: true,
+    };
+    let (_, whole) = transcribe_stand_in(55, 0, &described).await?;
+    let first = stand_in_revision(&source, 1, whole.map_err(|f| format!("{f:?}"))?, None)?;
+    let unreadable_start = StandInRecogniser {
+        first: None,
+        rest_described: true,
+    };
+    let (_, again) = transcribe_stand_in(55, 0, &unreadable_start).await?;
+    let second = stand_in_revision(
+        &source,
+        2,
+        again.map_err(|f| format!("{f:?}"))?,
+        Some(&first),
+    )?;
+    let kept: Vec<TimeRange> = second
+        .segments()
+        .iter()
+        .filter(|segment| segment.carried_from().is_some())
+        .map(vsift_domain::TranscriptSegment::range)
+        .collect();
+    let (first_kept, last_kept) = (
+        kept.first().ok_or("nothing was kept")?,
+        kept.last().ok_or("nothing was kept")?,
+    );
+
+    // The kept words themselves: read, not a gap.
+    let over_kept = get(
+        &second,
+        TimeRange::new(first_kept.start(), last_kept.end())?,
+        ResultView::Full,
+    )?;
+    assert_eq!(over_kept["status"], "complete");
+    assert!(over_kept["coverage"].is_null());
+    assert!(
+        !over_kept["data"]["items"]
+            .as_array()
+            .ok_or("items")?
+            .is_empty()
+    );
+
+    // The whole stretch the run could not read: only what the words leave open.
+    let stretch = get(&second, range(0, 25 * SECOND)?, ResultView::Full)?;
+    assert_eq!(stretch["status"], "partial");
+    let named = gaps_of(&stretch)?;
+    assert!(!named.is_empty());
+    assert_ne!(named, ["0-25000000"], "the kept words cover nothing");
+    // The run read nothing of 0-25 s, and the one segment revision 1 had there,
+    // the recorded F01 words at 0-5.26 s, is kept: what is open is the rest.
+    assert_eq!(
+        kept,
+        [TimeRange::new(
+            MediaTime::from_micros(0),
+            MediaTime::from_micros(5_260_000)
+        )?]
+    );
+    assert_eq!(named, ["5260000-25000000"]);
+    for gap in &named {
+        let (start, end) = gap.split_once('-').ok_or("not a range")?;
+        let (start, end): (u64, u64) = (start.parse()?, end.parse()?);
+        for words in &kept {
+            assert!(
+                end <= words.start().as_micros() || words.end().as_micros() <= start,
+                "{gap} overlaps the kept words at {words:?}"
+            );
+        }
+    }
+    Ok(())
+}
+
+/// #353 and #373: a stretch an earlier run could not read stays unread through
+/// a later run elsewhere. Revision 3 replaced only 5.3-5.4 s, but revision 2
+/// had left 5.5-6 s untranscribed, and revision 3 no longer records the run
+/// that left it: it records the stretch itself (`carried_untranscribed`), and a
+/// read of it is `partial`, where counting the first run's whole window would
+/// have made it look read.
+#[test]
+fn a_stretch_an_earlier_run_could_not_read_stays_a_gap_through_a_later_run() -> TestResult {
+    let (first, _) = f01_revisions()?;
+    let source = first.source_segment().clone();
+    let splice = |base: &TranscriptRevision,
+                  number: u32,
+                  replaced: TimeRange,
+                  outcome: AsrChunkOutcome|
+     -> Built<TranscriptRevision> {
+        Ok(build_asr_revision(AsrRevisionRequest {
+            session_id: &SessionId::parse(SESSION)?,
+            source_id: &SourceId::parse(F01_SPEECH_SOURCE)?,
+            source_segment: &source,
+            number: NonZeroU32::new(number).ok_or("zero")?,
+            transcription: AsrTranscription {
+                run: run(&source, replaced, outcome)?,
+                language: None,
+                segments: Vec::new(),
+                unplaced: Vec::new(),
+                warnings: TranscriptWarnings::default(),
+            },
+            splice: Some(RevisionSplice {
+                base,
+                replaced_range: replaced,
+            }),
+        })?)
+    };
+    let unread = range(5_500_000, 6 * SECOND)?;
+    let second = splice(
+        &first,
+        2,
+        unread,
+        AsrChunkOutcome::Unusable { audio: unread },
+    )?;
+    let quiet = range(5_300_000, 5_400_000)?;
+    let third = splice(&second, 3, quiet, AsrChunkOutcome::Silent { audio: quiet })?;
+    assert_eq!(third.carried_untranscribed(), [unread]);
+
+    for revision in [&second, &third] {
+        let over = get(revision, range(0, 6 * SECOND)?, ResultView::Full)?;
+        assert_eq!(over["status"], "partial");
+        assert_eq!(gaps_of(&over)?, ["5500000-6000000"]);
+        let before = get(revision, range(0, 5_500_000)?, ResultView::Full)?;
+        assert_eq!(before["status"], "complete");
+        assert!(before["coverage"].is_null());
+    }
+    Ok(())
+}
+
+/// A search and a read of one revision agree for every range, whatever the
+/// range: the two commands share the one rule, so no range is covered for one
+/// and not for the other.
+#[tokio::test]
+async fn a_read_and_a_search_agree_on_every_range() -> TestResult {
+    let revision = unusable_chunk_revision().await?;
+    let query = vsift_domain::SearchQuery::parse("words")?;
+    for (from, to) in [(0, 55), (10, 20), (28, 32), (30, 31), (29, 56), (54, 55)] {
+        let window = range(from * SECOND, to * SECOND)?;
+        let read = get(&revision, window, ResultView::Full)?;
+        let coverage = vsift_domain::SearchCoverage::of(&revision, Some(window));
+        let searched = serde_json::to_value(search_response(
+            &SearchPresentation {
+                session_id: &SessionId::parse(SESSION)?,
+                revision: &revision,
+                query: &query,
+                range: Some(window),
+                hits: Vec::new(),
+                next_cursor: None,
+                coverage: &coverage,
+            },
+            LifecycleResponse::ephemeral(EXPIRES_AT.to_owned()),
+        )?)?;
+        assert_eq!(read["status"], searched["status"], "{from}-{to}");
+        assert_eq!(
+            read["data"]["transcript_coverage"], searched["data"]["transcript_coverage"],
+            "{from}-{to}"
+        );
+        // A search always states its envelope coverage; a read states it only
+        // over a gap, and then it is the same.
+        if searched["status"] == "partial" {
+            assert_eq!(read["coverage"], searched["coverage"], "{from}-{to}");
+        } else {
+            assert!(read["coverage"].is_null(), "{from}-{to}");
+        }
+    }
+    Ok(())
+}
+
+/// A run over `chunks` planned chunks (a recording of `25 * (chunks - 1) + 30`
+/// seconds: each window is 30 s and each starts 25 s after the one before) whose
+/// chunk `index` has the outcome `outcome(index, window)`, and a revision that
+/// holds it with no segment. What a revision says is covered, and what is not,
+/// then depends on the outcomes alone.
+fn revision_by_chunk_outcome(
+    chunks: usize,
+    outcome: impl Fn(usize, TimeRange) -> AsrChunkOutcome,
+) -> Built<TranscriptRevision> {
+    revision_by_chunk_outcome_and_unplaced(chunks, outcome, Vec::new())
+}
+
+/// [`revision_by_chunk_outcome`] for a run that also recorded `unplaced`
+/// stretches of words that no segment holds (#359).
+fn revision_by_chunk_outcome_and_unplaced(
+    chunks: usize,
+    outcome: impl Fn(usize, TimeRange) -> AsrChunkOutcome,
+    unplaced: Vec<TimeRange>,
+) -> Built<TranscriptRevision> {
+    let source_id = SourceId::from_sha256(&"0123456789abcdef".repeat(4))?;
+    let seconds = 25 * u64::try_from(chunks - 1)? + 30;
+    let source = whole_file_source_segment(&source_id, MediaTime::from_micros(seconds * SECOND))?;
+    let planned = plan_chunks(source.id(), source.range(), ChunkPlan::R0)?;
+    assert_eq!(planned.len(), chunks);
+    let run = AsrRun::new(AsrRunParts {
+        provider: AsrProviderBuild::new(AsrProvider::WhisperCpp, Sha256Hex::parse(WHISPER_SHA256)?),
+        model: AsrModel::new(AsrModelProfile::Base, Sha256Hex::parse(BASE_MODEL_SHA256)?),
+        decoding: AsrDecodingProfile::R0V1,
+        plan: ChunkPlan::R0,
+        threads: NonZeroU16::new(4).ok_or("zero")?,
+        audio_stream: 1,
+        chunks: planned
+            .into_iter()
+            .enumerate()
+            .map(|(index, chunk)| {
+                let window = chunk.window();
+                AsrChunkRecord::new(chunk, outcome(index, window))
+            })
+            .collect(),
+    })?;
+    Ok(build_asr_revision(AsrRevisionRequest {
+        session_id: &SessionId::parse(SESSION)?,
+        source_id: &source_id,
+        source_segment: &source,
+        number: NonZeroU32::MIN,
+        transcription: AsrTranscription {
+            run,
+            language: None,
+            segments: Vec::new(),
+            unplaced,
+            warnings: TranscriptWarnings::default(),
+        },
+        splice: None,
+    })?)
+}
+
+/// #373: every gap of a read is listed, and a list beyond the hundred the
+/// envelope and the member carry says it was cut. A recording whose chunks
+/// cycle between read, unusable, read and silent has one 20 s gap for every
+/// fourth chunk (the window less the 5 s each neighbour's overlap covers).
+/// Twelve chunks have three of them, all listed; 1,020 chunks (the most a run
+/// plans is 1,024) have 255, of which exactly the first hundred are listed,
+/// with the reason `gap_list_truncated` and `ranges_truncated`.
+#[test]
+fn every_gap_is_listed_and_a_long_list_says_it_was_cut() -> TestResult {
+    let cycle = |index: usize, window: TimeRange| match index % 4 {
+        1 => AsrChunkOutcome::Unusable { audio: window },
+        3 => AsrChunkOutcome::Silent { audio: window },
+        _ => AsrChunkOutcome::Transcribed { audio: window },
+    };
+    let few = revision_by_chunk_outcome(12, cycle)?;
+    let whole = TimeRange::new(
+        MediaTime::from_micros(0),
+        few.source_segment().range().end(),
+    )?;
+    let response = get(&few, whole, ResultView::Full)?;
+    validate("operation-response.schema.json", &response)?;
+    assert_eq!(response["status"], "partial");
+    assert_eq!(
+        response["coverage"],
+        serde_json::json!({
+            "truncated": true,
+            "gaps": ["30000000-50000000", "130000000-150000000", "230000000-250000000"],
+            "reasons": ["untranscribed_range"],
+        })
+    );
+    assert_eq!(
+        response["data"]["transcript_coverage"]["untranscribed_ranges"]
+            .as_array()
+            .map(Vec::len),
+        Some(3)
+    );
+    assert_eq!(
+        response["data"]["transcript_coverage"]["ranges_truncated"],
+        false
+    );
+
+    let many = revision_by_chunk_outcome(1_020, cycle)?;
+    let whole = TimeRange::new(
+        MediaTime::from_micros(0),
+        many.source_segment().range().end(),
+    )?;
+    for view in ResultView::ALL {
+        let response = get(&many, whole, view)?;
+        validate("operation-response.schema.json", &response)?;
+        assert_eq!(response["status"], "partial", "{}", view.identifier());
+        let gaps = gaps_of(&response)?;
+        assert_eq!(gaps.len(), 100);
+        assert_eq!(gaps[0], "30000000-50000000");
+        assert_eq!(gaps[1], "130000000-150000000");
+        // The hundredth gap is the one after chunk 397 (25 s each, 5 s in).
+        assert_eq!(gaps[99], "9930000000-9950000000");
+        assert_eq!(
+            response["coverage"]["reasons"],
+            serde_json::json!(["untranscribed_range", "gap_list_truncated"])
+        );
+        let coverage = &response["data"]["transcript_coverage"];
+        assert_eq!(coverage["ranges_truncated"], true);
+        assert_eq!(
+            coverage["untranscribed_ranges"].as_array().map(Vec::len),
+            Some(100)
+        );
+        assert_eq!(
+            coverage["transcribed_ranges"].as_array().map(Vec::len),
+            Some(100)
+        );
+        assert_eq!(
+            coverage["no_speech_ranges"].as_array().map(Vec::len),
+            Some(100)
+        );
+        // What the answer costs beyond the usual 250 characters: far under the
+        // result budget (one mebibyte), measured here.
+        let cost = |value: &Value| -> Result<usize, serde_json::Error> {
+            Ok(serde_json::to_string(value)?.len())
+        };
+        assert!(cost(coverage)? < 20_000, "{}", cost(coverage)?);
+        assert!(
+            cost(&response["coverage"])? < 5_000,
+            "{}",
+            cost(&response["coverage"])?
+        );
+        // The whole page with no segment: 16,946 characters in the full view
+        // (the member 12,719, the envelope coverage 2,460, the 453 of the warning,
+        // and the revision block of a run with no unplaced stretch). With the most
+        // unplaced stretches the revision block is far larger: see
+        // `the_worst_case_page_is_the_revision_block_plus_the_coverage_in_either_view`.
+        let page = serde_json::to_string(&response)?.len();
+        assert!((16_000..18_000).contains(&page), "{page}");
+    }
+    Ok(())
+}
+
+/// #373: `ranges_truncated` says a list was cut when **any** of the three lists
+/// is over a hundred, not only when all are. A recording of 201 chunks that
+/// alternate between unusable and transcribed has 101 gaps and 100 transcribed
+/// ranges (the first and last chunks are unusable) and no silence: the gap list
+/// is cut at a hundred and nothing else is, and the read says so, with the
+/// reason `gap_list_truncated`, in both views.
+#[test]
+fn the_cut_of_the_gap_list_alone_is_said() -> TestResult {
+    let alternate = |index: usize, window: TimeRange| {
+        if index.is_multiple_of(2) {
+            AsrChunkOutcome::Unusable { audio: window }
+        } else {
+            AsrChunkOutcome::Transcribed { audio: window }
+        }
+    };
+    let revision = revision_by_chunk_outcome(201, alternate)?;
+    let whole = TimeRange::new(
+        MediaTime::from_micros(0),
+        revision.source_segment().range().end(),
+    )?;
+    for view in ResultView::ALL {
+        let response = get(&revision, whole, view)?;
+        validate("operation-response.schema.json", &response)?;
+        assert_eq!(response["status"], "partial", "{}", view.identifier());
+        let coverage = &response["data"]["transcript_coverage"];
+        assert_eq!(
+            coverage["untranscribed_ranges"].as_array().map(Vec::len),
+            Some(100),
+            "{}",
+            view.identifier()
+        );
+        assert_eq!(
+            coverage["transcribed_ranges"].as_array().map(Vec::len),
+            Some(100)
+        );
+        assert_eq!(coverage["no_speech_ranges"], serde_json::json!([]));
+        assert_eq!(coverage["ranges_truncated"], true, "{}", view.identifier());
+        assert_eq!(
+            response["coverage"]["reasons"],
+            serde_json::json!(["untranscribed_range", "gap_list_truncated"])
+        );
+    }
+    // Without the extra gap nothing is cut, and nothing says so.
+    let revision = revision_by_chunk_outcome(199, alternate)?;
+    let whole = TimeRange::new(
+        MediaTime::from_micros(0),
+        revision.source_segment().range().end(),
+    )?;
+    let response = get(&revision, whole, ResultView::Full)?;
+    assert_eq!(
+        response["data"]["transcript_coverage"]["ranges_truncated"],
+        false
+    );
+    Ok(())
+}
+
+/// #373 and #359: the combined worst case of a page. A revision that lists the
+/// most stretches of words that no segment holds (1,024, #377) has a revision
+/// block of tens of kilobytes, which both views keep whole, on top of the
+/// coverage member and the envelope coverage (each list cut at a hundred): an
+/// **empty** page over it is about 55 KB in either view, far under the one
+/// mebibyte result budget, and the brief view saves nothing on it. The first
+/// hundred stretches are untranscribed ranges of the read.
+#[test]
+fn the_worst_case_page_is_the_revision_block_plus_the_coverage_in_either_view() -> TestResult {
+    let chunks = 1_024_usize;
+    // One second of unplaced words ten seconds into every chunk's own window.
+    let stretches = (0..chunks)
+        .map(|index| {
+            let start = (25 * u64::try_from(index)? + 10) * SECOND;
+            range(start, start + SECOND)
+        })
+        .collect::<Built<Vec<TimeRange>>>()?;
+    let revision = revision_by_chunk_outcome_and_unplaced(
+        chunks,
+        |_, window| AsrChunkOutcome::Transcribed { audio: window },
+        stretches,
+    )?;
+    assert_eq!(revision.unplaced().len(), chunks);
+    let whole = TimeRange::new(
+        MediaTime::from_micros(0),
+        revision.source_segment().range().end(),
+    )?;
+    let size = |value: &Value| -> Result<usize, serde_json::Error> {
+        Ok(serde_json::to_string(value)?.len())
+    };
+    let mut totals = Vec::new();
+    for view in ResultView::ALL {
+        let response = get(&revision, whole, view)?;
+        validate("operation-response.schema.json", &response)?;
+        assert_eq!(response["status"], "partial", "{}", view.identifier());
+        assert!(
+            response["data"]["items"]
+                .as_array()
+                .is_some_and(Vec::is_empty)
+        );
+        assert_eq!(gaps_of(&response)?.len(), 100);
+        assert_eq!(
+            response["data"]["revision"]["local_asr"]["unplaced_ranges"]
+                .as_array()
+                .map(Vec::len),
+            Some(chunks)
+        );
+        let (block, member, envelope, total) = (
+            size(&response["data"]["revision"])?,
+            size(&response["data"]["transcript_coverage"])?,
+            size(&response["coverage"])?,
+            size(&response)?,
+        );
+        // Measured on this layout: block 45,190, member 8,407, envelope 2,394 and
+        // 56,810 in all (56,825 in the brief view, which adds `"view":"brief"`).
+        // The bounds leave room for the size of the times.
+        assert!((40_000..50_000).contains(&block), "{block}");
+        assert!(member < 12_000, "{member}");
+        assert!(envelope < 4_000, "{envelope}");
+        assert!((50_000..65_000).contains(&total), "{total}");
+        totals.push(total);
+    }
+    // The brief view saves nothing on such a page: it differs from the full one
+    // by the member that names it.
+    assert_eq!(totals.len(), 2);
+    assert!(totals[0].abs_diff(totals[1]) < 100, "{totals:?}");
+    Ok(())
+}
+
+/// One segment of speech, in milliseconds into the chunk, as the recogniser
+/// answers it.
+fn speech(start_ms: u64, end_ms: u64, words: &str) -> Built<ProviderChunkOutput> {
+    Ok(ProviderChunkOutput {
+        language: LanguageTag::parse("en").ok(),
+        segments: vec![ProviderSegment {
+            start: ChunkTime::from_millis(start_ms).ok_or("time")?,
+            end: ChunkTime::from_millis(end_ms).ok_or("time")?,
+            text: Some(CueText::new(words.to_owned(), words.to_owned())?),
+            tokens: Vec::new(),
+        }],
+    })
+}
+
+/// What a run that transcribed `range` as one chunk and heard `output` makes of
+/// it: its segments merged, with nothing unplaced.
+fn transcription_over(
+    source: &SourceSegment,
+    range: TimeRange,
+    output: ProviderChunkOutput,
+) -> Built<AsrTranscription> {
+    let run = run(source, range, AsrChunkOutcome::Transcribed { audio: range })?;
+    let chunk = run.chunks().first().ok_or("no chunk")?.chunk().clone();
+    let (segments, language, warnings) =
+        validate_chunk_output(&chunk, range, source.range(), output)?.into_parts();
+    Ok(AsrTranscription {
+        run,
+        language,
+        segments: merge_chunks(&[segments]).segments,
+        unplaced: Vec::new(),
+        warnings,
+    })
+}
+
+/// The third cause of a `partial` read of an existing revision, found in review
+/// and recorded in [L-033]: a range retranscription that replaces every segment
+/// of the first run carries nothing from it, so the revision no longer records
+/// the first run's window, and what only that run read is counted as not
+/// transcribed. A 12 s whole-video run with one segment at 1-4 s is complete over
+/// 0-12 s; retranscribing 2-3 s, which snaps outward to the segment's 1-4 s,
+/// gives a revision that reads `partial` over 0-12 s with the gaps 0-1 s and
+/// 4-12 s. The gaps are false (the first run did read them), never a false silence:
+/// a gap is the safe error, and `search` says the same.
+#[test]
+fn replacing_every_segment_of_the_first_run_leaves_a_false_gap_never_a_false_silence() -> TestResult
+{
+    let session = SessionId::parse(SESSION)?;
+    let source_id = SourceId::from_sha256(&"0123456789abcdef".repeat(4))?;
+    let source = whole_file_source_segment(&source_id, MediaTime::from_micros(12 * SECOND))?;
+    let whole = source.range();
+    let first = build_asr_revision(AsrRevisionRequest {
+        session_id: &session,
+        source_id: &source_id,
+        source_segment: &source,
+        number: NonZeroU32::MIN,
+        transcription: transcription_over(
+            &source,
+            whole,
+            speech(1_000, 4_000, "Said once, early on.")?,
+        )?,
+        splice: None,
+    })?;
+    // 2-3 s lies inside the segment, so the range snaps outward to its 1-4 s.
+    let replaced = first.snap_to_segments(range(2 * SECOND, 3 * SECOND)?);
+    assert_eq!(replaced, range(SECOND, 4 * SECOND)?);
+    let second = build_asr_revision(AsrRevisionRequest {
+        session_id: &session,
+        source_id: &source_id,
+        source_segment: &source,
+        number: NonZeroU32::new(2).ok_or("zero")?,
+        transcription: transcription_over(
+            &source,
+            replaced,
+            speech(0, 3_000, "Said again, differently.")?,
+        )?,
+        splice: Some(RevisionSplice {
+            base: &first,
+            replaced_range: replaced,
+        }),
+    })?;
+    // The new revision holds only the new words: nothing was carried.
+    assert!(
+        second
+            .segments()
+            .iter()
+            .all(|segment| segment.carried_from().is_none())
+    );
+
+    let read_first = get(&first, whole, ResultView::Full)?;
+    assert_eq!(read_first["status"], "complete");
+    assert!(read_first["coverage"].is_null());
+    let read_second = get(&second, whole, ResultView::Full)?;
+    assert_eq!(read_second["status"], "partial");
+    assert_eq!(gaps_of(&read_second)?, ["0-1000000", "4000000-12000000"]);
+    // What the second run did read, the new words' stretch, is not a gap.
+    let inside = get(&second, replaced, ResultView::Full)?;
+    assert_eq!(inside["status"], "complete");
+    Ok(())
+}
+
+/// The third cause is wider than a first run whose every segment is replaced
+/// (L-033): a first run with few or **no** segments carries nothing either. A
+/// 55 s whole-video run that found only silence (two silent chunks, no segment)
+/// says `no_speech` for all of 0-55 s and reads complete. Retranscribing 5-10 s,
+/// where speech is heard, gives a revision that carries nothing from it, so its
+/// windows are lost: a read of 0-55 s is `partial` with the gaps 0-5 s and
+/// 10-55 s and **no** `no_speech` at all (the silence the first run found is no
+/// longer recorded), where the first revision had the whole recording as
+/// silence. The gaps are false (the first run did read them), never a false
+/// silence; the read says the same in both views, as `search` does.
+#[test]
+fn a_first_run_with_no_segments_leaves_false_gaps_and_no_silence_after_a_range_retranscription()
+-> TestResult {
+    let silent = |_: usize, window: TimeRange| AsrChunkOutcome::Silent { audio: window };
+    let first = revision_by_chunk_outcome(2, silent)?;
+    let source = first.source_segment().clone();
+    assert_eq!(source.range(), range(0, 55 * SECOND)?);
+    assert!(first.segments().is_empty());
+    let whole = source.range();
+
+    let before = get(&first, whole, ResultView::Full)?;
+    assert_eq!(before["status"], "complete");
+    assert!(before["coverage"].is_null());
+    assert_eq!(
+        before["data"]["transcript_coverage"]["no_speech_ranges"],
+        serde_json::json!([{"from_us": 0, "to_us": 55_000_000}])
+    );
+
+    // The first run found nothing said in 5-10 s, and the range is not snapped
+    // (there is no segment to snap to); the second run hears speech there.
+    let replaced = first.snap_to_segments(range(5 * SECOND, 10 * SECOND)?);
+    assert_eq!(replaced, range(5 * SECOND, 10 * SECOND)?);
+    let second = build_asr_revision(AsrRevisionRequest {
+        session_id: &SessionId::parse(SESSION)?,
+        source_id: first.source_id(),
+        source_segment: &source,
+        number: NonZeroU32::new(2).ok_or("zero")?,
+        transcription: transcription_over(
+            &source,
+            replaced,
+            speech(500, 3_500, "Said, after all.")?,
+        )?,
+        splice: Some(RevisionSplice {
+            base: &first,
+            replaced_range: replaced,
+        }),
+    })?;
+    assert!(
+        second
+            .segments()
+            .iter()
+            .all(|segment| segment.carried_from().is_none())
+    );
+
+    for view in ResultView::ALL {
+        let after = get(&second, whole, view)?;
+        validate("operation-response.schema.json", &after)?;
+        assert_eq!(after["status"], "partial", "{}", view.identifier());
+        assert_eq!(
+            gaps_of(&after)?,
+            ["0-5000000", "10000000-55000000"],
+            "{}",
+            view.identifier()
+        );
+        let coverage = &after["data"]["transcript_coverage"];
+        assert_eq!(
+            coverage["untranscribed_ranges"],
+            serde_json::json!([
+                {"from_us": 0, "to_us": 5_000_000},
+                {"from_us": 10_000_000, "to_us": 55_000_000},
+            ])
+        );
+        // The silence the first run found is not recorded any more: the read
+        // does not say "silent" anywhere, and does not say "read" either.
+        assert_eq!(coverage["no_speech_ranges"], serde_json::json!([]));
+        assert_eq!(
+            coverage["transcribed_ranges"],
+            serde_json::json!([{"from_us": 5_000_000, "to_us": 10_000_000}])
+        );
+    }
+    // What the second run did read is not a gap.
+    assert_eq!(
+        get(&second, replaced, ResultView::Full)?["status"],
+        "complete"
+    );
     Ok(())
 }

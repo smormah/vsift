@@ -136,7 +136,12 @@ fn json(output: &Output) -> Built<Value> {
     let value: Value = serde_json::from_slice(&output.stdout)?;
     validate("operation-response.schema.json", &value)?;
     if value["command"] == "candidates" && value["error"].is_null() {
-        validate("candidates-data.schema.json", &value["data"])?;
+        let schema = if value["data"]["view"] == "brief" {
+            "candidates-brief-data.schema.json"
+        } else {
+            "candidates-data.schema.json"
+        };
+        validate(schema, &value["data"])?;
     }
     Ok(value)
 }
@@ -589,5 +594,238 @@ async fn human_output_is_readable_text() -> TestResult {
             "{identity} missing: {text}"
         );
     }
+    Ok(())
+}
+
+/// Whether `brief` is a projection of `full`: every member of `brief`, at every
+/// depth, is a member of `full` with the same value, and an array is one when
+/// each of its elements is.
+fn is_projection_of(brief: &Value, full: &Value) -> bool {
+    match (brief, full) {
+        (Value::Object(brief), Value::Object(full)) => brief.iter().all(|(member, value)| {
+            full.get(member)
+                .is_some_and(|other| is_projection_of(value, other))
+        }),
+        (Value::Array(brief), Value::Array(full)) => {
+            brief.len() == full.len()
+                && brief
+                    .iter()
+                    .zip(full)
+                    .all(|(brief, full)| is_projection_of(brief, full))
+        }
+        (brief, full) => brief == full,
+    }
+}
+
+/// #365 and #367: `--view brief` answers the same page with each candidate
+/// reduced, through the binary, for a complete range and for one with a typed
+/// gap; `--view full` is the default answer byte for byte; and a cursor of one
+/// view continues in the other, because the view is not part of what a cursor
+/// binds.
+#[tokio::test]
+async fn the_brief_view_is_the_full_page_without_what_every_candidate_repeats() -> TestResult {
+    let root = OwnedRoot::new()?;
+    let session = open_session(&root)?;
+    seed_index(&root, &session)?;
+    for to in ["60000000", "120000000"] {
+        let default = vsift(&root, &candidates(&session, "0", to, &["--json"]))?;
+        let explicit = vsift(
+            &root,
+            &candidates(&session, "0", to, &["--view", "full", "--json"]),
+        )?;
+        assert_eq!(default.status.code(), Some(0));
+        assert_eq!(default.stdout, explicit.stdout, "--view full to {to}");
+        let full = json(&default)?;
+        assert!(full["data"].get("view").is_none());
+
+        let output = vsift(
+            &root,
+            &candidates(&session, "0", to, &["--view", "brief", "--json"]),
+        )?;
+        assert_eq!(output.status.code(), Some(0));
+        let brief = json(&output)?;
+        assert_eq!(brief["data"]["view"], "brief");
+        for (member, value) in full.as_object().ok_or("not an object")? {
+            if member != "data" {
+                assert_eq!(&brief[member], value, "envelope member {member} to {to}");
+            }
+        }
+        for (member, value) in full["data"].as_object().ok_or("no data")? {
+            if member != "items" {
+                assert_eq!(&brief["data"][member], value, "data member {member}");
+            }
+        }
+        let (brief_items, full_items) = (
+            brief["data"]["items"].as_array().ok_or("items")?,
+            full["data"]["items"].as_array().ok_or("items")?,
+        );
+        assert!(!full_items.is_empty());
+        assert_eq!(brief_items.len(), full_items.len());
+        for (brief_item, full_item) in brief_items.iter().zip(full_items) {
+            assert!(is_projection_of(brief_item, full_item));
+            for member in ["source_id", "source_segment_id", "stream_index"] {
+                assert_eq!(
+                    brief["data"]["item_constants"][member], full_item[member],
+                    "{member}"
+                );
+            }
+        }
+        // The items are under half the characters; the page, which also holds
+        // the index, the coverage and the constants once, is smaller still.
+        let size = |items: &[Value]| -> Result<usize, serde_json::Error> {
+            items
+                .iter()
+                .map(|item| serde_json::to_string(item).map(|text| text.len()))
+                .sum()
+        };
+        assert!(
+            size(brief_items)? * 2 < size(full_items)?,
+            "brief items {} characters, full items {}",
+            size(brief_items)?,
+            size(full_items)?
+        );
+        assert!(output.stdout.len() < default.stdout.len());
+    }
+
+    // The gap is the full answer's: partial, with the same coverage.
+    let partial = json(&vsift(
+        &root,
+        &candidates(&session, "0", "120000000", &["--view", "brief", "--json"]),
+    )?)?;
+    assert_eq!(partial["status"], "partial");
+    assert_eq!(
+        partial["coverage"]["gaps"],
+        serde_json::json!(["60000000-120000000"])
+    );
+
+    // A cursor of the brief view continues in the full one and back.
+    let every = ids(&json(&vsift(
+        &root,
+        &candidates(&session, "0", "60000000", &["--limit", "100", "--json"]),
+    )?)?)?;
+    let first = json(&vsift(
+        &root,
+        &candidates(
+            &session,
+            "0",
+            "60000000",
+            &["--limit", "3", "--view", "brief", "--json"],
+        ),
+    )?)?;
+    let cursor = first["data"]["next_cursor"]
+        .as_str()
+        .ok_or("the first page has no cursor")?;
+    let rest = json(&vsift(
+        &root,
+        &candidates(
+            &session,
+            "0",
+            "60000000",
+            &["--limit", "100", "--cursor", cursor, "--json"],
+        ),
+    )?)?;
+    assert!(rest["data"].get("view").is_none());
+    let joined: Vec<String> = ids(&first)?.into_iter().chain(ids(&rest)?).collect();
+    assert_eq!(joined, every);
+    Ok(())
+}
+
+/// The brief view is refused for a stream before anything is analysed: the
+/// answer is the one terminal failure event, `INVALID_ARGUMENT`, whose
+/// remediation says why, where the same request without the option needs media
+/// tools the machine lacks and the unknown session would be another failure.
+/// The full view still streams, and a stream is what it was.
+#[tokio::test]
+async fn the_brief_view_is_refused_for_a_stream_before_anything_is_analysed() -> TestResult {
+    let root = OwnedRoot::new()?;
+    let session = open_session(&root)?;
+    seed_index(&root, &session)?;
+    let before = fs::read_dir(root.sessions())?.count();
+
+    // The range needs analysis, which this machine cannot do: the request
+    // without the option is a missing capability, and with it a refusal.
+    let needs_tools = vsift(
+        &root,
+        &candidates(&session, "0", "150000000", &["--events", "jsonl"]),
+    )?;
+    assert_eq!(
+        stream(&needs_tools)?[0]["result"]["error"]["code"],
+        "MISSING_CAPABILITY"
+    );
+    for session in [session.as_str(), "ses_ffffffffffffffff"] {
+        let refused = vsift(
+            &root,
+            &candidates(
+                session,
+                "0",
+                "150000000",
+                &["--view", "brief", "--events", "jsonl"],
+            ),
+        )?;
+        assert_eq!(refused.status.code(), Some(2));
+        let lines = stream(&refused)?;
+        assert_eq!(lines.len(), 1, "one terminal event and nothing else");
+        let error = &lines[0]["result"]["error"];
+        assert_eq!(error["code"], "INVALID_ARGUMENT");
+        let remedy = error["remediation"][0]["summary"]
+            .as_str()
+            .ok_or("remediation missing")?;
+        assert!(
+            remedy.contains("--view") && remedy.contains("--json"),
+            "{remedy}"
+        );
+        assert!(remedy.contains("index"), "{remedy}");
+        assert!(lines[0]["result"]["data"].is_null());
+    }
+    assert_eq!(fs::read_dir(root.sessions())?.count(), before);
+
+    // The full view streams, as it always has.
+    let default = vsift(
+        &root,
+        &candidates(&session, "0", "60000000", &["--events", "jsonl"]),
+    )?;
+    let explicit = vsift(
+        &root,
+        &candidates(
+            &session,
+            "0",
+            "60000000",
+            &["--view", "full", "--events", "jsonl"],
+        ),
+    )?;
+    assert_eq!(default.status.code(), Some(0));
+    assert_eq!(default.stdout, explicit.stdout);
+    for line in stream(&default)? {
+        assert!(line["result"]["data"].get("view").is_none());
+        assert!(line["record"].get("view").is_none());
+    }
+    Ok(())
+}
+
+/// A value the option does not name is a rejected command line; readable text
+/// is the same for both views, since it is written from the full answer and the
+/// view shapes the JSON.
+#[tokio::test]
+async fn an_unknown_view_is_a_parse_failure_and_readable_text_ignores_the_view() -> TestResult {
+    let root = OwnedRoot::new()?;
+    let session = open_session(&root)?;
+    seed_index(&root, &session)?;
+    let unknown = vsift(
+        &root,
+        &candidates(&session, "0", "60000000", &["--view", "short", "--json"]),
+    )?;
+    assert_eq!(unknown.status.code(), Some(2));
+    let value = json(&unknown)?;
+    assert_eq!(value["command"], "parse");
+    assert_eq!(value["error"]["code"], "INVALID_ARGUMENT");
+    assert!(!value.to_string().contains("short"), "the value is echoed");
+
+    let default = vsift(&root, &candidates(&session, "0", "60000000", &[]))?;
+    let brief = vsift(
+        &root,
+        &candidates(&session, "0", "60000000", &["--view", "brief"]),
+    )?;
+    assert_eq!(default.status.code(), Some(0));
+    assert_eq!(default.stdout, brief.stdout);
     Ok(())
 }

@@ -184,3 +184,54 @@ launcher's exit statuses 126 and 127 are the launcher's, not vsift's (`cli-v1.md
 and error taxonomy"). The window for editing a never-published v1 value in place closes at
 the first published artifact. *That artifact, 0.1.0, was published on 2026-10-01 (ADR 0023
 completion note): from 0.1.0 on, v1 changes are additive only.*
+
+## 2026-10-11 note: the brief view and the coverage of a read (0.2.1)
+
+**Context.** Two findings of the first real recordings (#365, #373; the brief part of
+#367). A transcript segment is about a thousand characters of JSON, nearly half of it what
+every segment of its revision repeats, and a page of 50 is about 54,000 characters: a
+client saved one, read the first 43,000 and lost nine items and the cursor with no error
+from VSift. And `transcript get` stated no coverage, so a read over a part nobody
+transcribed looked like a read of a silence, the failure ("a gap is never taken as
+absence") that `search`'s coverage exists to prevent.
+
+**Decision (maintainer, 2026-10-11, from the design of the second `0.2.1` candidate).**
+Both are additive within v1 and the version stays `0.2.1`.
+
+1. **`--view full|brief` on `transcript get`, `search` and `candidates`.** `full`, the
+   default, is the answer every release gave; `brief` adds `data.view: "brief"` and reduces
+   each item to what a reader cites and places, stating once (in the answer's revision or
+   index block, or in `item_constants` for candidates) what the full view repeats. No
+   filter, no progress events and no parallel windows are added to `candidates` (#367).
+2. **A brief item is projected from the full item**, never built apart from it, so a
+   brief member is a full member with the same value; contract tests hold every example
+   to that. The brief view never leaves out a gap: coverage, status and warnings are the
+   full answer's.
+3. **A stream and a stored record are never brief.** The records of `--events jsonl` are
+   published evidence that an indexer upserts by `key` (ADR 0016 decision 5), and a reduced
+   record under the same key would replace a complete one. `--view brief` with `--events
+   jsonl` is `INVALID_ARGUMENT`, refused before anything is read or analysed, with a
+   remediation that says why. Readable text is written from the full answer and is the
+   same for both views.
+4. **`transcript get` gains `transcript_coverage`** (always present, also in the stream's
+   terminal data), computed by the function `search` uses, and is `partial` exactly when
+   the requested range has untranscribed parts, with the envelope `coverage` and a fixed
+   warning (option (c) of the design). A complete read keeps `coverage: null`, so its
+   bytes are the published `0.1.0`'s but for the new member. This changes the status of an
+   existing answer only for a revision with an uncovered range, which `search` already
+   reports as `partial`.
+5. **`transcript_coverage` is not `required` in the schema.** The v1 rule that an added
+   member is always present and required cannot hold for a member added to an answer that
+   `0.1.0` already published: the compatibility test holds the current schemas to
+   `0.1.0`'s examples, and a required member would fail them. The member is a declared
+   property that every producer emits, and a test pins that. `cli-v1.md` ("Configuration
+   and compatibility") says so.
+6. **Compatibility.** An older release answers `--view` as an unknown argument
+   (`INVALID_ARGUMENT`, command `parse`); no stored record changes; the frozen agent skill
+   does not use the option and can only after a skill change (its guard fails a command
+   the parser does not accept).
+
+`docs/contracts/cli-v1.md` ("Views of a read" and the transcript retrieval text), the
+schemas `transcript-get-brief-data`, `search-brief-data`, `candidates-brief-data`,
+`transcript-segment-brief` and `visual-candidate-brief`, and the contract and CLI tests
+named in the C-08 row state and test this.

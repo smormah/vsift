@@ -42,7 +42,8 @@ real meetings, accents or noisy rooms, so every accuracy figure below says what 
   [L-145](../planning/known-limits.md#l-145)).** When the recogniser's answer for a 30-second stretch cannot be
   placed in that stretch of audio, VSift leaves the stretch out, keeps the rest and says so: the result is
   `partial` and lists the stretch as not transcribed by that run, and it stays listed through every later run, however
-  far from it, until a run reads it. A recording with long pauses can have a few. When you were re-transcribing a recording
+  far from it, until a run reads it. A `transcript get` and a `search` over a range that includes the stretch are `partial`
+  too and list it, so an empty page there is never a silence. A recording with long pauses can have a few. When you were re-transcribing a recording
   that already had a transcript, the words it had that reach into such a stretch are kept whole (unless the new words
   overlap them); a word said there that no transcript has cannot be found. Transcribing just that stretch again may cover it (the audio is
   then cut at other points), and a transcript file you supply can. If most stretches fail, the command fails
@@ -67,7 +68,7 @@ real meetings, accents or noisy rooms, so every accuracy figure below says what 
   inside the audio and is followed there by another segment, the revision lists the stretch from its start to the next
   segment's start (`local_asr.unplaced_ranges`) as where the words may lie, less what kept words cover, if that is more than half a second.
   The run stays `complete` (it read everything), and `search` lists the stretch as not transcribed: a word said there cannot
-  be found. Each stretch is an upper bound: the words took only part of it, so `search` can call more time untranscribed than
+  be found. A `transcript get` over the stretch answers `partial` and lists it too: it shows no words there, which is not a silence. Each stretch is an upper bound: the words took only part of it, so `search` can call more time untranscribed than
   was lost. Retranscribing just the stretch may give the same stretch; a transcript file you supply (`ingest --transcript`)
   is the sure remedy. A rejected segment with no word, one with an empty range, one that starts after its audio ends, and one
   that nothing follows in its audio (the last of a chunk, or of the last chunk) are only counted, so a loss there is not
@@ -75,6 +76,12 @@ real meetings, accents or noisy rooms, so every accuracy figure below says what 
   damaged** (`INTEGRITY_FAILURE`). They read the newest revision first: if that one holds it they can read nothing of the
   session; if only an older one does, they read the newest normally and refuse the older ones (by id, in `handoff check --session`
   and in `bundle validate`). Use the newer version, or discard the session.
+- **A stretch can be listed as not transcribed that the first run did read** ([L-033](../planning/known-limits.md#l-033)).
+  When a re-transcription of a range follows a first run with few or no words (a recording with one spoken stretch, say, or
+  one in which the first run heard only silence), the new transcript carries nothing from the first run and no longer
+  remembers that it had read the rest of the recording, so a `transcript get` or a `search` of the whole recording lists that
+  rest as not transcribed, and the silence the first run found is not listed as silence any more. The stretch is listed
+  wrongly and is never reported as silence: the safe error. Transcribing the stretch again, or the whole recording, clears it.
 
 ## The pictures: screen changes and frames
 

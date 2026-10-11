@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vsift.dev/schemas/v1/transcript-get-brief-data.schema.json",
+  "title": "VSift transcript.get data, brief view v1",
+  "description": "The data member of a complete or partial transcript.get result asked for with --view brief (0.2.1): transcript-get-data.schema.json with each item reduced to transcript-segment-brief.schema.json and a view member that is always brief. Everything else is the full page's own: the revision block holds once what the full view repeats on every item (revision_id, source_id, source_segment_id, the recognizer's digests, model and decoding profiles), and transcript_coverage says which parts of the range a transcript covers, exactly as in the full view. Validate the envelope with operation-response.schema.json: its coverage member is truncated, and its status partial, exactly when transcript_coverage.untranscribed_ranges is not empty. The view is refused with --events jsonl. Pass next_cursor back with the same session, range and revision to continue; the view is not part of what a cursor binds, so it continues in either view.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "session_id",
+    "view",
+    "revision",
+    "range",
+    "items",
+    "next_cursor",
+    "transcript_coverage"
+  ],
+  "properties": {
+    "session_id": { "type": "string", "pattern": "^ses_[a-z0-9]{16,64}$" },
+    "view": { "const": "brief" },
+    "revision": { "$ref": "transcript-revision.schema.json" },
+    "range": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from_us", "to_us"],
+      "properties": {
+        "from_us": { "type": "integer", "minimum": 0 },
+        "to_us": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "items": {
+      "type": "array",
+      "maxItems": 100,
+      "items": { "$ref": "transcript-segment-brief.schema.json" }
+    },
+    "next_cursor": {
+      "oneOf": [
+        { "type": "null" },
+        { "type": "string", "minLength": 1, "maxLength": 512 }
+      ]
+    },
+    "transcript_coverage": { "$ref": "search-data.schema.json#/$defs/transcript_coverage" }
+  }
+}

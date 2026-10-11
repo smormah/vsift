@@ -5,8 +5,8 @@ use super::{
     text::{Placement, RenderedText, TerminalText, TooLarge},
     time::{push_range, push_span},
     view::{
-        Envelope, Markup, Retranscription, Search, TranscriptPage, TranscriptRevision,
-        TranscriptSegment,
+        Envelope, Markup, Retranscription, Search, TranscriptCoverage, TranscriptPage,
+        TranscriptRevision, TranscriptSegment,
     },
 };
 
@@ -27,6 +27,12 @@ pub(super) fn page(envelope: &Envelope<TranscriptPage>) -> Result<RenderedText, 
     text.push_fixed("Range: ");
     push_range(&mut text, page.range);
     text.end_line();
+    // The gaps of the range, which a reader must not take for silence (#373):
+    // listed as a search lists them, in a read's own words, and nothing at all
+    // for a range that is wholly transcribed.
+    if let Some(coverage) = &page.transcript_coverage {
+        push_coverage_ranges(&mut text, coverage, READ_NOT_TRANSCRIBED);
+    }
     text.push_fixed("Segments on this page: ")
         .push_unsigned(count(page.items.len()))
         .end_line();
@@ -125,20 +131,7 @@ pub(super) fn search(envelope: &Envelope<Search>) -> Result<RenderedText, TooLar
         push_range(&mut text, searched);
     }
     text.end_line();
-    push_ranges(
-        &mut text,
-        "Not transcribed (words said there cannot be found):",
-        &coverage.untranscribed_ranges,
-    );
-    push_ranges(
-        &mut text,
-        "Transcribed without speech:",
-        &coverage.no_speech_ranges,
-    );
-    if coverage.ranges_truncated {
-        text.push_fixed("Range lists are cut at 100 each; use --json for the full coverage.")
-            .end_line();
-    }
+    push_coverage_ranges(&mut text, coverage, SEARCH_NOT_TRANSCRIBED);
     text.push_fixed("Hits on this page: ")
         .push_unsigned(count(data.hits.len()))
         .end_line();
@@ -151,6 +144,35 @@ pub(super) fn search(envelope: &Envelope<Search>) -> Result<RenderedText, TooLar
     push_next_page(&mut text, data.next_cursor.as_deref());
     push_outcome(&mut text, envelope);
     text.finish()
+}
+
+/// The label over the untranscribed ranges of a search.
+const SEARCH_NOT_TRANSCRIBED: &str = "Not transcribed (words said there cannot be found):";
+
+/// The label over the untranscribed ranges of a read: an empty page there is a
+/// gap, not a silence.
+const READ_NOT_TRANSCRIBED: &str =
+    "Not transcribed (no words are read there; that does not mean none were said):";
+
+/// Writes what a transcript does not cover of a range, and where it covers it
+/// with no speech: the lines `search` and `transcript get` share, because one
+/// rule decides both (#373), each over its own label. Nothing is written for a
+/// range with neither.
+fn push_coverage_ranges(
+    text: &mut TerminalText,
+    coverage: &TranscriptCoverage,
+    untranscribed_label: &'static str,
+) {
+    push_ranges(text, untranscribed_label, &coverage.untranscribed_ranges);
+    push_ranges(
+        text,
+        "Transcribed without speech:",
+        &coverage.no_speech_ranges,
+    );
+    if coverage.ranges_truncated {
+        text.push_fixed("Range lists are cut at 100 each; use --json for the full coverage.")
+            .end_line();
+    }
 }
 
 /// Writes a revision's identity, alignment and typed warnings.

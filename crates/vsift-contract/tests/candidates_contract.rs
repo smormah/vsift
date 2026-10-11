@@ -26,7 +26,7 @@ use vsift_application::{
 };
 use vsift_contract::{
     CandidatesEvidenceStream, CandidatesPresentation, EvidenceStream, LifecycleResponse,
-    VISUAL_COVERAGE_WARNING, candidates_response,
+    ResultView, VISUAL_COVERAGE_WARNING, candidates_response, candidates_response_with_view,
 };
 use vsift_domain::{
     FrameDimensions, MediaTime, PageLimit, SessionId, SourceId, TimeRange, VISUAL_BLOCKS,
@@ -34,6 +34,8 @@ use vsift_domain::{
     VisualIndexProfile, VisualIndexWindow, VisualSample, VisualWindow, VisualWindowOutcome,
     analyse_window,
 };
+
+mod common;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 type Built<T> = Result<T, Box<dyn std::error::Error>>;
@@ -48,6 +50,8 @@ const SCHEMA_BASE: &str = "https://vsift.dev/schemas/v1/";
 const JSON_EXAMPLE: &str = "examples/candidates.json";
 const PARTIAL_EXAMPLE: &str = "examples/candidates.partial.json";
 const STREAM_EXAMPLE: &str = "examples/candidates.events.jsonl";
+const BRIEF_EXAMPLE: &str = "examples/candidates.brief.json";
+const PARTIAL_BRIEF_EXAMPLE: &str = "examples/candidates.partial.brief.json";
 
 fn schema_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../schemas/v1")
@@ -279,6 +283,7 @@ fn partial_index(session: &SessionId) -> Built<VisualIndex> {
 /// One page in both published forms.
 struct Page {
     json: Value,
+    brief: Value,
     lines: Vec<String>,
 }
 
@@ -321,6 +326,11 @@ fn page(
     };
     let lifecycle = || LifecycleResponse::ephemeral(EXPIRES_AT.to_owned());
     let json = serde_json::to_value(candidates_response(&presentation, lifecycle())?)?;
+    let brief = serde_json::to_value(candidates_response_with_view(
+        &presentation,
+        lifecycle(),
+        ResultView::Brief,
+    )?)?;
     let stream = CandidatesEvidenceStream::new(&presentation, lifecycle())?;
     let mut lines = stream
         .records()
@@ -328,7 +338,7 @@ fn page(
         .map(serde_json::to_string)
         .collect::<Result<Vec<_>, _>>()?;
     lines.push(serde_json::to_string(stream.terminal())?);
-    Ok(Page { json, lines })
+    Ok(Page { json, brief, lines })
 }
 
 fn f02_page() -> Built<Page> {
@@ -543,5 +553,191 @@ fn published_shapes_reject_what_they_do_not_define() -> TestResult {
         "candidates-stream-data.schema.json",
         &with_items
     )?);
+    Ok(())
+}
+
+/// Whether `brief` is a projection of `full`: every member of `brief`, at every
+/// depth, is a member of `full` with the same value, and an array is one when
+/// each of its elements is.
+fn is_projection_of(brief: &Value, full: &Value) -> bool {
+    match (brief, full) {
+        (Value::Object(brief), Value::Object(full)) => brief.iter().all(|(member, value)| {
+            full.get(member)
+                .is_some_and(|other| is_projection_of(value, other))
+        }),
+        (Value::Array(brief), Value::Array(full)) => {
+            brief.len() == full.len()
+                && brief
+                    .iter()
+                    .zip(full)
+                    .all(|(brief, full)| is_projection_of(brief, full))
+        }
+        (brief, full) => brief == full,
+    }
+}
+
+/// The members every candidate of an index repeats in the full view.
+const ITEM_CONSTANTS: [&str; 5] = [
+    "source_id",
+    "source_segment_id",
+    "stream_index",
+    "displayed_dimensions",
+    "analysis",
+];
+
+/// #365 and #367: the brief results are their frozen examples, for a complete
+/// range and for one with typed gaps.
+#[test]
+fn the_brief_results_match_their_frozen_examples() -> TestResult {
+    for (page, example) in [
+        (f02_page()?, BRIEF_EXAMPLE),
+        (partial_page()?, PARTIAL_BRIEF_EXAMPLE),
+    ] {
+        regenerate(
+            example,
+            &format!("{}\n", serde_json::to_string_pretty(&page.brief)?),
+        )?;
+        validate("operation-response.schema.json", &page.brief)?;
+        validate("candidates-brief-data.schema.json", &page.brief["data"])?;
+        assert!(
+            page.brief == load(example)?,
+            "the brief result differs from {example}"
+        );
+        assert!(page.json["data"].get("view").is_none());
+        assert!(page.json["data"].get("item_constants").is_none());
+        assert_eq!(page.brief["data"]["view"], "brief");
+    }
+    Ok(())
+}
+
+/// #365 and #367: the brief result is the full result with each candidate
+/// reduced. The envelope and every member outside the items (the index, the
+/// coverage with its typed gaps, the cursor) are the full result's own; each
+/// brief candidate is a projection of the full one at the same position; and
+/// what the brief view leaves out is stated once, as the same values the full
+/// view repeats on every item.
+#[test]
+fn the_brief_result_is_a_projection_of_the_full_result() -> TestResult {
+    for page in [f02_page()?, partial_page()?] {
+        for (member, value) in page.json.as_object().ok_or("not an object")? {
+            if member != "data" {
+                assert_eq!(&page.brief[member], value, "envelope member {member}");
+            }
+        }
+        for (member, value) in page.json["data"].as_object().ok_or("no data")? {
+            if member != "items" {
+                assert_eq!(&page.brief["data"][member], value, "data member {member}");
+            }
+        }
+        let (brief_items, full_items) = (
+            page.brief["data"]["items"].as_array().ok_or("items")?,
+            page.json["data"]["items"].as_array().ok_or("items")?,
+        );
+        assert!(!full_items.is_empty());
+        assert_eq!(brief_items.len(), full_items.len());
+        let constants = &page.brief["data"]["item_constants"];
+        for (brief_item, full_item) in brief_items.iter().zip(full_items) {
+            validate("visual-candidate-brief.schema.json", brief_item)?;
+            assert!(is_projection_of(brief_item, full_item));
+            for member in ITEM_CONSTANTS {
+                assert!(brief_item.get(member).is_none(), "{member} is on the item");
+                assert_eq!(&constants[member], &full_item[member], "{member}");
+            }
+            // The window is derived: its ordinal is the representative time
+            // over the index's window length.
+            let window_us = page.brief["data"]["index"]["window_us"]
+                .as_u64()
+                .ok_or("no window length")?;
+            let representative = brief_item["representative_us"]
+                .as_u64()
+                .ok_or("no representative time")?;
+            assert_eq!(full_item["window"]["ordinal"], representative / window_us);
+            // A candidate no change opened has no `change`, rather than a null.
+            assert_eq!(
+                brief_item.get("change").is_some(),
+                !full_item["change"].is_null()
+            );
+        }
+        assert_eq!(
+            constants.as_object().map(serde_json::Map::len),
+            Some(ITEM_CONSTANTS.len())
+        );
+    }
+    Ok(())
+}
+
+/// A brief candidate is well under half the characters of the full candidate
+/// on the committed example (195 to 262 against 578 to 662, 233 against 625 on
+/// average), and the brief page
+/// of fifty (the example's items repeated to fifty, `common::page_of_fifty`) is
+/// under 45% of the full page: 31,980 and 12,718 characters, 39.8%. Adding back
+/// what the brief view leaves out (`sample_count` and `change_window`, about 55
+/// characters a candidate, or more) fails it.
+#[test]
+fn a_brief_candidate_is_a_fraction_of_the_full_candidate() -> TestResult {
+    let page = f02_page()?;
+    let (full_items, brief_items) = (
+        page.json["data"]["items"].as_array().ok_or("items")?,
+        page.brief["data"]["items"].as_array().ok_or("items")?,
+    );
+    let size = |items: &[Value]| -> Result<usize, serde_json::Error> {
+        items
+            .iter()
+            .map(|item| serde_json::to_string(item).map(|text| text.len()))
+            .sum()
+    };
+    let (full_size, brief_size) = (size(full_items)?, size(brief_items)?);
+    assert!(
+        brief_size * 2 < full_size,
+        "brief candidates are {brief_size} characters, full ones {full_size}"
+    );
+    let (full_page, brief_page) = (
+        common::page_of_fifty(&page.json)?,
+        common::page_of_fifty(&page.brief)?,
+    );
+    assert!(
+        brief_page * 20 < full_page * 9,
+        "{brief_page} of {full_page}"
+    );
+    Ok(())
+}
+
+/// A page with no candidate still states the constants, so the answer does not
+/// depend on whether the page had an item to read them from.
+#[test]
+fn a_brief_page_without_candidates_still_states_the_item_constants() -> TestResult {
+    let session = SessionId::parse(SESSION)?;
+    let index = f02_index(&session)?;
+    let full = page(&session, &index, range(0, 12 * SECOND)?, 20, None)?;
+    let empty = page(&session, &index, range(SECOND, 2 * SECOND)?, 20, None)?;
+    assert_eq!(empty.brief["data"]["items"], serde_json::json!([]));
+    validate("candidates-brief-data.schema.json", &empty.brief["data"])?;
+    assert_eq!(
+        empty.brief["data"]["item_constants"],
+        full.brief["data"]["item_constants"]
+    );
+    Ok(())
+}
+
+/// The stream and the full result are what they were: the new view changes
+/// neither, and a stream's records are the full candidates.
+#[test]
+fn the_stream_and_the_full_result_are_unchanged_by_the_brief_view() -> TestResult {
+    let page = f02_page()?;
+    let lines: Vec<Value> = page
+        .lines
+        .iter()
+        .map(|line| serde_json::from_str(line))
+        .collect::<Result<_, _>>()?;
+    let items = page.json["data"]["items"].as_array().ok_or("items")?;
+    for (line, item) in lines.iter().zip(items) {
+        assert_eq!(&line["record"], item);
+        for member in ITEM_CONSTANTS {
+            assert!(line["record"].get(member).is_some(), "{member}");
+        }
+    }
+    let terminal = lines.last().ok_or("terminal")?;
+    assert!(terminal["result"]["data"].get("view").is_none());
+    assert!(terminal["result"]["data"].get("item_constants").is_none());
     Ok(())
 }

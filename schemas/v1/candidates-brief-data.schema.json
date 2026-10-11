@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vsift.dev/schemas/v1/candidates-brief-data.schema.json",
+  "title": "VSift candidates data, brief view v1",
+  "description": "The data member of a complete or partial candidates result asked for with --view brief (0.2.1): candidates-data.schema.json with each item reduced to visual-candidate-brief.schema.json, a view member that is always brief and item_constants, which holds once what the full view repeats on every candidate of the index. The requested range, the index, the coverage with every typed gap and the cursor are the full page's own: what was and was not analysed is never left out. Validate the envelope with operation-response.schema.json: its coverage member is truncated, and its status partial, exactly when coverage.gaps is not empty. The view is refused with --events jsonl. Pass next_cursor back with the same session and range to continue; it never analyses anything, and the view is not part of what a cursor binds, so it continues in either view.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "session_id",
+    "view",
+    "range",
+    "index",
+    "item_constants",
+    "coverage",
+    "items",
+    "next_cursor"
+  ],
+  "properties": {
+    "session_id": { "type": "string", "pattern": "^ses_[a-z0-9]{16,64}$" },
+    "view": { "const": "brief" },
+    "range": { "$ref": "candidates-data.schema.json#/$defs/range" },
+    "index": { "$ref": "candidates-data.schema.json#/$defs/index" },
+    "item_constants": {
+      "description": "What every candidate of this index has in the full view, stated once: the same values the full view repeats on each item. source_id and source_segment_id name the video and its whole-file segment; stream_index is the sampled video stream; displayed_dimensions is the orientation-correct size of the frames; analysis is the profile and the size of the grey samples compared (no image is kept).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_id",
+        "source_segment_id",
+        "stream_index",
+        "displayed_dimensions",
+        "analysis"
+      ],
+      "properties": {
+        "source_id": { "type": "string", "pattern": "^src_sha256_[0-9a-f]{64}$" },
+        "source_segment_id": { "type": "string", "pattern": "^sgm_[a-z0-9]{16,64}$" },
+        "stream_index": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+        "displayed_dimensions": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["width", "height"],
+          "properties": {
+            "width": { "type": "integer", "minimum": 1 },
+            "height": { "type": "integer", "minimum": 1 }
+          }
+        },
+        "analysis": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["profile", "width", "height"],
+          "properties": {
+            "profile": { "const": "r0-visual-v1" },
+            "width": { "const": 128 },
+            "height": { "const": 72 }
+          }
+        }
+      }
+    },
+    "coverage": { "$ref": "candidates-data.schema.json#/$defs/coverage" },
+    "items": {
+      "type": "array",
+      "maxItems": 100,
+      "items": { "$ref": "visual-candidate-brief.schema.json" }
+    },
+    "next_cursor": { "$ref": "candidates-data.schema.json#/$defs/next_cursor" }
+  }
+}

@@ -16,6 +16,7 @@ mod json_input;
 mod output;
 mod parse_failure;
 mod progress;
+mod read_view;
 mod search;
 mod session;
 mod setup;
@@ -402,7 +403,8 @@ where
                     write_evidence_stream(&mut writer, operation, result)
                 }
                 TranscriptCommand::Get(arguments) => {
-                    let result = session::transcript_get(&engine, arguments);
+                    let view = read_view::presented_view(mode, arguments.view);
+                    let result = session::transcript_get(&engine, arguments, view);
                     write_session_result(&mut writer, mode, operation, result)
                 }
                 TranscriptCommand::Retranscribe(arguments) if mode == OutputMode::JsonLines => {
@@ -442,7 +444,8 @@ where
             write_evidence_stream(&mut writer, CommandName::Search, result)
         }
         Command::Search(arguments) => {
-            let result = search::search(&engine, arguments);
+            let view = read_view::presented_view(mode, arguments.view);
+            let result = search::search(&engine, arguments, view);
             write_session_result(&mut writer, mode, CommandName::Search, result)
         }
         Command::Candidates(arguments) if mode == OutputMode::JsonLines => {
@@ -450,7 +453,8 @@ where
             write_evidence_stream(&mut writer, CommandName::Candidates, result)
         }
         Command::Candidates(arguments) => {
-            let result = candidates::candidates(&engine, arguments, &cancellation).await;
+            let view = read_view::presented_view(mode, arguments.view);
+            let result = candidates::candidates(&engine, arguments, view, &cancellation).await;
             write_session_result(&mut writer, mode, CommandName::Candidates, result)
         }
         Command::Frame(arguments) if mode == OutputMode::JsonLines => {

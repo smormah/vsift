@@ -18,7 +18,7 @@ use std::{
     error::Error,
     ffi::OsStr,
     fs,
-    num::NonZeroU32,
+    num::{NonZeroU16, NonZeroU32},
     path::PathBuf,
     sync::{
         Arc,
@@ -30,18 +30,21 @@ use std::{
 use vsift::{
     Clock, ClockError, CoverageBasis, CursorError, DurabilityRequirement, Engine, EngineConfig,
     EngineError, EnginePorts, FailureCode, HostIsolation, IdentifierGenerationError,
-    IdentifierSource, ManagedRootLocation, MediaTime, OperationId, SearchMatch,
+    IdentifierSource, ManagedRootLocation, MediaTime, OperationId, SearchCoverage, SearchMatch,
     SearchQueryRejection, SearchRange, SearchRequest, SessionId, SessionRootLocation,
-    StorageGeneration, TranscriptOffset, TranscriptQuery, TranscriptQueryError, TranscriptRevision,
-    UserConfigurationLocation,
+    StorageGeneration, TimeRange, TranscriptOffset, TranscriptQuery, TranscriptQueryError,
+    TranscriptRevision, UserConfigurationLocation,
 };
 use vsift_application::{
-    ForegroundSessionPort, ImportedRevisionRequest, InitializeSessionStorage,
-    InitializeSessionStorageRequest, SuppliedTranscript, build_imported_revision,
+    AsrRevisionRequest, AsrTranscription, ForegroundSessionPort, ImportedRevisionRequest,
+    InitializeSessionStorage, InitializeSessionStorageRequest, SuppliedTranscript,
+    build_asr_revision, build_imported_revision, whole_file_source_segment,
 };
 use vsift_domain::{
-    CueSource, CueText, CueTiming, ImportedCue, ParsedTranscript, SidecarIdentity, SourceId,
-    TranscriptFormat, TranscriptWarnings,
+    AsrChunkOutcome, AsrChunkRecord, AsrDecodingProfile, AsrModel, AsrModelProfile, AsrProvider,
+    AsrProviderBuild, AsrRun, AsrRunParts, ChunkPlan, CueSource, CueText, CueTiming, ImportedCue,
+    ParsedTranscript, Sha256Hex, SidecarIdentity, SourceId, TranscriptFormat, TranscriptWarnings,
+    plan_chunks,
 };
 use vsift_infrastructure::{FilesystemSessionStore, SourceSnapshot};
 
@@ -138,6 +141,14 @@ struct Harness {
 
 impl Harness {
     async fn with_transcript(texts: &[String]) -> Built<Self> {
+        Self::with_revision(|session, source| revision_of(session, source, texts)).await
+    }
+
+    /// An engine over a private root holding one open session whose transcript
+    /// is the revision `build` makes for the session and its source.
+    async fn with_revision(
+        build: impl FnOnce(&SessionId, &SourceId) -> Built<TranscriptRevision>,
+    ) -> Built<Self> {
         let root = OwnedRoot::new()?;
         let clock = ControlledClock(Arc::new(AtomicU64::new(T0)));
         let engine = Engine::new(
@@ -152,7 +163,7 @@ impl Harness {
                 SequentialIdentifiers(Arc::new(AtomicU64::new(0))),
             ),
         );
-        let session = seed(&root, texts).await?;
+        let session = seed(&root, build).await?;
         Ok(Self {
             root,
             clock,
@@ -210,8 +221,11 @@ fn revision_of(
     })?)
 }
 
-/// Commits one open session holding the import of `texts` at `T0`.
-async fn seed(root: &OwnedRoot, texts: &[String]) -> Built<SessionId> {
+/// Commits one open session holding the revision `build` makes, at `T0`.
+async fn seed(
+    root: &OwnedRoot,
+    build: impl FnOnce(&SessionId, &SourceId) -> Built<TranscriptRevision>,
+) -> Built<SessionId> {
     let source = root.path("stand-in.mp4");
     fs::write(&source, b"\0\0\0\x18ftypisomengine-search")?;
     let session_id = SessionId::parse("ses_0123456789abcdef0123456789abcdef")?;
@@ -233,7 +247,7 @@ async fn seed(root: &OwnedRoot, texts: &[String]) -> Built<SessionId> {
         &OperationId::parse("op_1111111111111111")?,
         &source,
     )?;
-    let revision = revision_of(&session_id, snapshot.id(), texts)?;
+    let revision = build(&session_id, snapshot.id())?;
     store.activate_with_transcript(
         &snapshot,
         &OperationId::parse("op_2222222222222222")?,
@@ -242,6 +256,50 @@ async fn seed(root: &OwnedRoot, texts: &[String]) -> Built<SessionId> {
         &revision,
     )?;
     Ok(session_id)
+}
+
+/// A local-recognition revision of a 55 s recording with no segment, whose first
+/// chunk (0-30 s) was transcribed and whose second (25-55 s) could not be read:
+/// 30-55 s has no transcript.
+fn revision_with_a_gap(session_id: &SessionId, source_id: &SourceId) -> Built<TranscriptRevision> {
+    let source = whole_file_source_segment(source_id, MediaTime::from_micros(55 * SECOND))?;
+    let planned = plan_chunks(source.id(), source.range(), ChunkPlan::R0)?;
+    assert_eq!(planned.len(), 2);
+    let run = AsrRun::new(AsrRunParts {
+        provider: AsrProviderBuild::new(AsrProvider::WhisperCpp, Sha256Hex::parse(DIGEST)?),
+        model: AsrModel::new(AsrModelProfile::Base, Sha256Hex::parse(DIGEST)?),
+        decoding: AsrDecodingProfile::R0V1,
+        plan: ChunkPlan::R0,
+        threads: NonZeroU16::new(4).ok_or("zero")?,
+        audio_stream: 1,
+        chunks: planned
+            .into_iter()
+            .enumerate()
+            .map(|(index, chunk)| {
+                let audio = chunk.window();
+                let outcome = if index == 0 {
+                    AsrChunkOutcome::Transcribed { audio }
+                } else {
+                    AsrChunkOutcome::Unusable { audio }
+                };
+                AsrChunkRecord::new(chunk, outcome)
+            })
+            .collect(),
+    })?;
+    Ok(build_asr_revision(AsrRevisionRequest {
+        session_id,
+        source_id,
+        source_segment: &source,
+        number: NonZeroU32::MIN,
+        transcription: AsrTranscription {
+            run,
+            language: None,
+            segments: Vec::new(),
+            unplaced: Vec::new(),
+            warnings: TranscriptWarnings::default(),
+        },
+        splice: None,
+    })?)
 }
 
 fn texts(values: &[&str]) -> Vec<String> {
@@ -505,5 +563,57 @@ async fn s11_a_20000_segment_revision_pages_completely() -> TestResult {
             );
         }
     }
+    Ok(())
+}
+
+/// #373: the engine's transcript read states what the revision covers of the
+/// range it was asked for, by the rule `search` uses, and the coverage is the
+/// whole range's (clipped to the video) and not the page's or the video's. A
+/// host that reads `Engine::transcript` tells a part nobody transcribed from a
+/// silence with `excerpt.coverage()`; the contract only presents it.
+#[tokio::test]
+async fn a_transcript_read_states_the_coverage_of_the_range_it_was_asked_for() -> TestResult {
+    let harness = Harness::with_revision(revision_with_a_gap).await?;
+    let read = |from: u64, to: u64, limit: u16| TranscriptQuery {
+        session: harness.session.clone(),
+        revision: None,
+        from_micros: from * SECOND,
+        to_micros: to * SECOND,
+        limit: Some(limit),
+        cursor: None,
+    };
+    let span = |from: u64, to: u64| {
+        TimeRange::new(
+            MediaTime::from_micros(from * SECOND),
+            MediaTime::from_micros(to * SECOND),
+        )
+    };
+
+    // A range that reaches into the gap: the part of the range the gap holds,
+    // not the whole of the gap (30-55 s), and not the whole recording.
+    let inside = harness.engine.transcript(read(20, 50, 1))?;
+    let coverage = inside.coverage();
+    assert_eq!(coverage.basis(), CoverageBasis::LocalAsr);
+    assert_eq!(coverage.searched(), Some(span(20, 50)?));
+    assert_eq!(coverage.transcribed(), [span(20, 30)?]);
+    assert_eq!(coverage.untranscribed(), [span(30, 50)?]);
+    assert!(coverage.no_speech().is_empty());
+    assert!(!coverage.is_complete());
+    // It is the one rule: the search's coverage for the same revision and range.
+    assert_eq!(
+        coverage,
+        &SearchCoverage::of(inside.revision(), Some(inside.range()))
+    );
+
+    // A range that runs past the end of the video is clipped to it.
+    let past = harness.engine.transcript(read(40, 60, 100))?;
+    assert_eq!(past.coverage().searched(), Some(span(40, 55)?));
+    assert_eq!(past.coverage().untranscribed(), [span(40, 55)?]);
+
+    // A range clear of the gap is complete.
+    let clear = harness.engine.transcript(read(0, 30, 20))?;
+    assert!(clear.coverage().is_complete());
+    assert!(clear.coverage().untranscribed().is_empty());
+    assert_eq!(clear.coverage().searched(), Some(span(0, 30)?));
     Ok(())
 }

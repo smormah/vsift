@@ -85,7 +85,10 @@ re-transcribing a recording that already had a transcript (one you imported, or 
 transcript had around such a stretch are **kept** as they were, not deleted, when they reach into the stretch and the
 new words do not overlap them (a sentence that crosses the stretch's edge is kept whole); the line still lists the whole
 stretch, because that is what this run did not transcribe. `search` lists as not transcribed only what has no words, so a word
-said there and not kept cannot be found, and VSift never reports such a stretch as silence. Transcribing just that
+said there and not kept cannot be found, and VSift never reports such a stretch as silence. **Reading it says so too
+(0.2.1 and later):** a `transcript get` over a range that includes such a stretch ends with `Status: partial` and lists the
+stretch under `Not transcribed`, so an empty page there is a gap and not a silence; a range that stops short of it is
+complete. Transcribing just that
 stretch again (`--from` and `--to` of the stretch) cuts the audio at other points and may cover it, and a transcript file
 you already have can supply it (`vsift ingest <video> --transcript <file>`). If most stretches fail like this the
 command fails instead, and says why
@@ -106,7 +109,7 @@ result lists the stretch where those words may lie, from where the dropped segme
 starts, under a line that begins `Speech was heard in these stretches`, which says each stretch is the longest the words could cover. The
 words took only part of it, and some are not listed at all (those with an empty range, or none after them). The run is still
 `complete`, because it read everything; but `search` lists that stretch as not transcribed, so a word said there cannot be
-found and you are told. Transcribing that stretch again may give the same stretch; a transcript file you already have
+found and you are told, and a `transcript get` over it is `partial` and lists it too. Transcribing that stretch again may give the same stretch; a transcript file you already have
 (`vsift ingest <video> --transcript <file>`) is the sure remedy.
 
 **Expect mistakes.** Recognition is a machine's best guess, tested here on a synthetic voice only. It can
@@ -145,6 +148,13 @@ the machine that recognised them; yours will list each segment as in the first i
 (1 to 100) and, when the output ends with `More on the next page: repeat the command with --cursor N`,
 repeat it with that number. A page can be short and still have a next page; keep following the cursor
 until it no longer appears.
+
+An assistant that reads through `--json` can add `--view brief` to `transcript get` and `search` (and to `candidates`,
+below) from 0.2.1: each item then holds only its id, its times and its text (a candidate: its id, time, reasons and
+hash), and what every item of a revision repeats (the hashes, source and model details) is stated once, so a page of 50
+is about a fifth to two fifths of the size (the part of the answer that describes the revision as a whole is the same in
+both, and can be large for a recording with many stretches VSift could not place). It changes nothing in what you read here, and it is refused with `--events jsonl`, whose
+records are always complete.
 
 ## 5. Find what changed on screen
 

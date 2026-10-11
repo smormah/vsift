@@ -85,8 +85,13 @@ These files are the machine-readable public v1 boundary:
 - `ingest-data.schema.json` â the `data` member of a complete `ingest` result; its
   optional `transcript` member is present only when a supplied transcript was
   imported (P07);
-- `transcript-get-data.schema.json` â the `data` member of a complete
-  `transcript.get` result: one bounded page with its continuation cursor (P07);
+- `transcript-get-data.schema.json` â the `data` member of a complete or partial
+  `transcript.get` result: one bounded page with its continuation cursor (P07). Since
+  0.2.1 it also has `transcript_coverage` (what a transcript covers of the requested
+  range, `search`'s coverage member: #373): always emitted, but a declared property and
+  not `required`, because answers of the published 0.1.0 have none and stay valid. The
+  result is `partial`, with the envelope's `coverage` listing the ranges, exactly when
+  `untranscribed_ranges` is not empty;
 - `transcript-revision.schema.json` â one transcript revision: identities,
   alignment origin and offset, sidecar identity and typed warnings (P07). A
   local-ASR revision (origin `local_asr`, P07 increment 3b) has `sidecar: null` and
@@ -117,7 +122,8 @@ These files are the machine-readable public v1 boundary:
   `transcript.retranscribe` data);
 - `transcript-get-stream-data.schema.json` â the `data` member of the terminal
   event that ends a `transcript.get --events jsonl` stream: the page without its
-  items, with `record_count` and the continuation cursor (P07);
+  items, with `record_count`, the continuation cursor (P07) and, since 0.2.1, the
+  page's `transcript_coverage`;
 - `search-data.schema.json` â the `data` member of a complete or partial `search`
   result (P08): the matching segments as `items` (transcript segment records, in rank
   order), the parallel `hits` (`segment_id` and `match`: `phrase` or `all_terms`), the
@@ -138,6 +144,16 @@ These files are the machine-readable public v1 boundary:
 - `candidates-stream-data.schema.json` â the `data` member of the terminal event that
   ends a `candidates --events jsonl` stream: the page without its items, with
   `record_count` (P08);
+- `transcript-get-brief-data.schema.json`, `search-brief-data.schema.json` and
+  `candidates-brief-data.schema.json` - the `data` of `transcript get`, `search` and
+  `candidates` asked for with `--view brief` (0.2.1, #365 and #367): the full answer's own
+  members with each item reduced and a `view` member that is always `brief`. The items are
+  `transcript-segment-brief.schema.json` (identity, time, `display_text` and the speaker's
+  `display_label`) and `visual-candidate-brief.schema.json` (identity, `representative_us`,
+  `span`, `reasons`, `stability`, `change` and `visual_hash`); what the full view repeats on
+  every item is stated once, in the revision block or, for candidates, in `item_constants`.
+  A brief item is not an evidence record, and `--events jsonl` never carries one (the view
+  is refused there). Every member of a brief item is the full item's, with the same value;
 - `visual-candidate.schema.json` â one visual candidate, the second published evidence
   record (P08): identities, window, the actual decoded frame time
   `representative_us`, `span`, `change_window`, `reasons`, `stability`, the
@@ -286,7 +302,15 @@ as a result and as a stream (one evidence event and the terminal event); both ar
 checked by `vsift-contract`'s `search_contract`, the stream byte for byte.
 `search-stream-data.schema.json` references definitions of `search-data.schema.json`
 by JSON pointer (`search-data.schema.json#/$defs/hit`), and
-`candidates-stream-data.schema.json` those of `candidates-data.schema.json`.
+`candidates-stream-data.schema.json` those of `candidates-data.schema.json`, and the brief
+schemas reference those of the full ones and each other the same way.
+`transcript-get.brief.json`, `search.brief.json`, `candidates.brief.json` and
+`candidates.partial.brief.json` (0.2.1) are the brief views of `transcript-get.asr.json`,
+`search.json`, `candidates.json` and `candidates.partial.json`; `transcript-get.partial.json` is
+a read of the 55 s stand-in recording of `transcript-retranscribe.partial.json` over its whole
+length, `partial` with the gap 30-55 s (made by `local_asr_contract`, like that example).
+The contract tests build each brief example from the same code as the full answer and compare;
+they also hold every brief item to be a projection of its full item.
 `candidates.json` and `candidates.events.jsonl` page the F02 fixture (three slides,
 A-B-A) indexed from the samples FFmpeg 9.0 decoded from it
 (`crates/vsift-infrastructure/tests/data/visual_samples/F02.json`): four candidates
