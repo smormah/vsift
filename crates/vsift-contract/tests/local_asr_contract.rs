@@ -1911,6 +1911,101 @@ async fn a_read_over_a_gap_is_partial_and_names_the_gap() -> TestResult {
     Ok(())
 }
 
+/// #359 and #373: a stretch where the recogniser wrote words that no segment
+/// holds (`local_asr.unplaced_ranges`) is a gap of a read too. The run read the
+/// audio and is `complete`, but a read over the stretch shows no words there and
+/// must not look like a read of silence: it is `partial`, lists the stretch with
+/// the published reason and states it in `transcript_coverage`, as a search does.
+/// The brief view keeps the revision block and so the list of stretches, and
+/// states the same gap. A read clear of the stretch is complete.
+#[tokio::test]
+async fn a_read_over_words_that_no_segment_holds_is_partial_and_names_the_stretch() -> TestResult {
+    let recogniser = StandInRecogniser {
+        first: Some(words_that_no_segment_holds()?),
+        rest_described: true,
+    };
+    let (source, outcome) = transcribe_stand_in(55, 0, &recogniser).await?;
+    let revision = stand_in_revision(
+        &source,
+        1,
+        outcome.map_err(|failure| format!("the run failed: {failure:?}"))?,
+        None,
+    )?;
+    let stretch = [range(SECOND, 3 * SECOND)?];
+    assert_eq!(revision.unplaced(), stretch);
+
+    // Ten seconds that hold the two kept segments and the stretch between them.
+    let window = range(0, 10 * SECOND)?;
+    let full = get(&revision, window, ResultView::Full)?;
+    let brief = get(&revision, window, ResultView::Brief)?;
+    for response in [&full, &brief] {
+        validate("operation-response.schema.json", response)?;
+        assert_eq!(response["status"], "partial");
+        assert_eq!(
+            response["coverage"],
+            serde_json::json!({
+                "truncated": true,
+                "gaps": ["1000000-3000000"],
+                "reasons": ["untranscribed_range"],
+            })
+        );
+        assert!(
+            response["warnings"]
+                .as_array()
+                .ok_or("no warnings")?
+                .contains(&Value::from(UNTRANSCRIBED_READ_WARNING))
+        );
+        let coverage = &response["data"]["transcript_coverage"];
+        assert_eq!(
+            coverage["untranscribed_ranges"],
+            serde_json::json!([{"from_us": 1_000_000, "to_us": 3_000_000}])
+        );
+        assert_eq!(
+            coverage["transcribed_ranges"],
+            serde_json::json!([
+                {"from_us": 0, "to_us": 1_000_000},
+                {"from_us": 3_000_000, "to_us": 10_000_000},
+            ])
+        );
+        // What was kept is read, on both sides of the stretch; the revision
+        // block, which both views keep, lists where the rejected words may lie.
+        assert_eq!(response["data"]["items"].as_array().map(Vec::len), Some(2));
+        assert_eq!(
+            response["data"]["revision"]["local_asr"]["unplaced_ranges"],
+            serde_json::json!([{"from_us": 1_000_000, "to_us": 3_000_000}])
+        );
+    }
+    validate("transcript-get-data.schema.json", &full["data"])?;
+    validate("transcript-get-brief-data.schema.json", &brief["data"])?;
+    for member in ["status", "warnings", "error", "coverage", "lifecycle"] {
+        assert_eq!(brief[member], full[member], "{member}");
+    }
+    assert!(is_projection_of(
+        &brief["data"]["items"],
+        &full["data"]["items"]
+    ));
+
+    // One rule: a search over the same range reports the same stretch.
+    assert_eq!(
+        vsift_domain::SearchCoverage::of(&revision, Some(window)).untranscribed(),
+        stretch
+    );
+
+    // A page over the stretch alone holds no words, and says why: a gap, not a
+    // silence.
+    let over = get(&revision, range(SECOND, 2 * SECOND)?, ResultView::Full)?;
+    assert_eq!(over["status"], "partial");
+    assert_eq!(gaps_of(&over)?, ["1000000-2000000"]);
+    assert_eq!(over["data"]["items"].as_array().map(Vec::len), Some(0));
+
+    // Clear of the stretch, within what was transcribed, a read is complete.
+    let clear = get(&revision, range(3 * SECOND, 10 * SECOND)?, ResultView::Full)?;
+    assert_eq!(clear["status"], "complete");
+    assert!(clear["coverage"].is_null());
+    assert_eq!(clear["data"]["items"].as_array().map(Vec::len), Some(1));
+    Ok(())
+}
+
 /// #373: the answer is about the range asked for. A range that ends where the
 /// gap begins is complete and keeps `coverage` null; one that starts or ends
 /// inside the gap lists only its own part of it; one that runs past the end of
@@ -2087,6 +2182,7 @@ fn a_stretch_an_earlier_run_could_not_read_stays_a_gap_through_a_later_run() -> 
                 run: run(&source, replaced, outcome)?,
                 language: None,
                 segments: Vec::new(),
+                unplaced: Vec::new(),
                 warnings: TranscriptWarnings::default(),
             },
             splice: Some(RevisionSplice {
@@ -2195,6 +2291,7 @@ fn revision_by_chunk_outcome(
             run,
             language: None,
             segments: Vec::new(),
+            unplaced: Vec::new(),
             warnings: TranscriptWarnings::default(),
         },
         splice: None,
@@ -2331,6 +2428,7 @@ fn replacing_every_segment_of_the_first_run_leaves_a_false_gap_never_a_false_sil
                 run,
                 language,
                 segments: merge_chunks(&[segments]).segments,
+                unplaced: Vec::new(),
                 warnings,
             })
         };

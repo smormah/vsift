@@ -833,6 +833,7 @@ fn unusable_second_chunk(
             run,
             language,
             segments: merge_chunks(&[segments]).segments,
+            unplaced: Vec::new(),
             warnings,
         },
         splice: None,
