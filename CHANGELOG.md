@@ -6,10 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
-### What changes, in plain English
+## [0.2.1-rc.3] - 2026-10-13
+
+**This is a release candidate, under qualification.** It is the third candidate for `0.2.1`, the patch release after `0.2.0`, and it **supersedes the second, `0.2.1-rc.2`** (published on 2026-10-11, tag `v0.2.1-rc.2`) and, with it, the first, `0.2.1-rc.1`; both have the
+`setup check` defect of [#391](https://github.com/smormah/vsift/issues/391) ([L-161](docs/planning/known-limits.md#l-161)). It is `0.2.1-rc.2` plus that one fix and the version text, and nothing else. It is cut in this change and is **not tagged or published here**: when the
+maintainer publishes it, it goes to npm under the tag `next` and never under `latest` (`latest` stays `0.2.0` on all four packages), it is not announced, and it is no statement of support or stability. **`0.2.0`, `0.2.1-rc.1` and `0.2.1-rc.2` stay
+published and are not deprecated, and `0.2.0` is still affected by [L-145](docs/planning/known-limits.md#l-145), [L-149](docs/planning/known-limits.md#l-149) and [L-161](docs/planning/known-limits.md#l-161) until `0.2.1` is published.** No evidence is recorded for this
+candidate: the five hosted checks that were run on `0.2.1-rc.2` do not count for it, so the hosted checks are run once on this candidate, and agent-trial batches 2 and 3, which have not run on any `0.2.1` candidate, run once on it too; the plan says what is open, among
+it the four waivers that the completeness check passes without a decision ([`release-0.2.1.md`](docs/planning/release-0.2.1.md)). The release runbook for this candidate is [`release.md`](docs/operations/release.md) section 6.16.
+
+### What changed since 0.2.1-rc.2, in plain English
 
 **If `vsift setup check` said `[timeout]` for a tool you have, called your setup `blocked` and told you to install the tool
-([#391](https://github.com/smormah/vsift/issues/391), [L-161](docs/planning/known-limits.md#l-161); in every published version before `0.2.1-rc.3`: `0.1.0`, `0.2.0` and its three candidates, `0.2.1-rc.1` and `0.2.1-rc.2`; meant for a third candidate, `0.2.1-rc.3`, which this change does not cut).**
+([#391](https://github.com/smormah/vsift/issues/391), [L-161](docs/planning/known-limits.md#l-161); in every published version before `0.2.1-rc.3`: `0.1.0`, `0.2.0` and its three candidates, `0.2.1-rc.1` and `0.2.1-rc.2`; fixed in `0.2.1-rc.3`).**
 It was seen once, on one Windows 11 machine, on the first check after the machine started: FFmpeg and FFprobe were installed, on `PATH` and healthy, and the second run a moment later said `[ok]`. The tools were never called missing: each line said `[timeout]`, and under it stood the advice for a missing tool. Two things were wrong, and both are changed.
 
 - **The time allowed was too short.** `setup check` starts FFmpeg, FFprobe and whisper.cpp one after another and waits for each to answer (FFmpeg and FFprobe are asked for their version, whisper.cpp for its help text), and the three share one deadline. It was 5 seconds for all three; it is now **30 seconds**. It is still one deadline for all three,
@@ -27,6 +36,18 @@ It was seen once, on one Windows 11 machine, on the first check after the machin
 **What this does not show.** The slow first start was seen on one machine and was not reproduced with the default deadline by anyone else; the fix is shown by tests with stand-in tools that never answer and by running the new build with `--timeout-seconds 1` on one Windows 11
 machine, not by a cold start. On macOS and Linux only the automated tests ran. Nobody measured how long a cold start takes on a slow machine, so 30 seconds can still be too short there, and the answer then says so and names the option. A tool that never answers at all gets nothing more from the output than "run it again" and, at 60 seconds, "the tool itself hangs";
 the troubleshooting page has the next step. The issue stays open until the released candidate has been run on the machine that showed it.
+
+**What is not in this candidate.** Nothing else of `main`: `main` and `0.2.1-rc.2` differed by this fix only. No FFmpeg or whisper.cpp re-pin ([#351](https://github.com/smormah/vsift/issues/351)), no dependency update, and no change to the agent skill.
+
+### What this cut itself does
+
+- **The version** is `0.2.1-rc.3` in the five files that hold it (`Cargo.toml`, `Cargo.lock`, `fuzz/Cargo.toml`, `fuzz/Cargo.lock`, `npm/vsift-cli/package.json`), and only there; each is the `0.2.1-rc.2` file with the version text replaced (`Cargo.lock`: the eight lines of the workspace crates).
+- **The skill and the agent-trial freeze do not change:** the skill is the text of `0.2.1-rc.2`, so `batch-2/freeze.json` and `batch-3/freeze.json` stay byte for byte (`skill` digest `256b4840...`, whole-freeze digest `a48567ac...`) and the pin in the `committed_freeze` test did not move.
+  The batches run against `0.2.1-rc.3` ([`docs/agents/trials.md`](docs/agents/trials.md), "The freeze (P14)").
+- **The guide** still names the release `0.2.1` (the marker and the generated pages are unchanged); its first page now says that `0.2.1-rc.3` is the build it was checked against and what `0.2.1-rc.2`, `0.2.1-rc.1` and `0.2.0` lack, and the development guide lists the new candidate.
+  The installation guide's known-issue note for `setup check` says the fix is in `0.2.1-rc.3`.
+- **The runbook** is [`release.md`](docs/operations/release.md) 6.16 (6.15 becomes the record of the second candidate), the plan for the release is [`release-0.2.1.md`](docs/planning/release-0.2.1.md), and the register's L-108, L-133 and L-161 say that the third candidate is cut.
+- **`vsift-release candidate-delta` was not run:** it compares a stable commit with its accepted candidate and refuses a pre-release tree.
 
 ### Changed
 
