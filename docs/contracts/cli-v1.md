@@ -2055,7 +2055,13 @@ depends on the reason:
 | `missing`, `unhealthy` | unchanged: `Install or locate a trusted FFmpeg executable, then rerun setup check.` (and the FFprobe and whisper.cpp forms) |
 | `timed_out`, the tool was started | `FFmpeg was found and started but did not answer before the deadline all tool checks share (30 seconds). A first run after an install or restart can be slow. Run setup check again, or allow more time with --timeout-seconds (up to 60).` |
 | `timed_out`, the tool was not started | `FFprobe was found but not started: the deadline all tool checks share (30 seconds) had already passed. A first run after an install or restart can be slow. Run setup check again, or allow more time with --timeout-seconds (up to 60).` |
+| `timed_out`, started, and the deadline was already the longest (`--timeout-seconds 60`) | `FFmpeg was found and started but did not answer before the deadline all tool checks share (60 seconds); --timeout-seconds cannot allow more. Run setup check again. If it never answers, the tool itself hangs: run it yourself to see.` |
+| `timed_out`, not started, and the deadline was already the longest | `FFprobe was found but not started: the deadline all tool checks share (60 seconds) had already passed; --timeout-seconds cannot allow more. Run setup check again. If a tool never answers, that tool hangs: run it yourself to see.` |
 
+More time is offered only while the option has more to give: after `--timeout-seconds 60`
+(and for a library host that passed that much or more) the step does not say "allow more
+time", and says instead what a tool that never answers means. That is all the output says
+about a tool that never answers; the guide's troubleshooting page has the next step.
 The figure in brackets is the deadline that was applied (`1 second`, `30 seconds`; a library
 host that passes a deadline which is not a whole number of seconds gets milliseconds, and one
 over an hour gets `over an hour`). The two timed-out texts differ because they are different
@@ -2074,8 +2080,9 @@ its range (`1..60`), the `status` and `reason` values, the schema and the exit s
 unchanged; only the default, the `next_step` text of a `timed_out` dependency, the option's
 help text and what `setup plan` does with such a tool (below) are new. What
 it costs: a tool that truly hangs now holds `setup check` for up to 30 seconds instead of 5
-before the answer comes (and `setup plan` and `setup install`, which probe with the same
-default and have no option for it). Thirty seconds is a choice, not a measurement of slow
+before the answer comes, and `setup install` likewise; `setup plan` can wait twice that when
+a managed tool is installed (below). Neither of those two has an option for it.
+Thirty seconds is a choice, not a measurement of slow
 machines; `--timeout-seconds 60` is the most a caller can ask for. The local-ASR part below does
 not use the probes' results: it finds the tools again and runs under its own budget, so one
 answer can say `timed_out` for a tool and `verified` for local ASR, and both are true.
@@ -2162,7 +2169,17 @@ looks like a path or a ggml loader log is ever shown.
 `setup plan --profile <desktop|worker>` probes configured executables or filtered
 `PATH` like `setup check`, without per-call path options and under the same default
 deadline (thirty seconds since `0.2.1`; it has no `--timeout-seconds`, and neither has
-`setup install`, which probes again to compare the plan). On **Ubuntu 24.04
+`setup install`, which probes again to compare the plan). **`setup plan` can probe twice, and
+each time under a deadline of its own:** once for the plan's intent, over the tools outside
+VSift's managed store, and, when a managed executable is installed, once more for the observed
+state, with the managed versions. So on a machine that has a managed tool, a tool that never
+answers holds `setup plan` for up to twice the deadline, about 60 seconds (10 before `0.2.1`),
+where `setup check` and `setup install` probe once. And the two observations can disagree: a
+tool that did not answer the first time and did the second is shown with `status: "available"`
+beside a `next_step` that says its check did not finish, and the reverse (answered first, not
+second) with `status: "timed_out"` beside `existing_executable_probe_only`. Both members are
+then true of the moment each was observed; the step always follows the first, because it is
+part of what acceptance compares. Sharing one deadline between the two is not done. On **Ubuntu 24.04
 x86-64** it consults the reviewed, pinned catalogue for the paired FFmpeg and
 FFprobe build, whisper.cpp CLI and multilingual `base` model. It returns only
 actions needed by the current probe and configured-model presence, with exact
@@ -2204,8 +2221,8 @@ entries return typed `unavailable_*` status, no actions or digest, and manual
 BYO guidance. Missing and unhealthy tools receive
 `manual_selection_required` unless a reviewed managed action applies.
 
-**A tool whose probe timed out is planned for nothing** (issue
-[#391](https://github.com/smormah/vsift/issues/391), `0.2.1`). It was found, and the plan
+**A probe that timed out never causes a managed action** (issue
+[#391](https://github.com/smormah/vsift/issues/391), `0.2.1`). The tool was found, and the plan
 learned nothing about whether it works, so on every target it receives
 `manual_selection_required` and **never causes a managed action**: before `0.2.1`, on Ubuntu
 24.04, a healthy FFmpeg whose probe timed out was planned for a download exactly like a
@@ -2218,8 +2235,18 @@ Run setup check until it answers (it can be given more time with --timeout-secon
 then run setup plan again.` The disposition's name is the published one for a timed-out tool
 and reads oddly for it (nothing has to be selected); the step carries the meaning. What a
 timeout does not change: a tool that is really missing or failing is planned as before, with the
-tool it is paired with (a missing FFmpeg beside a timed-out FFprobe still plans the pair, and
-FFprobe keeps its own disposition), and the model is planned whatever the tools do, so a plan
+tool it is paired with. **FFmpeg and FFprobe come in one managed build**, so a missing FFmpeg
+beside a timed-out FFprobe still plans that build, and a managed version is used ahead of a tool
+found on `PATH`: accepting such a plan replaces the FFprobe whose probe only timed out. Its
+step therefore does not say that the plan proposes nothing; it keeps
+`manual_selection_required` and says what the plan does to it: `FFprobe was found, but its
+check did not finish before the deadline the tool checks share: it did not answer in time, or it
+was not started because the time had run out. This plan cannot tell whether it works. It
+proposes installing the paired FFmpeg and FFprobe build because FFmpeg is missing or failed its
+check, not because of this timeout; that build includes FFprobe, and VSift then uses it instead
+of this one unless you registered this one with setup configure. Review that action before you
+accept.` (and the same for a timed-out FFmpeg beside a missing or failing FFprobe; whisper.cpp
+has no pair). The model is planned whatever the tools do, so a plan
 made while every probe timed out can hold the model's action alone, or none
 (`managed_install: not_required`, which then means only that no observation asked for an
 install). The digest binds that a probe timed out, not which kind or under which deadline, so a

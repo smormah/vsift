@@ -307,13 +307,14 @@ archive, downloads none of these. Nothing downloads them unless you run `vsift s
 install` yourself, and the VSift agent skill never runs it for you.
 
 `vsift setup check` says what is missing and where each tool was found. Run it first and
-after every change below. It asks each tool for its version, one after another, and allows
-the three of them 30 seconds in all (`--timeout-seconds` takes 1 to 60). The first check
-after you install a tool or restart the machine can be slow, because each program is
-started for the first time; a line that starts `[timeout]` means the tool was found and did
-not answer in time, not that it is missing: run the check again
+after every change below. It starts each tool once, one after another, and waits for it to
+answer (FFmpeg and FFprobe are asked for their version, whisper.cpp for its help text), and
+allows the three of them 30 seconds in all (`--timeout-seconds` takes 1 to 60). The first
+check after you install a tool or restart the machine can be slow, because each program is
+started for the first time; a line that starts `[timeout]` means the tool was found and
+VSift had no answer from it in time, not that it is missing: run the check again
 ([troubleshooting](../guide/troubleshooting.md#missing_capability-a-tool-or-model-is-missing);
-`0.2.0` and the candidates up to `0.2.1-rc.2` are different, see [section 12](#12-problems)).
+every version before `0.2.1-rc.3` is different, see [section 12](#12-problems)).
 
 ### 5.1 Ubuntu 24.04 x64: let VSift install them
 
@@ -602,14 +603,14 @@ result still report the whole range as transcribed, and no warning gives a time,
 off near one is the sign. Or give VSift a transcript (`vsift ingest ./recording.mp4 --transcript ./recording.vtt`), which skips local recognition. Transcribing a range with
 `--from` and `--to` does not avoid it, because a range has seams of its own.
 
-**Known issue in 0.2.0 and in the release candidates up to 0.2.1-rc.2: the first `vsift setup check` after a restart can say `[timeout]` for
+**Known issue in every published version before 0.2.1-rc.3 (0.1.0, 0.2.0 and the earlier release candidates): the first `vsift setup check` after a restart can say `[timeout]` for
 FFmpeg and FFprobe, call the setup `blocked` and tell you to install tools you already have**
 ([#391](https://github.com/smormah/vsift/issues/391), [L-161](../planning/known-limits.md#l-161)). Those versions allow FFmpeg, FFprobe and whisper.cpp
-5 seconds in all to answer a version request, one after another. A large FFmpeg build that is started for the first time since the machine came up can use that up
+5 seconds in all to answer, one after another (FFmpeg and FFprobe are asked for their version, whisper.cpp for its help text). A large FFmpeg build that is started for the first time since the machine came up can use that up
 (on the one Windows 11 machine where this was seen, with real-time virus scanning, FFprobe alone was reported to take 4.7 seconds), and the answer then says
 "Install or locate this trusted tool" under a tool that is installed and working. Nothing is wrong with the tools. **Run `vsift setup check` again**, or run
 `vsift setup check --timeout-seconds 30`. The fix is on `main` and planned for 0.2.1 (a third candidate, `0.2.1-rc.3`): the limit becomes 30 seconds, and a tool that did not
-answer in time is told so, with what to do, instead of being called missing. It was seen once, on one machine; macOS and Linux were not checked.
+answer in time is told so, with what to do, instead of getting the advice for a missing tool. It was seen once, on one machine, on Windows; whether macOS and Linux show it was not checked.
 
 **`INTEGRITY_FAILURE` right after `--session-root <folder>`.** If the folder already exists and
 VSift did not create it (an empty folder you made with `mkdir`, say), VSift never adopts it and

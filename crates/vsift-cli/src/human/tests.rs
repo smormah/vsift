@@ -408,6 +408,61 @@ fn each_tool_and_each_kind_of_timeout_gets_the_timeout_advice_only() -> TestResu
     Ok(())
 }
 
+/// "Allow more time with --timeout-seconds (up to 60)" is no advice for
+/// someone who ran `setup check --timeout-seconds 60`. After the longest
+/// deadline the text says the option cannot extend it, to run the check
+/// again, and what a tool that never answers means; it still never says to
+/// install or locate the tool. One second less still offers more time.
+#[test]
+fn after_the_longest_deadline_the_readable_advice_does_not_offer_more_time() -> TestResult {
+    let text = setup_check_text(
+        [
+            timed_out(ProbeTimeoutKind::NoAnswer, 60),
+            timed_out(ProbeTimeoutKind::NotStarted, 60),
+            timed_out(ProbeTimeoutKind::NotStarted, 60),
+        ],
+        RuntimeReadiness::Blocked,
+        ManagedPlanAvailability::Qualified,
+    )?;
+    assert!(
+        text.contains(
+            "[timeout] FFmpeg (media_processing): found, but it did not answer in time [filtered PATH]\n  It was started and had not answered when the deadline passed: 60 seconds, which the three tool checks share and --timeout-seconds cannot extend. Run setup check again. If it never answers, the tool itself hangs: run it yourself to see what it does.\n"
+        ),
+        "{text}"
+    );
+    assert_eq!(
+        text.matches(
+            "  It was not started, because the deadline had already passed: 60 seconds, which the three tool checks share and --timeout-seconds cannot extend. Nothing is known about it yet. Run setup check again. If a tool never answers, that tool hangs: run it yourself to see what it does.\n"
+        )
+        .count(),
+        2,
+        "{text}"
+    );
+    assert!(!text.contains("allow more time"), "{text}");
+    assert!(!text.contains("up to 60"), "{text}");
+    for phrase in INSTALL_ADVICE {
+        assert!(!text.contains(phrase), "says {phrase:?}: {text}");
+    }
+
+    let one_second_less = setup_check_text(
+        [
+            timed_out(ProbeTimeoutKind::NoAnswer, 59),
+            timed_out(ProbeTimeoutKind::NotStarted, 59),
+            timed_out(ProbeTimeoutKind::NotStarted, 59),
+        ],
+        RuntimeReadiness::Blocked,
+        ManagedPlanAvailability::Qualified,
+    )?;
+    assert_eq!(
+        one_second_less
+            .matches("or allow more time with --timeout-seconds (up to 60).\n")
+            .count(),
+        3,
+        "{one_second_less}"
+    );
+    Ok(())
+}
+
 /// A plan with a reviewed action names its download, digest, licence,
 /// notices, trust limit and files, each URL on its own line.
 #[test]

@@ -54,8 +54,9 @@ What the status means:
 - **blocked**: FFmpeg or FFprobe is missing, or did not answer, so VSift cannot read video yet. The
   lines under `[missing]` say what to do. If you do not have the tools, [the install guide](../operations/install.md#5-install-ffmpeg-ffprobe-whispercpp-and-the-speech-model)
   explains how to get them on each system. A line that starts `[timeout]` is different: the tool
-  is there and was slow to start, which happens on the first run after an install or a restart.
-  Run the command again ([more](troubleshooting.md#missing_capability-a-tool-or-model-is-missing)).
+  is there, and VSift had no answer from it in time or did not get to it before the time ran
+  out. That can happen on the first run after an install or a restart. Run the command again;
+  if it keeps happening, see [troubleshooting](troubleshooting.md#missing_capability-a-tool-or-model-is-missing).
 
 VSift never installs anything on its own. On Ubuntu 24.04 it can install the tools for you
 after you read and accept a plan; everywhere else you install them yourself.

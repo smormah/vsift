@@ -188,11 +188,12 @@ in [`install.md`](../operations/install.md) section 5. The decision is unchanged
 ## 2026-10-13 note: a probe that timed out is not a missing tool (issue #391)
 
 Steps 1, 2 and 4 speak of tools that are "missing" or already suitable. The implementation
-had a third outcome that it treated as missing: an executable that was found, and whose
-version probe had no result when the one deadline the three probes share had passed. On
+had a third outcome that it handled like a missing tool: an executable that was found, and
+whose probe had no result when the one deadline the three probes share had passed. On
 one Windows 11 machine the first `setup check` after a restart reported an installed,
-healthy FFmpeg and FFprobe that way and gave step 4's manual advice, "install or locate"
-(`0.2.0` and every `0.2.1` candidate up to `0.2.1-rc.2`). The maintainer decided on
+healthy FFmpeg and FFprobe as `[timeout]` and gave step 4's manual advice, "install or
+locate" (every published version before `0.2.1-rc.3` does: `0.1.0`, `0.2.0` and its
+candidates, `0.2.1-rc.1` and `0.2.1-rc.2`). The maintainer decided on
 2026-10-13 to fix it in `0.2.1`, to raise the default deadline, to keep one shared
 deadline, and not to retry silently. What follows from that, as built:
 
@@ -203,13 +204,20 @@ deadline, and not to retry silently. What follows from that, as built:
   `timed_out` always means "found".
 - **Step 1 and step 4:** such a tool is told what happened, under which deadline, that a
   first run after an install or a restart can be slow, and to run the check again or allow
-  more time. It is never told to install or locate the tool, and the readable output offers
-  no managed installation for it. A tool that was found and failed its probe keeps step 4's
-  advice, which is true of it.
+  more time; after the longest deadline the option takes, more time is not offered and the
+  text says that a tool which never answers is itself hanging. It is never told to install
+  or locate the tool, and the readable output offers no managed installation for it. A tool
+  that was found and failed its probe keeps step 4's advice, which is true of it.
 - **Step 2:** "do not plan downloads for already-suitable user tools" is read to cover a
-  tool the probe could not judge. A timed-out probe plans nothing for its tool on any
+  tool the probe could not judge. A timed-out probe causes no managed action on any
   target: before this, on Ubuntu 24.04, it planned the managed download exactly as a
-  missing tool does. The plan says so and sends the reader to `setup check`.
+  missing tool does. The plan says so and sends the reader to `setup check`. One case
+  needs its own words: FFmpeg and FFprobe come in one managed build, so when one of them
+  is really missing the plan installs that build, and a managed version is used ahead of a
+  tool on `PATH`; the other tool is then replaced even if its probe only timed out. Its
+  step says that the plan replaces it and that the timeout is not the reason, where it
+  first said the plan proposed nothing for it (found in review). The cost of the rule on
+  Ubuntu: a `PATH` tool that only timed out is no longer offered a managed build.
 - **The default deadline is 30 seconds** (it was 5), for `setup check`, `setup plan` and
   `setup install`, with one home in the code. The value is the supervisor's proposal,
   confirmed by the maintainer's merge: it is not a measurement of slow machines, and a tool
@@ -217,6 +225,10 @@ deadline, and not to retry silently. What follows from that, as built:
 
 Not decided here: an option to change the deadline on `setup plan` and `setup install`
 (they would have to take the same value, because `setup install` probes again to compare
-the plan), and whether the local-ASR check of `setup check`, which finds the tools again and
-runs under its own budget, should take the probes' results into account. Both are in the
-register ([L-161](../planning/known-limits.md#l-161)). The decision of this ADR is unchanged.
+the plan); whether `setup plan`, which probes once for its intent and once more for the
+observed state when a managed tool is installed, each time under a deadline of its own,
+should give the two one deadline (it can wait twice the figure, and the two observations
+can disagree); and whether the local-ASR check of `setup check`, which finds the tools again
+and runs under its own budget, should take the probes' results into account. All three are
+in the register ([L-161](../planning/known-limits.md#l-161)). The decision of this ADR is
+unchanged.

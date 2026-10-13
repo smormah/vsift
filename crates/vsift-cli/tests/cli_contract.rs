@@ -250,20 +250,17 @@ fn the_setup_check_deadline_option_keeps_its_range() -> Result<(), Box<dyn std::
     Ok(())
 }
 
+/// This asserts that a stand-in tool answers, so it runs under the default
+/// deadline and names none: under an explicit five seconds, the default
+/// before #391, it could fail on a loaded machine for the very reason of
+/// that issue.
 #[test]
 fn off_path_whisper_is_selectable_without_installing_or_disclosing_its_path()
 -> Result<(), Box<dyn std::error::Error>> {
     let binary = Command::cargo_bin("vsift")?.get_program().to_os_string();
     let base = isolated_config_base()?;
     let output = with_config_base(&mut Command::cargo_bin("vsift")?, &base)
-        .args([
-            "setup",
-            "check",
-            "--json",
-            "--timeout-seconds",
-            "5",
-            "--whisper",
-        ])
+        .args(["setup", "check", "--json", "--whisper"])
         .arg(&binary)
         .env("PATH", "")
         .output()?;
@@ -300,7 +297,7 @@ fn setup_check_reports_an_unreviewed_model_without_running_or_disclosing_it()
     assert!(registered.status.success());
 
     let output = with_config_base(&mut Command::cargo_bin("vsift")?, &base)
-        .args(["setup", "check", "--json", "--timeout-seconds", "5"])
+        .args(["setup", "check", "--json"])
         .arg("--ffmpeg")
         .arg(&binary)
         .arg("--ffprobe")

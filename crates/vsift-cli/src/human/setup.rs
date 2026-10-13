@@ -7,8 +7,8 @@ use vsift::{
     ProbeTimeoutKind, RuntimeDependency, RuntimeDiagnosis, RuntimeReadiness,
 };
 use vsift_contract::{
-    DependencyLookup, MAX_PROVIDER_DETAIL_BYTES, explicit_path_option, probe_deadline_text,
-    sanitize_untrusted_text,
+    DependencyLookup, MAX_PROVIDER_DETAIL_BYTES, ProbeTimeHeadroom, explicit_path_option,
+    probe_deadline_text, sanitize_untrusted_text,
 };
 
 use super::{
@@ -132,9 +132,13 @@ const fn state_marker(state: &DependencyState) -> &'static str {
 /// The tool was found, so nothing here says to install or locate it, and no
 /// managed installation is offered for it. It says which of the two things
 /// happened, under which deadline, why a healthy tool can be this slow, and
-/// the two things that help. The deadline is the one the three probes share,
-/// which is said, because the tool did not have all of it to itself.
+/// what helps. The deadline is the one the three probes share, which is
+/// said, because the tool did not have all of it to itself. More time is
+/// offered only while `--timeout-seconds` has more to give: after the
+/// longest deadline there is, the text says what a tool that never answers
+/// means instead.
 fn push_timeout_advice(text: &mut TerminalText, timeout: ProbeTimeout) {
+    let headroom = ProbeTimeHeadroom::of(timeout.shared_deadline);
     text.push_fixed(match timeout.kind {
         ProbeTimeoutKind::NoAnswer => {
             "  It was started and had not answered when the deadline passed: "
@@ -144,17 +148,30 @@ fn push_timeout_advice(text: &mut TerminalText, timeout: ProbeTimeout) {
         }
     })
     .push_value(&probe_deadline_text(timeout.shared_deadline))
-    .push_fixed(match timeout.kind {
-        ProbeTimeoutKind::NoAnswer => ", which the three tool checks share.",
-        ProbeTimeoutKind::NotStarted => {
-            ", which the three tool checks share. Nothing is known about it yet."
+    .push_fixed(match headroom {
+        ProbeTimeHeadroom::MoreTimeAllowed => ", which the three tool checks share.",
+        ProbeTimeHeadroom::AtTheMaximum => {
+            ", which the three tool checks share and --timeout-seconds cannot extend."
+        }
+    });
+    if timeout.kind == ProbeTimeoutKind::NotStarted {
+        text.push_fixed(" Nothing is known about it yet.");
+    }
+    text.push_fixed(match (headroom, timeout.kind) {
+        (ProbeTimeHeadroom::MoreTimeAllowed, _) => {
+            " A first run after installing a tool or restarting the machine can be slow, for \
+             example while a virus scanner reads a large program for the first time. Run setup \
+             check again, or allow more time with --timeout-seconds (up to 60)."
+        }
+        (ProbeTimeHeadroom::AtTheMaximum, ProbeTimeoutKind::NoAnswer) => {
+            " Run setup check again. If it never answers, the tool itself hangs: run it \
+             yourself to see what it does."
+        }
+        (ProbeTimeHeadroom::AtTheMaximum, ProbeTimeoutKind::NotStarted) => {
+            " Run setup check again. If a tool never answers, that tool hangs: run it yourself \
+             to see what it does."
         }
     })
-    .push_fixed(
-        " A first run after installing a tool or restarting the machine can be slow, for \
-         example while a virus scanner reads a large program for the first time. Run setup \
-         check again, or allow more time with --timeout-seconds (up to 60).",
-    )
     .end_line();
 }
 

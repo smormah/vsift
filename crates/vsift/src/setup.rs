@@ -168,10 +168,16 @@ fn presence(selections: &ExecutableSelections) -> [bool; 3] {
 pub struct SetupPlanRequest {
     /// Profile whose dependencies are planned.
     pub profile: SetupProfile,
-    /// Total deadline shared by every dependency probe in the plan; hosts
-    /// normally pass [`DEFAULT_PROBE_TIMEOUT`]. A tool whose probe times out
-    /// is planned for nothing: the plan says so and proposes no install
-    /// because of it.
+    /// Total deadline shared by the dependency probes of one look at the
+    /// tools; hosts normally pass [`DEFAULT_PROBE_TIMEOUT`]. A probe that
+    /// times out causes no managed action, and the plan says so.
+    ///
+    /// [`Engine::plan_setup`] can look twice, each time under this deadline:
+    /// once at the tools outside the managed store, for the plan's intent,
+    /// and, when a managed executable is installed, once more with the
+    /// managed versions, for the observed state. So it can wait up to twice
+    /// this long on tools that never answer, and the two looks can disagree
+    /// (known limit L-161).
     pub probe_timeout: Duration,
 }
 
@@ -931,6 +937,113 @@ mod tests {
                 .map_err(|error| error.failure_code()),
             Err(FailureCode::InvalidArgument)
         );
+        Ok(())
+    }
+
+    /// A probe that answers with one fixed state for each dependency, in the
+    /// stable dependency order.
+    struct StatesProbe {
+        states: [DependencyState; 3],
+    }
+
+    impl DependencyProbe for StatesProbe {
+        fn probe(
+            &self,
+            dependency: RuntimeDependency,
+        ) -> impl Future<Output = DependencyStatus> + Send {
+            let state = RuntimeDependency::ALL
+                .iter()
+                .zip(&self.states)
+                .find(|(candidate, _)| **candidate == dependency)
+                .map_or(DependencyState::Missing, |(_, state)| state.clone());
+            ready(DependencyStatus { dependency, state })
+        }
+    }
+
+    /// Issue #391, the case a reviewer found: `FFmpeg` and `FFprobe` come in
+    /// one managed build. When one of them is missing the plan installs that
+    /// build, and a managed version is used ahead of a tool found on `PATH`,
+    /// so the other one is replaced too, even if its own probe only timed
+    /// out. Its step said "this plan ... decides nothing for it and proposes
+    /// no install because of it" while the same plan installed its
+    /// replacement. Now the step says what the plan does to it and that the
+    /// timeout is not the reason; the tool that is missing is planned as it
+    /// always was. Both ways round.
+    #[tokio::test]
+    async fn a_timed_out_tool_beside_its_missing_pair_is_told_the_plan_replaces_it()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let timed_out = || {
+            DependencyState::TimedOut(ProbeTimeout {
+                kind: ProbeTimeoutKind::NoAnswer,
+                shared_deadline: Duration::from_secs(30),
+            })
+        };
+        let available = || DependencyState::Available {
+            version: String::from("fixture 1"),
+        };
+        let schema = setup_plan_schema()?;
+        let validator = jsonschema::validator_for(&schema)?;
+        // (the states probed, the index of the missing tool, of the timed-out
+        // one, and the timed-out one's step)
+        let cases = [
+            (
+                [DependencyState::Missing, timed_out(), available()],
+                0,
+                1,
+                "FFprobe was found, but its check did not finish before the deadline the tool checks share: it did not answer in time, or it was not started because the time had run out. This plan cannot tell whether it works. It proposes installing the paired FFmpeg and FFprobe build because FFmpeg is missing or failed its check, not because of this timeout; that build includes FFprobe, and VSift then uses it instead of this one unless you registered this one with setup configure. Review that action before you accept.",
+            ),
+            (
+                [timed_out(), DependencyState::Missing, available()],
+                1,
+                0,
+                "FFmpeg was found, but its check did not finish before the deadline the tool checks share: it did not answer in time, or it was not started because the time had run out. This plan cannot tell whether it works. It proposes installing the paired FFmpeg and FFprobe build because FFprobe is missing or failed its check, not because of this timeout; that build includes FFmpeg, and VSift then uses it instead of this one unless you registered this one with setup configure. Review that action before you accept.",
+            ),
+        ];
+        for (states, missing_index, slow_index, step) in cases {
+            let plan = evaluate_plan(
+                StatesProbe { states },
+                SetupProfile::Desktop,
+                ManagedTarget::Ubuntu2404X86_64,
+                SetupSelectionState {
+                    model: Some(String::from("/fixture/model")),
+                    ..SetupSelectionState::default()
+                },
+                1_800_000_000,
+                Some(accepted_ubuntu_catalogue()?),
+            )
+            .await;
+            let value = plan_json(&plan)?;
+            validator
+                .validate(&value)
+                .map_err(|error| std::io::Error::other(error.to_string()))?;
+            let data = &value["data"];
+            let actions: Vec<&serde_json::Value> = data["actions"]
+                .as_array()
+                .ok_or("actions missing")?
+                .iter()
+                .map(|action| &action["id"])
+                .collect();
+            assert_eq!(actions, ["install-ffmpeg_ffprobe"], "the pair's build");
+
+            let missing = &data["dependencies"][missing_index];
+            assert_eq!(missing["status"], "missing");
+            assert_eq!(missing["disposition"], "managed_install");
+            let slow = &data["dependencies"][slow_index];
+            assert_eq!(slow["status"], "timed_out");
+            assert_eq!(slow["disposition"], "manual_selection_required");
+            assert_eq!(slow["next_step"], step);
+            for untrue in [
+                "decides nothing for it",
+                "proposes no install",
+                "nstall or locate",
+            ] {
+                assert!(!step.contains(untrue), "{untrue}: {step}");
+            }
+            assert_eq!(
+                data["dependencies"][2]["disposition"],
+                "existing_executable_probe_only"
+            );
+        }
         Ok(())
     }
 

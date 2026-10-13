@@ -8,9 +8,11 @@ use crate::command::ExecutionProfile;
 /// configuration layers work in. The figure and its reasons have one home,
 /// [`vsift::DEFAULT_PROBE_TIMEOUT`]; a test below holds this to it exactly.
 pub(crate) const DEFAULT_PROBE_TIMEOUT_SECONDS: u64 = vsift::DEFAULT_PROBE_TIMEOUT.as_secs();
-/// The most any layer may ask for. With three probes under one deadline it is
-/// also the longest a `setup check` can wait on tools that never answer.
-pub(crate) const MAX_PROBE_TIMEOUT_SECONDS: u64 = 60;
+/// The most any layer may ask for: the longest the executable probes of one
+/// `setup check` can wait, all three together. It has one home too,
+/// [`vsift_contract::MAX_PROBE_TIMEOUT`], because the advice for a probe that
+/// timed out names it and stops offering more time once it was applied.
+pub(crate) const MAX_PROBE_TIMEOUT_SECONDS: u64 = vsift_contract::MAX_PROBE_TIMEOUT.as_secs();
 
 /// Values contributed by one explicit configuration layer.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -171,6 +173,11 @@ mod tests {
             std::time::Duration::from_secs(DEFAULT_PROBE_TIMEOUT_SECONDS),
             vsift::DEFAULT_PROBE_TIMEOUT,
             "the engine's default is a whole number of seconds"
+        );
+        assert_eq!(
+            std::time::Duration::from_secs(MAX_PROBE_TIMEOUT_SECONDS),
+            vsift_contract::MAX_PROBE_TIMEOUT,
+            "the longest deadline the advice names is a whole number of seconds"
         );
         // The default is itself inside what the host allows, or no check could run.
         const {

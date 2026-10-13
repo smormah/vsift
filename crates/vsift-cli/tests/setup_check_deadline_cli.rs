@@ -41,8 +41,7 @@ use serde_json::Value;
 
 type TestResult<T = ()> = Result<T, Box<dyn Error>>;
 
-const TEST_NAME: &str =
-    "a_tool_that_does_not_answer_in_time_is_reported_as_a_timeout_not_as_missing";
+const TEST_NAME: &str = "a_tool_that_does_not_answer_in_time_gets_no_advice_for_a_missing_tool";
 const OWNED_PREFIX: &str = "vsift-setup-deadline-";
 /// A copy of this executable under this name is the stand-in tool.
 const SILENT_TOOL_STEM: &str = "vsift-test-silent-tool";

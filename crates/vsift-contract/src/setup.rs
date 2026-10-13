@@ -5,7 +5,7 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 use vsift_application::{
     LocalAsrCheckOutcome, LocalAsrSetupStatus, ManagedPlanAvailability, ManagedPlanObservation,
-    ManagedSetupAction, ManagedSetupPlan, ObservedModel, RuntimeDiagnosis,
+    ManagedSetupAction, ManagedSetupPlan, ObservedModel, PlannedSupply, RuntimeDiagnosis,
     SetupDependencyDisposition, SetupModelDisposition, SetupProfile,
 };
 use vsift_domain::ManagedComponent;
@@ -265,29 +265,78 @@ const fn found_tool_name(dependency: RuntimeDependency) -> &'static str {
     }
 }
 
+/// The longest deadline `setup check --timeout-seconds` accepts for all the
+/// probes together: the figure the advice for a timed-out probe names as
+/// "up to 60", and the bound the CLI's host policy applies.
+pub const MAX_PROBE_TIMEOUT: Duration = Duration::from_secs(60);
+
+/// Whether a caller whose probe timed out can still be offered more time.
+///
+/// "Allow more time with --timeout-seconds" is advice only while the option
+/// has more to give. A probe that had the whole maximum and still had no
+/// answer is not helped by it: what is left to say is that the tool itself
+/// may hang.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ProbeTimeHeadroom {
+    /// The deadline that applied was shorter than the option's maximum.
+    MoreTimeAllowed,
+    /// The deadline that applied was the option's maximum, or longer (a
+    /// library host may pass any duration).
+    AtTheMaximum,
+}
+
+impl ProbeTimeHeadroom {
+    /// The headroom left to a caller whose probes shared `deadline`.
+    #[must_use]
+    pub fn of(deadline: Duration) -> Self {
+        if deadline < MAX_PROBE_TIMEOUT {
+            Self::MoreTimeAllowed
+        } else {
+            Self::AtTheMaximum
+        }
+    }
+}
+
 /// The `setup check` advice for a tool whose probe timed out: what happened,
-/// under which deadline, and the two things that help. It never says to
-/// install or locate the tool, because the tool was found.
+/// under which deadline, and what helps. It never says to install or locate
+/// the tool, because the tool was found.
 ///
 /// The two kinds read differently because they are different facts: a tool
-/// that was never started cannot be said to have given no answer. The text
-/// fits the 240 characters the published schema allows a `next_step`, for
-/// every dependency and deadline, which is why it is shorter than the
-/// readable form and leaves out its example.
+/// that was never started cannot be said to have given no answer. More time
+/// is offered only while `--timeout-seconds` has more to give; at its maximum
+/// the text says so and what a tool that never answers means. The text fits
+/// the 240 characters the published schema allows a `next_step`, for every
+/// dependency and deadline, which is why it is shorter than the readable
+/// form and leaves out its example.
 fn timed_out_check_step(dependency: RuntimeDependency, timeout: ProbeTimeout) -> String {
     let tool = found_tool_name(dependency);
     let deadline = probe_deadline_text(timeout.shared_deadline);
     let what_happened = match timeout.kind {
         ProbeTimeoutKind::NoAnswer => format!(
-            "{tool} was found and started but did not answer before the deadline all tool checks share ({deadline})."
+            "{tool} was found and started but did not answer before the deadline all tool checks share ({deadline})"
         ),
         ProbeTimeoutKind::NotStarted => format!(
-            "{tool} was found but not started: the deadline all tool checks share ({deadline}) had already passed."
+            "{tool} was found but not started: the deadline all tool checks share ({deadline}) had already passed"
         ),
     };
-    format!(
-        "{what_happened} A first run after an install or restart can be slow. Run setup check again, or allow more time with --timeout-seconds (up to 60)."
-    )
+    match ProbeTimeHeadroom::of(timeout.shared_deadline) {
+        ProbeTimeHeadroom::MoreTimeAllowed => format!(
+            "{what_happened}. A first run after an install or restart can be slow. Run setup check again, or allow more time with --timeout-seconds (up to 60)."
+        ),
+        ProbeTimeHeadroom::AtTheMaximum => {
+            let if_it_never_answers = match timeout.kind {
+                ProbeTimeoutKind::NoAnswer => {
+                    "If it never answers, the tool itself hangs: run it yourself to see."
+                }
+                ProbeTimeoutKind::NotStarted => {
+                    "If a tool never answers, that tool hangs: run it yourself to see."
+                }
+            };
+            format!(
+                "{what_happened}; --timeout-seconds cannot allow more. Run setup check again. {if_it_never_answers}"
+            )
+        }
+    }
 }
 
 /// A probe deadline in words: `30 seconds`, `1 second`, `1500 ms` for one that
@@ -396,7 +445,12 @@ impl SetupPlanResponse {
                         .iter()
                         .find(|observed| observed.dependency == status.dependency)
                         .unwrap_or(status);
-                    dependency_response(observed, status, *disposition)
+                    dependency_response(
+                        observed,
+                        status,
+                        *disposition,
+                        plan.supply_of(status.dependency),
+                    )
                 })
                 .collect(),
         }
@@ -510,12 +564,14 @@ struct SetupRuntimeCopyResponse {
 /// managed versions included) beside the plan's intent for it.
 ///
 /// The next step is part of the intent, which acceptance compares, so it is
-/// chosen from what the plan's own probe saw (`planned`) and never from the
-/// observed status, which changes as `setup install` applies the plan.
+/// chosen from what the plan's own probe saw (`planned`) and from the plan's
+/// own actions (`supply`), and never from the observed status, which changes
+/// as `setup install` applies the plan.
 fn dependency_response(
     observed: &DependencyStatus,
     planned: &DependencyStatus,
     disposition: SetupDependencyDisposition,
+    supply: PlannedSupply,
 ) -> SetupPlanDependencyResponse {
     let (required_authority, next_step) = match disposition {
         SetupDependencyDisposition::ExistingProbeOnly => (
@@ -528,11 +584,19 @@ fn dependency_response(
         ),
         SetupDependencyDisposition::ManualSelection => (
             Some("user"),
-            match planned.state {
-                DependencyState::TimedOut(_) => timed_out_plan_step(planned.dependency),
-                DependencyState::Available { .. }
-                | DependencyState::Missing
-                | DependencyState::Unhealthy { .. } => manual_plan_step(planned.dependency),
+            match (&planned.state, supply) {
+                (DependencyState::TimedOut(_), PlannedSupply::NotInstalled) => {
+                    timed_out_plan_step(planned.dependency)
+                }
+                (DependencyState::TimedOut(_), PlannedSupply::Installed) => {
+                    timed_out_beside_planned_build_step(planned.dependency)
+                }
+                (
+                    DependencyState::Available { .. }
+                    | DependencyState::Missing
+                    | DependencyState::Unhealthy { .. },
+                    PlannedSupply::Installed | PlannedSupply::NotInstalled,
+                ) => manual_plan_step(planned.dependency),
             },
         ),
     };
@@ -670,9 +734,32 @@ const fn manual_plan_step(dependency: RuntimeDependency) -> &'static str {
     }
 }
 
-/// The plan's next step for a tool whose probe timed out: the tool was found,
-/// the plan learned nothing about it and therefore proposes nothing for it
-/// (issue #391).
+/// The plan's next step for a tool whose probe timed out while the plan
+/// installs the build that supplies it anyway, because the tool it is paired
+/// with is missing or failing.
+///
+/// `FFmpeg` and `FFprobe` come in one managed build, and a managed version
+/// is used ahead of a tool found on `PATH`. So "this plan proposes no install
+/// because of it" would be true and still mislead: accepting the plan
+/// replaces the tool. The step says what the plan does to it and that the
+/// timeout is not the reason. whisper.cpp has no pair, and its build is
+/// planned only when its own probe showed it unusable, so it cannot be here
+/// with a timeout; it keeps the ordinary text so that this stays total.
+const fn timed_out_beside_planned_build_step(dependency: RuntimeDependency) -> &'static str {
+    match dependency {
+        RuntimeDependency::Ffmpeg => {
+            "FFmpeg was found, but its check did not finish before the deadline the tool checks share: it did not answer in time, or it was not started because the time had run out. This plan cannot tell whether it works. It proposes installing the paired FFmpeg and FFprobe build because FFprobe is missing or failed its check, not because of this timeout; that build includes FFmpeg, and VSift then uses it instead of this one unless you registered this one with setup configure. Review that action before you accept."
+        }
+        RuntimeDependency::Ffprobe => {
+            "FFprobe was found, but its check did not finish before the deadline the tool checks share: it did not answer in time, or it was not started because the time had run out. This plan cannot tell whether it works. It proposes installing the paired FFmpeg and FFprobe build because FFmpeg is missing or failed its check, not because of this timeout; that build includes FFprobe, and VSift then uses it instead of this one unless you registered this one with setup configure. Review that action before you accept."
+        }
+        RuntimeDependency::Whisper => timed_out_plan_step(dependency),
+    }
+}
+
+/// The plan's next step for a tool whose probe timed out when no action of
+/// the plan installs what supplies it: the tool was found, the plan learned
+/// nothing about it and proposes nothing for it (issue #391).
 ///
 /// One text serves both kinds of timeout, and names no deadline: the next
 /// step is part of the plan's intent, which the digest stands for, and the

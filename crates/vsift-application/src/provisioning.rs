@@ -388,6 +388,48 @@ impl ManagedSetupPlan {
             Err(PlanAcceptanceError::DigestMismatch)
         }
     }
+
+    /// What this plan's actions do about the managed build that supplies
+    /// `dependency`.
+    ///
+    /// A dependency's own disposition does not answer this. `FFmpeg` and
+    /// `FFprobe` come in one build, so a plan that installs it because one of
+    /// them is missing also installs the other, whatever the other's probe
+    /// showed; and a managed version is used ahead of a tool found on `PATH`.
+    /// What a plan says about a tool it decided nothing for must be true of
+    /// that too (issue #391).
+    #[must_use]
+    pub fn supply_of(&self, dependency: RuntimeDependency) -> PlannedSupply {
+        let supplier = supplying_component(dependency);
+        if self
+            .actions
+            .iter()
+            .any(|action| action.artifact.component == supplier)
+        {
+            PlannedSupply::Installed
+        } else {
+            PlannedSupply::NotInstalled
+        }
+    }
+}
+
+/// What a plan's actions do about the managed build that supplies one
+/// dependency, whatever that dependency's own disposition is.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PlannedSupply {
+    /// An action of the plan installs the build, so once the plan is applied
+    /// the managed tool is there and is used ahead of one found on `PATH`.
+    Installed,
+    /// No action of the plan installs it.
+    NotInstalled,
+}
+
+/// The managed component whose build supplies `dependency`.
+const fn supplying_component(dependency: RuntimeDependency) -> ManagedComponent {
+    match dependency {
+        RuntimeDependency::Ffmpeg | RuntimeDependency::Ffprobe => ManagedComponent::MediaTools,
+        RuntimeDependency::Whisper => ManagedComponent::WhisperCli,
+    }
 }
 
 /// The step of a compatibility smoke that stopped it.
@@ -932,7 +974,7 @@ mod tests {
 
     use super::{
         AcceptedManagedArtifact, AcceptedManagedCatalogue, ManagedPlanAvailability,
-        PlanAcceptanceError, ReviewedCompatibilityPolicy, ReviewedManagedFile,
+        PlanAcceptanceError, PlannedSupply, ReviewedCompatibilityPolicy, ReviewedManagedFile,
         SetupDependencyDisposition, SetupProfile, SetupSelectionState, plan_managed_setup,
     };
     use crate::RuntimeDiagnosis;
@@ -1286,6 +1328,12 @@ mod tests {
                 "{:?}",
                 status.dependency
             );
+            assert_eq!(
+                plan.supply_of(status.dependency),
+                PlannedSupply::NotInstalled,
+                "{:?}",
+                status.dependency
+            );
         }
 
         // Without a configured model the model is still planned, as it always
@@ -1345,6 +1393,17 @@ mod tests {
                 SetupDependencyDisposition::ManagedInstall,
                 SetupDependencyDisposition::ManualSelection,
                 SetupDependencyDisposition::ManualSelection,
+            ]
+        );
+        // The pair's build is installed because one of the two is missing, so
+        // the plan does install what supplies the timed-out one, whatever its
+        // own disposition says; nothing is installed for the third tool.
+        assert_eq!(
+            RuntimeDependency::ALL.map(|dependency| beside_missing.supply_of(dependency)),
+            [
+                PlannedSupply::Installed,
+                PlannedSupply::Installed,
+                PlannedSupply::NotInstalled,
             ]
         );
 

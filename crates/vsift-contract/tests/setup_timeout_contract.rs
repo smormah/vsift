@@ -21,8 +21,8 @@ use vsift_application::{
     SetupProfile, SetupSelectionState, plan_managed_setup,
 };
 use vsift_contract::{
-    DependencyLookup, OperationResponse, SavedSetupPlan, SetupCheckResponse, SetupPlanResponse,
-    probe_deadline_text,
+    DependencyLookup, MAX_PROBE_TIMEOUT, OperationResponse, ProbeTimeHeadroom, SavedSetupPlan,
+    SetupCheckResponse, SetupPlanResponse, probe_deadline_text,
 };
 use vsift_domain::{
     DependencyState, DependencyStatus, FailureCode, ManagedTarget, ProbeTimeout, ProbeTimeoutKind,
@@ -207,12 +207,30 @@ fn no_tool_whose_probe_timed_out_is_told_to_install_or_locate_it() -> TestResult
                         step.contains(&format!("({})", probe_deadline_text(deadline))),
                         "{context}: {step}"
                     );
-                    assert!(
-                        step.ends_with(
-                            "A first run after an install or restart can be slow. Run setup check again, or allow more time with --timeout-seconds (up to 60)."
+                    // More time is offered only while the option has more
+                    // to give; after its longest deadline the step says so.
+                    match ProbeTimeHeadroom::of(deadline) {
+                        ProbeTimeHeadroom::MoreTimeAllowed => assert!(
+                            step.ends_with(
+                                "A first run after an install or restart can be slow. Run setup check again, or allow more time with --timeout-seconds (up to 60)."
+                            ),
+                            "{context}: {step}"
                         ),
-                        "{context}: {step}"
-                    );
+                        ProbeTimeHeadroom::AtTheMaximum => {
+                            assert!(!step.contains("allow more time"), "{context}: {step}");
+                            assert!(!step.contains("up to 60"), "{context}: {step}");
+                            assert!(
+                                step.contains(
+                                    "; --timeout-seconds cannot allow more. Run setup check again. If "
+                                ),
+                                "{context}: {step}"
+                            );
+                            assert!(
+                                step.ends_with("hangs: run it yourself to see."),
+                                "{context}: {step}"
+                            );
+                        }
+                    }
                     // A tool that responded has no remediation at all.
                     for other in (0..3).filter(|other| *other != index) {
                         assert_eq!(
@@ -258,6 +276,62 @@ fn the_two_kinds_of_timeout_are_told_apart_in_words_and_share_one_reason() -> Te
         let item = dependency(&response, index)?;
         assert_eq!(item["status"], "timed_out");
         assert_eq!(item["remediation"]["reason"], "timed_out");
+    }
+    Ok(())
+}
+
+/// "Allow more time (up to 60)" is not advice for a caller who already gave
+/// the probes sixty seconds. One second less still offers it; at the
+/// option's maximum, and beyond it for a library host, the step says the
+/// option cannot allow more, to run the check again, and what a tool that
+/// never answers means. The figure in the advice is the option's maximum.
+#[test]
+fn after_the_longest_deadline_more_time_is_not_offered() -> TestResult {
+    assert_eq!(MAX_PROBE_TIMEOUT, Duration::from_secs(60));
+    assert_eq!(
+        ProbeTimeHeadroom::of(Duration::from_secs(59)),
+        ProbeTimeHeadroom::MoreTimeAllowed
+    );
+    for at_most in [MAX_PROBE_TIMEOUT, Duration::from_secs(61), Duration::MAX] {
+        assert_eq!(
+            ProbeTimeHeadroom::of(at_most),
+            ProbeTimeHeadroom::AtTheMaximum
+        );
+    }
+
+    let below = check(
+        &reported_shape(Duration::from_secs(59)),
+        ManagedPlanAvailability::Qualified,
+    )?;
+    assert!(
+        next_step(dependency(&below, 0)?)?.ends_with(&format!(
+            "or allow more time with --timeout-seconds (up to {}).",
+            MAX_PROBE_TIMEOUT.as_secs()
+        )),
+        "{below}"
+    );
+
+    let at_the_maximum = check(
+        &reported_shape(MAX_PROBE_TIMEOUT),
+        ManagedPlanAvailability::Qualified,
+    )?;
+    validate("setup-check-response.schema.json", &at_the_maximum)?;
+    assert_eq!(
+        next_step(dependency(&at_the_maximum, 0)?)?,
+        "FFmpeg was found and started but did not answer before the deadline all tool checks share (60 seconds); --timeout-seconds cannot allow more. Run setup check again. If it never answers, the tool itself hangs: run it yourself to see."
+    );
+    assert_eq!(
+        next_step(dependency(&at_the_maximum, 1)?)?,
+        "FFprobe was found but not started: the deadline all tool checks share (60 seconds) had already passed; --timeout-seconds cannot allow more. Run setup check again. If a tool never answers, that tool hangs: run it yourself to see."
+    );
+    assert_eq!(
+        next_step(dependency(&at_the_maximum, 2)?)?,
+        "whisper.cpp was found but not started: the deadline all tool checks share (60 seconds) had already passed; --timeout-seconds cannot allow more. Run setup check again. If a tool never answers, that tool hangs: run it yourself to see."
+    );
+    for index in 0..3 {
+        let item = dependency(&at_the_maximum, index)?;
+        assert_eq!(item["remediation"]["reason"], "timed_out");
+        assert_no_install_advice(next_step(item)?, "at the maximum");
     }
     Ok(())
 }

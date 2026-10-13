@@ -80,7 +80,7 @@ pub use provisioning::{
     AcceptedManagedArtifact, AcceptedManagedCatalogue, CompatibilitySmoke, CompatibilitySmokeCheck,
     CompatibilitySmokeFailure, CompatibilitySmokeFailureReason, CompatibilitySmokeVerdict,
     ManagedPlanAvailability, ManagedPlanObservation, ManagedSetupAction, ManagedSetupPlan,
-    ObservedModel, PlanAcceptanceError, ReviewedArchiveLimits, ReviewedArchiveLink,
+    ObservedModel, PlanAcceptanceError, PlannedSupply, ReviewedArchiveLimits, ReviewedArchiveLink,
     ReviewedArchiveSelection, ReviewedCompatibilityPolicy, ReviewedManagedFile,
     ReviewedRuntimeCopy, SetupDependencyDisposition, SetupModelDisposition, SetupProfile,
     SetupSelectionState, SmokeStageOutcome, StageDisposal, StageRetentionReason,
