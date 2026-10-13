@@ -195,7 +195,12 @@ impl SetupCommand {
 /// Read-only setup-check options.
 #[derive(Args, Debug)]
 pub(crate) struct SetupCheckArguments {
-    /// Maximum seconds to wait for each dependency probe.
+    /// Seconds allowed for all the dependency probes together, 1 to 60 (default 30).
+    ///
+    /// The probes run one after another and share this one deadline. A tool
+    /// that has not answered when it passes, or was not reached before it, is
+    /// reported as a timeout, not as missing: run the check again, or allow
+    /// more time here. A first run after an install or a restart can be slow.
     #[arg(long, value_parser = clap::value_parser!(u64).range(1..=60))]
     pub timeout_seconds: Option<u64>,
 
@@ -1021,6 +1026,7 @@ mod tests {
     use vsift_contract::CommandName;
 
     use super::{Cli, TYPICAL_INVESTIGATION_HELP};
+    use crate::config::{DEFAULT_PROBE_TIMEOUT_SECONDS, MAX_PROBE_TIMEOUT_SECONDS};
 
     /// Every operation identifier the parser can produce: the command path of
     /// each leaf subcommand joined with `.`, as `CommandName` documents it.
@@ -1153,6 +1159,58 @@ mod tests {
         ] {
             assert!(TYPICAL_INVESTIGATION_HELP.contains(needle), "{needle}");
         }
+    }
+
+    /// Issue #391: the help of `setup check --timeout-seconds` said "for each
+    /// dependency probe", which it never was. It is one deadline for all the
+    /// probes, and the help states its range and its default, taken from the
+    /// figures the configuration applies. The parser's range is unchanged, and
+    /// `setup plan` still has no such option (it would have to be given to
+    /// `setup install` too, which probes again to compare the plan).
+    #[test]
+    fn the_setup_check_deadline_option_states_its_default_and_keeps_its_range()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let mut root = Cli::command();
+        let check = root
+            .find_subcommand_mut("setup")
+            .and_then(|setup| setup.find_subcommand_mut("check"))
+            .ok_or("setup check is not a command")?;
+        let help = check
+            .render_long_help()
+            .to_string()
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ");
+        let stated = format!(
+            "Seconds allowed for all the dependency probes together, 1 to {MAX_PROBE_TIMEOUT_SECONDS} (default {DEFAULT_PROBE_TIMEOUT_SECONDS})."
+        );
+        assert!(help.contains(&stated), "{help}");
+        assert!(!help.contains("for each dependency probe"), "{help}");
+
+        let accepts = |arguments: &[&str]| Cli::try_parse_from(arguments).is_ok();
+        for seconds in ["1", "30", "60"] {
+            assert!(
+                accepts(&["vsift", "setup", "check", "--timeout-seconds", seconds]),
+                "{seconds}"
+            );
+        }
+        for refused in ["0", "61", "-1", "soon"] {
+            assert!(
+                !accepts(&["vsift", "setup", "check", "--timeout-seconds", refused]),
+                "{refused}"
+            );
+        }
+        assert!(accepts(&["vsift", "setup", "plan", "--profile", "desktop"]));
+        assert!(!accepts(&[
+            "vsift",
+            "setup",
+            "plan",
+            "--profile",
+            "desktop",
+            "--timeout-seconds",
+            "30"
+        ]));
+        Ok(())
     }
 
     /// The numbers the example states are the parser's own.

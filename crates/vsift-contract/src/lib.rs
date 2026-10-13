@@ -233,8 +233,9 @@ pub use session::{
     OpenData, PageData, SessionState, StatusData,
 };
 pub use setup::{
-    ConfiguredModelResponse, ConfiguredSelectionResponse, DependencyLookup, SavedSetupPlan,
-    SetupCheckResponse, SetupPlanResponse, explicit_path_option,
+    ConfiguredModelResponse, ConfiguredSelectionResponse, DependencyLookup, MAX_PROBE_TIMEOUT,
+    ProbeTimeHeadroom, SavedSetupPlan, SetupCheckResponse, SetupPlanResponse, explicit_path_option,
+    probe_deadline_text,
 };
 pub use storage::{
     PrivateFolder, SESSION_NOT_PUBLISHED_REMEDIATION, SOURCE_ACCESS_DENIED_REMEDIATION,

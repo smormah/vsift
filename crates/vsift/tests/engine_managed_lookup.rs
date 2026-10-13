@@ -23,9 +23,9 @@ use std::{
 use sha2::{Digest, Sha256};
 use tar::{Builder, Header};
 use vsift::{
-    Engine, EngineConfig, EnginePorts, ExecutableSelections, HostIsolation, LocalAsrModelStatus,
-    ManagedRootLocation, RuntimeDependency, SessionRootLocation, SetupCheckRequest,
-    UserConfigurationLocation,
+    DEFAULT_PROBE_TIMEOUT, Engine, EngineConfig, EnginePorts, ExecutableSelections, HostIsolation,
+    LocalAsrModelStatus, ManagedRootLocation, RuntimeDependency, SessionRootLocation,
+    SetupCheckRequest, UserConfigurationLocation,
 };
 use vsift_contract::DependencyLookup;
 use vsift_domain::{ArtifactIntegrity, ManagedComponent};
@@ -191,7 +191,7 @@ fn install_all(root: &Path) -> TestResult {
 
 fn check(per_call: ExecutableSelections) -> SetupCheckRequest {
     SetupCheckRequest {
-        probe_timeout: Duration::from_secs(5),
+        probe_timeout: DEFAULT_PROBE_TIMEOUT,
         per_call,
         local_asr_budget: Duration::from_secs(5),
     }

@@ -6,19 +6,24 @@
 //! `VSIFT_UPDATE_HUMAN_SNAPSHOTS=1` to rewrite them after a deliberate
 //! change, then review the diff.
 
-use std::{env, fs, path::PathBuf};
+use std::{env, fs, path::PathBuf, time::Duration};
 
 use serde_json::{Value, json};
-use vsift::RuntimeDependency;
+use vsift::{
+    DependencyState, DependencyStatus, LocalAsrCheckOutcome, LocalAsrModelStatus,
+    LocalAsrNotRunReason, LocalAsrSetupStatus, ManagedPlanAvailability, ProbeTimeout,
+    ProbeTimeoutKind, RuntimeDependency, RuntimeDiagnosis, RuntimeReadiness,
+};
 use vsift_contract::{
-    CommandName, ConfiguredModelResponse, ConfiguredSelectionResponse, MEDIA_BUSY_REMEDIATION,
-    OperationResponse, is_hidden_character,
+    CommandName, ConfiguredModelResponse, ConfiguredSelectionResponse, DependencyLookup,
+    MEDIA_BUSY_REMEDIATION, OperationResponse, is_hidden_character,
 };
 
 use super::{
-    HumanDetail, evidence, failure::render_failure, render_host, render_value, result,
+    HumanDetail, evidence, failure::render_failure, render_host, render_value, result, setup_check,
     text::DisplayText,
 };
+use crate::command::ExecutionProfile;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
@@ -209,6 +214,11 @@ fn frozen_examples_render_as_readable_text() -> TestResult {
             "setup-plan-unavailable",
         ),
         (
+            CommandName::SetupPlan,
+            "setup-plan.timed-out.json",
+            "setup-plan-timeout",
+        ),
+        (
             CommandName::SessionInitWorkspace,
             "workspace-init.json",
             "session-init-workspace",
@@ -217,6 +227,239 @@ fn frozen_examples_render_as_readable_text() -> TestResult {
         let text = render(command, &example(file)?)?;
         check_snapshot(snapshot, &text)?;
     }
+    Ok(())
+}
+
+/// What `setup check` prints for these probe results, with no model
+/// registered, where managed installation is or is not available.
+fn setup_check_text(
+    states: [DependencyState; 3],
+    readiness: RuntimeReadiness,
+    managed_install: ManagedPlanAvailability,
+) -> Result<String, Box<dyn std::error::Error>> {
+    let diagnosis = RuntimeDiagnosis {
+        readiness,
+        dependencies: RuntimeDependency::ALL
+            .into_iter()
+            .zip(states)
+            .map(|(dependency, state)| DependencyStatus { dependency, state })
+            .collect(),
+    };
+    let rendered = setup_check(
+        &diagnosis,
+        LocalAsrSetupStatus {
+            model: LocalAsrModelStatus::NotSelected,
+            verification: LocalAsrCheckOutcome::NotRun(LocalAsrNotRunReason::ModelNotSelected),
+        },
+        managed_install,
+        ExecutionProfile::Desktop,
+        &|_| DependencyLookup::FilteredPath,
+    )
+    .map_err(|_| "the setup check is too large to render")?;
+    let text = rendered.as_str().to_owned();
+    assert_terminal_safe(&text);
+    Ok(text)
+}
+
+fn timed_out(kind: ProbeTimeoutKind, seconds: u64) -> DependencyState {
+    DependencyState::TimedOut(ProbeTimeout {
+        kind,
+        shared_deadline: Duration::from_secs(seconds),
+    })
+}
+
+/// Words that tell a reader to get a tool or to point `VSift` at one. None
+/// is true of a tool that was found.
+const INSTALL_ADVICE: [&str; 10] = [
+    "Install or locate",
+    "install or locate",
+    "setup install",
+    "setup plan",
+    "reviewed build",
+    "Managed installation",
+    "absolute path",
+    "--ffmpeg",
+    "--ffprobe",
+    "--whisper",
+];
+
+/// Issue #391: the first `setup check` after a restart reported an installed,
+/// healthy `FFmpeg` and `FFprobe` as `[timeout]` and printed, under each, the
+/// advice for a missing tool. The reported shape (the first tool does not
+/// answer, the two after it are never started) now says what happened to
+/// each, under which deadline, and what helps; it is still `blocked`, and
+/// nothing in it says to install or locate a tool or offers to install one,
+/// whether or not this machine has managed installation.
+#[test]
+fn a_tool_whose_probe_timed_out_is_not_told_to_install_or_locate_it() -> TestResult {
+    let reported = || {
+        [
+            timed_out(ProbeTimeoutKind::NoAnswer, 30),
+            timed_out(ProbeTimeoutKind::NotStarted, 30),
+            timed_out(ProbeTimeoutKind::NotStarted, 30),
+        ]
+    };
+    let text = setup_check_text(
+        reported(),
+        RuntimeReadiness::Blocked,
+        ManagedPlanAvailability::TargetUnavailable,
+    )?;
+    check_snapshot("setup-check-timeout", &text)?;
+    assert_eq!(
+        text,
+        setup_check_text(
+            reported(),
+            RuntimeReadiness::Blocked,
+            ManagedPlanAvailability::Qualified,
+        )?,
+        "managed installation changes nothing for a tool that was found"
+    );
+
+    for phrase in INSTALL_ADVICE {
+        assert!(!text.contains(phrase), "says {phrase:?}: {text}");
+    }
+    assert!(!text.contains("[missing]") && !text.contains("not found"));
+    assert!(text.contains("Status: blocked\n"), "{text}");
+    assert_eq!(text.matches("[timeout] ").count(), 3, "{text}");
+    assert_eq!(
+        text.matches(
+            "Run setup check again, or allow more time with --timeout-seconds (up to 60).\n"
+        )
+        .count(),
+        3,
+        "{text}"
+    );
+    assert!(
+        text.contains(
+            "[timeout] FFmpeg (media_processing): found, but it did not answer in time [filtered PATH]\n  It was started and had not answered when the deadline passed: 30 seconds, which the three tool checks share."
+        ),
+        "{text}"
+    );
+    assert!(
+        text.contains(
+            "[timeout] FFprobe (media_processing): found, but not started before the deadline passed [filtered PATH]\n  It was not started, because the deadline had already passed: 30 seconds, which the three tool checks share. Nothing is known about it yet."
+        ),
+        "{text}"
+    );
+    Ok(())
+}
+
+/// The same for each tool on its own and each kind of timeout, with the
+/// deadline the command line applied named as it was given; and a tool that
+/// is missing, or was found and failed, keeps the advice it had.
+#[test]
+fn each_tool_and_each_kind_of_timeout_gets_the_timeout_advice_only() -> TestResult {
+    let available = || DependencyState::Available {
+        version: String::from("fixture 1"),
+    };
+    for index in 0..3 {
+        for (kind, said) in [
+            (
+                ProbeTimeoutKind::NoAnswer,
+                "found, but it did not answer in time",
+            ),
+            (
+                ProbeTimeoutKind::NotStarted,
+                "found, but not started before the deadline passed",
+            ),
+        ] {
+            let mut states = [available(), available(), available()];
+            states[index] = timed_out(kind, 1);
+            let text = setup_check_text(
+                states,
+                RuntimeReadiness::Degraded,
+                ManagedPlanAvailability::Qualified,
+            )?;
+            for phrase in INSTALL_ADVICE {
+                assert!(
+                    !text.contains(phrase),
+                    "{index} {kind:?}: {phrase:?}: {text}"
+                );
+            }
+            assert_eq!(text.matches("[timeout] ").count(), 1, "{text}");
+            assert!(text.contains(said), "{text}");
+            assert!(
+                text.contains(": 1 second, which the three tool checks share."),
+                "{text}"
+            );
+        }
+        for state in [
+            DependencyState::Missing,
+            DependencyState::Unhealthy {
+                message: String::from("process exited with exit code: 3"),
+            },
+        ] {
+            let mut states = [available(), available(), available()];
+            states[index] = state;
+            let text = setup_check_text(
+                states,
+                RuntimeReadiness::Degraded,
+                ManagedPlanAvailability::Qualified,
+            )?;
+            assert!(
+                text.contains(
+                    "  Install or locate this trusted tool, then rerun setup check with its absolute path using --"
+                ),
+                "{text}"
+            );
+            assert!(!text.contains("--timeout-seconds"), "{text}");
+        }
+    }
+    Ok(())
+}
+
+/// "Allow more time with --timeout-seconds (up to 60)" is no advice for
+/// someone who ran `setup check --timeout-seconds 60`. After the longest
+/// deadline the text says the option cannot extend it, to run the check
+/// again, and what a tool that never answers means; it still never says to
+/// install or locate the tool. One second less still offers more time.
+#[test]
+fn after_the_longest_deadline_the_readable_advice_does_not_offer_more_time() -> TestResult {
+    let text = setup_check_text(
+        [
+            timed_out(ProbeTimeoutKind::NoAnswer, 60),
+            timed_out(ProbeTimeoutKind::NotStarted, 60),
+            timed_out(ProbeTimeoutKind::NotStarted, 60),
+        ],
+        RuntimeReadiness::Blocked,
+        ManagedPlanAvailability::Qualified,
+    )?;
+    assert!(
+        text.contains(
+            "[timeout] FFmpeg (media_processing): found, but it did not answer in time [filtered PATH]\n  It was started and had not answered when the deadline passed: 60 seconds, which the three tool checks share and --timeout-seconds cannot extend. Run setup check again. If it never answers, the tool itself hangs: run it yourself to see what it does.\n"
+        ),
+        "{text}"
+    );
+    assert_eq!(
+        text.matches(
+            "  It was not started, because the deadline had already passed: 60 seconds, which the three tool checks share and --timeout-seconds cannot extend. Nothing is known about it yet. Run setup check again. If a tool never answers, that tool hangs: run it yourself to see what it does.\n"
+        )
+        .count(),
+        2,
+        "{text}"
+    );
+    assert!(!text.contains("allow more time"), "{text}");
+    assert!(!text.contains("up to 60"), "{text}");
+    for phrase in INSTALL_ADVICE {
+        assert!(!text.contains(phrase), "says {phrase:?}: {text}");
+    }
+
+    let one_second_less = setup_check_text(
+        [
+            timed_out(ProbeTimeoutKind::NoAnswer, 59),
+            timed_out(ProbeTimeoutKind::NotStarted, 59),
+            timed_out(ProbeTimeoutKind::NotStarted, 59),
+        ],
+        RuntimeReadiness::Blocked,
+        ManagedPlanAvailability::Qualified,
+    )?;
+    assert_eq!(
+        one_second_less
+            .matches("or allow more time with --timeout-seconds (up to 60).\n")
+            .count(),
+        3,
+        "{one_second_less}"
+    );
     Ok(())
 }
 

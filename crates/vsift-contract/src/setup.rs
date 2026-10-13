@@ -1,14 +1,17 @@
 //! Setup check, setup plan and dependency-registration responses.
 
+use std::time::Duration;
+
 use serde::{Deserialize, Serialize};
 use vsift_application::{
     LocalAsrCheckOutcome, LocalAsrSetupStatus, ManagedPlanAvailability, ManagedPlanObservation,
-    ManagedSetupAction, ManagedSetupPlan, ObservedModel, RuntimeDiagnosis,
+    ManagedSetupAction, ManagedSetupPlan, ObservedModel, PlannedSupply, RuntimeDiagnosis,
     SetupDependencyDisposition, SetupModelDisposition, SetupProfile,
 };
 use vsift_domain::ManagedComponent;
 use vsift_domain::{
-    DependencyState, DependencyStatus, FailureCode, ReviewedAsrModel, RuntimeDependency,
+    DependencyState, DependencyStatus, FailureCode, ProbeTimeout, ProbeTimeoutKind,
+    ReviewedAsrModel, RuntimeDependency,
 };
 
 use crate::{
@@ -170,12 +173,18 @@ struct SetupCheckDependencyResponse {
     remediation: Option<SetupRemediationResponse>,
 }
 
+/// What to do about a dependency that is not available.
+///
+/// `managed_install` and `explicit_path_option` are facts about this host and
+/// this command (whether managed installation exists here, which option names
+/// the executable); they are present for every reason because the published
+/// schema requires them. The advice is `next_step`, and it differs by reason.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 struct SetupRemediationResponse {
     reason: &'static str,
     managed_install: &'static str,
     required_authority: &'static str,
-    next_step: &'static str,
+    next_step: String,
     explicit_path_option: &'static str,
 }
 
@@ -190,7 +199,7 @@ impl SetupCheckDependencyResponse {
                 Some(sanitize_untrusted_text(version, MAX_PROVIDER_DETAIL_BYTES))
             }
             DependencyState::Unhealthy { .. } => Some(String::from("dependency probe failed")),
-            DependencyState::Missing | DependencyState::TimedOut => None,
+            DependencyState::Missing | DependencyState::TimedOut(_) => None,
         };
         Self {
             dependency: status.dependency.identifier(),
@@ -203,13 +212,32 @@ impl SetupCheckDependencyResponse {
             } else {
                 "not_validated"
             },
-            remediation: (!status.state.is_available()).then_some(SetupRemediationResponse {
+            remediation: check_next_step(status).map(|next_step| SetupRemediationResponse {
                 reason: status.state.identifier(),
                 managed_install: managed_install.identifier(),
                 required_authority: "user",
-                next_step: manual_dependency_step(status.dependency),
+                next_step,
                 explicit_path_option: explicit_path_option(status.dependency),
             }),
+        }
+    }
+}
+
+/// The `next_step` of a `setup check` dependency, or `None` for one that
+/// responded.
+///
+/// A tool whose probe timed out was found, so it gets advice of its own:
+/// telling its owner to install or locate it is false (issue #391). A tool
+/// that was found and failed its probe keeps the advice of a missing one,
+/// which is true of it: another executable, or a repaired one, is the fix.
+fn check_next_step(status: &DependencyStatus) -> Option<String> {
+    match &status.state {
+        DependencyState::Available { .. } => None,
+        DependencyState::Missing | DependencyState::Unhealthy { .. } => {
+            Some(manual_dependency_step(status.dependency).to_owned())
+        }
+        DependencyState::TimedOut(timeout) => {
+            Some(timed_out_check_step(status.dependency, *timeout))
         }
     }
 }
@@ -225,6 +253,111 @@ const fn manual_dependency_step(dependency: RuntimeDependency) -> &'static str {
         RuntimeDependency::Whisper => {
             "Install or locate a trusted whisper.cpp CLI executable for local ASR, then rerun setup check. A supplied transcript can skip local ASR."
         }
+    }
+}
+
+/// The name a `next_step` uses for a dependency that was found.
+const fn found_tool_name(dependency: RuntimeDependency) -> &'static str {
+    match dependency {
+        RuntimeDependency::Ffmpeg => "FFmpeg",
+        RuntimeDependency::Ffprobe => "FFprobe",
+        RuntimeDependency::Whisper => "whisper.cpp",
+    }
+}
+
+/// The longest deadline `setup check --timeout-seconds` accepts for all the
+/// probes together: the figure the advice for a timed-out probe names as
+/// "up to 60", and the bound the CLI's host policy applies.
+pub const MAX_PROBE_TIMEOUT: Duration = Duration::from_secs(60);
+
+/// Whether a caller whose probe timed out can still be offered more time.
+///
+/// "Allow more time with --timeout-seconds" is advice only while the option
+/// has more to give. A probe that had the whole maximum and still had no
+/// answer is not helped by it: what is left to say is that the tool itself
+/// may hang.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ProbeTimeHeadroom {
+    /// The deadline that applied was shorter than the option's maximum.
+    MoreTimeAllowed,
+    /// The deadline that applied was the option's maximum, or longer (a
+    /// library host may pass any duration).
+    AtTheMaximum,
+}
+
+impl ProbeTimeHeadroom {
+    /// The headroom left to a caller whose probes shared `deadline`.
+    #[must_use]
+    pub fn of(deadline: Duration) -> Self {
+        if deadline < MAX_PROBE_TIMEOUT {
+            Self::MoreTimeAllowed
+        } else {
+            Self::AtTheMaximum
+        }
+    }
+}
+
+/// The `setup check` advice for a tool whose probe timed out: what happened,
+/// under which deadline, and what helps. It never says to install or locate
+/// the tool, because the tool was found.
+///
+/// The two kinds read differently because they are different facts: a tool
+/// that was never started cannot be said to have given no answer. More time
+/// is offered only while `--timeout-seconds` has more to give; at its maximum
+/// the text says so and what a tool that never answers means. The text fits
+/// the 240 characters the published schema allows a `next_step`, for every
+/// dependency and deadline, which is why it is shorter than the readable
+/// form and leaves out its example.
+fn timed_out_check_step(dependency: RuntimeDependency, timeout: ProbeTimeout) -> String {
+    let tool = found_tool_name(dependency);
+    let deadline = probe_deadline_text(timeout.shared_deadline);
+    let what_happened = match timeout.kind {
+        ProbeTimeoutKind::NoAnswer => format!(
+            "{tool} was found and started but did not answer before the deadline all tool checks share ({deadline})"
+        ),
+        ProbeTimeoutKind::NotStarted => format!(
+            "{tool} was found but not started: the deadline all tool checks share ({deadline}) had already passed"
+        ),
+    };
+    match ProbeTimeHeadroom::of(timeout.shared_deadline) {
+        ProbeTimeHeadroom::MoreTimeAllowed => format!(
+            "{what_happened}. A first run after an install or restart can be slow. Run setup check again, or allow more time with --timeout-seconds (up to 60)."
+        ),
+        ProbeTimeHeadroom::AtTheMaximum => {
+            let if_it_never_answers = match timeout.kind {
+                ProbeTimeoutKind::NoAnswer => {
+                    "If it never answers, the tool itself hangs: run it yourself to see."
+                }
+                ProbeTimeoutKind::NotStarted => {
+                    "If a tool never answers, that tool hangs: run it yourself to see."
+                }
+            };
+            format!(
+                "{what_happened}; --timeout-seconds cannot allow more. Run setup check again. {if_it_never_answers}"
+            )
+        }
+    }
+}
+
+/// A probe deadline in words: `30 seconds`, `1 second`, `1500 ms` for one that
+/// is not a whole number of seconds, and `over an hour` beyond that.
+///
+/// The CLI only ever applies whole seconds from 1 to 60; a library host may
+/// pass any duration, and the text must stay true and short for all of them
+/// (it goes into a `next_step` of at most 240 characters). No probe waits an
+/// hour, so nothing is lost by not printing a larger figure.
+#[must_use]
+pub fn probe_deadline_text(deadline: Duration) -> String {
+    const HOUR: Duration = Duration::from_secs(3_600);
+    if deadline > HOUR {
+        String::from("over an hour")
+    } else if deadline.subsec_nanos() != 0 {
+        // Rounded up, so a deadline under a millisecond is not printed as none.
+        format!("{} ms", deadline.as_nanos().div_ceil(1_000_000))
+    } else if deadline.as_secs() == 1 {
+        String::from("1 second")
+    } else {
+        format!("{} seconds", deadline.as_secs())
     }
 }
 
@@ -312,7 +445,12 @@ impl SetupPlanResponse {
                         .iter()
                         .find(|observed| observed.dependency == status.dependency)
                         .unwrap_or(status);
-                    dependency_response(observed, *disposition)
+                    dependency_response(
+                        observed,
+                        status,
+                        *disposition,
+                        plan.supply_of(status.dependency),
+                    )
                 })
                 .collect(),
         }
@@ -422,9 +560,18 @@ struct SetupRuntimeCopyResponse {
     source_selected: String,
 }
 
+/// One dependency of a plan: the status commands would see now (`observed`,
+/// managed versions included) beside the plan's intent for it.
+///
+/// The next step is part of the intent, which acceptance compares, so it is
+/// chosen from what the plan's own probe saw (`planned`) and from the plan's
+/// own actions (`supply`), and never from the observed status, which changes
+/// as `setup install` applies the plan.
 fn dependency_response(
-    status: &DependencyStatus,
+    observed: &DependencyStatus,
+    planned: &DependencyStatus,
     disposition: SetupDependencyDisposition,
+    supply: PlannedSupply,
 ) -> SetupPlanDependencyResponse {
     let (required_authority, next_step) = match disposition {
         SetupDependencyDisposition::ExistingProbeOnly => (
@@ -435,13 +582,27 @@ fn dependency_response(
             Some("user"),
             "Review the exact managed action, then run setup install with this saved plan and its digest; a component already installed at this version is reported already_current.",
         ),
-        SetupDependencyDisposition::ManualSelection => {
-            (Some("user"), manual_plan_step(status.dependency))
-        }
+        SetupDependencyDisposition::ManualSelection => (
+            Some("user"),
+            match (&planned.state, supply) {
+                (DependencyState::TimedOut(_), PlannedSupply::NotInstalled) => {
+                    timed_out_plan_step(planned.dependency)
+                }
+                (DependencyState::TimedOut(_), PlannedSupply::Installed) => {
+                    timed_out_beside_planned_build_step(planned.dependency)
+                }
+                (
+                    DependencyState::Available { .. }
+                    | DependencyState::Missing
+                    | DependencyState::Unhealthy { .. },
+                    PlannedSupply::Installed | PlannedSupply::NotInstalled,
+                ) => manual_plan_step(planned.dependency),
+            },
+        ),
     };
     SetupPlanDependencyResponse {
-        dependency: status.dependency.identifier().to_owned(),
-        status: status.state.identifier().to_owned(),
+        dependency: observed.dependency.identifier().to_owned(),
+        status: observed.state.identifier().to_owned(),
         disposition: disposition.identifier().to_owned(),
         required_authority: required_authority.map(str::to_owned),
         next_step: next_step.to_owned(),
@@ -569,6 +730,51 @@ const fn manual_plan_step(dependency: RuntimeDependency) -> &'static str {
         }
         RuntimeDependency::Whisper => {
             "For local ASR, install or locate a trusted whisper.cpp CLI, then run setup configure whisper --executable <absolute-path> and setup check. A supplied transcript can skip local ASR."
+        }
+    }
+}
+
+/// The plan's next step for a tool whose probe timed out while the plan
+/// installs the build that supplies it anyway, because the tool it is paired
+/// with is missing or failing.
+///
+/// `FFmpeg` and `FFprobe` come in one managed build, and a managed version
+/// is used ahead of a tool found on `PATH`. So "this plan proposes no install
+/// because of it" would be true and still mislead: accepting the plan
+/// replaces the tool. The step says what the plan does to it and that the
+/// timeout is not the reason. whisper.cpp has no pair, and its build is
+/// planned only when its own probe showed it unusable, so it cannot be here
+/// with a timeout; it keeps the ordinary text so that this stays total.
+const fn timed_out_beside_planned_build_step(dependency: RuntimeDependency) -> &'static str {
+    match dependency {
+        RuntimeDependency::Ffmpeg => {
+            "FFmpeg was found, but its check did not finish before the deadline the tool checks share: it did not answer in time, or it was not started because the time had run out. This plan cannot tell whether it works. It proposes installing the paired FFmpeg and FFprobe build because FFprobe is missing or failed its check, not because of this timeout; that build includes FFmpeg, and VSift then uses it instead of this one unless you registered this one with setup configure. Review that action before you accept."
+        }
+        RuntimeDependency::Ffprobe => {
+            "FFprobe was found, but its check did not finish before the deadline the tool checks share: it did not answer in time, or it was not started because the time had run out. This plan cannot tell whether it works. It proposes installing the paired FFmpeg and FFprobe build because FFmpeg is missing or failed its check, not because of this timeout; that build includes FFprobe, and VSift then uses it instead of this one unless you registered this one with setup configure. Review that action before you accept."
+        }
+        RuntimeDependency::Whisper => timed_out_plan_step(dependency),
+    }
+}
+
+/// The plan's next step for a tool whose probe timed out when no action of
+/// the plan installs what supplies it: the tool was found, the plan learned
+/// nothing about it and proposes nothing for it (issue #391).
+///
+/// One text serves both kinds of timeout, and names no deadline: the next
+/// step is part of the plan's intent, which the digest stands for, and the
+/// digest binds only that the probe timed out. `setup plan` has no option to
+/// allow more time, so the text sends the reader to `setup check`, which has.
+const fn timed_out_plan_step(dependency: RuntimeDependency) -> &'static str {
+    match dependency {
+        RuntimeDependency::Ffmpeg => {
+            "FFmpeg was found, but its check did not finish before the deadline the tool checks share: it did not answer in time, or it was not started because the time had run out. This plan cannot tell whether it works, so it decides nothing for it and proposes no install because of it. A first run after an install or restart can be slow. Run setup check until it answers (it can be given more time with --timeout-seconds, up to 60), then run setup plan again."
+        }
+        RuntimeDependency::Ffprobe => {
+            "FFprobe was found, but its check did not finish before the deadline the tool checks share: it did not answer in time, or it was not started because the time had run out. This plan cannot tell whether it works, so it decides nothing for it and proposes no install because of it. A first run after an install or restart can be slow. Run setup check until it answers (it can be given more time with --timeout-seconds, up to 60), then run setup plan again."
+        }
+        RuntimeDependency::Whisper => {
+            "whisper.cpp was found, but its check did not finish before the deadline the tool checks share: it did not answer in time, or it was not started because the time had run out. This plan cannot tell whether it works, so it decides nothing for it and proposes no install because of it. A first run after an install or restart can be slow. Run setup check until it answers (it can be given more time with --timeout-seconds, up to 60), then run setup plan again."
         }
     }
 }

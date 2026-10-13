@@ -1,0 +1,13 @@
+VSift setup check
+Profile: desktop
+Status: blocked
+[timeout] FFmpeg (media_processing): found, but it did not answer in time [filtered PATH]
+  It was started and had not answered when the deadline passed: 30 seconds, which the three tool checks share. A first run after installing a tool or restarting the machine can be slow, for example while a virus scanner reads a large program for the first time. Run setup check again, or allow more time with --timeout-seconds (up to 60).
+[timeout] FFprobe (media_processing): found, but not started before the deadline passed [filtered PATH]
+  It was not started, because the deadline had already passed: 30 seconds, which the three tool checks share. Nothing is known about it yet. A first run after installing a tool or restarting the machine can be slow, for example while a virus scanner reads a large program for the first time. Run setup check again, or allow more time with --timeout-seconds (up to 60).
+[timeout] Whisper (transcription): found, but not started before the deadline passed [filtered PATH]
+  It was not started, because the deadline had already passed: 30 seconds, which the three tool checks share. Nothing is known about it yet. A first run after installing a tool or restarting the machine can be slow, for example while a virus scanner reads a large program for the first time. Run setup check again, or allow more time with --timeout-seconds (up to 60).
+Media executable probes are blocked until FFmpeg and FFprobe respond.
+Local ASR model: not registered (setup configure-model --file <path>)
+Local ASR check: not run: no model is registered
+Executable probes only show that each tool responds. The local ASR check transcribes a short speech clip built into VSift with the selected tools and model. A supplied transcript can avoid local ASR.

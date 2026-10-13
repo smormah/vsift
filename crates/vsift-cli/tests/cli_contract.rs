@@ -225,20 +225,42 @@ fn setup_check_json_is_structural_and_environment_independent()
     Ok(())
 }
 
+/// Issue #391 raised the default deadline of the probes from five seconds to
+/// thirty. The option that replaces it kept its range: the binary still takes
+/// 1 and 60 and still refuses 0 and 61 as a rejected command line.
+#[test]
+fn the_setup_check_deadline_option_keeps_its_range() -> Result<(), Box<dyn std::error::Error>> {
+    for accepted in ["1", "60"] {
+        let base = isolated_config_base()?;
+        let output = with_config_base(&mut Command::cargo_bin("vsift")?, &base)
+            .args(["setup", "check", "--json", "--timeout-seconds", accepted])
+            .env("PATH", "")
+            .output()?;
+        let value = parse_stdout(&output)?;
+        assert_eq!(value["command"], "setup.check", "{accepted}");
+        assert_eq!(value["status"], "blocked", "{accepted}");
+    }
+    for refused in ["0", "61"] {
+        let output = run(&["setup", "check", "--json", "--timeout-seconds", refused])?;
+        let value = parse_stdout(&output)?;
+        assert_eq!(output.status.code(), Some(2), "{refused}");
+        assert_eq!(value["command"], "parse", "{refused}");
+        assert_eq!(value["error"]["code"], "INVALID_ARGUMENT", "{refused}");
+    }
+    Ok(())
+}
+
+/// This asserts that a stand-in tool answers, so it runs under the default
+/// deadline and names none: under an explicit five seconds, the default
+/// before #391, it could fail on a loaded machine for the very reason of
+/// that issue.
 #[test]
 fn off_path_whisper_is_selectable_without_installing_or_disclosing_its_path()
 -> Result<(), Box<dyn std::error::Error>> {
     let binary = Command::cargo_bin("vsift")?.get_program().to_os_string();
     let base = isolated_config_base()?;
     let output = with_config_base(&mut Command::cargo_bin("vsift")?, &base)
-        .args([
-            "setup",
-            "check",
-            "--json",
-            "--timeout-seconds",
-            "5",
-            "--whisper",
-        ])
+        .args(["setup", "check", "--json", "--whisper"])
         .arg(&binary)
         .env("PATH", "")
         .output()?;
@@ -275,7 +297,7 @@ fn setup_check_reports_an_unreviewed_model_without_running_or_disclosing_it()
     assert!(registered.status.success());
 
     let output = with_config_base(&mut Command::cargo_bin("vsift")?, &base)
-        .args(["setup", "check", "--json", "--timeout-seconds", "5"])
+        .args(["setup", "check", "--json"])
         .arg("--ffmpeg")
         .arg(&binary)
         .arg("--ffprobe")

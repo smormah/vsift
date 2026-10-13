@@ -2028,10 +2028,65 @@ parts stay usable.
 
 Running `vsift` or `vsift setup` without a leaf command prints help and performs no
 dependency probe or mutation. `setup check` defaults to the `desktop` profile and a
-five-second total operation deadline; `--profile worker` and
+thirty-second total operation deadline (five seconds before `0.2.1`); `--profile worker` and
 `--timeout-seconds 1..60` are explicit overrides. `--ffmpeg`, `--ffprobe` and
 `--whisper` select existing absolute executables for this check only. An invalid
 explicit selection does not fall back to `PATH` or persist configuration.
+
+**The probe deadline, and a probe that timed out** (issue
+[#391](https://github.com/smormah/vsift/issues/391), `0.2.1`). The three executable probes
+run one after another, FFmpeg, FFprobe, then whisper.cpp, and **share one deadline**: the
+figure is the time for all of them together, not for each, and there is no retry. A tool that
+is slow to start leaves less for the ones after it, and a probe whose turn comes after the
+deadline is **not started**. Both are reported with the one published value `timed_out`
+(`status`, and `remediation.reason`; the readable marker is `[timeout]`), the aggregate
+`status` is `blocked` when it is FFmpeg or FFprobe, and the exit status is unchanged. A tool is
+looked for before the deadline is looked at, so a tool that is not installed is `missing` even
+then, and `timed_out` always means the executable was found.
+
+What changed in `0.2.1` is what the answer says to do. Before, a timed-out tool got the advice
+of a missing one ("Install or locate a trusted FFmpeg executable, then rerun setup check."),
+which is false of a tool that was found: the first check after a restart reported an installed,
+healthy FFmpeg and FFprobe that way on one Windows 11 machine. Now `remediation.next_step`
+depends on the reason:
+
+| `reason` | `next_step` |
+| --- | --- |
+| `missing`, `unhealthy` | unchanged: `Install or locate a trusted FFmpeg executable, then rerun setup check.` (and the FFprobe and whisper.cpp forms) |
+| `timed_out`, the tool was started | `FFmpeg was found and started but did not answer before the deadline all tool checks share (30 seconds). A first run after an install or restart can be slow. Run setup check again, or allow more time with --timeout-seconds (up to 60).` |
+| `timed_out`, the tool was not started | `FFprobe was found but not started: the deadline all tool checks share (30 seconds) had already passed. A first run after an install or restart can be slow. Run setup check again, or allow more time with --timeout-seconds (up to 60).` |
+| `timed_out`, started, and the deadline was already the longest (`--timeout-seconds 60`) | `FFmpeg was found and started but did not answer before the deadline all tool checks share (60 seconds); --timeout-seconds cannot allow more. Run setup check again. If it never answers, the tool itself hangs: run it yourself to see.` |
+| `timed_out`, not started, and the deadline was already the longest | `FFprobe was found but not started: the deadline all tool checks share (60 seconds) had already passed; --timeout-seconds cannot allow more. Run setup check again. If a tool never answers, that tool hangs: run it yourself to see.` |
+
+More time is offered only while the option has more to give: after `--timeout-seconds 60`
+(and for a library host that passed that much or more) the step does not say "allow more
+time", and says instead what a tool that never answers means. That is all the output says
+about a tool that never answers; the guide's troubleshooting page has the next step.
+The figure in brackets is the deadline that was applied (`1 second`, `30 seconds`; a library
+host that passes a deadline which is not a whole number of seconds gets milliseconds, and one
+over an hour gets `over an hour`). The two timed-out texts differ because they are different
+facts; a reader that needs to tell them apart in a program reads the words `but not started`,
+since v1 has no member for it. The text fits the schema's 240 characters, which is why it is
+shorter than the readable form: the readable output says the same under each `[timeout]` line,
+with the example of a virus scanner reading a large program for the first time. Neither form
+says to install or locate the tool, and the readable output offers no managed installation for
+it. `remediation.managed_install` and `remediation.explicit_path_option` are still present for
+`timed_out`, because the schema requires them: they are facts about the host and the command,
+not advice. An `unhealthy` tool (found, ran, failed its probe, or an invalid explicit path)
+keeps the advice of a missing one, which is true of it.
+
+**Compatibility.** The default deadline changed from 5 to 30 seconds in `0.2.1`. The option,
+its range (`1..60`), the `status` and `reason` values, the schema and the exit statuses are
+unchanged; only the default, the `next_step` text of a `timed_out` dependency, the option's
+help text and what `setup plan` does with such a tool (below) are new. What
+it costs: a tool that truly hangs now holds `setup check` for up to 30 seconds instead of 5
+before the answer comes, and `setup install` likewise; `setup plan` can wait twice that when
+a managed tool is installed (below). Neither of those two has an option for it.
+Thirty seconds is a choice, not a measurement of slow
+machines; `--timeout-seconds 60` is the most a caller can ask for. The local-ASR part below does
+not use the probes' results: it finds the tools again and runs under its own budget, so one
+answer can say `timed_out` for a tool and `verified` for local ASR, and both are true.
+Example: [`setup-check.timed-out.json`](../../schemas/v1/examples/setup-check.timed-out.json).
 
 P06 will distinguish an already suitable provider, an installable missing provider,
 and one requiring user-managed installation or explicit configuration. `setup plan`
@@ -2040,7 +2095,8 @@ rights, offline/unqualified target or failed installation, headless calls return
 typed bounded manual remediation and never prompt, elevate or silently retry with
 broader authority. An agent's request to inspect a video does not authorize setup.
 The first P06 increment checks explicit paths or filtered `PATH` and provides
-typed manual/BYO remediation for missing, unhealthy and timed-out tools. The legacy aggregate
+typed manual/BYO remediation for missing and unhealthy tools; a timed-out tool has had
+advice of its own since `0.2.1` (above). The legacy aggregate
 `status` reflects only executable probe results. `verification_scope` is
 `executable_probe_only`, and `local_asr_model` is `not_checked`: a successful
 `--version`/`--help` response does **not** prove provider compatibility or a
@@ -2088,11 +2144,21 @@ response carries a `local_asr` object:
 - The exit status still reflects only the executable probes: a local-ASR check that
   did not pass is reported, not a failed `setup check`, because media inspection and
   supplied transcripts need no speech recognition.
+- **It does not use the executable probes' results either.** It finds FFmpeg, FFprobe and
+  whisper.cpp again and, when it runs, checks them on the built-in clip under its own
+  budget. So `media_tools_unavailable` means that a media tool was not found, was rejected,
+  or failed that check on the clip ("its own check"), never merely that its executable probe
+  timed out; and after a probe that timed out the same answer can report local ASR as
+  `verified`, from a recorded pass or from a run made a moment later (seen with
+  `--timeout-seconds 1`, issue [#391](https://github.com/smormah/vsift/issues/391)). Both
+  statements are then true: the probe had no answer within its deadline, and the tools work.
 
 Schema [`setup-check-response.schema.json`](../../schemas/v1/setup-check-response.schema.json)
 (the object is optional for responses from earlier builds); examples
-[`setup-check.local-asr.json`](../../schemas/v1/examples/setup-check.local-asr.json)
-and [`setup-check.blocked.json`](../../schemas/v1/examples/setup-check.blocked.json). Provider `detail` is not an instruction
+[`setup-check.local-asr.json`](../../schemas/v1/examples/setup-check.local-asr.json),
+[`setup-check.blocked.json`](../../schemas/v1/examples/setup-check.blocked.json) and
+[`setup-check.timed-out.json`](../../schemas/v1/examples/setup-check.timed-out.json) (three tools that were found and whose probes
+timed out, the first started and the two after it not). Provider `detail` is not an instruction
 channel. Paths are not echoed in the response. `detail` for FFmpeg and FFprobe is
 only their `ffmpeg version ...` / `ffprobe version ...` banner line, or `detected`
 when none is safe to show; whisper output is never echoed, and its `detail` is
@@ -2101,7 +2167,19 @@ build reviewed in P06, otherwise `whisper-cli (build not recognised)`. No line t
 looks like a path or a ggml loader log is ever shown.
 
 `setup plan --profile <desktop|worker>` probes configured executables or filtered
-`PATH` like `setup check`, without per-call path options. On **Ubuntu 24.04
+`PATH` like `setup check`, without per-call path options and under the same default
+deadline (thirty seconds since `0.2.1`; it has no `--timeout-seconds`, and neither has
+`setup install`, which probes again to compare the plan). **`setup plan` can probe twice, and
+each time under a deadline of its own:** once for the plan's intent, over the tools outside
+VSift's managed store, and, when a managed executable is installed, once more for the observed
+state, with the managed versions. So on a machine that has a managed tool, a tool that never
+answers holds `setup plan` for up to twice the deadline, about 60 seconds (10 before `0.2.1`),
+where `setup check` and `setup install` probe once. And the two observations can disagree: a
+tool that did not answer the first time and did the second is shown with `status: "available"`
+beside a `next_step` that says its check did not finish, and the reverse (answered first, not
+second) with `status: "timed_out"` beside `existing_executable_probe_only`. Both members are
+then true of the moment each was observed; the step always follows the first, because it is
+part of what acceptance compares. Sharing one deadline between the two is not done. On **Ubuntu 24.04
 x86-64** it consults the reviewed, pinned catalogue for the paired FFmpeg and
 FFprobe build, whisper.cpp CLI and multilingual `base` model. It returns only
 actions needed by the current probe and configured-model presence, with exact
@@ -2140,9 +2218,45 @@ the same digest.
 
 Windows x86-64, macOS ARM64, other hosts and expired or invalid catalogue
 entries return typed `unavailable_*` status, no actions or digest, and manual
-BYO guidance. Missing, unhealthy and timed-out tools receive
-`manual_selection_required` unless a reviewed managed action applies. A
-responding executable remains `existing_executable_probe_only`; a configured
+BYO guidance. Missing and unhealthy tools receive
+`manual_selection_required` unless a reviewed managed action applies.
+
+**A probe that timed out never causes a managed action** (issue
+[#391](https://github.com/smormah/vsift/issues/391), `0.2.1`). The tool was found, and the plan
+learned nothing about whether it works, so on every target it receives
+`manual_selection_required` and **never causes a managed action**: before `0.2.1`, on Ubuntu
+24.04, a healthy FFmpeg whose probe timed out was planned for a download exactly like a
+missing one (read from the code; it was not seen). Its `next_step` says so, with one text for
+both kinds of timeout and no deadline in it: `FFmpeg was found, but its check did not finish
+before the deadline the tool checks share: it did not answer in time, or it was not started
+because the time had run out. This plan cannot tell whether it works, so it decides nothing for
+it and proposes no install because of it. A first run after an install or restart can be slow.
+Run setup check until it answers (it can be given more time with --timeout-seconds, up to 60),
+then run setup plan again.` The disposition's name is the published one for a timed-out tool
+and reads oddly for it (nothing has to be selected); the step carries the meaning. What a
+timeout does not change: a tool that is really missing or failing is planned as before, with the
+tool it is paired with. **FFmpeg and FFprobe come in one managed build**, so a missing FFmpeg
+beside a timed-out FFprobe still plans that build, and a managed version is used ahead of a tool
+found on `PATH`: accepting such a plan replaces the FFprobe whose probe only timed out. Its
+step therefore does not say that the plan proposes nothing; it keeps
+`manual_selection_required` and says what the plan does to it: `FFprobe was found, but its
+check did not finish before the deadline the tool checks share: it did not answer in time, or it
+was not started because the time had run out. This plan cannot tell whether it works. It
+proposes installing the paired FFmpeg and FFprobe build because FFmpeg is missing or failed its
+check, not because of this timeout; that build includes FFprobe, and VSift then uses it instead
+of this one unless you registered this one with setup configure. Review that action before you
+accept.` (and the same for a timed-out FFmpeg beside a missing or failing FFprobe; whisper.cpp
+has no pair). The model is planned whatever the tools do, so a plan
+made while every probe timed out can hold the model's action alone, or none
+(`managed_install: not_required`, which then means only that no observation asked for an
+install). The digest binds that a probe timed out, not which kind or under which deadline, so a
+plan saved while a tool did not answer is refused as stale by `setup install` once the tool
+answers; and a plan saved while the tools answered is refused the same way if one of them
+times out when `setup install` probes again (run `setup plan --json` again, as the refusal
+says). Example:
+[`setup-plan.timed-out.json`](../../schemas/v1/examples/setup-plan.timed-out.json).
+
+A responding executable remains `existing_executable_probe_only`; a configured
 model file remains `configured_model_probe_only`. Neither response proves
 provider or model compatibility. `readiness` remains the executable-probe
 aggregate. The model status in a plan is presence-only and is separate from
@@ -2502,7 +2616,10 @@ ambient discovery. A missing tool's `remediation.managed_install` says whether m
 installation can supply it on this host: `catalogue_accepted` (run `setup plan`, then
 `setup install`), `unavailable_target`, `unavailable_catalogue_expired` or
 `unavailable_catalogue_invalid` (renamed in place from the constant
-`unavailable_unqualified` by P13 PR 4). `setup configure <ffmpeg|ffprobe|whisper>
+`unavailable_unqualified` by P13 PR 4). The member has the same value for an `unhealthy`
+and a `timed_out` tool; for a `timed_out` one it is a fact about the host and not advice,
+because `setup plan` proposes no install for a tool whose probe timed out
+([#391](https://github.com/smormah/vsift/issues/391)). `setup configure <ffmpeg|ffprobe|whisper>
 --executable <absolute-path>` persistently registers a canonical user-managed
 file without executing it. It creates private per-user configuration under
 `LOCALAPPDATA/vsift` on Windows, `~/Library/Application Support/vsift` on macOS,
@@ -2797,7 +2914,7 @@ producer emits it every time, and a test pins that.
 | Test ID | Executable evidence |
 | --- | --- |
 | C-01 | CLI hierarchy, help/version, parse errors and their typed remediation, with hostile argument text never echoed (`parse_cli_contract`), reserved-command failure; `session init-workspace` creation, idempotence, policy refusal, durable fail-closed and strict-isolation refusal before work (`workspace_cli_contract`) |
-| C-02 | deterministic ready/degraded/blocked setup and terminal response states |
+| C-02 | deterministic ready/degraded/blocked setup and terminal response states; a dependency probe that timed out, started or not, is `timed_out`, is never advised to be installed or located and is never planned for a managed install (#391: `dependency_probe_deadline` in the infrastructure, the application's `provisioning` tests, `setup_timeout_contract`, the engine's `tools_whose_probes_timed_out_are_not_planned_for_managed_installation`, and `setup_check_deadline_cli` through the binary with stand-in tools that never answer) |
 | C-03 | page bounds and cursor scope/expiry/round trips, including transcript pages, search pages (`search_cli_contract`, `engine_search`, the application's `search` tests with a no-gap/no-duplicate property) and candidate pages (`candidates_cli_contract`, `engine_candidates`, the application's `visual` tests with the property `any_range_and_limit_page_without_gaps_or_duplicates`) |
 | C-04 | opaque identifier rejection of path, option, Unicode/control payloads |
 | C-05 | bounded/sanitized output and broken stdout/stderr behavior |

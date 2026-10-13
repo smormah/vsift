@@ -294,7 +294,17 @@ P10 PR 3, `jobs` (at most 16 of `job_id`, `kind`, `state`, `live_owner`, `resuma
 and passed with the pinned base model, and `setup-check.blocked.json` the check with
 nothing installed (local ASR `not_run`, `media_tools_unavailable`); both are checked
 by `vsift-contract`'s `setup_local_asr_contract` and `schema_conformance`, and the
-blocked one against the binary's output by the CLI's `schema_contract`. Local-ASR
+blocked one against the binary's output by the CLI's `schema_contract`.
+`setup-check.timed-out.json` is the check on a machine whose three tools were found and
+whose probes timed out under the default 30-second deadline they share, the first started
+and the two after it not (issue #391): each is `timed_out`, the setup is `blocked`, and each
+`next_step` says what happened and to run the check again or allow more time, never to
+install or locate the tool. `setup-plan.timed-out.json` is `setup plan` after the same on a
+target with no managed installation: the two tools that were found are
+`manual_selection_required` with a step that says the plan decided nothing for them, and a
+tool that is missing keeps its published step. Both are checked by `vsift-contract`'s
+`setup_timeout_contract`, and the texts through the binary by the CLI's
+`setup_check_deadline_cli`. Local-ASR
 provenance names the model profile `base` or `base_q5_1` (P07 increment 3c).
 `search.json` and `search.events.jsonl` search that F10 import for `R-17`: one phrase
 hit, the segment F10-E01 cites, with complete coverage from the supplied transcript,

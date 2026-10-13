@@ -1,0 +1,16 @@
+VSift setup plan (read-only; nothing was changed)
+Profile: desktop
+Readiness: blocked
+Target: windows_x86_64
+Verification: executable_probe_and_reviewed_catalogue
+Managed installation: unavailable_target
+Plan digest: none (nothing to install from this plan)
+
+ffmpeg: timed_out, manual_selection_required (needs user authority)
+  Next: FFmpeg was found, but its check did not finish before the deadline the tool checks share: it did not answer in time, or it was not started because the time had run out. This plan cannot tell whether it works, so it decides nothing for it and proposes no install because of it. A first run after an install or restart can be slow. Run setup check until it answers (it can be given more time with --timeout-seconds, up to 60), then run setup plan again.
+ffprobe: timed_out, manual_selection_required (needs user authority)
+  Next: FFprobe was found, but its check did not finish before the deadline the tool checks share: it did not answer in time, or it was not started because the time had run out. This plan cannot tell whether it works, so it decides nothing for it and proposes no install because of it. A first run after an install or restart can be slow. Run setup check until it answers (it can be given more time with --timeout-seconds, up to 60), then run setup plan again.
+whisper: missing, manual_selection_required (needs user authority)
+  Next: For local ASR, install or locate a trusted whisper.cpp CLI, then run setup configure whisper --executable <absolute-path> and setup check. A supplied transcript can skip local ASR.
+Local ASR model: missing, manual_selection_required (needs user authority)
+  Next: For local ASR, configure trusted model weights with setup configure-model --file <absolute-path>. A supplied transcript can skip local ASR.

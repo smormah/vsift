@@ -202,6 +202,46 @@ On Ubuntu 24.04 `vsift setup plan --profile desktop` lets VSift install reviewed
 and accept the plan. A tool that is present but "failed VSift's media-tool check" is a different problem: it is
 an FFmpeg that starts and does the wrong thing, so install a standard build. [Install guide, section 5](../operations/install.md#5-install-ffmpeg-ffprobe-whispercpp-and-the-speech-model).
 
+**`setup check` says `[timeout]` for a tool you have.** A `[timeout]` line is not a `[missing]` line: VSift found the
+tool and got no answer in time. `setup check` starts FFmpeg, FFprobe and whisper.cpp one after another and waits for each to
+answer (the first two are asked for their version, whisper.cpp for its help text), and the three share one time limit, 30 seconds in all. The first time a program runs after you installed it or restarted the
+machine it can take seconds to start, for example while a virus scanner reads a large program for the first time, and a
+slow first tool leaves less time for the next ones. The lines under `[timeout]` say which of two things happened:
+
+```text
+[timeout] FFmpeg (media_processing): found, but it did not answer in time [filtered PATH]
+  It was started and had not answered when the deadline passed: 30 seconds, which the three tool checks share. A first run after installing a tool or restarting the machine can be slow, for example while a virus scanner reads a large program for the first time. Run setup check again, or allow more time with --timeout-seconds (up to 60).
+[timeout] FFprobe (media_processing): found, but not started before the deadline passed [filtered PATH]
+  It was not started, because the deadline had already passed: 30 seconds, which the three tool checks share. Nothing is known about it yet. A first run after installing a tool or restarting the machine can be slow, for example while a virus scanner reads a large program for the first time. Run setup check again, or allow more time with --timeout-seconds (up to 60).
+```
+
+*These lines are the fixed form VSift prints, taken from its own tests, where stand-in tools never answer; they are not
+checked automatically here because a real tool that times out depends on the machine.* What to do:
+
+1. **Run `vsift setup check` again.** A second run right after the first is normally much quicker.
+2. If it still says `[timeout]`, allow the most time there is: `vsift setup check --timeout-seconds 60`.
+3. If it still does, the tool itself hangs or does not start, and VSift says so instead of offering more time. Run
+   the tool yourself and see what it does: `ffmpeg -version` and `ffprobe -version` should each print a version at once,
+   and `whisper-cli --help` its options. A tool that prints nothing, or waits, is the problem, not VSift: repair or
+   replace that tool. This is the only place that says so; the answer of `setup check` stops at "the tool itself hangs".
+
+While FFmpeg or FFprobe is `[timeout]` the status is `blocked` and the exit status is 2, as for a missing tool, because
+VSift could not confirm the tool; nothing is wrong with your setup if the next run says `[ok]`. The answer never tells you
+to install a tool it found. The line `Local ASR check:` further down is worked out separately and can say `verified` in the
+same answer: both are true (the tool gave that check no answer in time, and the tools worked a moment later).
+`vsift setup plan` uses the same 30 seconds and has no option to change it; for a tool that did not answer it says so and
+proposes nothing because of it, so run `setup check` until the tool answers and then the plan again. Two things to know
+about the plan. It can take up to twice as long on a machine where VSift has installed a tool, because it looks at the
+tools twice, and the two looks can disagree (a tool shown as `available` beside a step that says its check did not
+finish). And FFmpeg and FFprobe come in one build: when one of them is really missing, the plan installs that build, and
+VSift then uses its copy of the other one too, in place of yours that only timed out, unless you registered yours with
+`setup configure`. The timed-out tool's line in the plan says so.
+
+**In every version before `0.2.1-rc.3`** (`0.1.0`, `0.2.0` and the earlier candidates) the limit was 5 seconds for the three tools together, which a large
+FFmpeg build can use up on its first start, and a `[timeout]` line was followed by "Install or locate this trusted tool",
+which was wrong ([#391](https://github.com/smormah/vsift/issues/391), [L-161](../planning/known-limits.md#l-161); seen on
+one Windows 11 machine). There, run the check again, or run `vsift setup check --timeout-seconds 30`.
+
 **`MISSING_CAPABILITY` from `transcript retranscribe` when `setup check` is fine.** If the `Fix:` line begins
 `Local speech recognition failed at the output_validation step (malformed_output)` and names
 `too_many_rejected_segments`, nothing is missing: VSift checked the tools on a built-in clip before it ran, and they

@@ -16,17 +16,17 @@ use std::{
         Arc,
         atomic::{AtomicU64, Ordering},
     },
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::{SystemTime, UNIX_EPOCH},
 };
 
 use vsift::{
     Cancellation, CleanDecision, CleanEntry, CleanMode, CleanRequest, CleanScope, Clock,
-    ClockError, DEFAULT_LOCAL_ASR_CHECK_BUDGET, DependencyState, Engine, EngineConfig, EngineError,
-    EnginePorts, ExecutableRejection, ExecutableSelections, FailureCode, HostIsolation,
-    IdentifierGenerationError, IdentifierSource, IngestRequest, LocalAsrCheckOutcome,
-    LocalAsrModelStatus, LocalAsrNotRunReason, LocalAsrSetupStatus, ManagedRootLocation,
-    MediaToolSelection, MediaToolVerification, MediaToolVerificationRequest, ModelSelection,
-    ModelVerification, OperationId, RuntimeDependency, RuntimeReadiness, SessionId,
+    ClockError, DEFAULT_LOCAL_ASR_CHECK_BUDGET, DEFAULT_PROBE_TIMEOUT, DependencyState, Engine,
+    EngineConfig, EngineError, EnginePorts, ExecutableRejection, ExecutableSelections, FailureCode,
+    HostIsolation, IdentifierGenerationError, IdentifierSource, IngestRequest,
+    LocalAsrCheckOutcome, LocalAsrModelStatus, LocalAsrNotRunReason, LocalAsrSetupStatus,
+    ManagedRootLocation, MediaToolSelection, MediaToolVerification, MediaToolVerificationRequest,
+    ModelSelection, ModelVerification, OperationId, RuntimeDependency, RuntimeReadiness, SessionId,
     SessionLifetime, SessionListEntry, SessionPhase, SessionRootError, SessionRootLocation,
     SetupCheckRequest, SourcePathFault, SourceRetention, SuppliedTranscriptRequest,
     TranscriptSourceError, UserConfigurationLocation,
@@ -520,7 +520,7 @@ async fn setup_check_reports_missing_explicit_paths_without_searching_path() -> 
     let report = harness
         .engine
         .check_setup(SetupCheckRequest {
-            probe_timeout: Duration::from_secs(5),
+            probe_timeout: DEFAULT_PROBE_TIMEOUT,
             per_call: ExecutableSelections {
                 ffmpeg: None,
                 ffprobe: Some(harness.root.path("missing-ffprobe")),

@@ -46,7 +46,10 @@ pub struct SetupInstallRequest {
     /// An absolute folder holding the plan's artifact files, for an offline
     /// install; `None` downloads each from its reviewed publisher.
     pub artifact_directory: Option<PathBuf>,
-    /// Total deadline shared by the dependency probes that rebuild the plan.
+    /// Total deadline shared by the dependency probes that rebuild the plan;
+    /// hosts normally pass [`crate::DEFAULT_PROBE_TIMEOUT`]. A tool that
+    /// answered when the plan was made and times out now changes the plan,
+    /// so the saved one is refused as stale and nothing is installed.
     pub probe_timeout: Duration,
 }
 

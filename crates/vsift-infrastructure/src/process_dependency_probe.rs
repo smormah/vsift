@@ -4,13 +4,30 @@ use std::{ffi::OsStr, path::PathBuf, time::Duration};
 
 use tokio::time::Instant;
 use vsift_application::DependencyProbe;
-use vsift_domain::{DependencyState, DependencyStatus, RuntimeDependency};
+use vsift_domain::{
+    DependencyState, DependencyStatus, ProbeTimeout, ProbeTimeoutKind, RuntimeDependency,
+};
 
 use crate::{
     ExecutableResolutionError, ExecutableResolver, ProcessCancellation, ProcessError,
     ProcessRequest, ProcessSupervisor, ProcessWorkingDirectory, TerminationReason,
     TrustedExecutable, WhisperBuildRecognition, identify_whisper_build,
 };
+
+/// The total time the probes of one diagnostic share when the caller names none.
+///
+/// It was five seconds until `0.2.1`. That was enough for tools that are
+/// already in the operating system's file cache and too little for the first
+/// start after an install or a restart: on one Windows machine with real-time
+/// virus scanning, a full `FFmpeg` build of about 200 MB was reported to take
+/// 0.8 s and `FFprobe` 4.7 s cold, so two healthy tools used up the whole
+/// deadline and were reported as timed out (issue #391). Thirty seconds is a
+/// choice, not a measurement of slow machines: more than five times that
+/// report's cold total, room for three slow starts in a row, and half the
+/// 60-second cap a caller may ask for. The cost is the other side of the same
+/// number: a tool that truly hangs now holds the diagnostic for up to thirty
+/// seconds instead of five.
+pub const DEFAULT_PROBE_TIMEOUT: Duration = Duration::from_secs(30);
 
 const MAX_DIAGNOSTIC_LENGTH: usize = 240;
 /// Detail when a tool responded but printed no line that is safe to echo.
@@ -51,8 +68,16 @@ impl ExplicitProbePaths {
 /// One instance represents one setup-check operation. Its deadline is shared across every
 /// dependency probe, preventing a sequence of slow providers from multiplying the caller's
 /// configured operation timeout.
+///
+/// The price of sharing is that a slow probe leaves less, or nothing, for the ones after it. A
+/// probe whose turn comes after the deadline is reported as timed out without being started, and
+/// says so ([`ProbeTimeoutKind::NotStarted`]): it is a different fact from a tool that was started
+/// and did not answer, and neither is a missing tool. A tool that cannot be found is still reported
+/// missing after the deadline, because resolution comes before the deadline is looked at.
 pub struct ProcessDependencyProbe {
     operation_deadline: Instant,
+    /// The deadline as the caller set it, reported with every probe that timed out.
+    operation_timeout: Duration,
     resolver: ExecutableResolver,
     supervisor: ProcessSupervisor,
     explicit_paths: ExplicitProbePaths,
@@ -103,22 +128,33 @@ impl ProcessDependencyProbe {
         explicit_paths: ExplicitProbePaths,
     ) -> Self {
         let now = Instant::now();
-        let operation_deadline = match now.checked_add(operation_timeout) {
-            Some(deadline) => deadline,
-            None => now,
+        // A timeout too large to be an instant on this clock was always treated as
+        // none at all; it is reported as the zero it was applied as.
+        let (operation_deadline, operation_timeout) = match now.checked_add(operation_timeout) {
+            Some(deadline) => (deadline, operation_timeout),
+            None => (now, Duration::ZERO),
         };
         Self {
             operation_deadline,
+            operation_timeout,
             resolver,
             supervisor,
             explicit_paths,
         }
     }
+
+    /// A probe of this operation that gave no result by the shared deadline.
+    const fn timed_out(&self, kind: ProbeTimeoutKind) -> DependencyState {
+        DependencyState::TimedOut(ProbeTimeout {
+            kind,
+            shared_deadline: self.operation_timeout,
+        })
+    }
 }
 
 impl Default for ProcessDependencyProbe {
     fn default() -> Self {
-        Self::new(Duration::from_secs(5))
+        Self::new(DEFAULT_PROBE_TIMEOUT)
     }
 }
 
@@ -162,14 +198,16 @@ impl ProcessDependencyProbe {
                 };
             }
         };
+        // The executable is found and its folder is usable; only now is the shared
+        // deadline looked at, so "found but not started" is true of what follows.
         let Some(remaining) = self
             .operation_deadline
             .checked_duration_since(Instant::now())
         else {
-            return DependencyState::TimedOut;
+            return self.timed_out(ProbeTimeoutKind::NotStarted);
         };
         if remaining.is_zero() {
-            return DependencyState::TimedOut;
+            return self.timed_out(ProbeTimeoutKind::NotStarted);
         }
         let request = match ProcessRequest::new(executable.clone(), working_directory, remaining) {
             Ok(request) => request.with_arguments(specification.arguments.iter().copied()),
@@ -186,7 +224,7 @@ impl ProcessDependencyProbe {
             .await
         {
             Ok(outcome) if outcome.termination == TerminationReason::Deadline => {
-                DependencyState::TimedOut
+                self.timed_out(ProbeTimeoutKind::NoAnswer)
             }
             Ok(outcome) if outcome.status.success() => DependencyState::Available {
                 version: match specification.detail {

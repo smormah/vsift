@@ -26,14 +26,14 @@ use std::{
 
 use vsift::{
     AsrDecodingProfile, AsrFailure, AsrFailureReason, AsrModel, AsrModelProfile, AsrProvider,
-    AsrProviderBuild, AsrStage, DEFAULT_LOCAL_ASR_CHECK_BUDGET, Engine, EngineConfig, EnginePorts,
-    ExecutableSelections, HostIsolation, LanguageTag, LocalAsrCheckFailure, LocalAsrCheckOutcome,
-    LocalAsrModelStatus, LocalAsrNotRunReason, LocalAsrSetupStatus, LocalAsrVerification,
-    LocalAsrVerificationFailure, LocalAsrVerificationSource, LocalAsrVerifier, ManagedRootLocation,
-    MediaToolCheck, MediaToolFailure, MediaToolVerification, MediaToolVerifier, PlannedChunk,
-    ProviderChunkOutput, RecognizerIdentity, ReviewedAsrModel, SessionRootLocation,
-    SetupCheckRequest, Sha256Hex, SpeechPcm, SpeechRecognitionError, SpeechRecognizer,
-    UserConfigurationLocation,
+    AsrProviderBuild, AsrStage, DEFAULT_LOCAL_ASR_CHECK_BUDGET, DEFAULT_PROBE_TIMEOUT, Engine,
+    EngineConfig, EnginePorts, ExecutableSelections, HostIsolation, LanguageTag,
+    LocalAsrCheckFailure, LocalAsrCheckOutcome, LocalAsrModelStatus, LocalAsrNotRunReason,
+    LocalAsrSetupStatus, LocalAsrVerification, LocalAsrVerificationFailure,
+    LocalAsrVerificationSource, LocalAsrVerifier, ManagedRootLocation, MediaToolCheck,
+    MediaToolFailure, MediaToolVerification, MediaToolVerifier, PlannedChunk, ProviderChunkOutput,
+    RecognizerIdentity, ReviewedAsrModel, SessionRootLocation, SetupCheckRequest, Sha256Hex,
+    SpeechPcm, SpeechRecognitionError, SpeechRecognizer, UserConfigurationLocation,
 };
 
 type TestResult = Result<(), Box<dyn Error>>;
@@ -245,7 +245,7 @@ impl Harness {
     ) -> Built<LocalAsrSetupStatus> {
         Ok(*engine
             .check_setup(SetupCheckRequest {
-                probe_timeout: Duration::from_secs(5),
+                probe_timeout: DEFAULT_PROBE_TIMEOUT,
                 per_call: selections,
                 local_asr_budget: budget,
             })
