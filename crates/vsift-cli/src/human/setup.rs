@@ -3,11 +3,12 @@
 
 use vsift::{
     DependencyState, LocalAsrCheckOutcome, LocalAsrModelStatus, LocalAsrNotRunReason,
-    LocalAsrSetupStatus, LocalAsrVerificationSource, ManagedPlanAvailability, RuntimeDependency,
-    RuntimeDiagnosis, RuntimeReadiness,
+    LocalAsrSetupStatus, LocalAsrVerificationSource, ManagedPlanAvailability, ProbeTimeout,
+    ProbeTimeoutKind, RuntimeDependency, RuntimeDiagnosis, RuntimeReadiness,
 };
 use vsift_contract::{
-    DependencyLookup, MAX_PROVIDER_DETAIL_BYTES, explicit_path_option, sanitize_untrusted_text,
+    DependencyLookup, MAX_PROVIDER_DETAIL_BYTES, explicit_path_option, probe_deadline_text,
+    sanitize_untrusted_text,
 };
 
 use super::{
@@ -68,8 +69,13 @@ where
             DependencyState::Unhealthy { .. } => {
                 text.push_fixed("dependency probe failed");
             }
-            DependencyState::TimedOut => {
-                text.push_fixed("probe exceeded its deadline");
+            DependencyState::TimedOut(timeout) => {
+                text.push_fixed(match timeout.kind {
+                    ProbeTimeoutKind::NoAnswer => "found, but it did not answer in time",
+                    ProbeTimeoutKind::NotStarted => {
+                        "found, but not started before the deadline passed"
+                    }
+                });
             }
         }
         text.push_fixed(match provenance {
@@ -79,19 +85,23 @@ where
             DependencyLookup::FilteredPath => " [filtered PATH]",
         })
         .end_line();
-        if !status.state.is_available() {
-            text.push_fixed(
-                "  Install or locate this trusted tool, then rerun setup check with its absolute \
-                 path using ",
-            )
-            .push_value(explicit_path_option(status.dependency))
-            .push_fixed(if managed_install == ManagedPlanAvailability::Qualified {
-                ". Or let VSift install the reviewed build: review setup plan, then accept it \
-                 with setup install."
-            } else {
-                ". Managed installation is not available for this target."
-            })
-            .end_line();
+        match &status.state {
+            DependencyState::Available { .. } => {}
+            DependencyState::Missing | DependencyState::Unhealthy { .. } => {
+                text.push_fixed(
+                    "  Install or locate this trusted tool, then rerun setup check with its \
+                     absolute path using ",
+                )
+                .push_value(explicit_path_option(status.dependency))
+                .push_fixed(if managed_install == ManagedPlanAvailability::Qualified {
+                    ". Or let VSift install the reviewed build: review setup plan, then accept \
+                     it with setup install."
+                } else {
+                    ". Managed installation is not available for this target."
+                })
+                .end_line();
+            }
+            DependencyState::TimedOut(timeout) => push_timeout_advice(&mut text, *timeout),
         }
     }
     if diagnosis.readiness == RuntimeReadiness::Blocked {
@@ -113,8 +123,39 @@ const fn state_marker(state: &DependencyState) -> &'static str {
         DependencyState::Available { .. } => "ok",
         DependencyState::Missing => "missing",
         DependencyState::Unhealthy { .. } => "unhealthy",
-        DependencyState::TimedOut => "timeout",
+        DependencyState::TimedOut(_) => "timeout",
     }
+}
+
+/// The advice under a tool whose probe timed out (issue #391).
+///
+/// The tool was found, so nothing here says to install or locate it, and no
+/// managed installation is offered for it. It says which of the two things
+/// happened, under which deadline, why a healthy tool can be this slow, and
+/// the two things that help. The deadline is the one the three probes share,
+/// which is said, because the tool did not have all of it to itself.
+fn push_timeout_advice(text: &mut TerminalText, timeout: ProbeTimeout) {
+    text.push_fixed(match timeout.kind {
+        ProbeTimeoutKind::NoAnswer => {
+            "  It was started and had not answered when the deadline passed: "
+        }
+        ProbeTimeoutKind::NotStarted => {
+            "  It was not started, because the deadline had already passed: "
+        }
+    })
+    .push_value(&probe_deadline_text(timeout.shared_deadline))
+    .push_fixed(match timeout.kind {
+        ProbeTimeoutKind::NoAnswer => ", which the three tool checks share.",
+        ProbeTimeoutKind::NotStarted => {
+            ", which the three tool checks share. Nothing is known about it yet."
+        }
+    })
+    .push_fixed(
+        " A first run after installing a tool or restarting the machine can be slow, for \
+         example while a virus scanner reads a large program for the first time. Run setup \
+         check again, or allow more time with --timeout-seconds (up to 60).",
+    )
+    .end_line();
 }
 
 /// The local-ASR lines: every value is a typed identifier, never a path or

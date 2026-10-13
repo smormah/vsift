@@ -4,8 +4,13 @@ use std::{error::Error, fmt, time::Duration};
 
 use crate::command::ExecutionProfile;
 
-const DEFAULT_PROBE_TIMEOUT_SECONDS: u64 = 5;
-const MAX_PROBE_TIMEOUT_SECONDS: u64 = 60;
+/// The engine's default, in the whole seconds the command line and the
+/// configuration layers work in. The figure and its reasons have one home,
+/// [`vsift::DEFAULT_PROBE_TIMEOUT`]; a test below holds this to it exactly.
+pub(crate) const DEFAULT_PROBE_TIMEOUT_SECONDS: u64 = vsift::DEFAULT_PROBE_TIMEOUT.as_secs();
+/// The most any layer may ask for. With three probes under one deadline it is
+/// also the longest a `setup check` can wait on tools that never answer.
+pub(crate) const MAX_PROBE_TIMEOUT_SECONDS: u64 = 60;
 
 /// Values contributed by one explicit configuration layer.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -110,7 +115,10 @@ impl Error for ConfigError {}
 
 #[cfg(test)]
 mod tests {
-    use super::{ConfigError, ConfigLayer, EffectiveConfig, HostPolicy};
+    use super::{
+        ConfigError, ConfigLayer, DEFAULT_PROBE_TIMEOUT_SECONDS, EffectiveConfig, HostPolicy,
+        MAX_PROBE_TIMEOUT_SECONDS,
+    };
     use crate::command::ExecutionProfile;
 
     #[test]
@@ -140,6 +148,9 @@ mod tests {
         );
     }
 
+    /// Issue #391: the default deadline the three probes share is thirty
+    /// seconds (it was five, which two healthy tools used up on a cold
+    /// start), and it is the engine's default exactly, not a second figure.
     #[test]
     fn defaults_are_applied_without_loading_project_configuration() {
         let effective = EffectiveConfig::resolve(
@@ -153,23 +164,63 @@ mod tests {
             effective,
             Ok(EffectiveConfig {
                 profile: ExecutionProfile::Desktop,
-                probe_timeout: std::time::Duration::from_secs(5),
+                probe_timeout: std::time::Duration::from_secs(30),
             })
         );
+        assert_eq!(
+            std::time::Duration::from_secs(DEFAULT_PROBE_TIMEOUT_SECONDS),
+            vsift::DEFAULT_PROBE_TIMEOUT,
+            "the engine's default is a whole number of seconds"
+        );
+        // The default is itself inside what the host allows, or no check could run.
+        const {
+            assert!(
+                0 < DEFAULT_PROBE_TIMEOUT_SECONDS
+                    && DEFAULT_PROBE_TIMEOUT_SECONDS <= MAX_PROBE_TIMEOUT_SECONDS
+            );
+        };
+    }
+
+    /// An explicit deadline still replaces the default, at both ends of what
+    /// the host allows.
+    #[test]
+    fn an_explicit_deadline_overrides_the_default_within_the_host_bounds() {
+        for seconds in [1, 5, 60] {
+            let effective = EffectiveConfig::resolve(
+                ConfigLayer {
+                    profile: None,
+                    probe_timeout_seconds: Some(seconds),
+                },
+                ConfigLayer::default(),
+                ConfigLayer::default(),
+                &HostPolicy::local_r0(),
+            );
+            assert_eq!(
+                effective.map(|config| config.probe_timeout),
+                Ok(std::time::Duration::from_secs(seconds)),
+                "{seconds}"
+            );
+        }
     }
 
     #[test]
     fn host_policy_caps_every_configuration_layer() {
-        let result = EffectiveConfig::resolve(
-            ConfigLayer {
-                profile: None,
-                probe_timeout_seconds: Some(61),
-            },
-            ConfigLayer::default(),
-            ConfigLayer::default(),
-            &HostPolicy::local_r0(),
-        );
+        for seconds in [0, 61] {
+            let result = EffectiveConfig::resolve(
+                ConfigLayer {
+                    profile: None,
+                    probe_timeout_seconds: Some(seconds),
+                },
+                ConfigLayer::default(),
+                ConfigLayer::default(),
+                &HostPolicy::local_r0(),
+            );
 
-        assert_eq!(result, Err(ConfigError::ProbeTimeoutOutsidePolicy));
+            assert_eq!(
+                result,
+                Err(ConfigError::ProbeTimeoutOutsidePolicy),
+                "{seconds}"
+            );
+        }
     }
 }

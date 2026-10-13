@@ -37,6 +37,10 @@ fn every_published_example_validates_against_its_schema() -> Result<(), Box<dyn 
             "examples/setup-check.local-asr.json",
         ),
         (
+            "setup-check-response.schema.json",
+            "examples/setup-check.timed-out.json",
+        ),
+        (
             "operation-response.schema.json",
             "examples/operation-error.json",
         ),
@@ -51,6 +55,10 @@ fn every_published_example_validates_against_its_schema() -> Result<(), Box<dyn 
         (
             "setup-plan.schema.json",
             "examples/setup-plan.unavailable.json",
+        ),
+        (
+            "setup-plan.schema.json",
+            "examples/setup-plan.timed-out.json",
         ),
         ("terminal-event.schema.json", "examples/terminal-event.json"),
         ("config.schema.json", "examples/config.json"),
@@ -72,6 +80,10 @@ fn strict_schemas_reject_unknown_fields() -> Result<(), Box<dyn std::error::Erro
             "examples/setup-check.local-asr.json",
         ),
         (
+            "setup-check-response.schema.json",
+            "examples/setup-check.timed-out.json",
+        ),
+        (
             "operation-response.schema.json",
             "examples/operation-error.json",
         ),
@@ -86,6 +98,10 @@ fn strict_schemas_reject_unknown_fields() -> Result<(), Box<dyn std::error::Erro
         (
             "setup-plan.schema.json",
             "examples/setup-plan.unavailable.json",
+        ),
+        (
+            "setup-plan.schema.json",
+            "examples/setup-plan.timed-out.json",
         ),
         ("terminal-event.schema.json", "examples/terminal-event.json"),
         ("config.schema.json", "examples/config.json"),

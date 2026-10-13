@@ -234,7 +234,7 @@ pub use session::{
 };
 pub use setup::{
     ConfiguredModelResponse, ConfiguredSelectionResponse, DependencyLookup, SavedSetupPlan,
-    SetupCheckResponse, SetupPlanResponse, explicit_path_option,
+    SetupCheckResponse, SetupPlanResponse, explicit_path_option, probe_deadline_text,
 };
 pub use storage::{
     PrivateFolder, SESSION_NOT_PUBLISHED_REMEDIATION, SOURCE_ACCESS_DENIED_REMEDIATION,

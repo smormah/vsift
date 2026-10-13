@@ -218,9 +218,12 @@ impl ManagedPlanAvailability {
 pub enum SetupDependencyDisposition {
     /// A user-managed executable responded but still needs compatibility preflight.
     ExistingProbeOnly,
-    /// An accepted managed action supplies this missing dependency.
+    /// An accepted managed action supplies this dependency, which the probe
+    /// showed to be missing or failing.
     ManagedInstall,
-    /// The user must supply or install this dependency externally.
+    /// The plan proposes nothing for this dependency and the next move is the
+    /// user's: supply or install it outside managed setup, or, when its probe
+    /// timed out and so showed nothing, check it again and plan again.
     ManualSelection,
 }
 
@@ -659,14 +662,21 @@ pub fn plan_managed_setup(
     };
 
     let qualified = availability == ManagedPlanAvailability::Qualified;
+    // Only a probe that showed a tool unusable (missing, or found and failing)
+    // is a reason to install one. A probe that timed out shows nothing: the
+    // tool was found and may be perfectly healthy, as a large executable is on
+    // its first start after a restart (issue #391). Planning a download for it
+    // would replace a working tool on the strength of one slow start, so a
+    // timeout plans nothing, and its own disposition below says the user has to
+    // look again.
     let media_missing = diagnosis.dependencies.iter().any(|status| {
         matches!(
             status.dependency,
             RuntimeDependency::Ffmpeg | RuntimeDependency::Ffprobe
-        ) && !status.state.is_available()
+        ) && status.state.is_unusable()
     });
     let whisper_missing = diagnosis.dependencies.iter().any(|status| {
-        status.dependency == RuntimeDependency::Whisper && !status.state.is_available()
+        status.dependency == RuntimeDependency::Whisper && status.state.is_unusable()
     });
 
     let dependencies = diagnosis
@@ -680,7 +690,7 @@ pub fn plan_managed_setup(
             let needs_whisper = status.dependency == RuntimeDependency::Whisper && whisper_missing;
             let disposition = if status.state.is_available() {
                 SetupDependencyDisposition::ExistingProbeOnly
-            } else if qualified && (needs_media || needs_whisper) {
+            } else if qualified && status.state.is_unusable() && (needs_media || needs_whisper) {
                 SetupDependencyDisposition::ManagedInstall
             } else {
                 SetupDependencyDisposition::ManualSelection
@@ -816,7 +826,11 @@ fn plan_digest(plan: &ManagedSetupPlan) -> String {
             vsift_domain::DependencyState::Unhealthy { message } => {
                 digest_field(&mut digest, message);
             }
-            vsift_domain::DependencyState::Missing | vsift_domain::DependencyState::TimedOut => {}
+            // Which kind of timeout it was, and under which deadline, is not
+            // bound: the plan's text for a timed-out probe is the same for
+            // both kinds, and a deadline is not an observation of the tool.
+            vsift_domain::DependencyState::Missing | vsift_domain::DependencyState::TimedOut(_) => {
+            }
         }
         digest_field(
             &mut digest,
@@ -908,9 +922,12 @@ fn digest_field(digest: &mut Sha256, value: &str) {
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
     use vsift_domain::{
         ArtifactIntegrity, DependencyState, DependencyStatus, ManagedArtifactFormat,
-        ManagedComponent, ManagedTarget, RuntimeDependency, RuntimeReadiness,
+        ManagedComponent, ManagedTarget, ProbeTimeout, ProbeTimeoutKind, RuntimeDependency,
+        RuntimeReadiness,
     };
 
     use super::{
@@ -1202,6 +1219,227 @@ mod tests {
         assert_eq!(plan.availability, ManagedPlanAvailability::CatalogueInvalid);
         assert!(plan.actions.is_empty());
         assert!(plan.digest.is_none());
+        Ok(())
+    }
+
+    fn timed_out(kind: ProbeTimeoutKind) -> DependencyState {
+        DependencyState::TimedOut(ProbeTimeout {
+            kind,
+            shared_deadline: Duration::from_secs(30),
+        })
+    }
+
+    /// A blocked diagnosis with these states, in the stable dependency order.
+    fn diagnosis_of(states: [DependencyState; 3]) -> RuntimeDiagnosis {
+        RuntimeDiagnosis {
+            readiness: RuntimeReadiness::Blocked,
+            dependencies: RuntimeDependency::ALL
+                .into_iter()
+                .zip(states)
+                .map(|(dependency, state)| DependencyStatus { dependency, state })
+                .collect(),
+        }
+    }
+
+    fn planned_components(plan: &super::ManagedSetupPlan) -> Vec<ManagedComponent> {
+        plan.actions
+            .iter()
+            .map(|action| action.artifact.component)
+            .collect()
+    }
+
+    fn with_model() -> SetupSelectionState {
+        SetupSelectionState {
+            model: Some(String::from("/fixture/model")),
+            ..SetupSelectionState::default()
+        }
+    }
+
+    /// Issue #391: where managed installation is available, a tool whose probe
+    /// only timed out was planned for a download exactly like a missing one. A
+    /// healthy tool that was slow to start once is not a reason to install
+    /// another: a timeout plans nothing for its tool, whichever way the
+    /// timeout happened, and leaves the next move with the user.
+    #[test]
+    fn a_probe_that_timed_out_plans_no_install_for_its_tool()
+    -> Result<(), Box<dyn std::error::Error>> {
+        // The reported shape: the first tool does not answer in time and the
+        // two after it are never started.
+        let plan = plan_managed_setup(
+            SetupProfile::Desktop,
+            diagnosis_of([
+                timed_out(ProbeTimeoutKind::NoAnswer),
+                timed_out(ProbeTimeoutKind::NotStarted),
+                timed_out(ProbeTimeoutKind::NotStarted),
+            ]),
+            ManagedTarget::Ubuntu2404X86_64,
+            with_model(),
+            1_000,
+            Some(catalogue()?),
+        );
+        assert!(plan.actions.is_empty(), "{:?}", planned_components(&plan));
+        assert_eq!(plan.readiness, RuntimeReadiness::Blocked);
+        for (status, disposition) in &plan.dependencies {
+            assert_eq!(
+                *disposition,
+                SetupDependencyDisposition::ManualSelection,
+                "{:?}",
+                status.dependency
+            );
+        }
+
+        // Without a configured model the model is still planned, as it always
+        // was whatever the tools do, and nothing else is.
+        let without_model = plan_managed_setup(
+            SetupProfile::Desktop,
+            diagnosis_of([
+                timed_out(ProbeTimeoutKind::NoAnswer),
+                timed_out(ProbeTimeoutKind::NotStarted),
+                timed_out(ProbeTimeoutKind::NotStarted),
+            ]),
+            ManagedTarget::Ubuntu2404X86_64,
+            SetupSelectionState::default(),
+            1_000,
+            Some(catalogue()?),
+        );
+        assert_eq!(
+            planned_components(&without_model),
+            [ManagedComponent::WhisperModel]
+        );
+        Ok(())
+    }
+
+    /// A timeout decides nothing in either direction: a tool that is really
+    /// missing is still planned, with the tool it is paired with, while the
+    /// timed-out one keeps its own disposition; and a tool that was found and
+    /// failed is planned as before.
+    #[test]
+    fn a_timeout_beside_a_missing_or_failing_tool_changes_only_its_own_disposition()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let available = || DependencyState::Available {
+            version: String::from("fixture"),
+        };
+        let beside_missing = plan_managed_setup(
+            SetupProfile::Desktop,
+            diagnosis_of([
+                DependencyState::Missing,
+                timed_out(ProbeTimeoutKind::NoAnswer),
+                timed_out(ProbeTimeoutKind::NotStarted),
+            ]),
+            ManagedTarget::Ubuntu2404X86_64,
+            with_model(),
+            1_000,
+            Some(catalogue()?),
+        );
+        assert_eq!(
+            planned_components(&beside_missing),
+            [ManagedComponent::MediaTools]
+        );
+        assert_eq!(
+            beside_missing
+                .dependencies
+                .iter()
+                .map(|(_, disposition)| *disposition)
+                .collect::<Vec<_>>(),
+            [
+                SetupDependencyDisposition::ManagedInstall,
+                SetupDependencyDisposition::ManualSelection,
+                SetupDependencyDisposition::ManualSelection,
+            ]
+        );
+
+        let failing = plan_managed_setup(
+            SetupProfile::Desktop,
+            diagnosis_of([
+                DependencyState::Unhealthy {
+                    message: String::from("process exited with exit code: 3"),
+                },
+                available(),
+                DependencyState::Unhealthy {
+                    message: String::from("process exited with exit code: 3"),
+                },
+            ]),
+            ManagedTarget::Ubuntu2404X86_64,
+            with_model(),
+            1_000,
+            Some(catalogue()?),
+        );
+        assert_eq!(
+            planned_components(&failing),
+            [ManagedComponent::MediaTools, ManagedComponent::WhisperCli]
+        );
+        assert_eq!(
+            failing.dependencies[0].1,
+            SetupDependencyDisposition::ManagedInstall
+        );
+        assert_eq!(
+            failing.dependencies[2].1,
+            SetupDependencyDisposition::ManagedInstall
+        );
+        Ok(())
+    }
+
+    /// The digest binds that a probe timed out, so a plan made while a tool
+    /// did not answer is not the plan of the same machine once it does; it
+    /// does not bind which kind of timeout it was or under which deadline.
+    #[test]
+    fn the_digest_binds_a_timeout_but_not_its_kind_or_deadline()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let plan = |ffprobe: DependencyState| -> Result<_, Box<dyn std::error::Error>> {
+            Ok(plan_managed_setup(
+                SetupProfile::Desktop,
+                diagnosis_of([
+                    DependencyState::Available {
+                        version: String::from("fixture"),
+                    },
+                    ffprobe,
+                    DependencyState::Missing,
+                ]),
+                ManagedTarget::Ubuntu2404X86_64,
+                with_model(),
+                1_000,
+                Some(catalogue()?),
+            ))
+        };
+        let no_answer = plan(timed_out(ProbeTimeoutKind::NoAnswer))?;
+        let not_started = plan(DependencyState::TimedOut(ProbeTimeout {
+            kind: ProbeTimeoutKind::NotStarted,
+            shared_deadline: Duration::from_secs(5),
+        }))?;
+        let answered = plan(DependencyState::Available {
+            version: String::from("fixture"),
+        })?;
+        assert!(no_answer.digest.is_some());
+        assert_eq!(no_answer.digest, not_started.digest);
+        assert_ne!(no_answer.digest, answered.digest);
+        Ok(())
+    }
+
+    /// Where nothing can be installed a timed-out tool was already left to the
+    /// user; that is unchanged.
+    #[test]
+    fn a_timeout_on_a_target_without_managed_installation_stays_with_the_user()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let plan = plan_managed_setup(
+            SetupProfile::Desktop,
+            diagnosis_of([
+                timed_out(ProbeTimeoutKind::NoAnswer),
+                timed_out(ProbeTimeoutKind::NotStarted),
+                DependencyState::Missing,
+            ]),
+            ManagedTarget::WindowsX86_64,
+            SetupSelectionState::default(),
+            1_000,
+            Some(catalogue()?),
+        );
+        assert_eq!(
+            plan.availability,
+            ManagedPlanAvailability::TargetUnavailable
+        );
+        assert!(plan.actions.is_empty());
+        for (_, disposition) in &plan.dependencies {
+            assert_eq!(*disposition, SetupDependencyDisposition::ManualSelection);
+        }
         Ok(())
     }
 }

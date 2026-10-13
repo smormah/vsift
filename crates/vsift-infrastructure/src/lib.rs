@@ -171,7 +171,9 @@ pub use media_tool_verification_cache::{
     media_tool_fingerprint,
 };
 pub use offline_artifact_import::{ArtifactImportError, import_reviewed_artifact};
-pub use process_dependency_probe::{ExplicitProbePaths, ProcessDependencyProbe};
+pub use process_dependency_probe::{
+    DEFAULT_PROBE_TIMEOUT, ExplicitProbePaths, ProcessDependencyProbe,
+};
 pub use process_supervisor::{
     CapturedOutput, ControlStatus, DEFAULT_STREAM_LIMIT, EffectiveControls, HardIsolation,
     HostIsolation, IsolationRequirement, OutputStream, ProcessCancellation, ProcessContainment,

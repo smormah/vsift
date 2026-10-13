@@ -151,7 +151,8 @@ pub use sessions::{
     SessionSnapshot, SourceRetention, SuppliedTranscriptRequest,
 };
 pub use setup::{
-    EvaluatedSetupPlan, ExecutableSelections, SetupCheckReport, SetupCheckRequest, SetupPlanRequest,
+    DEFAULT_PROBE_TIMEOUT, EvaluatedSetupPlan, ExecutableSelections, SetupCheckReport,
+    SetupCheckRequest, SetupPlanRequest,
 };
 pub use transcripts::{TranscriptExcerpt, TranscriptQuery};
 pub use verification::{
@@ -201,10 +202,11 @@ pub use vsift_domain::{
     ADMISSION_RETRY_AFTER, AdmissionBudget, AdmissionBudgetError, AdmissionWait, AttemptFailure,
     DependencyState, DependencyStatus, DurabilityRequirement, EvidenceId, FailureClass,
     FailureCode, IdentifierError, JobId, JobKind, JobState, MAX_ADMISSION_WAIT,
-    MAX_RECOGNIZER_THREADS, OperationId, OperationStatus, ProgressStage, ProgressUnit,
-    ProgressUpdate, PublicationGuarantee, RuntimeCapability, RuntimeDependency, RuntimeReadiness,
-    SessionId, SessionLifetime, SessionLifetimePolicy, SessionPhase, SourceId, StorageGeneration,
-    WorkspacePolicy, WorkspacePolicyError, WorkspaceRetention,
+    MAX_RECOGNIZER_THREADS, OperationId, OperationStatus, ProbeTimeout, ProbeTimeoutKind,
+    ProgressStage, ProgressUnit, ProgressUpdate, PublicationGuarantee, RuntimeCapability,
+    RuntimeDependency, RuntimeReadiness, SessionId, SessionLifetime, SessionLifetimePolicy,
+    SessionPhase, SourceId, StorageGeneration, WorkspacePolicy, WorkspacePolicyError,
+    WorkspaceRetention,
 };
 /// Transcript evidence values that appear in this API.
 pub use vsift_domain::{

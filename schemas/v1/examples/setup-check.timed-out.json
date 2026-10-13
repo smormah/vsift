@@ -1,0 +1,17 @@
+{
+  "schema_version": "1",
+  "command": "setup.check",
+  "profile": "desktop",
+  "status": "blocked",
+  "verification_scope": "executable_probe_only",
+  "local_asr_model": "not_checked",
+  "dependencies": [
+    { "dependency": "ffmpeg", "capability": "media_processing", "status": "timed_out", "detail": null, "lookup": "filtered_path", "validation": "not_validated", "remediation": { "reason": "timed_out", "managed_install": "catalogue_accepted", "required_authority": "user", "next_step": "FFmpeg was found and started but did not answer before the deadline all tool checks share (30 seconds). A first run after an install or restart can be slow. Run setup check again, or allow more time with --timeout-seconds (up to 60).", "explicit_path_option": "--ffmpeg" } },
+    { "dependency": "ffprobe", "capability": "media_processing", "status": "timed_out", "detail": null, "lookup": "filtered_path", "validation": "not_validated", "remediation": { "reason": "timed_out", "managed_install": "catalogue_accepted", "required_authority": "user", "next_step": "FFprobe was found but not started: the deadline all tool checks share (30 seconds) had already passed. A first run after an install or restart can be slow. Run setup check again, or allow more time with --timeout-seconds (up to 60).", "explicit_path_option": "--ffprobe" } },
+    { "dependency": "whisper", "capability": "transcription", "status": "timed_out", "detail": null, "lookup": "filtered_path", "validation": "not_validated", "remediation": { "reason": "timed_out", "managed_install": "catalogue_accepted", "required_authority": "user", "next_step": "whisper.cpp was found but not started: the deadline all tool checks share (30 seconds) had already passed. A first run after an install or restart can be slow. Run setup check again, or allow more time with --timeout-seconds (up to 60).", "explicit_path_option": "--whisper" } }
+  ],
+  "local_asr": {
+    "model": { "status": "not_selected", "profile": null },
+    "verification": { "status": "not_run", "source": null, "not_run_reason": "model_not_selected", "check": null, "reason": null }
+  }
+}

@@ -53,5 +53,13 @@ vsift-infrastructure.workspace = true
 name = "p14_installed_binary_e2e"
 harness = false
 
+# Issue #391: `setup check` with tools that never answer. The stand-in tool is
+# a copy of the test executable itself, started by vsift with a probe's
+# argument list, which libtest would reject (see the file's documentation).
+# Unlike the target above it always runs.
+[[test]]
+name = "setup_check_deadline_cli"
+harness = false
+
 [lints]
 workspace = true

@@ -19,6 +19,17 @@ use vsift_infrastructure::{
 
 use crate::{engine::Engine, error::EngineError};
 
+/// The total time the dependency probes of one setup operation share when the
+/// host has no reason to choose another: thirty seconds.
+///
+/// The probes run one after another under this one deadline, so it has to
+/// cover a slow first start of every tool (after an install or a restart, a
+/// large executable can take seconds to answer `-version`), not just one. A
+/// host that passes less gets `timed_out` for healthy tools on such a start
+/// (issue #391); a tool that truly hangs holds the operation for this long.
+/// `vsift` uses it for `setup check`, `setup plan` and `setup install`.
+pub const DEFAULT_PROBE_TIMEOUT: Duration = vsift_infrastructure::DEFAULT_PROBE_TIMEOUT;
+
 /// Executable paths selected for each runtime dependency.
 ///
 /// An absent entry means "not selected here": the engine falls back to the
@@ -72,7 +83,10 @@ impl ExecutableSelections {
 /// A read-only dependency check.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SetupCheckRequest {
-    /// Total deadline shared by every dependency probe in the check.
+    /// Total deadline shared by every dependency probe in the check; hosts
+    /// normally pass [`DEFAULT_PROBE_TIMEOUT`]. A probe that has no result
+    /// when it passes is reported `timed_out` with this figure, whether it
+    /// was started or not.
     pub probe_timeout: Duration,
     /// Selections for this call only; they take precedence over configured ones.
     pub per_call: ExecutableSelections,
@@ -154,7 +168,10 @@ fn presence(selections: &ExecutableSelections) -> [bool; 3] {
 pub struct SetupPlanRequest {
     /// Profile whose dependencies are planned.
     pub profile: SetupProfile,
-    /// Total deadline shared by every dependency probe in the plan.
+    /// Total deadline shared by every dependency probe in the plan; hosts
+    /// normally pass [`DEFAULT_PROBE_TIMEOUT`]. A tool whose probe times out
+    /// is planned for nothing: the plan says so and proposes no install
+    /// because of it.
     pub probe_timeout: Duration,
 }
 
@@ -483,7 +500,7 @@ async fn evaluate_plan<P: vsift_application::DependencyProbe>(
 
 #[cfg(test)]
 mod tests {
-    use std::future::ready;
+    use std::{future::ready, time::Duration};
 
     use vsift_application::{
         DependencyProbe, ManagedPlanObservation, ObservedModel, SetupProfile, SetupSelectionState,
@@ -491,7 +508,7 @@ mod tests {
     use vsift_contract::{OperationResponse, SavedSetupPlan};
     use vsift_domain::{
         DependencyState, DependencyStatus, FailureCode, ManagedComponent, ManagedTarget,
-        RuntimeDependency, RuntimeReadiness,
+        ProbeTimeout, ProbeTimeoutKind, RuntimeDependency, RuntimeReadiness,
     };
     use vsift_infrastructure::accepted_ubuntu_catalogue;
 
@@ -798,6 +815,118 @@ mod tests {
         let saved: SavedSetupPlan = serde_json::from_value(tampered)?;
         assert_eq!(
             original
+                .validate_acceptance(&saved, &digest)
+                .map_err(|error| error.failure_code()),
+            Err(FailureCode::InvalidArgument)
+        );
+        Ok(())
+    }
+
+    /// Issue #391, on the one target where `VSift` can install the tools, with
+    /// the reviewed catalogue: tools whose probes only timed out are not
+    /// planned for a download as missing ones are. The plan says what
+    /// happened and to look again, and proposes nothing for them; what it
+    /// proposes for the model does not depend on the tools and is unchanged.
+    #[tokio::test]
+    async fn tools_whose_probes_timed_out_are_not_planned_for_managed_installation()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let timed_out = || FixedProbe {
+            state: DependencyState::TimedOut(ProbeTimeout {
+                kind: ProbeTimeoutKind::NoAnswer,
+                shared_deadline: Duration::from_secs(30),
+            }),
+        };
+        let schema = setup_plan_schema()?;
+        let validator = jsonschema::validator_for(&schema)?;
+
+        let plan = evaluate_plan(
+            timed_out(),
+            SetupProfile::Desktop,
+            ManagedTarget::Ubuntu2404X86_64,
+            SetupSelectionState::default(),
+            1_800_000_000,
+            Some(accepted_ubuntu_catalogue()?),
+        )
+        .await;
+        let value = plan_json(&plan)?;
+        validator
+            .validate(&value)
+            .map_err(|error| std::io::Error::other(error.to_string()))?;
+        let data = &value["data"];
+        assert_eq!(data["readiness"], "blocked");
+        assert_eq!(data["managed_install"], "catalogue_accepted");
+        let actions: Vec<&serde_json::Value> = data["actions"]
+            .as_array()
+            .ok_or("actions missing")?
+            .iter()
+            .map(|action| &action["component"])
+            .collect();
+        assert_eq!(actions, ["whisper_model"], "only the model is planned");
+        for dependency in data["dependencies"].as_array().ok_or("deps missing")? {
+            assert_eq!(dependency["status"], "timed_out", "{dependency}");
+            assert_eq!(dependency["disposition"], "manual_selection_required");
+            let step = dependency["next_step"].as_str().ok_or("no next step")?;
+            assert!(step.contains("proposes no install because of it"), "{step}");
+            assert!(step.ends_with("then run setup plan again."), "{step}");
+            assert!(!step.contains("setup install"), "{step}");
+            assert!(!step.contains("nstall or locate"), "{step}");
+        }
+
+        // With a model of the user's own nothing at all is proposed, and the
+        // plan's availability is the published value for that.
+        let nothing = evaluate_plan(
+            timed_out(),
+            SetupProfile::Desktop,
+            ManagedTarget::Ubuntu2404X86_64,
+            SetupSelectionState {
+                model: Some(String::from("/fixture/model")),
+                ..SetupSelectionState::default()
+            },
+            1_800_000_000,
+            Some(accepted_ubuntu_catalogue()?),
+        )
+        .await;
+        let value = plan_json(&nothing)?;
+        validator
+            .validate(&value)
+            .map_err(|error| std::io::Error::other(error.to_string()))?;
+        assert_eq!(value["data"]["actions"], serde_json::json!([]));
+        assert_eq!(value["data"]["install_needed"], false);
+        assert_eq!(value["data"]["managed_install"], "not_required");
+
+        // A plan saved while the probes timed out is not the plan of the same
+        // machine once they answer: accepting it then is refused as stale.
+        let digest = plan
+            .authority
+            .digest
+            .clone()
+            .ok_or_else(|| std::io::Error::other("qualified plan omitted its digest"))?;
+        let saved: SavedSetupPlan = serde_json::from_value(plan_json(&plan)?)?;
+        let unchanged = evaluate_plan(
+            timed_out(),
+            SetupProfile::Desktop,
+            ManagedTarget::Ubuntu2404X86_64,
+            SetupSelectionState::default(),
+            1_800_000_000,
+            Some(accepted_ubuntu_catalogue()?),
+        )
+        .await;
+        assert_eq!(unchanged.validate_acceptance(&saved, &digest), Ok(()));
+        let answered = evaluate_plan(
+            FixedProbe {
+                state: DependencyState::Available {
+                    version: String::from("fixture 1"),
+                },
+            },
+            SetupProfile::Desktop,
+            ManagedTarget::Ubuntu2404X86_64,
+            SetupSelectionState::default(),
+            1_800_000_000,
+            Some(accepted_ubuntu_catalogue()?),
+        )
+        .await;
+        assert_eq!(
+            answered
                 .validate_acceptance(&saved, &digest)
                 .map_err(|error| error.failure_code()),
             Err(FailureCode::InvalidArgument)

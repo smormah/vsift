@@ -23,6 +23,8 @@ mod transcript;
 mod visual;
 mod worker;
 
+use std::time::Duration;
+
 pub use admission::{
     ADMISSION_RETRY_AFTER, AdmissionBudget, AdmissionBudgetError, AdmissionDecision, AdmissionWait,
     MAX_ADMISSION_WAIT, MAX_RECOGNIZER_THREADS, SINGLE_STAGE_WEIGHT, VISUAL_WINDOW_WEIGHT,
@@ -197,8 +199,9 @@ pub enum DependencyState {
         /// A bounded diagnostic safe to present to the caller.
         message: String,
     },
-    /// The dependency did not respond before the diagnostic deadline.
-    TimedOut,
+    /// The dependency executable was found, but the diagnostic deadline passed
+    /// before its probe gave a result. Nothing is known about whether it works.
+    TimedOut(ProbeTimeout),
 }
 
 impl DependencyState {
@@ -208,16 +211,59 @@ impl DependencyState {
         matches!(self, Self::Available { .. })
     }
 
+    /// Reports whether the probe showed that the executable cannot be used as
+    /// it is: none was found, or the one found failed.
+    ///
+    /// A probe that timed out shows neither, so it is not [`Self::is_available`]
+    /// and not this either. The difference matters wherever an unusable tool is
+    /// a reason to act: a healthy tool that was slow to start once must never
+    /// be replaced or reinstalled as if it were missing (issue #391).
+    #[must_use]
+    pub const fn is_unusable(&self) -> bool {
+        matches!(self, Self::Missing | Self::Unhealthy { .. })
+    }
+
     /// Returns the stable state identifier used in machine-readable contracts.
+    ///
+    /// Both kinds of [`ProbeTimeout`] are the one published value `timed_out`.
     #[must_use]
     pub const fn identifier(&self) -> &'static str {
         match self {
             Self::Available { .. } => "available",
             Self::Missing => "missing",
             Self::Unhealthy { .. } => "unhealthy",
-            Self::TimedOut => "timed_out",
+            Self::TimedOut(_) => "timed_out",
         }
     }
+}
+
+/// How a dependency probe came to have no result by the diagnostic deadline.
+///
+/// The probes of one diagnostic run one after another under a single shared
+/// deadline, so a slow first probe can leave no time for the ones after it.
+/// The two cases are one published state (`timed_out`) but different facts,
+/// and advice that is true of one is false of the other: "it did not answer"
+/// cannot be said of a tool that was never started.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ProbeTimeoutKind {
+    /// The executable was started and had not answered when the deadline
+    /// passed; it was stopped.
+    NoAnswer,
+    /// The executable was found but never started, because the shared
+    /// deadline had already passed when its turn came.
+    NotStarted,
+}
+
+/// A dependency probe that gave no result by the diagnostic deadline.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ProbeTimeout {
+    /// Whether the executable was started.
+    pub kind: ProbeTimeoutKind,
+    /// The one deadline every probe of the diagnostic shared, as the caller
+    /// set it: the time allowed for all of them together, not for this probe
+    /// alone. It is carried so that advice can name the figure the caller
+    /// would have to raise.
+    pub shared_deadline: Duration,
 }
 
 /// The diagnostic result for one dependency.
@@ -248,6 +294,41 @@ impl RuntimeReadiness {
             Self::Ready => "ready",
             Self::Degraded => "degraded",
             Self::Blocked => "blocked",
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+
+    use super::{DependencyState, ProbeTimeout, ProbeTimeoutKind};
+
+    /// Issue #391: a probe that timed out is one published state whichever way
+    /// it happened, and it is neither a usable tool nor one shown to be
+    /// unusable, so nothing may treat it as missing.
+    #[test]
+    fn a_timed_out_probe_is_neither_available_nor_shown_unusable() {
+        for kind in [ProbeTimeoutKind::NoAnswer, ProbeTimeoutKind::NotStarted] {
+            let state = DependencyState::TimedOut(ProbeTimeout {
+                kind,
+                shared_deadline: Duration::from_secs(30),
+            });
+            assert_eq!(state.identifier(), "timed_out", "{kind:?}");
+            assert!(!state.is_available(), "{kind:?}");
+            assert!(!state.is_unusable(), "{kind:?}");
+        }
+        let available = DependencyState::Available {
+            version: String::from("fixture 1"),
+        };
+        assert!(available.is_available() && !available.is_unusable());
+        for unusable in [
+            DependencyState::Missing,
+            DependencyState::Unhealthy {
+                message: String::from("process exited with exit code: 3"),
+            },
+        ] {
+            assert!(!unusable.is_available() && unusable.is_unusable());
         }
     }
 }
