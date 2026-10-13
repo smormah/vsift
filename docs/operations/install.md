@@ -609,7 +609,7 @@ FFmpeg and FFprobe, call the setup `blocked` and tell you to install tools you a
 5 seconds in all to answer, one after another (FFmpeg and FFprobe are asked for their version, whisper.cpp for its help text). A large FFmpeg build that is started for the first time since the machine came up can use that up
 (on the one Windows 11 machine where this was seen, with real-time virus scanning, FFprobe alone was reported to take 4.7 seconds), and the answer then says
 "Install or locate this trusted tool" under a tool that is installed and working. Nothing is wrong with the tools. **Run `vsift setup check` again**, or run
-`vsift setup check --timeout-seconds 30`. The fix is on `main` and planned for 0.2.1 (a third candidate, `0.2.1-rc.3`): the limit becomes 30 seconds, and a tool that did not
+`vsift setup check --timeout-seconds 30`. The fix is in the third candidate of 0.2.1, `0.2.1-rc.3` (cut 2026-10-13), and in the release that follows it: the limit becomes 30 seconds, and a tool that did not
 answer in time is told so, with what to do, instead of getting the advice for a missing tool. It was seen once, on one machine, on Windows; whether macOS and Linux show it was not checked.
 
 **`INTEGRITY_FAILURE` right after `--session-root <folder>`.** If the folder already exists and

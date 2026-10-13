@@ -887,7 +887,9 @@ was `dbc4c22c...`), and the pin in `committed_freeze` moved with it, with a comm
 byte-identical to the third and fourth candidates' (`freeze check` of the fourth candidate's file answers `skill changed since the freeze` and nothing else; the grader's source did not change).
 The files name `0f047a9cf12a983d19c2c0427654c7722cf1655c`, the commit of the cut's own branch at which the skill was applied (the pull request keeps it; the squash merge leaves it behind).
 **No batch ran under the fourth candidate's freeze, so there was nothing to move aside this time:** `batch-2/` and `batch-3/` hold only the new `freeze.json`, and the fourth candidate's file stays in the
-history of `main` (`cb8cb3a`). **Batch 3 needs `-AllowGraderChange`:** the script checks batch 3's cold components against **batch 1's** freeze, and the
+history of `main` (`cb8cb3a`). **The sixth candidate (0.2.1-rc.3, 2026-10-13) keeps the freeze written for `0.2.1-rc.2`, byte for byte:** the skill is the same text (the fix of #391 is in
+`setup check`, not in the skill), so `batch-2/freeze.json` and `batch-3/freeze.json` are unchanged, `freeze check` still answers that nothing frozen has changed, the pin in `committed_freeze`
+is the same, and the batches run against the published `0.2.1-rc.3` (`-Version 0.2.1-rc.3`). **Batch 3 needs `-AllowGraderChange`:** the script checks batch 3's cold components against **batch 1's** freeze, and the
 grader changed on 2026-10-04 (below), which the maintainer accepted; the usefulness grading did not change. **The grader changed on 2026-10-04** (the three cold
 classifications above, between batch 1 and batch 2, as the freeze rule allows): batch 2's freeze is a fresh
 `freeze write`, and batch 1's records and summary stay as graded at the time, so the baseline's safety counts
