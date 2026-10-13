@@ -204,7 +204,9 @@ Options:
           Emit one versioned JSON terminal result
 
       --timeout-seconds <TIMEOUT_SECONDS>
-          Maximum seconds to wait for each dependency probe
+          Seconds allowed for all the dependency probes together, 1 to 60 (default 30).
+
+          The probes run one after another and share this one deadline. A tool that has not answered when it passes, or was not reached before it, is reported as a timeout, not as missing: run the check again, or allow more time here. A first run after an install or a restart can be slow.
 
       --events <EVENTS>
           Emit versioned evidence, progress and terminal records as JSON Lines

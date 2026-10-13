@@ -6,6 +6,38 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### What changes, in plain English
+
+**If `vsift setup check` said `[timeout]` for a tool you have, called your setup `blocked` and told you to install the tool
+([#391](https://github.com/smormah/vsift/issues/391), [L-161](docs/planning/known-limits.md#l-161); in `0.2.0` and in every `0.2.1` candidate up to `0.2.1-rc.2`; meant for a third candidate, `0.2.1-rc.3`, which this change does not cut).**
+It was seen once, on one Windows 11 machine, on the first check after the machine started: FFmpeg and FFprobe were installed, on `PATH` and healthy, and the second run a moment later said `[ok]`. Two things were wrong, and both are changed.
+
+- **The time allowed was too short.** `setup check` asks FFmpeg, FFprobe and whisper.cpp for their version one after another, and the three share one deadline. It was 5 seconds for all three; it is now **30 seconds**. It is still one deadline for all three,
+  `--timeout-seconds` still takes 1 to 60, and nothing is tried twice. What it costs: a tool that really hangs now holds `setup check` for up to 30 seconds instead of 5 before it answers. The 30 is a choice, not a measurement of slow machines.
+  `setup plan` and `setup install` use the same default and have no option to change it.
+- **The advice was the advice for a missing tool.** A tool that did not answer in time is now told what happened and what helps, in the readable output and in the JSON answer's `remediation.next_step`: it was found; either it was started and did not answer
+  before the deadline, or it was not started because the deadline had already passed (an earlier tool had used up the time), which the answer now says apart; a first run after an install or a restart can be slow; run `setup check` again, or allow more time
+  with `--timeout-seconds` (up to 60). Nothing in it says to install or locate the tool, and the readable output no longer offers a managed installation for it. The setup is still `blocked` when it is FFmpeg or FFprobe, the exit status is the same, and the
+  published `timed_out` value is unchanged. A missing tool, and one that was found and failed its check, keep the advice they had.
+- **`setup plan` no longer plans to install a tool only because it did not answer in time.** On Ubuntu 24.04, where VSift can install reviewed builds, a healthy FFmpeg whose probe timed out would have been planned for a download like a missing one (read from the
+  code; it was not seen). Now the plan says the tool was found, that it could not tell whether it works, that it proposes no install because of it, and to run `setup check` and then `setup plan` again.
+- **The help of `--timeout-seconds` said "for each dependency probe"**, which it never was. It now says it is for all the probes together, and states the range and the default.
+
+**What this does not show.** The slow first start was seen on one machine and was not reproduced with the default deadline by anyone else; the fix is shown by tests with stand-in tools that never answer and by `--timeout-seconds 1` on two Windows 11
+machines, not by a cold start. macOS and Linux were not checked. Nobody measured how long a cold start takes on a slow machine, so 30 seconds can still be too short there, and the answer then says so and names the option. The issue stays open until the
+released candidate has been run on the machine that showed it.
+
+### Changed
+
+- The default total deadline of the dependency probes is 30 seconds (it was 5), for `setup check`, `setup plan` and `setup install`; the option `--timeout-seconds 1..60` of `setup check` and its help text; one home for the figure (`vsift::DEFAULT_PROBE_TIMEOUT`).
+- `setup check`: the readable advice and the JSON `remediation.next_step` of a `timed_out` dependency, by kind of timeout (started and no answer, or not started), with the deadline that was applied. No schema changed; the `status` and `reason` values are the published ones.
+- `setup plan`: a dependency whose probe timed out is `manual_selection_required` on every target, causes no managed action, and has a `next_step` of its own.
+- The engine's Rust API (0.x, not a published contract): `DependencyState::TimedOut` now carries a `ProbeTimeout` (which kind, and the deadline all the probes shared), and `DependencyState::is_unusable` tells a tool shown to be missing or failing from one whose probe showed nothing.
+
+### Added
+
+- Examples [`setup-check.timed-out.json`](schemas/v1/examples/setup-check.timed-out.json) and [`setup-plan.timed-out.json`](schemas/v1/examples/setup-plan.timed-out.json), with their readable snapshots; the register entry [L-161](docs/planning/known-limits.md#l-161).
+
 ## [0.2.1-rc.2] - 2026-10-11
 
 **This is a release candidate, under qualification.** It is the second candidate for `0.2.1`, the patch release after `0.2.0`, and it **supersedes the first, `0.2.1-rc.1`**, which was published on 2026-10-10 and has the silent

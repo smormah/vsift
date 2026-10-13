@@ -184,3 +184,39 @@ stays reserved were true at their dates and are superseded by the notes of 2026-
 the evidence and what it does not prove are in
 [`p13-distribution.md`](../planning/p13-distribution.md), and the steps users follow are
 in [`install.md`](../operations/install.md) section 5. The decision is unchanged.
+
+## 2026-10-13 note: a probe that timed out is not a missing tool (issue #391)
+
+Steps 1, 2 and 4 speak of tools that are "missing" or already suitable. The implementation
+had a third outcome that it treated as missing: an executable that was found, and whose
+version probe had no result when the one deadline the three probes share had passed. On
+one Windows 11 machine the first `setup check` after a restart reported an installed,
+healthy FFmpeg and FFprobe that way and gave step 4's manual advice, "install or locate"
+(`0.2.0` and every `0.2.1` candidate up to `0.2.1-rc.2`). The maintainer decided on
+2026-10-13 to fix it in `0.2.1`, to raise the default deadline, to keep one shared
+deadline, and not to retry silently. What follows from that, as built:
+
+- **A timed-out probe is its own outcome, in two kinds.** The tool was started and gave no
+  answer, or it was never started because the deadline had already passed. Both keep the
+  published value `timed_out`; the domain keeps them apart (`ProbeTimeout`) so that the
+  advice is true of each. A tool is looked for before the deadline is looked at, so
+  `timed_out` always means "found".
+- **Step 1 and step 4:** such a tool is told what happened, under which deadline, that a
+  first run after an install or a restart can be slow, and to run the check again or allow
+  more time. It is never told to install or locate the tool, and the readable output offers
+  no managed installation for it. A tool that was found and failed its probe keeps step 4's
+  advice, which is true of it.
+- **Step 2:** "do not plan downloads for already-suitable user tools" is read to cover a
+  tool the probe could not judge. A timed-out probe plans nothing for its tool on any
+  target: before this, on Ubuntu 24.04, it planned the managed download exactly as a
+  missing tool does. The plan says so and sends the reader to `setup check`.
+- **The default deadline is 30 seconds** (it was 5), for `setup check`, `setup plan` and
+  `setup install`, with one home in the code. The value is the supervisor's proposal,
+  confirmed by the maintainer's merge: it is not a measurement of slow machines, and a tool
+  that truly hangs now holds the command for 30 seconds instead of 5.
+
+Not decided here: an option to change the deadline on `setup plan` and `setup install`
+(they would have to take the same value, because `setup install` probes again to compare
+the plan), and whether the local-ASR check of `setup check`, which finds the tools again and
+runs under its own budget, should take the probes' results into account. Both are in the
+register ([L-161](../planning/known-limits.md#l-161)). The decision of this ADR is unchanged.
