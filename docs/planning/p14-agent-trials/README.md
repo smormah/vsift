@@ -20,8 +20,7 @@ retranscription, a long report checked in two parts, `session list` paging and w
 the other six components (grader, scenarios, cold scenarios, hold-outs, settings, corpus truth) are the third and fourth candidates', byte for byte. [`batch-2/`](batch-2/) and [`batch-3/`](batch-3/) hold only
 this candidate's `freeze.json` (the same bytes in both): no batch ran under the fourth candidate's file, so there was nothing to move aside, and that file is in the history of `main` (`cb8cb3a`).
 **The sixth candidate, `0.2.1-rc.3` (cut 2026-10-13 for a fix in `setup check`), keeps the freeze written for `0.2.1-rc.2`, byte for byte, because the skill is the same text;** nothing was moved or rewritten here, and the batches run against `0.2.1-rc.3` (`-Version 0.2.1-rc.3`).
-**Batches 2 and 3 on the sixth candidate start only on the maintainer's explicit go
-and after the candidate is published**, one at a time ([the checklist](../p14-batch-2-3-checklist.md)); until they have run, RQ-15 and RQ-16 say nothing about the changed skill.
+**Batches 2 and 3 on the sixth candidate ran on 2026-10-14 and 2026-10-15**, one at a time, on the maintainer's go ([the checklist](../p14-batch-2-3-checklist.md)); their records, summaries and both clients' state are in [`batch-2/`](batch-2/) and [`batch-3/`](batch-3/), and their readings are [batch-2-reading-0.2.1-rc.3.md](batch-2-reading-0.2.1-rc.3.md) and [batch-3-reading-0.2.1-rc.3.md](batch-3-reading-0.2.1-rc.3.md). **Batch 2 (34 runs) met every gate as graded except the compact regression, 8 of 10 (two Claude Sonnet 5.5 runs never ran `search`); batch 3 (18 cold runs) did not meet cold safety (1 of 18: a combined command that Claude Code's strict setting denied, so nothing was read) or the Claude compact cold usefulness (2 of 6, the strict setting refused compound commands; Codex compact met 6 of 6). The maintainer waived all three for 0.2.1 on 2026-10-15, so RQ-15 and RQ-16 are `waived`, not `passed`, and the RQ-16 waiver for `0.2.0-rc.3` is replaced** (issues #395, #396 and #397; [`release-0.2.1.md`](../release-0.2.1.md)). Batch 2 holds one disclosed hand edit of a state file: three attempts of one Codex run that ended on an expired sign-in were changed from `invalid` to `usage_limited` with the maintainer's approval (L-166), and their three invalid records stay.
 A test fails every pull request that changes anything frozen
 until another candidate and a new freeze are decided on purpose, and pins the whole-freeze digest; batch 1's freeze is history and no longer holds. P14 PR 6 built the harness, the cold-agent mode, the hold-out scenarios and the campaign
 scripts; every batch spends the maintainer's Claude and Codex allowances and starts on the
@@ -59,10 +58,12 @@ p14-agent-trials/
                   when the fourth candidate was cut; its freeze.json is a copy of the file as it was)
   batch-3-reading-rc.3.md         the reading of batch-3-rc.3: the gates against the 0.1.0 baseline, the cold finding and the maintainer's decision of
                                   2026-10-09, the read of the raw logs, what the cold agents struggled with, and what is weaker than it sounds
-  batch-2/    the FIFTH candidate 0.2.1-rc.2 (cut 2026-10-11; the fourth, 0.2.1-rc.1, was cut 2026-10-10 and no batch ran under it; the sixth, 0.2.1-rc.3, keeps this
-              freeze): holds only freeze.json, the file the fifth candidate was cut with; the batch has
-              not run (it starts on the maintainer's go, after the candidate is published, and writes its records, state files and summary here)
-  batch-3/    the same for the cold final round: only freeze.json (the same bytes as batch-2's), no batch run yet
+  batch-2/    the counted set with the skill on the SIXTH candidate 0.2.1-rc.3 (ran 2026-10-14 and 2026-10-15), under the freeze written for the FIFTH, 0.2.1-rc.2 (cut 2026-10-11; the fourth,
+              0.2.1-rc.1, was cut 2026-10-10 and no batch ran under it; the sixth keeps this freeze): freeze.json, records/ (37 files: 34 counted, 3 invalid), state-claude.json,
+              state-codex.json, summary.json and SUMMARY.md
+  batch-2-reading-0.2.1-rc.3.md   the reading of batch-2: the gates, the two compact misses, the Codex sign-in expiry and the one edit of a state file
+  batch-3/    the cold final round on the sixth candidate (ran 2026-10-15; 18 counted runs): the same files and the same freeze.json bytes as batch-2's
+  batch-3-reading-0.2.1-rc.3.md   the reading of batch-3: the gates, the denied action, the four runs the strict setting stopped, what is weaker than it sounds
     records/<trial>-<client>-p1.json   one bounded record (at most 64 KiB) per counted or invalid trial
     state-claude.json, state-codex.json  the plan and every attempt of each client (run identifiers,
                                          trial identifiers, outcomes; no path, prompt or name)
