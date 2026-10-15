@@ -3439,6 +3439,12 @@ that week.**
   with the residual named in its ledger entry. The reading is repeated within seven days of the stable release
   (the 2026-10-05 record, [`p14-scan-reading-2026-10-05.md`](p14-scan-reading-2026-10-05.md), found nothing
   new). Refreshing the build does not change it ([L-132](#l-132)).
+- **Reading of 2026-10-15 ([`p14-scan-reading-2026-10-15.md`](p14-scan-reading-2026-10-15.md)): unchanged, with a second record of the same kind, decided.** CVE-2026-38350 was not
+  modified and no commit on `master` since the snapshot touches `libswscale/output.c`. A new record, CVE-2026-109311 (filed against vLLM; CVSS 4.0 7.1, 3.1 6.5; "Received"), describes a heap overflow in
+  FFmpeg's IAMF parser that the MP4 demuxer reaches; it names no FFmpeg commit, and the shipped snapshot has the check at the site it names (`f8e6f8f0a2`, an ancestor), so it is fixed by inference,
+  not by name, like this record. **The maintainer decided on 2026-10-15: issue [#400](https://github.com/smormah/vsift/issues/400) is closed as fixed by inference, recorded beside this entry** (the check at the
+  named site is present in the shipped snapshot and `f8e6f8f0a2` is an ancestor); the residual that the fix is tied to the record by inference and not by name is accepted, as this entry's is, and the
+  2026-10-31 re-pin ([L-132](#l-132)) strengthens it. RQ-13 is `passed` for `0.2.1-rc.3` with it named. Nothing was run on a crafted IAMF file; if the record describes another site in the parser, nothing here covers it.
 - **Owner:** P14. **Issue:** [#272](https://github.com/smormah/vsift/issues/272) (left open: closing it
   is the maintainer's). **Status:** accepted residual. **Review:** accepted (2026-10-05, by the
   maintainer's decision on RQ-13; the register's own pass over the thirty entries is separate).
@@ -3989,6 +3995,16 @@ that week.**
   cleared environment, a 120 s deadline, bounded output and a strict parse of its JSON. **On a desktop
   there is no sandbox, and memory is bounded only by the operating system** ([L-004](#l-004)); a worker
   adds strict isolation.
+- **Reading of 2026-10-15 ([`p14-scan-reading-2026-10-15.md`](p14-scan-reading-2026-10-15.md)): the first
+  record for one of these commits, and a recommendation that is not a decision.** CVE-2026-110810 (published
+  2026-10-15, "Received"; Low: CVSS 4.0 0.9, 3.1 2.8) names the model loader reading a tensor type out of bounds
+  in whisper.cpp "up to 1.9.4"; the fix is `60c0be6ac8` (2026-10-02, in v1.9.5, not in the pinned v1.9.2), the
+  model-file change [#322](https://github.com/smormah/vsift/issues/322) listed as "a tensor type check". It is
+  not reachable in use: the engine refuses a model that is not a reviewed pin before any chunk is recognised
+  (`LocalAsrModelNotPinned`), so the loader runs only on the two pinned models, and the local swap between
+  hashing and loading stays this entry's residual. **The maintainer decided on 2026-10-15: issue [#399](https://github.com/smormah/vsift/issues/399)
+  is accepted for `0.2.1` under this entry** (only a reviewed pinned model is loaded), **to be fixed with the planned whisper.cpp re-pin; the issue stays open until then.** RQ-13 is `passed` for
+  `0.2.1-rc.3` with it named. No release newer than v1.9.5 and no repository advisory exist.
 - **Next step:** after `0.2.0`, re-pin whisper.cpp together with the FFmpeg refresh ([L-132](#l-132)). A
   stage of the P07 checkpoint that asks the real recogniser for a short range would show the floor on
   published bytes.
@@ -4386,6 +4402,10 @@ that week.**
 - **Next step:** when the 2026-10-31 month-end FFmpeg build is chosen for the re-pin ([L-132](#l-132)), look for an upstream fix for the record (its pull request 24593, which this reading did not read, or a
   commit on `master` or `release/9.0`) in that build, or cherry-pick one; re-run the ancestry tool for the record; and add a malformed-MP4 `pssh` case to the malicious-media campaign
   (`tools/p14-campaigns/`) so that the effect on VSift's child (a typed failure inside its bounds) is measured and not assumed. A change of the catalogue is a new candidate.
+- **Reading of 2026-10-15 ([`p14-scan-reading-2026-10-15.md`](p14-scan-reading-2026-10-15.md)): unchanged, and the upstream fix is now visible.** The record moved from "Undergoing Analysis" to "Analyzed"
+  (2026-10-14; the same scores, versions through 9.0.2). The fix is a proposal, not a release: pull request 24593 on the project's code host (`avutil/encryption_info: avoid stack
+  exhaustion freeing init info list`, opened 2026-09-21) is open and not merged, three commits, its two comments automated reviews; no commit on `master` or `release/9.0` touches the recursion.
+  So the shipped snapshot is still affected and the acceptance of 2026-10-10 stands. When the re-pin of L-132 is made, check whether that pull request has merged and into which line.
 - **Owner:** unscheduled (the re-pin of L-132 in practice). **Issue:** [#351](https://github.com/smormah/vsift/issues/351). **Status:** accepted residual. **Review:** accepted (2026-10-10, by the maintainer's
   decision on the scan reading of the day, outside the register pass).
 
