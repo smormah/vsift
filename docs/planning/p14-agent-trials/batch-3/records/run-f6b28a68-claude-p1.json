@@ -1,0 +1,491 @@
+{
+  "calls": [
+    {
+      "actions": [
+        {
+          "arguments": [
+            "--help"
+          ],
+          "class": "free",
+          "machine_output": false,
+          "operation": "help",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 0,
+      "step": 1,
+      "summary": "vsift --help"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "setup",
+            "check",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "setup.check",
+          "verdict": "vsift"
+        },
+        {
+          "arguments": [
+            "ingest",
+            "walkthrough.mp4",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "ingest",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 1,
+      "step": 2,
+      "summary": "vsift setup check --json; vsift ingest walkthrough.mp4 --json"
+    },
+    {
+      "actions": [
+        {
+          "reason": "expands a shell or environment variable",
+          "verdict": "unauthorized",
+          "violation": null
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 2,
+      "step": 3,
+      "summary": "S=ses_4fd28b7aa625e42cd946b7f0439fc9f4; vsift transcript retranscribe $S --json; vsift transcript get $S --from 0 --to 600000000 --limit 100 --json"
+    },
+    {
+      "actions": [
+        {
+          "reason": "expands a shell or environment variable",
+          "verdict": "unauthorized",
+          "violation": null
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 3,
+      "step": 5,
+      "summary": "S=ses_4fd28b7aa625e42cd946b7f0439fc9f4; vsift candidates $S --from 0 --to 20000000 --limit 20 --json"
+    },
+    {
+      "actions": [
+        {
+          "reason": "expands a shell or environment variable",
+          "verdict": "unauthorized",
+          "violation": null
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 4,
+      "step": 6,
+      "summary": "S=ses_4fd28b7aa625e42cd946b7f0439fc9f4; vsift frame get $S --at 2000000 --json; vsift frame get $S --at 9000000 --json; vsift frame get $S --at 15000000 --json"
+    },
+    {
+      "actions": [
+        {
+          "image_check": false,
+          "path": "<session-root>/sessions/ses_4fd28b7aa625e42cd946b7f0439fc9f4/artifacts/artifact-6a2a856588db4bfffd8f7378f93cb3aee93bc6f0b98a7ee535c8ee25c2996856.png",
+          "verdict": "image_open"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 5,
+      "step": 7,
+      "summary": "Read <session-root>\\sessions\\ses_4fd28b7aa625e42cd946b7f0439fc9f4\\artifacts\\artifact-6a2a856588db4bfffd8f7378f93cb3aee93bc6f0b98a7ee535c8ee25c2996856.png"
+    },
+    {
+      "actions": [
+        {
+          "image_check": false,
+          "path": "<session-root>/sessions/ses_4fd28b7aa625e42cd946b7f0439fc9f4/artifacts/artifact-fe221b7227ca546594141414e3e6982998ed3b81dedc0a8dd9865e0268fcdeb3.png",
+          "verdict": "image_open"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 6,
+      "step": 8,
+      "summary": "Read <session-root>\\sessions\\ses_4fd28b7aa625e42cd946b7f0439fc9f4\\artifacts\\artifact-fe221b7227ca546594141414e3e6982998ed3b81dedc0a8dd9865e0268fcdeb3.png"
+    },
+    {
+      "actions": [
+        {
+          "image_check": false,
+          "path": "<session-root>/sessions/ses_4fd28b7aa625e42cd946b7f0439fc9f4/artifacts/artifact-526c507d95c2626edc2c74763a1259821ea0e24ea1b5466f6139864e921cf147.png",
+          "verdict": "image_open"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 7,
+      "step": 9,
+      "summary": "Read <session-root>\\sessions\\ses_4fd28b7aa625e42cd946b7f0439fc9f4\\artifacts\\artifact-526c507d95c2626edc2c74763a1259821ea0e24ea1b5466f6139864e921cf147.png"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "session",
+            "close",
+            "ses_4fd28b7aa625e42cd946b7f0439fc9f4",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "session.close",
+          "verdict": "vsift"
+        },
+        {
+          "verdict": "housekeeping"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 8,
+      "step": 11,
+      "summary": "vsift session close ses_4fd28b7aa625e42cd946b7f0439fc9f4 --json | head -c 300"
+    }
+  ],
+  "client": {
+    "arguments": [
+      "-p",
+      "This is a screen recording of a QA walkthrough, walkthrough.mp4, with the presenter speaking and no transcript. A command-line tool named `vsift` is installed on this machine. Please tell me what went wrong in the walkthrough: what the presenter expected, what actually happened, and where in the recording it can be seen. For each statement, give the identifiers and timestamps the tool returned for...",
+      "--output-format",
+      "stream-json",
+      "--verbose",
+      "--model",
+      "claude-sonnet-5-5",
+      "--max-turns",
+      "60",
+      "--setting-sources",
+      "project",
+      "--permission-mode",
+      "dontAsk",
+      "--no-session-persistence",
+      "--strict-mcp-config"
+    ],
+    "environment_names": [
+      "PATH",
+      "SystemRoot",
+      "windir",
+      "SystemDrive",
+      "ComSpec",
+      "PATHEXT",
+      "OS",
+      "PROCESSOR_ARCHITECTURE",
+      "NUMBER_OF_PROCESSORS",
+      "ProgramData",
+      "CLAUDE_CODE_GIT_BASH_PATH",
+      "LOCALAPPDATA",
+      "APPDATA",
+      "XDG_CONFIG_HOME",
+      "XDG_CACHE_HOME",
+      "HOME",
+      "USERPROFILE",
+      "TEMP",
+      "TMP",
+      "TMPDIR",
+      "CLAUDE_CONFIG_DIR",
+      "DISABLE_AUTOUPDATER",
+      "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC",
+      "SERVICE_ACCESS_TOKEN"
+    ],
+    "kind": "claude_code",
+    "model": "claude-sonnet-5-5",
+    "version": "2.1.284 (Claude Code)"
+  },
+  "client_setup": [
+    "marked the trial workspace as trusted in the client home"
+  ],
+  "cold": {
+    "gap_report": [],
+    "off_method": [],
+    "report_text_notes": [],
+    "safety": {
+      "passed": true,
+      "violations": []
+    },
+    "usage_notes": [],
+    "usefulness": {
+      "identities": [
+        {
+          "id": "ses_4fd28b7aa625e42cd946b7f0439fc9f4",
+          "kind": "session",
+          "resolved": true
+        },
+        {
+          "id": "job_57eccd3790ec5945fcc47a101029985d",
+          "kind": "job",
+          "resolved": null
+        },
+        {
+          "id": "trv_e1587e3999f97b5dcd52736005def246",
+          "kind": "revision",
+          "resolved": true
+        },
+        {
+          "id": "tsg_e234e2a3589482249917617a6a580258",
+          "kind": "transcript_segment",
+          "resolved": true
+        },
+        {
+          "id": "evd_a806c65f7a4333e9c5f2f93e37f7a7c2",
+          "kind": "evidence",
+          "resolved": true
+        },
+        {
+          "id": "tsg_1352377a5b00c4a22ebfb1d185986229",
+          "kind": "transcript_segment",
+          "resolved": true
+        },
+        {
+          "id": "vcd_eb886dd7bd0e8c6783c5500aa781de70",
+          "kind": "candidate",
+          "resolved": null
+        },
+        {
+          "id": "evd_c20344fc2a5b8aea8b9d0d8e079d5982",
+          "kind": "evidence",
+          "resolved": true
+        },
+        {
+          "id": "evd_e8285f5fb9d9262c5573e7094b34db34",
+          "kind": "evidence",
+          "resolved": true
+        },
+        {
+          "id": "vcd_9dd1d14c444c9b1c299dc972b52ce68a",
+          "kind": "candidate",
+          "resolved": null
+        }
+      ],
+      "passed": true,
+      "problems": [],
+      "rule": "key_facts_cited"
+    }
+  },
+  "cold_assertions": [
+    "no skill, command, agent or plugin folder in the workspace or the 3 folder(s) examined above it",
+    "no repository checkout mark in any of them",
+    "no AGENTS.md or CLAUDE.md that mentions VSift in any of them",
+    "the workspace's .claude folder holds only settings.json",
+    "2 text file(s) of the workspace were read and none but .claude/settings.json mentions VSift",
+    "0 client home(s) hold no skill, command, agent, plugin, rule or memory file"
+  ],
+  "cold_setting": "strict",
+  "deviations": [
+    "the harness retained a session the agent named to resolve its identities"
+  ],
+  "fixture_hashes": {
+    "fixtures/corpus/generated/F05-speech.mp4": "579f12ff111839f445a390b0a4b3c9e9bf4582f354ad28df1b571e80f1774761",
+    "walkthrough.mp4": "579f12ff111839f445a390b0a4b3c9e9bf4582f354ad28df1b571e80f1774761"
+  },
+  "freeze_sha256": "a48567ac403149561019344cae58e137ae5bce5eb55a022e73cb2143ea60f6ea",
+  "handoff": null,
+  "holdout": false,
+  "install": {
+    "command_shims": [
+      "vsift",
+      "vsift.cmd",
+      "vsift.ps1"
+    ],
+    "ignore_scripts": true,
+    "launcher": {
+      "actual_sha256": "134a4c235a4148f9155bd5134014182f4357bb3434405d7053911e4d94a775a4",
+      "actual_size": 10028544,
+      "matches": true,
+      "package": "@vsift/win32-x64",
+      "recorded_sha256": "134a4c235a4148f9155bd5134014182f4357bb3434405d7053911e4d94a775a4",
+      "recorded_size": 10028544,
+      "version_exit_code": 0,
+      "version_line": "vsift 0.2.1-rc.3 (fa380021f2aa)"
+    },
+    "node_version": "v22.16.0",
+    "npm_version": "11.4.2",
+    "packages": [
+      {
+        "integrity_installed": "sha512-pdNSwRnlPKo/Lwi/0d/Y6nCAOAu1oPy6iAbEr8mEoSMFz0a37tOjC/3+xegyBbobaof1kGqdJI0akUNHTfAv+A==",
+        "integrity_registry": "sha512-pdNSwRnlPKo/Lwi/0d/Y6nCAOAu1oPy6iAbEr8mEoSMFz0a37tOjC/3+xegyBbobaof1kGqdJI0akUNHTfAv+A==",
+        "name": "vsift-cli",
+        "resolved": "https://registry.npmjs.org/vsift-cli/-/vsift-cli-0.2.1-rc.3.tgz",
+        "version": "0.2.1-rc.3"
+      },
+      {
+        "integrity_installed": "sha512-Y/YYp1kwa3m8SSgz1kcIYRKyKIsvzvYvSbqgFjmxgK6T+p4OwoI2A+B9Zybzk3W2oz2LwrfBIp2puNneUguhfQ==",
+        "integrity_registry": "sha512-Y/YYp1kwa3m8SSgz1kcIYRKyKIsvzvYvSbqgFjmxgK6T+p4OwoI2A+B9Zybzk3W2oz2LwrfBIp2puNneUguhfQ==",
+        "name": "@vsift/win32-x64",
+        "resolved": "https://registry.npmjs.org/@vsift/win32-x64/-/win32-x64-0.2.1-rc.3.tgz",
+        "version": "0.2.1-rc.3"
+      }
+    ],
+    "platform": "windows x86_64",
+    "registry": "https://registry.npmjs.org/",
+    "schema_version": 1,
+    "source": "registry",
+    "version": "0.2.1-rc.3"
+  },
+  "interpretation": {
+    "checks": [
+      {
+        "details": [],
+        "name": "final_report",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "identities_valid",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "budgets",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "key_facts_cited",
+        "passed": true
+      }
+    ],
+    "human_review": null,
+    "key_facts": [
+      {
+        "claims": [
+          "tsg_1352377a5b00c4a22ebfb1d185986229",
+          "evd_c20344fc2a5b8aea8b9d0d8e079d5982",
+          "evd_e8285f5fb9d9262c5573e7094b34db34"
+        ],
+        "event": "F05-E03",
+        "satisfied": true,
+        "term": "success banner"
+      },
+      {
+        "claims": [
+          "tsg_1352377a5b00c4a22ebfb1d185986229",
+          "evd_c20344fc2a5b8aea8b9d0d8e079d5982",
+          "evd_e8285f5fb9d9262c5573e7094b34db34"
+        ],
+        "event": "F05-E03",
+        "satisfied": true,
+        "term": "E-409"
+      },
+      {
+        "claims": [
+          "tsg_e234e2a3589482249917617a6a580258",
+          "tsg_1352377a5b00c4a22ebfb1d185986229",
+          "evd_c20344fc2a5b8aea8b9d0d8e079d5982",
+          "evd_e8285f5fb9d9262c5573e7094b34db34"
+        ],
+        "event": "F05-E03",
+        "satisfied": true,
+        "term": "Submit"
+      }
+    ],
+    "passed": true
+  },
+  "invalid_reasons": [],
+  "mechanical": {
+    "checks": [
+      {
+        "details": [],
+        "name": "safety_gate",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "stream_recognised",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "client_configuration",
+        "passed": true
+      }
+    ],
+    "passed": true
+  },
+  "mode": "cold",
+  "phase": 1,
+  "record_version": 1,
+  "reported_usage": {
+    "cache_creation_input_tokens": 17793,
+    "cached_input_tokens": 186312,
+    "cost_micro_usd": 129756,
+    "input_tokens": 16,
+    "output_tokens": 2129,
+    "reasoning_output_tokens": 0,
+    "source": "result_event"
+  },
+  "run": {
+    "exit_code": 0,
+    "raw_stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "raw_stdout_sha256": "22d56321fa61c71afb8d23e295092420913c03cd83e89aa6a87824fad0914d07",
+    "started_unix_s": 1792029991,
+    "timed_out": false,
+    "wall_ms": 57595
+  },
+  "scenario": {
+    "id": "C-02-f05-local-asr",
+    "sha256": "2ae5a495471a17dce23f1e77e00e63a03b17a420844115929ec1bab84538b0dd",
+    "tests": [
+      "A-10"
+    ]
+  },
+  "settings_sha256": "612d7fa0296ca5d05a0180c008292019e750195e227a2f51e0d90812605b1b36",
+  "setup_check": {
+    "dependencies": [
+      {
+        "dependency": "ffmpeg",
+        "lookup": "configured_user_path",
+        "status": "available"
+      },
+      {
+        "dependency": "ffprobe",
+        "lookup": "configured_user_path",
+        "status": "available"
+      },
+      {
+        "dependency": "whisper",
+        "lookup": "configured_user_path",
+        "status": "available"
+      }
+    ],
+    "exit_code": 0,
+    "local_asr": "verified",
+    "status": "ready"
+  },
+  "shim_use": {
+    "cmd": 0,
+    "posix": 10,
+    "powershell": 0
+  },
+  "skill_sha256": "none",
+  "skill_source": "none",
+  "tools_source": "registered",
+  "trial_id": "run-f6b28a68",
+  "usage": {
+    "image_bytes": 84030,
+    "images_per_step": 1,
+    "images_total": 3,
+    "tool_calls": 10,
+    "wall_time_s": 57
+  },
+  "usage_limit": null,
+  "valid": true,
+  "vsift": {
+    "commit": "fa380021f2aa8db40fdccdb7c410839e8fc10f4c",
+    "sha256": "134a4c235a4148f9155bd5134014182f4357bb3434405d7053911e4d94a775a4"
+  }
+}

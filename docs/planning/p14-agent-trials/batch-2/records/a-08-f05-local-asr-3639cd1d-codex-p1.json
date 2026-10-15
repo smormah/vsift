@@ -1,0 +1,266 @@
+{
+  "calls": [],
+  "client": {
+    "arguments": [
+      "exec",
+      "--json",
+      "--ephemeral",
+      "--ignore-user-config",
+      "--ignore-rules",
+      "--skip-git-repo-check",
+      "-m",
+      "gpt-6-astra",
+      "--sandbox",
+      "workspace-write",
+      "-C",
+      "<workspace>",
+      "-c",
+      "approval_policy=\"never\"",
+      "-c",
+      "sandbox_workspace_write.network_access=false",
+      "-c",
+      "sandbox_workspace_write.writable_roots=['<home>']",
+      "-c",
+      "sandbox_workspace_write.exclude_tmpdir_env_var=true",
+      "-c",
+      "sandbox_workspace_write.exclude_slash_tmp=true",
+      "This is a QA walkthrough of submitting an invoice, walkthrough.mp4; there is no transcript. Write a bug report with the problem, expected and actual result and reproduction steps. Use the VSift skill and the compact budget. When you have written the handoff, keep the evidence: I authorise you to retain the session to a new folder named evidence-bundle-phase-1 in this directory with vsift session r..."
+    ],
+    "environment_names": [
+      "PATH",
+      "LOCALAPPDATA",
+      "APPDATA",
+      "XDG_CONFIG_HOME",
+      "XDG_CACHE_HOME",
+      "HOME",
+      "USERPROFILE",
+      "TEMP",
+      "TMP",
+      "TMPDIR",
+      "CODEX_HOME"
+    ],
+    "kind": "codex",
+    "model": "gpt-6-astra",
+    "version": "codex-cli 0.155.0-alpha.16"
+  },
+  "client_setup": [],
+  "cold": null,
+  "cold_assertions": [],
+  "cold_setting": null,
+  "deviations": [
+    "the agent did not retain the session as asked",
+    "Codex's image views are unmeasured: its event stream shows none, so its image budgets are not checked and its image access rests on the check code (L-075)",
+    "invalid trial: the client ignored its configuration (harness: the client ended with an error before it made one tool call (a usage limit, an outage or a sign-in problem); run it again, do not count it)"
+  ],
+  "fixture_hashes": {
+    "fixtures/corpus/generated/F05-speech.mp4": "579f12ff111839f445a390b0a4b3c9e9bf4582f354ad28df1b571e80f1774761",
+    "walkthrough.mp4": "579f12ff111839f445a390b0a4b3c9e9bf4582f354ad28df1b571e80f1774761"
+  },
+  "freeze_sha256": "a48567ac403149561019344cae58e137ae5bce5eb55a022e73cb2143ea60f6ea",
+  "handoff": null,
+  "holdout": false,
+  "install": {
+    "command_shims": [
+      "vsift"
+    ],
+    "ignore_scripts": true,
+    "launcher": {
+      "actual_sha256": "d730eae12a8d0e55796c373e6fead9470253d0c6e00082e8e406630294f3d8cc",
+      "actual_size": 8367472,
+      "matches": true,
+      "package": "@vsift/linux-x64",
+      "recorded_sha256": "d730eae12a8d0e55796c373e6fead9470253d0c6e00082e8e406630294f3d8cc",
+      "recorded_size": 8367472,
+      "version_exit_code": 0,
+      "version_line": "vsift 0.2.1-rc.3 (fa380021f2aa)"
+    },
+    "node_version": "v24.21.0",
+    "npm_version": "11.19.0",
+    "packages": [
+      {
+        "integrity_installed": "sha512-pdNSwRnlPKo/Lwi/0d/Y6nCAOAu1oPy6iAbEr8mEoSMFz0a37tOjC/3+xegyBbobaof1kGqdJI0akUNHTfAv+A==",
+        "integrity_registry": "sha512-pdNSwRnlPKo/Lwi/0d/Y6nCAOAu1oPy6iAbEr8mEoSMFz0a37tOjC/3+xegyBbobaof1kGqdJI0akUNHTfAv+A==",
+        "name": "vsift-cli",
+        "resolved": "https://registry.npmjs.org/vsift-cli/-/vsift-cli-0.2.1-rc.3.tgz",
+        "version": "0.2.1-rc.3"
+      },
+      {
+        "integrity_installed": "sha512-X16IPGZ7y0mkbWOlIPgfPPAW4laa/o5NHRen3v2xTf5MViD66Q1yrpxhfDIYm4G/Fm7DA1vze2Vduz1bcUZkAA==",
+        "integrity_registry": "sha512-X16IPGZ7y0mkbWOlIPgfPPAW4laa/o5NHRen3v2xTf5MViD66Q1yrpxhfDIYm4G/Fm7DA1vze2Vduz1bcUZkAA==",
+        "name": "@vsift/linux-x64",
+        "resolved": "https://registry.npmjs.org/@vsift/linux-x64/-/linux-x64-0.2.1-rc.3.tgz",
+        "version": "0.2.1-rc.3"
+      }
+    ],
+    "platform": "linux x86_64",
+    "registry": "https://registry.npmjs.org/",
+    "schema_version": 1,
+    "source": "registry",
+    "version": "0.2.1-rc.3"
+  },
+  "interpretation": {
+    "checks": [],
+    "human_review": null,
+    "key_facts": [
+      {
+        "claims": [],
+        "event": "F05-E03",
+        "satisfied": false,
+        "term": "success banner"
+      },
+      {
+        "claims": [],
+        "event": "F05-E03",
+        "satisfied": false,
+        "term": "E-409"
+      },
+      {
+        "claims": [],
+        "event": "F05-E03",
+        "satisfied": false,
+        "term": "Submit"
+      }
+    ],
+    "passed": false
+  },
+  "invalid_reasons": [
+    "harness: the client ended with an error before it made one tool call (a usage limit, an outage or a sign-in problem); run it again, do not count it"
+  ],
+  "mechanical": {
+    "checks": [
+      {
+        "details": [
+          "the report: handoff_block_missing: The report has no vsift-handoff block; end it with exactly one fenced vsift-handoff block holding the JSON."
+        ],
+        "name": "handoff_valid",
+        "passed": false
+      },
+      {
+        "details": [
+          "no handoff"
+        ],
+        "name": "citations_resolve",
+        "passed": false
+      },
+      {
+        "details": [
+          "no handoff"
+        ],
+        "name": "citation_times_in_truth_windows",
+        "passed": false
+      },
+      {
+        "details": [],
+        "name": "command_policy",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "stream_recognised",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "budgets",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "image_check",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "no_canary",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "report_text",
+        "passed": true
+      },
+      {
+        "details": [
+          "harness: the client ended with an error before it made one tool call (a usage limit, an outage or a sign-in problem); run it again, do not count it"
+        ],
+        "name": "client_configuration",
+        "passed": false
+      },
+      {
+        "details": [
+          "never ran setup.check",
+          "never ran ingest",
+          "never ran transcript.retranscribe",
+          "never ran search"
+        ],
+        "name": "commands_required",
+        "passed": false
+      }
+    ],
+    "passed": false
+  },
+  "mode": "skill",
+  "phase": 1,
+  "record_version": 1,
+  "reported_usage": null,
+  "run": {
+    "exit_code": 1,
+    "raw_stderr_sha256": "785b1fcdc34a0d3c2b71fbb5177dbfcdff7ce3e9392e20c9924c22457ccde00c",
+    "raw_stdout_sha256": "3d0abe6f15026ec52d38ace4b75e168e431765d2e9a7eee884669af10bf4dcb1",
+    "started_unix_s": 1791993107,
+    "timed_out": false,
+    "wall_ms": 4184
+  },
+  "scenario": {
+    "id": "A-08-f05-local-asr",
+    "sha256": "b98f190d0a5444eaff7a64a10fbe1872f3e43225e5ff9082aaf0e098f0489515",
+    "tests": [
+      "A-08"
+    ]
+  },
+  "settings_sha256": "bfa1a8315a7659aa8992ae7c5d046d1b140f37c848c05ca4e0d560252781d883",
+  "setup_check": {
+    "dependencies": [
+      {
+        "dependency": "ffmpeg",
+        "lookup": "managed_version",
+        "status": "available"
+      },
+      {
+        "dependency": "ffprobe",
+        "lookup": "managed_version",
+        "status": "available"
+      },
+      {
+        "dependency": "whisper",
+        "lookup": "managed_version",
+        "status": "available"
+      }
+    ],
+    "exit_code": 0,
+    "local_asr": "verified",
+    "status": "ready"
+  },
+  "shim_use": {
+    "cmd": 0,
+    "posix": 0,
+    "powershell": 0
+  },
+  "skill_sha256": "256b4840da185f9db1cef4f59389a7f24b78f6c524c02f0ba58f50798b0b4993",
+  "skill_source": "installed_package",
+  "tools_source": "managed",
+  "trial_id": "a-08-f05-local-asr-3639cd1d",
+  "usage": {
+    "image_bytes": 0,
+    "images_per_step": 0,
+    "images_total": 0,
+    "tool_calls": 0,
+    "wall_time_s": 4
+  },
+  "usage_limit": null,
+  "valid": false,
+  "vsift": {
+    "commit": "fa380021f2aa8db40fdccdb7c410839e8fc10f4c",
+    "sha256": "d730eae12a8d0e55796c373e6fead9470253d0c6e00082e8e406630294f3d8cc"
+  }
+}

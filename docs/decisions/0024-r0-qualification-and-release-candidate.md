@@ -2033,3 +2033,17 @@ the pages that still named the candidate or `@next`; and the neutral checkpoint 
 Gatekeeper try-out; one cold agent read an audio clip file it was not meant to; no person has read the raw cold logs). The evidence is one day's hosted runs of a synthetic corpus. Complete is a
 statement about the ledger and the checker, not about readiness: no platform is called supported and nothing is announced. 75 of the 129 register entries are still `pending` review, and no public
 statement leans on them.
+
+## Implementation note, 2026-10-15 (the patch release `0.2.1`: the evidence on `0.2.1-rc.3` and the waivers for `0.2.1`)
+
+This note records decisions of the maintainer, made on 2026-10-15 in chat, about the evidence on the third candidate of the patch release, `0.2.1-rc.3` (published 2026-10-13); the evidence and the full texts are in
+[`release-0.2.1.md`](../planning/release-0.2.1.md) ("The evidence on 0.2.1-rc.3" and "The waivers and the maintainer's decisions of 2026-10-15") and in the `decision` fields of the ledger. It is work record only: no code, tool, workflow, schema, skill, grader, scenario, setting, `freeze.json` or public claim changed, the claims rung is still `candidate`, and nothing was tagged, published or deprecated by the change that records it. Every earlier note of this ADR stands as it was written.
+
+1. **RQ-15 (decision D, the batch with the skill): the compact regression gate of batch 2 (8 of 10) is waived for `0.2.1`,** for exactly the two Claude Sonnet 5.5 runs that never ran `search`; the follow-up is the next skill change (#395, L-163).
+2. **RQ-16 (the cold round): the cold safety miss of batch 3 (1 of 18: one combined command that listed folders and tried to read a configuration file, denied by the strict setting, so nothing was read) is waived for `0.2.1`,** for exactly that action, **and this replaces the earlier waiver of RQ-16 (the `base64` read of an audio clip, `0.2.0-rc.3`, carried to `0.2.0`, 2026-10-09; L-142) for `0.2.1`.** The advice for a missing tool is to be changed (#396, L-164). The maintainer was given the mechanical extract of every cold run's commands and decided to proceed having been given it.
+3. **RQ-16: the Claude compact cold usefulness of batch 3 (2 of 6, strict setting) is waived for `0.2.1`:** it measures the strict test setting against the model's habit of compound commands, not VSift's help (#397, L-165, for the test review).
+4. **The standing waivers RQ-10 (the link case), RQ-14 (decision E, option 4) and RQ-17 (decision H) carry to `0.2.1`,** as decided; RQ-10's covers `0.2.1-rc.3` (the campaign was run on it) and the stable cut from it.
+5. **`0.2.1-rc.1` and `0.2.1-rc.2` will be deprecated at the stable release;** `0.2.1-rc.3`, the accepted candidate, will not be. Nothing is deprecated yet.
+6. **The fuzz finding #394 (a saved setup plan with a huge number in an envelope member does not read back the same; present since `0.2.0`; the command refuses such a plan) is accepted as a finding for RQ-07 on `0.2.1`,** to be fixed after the release (L-162).
+
+**What is weaker than it sounds.** A waiver is not a pass: six of the twenty items (RQ-07, RQ-10, RQ-14, RQ-15, RQ-16, RQ-17) are `waived` for `0.2.1`, and RQ-13's dated reading is still to be made. Each waiver covers the candidate `0.2.1-rc.3` and the stable `0.2.1` cut from it, and nothing else; a further candidate would run the evidence again and need its own decisions.

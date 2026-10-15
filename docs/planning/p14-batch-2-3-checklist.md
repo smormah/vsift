@@ -4,8 +4,7 @@ Status: **prepared 2026-10-05 (P14 PR 11b) for the first candidate, moved to the
 on 2026-10-08 (P14 PR 10 repeated again), to the fourth, `0.2.1-rc.1`, on 2026-10-10 (the cut of the patch release's first candidate, published and
 superseded), to the fifth, `0.2.1-rc.2`, on 2026-10-11 (the cut of its second candidate, published and superseded) and to the sixth, `0.2.1-rc.3`, on 2026-10-13
 (the cut of its third candidate, for a fix in `setup check`: the skill is the same text, so it keeps the fifth candidate's freeze and the batches run against `0.2.1-rc.3`, `-Version 0.2.1-rc.3`).
-Both batches have run on the third candidate and on none of the `0.2.1` candidates: the skill changed on purpose for `0.2.1`, twice, so both batches run again
-under a new freeze, and each starts only on your explicit go, after `0.2.1-rc.3` is published and not before.** What the third candidate's
+Both batches ran on the third candidate (`0.2.0-rc.3`), and **both have now run on the sixth, `0.2.1-rc.3`, on your go (batch 2 on 2026-10-14 and 2026-10-15, batch 3 on 2026-10-15), under the fifth candidate's freeze, which it keeps:** batch 2 met every gate but the compact regression (8 of 10), batch 3 did not meet cold safety (1 of 18 runs) or Claude compact cold usefulness (2 of 6), and you waived those for 0.2.1 on 2026-10-15 (readings [`batch-2-reading-0.2.1-rc.3.md`](p14-agent-trials/batch-2-reading-0.2.1-rc.3.md) and [`batch-3-reading-0.2.1-rc.3.md`](p14-agent-trials/batch-3-reading-0.2.1-rc.3.md); decisions in [`release-0.2.1.md`](release-0.2.1.md)). The page below is kept as the instructions for running a batch, written before they ran, and says "not run" where it was true then. What the third candidate's
 runs were: batch 2 (2026-10-08) met every gate (34 of 34 runs passed fully, RQ-15 `passed` for `0.2.0-rc.3`, plan section 29.8); batch 3
 (the evening of 2026-10-08): cold usefulness met on both clients with no margin, cold safety not met (1 of 18 runs), RQ-16 waived for `0.2.0-rc.3`
 for that one action (and carried to `0.2.0`) by your decision of 2026-10-09 (plan section 29.9). Their records are history now, in
@@ -13,13 +12,13 @@ for that one action (and carried to `0.2.0`) by your decision of 2026-10-09 (pla
 `docs/planning/p14-agent-trials/batch-3-rc.3/` (reading [`batch-3-reading-rc.3.md`](p14-agent-trials/batch-3-reading-rc.3.md)); the first
 two candidates' batch 2 are in `batch-2-rc.1/` (reading [`batch-2-reading.md`](p14-agent-trials/batch-2-reading.md)) and `batch-2-rc.2/`
 (reading with your decision of 2026-10-07 [`batch-2-reading-rc.2.md`](p14-agent-trials/batch-2-reading-rc.2.md); RQ-15 was `failed` for it, plan
-section 27). **`batch-2/` and `batch-3/` hold only the `freeze.json` written for the fifth candidate, which the sixth keeps unchanged** (the fourth's was never run under, so no records were moved aside for it), and nothing in the plan for `0.2.1`
-([`release-0.2.1.md`](release-0.2.1.md)) counts as evidence for the changed skill until they have run. Both batches spend your
+section 27). **`batch-2/` and `batch-3/` hold the `freeze.json` written for the fifth candidate, which the sixth keeps unchanged, and, since 2026-10-15, the records, state files and summaries of the batches on `0.2.1-rc.3`** (the fourth's freeze was never run under, so no records were moved aside for it). The plan for `0.2.1`
+([`release-0.2.1.md`](release-0.2.1.md)) records what they found. Both batches spend your
 Claude and Codex allowances, so each starts only on your explicit go, one batch at a time (plan section 7, ADR 0024 decision D).
 No supervisor and no agent runs a batch. This page collects what the runbook
 ([`docs/agents/trials.md`](../agents/trials.md), "The P14 batches") spreads over several sections, with the numbers batch 1
 measured. It is evidence items **RQ-15** (batch 2: the counted set with the skill) and **RQ-16** (batch 3: the cold final
-round), on `0.2.1-rc.3` once it is published (the ledger holds nothing for it yet).
+round), on `0.2.1-rc.3` (since 2026-10-15 the ledger holds both as `waived` for 0.2.1, not `passed`).
 
 ## What each batch is
 
