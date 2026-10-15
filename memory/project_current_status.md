@@ -3,6 +3,8 @@
 As of 2026-10-15. Current-state document: rewrite it, don't append to it. Next actions and
 open decisions are in `memory/TODO.md`.
 
+**2026-10-15, evening: `0.2.1` is published and is the current stable release** (npm `latest`; tag `v0.2.1`). Where the text below says a fix is "planned for `0.2.1`" or "in the `0.2.1` candidates", it is now in the release `latest` names; `0.2.1-rc.1` and `0.2.1-rc.2` are deprecated. The full rewrite of this file is part of the post-publish work record (`memory/TODO.md`); the backlog map is `docs/planning/backlog-iterations.md`.
+
 ## In plain English
 
 VSift is a Rust command-line tool that gives anyone, and their AI assistant, local,
