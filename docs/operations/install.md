@@ -14,7 +14,7 @@ numbers, this guide, the npm package's README and the project's work record (a m
 new version number and commit, so the hosted checks are run again on the published 0.2.1 (`release.md` section 6.17), and until
 their results are recorded in the release evidence ledger nothing has been run against 0.2.1's own bytes.
 **What 0.2.1 changes for you** since 0.2.0 is in the [changelog](../../CHANGELOG.md): changes to how a long recording is transcribed (a stretch that cannot be
-transcribed is a recorded gap instead of a failed run, and the join of the 30-second pieces no longer drops words silently; both are shown on stand-in recordings, not on a real one), a shorter
+transcribed is a recorded gap instead of a failed run, and the join of the 30-second pieces no longer drops whole sentences silently at a seam and reports the stretches where words could not be placed, though up to about half a second at the end of a piece can still be missing without a sign; both are shown on stand-in recordings, not on a real one), a shorter
 brief view of transcripts and searches for an AI assistant, and a `setup check` that waits 30 seconds instead of 5. Section 12 has the notes on 0.2.0.
 The machines in section 1 are R0 targets, not yet a supported platform. The
 evidence gathered so far, with its gaps, is recorded in the release evidence ledger

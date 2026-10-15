@@ -43,7 +43,7 @@ Six evidence items are `waived` for `0.2.1`, none is a pass, and `release-eviden
 ## 0. Before you merge the pull request
 
 1. **Merge it only when you can tag and publish at once** (about an hour): on merge the installation guide and the launcher's README say that `npm install vsift-cli` installs `0.2.1`, which is true only after step 6 ([L-133](known-limits.md#l-133)).
-2. **Merge the dated scan reading first** (the records pull request for RQ-13), then rebase this one on `main`: the evidence guard of the plan is complete for `0.2.1-rc.3` only when RQ-13 is `passed`, and at the time of writing it is `running`, so a dry run would be **REFUSED** by that guard alone.
+2. **The dated scan reading (RQ-13) is merged** (#401, 2026-10-15), so the plan's evidence guard is complete for `0.2.1-rc.3`; this pull request is rebased on it. Had RQ-13 still been `running`, a dry run would have been **REFUSED** by that guard alone.
 3. **Merge nothing else** between this pull request and the publish except a work-record pull request: no Dependabot pull request, no workflow edit, no dependency, no tool. A work-record pull request must touch only `CHANGELOG.md`, `memory/`, `docs/decisions/`, `docs/history/`, `docs/planning/` and `docs/guide/` pages (not `docs/guide/reference/`, `docs/guide/files/` or `docs/planning/delivery-ledger.json`): **a page of `docs/agents/` or `docs/operations/` is refused** (the records change of 2026-10-15 added one sentence to `docs/agents/trials.md` after the tag, and this page's commit restores that file to the tag's text for that reason).
 4. **The "up to date" rule is on:** `gh api repos/smormah/vsift/branches/main/protection --jq .required_status_checks.strict` prints `true`.
 
@@ -94,7 +94,7 @@ Items 1, 2, 7, 10, 11 and 12 are the model page's, unchanged (trusted publishers
    cargo run --locked -p vsift-governance -- release-evidence --complete-for 0.2.1-rc.3 --commit fa380021f2aa8db40fdccdb7c410839e8fc10f4c
    ```
 
-   Expect "VSift release evidence is complete for 0.2.1-rc.3 at fa380021f2aa." and exit status 0 (it does not until RQ-13's dated reading is recorded: step 0 item 2). It says the ledger's records are complete, not that the evidence is good enough to ship: the six waivers above are the part to read.
+   Expect "VSift release evidence is complete for 0.2.1-rc.3 at fa380021f2aa." and exit status 0 (RQ-13 is `passed` since #401). It says the ledger's records are complete, not that the evidence is good enough to ship: the six waivers above are the part to read.
 9. **What npm holds now**, from a shell with no npm login (`npm config get //registry.npmjs.org/:_authToken` prints `undefined`): `npm view vsift-cli dist-tags` and the same for `@vsift/win32-x64`, `@vsift/darwin-arm64` and `@vsift/linux-x64` print
    **`{ latest: '0.2.0', next: '0.2.1-rc.3' }` four times** (anything else means something was published or moved since 2026-10-13: stop and tell the supervisor), and `npm view vsift-cli versions` lists `0.0.0`, `0.1.0`, the three `0.2.0` candidates, `0.2.0`, the three `0.2.1` candidates and **not** `0.2.1`. Then write down what the seven earlier versions' bytes are, so that step 7 can show they are untouched (**twenty-eight integrity values**), and the seven tags' commits:
 
@@ -152,7 +152,7 @@ Expect `isPrerelease` false, `isDraft` false and ten assets; `gh api repos/smorm
 
 ## 8. If something fails
 
-The model page's table applies with these numbers. Three differ: "Candidate published" refused means `0.2.1-rc.3` is not on all four packages; "`latest` moves forward" refused means `latest` is not `0.2.0` or `0.2.1` is already on npm with other bytes; "Evidence ledger" refused means the ledger is not complete for `0.2.1-rc.3` at `fa380021f2aa` (RQ-13: step 0 item 2). **A published version that is bad is never unpublished:**
+The model page's table applies with these numbers. Three differ: "Candidate published" refused means `0.2.1-rc.3` is not on all four packages; "`latest` moves forward" refused means `latest` is not `0.2.0` or `0.2.1` is already on npm with other bytes; "Evidence ledger" refused means the ledger is not complete for `0.2.1-rc.3` at `fa380021f2aa` (RQ-13 was the only open item until #401). **A published version that is bad is never unpublished:**
 `npm deprecate` it on all four packages, edit the release's notes, and publish `0.2.2` after its own candidate (`release.md` 6.5); until then `latest` names the bad version, and pointing `latest` back at `0.2.0` (`npm dist-tag add <package>@0.2.0 latest` for each package, two-factor authentication) is safe and your choice at the time.
 
 ## 9. Deprecate the first two candidates of `0.2.1` (decided 2026-10-15: at the stable, not before)

@@ -31,7 +31,7 @@ candidates stay published; `0.2.1-rc.1` and `0.2.1-rc.2` are deprecated and supe
 
 The changelog has the detail. In short: a long recording whose transcription used to fail as a missing
 speech recogniser now finishes with a recorded gap, and the join of the 30-second pieces no longer drops
-words silently at a seam (both are shown on stand-in recordings, not on a real one, and the installation guide's
+whole sentences silently at a seam and reports the stretches where words could not be placed (up to about half a second at the end of a piece can still be missing without a sign; both are shown on stand-in recordings, not on a real one, and the installation guide's
 notes on 0.2.0 say what to do if you are still on it); `transcript get`, `search` and `candidates` take a
 shorter `--view brief` for an AI assistant; `vsift setup check` waits 30 seconds for the tools instead of 5 and no
 longer tells you to install a tool that only answered late; and the agent skill has new wording.
