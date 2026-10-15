@@ -8,8 +8,8 @@ terminal, or you let an AI assistant on your machine use it. Nothing is uploaded
 
 This guide teaches you to do things with it. It is written for anyone with a video, not only for programmers.
 
-**Checked against vsift 0.2.1**: the release candidate `0.2.1-rc.3` and the release that
-follows it are built from the same code, so this guide names the release, not a candidate. Where this guide says what a command prints, that
+**Checked against vsift 0.2.1**: the release `0.2.1` and the release candidate `0.2.1-rc.3` it was built from have
+the same code, so this guide names the release, not a candidate. Where this guide says what a command prints, that
 is real output of that build on practice recordings from the repository, and the examples are re-run whenever the
 code changes ([how](#how-this-guide-is-kept-true)). The second candidate, `0.2.1-rc.2`, has the same commands and
 options and one fix fewer: its `setup check` gives the three tools 5 seconds in all
@@ -18,7 +18,7 @@ instead of 30, and gives a tool that only did not answer in time the advice for 
 options except `--view` (on `transcript get`, `search` and `candidates`) and a few fixes fewer still, that one included: where two pieces of a local
 transcription met, the end of a sentence could be lost with no warning, a `transcript get` over a part nobody
 transcribed did not say so, `ingest` of a path that names no file gave no hint what to do, and the agent skill had older wording.
-The release `0.2.0`, which `npm install vsift-cli` installs until `0.2.1` is published, has the same commands and
+The release `0.2.0`, which `npm install vsift-cli` installed before `0.2.1`, has the same commands and
 options as `0.2.1-rc.1` and fewer fixes still: a recording with a stretch of little
 recognisable speech could make the whole local transcription fail and keep nothing (where this guide says a stretch can
 be left without a transcript, `0.2.0` fails the whole run instead), the help of `audio` did not say that an AI assistant
