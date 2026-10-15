@@ -18,22 +18,31 @@ or Bun 1.2 or later, runs the launcher.
 
 ## Which version you get
 
-**Version 0.2.0 is the first release published under the dist-tag `latest`**, so the commands
-above, without a tag, install it. Until then `latest` was an empty `0.0.0` placeholder, a package
-with no command. It has not been announced. Yarn 4 holds back a version for a day after it is
-published, so Yarn users get 0.2.0 a day after the publish (the installation guide has the
-setting that lets it through).
+**Version 0.2.1 is the patch release after 0.2.0**, and the commands above, without a tag, install it: it
+replaces 0.2.0 under the dist-tag `latest`, where 0.2.0 (2026-10-09) was the first release. It has not been
+announced. Yarn 4 holds back a version for a day after it is published, so Yarn users get 0.2.1 a day
+after the publish (the installation guide has the setting that lets it through).
 
-The dist-tag `next` is for release candidates and you do not need it: it names `0.2.0-rc.3`,
-the release candidate that 0.2.0 was built from, or a later candidate or release. The older
-candidates `0.2.0-rc.1` and `0.2.0-rc.2` stay published and are superseded.
+The dist-tag `next` is for release candidates and you do not need it: it names `0.2.1-rc.3`,
+the release candidate that 0.2.1 was built from, or a later candidate or release. The older
+candidates stay published; `0.2.1-rc.1` and `0.2.1-rc.2` are deprecated and superseded.
+
+## What changed since 0.2.0
+
+The changelog has the detail. In short: a long recording whose transcription used to fail as a missing
+speech recogniser now finishes with a recorded gap, and the join of the 30-second pieces no longer drops
+whole sentences silently at a seam and reports the stretches where words could not be placed (up to about half a second at the end of a piece can still be missing without a sign; both are shown on stand-in recordings, not on a real one, and the installation guide's
+notes on 0.2.0 say what to do if you are still on it); `transcript get`, `search` and `candidates` take a
+shorter `--view brief` for an AI assistant; `vsift setup check` waits 30 seconds for the tools instead of 5 and no
+longer tells you to install a tool that only answered late; and the agent skill has new wording.
 
 ## What was not tried
 
-0.2.0 is built from the same source as the release candidate `0.2.0-rc.3` and differs from it
+0.2.1 is built from the same source as the release candidate `0.2.1-rc.3` and differs from it
 only in its version numbers, this README and the installation guide. That candidate was tried on hosted runners and in
-trials with the agent skill, on a synthetic corpus and a synthetic voice; nothing has been run
-on a real recording. Two things were not tried before this release, and it ships without them:
+trials with the agent skill, on a synthetic corpus and a synthetic voice; the executables of 0.2.1 itself are checked after
+its publish. The measured figures come from a synthetic corpus and a synthetic voice; the two real recordings tried on 0.2.0 found
+the defects that 0.2.1 changes, and the fixes were not tried on them. Two things were not tried before this release, and it ships without them:
 
 - **Windows Smart App Control, SmartScreen and macOS Gatekeeper** have not been seen reacting
   to VSift, and no machine without a developer's tools has installed this package. The

@@ -1,18 +1,21 @@
 # Installing VSift
 
-Status: user guide, updated 2026-10-10 (section 7 on upgrading from a candidate of a later release: the cut of the patch release's candidate) and 2026-10-09 (P14 PR 12, the release 0.2.0; P14 PR 10 repeated again, the third candidate; P14 PR 11c;
+Status: user guide, updated 2026-10-15 (the release 0.2.1) and 2026-10-10 (section 7 on upgrading from a candidate of a later release: the cut of the patch release's candidate) and 2026-10-09 (P14 PR 12, the release 0.2.0; P14 PR 10 repeated again, the third candidate; P14 PR 11c;
 P14 PR 9a; written by P13 PR 11 and PR 12 for the published pre-release;
 [ADR 0023](../decisions/0023-r0-distribution-managed-installation-and-handoff-check.md)).
-**VSift 0.2.0 is the first release published under npm's `latest` dist-tag**, so `npm install vsift-cli` with no tag installs it.
-The npm packages carry npm provenance, and the native archives on its GitHub release carry a Sigstore build-provenance
-attestation, as every file of the release does. Before it, `latest` was an empty `0.0.0` placeholder, a package with no command. The
-pre-release 0.1.0 (2026-10-01) and the release candidates 0.2.0-rc.1 (2026-10-05), 0.2.0-rc.2 (2026-10-07) and 0.2.0-rc.3
-(2026-10-08) were installed with `vsift-cli@next`; they stay published and are superseded. 0.2.0 is not announced.
-**0.2.0 is built from the same source as the third release candidate, 0.2.0-rc.3**, and differs from it only in its version
+**VSift 0.2.1 is the patch release after 0.2.0**, and `npm install vsift-cli` with no tag installs it once it is published (it
+replaces 0.2.0 under npm's `latest` dist-tag). The npm packages carry npm provenance, and the native archives on its GitHub release carry a Sigstore build-provenance
+attestation, as every file of the release does. 0.2.0 (2026-10-09) was the first release under `latest`; before it, `latest` was an empty `0.0.0` placeholder, a package with no command. The
+pre-release 0.1.0 (2026-10-01), the release candidates of 0.2.0 and the release candidates of 0.2.1 (0.2.1-rc.1, 0.2.1-rc.2 and 0.2.1-rc.3) were installed with `vsift-cli@next`; they stay published, and 0.2.1-rc.1 and 0.2.1-rc.2
+are deprecated (npm warns on an install of either and names this release). 0.2.1 is not announced.
+**0.2.1 is built from the same source as the third release candidate, 0.2.1-rc.3**, and differs from it only in its version
 numbers, this guide, the npm package's README and the project's work record (a mechanical check enforces that:
 [`release.md`](release.md) section 6.8). What was tried on that candidate was tried on that source. The executable carries the
-new version number and commit, so the hosted checks were run again on the published 0.2.0 on 2026-10-09 (`release.md` section 6.13), and
-their results are recorded in the release evidence ledger.
+new version number and commit, so the hosted checks are run again on the published 0.2.1 (`release.md` section 6.17), and until
+their results are recorded in the release evidence ledger nothing has been run against 0.2.1's own bytes.
+**What 0.2.1 changes for you** since 0.2.0 is in the [changelog](../../CHANGELOG.md): changes to how a long recording is transcribed (a stretch that cannot be
+transcribed is a recorded gap instead of a failed run, and the join of the 30-second pieces no longer drops whole sentences silently at a seam and reports the stretches where words could not be placed, though up to about half a second at the end of a piece can still be missing without a sign; both are shown on stand-in recordings, not on a real one), a shorter
+brief view of transcripts and searches for an AI assistant, and a `setup check` that waits 30 seconds instead of 5. Section 12 has the notes on 0.2.0.
 The machines in section 1 are R0 targets, not yet a supported platform. The
 evidence gathered so far, with its gaps, is recorded in the release evidence ledger
 ([`p14-evidence-ledger.json`](../planning/p14-evidence-ledger.json)). **What was not tried before this release, and it ships
@@ -21,7 +24,7 @@ without them:** Windows Smart App Control and SmartScreen, a true clean-machine 
 from hosted runners only. **What has been run against these steps.** In P13 they ran on
 hosted runners against a local registry. Since 2026-10-02 (P14) the published packages have also
 been installed from the real registry with npm, pnpm, Yarn and Bun on hosted Windows, macOS and
-Ubuntu runners, first 0.1.0, then each release candidate and then 0.2.0 itself on 2026-10-09; the three archives have been
+Ubuntu runners, first 0.1.0, then each release candidate (the last being 0.2.1-rc.3 on 2026-10-13 to 2026-10-15) and 0.2.0 itself on 2026-10-09; the three archives have been
 downloaded, checked, extracted and run, the offline
 install of the managed tools has been run with the real files, the upgrade and uninstall steps
 (sections 7 and 8) have been walked, and the same bytes have run the supplied-transcript and
@@ -52,12 +55,12 @@ source ([`development.md`](../development.md)) also works.
   24.04 x64 only (ADR 0023 decision E). On Windows and macOS you install FFmpeg,
   FFprobe, whisper.cpp and the speech model yourself and tell VSift where they are
   (section 5.2).
-- **What 0.2.0 promises** is the `vsift` command-line grammar, its exit codes and its v1 JSON
+- **What 0.2.1 promises** (as 0.2.0 did) is the `vsift` command-line grammar, its exit codes and its v1 JSON
   contracts ([`cli-v1.md`](../contracts/cli-v1.md)). They change only by addition: new commands,
   fields and failure codes may appear, and what exists keeps its meaning. Nothing else is
   promised: the readable text that commands print without `--json` is for people and may
   change, and the accuracy figures were measured on a synthetic corpus. The release
-  qualification of P14 is not finished: its last step records the hosted checks on 0.2.0
+  qualification of 0.2.1 is not finished: its last step records the hosted checks on 0.2.1
   itself.
 - **Not signed.** The Windows and macOS executables carry no Authenticode signature and
   no Apple notarization. Section 4 says what that means for you and how to check a
@@ -69,13 +72,13 @@ to run the small launcher. Installing from a native archive needs neither.
 ## 2. Install with a package manager
 
 The npm package is `vsift-cli`; the command it installs is `vsift`. **Ask for it without a
-tag:** 0.2.0 is published under the dist-tag `latest`, which is what a plain `vsift-cli` means.
-The dist-tag `next` is for release candidates and you do not need it; it names `0.2.0-rc.3`,
-the candidate 0.2.0 was built from, or a later candidate or release. The empty `0.0.0`
+tag:** 0.2.1 is published under the dist-tag `latest`, which is what a plain `vsift-cli` means.
+The dist-tag `next` is for release candidates and you do not need it; it names `0.2.1-rc.3`,
+the candidate 0.2.1 was built from, or a later candidate or release. The empty `0.0.0`
 placeholder that was `latest` before 0.2.0 has no command: if `vsift` is not found after an
 install and your package manager reports `vsift-cli` at `0.0.0`, it resolved the placeholder
 (for example a registry mirror that has not caught up; Yarn's one-day hold below may do the same,
-which was not tried), and asking for the exact version, `vsift-cli@0.2.0`, installs the
+which was not tried), and asking for the exact version, `vsift-cli@0.2.1`, installs the
 release. Install globally, so the
 `vsift` command is on your `PATH`:
 
@@ -93,7 +96,7 @@ yarn vsift --version
 ```
 
 Recent Yarn 4 releases (4.18.1 checked) hold back any version published less than a day
-ago (`npmMinimalAgeGate`, default one day), so Yarn users get 0.2.0 a day after it was
+ago (`npmMinimalAgeGate`, default one day), so Yarn users get 0.2.1 (as they did 0.2.0) a day after it was
 published, and every later release a day after its publish. Until then Yarn
 reports that the versions of `vsift-cli` or `@vsift/...` "are quarantined" (seen with the exact
 version of 0.1.0, 6.5 hours after its publish). Wait a day, or exempt VSift in the project's
@@ -314,7 +317,7 @@ check after you install a tool or restart the machine can be slow, because each 
 started for the first time; a line that starts `[timeout]` means the tool was found and
 VSift had no answer from it in time, not that it is missing: run the check again
 ([troubleshooting](../guide/troubleshooting.md#missing_capability-a-tool-or-model-is-missing);
-every version before `0.2.1-rc.3` is different, see [section 12](#12-problems)).
+every version before `0.2.1` is different, see [section 12](#12-problems)).
 
 ### 5.1 Ubuntu 24.04 x64: let VSift install them
 
@@ -453,7 +456,7 @@ folder.
 
 - **npm:** install again: `npm install --global vsift-cli` (likewise for
   pnpm and Bun; Yarn: `yarn add vsift-cli` again in the project). Someone who installed a
-  release candidate of 0.2.0 with `@next` is moved to 0.2.0 the same way, because `latest` is the higher
+  release candidate of 0.2.0 or 0.2.1 with `@next` is moved to 0.2.1 the same way, because `latest` is the higher
   version. A candidate of a later release is newer than `latest`, so the same command installs the older
   `latest` until that release is published: ask for the exact version to stay on the candidate
   (`vsift-cli@<version>`). `@next` is not the way to get releases. The launcher and the
@@ -478,7 +481,7 @@ folder.
   published 0.2.0-rc.1 to the published 0.2.0-rc.2 on the three systems with the same result (runs 37602931887 and
   37611381117), and on 2026-10-08 the published 0.1.0 and the published 0.2.0-rc.2 to the published 0.2.0-rc.3 (runs
   37748859247 and 37752825599). On 2026-10-09, after its publish, the same run upgraded the published 0.1.0 and the published
-  0.2.0-rc.3 to the published 0.2.0 on the three systems with the same result (runs 37999883603 and 38000209110).
+  0.2.0-rc.3 to the published 0.2.0 on the three systems with the same result (runs 37999883603 and 38000209110). The same upgrades are run again for 0.2.1 after its publish (`release.md` section 6.17), and until their results are recorded nothing has been run against 0.2.1's own bytes.
 
 ## 8. Uninstall
 
@@ -589,27 +592,27 @@ recognition works** ([#353](https://github.com/smormah/vsift/issues/353), [L-145
 recognised in 30-second chunks. If one chunk of a real recording holds very little recognised speech (a long pause while the speaker types
 is enough) and one of its few segments is rejected as unusable, VSift fails the whole run and keeps no chunk, and `vsift job resume`
 fails at the same chunk. `vsift setup check` still says everything is in place, and reinstalling whisper.cpp does not help, whatever
-the error's remediation text says. A fix is planned for 0.2.1. Until then, either give VSift a transcript
+the error's remediation text says. The fix is in 0.2.1: a stretch whose answer cannot be used is now a recorded gap and the run finishes `partial` instead of failing. On 0.2.0, either give VSift a transcript
 (`vsift ingest ./recording.mp4 --transcript ./recording.vtt`), which skips local recognition, or transcribe in ranges
 (`vsift transcript retranscribe <session> --from <microseconds> --to <microseconds>`) and move a range's edges by a few seconds if one fails,
 which can get past the chunk. This was found with the first real recording tried; every accuracy figure before it came from a synthetic corpus.
 
-**Known issue in 0.2.0 and in the 0.2.1-rc.1 release candidate: a transcript made by `vsift transcript retranscribe` can be missing up to a few seconds of speech where two pieces meet, and nothing says so**
+**Known issue in 0.2.0 and in the 0.2.1-rc.1 release candidate (fixed in 0.2.1): a transcript made by `vsift transcript retranscribe` can be missing up to a few seconds of speech where two pieces meet, and nothing says so**
 ([#359](https://github.com/smormah/vsift/issues/359), [L-149](../planning/known-limits.md#l-149)). VSift recognises speech in 30-second pieces that
 overlap by 5 seconds, and merges them. On both real recordings tried, a sentence broke off at the end of one piece and resumed several seconds later at some of
 the seams, and the words between are missing from the transcript (the cause is read from the code, not yet confirmed with the recogniser's own output). `vsift search` and the transcription
-result still report the whole range as transcribed, and no warning gives a time, so a missing word reads as "nothing was said". A fix is planned for 0.2.1. Until then, check a transcript you rely on against the recording where the pieces meet: the overlaps are
+result still report the whole range as transcribed, and no warning gives a time, so a missing word reads as "nothing was said". The fix is in 0.2.1 (it is shown on stand-in recordings, not on a real one; the changelog says what it leaves). On 0.2.0 or 0.2.1-rc.1, check a transcript you rely on against the recording where the pieces meet: the overlaps are
 5 seconds long and start every 25 seconds, counted from the start of the range you transcribed (at 0:25, 0:50, 1:15 and so on for a whole recording), and a sentence that breaks
 off near one is the sign. Or give VSift a transcript (`vsift ingest ./recording.mp4 --transcript ./recording.vtt`), which skips local recognition. Transcribing a range with
 `--from` and `--to` does not avoid it, because a range has seams of its own.
 
-**Known issue in every published version before 0.2.1-rc.3 (0.1.0, 0.2.0 and the earlier release candidates): the first `vsift setup check` after a restart can say `[timeout]` for
+**Known issue in every published version before 0.2.1-rc.3 (0.1.0, 0.2.0 and the earlier release candidates; fixed in 0.2.1-rc.3 and in 0.2.1): the first `vsift setup check` after a restart can say `[timeout]` for
 FFmpeg and FFprobe, call the setup `blocked` and tell you to install tools you already have**
 ([#391](https://github.com/smormah/vsift/issues/391), [L-161](../planning/known-limits.md#l-161)). Those versions allow FFmpeg, FFprobe and whisper.cpp
 5 seconds in all to answer, one after another (FFmpeg and FFprobe are asked for their version, whisper.cpp for its help text). A large FFmpeg build that is started for the first time since the machine came up can use that up
 (on the one Windows 11 machine where this was seen, with real-time virus scanning, FFprobe alone was reported to take 4.7 seconds), and the answer then says
 "Install or locate this trusted tool" under a tool that is installed and working. Nothing is wrong with the tools. **Run `vsift setup check` again**, or run
-`vsift setup check --timeout-seconds 30`. The fix is in the third candidate of 0.2.1, `0.2.1-rc.3` (cut 2026-10-13), and in the release that follows it: the limit becomes 30 seconds, and a tool that did not
+`vsift setup check --timeout-seconds 30`. The fix is in the third candidate of 0.2.1, `0.2.1-rc.3` (cut 2026-10-13), and in 0.2.1, which is built from it: the limit becomes 30 seconds, and a tool that did not
 answer in time is told so, with what to do, instead of getting the advice for a missing tool. It was seen once, on one machine, on Windows; whether macOS and Linux show it was not checked.
 
 **`INTEGRITY_FAILURE` right after `--session-root <folder>`.** If the folder already exists and
