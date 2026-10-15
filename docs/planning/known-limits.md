@@ -3439,11 +3439,12 @@ that week.**
   with the residual named in its ledger entry. The reading is repeated within seven days of the stable release
   (the 2026-10-05 record, [`p14-scan-reading-2026-10-05.md`](p14-scan-reading-2026-10-05.md), found nothing
   new). Refreshing the build does not change it ([L-132](#l-132)).
-- **Reading of 2026-10-15 ([`p14-scan-reading-2026-10-15.md`](p14-scan-reading-2026-10-15.md)): unchanged, with a second record of the same kind proposed, not decided.** CVE-2026-38350 was not
+- **Reading of 2026-10-15 ([`p14-scan-reading-2026-10-15.md`](p14-scan-reading-2026-10-15.md)): unchanged, with a second record of the same kind, decided.** CVE-2026-38350 was not
   modified and no commit on `master` since the snapshot touches `libswscale/output.c`. A new record, CVE-2026-109311 (filed against vLLM; CVSS 4.0 7.1, 3.1 6.5; "Received"), describes a heap overflow in
   FFmpeg's IAMF parser that the MP4 demuxer reaches; it names no FFmpeg commit, and the shipped snapshot has the check at the site it names (`f8e6f8f0a2`, an ancestor), so it is fixed by inference,
-  not by name, like this record. Issue [#400](https://github.com/smormah/vsift/issues/400) recommends closing it as fixed on that evidence and recording it beside this entry;
-  **the maintainer has not decided**, and until then RQ-13 for `0.2.1-rc.3` is `running`.
+  not by name, like this record. **The maintainer decided on 2026-10-15: issue [#400](https://github.com/smormah/vsift/issues/400) is closed as fixed by inference, recorded beside this entry** (the check at the
+  named site is present in the shipped snapshot and `f8e6f8f0a2` is an ancestor); the residual that the fix is tied to the record by inference and not by name is accepted, as this entry's is, and the
+  2026-10-31 re-pin ([L-132](#l-132)) strengthens it. RQ-13 is `passed` for `0.2.1-rc.3` with it named. Nothing was run on a crafted IAMF file; if the record describes another site in the parser, nothing here covers it.
 - **Owner:** P14. **Issue:** [#272](https://github.com/smormah/vsift/issues/272) (left open: closing it
   is the maintainer's). **Status:** accepted residual. **Review:** accepted (2026-10-05, by the
   maintainer's decision on RQ-13; the register's own pass over the thirty entries is separate).
@@ -4001,9 +4002,9 @@ that week.**
   model-file change [#322](https://github.com/smormah/vsift/issues/322) listed as "a tensor type check". It is
   not reachable in use: the engine refuses a model that is not a reviewed pin before any chunk is recognised
   (`LocalAsrModelNotPinned`), so the loader runs only on the two pinned models, and the local swap between
-  hashing and loading stays this entry's residual. Issue [#399](https://github.com/smormah/vsift/issues/399)
-  recommends accepting it within this entry and fixing it with the re-pin; **the maintainer has not decided**,
-  and until then RQ-13 for `0.2.1-rc.3` is `running`. No release newer than v1.9.5 and no repository advisory exist.
+  hashing and loading stays this entry's residual. **The maintainer decided on 2026-10-15: issue [#399](https://github.com/smormah/vsift/issues/399)
+  is accepted for `0.2.1` under this entry** (only a reviewed pinned model is loaded), **to be fixed with the planned whisper.cpp re-pin; the issue stays open until then.** RQ-13 is `passed` for
+  `0.2.1-rc.3` with it named. No release newer than v1.9.5 and no repository advisory exist.
 - **Next step:** after `0.2.0`, re-pin whisper.cpp together with the FFmpeg refresh ([L-132](#l-132)). A
   stage of the P07 checkpoint that asks the real recogniser for a short range would show the floor on
   published bytes.
