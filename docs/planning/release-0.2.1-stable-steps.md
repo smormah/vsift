@@ -23,7 +23,7 @@ numbers, the launcher's README, the installation guide and the work record, and 
 | What the plan does | `latest` from `0.0.0` to `0.2.0` | **`latest` from `0.2.0` to `0.2.1`; `next` stays `0.2.1-rc.3`** |
 | The `latest moves forward` guard | `latest` is `0.0.0` on all four | `latest` is **`0.2.0`**, a stable version below `0.2.1`, and `0.2.1` is on none of them |
 | The evidence ledger guard | complete for `0.2.0-rc.3` at `83dca856e7a0` | complete for **`0.2.1-rc.3` at `fa380021f2aa`** |
-| The candidate-to-stable file counts | 5 version-string, 2 shipped-document, 77 work-record files | 5 version-string, 2 shipped-document and a number of work-record files (76 at the time of writing, more once the records and this page are merged) |
+| The candidate-to-stable file counts | 5 version-string, 2 shipped-document, 77 work-record files | 5 version-string, 2 shipped-document and a number of work-record files (77 at the time of writing, more once the records and this page are merged) |
 | `--tag latest` under trusted publishing | never tried (L-105) | **tried and accepted for `0.2.0` (`release.md` 6.13)**; the entries are still the one setting no dry run can read |
 | The before-snapshot of the earlier versions | three candidates, twelve values, three tags | **seven versions, twenty-eight values, seven tags** (below) |
 | What `vsift --version` prints | `vsift 0.2.0 (eeb2a22a46a8)` | `vsift 0.2.1 (<the first 12 digits of the stable commit>)` |
