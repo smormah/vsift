@@ -13,6 +13,11 @@ name: Guide
 #   what the command prints. Values that change on every run (identifiers, times, digests, file sizes)
 #   are compared by kind.
 #
+# The examples need the real tools and take four to seven minutes, so since the CI lanes
+# (docs/development.md, "The CI lanes") they run on a pull request or push only when the guide, its
+# tools or this workflow change; the Nightly workflow calls this workflow and runs them every night
+# that something merged to main. The reference job keeps running on every change below.
+#
 # Read-only: no secret, no token, no publishing. The examples job downloads the three reviewed tool
 # artifacts from their publishers over HTTPS, each checked by size and SHA-256 (the same transfer as
 # `P13 managed smoke`), and sends only VSift's neutral user agent.
@@ -46,6 +51,7 @@ on:
       - Cargo.toml
       - Cargo.lock
   workflow_dispatch:
+  workflow_call:
 
 permissions: {}
 
@@ -81,8 +87,47 @@ jobs:
       - name: The generated pages are current and the guide keeps its promises
         run: node tools/guide/generate-reference.cjs --binary target/debug/vsift --check
 
+  scope:
+    # Whether this run needs the examples: always when the Nightly workflow calls
+    # this one or it is dispatched; on a pull request or push only when the guide's
+    # pages, its tools, its practice recordings or this workflow change.
+    name: Examples needed
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      examples: ${{ steps.scope.outputs.examples }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Decide
+        id: scope
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          examples=true
+          if [ "$EVENT" = pull_request ] || [ "$EVENT" = push ]; then
+            if [ -n "$BASE" ] && [ -n "${BASE//0/}" ] && git cat-file -e "${BASE}^{commit}" 2>/dev/null; then
+              if git diff --name-only "$BASE...HEAD" | grep -Eq '^(docs/guide/|tools/guide/|fixtures/corpus/|\.github/workflows/guide\.yml$)'; then
+                examples=true
+              else
+                examples=false
+              fi
+            fi
+          fi
+          echo "examples=$examples" >> "$GITHUB_OUTPUT"
+          echo "Examples needed: $examples"
+
   examples:
     name: Examples against the real binary (Ubuntu 24.04)
+    needs: scope
+    if: needs.scope.outputs.examples == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     permissions:
