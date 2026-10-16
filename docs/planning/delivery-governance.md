@@ -72,6 +72,75 @@ Each implementation PR cites one packet issue, requirements, tests, threats/find
 predecessors and exclusions. Protected main, CODEOWNERS, required CI/security checks
 and the Governance check prevent an unattended task from merging around the ledger.
 
+## Delivery cycles and the test and release model (decided 2026-10-16)
+
+The maintainer decided on 2026-10-16 how work is grouped, who may approve what inside a cycle, and
+what is run, and when, to test and release it. **The cycle map is
+[`backlog-iterations.md`](backlog-iterations.md)** (stories and issue numbers); the weekly window as an
+operating procedure is [`release.md`](../operations/release.md) 6.18. This section is the policy.
+**It supersedes the rule of 2026-10-15 that "the full round" (all hosted evidence plus agent batches 2 and 3) runs
+"about once a week, at a big shift, or when many changes have accumulated, never per fix"**, which was
+written in the earlier backlog map and in the two handoff files. No accepted ADR states that cadence, so
+none is rewritten; [ADR 0024](../decisions/0024-r0-qualification-and-release-candidate.md) carries a dated note
+instead. **Status: decided, and partly not built.** The pull-request gate's path rules, the nightly run and the
+nightly precondition of a candidate are separate changes (CI workflows, the release workflow); until they land
+the rules below are followed by hand and the existing CI still runs its full set on every pull request.
+
+### Delivery in cycles (D1 to D5)
+
+- **D1. Work is delivered in four larger cycles instead of small iterations, each running as many stories in parallel as can be handled.** Cycle 1 is `0.2.2`
+  (the fixes found during `0.2.1`, with the test review folded in); cycle 2 is `0.2.3` (the re-pins, the seam
+  follow-ups measured on real speech, and the evaluations); cycle 3 is launch readiness; then R1 (P15 to P20).
+  The stories of each cycle are in the cycle map. Parallel work needs non-overlapping files and explicit integration ownership (rule 2 below).
+- **D2. Cycle 1 takes #366, #367, #370 and #371** (the skill-wording issues `0.2.1` left open), besides #404 and
+  #257 first.
+- **D3. Standing approvals inside a cycle.** The supervisor merges on green after review, files issues for
+  findings, and closes an issue whose own closing criteria are met, with the evidence in the comment.
+  **Every `release` environment gate and every npm write stays with the maintainer.** A decision that this
+  document or an ADR reserves to the maintainer (a waiver, a claims rung, moving `next`) is not covered.
+- **D4. The README is rebuilt as the front page by a separate design session during cycle 1.** It starts early in
+  the cycle and does not wait for the fixes; it belongs to cycle 3's launch readiness.
+- **D5. Records.** Both handoff files are still rewritten in every pull request, as `AGENTS.md` says.
+  Parallel pull requests rebase before they merge, so the rewrite of one is never lost to the other.
+
+Iteration A of the earlier map (closing what `0.2.1` settled) was done on 2026-10-16; the cycle map says how.
+
+### The test and release model (D6)
+
+| Stage | When | What runs | Rule |
+| --- | --- | --- | --- |
+| **Pull-request gate** | every pull request | only what the change can affect | Target 5 minutes, hard limit 10. A docs-only change runs the document and governance checks. A code change runs lint plus the unit and contract tests of the touched crates and their dependents, on Ubuntu. Windows and macOS run only for a platform-sensitive change. A hot fix can request the full three-system run. |
+| **Nightly** | on `main`, when something merged | at least the full three-system check (what it adds is the CI change's design) | A failure opens an issue automatically and **must be fixed before further development (stop the line)**. **A release candidate may only be cut from a commit whose nightly passed.** |
+| **Weekly release window** | the candidate is cut at Friday or Saturday midnight, in the maintainer's local time | the long hosted runs (2 to 3 hours), after the cut, limited to what the week's changes touched | The target is to release and publish on **Monday or Tuesday**. A failure in the window gets a targeted fix and a rerun of **only the failing workflow**, never the whole round, while development continues (see the constraint below). |
+| **Hot fix** | outside the window | the full three-system check (about 30 minutes), then the publish, then the quick checks of the published bytes | The quick checks are `P14 verify release`, `P14 journeys`, `P13 managed smoke` and `P14 published artifacts` from the previous release and from the candidate. |
+| **Monthly, or with a major change** (a skill rewrite, a re-pin) | about once a month, or when such a change lands | the full-cost items | Agent batches 2 and 3; the dependency-quality checks (`P07 local ASR` accuracy, `P14 malicious media`, the dated scan reading); the full durability campaign. **Not weekly.** An ordinary week's skill wording change gets the uncounted skill smoke (about nine Claude runs on a local build, about $6) instead. |
+| **Weekly drift runs** | scheduled | the published binary, as today | They stay. A failure opens an issue by itself. |
+
+**Why the split.** The full round costs half a day or more, millions of client tokens and thousands of runner minutes. Most of it
+measures things a week's fixes did not touch, and a failure found late blocks a release that waited for it. The gate answers
+the author quickly, the nightly finds what the gate chose not to run while the cause is one day old, and the window
+spends the expensive runs once, on a commit that is already known to be green.
+
+**Our code or a dependency's quality.** `P07 local ASR`'s word-error figure measures mostly whisper.cpp; `P14 malicious media`
+measures FFmpeg's robustness as much as our isolation; the scan reading reads the pinned tools' records. They belong to the monthly
+round and to a re-pin, a model change or a change to the way VSift calls a tool, not to every candidate.
+
+**What the model does not change.**
+
+- The four commands in `AGENTS.md` are still what an author runs before completing a change. The gate is the CI's
+  shortcut, not the author's.
+- Protected `main` keeps its required checks. A path-limited job must still report on every pull request; how it does is the
+  CI change's design.
+- The candidate rule ([`release.md`](../operations/release.md) 6.8, ADR 0024 decision B) and the stable plan's six guards hold. A
+  hot fix still goes through a published candidate, because the stable plan needs one.
+- **The evidence ledger's completeness check is not relaxed.** An item whose scope a change touched is `passed`, carried by the
+  recorded delta, or waived by a recorded decision of the maintainer. The ledger's scopes are coarse (`crates` is in the
+  scope of most items, RQ-01 to RQ-12 and RQ-14 to RQ-17), so "limited to what the week touched" does not by itself make the check pass: narrowing the scopes
+  or deciding waivers is a change of its own, with the release-workflow change that enforces the nightly precondition.
+- **The freeze between a candidate's tag and the stable commit (6.8) holds**, so "development continues" in the window means branches
+  and draft pull requests, and merges of work record and documents that 6.8 allows; a change to code, a dependency or a workflow
+  waits for the publish. Replacing this with a release branch would change the candidate check and ADR 0024 decision B, and is not decided here.
+
 ## Rules for implementation sessions
 
 These apply to attended and unattended sessions alike, whether the implementer is a
@@ -110,6 +179,9 @@ person or an AI agent.
     packet is complete, and list what remains.
 14. A failed required check is evidence. Link it to a tracked issue before re-running,
     and treat a tracked intermittent failure as priority work rather than routine noise.
+15. A failed nightly stops the line (decided 2026-10-16): the issue it opens is fixed before further
+    development, and a release candidate is cut only from a commit whose nightly passed. The model is
+    the section "Delivery cycles and the test and release model" above.
 
 ## Drift response
 
