@@ -24,20 +24,21 @@ The `0.2.x` line is R0 maintenance. R1 (packets P15 to P20, issues #25 to #30) i
 
 **Delivery in cycles (D1 to D5).**
 
-- **D1. Four cycles.** Work is delivered in four larger cycles instead of small iterations: cycle 1 is `0.2.2`, cycle 2 is
-  `0.2.3`, cycle 3 is launch readiness, and then R1 (P15 to P20). Their stories are below.
+- **D1. Four cycles.** Work is delivered in four larger cycles instead of small iterations: cycle 1 is `0.2.2`, with the test review
+  folded into it; cycle 2 is `0.2.3`; cycle 3 is launch readiness; and then R1 (P15 to P20). Their stories are below. **Each cycle runs as many
+  stories in parallel as can be handled** (stories that overlap in files do not run in parallel).
 - **D2. Cycle 1 also takes #366, #367, #370 and #371** (the skill-wording issues that `0.2.1` left open), after #404 and #257.
 - **D3. Standing approvals inside a cycle.** The supervisor merges on green after review, files issues for findings, and closes
   issues whose own closing criteria are met, with the evidence in the comment. Every `release` environment gate and every npm
   write stays with the maintainer.
-- **D4. Stories inside a cycle run in parallel where they do not overlap.**
+- **D4. The README is rebuilt as the front page by a separate design session during cycle 1.** It starts early in the cycle and does not wait for the fixes (it belongs to cycle 3's launch readiness).
 - **D5. Records.** Both memory files are still rewritten in every pull request, as `AGENTS.md` says. Parallel pull requests
   rebase before they merge.
 
 **The test and release model (D6)** is written out in [`delivery-governance.md`](delivery-governance.md) and summarised in
 "How each kind of change is tested" below: a short pull-request gate (target 5 minutes, hard limit 10); a nightly run on `main`
 whose failure stops the line and without whose pass no candidate is cut; a weekly release window (the candidate is cut at Friday or
-Saturday midnight, the long hosted runs follow, the target is to publish on Monday or Tuesday); hot fixes outside the window; and the
+Saturday midnight in the maintainer's local time, the long hosted runs follow, the target is to publish on Monday or Tuesday); hot fixes outside the window; and the
 full-cost items monthly or with a major change.
 
 **The earlier decisions that still stand:** online sources are planned inside R1, starting from P15's decision packet
@@ -70,7 +71,7 @@ now has its implementation, regression tests and a release. The entries for #366
 
 ## Cycle 1: `0.2.2`, the fixes found during 0.2.1, with the test review folded in
 
-One candidate, cut in a weekly window (below). Stories that do not overlap run in parallel (D4).
+One candidate, cut in a weekly window (below). Stories that do not overlap run in parallel (D1).
 
 **First:**
 - #404: on Windows the worker's shutdown can leave provider processes running, or report a cancelled recognition as
@@ -111,7 +112,7 @@ nightly; the long hosted runs for what the cycle touched; an uncounted skill smo
 
 ## Cycle 3: launch readiness
 
-- **The README as the front page.** It starts early, in a separate session during cycle 1.
+- **The README as the front page (D4).** It starts early, in a separate design session during cycle 1.
 - **The documentation sweep:** #177, #286, #374, #219, #224, #246.
 - **The clean-machine try-out (RQ-17).**
 - **Help text for agents without the skill** (the cold-agent variant must be usable from `--help` alone).
@@ -141,7 +142,7 @@ the nightly and the nightly precondition are separate changes, and until they la
 | --- | --- | --- |
 | Every pull request | The gate: only what the change can affect. Docs-only: the document and governance checks. Code: lint plus the unit and contract tests of the touched crates and their dependents on Ubuntu; Windows and macOS only for a platform-sensitive change. Target 5 minutes, hard limit 10. A hot fix can request the full three-system run. | minutes of runner time |
 | `main`, when something merged | The nightly. A failure opens an issue and stops development until it is fixed; a candidate is cut only from a commit whose nightly passed. | automatic |
-| The weekly window | The candidate is cut at Friday or Saturday midnight; the long hosted runs (2 to 3 hours) follow, limited to what the week's changes touched; publish on Monday or Tuesday, on the maintainer's approval. A failure gets a targeted fix and a rerun of only the failing workflow. | hours of runner time, no client tokens |
+| The weekly window | The candidate is cut at Friday or Saturday midnight, in the maintainer's local time; the long hosted runs (2 to 3 hours) follow, limited to what the week's changes touched; publish on Monday or Tuesday, on the maintainer's approval. A failure gets a targeted fix and a rerun of only the failing workflow. | hours of runner time, no client tokens |
 | A hot fix | Outside the window: the full three-system check (about 30 minutes), the publish, then the quick checks of the published bytes (`P14 verify release`, `P14 journeys`, `P13 managed smoke`, `P14 published artifacts` from the previous release and from the candidate). | about 30 minutes before, about 90 minutes after |
 | A skill wording change in an ordinary week | One uncounted skill smoke (about nine Claude runs on a local build) instead of the counted batches. | about $6 and 15 minutes |
 | Monthly, or with a major change (a skill rewrite, a re-pin) | The full-cost items: agent batches 2 and 3; the dependency-quality checks (`P07 local ASR` accuracy, `P14 malicious media`, the dated scan reading); the full durability campaign. Not weekly. | half a day or more, about $10 of Claude and the Codex allowance |
@@ -163,4 +164,4 @@ still freezes code, dependencies and workflows from the candidate's tag to the s
 - Ratifying or reversing the choices of #377, of the Reads change and of #392.
 - The folder answer that differs by platform (`STORAGE_IO` on Windows, `INVALID_SOURCE` on Linux and macOS).
 - RQ-05 stays `failed` for `0.2.1` ([`release-0.2.1.md`](release-0.2.1.md)); the maintainer may still waive it, knowing a waiver does not expire by itself.
-- The time zone of "midnight" when the cut is scheduled, and whether a release branch should replace the freeze of 6.8 so that development continues in the window.
+- Whether a release branch should replace the freeze of 6.8 so that development continues in the window.

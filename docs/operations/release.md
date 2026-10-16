@@ -25,7 +25,7 @@ The exact steps for the third candidate, `0.2.1-rc.3`, are section 6.16 (publish
 change, written compactly, because `0.2.1-rc.3` is `0.2.1-rc.2` plus one fix).
 Sections 6.10 to 6.16 are the record of those publishes, not instructions for a version that is
 already published. **For the next stable version, 6.17 (with 6.7) is the model; for the next candidate there is no section yet: write it from 6.16, the
-candidate that is published while another version is `latest`.** **From 2026-10-16 releases are timed by the weekly window of 6.18** (the cut at Friday or Saturday midnight from a commit whose nightly passed, the long hosted runs after it, the publish on Monday or Tuesday; hot fixes outside it). The workflow described here builds, checks and
+candidate that is published while another version is `latest`.** **From 2026-10-16 releases are timed by the weekly window of 6.18** (the cut at Friday or Saturday midnight in the maintainer's local time, from a commit whose nightly passed, the long hosted runs after it, the publish on Monday or Tuesday; hot fixes outside it). The workflow described here builds, checks and
 packages the archives, assembles the npm packages and runs their qualification (section 5),
 and on every run writes the publish plan and shows it (a dry run). It publishes only when the maintainer
 dispatches it on a release tag with `dry_run` cleared and then approves the protected
@@ -2675,14 +2675,14 @@ until they land, the person cutting the candidate checks the nightly by hand (st
 | When | What |
 | --- | --- |
 | Monday to Friday | Development. Each pull request passes the gate (target 5 minutes, hard limit 10). The nightly runs on `main` when something merged. |
-| **Friday or Saturday midnight** | **The cut** (step 2). |
+| **Friday or Saturday midnight** (the maintainer's local time) | **The cut** (step 2). |
 | Saturday to Monday | The long hosted runs (2 to 3 hours each), after the cut, for what the week's changes touched (step 3). |
 | **Monday or Tuesday** | **The target for the stable release and its publish**, on the maintainer's approval (step 5). |
 
 1. **The nightly precondition.** A candidate may only be cut from a commit whose nightly passed. **To be enforced by the release workflow** (a later change). Until then, before
    tagging, open the nightly run for the exact commit you mean to tag and write down its link. If the latest nightly failed, development has stopped: its issue is fixed first,
    and there is no cut from a red commit. Never cut from a commit the nightly has not seen.
-2. **The cut.** At Friday or Saturday midnight (the time zone is fixed when the cut is scheduled), take the candidate by 6.3: bump the version in the files it lists,
+2. **The cut.** At Friday or Saturday midnight, in the maintainer's local time, take the candidate by 6.3: bump the version in the files it lists,
    merge to `main`, tag the merged commit, dry run on the tag, then publish on the tag with `dry_run` cleared and the maintainer's approval. The candidate goes to `next`.
    From the tag on, 6.8 holds: only fixes for findings change the code, and a change to code, a dependency or a workflow waits for the stable release's publish.
    Work meanwhile goes on in branches and draft pull requests, and the work record and documents that 6.8 allows can merge.
@@ -2713,5 +2713,5 @@ changed still needs those items passed, carried or waived before the stable rele
 until it lands, read the Actions page each Monday and file the issue by hand.
 
 **What this does not settle.** The freeze of 6.8 against "development continues" (above: branches and draft pull requests, with a release branch as a possible later replacement that
-would change the candidate check and ADR 0024 decision B); the coarse scopes of the ledger against "limited to what the week touched"; and the time zone of the cut. Each is listed for the maintainer in
+would change the candidate check and ADR 0024 decision B); and the coarse scopes of the ledger against "limited to what the week touched". Each is listed for the maintainer in
 [`backlog-iterations.md`](../planning/backlog-iterations.md).

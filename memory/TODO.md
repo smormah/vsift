@@ -15,13 +15,13 @@ The maintainer's delivery model of 2026-10-16 is in `docs/planning/delivery-gove
 - **Cycle 1 order:** #404 and #257 first; then #366, #367, #370, #371; then #396, #395, #394, #274, #334, #361, #362, #325, #266, #264, #265, #277, #232, #403, #337; and the test review (flaky tests, runners and harness, trial design incl. #397). Stories that do not overlap run in parallel.
 - **Standing approvals inside a cycle:** the supervisor merges on green after review, files issues for findings, and closes issues whose own closing criteria are met, with the evidence in the comment. **Every `release` environment gate and every npm write stays with the maintainer.** Both memory files are rewritten in every pull request; parallel pull requests rebase before merge.
 - **Iteration A is done (2026-10-16):** #365, #369, #372, #373, #349, #17 and #40 closed with evidence comments; #366, #367, #368, #370 and #371 have status comments and stay open; #359 stays open for the maintainer's own listening check on the two recordings.
-- **In flight:** this change (the model, written down); a separate change to the CI workflows and `docs/development.md` (the gate and the nightly); the README is a separate session that starts early in this cycle.
+- **In flight:** this change (the model, written down); a separate change to the CI workflows and `docs/development.md` (the gate and the nightly); the README (D4) is rebuilt as the front page by a separate design session that starts early in this cycle.
 
 ## The test and release model, in one view (decided 2026-10-16; the machinery is not all built)
 
 - **Pull-request gate:** only what the change can affect; target 5 minutes, hard limit 10; docs-only runs the document and governance checks; Windows and macOS only for platform-sensitive changes; a hot fix can ask for the full three-system run.
 - **Nightly on `main`** when something merged: a failure opens an issue and stops development until fixed; **a candidate is cut only from a commit whose nightly passed** (to be enforced by the release workflow).
-- **Weekly window:** cut at Friday or Saturday midnight; the long hosted runs follow, for what the week touched; publish on Monday or Tuesday on the maintainer's approval; a failure gets a targeted fix and a rerun of only the failing workflow.
+- **Weekly window:** cut at Friday or Saturday midnight in the maintainer's local time; the long hosted runs follow, for what the week touched; publish on Monday or Tuesday on the maintainer's approval; a failure gets a targeted fix and a rerun of only the failing workflow.
 - **Hot fix:** outside the window: the full ~30-minute three-system check, the publish, then the quick checks of the published bytes.
 - **Monthly, or with a major change** (a skill rewrite, a re-pin): agent batches 2 and 3, the dependency-quality checks, the full durability campaign. Not weekly; an ordinary week's skill wording change gets the uncounted skill smoke (about $6). The weekly drift runs stay and open an issue on failure.
 - **Two limits to remember:** the evidence ledger's scopes are coarse (`crates` is in most items' scope), so "limited to what the week touched" does not alone make the completeness check pass; and the freeze of `release.md` 6.8 still stops code merges between a candidate's tag and the stable commit.
@@ -33,7 +33,7 @@ The maintainer's delivery model of 2026-10-16 is in `docs/planning/delivery-gove
 - **Choices to ratify or reverse:** #377's (the union guard, half a second, the stored member and what going back costs), the Reads change's, #392's (30 seconds, no deadline option on `setup plan` or `setup install`).
 - **The folder answer that differs by platform:** a folder named as the source is `STORAGE_IO` on Windows and `INVALID_SOURCE` on Linux and macOS (align or keep).
 - **RQ-05 is recorded `failed` for `0.2.1`** (no waiver; a waiver would not expire by itself). The user-facing note about #404 (installation guide section 12, the README's status) stays as written unless you say otherwise.
-- **The window's details:** the time zone of "midnight", and whether a release branch should replace the freeze of 6.8 so development can continue during the window.
+- **The window's details:** whether a release branch should replace the freeze of 6.8 so development can continue during the window.
 - **Register reviews `pending`:** 95 of 149 entries. **The next free register number is L-168.**
 
 ## What the next session reads first

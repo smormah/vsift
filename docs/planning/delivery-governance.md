@@ -88,18 +88,18 @@ the rules below are followed by hand and the existing CI still runs its full set
 
 ### Delivery in cycles (D1 to D5)
 
-- **D1. Work is delivered in four larger cycles instead of small iterations.** Cycle 1 is `0.2.2`
+- **D1. Work is delivered in four larger cycles instead of small iterations, each running as many stories in parallel as can be handled.** Cycle 1 is `0.2.2`
   (the fixes found during `0.2.1`, with the test review folded in); cycle 2 is `0.2.3` (the re-pins, the seam
   follow-ups measured on real speech, and the evaluations); cycle 3 is launch readiness; then R1 (P15 to P20).
-  The stories of each cycle are in the cycle map.
+  The stories of each cycle are in the cycle map. Parallel work needs non-overlapping files and explicit integration ownership (rule 2 below).
 - **D2. Cycle 1 takes #366, #367, #370 and #371** (the skill-wording issues `0.2.1` left open), besides #404 and
   #257 first.
 - **D3. Standing approvals inside a cycle.** The supervisor merges on green after review, files issues for
   findings, and closes an issue whose own closing criteria are met, with the evidence in the comment.
   **Every `release` environment gate and every npm write stays with the maintainer.** A decision that this
   document or an ADR reserves to the maintainer (a waiver, a claims rung, moving `next`) is not covered.
-- **D4. Stories inside a cycle run in parallel where they do not overlap** (rule 2 below still applies: parallel work
-  needs non-overlapping files and explicit integration ownership).
+- **D4. The README is rebuilt as the front page by a separate design session during cycle 1.** It starts early in
+  the cycle and does not wait for the fixes; it belongs to cycle 3's launch readiness.
 - **D5. Records.** Both handoff files are still rewritten in every pull request, as `AGENTS.md` says.
   Parallel pull requests rebase before they merge, so the rewrite of one is never lost to the other.
 
@@ -111,7 +111,7 @@ Iteration A of the earlier map (closing what `0.2.1` settled) was done on 2026-1
 | --- | --- | --- | --- |
 | **Pull-request gate** | every pull request | only what the change can affect | Target 5 minutes, hard limit 10. A docs-only change runs the document and governance checks. A code change runs lint plus the unit and contract tests of the touched crates and their dependents, on Ubuntu. Windows and macOS run only for a platform-sensitive change. A hot fix can request the full three-system run. |
 | **Nightly** | on `main`, when something merged | at least the full three-system check (what it adds is the CI change's design) | A failure opens an issue automatically and **must be fixed before further development (stop the line)**. **A release candidate may only be cut from a commit whose nightly passed.** |
-| **Weekly release window** | the candidate is cut at Friday or Saturday midnight | the long hosted runs (2 to 3 hours), after the cut, limited to what the week's changes touched | The target is to release and publish on **Monday or Tuesday**. A failure in the window gets a targeted fix and a rerun of **only the failing workflow**, never the whole round, while development continues (see the constraint below). |
+| **Weekly release window** | the candidate is cut at Friday or Saturday midnight, in the maintainer's local time | the long hosted runs (2 to 3 hours), after the cut, limited to what the week's changes touched | The target is to release and publish on **Monday or Tuesday**. A failure in the window gets a targeted fix and a rerun of **only the failing workflow**, never the whole round, while development continues (see the constraint below). |
 | **Hot fix** | outside the window | the full three-system check (about 30 minutes), then the publish, then the quick checks of the published bytes | The quick checks are `P14 verify release`, `P14 journeys`, `P13 managed smoke` and `P14 published artifacts` from the previous release and from the candidate. |
 | **Monthly, or with a major change** (a skill rewrite, a re-pin) | about once a month, or when such a change lands | the full-cost items | Agent batches 2 and 3; the dependency-quality checks (`P07 local ASR` accuracy, `P14 malicious media`, the dated scan reading); the full durability campaign. **Not weekly.** An ordinary week's skill wording change gets the uncounted skill smoke (about nine Claude runs on a local build, about $6) instead. |
 | **Weekly drift runs** | scheduled | the published binary, as today | They stay. A failure opens an issue by itself. |
