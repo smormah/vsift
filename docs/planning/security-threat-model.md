@@ -211,6 +211,22 @@ fetching model weights in npm lifecycle scripts. Users need a Rust toolchain onl
 when building from source. Qualify package-manager configurations that omit optional
 dependencies or disable scripts and provide an explicit recovery path.
 
+*SEC-01 note, 2026-10-16 (#257, [L-109](known-limits.md#l-109)).* "No shell" holds for VSift's
+own processes, but on Windows a package manager puts one in front of the launcher: npm, pnpm and
+Yarn 1 write a `vsift.cmd` for the `vsift` command, and cmd.exe acts on `%NAME%`, quotes and an
+unquoted `>`, `|` or `&` in the caller's command line while it starts that file. Reproduced on
+Windows 11 with the launcher from source (no registry): through `vsift.cmd` a redirection ran and
+`%COMSPEC%` was expanded; through `vsift.ps1` all 25 hostile cases arrived unchanged. The caller
+reaches the `.cmd` through a shell or, with an argument list and no shell, after a `PATHEXT` lookup
+(Python's `shutil.which`), which finds `.cmd` and not `.ps1`. **No package change removes it**:
+the managers write a `.cmd` for every `bin` entry, a native `.exe` included, and a `.cmd` that
+ignores its arguments runs the injected command as well, so the text is acted on before any shim
+line or launcher code runs; the launcher then receives arguments it cannot tell from ones a caller
+wrote that way, and the traces of a cmd.exe parent are the same for a person at a cmd.exe prompt.
+The control is therefore the documented safe routes (PowerShell or Git Bash for a person; for a
+program, an argument list to `vsift.exe` or to Node on `bin/vsift.cjs`, by full path) and Windows
+launcher tests that run the cases through the shims npm really writes. Accepted residual, low.
+
 Use short-lived release credentials and trusted publishing where supported. npm's
 OIDC publishing can attach provenance; configure its trust relationship for the exact
 repository/workflow/environment. Since P13 PR 10 the Release workflow's `publish` job
