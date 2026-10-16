@@ -1,5 +1,21 @@
 name: CI
 
+# The pull-request gate (docs/development.md, "The CI lanes"). The `Changes` job
+# reads what the change touches (tools/ci_lanes.py) and chooses a lane:
+#
+#   docs    Documentation and Governance only;
+#   crates  lint and tests of the touched packages and every package that depends
+#           on them, on Ubuntu, and on Windows and macOS too when a touched file
+#           is platform-sensitive; the fuzz harness, the npm launcher and the
+#           worker boundary when the change reaches them;
+#   full    everything, on all three systems, as before the lanes existed: any
+#           build-wide change (manifests, lockfile, toolchain, workflows, the
+#           selection itself), an unknown path, or the `full-ci` label.
+#
+# Whatever the lane, the Nightly workflow runs the full set on `main` every night
+# that something merged. `CI result` is the one check branch protection needs from
+# this workflow: it fails if any job that ran failed or was cancelled.
+
 on:
   push:
     branches:
@@ -7,6 +23,14 @@ on:
   pull_request:
     branches:
       - main
+    # `labeled` and `unlabeled` let the `full-ci` label start (or stop asking for)
+    # the full run without a new push.
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - labeled
+      - unlabeled
 
 permissions:
   contents: read
@@ -15,7 +39,60 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  CARGO_TERM_COLOR: never
+  # No debug information in test builds (CI only; local builds keep the default).
+  # The managed-store tests pack the `vsift-smoke-fixture` binary into their fixture
+  # archives and hash and unpack it in an unoptimised build; with Linux's embedded
+  # debug information that binary is about 13 MB and the kill scenarios took 23
+  # minutes of Ubuntu's 29-minute test step (CI run 38889838351). Without it the
+  # binary is 0.5 MB and the same test binary takes under 3 minutes. Debug
+  # assertions, which the fault-injection features need, are unaffected.
+  CARGO_PROFILE_DEV_DEBUG: "0"
+  # Incremental artifacts are never reused across CI runs; leaving them out makes
+  # the build cache smaller.
+  CARGO_INCREMENTAL: "0"
+
 jobs:
+  changes:
+    name: Changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      lane: ${{ steps.lanes.outputs.lane }}
+      quality: ${{ steps.lanes.outputs.quality }}
+      package_arguments: ${{ steps.lanes.outputs.package_arguments }}
+      systems: ${{ steps.lanes.outputs.systems }}
+      fuzz: ${{ steps.lanes.outputs.fuzz }}
+      npm: ${{ steps.lanes.outputs.npm }}
+      platform: ${{ steps.lanes.outputs.platform }}
+      worker_boundary: ${{ steps.lanes.outputs.worker_boundary }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The merge base of the change is needed to list what it touches.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Test the lane selection
+        run: python3 -m unittest discover -s tools -p test_ci_lanes.py
+
+      - name: Choose the lanes
+        id: lanes
+        env:
+          # A pull request is compared with its base; a push with what main was
+          # before it. A missing base selects the full lane.
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+        run: >-
+          python3 tools/ci_lanes.py
+          --base "$BASE"
+          --head HEAD
+          --labels "$LABELS"
+          --output "$GITHUB_OUTPUT"
+          --summary "$GITHUB_STEP_SUMMARY"
+
   governance:
     name: Governance
     runs-on: ubuntu-latest
@@ -26,17 +103,34 @@ jobs:
       - name: Validate delivery ledger and fixture corpus
         run: cargo run --locked -p vsift-governance -- check
 
+  documentation:
+    name: Documentation
+    runs-on: ubuntu-latest
+    env:
+      RUSTDOCFLAGS: -D warnings
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Build documentation
+        run: cargo doc --workspace --no-deps --locked
+
   quality:
     name: Quality (${{ matrix.os }})
+    needs: changes
+    if: needs.changes.outputs.quality == 'true'
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 75
     strategy:
       fail-fast: false
       matrix:
-        os:
-          - ubuntu-latest
-          - windows-latest
-          - macos-latest
-
+        os: ${{ fromJSON(needs.changes.outputs.systems) }}
+    defaults:
+      run:
+        shell: bash
+    env:
+      LANE: ${{ needs.changes.outputs.lane }}
+      PACKAGE_ARGUMENTS: ${{ needs.changes.outputs.package_arguments }}
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -44,14 +138,50 @@ jobs:
       - name: Show toolchain
         run: rustup show active-toolchain
 
+      # Restore only: the Nightly workflow saves the cache from `main`, so every
+      # pull request starts from the last night's dependencies and none of them
+      # spends the repository's cache space.
+      - name: Restore the build cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target/debug
+          key: ci-v1-${{ runner.os }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}-pull-request
+          restore-keys: |
+            ci-v1-${{ runner.os }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}-
+            ci-v1-${{ runner.os }}-
+
       - name: Check formatting
         run: cargo fmt --all --check
 
       - name: Lint
-        run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+        run: |
+          if [ "$LANE" = full ]; then scope=(--workspace); else read -r -a scope <<< "$PACKAGE_ARGUMENTS"; fi
+          cargo clippy "${scope[@]}" --all-targets --all-features --locked -- -D warnings
 
+      # Outside the full lane, Ubuntu leaves out the two managed-store kill
+      # scenarios that try every arrival of every fault point on Linux (94 kills
+      # and reruns, about four minutes even without debug information). Windows
+      # and macOS run them on their first arrivals whenever they run; the Nightly
+      # workflow and the full lane run the exhaustive Linux form.
       - name: Test
-        run: cargo test --workspace --locked -- --nocapture
+        run: |
+          skip=()
+          if [ "$LANE" = full ]; then
+            scope=(--workspace)
+          else
+            read -r -a scope <<< "$PACKAGE_ARGUMENTS"
+            if [ "$RUNNER_OS" = Linux ]; then
+              skip=(
+                --skip kill::a_first_install_killed_anywhere_is_consistent_and_a_rerun_completes
+                --skip kill::an_update_killed_anywhere_keeps_a_whole_selection_and_a_rerun_completes
+              )
+            fi
+          fi
+          cargo test "${scope[@]}" --locked -- --nocapture "${skip[@]}"
 
       - name: Record storage probe filesystem (Linux)
         if: runner.os == 'Linux'
@@ -75,7 +205,10 @@ jobs:
           Get-CimInstance Win32_OperatingSystem | Select-Object Caption,Version,BuildNumber | ConvertTo-Json -Compress
           Get-Volume -FilePath $env:TEMP | Select-Object DriveLetter,FileSystemType,HealthStatus | ConvertTo-Json -Compress
 
+      # The release profile is built by the full lane and the Nightly workflow;
+      # the Release workflow builds the shipped binary itself.
       - name: Build release binary
+        if: needs.changes.outputs.lane == 'full'
         run: cargo build --workspace --release --locked
 
   npm-launcher:
@@ -84,6 +217,8 @@ jobs:
     # forwarding, on the pinned minimum Node.js of ADR 0023 decision H6.
     # The packages themselves are qualified by the Release workflow.
     name: npm launcher (${{ matrix.os }})
+    needs: changes
+    if: needs.changes.outputs.npm == 'true'
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     strategy:
@@ -108,23 +243,16 @@ jobs:
       - name: Test the launcher
         run: node --test npm/test/launcher.test.cjs
 
-  documentation:
-    name: Documentation
-    runs-on: ubuntu-latest
-    env:
-      RUSTDOCFLAGS: -D warnings
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Build documentation
-        run: cargo doc --workspace --no-deps --locked
-
   fuzz-harness:
     # The fuzz crate is outside the workspace, so the Quality job does not see
     # it. This replays every fuzz target over its committed seeds on the stable
-    # toolchain; libFuzzer itself runs in the scheduled Fuzz workflow.
+    # toolchain; libFuzzer itself runs in the scheduled Fuzz workflow. The gate
+    # runs it when the harness changes or a package it depends on is selected,
+    # since it is a dependent of those packages that `cargo metadata` of the
+    # workspace does not list.
     name: Fuzz harness replay
+    needs: changes
+    if: needs.changes.outputs.fuzz == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -142,6 +270,8 @@ jobs:
 
   strict-worker-boundary:
     name: Strict worker boundary (Ubuntu 24.04)
+    needs: changes
+    if: needs.changes.outputs.worker_boundary == 'true' || needs.changes.outputs.platform == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -190,3 +320,29 @@ jobs:
             "/workspace/${test_binary}" \
             --exact p11_strict_linux_attestation_holds_inside_the_hardened_container \
             --nocapture --test-threads=1
+
+  result:
+    # The one check of this workflow that branch protection requires. A job the
+    # lanes skipped counts as passed; one that failed or was cancelled does not.
+    name: CI result
+    needs:
+      - changes
+      - governance
+      - documentation
+      - quality
+      - npm-launcher
+      - fuzz-harness
+      - strict-worker-boundary
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Every job that ran passed
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+          LANE: ${{ needs.changes.outputs.lane }}
+        run: |
+          echo "Lane: ${LANE:-unknown}"
+          echo "$RESULTS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
+          echo "$RESULTS" | jq -e 'all(.[]; .result == "success" or .result == "skipped")' > /dev/null
+          echo "$RESULTS" | jq -e '.changes.result == "success"' > /dev/null

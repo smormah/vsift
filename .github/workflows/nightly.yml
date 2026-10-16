@@ -1,0 +1,343 @@
+name: Nightly
+
+# The full run on `main` (docs/development.md, "The CI lanes"): everything the
+# pull-request gate leaves out or runs only for some changes. The whole workspace
+# suite on Ubuntu, Windows and macOS (with the exhaustive Linux kill scenarios of
+# the managed store) and the release build, the npm launcher on all three systems,
+# the fuzz harness replay, the strict worker boundary, the documentation and
+# governance checks, and the guide's examples against the real binary and tools.
+#
+# A scheduled run starts only if `main` moved since the last nightly that ran; a
+# dispatch always runs. A failure is a stop-the-line event: the run opens one issue
+# labelled `nightly-failure`, or comments on the one already open, with the run's
+# link, and it is fixed before further development (docs/development.md).
+#
+# Read-only except the report job, which may write issues and nothing else. No
+# secret; `gh` uses the job's own token.
+on:
+  schedule:
+    # Every night, 02:41 UTC.
+    - cron: "41 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: never
+  # The CI build settings (`ci.yml` explains them): no debug information, no
+  # incremental artifacts. The cache this workflow saves is built with them.
+  CARGO_PROFILE_DEV_DEBUG: "0"
+  CARGO_INCREMENTAL: "0"
+
+jobs:
+  gate:
+    name: Anything new on main
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      run: ${{ steps.decide.outputs.run }}
+    steps:
+      - name: Compare with the last nightly that ran
+        id: decide
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT" != schedule ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            echo "A dispatch always runs."
+            exit 0
+          fi
+          # The newest scheduled run that got past this gate (a skipped one
+          # changes nothing, so it does not count).
+          last="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow nightly.yml --branch main \
+            --event schedule --limit 30 --json headSha,conclusion,databaseId \
+            --jq "[.[] | select(.databaseId != ${GITHUB_RUN_ID}) | select(.conclusion == \"success\" or .conclusion == \"failure\")] | .[0].headSha // \"\"")"
+          if [ "$last" = "$GITHUB_SHA" ]; then
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "Nothing merged since the last nightly ($last)."
+          else
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            echo "main is at $GITHUB_SHA; the last nightly ran on ${last:-nothing}."
+          fi
+
+  quality:
+    name: Quality (${{ matrix.os }})
+    needs: gate
+    if: needs.gate.outputs.run == 'true'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+          - macos-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Show toolchain
+        run: rustup show active-toolchain
+
+      - name: Restore the build cache
+        id: cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target/debug
+          key: ci-v1-${{ runner.os }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}-${{ github.run_id }}
+          restore-keys: |
+            ci-v1-${{ runner.os }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}-
+            ci-v1-${{ runner.os }}-
+
+      - name: Check formatting
+        run: cargo fmt --all --check
+
+      - name: Lint
+        run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+
+      - name: Test
+        run: cargo test --workspace --locked -- --nocapture
+
+      - name: Record storage probe filesystem (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          uname -a
+          cat /etc/os-release
+          findmnt --target "${TMPDIR:-/tmp}" --output SOURCE,FSTYPE,OPTIONS
+
+      - name: Record storage probe filesystem (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          sw_vers
+          uname -m
+          df "$TMPDIR"
+          diskutil info "$(df "$TMPDIR" | tail -n 1 | awk '{print $1}')"
+
+      - name: Record storage probe filesystem (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Get-CimInstance Win32_OperatingSystem | Select-Object Caption,Version,BuildNumber | ConvertTo-Json -Compress
+          Get-Volume -FilePath $env:TEMP | Select-Object DriveLetter,FileSystemType,HealthStatus | ConvertTo-Json -Compress
+
+      - name: Build release binary
+        run: cargo build --workspace --release --locked
+
+      # Saved from `main` only, once a night per system, for the pull requests
+      # to restore. A run whose tests failed still saves what it compiled.
+      - name: Save the build cache
+        if: always() && steps.cache.outputs.cache-hit != 'true' && github.ref == 'refs/heads/main'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target/debug
+          key: ci-v1-${{ runner.os }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}-${{ github.run_id }}
+
+  npm-launcher:
+    name: npm launcher (${{ matrix.os }})
+    needs: gate
+    if: needs.gate.outputs.run == 'true'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+          - macos-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up the pinned Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22.23.3"
+          package-manager-cache: false
+
+      - name: Test the launcher
+        run: node --test npm/test/launcher.test.cjs
+
+  documentation:
+    name: Documentation
+    needs: gate
+    if: needs.gate.outputs.run == 'true'
+    runs-on: ubuntu-latest
+    env:
+      RUSTDOCFLAGS: -D warnings
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build documentation
+        run: cargo doc --workspace --no-deps --locked
+
+  governance:
+    name: Governance
+    needs: gate
+    if: needs.gate.outputs.run == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Test the CI lane selection
+        run: python3 -m unittest discover -s tools -p test_ci_lanes.py
+
+      - name: Validate delivery ledger and fixture corpus
+        run: cargo run --locked -p vsift-governance -- check
+
+  fuzz-harness:
+    name: Fuzz harness replay
+    needs: gate
+    if: needs.gate.outputs.run == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check formatting
+        run: cargo fmt --manifest-path fuzz/Cargo.toml --check
+
+      - name: Lint, including the libFuzzer entry points
+        run: cargo clippy --manifest-path fuzz/Cargo.toml --all-targets --all-features --locked -- -D warnings
+
+      - name: Replay every target over its seeds
+        run: cargo test --manifest-path fuzz/Cargo.toml --locked
+
+  strict-worker-boundary:
+    name: Strict worker boundary (Ubuntu 24.04)
+    needs: gate
+    if: needs.gate.outputs.run == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build process qualification fixture
+        run: cargo test --locked -p vsift-infrastructure --test process_supervisor --no-run
+
+      - name: Verify inherited container and cgroup controls
+        shell: bash
+        run: |
+          set -euo pipefail
+          test_binary="$(find target/debug/deps -maxdepth 1 -type f -name 'process_supervisor-*' -perm -111 | head -n 1)"
+          test -n "${test_binary}"
+          for test_name in \
+            p08_qualified_linux_host_reports_inherited_kernel_controls \
+            p11_strict_linux_attestation_holds_inside_the_hardened_container; do
+            docker run --rm \
+              --network none \
+              --read-only \
+              --pids-limit 64 \
+              --memory 512m \
+              --memory-swap 512m \
+              --cpus 1 \
+              --cap-drop ALL \
+              --security-opt no-new-privileges \
+              --user 65534:65534 \
+              --env VSIFT_STRICT_WORKER_TEST=1 \
+              --volume "${PWD}:/workspace:ro" \
+              --workdir /workspace \
+              ubuntu@sha256:a61567bd31828687156d735ea8eb01ba4e37636e225dd6a48ba94136a70d9d61 \
+              "/workspace/${test_binary}" \
+              --exact "${test_name}" \
+              --nocapture --test-threads=1
+          done
+
+  guide:
+    # The guide's reference check and its examples against the real binary and the
+    # reviewed tools (the Guide workflow; on pull requests the examples run only
+    # when the guide changes).
+    name: Guide
+    needs: gate
+    if: needs.gate.outputs.run == 'true'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/guide.yml
+
+  report:
+    # Stop the line: one open issue labelled `nightly-failure` collects every
+    # failed nightly until someone fixes the cause and closes it. Only a run on
+    # `main` writes; any other ref prints what it would have written.
+    name: Report a failure
+    needs:
+      - gate
+      - quality
+      - npm-launcher
+      - documentation
+      - governance
+      - fuzz-harness
+      - strict-worker-boundary
+      - guide
+    if: failure() || cancelled()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Open or update the nightly-failure issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RESULTS: ${{ toJSON(needs) }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          failed="$(echo "$RESULTS" | jq -r '[to_entries[] | select(.value.result == "failure" or .value.result == "cancelled") | "\(.key) (\(.value.result))"] | join(", ")')"
+          {
+            echo "The nightly run on \`main\` failed: ${RUN_URL}"
+            echo
+            echo "- Commit: ${GITHUB_SHA}"
+            echo "- Jobs: ${failed:-see the run}"
+            echo
+            echo "Stop the line: fix this before further development (docs/development.md, \"The CI lanes\"). Close this issue when a nightly run passes again."
+          } > report.md
+          if [ "$GITHUB_REF" != refs/heads/main ]; then
+            echo "Not main ($GITHUB_REF): the report is printed, not filed."
+            cat report.md
+            exit 0
+          fi
+          gh label create nightly-failure --repo "$GITHUB_REPOSITORY" --color B60205 \
+            --description "A nightly run on main failed; fix before further development" 2>/dev/null || true
+          open="$(gh issue list --repo "$GITHUB_REPOSITORY" --label nightly-failure --state open --limit 1 --json number --jq '.[0].number // ""')"
+          if [ -n "$open" ]; then
+            gh issue comment "$open" --repo "$GITHUB_REPOSITORY" --body-file report.md
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "Nightly run failed on main" \
+              --label nightly-failure --body-file report.md
+          fi

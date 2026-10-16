@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="360" viewBox="0 0 1200 360" role="img" aria-labelledby="title desc" xml:space="preserve">
 <title id="title">VSift roadmap</title>
-<desc id="desc">VSift roadmap in three parts. R0, done: work packets P00 to P14, each with its evidence; the first pre-release, 0.1.0, on npm on 1 October 2026; and 0.2.0, the R0 release, on 10 October 2026. The 0.2.x line: 0.2.1 now, on npm latest, with transcription fixes and brief JSON views; next, 0.2.2 with Windows fixes first; then re-pins of FFmpeg and whisper.cpp with real-media tests. R1, planned: work packets P15 to P20, for cross-video indexing, enrichment, workers and online video links. Planned steps are plans, not dates.</desc>
+<desc id="desc">VSift roadmap in three parts. R0, done: work packets P00 to P14, each with its evidence; the first pre-release, 0.1.0, on npm on 1 October 2026; and 0.2.0, the R0 release, on 10 October 2026. The 0.2.x line: 0.2.1 now, on npm latest, with transcription fixes and brief JSON views; next, 0.2.2 with Windows fixes first; then 0.2.3 with real-media tests and re-pins of FFmpeg and whisper.cpp. R1, planned: work packets P15 to P20, for cross-video indexing, enrichment, workers and online video links. Planned steps are plans, not dates.</desc>
 <style>
 .s{font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif} .m{font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace}
 .t{fill:#e8eef6} .mu{fill:#9fb2c8} .di{fill:#62799a}
@@ -9,7 +9,7 @@ text{white-space:pre} .b{font-weight:600} .bb{font-weight:700}
 <rect width="1200" height="360" rx="20" fill="#0e1a2b"/>
 <rect x="0.5" y="0.5" width="1199" height="359" rx="20" fill="none" stroke="#25405f"/>
 <text x="40" y="46" font-size="12.5" class="s b" fill="#2dd4bf" letter-spacing="1.6">ROADMAP</text>
-<text x="1160" y="46" font-size="12.5" class="s mu" text-anchor="end">from the open delivery ledger, decision records and backlog map</text>
+<text x="1160" y="46" font-size="12.5" class="s mu" text-anchor="end">from the open delivery ledger, decision records and cycle map</text>
 <rect x="36" y="78" width="450" height="230" rx="14" fill="#13233a" stroke="#2dd4bf" stroke-opacity="0.45"/>
 <text x="54" y="104" font-size="15" class="s bb" fill="#2dd4bf">R0</text>
 <text x="79" y="104" font-size="11" class="s b" fill="#9fb2c8" letter-spacing="1.2">DONE</text>
@@ -49,9 +49,9 @@ text{white-space:pre} .b{font-weight:600} .bb{font-weight:700}
 <text x="752" y="214" font-size="17" class="s bb" text-anchor="middle" fill="#9fb2c8">0.2.2</text>
 <text x="752" y="240" font-size="13" class="s mu" text-anchor="middle">Windows fixes first</text>
 <circle cx="914" cy="170" r="12" fill="#0e1a2b" stroke="#f5b942" stroke-opacity="0.8" stroke-width="2.5"/>
-<text x="914" y="214" font-size="17" class="s bb" text-anchor="middle" fill="#9fb2c8">Re-pins</text>
-<text x="914" y="240" font-size="13" class="s mu" text-anchor="middle">FFmpeg, whisper.cpp,</text>
-<text x="914" y="259" font-size="13" class="s mu" text-anchor="middle">real-media tests</text>
+<text x="914" y="214" font-size="17" class="s bb" text-anchor="middle" fill="#9fb2c8">0.2.3</text>
+<text x="914" y="240" font-size="13" class="s mu" text-anchor="middle">real media, FFmpeg</text>
+<text x="914" y="259" font-size="13" class="s mu" text-anchor="middle">and whisper.cpp re-pins</text>
 <circle cx="1091" cy="170" r="12" fill="#0e1a2b" stroke="#a78bfa" stroke-opacity="0.8" stroke-width="2.5"/>
 <text x="1091" y="214" font-size="17" class="s bb" text-anchor="middle" fill="#9fb2c8">P15 – P20</text>
 <text x="1091" y="240" font-size="13" class="s mu" text-anchor="middle">cross-video indexing,</text>

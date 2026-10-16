@@ -14,7 +14,7 @@ and dark themes, and a `<title>` and `<desc>` for screen readers.
 | `pipeline.svg` | From video to cited handoff, with the "on your machine" boundary | `docs/architecture.md` |
 | `before-after.svg` | Doing it by hand against doing it with VSift | — |
 | `architecture.svg` | The five crates, the contract crate and the external processes | `AGENTS.md`, `Cargo.toml` |
-| `roadmap.svg` | R0 done, the 0.2.x line (0.2.1 now, 0.2.2 and the re-pins next) and R1 planned | `delivery-ledger.json`, ADR 0024, `backlog-iterations.md`, the R1 plan |
+| `roadmap.svg` | R0 done, the 0.2.x line (0.2.1 now, 0.2.2 and 0.2.3 next) and R1 planned | `delivery-ledger.json`, ADR 0024, `backlog-iterations.md` (the cycle map), the R1 plan |
 | `frame-*.png` | The three frames `frame get` returned, at full size | The real session |
 | `crop-10s-failed.png` | The 480x110 crop of the `1017 FAILED` row that `crop` returned | The real session |
 

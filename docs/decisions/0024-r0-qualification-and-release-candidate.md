@@ -2058,3 +2058,12 @@ This note records decisions of the maintainer, made on 2026-10-15 in chat, about
 4. **Online sources are planned inside R1,** starting from P15's decision packet (#406 with the slices #407 to #410: direct HTTPS links; HLS and DASH; platform pages through an optional yt-dlp component; live platform streams). They are not a `0.2.x` change.
 
 **What is weaker than it sounds.** Six of the twenty items are `waived` for `0.2.1` and one is `failed`; the other thirteen are `passed` or `planned` (RQ-20). The evidence is one day's hosted runs on a synthetic corpus, no real recording has tried the fixes of #353 and #359, and the dated reading of RQ-13 was made at the candidate's tree on the day of the publish and not repeated by hand after it.
+
+## Implementation note, 2026-10-16 (later: the delivery cycles and the test and release model)
+
+The maintainer decided later on 2026-10-16 how work is grouped and when it is tested and released (the policy is in [`delivery-governance.md`](../planning/delivery-governance.md), the cycle map in [`backlog-iterations.md`](../planning/backlog-iterations.md), the operating procedure in [`release.md`](../operations/release.md) 6.18). It is work record only: no code, tool, workflow, schema, skill, grader, scenario, setting or public claim changed. Every earlier note of this ADR stands as it was written, with these dated readings:
+
+1. **Item 3 of the note above (the order of the iterations A, D, B, C) is superseded by four cycles:** iteration A is done; B and D are cycle 1 (`0.2.2`); C is cycle 2 (`0.2.3`); cycle 3 is launch readiness; then R1.
+2. **The weekly cadence this ADR names applies only to the scheduled drift runs** (fuzzing, the durability campaigns, the weekly published-binary runs), which stay. The candidate is cut in a weekly window, the long hosted runs follow it for what the week touched, and the full-cost items (agent batches 2 and 3, the dependency-quality checks, the full durability campaign) run monthly or with a major change.
+3. **Decisions A and B, the candidate rule, the stable plan's guards and the evidence ledger's completeness check are not changed.** A candidate is additionally to be cut only from a commit whose nightly run passed, to be enforced by the release workflow in a later change.
+

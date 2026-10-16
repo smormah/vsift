@@ -25,7 +25,7 @@ The exact steps for the third candidate, `0.2.1-rc.3`, are section 6.16 (publish
 change, written compactly, because `0.2.1-rc.3` is `0.2.1-rc.2` plus one fix).
 Sections 6.10 to 6.16 are the record of those publishes, not instructions for a version that is
 already published. **For the next stable version, 6.17 (with 6.7) is the model; for the next candidate there is no section yet: write it from 6.16, the
-candidate that is published while another version is `latest`.** The workflow described here builds, checks and
+candidate that is published while another version is `latest`.** **From 2026-10-16 releases are timed by the weekly window of 6.18** (the cut at Friday or Saturday midnight in the maintainer's local time, from a commit whose nightly passed, the long hosted runs after it, the publish on Monday or Tuesday; hot fixes outside it). The workflow described here builds, checks and
 packages the archives, assembles the npm packages and runs their qualification (section 5),
 and on every run writes the publish plan and shows it (a dry run). It publishes only when the maintainer
 dispatches it on a release tag with `dry_run` cleared and then approves the protected
@@ -2656,6 +2656,62 @@ install it by its exact version have finished, which includes the optional upgra
 
 **Deprecation.** On 2026-10-15 `0.2.1-rc.1` and `0.2.1-rc.2` were deprecated on all four packages with the message `Superseded by 0.2.1. Install vsift-cli.`; `0.2.1-rc.3`, `0.2.1` and `0.2.0` were not. **`next` was not moved** and the workflow never moves it ([L-108](../planning/known-limits.md#l-108)): `vsift-cli@next` installs `0.2.1-rc.3`, a pre-release of the same source, and whether to move it by hand is the maintainer's open choice.
 
-**What this run showed about the steps, for the next stable version.** (1) **The read-back window is too short for the real service** (#403): the packages can be published and the job can still fail, and then 6.5's re-run is the whole remedy. Until the window is lengthened (iteration B of [`backlog-iterations.md`](../planning/backlog-iterations.md)), expect that, check `npm view` before doing anything else, and re-run the failed job rather than the whole workflow. (2) The page said that for `0.2.0` the read-back took about two and a half minutes; for `0.2.1` one package took more than five. (3) **A failed `P14 journeys` run on one system is a finding** whatever the other systems say: governance rule 14 asked for an issue before the one re-run, and the failure is recorded in the evidence ledger as it is (the item is `failed`; whether to waive it is the maintainer's). (4) No other problem with the steps was reported: the guards, the approval, the delta record, the checks from outside and the deprecations are as the model page has them.
+**What this run showed about the steps, for the next stable version.** (1) **The read-back window is too short for the real service** (#403): the packages can be published and the job can still fail, and then 6.5's re-run is the whole remedy. Until the window is lengthened (iteration B of [`backlog-iterations.md`](../planning/backlog-iterations.md), which is cycle 1, `0.2.2`, since 2026-10-16), expect that, check `npm view` before doing anything else, and re-run the failed job rather than the whole workflow. (2) The page said that for `0.2.0` the read-back took about two and a half minutes; for `0.2.1` one package took more than five. (3) **A failed `P14 journeys` run on one system is a finding** whatever the other systems say: governance rule 14 asked for an issue before the one re-run, and the failure is recorded in the evidence ledger as it is (the item is `failed`; whether to waive it is the maintainer's). (4) No other problem with the steps was reported: the guards, the approval, the delta record, the checks from outside and the deprecations are as the model page has them.
 
 **What was not tried, and is not shown.** Yarn's behaviour for an untagged `yarn add vsift-cli` inside its one-day gate (the hosted jobs installed the exact version after the documented exemption); the campaigns on the release's own tag (they are the candidate's, carried by the recorded delta); and everything the release ships untried (the maintainer's try-outs, RQ-17, [L-143](../planning/known-limits.md#l-143)). Nothing here announces anything.
+
+### 6.18 The weekly release window (decided 2026-10-16)
+
+**An operating procedure, not a record, and not yet fully automated.** The maintainer decided on 2026-10-16 how releases are timed and
+tested. The policy and the reasons are in [`delivery-governance.md`](../planning/delivery-governance.md) ("The test and release model"), and the stories it
+serves are in [`backlog-iterations.md`](../planning/backlog-iterations.md). This section is what a person does. **It changes when work
+happens, not what a release must be:** the steps of 6.3 (a candidate) and 6.7 (the stable version), the candidate rule of 6.8 and the stable plan's six guards
+are unchanged, and so is the maintainer's approval of every `release` environment gate and of every npm write. The parts that need a workflow
+change (the nightly run, its issue on failure, and the check in the release workflow that refuses a candidate whose nightly did not pass) are separate pull requests;
+until they land, the person cutting the candidate checks the nightly by hand (step 1).
+
+**The rhythm.**
+
+| When | What |
+| --- | --- |
+| Monday to Friday | Development. Each pull request passes the gate (target 5 minutes, hard limit 10). The nightly runs on `main` when something merged. |
+| **Friday or Saturday midnight** (the maintainer's local time) | **The cut** (step 2). |
+| Saturday to Monday | The long hosted runs (2 to 3 hours each), after the cut, for what the week's changes touched (step 3). |
+| **Monday or Tuesday** | **The target for the stable release and its publish**, on the maintainer's approval (step 5). |
+
+1. **The nightly precondition.** A candidate may only be cut from a commit whose nightly passed. **To be enforced by the release workflow** (a later change). Until then, before
+   tagging, open the nightly run for the exact commit you mean to tag and write down its link. If the latest nightly failed, development has stopped: its issue is fixed first,
+   and there is no cut from a red commit. Never cut from a commit the nightly has not seen.
+2. **The cut.** At Friday or Saturday midnight, in the maintainer's local time, take the candidate by 6.3: bump the version in the files it lists,
+   merge to `main`, tag the merged commit, dry run on the tag, then publish on the tag with `dry_run` cleared and the maintainer's approval. The candidate goes to `next`.
+   From the tag on, 6.8 holds: only fixes for findings change the code, and a change to code, a dependency or a workflow waits for the stable release's publish.
+   Work meanwhile goes on in branches and draft pull requests, and the work record and documents that 6.8 allows can merge.
+3. **After the cut, the long hosted runs.** Dispatch from `main`, on the candidate's tag, the long runs for the items whose scope this week's changes touched. The evidence
+   ledger's scopes decide, and they are coarse: `crates` is in the scope of most items, RQ-01 to RQ-12 and RQ-14 to RQ-17. The list is in [`p14-qualification.md`](../planning/p14-qualification.md) and the
+   ledger, and `release-evidence --complete-for <candidate> --commit <sha>` names what is missing. Record the run links in the release's planning page and the ledger, as for any candidate.
+4. **A failure in the window.** Open (or find) the issue first, then fix it with a **targeted fix and a rerun of only the failing workflow**, never the whole round. If the fix
+   changes code, 6.8 applies: it means a new candidate (`rc.N+1`), and the workflows that cover what the fix touches run on it. A finding that is not a regression of this week may be accepted
+   by the maintainer as a known issue of the release, as #404 was for `0.2.1`. That is the maintainer's decision, recorded in the ledger, and never the supervisor's.
+5. **The stable release and its publish, Monday or Tuesday.** When the accepted candidate's evidence is complete (`release-evidence --complete-for`), take the stable release by 6.7
+   and the model pages 6.13 and 6.17 (the stable commit, the delta check, the tag, the dry run, the publish). **The publish waits for the maintainer's approval of the `release` environment;
+   the supervisor never approves it and never runs an npm write.** Then check the published bytes from outside (6.4) and run the quick checks: `P14 verify release` (within seven days of the publish), `P14 journeys`,
+   `P13 managed smoke`, and `P14 published artifacts` from the previous release and from the candidate.
+6. **If the window slips,** the cut waits for the next Friday or Saturday. A candidate already published stays on `next`. Only a red nightly stops development; a late publish does not.
+
+**A hot fix** is a fix too urgent to wait for the window. It goes through outside the window: the full check on all three systems (about 30 minutes) on the fix, a candidate and the stable
+release by 6.3 and 6.7 (the stable plan needs a published accepted candidate, and the completeness check still applies: an item whose scope the fix touches and that needs a long run needs
+that run or a recorded waiver by the maintainer), the publish on the maintainer's approval, and then the quick checks of the published bytes listed in step 5. The long runs and the agent
+batches are not run before a hot fix; they run in the next window, and anything they find is an issue first.
+
+**The monthly round, or with a major change.** About once a month, and when a major change lands (a rewrite of the skill, a re-pin of FFmpeg or whisper.cpp, a change to the way VSift calls
+a tool), the full-cost items run in the window of the candidate that carries the change: agent batches 2 and 3 (the agent-trial runbook, [`trials.md`](../agents/trials.md)),
+the dependency-quality checks (`P07 local ASR` accuracy, `P14 malicious media` and the dated scan reading) and the full durability campaign. They are **not run weekly**. In an ordinary
+week, a change to the skill's wording gets the uncounted skill smoke (about nine Claude runs on a local build, about $6 and 15 minutes) instead. It is not evidence for RQ-15 or RQ-16, so a candidate whose skill
+changed still needs those items passed, carried or waived before the stable release: the ledger's rule is unchanged.
+
+**The weekly drift runs stay** (`P14 journeys`, `P13 managed smoke`, `P07 local ASR`, `Fuzz` and the durability campaigns, on their schedules). A failure of one opens an issue by itself. That needs a workflow change;
+until it lands, read the Actions page each Monday and file the issue by hand.
+
+**What this does not settle.** The freeze of 6.8 against "development continues" (above: branches and draft pull requests, with a release branch as a possible later replacement that
+would change the candidate check and ADR 0024 decision B); and the coarse scopes of the ledger against "limited to what the week touched". Each is listed for the maintainer in
+[`backlog-iterations.md`](../planning/backlog-iterations.md).
