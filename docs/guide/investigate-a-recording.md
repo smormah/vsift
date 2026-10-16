@@ -76,7 +76,7 @@ A **revision** is one version of the transcript. Recognising again, or importing
 one and keeps the old ones; the revision id says which you are reading.
 
 **When a stretch could not be transcribed (0.2.1 and later; 0.2.0 fails the whole run instead,
-[L-145](../planning/known-limits.md#l-145)).** Now and then the recogniser answers for a 30-second stretch
+[#353](https://github.com/smormah/vsift/issues/353)).** Now and then the recogniser answers for a 30-second stretch
 with words whose times cannot be placed in that audio, which happens in a recording with long pauses (live
 coding, a speaker who stops to type). VSift does not throw the rest away: it keeps what it could transcribe,
 leaves that stretch without a transcript and says so. The result ends with `Status: partial`, a line
@@ -95,9 +95,9 @@ command fails instead, and says why
 ([troubleshooting](troubleshooting.md#missing_capability-a-tool-or-model-is-missing)).
 
 **Where two chunks meet, and words the recogniser wrote that VSift could not place (0.2.1 and later,
-[L-149](../planning/known-limits.md#l-149)).** The recogniser works on 30-second chunks that overlap by five seconds
+[L-155](../planning/known-limits.md#l-155) to [L-159](../planning/known-limits.md#l-159)).** The recogniser works on 30-second chunks that overlap by five seconds
 and VSift joins them. Up to `0.2.0` and `0.2.1-rc.1` it could drop the end of a sentence where two chunks met, with no
-warning, and `search` still called the stretch transcribed. From the second `0.2.1` candidate on, VSift keeps a piece of
+warning, and `search` still called the stretch transcribed. In `0.2.1`, VSift keeps a piece of
 speech again whenever leaving it out would leave more than half a second of what the chunks heard in no segment, even if that
 means the same words appear twice, because a repeat you can see is better than a hole you cannot. It is built to do that and
 **has not yet been checked on a real recording**; up to about half a second at the end of a copy can still be missing, and

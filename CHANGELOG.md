@@ -6,9 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+- **The post-publish records for `0.2.1` (2026-10-16; records and pages only, nothing that ships changes).** `0.2.1` was published on 2026-10-15 (tag `v0.2.1` at `e9ab6e626733`, publish run 38758081349) and checked from outside: `latest` is `0.2.1` and `next` is `0.2.1-rc.3` on all four packages, the 28 earlier integrity values and 7 tag commits are unchanged, `npm audit signatures` reports 4 and 4, the 10 release files and 4 tarballs are attested and equal to the plan. The job's read-back of `latest` gave up after five minutes with the packages already published ([#403](https://github.com/smormah/vsift/issues/403)); its re-run, approved again, created the GitHub release. `0.2.1-rc.1` and `0.2.1-rc.2` were deprecated the same day.
+  - **The evidence ledger** holds the `release_delta` of `0.2.1` (copied from the publish run's artifact) and `0.2.1`'s own entries for RQ-01 to RQ-04, RQ-06, RQ-13, RQ-18 and RQ-19, all `passed`. **RQ-05 is `failed`:** the published journeys failed twice on hosted Windows in the worker's shutdown stage and passed on Ubuntu and macOS ([#404](https://github.com/smormah/vsift/issues/404)). The maintainer decided on 2026-10-16 that it is a known issue of `0.2.1` and the first fix of `0.2.2`; the ledger has no status for "failed, accepted" and records no waiver, so `release-evidence --complete-for 0.2.1` names RQ-05 alone (the plan page, [`release-0.2.1.md`](docs/planning/release-0.2.1.md), says what the choices are).
+  - **The register:** L-145 (#353), L-149 (#359) and L-150 (#365) are closed and deleted, because each now has its implementation, regression tests (#358, #377, #379) and a release; their IDs are never reused. L-161 is rewritten to what the fix of #391 leaves (the issue is closed; severity medium to low, to be confirmed at review), L-167 is new (#404, medium), L-142 is re-read, and L-151 to L-154, L-155 to L-160 and L-162 to L-166 say where they stand. 149 entries: 1 high, 51 medium, 97 low.
+  - **The runbook:** [`release.md`](docs/operations/release.md) 6.17 holds the numbers and command lines of the release's steps and what the real services showed, and 6.15 and 6.16 are marked records. The 0.2.1 steps page is kept as prepared.
+  - **The pages the release could not change** say what is true now: the README (version, the known-issue notes of 0.2.0, the status), `SECURITY.md` (the newest patch of the line, `0.2.1`, receives security fixes; `0.2.0` no longer does), the skill guide (the skill of `0.2.1` ran once, with the results), the development guide, the installation guide (the notes on #353, #359 and #391 now say which versions have them; a note on #404), the guide's pages that linked the closed entries, ADR 0017's link, a note in ADR 0024, and the sentence in `docs/agents/trials.md` that agent batches 2 and 3 ran on 2026-10-14 and 2026-10-15. The claims registry gains one non-claim for the new steps page's file name (NC-811); no claim is raised and the rung is still `candidate`.
+  - **The decisions of 2026-10-16** are recorded in the backlog map ([`backlog-iterations.md`](docs/planning/backlog-iterations.md)): the order of the iterations (A, D, B, C, then R1) and online sources inside R1 (#406 with #407 to #410). The two handoff files in `memory/` say what is true, what is next and what is still the maintainer's.
+
 ## [0.2.1] - 2026-10-15
 
-**This is the patch release after `0.2.0`: the stable commit is `0.2.1-rc.3` with a different version number.** It is cut in this change and is **not tagged or published here**: when the maintainer publishes it, it goes to npm under `latest` (`latest` moves from `0.2.0` to `0.2.1` on all four packages, so `npm install vsift-cli` with no tag installs it; `next` stays `0.2.1-rc.3`, because only the maintainer's own command moves it) and it is not announced. It is the same source as the accepted third candidate `0.2.1-rc.3` (published 2026-10-13, tag `v0.2.1-rc.3`), so everything listed below under `0.2.1-rc.1`, `0.2.1-rc.2` and `0.2.1-rc.3` is in this release, and nothing else is. `0.2.1-rc.1` and `0.2.1-rc.2` are to be deprecated on npm after the publish (the maintainer's decision of 2026-10-15); `0.2.1-rc.3` is not. **`0.2.0` stays published and is not deprecated; it keeps the defects below until a person upgrades.**
+**This is the patch release after `0.2.0`: the stable commit is `0.2.1-rc.3` with a different version number.** **It was published on 2026-10-15** (tag `v0.2.1` at `e9ab6e626733`, the merge of #402; publish run 38758081349; [`release.md`](docs/operations/release.md) 6.17): it went to npm under `latest` (`latest` moved from `0.2.0` to `0.2.1` on all four packages, so `npm install vsift-cli` with no tag installs it; `next` stays `0.2.1-rc.3`, because only the maintainer's own command moves it) and it is not announced. It is the same source as the accepted third candidate `0.2.1-rc.3` (published 2026-10-13, tag `v0.2.1-rc.3`), so everything listed below under `0.2.1-rc.1`, `0.2.1-rc.2` and `0.2.1-rc.3` is in this release, and nothing else is. `0.2.1-rc.1` and `0.2.1-rc.2` were deprecated on npm after the publish (2026-10-15); `0.2.1-rc.3` is not. **`0.2.0` stays published and is not deprecated; it keeps the defects below until a person upgrades.**
 
 ### What changes for you since 0.2.0, in plain English
 
@@ -32,7 +39,7 @@ Six evidence items are `waived` for this release, none is a pass, and the ledger
 - **Agent trials.** Under the frozen grader, one gate of agent-trial batch 2 was not met: the compact tier, 8 of 10 (two Claude runs read a whole transcript with `--view brief` and never ran `search`, [#395](https://github.com/smormah/vsift/issues/395), [L-163](docs/planning/known-limits.md#l-163)). In batch 3, one cold run tried a command that listed folders and read a configuration file, which the strict setting denied, so nothing was read ([#396](https://github.com/smormah/vsift/issues/396), [L-164](docs/planning/known-limits.md#l-164); VSift's advice for a missing tool invites such a search), and the Claude compact cold usefulness was 2 of 6 under the strict setting ([#397](https://github.com/smormah/vsift/issues/397), [L-165](docs/planning/known-limits.md#l-165)). The maintainer waived these for `0.2.1` after reading the evidence; nothing was re-graded and the grader, skill and scenarios did not change.
 - **A fuzz finding** ([#394](https://github.com/smormah/vsift/issues/394), [L-162](docs/planning/known-limits.md#l-162)): one of 31 targets failed after 83,782,862 runs on a saved setup plan whose `lifecycle` member is an enormous integer; it is the same at `0.2.0`, and `setup install --plan` refuses such a plan.
 - **The standing waivers carry:** a symbolic link given as the video answers `STORAGE_IO` where the malicious-media rule names `INVALID_SOURCE` ([#265](https://github.com/smormah/vsift/issues/265), [L-127](docs/planning/known-limits.md#l-127)); the strict worker profile is not claimed to contain a hostile decoder ([L-068](docs/planning/known-limits.md#l-068)); and **Windows Smart App Control, SmartScreen, a true clean-machine install and macOS Gatekeeper were not tried, and no one has run VSift on a Mac** ([L-143](docs/planning/known-limits.md#l-143)).
-- **Nothing had been run against this release's own bytes when this was written.** The hosted checks are run on the published `0.2.1` (`release.md` 6.7; the checklist is [`release-0.2.1-stable-steps.md`](docs/planning/release-0.2.1-stable-steps.md)). Everything else was measured on a synthetic corpus and a synthetic voice, and the two real recordings tried have not been used to try the fixes. No platform is "supported" and the claims rung is still `candidate`.
+- **Nothing had been run against this release's own bytes when this was written.** The hosted checks were run on the published `0.2.1` on 2026-10-15 and are recorded in the change below: all passed except the journeys on hosted Windows ([#404](https://github.com/smormah/vsift/issues/404)). Everything else was measured on a synthetic corpus and a synthetic voice, and the two real recordings tried have not been used to try the fixes. No platform is "supported" and the claims rung is still `candidate`.
 
 ### What this cut itself does
 
@@ -48,7 +55,7 @@ Six evidence items are `waived` for this release, none is a pass, and the ledger
 **This is a release candidate, under qualification.** It is the third candidate for `0.2.1`, the patch release after `0.2.0`, and it **supersedes the second, `0.2.1-rc.2`** (published on 2026-10-11, tag `v0.2.1-rc.2`) and, with it, the first, `0.2.1-rc.1`; both have the
 `setup check` defect of [#391](https://github.com/smormah/vsift/issues/391) ([L-161](docs/planning/known-limits.md#l-161)). It is `0.2.1-rc.2` plus that one fix and the version text, and nothing else. It is cut in this change and is **not tagged or published here**: when the
 maintainer publishes it, it goes to npm under the tag `next` and never under `latest` (`latest` stays `0.2.0` on all four packages), it is not announced, and it is no statement of support or stability. **`0.2.0`, `0.2.1-rc.1` and `0.2.1-rc.2` stay
-published and are not deprecated, and `0.2.0` is still affected by [L-145](docs/planning/known-limits.md#l-145), [L-149](docs/planning/known-limits.md#l-149) and [L-161](docs/planning/known-limits.md#l-161) until `0.2.1` is published.** No evidence is recorded for this
+published and are not deprecated, and `0.2.0` is still affected by L-145, L-149 and [L-161](docs/planning/known-limits.md#l-161) until `0.2.1` is published.** No evidence is recorded for this
 candidate: the five hosted checks that were run on `0.2.1-rc.2` do not count for it, so the hosted checks are run once on this candidate, and agent-trial batches 2 and 3, which have not run on any `0.2.1` candidate, run once on it too; the plan says what is open, among
 it the four waivers that the completeness check passes without a decision ([`release-0.2.1.md`](docs/planning/release-0.2.1.md)). The release runbook for this candidate is [`release.md`](docs/operations/release.md) section 6.16.
 
@@ -105,15 +112,15 @@ the troubleshooting page has the next step. The issue stays open until the relea
 ## [0.2.1-rc.2] - 2026-10-11
 
 **This is a release candidate, under qualification.** It is the second candidate for `0.2.1`, the patch release after `0.2.0`, and it **supersedes the first, `0.2.1-rc.1`**, which was published on 2026-10-10 and has the silent
-transcription defect of [#359](https://github.com/smormah/vsift/issues/359) ([L-149](docs/planning/known-limits.md#l-149)). It is cut in this change and is **not tagged or published here**: when the maintainer publishes it, it goes to npm under
+transcription defect of [#359](https://github.com/smormah/vsift/issues/359) (L-149). It is cut in this change and is **not tagged or published here**: when the maintainer publishes it, it goes to npm under
 the tag `next` and never under `latest` (`latest` stays `0.2.0` on all four packages), it is not announced, and it is no statement of support or stability. **`0.2.0` and `0.2.1-rc.1` stay published and are not deprecated, and `0.2.0` is still
-affected by [L-145](docs/planning/known-limits.md#l-145) and [L-149](docs/planning/known-limits.md#l-149) until `0.2.1` is published.** No evidence is recorded for this candidate: the hosted checks, and agent-trial batches 2 and 3 under the new
+affected by L-145 and L-149 until `0.2.1` is published.** No evidence is recorded for this candidate: the hosted checks, and agent-trial batches 2 and 3 under the new
 freeze, are still to be run, nothing from `0.2.1-rc.1`'s stopped round counts, and the plan says what is open, among it the four waivers that the completeness check passes without a decision
 ([`release-0.2.1.md`](docs/planning/release-0.2.1.md)). The release runbook for this candidate is [`release.md`](docs/operations/release.md) section 6.15.
 
 ### What changed since 0.2.1-rc.1, in plain English
 
-**If you transcribe a long recording ([#359](https://github.com/smormah/vsift/issues/359), [L-149](docs/planning/known-limits.md#l-149), high).** Joining the 30-second pieces of a transcription could drop the end of a sentence at a seam, with no
+**If you transcribe a long recording ([#359](https://github.com/smormah/vsift/issues/359), L-149, high).** Joining the 30-second pieces of a transcription could drop the end of a sentence at a seam, with no
 warning, and `search` still called the stretch transcribed; it was seen on both real recordings tried. Now the join keeps such a piece again, at the price of repeats, and the revision lists the stretches where words that no segment
 holds may lie, which `search` and `transcript get` call not transcribed. It is shown on stand-in layouts and not on a real recording, and what it leaves is registered ([L-155](docs/planning/known-limits.md#l-155) to [L-160](docs/planning/known-limits.md#l-160)).
 **A session written by this version can hold a new optional member, and `0.2.0` and `0.2.1-rc.1` read a revision that holds it as damaged**, so going back to either after using this version can lose the session, or part of it.
@@ -206,9 +213,9 @@ the run read it and is `complete`, but a read over it shows no words and is `par
 ### Changed
 
 - **Work record, register and a known-issue note only; nothing that ships changes, and nothing is fixed: the findings of the maintainer's live testing on two real recordings, and the plan for a second candidate of `0.2.1`.** A new known limit,
-  [L-149](docs/planning/known-limits.md#l-149) (high, open, issue [#359](https://github.com/smormah/vsift/issues/359)): merging the overlapping 30-second pieces of a transcription can drop speech at a seam with no warning, and the result
+  L-149 (high, open, issue [#359](https://github.com/smormah/vsift/issues/359)): merging the overlapping 30-second pieces of a transcription can drop speech at a seam with no warning, and the result
   still says the whole range was transcribed. The cause is inferred from the source and the timings, not confirmed with the recogniser's own output, and it is in `0.2.0` and in `0.2.1-rc.1`. Five more, all medium and open:
-  [L-150](docs/planning/known-limits.md#l-150) to [L-154](docs/planning/known-limits.md#l-154) (#365, #366, #367, #368, #370: how an agent reads a transcript, checks a long report, shortlists screens, asks a whole-recording question and asks for a frame
+  L-150 to [L-154](docs/planning/known-limits.md#l-154) (#365, #366, #367, #368, #370: how an agent reads a transcript, checks a long report, shortlists screens, asks a whole-recording question and asks for a frame
   while a transcription runs). The README and the installation guide carry a known-issue note for L-149 with the workarounds. `0.2.1-rc.1`, published on 2026-10-10 under `next`, is superseded: the maintainer decided on 2026-10-11 to put #359 and the larger findings into
   `0.2.1` and to cut a second candidate, `0.2.1-rc.2`; the plan ([`release-0.2.1.md`](docs/planning/release-0.2.1.md)) lists what it needs and the decisions still open, among them the version number.
 - **`merge_chunks` (domain, [ADR 0017](docs/decisions/0017-local-asr-through-whisper-cpp.md), note of 2026-10-11).** A guard between rules 2 and 3 restores segments that rules 1 and 2 dropped, whole, until no stretch of the union of all the
@@ -249,13 +256,13 @@ revision's ids), and a retained bundle holds the record of both revisions.
 2026-10-10 that `0.2.1` carries everything that was waiting). It is cut in this change and is **not tagged or published here**: when the maintainer
 publishes it, it goes to npm under the tag `next` and never under `latest` (`latest` stays `0.2.0` on all four packages), it is not announced, and it
 is no statement of support or stability. **`0.2.0` stays published and is not deprecated, and it is still affected by
-[L-145](docs/planning/known-limits.md#l-145) until `0.2.1` is published.** No evidence is recorded for this candidate: the hosted checks, and agent-trial
+L-145 until `0.2.1` is published.** No evidence is recorded for this candidate: the hosted checks, and agent-trial
 batches 2 and 3 under the new freeze, are still to be run, and the plan says what is open ([`release-0.2.1.md`](docs/planning/release-0.2.1.md)). The release
 runbook for this candidate is [`release.md`](docs/operations/release.md) section 6.14.
 
 ### What changed since 0.2.0, in plain English
 
-**If you transcribe a recording with long pauses ([#353](https://github.com/smormah/vsift/issues/353), [L-145](docs/planning/known-limits.md#l-145), the reason for the release).**
+**If you transcribe a recording with long pauses ([#353](https://github.com/smormah/vsift/issues/353), L-145, the reason for the release).**
 In `0.2.0` a recording whose 30-second stretch held few recognised pieces of text, one of them rejected, made `transcript retranscribe` fail the whole run as
 `MISSING_CAPABILITY` and keep nothing; `job resume` failed the same way, and the error did not say what had failed. The first real recording tried on `0.2.0`
 (a 34-minute screencast) showed it. Now a stretch whose answer cannot be used is a recorded gap: the run finishes as `partial`, says which stretches it did not
@@ -319,7 +326,7 @@ The entries below are the detail of what was merged to `main` since `0.2.0`, by 
 
 ### Changed
 
-- **Work record and register only, nothing that ships changes: a new known limit, [L-145](docs/planning/known-limits.md#l-145) (high, open, issue #353), and the plan for the patch release `0.2.1`.** The first real
+- **Work record and register only, nothing that ships changes: a new known limit, L-145 (high, open, issue #353), and the plan for the patch release `0.2.1`.** The first real
   recording tried on `0.2.0` showed that `vsift transcript retranscribe` fails the whole run, and keeps nothing, when one 30-second chunk holds few recognised segments and one of them is rejected; nothing is fixed
   in this change. `0.2.1` is to carry the fix with the other waiting items (#340, #342, #345, #349); `0.2.0` stays published.
 - **`P14 verify release` now verifies a stable release in full (P14 PR 13a, 2026-10-10; a tool and its tests, nothing that ships changes).** Its two stable checks, which
@@ -368,7 +375,7 @@ The entries below are the detail of what was merged to `main` since `0.2.0`, by 
   load did not fail once, so what in Windows leaves the thread out of the snapshot is not known, and the retry is evidence of a repair for a failure seen once, not of a
   measured rate. The other tests that call `run` (the rest of `run_stub.rs` and `prepare_modes.rs`) meet the same race at the same rate and are unchanged, and a real trial
   that meets it stops with the same message and no run record. No known limit is added: the product is untouched, and a recurrence goes to the register as #345 asks.
-- **A recording with pauses is no longer thrown away when one 30-second stretch cannot be transcribed (#353, the main fix proposed for `0.2.1`; the register's entry is [L-145](docs/planning/known-limits.md#l-145), which stays open until `0.2.1` is published, because `0.2.0` still has the defect).** The first real recording tried with
+- **A recording with pauses is no longer thrown away when one 30-second stretch cannot be transcribed (#353, the main fix proposed for `0.2.1`; the register's entry is L-145, which stays open until `0.2.1` is published, because `0.2.0` still has the defect).** The first real recording tried with
   `0.2.0` (a 34:36 screencast of slides and live coding, one speaker, long pauses while the speaker typed) failed as `MISSING_CAPABILITY` (`output_validation`, `malformed_output`)
   after 65 of its 83 chunks were saved, committed nothing, and left the job `resumable: true` although a resume could never succeed. The cause was one chunk, 27:05 to 27:35, in which
   one segment did not fit its audio. **Four fixes (ADR 0017, note of 2026-10-10; proposed, the maintainer confirms by merging):**

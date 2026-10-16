@@ -1,18 +1,19 @@
 # Installing VSift
 
-Status: user guide, updated 2026-10-15 (the release 0.2.1) and 2026-10-10 (section 7 on upgrading from a candidate of a later release: the cut of the patch release's candidate) and 2026-10-09 (P14 PR 12, the release 0.2.0; P14 PR 10 repeated again, the third candidate; P14 PR 11c;
+Status: user guide, updated 2026-10-16 (0.2.1 is published; its known issues and what was run against it) and 2026-10-15 (the release 0.2.1) and 2026-10-10 (section 7 on upgrading from a candidate of a later release: the cut of the patch release's candidate) and 2026-10-09 (P14 PR 12, the release 0.2.0; P14 PR 10 repeated again, the third candidate; P14 PR 11c;
 P14 PR 9a; written by P13 PR 11 and PR 12 for the published pre-release;
 [ADR 0023](../decisions/0023-r0-distribution-managed-installation-and-handoff-check.md)).
-**VSift 0.2.1 is the patch release after 0.2.0**, and `npm install vsift-cli` with no tag installs it once it is published (it
-replaces 0.2.0 under npm's `latest` dist-tag). The npm packages carry npm provenance, and the native archives on its GitHub release carry a Sigstore build-provenance
+**VSift 0.2.1 is the patch release after 0.2.0**, and `npm install vsift-cli` with no tag installs it (it
+replaced 0.2.0 under npm's `latest` dist-tag on 2026-10-15). The npm packages carry npm provenance, and the native archives on its GitHub release carry a Sigstore build-provenance
 attestation, as every file of the release does. 0.2.0 (2026-10-09) was the first release under `latest`; before it, `latest` was an empty `0.0.0` placeholder, a package with no command. The
-pre-release 0.1.0 (2026-10-01), the release candidates of 0.2.0 and the release candidates of 0.2.1 (0.2.1-rc.1, 0.2.1-rc.2 and 0.2.1-rc.3) were installed with `vsift-cli@next`; they stay published, and 0.2.1-rc.1 and 0.2.1-rc.2
-are deprecated (npm warns on an install of either and names this release). 0.2.1 is not announced.
+pre-release 0.1.0 (2026-10-01), the release candidates of 0.2.0 and the release candidates of 0.2.1 (0.2.1-rc.1, 0.2.1-rc.2 and 0.2.1-rc.3) were installed with `vsift-cli@next`; they stay published, and 0.2.0-rc.1, 0.2.0-rc.2, 0.2.1-rc.1 and 0.2.1-rc.2
+are deprecated (npm warns on an install of any of them and names the release that replaced it). `next` still names 0.2.1-rc.3, the source of 0.2.1. 0.2.1 is not announced.
 **0.2.1 is built from the same source as the third release candidate, 0.2.1-rc.3**, and differs from it only in its version
 numbers, this guide, the npm package's README and the project's work record (a mechanical check enforces that:
 [`release.md`](release.md) section 6.8). What was tried on that candidate was tried on that source. The executable carries the
-new version number and commit, so the hosted checks are run again on the published 0.2.1 (`release.md` section 6.17), and until
-their results are recorded in the release evidence ledger nothing has been run against 0.2.1's own bytes.
+new version number and commit, so the hosted checks were run again on the published 0.2.1 on 2026-10-15 (`release.md` section 6.17) and are recorded in the release evidence ledger:
+the installs, the archives, the upgrades, the managed install and the checks of the publish passed, and **the worker-host journeys failed twice on hosted Windows**
+(the stage that shuts a worker down while a recognition is running; a known issue of 0.2.1, [#404](https://github.com/smormah/vsift/issues/404); it passed on Ubuntu and macOS and on 0.2.1-rc.3).
 **What 0.2.1 changes for you** since 0.2.0 is in the [changelog](../../CHANGELOG.md): changes to how a long recording is transcribed (a stretch that cannot be
 transcribed is a recorded gap instead of a failed run, and the join of the 30-second pieces no longer drops whole sentences silently at a seam and reports the stretches where words could not be placed, though up to about half a second at the end of a piece can still be missing without a sign; both are shown on stand-in recordings, not on a real one), a shorter
 brief view of transcripts and searches for an AI assistant, and a `setup check` that waits 30 seconds instead of 5. Section 12 has the notes on 0.2.0.
@@ -24,7 +25,7 @@ without them:** Windows Smart App Control and SmartScreen, a true clean-machine 
 from hosted runners only. **What has been run against these steps.** In P13 they ran on
 hosted runners against a local registry. Since 2026-10-02 (P14) the published packages have also
 been installed from the real registry with npm, pnpm, Yarn and Bun on hosted Windows, macOS and
-Ubuntu runners, first 0.1.0, then each release candidate (the last being 0.2.1-rc.3 on 2026-10-13 to 2026-10-15) and 0.2.0 itself on 2026-10-09; the three archives have been
+Ubuntu runners, first 0.1.0, then each release candidate (the last being 0.2.1-rc.3 on 2026-10-13 to 2026-10-15), 0.2.0 itself on 2026-10-09 and 0.2.1 itself on 2026-10-15; the three archives have been
 downloaded, checked, extracted and run, the offline
 install of the managed tools has been run with the real files, the upgrade and uninstall steps
 (sections 7 and 8) have been walked, and the same bytes have run the supplied-transcript and
@@ -60,8 +61,8 @@ source ([`development.md`](../development.md)) also works.
   fields and failure codes may appear, and what exists keeps its meaning. Nothing else is
   promised: the readable text that commands print without `--json` is for people and may
   change, and the accuracy figures were measured on a synthetic corpus. The release
-  qualification of 0.2.1 is not finished: its last step records the hosted checks on 0.2.1
-  itself.
+  qualification of 0.2.1 is recorded in the release evidence ledger, with one item failed: the worker-host journeys on
+  hosted Windows (#404).
 - **Not signed.** The Windows and macOS executables carry no Authenticode signature and
   no Apple notarization. Section 4 says what that means for you and how to check a
   download instead.
@@ -481,7 +482,7 @@ folder.
   published 0.2.0-rc.1 to the published 0.2.0-rc.2 on the three systems with the same result (runs 37602931887 and
   37611381117), and on 2026-10-08 the published 0.1.0 and the published 0.2.0-rc.2 to the published 0.2.0-rc.3 (runs
   37748859247 and 37752825599). On 2026-10-09, after its publish, the same run upgraded the published 0.1.0 and the published
-  0.2.0-rc.3 to the published 0.2.0 on the three systems with the same result (runs 37999883603 and 38000209110). The same upgrades are run again for 0.2.1 after its publish (`release.md` section 6.17), and until their results are recorded nothing has been run against 0.2.1's own bytes.
+  0.2.0-rc.3 to the published 0.2.0 on the three systems with the same result (runs 37999883603 and 38000209110). On 2026-10-15, after its publish, the same run upgraded the published 0.2.0 and the published 0.2.1-rc.3 to the published 0.2.1 on the three systems with the same result (runs 38765075608 and 38765697122).
 
 ## 8. Uninstall
 
@@ -587,33 +588,38 @@ process group, which would deliver the signal twice ([L-091](../planning/known-l
 
 ## 12. Problems
 
-**Known issue in 0.2.0: `vsift transcript retranscribe` of a whole recording fails as `MISSING_CAPABILITY` although speech
-recognition works** ([#353](https://github.com/smormah/vsift/issues/353), [L-145](../planning/known-limits.md#l-145)). Speech is
+**A known issue of 0.2.0, fixed in 0.2.1: `vsift transcript retranscribe` of a whole recording failed as `MISSING_CAPABILITY` although speech
+recognition works** ([#353](https://github.com/smormah/vsift/issues/353)). Speech is
 recognised in 30-second chunks. If one chunk of a real recording holds very little recognised speech (a long pause while the speaker types
-is enough) and one of its few segments is rejected as unusable, VSift fails the whole run and keeps no chunk, and `vsift job resume`
+is enough) and one of its few segments is rejected as unusable, 0.2.0 fails the whole run and keeps no chunk, and `vsift job resume`
 fails at the same chunk. `vsift setup check` still says everything is in place, and reinstalling whisper.cpp does not help, whatever
-the error's remediation text says. The fix is in 0.2.1: a stretch whose answer cannot be used is now a recorded gap and the run finishes `partial` instead of failing. On 0.2.0, either give VSift a transcript
+the error's remediation text says. In 0.2.1 a stretch whose answer cannot be used is a recorded gap and the run finishes `partial` instead of failing; that is shown on stand-in recordings, not on the recording that found it. On 0.2.0, upgrade, or give VSift a transcript
 (`vsift ingest ./recording.mp4 --transcript ./recording.vtt`), which skips local recognition, or transcribe in ranges
 (`vsift transcript retranscribe <session> --from <microseconds> --to <microseconds>`) and move a range's edges by a few seconds if one fails,
 which can get past the chunk. This was found with the first real recording tried; every accuracy figure before it came from a synthetic corpus.
 
-**Known issue in 0.2.0 and in the 0.2.1-rc.1 release candidate (fixed in 0.2.1): a transcript made by `vsift transcript retranscribe` can be missing up to a few seconds of speech where two pieces meet, and nothing says so**
-([#359](https://github.com/smormah/vsift/issues/359), [L-149](../planning/known-limits.md#l-149)). VSift recognises speech in 30-second pieces that
+**A known issue of 0.2.0 and of the 0.2.1-rc.1 release candidate, changed in 0.2.1: a transcript made by `vsift transcript retranscribe` could be missing up to a few seconds of speech where two pieces meet, and nothing said so**
+([#359](https://github.com/smormah/vsift/issues/359)). VSift recognises speech in 30-second pieces that
 overlap by 5 seconds, and merges them. On both real recordings tried, a sentence broke off at the end of one piece and resumed several seconds later at some of
-the seams, and the words between are missing from the transcript (the cause is read from the code, not yet confirmed with the recogniser's own output). `vsift search` and the transcription
-result still report the whole range as transcribed, and no warning gives a time, so a missing word reads as "nothing was said". The fix is in 0.2.1 (it is shown on stand-in recordings, not on a real one; the changelog says what it leaves). On 0.2.0 or 0.2.1-rc.1, check a transcript you rely on against the recording where the pieces meet: the overlaps are
+the seams, and the words between were missing from the transcript (the cause is read from the code, not yet confirmed with the recogniser's own output). `vsift search` and the transcription
+result still reported the whole range as transcribed, and no warning gave a time, so a missing word read as "nothing was said". 0.2.1 keeps such a piece, at the price of repeated words, and lists the stretches where words could not be placed;
+it is not complete (up to about half a second at the end of a piece can still be missing without a sign, [L-156](../planning/known-limits.md#l-156)) and it is shown on stand-in recordings, not on a real one; the changelog says what it leaves. On 0.2.0 or 0.2.1-rc.1, upgrade, and check a transcript you rely on against the recording where the pieces meet: the overlaps are
 5 seconds long and start every 25 seconds, counted from the start of the range you transcribed (at 0:25, 0:50, 1:15 and so on for a whole recording), and a sentence that breaks
 off near one is the sign. Or give VSift a transcript (`vsift ingest ./recording.mp4 --transcript ./recording.vtt`), which skips local recognition. Transcribing a range with
 `--from` and `--to` does not avoid it, because a range has seams of its own.
 
-**Known issue in every published version before 0.2.1-rc.3 (0.1.0, 0.2.0 and the earlier release candidates; fixed in 0.2.1-rc.3 and in 0.2.1): the first `vsift setup check` after a restart can say `[timeout]` for
+**A known issue of every version before 0.2.1-rc.3 (0.1.0, 0.2.0, 0.2.1-rc.1 and 0.2.1-rc.2), fixed in 0.2.1: the first `vsift setup check` after a restart can say `[timeout]` for
 FFmpeg and FFprobe, call the setup `blocked` and tell you to install tools you already have**
 ([#391](https://github.com/smormah/vsift/issues/391), [L-161](../planning/known-limits.md#l-161)). Those versions allow FFmpeg, FFprobe and whisper.cpp
 5 seconds in all to answer, one after another (FFmpeg and FFprobe are asked for their version, whisper.cpp for its help text). A large FFmpeg build that is started for the first time since the machine came up can use that up
 (on the one Windows 11 machine where this was seen, with real-time virus scanning, FFprobe alone was reported to take 4.7 seconds), and the answer then says
 "Install or locate this trusted tool" under a tool that is installed and working. Nothing is wrong with the tools. **Run `vsift setup check` again**, or run
-`vsift setup check --timeout-seconds 30`. The fix is in the third candidate of 0.2.1, `0.2.1-rc.3` (cut 2026-10-13), and in 0.2.1, which is built from it: the limit becomes 30 seconds, and a tool that did not
-answer in time is told so, with what to do, instead of getting the advice for a missing tool. It was seen once, on one machine, on Windows; whether macOS and Linux show it was not checked.
+`vsift setup check --timeout-seconds 30`, or upgrade. In 0.2.1 the limit is 30 seconds, and a tool that did not
+answer in time is told so, with what to do, instead of getting the advice for a missing tool. It was seen once, on one machine, on Windows, and the fix was checked by hand on a second Windows machine; whether macOS and Linux show it was not checked.
+
+**A known issue of 0.2.1: the worker host on Windows** ([#404](https://github.com/smormah/vsift/issues/404), [L-167](../planning/known-limits.md#l-167)). The hosted check that shuts a worker down while a local recognition is running failed twice on Windows, once because
+two provider processes were still alive when the check looked and once because the cancelled recognition was reported as failed with `MISSING_CAPABILITY`; it passed on Ubuntu and macOS and on the candidate this release was built from. Nobody has seen it
+outside that hosted check. It concerns programs that run `vsift job run` or `vsift job batch` as a worker and stop it, and the next patch release fixes it first. Whether it happens in use is not known: if you run the worker host on Windows and stop a worker while it is recognising speech, a provider process may be left for a moment, or a request may report a failure where a cancellation was expected.
 
 **`INTEGRITY_FAILURE` right after `--session-root <folder>`.** If the folder already exists and
 VSift did not create it (an empty folder you made with `mkdir`, say), VSift never adopts it and
