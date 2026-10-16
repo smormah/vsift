@@ -8,6 +8,12 @@ Current-state handoff, rewritten in every change; history: git, `CHANGELOG.md`, 
 - **One evidence item is `failed` for `0.2.1`: RQ-05.** The published journeys failed twice on hosted Windows, in the worker's shutdown stage (#404, L-167); Ubuntu and macOS passed. The maintainer decided that it is a known issue of `0.2.1` and the first fix of `0.2.2`. No waiver is recorded, so `release-evidence --complete-for 0.2.1` names RQ-05 alone, and the `0.2.2` candidate's check will name it until the journeys are recorded again on that candidate.
 - **The publish of 2026-10-15** needed a second attempt because the job's read-back of `latest` gave up after five minutes with the packages already published (#403); 6.17 has the steps and what the services showed. `0.2.1-rc.1` and `0.2.1-rc.2` are deprecated; `0.2.1-rc.3`, `0.2.0` and earlier are not.
 
+## CI: the gate and the nightly are built (#414, open, not merged when this was written)
+
+- **The change:** `CI` chooses a lane per pull request (`tools/ci_lanes.py`; `docs/development.md`, "The CI lanes"): docs-only runs Governance and Documentation; code runs lint and tests of the touched packages and their dependents on Ubuntu, plus Windows and macOS when a file holds platform code; build-wide changes, unknown paths or the `full-ci` label run everything. `Nightly` runs everything on `main` each night something merged and opens or updates one `nightly-failure` issue on a failure (stop the line). CI builds tests without debug information: the 23-minute Ubuntu test binary (the managed-store kill scenarios packing a 13 MB debug stand-in) now takes under 3 minutes. **Measured on #414 (no build cache yet):** docs-only 2 min 15 s (was 33 min), one CLI file 3 min 16 s, one domain file 6 min 23 s, the full lane 18 min 55 s (was 34 min), the nightly 20 min 25 s and green.
+- **For the maintainer when it merges:** change the required checks of `main` to `CI result`, `Documentation`, `Governance`, `Dependency policy`, `Dependency review`, `Analyze Rust` (remove the three `Quality (...)` checks, which no longer run on every pull request); create the `full-ci` label. Until then a docs-only pull request waits on the `Quality` checks.
+- **Findings left for decisions:** `CodeQL` (6 to 8 minutes, required) and `P14 local upgrade` (13 to 15 minutes on any `crates/**` change) set the wall time of a code pull request and are outside the lanes; the slow default profile on Linux is L-169 (a code change to the fixture, for iteration D). L-168 is what the gate leaves to the nightly.
+
 ## Cycle 1 (`0.2.2`) has started
 
 The maintainer's delivery model of 2026-10-16 is in `docs/planning/delivery-governance.md` (the policy) and `docs/planning/backlog-iterations.md` (the cycle map, with every issue); the weekly window as a procedure is `docs/operations/release.md` 6.18.
@@ -15,12 +21,12 @@ The maintainer's delivery model of 2026-10-16 is in `docs/planning/delivery-gove
 - **Cycle 1 order:** #404 and #257 first; then #366, #367, #370, #371; then #396, #395, #394, #274, #334, #361, #362, #325, #266, #264, #265, #277, #232, #403, #337; and the test review (flaky tests, runners and harness, trial design incl. #397). Stories that do not overlap run in parallel.
 - **Standing approvals inside a cycle:** the supervisor merges on green after review, files issues for findings, and closes issues whose own closing criteria are met, with the evidence in the comment. **Every `release` environment gate and every npm write stays with the maintainer.** Both memory files are rewritten in every pull request; parallel pull requests rebase before merge.
 - **Iteration A is done (2026-10-16):** #365, #369, #372, #373, #349, #17 and #40 closed with evidence comments; #366, #367, #368, #370 and #371 have status comments and stay open; #359 stays open for the maintainer's own listening check on the two recordings.
-- **In flight:** this change (the model, written down); a separate change to the CI workflows and `docs/development.md` (the gate and the nightly); the README (D4) is rebuilt as the front page by a separate design session that starts early in this cycle.
+- **In flight:** the CI gate and the nightly (#414, open; the section above); the README (D4) is rebuilt as the front page by a separate design session that starts early in this cycle.
 
 ## The test and release model, in one view (decided 2026-10-16; the machinery is not all built)
 
-- **Pull-request gate:** only what the change can affect; target 5 minutes, hard limit 10; docs-only runs the document and governance checks; Windows and macOS only for platform-sensitive changes; a hot fix can ask for the full three-system run.
-- **Nightly on `main`** when something merged: a failure opens an issue and stops development until fixed; **a candidate is cut only from a commit whose nightly passed** (to be enforced by the release workflow).
+- **Pull-request gate** (built in #414, not merged): only what the change can affect; target 5 minutes, hard limit 10; docs-only runs the document and governance checks; Windows and macOS only for platform-sensitive changes; a hot fix can ask for the full three-system run.
+- **Nightly on `main`** when something merged (built in #414): a failure opens an issue and stops development until fixed; **a candidate is cut only from a commit whose nightly passed** (to be enforced by the release workflow).
 - **Weekly window:** cut at Friday or Saturday midnight in the maintainer's local time; the long hosted runs follow, for what the week touched; publish on Monday or Tuesday on the maintainer's approval; a failure gets a targeted fix and a rerun of only the failing workflow.
 - **Hot fix:** outside the window: the full ~30-minute three-system check, the publish, then the quick checks of the published bytes.
 - **Monthly, or with a major change** (a skill rewrite, a re-pin): agent batches 2 and 3, the dependency-quality checks, the full durability campaign. Not weekly; an ordinary week's skill wording change gets the uncounted skill smoke (about $6). The weekly drift runs stay and open an issue on failure.
@@ -34,7 +40,8 @@ The maintainer's delivery model of 2026-10-16 is in `docs/planning/delivery-gove
 - **The folder answer that differs by platform:** a folder named as the source is `STORAGE_IO` on Windows and `INVALID_SOURCE` on Linux and macOS (align or keep).
 - **RQ-05 is recorded `failed` for `0.2.1`** (no waiver; a waiver would not expire by itself). The user-facing note about #404 (installation guide section 12, the README's status) stays as written unless you say otherwise.
 - **The window's details:** whether a release branch should replace the freeze of 6.8 so development can continue during the window.
-- **Register reviews `pending`:** 95 of 149 entries. **The next free register number is L-168.**
+- **Register reviews `pending`:** 97 of 151 entries (L-168 and L-169 are the CI lanes'). **The next free register number is L-170.**
+- **The branch-protection change for #414** (when it merges): require `CI result`, `Documentation`, `Governance`, `Dependency policy`, `Dependency review`, `Analyze Rust`; remove the three `Quality (...)` checks; create the `full-ci` label.
 
 ## What the next session reads first
 

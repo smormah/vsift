@@ -87,10 +87,10 @@ jobs:
       - name: The generated pages are current and the guide keeps its promises
         run: node tools/guide/generate-reference.cjs --binary target/debug/vsift --check
 
+  # Whether this run needs the examples: always when the Nightly workflow calls
+  # this one or it is dispatched; on a pull request or push only when the guide's
+  # pages, its tools, its practice recordings or this workflow change.
   scope:
-    # Whether this run needs the examples: always when the Nightly workflow calls
-    # this one or it is dispatched; on a pull request or push only when the guide's
-    # pages, its tools, its practice recordings or this workflow change.
     name: Examples needed
     runs-on: ubuntu-24.04
     timeout-minutes: 10
