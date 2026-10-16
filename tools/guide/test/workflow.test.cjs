@@ -20,7 +20,7 @@ test('the workflow grants nothing at the top and one read scope to each job', ()
   assert.match(code, /^permissions: \{\}$/m, 'no empty top-level permissions');
   const jobs = code.slice(code.indexOf('\njobs:'));
   const names = [...jobs.matchAll(/^ {2}([a-z][a-z-]*):\n {4}name:/gm)].map((match) => match[1]);
-  assert.deepEqual(names, ['reference', 'examples']);
+  assert.deepEqual(names, ['reference', 'scope', 'examples']);
   for (const name of names) {
     const start = jobs.indexOf(`\n  ${name}:\n`);
     const next = names.map((other) => jobs.indexOf(`\n  ${other}:\n`)).filter((index) => index > start).sort((a, b) => a - b)[0];
@@ -59,11 +59,30 @@ test('every action is pinned to the commit the Release workflow uses, and a chec
   }
 });
 
-test('no expression reaches a shell: the only expressions are in the concurrency group', () => {
+// Since the CI lanes (2026-10-16) the `scope` job decides whether the examples run, so three more
+// expressions exist: the event's name and its base commit reach the decision's script through `env`
+// (never interpolated into it), and the decision reaches the examples job as a job output.
+const ALLOWED_EXPRESSIONS = [
+  /^\s+(group|cancel-in-progress): /,
+  /^ {6}examples: \$\{\{ steps\.scope\.outputs\.examples \}\}$/,
+  /^ {4}if: needs\.scope\.outputs\.examples == 'true'$/,
+  /^ {10}EVENT: \$\{\{ github\.event_name \}\}$/,
+  /^ {10}BASE: \$\{\{ github\.event\.pull_request\.base\.sha \|\| github\.event\.before \}\}$/,
+];
+
+test('no expression reaches a shell: the only expressions are the concurrency group and the scope decision', () => {
   const lines = code.split('\n').filter((line) => line.includes('${{'));
   assert.ok(lines.length >= 1);
   for (const line of lines) {
-    assert.match(line, /^\s+(group|cancel-in-progress): /, `an expression outside the concurrency block: ${line.trim()}`);
+    assert.ok(
+      ALLOWED_EXPRESSIONS.some((allowed) => allowed.test(line)),
+      `an expression outside the concurrency block and the scope decision: ${line.trim()}`,
+    );
+  }
+  // The decision's script reads those values from its environment only.
+  const runs = [...code.matchAll(/^ {8}run: \|\n((?: {10,}[^\n]*\n)+)/gm)].map((match) => match[1]);
+  for (const script of runs) {
+    assert.ok(!script.includes('${{'), 'an expression inside a run script');
   }
 });
 

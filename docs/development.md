@@ -30,7 +30,8 @@ cargo test --workspace --locked
 cargo doc --workspace --no-deps --locked
 ```
 
-CI runs the same checks on Windows, macOS, and Linux. If you changed anything under
+CI runs these checks in lanes chosen by what the pull request touches, and the whole
+set on all three systems every night (see "The CI lanes" below). If you changed anything under
 `npm/`, also run `node --test npm/test/launcher.test.cjs` (see "npm packages" below).
 
 If you changed a parser the fuzz targets use, or anything in `fuzz/`, also run the
@@ -41,6 +42,90 @@ cargo fmt --manifest-path fuzz/Cargo.toml --check
 cargo clippy --manifest-path fuzz/Cargo.toml --all-targets --all-features --locked -- -D warnings
 cargo test --manifest-path fuzz/Cargo.toml --locked
 ```
+
+## The CI lanes
+
+Since 2026-10-16 (the maintainer's test model) the `CI` workflow is a fast gate: a pull request
+runs what its change can affect, and the `Nightly` workflow runs everything on `main`. The aim is
+five minutes for a typical pull request and ten at most.
+
+**How a lane is chosen.** The first job, `Changes`, runs the tests of `tools/ci_lanes.py`
+(`tools/test_ci_lanes.py`) and then the script itself on the files the change touches (from the
+merge base with `main`):
+
+| Lane | When | What runs |
+| --- | --- | --- |
+| `docs` | Every touched file is prose, the work record or a tool with its own workflow: `docs/` (except the files below that tests read), `memory/`, the top-level `*.md` files, `deny.toml`, `.github/` metadata, the Python drivers in `tools/`, `tools/guide/`, `tools/p14-*/` | `Governance` and `Documentation` |
+| `crates` | Workspace code, or a file a package's tests read | `Governance`, `Documentation`, and `Quality` for the selected packages (format, Clippy and tests); the fuzz harness, the npm launcher and the worker boundary when the change reaches them |
+| `full` | `Cargo.toml` or `Cargo.lock` at the root, any member's `Cargo.toml` or `build.rs`, `rust-toolchain.toml`, `rustfmt.toml`, `.gitattributes`, `.github/workflows/`, `tools/ci_lanes.py` and its tests, any path no rule knows, or the `full-ci` label | Everything, as before the lanes: the whole workspace on Ubuntu, Windows and macOS, the release build, every job |
+
+- **The selected packages** are the touched workspace packages and every package that depends
+  on them (from `cargo metadata`: normal, build and development edges, transitively), plus the
+  packages whose tests read a touched file outside their own folder. That second list is
+  `SHARED_INPUTS` in the script, found by reading every package for the paths it opens: `schemas/`
+  (contract, engine, CLI, infrastructure, release tool), `fixtures/` (engine, CLI, infrastructure,
+  agent trials, governance), `skills/` (contract, CLI, agent trials, release tool),
+  `docs/contracts/` (CLI), `docs/agents/` (CLI, agent trials), the agent-trial records in
+  `docs/planning/p12-agent-trials/` and `p14-agent-trials/` (agent trials),
+  `docs/operations/release.md`, `LICENSE*` and `npm/` (release tool; `npm/` also the agent trials
+  and the launcher's tests), `tools/send-console-ctrl.ps1` (CLI) and the infrastructure crate's
+  test data (also the contract and the engine). A test that starts reading another shared file
+  needs a row there ([L-168](planning/known-limits.md#l-168)).
+- **The fuzz harness** (`fuzz/`, its own workspace) counts as a dependent of the packages its
+  manifest names by path (application, contract, domain, infrastructure); it runs when one of them
+  is selected, when `fuzz/` changes, or when a file its replay reads changes (`fixtures/`, `skills/`,
+  the infrastructure and contract test data).
+- **Windows and macOS** run `Quality` (and the npm launcher runs on all three) only when a touched
+  file is platform-sensitive. That is decided from the code, not from a hand-kept list: a Rust file
+  is platform-sensitive when, before or after the change, it holds conditional compilation on the
+  target (`cfg(windows)`, `cfg(unix)`, `target_os`, `target_family`), `std::os::`, the
+  capability-based filesystem, process-group, permission or ACL crates (`cap_std`, `cap_fs_ext`,
+  `rustix`, `windows_sys`, `windows_acl`, `libc`, `process_wrap`), `tokio::signal`, file locks,
+  permissions, links or path canonicalisation (`PLATFORM_MARKERS`). On 2026-10-16 that is 118 of
+  the 476 Rust files: process supervision, private folders and roots, the session and managed
+  stores, the archive readers, the signal handling, the worker and the platform tests. `npm/`,
+  the agent trials' PowerShell campaign scripts and any `.ps1`, `.cmd`, `.bat` or `.sh` file count
+  too. Plain spawning of the built binary is not a marker, so most CLI contract tests stay on
+  Ubuntu.
+- **The strict worker boundary** runs when the process supervisor, the host attestation or their
+  tests change, and whenever a change is platform-sensitive.
+- **What a fast lane leaves out on Ubuntu:** the two managed-store kill scenarios that try every
+  arrival of every fault point on Linux (`kill::a_first_install_killed_anywhere_is_consistent_and_a_rerun_completes` and
+  `kill::an_update_killed_anywhere_keeps_a_whole_selection_and_a_rerun_completes`, 94 kills and
+  reruns, about four minutes), and the release
+  build. Windows and macOS run those two scenarios on their first arrivals whenever they run; the
+  full lane and the nightly run the exhaustive Linux form.
+- **The build** in CI has no debug information (`CARGO_PROFILE_DEV_DEBUG=0`) and no incremental
+  artifacts. The managed-store tests pack the `vsift-smoke-fixture` binary into their fixture
+  archives, and with Linux's embedded debug information that binary is about 13 MB: in CI run
+  38889838351 one test binary took 23 of Ubuntu's 29 test minutes. Without it the binary is
+  0.5 MB and the same tests take under three minutes. Debug assertions are unaffected. Locally the
+  default profile still applies ([L-169](planning/known-limits.md#l-169)).
+- **The build cache:** `Quality` restores `~/.cargo` and `target/debug` from the cache that the
+  nightly saves on `main` (per system, keyed by `Cargo.lock` and the toolchain); pull requests only
+  read it.
+- **`CI result`** is the one check of the workflow that branch protection requires. It passes when
+  every job that ran passed; a job the lane skipped counts as passed, a cancelled one does not.
+
+**The full run on a pull request (hot fixes).** Add the label `full-ci` to the pull request. The
+label starts a new run at once (the workflow listens for `labeled`) and every push afterwards runs
+the full lane until the label is removed. Use it for a hot fix, a change you suspect the selection
+misjudges, or a release-adjacent change; a change to the workflows or the build files gets the full
+lane anyway. The label must exist in the repository (create it once with `gh label create
+full-ci`).
+
+**The nightly run and the stop-the-line rule.** `.github/workflows/nightly.yml` runs at 02:41 UTC
+when `main` moved since the last nightly that ran (a dispatch, `gh workflow run nightly.yml`,
+always runs): `Quality` on all three systems with the whole workspace suite, the exhaustive Linux
+kill scenarios and the release build; the npm launcher on all three; `Documentation`, `Governance`
+(with the lane tests), the fuzz harness replay and the strict worker boundary; and the `Guide`
+workflow with its examples against the real binary and the reviewed tools (on pull requests the
+examples run only when `docs/guide/`, `tools/guide/`, `fixtures/corpus/` or `guide.yml` change).
+It saves the build cache. **A failed nightly stops the line:** the run opens one issue labelled
+`nightly-failure` (or comments on the one already open) with the run's link and the failed jobs,
+using its own token; the cause is fixed before any further development is merged, and the issue is
+closed when a nightly passes again. A run on any ref but `main` prints the report instead of filing
+it.
 
 ## Fuzzing
 
@@ -462,7 +547,7 @@ built-ins only, no dependencies), `package.json` and `README.md`. The platform p
 are generated from the release archives by `vsift-release npm`
 ([`operations/release.md`](operations/release.md) section 5). If you change the launcher,
 run its tests with Node.js 22 or later (CI job `npm launcher` runs them on Windows, macOS
-and Linux):
+and Linux, on a pull request that touches `npm/` and every night):
 
 ```console
 node --test npm/test/launcher.test.cjs
@@ -506,8 +591,8 @@ or the pins test fails. A pull request that changes `tools/p14-published/**` or 
 workflows starts the first three workflows; one that changes the schemas, the contract or the
 record readers starts `P14 compatibility`, which fetches the history and requires the checked-in
 copy of 0.1.0's JSON examples (`schemas/v1/frozen/v0.1.0/`) to be the tag's bytes. The tests behind
-that workflow, `published_compatibility` and `published_v0_1_0_records`, also run in every Quality
-job with the checked-in copy.
+that workflow, `published_compatibility` and `published_v0_1_0_records`, also run with the checked-in
+copy in every Quality job that selects their packages, and every night.
 
 ## Robustness campaigns (P14)
 
