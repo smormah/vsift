@@ -9,19 +9,25 @@ and dark themes, and a `<title>` and `<desc>` for screen readers.
 | --- | --- | --- |
 | `hero.svg` | Logo, wordmark, tagline; three frames pass through a sieve and come out as cited evidence | The real session below |
 | `logo.svg` | The mark alone, 128 px | — |
-| `demo-terminal.svg` | Animated terminal (CSS keyframes, 24 s loop) replaying the session | Real output of `vsift-cli@0.1.0`, trimmed |
+| `demo-terminal.svg` | Animated terminal (CSS keyframes, about 36 s loop) replaying the session: ingest, retranscribe, search (text and `--json --view brief`), candidates, frame get, crop, handoff check | Real output of `vsift-cli@0.2.1`, trimmed |
 | `evidence-timeline.svg` | 0–14 s timeline: speech, screen changes and the three real frames | The real session; the frames embedded as 480 px PNG |
 | `pipeline.svg` | From video to cited handoff, with the "on your machine" boundary | `docs/architecture.md` |
 | `before-after.svg` | Doing it by hand against doing it with VSift | — |
 | `architecture.svg` | The five crates, the contract crate and the external processes | `AGENTS.md`, `Cargo.toml` |
-| `roadmap.svg` | Done, now and next | `delivery-ledger.json`, ADR 0024, the R1 plan |
+| `roadmap.svg` | R0 done, the 0.2.x line (0.2.1 now, 0.2.2 and the re-pins next) and R1 planned | `delivery-ledger.json`, ADR 0024, `backlog-iterations.md`, the R1 plan |
 | `frame-*.png` | The three frames `frame get` returned, at full size | The real session |
+| `crop-10s-failed.png` | The 480x110 crop of the `1017 FAILED` row that `crop` returned | The real session |
 
-**The real session.** `vsift-cli@0.1.0` from npm, on `fixtures/corpus/generated/F04-speech.mp4`
-(14 s, synthetic), local ASR with whisper.cpp `base`: session
-`ses_1179db5b0e627c16e2fa26d0a8892e81`, speech segment `tsg_064d9d71…` (0.000–7.000 s, 82.20%),
-visual candidates at 0, 7 and 10 s, frames `evd_de565174…`, `evd_fb4171c4…` and `evd_efa4af05…`.
-Anything labelled as output must stay real output; trimmed output says it is trimmed.
+**The real session.** `vsift-cli@0.2.1` from npm, installed into a temporary prefix with its
+configuration and session folders isolated in a short temporary folder, on
+`fixtures/corpus/generated/F04-speech.mp4` (14 s, synthetic; shown as `walkthrough.mp4`), local ASR
+with whisper.cpp v1.9.2 `base`: session `ses_b7ff4f4f5de12f4af02f9fa86823436a`, revision
+`trv_e094613c…`, speech segment `tsg_f5a4c0cb…` (0.000–7.000 s, 82.20%), visual candidates
+`vcd_4d4de712…`, `vcd_2be29f4f…` and `vcd_6d9d6bdc…` at 0, 7 and 10 s, frames `evd_1fc0339d…`,
+`evd_901de99c…` and `evd_dac79c65…`, crop `evd_8e029895…` (`--rect 120,280,480,110`). The three
+frames are byte for byte the ones `vsift-cli@0.1.0` returned (same SHA-256), so the PNG files did
+not change; the ids did. Anything labelled as output must stay real output; trimmed output says it
+is trimmed.
 
 **Palette and type.** Navy `#0e1a2b` (background), `#13233a` and `#172a44` (cards), `#25405f`
 (lines), header blue `#2a4a73` (from the frames), text `#e8eef6`, muted `#9fb2c8`, dim `#62799a`;
@@ -45,5 +51,6 @@ mono: `ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`. Animations sto
   come from the synthetic corpus only.
 - Keep each file well under 150 KB, and keep words that date quickly out of the graphics, except
   the roadmap.
-- **Redraw `roadmap.svg` when a rung moves:** with the first release candidate (P14 PR 10) and when
-  P14 completes (PR 13).
+- **Redraw `roadmap.svg` when "now" moves:** when a release of the 0.2.x line is published (move
+  the NOW marker and the done line), and when R1 starts. Its text dates by design; the other
+  graphics should not.

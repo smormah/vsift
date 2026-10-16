@@ -34,7 +34,7 @@ embeddable engine library (`vsift`) that the CLI, and later other hosts, use. To
   (provider processes still running after the batch ended; a cancelled recognition reported as `MISSING_CAPABILITY`), nobody has seen it in use, and it is the first fix of `0.2.2` (#404, L-167);**
 - be installed without Rust: **`0.2.1` is npm's `latest` (2026-10-15), so `npm install --global vsift-cli` with no tag installs it**; `next` names `0.2.1-rc.3` (the same source);
   `0.1.0`, `0.2.0` and the candidates stay published (`0.2.0-rc.1`, `0.2.0-rc.2`, `0.2.1-rc.1` and `0.2.1-rc.2` are deprecated). Archives on the GitHub release
-  carry a Sigstore attestation and npm carries provenance. The README shows 0.1.0's real output (graphics: L-121).
+  carry a Sigstore attestation and npm carries provenance. **The README front page was rebuilt on 2026-10-16** (a pull request, open and not merged when this was written): real `0.2.1` output (with `--view brief`, a crop and `handoff check`), the terminal demo regenerated, the ids in the hero and the timeline renewed and the roadmap redrawn (R0 done, the `0.2.x` line, R1 planned; L-121 stays open, because the next release makes it stale again).
 
 **The agent skill** (`skills/vsift/`) teaches Claude Code or Codex to run an investigation with
 the CLI and write a cited report. P12's named-client trials qualified it:

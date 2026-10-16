@@ -102,7 +102,7 @@
       "id": "NC-001",
       "documents": ["README.md", "docs/operations/install.md"],
       "text": "not yet a supported platform",
-      "note": "A negation: the R0 targets are not yet supported platforms."
+      "note": "A negation: the R0 targets are not yet supported platforms. The README's sentence was rewritten on 2026-10-16 (the front-page rebuild): it now gives the reason in the same sentence (Windows Smart App Control, a clean machine and macOS Gatekeeper were not tried); the phrase is unchanged."
     },
     {
       "kind": "non_claim",
@@ -338,7 +338,7 @@
       "documents": ["README.md", "docs/operations/install.md"],
       "text": "the evidence gathered so far, with its gaps, is recorded in the release evidence ledger",
       "requires": ["RQ-19"],
-      "note": "The evidence summary as it stands; points at the ledger rather than restating results."
+      "note": "The evidence summary as it stands; points at the ledger rather than restating results. In the README, since the front-page rebuild of 2026-10-16, the sentence sits in the bullet that says R0 is complete, after the waived and failed items; the phrase is unchanged."
     },
     {
       "kind": "claim",
