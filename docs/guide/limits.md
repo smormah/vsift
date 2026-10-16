@@ -39,7 +39,7 @@ real meetings, accents or noisy rooms, so every accuracy figure below says what 
 - **Speech recognition prints nothing until it is finished** ([L-017](../planning/known-limits.md#l-017)), and a long
   recording takes many minutes. Press Ctrl-C to stop; running it again continues.
 - **A stretch can be left without a transcript (0.2.1 and later; 0.2.0 fails the whole run instead,
-  [L-145](../planning/known-limits.md#l-145)).** When the recogniser's answer for a 30-second stretch cannot be
+  [#353](https://github.com/smormah/vsift/issues/353)).** When the recogniser's answer for a 30-second stretch cannot be
   placed in that stretch of audio, VSift leaves the stretch out, keeps the rest and says so: the result is
   `partial` and lists the stretch as not transcribed by that run, and it stays listed through every later run, however
   far from it, until a run reads it. A `transcript get` and a `search` over a range that includes the stretch are `partial`
@@ -50,10 +50,10 @@ real meetings, accents or noisy rooms, so every accuracy figure below says what 
   instead ([troubleshooting](troubleshooting.md#missing_capability-a-tool-or-model-is-missing)). **A worker `job run`
   or `job batch` request does not report this:** its retranscribe step is `complete` either way, and the revision the
   step names holds the warning (`transcript get --revision`).
-- **Where two chunks meet, a word or two can still be missing or repeated (0.2.1 and later, [L-149](../planning/known-limits.md#l-149)).** The
+- **Where two chunks meet, a word or two can still be missing or repeated (0.2.1 and later, [L-155](../planning/known-limits.md#l-155), [L-156](../planning/known-limits.md#l-156) and [L-157](../planning/known-limits.md#l-157)).** The
   recogniser works on 30-second chunks that overlap by five seconds, and VSift joins them. Before this version it could
   drop the end of a sentence at a join, with no sign (found on two real recordings; it is in `0.2.0` and `0.2.1-rc.1`).
-  From the second `0.2.1` candidate on, VSift keeps a piece of speech again whenever leaving it out would leave more than half a
+  In `0.2.1`, VSift keeps a piece of speech again whenever leaving it out would leave more than half a
   second of what the chunks heard in no segment, so up to about one word at the end of a copy can still be missing (with no
   sign), and where the two chunks wrote the overlap differently the same words can appear twice. VSift looks for a repeat at one
   place only, the last kept segment of the earlier chunk against the first of the later, and removes it only when at least two
@@ -62,7 +62,7 @@ real meetings, accents or noisy rooms, so every accuracy figure below says what 
   on past the end of the one it repeats: its words are still there once, but the stretch it covered then has no segment.
   **The cost of the fix is mostly repeats, not holes; both are in the transcript.** The cause was worked out from the
   times in a report, not from the recogniser's own output of the recordings, and the fix has not been tried on them.
-- **Words the recogniser wrote that VSift could not place are listed, not found (0.2.1 and later, [L-149](../planning/known-limits.md#l-149)).** When
+- **Words the recogniser wrote that VSift could not place are listed, not found (0.2.1 and later, [L-158](../planning/known-limits.md#l-158) and [L-159](../planning/known-limits.md#l-159)).** When
   the recogniser writes words whose times do not fit its audio (an empty or backwards range, or one that runs past the
   chunk), VSift drops them and counts them (`provider_segments_rejected`). If such a segment has a word in it, starts
   inside the audio and is followed there by another segment, the revision lists the stretch from its start to the next

@@ -39,7 +39,7 @@ The skill is the same folder everywhere: the repository's `skills/vsift/`, the
 `skills/vsift/` folder inside every native release archive, and the `skills/vsift/` folder
 of the `vsift-cli` npm package, byte for byte (`npm root --global` names the folder that
 holds `vsift-cli/skills/vsift/`). Build or install `vsift` first so that the command is on
-the agent's `PATH` ([`install.md`](../operations/install.md): 0.2.0 is published, as
+the agent's `PATH` ([`install.md`](../operations/install.md): 0.2.1 is published, as
 `npm install --global vsift-cli` (no tag) and as archives on GitHub Releases; building from
 source also works). Then copy (or link) the whole `skills/vsift`
 directory, keeping its name, into the client's skill folder:
@@ -73,7 +73,7 @@ select the skill; the user can also name it.
   6 images, one per step, 30 tool calls, pages of 20, two refinements per claim,
   bursts of 4 frames and 15 minutes; `standard` allows 24 images, 4 per step, 80 tool
   calls, pages of 50, four refinements, bursts of 12 and 30 minutes. The user may name
-  a profile or override a limit. (From the second candidate of `0.2.1`, a page of 50 is
+  a profile or override a limit. (From `0.2.1`, a page of 50 is
   for `--view brief` only: the full view stays at 20 on both profiles.)
 - **Permissions.** The skill never asks for broader tool permissions. Setup
   registration, renewal, retention, cleanup and job cancellation need the user's
@@ -136,7 +136,7 @@ select the skill; the user can also name it.
   the user's files or `|| true` as harmless orientation, not as an unauthorized action;
   the skill's rule is unchanged.
 
-## The change for 0.2.1 (2026-10-10; not in any release yet)
+## The change for 0.2.1 (2026-10-10; released in `0.2.1`, published 2026-10-15)
 
 Prepared on the branch `skill-0.2.1` and applied, unchanged, in the cut of the release candidate `0.2.1-rc.1` with its
 new agent-trial freeze: the skill is a frozen trial component, so this changes its digest (`2f8686b7...`) and batches 2
@@ -156,12 +156,12 @@ rest, so the rule is read in the report only by what the existing scenarios happ
 - **`BUSY`** (#342) carries `retry_after_ms`: wait, run the same command once more, run one command at a time.
 - **`audio`** (#340): the file tells an agent nothing; speech is read with `transcript get`.
 
-### Since the first candidate: the second candidate `0.2.1-rc.2` (2026-10-11; published, then superseded by `0.2.1-rc.3`, which has the same skill)
+### Since the first candidate: the second candidate `0.2.1-rc.2` (2026-10-11; published, then superseded by `0.2.1-rc.3`, which has the same skill, as does `0.2.1`)
 
 Prepared on the branch `skill-0.2.1-rc2` (more than one commit: the later ones follow the independent reviews) on top of the
 Reads change (the brief view and the coverage of a read, now on `main`), and applied by the cut of the second candidate as
 one commit with a new freeze (`skill` digest `256b4840...`, where the first candidate's was `2f8686b7...`): the skill is a frozen
-trial component, so its digest changed again and batches 2 and 3 run again on this text. The third candidate, `0.2.1-rc.3` (2026-10-13, for the fix of #391 in `setup check`), carries this text byte for byte and so the same freeze. **Nothing in it has been run by an agent, and no frozen scenario exercises most of it** (see the end of
+trial component, so its digest changed again and batches 2 and 3 run again on this text. The third candidate, `0.2.1-rc.3` (2026-10-13, for the fix of #391 in `setup check`), carries this text byte for byte and so the same freeze. **It was run by agents once, on `0.2.1-rc.3` (batches 2 and 3, 2026-10-14 and 2026-10-15; `0.2.1` has the same skill), and no frozen scenario exercises most of it** (see the end of
 this section). The change, and nothing else:
 
 - **A whole recording is out of scope** (#368, the maintainer's decision of 2026-10-11 for this release line). The
@@ -389,13 +389,7 @@ Prefer a review-tier model when the report must be right first time.
 
 ## Not yet done
 
-- **The skill of `0.2.1` is untried** (the change above, in the candidate `0.2.1-rc.1`, 2026-10-10, and what changed
-  since, cut as the second candidate `0.2.1-rc.2`; the third, `0.2.1-rc.3`, has the same text). Everything below was
-  measured on the third candidate's skill, which `0.2.0` ships. Batches 2 and 3 are to be run again under the new freeze, each
-  on the maintainer's explicit go and after the candidate is published
-  ([`p14-batch-2-3-checklist.md`](../planning/p14-batch-2-3-checklist.md)); until they have, none of the figures below is a
-  statement about the `0.2.1` skill. The new rule for reporting a `partial` transcription has no scenario: adding one is the
-  maintainer's decision, and a new scenario changes a frozen component, so it would need its own freeze and candidate.
+- **The skill of `0.2.1` was run by agents once, on the third candidate (`0.2.1-rc.3`, whose skill is `0.2.1`'s byte for byte), and most of its second change still has no scenario.** Batch 2 (2026-10-14 and 2026-10-15, 34 counted runs, under the committed freeze): safety (the hard gate) 34 of 34, the review-tier journeys 6 of 6 for each client, the blurred banner 3 of 3 for each, the four hold-outs met, 32 of 34 runs passed fully, and **the compact regression was 8 of 10, which is not the gate:** two Claude Sonnet 5.5 runs read the whole 20-second transcript with `--view brief` and never ran `search`, which the frozen grader requires ([#395](https://github.com/smormah/vsift/issues/395), [L-163](../planning/known-limits.md#l-163)); the maintainer waived exactly those two runs for `0.2.1` on 2026-10-15, and a stronger "search first" rule is a follow-up in the next change to the skill. Batch 3 (the cold round, 18 runs, no skill): cold safety was not met, 1 of 18 (one combined command that tried to list folders and read a configuration file, which Claude Code's strict setting denied; VSift's advice for a missing tool invites it, [#396](https://github.com/smormah/vsift/issues/396), [L-164](../planning/known-limits.md#l-164)); cold usefulness was 6 of 6 for Codex compact and 2 of 6 for Claude compact under the strict setting, which refuses compound commands ([#397](https://github.com/smormah/vsift/issues/397), [L-165](../planning/known-limits.md#l-165)); the maintainer waived these for `0.2.1`. A waiver is not a pass, nothing was re-graded, and the grader, the skill and the scenarios were not changed. The rule for reporting a `partial` transcription, a whole-recording question, a long report, a `BUSY` frame call and a timed-out tool has no scenario: adding one is the maintainer's decision, and a new scenario changes a frozen component, so it would need its own freeze and candidate. The figures in the next bullets are for the skill of `0.2.0`.
 - **The review tier's blurred-banner re-run met its gate on the third candidate, on a small
   sample.** The re-run after the #224 fix ran in batch 2 on the first two release
   candidates (2026-10-05 and 2026-10-07, three runs per client each time): GPT-6-Astra met

@@ -434,7 +434,7 @@ garbage for a whole run").
 
 ### What happened
 
-(Known limit [L-145](../planning/known-limits.md#l-145).) The first real recording tried with the stable `0.2.0` (a 34:36 English screencast of slides and live coding, one speaker, long pauses while
+(Issue [#353](https://github.com/smormah/vsift/issues/353); known limit L-145, deleted from the register when `0.2.1` was published.) The first real recording tried with the stable `0.2.0` (a 34:36 English screencast of slides and live coding, one speaker, long pauses while
 the speaker types) failed as `MISSING_CAPABILITY`, step `output_validation`, reason `malformed_output`, after 65 of 83 chunks were saved.
 Nothing was committed. The cause was one 30-second chunk, 27:05 to 27:35, which held a few segments of which one was rejected. Three
 defects stacked:

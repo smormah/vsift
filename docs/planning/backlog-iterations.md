@@ -1,16 +1,16 @@
-# Backlog iterations after 0.2.1 (written 2026-10-15)
+# Backlog iterations after 0.2.1 (written 2026-10-15; the order decided 2026-10-16)
 
-Status: **a plan the maintainer asked for on 2026-10-15, not a decision.** It maps every open issue to an iteration and says
-how each iteration is tested, so that a fix does not wait on a half-day evidence round. The maintainer decides the order;
-a later change records each decision here.
+Status: **a plan the maintainer asked for on 2026-10-15; the order of the iterations was decided on 2026-10-16** (below, "Decided order"),
+and what is inside each iteration is still a plan. It maps every open issue to an iteration and says
+how each iteration is tested, so that a fix does not wait on a half-day evidence round. A later change records each further decision here.
 
 ## Where things stand
 
 | Version | State |
 | --- | --- |
 | `0.2.0` | The first stable release (R0, packets P00 to P14), 2026-10-09. Superseded by `0.2.1`; not deprecated. |
-| `0.2.1` | **The current stable release**, published 2026-10-15 (tag `v0.2.1` at `e9ab6e626733`; npm `latest`). It fixes #353 (a sparse chunk failed a whole transcription), #359 (speech dropped at chunk seams) and #391 (`setup check` called a slow tool missing), and adds `--view brief`, coverage on `transcript get`, the missing-path remediations and the second skill text. Verified from outside the same day. |
-| `0.2.1-rc.1`, `0.2.1-rc.2` | Deprecated on npm (2026-10-15). |
+| `0.2.1` | **The current stable release**, published 2026-10-15 (tag `v0.2.1` at `e9ab6e626733`; npm `latest`). It fixes #353 (a sparse chunk failed a whole transcription), #359 (speech dropped at chunk seams) and #391 (`setup check` called a slow tool missing), and adds `--view brief`, coverage on `transcript get`, the missing-path remediations and the second skill text. Verified from outside the same day. The hosted checks of its bytes passed except the journeys on hosted Windows (#404), **a known issue of `0.2.1` by the maintainer's decision of 2026-10-16**; the ledger records that item as `failed`. |
+| `0.2.1-rc.1`, `0.2.1-rc.2` | Deprecated on npm (2026-10-15): "Superseded by 0.2.1. Install vsift-cli." |
 | `0.2.1-rc.3` | The accepted candidate; npm `next`; not deprecated. |
 
 The `0.2.x` line is R0 maintenance. R1 (packets P15 to P20, issues #25 to #30) is planned in
@@ -39,6 +39,8 @@ rule into `delivery-governance.md` and the release runbook.
 
 Each issue is closed with its evidence or a note saying why it stays open.
 
+The register entries of #353 (L-145), #359 (L-149) and #365 (L-150) were deleted when `0.2.1` was published (2026-10-16), because each now has its implementation, regression tests and a release; #353 is closed, and #359 and #365 are closed here with their evidence (#365's one remaining check is a real run that shows a client paging with a cursor, which only the maintainer's recordings can give). The entries for #366, #367, #368 and #370 stay: `0.2.1` shipped the skill's words only for them.
+
 - Fixed in code in `0.2.1`: #359 (#377; its limits are #380 to #384), #365 (#379; the skill uses it), #369 (#378; close after a passing Linux and macOS run, which CI gave), #372 (#378), #373 (#379).
 - Skill wording in `0.2.1`: #366, #367 (the brief view and the five-minute rule; the first-call silence is not addressed: keep open or move to B), #370, #371, #349.
 - Out of scope by the maintainer's decision of 2026-10-11: #368 (whole-recording questions): keep open for R1 or close as decided.
@@ -47,7 +49,7 @@ Each issue is closed with its evidence or a note saying why it stays open.
 ## Iteration B: `0.2.2`, small fixes found during 0.2.1 (one candidate, about a week)
 
 First, because they affect people on Windows:
-- #404: on Windows the worker's shutdown can leave provider processes running, or report a cancelled recognition as `MISSING_CAPABILITY` (seen twice on the stable's journeys, 2026-10-15).
+- #404: on Windows the worker's shutdown can leave provider processes running, or report a cancelled recognition as `MISSING_CAPABILITY` (seen twice on the stable's journeys, 2026-10-15). **Decided 2026-10-16: a known issue of `0.2.1` and the first fix of `0.2.2`** ([L-167](known-limits.md#l-167); the ledger's RQ-05 is `failed` for `0.2.1` and is recorded again on the `0.2.2` candidate).
 - #257 (security): the `vsift.cmd` shim npm and pnpm create lets cmd.exe re-read arguments.
 
 Then:
@@ -84,11 +86,14 @@ Testing: each fix with its regression test; one candidate; the quick checks; a s
 
 - Evaluations: #170 to #175, #159, #150, #178.
 - R1: P15 to P20 (#25 to #30). Later: a live screen share (#107), speakers (#108), a faster-whisper adapter (#147).
+- **Online sources, inside R1, starting from P15's decision packet (decided 2026-10-16; filed after this map was first written; not a `0.2.x` change):** [#406](https://github.com/smormah/vsift/issues/406) (investigate videos from online links with source-grounded evidence) with four slices: [#407](https://github.com/smormah/vsift/issues/407) direct HTTPS video links, built in VSift; [#408](https://github.com/smormah/vsift/issues/408) HLS and DASH links; [#409](https://github.com/smormah/vsift/issues/409) platform pages through the optional yt-dlp component; [#410](https://github.com/smormah/vsift/issues/410) live platform streams through yt-dlp, on #107's live design.
 
-## Suggested order
+## Decided order (2026-10-16)
 
 1. A (close what 0.2.1 settled).
 2. D's plan (the test review), so B and C are tested the new way.
 3. B (`0.2.2`), #404 and #257 first.
 4. C (re-pins), with #363's real-media set.
-5. Decide R1.
+5. R1, starting with P15's decision packet and not before the maintainer says.
+
+**Still open for the maintainer** (listed, not decided): whether to move `next` ([L-108](known-limits.md#l-108)); the first-day note for Yarn users; #188, #176, #246 and #374 (above); ratifying or reversing the choices of #377, of the Reads change and of #392; the folder answer that differs by platform (`STORAGE_IO` on Windows, `INVALID_SOURCE` on Linux and macOS); and whether RQ-05 is waived for `0.2.1` ([`release-0.2.1.md`](release-0.2.1.md)).

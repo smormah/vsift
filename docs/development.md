@@ -574,8 +574,9 @@ cargo run --locked -p vsift-governance -- public-claims
 cargo run --locked -p vsift-governance -- release-evidence --complete-for <version> --commit <40 hex digits>
 ```
 
-For example `--complete-for 0.2.0 --commit eeb2a22a46a85ab10a456f2ab5d6a62e292836c5` is the check of the
-release 0.2.0 (it names the stable commit; a candidate's version, such as `0.2.0-rc.3`, is checked as a candidate).
+For example `--complete-for 0.2.1 --commit e9ab6e62673328a1645254a4a32e552a2a2f61bf` is the check of the
+release 0.2.1 (it names the stable commit; a candidate's version, such as `0.2.1-rc.3`, is checked as a candidate). When this was written (2026-10-16) it answered that
+RQ-05 is `failed` for 0.2.1 (the journeys on hosted Windows, #404) and named nothing else; for 0.2.0 the same check passed.
 
 - **The ledger's shape** (schema version 1; the Rust types in
   `tools/vsift-governance/src/release_evidence/schema.rs` are the schema, and every struct
@@ -588,7 +589,7 @@ release 0.2.0 (it names the stable commit; a candidate's version, such as `0.2.0
   typed `reference` of `workflow_run`, `pull_request`, `issue` or `record`, with a `date` and a
   `note`), `issues`, `decision`, `reason` and `date`. `release_delta` is null until a stable
   release is published and its ledger follow-up copies the stable plan's `release-delta.json`
-  (P14 PR 8's delta check) into it; it holds the record of `0.2.0` since 2026-10-10 (nothing
+  (P14 PR 8's delta check) into it; it holds the record of `0.2.1` since 2026-10-16 (and held `0.2.0`'s from 2026-10-10 to then; nothing
   copies it for you: [L-103](planning/known-limits.md#l-103)).
 - **Changing an evidence item's status** is a change to the ledger: set `status`, give the
   version and commit it is for (`applies_to`) and at least one typed link (a workflow run, a

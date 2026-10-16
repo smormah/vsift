@@ -3,16 +3,16 @@
   "packet": "P14",
   "plan": "docs/planning/p14-qualification.md",
   "release_delta": {
-    "candidate_commit": "83dca856e7a00fc9a71c87baae99f0b1d401dd31",
-    "candidate_version": "0.2.0-rc.3",
+    "candidate_commit": "fa380021f2aa8db40fdccdb7c410839e8fc10f4c",
+    "candidate_version": "0.2.1-rc.3",
     "check": {
-      "run_id": 37946261087,
+      "run_id": 38758081349,
       "type": "workflow_run",
       "workflow": "Release"
     },
-    "date": "2026-10-09",
-    "stable_commit": "eeb2a22a46a85ab10a456f2ab5d6a62e292836c5",
-    "stable_version": "0.2.0",
+    "date": "2026-10-15",
+    "stable_commit": "e9ab6e62673328a1645254a4a32e552a2a2f61bf",
+    "stable_version": "0.2.1",
     "verdict": "allowed"
   },
   "items": [
@@ -36,10 +36,35 @@
       "gate": { "candidate": "required", "stable": "repeat" },
       "status": "passed",
       "applies_to": {
-        "version": "0.2.1-rc.3",
-        "commit": "fa380021f2aa8db40fdccdb7c410839e8fc10f4c"
+        "version": "0.2.1",
+        "commit": "e9ab6e62673328a1645254a4a32e552a2a2f61bf"
       },
       "evidence": [
+        {
+          "reference": {
+            "type": "workflow_run",
+            "workflow": "P14 published artifacts",
+            "run_id": 38765075608
+          },
+          "date": "2026-10-15",
+          "note": "The twelve clean-install jobs (npm, pnpm, Yarn and Bun on Windows Server 2025, macOS 15 and Ubuntu 24.04) of the dispatch with version 0.2.1 and from_version 0.2.0 from main at e9ab6e6, the stable commit, on 2026-10-15 at 15:58 UTC, about eleven minutes after the publish run ended: vsift-cli@0.2.1 installed from the real registry with cargo, rustc, rustup, git and python not resolving (asserted first); global (Yarn: project) and one-shot installs with scripts disabled; --version names 0.2.1 and the tag commit (e9ab6e626733) on every manager and system; the installed package's skill is the tag's skills/vsift, byte for byte (12 files identical in the nine npm, pnpm and Bun jobs; not compared under Yarn Plug'n'Play, which keeps the package in a zip archive, where the archive jobs compare it); hostile file names and arguments through the PowerShell and Bun shims and through yarn answered as vsift itself does (39 of 39 on each Windows job that has them, 60 of 60 on each Linux and macOS job); a fake ffmpeg planted in the working directory and on PATH is never selected or run from the working directory or a relative entry and is never trusted for media work (SEC-02); optional dependencies omitted fail with exit 127 naming the package; npm audit signatures and gh attestation verify pass in the same job. Yarn held the 0.4-hour-old version back (\"quarantined\") and the documented npmPreapprovedPackages exemption let yarn add vsift-cli@0.2.1 through: an untagged yarn add vsift-cli was not tried. All 23 jobs passed. The Windows vsift.cmd shim is an observation, not a pass: 36 of 39 hostile cases answered as vsift itself does, the others are cmd.exe re-reading the command line (#257, L-109, an accepted residual). For 0.2.1 only; hosted images are not clean machines (L-112)."
+        },
+        {
+          "reference": {
+            "type": "workflow_run",
+            "workflow": "P14 published artifacts",
+            "run_id": 38765697122
+          },
+          "date": "2026-10-15",
+          "note": "The same twelve jobs of the second dispatch (from_version 0.2.1-rc.3, 2026-10-15 at 16:03 UTC, dispatched after the first had finished because runs of one workflow share a concurrency group) were green too. All 23 jobs of each run passed."
+        },
+        {
+          "reference": { "type": "record", "path": "docs/planning/release-0.2.1.md" },
+          "date": "2026-10-16",
+          "note": "The section \"The evidence on 0.2.1 (recorded 2026-10-16)\": RQ-01 to RQ-04, the two published-artifacts dispatches and what each shows and does not show."
+        }
+      ],
+      "prior": [
         {
           "reference": {
             "type": "workflow_run",
@@ -62,9 +87,7 @@
           "reference": { "type": "record", "path": "docs/planning/release-0.2.1.md" },
           "date": "2026-10-15",
           "note": "The section \"The evidence on 0.2.1-rc.3 (recorded 2026-10-15)\": RQ-01 to RQ-04, the two published-artifacts dispatches and what each shows and does not show."
-        }
-      ],
-      "prior": [
+        },
         {
           "reference": {
             "type": "workflow_run",
@@ -141,7 +164,7 @@
           "note": "One install of 0.1.0 from the real registry, with npm only, on the maintainer's Windows 11 development machine (npm audit signatures 4 and 4, npx vsift --version). No pnpm, Yarn or Bun, no other system, not a clean machine."
         }
       ],
-      "date": "2026-10-15"
+      "date": "2026-10-16"
     },
     {
       "id": "RQ-02",
@@ -163,10 +186,26 @@
       "gate": { "candidate": "required", "stable": "repeat" },
       "status": "passed",
       "applies_to": {
-        "version": "0.2.1-rc.3",
-        "commit": "fa380021f2aa8db40fdccdb7c410839e8fc10f4c"
+        "version": "0.2.1",
+        "commit": "e9ab6e62673328a1645254a4a32e552a2a2f61bf"
       },
       "evidence": [
+        {
+          "reference": {
+            "type": "workflow_run",
+            "workflow": "P14 published artifacts",
+            "run_id": 38765075608
+          },
+          "date": "2026-10-15",
+          "note": "The three archive jobs of the dispatch with from_version 0.2.0 (0.2.1, e9ab6e6): the three archives and SHA256SUMS downloaded from the v0.2.1 release, the checksums matched (SHA256SUMS lists the three archives) and the three attestations verified against the Release workflow and refs/tags/v0.2.1 (3 of 3 on each job); node, npm, npx, bun, pnpm, yarn, cargo, rustc, git and python do not resolve; each archive holds its executable in the right format (Mach-O arm64, PE x64, ELF x64), the licences, the notices, the SBOM and the skill; vsift --version names 0.2.1 and e9ab6e626733; setup check --json answers with the setup.check document (exit 2, blocked, on a machine with no tools); the shipped skill is the tag's skills/vsift, byte for byte (12 files identical on each). One job per system, Windows Server 2025, macOS 15 and Ubuntu 24.04, all green. Repeated by the second dispatch (run 38765697122, from_version 0.2.1-rc.3), also green. For 0.2.1 only."
+        },
+        {
+          "reference": { "type": "record", "path": "docs/planning/release-0.2.1.md" },
+          "date": "2026-10-16",
+          "note": "The section \"The evidence on 0.2.1 (recorded 2026-10-16)\": RQ-01 to RQ-04."
+        }
+      ],
+      "prior": [
         {
           "reference": {
             "type": "workflow_run",
@@ -180,9 +219,7 @@
           "reference": { "type": "record", "path": "docs/planning/release-0.2.1.md" },
           "date": "2026-10-15",
           "note": "The section \"The evidence on 0.2.1-rc.3 (recorded 2026-10-15)\": RQ-01 to RQ-04."
-        }
-      ],
-      "prior": [
+        },
         {
           "reference": {
             "type": "workflow_run",
@@ -239,7 +276,7 @@
           "note": "The three archive jobs of this run at 6aa5403: the three archives and SHA256SUMS downloaded from the v0.1.0 release, checksums and attestations verified, extracted, each executable in the right format, the system's own run with --version (0.1.0 and the tag commit) and setup check --json with no Node.js, Rust, Git or Python on PATH, and the shipped skill byte-identical to the tag's. For 0.1.0 only; no browser download (RQ-17)."
         }
       ],
-      "date": "2026-10-15"
+      "date": "2026-10-16"
     },
     {
       "id": "RQ-03",
@@ -260,10 +297,26 @@
       "gate": { "candidate": "required", "stable": "repeat" },
       "status": "passed",
       "applies_to": {
-        "version": "0.2.1-rc.3",
-        "commit": "fa380021f2aa8db40fdccdb7c410839e8fc10f4c"
+        "version": "0.2.1",
+        "commit": "e9ab6e62673328a1645254a4a32e552a2a2f61bf"
       },
       "evidence": [
+        {
+          "reference": {
+            "type": "workflow_run",
+            "workflow": "P14 published artifacts",
+            "run_id": 38765075608
+          },
+          "date": "2026-10-15",
+          "note": "The offline-install job of the same dispatch (0.2.1, e9ab6e6): the published Linux archive downloaded, checksummed, attested and extracted (vsift 0.2.1 (e9ab6e626733)); the three reviewed artifacts (ffmpeg_ffprobe n9.0.1-11-ge47273f4d9-20260831, 113,372,924 bytes; whisper_cli whisper.cpp-v1.9.2-ubuntu-x64, 9,497,583 bytes; whisper_model whisper-base-multilingual-80da2d8, 147,951,465 bytes) downloaded by the binary's own setup plan with size and SHA-256 checked, then installed with --artifact-dir in a container with --network none: all three components activated, setup check is ready with every tool from the managed store and local ASR verified, setup list verifies every component and a rerun is already_current for all three; the same install without the folder fails as offline (DOWNLOAD_FAILED, exit 7); a relative folder is INVALID_ARGUMENT (exit 2); one changed byte is INTEGRITY_FAILURE (digest_mismatch, exit 7: ffmpeg activated, whisper_cli refused, whisper_model blocked, setup check degraded) and the file is never used; a missing file is INVALID_ARGUMENT (artifact_missing, exit 2). The job again observed that the minimal Ubuntu image lacks libgomp1 for whisper-cli (#256, fixed in the message and the guide); the image was given exactly that package. Repeated by the second dispatch (run 38765697122), also green. For 0.2.1 only."
+        },
+        {
+          "reference": { "type": "record", "path": "docs/planning/release-0.2.1.md" },
+          "date": "2026-10-16",
+          "note": "The section \"The evidence on 0.2.1 (recorded 2026-10-16)\": RQ-01 to RQ-04."
+        }
+      ],
+      "prior": [
         {
           "reference": {
             "type": "workflow_run",
@@ -277,9 +330,7 @@
           "reference": { "type": "record", "path": "docs/planning/release-0.2.1.md" },
           "date": "2026-10-15",
           "note": "The section \"The evidence on 0.2.1-rc.3 (recorded 2026-10-15)\": RQ-01 to RQ-04."
-        }
-      ],
-      "prior": [
+        },
         {
           "reference": {
             "type": "workflow_run",
@@ -341,7 +392,7 @@
           "note": "The offline path has run with stand-in artifacts only; the managed smoke downloads the real files online, from a source-built binary."
         }
       ],
-      "date": "2026-10-15"
+      "date": "2026-10-16"
     },
     {
       "id": "RQ-04",
@@ -362,10 +413,35 @@
       "gate": { "candidate": "required", "stable": "repeat" },
       "status": "passed",
       "applies_to": {
-        "version": "0.2.1-rc.3",
-        "commit": "fa380021f2aa8db40fdccdb7c410839e8fc10f4c"
+        "version": "0.2.1",
+        "commit": "e9ab6e62673328a1645254a4a32e552a2a2f61bf"
       },
       "evidence": [
+        {
+          "reference": {
+            "type": "workflow_run",
+            "workflow": "P14 published artifacts",
+            "run_id": 38765075608
+          },
+          "date": "2026-10-15",
+          "note": "The three upgrade jobs (real-registry mode) of the dispatch with from_version 0.2.0 (the upgrade a person on latest really does): the published 0.2.0 (eeb2a22a46a8) installed from the real registry with its media tools (Ubuntu: the managed install of that version; Windows and macOS: registered tools), a configuration registered, two sessions made (a supplied SRT and a VTT) and a bundle retained; then npm install --global vsift-cli@0.2.1 (now vsift 0.2.1, e9ab6e626733): the configuration byte-identical (and the media-tool verification record unchanged), session A's status, transcript and search read the same (additive members allowed), the session list and the bundle as before, the managed tools still verify (Ubuntu), a new session works; then install.md section 8 walked: managed tools removed, the package gone, VSift's own folders exactly the ones the guide names, deleting them left no trace and the bundle, registered tools and source files stayed. All three green. npm only; no downgrade (L-044)."
+        },
+        {
+          "reference": {
+            "type": "workflow_run",
+            "workflow": "P14 published artifacts",
+            "run_id": 38765697122
+          },
+          "date": "2026-10-15",
+          "note": "The three upgrade jobs of the second dispatch, from_version 0.2.1-rc.3 (the upgrade a person on next does): the published 0.2.1-rc.3 installed from the real registry with the same fixtures, then npm install --global vsift-cli@0.2.1: the configuration identical, session A read the same, the list and the retained bundle as before, the managed tools still verify (Ubuntu), a new session works, and install.md section 8 walked to a clean uninstall on each of Ubuntu, Windows and macOS. All three green. The upgrade from 0.1.0 and P14 compatibility (the frozen 0.1.0 examples against the 0.1.0 tag's bytes) were not dispatched for 0.2.1; the candidate's runs of them are in prior."
+        },
+        {
+          "reference": { "type": "record", "path": "docs/planning/release-0.2.1.md" },
+          "date": "2026-10-16",
+          "note": "The section \"The evidence on 0.2.1 (recorded 2026-10-16)\": RQ-01 to RQ-04."
+        }
+      ],
+      "prior": [
         {
           "reference": {
             "type": "workflow_run",
@@ -397,9 +473,7 @@
           "reference": { "type": "record", "path": "docs/planning/release-0.2.1.md" },
           "date": "2026-10-15",
           "note": "The section \"The evidence on 0.2.1-rc.3 (recorded 2026-10-15)\": RQ-01 to RQ-04."
-        }
-      ],
-      "prior": [
+        },
         {
           "reference": {
             "type": "workflow_run",
@@ -537,7 +611,7 @@
           "note": "With the full history and VSIFT_REQUIRE_RELEASE_TAG=v0.1.0: the frozen copy of 0.1.0's 52 JSON examples is the tag's bytes, every one validates against the current v1 schemas, and the current readers decode the four stored session records (the same tests run in every Quality job)."
         }
       ],
-      "date": "2026-10-15"
+      "date": "2026-10-16"
     },
     {
       "id": "RQ-05",
@@ -557,12 +631,34 @@
       },
       "scope": ["Cargo.toml", "Cargo.lock", "rust-toolchain.toml", "crates", "npm", "skills/vsift", "tools/vsift-release", ".github/workflows/release.yml", ".github/workflows/p14-journeys.yml", "tools/p14_journeys.py", "tools/p07_local_asr_tools.py", "fixtures"],
       "gate": { "candidate": "required", "stable": "repeat" },
-      "status": "passed",
+      "status": "failed",
       "applies_to": {
-        "version": "0.2.1-rc.3",
-        "commit": "fa380021f2aa8db40fdccdb7c410839e8fc10f4c"
+        "version": "0.2.1",
+        "commit": "e9ab6e62673328a1645254a4a32e552a2a2f61bf"
       },
       "evidence": [
+        {
+          "reference": {
+            "type": "workflow_run",
+            "workflow": "P14 journeys",
+            "run_id": 38764446399
+          },
+          "date": "2026-10-15",
+          "note": "FAILED on hosted Windows, twice; passed on Ubuntu and macOS. The published vsift 0.2.1 (e9ab6e626733), installed from the real npm registry and run as the native executable through VSIFT_E2E_BINARY (the tests compiled from the tag's own source), dispatched from main at e9ab6e6 on 2026-10-15 at 15:54 UTC, about six minutes after the publish run ended. Attempt 1: Ubuntu 24.04 passed 9 of 9 checkpoints and macOS 15 passed 10 of 10 (on macOS the T-04 gates in process: base clean word error rate 4.06%, F08 61.53%; base_q5_1 4.87% and 46.15%; no unexpected miss), and on Windows Server 2025 8 of 9 checkpoints passed (setup, supplied transcript, local ASR, search, candidates, evidence, recovery and the installed-binary checks) and the P11 worker checkpoint failed in its stage p11_shutdown_and_redelivery with \"providers still running after the batch ended: [760, 856]\" (two provider process ids still alive when the check looked, 76 seconds into the stage); the Report job failed. Attempt 2 (the failed Windows job re-run once, at 17:36 UTC after issue 404 was filed; Ubuntu and macOS were not re-run and their results stand) failed in the same stage with another symptom: \"the second recognition's request was not cancelled\", the request that the shutdown should have cancelled ended as failed with MISSING_CAPABILITY (step 1, not retryable) instead of cancelled. The same stage passed on 0.2.1-rc.3 (run 38482273668), whose source is the same, so the failure is intermittent on this evidence. The per-stage report files of the run (artifact p14-journeys-windows) were not downloaded for this record: what is recorded is the job logs and the two messages in issue 404. Not repeated on the stable's tag: the Ubuntu and Windows T-04 gates (P07 local ASR) and the Ubuntu durable path with write barriers (P14 load, P14 runbook walk; RQ-09 and RQ-12 carry); the candidate's runs of them are in prior. The item is failed for 0.2.1, not passed: on Windows not every stage that can run there passed (the per-system rule of plan section 21)."
+        },
+        {
+          "reference": { "type": "issue", "number": 404 },
+          "date": "2026-10-15",
+          "note": "The tracking issue for the failure, filed after the first attempt (governance rule 14) and extended after the one re-run: both symptoms are on the worker's shutdown path on Windows (providers still running after the batch ended; a cancelled recognition reported as MISSING_CAPABILITY), a race between the stop and the verdict; the first attempt's report step also hit a Python UnicodeEncodeError while printing, a defect of the journeys' report step and not of VSift. What would settle it: read the report and logs, find whether the two processes ended shortly after the check or kept running, and fix the one that is true."
+        },
+        {
+          "reference": { "type": "record", "path": "docs/planning/release-0.2.1.md" },
+          "date": "2026-10-16",
+          "note": "The section \"The evidence on 0.2.1 (recorded 2026-10-16)\": RQ-05, the journeys run, the finding and the maintainer's decision of 2026-10-16: #404 is a known issue of 0.2.1 (a finding accepted for 0.2.1) and the first fix of 0.2.2. The pass rule has no clause for an accepted finding and the ledger has no status for 'failed, accepted': the item stays failed, and whether to waive it for 0.2.1 as the other accepted findings were (RQ-07 for #394) is recorded there as the one thing the checker needs and the maintainer has not decided."
+        }
+      ],
+      "issues": [258, 263, 404],
+      "prior": [
         {
           "reference": {
             "type": "workflow_run",
@@ -603,10 +699,7 @@
           "reference": { "type": "record", "path": "docs/planning/release-0.2.1.md" },
           "date": "2026-10-15",
           "note": "The section \"The evidence on 0.2.1-rc.3 (recorded 2026-10-15)\": RQ-05, the journeys' checkpoint verdicts, the two P07 local ASR dispatches and what is not restated."
-        }
-      ],
-      "issues": [258, 263],
-      "prior": [
+        },
         {
           "reference": {
             "type": "workflow_run",
@@ -800,7 +893,7 @@
           "note": "A dispatch of the same gates on hosted Ubuntu 24.04 and Windows Server 2025 (both jobs passed), in process on source at f4695c3, a commit after the 0.1.0 commit; not the published binary. A dispatch at the 0.1.0 commit would put these two systems' gates among the counted evidence; the release candidate's run must."
         }
       ],
-      "date": "2026-10-15"
+      "date": "2026-10-16"
     },
     {
       "id": "RQ-06",
@@ -822,10 +915,26 @@
       "gate": { "candidate": "required", "stable": "repeat" },
       "status": "passed",
       "applies_to": {
-        "version": "0.2.1-rc.3",
-        "commit": "fa380021f2aa8db40fdccdb7c410839e8fc10f4c"
+        "version": "0.2.1",
+        "commit": "e9ab6e62673328a1645254a4a32e552a2a2f61bf"
       },
       "evidence": [
+        {
+          "reference": {
+            "type": "workflow_run",
+            "workflow": "P13 managed smoke",
+            "run_id": 38764760524
+          },
+          "date": "2026-10-15",
+          "note": "Dispatched with published_version 0.2.1 from main at e9ab6e6 on 2026-10-15 at 15:56 UTC: all three jobs green on Ubuntu 24.04 (the pinned smoke before activation, the real setup plan, install and check, and the install end to end with its kills and the local-ASR journey) with the published vsift 0.2.1 (e9ab6e626733) from the real npm registry as the binary under test (the report's overall is passed), downloading the three reviewed artifacts from their publishers (catalogue ubuntu-24.04-x86_64-2026-09-22-r2: FFmpeg n9.0.1-11-ge47273f4d9, whisper.cpp v1.9.2 and the base model). Evidence for 0.2.1 only; the weekly schedule runs the highest published version."
+        },
+        {
+          "reference": { "type": "record", "path": "docs/planning/release-0.2.1.md" },
+          "date": "2026-10-16",
+          "note": "The section \"The evidence on 0.2.1 (recorded 2026-10-16)\": RQ-06."
+        }
+      ],
+      "prior": [
         {
           "reference": {
             "type": "workflow_run",
@@ -839,9 +948,7 @@
           "reference": { "type": "record", "path": "docs/planning/release-0.2.1.md" },
           "date": "2026-10-15",
           "note": "The section \"The evidence on 0.2.1-rc.3 (recorded 2026-10-15)\": RQ-06."
-        }
-      ],
-      "prior": [
+        },
         {
           "reference": {
             "type": "workflow_run",
@@ -906,7 +1013,7 @@
           "note": "Green at 01656d6, same limits; nothing watches the publishers' files between releases (L-099)."
         }
       ],
-      "date": "2026-10-15"
+      "date": "2026-10-16"
     },
     {
       "id": "RQ-07",
@@ -1579,10 +1686,32 @@
       "gate": { "candidate": "required", "stable": "repeat" },
       "status": "passed",
       "applies_to": {
-        "version": "0.2.1-rc.3",
-        "commit": "fa380021f2aa8db40fdccdb7c410839e8fc10f4c"
+        "version": "0.2.1",
+        "commit": "e9ab6e62673328a1645254a4a32e552a2a2f61bf"
       },
       "evidence": [
+        {
+          "reference": { "type": "record", "path": "docs/planning/p14-scan-reading-2026-10-15.md" },
+          "date": "2026-10-15",
+          "note": "The dated reading of the public sources made on 2026-10-15, the day 0.2.1 was published, at main fa380021f2aa (the tag v0.2.1-rc.3's tree). The stable commit e9ab6e626733 differs from that tree in the version text, the launcher's README, the installation guide and the work record only (the candidate-to-stable check of the publish run, verdict allowed), so the reading is of the stable's source. It named two new findings, both decided by the maintainer on 2026-10-15: CVE-2026-110810 (whisper.cpp, Low, #399) accepted under L-137 and fixed with the re-pin, open until then; CVE-2026-109311 (an FFmpeg IAMF parser overflow reachable through the MP4 demuxer, #400) closed as fixed by inference beside L-122. The standing acceptances (CVE-2026-107678 / L-144 / #351, CVE-2026-38350 / L-122 / #272, the pinned whisper.cpp / L-137 / #322) stand unchanged. No second reading by hand was made after the publish. Not scanned: the worker image's packages; the Windows and macOS executables' system libraries."
+        },
+        {
+          "reference": {
+            "type": "workflow_run",
+            "workflow": "P14 scan reading",
+            "run_id": 38777879949
+          },
+          "date": "2026-10-15",
+          "note": "The hosted part of the reading, dispatched from main at e9ab6e6 with version 0.2.1 on 2026-10-15 at 17:30 UTC (about two and a quarter minutes, one job): cargo deny 0.20.2 advisories ok, bans ok, licenses ok and sources ok for the workspace and for the fuzz crate; the published Linux executable (vsift 0.2.1 (e9ab6e626733); highest glibc symbol GLIBC_2.34); the release's SBOM against cargo metadata (164 components against 165 resolved crates; the one difference is the root package vsift-cli 0.2.1). Read through the run's log on 2026-10-16 (the artifact was not downloaded). This is the hosted part; the dated reading is the entry before it."
+        },
+        {
+          "reference": { "type": "record", "path": "docs/planning/release-0.2.1.md" },
+          "date": "2026-10-16",
+          "note": "The section \"The evidence on 0.2.1 (recorded 2026-10-16)\": RQ-13, what was read and what was not."
+        }
+      ],
+      "issues": [272, 322, 351, 399, 400],
+      "prior": [
         {
           "reference": { "type": "record", "path": "docs/planning/p14-scan-reading-2026-10-15.md" },
           "date": "2026-10-15",
@@ -1601,10 +1730,7 @@
           "reference": { "type": "record", "path": "docs/planning/release-0.2.1.md" },
           "date": "2026-10-15",
           "note": "The section \"The evidence on 0.2.1-rc.3 (recorded 2026-10-15)\": RQ-13, what was read and what remains."
-        }
-      ],
-      "issues": [272, 322, 351, 399, 400],
-      "prior": [
+        },
         {
           "reference": { "type": "record", "path": "docs/planning/p14-scan-reading-2026-10-10.md" },
           "date": "2026-10-10",
@@ -1727,7 +1853,7 @@
           "note": "The same candidate through the local-ASR adapter, the CLI checkpoint and the T-04 gates on Ubuntu 24.04 and Windows."
         }
       ],
-      "date": "2026-10-15"
+      "date": "2026-10-16"
     },
     {
       "id": "RQ-14",
@@ -2022,10 +2148,26 @@
       "gate": { "candidate": "required", "stable": "repeat" },
       "status": "passed",
       "applies_to": {
-        "version": "0.2.1-rc.3",
-        "commit": "fa380021f2aa8db40fdccdb7c410839e8fc10f4c"
+        "version": "0.2.1",
+        "commit": "e9ab6e62673328a1645254a4a32e552a2a2f61bf"
       },
       "evidence": [
+        {
+          "reference": {
+            "type": "workflow_run",
+            "workflow": "CI",
+            "run_id": 38750059203
+          },
+          "date": "2026-10-15",
+          "note": "The Governance job (21 s) and the nine other jobs of the CI run of the push to main at e9ab6e6, the stable commit (2026-10-15, 14:17 UTC), all green, at the claims rung candidate: the Governance job runs cargo run --locked -p vsift-governance -- check, that is the delivery ledger, the evidence ledger's structure, the claims registry and its check (every scanned document, the matrix, the launcher's messages and the README graphics' text carry no controlled word outside a registered statement and no banned phrase), the register enforcement and the size limits of the two handoff files. This shows recorded evidence and absent banned words, not that a sentence is true (L-101); the claims check reads RQ-19's status and not its version (L-133). The rung is still candidate."
+        },
+        {
+          "reference": { "type": "record", "path": "docs/planning/release-0.2.1.md" },
+          "date": "2026-10-16",
+          "note": "The section \"The evidence on 0.2.1 (recorded 2026-10-16)\": RQ-18."
+        }
+      ],
+      "prior": [
         {
           "reference": {
             "type": "workflow_run",
@@ -2039,9 +2181,7 @@
           "reference": { "type": "record", "path": "docs/planning/release-0.2.1.md" },
           "date": "2026-10-15",
           "note": "The section \"The evidence on 0.2.1-rc.3 (recorded 2026-10-15)\": RQ-18."
-        }
-      ],
-      "prior": [
+        },
         {
           "reference": {
             "type": "workflow_run",
@@ -2072,7 +2212,7 @@
           "note": "The Governance job (and the other nine jobs, all green) of the push to main at d5792ce, the candidate's own commit, at the claims rung candidate: the delivery ledger, the evidence ledger's structure, the claims registry and its check (the statements in use, CL-101 and CL-102, name RQ-19; every scanned document, the matrix, the launcher's messages and the README graphics' text carry no controlled word outside a registered statement and no banned phrase), the register enforcement and the size limits of the two handoff files. The Guide workflow of the same commit (run 37278869635) also passed: the generated reference pages equal the binary and the schemas, and the 40 marked examples print what the pages show. This shows recorded evidence and absent banned words, not that a sentence is true (L-101); the claims check reads RQ-19's status and not its version (L-133), and RQ-19 is passed for the candidate in this same ledger."
         }
       ],
-      "date": "2026-10-15"
+      "date": "2026-10-16"
     },
     {
       "id": "RQ-19",
@@ -2094,10 +2234,40 @@
       "gate": { "candidate": "required", "stable": "repeat" },
       "status": "passed",
       "applies_to": {
-        "version": "0.2.1-rc.3",
-        "commit": "fa380021f2aa8db40fdccdb7c410839e8fc10f4c"
+        "version": "0.2.1",
+        "commit": "e9ab6e62673328a1645254a4a32e552a2a2f61bf"
       },
       "evidence": [
+        {
+          "reference": {
+            "type": "workflow_run",
+            "workflow": "P14 verify release",
+            "run_id": 38764125726
+          },
+          "date": "2026-10-15",
+          "note": "From a hosted runner holding no publishing credential, dispatched from main at e9ab6e6 with version 0.2.1 on 2026-10-15 at 15:52 UTC, about four minutes after the publish run ended (15:48 UTC): one job, 22 checks, all pass, the two that a stable version adds among them. The tag v0.2.1 names e9ab6e626733; the four packages are published at 0.2.1 with latest 0.2.1 and next 0.2.1-rc.3 and no install script; npm provenance of each names this repository's Release workflow (run 38758081349, attempt 1, the attempt that published the packages), the tag and the tag's commit; npm audit signatures reports 2 packages with verified registry signatures and 2 with verified attestations; gh attestation verify passes for 10 of 10 release files and 4 of 4 tarballs; the release holds exactly ten files whose digests equal GitHub's and whose checksums match (SHA256SUMS holds 3 archives); it is not a draft and not a pre-release and GitHub's latest release is v0.2.1; stable: candidate-to-stable-delta passed (release-delta.json of the publish run: 0.2.1-rc.3 at fa380021f2aa to 0.2.1 at e9ab6e626733) and stable: latest-on-all-four-packages passed. For 0.2.1 only."
+        },
+        {
+          "reference": {
+            "type": "workflow_run",
+            "workflow": "Release",
+            "run_id": 38758081349
+          },
+          "date": "2026-10-15",
+          "note": "The publish run of v0.2.1 (workflow_dispatch on the tag, preceded by its dry run, run 38756334727, 2026-10-15 at 14:59 UTC, success). The real dispatch started at 15:11 UTC. After the maintainer's approval, attempt 1's publish job published the four packages to npm (15:32 to 15:38 UTC) and failed in its read-back of latest, which gave up after five minutes while @vsift/darwin-arm64 still read 0.2.0 (issue 403); no GitHub release was created and no draft was left. Attempt 2 (the failed job re-run on the same run and approved again, 15:44 to 15:48 UTC, success) skipped the versions npm already held with the same bytes, passed the read-back and created and published the GitHub release as latest; npm's provenance names attempt 1. Checked from outside on 2026-10-15: latest is 0.2.1 and next is 0.2.1-rc.3 on all four packages; the 28 integrity values of the seven earlier versions and the seven earlier tag commits are unchanged; npm audit signatures reports 4 packages with verified registry signatures and 4 with verified attestations; the 10 release files and the 4 registry tarballs verify with gh attestation verify and equal the plan; a plain npm install vsift-cli prints vsift 0.2.1 (e9ab6e626733)."
+        },
+        {
+          "reference": { "type": "issue", "number": 403 },
+          "date": "2026-10-15",
+          "note": "The tracking issue for the publish job's read-back window (five minutes for one package's latest to propagate), with the recovery that was used (re-run the failed job, approved again) and the proposal, not for 0.2.1, to lengthen the window or say plainly that the packages are published and only the read-back timed out."
+        },
+        {
+          "reference": { "type": "record", "path": "docs/planning/release-0.2.1.md" },
+          "date": "2026-10-16",
+          "note": "The section \"The evidence on 0.2.1 (recorded 2026-10-16)\": RQ-19 and the publish, with release.md 6.17."
+        }
+      ],
+      "prior": [
         {
           "reference": {
             "type": "workflow_run",
@@ -2120,9 +2290,7 @@
           "reference": { "type": "record", "path": "docs/planning/release-0.2.1.md" },
           "date": "2026-10-15",
           "note": "The section \"The evidence on 0.2.1-rc.3 (recorded 2026-10-15)\": RQ-19 and the publish."
-        }
-      ],
-      "prior": [
+        },
         {
           "reference": {
             "type": "workflow_run",
@@ -2193,7 +2361,7 @@
           "note": "One supervising agent session on the maintainer's Windows 11 machine ran npm audit signatures (4 and 4) and gh attestation verify (10 of 10 files, 4 of 4 tarballs) for 0.1.0. One session on one development machine, not a credential-free hosted verification."
         }
       ],
-      "date": "2026-10-15"
+      "date": "2026-10-16"
     },
     {
       "id": "RQ-20",
