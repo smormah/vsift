@@ -425,7 +425,8 @@ still answers `COMMAND_NOT_IMPLEMENTED` (PR 4).
   `op_` and the first 32 hex digits of `sha256("vsift.job-step.v1\n" + op + "\n" +
   index)`), with the host's `AdmissionWait`; its own bounded admission wait is not
   retried again. *Candidates:* `Engine::candidates` until no `not_analyzed` or
-  `deadline_exceeded` window is left, a call analyses nothing, or 16 calls
+  `deadline_exceeded` window is left, a call analyses nothing (a call that analysed nothing
+  because the admission was busy is the step's `BUSY` instead, note of 2026-10-17), or 16 calls
   (`MAX_CANDIDATE_CALLS`); a whole-source range is clipped by the operation; a stop
   mid-way commits what was analysed and cancels the step. *Retain:* into a hidden
   staging directory beside the bundle's name, renamed once it validates, with the
@@ -660,3 +661,23 @@ session id leaves "the abandoned registration" to "normal cleanup".
 - **Progress with a timer thread.** A held update is written with the next one or
   before the terminal event instead; recognition chunks take seconds, so the
   difference is small and there is no thread to stop.
+
+## Note — 2026-10-17: a candidates call stopped by busy admission is the step's `BUSY` (#433)
+
+The candidates step ended when a call analysed nothing, so that a window that cannot be
+analysed does not make it call for ever. A visual window's FFmpeg takes two units of the
+workspace's capacity without waiting (`FfmpegMedia::admit`); while other requests' windows
+hold the capacity, a call stops at the first window it cannot admit. The step's first call
+then failed `BUSY` and was retried with the admission wait, but a later call, with windows of
+the range already indexed, answers `partial` with nothing analysed, and the step ended there:
+the request was `partial` with a window `not_analyzed` (P11's admission ladder at
+concurrency 4 in a four-unit workspace, about 1 in 12 to 1 in 24 local runs on Windows, and
+most runs on a loaded desktop). That gap describes a moment of contention inside the host,
+not the video, and the contract of the step is "until no window is left unanalysed".
+
+A call that analysed nothing and stopped on admission is now the step's failure
+`VisualAnalysisStopped(Busy)` (`BUSY`), which `run_step_retrying` retries with the host's
+`AdmissionWait` like any `BUSY` step (the windows already analysed are committed and are
+not analysed again). When the wait runs out the request fails `BUSY` and stays resumable, as
+a step whose first call was refused did before. A call that analysed nothing for another
+reason (a window's deadline, a cancellation) still ends the step.
