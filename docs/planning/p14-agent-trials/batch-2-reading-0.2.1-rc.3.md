@@ -3,15 +3,15 @@
 Batch 2 is the counted set with the skill, run for the fourth time and the first time for the patch release `0.2.1`, against the published
 `0.2.1-rc.3` (tag `v0.2.1-rc.3` at `fa380021f2aa8db40fdccdb7c410839e8fc10f4c`) from a clean install: every one of the 37 records names the registry's
 integrity for the installed packages (equal to what npm installed), the launcher's digest check and the version line `vsift 0.2.1-rc.3 (fa380021f2aa)`.
-It ran under the freeze committed in `batch-2/freeze.json`, kept since 2026-10-17 as [`batch-2/freeze-0.2.1-rc.3.json`](batch-2/freeze-0.2.1-rc.3.json), which was written for `0.2.1-rc.2` and kept byte for byte for rc.3
+It ran under the freeze committed in `batch-2/freeze.json`, kept from 2026-10-17 as `batch-2/freeze-0.2.1-rc.3.json` and, since the cut of `0.2.2-rc.1` (2026-10-17), as [`batch-2-0.2.1-rc.3/freeze.json`](batch-2-0.2.1-rc.3/freeze.json), which was written for `0.2.1-rc.2` and kept byte for byte for rc.3
 (whole-freeze digest `a48567ac403149561019344cae58e137ae5bce5eb55a022e73cb2143ea60f6ea`; the skill's digest `256b4840da185f9db1cef4f59389a7f24b78f6c524c02f0ba58f50798b0b4993`;
 every record carries both). `freeze check` answered "nothing frozen has changed" for this tree, before and after. Claude Code 2.1.284 ran on the maintainer's
 Windows 11 machine and Codex 0.155.0-alpha.16 in the Linux container, from 2026-10-14 to 2026-10-15. 34 counted runs, 17 per client: the review tier 12 each (Claude Opus 5.5,
-GPT-6-Astra) and the compact tier 5 each (Claude Sonnet 5.5, GPT-6-Sol). The records, the summary and both clients' state are in [`batch-2/`](batch-2/). The earlier
+GPT-6-Astra) and the compact tier 5 each (Claude Sonnet 5.5, GPT-6-Sol). The records, the summary and both clients' state were in `batch-2/` and are in [`batch-2-0.2.1-rc.3/`](batch-2-0.2.1-rc.3/) since the cut of `0.2.2-rc.1` moved them aside (nothing in them changed). The earlier
 batches are history: [`batch-2-rc.3/`](batch-2-rc.3/) with [batch-2-reading-rc.3.md](batch-2-reading-rc.3.md) (the third candidate of `0.2.0`, which ran under another skill),
 [`batch-2-rc.2/`](batch-2-rc.2/) and [`batch-2-rc.1/`](batch-2-rc.1/).
 
-**Who reads this.** The numbers are the frozen grader's, computed by `vsift-agent-trials summarize` into [`batch-2/SUMMARY.md`](batch-2/SUMMARY.md), and **nothing is re-graded**.
+**Who reads this.** The numbers are the frozen grader's, computed by `vsift-agent-trials summarize` into [`batch-2-0.2.1-rc.3/SUMMARY.md`](batch-2-0.2.1-rc.3/SUMMARY.md), and **nothing is re-graded**.
 This reading is the pull request author's, from the records, the summary and the state files; the raw logs stay on the maintainer's machine and were not read for it.
 The only maintainer decision in it is the waiver quoted below.
 
@@ -54,7 +54,7 @@ inside 0.2.1; the ledger entry RQ-15 is `waived`, not `passed` ([`release-0.2.1.
 
 **The Codex sign-in in the trial home expired during the batch.** Three attempts of `b2-codex-review-counted-a-08-f05-local-asr-1` ended before any tool call ("refresh token was
 already used"), the harness marked them `invalid` and the run blocked. **With the maintainer's approval the supervisor changed those three attempts in
-[`batch-2/state-codex.json`](batch-2/state-codex.json) from `invalid` to `usage_limited`**, with the note in the file ("operator 2026-10-14: Codex sign-in expired (refresh token already
+[`batch-2-0.2.1-rc.3/state-codex.json`](batch-2-0.2.1-rc.3/state-codex.json) from `invalid` to `usage_limited`**, with the note in the file ("operator 2026-10-14: Codex sign-in expired (refresh token already
 used); no tool call was made; reclassified from invalid"), set the run back to pending, and it was counted on its fourth attempt (trial `a-08-f05-local-asr-4b42fdcd`). This is the one
 hand edit of a state file that the supervisor reports; it is disclosed here, in the ledger and in the register ([L-166](../known-limits.md#l-166)). **What the state and the records show:** the 37 record files are
 the 34 counted trials and the three invalid attempts (each record has no calls and an `invalid_reasons` entry that the client ended with an error before one tool call); every `install`

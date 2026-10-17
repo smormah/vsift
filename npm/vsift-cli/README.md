@@ -25,7 +25,8 @@ after the publish (the installation guide has the setting that lets it through).
 
 The dist-tag `next` is for release candidates and you do not need it: it names `0.2.1-rc.3`,
 the release candidate that 0.2.1 was built from, or a later candidate or release. The older
-candidates stay published; `0.2.1-rc.1` and `0.2.1-rc.2` are deprecated and superseded.
+candidates stay published; `0.2.1-rc.1` and `0.2.1-rc.2` are deprecated and superseded. The release candidates of
+the next patch release, 0.2.2 (the first is `0.2.2-rc.1`), go to `next` when they are published and never to `latest`.
 
 ## What changed since 0.2.0
 

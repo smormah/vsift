@@ -258,7 +258,7 @@ test (the whole-recording limit, the `BUSY` rule, the two-part check, the 5-minu
 rule for a gap and the cut-answer rule) are text shipped, behaviour unmeasured, until a real run shows an agent following
 them.
 
-## The change for 0.2.2 (2026-10-17; on `main` once merged, not released)
+## The change for 0.2.2 (2026-10-17; in the first candidate `0.2.2-rc.1`, cut 2026-10-17, not published)
 
 One rule, for #395. In agent-trial batch 2 on `0.2.1-rc.3` two compact Claude Sonnet 5.5 runs read the whole 20-second
 transcript with `transcript get --view brief` and never ran `search`, although `FIND_SPOKEN_SPANS` began "Always search
@@ -281,7 +281,7 @@ CLI's own advice for a missing tool changed in the same pull request (#396, [L-1
 trial freeze is new (`skill` `7f445a9a...`, whole freeze `f52265e7...`; [trials.md](trials.md), "The freeze (P14)"). **No agent
 has run this text:** it gets the uncounted skill smoke, and the compact tier is measured again only in the next counted batch.
 
-### A long report's check on Windows (#366; 2026-10-17, on `main` once merged, not released)
+### A long report's check on Windows (#366; 2026-10-17, in `0.2.2-rc.1`, not published)
 
 The skill's two draft forms of `vsift handoff check` stay the only ones, and the check still reads a draft from standard
 input or `--file`. What was measured, on Windows 11 with Claude Code (desktop app 2.42304, Agent SDK 0.3.299), Git for Windows
@@ -310,7 +310,7 @@ Not measured: Codex (it cannot run VSift on Windows, [L-076](../planning/known-l
 releases, and bash on Linux and macOS. **No agent has run this text**; the trial freeze is new ([trials.md](trials.md), "The
 freeze (P14)"): `skill` `13b485f3...`, whole freeze `cfaf9783...`.
 
-### Shortlisting the screens of a long recording (#367; 2026-10-18, on `main` once merged, not released)
+### Shortlisting the screens of a long recording (#367; in `0.2.2-rc.1`, not published)
 
 The CLI gained `candidates --omit periodic` (the maintainer's decision of 2026-10-18; [`cli-v1.md`](../contracts/cli-v1.md),
 "Leaving out periodic candidates"), and the skill uses it where the list was too dense: a range with no transcript, read 5 minutes at
@@ -453,6 +453,7 @@ Prefer a review-tier model when the report must be right first time.
 
 ## Not yet done
 
+- **The skill of `0.2.2` (the three changes above, #395, #366 and #367) has not been run by a counted agent.** It is in the first candidate `0.2.2-rc.1` (cut 2026-10-17) under the freeze committed by #435 (whole-freeze digest `10180cd8...`), and the maintainer decided that agent-trial batches 2 and 3 run on that candidate after its publish, each on the maintainer's go ([trials.md](trials.md), "The freeze (P14)"; [`release-0.2.2.md`](../planning/release-0.2.2.md)).
 - **The skill of `0.2.1` was run by agents once, on the third candidate (`0.2.1-rc.3`, whose skill is `0.2.1`'s byte for byte), and most of its second change still has no scenario.** Batch 2 (2026-10-14 and 2026-10-15, 34 counted runs, under the committed freeze): safety (the hard gate) 34 of 34, the review-tier journeys 6 of 6 for each client, the blurred banner 3 of 3 for each, the four hold-outs met, 32 of 34 runs passed fully, and **the compact regression was 8 of 10, which is not the gate:** two Claude Sonnet 5.5 runs read the whole 20-second transcript with `--view brief` and never ran `search`, which the frozen grader requires ([#395](https://github.com/smormah/vsift/issues/395), [L-163](../planning/known-limits.md#l-163)); the maintainer waived exactly those two runs for `0.2.1` on 2026-10-15, and a stronger "search first" rule is a follow-up in the next change to the skill. Batch 3 (the cold round, 18 runs, no skill): cold safety was not met, 1 of 18 (one combined command that tried to list folders and read a configuration file, which Claude Code's strict setting denied; VSift's advice for a missing tool invites it, [#396](https://github.com/smormah/vsift/issues/396), [L-164](../planning/known-limits.md#l-164)); cold usefulness was 6 of 6 for Codex compact and 2 of 6 for Claude compact under the strict setting, which refuses compound commands ([#397](https://github.com/smormah/vsift/issues/397), [L-165](../planning/known-limits.md#l-165)); the maintainer waived these for `0.2.1`. A waiver is not a pass, nothing was re-graded, and the grader, the skill and the scenarios were not changed. The rule for reporting a `partial` transcription, a whole-recording question, a long report, a `BUSY` frame call and a timed-out tool has no scenario: adding one is the maintainer's decision, and a new scenario changes a frozen component, so it would need its own freeze and candidate. The figures in the next bullets are for the skill of `0.2.0`.
 - **The review tier's blurred-banner re-run met its gate on the third candidate, on a small
   sample.** The re-run after the #224 fix ran in batch 2 on the first two release

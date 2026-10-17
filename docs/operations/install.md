@@ -1,13 +1,13 @@
 # Installing VSift
 
-Status: user guide, updated 2026-10-16 (0.2.1 is published; its known issues and what was run against it) and 2026-10-15 (the release 0.2.1) and 2026-10-10 (section 7 on upgrading from a candidate of a later release: the cut of the patch release's candidate) and 2026-10-09 (P14 PR 12, the release 0.2.0; P14 PR 10 repeated again, the third candidate; P14 PR 11c;
+Status: user guide, updated 2026-10-17 (the cut of the first release candidate of 0.2.2, `0.2.2-rc.1`: the candidates of 0.2.2 and the fix of #404) and 2026-10-16 (0.2.1 is published; its known issues and what was run against it) and 2026-10-15 (the release 0.2.1) and 2026-10-10 (section 7 on upgrading from a candidate of a later release: the cut of the patch release's candidate) and 2026-10-09 (P14 PR 12, the release 0.2.0; P14 PR 10 repeated again, the third candidate; P14 PR 11c;
 P14 PR 9a; written by P13 PR 11 and PR 12 for the published pre-release;
 [ADR 0023](../decisions/0023-r0-distribution-managed-installation-and-handoff-check.md)).
 **VSift 0.2.1 is the patch release after 0.2.0**, and `npm install vsift-cli` with no tag installs it (it
 replaced 0.2.0 under npm's `latest` dist-tag on 2026-10-15). The npm packages carry npm provenance, and the native archives on its GitHub release carry a Sigstore build-provenance
 attestation, as every file of the release does. 0.2.0 (2026-10-09) was the first release under `latest`; before it, `latest` was an empty `0.0.0` placeholder, a package with no command. The
 pre-release 0.1.0 (2026-10-01), the release candidates of 0.2.0 and the release candidates of 0.2.1 (0.2.1-rc.1, 0.2.1-rc.2 and 0.2.1-rc.3) were installed with `vsift-cli@next`; they stay published, and 0.2.0-rc.1, 0.2.0-rc.2, 0.2.1-rc.1 and 0.2.1-rc.2
-are deprecated (npm warns on an install of any of them and names the release that replaced it). `next` still names 0.2.1-rc.3, the source of 0.2.1. 0.2.1 is not announced.
+are deprecated (npm warns on an install of any of them and names the release that replaced it). `next` still names 0.2.1-rc.3, the source of 0.2.1. 0.2.1 is not announced. The release candidates of the next patch release, 0.2.2 (the first is 0.2.2-rc.1, cut on 2026-10-17), go to `next` when they are published and are never `latest`; you do not need them.
 **0.2.1 is built from the same source as the third release candidate, 0.2.1-rc.3**, and differs from it only in its version
 numbers, this guide, the npm package's README and the project's work record (a mechanical check enforces that:
 [`release.md`](release.md) section 6.8). What was tried on that candidate was tried on that source. The executable carries the
@@ -637,7 +637,7 @@ answer in time is told so, with what to do, instead of getting the advice for a 
 
 **A known issue of 0.2.1: the worker host on Windows** ([#404](https://github.com/smormah/vsift/issues/404), [L-167](../planning/known-limits.md#l-167)). The hosted check that shuts a worker down while a local recognition is running failed twice on Windows, once because
 two provider processes were still alive when the check looked and once because the cancelled recognition was reported as failed with `MISSING_CAPABILITY`; it passed on Ubuntu and macOS and on the candidate this release was built from. Nobody has seen it
-outside that hosted check. It concerns programs that run `vsift job run` or `vsift job batch` as a worker and stop it, and the next patch release fixes it first. Whether it happens in use is not known: if you run the worker host on Windows and stop a worker while it is recognising speech, a provider process may be left for a moment, or a request may report a failure where a cancellation was expected.
+outside that hosted check. It concerns programs that run `vsift job run` or `vsift job batch` as a worker and stop it, and the next patch release fixes it first: the fix is in the first release candidate of 0.2.2, `0.2.2-rc.1` (cut 2026-10-17), and in the release that follows it, and it has not yet run on hosted Windows. Whether it happens in use is not known: if you run the worker host on Windows and stop a worker while it is recognising speech, a provider process may be left for a moment, or a request may report a failure where a cancellation was expected.
 
 **`INTEGRITY_FAILURE` right after `--session-root <folder>`.** If the folder already exists and
 VSift did not create it (an empty folder you made with `mkdir`, say), VSift never adopts it and

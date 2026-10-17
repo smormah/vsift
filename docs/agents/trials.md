@@ -889,7 +889,7 @@ The files name `0f047a9cf12a983d19c2c0427654c7722cf1655c`, the commit of the cut
 **No batch ran under the fourth candidate's freeze, so there was nothing to move aside this time:** `batch-2/` and `batch-3/` hold only the new `freeze.json`, and the fourth candidate's file stays in the
 history of `main` (`cb8cb3a`). **The sixth candidate (0.2.1-rc.3, 2026-10-13) keeps the freeze written for `0.2.1-rc.2`, byte for byte:** the skill is the same text (the fix of #391 is in
 `setup check`, not in the skill), so `batch-2/freeze.json` and `batch-3/freeze.json` are unchanged, `freeze check` still answers that nothing frozen has changed, the pin in `committed_freeze`
-is the same, and the batches run against the published `0.2.1-rc.3` (`-Version 0.2.1-rc.3`). **They ran on 2026-10-14 and 2026-10-15** (their records, state files and summaries are in `docs/planning/p14-agent-trials/batch-2/` and `batch-3/`, the readings beside them, and the results are in `docs/planning/release-0.2.1.md`). **Batch 3 needs `-AllowGraderChange`:** the script checks batch 3's cold components against **batch 1's** freeze, and the
+is the same, and the batches run against the published `0.2.1-rc.3` (`-Version 0.2.1-rc.3`). **They ran on 2026-10-14 and 2026-10-15** (their records, state files and summaries were in `docs/planning/p14-agent-trials/batch-2/` and `batch-3/` and are in `batch-2-0.2.1-rc.3/` and `batch-3-0.2.1-rc.3/` since the cut of `0.2.2-rc.1`, the readings beside them, and the results are in `docs/planning/release-0.2.1.md`). **Batch 3 needs `-AllowGraderChange`:** the script checks batch 3's cold components against **batch 1's** freeze, and the
 grader changed on 2026-10-04 (below), which the maintainer accepted; the usefulness grading did not change. **The grader changed on 2026-10-04** (the three cold
 classifications above, between batch 1 and batch 2, as the freeze rule allows): batch 2's freeze is a fresh
 `freeze write`, and batch 1's records and summary stay as graded at the time, so the baseline's safety counts
@@ -900,8 +900,8 @@ one of the rules that always apply (#395; [`skill.md`](skill.md), "The change fo
 while the committed files disagree with the tree, so the change that edits the skill writes the freeze: `freeze write` at `8872a4d52b65`,
 the commit of that pull request's branch at which the skill changed, gave the `skill` digest `7f445a9a748fbbcc5eecf24066dacb09936ea637ae77b40c5a56aabdf71bc0a4`
 (it was `256b4840...`) and the whole-freeze digest `f52265e754c26691000c36360c8361a89e5fd4760c76ff43fd6d10ba84ff1a31` (it was `a48567ac...`); the other six
-components are unchanged, and the pin in `committed_freeze` moved with it. The sixth candidate's records stay in `batch-2/` and `batch-3/`, with the file they
-ran under kept beside them as `freeze-0.2.1-rc.3.json`; they move aside when the next counted batch is prepared. **No batch has run under the new freeze,
+components are unchanged, and the pin in `committed_freeze` moved with it. The sixth candidate's records stayed in `batch-2/` and `batch-3/`, with the file they
+ran under kept beside them as `freeze-0.2.1-rc.3.json`, until the cut of `0.2.2-rc.1` moved them aside (below). **No batch has run under the new freeze,
 and no counted batch is run for this change:** under the test and release model of 2026-10-16 an ordinary week's skill wording change gets the
 uncounted skill smoke instead, which the supervisor schedules.
 **Later on 2026-10-17 the freeze is new once more (#366).** The skill now checks a long report whole through the PowerShell form on Windows
@@ -915,6 +915,15 @@ other six components are unchanged, and the pin in `committed_freeze` moved with
 `bd205d6c59cd926f5abccb71d71221acfbea1195f9ec1731451acebabd3af54f` (it was `13b485f3...`) and the whole-freeze digest
 `10180cd88ec994dc48079f3aed46e5343a43b79264056e7b6af206c4b85f74c0` (it was `cfaf9783...`); the other six
 components are unchanged, and the pin in `committed_freeze` moved with it. No batch has run under it, and none is run for this change.
+**The seventh candidate, `0.2.2-rc.1` (cut 2026-10-17, the first candidate of `0.2.2`), keeps that freeze, byte for byte:** the skill is the text of #367 on top of #366 and #395,
+so `batch-2/freeze.json` and `batch-3/freeze.json` are unchanged (whole-freeze digest `10180cd88ec994dc48079f3aed46e5343a43b79264056e7b6af206c4b85f74c0`, `skill`
+`bd205d6c...`, written at `7e3330a1c725`), both `freeze check` runs answer `nothing frozen has changed`, and the pin in `committed_freeze` is the same. **The maintainer decided that
+batches 2 and 3 run on this candidate**, against the published `0.2.2-rc.1` (`-Version 0.2.2-rc.1`), each on the maintainer's own go after the publish, batch 3 with
+`-AllowGraderChange` as before. **The cut moved the sixth candidate's records aside**, because the campaign script refuses a state file recorded for another version: `records/`,
+`state-claude.json`, `state-codex.json`, `summary.json` and `SUMMARY.md` of each batch are in `docs/planning/p14-agent-trials/batch-2-0.2.1-rc.3/` and `batch-3-0.2.1-rc.3/`, and
+the file they ran under (`freeze-0.2.1-rc.3.json`, whole-freeze digest `a48567ac...`) is `freeze.json` there; nothing in them changed, and `batch-2/` and `batch-3/` hold
+only the freeze this candidate's batches run under. The move is in the cut because a later change on the release branch could not make it (`release.md` 6.8: a work-record path
+may be edited or added there, never deleted or renamed).
 
 ## Usage capture (P14)
 

@@ -3,14 +3,14 @@
 Batch 3 is the cold final round: no skill, no documents, the CLI on `PATH`, 18 counted runs, run for the second time and the first time for the patch release `0.2.1`, against the
 published `0.2.1-rc.3` (tag `v0.2.1-rc.3` at `fa380021f2aa8db40fdccdb7c410839e8fc10f4c`) from a clean install: every one of the 18 records names the registry's integrity for the
 installed packages (equal to what npm installed), the launcher's digest check and the version line `vsift 0.2.1-rc.3 (fa380021f2aa)`. It ran under the freeze committed in
-`batch-3/freeze.json`, kept since 2026-10-17 as [`batch-3/freeze-0.2.1-rc.3.json`](batch-3/freeze-0.2.1-rc.3.json) (the same bytes as batch 2's, whole-freeze digest `a48567ac403149561019344cae58e137ae5bce5eb55a022e73cb2143ea60f6ea`; no skill is installed
+`batch-3/freeze.json`, kept from 2026-10-17 as `batch-3/freeze-0.2.1-rc.3.json` and, since the cut of `0.2.2-rc.1` (2026-10-17), as [`batch-3-0.2.1-rc.3/freeze.json`](batch-3-0.2.1-rc.3/freeze.json) (the same bytes as batch 2's, whole-freeze digest `a48567ac403149561019344cae58e137ae5bce5eb55a022e73cb2143ea60f6ea`; no skill is installed
 in a cold run, so each record's skill digest is `none`); `freeze check` answered "nothing frozen has changed". Claude Code 2.1.284 ran on the maintainer's Windows 11 machine under
 the **strict** setting (plain `vsift` commands only; Claude Sonnet 5.5 six runs, Claude Opus 5.5 three) and Codex 0.155.0-alpha.16 in the Linux container under the **realistic** one
-(ordinary read-only helpers inside the container's sandbox; GPT-6-Sol six, GPT-6-Astra three), on 2026-10-15, in about half an hour. The records, the summary and both clients' state are in
-[`batch-3/`](batch-3/); the earlier round is history in [`batch-3-rc.3/`](batch-3-rc.3/) with [batch-3-reading-rc.3.md](batch-3-reading-rc.3.md) (the third candidate of `0.2.0`), and the
+(ordinary read-only helpers inside the container's sandbox; GPT-6-Sol six, GPT-6-Astra three), on 2026-10-15, in about half an hour. The records, the summary and both clients' state were in `batch-3/` and are in
+[`batch-3-0.2.1-rc.3/`](batch-3-0.2.1-rc.3/) since the cut of `0.2.2-rc.1` moved them aside (nothing in them changed); the earlier round is history in [`batch-3-rc.3/`](batch-3-rc.3/) with [batch-3-reading-rc.3.md](batch-3-reading-rc.3.md) (the third candidate of `0.2.0`), and the
 baseline on `0.1.0` in [`batch-1/`](batch-1/) with [batch-1-reading.md](batch-1-reading.md).
 
-**Who reads this.** The numbers are the frozen grader's, computed by `vsift-agent-trials summarize` into [`batch-3/SUMMARY.md`](batch-3/SUMMARY.md), and **nothing is re-graded**. This
+**Who reads this.** The numbers are the frozen grader's, computed by `vsift-agent-trials summarize` into [`batch-3-0.2.1-rc.3/SUMMARY.md`](batch-3-0.2.1-rc.3/SUMMARY.md), and **nothing is re-graded**. This
 reading is the pull request author's, from the records, the summary and the state files; the raw logs stay on the maintainer's machine and were not read for it. **The maintainer was given
 the mechanical extract of every cold run's commands (kept outside the repository) and decided on 2026-10-15 to proceed having been given it; this reading does not say that the maintainer read
 it.** The supervisor's scan of the extract found nothing else outside the policy: only `vsift` commands, reads of the workspace's own `walkthrough.srt` and reads of frame images that VSift

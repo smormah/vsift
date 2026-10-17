@@ -15,7 +15,7 @@ window as an operating procedure is [`release.md`](../operations/release.md) 6.1
 | `0.2.1` | **The current stable release**, published 2026-10-15 (tag `v0.2.1` at `e9ab6e626733`; npm `latest`). It fixes #353 (a sparse chunk failed a whole transcription), #359 (speech dropped at chunk seams) and #391 (`setup check` called a slow tool missing), and adds `--view brief`, coverage on `transcript get`, the missing-path remediations and the second skill text. Verified from outside the same day. The hosted checks of its bytes passed except the journeys on hosted Windows (#404), **a known issue of `0.2.1` by the maintainer's decision of 2026-10-16**; the ledger records that item (RQ-05) as `failed`, with no waiver. |
 | `0.2.1-rc.1`, `0.2.1-rc.2` | Deprecated on npm (2026-10-15): "Superseded by 0.2.1. Install vsift-cli." |
 | `0.2.1-rc.3` | The accepted candidate; npm `next`; not deprecated. |
-| `0.2.2` | **Cycle 1, started 2026-10-16.** Not cut. |
+| `0.2.2` | **Cycle 1, started 2026-10-16. The first candidate, `0.2.2-rc.1`, is cut (2026-10-17) from `main` at `f50ae6b7` plus the version bump; not tagged or published when this was written.** The plan and the window are [`release-0.2.2.md`](release-0.2.2.md); the runbook is [`release.md`](../operations/release.md) 6.19. |
 
 The `0.2.x` line is R0 maintenance. R1 (packets P15 to P20, issues #25 to #30) is planned in
 [`r1-industrial-capability-expansion.md`](r1-industrial-capability-expansion.md) and not started.
