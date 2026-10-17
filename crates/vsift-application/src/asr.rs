@@ -439,9 +439,11 @@ pub struct AsrTranscription {
 /// work (maintainer decision D5, ADR 0017), because nothing about an
 /// unreviewed model's accuracy, licence or resource use is known.
 ///
-/// The recognizer's identity is read before the first chunk and after the
-/// last and must equal `expected` both times, so a model or binary swapped
-/// during the run fails it rather than mixing outputs. A chunk whose decoded
+/// The recognizer's identity is read before the first chunk and after every
+/// chunk it answered, and must equal `expected` each time, so a model or
+/// binary swapped during the run fails it at the first answer after the swap
+/// rather than mixing outputs, and no answer is kept (or checkpointed) that
+/// another model gave (#361). A chunk whose decoded
 /// audio is silent, or shorter than 100 ms
 /// ([`MIN_RECOGNITION_SAMPLES`](vsift_domain::MIN_RECOGNITION_SAMPLES)), is
 /// recorded as a silent gap without running the recognizer, so a recognizer
@@ -587,7 +589,10 @@ impl From<AsrFailure> for AsrRunFailure {
 /// never guessed at (S-08). After a chunk is done fresh its outcome is stored
 /// before the next chunk starts: the raw output once it has passed validation,
 /// a gap as recorded, or the verdict on an unusable answer; a checkpoint that
-/// cannot be stored costs only the redo.
+/// cannot be stored costs only the redo. An answer is stored only after the
+/// recognizer's identity, read again once it answered, is still the one the
+/// recognition key names (#361): the key says which model gave every answer
+/// stored under it.
 ///
 /// # Errors
 ///
@@ -673,6 +678,17 @@ where
             let (result, checkpoint) = fresh_chunk(&chunk, bounds, audio, recognizer, cancellation)
                 .await
                 .map_err(at_chunk)?;
+            // The recognizer's identity is read again after every chunk it
+            // answered and before that answer is kept (#361): a checkpoint is
+            // stored under the recognition key only when the model and the
+            // executable that answered are the key's, so a model swapped during
+            // the run, and put back before a resume, never lends its answers to
+            // the resumed run. It is also why a swap that makes the recognizer
+            // answer with garbage is reported as `model_changed`, not as
+            // unusable answers.
+            if answered_by_the_recognizer(&checkpoint) {
+                ensure_identity(recognizer, request.expected).await?;
+            }
             if let Some(scope) = &scope {
                 // Best effort by design: see the port's documentation.
                 let _ = scope.checkpoints.store(&ChunkCheckpoint::new(
@@ -690,19 +706,14 @@ where
         // as no chunk still to come could change it. A recognizer that answers
         // with garbage is therefore not run to the end of a long recording.
         let done = u32::try_from(completed).unwrap_or(u32::MAX);
+        // No identity check is needed before the verdict or after the last
+        // chunk: every answer of this run was followed by one (above), and a
+        // reused checkpoint was stored only after one.
         if let Some(failure) = gathered.failure(planned, done) {
-            // The identity check that closes every run comes first: a model or
-            // executable swapped during the run can answer with garbage, and the
-            // failure is then `model_changed`, not "the tool works" with a job
-            // that can no longer be resumed.
-            stop_if_cancelled(cancellation, AsrStage::RecognizerIdentity)?;
-            ensure_identity(recognizer, request.expected).await?;
             return Err(failure);
         }
     }
     gathered.count_gaps();
-    stop_if_cancelled(cancellation, AsrStage::RecognizerIdentity)?;
-    ensure_identity(recognizer, request.expected).await?;
 
     let merged = merge_chunks(&gathered.merge_input);
     let mut warnings = gathered.warnings;
@@ -873,6 +884,16 @@ where
                 },
             ),
         },
+    )
+}
+
+/// Whether the recognizer was asked for this chunk: its answer was kept or
+/// refused as a whole. A gap (no audio, silence, under the floor) was decided
+/// without it.
+const fn answered_by_the_recognizer(outcome: &CheckpointOutcome) -> bool {
+    matches!(
+        outcome,
+        CheckpointOutcome::Recognised { .. } | CheckpointOutcome::Unusable { .. }
     )
 }
 

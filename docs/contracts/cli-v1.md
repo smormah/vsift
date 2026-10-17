@@ -940,7 +940,9 @@ other points and may work, or the same transcript (example
 Neither says that a larger or different range will not help: no run has established that. (Before `0.2.1` it told to retry
 with a larger range or the whole video, and to reinstall whisper.cpp only if the whole video failed too. That is the advice written for a short range cut in mid-speech (#274), where a larger range does help; it does not describe this failure.) For a structural fault
 the recogniser is the suspect and the reinstall step stays. The model's identity is checked before the answers are judged, so a
-recogniser swapped during the run is `model_changed`, not this failure. **The job ends `failed` at once** (`job status`:
+recogniser swapped during the run is `model_changed`, not this failure. **Since #361 (on `main` after `0.2.1`)** it is checked after
+every chunk the recogniser answered, before the answer is checkpointed: a swap ends the run at the first answer after it, as
+`model_changed` (the job stays resumable), and no answer of the swapped model is stored for a resume to reuse. **The job ends `failed` at once** (`job status`:
 `resumable: false`, `resumable_reason: failed`; `job resume` refuses), because a resume would read the same verdicts from its
 checkpoints; the same `transcript retranscribe` command starts it anew.
 **Rolling back.** A revision written with a trimmed end more than one second past its audio

@@ -493,6 +493,8 @@ Two additions to sections 4 and 5, proposed with [ADR 0017's note of the same da
   of the other model would be committed under the original model's provenance (the limit of such checkpoints before this change), and a stored `unusable` verdict of it makes the
   resumed run fail as unusable answers, which ends the job as failed, after which the same command starts it afresh and works. A fix (end the job on `model_changed`, or check the
   identity per chunk) changes a published behaviour or a cost, and is left for the register, not made in a patch release.
+  *(Amended 2026-10-17, #361: the identity is now read after every chunk the recogniser answered, before the answer is checkpointed, so a checkpoint is
+  stored only under the key of the model that gave it; the job still stays resumable on `model_changed`. ADR 0017, note of 2026-10-17; L-146.)*
 - **What a supervisor sees when a worker step could not read part of a recording.** In `job run` and `job batch`, a `retranscribe` step whose run had unusable chunks is
   still `complete` with `coverage: null`, as is the request: its outputs name the revision, the generation and the chunks reused, and the worker schema has no member for
   gaps. This is deliberate for 0.2.1 (the worker schema is unchanged) and means a supervisor that reads only the request's result is not told that part of the recording was

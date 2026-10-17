@@ -193,7 +193,7 @@ impl SpeechAudioSource for FakeAudio {
 }
 
 /// What the recognizer does at one chunk.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Fault {
     /// Fails with this error.
     Fails(SpeechRecognitionError),
@@ -209,6 +209,21 @@ enum Fault {
     /// audio, as whisper.cpp ended the first five seconds of F02 and F04 at
     /// 7.000 s (#274).
     Overruns,
+    /// The model file is replaced while this chunk is recognised: the
+    /// recognizer answers it, and every chunk after it, as the other model
+    /// does ([`SwappedModel`]) until [`FakeRecognizer::restore_model`] (#361).
+    SwapsModel,
+}
+
+/// How the model that was swapped in answers (#361).
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+enum SwappedModel {
+    /// Usable text that is not the original model's.
+    #[default]
+    OtherWords,
+    /// Answers the rules refuse as a whole, so each chunk's verdict is
+    /// unusable.
+    Garbage,
 }
 
 /// A deterministic recognizer: chunk `i` always says the same words.
@@ -217,6 +232,9 @@ struct FakeRecognizer {
     faults: Mutex<BTreeMap<u32, Fault>>,
     flag: Arc<AtomicBool>,
     calls: AtomicUsize,
+    /// Whether the other model is in place, and how it answers.
+    swapped: Mutex<Option<SwappedModel>>,
+    swapped_model: SwappedModel,
 }
 
 impl FakeRecognizer {
@@ -231,6 +249,40 @@ impl FakeRecognizer {
             faults.clear();
         }
     }
+
+    /// Puts the original model back.
+    fn restore_model(&self) {
+        if let Ok(mut swapped) = self.swapped.lock() {
+            *swapped = None;
+        }
+    }
+
+    fn swapped(&self) -> Option<SwappedModel> {
+        self.swapped.lock().ok().and_then(|swapped| *swapped)
+    }
+}
+
+/// The identity of the model swapped in during a run (#361).
+fn other_identity() -> Built<RecognizerIdentity> {
+    Ok(RecognizerIdentity {
+        model: AsrModel::new(
+            AsrModelProfile::Base,
+            Sha256Hex::parse("fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210")?,
+        ),
+        ..identity()?
+    })
+}
+
+/// What the swapped-in model says for a chunk: the original's segment with
+/// other words.
+fn other_words(chunk: &PlannedChunk) -> Result<ProviderChunkOutput, SpeechRecognitionError> {
+    let mut output = words(chunk)?;
+    let text = format!("the other model's words of chunk {}", chunk.index());
+    for segment in &mut output.segments {
+        segment.text =
+            Some(CueText::new(text.clone(), text.clone()).map_err(|_| SpeechRecognitionError::Io)?);
+    }
+    Ok(output)
 }
 
 /// One segment per chunk: 10 s into the first chunk and 6 s (past the 5 s
@@ -285,7 +337,12 @@ impl SpeechRecognizer for FakeRecognizer {
     fn identity(
         &self,
     ) -> impl Future<Output = Result<RecognizerIdentity, SpeechRecognitionError>> + Send {
-        std::future::ready(identity().map_err(|_| SpeechRecognitionError::Io))
+        let current = if self.swapped().is_some() {
+            other_identity()
+        } else {
+            identity()
+        };
+        std::future::ready(current.map_err(|_| SpeechRecognitionError::Io))
     }
 
     fn recognize(
@@ -299,19 +356,28 @@ impl SpeechRecognizer for FakeRecognizer {
             .lock()
             .ok()
             .and_then(|faults| faults.get(&chunk.index()).copied());
-        let answer = match fault {
-            Some(Fault::Fails(error)) => Err(error),
-            Some(Fault::Raises) => {
-                self.flag.store(true, Ordering::SeqCst);
-                words(chunk)
-            }
-            Some(Fault::RaisesAndFails(error)) => {
-                self.flag.store(true, Ordering::SeqCst);
-                Err(error)
-            }
-            Some(Fault::Garbage) => garbage(chunk),
-            Some(Fault::Overruns) => overrun(chunk),
-            None => words(chunk),
+        if fault == Some(Fault::SwapsModel)
+            && let Ok(mut swapped) = self.swapped.lock()
+        {
+            *swapped = Some(self.swapped_model);
+        }
+        let answer = match (self.swapped(), fault) {
+            (Some(SwappedModel::OtherWords), _) => other_words(chunk),
+            (Some(SwappedModel::Garbage), _) => garbage(chunk),
+            (None, fault) => match fault {
+                Some(Fault::Fails(error)) => Err(error),
+                Some(Fault::Raises) => {
+                    self.flag.store(true, Ordering::SeqCst);
+                    words(chunk)
+                }
+                Some(Fault::RaisesAndFails(error)) => {
+                    self.flag.store(true, Ordering::SeqCst);
+                    Err(error)
+                }
+                Some(Fault::Garbage) => garbage(chunk),
+                Some(Fault::Overruns) => overrun(chunk),
+                Some(Fault::SwapsModel) | None => words(chunk),
+            },
         };
         std::future::ready(answer)
     }
@@ -1696,6 +1762,102 @@ async fn a_range_cut_mid_speech_commits_its_overrunning_segment_cut_at_the_range
             .map(|merged| merged.segment.range().end())
             .collect::<Vec<_>>(),
         [cut.end()]
+    );
+    Ok(())
+}
+
+/// Runs a whole-file job in which the model is swapped while chunk 1 is
+/// recognised, and returns the harness, the job and the failure (#361).
+async fn a_run_with_the_model_swapped_at_chunk_one(
+    swapped_model: SwappedModel,
+) -> Built<(Harness, Resolved, JobRunError)> {
+    let mut harness = Harness::new()?;
+    harness.recognizer.swapped_model = swapped_model;
+    harness.recognizer.fault_at(1, Fault::SwapsModel);
+    let resolved = harness.resolve(None)?;
+    let failure = harness
+        .run(&resolved, None)
+        .await
+        .err()
+        .ok_or("a run whose model was swapped committed")?;
+    Ok((harness, resolved, failure))
+}
+
+/// #361: the run stops at the first answer the swapped model gave, as
+/// `model_changed`, leaves the job resumable and keeps only the checkpoint of
+/// the chunk the original model answered.
+fn assert_stopped_at_the_swap(
+    harness: &Harness,
+    resolved: &Resolved,
+    failure: &JobRunError,
+) -> TestResult {
+    assert!(
+        matches!(
+            failure,
+            JobRunError::Asr { failure, .. }
+                if failure.failure.stage == AsrStage::RecognizerIdentity
+                    && failure.failure.reason == AsrFailureReason::ModelChanged
+        ),
+        "{failure:?}"
+    );
+    assert_eq!(
+        harness.record(&resolved.spec.job_id)?.state,
+        JobState::Interrupted
+    );
+    assert_eq!(harness.recognizer.calls.load(Ordering::SeqCst), 2);
+    assert_eq!(harness.checkpoints(&resolved.spec.job_id)?, 1);
+    Ok(())
+}
+
+/// #361, the text: a model swapped during a run and put back before the
+/// resume. Before, the run went on to its last chunk storing the other
+/// model's words under the original model's recognition key, and the resume
+/// committed them under the original model's provenance. Now the swap ends the
+/// run at the answer it gave, that answer is not stored, and the resume
+/// recognises the rest with the original model: the revision is the one an
+/// undisturbed run commits.
+#[tokio::test]
+async fn a_model_swapped_and_put_back_lends_no_text_to_the_resumed_job() -> TestResult {
+    let control = Harness::new()?.request(None, None).await??;
+    let (harness, resolved, failure) =
+        a_run_with_the_model_swapped_at_chunk_one(SwappedModel::OtherWords).await?;
+    assert_stopped_at_the_swap(&harness, &resolved, &failure)?;
+
+    harness.recognizer.clear();
+    harness.recognizer.restore_model();
+    let resumed = harness.run(&resolved, None).await?;
+    assert_eq!(resumed.report.chunks_reused, 1);
+    assert!(
+        resumed
+            .revision
+            .segments()
+            .iter()
+            .all(|segment| !segment.text().text().contains("other model"))
+    );
+    assert_eq!(resumed.revision, control.revision);
+    Ok(())
+}
+
+/// #361, the verdict (new in 0.2.1 with the `unusable` checkpoint): a swapped
+/// model that answers with garbage. Before, its `unusable` verdicts were
+/// stored under the original model's key, and the resume with the original
+/// model put back failed the job on them. Now none is stored, and the resume
+/// commits the undisturbed revision.
+#[tokio::test]
+async fn a_model_swapped_and_put_back_lends_no_unusable_verdict_to_the_resumed_job() -> TestResult {
+    let control = Harness::new()?.request(None, None).await??;
+    let (harness, resolved, failure) =
+        a_run_with_the_model_swapped_at_chunk_one(SwappedModel::Garbage).await?;
+    assert_stopped_at_the_swap(&harness, &resolved, &failure)?;
+
+    harness.recognizer.clear();
+    harness.recognizer.restore_model();
+    let resumed = harness.run(&resolved, None).await?;
+    assert_eq!(resumed.report.chunks_reused, 1);
+    assert_eq!(resumed.revision, control.revision);
+    assert_eq!(
+        harness.record(&resolved.spec.job_id)?.state,
+        JobState::Succeeded
     );
     Ok(())
 }

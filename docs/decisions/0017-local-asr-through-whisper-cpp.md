@@ -570,7 +570,7 @@ list to mean "covered". The coverage can still understate (a run none of whose t
 detected when the run ends. Checkpoints written after the swap are stored under the recognition key of the model the run started with, so if the original model is put back and the job resumed, they are reused: a
 `recognised` output of the swapped model would be committed under the original model's provenance (a limit of the checkpoints from before this change), and an `unusable` verdict of it makes the resumed run fail as
 unusable answers, ending the job as failed, after which the same command starts it afresh and works. Not changed here: a per-chunk identity check hashes the model for every chunk, and ending the job on `model_changed` changes
-a published behaviour; it is listed for the register.
+a published behaviour; it is listed for the register. *(Superseded 2026-10-17, #361: the identity is now read after every answer; see the note of that date.)*
 
 ### What does not change
 
@@ -759,3 +759,15 @@ short `audio` range decoded to nothing. The decode now seeks one second earlier 
 `-stream_loop` and copied) decodes 30.032 s for a 30 s chunk, as it always did. What a recogniser hears: on a 16 kHz source with video, the same bytes as before; on other rates, the same samples except the
 resampler's first few milliseconds, which now fall before the chunk; on an audio-only source, the chunk from its true start. The 100 ms
 floor, the chunk plan and every recorded field are unchanged. Register: L-141.
+
+## 2026-10-17 note: the identity is read after every answer, so a checkpoint names the model that answered (#361)
+
+Supersedes the paragraph "A swapped recogniser and a resumed job" of the 2026-10-10 note. A run reads the recogniser's identity before its first chunk and
+**after every chunk the recogniser answered, before the answer is kept or stored**; it must equal the identity the run's recognition key was built from. A
+swap therefore ends the run at the first answer given after it, as `model_changed` (still retryable; the job stays resumable), and that answer is not
+checkpointed, so a resume with the original model put back reuses only answers the original model gave. The checks before the verdict on the answers and
+after the last chunk are removed as redundant (every answer was followed by one), so a swap that makes the recogniser answer with garbage is still
+reported as `model_changed` first. The cost is one hash of the model per recognised chunk (about 0.3 s in a release build against seconds of recognition
+per 30 s chunk), the per-chunk read this ADR's earlier notes left out for its cost. Ending the job on `model_changed` was the other option and was not
+taken: it changes a published, retryable failure. Left: a swap undone between the two reads around one chunk, and checkpoints written by earlier releases
+(register L-146).
