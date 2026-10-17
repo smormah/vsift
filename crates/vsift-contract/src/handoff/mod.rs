@@ -60,7 +60,7 @@ pub const HANDOFF_VERSION: &str = "1";
 ///
 /// It was 64 KiB until `0.2.2`. #366: on Windows a report of 70,000
 /// characters or more could not be checked in one piece by any form the
-/// skill allows, and once a form that reaches VSift without the process
+/// skill allows, and once a form that reaches `VSift` without the process
 /// command line was found (PowerShell's here-string through a client that
 /// hands PowerShell its script outside the command line), this bound was
 /// the next limit. 128 KiB holds such a report with room for text that is

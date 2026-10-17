@@ -298,7 +298,7 @@ regression test are `crates/vsift-cli/tests/handoff_long_report_windows.rs`):
   above 32,767 the shell does not start. The same tool also turned a doubled backslash into one in a quoted heredoc, so the
   Git Bash form does not keep every character either.
 - **The check's own bound was the next limit:** the PowerShell form delivered 70,000 characters and the check refused them as
-  over 64 KiB. It now reads up to 128 KiB (`MAX_HANDOFF_REPORT_BYTES`; ADR 0023 note of 2026-10-17).
+  over 64 KiB. It now reads up to 128 KiB (ADR 0023 note of 2026-10-17).
 
 So the form for a long report on Windows is the PowerShell one, which passes neither the command line nor a file. The
 skill says so (`SKILL.md` REPORT, `commands.md` "Checking the draft", `handoff.md`): on Windows use the PowerShell form
@@ -308,7 +308,7 @@ characters (no longer "two parts": the text above the block is cut at line ends 
 alone; a `line` counts from its part's first line). `SKILL.md` stays at 300 lines and its fuzz seed copy is the same bytes.
 Not measured: Codex (it cannot run VSift on Windows, [L-076](../planning/known-limits.md#l-076)), newer Git for Windows
 releases, and bash on Linux and macOS. **No agent has run this text**; the trial freeze is new ([trials.md](trials.md), "The
-freeze (P14)").
+freeze (P14)"): `skill` `13b485f3...`, whole freeze `cfaf9783...`.
 
 ## Keeping it in step with the CLI
 

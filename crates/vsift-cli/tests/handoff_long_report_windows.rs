@@ -145,10 +145,11 @@ fn long_report(with_path: bool) -> (String, String) {
         if with_path && line == PATH_LINE {
             text.push_str("The log was copied to C:\\Users\\someone\\notes.txt by hand.\n");
         } else {
-            text.push_str(&format!(
-                "{line}. The dialog didn't close after Save; the user's count stayed at 7, \
-                 \"as shown\" — résumé “quoted” and a\\\\b kept.\n"
-            ));
+            text.push_str(&line.to_string());
+            text.push_str(
+                ". The dialog didn't close after Save; the user's count stayed at 7, \
+                 \"as shown\" — résumé “quoted” and a\\\\b kept.\n",
+            );
         }
         line += 1;
     }

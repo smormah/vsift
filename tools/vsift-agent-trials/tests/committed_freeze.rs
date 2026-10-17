@@ -60,6 +60,11 @@ fn the_committed_freezes_still_hold() -> TestResult {
 /// visible: changing this constant is the decision to cut another candidate and write a new freeze
 /// (`docs/operations/release.md` section 6.8), and it shows in the diff of a test, not only of a data file.
 ///
+/// The second freeze of 2026-10-17 is new on purpose too (#366): the skill checks a long report whole through
+/// the PowerShell form on Windows and in parts in Git Bash (`docs/agents/skill.md`, "A long report's check on
+/// Windows"), so the `skill` component changed, `7f445a9a...` to `13b485f3...`, and this digest, `f52265e7...` to the
+/// value below. The other six components are unchanged. No batch has run under it.
+///
 /// The freeze of 2026-10-17 is new on purpose, in the `0.2.2` cycle rather than at a cut: the skill's "search
 /// first" rule became one that always applies (issue #395; `docs/agents/skill.md`, "The change for 0.2.2"), so the
 /// `skill` component changed, `256b4840...` to `7f445a9a...`, and this digest, `a48567ac...` to the value below. The
@@ -80,7 +85,7 @@ fn the_committed_freezes_still_hold() -> TestResult {
 /// in `batch-2-rc.3/` and `batch-3-rc.3/`); the first two candidates' was
 /// `1e89b5cc488e7245d1a6d63ec8809c1f8a5c137ee87f5ed05f9b692c2af6e392` (copies in `batch-2-rc.1/` and
 /// `batch-2-rc.2/`).
-const CUT_FREEZE_SHA256: &str = "f52265e754c26691000c36360c8361a89e5fd4760c76ff43fd6d10ba84ff1a31";
+const CUT_FREEZE_SHA256: &str = "cfaf9783e7b26cc0a0088f0cef117ac469891f3920c090e5383c4e98bb14d9bb";
 
 #[test]
 fn the_committed_freezes_are_the_ones_written_at_the_cut() -> TestResult {
