@@ -270,12 +270,12 @@ impl FilesystemSessionStore {
     /// Requires the root's filesystem to keep [`FREE_SPACE_RESERVE_BYTES`]
     /// free after `incoming_bytes` are written to it (a worker workspace's
     /// source copy, P11 PR 2), so a copy never fills the disk a durable
-    /// commit needs. On Unix the available space is read with `fstatvfs`
-    /// on the held root; Windows has no equivalent here and reports
-    /// [`FreeSpaceCheck::NotEnforced`] without checking. The check is a
-    /// reservation made before the copy, not a quota: a concurrent writer
-    /// can still use the space (known limit). A workspace's reserve is a
-    /// guarantee, so space that cannot be read is an error here.
+    /// commit needs. The space available to this process is read on every
+    /// platform (`available_bytes` in this module: `fstatvfs` on the held root on
+    /// Unix, the root's volume on Windows since #266). The check is made
+    /// before the copy, not a quota: a concurrent writer can still use the
+    /// space (known limit L-061). A workspace's reserve is a guarantee, so
+    /// space that cannot be read is an error here, on Windows too.
     ///
     /// # Errors
     ///
@@ -285,8 +285,8 @@ impl FilesystemSessionStore {
         &self,
         incoming_bytes: u64,
     ) -> Result<FreeSpaceCheck, SessionStorageError> {
-        free_space_check(
-            &self.root,
+        decide_room(
+            available_bytes(&self.root, &self.root_path),
             incoming_bytes,
             FREE_SPACE_RESERVE_BYTES,
             FreeSpaceStrictness::Guarantee,
@@ -298,11 +298,11 @@ impl FilesystemSessionStore {
     /// workspace's reserve: the check of a desktop root, so a copy that cannot
     /// fit is refused before it starts instead of failing after it has filled
     /// the disk (#266). Same platform rules and caveats as
-    /// [`Self::ensure_free_space`] (Unix only; a reservation, not a quota).
+    /// [`Self::ensure_free_space`] (every platform; a check, not a quota).
     ///
     /// **Best effort, never a reason to refuse by itself:** a desktop root has
     /// no guarantee to keep, so a filesystem whose free space cannot be read
-    /// (`fstatvfs` fails) or that reports no available blocks at all (some
+    /// (the platform's query fails) or that reports no available space at all (some
     /// network and user-space filesystems do, whatever they hold) is reported
     /// as [`FreeSpaceCheck::NotEnforced`], and a copy that really cannot fit
     /// is then found by its failed write, as before. Without this every
@@ -316,8 +316,8 @@ impl FilesystemSessionStore {
         &self,
         incoming_bytes: u64,
     ) -> Result<FreeSpaceCheck, SessionStorageError> {
-        free_space_check(
-            &self.root,
+        decide_room(
+            available_bytes(&self.root, &self.root_path),
             incoming_bytes,
             COPY_ROOM_MARGIN_BYTES,
             FreeSpaceStrictness::BestEffort,
@@ -726,7 +726,10 @@ pub const FREE_SPACE_RESERVE_BYTES: u64 = 1024 * 1024 * 1024;
 pub enum FreeSpaceCheck {
     /// The available space was read and was enough.
     Enforced,
-    /// This platform has no check here (Windows).
+    /// Nothing was checked: only a desktop root's best-effort check answers
+    /// this, for a filesystem whose space cannot be read or that reports none
+    /// available. A workspace's reserve never does (since #266 not on
+    /// Windows either).
     NotEnforced,
 }
 
@@ -746,8 +749,8 @@ enum FreeSpaceStrictness {
 
 /// Decides whether `incoming_bytes` and `keep_free` fit in `available`
 /// bytes, where `None` is a filesystem whose space could not be read. A pure
-/// function, so every branch is tested on every platform.
-#[cfg(any(unix, test))]
+/// function, so every branch is tested on every platform; the platforms
+/// differ only in how [`available_bytes`] reads the space.
 fn decide_room(
     available: Option<u64>,
     incoming_bytes: u64,
@@ -771,31 +774,36 @@ fn decide_room(
     Ok(FreeSpaceCheck::Enforced)
 }
 
+/// The bytes available to this process on the filesystem that holds the
+/// root, or `None` when they cannot be read.
+///
+/// On Unix: `fstatvfs` on the held root, the blocks available to an
+/// unprivileged user (`f_bavail`) times the fragment size.
 #[cfg(unix)]
-fn free_space_check(
-    root: &Dir,
-    incoming_bytes: u64,
-    keep_free: u64,
-    strictness: FreeSpaceStrictness,
-) -> Result<FreeSpaceCheck, SessionStorageError> {
-    let available = rustix::fs::fstatvfs(root)
+fn available_bytes(root: &Dir, _root_path: &Path) -> Option<u64> {
+    rustix::fs::fstatvfs(root)
         .ok()
-        .map(|statistics| statistics.f_bavail.saturating_mul(statistics.f_frsize));
-    decide_room(available, incoming_bytes, keep_free, strictness)
+        .map(|statistics| statistics.f_bavail.saturating_mul(statistics.f_frsize))
 }
 
-#[cfg(not(unix))]
-#[allow(
-    clippy::unnecessary_wraps,
-    reason = "the Unix check can fail; every platform shares one signature"
-)]
-const fn free_space_check(
-    _root: &Dir,
-    _incoming_bytes: u64,
-    _keep_free: u64,
-    _strictness: FreeSpaceStrictness,
-) -> Result<FreeSpaceCheck, SessionStorageError> {
-    Ok(FreeSpaceCheck::NotEnforced)
+/// The bytes available to this process on the filesystem that holds the
+/// root, or `None` when they cannot be read.
+///
+/// On Windows (#266): `fs4::available_space` on the root's canonical path,
+/// which finds the path's volume (`GetVolumePathNameW`, so a folder mounted
+/// from another volume reads that volume) and reads the bytes free to the
+/// caller (`GetDiskFreeSpaceExW`'s first answer, which honours a per-user disk
+/// quota): the counterpart of `f_bavail`. Why a path and not the held handle:
+/// the handle-based query (`NtQueryVolumeInformationFile`) and the
+/// `windows` crate's free-space calls are all `unsafe`, which `VSift` crates
+/// forbid; and the canonical path is what the root's DACL check already reads
+/// on Windows ([`validate_platform_root_permissions`]). A path that names
+/// another folder than the held root by the time it is read (only its owner
+/// can rename a private root) would give another volume's number, which can
+/// only make this check wrong, never a commit.
+#[cfg(windows)]
+fn available_bytes(_root: &Dir, root_path: &Path) -> Option<u64> {
+    fs4::available_space(root_path).ok()
 }
 
 /// The validated workspace policy a marker records, if any. A recorded

@@ -39,6 +39,11 @@ lzma-rust2 = { version = "=0.20.1", default-features = false, features = ["std",
 native-tls = { version = "0.2", default-features = false }
 cap-fs-ext = "=4.0.3"
 cap-std = "=4.0.3"
+# Windows only: the free space of a session root's volume, for the checks
+# before a source copy (#266, ADR 0021 note of 2026-10-18). Its only Windows
+# dependency, windows-sys 0.61, is already in the lock; without default
+# features it is the filesystem-statistics functions alone (no locks).
+fs4 = { version = "=1.1.0", default-features = false }
 clap = { version = "4.5", features = ["derive"] }
 predicates = "3.1"
 process-wrap = { version = "10.0", default-features = false, features = ["creation-flags", "job-object", "kill-on-drop", "process-group", "tokio1"] }

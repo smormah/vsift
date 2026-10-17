@@ -1162,15 +1162,16 @@ impl Engine {
         let capacity = context
             .and_then(|context| NonZeroU16::new(context.store.admission_capacity()))
             .unwrap_or_else(|| self.admission_capacity_hint());
-        // Only a copy into a workspace checks the reserve, and only on Unix
-        // (P11 PR 2).
+        // Only a copy into a workspace checks the reserve (P11 PR 2), on
+        // every platform since #266: Windows reads the root volume's free
+        // space too, and space that cannot be read refuses the copy.
         let copies = matches!(run.request.target(), WorkTarget::Ingest { .. });
         WorkControls {
             isolation,
             admission_capacity: capacity,
             concurrency: run.concurrency,
             resource_limits,
-            free_space_reserve: if copies && cfg!(unix) {
+            free_space_reserve: if copies {
                 FreeSpaceReserve::Enforced
             } else {
                 FreeSpaceReserve::NotEnforced

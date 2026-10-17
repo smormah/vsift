@@ -749,7 +749,8 @@ async fn a_workspace_decides_the_durability_of_its_sessions() -> TestResult {
         other => return Err(format!("expected WorkspaceNotDurable, got {other:?}").into()),
     }
     assert!(harness.engine.list_sessions(None)?.entries().is_empty());
-    // The workspace's free-space reserve is checked before the copy on Unix.
+    // The workspace's free-space reserve is checked before the copy, on
+    // Windows too since #266 (it reported `NotEnforced` there before).
     let opened = harness
         .engine
         .ingest(IngestRequest {
@@ -759,14 +760,7 @@ async fn a_workspace_decides_the_durability_of_its_sessions() -> TestResult {
             durability: vsift::DurabilityRequirement::Ephemeral,
         })
         .await?;
-    assert_eq!(
-        opened.free_space,
-        if cfg!(unix) {
-            vsift::FreeSpaceReserveCheck::Enforced
-        } else {
-            vsift::FreeSpaceReserveCheck::NotEnforced
-        }
-    );
+    assert_eq!(opened.free_space, vsift::FreeSpaceReserveCheck::Enforced);
 
     let durable = Harness::new()?;
     let initialised = durable.engine.init_workspace(vsift::WorkspaceInitRequest {

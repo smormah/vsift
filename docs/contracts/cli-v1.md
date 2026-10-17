@@ -158,11 +158,12 @@ path inside an operator's `--input-root`, so a link anywhere on that path is `pa
 **A source within the size limit that does not fit the session root's filesystem** is refused with `STORAGE_IO`
 (exit 7), the code the CLI path gave, and a remediation that says nothing is damaged, tells the user to free space (or
 an operator to name a folder on a drive with more room with `--session-root`) and to retry (since P14 PR 7,
-#266). On Unix `ingest` checks the source's size (plus a 16 MiB margin for the session's records) against the
-free space before it copies anything, after the size limit above (a source over the limit is not asked for room); a write
-that runs out of room during the copy (the only check on
-Windows, which reads no free space, L-061) gives the same answer. The desktop check is best effort: a
-filesystem whose space cannot be read, or that reports none available, is not checked (known limit L-061).
+#266). `ingest` checks the source's size (plus a 16 MiB margin for the session's records) against the
+free space before it copies anything, after the size limit above (a source over the limit is not asked for room), on Unix
+and, since the change that brought the check to Windows (#266, cycle 1 of 0.2.2, not released), on Windows too, where the
+space free to the user on the session root's volume is read; a write that runs out of room during the copy gives the same
+answer. The desktop check is best effort: a filesystem whose space cannot be read, or that reports none available, is not
+checked (known limit L-061).
 The code stays because changing a published failure code is not additive within v1 (known limit L-127). A
 worker workspace keeps its 1 GiB reserve and its `RESOURCE_LIMIT` answer, unchanged, and its order too: the reserve is
 checked first, as in 0.1.0, so a source over the limit that is also larger than the workspace's free space less the
@@ -1349,7 +1350,9 @@ requested step: `kind`, `status` (`complete`, `partial`, `failed`, `cancelled`,
 (`isolation` `process_only` or `strict_linux`, `admission_capacity`, `concurrency`,
 `resource_limits` `host_cgroup` or `not_enforced`: the attested host cgroup's limits,
 never VSift's own, and `free_space_reserve` `enforced` or `not_enforced`: whether the
-workspace's free-space reserve was checked before the copy).
+workspace's free-space reserve was checked before the copy; `enforced` for an ingest
+target on every platform since #266, where a Windows host of 0.2.1 or earlier said
+`not_enforced`, and a request recorded then replays that answer).
 The outputs are: ingest `generation`, `revision_id` (an imported transcript or
 `null`); retranscribe `revision_id`, `generation`, `chunks_reused` (the parts its run
 did not transcribe are its `coverage`, below); candidates
@@ -1460,9 +1463,10 @@ line's durable mode, ADR 0020 D-3); in an ephemeral one `process_crash_consisten
 Every session of a workspace reports `lifecycle.mode` `durable_worker` with its
 expiry, since the mode names whose rules bound its life; `session renew` extends it
 by the retention, and `session clean --expired` removes it once expired, as for any
-session. Before a source is copied into a workspace on Unix, the filesystem must have
-the source's size and a 1 GiB reserve free, else `RESOURCE_LIMIT`; Windows does not
-check (L-061). A desktop root (the CLI's default) keeps a 16 MiB margin instead of the
+session. Before a source is copied into a workspace, the filesystem must have
+the source's size and a 1 GiB reserve free, else `RESOURCE_LIMIT`, and space that cannot
+be read refuses the copy (`STORAGE_IO`); on Windows too since #266 (cycle 1 of 0.2.2, not
+released), where 0.2.1 did not check (L-061). A desktop root (the CLI's default) keeps a 16 MiB margin instead of the
 reserve and answers `STORAGE_IO` with its own remediation (see "A source within the size limit
 that does not fit the session root's filesystem" under `ingest`).
 

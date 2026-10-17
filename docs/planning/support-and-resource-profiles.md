@@ -150,7 +150,7 @@ each run.
 | Worker request | Not applicable | One request of at most 64 KiB and 8 steps per `job run`; `deadline_ms` up to one day (per delivery); a step waits at most `--admission-wait-ms` (default and maximum 60 s) for admission; at most 16 `candidates` calls per step; at most 4,096 request records of at most 192 KiB per workspace |
 | Durability | Ephemeral unless explicitly retained | A workspace created with `--durability durable` (Ubuntu 24.04 / ext4 only); its every session is `os_crash_durable` |
 | Network/filesystem isolation | Report effective controls | `--host-isolation strict-linux`: attested cgroup v2 CPU, memory and PID limits, read-only root, loopback only, else `ISOLATION_UNAVAILABLE` before any work; limits reported as the host cgroup's. SEC-T01 for P11: non-adversarial evidence accepted by the maintainer (attestation and the CI container job's controls); adversarial containment evidence deferred as technical debt (L-068) |
-| Free-space reserve | Not checked | 1 GiB beyond each source copy, checked on Unix; not checked on Windows |
+| Free-space reserve | No reserve; the source's size and a 16 MiB margin must be free before the copy, best effort (L-061), on Windows too since #266 (0.2.2, not released) | 1 GiB beyond each source copy, checked on every platform (on Windows since #266, 0.2.2, not released; 0.2.1 does not check there) |
 
 Visual analysis (P08, `candidates`) in both profiles: 60 s windows, at most 30 per
 call; per window at most 122 decoded 128x72 grey frames (about 1.1 MiB), 256 KiB of

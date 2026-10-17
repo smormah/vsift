@@ -347,10 +347,13 @@ request replays that job's commit.
 
 ## 8. Disk pressure
 
-On Unix a workspace checks, before each source copy, that the source's size and a
-1 GiB reserve are free on its filesystem, else the ingest fails `RESOURCE_LIMIT`, which
-ends the request and is replayed (so resubmit under a new id once space is freed). It is
-a pre-copy check, not a quota (L-061), and Windows does not check. A write that fails
+A workspace checks, before each source copy, that the source's size and a 1 GiB
+reserve are free on its filesystem, else the ingest fails `RESOURCE_LIMIT`, which ends
+the request and is replayed (so resubmit under a new id once space is freed). Space that
+cannot be read refuses the copy too. Windows checks as well since #266 (cycle 1 of
+0.2.2, not released; 0.2.1 did not check there): it reads the space free to VSift's user
+on the workspace's volume, so a per-user disk quota counts. It is a pre-copy check, not
+a quota (L-061). A write that fails
 for lack of space during a step is `STORAGE_IO`, which leaves the request resumable.
 Keep the workspace on its own filesystem or quota, alert well above the reserve, and
 clean expired sessions. The per-session and per-root budgets (10 GiB per session, 512
@@ -436,7 +439,7 @@ shown what.
 | `--host-isolation strict-linux` | accepted only when the kernel attests cgroup v2 limits, a read-only root and loopback only; adversarial containment evidence deferred as technical debt (L-068) | same attestation | `ISOLATION_UNAVAILABLE` | `ISOLATION_UNAVAILABLE` |
 | Provider tree stopped when VSift dies | graceful paths reap; a `SIGKILL` of VSift alone leaves the current unit running (L-055), the cgroup kill removes it | same | yes: the Job Object kills the tree, except a kill in the first instants of a provider's start, which leaves that provider suspended (L-129) | as Linux (process groups) |
 | Graceful shutdown signal | `SIGTERM`/`SIGINT` | same | console Ctrl-Break (or Ctrl-C unless ignored, L-053); a Windows service stop sends no console event | `SIGTERM`/`SIGINT` |
-| Free-space reserve before a copy | yes (1 GiB) | yes | not checked (L-061) | yes |
+| Free-space reserve before a copy | yes (1 GiB) | yes | yes since #266 (0.2.2, not released; 0.2.1 does not check), the volume's space free to the user | yes |
 | Weighted admission across processes | yes | yes | yes (tested) | yes |
 | Network and filesystem confinement of providers | the host's (attested, not enforced by VSift) | the host's | none: providers run with the user's rights (L-004) | none (L-004) |
 

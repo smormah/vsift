@@ -16,8 +16,15 @@
 //!   test makes its source a little larger than what is free where the session
 //!   root is, and looks for such a filesystem (see [`small_filesystem`]).
 //!
-//! Unix only: Windows reads no free space (L-061), so a source that does not
-//! fit is found there by the write that runs out of room.
+//! Unix only, although Windows reads the free space too since #266: there a
+//! stand-in source needs a sparse file (a long file that is not sparse takes
+//! its length from the disk) and a filesystem smaller than the size limit,
+//! which a Windows machine does not offer without elevated tools. The Windows
+//! reading is pinned below the binary: the store's
+//! `a_copy_that_cannot_fit_is_refused_before_it_starts` and
+//! `the_free_space_reserve_is_checked_before_a_copy`, which run on every
+//! platform, and the engine's and the worker's `enforced` reports; the step
+//! from the store's answer to the CLI's is the same code on every platform.
 
 #![cfg(unix)]
 
