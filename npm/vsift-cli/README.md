@@ -78,10 +78,13 @@ match its recorded digest or cannot be started). Reinstall `vsift-cli` with opti
 dependencies included; `vsift` itself never exits with either status.
 
 On Windows, npm and pnpm also write a `vsift.cmd` file, and `cmd.exe` re-reads the command
-line of a `.cmd` file (it expands `%NAME%` and acts on an unquoted `>` or `|`). Typing `vsift` in
-PowerShell or Git Bash is not affected. A program that passes `vsift` text it did not write should
-not go through `cmd.exe` (Node's `exec`, Python's `shell=True`, `cmd /c`): start the platform
-package's `vsift.exe`, or Node on `bin/vsift.cjs`, with an argument list and no shell.
+line of a `.cmd` file (it expands `%NAME%` and acts on an unquoted `>`, `|` or `&`); no package can
+leave that file out. Typing `vsift` in PowerShell or Git Bash is not affected (Yarn 1 writes no
+PowerShell file, so there even PowerShell runs the `.cmd`). A program that passes `vsift` text it
+did not write must not start `vsift.cmd`: neither through a shell (Node's `exec`, Python's
+`shell=True`, `cmd /c`) nor with an argument list after a lookup through `PATHEXT` (Python's
+`shutil.which("vsift")` finds the `.cmd`). Start the platform package's `vsift.exe`, or Node on
+`bin/vsift.cjs`, by its full path, with an argument list and no shell.
 
 The install guide, including the native archives for machines without a JavaScript
 runtime and how to verify them, is

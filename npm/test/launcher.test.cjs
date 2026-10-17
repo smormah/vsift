@@ -239,6 +239,189 @@ test('hostile file names and arguments reach the executable unchanged and run no
   assert.equal(fs.existsSync(path.join(layout.root, MARKER)), false, `${MARKER} was created: a command an argument spelled ran`);
 });
 
+// The shims npm itself writes on Windows (#257, L-109), installed from this
+// source into a temporary prefix: npm's own CLI, started with this Node.js and
+// an argument list, no registry (`--offline`, optional dependencies omitted),
+// no install scripts. The platform package is laid out by hand, with the
+// stand-in executable, as in the tests above. The cases go through each shim
+// from PowerShell, the way the published-artifact check sends them.
+
+const npmCli = path.join(path.dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js');
+const throughPowerShell = path.join(__dirname, 'fixtures', 'through-powershell.ps1');
+
+function powerShellFound() {
+  if (!windows) {
+    return false;
+  }
+  const probe = childProcess.spawnSync('pwsh', ['-NoProfile', '-NonInteractive', '-Command', 'exit 0'], { timeout: 60_000, windowsHide: true });
+  return probe.status === 0;
+}
+
+const npmShims = {
+  skip:
+    windowsOnly.skip ||
+    (fs.existsSync(npmCli) ? false : `npm is not beside this Node.js (${npmCli})`) ||
+    (powerShellFound() ? false : 'PowerShell 7 (pwsh) is not on PATH'),
+};
+
+/** An environment for npm that reads no user configuration and writes only under `root`. */
+function npmEnvironment(root) {
+  const environment = Object.fromEntries(Object.entries(process.env).filter(([key]) => !/^npm_/i.test(key)));
+  const userconfig = path.join(root, 'empty.npmrc');
+  fs.writeFileSync(userconfig, '');
+  return {
+    ...environment,
+    npm_config_userconfig: userconfig,
+    npm_config_cache: path.join(root, 'npm-cache'),
+    npm_config_update_notifier: 'false',
+  };
+}
+
+let npmInstall;
+// Registered at the top level, so it runs once every test of the file has finished.
+test.after(() => {
+  if (npmInstall !== undefined) {
+    removeTree(npmInstall.root, { force: true });
+  }
+});
+
+/**
+ * Installs the launcher globally into a temporary prefix with npm, and lays out
+ * the stand-in platform package; once for the tests below, which only read it.
+ */
+function installWithNpm() {
+  if (npmInstall !== undefined) {
+    return npmInstall;
+  }
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'vsift npm shims '));
+  const packageDir = path.join(root, 'package');
+  for (const file of ['package.json', 'README.md', path.join('bin', 'vsift.cjs'), path.join('lib', 'launcher.cjs')]) {
+    fs.mkdirSync(path.dirname(path.join(packageDir, file)), { recursive: true });
+    fs.copyFileSync(path.join(launcherSource, file), path.join(packageDir, file));
+  }
+  const bytes = fs.readFileSync(process.execPath);
+  fs.writeFileSync(
+    path.join(packageDir, 'platform-digests.json'),
+    JSON.stringify({
+      format: launcher.DIGESTS_FORMAT,
+      version: VERSION,
+      packages: { [hostTarget.packageName]: { file: hostTarget.executable, size: bytes.length, sha256: sha256(bytes) } },
+    }),
+  );
+  const prefix = path.join(root, 'prefix');
+  const install = childProcess.spawnSync(
+    process.execPath,
+    [npmCli, 'install', '--global', '--prefix', prefix, '--install-links', '--omit=optional', '--ignore-scripts', '--offline', '--no-audit', '--no-fund', '--loglevel=error', packageDir],
+    { cwd: root, env: npmEnvironment(root), encoding: 'utf8', timeout: 300_000, windowsHide: true },
+  );
+  assert.equal(install.status, 0, `npm install: ${install.stderr}`);
+  const platformDir = path.join(prefix, 'node_modules', ...hostTarget.packageName.split('/'));
+  fs.mkdirSync(platformDir, { recursive: true });
+  fs.writeFileSync(path.join(platformDir, 'package.json'), JSON.stringify({ name: hostTarget.packageName, version: VERSION }));
+  fs.copyFileSync(process.execPath, path.join(platformDir, hostTarget.executable));
+  const work = path.join(root, 'work');
+  fs.mkdirSync(work);
+  npmInstall = { root, prefix, work };
+  return npmInstall;
+}
+
+/** `file` with its long name: os.tmpdir() can be an 8.3 short name that PowerShell and where.exe expand. */
+function longPath(file) {
+  return fs.realpathSync.native(file).toLowerCase();
+}
+
+/** Runs `command <prefix...> <case>` from PowerShell once per case; what each printed, its status and whether the marker appeared. */
+function runThroughPowerShell(command, prefix, cases, cwd) {
+  const carry = (values) => values.map((value) => Buffer.from(value, 'utf8').toString('base64')).join(',');
+  const result = childProcess.spawnSync('pwsh', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', throughPowerShell], {
+    cwd,
+    encoding: 'utf8',
+    timeout: 600_000,
+    windowsHide: true,
+    env: {
+      ...process.env,
+      VSIFT_TEST_COMMAND: command,
+      VSIFT_TEST_PREFIX: carry(prefix),
+      VSIFT_TEST_CASES: carry(cases),
+      VSIFT_TEST_MARKER: path.join(cwd, MARKER),
+    },
+  });
+  assert.equal(result.status, 0, `pwsh: ${result.stderr}`);
+  const runs = JSON.parse(result.stdout);
+  assert.equal(runs.length, cases.length);
+  return runs;
+}
+
+/** The value the stand-in executable received after `--`, or undefined when it printed no argument list. */
+function receivedValue(run) {
+  try {
+    const received = JSON.parse(run.stdout.trim().split('\n').pop());
+    return received.length === 2 && received[0] === '--' ? received[1] : { split: received.slice(1) };
+  } catch {
+    return undefined;
+  }
+}
+
+/** The hostile cases that did not arrive unchanged, or that ran a command, through `command`. */
+function hostileDifferences(command, install) {
+  const cases = [...hostileFileNames(process.platform), ...hostileArguments(process.platform)];
+  const runs = runThroughPowerShell(command, [fakeScript, 'args', '--'], cases.map(([, value]) => value), install.work);
+  return cases.flatMap(([label, value], index) => {
+    const run = runs[index];
+    const received = receivedValue(run);
+    return run.marker || run.status !== 0 || received !== value ? [{ label, value, received, status: run.status, ranACommand: run.marker }] : [];
+  });
+}
+
+test('Windows: npm writes vsift.cmd, vsift.ps1 and a POSIX script, PowerShell runs the .ps1, and a PATHEXT lookup finds the .cmd', npmShims, () => {
+  const install = installWithNpm();
+  // npm's cmd-shim writes all three for every `bin` entry (for a native `.exe` target as well, as
+  // the reproduction for #257 showed), so no `bin` this package could declare leaves the `.cmd` out.
+  assert.deepEqual(fs.readdirSync(install.prefix).filter((file) => file.startsWith('vsift')).sort(), ['vsift', 'vsift.cmd', 'vsift.ps1']);
+  const pathWithPrefix = `${install.prefix};${process.env.PATH}`;
+  const powerShell = childProcess.spawnSync('pwsh', ['-NoProfile', '-NonInteractive', '-Command', '(Get-Command vsift).Source'], {
+    encoding: 'utf8',
+    env: { ...process.env, PATH: pathWithPrefix },
+    timeout: 60_000,
+    windowsHide: true,
+  });
+  assert.equal(longPath(powerShell.stdout.trim()), longPath(path.join(install.prefix, 'vsift.ps1')), powerShell.stderr);
+  // A lookup that follows PATHEXT (where.exe here; Python's shutil.which and Go's exec.LookPath do the same)
+  // has no `.ps1` in it, so it finds the `.cmd`, and a program that then passes an argument list still goes through cmd.exe.
+  const where = childProcess.spawnSync('where.exe', ['vsift'], { encoding: 'utf8', env: { ...process.env, PATH: pathWithPrefix }, timeout: 60_000 });
+  const found = where.stdout.split(/\r?\n/).filter((line) => /\.[a-z]+$/i.test(line));
+  assert.equal(longPath(found[0]), longPath(path.join(install.prefix, 'vsift.cmd')), where.stdout);
+});
+
+test("Windows: through npm's vsift.ps1 every hostile file name and argument arrives unchanged and runs nothing", npmShims, () => {
+  const install = installWithNpm();
+  const differences = hostileDifferences(path.join(install.prefix, 'vsift.ps1'), install);
+  assert.deepEqual(differences, []);
+});
+
+// L-109 is an accepted residual, so this pins it as the register, install.md,
+// SECURITY.md and the README describe it. If it fails, npm or Windows no longer
+// does what they say: rewrite them (and the entry) rather than this test.
+test("Windows: through npm's vsift.cmd, cmd.exe still re-reads the line as L-109 records, and a .cmd that ignores its arguments does the same", npmShims, () => {
+  const install = installWithNpm();
+  const differences = hostileDifferences(path.join(install.prefix, 'vsift.cmd'), install);
+  const byLabel = new Map(differences.map((difference) => [difference.label, difference]));
+  // An unquoted redirection with no whitespace runs: the marker is created.
+  assert.equal(byLabel.get('semicolon and comma')?.ranACommand, true, JSON.stringify(differences));
+  // %NAME% is expanded before the launcher runs.
+  assert.equal(byLabel.get('percent variable')?.received, process.env.ComSpec, JSON.stringify(differences));
+  // The same cases through the .ps1 shim are exact (the test above), so the difference is the .cmd file's.
+  assert.ok(differences.length >= 3, JSON.stringify(differences));
+
+  // Why no shim content, `bin` shape or launcher check can remove it: cmd.exe acts on
+  // the caller's command line while it starts the batch file, before the file's
+  // first line. A .cmd that never reads its arguments creates the marker as well.
+  const noop = path.join(install.root, 'noop.cmd');
+  fs.writeFileSync(noop, '@exit /b 0\r\n');
+  const [run] = runThroughPowerShell(noop, ['ingest', '--'], [`a;echo,x>${MARKER}`], install.work);
+  assert.equal(run.marker, true, JSON.stringify(run));
+});
+
 test('the exit status is the executable’s', endToEnd, (t) => {
   const layout = makeLayout(t, { target: hostTarget, executable: process.execPath });
   for (const status of [0, 1, 2, 6, 7, 126, 255]) {
@@ -367,8 +550,11 @@ function sendConsoleEvent(pid, event) {
 }
 
 // The documents that tell a Windows user what the `vsift.cmd` file of npm and
-// pnpm does (L-109, #257). VSift cannot change that file, so the warning and
-// the routes around it are the mitigation and must not be dropped silently.
+// pnpm does (L-109, #257). No package can leave that file out (the npm-shim
+// tests above show why), so the warning and the routes around it are the
+// mitigation and must not be dropped silently. They name both ways a program
+// reaches the `.cmd`: through a shell, and with an argument list after a
+// `PATHEXT` lookup such as Python's `shutil.which` (found on 2026-10-16).
 const windowsShimDocuments = {
   'docs/operations/install.md': [
     'vsift.cmd',
@@ -380,13 +566,18 @@ const windowsShimDocuments = {
     'vsift.cjs',
     'child_process.exec',
     'shell=True',
+    'PATHEXT',
+    'shutil.which',
+    'Yarn 1',
+    'npx.cmd',
     'L-109',
   ],
-  'SECURITY.md': ['vsift.cmd', 'cmd.exe', 'PowerShell', 'Git Bash', 'vsift.exe', 'known-limits.md#l-109'],
-  'npm/vsift-cli/README.md': ['vsift.cmd', 'cmd.exe', 'PowerShell', 'Git Bash', 'vsift.exe', 'bin/vsift.cjs'],
+  'SECURITY.md': ['vsift.cmd', 'cmd.exe', 'PowerShell', 'Git Bash', 'vsift.exe', 'PATHEXT', 'shutil.which', 'known-limits.md#l-109'],
+  'npm/vsift-cli/README.md': ['vsift.cmd', 'cmd.exe', 'PowerShell', 'Git Bash', 'vsift.exe', 'bin/vsift.cjs', 'PATHEXT', 'shutil.which', 'Yarn 1'],
+  'docs/planning/known-limits.md': ['PATHEXT', 'shutil.which', 'Yarn 1'],
 };
 
-test('the install guide, the security policy and the package README warn about vsift.cmd and name the safe routes', () => {
+test('the install guide, the security policy, the package README and the register warn about vsift.cmd and name the safe routes', () => {
   for (const [relative, fragments] of Object.entries(windowsShimDocuments)) {
     const text = fs.readFileSync(path.join(repositoryRoot, ...relative.split('/')), 'utf8');
     for (const fragment of fragments) {

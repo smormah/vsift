@@ -12,7 +12,9 @@ function waitForever() {
 
 switch (mode) {
   case 'args':
-    process.stdout.write(JSON.stringify(rest));
+    // Every non-ASCII character as a JSON escape, so the text parses to the
+    // same strings whatever code page a shell in between decodes it with.
+    process.stdout.write(JSON.stringify(rest).replace(/[\u007f-￿]/g, (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, '0')}`));
     break;
   case 'exit':
     process.exitCode = Number(rest[0]);

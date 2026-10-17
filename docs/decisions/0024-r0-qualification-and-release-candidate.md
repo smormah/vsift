@@ -1016,7 +1016,13 @@ route and require them to arrive unchanged with no command run, and pin the thre
 the routes. **Not done:** one sentence in the skill (run `vsift` from PowerShell or Git Bash on Windows, never
 through `cmd.exe`), because the skill is frozen for the agent-trial batches; it is a candidate for the next
 freeze and the maintainer decides (**update, 2026-10-05: made in PR 10a**, see the note at the end of this ADR).
-[L-109](../planning/known-limits.md#l-109) is an accepted residual.
+[L-109](../planning/known-limits.md#l-109) is an accepted residual. (**Update, 2026-10-16, the `0.2.2` work on
+#257:** the decision stands, now with the evidence that no package change can do better: npm, pnpm and Yarn 1
+write a `.cmd` for every `bin` entry, a native `.exe` target included, and cmd.exe acts on the caller's line while
+it starts a `.cmd`, so a `.cmd` that ignores its arguments runs the injected command too. One premise above was
+too narrow: a caller with an argument list and no shell is also exposed when it finds `vsift` through `PATHEXT`
+(Python's `shutil.which` finds the `.cmd`), and Yarn 1 writes no `.ps1`, so there PowerShell runs the `.cmd`.
+The documents and L-109 now say so, and Windows launcher tests run the hostile cases through npm's real shims.)
 
 ## Implementation note, 2026-10-03 (P14 PR 4, the robustness campaigns)
 
