@@ -41,7 +41,7 @@ cap-fs-ext = "=4.0.3"
 cap-std = "=4.0.3"
 clap = { version = "4.5", features = ["derive"] }
 predicates = "3.1"
-process-wrap = { version = "10.0", default-features = false, features = ["job-object", "kill-on-drop", "process-group", "tokio1"] }
+process-wrap = { version = "10.0", default-features = false, features = ["creation-flags", "job-object", "kill-on-drop", "process-group", "tokio1"] }
 reqwest = { version = "=0.13.5", default-features = false, features = ["native-tls"] }
 proptest = { version = "1.11", default-features = false, features = ["std"] }
 # The 17 patterns of the skill-owned handoff schema (P13 PR 5, ADR 0023 note of
@@ -60,6 +60,11 @@ vsift-contract = { version = "0.2.1", path = "crates/vsift-contract" }
 vsift-domain = { version = "0.2.1", path = "crates/vsift-domain" }
 vsift-infrastructure = { version = "0.2.1", path = "crates/vsift-infrastructure" }
 windows-acl = "=0.3.0"
+# Already in the lock through process-wrap's Job Object support, with the same
+# version and the same feature; named directly only for the type of the
+# provider's creation flags (`CREATE_NO_WINDOW`, a console of its own, #404).
+# No new crate.
+windows = { version = "0.62.2", features = ["Win32_System_Threading"] }
 # The governance checker's workflow lint (P13 PR 8): parses .github/workflows/*.yml
 # into a tree, so flow mappings and anchors cannot hide a permission or an
 # unpinned action from a line-based scan. Never a dependency of a shipped crate.

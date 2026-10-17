@@ -17,6 +17,7 @@ use std::{
     error::Error,
     ffi::OsStr,
     fs,
+    future::Future,
     num::NonZeroU16,
     path::PathBuf,
     process::{Command, Stdio},
@@ -32,12 +33,18 @@ use jsonschema::{Retrieve, Uri};
 use serde_json::Value;
 use vsift::{
     AdmissionBudget, AdmissionWait, Cancellation, DurabilityRequirement, Engine, EngineConfig,
-    EngineError, EnginePorts, HostIsolation, JobProgress, ManagedRootLocation, ProgressObserver,
-    ProgressStage, SessionListEntry, SessionRootLocation, UserConfigurationLocation, WorkOutcome,
-    WorkRequestRun, WorkerFailure, WorkspaceInitRequest, WorkspacePolicy, WorkspaceRetention,
+    EngineError, EnginePorts, HostIsolation, JobProgress, LocalAsrVerification, LocalAsrVerifier,
+    ManagedRootLocation, MediaToolVerification, MediaToolVerifier, PlannedChunk, ProgressObserver,
+    ProgressStage, ProviderChunkOutput, RecognizerIdentity, RuntimeDependency, SessionListEntry,
+    SessionRootLocation, SpeechPcm, SpeechRecognitionError, SpeechRecognizer,
+    UserConfigurationLocation, WorkOutcome, WorkRequestRun, WorkerFailure, WorkspaceInitRequest,
+    WorkspacePolicy, WorkspaceRetention,
 };
 use vsift_contract::{WorkRequest, decode_work_request};
-use vsift_domain::OperationId;
+use vsift_domain::{
+    AsrDecodingProfile, AsrModel, AsrModelProfile, AsrProvider, AsrProviderBuild, FailureCode,
+    OperationId, Sha256Hex,
+};
 use vsift_infrastructure::{FilesystemSessionStore, WorkerRequestClaim};
 
 type TestResult = Result<(), Box<dyn Error>>;
@@ -91,6 +98,10 @@ impl Layout {
     }
 
     fn engine(&self) -> Engine {
+        self.engine_with(EnginePorts::system())
+    }
+
+    fn engine_with(&self, ports: EnginePorts) -> Engine {
         Engine::new(
             EngineConfig {
                 session_root: SessionRootLocation::Explicit(self.workspace()),
@@ -98,13 +109,18 @@ impl Layout {
                 managed_root: ManagedRootLocation::Explicit(self.0.join("managed")),
                 host_isolation: HostIsolation::ProcessOnly,
             },
-            EnginePorts::system(),
+            ports,
         )
     }
 
     /// Creates the ephemeral workspace with `capacity` admission units.
     fn init(&self, capacity: u16) -> Built<Engine> {
-        let engine = self.engine();
+        self.init_with(capacity, EnginePorts::system())
+    }
+
+    /// [`Layout::init`] with the engine's `ports`.
+    fn init_with(&self, capacity: u16, ports: EnginePorts) -> Built<Engine> {
+        let engine = self.engine_with(ports);
         engine.init_workspace(WorkspaceInitRequest {
             policy: WorkspacePolicy::new(
                 DurabilityRequirement::Ephemeral,
@@ -400,6 +416,203 @@ async fn a_stopped_request_continues_from_its_next_step() -> TestResult {
     assert_eq!(value["attempt"], 2);
     assert_eq!(value["session_id"], session);
     assert_eq!(Layout::opened_sessions(&engine)?, 1);
+    Ok(())
+}
+
+/// A host-supplied recognizer that the host's shutdown interrupts while the
+/// recognition identifies it: the call stops the host's running step (it
+/// cancels the run's `cancellation`, as the end of a shutdown's drain does)
+/// and then either answers with a failure of its own, as an interrupted
+/// provider can (`Answer::Fails`), or identifies itself, so that the step
+/// goes on to its next provider call with the stop already recorded
+/// (`Answer::Identifies`).
+#[derive(Clone)]
+struct InterruptedRecognizer {
+    stop: Cancellation,
+    answer: Answer,
+}
+
+/// How [`InterruptedRecognizer`] answers once it has stopped the step.
+#[derive(Clone, Copy)]
+enum Answer {
+    Fails,
+    Identifies,
+}
+
+impl SpeechRecognizer for InterruptedRecognizer {
+    fn identity(
+        &self,
+    ) -> impl Future<Output = Result<RecognizerIdentity, SpeechRecognitionError>> + Send {
+        self.stop.cancel();
+        std::future::ready(match self.answer {
+            Answer::Fails => Err(SpeechRecognitionError::Io),
+            Answer::Identifies => base_identity(),
+        })
+    }
+
+    fn recognize(
+        &self,
+        _chunk: &PlannedChunk,
+        _pcm: &SpeechPcm,
+    ) -> impl Future<Output = Result<ProviderChunkOutput, SpeechRecognitionError>> + Send {
+        std::future::ready(Err(SpeechRecognitionError::Io))
+    }
+}
+
+/// A pinned base-model identity, as a stand-in recognizer reports it.
+fn base_identity() -> Result<RecognizerIdentity, SpeechRecognitionError> {
+    let digest =
+        Sha256Hex::parse("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
+            .map_err(|_| SpeechRecognitionError::Io)?;
+    Ok(RecognizerIdentity {
+        provider: AsrProviderBuild::new(AsrProvider::WhisperCpp, digest.clone()),
+        model: AsrModel::new(AsrModelProfile::Base, digest),
+        decoding: AsrDecodingProfile::R0V1,
+        threads: NonZeroU16::MIN,
+    })
+}
+
+/// A workspace whose recognitions use `recognizer`, with stand-in media tools
+/// that are files and never run.
+fn interrupted_workspace(layout: &Layout, recognizer: InterruptedRecognizer) -> Built<Engine> {
+    let engine = layout.init_with(
+        4,
+        EnginePorts::system()
+            .with_media_tool_verifier(PassingMediaTools)
+            .with_speech_recognizer(recognizer, PassingAsrVerifier),
+    )?;
+    for (dependency, name) in [
+        (RuntimeDependency::Ffmpeg, "ffmpeg-stand-in.exe"),
+        (RuntimeDependency::Ffprobe, "ffprobe-stand-in.exe"),
+    ] {
+        let path = layout.0.join(name);
+        fs::write(&path, b"not a program")?;
+        engine.configure_executable(dependency, &path)?;
+    }
+    Ok(engine)
+}
+
+#[derive(Clone)]
+struct PassingAsrVerifier;
+
+impl LocalAsrVerifier for PassingAsrVerifier {
+    fn verify(&self) -> impl Future<Output = LocalAsrVerification> + Send {
+        std::future::ready(LocalAsrVerification::Verified)
+    }
+}
+
+#[derive(Clone)]
+struct PassingMediaTools;
+
+impl MediaToolVerifier for PassingMediaTools {
+    fn verify(&self) -> impl Future<Output = MediaToolVerification> + Send {
+        std::future::ready(MediaToolVerification::Verified)
+    }
+}
+
+/// #404: a step that fails once the host has stopped it is recorded as
+/// stopped (`cancelled`, resumable), whatever its own failure says, and its
+/// own failure is kept beside the stop for diagnostics.
+///
+/// The shutdown reaches the `retranscribe` step while the stand-in
+/// recognizer identifies itself, and the recognizer then fails
+/// (`identity()` answers an I/O failure, before any probe), so the step's
+/// own answer is `MISSING_CAPABILITY`, a failure that ends a request for
+/// good: recorded as it was, the next delivery would replay it instead of
+/// continuing. The next delivery, which no shutdown stops, continues the
+/// request (attempt 2) and records the failure that is then real. Runs
+/// everywhere: the media tools are stand-in files that never run.
+#[tokio::test]
+async fn a_step_that_fails_after_the_host_stopped_it_is_recorded_as_stopped() -> TestResult {
+    let layout = Layout::new()?;
+    let stop = Cancellation::new();
+    let engine = interrupted_workspace(
+        &layout,
+        InterruptedRecognizer {
+            stop: stop.clone(),
+            answer: Answer::Fails,
+        },
+    )?;
+    let request = ingest_request(
+        OPERATION,
+        r#"{"retranscribe":{"range":null}},{"close":{}}"#,
+        "",
+    )?;
+    let mut run = layout.run(&request);
+    run.cancellation = stop;
+    let stopped = engine.run_work_request(run).await;
+    let value = data(&stopped)?;
+    conforms(&value)?;
+    assert_eq!(value["status"], "cancelled", "{value}");
+    assert_eq!(value["failure"]["code"], "CANCELLED");
+    assert_eq!(value["failure"]["step"], 1);
+    assert!(stopped.stopped_by_shutdown());
+    assert_eq!(
+        statuses(&value),
+        [
+            ("ingest".to_owned(), "complete".to_owned()),
+            ("retranscribe".to_owned(), "cancelled".to_owned()),
+            ("close".to_owned(), "not_started".to_owned())
+        ]
+    );
+    assert_eq!(
+        stopped
+            .stopped_step_failure()
+            .map(EngineError::failure_code),
+        Some(FailureCode::MissingCapability),
+        "the step's own failure is kept"
+    );
+
+    let delivered = engine.run_work_request(layout.run(&request)).await;
+    let value = data(&delivered)?;
+    assert_eq!(value["replayed"], false, "{value}");
+    assert_eq!(value["attempt"], 2);
+    assert_eq!(value["failure"]["code"], "MISSING_CAPABILITY");
+    assert!(!delivered.stopped_by_shutdown());
+    assert_eq!(delivered.stopped_step_failure(), None);
+    assert_eq!(Layout::opened_sessions(&engine)?, 1);
+    Ok(())
+}
+
+/// #404, on the path `VSift` controls: the stop is recorded while the step
+/// identifies its recognizer, which then answers, and the step's next
+/// provider call (the source's probe) is refused before it starts. The step
+/// is recorded as stopped, and its own failure, kept beside the stop, is a
+/// cancellation too: the worker's rule is not what makes this one
+/// `cancelled`. Had the probe's refusal been reported as a tool that could
+/// not run (as it was in `0.2.1`), the request would still say `cancelled`
+/// through the worker's rule, and only this kept failure would show it.
+#[tokio::test]
+async fn a_step_stopped_before_its_next_provider_call_fails_as_a_cancellation() -> TestResult {
+    let layout = Layout::new()?;
+    let stop = Cancellation::new();
+    let engine = interrupted_workspace(
+        &layout,
+        InterruptedRecognizer {
+            stop: stop.clone(),
+            answer: Answer::Identifies,
+        },
+    )?;
+    let request = ingest_request(
+        OPERATION,
+        r#"{"retranscribe":{"range":null}},{"close":{}}"#,
+        "",
+    )?;
+    let mut run = layout.run(&request);
+    run.cancellation = stop;
+    let stopped = engine.run_work_request(run).await;
+    let value = data(&stopped)?;
+    conforms(&value)?;
+    assert_eq!(value["status"], "cancelled", "{value}");
+    assert_eq!(value["failure"]["step"], 1);
+    let underlying = stopped
+        .stopped_step_failure()
+        .ok_or("the step's own failure was not kept")?;
+    assert_eq!(
+        underlying.failure_code(),
+        FailureCode::Cancelled,
+        "{underlying:?}"
+    );
     Ok(())
 }
 

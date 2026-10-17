@@ -646,6 +646,71 @@ async fn a_range_under_a_tenth_of_a_second_is_recorded_and_never_decoded_or_reco
     Ok(())
 }
 
+/// A recognizer that stands in for a shutdown arriving while the run
+/// identifies it: identifying cancels the run's cancellation, the way a
+/// worker host's shutdown lands while a recognition hashes its model.
+#[derive(Clone)]
+struct StoppedWhileIdentifying {
+    inner: CountingRecognizer,
+    stop: Cancellation,
+}
+
+impl SpeechRecognizer for StoppedWhileIdentifying {
+    fn identity(
+        &self,
+    ) -> impl Future<Output = Result<RecognizerIdentity, SpeechRecognitionError>> + Send {
+        self.stop.cancel();
+        std::future::ready(self.inner.answer_identity())
+    }
+
+    fn recognize(
+        &self,
+        chunk: &PlannedChunk,
+        _pcm: &SpeechPcm,
+    ) -> impl Future<Output = Result<ProviderChunkOutput, SpeechRecognitionError>> + Send {
+        std::future::ready(self.inner.answer(chunk))
+    }
+}
+
+/// #404: a recognition stopped before its first provider call is cancelled.
+///
+/// The stop arrives while the run identifies its recognizer, before the
+/// source is probed. The probe is then refused before its provider starts,
+/// and that refusal was reported as a probe that could not run: the run
+/// failed with `MISSING_CAPABILITY`, which a worker host records for good,
+/// as the hosted Windows journeys saw on `0.2.1`. It is the cancellation. Runs
+/// everywhere: the stand-in tools are never started.
+#[tokio::test]
+async fn a_recognition_stopped_before_its_first_provider_call_is_cancelled() -> TestResult {
+    let harness = Harness::passing(AsrModelProfile::Base, Speech::Words)?;
+    let stop = Cancellation::new();
+    let recognizer = StoppedWhileIdentifying {
+        inner: harness.recognizer.clone(),
+        stop: stop.clone(),
+    };
+    let engine = harness.engine_with(
+        EnginePorts::system()
+            .with_media_tool_verifier(PassingMediaTools)
+            .with_speech_recognizer(recognizer, harness.verifier.clone()),
+    );
+    harness.stand_in_tools(&engine)?;
+    let source = harness.write("placeholder.mp4", PLACEHOLDER_SOURCE)?;
+    let session = harness.plain_session(&engine, source).await?;
+    let before = engine.session_status(&session)?;
+    let mut stopped = request(&session, None);
+    stopped.cancellation = stop;
+    let error = engine
+        .retranscribe(stopped)
+        .await
+        .err()
+        .ok_or("a stopped recognition ran")?;
+    assert_eq!(error.failure_code(), FailureCode::Cancelled, "{error:?}");
+    assert_eq!(harness.recognizer.calls().1, 0);
+    let after = engine.session_status(&session)?;
+    assert_eq!(after.generation(), before.generation());
+    Ok(())
+}
+
 /// A video without audio is a typed invalid argument; nothing is committed.
 #[tokio::test]
 #[ignore = "requires FFmpeg and FFprobe on PATH"]

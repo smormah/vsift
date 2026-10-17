@@ -232,10 +232,13 @@ impl FfmpegMedia<'_> {
             .with_argument((vsift_domain::MAX_LISTED_FRAMES + 1).to_string())
             .with_arguments(["-f", "null", "-"]);
         let output = self
-            .supervisor_with(LISTING_STDOUT_BYTES, MAX_LISTING_DIAGNOSTIC_BYTES)
-            .run(request, cancellation)
-            .await
-            .map_err(MediaError::Process)?;
+            .run_provider(
+                request,
+                LISTING_STDOUT_BYTES,
+                MAX_LISTING_DIAGNOSTIC_BYTES,
+                cancellation,
+            )
+            .await?;
         super::validate_outcome(&output)?;
         parse_frame_listing(&output.stderr.bytes, &window)
     }
@@ -418,10 +421,13 @@ impl FfmpegMedia<'_> {
             .with_argument(pts.len().to_string())
             .with_arguments(["-f", "image2pipe", "-vcodec", "png", "pipe:1"]);
         let output = self
-            .supervisor(MAX_FRAME_BYTES)
-            .run(request, cancellation)
-            .await
-            .map_err(MediaError::Process)?;
+            .run_provider(
+                request,
+                MAX_FRAME_BYTES,
+                super::MAX_DIAGNOSTIC_BYTES,
+                cancellation,
+            )
+            .await?;
         super::validate_outcome(&output)?;
         let dimensions = region.dimensions();
         let log = scan_showinfo(&output.stderr.bytes, MAX_IMAGES_PER_RUN)?;

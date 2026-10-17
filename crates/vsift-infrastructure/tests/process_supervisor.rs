@@ -92,6 +92,8 @@ fn process_fixture() -> Result<(), Box<dyn Error>> {
             std::thread::sleep(Duration::from_secs(60));
             Ok(())
         }
+        "announce-and-sleep" => fixture_announce_and_sleep(),
+        "interrupt-host" => fixture_interrupt_host(),
         "descendant" => fixture_descendant(ParentLifecycle::Wait),
         "pipe-holder" => fixture_descendant(ParentLifecycle::Exit),
         #[cfg(target_os = "linux")]
@@ -135,6 +137,88 @@ fn fixture_both_floods() -> Result<(), Box<dyn Error>> {
     loop {
         io::stdout().write_all(&bytes)?;
         io::stderr().write_all(&bytes)?;
+    }
+}
+
+/// A provider in the middle of its work: it writes its process id to the
+/// marker, then sleeps, as whisper.cpp does mid-chunk.
+fn fixture_announce_and_sleep() -> Result<(), Box<dyn Error>> {
+    let marker = env::var_os(DESCENDANT_MARKER).ok_or("no marker path was given")?;
+    std::fs::write(marker, format!("{}\n", std::process::id()))?;
+    std::thread::sleep(Duration::from_secs(60));
+    Ok(())
+}
+
+/// How long the interrupt host waits between hearing the interrupt and
+/// cancelling. A loaded runner's host can act on an interrupt well after the
+/// operating system delivered it; the wait makes that late reaction certain,
+/// so a provider that heard the same interrupt has ended long before the
+/// cancellation exists.
+const HOST_REACTION: Duration = Duration::from_secs(1);
+
+/// How long the interrupt test waits for each line of its host: a safety
+/// stop, not a timing claim. The first line comes after the host's provider
+/// has started and written its marker, which includes the slow Windows spawn
+/// of [`MARKER_WAIT`]; each wait ends as soon as its line is printed.
+const HOST_WAIT: Duration = Duration::from_secs(120);
+
+/// A host as `vsift` is one: it runs a provider under the supervisor, and an
+/// interrupt (a console Ctrl-Break on Windows, `SIGINT` to its process group
+/// on Unix) makes it cancel, [`HOST_REACTION`] later. It prints `HOST_READY`
+/// once the provider is at work and `TERMINATION=<reason>` at the end.
+fn fixture_interrupt_host() -> Result<(), Box<dyn Error>> {
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()?;
+    runtime.block_on(async {
+        let mut interrupt = HostInterrupt::listen()?;
+        let marker = PathBuf::from(env::var_os(DESCENDANT_MARKER).ok_or("no marker path")?);
+        let request = fixture_request("announce-and-sleep", CANCELLED_FIXTURE_DEADLINE)?
+            .with_environment(DESCENDANT_MARKER, marker.as_os_str())?;
+        let cancellation = ProcessCancellation::new();
+        let trigger = cancellation.clone();
+        let supervisor = supervisor(64 * 1024)?;
+        let run = tokio::spawn(async move { supervisor.run(request, cancellation).await });
+        wait_for_descendant_marker(&marker, MARKER_WAIT).await?;
+        writeln!(io::stdout(), "HOST_READY")?;
+        io::stdout().flush()?;
+        interrupt.next().await;
+        tokio::time::sleep(HOST_REACTION).await;
+        trigger.cancel();
+        let outcome = run.await??;
+        writeln!(io::stdout(), "TERMINATION={:?}", outcome.termination)?;
+        io::stdout().flush()?;
+        Ok::<(), Box<dyn Error>>(())
+    })
+}
+
+/// The interrupt the host listens for.
+#[cfg(windows)]
+struct HostInterrupt(tokio::signal::windows::CtrlBreak);
+
+#[cfg(windows)]
+impl HostInterrupt {
+    fn listen() -> io::Result<Self> {
+        tokio::signal::windows::ctrl_break().map(Self)
+    }
+
+    async fn next(&mut self) {
+        let _ = self.0.recv().await;
+    }
+}
+
+/// The interrupt the host listens for.
+#[cfg(unix)]
+struct HostInterrupt(tokio::signal::unix::Signal);
+
+#[cfg(unix)]
+impl HostInterrupt {
+    fn listen() -> io::Result<Self> {
+        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt()).map(Self)
+    }
+
+    async fn next(&mut self) {
+        let _ = self.0.recv().await;
     }
 }
 
@@ -289,6 +373,7 @@ async fn p01_uses_exact_arguments_null_stdin_allowlisted_environment_and_explici
             ProcessContainment::UnixProcessGroup
         );
     }
+    assert_eq!(outcome.controls.interrupt_isolation, ControlStatus::Applied);
     assert!(stdout.contains("PATH_PRESENT=false"));
     assert!(stdout.contains("ALLOWED=expected"));
     Ok(())
@@ -423,6 +508,149 @@ async fn p06_descendants_and_inherited_pipe_holders_are_terminated() -> Result<(
 
         assert_eq!(outcome.termination, TerminationReason::Cancelled);
         assert!(wait_until_process_gone(descendant_pid, REAP_DEADLINE)?);
+    }
+    Ok(())
+}
+
+/// #404: an interrupt aimed at the host never reaches the provider, so the
+/// provider stops only when the host cancels it, and the run is cancelled.
+///
+/// The host here hears the interrupt and cancels a second later
+/// ([`HOST_REACTION`]). On Windows the interrupt is a console Ctrl-Break, which
+/// reaches every process attached to the console: a provider that shared the
+/// host's console died of it at once (`STATUS_CONTROL_C_EXIT`), the
+/// supervisor saw a provider that ended abnormally before any cancellation
+/// existed, and the run was reported `Exited`, which a recognition records as
+/// its own failure. With a console of its own the provider is still at work
+/// when the host cancels. On Unix the interrupt is `SIGINT` to the host's
+/// process group, which a provider leading its own group never received; the
+/// test holds that too. The provider is gone afterwards on both.
+#[tokio::test]
+async fn an_interrupt_to_the_host_never_ends_its_provider_first() -> Result<(), Box<dyn Error>> {
+    use std::io::{BufRead, BufReader};
+
+    let marker = unique_marker_path("interrupt-host-provider");
+    let _ = std::fs::remove_file(&marker);
+    let mut command = Command::new(env::current_exe()?);
+    command
+        .args([
+            "--exact",
+            "process_fixture",
+            "--nocapture",
+            "--test-threads=1",
+        ])
+        .env(FIXTURE_MODE, "interrupt-host")
+        .env(DESCENDANT_MARKER, &marker)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null());
+    separate_from_this_test(&mut command);
+    let mut host = command.spawn()?;
+    let stdout = host
+        .stdout
+        .take()
+        .ok_or("the host has no standard output")?;
+    let (lines, received) = std::sync::mpsc::channel();
+    let reader = std::thread::spawn(move || {
+        for line in BufReader::new(stdout).lines().map_while(Result::ok) {
+            if lines.send(line).is_err() {
+                break;
+            }
+        }
+    });
+    let wait_for = |prefix: &str| -> Result<String, Box<dyn Error>> {
+        let deadline = StandardInstant::now() + HOST_WAIT;
+        loop {
+            let left = deadline.saturating_duration_since(StandardInstant::now());
+            let line = received
+                .recv_timeout(left)
+                .map_err(|_| format!("the host never printed {prefix}"))?;
+            // The harness's own words can precede it on the line.
+            if let Some((_, rest)) = line.split_once(prefix) {
+                return Ok(format!("{prefix}{rest}"));
+            }
+        }
+    };
+    let termination = wait_for("HOST_READY")
+        .and_then(|_| interrupt_host(&host))
+        .and_then(|()| wait_for("TERMINATION="));
+    if termination.is_err() {
+        let _ = host.kill();
+    }
+    let _ = host.wait()?;
+    let _ = reader.join();
+    let provider = wait_for_descendant_marker(&marker, Duration::from_secs(1)).await;
+    let _ = std::fs::remove_file(&marker);
+    assert_eq!(termination?, "TERMINATION=Cancelled");
+    assert!(wait_until_process_gone(provider?, REAP_DEADLINE)?);
+    Ok(())
+}
+
+/// Starts the host apart from this test, so the interrupt sent to it reaches
+/// nothing else: on Windows in a console of its own, on Unix in a process
+/// group of its own.
+#[cfg(windows)]
+fn separate_from_this_test(command: &mut Command) -> &mut Command {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    command.creation_flags(CREATE_NO_WINDOW)
+}
+
+/// See the Windows variant.
+#[cfg(unix)]
+fn separate_from_this_test(command: &mut Command) -> &mut Command {
+    use std::os::unix::process::CommandExt;
+    command.process_group(0)
+}
+
+/// Sends the host its interrupt (Windows only): a console Ctrl-Break to its
+/// console, through the repository's helper, as the P10 and P11 checkpoints
+/// do. The helper starts in a console of its own as well, then detaches from
+/// it and attaches to the host's, so this test's console is never touched.
+#[cfg(windows)]
+fn interrupt_host(host: &std::process::Child) -> Result<(), Box<dyn Error>> {
+    let system_root = env::var_os("SystemRoot").ok_or("SystemRoot is unavailable")?;
+    let powershell = PathBuf::from(system_root)
+        .join("System32")
+        .join("WindowsPowerShell")
+        .join("v1.0")
+        .join("powershell.exe");
+    let helper = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("..")
+        .join("..")
+        .join("tools")
+        .join("send-console-ctrl.ps1");
+    let mut command = Command::new(powershell);
+    command
+        .args([
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+        ])
+        .arg(helper)
+        .args(["-ProcessId", &host.id().to_string(), "-Event", "CtrlBreak"])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+    let status = separate_from_this_test(&mut command).status()?;
+    if status.code() != Some(0) {
+        return Err(format!("the console helper failed: {status}").into());
+    }
+    Ok(())
+}
+
+/// Sends the host its interrupt (Unix only): `SIGINT` to its whole process
+/// group, as a terminal's Ctrl-C reaches the foreground group.
+#[cfg(unix)]
+fn interrupt_host(host: &std::process::Child) -> Result<(), Box<dyn Error>> {
+    let status = Command::new("kill")
+        .args(["-s", "INT", "--", &format!("-{}", host.id())])
+        .stdin(Stdio::null())
+        .status()?;
+    if !status.success() {
+        return Err(format!("kill -s INT failed: {status}").into());
     }
     Ok(())
 }

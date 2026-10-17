@@ -40,7 +40,9 @@
 //! fires the first on a shutdown signal and the second when its drain time
 //! is over. Either way the request stays resumable: its record keeps the
 //! finished steps and the next delivery continues from the first unfinished
-//! one.
+//! one. A step that fails once its `cancellation` has fired is recorded as
+//! stopped, whatever its own failure (#404): the stop can reach a step's work
+//! as a failure of that work, which would otherwise end the request for good.
 
 use std::{
     num::{NonZeroU16, NonZeroU32},
@@ -117,6 +119,7 @@ pub struct WorkOutcome {
     cause: Option<EngineError>,
     stopped: bool,
     unrecorded: Option<EngineError>,
+    stopped_step_failure: Option<EngineError>,
 }
 
 impl WorkOutcome {
@@ -148,6 +151,20 @@ impl WorkOutcome {
     #[must_use]
     pub const fn unrecorded(&self) -> Option<&EngineError> {
         self.unrecorded.as_ref()
+    }
+
+    /// What the running step itself reported when the host's stop was
+    /// recorded in its place (#404).
+    ///
+    /// A step that fails once the host has cancelled it is recorded as
+    /// stopped, whatever its own failure, so that the request stays
+    /// resumable. This keeps the step's own failure for diagnostics: on every
+    /// path where `VSift` itself stops the step it is a cancellation too, and
+    /// anything else (a provider ended by a signal from outside, or an
+    /// adapter that reads the stop as the tool's fault) is worth a look.
+    #[must_use]
+    pub const fn stopped_step_failure(&self) -> Option<&EngineError> {
+        self.stopped_step_failure.as_ref()
     }
 
     /// The result and its cause.
@@ -199,6 +216,9 @@ struct StepFailed {
     error: EngineError,
     timing: StepTiming,
     job: Option<JobId>,
+    /// The step's own failure, when the host's stop is reported in its place.
+    /// Boxed: two whole engine errors would make every step's `Err` large.
+    underlying: Option<Box<EngineError>>,
 }
 
 /// What one run of a step produced.
@@ -471,6 +491,7 @@ impl Engine {
         let plan = plan(&run.request);
         let total = u64::try_from(plan.len()).unwrap_or(u64::MAX);
         let mut cause = None;
+        let mut stopped_step_failure = None;
         report_steps(&run.progress, progress.steps.len(), total);
         while let Some(planned) = plan.get(progress.steps.len()) {
             let kind = planned.kind();
@@ -526,6 +547,7 @@ impl Engine {
                         failure_of(&failed.error),
                     ));
                     cause = Some(failed.error);
+                    stopped_step_failure = failed.underlying.map(|underlying| *underlying);
                     break;
                 }
             }
@@ -550,6 +572,7 @@ impl Engine {
                 cause,
                 stopped: false,
                 unrecorded: Some(error),
+                stopped_step_failure,
             };
         }
         WorkOutcome {
@@ -557,6 +580,7 @@ impl Engine {
             cause,
             stopped: false,
             unrecorded: None,
+            stopped_step_failure,
         }
     }
 
@@ -601,12 +625,27 @@ impl Engine {
                     admission_wait_ms: millis(waited),
                 },
                 job: failed.job.clone(),
+                underlying: None,
             };
             if deadline == DeadlineOutcome::Passed {
                 return Err(stop(
                     EngineError::Worker(WorkerFailure::DeadlineExceeded),
                     waited,
                 ));
+            }
+            // A step that fails once the host has stopped it was stopped,
+            // whatever its own failure says (#404). The stop can reach a
+            // step's work as a failure of that work (a provider call refused
+            // or cut short, an adapter that reads the stop as the tool's
+            // fault), and a failure such as `MISSING_CAPABILITY` ends the
+            // request for good: the next delivery would replay it instead of
+            // continuing. Recorded as the stop, the request stays resumable,
+            // and a failure that was real comes back on the next delivery.
+            // The step's own failure is kept beside it for diagnostics.
+            if run.cancellation.is_cancelled() {
+                let mut stopped = stop(EngineError::Worker(WorkerFailure::Stopped), waited);
+                stopped.underlying = Some(Box::new(failed.error));
+                return Err(stopped);
             }
             // A recognition waits for its admission inside the job (the
             // same bounded wait); its `BUSY` after that wait is reported.
@@ -1008,6 +1047,7 @@ impl Engine {
                 cause: None,
                 stopped: false,
                 unrecorded: None,
+                stopped_step_failure: None,
             },
             Err(_) => self.refused(
                 context.run,
@@ -1099,6 +1139,7 @@ impl Engine {
             cause,
             stopped: false,
             unrecorded: None,
+            stopped_step_failure: None,
         }
     }
 
