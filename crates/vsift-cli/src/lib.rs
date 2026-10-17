@@ -55,12 +55,12 @@ use vsift_contract::{
     SOURCE_ACCESS_DENIED_REMEDIATION, SOURCE_COPY_TOO_SLOW_REMEDIATION,
     SOURCE_IS_FOLDER_REMEDIATION, SOURCE_IS_LINK_REMEDIATION, SOURCE_NO_ROOM_REMEDIATION,
     SOURCE_NOT_FOUND_REMEDIATION, STALE_PLAN_REMEDIATION, SUPERSEDED_REMEDIATION,
-    TerminalEventResponse, UNKNOWN_JOB_REMEDIATION, UNKNOWN_REVISION_REMEDIATION,
-    UNOWNED_SESSION_ROOT_REMEDIATION, UNPINNED_MODEL_REMEDIATION, VISUAL_TOOLS_REMEDIATION,
-    WORKSPACE_NOT_DURABLE_REMEDIATION, WORKSPACE_POLICY_MISMATCH_REMEDIATION,
-    WORKSPACE_ROOT_REMEDIATION, local_asr_failure_summary, local_asr_verification_summary,
-    managed_lifecycle_remediation, media_tool_verification_summary, non_private_folder_summary,
-    search_query_rejection_summary, transcript_rejection_summary,
+    TRANSCRIPTION_RUNNING_REMEDIATION, TerminalEventResponse, UNKNOWN_JOB_REMEDIATION,
+    UNKNOWN_REVISION_REMEDIATION, UNOWNED_SESSION_ROOT_REMEDIATION, UNPINNED_MODEL_REMEDIATION,
+    VISUAL_TOOLS_REMEDIATION, WORKSPACE_NOT_DURABLE_REMEDIATION,
+    WORKSPACE_POLICY_MISMATCH_REMEDIATION, WORKSPACE_ROOT_REMEDIATION, local_asr_failure_summary,
+    local_asr_verification_summary, managed_lifecycle_remediation, media_tool_verification_summary,
+    non_private_folder_summary, search_query_rejection_summary, transcript_rejection_summary,
 };
 
 /// Parses the process arguments, executes one command, and returns its documented exit status.
@@ -691,6 +691,14 @@ impl From<EngineError> for CommandFailure {
                     job.as_str().to_owned(),
                 ]
             }
+            // #370: follow the transcription, then ask again.
+            EngineError::TranscriptionRunning { job, .. } => {
+                vec![
+                    "job".to_owned(),
+                    "status".to_owned(),
+                    job.as_str().to_owned(),
+                ]
+            }
             EngineError::ManagedLifecycle(refusal) => managed_lifecycle_remediation(*refusal)
                 .1
                 .iter()
@@ -732,6 +740,9 @@ fn local_asr_remediation(error: &EngineError) -> Option<String> {
         EngineError::NoVideoStream => Some(NO_VIDEO_STREAM_REMEDIATION.to_owned()),
         EngineError::CandidateCursorWithoutIndex => Some(CANDIDATE_CURSOR_REMEDIATION.to_owned()),
         EngineError::JobBusy { .. } => Some(JOB_BUSY_REMEDIATION.to_owned()),
+        EngineError::TranscriptionRunning { .. } => {
+            Some(TRANSCRIPTION_RUNNING_REMEDIATION.to_owned())
+        }
         EngineError::IdempotencyConflict { .. } => {
             Some(IDEMPOTENCY_CONFLICT_REMEDIATION.to_owned())
         }
@@ -1158,6 +1169,7 @@ mod tests {
         CommandName, IDEMPOTENCY_CONFLICT_REMEDIATION, JOB_BUSY_REMEDIATION,
         SOURCE_ACCESS_DENIED_REMEDIATION, SOURCE_COPY_TOO_SLOW_REMEDIATION,
         SOURCE_IS_FOLDER_REMEDIATION, SOURCE_NO_ROOM_REMEDIATION, SOURCE_NOT_FOUND_REMEDIATION,
+        TRANSCRIPTION_RUNNING_REMEDIATION,
     };
 
     use super::{
@@ -1343,6 +1355,53 @@ mod tests {
             std::time::Duration::from_mins(10)
         );
         assert!(SOURCE_COPY_TOO_SLOW_REMEDIATION.contains("ten-minute limit"));
+        Ok(())
+    }
+
+    /// #370: a media command refused while a transcription of its session
+    /// runs is still `BUSY` (exit 4, retryable, the two-second hint), and now
+    /// names the session and the job in `affected_ids`, says that retrying at
+    /// once will not help, and suggests the job's `job status`.
+    #[test]
+    fn a_media_command_during_a_transcription_names_the_job()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let session = vsift::SessionId::parse("ses_0123456789abcdef0123456789abcdef")?;
+        let job = JobId::parse("job_0123456789abcdef0123456789abcdef")?;
+        for command in [
+            CommandName::FrameGet,
+            CommandName::Candidates,
+            CommandName::Audio,
+        ] {
+            let mut stdout = Vec::new();
+            let mut stderr = Vec::new();
+            let mut writer = OutputWriter::new(&mut stdout, &mut stderr);
+            let written = write_command_failure(
+                &mut writer,
+                OutputMode::Json,
+                command,
+                CommandFailure::from(EngineError::TranscriptionRunning {
+                    session: session.clone(),
+                    job: job.clone(),
+                }),
+            );
+            assert_eq!(written, ProcessExit::Retryable);
+            let value: serde_json::Value = serde_json::from_slice(&stdout)?;
+            assert_eq!(value["error"]["code"], "BUSY");
+            assert_eq!(value["error"]["retryable"], true);
+            assert_eq!(value["error"]["retry_after_ms"], 2_000);
+            assert_eq!(
+                value["error"]["affected_ids"],
+                serde_json::json!([session.as_str(), job.as_str()])
+            );
+            assert_eq!(
+                value["error"]["remediation"][0]["summary"],
+                TRANSCRIPTION_RUNNING_REMEDIATION
+            );
+            assert_eq!(
+                value["error"]["remediation"][0]["command"],
+                serde_json::json!({"executable": "vsift", "arguments": ["job", "status", job.as_str()]})
+            );
+        }
         Ok(())
     }
 

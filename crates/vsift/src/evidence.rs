@@ -329,7 +329,9 @@ impl Engine {
     /// (`FrameNotSelected`), a candidate frame that is not at its time
     /// (`INTEGRITY_FAILURE`), an exhausted evidence budget, a provider
     /// failure with nothing extracted, and a stored record that fails its
-    /// integrity checks.
+    /// integrity checks. A refusal for contention (`BUSY`) while a
+    /// transcription of the same session runs is
+    /// [`EngineError::TranscriptionRunning`], which names the job (#370).
     pub async fn frame_get(
         &self,
         request: FrameGetRequest,
@@ -483,8 +485,22 @@ impl Engine {
         ))
     }
 
-    /// Steps 2-5 of the module documentation.
+    /// Steps 2-5 of the module documentation; a refusal for contention
+    /// while a transcription of the session runs names that job (#370).
     async fn run_evidence(
+        &self,
+        store: FilesystemSessionStore,
+        session: &SessionId,
+        operation: Operation,
+        cancellation: &Cancellation,
+    ) -> Result<EvidenceResults, EngineError> {
+        self.extract_evidence(store, session, operation, cancellation)
+            .await
+            .map_err(|error| self.name_running_transcription(session, error))
+    }
+
+    /// Steps 2-5 of the module documentation.
+    async fn extract_evidence(
         &self,
         store: FilesystemSessionStore,
         session: &SessionId,

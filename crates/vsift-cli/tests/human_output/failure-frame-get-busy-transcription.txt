@@ -1,0 +1,5 @@
+Error: The requested operation is temporarily busy. (BUSY)
+Fix: A transcription of this session is running (the job in affected_ids) and holds this session root's share of the machine's capacity until it ends, so this command could not run. Nothing was committed. Retrying at once will not help: run the suggested job status command, and when it no longer reports the job running, run the same command again. A transcription of a long recording can take many minutes.
+Run: vsift job status job_0123456789abcdef0123456789abcdef
+Affected: ses_0123456789abcdef0123456789abcdef, job_0123456789abcdef0123456789abcdef
+Retry after: 2000 ms

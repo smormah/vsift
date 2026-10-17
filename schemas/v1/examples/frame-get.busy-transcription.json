@@ -1,0 +1,34 @@
+{
+  "schema_version": "1",
+  "command": "frame.get",
+  "operation_id": null,
+  "status": "failed",
+  "data": null,
+  "warnings": [],
+  "error": {
+    "code": "BUSY",
+    "message": "The requested operation is temporarily busy.",
+    "retryable": true,
+    "retry_after_ms": 2000,
+    "affected_ids": [
+      "ses_0123456789abcdef0123456789abcdef",
+      "job_0123456789abcdef0123456789abcdef"
+    ],
+    "remediation": [
+      {
+        "summary": "A transcription of this session is running (the job in affected_ids) and holds this session root's share of the machine's capacity until it ends, so this command could not run. Nothing was committed. Retrying at once will not help: run the suggested job status command, and when it no longer reports the job running, run the same command again. A transcription of a long recording can take many minutes.",
+        "required_authority": "none",
+        "command": {
+          "executable": "vsift",
+          "arguments": [
+            "job",
+            "status",
+            "job_0123456789abcdef0123456789abcdef"
+          ]
+        }
+      }
+    ]
+  },
+  "coverage": null,
+  "lifecycle": null
+}

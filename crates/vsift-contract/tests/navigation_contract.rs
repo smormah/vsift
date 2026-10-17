@@ -43,8 +43,8 @@ use vsift_application::{
 use vsift_contract::{
     AudioEvidenceStream, CommandName, DeliveredEvidenceFile, EvidencePresentation,
     EvidencePresentationError, EvidenceStream, FrameEvidenceStream, LifecycleResponse,
-    MEDIA_BUSY_REMEDIATION, OperationResponse, TerminalEventResponse, audio_response,
-    frame_response, partial_evidence_warning,
+    MEDIA_BUSY_REMEDIATION, OperationResponse, TRANSCRIPTION_RUNNING_REMEDIATION,
+    TerminalEventResponse, audio_response, frame_response, partial_evidence_warning,
 };
 use vsift_domain::{
     AudioRange, BurstCount, BurstRange, CropRect, EvidenceMediaKind, EvidenceProfile,
@@ -974,5 +974,49 @@ fn a_busy_media_command_carries_a_remediation_and_a_retry_hint() -> TestResult {
         assert!(MEDIA_BUSY_REMEDIATION.contains(needle), "{needle}");
     }
     assert!(MEDIA_BUSY_REMEDIATION.chars().count() <= 480);
+    Ok(())
+}
+
+/// #370: a media command refused while a transcription of its session runs
+/// is the same `BUSY` (code, `retryable`, message, the two-second hint), and
+/// it names the session and the job in `affected_ids` and suggests the job's
+/// `job status`, with a remediation that says a retry at once will not help.
+/// The answer is the published example, as a result and as a terminal event.
+#[test]
+fn a_media_command_during_a_transcription_names_the_job() -> TestResult {
+    let session = "ses_0123456789abcdef0123456789abcdef";
+    let job = "job_0123456789abcdef0123456789abcdef";
+    let response = OperationResponse::<Value>::failure_with_suggested_command(
+        CommandName::FrameGet.identifier(),
+        FailureCode::Busy,
+        TRANSCRIPTION_RUNNING_REMEDIATION.to_owned(),
+        &["job", "status", job],
+    )
+    .with_affected_ids(&[session, job])
+    .with_retry_after(2_000);
+    let value = serde_json::to_value(&response)?;
+    validate("operation-response.schema.json", &value)?;
+    assert_eq!(value, load("examples/frame-get.busy-transcription.json")?);
+    assert_eq!(value["error"]["code"], "BUSY");
+    assert_eq!(value["error"]["retryable"], true);
+    assert_eq!(
+        value["error"]["message"],
+        load("examples/frame-get.busy.json")?["error"]["message"]
+    );
+    let event = serde_json::to_value(TerminalEventResponse::new(response))?;
+    validate("terminal-event.schema.json", &event)?;
+    for needle in [
+        "A transcription of this session is running",
+        "affected_ids",
+        "Nothing was committed.",
+        "Retrying at once will not help",
+        "run the same command again",
+    ] {
+        assert!(
+            TRANSCRIPTION_RUNNING_REMEDIATION.contains(needle),
+            "{needle}"
+        );
+    }
+    assert!(TRANSCRIPTION_RUNNING_REMEDIATION.chars().count() <= 480);
     Ok(())
 }

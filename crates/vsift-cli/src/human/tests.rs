@@ -750,6 +750,10 @@ fn frozen_failures_render_as_message_remediation_and_command() -> TestResult {
         ),
         ("frame-get.busy.json", "failure-frame-get-busy"),
         (
+            "frame-get.busy-transcription.json",
+            "failure-frame-get-busy-transcription",
+        ),
+        (
             "media-tool-verification-failed.json",
             "failure-media-tool-verification",
         ),

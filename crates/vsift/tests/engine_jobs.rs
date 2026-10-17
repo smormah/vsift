@@ -33,8 +33,9 @@ use std::{
 
 use vsift::{
     AsrDecodingProfile, AsrModel, AsrModelProfile, AsrProvider, AsrProviderBuild, Cancellation,
-    ChunkTime, Clock, ClockError, CueText, Engine, EngineConfig, EngineError, EnginePorts,
-    FailureCode, HostIsolation, IdentifierGenerationError, IdentifierSource, IngestRequest,
+    CandidatesRange, CandidatesRequest, ChunkTime, Clock, ClockError, CueText, Engine,
+    EngineConfig, EngineError, EnginePorts, FailureCode, FrameGetRequest, FrameSelection,
+    FrameTarget, HostIsolation, IdentifierGenerationError, IdentifierSource, IngestRequest,
     JobCancelOutcome, JobId, JobProgress, JobResumeRequest, JobState, LanguageTag,
     LocalAsrVerification, LocalAsrVerifier, ManagedRootLocation, MediaToolVerification,
     MediaToolVerifier, OperationId, PlannedChunk, ProgressObserver, ProgressStage,
@@ -463,6 +464,263 @@ async fn committed_through_the_use_case(
     )
     .await?;
     Ok((outcome.report.job_id, outcome.revision))
+}
+
+/// A host recognizer that holds its first chunk until the test releases it,
+/// so a transcription is running, and holding its admission, for as long as
+/// the test needs (#370). Its identity asks for four recognizer threads, the
+/// weight a recognition takes on a desktop root of four units on any machine
+/// with four threads or more.
+#[derive(Clone)]
+struct HeldRecognizer {
+    entered: Arc<tokio::sync::Notify>,
+    release: Arc<tokio::sync::Notify>,
+    released: Arc<std::sync::atomic::AtomicBool>,
+}
+
+impl HeldRecognizer {
+    fn new() -> Self {
+        Self {
+            entered: Arc::new(tokio::sync::Notify::new()),
+            release: Arc::new(tokio::sync::Notify::new()),
+            released: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+        }
+    }
+
+    fn identity() -> Result<RecognizerIdentity, SpeechRecognitionError> {
+        let mut identity = identity()?;
+        identity.threads = NonZeroU16::new(4).ok_or(SpeechRecognitionError::Io)?;
+        Ok(identity)
+    }
+
+    fn release(&self) {
+        self.released.store(true, Ordering::SeqCst);
+        self.release.notify_one();
+    }
+}
+
+impl SpeechRecognizer for HeldRecognizer {
+    fn identity(
+        &self,
+    ) -> impl Future<Output = Result<RecognizerIdentity, SpeechRecognitionError>> + Send {
+        std::future::ready(Self::identity())
+    }
+
+    fn recognize(
+        &self,
+        chunk: &PlannedChunk,
+        _pcm: &SpeechPcm,
+    ) -> impl Future<Output = Result<ProviderChunkOutput, SpeechRecognitionError>> + Send {
+        let output = words(chunk);
+        let held = self.clone();
+        async move {
+            if !held.released.load(Ordering::SeqCst) {
+                held.entered.notify_one();
+                held.release.notified().await;
+            }
+            output
+        }
+    }
+}
+
+/// A different session identity from [`FixedIdentifiers`], for a second
+/// session in the same root.
+struct OtherIdentifiers(AtomicU64);
+
+impl IdentifierSource for OtherIdentifiers {
+    fn session_id(&self) -> Result<SessionId, IdentifierGenerationError> {
+        SessionId::parse("ses_fedcba9876543210fedcba9876543210")
+            .map_err(|_| IdentifierGenerationError::NonCanonical)
+    }
+
+    fn operation_id(&self) -> Result<OperationId, IdentifierGenerationError> {
+        let next = self.0.fetch_add(1, Ordering::SeqCst);
+        OperationId::parse(format!("op_f{next:031x}"))
+            .map_err(|_| IdentifierGenerationError::NonCanonical)
+    }
+}
+
+impl Harness {
+    /// A second engine on the same root that opens another session.
+    fn other_engine(&self) -> Engine {
+        Engine::new(
+            EngineConfig {
+                session_root: SessionRootLocation::Explicit(self.root.path("sessions")),
+                user_configuration: UserConfigurationLocation::Explicit(self.root.path("config")),
+                managed_root: ManagedRootLocation::Explicit(self.root.path("managed")),
+                host_isolation: HostIsolation::ProcessOnly,
+            },
+            EnginePorts::new(Wall, OtherIdentifiers(AtomicU64::new(1)))
+                .with_media_tool_verifier(PassingMediaTools),
+        )
+    }
+}
+
+/// The #370 answer: `BUSY`, naming the session and its running job, with
+/// the live-job retry hint.
+fn names_the_job(refused: Option<EngineError>, session: &SessionId, job: &JobId) -> TestResult {
+    let refused = refused.ok_or("a media call was admitted during the transcription")?;
+    assert_eq!(
+        refused,
+        EngineError::TranscriptionRunning {
+            session: session.clone(),
+            job: job.clone(),
+        }
+    );
+    assert_eq!(refused.failure_code(), FailureCode::Busy);
+    assert_eq!(refused.affected_session(), Some(session));
+    assert_eq!(refused.affected_job(), Some(job));
+    assert_eq!(refused.retry_after_ms(), Some(2_000));
+    Ok(())
+}
+
+fn frame_at_start(session: &SessionId) -> FrameGetRequest {
+    FrameGetRequest {
+        session: session.clone(),
+        target: FrameTarget::At {
+            at_micros: 0,
+            selection: FrameSelection::AtOrAfter,
+            tolerance_micros: None,
+        },
+        cancellation: Cancellation::new(),
+    }
+}
+
+fn first_minute(session: &SessionId) -> CandidatesRequest {
+    CandidatesRequest {
+        session: session.clone(),
+        range: CandidatesRange {
+            from_micros: 0,
+            to_micros: 60 * SECOND,
+        },
+        limit: None,
+        cursor: None,
+        cancellation: Cancellation::new(),
+    }
+}
+
+/// #370, the decided behaviour: frames are not read while a transcription of
+/// the session runs, and the answer says why.
+///
+/// Reading a frame during a transcription would be safe for the data (both
+/// take a shared hold on the session and the frame's commit merges onto any
+/// generation the transcription writes), but the recognition holds its four
+/// recognizer threads of the desktop root's four admission units for its
+/// whole run, so a frame (one unit for its probe and one for its extraction)
+/// or a window of visual analysis (two) cannot be admitted until it ends.
+/// Letting them through needs a capacity design (a unit the recognizer
+/// leaves, or one reserved for evidence), which this change does not make.
+///
+/// While the transcription is held running: `frame get` and `candidates` of
+/// the same session fail `BUSY` as `TranscriptionRunning`, naming the
+/// session and the running job; the same call for another session of the
+/// root is the plain contention `BUSY` (nothing names a job it does not
+/// own). Once the transcription has committed, the same `frame get` is
+/// admitted and goes on to run the (stand-in) media tools.
+#[tokio::test]
+async fn a_frame_during_a_transcription_of_its_session_is_busy_and_names_the_job() -> TestResult {
+    let harness = Harness::new(Recognizer::default())?;
+    let engine = harness.engine();
+    harness.stand_in_tools(&engine)?;
+    let source = harness.root.path("original.mp4");
+    fs::write(&source, PLACEHOLDER_SOURCE)?;
+    let session = harness.session(&engine, source.clone()).await?;
+    let other_engine = harness.other_engine();
+    let other = harness.session(&other_engine, source).await?;
+    assert_ne!(other, session);
+
+    let store = harness.store()?;
+    let recognizer = HeldRecognizer::new();
+    let identity = HeldRecognizer::identity().map_err(|_| "no identity")?;
+    let now = Wall.now_unix_seconds()?;
+    let status = store.session_status(&session)?;
+    let segment =
+        whole_file_source_segment(status.source_id(), MediaTime::from_micros(60 * SECOND))?;
+    let head = store.head(&session, now)?;
+    let replaced = retranscription_range(head.newest.as_ref(), None, segment.range());
+    let key = recognition_key(&RecognitionScope {
+        session_id: &session,
+        source_id: status.source_id(),
+        audio_stream: 1,
+        replaced_range: replaced,
+        plan: ChunkPlan::R0,
+        recognizer: &identity,
+        verification: None,
+    })?;
+    let operation_key =
+        retranscribe_operation_key(&key, head.newest.as_ref().map(TranscriptRevision::id))?;
+    let spec = JobSpec {
+        session_id: session.clone(),
+        job_id: job_id(&session, &operation_key)?,
+        request_digest: retranscribe_request_digest(&session, None)?,
+        operation_key,
+        recognition_key: key,
+        request: JobRequest::Retranscribe { range: None },
+        planned_chunks: None,
+    };
+    let operation = OperationId::parse(OPERATION)?;
+    let mut unchanged = Unchanged;
+    let transcription = run_retranscription(
+        RetranscriptionRun {
+            spec: &spec,
+            operation_id: Some(&operation),
+            transcribe: TranscribeRangeRequest {
+                source_segment: &segment,
+                range: replaced,
+                plan: ChunkPlan::R0,
+                audio_stream: 1,
+                expected: &identity,
+            },
+            source_id: status.source_id(),
+            requested: None,
+            base: head.newest.as_ref(),
+            observed: head.generation,
+            now,
+            admission: vsift_domain::AdmissionWait::Immediate,
+        },
+        RetranscriptionPorts {
+            store: &store,
+            audio: &Audio,
+            recognizer: &recognizer,
+            cancellation: &Never,
+            timer: &Instant0,
+            classify: |_| FailureCode::Internal,
+            progress: &vsift_application::NoProgress,
+        },
+        &mut unchanged,
+    );
+    let during = async {
+        recognizer.entered.notified().await;
+        let frame = engine.frame_get(frame_at_start(&session)).await;
+        let candidates = engine.candidates(first_minute(&session)).await;
+        let elsewhere = other_engine.frame_get(frame_at_start(&other)).await;
+        recognizer.release();
+        (frame, candidates, elsewhere)
+    };
+    let (committed, (frame, candidates, elsewhere)) = tokio::join!(transcription, during);
+    committed?;
+
+    for refused in [frame.err(), candidates.err()] {
+        names_the_job(refused, &session, &spec.job_id)?;
+    }
+    let elsewhere = elsewhere
+        .err()
+        .ok_or("another session's frame was admitted during the transcription")?;
+    assert_eq!(elsewhere.failure_code(), FailureCode::Busy);
+    assert!(
+        !matches!(elsewhere, EngineError::TranscriptionRunning { .. }),
+        "{elsewhere:?}"
+    );
+
+    // The transcription has ended: the frame is admitted and reaches the
+    // stand-in tools, which cannot run.
+    let after = engine
+        .frame_get(frame_at_start(&session))
+        .await
+        .err()
+        .ok_or("the stand-in tools extracted a frame")?;
+    assert_ne!(after.failure_code(), FailureCode::Busy, "{after:?}");
+    Ok(())
 }
 
 /// X-02 and X-03 through the engine: a retry with the operation id of a

@@ -108,6 +108,18 @@ pub const EVIDENCE_PATH_REMEDIATION: &str = "The evidence was committed, but the
 /// session or time.
 pub const MEDIA_BUSY_REMEDIATION: &str = "Another VSift request is using this session, or this session root's share of the machine's capacity, so this command could not finish. Nothing was committed. Wait for retry_after_ms, then run the same command again. A transcription or a visual analysis can hold the capacity for minutes: if it is still busy, wait for that work to end. Running the commands for one session one at a time avoids it.";
 
+/// Remediation when a media command (`frame`, `crop`, `audio`, `candidates`)
+/// was refused because a transcription of the same session is running (#370).
+///
+/// A recognition reserves its recognizer threads of the root's capacity for
+/// its whole run (on a desktop root all four units), so the command cannot be
+/// admitted until the transcription ends, and retrying after
+/// `retry_after_ms` alone would most likely be refused again. The session and
+/// the job are in `affected_ids` and the job's `job status` is the
+/// remediation's command. The code stays `BUSY` and `retryable` stays true.
+/// Fixed prose; it names no path, session, job or time.
+pub const TRANSCRIPTION_RUNNING_REMEDIATION: &str = "A transcription of this session is running (the job in affected_ids) and holds this session root's share of the machine's capacity until it ends, so this command could not run. Nothing was committed. Retrying at once will not help: run the suggested job status command, and when it no longer reports the job running, run the same command again. A transcription of a long recording can take many minutes.";
+
 /// Remediation when no displayed frame satisfies a frame request, chosen by
 /// the typed reason (ADR 0019 decision 2).
 #[must_use]

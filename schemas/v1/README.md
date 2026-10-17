@@ -375,6 +375,13 @@ request holds the session or the root's share of the machine's capacity (#342): 
 2000 where it had an empty `remediation` and a null hint; no field is added (the failure shape
 already has both). `crop`, `audio` and `candidates` answer the same way. It is checked by
 `navigation_contract` and by a unit test of the CLI, which builds it from the typed cause.
+`frame-get.busy-transcription.json` is the same refusal when a transcription of the same session is
+running (#370, since 0.2.2): the same code, `retryable`, message and `retry_after_ms`, with the session
+and the job in `affected_ids`, a remediation that says the transcription holds the root's capacity
+until it ends and that a retry at once will not help, and the job's `job status` as its command; no
+field is added. `crop`, `audio` and `candidates` answer the same way. It is checked by
+`navigation_contract`, by a unit test of the CLI and by `engine_jobs`, which asks for a frame and for
+candidates while a transcription of the session is held running.
 
 The Rust types that produce these documents live in the `vsift-contract` crate
 (`crates/vsift-contract`), which every VSift host uses so they all emit identical JSON.

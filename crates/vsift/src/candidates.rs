@@ -184,8 +184,21 @@ impl Engine {
     /// (`NoVideoStream`) or without a decodable one, a probe failure, a copy
     /// that changed, a stop before anything of the range was indexed, a
     /// record or session over its bounds, and a stored record that fails its
-    /// integrity checks.
+    /// integrity checks. A refusal for contention while a transcription of the
+    /// same session runs is [`EngineError::TranscriptionRunning`] (#370).
     pub async fn candidates(
+        &self,
+        request: CandidatesRequest,
+    ) -> Result<CandidatesResults, EngineError> {
+        let session = request.session.clone();
+        self.page_candidates(request)
+            .await
+            .map_err(|error| self.name_running_transcription(&session, error))
+    }
+
+    /// [`Engine::candidates`] before a refusal for contention while a
+    /// transcription of the session runs is given that job's name (#370).
+    async fn page_candidates(
         &self,
         request: CandidatesRequest,
     ) -> Result<CandidatesResults, EngineError> {
