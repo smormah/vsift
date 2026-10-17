@@ -186,9 +186,19 @@ the wall-clock boundary, but physical cleanup requires a later `clean` invocatio
 no daemon or secure deletion is promised.
 
 `session list [--cursor 0..255]` and `session clean --expired
-[--cursor 0..255] [--dry-run]` return one bounded hash-bucket page at a time.
+[--cursor 0..255] [--dry-run]` return one bounded page of the hash-bucket index at a time.
 `next_cursor` continues the scan; repeat until it is null. A page has at most
-256 registrations. An initializing registration is visible as such. A corrupt
+256 registrations. **Since `0.2.2` (#371) a page holds as many whole buckets, in
+bucket order, as fit within those 256**, so a root of up to 256 sessions lists in
+one call; it stops at the end of the index or before the first bucket that would
+not fit, and `next_cursor` is that bucket's number. Until `0.2.2` a page was the
+first bucket that held a session, so sessions spread over the buckets came back one
+a page (three sessions took four calls). Nothing else changed: the members, the
+cursor's range and meaning (a bucket number; a cursor from an older release
+continues where it did), the empty final page and the per-item errors are as
+before; a client that repeats until `next_cursor` is null reads the same sessions
+in fewer calls, and a page of `session clean` without `--dry-run` may now remove
+up to 256 sessions in one call, as one full bucket always could. An initializing registration is visible as such. A corrupt
 or busy item is reported with an item error and a partial page rather than
 silently omitted or used as deletion authority. **One exception: a registration
 that is being removed at that moment** (by `session clean`, or by a failed open

@@ -863,3 +863,51 @@ fn racing_initialisations_create_one_workspace() -> TestResult {
     );
     Ok(())
 }
+
+/// #371, through the engine: sessions spread over the index's hash buckets
+/// used to list one a page (three sessions took four calls). A page now holds
+/// every whole bucket that fits within 256 registrations, so several sessions
+/// list in one call, and a cleanup's dry run reads them the same way. Paging
+/// over more than one full page is pinned by the unit tests of the filling
+/// rule in `sessions.rs`, with a smaller bound.
+#[tokio::test]
+async fn several_sessions_list_and_clean_in_one_page() -> TestResult {
+    let harness = Harness::new()?;
+    let mut opened = Vec::new();
+    for _ in 0..6 {
+        opened.push(harness.open().await?);
+    }
+    opened.sort_by(|left, right| left.as_str().cmp(right.as_str()));
+
+    let listed = harness.engine.list_sessions(None)?;
+    assert_eq!(listed.next_cursor(), None);
+    let mut ids: Vec<SessionId> = listed
+        .entries()
+        .iter()
+        .filter_map(|entry| match entry {
+            SessionListEntry::Indexed(snapshot) => Some(snapshot.session_id().clone()),
+            SessionListEntry::Initializing(_) | SessionListEntry::Unavailable { .. } => None,
+        })
+        .collect();
+    ids.sort_by(|left, right| left.as_str().cmp(right.as_str()));
+    assert_eq!(ids, opened);
+
+    for session_id in &opened {
+        harness.engine.close_session(session_id)?;
+    }
+    let dry_run = harness.engine.clean_sessions(CleanRequest {
+        scope: CleanScope::Expired,
+        mode: CleanMode::DryRun,
+        cursor: None,
+    })?;
+    assert_eq!(dry_run.next_cursor(), None);
+    assert_eq!(dry_run.entries().len(), opened.len());
+    assert!(dry_run.entries().iter().all(|entry| matches!(
+        entry,
+        CleanEntry::Examined {
+            decision: CleanDecision::Eligible,
+            ..
+        }
+    )));
+    Ok(())
+}

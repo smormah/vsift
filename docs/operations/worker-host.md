@@ -316,8 +316,10 @@ request replays that job's commit.
 
 - Run `vsift --session-root /var/lib/vsift/workspace session clean --expired --json`
   periodically (a systemd timer), paging with `--cursor` until `next_cursor` is null (a
-  cursor is a hash-bucket number, 0 to 255, so a whole pass is up to 256 calls: P14 walked
-  24 pages on a small workspace). It
+  cursor is a hash-bucket number, 0 to 255; since `0.2.2` a page holds as many whole
+  buckets as fit within 256 sessions, so a workspace of up to 256 sessions is one call;
+  before it, a page was one bucket and a whole pass up to 256 calls: P14 walked 24 pages
+  on a small workspace, #371). It
   removes closed, expired and abandoned sessions of the workspace; it never touches the
   input root or the bundle root. `session clean` of a session with active work answers
   `BUSY`.
