@@ -2111,3 +2111,10 @@ questions are asked at the dispatch and again after the approval, and between th
 own steps run. A hot fix of a version tagged before this change first brings the current workflows onto its release branch. The read-back
 window is a reading of three publishes, not a bound npm states ([L-172](../planning/known-limits.md#l-172)). Nothing was dispatched as a
 candidate or stable release, tagged, branched on the remote or published by the change that records this note.
+
+**Update, 2026-10-17 (the same day, a later change): two of the gaps above are narrowed.** CodeQL, `Security` (the dependency review
+included) and the nine P14 path workflows now also run on pull requests to `release/**`, so a window fix is scanned as one to `main`
+(their pushes and schedules stay on `main`). And the `Release window` workflow (`tools/release_window.py`) reports every commit of a release
+branch since its cut whose change is not on `main`, by content, not by commit or patch-id, because squash merges make the two branches'
+commits unrelated; it runs on the records change after a publish and on demand, and no ruleset requires it. What is left is in
+[L-173](../planning/known-limits.md#l-173): the check is a report that compares lines, and the guard still reads rule types, not settings.

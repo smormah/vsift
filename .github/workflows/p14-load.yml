@@ -38,6 +38,7 @@ on:
   pull_request:
     branches:
       - main
+      - release/**
     paths:
       - .github/workflows/p14-load.yml
       - tools/p14-campaigns/load.cjs

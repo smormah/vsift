@@ -1093,7 +1093,18 @@ candidate is an ancestor of the stable commit there.
     work record, and the shipped documents of the stable commit. Its pull requests run `CI` and the
     Release dry run (both workflows trigger on `release/**`).
   - **A window fix is brought to `main` too,** by its own pull request against `main` with the same
-    change, so `main` never lacks a fix that shipped. The release branch's work record reaches `main` in
+    change, so `main` never lacks a fix that shipped. **The `Release window` workflow checks it**
+    (`python3 tools/release_window.py`, since 2026-10-17; 6.18 step 4 has when it runs): for every commit
+    of a release branch since its cut it asks whether the change is on `main`, **by content and not by
+    commit**, because with squash merges nothing on the branch is an ancestor of `main`, the counterpart is
+    another pull request with another number, and a patch-id fails as soon as `main` has moved on. For each
+    file the commit changed, every significant line it added must be in `main`'s file, every significant
+    line it removed must be gone from it, a deleted file must be gone and a changed binary file identical;
+    a version string is compared without its version. Run by hand:
+    `git fetch origin && python3 tools/release_window.py [--records]` (it reads `origin/main` and every
+    `origin/release/*`; `--main <ref>` and `--release <ref>` choose others). It exits 1 and names the
+    commit, the file and the lines when a fix is missing; **no ruleset requires it**, so a deliberate
+    difference is recorded in the pull request that finds it. The release branch's work record reaches `main` in
     the records change after the publish, **and so do the stable commit's shipped documents**
     (`docs/operations/install.md` and `npm/vsift-cli/README.md`, which tell a reader to install
     `vsift-cli` rather than `vsift-cli@next`): they are made on the release branch, and without that
@@ -1139,7 +1150,8 @@ candidate is an ancestor of the stable commit there.
   installation guide is right, that a work record is true, that the candidate's evidence was
   complete, or that a version string was the only thing a change meant; it takes the highest
   candidate to be the accepted one. Nor does the release branch prove that a window fix reached
-  `main`: that is a pull request someone opens ([L-173](../planning/known-limits.md#l-173)).
+  `main`: that is a pull request someone opens, and the `Release window` check above reports its absence when it is
+  run, by lines and not by meaning ([L-173](../planning/known-limits.md#l-173)).
 
 ### 6.9 Testing the publishing shell (P14 PR 8)
 
@@ -2913,6 +2925,10 @@ with `gh`, pass `--ref v<version>`. A wrong choice now costs seconds, not the tw
       through a pull request"): window fixes, bumps and records reach it by pull request only. If a previous window's `release/0.2.x` is still there, the stable release of that window is published
       and its records are on `main`: delete it first (`git push origin --delete release/0.2.x`); its tags keep its commits.
       If the stable release of that window is not published, the window has slipped (step 6) and there is no new cut.
+      **Before deleting the old branch, run the `Release window` workflow** (`gh workflow run release-window.yml
+      --repo smormah/vsift --ref main -f records=true`, or `python3 tools/release_window.py --records` from a fresh
+      clone): the branch is the last place that holds a fix `main` may lack, and the records change should
+      already have shown none.
    4. **Tag the commit** (6.3 step 2): `git tag -a v0.2.2-rc.1 -m "VSift 0.2.2-rc.1" <commit>` and `git push origin
       v0.2.2-rc.1`.
    5. **Dry run on the tag, then publish** (6.3 steps 3 and 4): `gh workflow run release.yml --repo smormah/vsift
@@ -2943,10 +2959,15 @@ with `gh`, pass `--ref v<version>`. A wrong choice now costs seconds, not the tw
    change goes to `main` by its own pull request. If it changes code, 6.8 applies: it means a new candidate. Merge its
    version bump (`rc.N+1`) into the release branch by pull request, dispatch the nightly on the branch (`gh workflow
    run nightly.yml --repo smormah/vsift --ref release/0.2.x`) and wait for it to pass on the branch's head, then tag
-   that head and dispatch as in step 2.5. **Then dispatch, on the new candidate's tag, the workflows that cover what the
-   fix touches**: pull requests to a release branch run `CI` and the Release dry run only, and CodeQL, the security
-   workflow and the P14 workflows run on pull requests to `main`, not on window fixes (L-173; extending them is a
-   later story). A finding that is
+   that head and dispatch as in step 2.5. **Pull requests to a release branch get the scanning of those to `main`** (since
+   2026-10-17, L-173): `CI`, the Release dry run, CodeQL's `Analyze Rust` (it always reports, and analyses when the
+   change touches what CodeQL reads, #416), `Security` (the cargo-deny policy and the dependency review) and the
+   P14 workflows whose paths the change touches. Their pushes and schedules stay on `main`. **Then dispatch, on the
+   new candidate's tag, the long workflows that cover what the fix touches** (step 3): a pull request runs them only
+   for the paths each one names. **The fix's counterpart pull request to `main` is opened with it**, and the `Release
+   window` check (`python3 tools/release_window.py`, or the workflow on demand) lists any commit of the branch that
+   `main` does not have yet; it is a report, so a counterpart that is still open shows as missing until it merges.
+   A finding that is
    not a regression of this week may be accepted by the maintainer as a known issue of the release, as #404 was for
    `0.2.1`. That is the maintainer's decision, recorded in the ledger, and never the supervisor's.
 5. **The stable release and its publish, Monday or Tuesday.** When the accepted candidate's evidence is complete
@@ -2961,7 +2982,12 @@ with `gh`, pass `--ref v<version>`. A wrong choice now costs seconds, not the tw
    from the previous release and from the candidate. **The records change after the publish is a pull request to
    `main`** that brings the release branch's work record (the ledger, the planning page, the changelog) **and the
    stable commit's shipped documents** (`docs/operations/install.md`, `npm/vsift-cli/README.md`, so `main`'s
-   installation guide says what the stable release says), and checks that every window fix is on `main`. After it merges, the release branch may stay until the next cut deletes it.
+   installation guide says what the stable release says), and checks that every window fix is on `main`: **the `Release window` workflow runs on that pull request by itself**
+   (it triggers on a change to `docs/planning/p14-evidence-ledger.json`, which every records change makes) and, as the
+   merge ref is compared, requires the work record and the shipped documents of the branch to be on `main` as well as
+   its fixes (`--records`); it fails with the commit, the file and the lines `main` lacks. Bring them, or record
+   in the pull request why `main` differs, before merging; no ruleset requires the check. After it merges, the release
+   branch may stay until the next cut deletes it.
 6. **If the window slips,** the cut waits for the next Friday or Saturday. A candidate already published stays on
    `next`, and its release branch stays. Only a red nightly stops development; a late publish does not.
 
@@ -2988,7 +3014,7 @@ until it lands, read the Actions page each Monday and file the issue by hand.
 **What this does not settle.** The coarse scopes of the ledger against "limited to what the week touched" (listed for
 the maintainer in [`backlog-iterations.md`](../planning/backlog-iterations.md)). And what the release branch leaves to
 people ([L-173](../planning/known-limits.md#l-173)): a window fix reaches `main` only by a pull request someone opens;
-pull requests to a release branch run `CI` and the Release dry run, but not CodeQL, the dependency review or the P14
-workflows, which trigger on `main` only (the nightly dispatched on the branch is the full check a candidate needs);
-and the guard and the re-check read the branch's rule types, not their settings. (The guard's questions are asked twice: at the dispatch,
+the `Release window` check that a window fix is on `main` is a report that runs on the records change and on demand,
+not a rule, and compares lines, not the counterpart's correctness (a fix that `main` reworked is reported as
+missing); and the guard and the re-check read the branch's rule types, not their settings. (The guard's questions are asked twice: at the dispatch,
 and again by the `publish` job after the approval.)

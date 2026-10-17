@@ -30,6 +30,7 @@ on:
   pull_request:
     branches:
       - main
+      - release/**
     paths:
       - .github/workflows/p14-published-artifacts.yml
       - tools/p14-published/**

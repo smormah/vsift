@@ -42,6 +42,7 @@ on:
   pull_request:
     branches:
       - main
+      - release/**
     paths:
       - ".github/workflows/p14-journeys.yml"
       - "tools/p14_journeys.py"

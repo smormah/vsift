@@ -26,6 +26,7 @@ on:
   pull_request:
     branches:
       - main
+      - release/**
     paths:
       - .github/workflows/p14-scan-reading.yml
       - tools/p14-campaigns/scan-inventory.cjs

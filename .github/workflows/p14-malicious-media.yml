@@ -30,6 +30,7 @@ on:
   pull_request:
     branches:
       - main
+      - release/**
     paths:
       - .github/workflows/p14-malicious-media.yml
       - tools/p14-campaigns/hostile-media.cjs

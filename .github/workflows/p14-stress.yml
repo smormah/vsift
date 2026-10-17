@@ -35,6 +35,7 @@ on:
   pull_request:
     branches:
       - main
+      - release/**
     paths:
       - .github/workflows/p14-stress.yml
       - tools/p14-campaigns/stress.cjs
