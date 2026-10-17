@@ -1,0 +1,24 @@
+{
+  "schema_version": "1",
+  "command": "ingest",
+  "operation_id": null,
+  "status": "failed",
+  "data": null,
+  "warnings": [],
+  "error": {
+    "code": "STORAGE_IO",
+    "message": "Storage or output I/O prevented completion.",
+    "retryable": false,
+    "retry_after_ms": null,
+    "affected_ids": [],
+    "remediation": [
+      {
+        "summary": "The last folder name of the session root you gave is one VSift does not use, so nothing was created or changed, and no storage failed (the code is the closest published one). The name must not be empty, hold a colon, end with a space or a dot, or be a name Windows keeps for a device (CON, PRN, AUX, NUL, COM1 to COM9, LPT1 to LPT9, with or without an extension); on Windows it must also hold no control character and none of < > \" | ? *. Give --session-root a folder whose last name avoids these, and run the command again.",
+        "required_authority": "none",
+        "command": null
+      }
+    ]
+  },
+  "coverage": null,
+  "lifecycle": null
+}

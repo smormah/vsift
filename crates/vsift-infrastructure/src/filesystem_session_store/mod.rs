@@ -132,6 +132,15 @@ pub enum SessionStoreOpenError {
     RootMustBeAbsolute,
     /// The selected root is unavailable or cannot be opened safely.
     RootUnavailable,
+    /// The root's own final folder name is one `VSift` does not use as a
+    /// session root (#232): empty or not UTF-8, holding `:`, ending in a space
+    /// or a dot, or a reserved Windows device name, on every platform; on
+    /// Windows also a control character or one of `< > " | ? *`, which Windows
+    /// refuses in any name. Nothing is created. Control characters are allowed
+    /// elsewhere, where the operating system allows them. The published code is
+    /// that of [`Self::RootUnavailable`], which this case gave before it had a
+    /// cause of its own.
+    RootNameNotAllowed,
     /// The selected root is not a directory.
     RootNotDirectory,
     /// Unix permission bits allow access outside the owning user.
@@ -163,6 +172,7 @@ impl fmt::Display for SessionStoreOpenError {
         let message = match self {
             Self::RootMustBeAbsolute => "session storage root must be an absolute path",
             Self::RootUnavailable => "session storage root is unavailable",
+            Self::RootNameNotAllowed => "session storage root's folder name is not allowed",
             Self::RootNotDirectory => "session storage root is not a directory",
             Self::RootNotPrivate => "session storage root permissions are not private",
             Self::OwnershipMarkerMissing => "session storage root has no ownership marker",

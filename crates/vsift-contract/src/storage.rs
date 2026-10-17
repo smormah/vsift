@@ -55,6 +55,17 @@ pub fn non_private_folder_summary(folder: PrivateFolder) -> String {
     )
 }
 
+/// Remediation when the session root's own final folder name is one `VSift`
+/// does not use (#232).
+///
+/// The code stays `STORAGE_IO`, what the case answered before it had a cause
+/// (changing a published failure code is not additive within v1; known limit
+/// L-127), so this text says what happened and states the rule. Control
+/// characters are named for Windows only: Linux and macOS allow them in a
+/// name, and so does `VSift`. The first sentence is stable and the text names
+/// no path.
+pub const SESSION_ROOT_NAME_REMEDIATION: &str = "The last folder name of the session root you gave is one VSift does not use, so nothing was created or changed, and no storage failed (the code is the closest published one). The name must not be empty, hold a colon, end with a space or a dot, or be a name Windows keeps for a device (CON, PRN, AUX, NUL, COM1 to COM9, LPT1 to LPT9, with or without an extension); on Windows it must also hold no control character and none of < > \" | ? *. Give --session-root a folder whose last name avoids these, and run the command again.";
+
 /// Remediation for an existing session root that holds no `VSift` ownership
 /// marker (#261).
 ///
