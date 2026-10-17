@@ -17,7 +17,7 @@ use vsift_domain::{
 use vsift_infrastructure::{
     BundleSourcePolicy, BundleStatus, CleanOutcome, ContainedFile, ContainedSourceStore,
     FfprobeSourceDuration, FilesystemAdmissionPermit, FilesystemSessionStore, FreeSpaceCheck,
-    MAX_SOURCE_BYTES, SessionIndexPage, SessionRootProvisioning, SessionStatus, SourceSnapshot,
+    MAX_SOURCE_BYTES, SessionRootProvisioning, SessionStatus, SourceSnapshot,
 };
 
 use crate::{
@@ -649,8 +649,10 @@ impl Engine {
 
     /// Lists one bounded page of the session index.
     ///
-    /// Empty buckets are skipped, so a page is empty only at the end of the
-    /// index. A missing root lists as one empty final page and is not created.
+    /// A page holds whole index buckets in order, as many as fit within 256
+    /// registrations (#371), so it is empty only at the end of the index and
+    /// a root of up to 256 sessions lists in one call. A missing root lists as
+    /// one empty final page and is not created.
     ///
     /// # Errors
     ///
@@ -664,9 +666,9 @@ impl Engine {
                 next_cursor: None,
             });
         };
-        let page = first_occupied_page(&store, cursor)?;
+        let page = filled_index_page(&store, cursor)?;
         let entries = page
-            .session_ids()
+            .session_ids
             .iter()
             .map(
                 |session_id| match store.indexed_session_status(session_id) {
@@ -683,7 +685,7 @@ impl Engine {
             .collect();
         Ok(SessionPage {
             entries,
-            next_cursor: page.next_bucket(),
+            next_cursor: page.next_bucket,
         })
     }
 
@@ -755,6 +757,9 @@ impl Engine {
 
     /// Examines, and unless dry-running removes, sessions on one index page.
     ///
+    /// The page is the listing's: whole buckets in order, up to 256
+    /// registrations (#371).
+    ///
     /// Only positively identified `VSift` sessions proven closed, expired or
     /// abandoned are removed. A missing root cleans as one empty final page.
     ///
@@ -775,13 +780,13 @@ impl Engine {
                 mode: request.mode,
             });
         };
-        let page = first_occupied_page(&store, request.cursor)?;
+        let page = filled_index_page(&store, request.cursor)?;
         let dry_run = request.mode == CleanMode::DryRun;
         // A registration that was removed after the page listed it (another
         // cleanup, or a failed open removing its own) is not an entry: there is
         // nothing left to report and nothing went wrong.
         let entries = page
-            .session_ids()
+            .session_ids
             .iter()
             .filter_map(
                 |session_id| match store.clean_session(session_id, now, dry_run) {
@@ -805,7 +810,7 @@ impl Engine {
             .collect();
         Ok(CleanPage {
             entries,
-            next_cursor: page.next_bucket(),
+            next_cursor: page.next_bucket,
             mode: request.mode,
         })
     }
@@ -1016,21 +1021,73 @@ fn session_durability(
     }
 }
 
-/// Returns the first non-empty index bucket at or after `cursor`, or the last
-/// bucket when every remaining bucket is empty.
-fn first_occupied_page(
+/// The most registrations one `session list` or `session clean` page holds.
+///
+/// It is the contract's bound for a page (`cli-v1.md`: "A page has at most 256
+/// registrations"), which is also the most one bucket may hold, so the first
+/// bucket of a page always fits.
+const MAX_PAGE_REGISTRATIONS: usize = 256;
+
+/// The registrations of one listing or cleanup page and where the next begins.
+#[derive(Debug, Eq, PartialEq)]
+struct IndexPage {
+    session_ids: Vec<SessionId>,
+    next_bucket: Option<u16>,
+}
+
+/// Reads whole index buckets from `cursor` on, in index order, into one page.
+///
+/// #371: a page used to be the first non-empty bucket alone, so with sessions
+/// spread over the 256 buckets by their hash, N sessions took about N + 1
+/// calls (three sessions took four). A page now takes every following bucket
+/// that still fits within [`MAX_PAGE_REGISTRATIONS`], and stops at the end of
+/// the index or before the first bucket that would not fit, whose number is
+/// the next cursor. A bucket is never split, so the cursor stays a bucket
+/// number and an older cursor still continues where it did. The work per call
+/// is unchanged in kind: the old code already scanned every empty bucket up to
+/// the next occupied one; a bucket that does not fit is read twice, here and
+/// on the next call.
+fn filled_index_page(
     store: &FilesystemSessionStore,
     cursor: Option<u16>,
-) -> Result<SessionIndexPage, EngineError> {
-    let mut bucket = cursor.unwrap_or(0);
-    loop {
+) -> Result<IndexPage, EngineError> {
+    fill_index_page(cursor, MAX_PAGE_REGISTRATIONS, |bucket| {
         let page = store.scan_session_bucket(bucket)?;
-        if !page.session_ids().is_empty() || page.next_bucket().is_none() {
-            return Ok(page);
+        Ok((page.session_ids().to_vec(), page.next_bucket()))
+    })
+}
+
+/// The filling rule of [`filled_index_page`], with the bucket scan and the
+/// bound given, so that paging across several pages is tested without
+/// registering hundreds of sessions.
+///
+/// The first bucket read is always taken whole (a bucket holds at most the
+/// bound), so a page is empty only at the end of the index.
+fn fill_index_page(
+    cursor: Option<u16>,
+    limit: usize,
+    mut scan: impl FnMut(u16) -> Result<(Vec<SessionId>, Option<u16>), EngineError>,
+) -> Result<IndexPage, EngineError> {
+    let mut bucket = cursor.unwrap_or(0);
+    let mut session_ids: Vec<SessionId> = Vec::new();
+    loop {
+        let (bucket_ids, next_bucket) = scan(bucket)?;
+        if !session_ids.is_empty() && session_ids.len() + bucket_ids.len() > limit {
+            return Ok(IndexPage {
+                session_ids,
+                next_bucket: Some(bucket),
+            });
         }
-        bucket = page
-            .next_bucket()
-            .ok_or(EngineError::SessionIndexInconsistent)?;
+        session_ids.extend(bucket_ids);
+        match next_bucket {
+            Some(next) => bucket = next,
+            None => {
+                return Ok(IndexPage {
+                    session_ids,
+                    next_bucket: None,
+                });
+            }
+        }
     }
 }
 
@@ -1041,7 +1098,9 @@ mod tests {
     use vsift_application::{OpenSessionError, SessionStorageError};
     use vsift_infrastructure::{FreeSpaceCheck, MAX_SOURCE_BYTES};
 
-    use super::{ensure_room_for_desktop_copy, retry_while_transient};
+    use vsift_domain::SessionId;
+
+    use super::{IndexPage, ensure_room_for_desktop_copy, fill_index_page, retry_while_transient};
     use crate::error::EngineError;
 
     const LONG: Duration = Duration::from_secs(30);
@@ -1212,5 +1271,110 @@ mod tests {
 
         assert_eq!(outcome, Err(SessionStorageError::AccessDenied));
         assert_eq!(calls.get() > 1, cfg!(windows), "{} attempts", calls.get());
+    }
+
+    type Paged = Result<(), Box<dyn std::error::Error>>;
+
+    /// A stand-in index's occupied buckets and their sessions, in bucket order.
+    type Buckets = Vec<(u16, Vec<SessionId>)>;
+
+    /// A stand-in index: `occupied` lists `(bucket, sessions)`, every other
+    /// bucket of the 256 is empty; ids are `ses_` and the bucket and position.
+    fn index(occupied: &[(u16, usize)]) -> Result<Buckets, Box<dyn std::error::Error>> {
+        let mut buckets = Vec::new();
+        for &(bucket, sessions) in occupied {
+            let mut ids = Vec::new();
+            for position in 0..sessions {
+                ids.push(SessionId::parse(format!(
+                    "ses_{bucket:016x}{position:016x}"
+                ))?);
+            }
+            buckets.push((bucket, ids));
+        }
+        Ok(buckets)
+    }
+
+    /// One page of the stand-in index, with the scan the store makes: the
+    /// bucket's sessions and the next bucket, none after 255.
+    fn page(
+        buckets: &[(u16, Vec<SessionId>)],
+        cursor: Option<u16>,
+        limit: usize,
+    ) -> Result<IndexPage, EngineError> {
+        fill_index_page(cursor, limit, |bucket| {
+            let ids = buckets
+                .iter()
+                .find(|(number, _)| *number == bucket)
+                .map(|(_, ids)| ids.clone())
+                .unwrap_or_default();
+            Ok((ids, (bucket < 255).then_some(bucket + 1)))
+        })
+    }
+
+    /// #371: three sessions in three buckets took four calls, one session a
+    /// page. A page now takes every bucket that fits, so they list in one.
+    #[test]
+    fn sessions_in_separate_buckets_list_in_one_page() -> Paged {
+        let buckets = index(&[(0x10, 1), (0xa0, 1), (0xf8, 1)])?;
+        let first = page(&buckets, None, 256)?;
+        assert_eq!(first.session_ids.len(), 3);
+        assert_eq!(first.next_bucket, None);
+        Ok(())
+    }
+
+    /// #371, the test the issue asks for: several sessions over more than one
+    /// page (a bound of 4 stands in for 256), read by following the cursor
+    /// to null. Every session is read exactly once and in index order, no page
+    /// holds more than the bound, a bucket is never split, and a page stops
+    /// before the first bucket that does not fit, which is the next cursor.
+    #[test]
+    fn every_session_is_read_once_across_pages() -> Paged {
+        let buckets = index(&[(2, 3), (5, 2), (9, 1), (20, 4), (21, 1), (255, 2)])?;
+        let mut cursor = None;
+        let mut read = Vec::new();
+        let mut cursors = Vec::new();
+        loop {
+            let next = page(&buckets, cursor, 4)?;
+            assert!(next.session_ids.len() <= 4, "{next:?}");
+            read.extend(next.session_ids);
+            cursors.push(next.next_bucket);
+            match next.next_bucket {
+                Some(bucket) => cursor = Some(bucket),
+                None => break,
+            }
+        }
+        let expected: Vec<SessionId> = buckets.into_iter().flat_map(|(_, ids)| ids).collect();
+        assert_eq!(read, expected);
+        // 3 | 2 + 1 | 4 | 1 + 2, each page stopping before a bucket that would
+        // overflow it.
+        assert_eq!(cursors, [Some(5), Some(20), Some(21), None]);
+        Ok(())
+    }
+
+    /// A bucket that fills a page alone is taken whole as a page's first, and
+    /// an empty index is one empty final page, as before.
+    #[test]
+    fn a_full_bucket_is_one_page_and_an_empty_index_one_empty_page() -> Paged {
+        let buckets = index(&[(0, 1), (7, 4), (8, 1)])?;
+        let from_full = page(&buckets, Some(7), 4)?;
+        assert_eq!(from_full.session_ids.len(), 4);
+        assert_eq!(from_full.next_bucket, Some(8));
+        let empty = page(&[], None, 256)?;
+        assert!(empty.session_ids.is_empty());
+        assert_eq!(empty.next_bucket, None);
+        Ok(())
+    }
+
+    /// A bucket that cannot be read fails the page, as it did before.
+    #[test]
+    fn an_unreadable_bucket_fails_the_page() {
+        let failed = fill_index_page(None, 256, |bucket| {
+            if bucket == 3 {
+                Err(EngineError::SessionIndexInconsistent)
+            } else {
+                Ok((Vec::new(), Some(bucket + 1)))
+            }
+        });
+        assert_eq!(failed, Err(EngineError::SessionIndexInconsistent));
     }
 }

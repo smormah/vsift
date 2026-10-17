@@ -38,12 +38,12 @@ Lifecycle: ephemeral, expires 2026-10-05T18:40:00Z
 $ vsift session list
 Sessions:
   ses_6e9a8a3d…  open  expires 2026-10-05T18:40:00Z
-More on the next page: repeat the command with --cursor 127
 ```
 
-`session list` walks VSift's session folder in bounded pages. A page can hold few or no sessions and still
-end with `More on the next page`: keep repeating the command with the number it gives until that line no
-longer appears. `vsift session status <session>` shows one session, with its size and any long-running work.
+`session list` walks VSift's session folder in bounded pages of up to 256 sessions, so it usually shows every
+session at once. When a page ends with `More on the next page`, repeat the command with the number it gives
+until that line no longer appears. (Before VSift 0.2.2 a page often held one session or none and still ended
+with that line.) `vsift session status <session>` shows one session, with its size and any long-running work.
 
 ## 3. Close a session when you are done
 
@@ -72,7 +72,6 @@ Look first. `--dry-run` removes nothing and says which sessions the cleanup woul
 $ vsift session clean --expired --dry-run
 Session cleanup, dry run: nothing was removed.
   ses_6e9a8a3d…  eligible
-More on the next page: repeat the command with --cursor 127
 ```
 
 `eligible` means closed or expired. A session that is still open and unexpired is `ineligible` and is left
@@ -83,7 +82,6 @@ alone. Then do it:
 $ vsift session clean --expired
 Session cleanup:
   ses_6e9a8a3d…  removed
-More on the next page: repeat the command with --cursor 127
 $ vsift session list
 No sessions.
 ```

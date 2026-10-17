@@ -138,7 +138,9 @@ else fails before admission or mutation.
 P05 registers each new session in a bounded root-local hash index before source
 staging. A held marker lock protects an opener across processes. Source binding,
 renewal, close and artifact publication extend the same immutable manifest chain.
-Each list/clean page inspects at most one 256-entry bucket. Cleanup claims an
+Each list/clean page holds whole buckets in order, as many as fit within 256
+registrations (#371; until `0.2.2` a page was one bucket, so scattered sessions
+came back one a page). Cleanup claims an
 exclusive lifetime lock, validates the contained owned tree, quarantines it,
 and removes it without touching the original or a retained export. Expiry makes
 a temporary session eligible for cleanup; with no background process, physical

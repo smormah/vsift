@@ -186,3 +186,60 @@ fn unreadable_transcript_and_invalid_bundle_fail_with_typed_v1_results_without_m
     assert_eq!(fs::read(&source)?, b"\0\0\0\x18ftypisomsource-content");
     Ok(())
 }
+
+/// #371: three sessions took four `session list` calls, one session a page.
+/// Several sessions now come back in one page with `next_cursor` null, and an
+/// agent that follows the cursor to null, as the skill says, reads each of
+/// them exactly once; `session clean --expired --dry-run` pages the same way.
+#[test]
+fn several_sessions_are_read_in_one_page_by_following_the_cursor_to_null() -> TestResult {
+    let temp = OwnedRoot::new()?;
+    let root = temp.0.join("private sessions");
+    let source = temp.0.join("original media.mp4");
+    fs::write(&source, b"\0\0\0\x18ftypisomsource-content")?;
+    let source_text = source.to_str().ok_or("source path is not UTF-8")?;
+    let mut opened = Vec::new();
+    for _ in 0..4 {
+        let session = run(&root, &["ingest", source_text])?;
+        let id = session["data"]["session_id"]
+            .as_str()
+            .ok_or("missing session id")?
+            .to_owned();
+        opened.push(id);
+    }
+    opened.sort();
+
+    for command in [
+        vec!["session", "list"],
+        vec!["session", "clean", "--expired", "--dry-run"],
+    ] {
+        let mut read = Vec::new();
+        let mut calls = 0;
+        let mut cursor: Option<String> = None;
+        loop {
+            let mut arguments = command.clone();
+            if let Some(next) = cursor.as_deref() {
+                arguments.extend(["--cursor", next]);
+            }
+            let page = run(&root, &arguments)?;
+            calls += 1;
+            for item in page["data"]["items"].as_array().ok_or("missing items")? {
+                read.push(
+                    item["session_id"]
+                        .as_str()
+                        .ok_or("missing session id")?
+                        .to_owned(),
+                );
+            }
+            match &page["data"]["next_cursor"] {
+                Value::Null => break,
+                Value::Number(next) => cursor = Some(next.to_string()),
+                other => return Err(format!("unexpected next_cursor {other}").into()),
+            }
+        }
+        read.sort();
+        assert_eq!(read, opened, "{command:?}");
+        assert_eq!(calls, 1, "{command:?} took {calls} calls");
+    }
+    Ok(())
+}

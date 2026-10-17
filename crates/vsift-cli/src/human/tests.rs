@@ -1087,3 +1087,51 @@ fn a_result_without_its_published_shape_is_refused() {
     let broken = json!({"status": "complete", "data": {"session_id": 3}});
     assert!(render_value(CommandName::Ingest, &broken).is_err());
 }
+
+/// #371: a session page that is not the last still says how to read the next
+/// one. Since a page holds up to 256 sessions the readable snapshots, made
+/// with a handful of sessions, end on their last page, so the line is pinned
+/// here for both commands.
+#[test]
+fn a_session_page_that_is_not_the_last_names_its_next_cursor() -> TestResult {
+    let item = json!({
+        "error_code": null,
+        "session_id": "ses_c574fee114f5a357daedeac75e93addc",
+        "state": "open",
+        "status": {
+            "artifact_bytes": 0,
+            "artifact_count": 0,
+            "expires_at": "2026-10-18T03:38:15Z",
+            "generation": 1,
+            "session_id": "ses_c574fee114f5a357daedeac75e93addc",
+            "source_bytes": 13,
+            "source_id": "src_sha256_1a55b52ee45dfa2fb9466588a56dfa010ef5d26fbcd5aeb9a8676706323d1bec",
+            "state": "open"
+        }
+    });
+    let list = json!({
+        "schema_version": "1", "command": "session.list", "operation_id": null,
+        "status": "complete", "data": {"items": [item], "next_cursor": 200},
+        "warnings": [], "error": null, "coverage": null, "lifecycle": null
+    });
+    let clean = json!({
+        "schema_version": "1", "command": "session.clean", "operation_id": null,
+        "status": "complete",
+        "data": {"dry_run": true, "items": [{
+            "error_code": null, "outcome": "ineligible",
+            "session_id": "ses_c574fee114f5a357daedeac75e93addc"
+        }], "next_cursor": 200},
+        "warnings": [], "error": null, "coverage": null, "lifecycle": null
+    });
+    for (command, value) in [
+        (CommandName::SessionList, list),
+        (CommandName::SessionClean, clean),
+    ] {
+        let text = render(command, &value)?;
+        assert!(
+            text.contains("More on the next page: repeat the command with --cursor 200\n"),
+            "{text}"
+        );
+    }
+    Ok(())
+}
