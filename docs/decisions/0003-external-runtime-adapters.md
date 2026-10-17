@@ -96,7 +96,7 @@ its own of the note above are unchanged.
 `tokio` hands out, or a thread list of the one process (`PssCaptureSnapshot`, about 0.5 ms
 alone and 1.5 ms six at once on the same machine), and either is a call only `unsafe` code
 can make. That is a change in `process-wrap` upstream, or an accepted ADR for a narrowly
-isolated crate of VSift's own; the maintainer decided on 2026-10-18 that this waits for R1, with nothing proposed upstream before then. `win-custody` 0.1.1, which
+isolated crate of VSift's own; the maintainer decided on 2026-10-17 that this waits for R1, with nothing proposed upstream before then. `win-custody` 0.1.1, which
 creates the child inside its job itself, was looked at and not adopted: one young release
 from one maintainer, and its own process start without the `tokio` pipes and wait the
 supervisor is built on. What remains is register entry L-170.

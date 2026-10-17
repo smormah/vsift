@@ -1,6 +1,6 @@
 # `candidates` on a long recording: the measurement for #367 (2026-10-17)
 
-Status: measured, decided and built in cycle 1 (`0.2.2`). The maintainer chose option (a) on 2026-10-18: an opt-in
+Status: measured, decided and built in cycle 1 (`0.2.2`). The maintainer chose option (a) on 2026-10-17: an opt-in
 filter that leaves out periodic-only candidates, `candidates --omit periodic` ([`cli-v1.md`](../contracts/cli-v1.md),
 "Leaving out periodic candidates"), which the skill uses to shortlist the screens of a range with no transcript. Register:
 [L-152](known-limits.md#l-152). Issue: [#367](https://github.com/smormah/vsift/issues/367).
@@ -69,7 +69,7 @@ is still listed. The 39 runs of equal hash become 39 runs in 48 items, so an age
 needs more than the 24 images of the `standard` profile for the whole recording; the image budget, not the list, is then
 the limit, and the skill keeps asking for one stretch at a time.
 
-## The decision this needed (taken 2026-10-18: option a)
+## The decision this needed (taken 2026-10-17: option a)
 
 Whether `candidates` gains a filter (a, b or both) and in what form; whether a call's default analysis shrinks (c); or
 whether only the skill changes (d). **(a) is the smallest change that halves the characters** on this recording (38,349

@@ -39,7 +39,7 @@ const NO_ROOM_REMEDIATION_START = "The folder that holds VSift's sessions does n
  * How the remediation of an `ingest` of a symbolic link begins. The link case
  * requires it beside `STORAGE_IO`, because the code alone is also the answer
  * of a disk that failed (RQ-10's rule since the maintainer's decision of
- * 2026-10-18, plan section 32; #265, L-127). It is the stable first sentence
+ * 2026-10-17, plan section 32; #265, L-127). It is the stable first sentence
  * of `SOURCE_IS_LINK_REMEDIATION` in `crates/vsift-contract/src/storage.rs`; a
  * test here reads the constant and fails if the two part.
  */

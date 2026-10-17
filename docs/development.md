@@ -717,6 +717,9 @@ cargo run --locked -p vsift-governance -- release-evidence --complete-for <versi
 For example `--complete-for 0.2.1 --commit e9ab6e62673328a1645254a4a32e552a2a2f61bf` is the check of the
 release 0.2.1 (it names the stable commit; a candidate's version, such as `0.2.1-rc.3`, is checked as a candidate). When this was written (2026-10-16) it answered that
 RQ-05 is `failed` for 0.2.1 (the journeys on hosted Windows, #404) and named nothing else; for 0.2.0 the same check passed.
+Since the cut of `0.2.2-rc.1` (2026-10-17) it also names RQ-07, RQ-10, RQ-15 and RQ-16, which are `planned` for that
+candidate (their waivers for 0.2.1 are kept in each item's `prior`): an item holds one status, the current one, so the
+check of an earlier version reads the ledger as it is now. `--complete-for 0.2.2-rc.1` is the check of the candidate.
 
 - **The ledger's shape** (schema version 1; the Rust types in
   `tools/vsift-governance/src/release_evidence/schema.rs` are the schema, and every struct
@@ -790,8 +793,8 @@ node tools/guide/check-examples.cjs --binary target/debug/vsift
   for the first identifier of that kind an earlier command printed on the same page;
   `<candidate:3>` picks the third. A placeholder with no value yet fails the check rather than
   being guessed.
-- **A version bump re-checks the guide.** The guide names a release (`0.2.1`), not a
-  candidate: `0.2.1-rc.1`, `0.2.1-rc.2`, `0.2.1-rc.3` and `0.2.1` are the same release to these tools (and `0.2.0-rc.1` to `0.2.0-rc.3` and `0.2.0` were another), so the stable commit
+- **A version bump re-checks the guide.** The guide names a release (`0.2.2`), not a
+  candidate: `0.2.2-rc.1` and `0.2.2` are the same release to these tools (and `0.2.1-rc.1` to `0.2.1-rc.3` and `0.2.1` were another, as `0.2.0-rc.1` to `0.2.0-rc.3` and `0.2.0` were), so the stable commit
   needs no guide change, which matters because it may differ from its accepted candidate only in
   version-string files, shipped documents and the work record, and the generated reference pages,
   which name the release, are in none of them ([release process, 6.8](operations/release.md)).
@@ -824,7 +827,7 @@ advisory, and replacement remains appropriate if a maintained safe DACL reader a
 Windows-only `fs4` 1.1.0 (MIT OR Apache-2.0, without default features) reads a session root's
 free space for the checks before a source copy (#266); its review, and why the `windows` crate,
 `fs2` and `sysinfo` were not chosen, is the
-[ADR 0021 note of 2026-10-18](decisions/0021-worker-and-batch-host.md#note-2026-10-18-266-the-free-space-checks-on-windows-and-the-fs4-dependency).
+[ADR 0021 note of 2026-10-17](decisions/0021-worker-and-batch-host.md#note-2026-10-17-266-the-free-space-checks-on-windows-and-the-fs4-dependency).
 `deny.toml` explicitly includes development dependencies in licence and duplicate
 checks; cargo-deny otherwise omits them from these checks by default. Keep the
 explicit settings when evaluating future test-only platform wrappers.

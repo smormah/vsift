@@ -60,7 +60,7 @@ fn the_committed_freezes_still_hold() -> TestResult {
 /// visible: changing this constant is the decision to cut another candidate and write a new freeze
 /// (`docs/operations/release.md` section 6.8), and it shows in the diff of a test, not only of a data file.
 ///
-/// The freeze of 2026-10-18 is new on purpose (#367), written on top of #366's: the skill shortlists the screens
+/// The freeze of 2026-10-17 is new on purpose (#367), written on top of #366's: the skill shortlists the screens
 /// of a range with no transcript with `candidates --omit periodic` (`docs/agents/skill.md`, "Shortlisting the screens
 /// of a long recording"), so the `skill` component changed, `13b485f3...` to `bd205d6c...`, and this digest,
 /// `cfaf9783...` to the value below. The other six components are unchanged. No batch has run under it.

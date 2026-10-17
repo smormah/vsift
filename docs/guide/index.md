@@ -1,6 +1,6 @@
 # VSift user guide
 
-<!-- guide-version: 0.2.1 -->
+<!-- guide-version: 0.2.2 -->
 
 VSift turns a video on your machine into **timestamped speech**, **the moments the screen changed** and
 **the exact frames and audio that prove them**, each with an id you can cite. You use it yourself, from a
@@ -8,11 +8,20 @@ terminal, or you let an AI assistant on your machine use it. Nothing is uploaded
 
 This guide teaches you to do things with it. It is written for anyone with a video, not only for programmers.
 
-**Checked against vsift 0.2.1**: the release `0.2.1` and the release candidate `0.2.1-rc.3` it was built from have
+**Checked against vsift 0.2.2**: the release candidate `0.2.2-rc.1` and the release that follows it are built from
 the same code, so this guide names the release, not a candidate. Where this guide says what a command prints, that
 is real output of that build on practice recordings from the repository, and the examples are re-run whenever the
-code changes ([how](#how-this-guide-is-kept-true)). The second candidate, `0.2.1-rc.2`, has the same commands and
-options and one fix fewer: its `setup check` gives the three tools 5 seconds in all
+code changes ([how](#how-this-guide-is-kept-true)). The release `0.2.1`, which `npm install vsift-cli` installs until
+`0.2.2` is published, and the candidate `0.2.1-rc.3` it was built from have the same commands and options except
+`candidates --omit`, and fewer fixes: a worker host stopped during a recognition could record the request as failed
+with `MISSING_CAPABILITY` instead of cancelled, and a worker's `retranscribe` step said `complete` over a part it
+could not transcribe; on Windows the free space was not checked before a video was copied; a slow copy ran its full
+ten minutes before it failed; a named pipe, a device or a socket given as the video, a refused `--session-root`
+name and a `frame get` refused during a transcription were answered without saying why; a very short `audio` range
+of a recording without video came back empty; `session list` gave one session a page; `handoff check` read at most
+64 KiB; the advice for a missing tool said to "locate" it; and the agent skill had older wording.
+The second candidate of `0.2.1`, `0.2.1-rc.2`, has the same commands and
+options as `0.2.1` and one fix fewer: its `setup check` gives the three tools 5 seconds in all
 instead of 30, and gives a tool that only did not answer in time the advice for a missing one
 ([troubleshooting](troubleshooting.md#missing_capability-a-tool-or-model-is-missing)). The first candidate, `0.2.1-rc.1`, has the same commands and
 options except `--view` (on `transcript get`, `search` and `candidates`) and a few fixes fewer still, that one included: where two pieces of a local

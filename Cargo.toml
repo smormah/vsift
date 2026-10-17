@@ -17,7 +17,7 @@ exclude = ["fuzz"]
 resolver = "3"
 
 [workspace.package]
-version = "0.2.1"
+version = "0.2.2-rc.1"
 edition = "2024"
 rust-version = "1.98"
 authors = ["VSift contributors"]
@@ -40,7 +40,7 @@ native-tls = { version = "0.2", default-features = false }
 cap-fs-ext = "=4.0.3"
 cap-std = "=4.0.3"
 # Windows only: the free space of a session root's volume, for the checks
-# before a source copy (#266, ADR 0021 note of 2026-10-18). Its only Windows
+# before a source copy (#266, ADR 0021 note of 2026-10-17). Its only Windows
 # dependency, windows-sys 0.61, is already in the lock; without default
 # features it is the filesystem-statistics functions alone (no locks).
 fs4 = { version = "=1.1.0", default-features = false }
@@ -59,11 +59,11 @@ sha2 = { version = "0.11", default-features = false }
 tar = { version = "=0.4.46", default-features = false }
 time = { version = "0.3", features = ["formatting"] }
 tokio = { version = "1.48", features = ["fs", "io-util", "macros", "process", "rt-multi-thread", "signal", "sync", "time"] }
-vsift = { version = "0.2.1", path = "crates/vsift" }
-vsift-application = { version = "0.2.1", path = "crates/vsift-application" }
-vsift-contract = { version = "0.2.1", path = "crates/vsift-contract" }
-vsift-domain = { version = "0.2.1", path = "crates/vsift-domain" }
-vsift-infrastructure = { version = "0.2.1", path = "crates/vsift-infrastructure" }
+vsift = { version = "0.2.2-rc.1", path = "crates/vsift" }
+vsift-application = { version = "0.2.2-rc.1", path = "crates/vsift-application" }
+vsift-contract = { version = "0.2.2-rc.1", path = "crates/vsift-contract" }
+vsift-domain = { version = "0.2.2-rc.1", path = "crates/vsift-domain" }
+vsift-infrastructure = { version = "0.2.2-rc.1", path = "crates/vsift-infrastructure" }
 windows-acl = "=0.3.0"
 # Already in the lock through process-wrap's Job Object support, with the same
 # version and the same feature; named directly only for the type of the

@@ -792,7 +792,7 @@ the request path grammar (no `..`, absolute, drive, `\`, `:` or stream, device n
 control characters); a link anywhere on the path and a file with several hard links
 are refused, and nothing outside the root is read (S-01, S-02; L-062). A worker
 workspace checks that a source copy leaves 1 GiB free before it starts (on Windows too
-since #266, read by path through the `fs4` crate, ADR 0021 note of 2026-10-18); it is a pre-copy check, not a quota (L-061). Decoder allocation and thread caps are
+since #266, read by path through the `fs4` crate, ADR 0021 note of 2026-10-17); it is a pre-copy check, not a quota (L-061). Decoder allocation and thread caps are
 unchanged.
 **SEC-06/SEC-25 (strict worker).** `--host-isolation strict-linux` is accepted only
 after bounded reads of the kernel's own view attest a cgroup v2 with finite CPU,

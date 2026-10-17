@@ -160,7 +160,7 @@ async function runCase(spec, canaries) {
  * fail; the same case answering anything else is a new finding
  * (judge.trackedIssue). None is left. `ingest` of a symbolic link answers
  * `STORAGE_IO`, a published code that does not change within v1 (#265, known
- * limit L-127); since the maintainer's decision of 2026-10-18 (plan section
+ * limit L-127); since the maintainer's decision of 2026-10-17 (plan section
  * 32) that answer, with its remediation, meets RQ-10's rule and the case pins
  * it. The named pipe (#264) has passed since 0.2.0-rc.1, and the no-room case
  * (#266) passes now that it names a root VSift creates (#310).
