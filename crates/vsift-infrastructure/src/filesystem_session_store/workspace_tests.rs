@@ -186,3 +186,51 @@ fn the_free_space_reserve_is_checked_on_unix_only() -> TestResult {
     }
     Ok(())
 }
+
+/// #277: what an interrupted open leaves (a registration with no published
+/// session) is collected by `session clean` a day after it was registered,
+/// whatever the workspace's retention: here one hour, so a published session
+/// of this workspace would have expired 23 hours earlier. The interval is
+/// `SessionLifetime::IDLE_SECONDS`, which the runbook states.
+#[test]
+fn an_abandoned_registration_is_collected_a_day_after_it_was_registered_whatever_the_retention()
+-> TestResult {
+    use vsift_domain::{OperationId, SessionId, SessionLifetime};
+
+    use super::CleanOutcome;
+
+    const REGISTERED_AT: u64 = 1_000;
+    let fixture = Fixture::new()?;
+    let store = FilesystemSessionStore::provision_workspace(
+        new_root(&fixture),
+        policy(DurabilityRequirement::Ephemeral, 1, 1)?,
+    )?;
+    let session = SessionId::parse("ses_abababababababab")?;
+    drop(store.register_session(
+        &session,
+        &OperationId::parse("op_cdcdcdcdcdcdcdcd")?,
+        REGISTERED_AT,
+    )?);
+    let retention = WorkspaceRetention::from_hours(1)?.seconds();
+    assert_eq!(
+        store.clean_session(&session, REGISTERED_AT + retention + 1, false)?,
+        CleanOutcome::Ineligible
+    );
+    assert_eq!(
+        store.clean_session(
+            &session,
+            REGISTERED_AT + SessionLifetime::IDLE_SECONDS - 1,
+            false
+        )?,
+        CleanOutcome::Ineligible
+    );
+    assert_eq!(
+        store.clean_session(
+            &session,
+            REGISTERED_AT + SessionLifetime::IDLE_SECONDS,
+            false
+        )?,
+        CleanOutcome::Removed
+    );
+    Ok(())
+}
