@@ -114,8 +114,41 @@ test('the remediation the no-room case requires is how the product begins it', (
   assert.ok(hostile.NO_ROOM_REMEDIATION_START.length >= 40, 'long enough to tell it from any other remediation');
 });
 
-test('only filed findings are tracked, each for a case, an operation and an outcome the campaign has', () => {
-  assert.deepEqual(media.TRACKED, { 'symlink-to-canary': { issue: 265, op: 'ingest', outcome: 'failed STORAGE_IO' } });
+test('the remediation the link case requires is how the product begins it', () => {
+  const source = fs.readFileSync(path.join(repository, 'crates', 'vsift-contract', 'src', 'storage.rs'), 'utf8');
+  const constant = /pub const SOURCE_IS_LINK_REMEDIATION: &str = "([^"\\]*)";/.exec(source);
+  assert.ok(constant, 'SOURCE_IS_LINK_REMEDIATION is a plain string constant in vsift-contract');
+  assert.ok(constant[1].startsWith(hostile.LINK_REMEDIATION_START), constant[1]);
+  assert.ok(hostile.LINK_REMEDIATION_START.length >= 40, 'long enough to tell it from any other remediation');
+});
+
+test('the link case requires the documented answer: STORAGE_IO with the remediation that links are not followed (RQ-10, plan section 32)', () => {
+  const spec = find('symlink-to-canary');
+  assert.equal(spec.expect, 'failure');
+  assert.deepEqual(spec.ops, ['ingest', 'job_name']);
+  assert.equal(spec.codes, undefined, 'the answers are pinned, not widened by the case\'s own codes');
+  const linkText = `${hostile.LINK_REMEDIATION_START} Nothing was read or copied, and no storage failed.`;
+
+  // The answer the published 0.2.1-rc.3 gave (run 38592429160) and the contract documents.
+  assert.equal(verdict(spec, 'ingest', answered(cliFailure('STORAGE_IO', linkText))).ok, true);
+  assert.equal(verdict(spec, 'job_name', answered(jobFailure('INVALID_ARGUMENT'), 0.6)).ok, true);
+
+  // The code without the remediation is a disk that failed (or a regression of the documented answer): a finding.
+  const bare = verdict(spec, 'ingest', answered(cliFailure('STORAGE_IO', null)));
+  assert.equal(bare.ok, false);
+  assert.match(bare.findings[0], /remediation does not begin/);
+  assert.equal(verdict(spec, 'ingest', answered(cliFailure('STORAGE_IO', `${hostile.NO_ROOM_REMEDIATION_START} of this video.`))).ok, false);
+  // Another code is a finding too, a typed one included: the published answer changed.
+  assert.equal(verdict(spec, 'ingest', answered(cliFailure('INVALID_SOURCE', linkText))).ok, false);
+  assert.equal(verdict(spec, 'ingest', answered(cliFailure('INVALID_ARGUMENT', linkText))).ok, false);
+  // A link that was followed is the worst finding.
+  assert.equal(verdict(spec, 'ingest', { ...answered({ status: 'complete', data: { session_id: 'ses_0123456789abcdef' } }), code: 0 }).ok, false);
+  // The worker request keeps its own answer.
+  assert.equal(verdict(spec, 'job_name', answered(jobFailure('STORAGE_IO'))).ok, false);
+});
+
+test('no finding is filed any more, and what the mechanism takes is still checked', () => {
+  assert.deepEqual(media.TRACKED, {});
   for (const [id, filed] of Object.entries(media.TRACKED)) {
     const spec = find(id);
     assert.ok(spec, `${id} is a case`);
@@ -131,17 +164,23 @@ test('only filed findings are tracked, each for a case, an operation and an outc
 });
 
 test('the summary says which findings are filed and which are new', () => {
-  const linkFinding = { id: 'symlink-to-canary', op: 'ingest', outcome: 'failed STORAGE_IO', findings: ['failed with STORAGE_IO, not one of INVALID_SOURCE, RESOURCE_LIMIT, DEADLINE_EXCEEDED, INVALID_ARGUMENT'] };
+  // None is filed now (the link's answer meets the rule), so the mechanism is shown with a filed entry of its own.
+  const filed = { 'sparse-no-room': { issue: 266, op: 'ingest', outcome: 'failed INTEGRITY_FAILURE' } };
   const roomFinding = { id: 'sparse-no-room', op: 'ingest', outcome: 'failed INTEGRITY_FAILURE', findings: ['failed with INTEGRITY_FAILURE, not one of STORAGE_IO'] };
-  const report = (findingsList) => {
-    const split = judge.splitKnown(findingsList, media.TRACKED, []);
+  const linkFinding = { id: 'symlink-to-canary', op: 'ingest', outcome: 'failed STORAGE_IO', findings: ['failed with STORAGE_IO, but its remediation does not begin "The path you gave is a link, and VSift does not follow links.": ""'] };
+  const report = (findingsList, tracked) => {
+    const split = judge.splitKnown(findingsList, tracked, []);
     return { ok: false, known: split.known, fresh: split.fresh, fixed: split.fixed, containmentOk: true, cases: 96, operations: 251, findings: findingsList.length, slowestSeconds: 5.2, peakMiB: 809, results: [], findingsList, containment: [] };
   };
-  const tracked = media.markdown(report([linkFinding]));
-  assert.match(tracked, /FINDINGS, all tracked \(#265\)/);
-  assert.match(tracked, /`symlink-to-canary` ingest: .* \(tracked: #265\)/);
-  const fresh = media.markdown(report([linkFinding, roomFinding]));
-  assert.match(fresh, /NEW FINDINGS/);
-  assert.match(fresh, /`sparse-no-room` ingest: failed with INTEGRITY_FAILURE, not one of STORAGE_IO \(NEW\)/);
-  assert.match(fresh, /`symlink-to-canary` ingest: .* \(tracked: #265\)/);
+  const trackedRun = media.markdown(report([roomFinding], filed), filed);
+  assert.match(trackedRun, /FINDINGS, all tracked \(#266\)/);
+  assert.match(trackedRun, /`sparse-no-room` ingest: .* \(tracked: #266\)/);
+  const freshRun = media.markdown(report([roomFinding, linkFinding], filed), filed);
+  assert.match(freshRun, /NEW FINDINGS/);
+  assert.match(freshRun, /`symlink-to-canary` ingest: .* \(NEW\)/);
+  assert.match(freshRun, /`sparse-no-room` ingest: .* \(tracked: #266\)/);
+  // With nothing filed, as now, the link answering the bare code is new and fails the run.
+  const none = media.markdown(report([linkFinding], media.TRACKED));
+  assert.match(none, /NEW FINDINGS/);
+  assert.match(none, /`symlink-to-canary` ingest: .* \(NEW\)/);
 });

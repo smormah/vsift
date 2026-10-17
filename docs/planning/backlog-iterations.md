@@ -97,6 +97,16 @@ One candidate, cut in a weekly window (below). Stories that do not overlap run i
   still to build: the pull-request gate's path rules, the nightly with its issue-on-failure, and the release workflow's nightly precondition (separate changes;
   the first two were built in #414, the third with release branches, #337 and #403 on 2026-10-17).
 
+**Decided by the maintainer on 2026-10-18 (cycle 1 notes):**
+- **#265, a symbolic link as the source:** the answer stays `STORAGE_IO` with its remediation (the rule of 2026-10-04: a published code stays). RQ-10's pass rule now admits that answer, so the waiver that covered it ends with `0.2.1`; the next candidate's `P14 malicious media` run is judged by the new rule, which the campaign's judge now pins (plan section 32). L-127 stays until v2.
+- **#232, a root name with control characters:** no further change. VSift does not add a refusal of control characters (they work on Linux and macOS and are refused on Windows; the Linux failure was the name's two colons, which a remediation now explains).
+- **#277, sessions left `initializing`:** no further change. `session clean` removes an abandoned registration 24 hours after it was made, in every root, whatever a workspace's retention (documented).
+- **Ratified:** the `handoff check` limit of 128 KiB (#366, [L-151](known-limits.md#l-151)) and the early-stop forecast of a slow copy with its known cost (#325, [L-140](known-limits.md#l-140): one minute, the fastest ten-second stretch, sixteen blocks, one and a half times the limit).
+- **Approved, not built here:** the opt-in filter that leaves out periodic-only candidates (#367, [L-152](known-limits.md#l-152)); pull request #435 implements it.
+- **Kept, and moved to R1:** the `BUSY` refusal of `frame get` during a transcription (#370, [L-154](known-limits.md#l-154)); see R1 below.
+- **#419, the Windows spawn cost ([L-170](known-limits.md#l-170)):** a request's deadline starts once the provider runs (a cycle 1 change, not built yet). Removing the thread scan itself is deferred to R1 (it needs `unsafe`, so an ADR, or a change upstream), and nothing is posted upstream for now.
+- **#433, the admission ladder's `partial` under concurrency:** under contention a `candidates` request fails `BUSY`, resumable, instead of ending `partial` with a window `not_analyzed` (not built yet).
+
 **Testing:** each fix with its regression test; the gate on each pull request; the nightly on `main`; the candidate cut from a green
 nightly; the long hosted runs for what the cycle touched; an uncounted skill smoke if the skill's wording changes.
 
@@ -128,6 +138,8 @@ Starts with P15's decision packet and not before the maintainer says. Planned in
   video links, built in VSift; [#408](https://github.com/smormah/vsift/issues/408) HLS and DASH links; [#409](https://github.com/smormah/vsift/issues/409)
   platform pages through the optional yt-dlp component; [#410](https://github.com/smormah/vsift/issues/410) live platform streams through yt-dlp, on #107's live design.
 - A live screen share (#107), speakers (#108), whole-recording questions (#368), a faster-whisper adapter (#147).
+- **The removal of the Windows thread scan (#419, [L-170](known-limits.md#l-170)), deferred here by the decision of 2026-10-18** (no upstream post for now).
+- **The worker work's capacity and admission design, where #370 is revisited** (decided 2026-10-18: the `BUSY` refusal of `frame get` during a transcription stays in `0.2.x`; [L-154](known-limits.md#l-154), owner R1). The options are in the register entry: a recognizer that leaves one unit, a fifth unit for new roots, or an evidence slot outside the capacity.
 - #176 (library API stability, MSRV, pre-releases and an MCP adapter), #188 (SEC-T01 adversarial containment), #204 and #206 (Codex's Windows sandbox identity and root
   permissions on Windows).
 - Evaluations: #170, #171, #172 and #178.

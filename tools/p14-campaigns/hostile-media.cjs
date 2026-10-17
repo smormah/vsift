@@ -158,16 +158,17 @@ async function runCase(spec, canaries) {
  * The findings already filed as issues, by case id: the issue, and the one
  * operation and outcome it was filed for. A run that finds only these does not
  * fail; the same case answering anything else is a new finding
- * (judge.trackedIssue). One is left: `ingest` of a symbolic link answers
+ * (judge.trackedIssue). None is left. `ingest` of a symbolic link answers
  * `STORAGE_IO`, a published code that does not change within v1 (#265, known
- * limit L-127). The named pipe (#264) has passed since 0.2.0-rc.1, and the
- * no-room case (#266) passes now that it names a root VSift creates (#310).
+ * limit L-127); since the maintainer's decision of 2026-10-18 (plan section
+ * 32) that answer, with its remediation, meets RQ-10's rule and the case pins
+ * it. The named pipe (#264) has passed since 0.2.0-rc.1, and the no-room case
+ * (#266) passes now that it names a root VSift creates (#310).
  */
-const TRACKED = Object.freeze({
-  'symlink-to-canary': Object.freeze({ issue: 265, op: 'ingest', outcome: 'failed STORAGE_IO' }),
-});
+const TRACKED = Object.freeze({});
 
-function markdown(report) {
+/** @param {object} report @param {typeof TRACKED} [tracked] the filed findings (a test passes its own, since none is filed now) */
+function markdown(report, tracked = TRACKED) {
   const headline = report.ok
     ? 'every operation held'
     : report.fresh.length === 0 && report.containmentOk
@@ -184,7 +185,7 @@ function markdown(report) {
   if (report.findingsList.length > 0) {
     lines.push('### Findings', '');
     for (const finding of report.findingsList) {
-      const issue = judge.trackedIssue(finding, TRACKED);
+      const issue = judge.trackedIssue(finding, tracked);
       lines.push(`- \`${finding.id}\` ${finding.op}: ${finding.findings.join('; ')}${issue === null ? ' (NEW)' : ` (tracked: #${issue})`}`);
     }
     for (const id of report.fixed) lines.push(`- \`${id}\` is tracked and now passes: remove it from TRACKED`);

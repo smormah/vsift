@@ -3006,7 +3006,7 @@ they find is an issue first.
 a tool), the full-cost items run in the window of the candidate that carries the change: agent batches 2 and 3 (the agent-trial runbook, [`trials.md`](../agents/trials.md)),
 the dependency-quality checks (`P07 local ASR` accuracy, `P14 malicious media` and the dated scan reading) and the full durability campaign. They are **not run weekly**. In an ordinary
 week, a change to the skill's wording gets the uncounted skill smoke (about nine Claude runs on a local build, about $6 and 15 minutes) instead. It is not evidence for RQ-15 or RQ-16, so a candidate whose skill
-changed still needs those items passed, carried or waived before the stable release: the ledger's rule is unchanged.
+changed still needs those items passed, carried or waived before the stable release: the ledger's rule is unchanged. **One exception to read with it (2026-10-18, [`p14-qualification.md`](../planning/p14-qualification.md) section 32):** RQ-10's waiver ends with `0.2.1`, so the first candidate after it runs `P14 malicious media` on its own bytes and RQ-10 is recorded `passed` for it, although that run is otherwise a monthly one; the ledger entry stays `waived` until then only because the completeness check cannot end a waiver by date, and the campaign's judge already pins the link's `STORAGE_IO` and its remediation (the same change).
 
 **The weekly drift runs stay** (`P14 journeys`, `P13 managed smoke`, `P07 local ASR`, `Fuzz` and the durability campaigns, on their schedules). A failure of one opens an issue by itself. That needs a workflow change;
 until it lands, read the Actions page each Monday and file the issue by hand.
