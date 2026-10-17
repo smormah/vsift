@@ -80,6 +80,7 @@ lzma-rust2 = { workspace = true, features = ["encoder"] }
 proptest.workspace = true
 
 [target.'cfg(windows)'.dependencies]
+fs4.workspace = true
 windows.workspace = true
 windows-acl.workspace = true
 

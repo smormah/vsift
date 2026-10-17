@@ -665,6 +665,68 @@ L-147, now removed). The text above is kept as it was written.
    the direct rule's for the revision it committed and for a direct run on the same session, and
    the replay returns it). The engine test failed before the change (`complete`, `coverage: null`).
 
+## Note, 2026-10-18 (#266): the free-space checks on Windows, and the `fs4` dependency
+
+The PR 2 notes say a workspace's reserve is checked "on Unix" and that "Windows reports
+`not_enforced`"; the text above is kept as written and this note supersedes it. The
+maintainer decided on 2026-10-18 to add the Windows check after a dependency review.
+
+**What changed.** The two checks before a source copy, a workspace's reserve (the source's
+size and 1 GiB, a guarantee, `RESOURCE_LIMIT`) and a desktop root's room check (the source's
+size and 16 MiB, best effort, `STORAGE_IO` with its own remediation, #266), now read the free
+space on Windows too, with the same decision (`decide_room`), the same codes and the same
+remediation as Unix. Only the reading differs: on Windows it is the bytes free to the caller
+on the volume that holds the root's canonical path (`GetDiskFreeSpaceExW`'s first answer,
+which honours a per-user quota, the counterpart of Unix's `f_bavail`). A job result's
+`controls.free_space_reserve` is `enforced` for an ingest target on every platform; a request
+recorded by a 0.2.1 Windows host replays its `not_enforced`. A Windows workspace whose space
+cannot be read now refuses the copy (`STORAGE_IO`), as a Unix one always did; a desktop root
+still steps aside (known limit [L-061](../planning/known-limits.md#l-061)).
+
+**Why a path and not the held handle.** Unix reads `fstatvfs` on the held root. Windows'
+handle-based query (`NtQueryVolumeInformationFile`) and the free-space calls of the `windows`
+crate are all `unsafe`, which VSift crates forbid. The canonical path is what the root's DACL
+check already reads on Windows. A path that names another folder than the held root by the
+time it is read (only the root's owner can rename a private root) gives another volume's
+number, which can make the check wrong, never a commit.
+
+**The dependency review (`AGENTS.md`).** `fs4` 1.1.0, Windows only, without default
+features (the filesystem-statistics functions alone, no file locks):
+
+- *Need:* a free-space reading on Windows without `unsafe` in a VSift crate. No crate already
+  in the lock offers one: `cap-std`, `cap-primitives`, `cap-fs-ext`, `winx` and `io-extras`
+  have no such call (their sources were searched), `rustix` has no Windows backend for it,
+  and the standard library has none.
+- *API:* `fs4::available_space(path) -> io::Result<u64>`: `GetVolumePathNameW` on the path,
+  then `GetDiskFreeSpaceExW` and `GetDiskFreeSpaceW` on the volume. Its `unsafe` is those three
+  FFI calls (a NUL-terminated input, a 261-character output buffer passed with its length,
+  out-parameters), reviewed. Its residuals: a volume path longer than 260 characters (a
+  folder mounted at a very long path) and a volume where either call fails read as
+  unreadable space, which a desktop root steps aside for and a workspace refuses.
+- *Licence:* MIT OR Apache-2.0, both allowed by `deny.toml`.
+- *Maintenance:* the repository (`al8n/fs4`, a maintained fork of `fs2`) is not archived; four
+  releases in April 2026 (1.0.0 on 2026-04-22 to 1.1.0 on 2026-04-28, more than five months
+  before this review), 1.0.1 among them correcting the Windows reading to the caller's free
+  bytes; one open issue when reviewed. Its declared MSRV is 1.75, below VSift's 1.98.
+- *Transitive dependencies:* on Windows `windows-sys` 0.61 (features `Win32_Foundation`,
+  `Win32_Storage_FileSystem`, `Win32_System_IO`), already in the lock at 0.61.2; elsewhere
+  `rustix` 1, already in the lock, and never built because VSift names `fs4` for Windows only.
+  **One new crate, `fs4`, and no other.** Cargo also re-pointed the Windows edge of `errno`,
+  `rustix` and `tempfile` from `windows-sys` 0.59.0 to 0.61.2 (both already in the lock;
+  each of those crates accepts `>=0.52, <0.62`).
+- *`cargo deny check`:* advisories ok, bans ok, licences ok, sources ok; the duplicate warnings
+  are the same six crates as before the change (`base64`, `getrandom`, `io-lifetimes`, `r-efi`,
+  `syn`, `windows-sys`), so none is new.
+
+*Rejected:* the `windows` crate VSift names directly since #432 (0.62.2) and `windows-sys`
+directly, because `GetDiskFreeSpaceExW` is `unsafe` in both; `fs2` 0.4.3, the original, because
+it is unmaintained (its last release and last commit are of January 2018, 24 open issues)
+and needs `winapi` 0.3; `sysinfo` 0.39, because it lists disks by mount point rather than answering for a
+path (VSift would have to match the root to a mount itself, which misses mounted folders and
+shares), and brings a whole-system information crate and many more `windows` features for one
+number; and running `fsutil volume diskfree` or PowerShell, because a process per ingest with
+locale-dependent output is slower and more fragile than one call.
+
 ## Consequences
 
 - The worker request and result are public v1 contracts before any command uses them,

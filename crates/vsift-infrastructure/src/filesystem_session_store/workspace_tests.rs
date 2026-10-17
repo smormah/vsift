@@ -136,54 +136,38 @@ fn a_durable_workspace_fails_closed_off_the_qualified_profile() -> TestResult {
 
 /// #266: a desktop root is also refused a copy that cannot fit, before it
 /// starts: the source's size plus a small margin must be free, without the
-/// worker workspace's 1 GiB reserve. Windows reports that it did not check.
+/// worker workspace's 1 GiB reserve. On every platform: Windows reads its free
+/// space too since the room check came to Windows (#266), and before that this
+/// test expected `NotEnforced` there, so it fails on Windows without the check.
 #[test]
-fn a_copy_that_cannot_fit_is_refused_before_it_starts_on_unix_only() -> TestResult {
+fn a_copy_that_cannot_fit_is_refused_before_it_starts() -> TestResult {
     let fixture = Fixture::new()?;
     let store = FilesystemSessionStore::open_existing(&fixture.path)?;
     let impossible = u64::MAX - super::root::COPY_ROOM_MARGIN_BYTES;
-    if cfg!(unix) {
-        assert_eq!(store.ensure_room_for_copy(0), Ok(FreeSpaceCheck::Enforced));
-        assert_eq!(
-            store.ensure_room_for_copy(impossible),
-            Err(SessionStorageError::CapacityExhausted)
-        );
-        // The reserve is not part of this check: a source that leaves less
-        // than 1 GiB free but fits is allowed here and refused there.
-        const { assert!(super::root::COPY_ROOM_MARGIN_BYTES < FREE_SPACE_RESERVE_BYTES) };
-    } else {
-        for incoming in [0, impossible] {
-            assert_eq!(
-                store.ensure_room_for_copy(incoming),
-                Ok(FreeSpaceCheck::NotEnforced)
-            );
-        }
-    }
+    assert_eq!(store.ensure_room_for_copy(0), Ok(FreeSpaceCheck::Enforced));
+    assert_eq!(
+        store.ensure_room_for_copy(impossible),
+        Err(SessionStorageError::CapacityExhausted)
+    );
+    // The reserve is not part of this check: a source that leaves less than
+    // 1 GiB free but fits is allowed here and refused there.
+    const { assert!(super::root::COPY_ROOM_MARGIN_BYTES < FREE_SPACE_RESERVE_BYTES) };
     Ok(())
 }
 
-/// The free-space reserve (P11 PR 2): on Unix a copy that would leave less
-/// than the reserve free is refused as a capacity error before anything is
-/// written; Windows reports that it did not check.
+/// The free-space reserve (P11 PR 2): a copy that would leave less than the
+/// reserve free is refused as a capacity error before anything is written. On
+/// every platform since #266 (Windows reported `NotEnforced` before).
 #[test]
-fn the_free_space_reserve_is_checked_on_unix_only() -> TestResult {
+fn the_free_space_reserve_is_checked_before_a_copy() -> TestResult {
     let fixture = Fixture::new()?;
     let store = FilesystemSessionStore::open_existing(&fixture.path)?;
     let impossible = u64::MAX - FREE_SPACE_RESERVE_BYTES;
-    if cfg!(unix) {
-        assert_eq!(store.ensure_free_space(0), Ok(FreeSpaceCheck::Enforced));
-        assert_eq!(
-            store.ensure_free_space(impossible),
-            Err(SessionStorageError::CapacityExhausted)
-        );
-    } else {
-        for incoming in [0, impossible] {
-            assert_eq!(
-                store.ensure_free_space(incoming),
-                Ok(FreeSpaceCheck::NotEnforced)
-            );
-        }
-    }
+    assert_eq!(store.ensure_free_space(0), Ok(FreeSpaceCheck::Enforced));
+    assert_eq!(
+        store.ensure_free_space(impossible),
+        Err(SessionStorageError::CapacityExhausted)
+    );
     Ok(())
 }
 

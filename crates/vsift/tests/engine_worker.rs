@@ -303,6 +303,12 @@ async fn a_request_runs_once_and_is_replayed() -> TestResult {
     assert_eq!(value["steps"][1]["outputs"]["bundle_name"], "talk-review");
     assert_eq!(value["lifecycle"]["mode"], "durable_worker");
     assert_eq!(value["publication"], "process_crash_consistent");
+    // The ingest's copy checked the workspace's free-space reserve, on every
+    // platform since #266 (Windows reported `not_enforced` before).
+    assert_eq!(
+        value["controls"]["free_space_reserve"], "enforced",
+        "{value}"
+    );
     let bundle = engine.validate_bundle(&layout.bundles().join("talk-review"))?;
     assert_eq!(
         value["steps"][1]["outputs"]["bundle_sha256"],

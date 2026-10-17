@@ -420,7 +420,8 @@ full jitter for at most 60 s. The root's policy (capacity, and for a worker work
 its durability and retention) is recorded once in its marker and is immutable: a
 marker changed underneath an open store is an integrity failure. Model memory
 estimates, GPU tokens and expected disk usage are not yet part of a reservation; a
-workspace checks a 1 GiB free-space reserve before each copy on Unix. There is no
+workspace checks a 1 GiB free-space reserve before each copy (on Windows too since
+#266, which reads the root volume's space free to the user). There is no
 ordering between processes sharing a root (known limit L-060). A strict Linux worker
 is accepted only after the kernel attests the inherited cgroup v2 CPU, memory and PID
 limits, a read-only root and loopback-only networking (`--host-isolation
@@ -449,8 +450,9 @@ in effective configuration, validated before work, and tested at boundaries.
 As implemented through P11 PR 2: a desktop root admits 4 weight units; a worker
 workspace sets 1 to 64 when it is created (`session init-workspace`), with its
 sessions' retention (default 168 hours, 1 to 720, renewable within a 720-hour life)
-and durability. A workspace keeps 1 GiB free beyond each source copy on Unix; Windows
-does not check (known limit L-061).
+and durability. A workspace keeps 1 GiB free beyond each source copy, on Windows too
+since #266 (0.2.2, not released); it is a check before the copy, not a quota (known
+limit L-061).
 
 Long audio must be streamed/chunked: four hours of mono 16 kHz 16-bit PCM is roughly
 461 MB before overhead. Never load it all into memory. Enforce output quotas during

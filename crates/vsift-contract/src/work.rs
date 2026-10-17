@@ -134,13 +134,16 @@ impl ResourceLimits {
 }
 
 /// Whether the workspace's free-space reserve was checked before a source
-/// was copied into it (P11 PR 2): on Unix the filesystem's available space
-/// is compared with the source and the reserve; on Windows it is not.
+/// was copied into it (P11 PR 2): the filesystem's available space is
+/// compared with the source and the reserve, on every platform since #266
+/// (Windows reported `not_enforced` for an ingest before; a request recorded
+/// then replays that answer). A request with no copy reports `not_enforced`.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum FreeSpaceReserve {
     /// Checked before the copy.
     Enforced,
-    /// Not checked on this platform.
+    /// Not checked: the request copies no source (or was recorded by a
+    /// Windows host before #266).
     NotEnforced,
 }
 

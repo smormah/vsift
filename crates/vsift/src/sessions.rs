@@ -116,17 +116,19 @@ pub struct IngestOutcome {
     /// The imported revision, committed in the same generation as the source.
     pub transcript: Option<TranscriptRevision>,
     /// Whether the workspace's free-space reserve was checked before the
-    /// copy: only a worker workspace on Unix checks it (P11 PR 2).
+    /// copy: only a worker workspace checks it (P11 PR 2), on every platform
+    /// since #266.
     pub free_space: FreeSpaceReserveCheck,
 }
 
 /// Whether an ingest checked the free-space reserve before its copy.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum FreeSpaceReserveCheck {
-    /// A workspace on Unix: the filesystem had the source's size and the
-    /// 1 GiB reserve free before the copy.
+    /// A worker workspace: the filesystem had the source's size and the
+    /// 1 GiB reserve free before the copy (on Windows too since #266).
     Enforced,
-    /// A desktop root, or a workspace on Windows: nothing was checked.
+    /// A desktop root: it has no reserve to check. Its own room check (the
+    /// source's size and a small margin, best effort) is not reported here.
     NotEnforced,
 }
 
