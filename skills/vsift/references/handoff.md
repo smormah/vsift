@@ -285,9 +285,9 @@ exhausted budget is status `partial` with a `budget_exhausted` gap, the limit in
 
 - Check the whole draft once with `vsift handoff check`, in one of the two forms of
   [commands.md](commands.md) ("Checking the draft"), and fix what it reports. A report over
-  64 KiB cannot be checked: shorten it. If it is long (about 5,500 characters or more) or you
-  are unsure, check two parts, the text above the block and then the block, as that section
-  says.
+  128 KiB cannot be checked: shorten it. On Windows prefer the PowerShell form, which takes a long
+  report whole; in Git Bash a report of about 5,500 characters or more (or unsure) is checked in
+  parts, the text above the block and then the block, as that section says.
 - The final message ends with exactly one `vsift-handoff` block, also when you stop
   early (a missing tool, an expired session, a budget): SKILL.md's REPORT state shows
   its shape and says what a stop before any evidence holds. Never save the report to

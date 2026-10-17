@@ -2,7 +2,7 @@
 //!
 //! The draft arrives on standard input (the skill's quoted heredoc or
 //! single-quoted here-string) or from `--file`. It is read bounded to
-//! 64 KiB and must be UTF-8; anything larger, or not text, is the caller's
+//! 128 KiB (64 KiB until `0.2.2`, #366) and must be UTF-8; anything larger, or not text, is the caller's
 //! input error. Everything else about the draft is an answer, not a
 //! failure: the result is `complete` with `data.valid`, and the process
 //! exits 0 (decision H1). The check itself lives in `vsift_contract`, which

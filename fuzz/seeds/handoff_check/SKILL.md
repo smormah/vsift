@@ -264,9 +264,9 @@ vsift frame burst <session> --from <from-us> --to <to-us> --max-frames <n> --jso
   the link ("a download link"); write no other address; no Markdown link, absolute path, drive letter or home
   folder (cite evidence ids); a retained bundle is "the folder you named".
 - **Then run `vsift handoff check` on your draft once, fix what it reports, then send**: your whole message as
-  `<report>`, in bash or sh exactly so (Git Bash too; PowerShell: commands.md). If it is long (about 5,500
-  characters or more, or unsure), check two parts, the text above the block, then the block (commands.md);
-  over 64 KiB, shorten it:
+  `<report>`, in bash or sh exactly so. On Windows use the PowerShell form when you have it (commands.md): it takes
+  a long report whole. In Git Bash, a report of about 5,500 characters or more (or unsure) is checked in parts
+  (commands.md); over 128 KiB, shorten it:
 
 ```sh
 vsift handoff check --json <<'VSIFT_HANDOFF'

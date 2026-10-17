@@ -1920,7 +1920,7 @@ Usage: vsift handoff check [OPTIONS]
 
 Options:
       --file <FILE>
-          Absolute path of a file holding the whole draft report (at most 64 KiB of UTF-8); without it the draft is read from standard input
+          Absolute path of a file holding the whole draft report (at most 128 KiB of UTF-8); without it the draft is read from standard input
 
       --json
           Emit one versioned JSON terminal result

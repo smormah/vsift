@@ -141,8 +141,10 @@ Before you send the report, check it once with `vsift handoff check`. Pass your 
 final message, unchanged, in place of `<report>`, in exactly one of these two forms and
 no other: no other command in the same call, no file, no variable. The quotes around
 the first `VSIFT_HANDOFF` and the single quotes of `@'` keep your text exactly as
-written. Each form belongs to one shell; never use the other shell's form. In bash or
-sh (Claude Code's Bash tool, Codex, and Git Bash on Windows):
+written. Each form belongs to one shell; never use the other shell's form. **On Windows,
+use the PowerShell form whenever your client has a PowerShell tool** (Claude Code does): it
+takes a long report whole and keeps every character, where Git Bash cuts a long command
+(below). In bash or sh (Claude Code's Bash tool, Codex, and Git Bash on Windows):
 
 ```sh
 vsift handoff check --json <<'VSIFT_HANDOFF'
@@ -159,18 +161,28 @@ report would end the quoting and the rest would run as commands):
 '@ | vsift handoff check --json
 ```
 
-**Size.** The check reads at most 64 KiB: a report longer than that cannot be checked (the answer
-is `INVALID_ARGUMENT`), so shorten it. The shell can fail first, before `vsift` runs. On Windows
-through Claude Code a report of about 5,500 characters passed in Git Bash and one of about 15,000
-in PowerShell; one of about 15,000 never reached `vsift` from Git Bash and one of about 70,000
-never started from PowerShell. You cannot count characters (no `wc`), so when the report is long
-(about 5,500 characters or more) or you are unsure, make two calls, each in the form for your
-shell. The two parts are the text above the `vsift-handoff` block, then the block alone, from its
-opening fence to its closing fence; never cut inside the JSON. If a part is still over about
-5,500 characters, shorten the report.
+**Size.** The check reads at most 128 KiB (64 KiB before VSift 0.2.2): a longer report cannot be
+checked (the answer is `INVALID_ARGUMENT`), so shorten it. The shell can fail first, before `vsift`
+runs, and you cannot count characters (no `wc`), so judge by length:
 
-- The text part is expected to answer `handoff_block_missing`: ignore that one. What matters are
-  its other findings (a path, a web link, a hidden character), each with its `line` in the report.
+- **PowerShell through Claude Code** receives the command outside the command line: a report of
+  140,000 characters reached `vsift` whole. Check the whole report in one call. If the call fails
+  before `vsift` starts because the command is too long, your client puts it on the command line
+  (about 30,000 characters at most): check in parts of at most about 30,000 characters.
+- **Git Bash on Windows** (Claude Code's Bash tool) gets the command on the command line and cuts it
+  at about 8,000 characters (each apostrophe counts as five), so the rest is lost or run as commands.
+  When the report is long (about 5,500 characters or more) or you are unsure, check it from
+  PowerShell if you can, otherwise in parts of at most about 5,500 characters.
+- Elsewhere, bash or sh: if a call fails before `vsift` starts, check in parts as for Git Bash.
+
+The parts are the text above the `vsift-handoff` block, cut only at the end of a line into as few
+pieces as the size allows, each checked in its own call, then the block alone, from its opening
+fence to its closing fence; never cut inside the JSON. If the block alone is over the size, check
+from PowerShell or shorten the report.
+
+- A text part is expected to answer `handoff_block_missing`: ignore that one. What matters are
+  its other findings (a path, a web link, a hidden character), each with its `line`, counted from
+  the part's first line.
 - The block part answers the schema and the rules (`pointer` names the member); a `line` in it
   counts from the block's first line (the opening fence), not from the report's.
 - Fix what either part reports, then send the whole message. The two calls are one check.

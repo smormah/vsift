@@ -521,6 +521,10 @@ example is `schemas/v1/examples/parse-failure.json`, and L-071 is closed.
   `vsift-contract::handoff`; the grader keeps only its grading policy and calls them.
   `jsonschema` becomes a production dependency after the dependency review.
 - Input per decision G, bounded to 64 KiB of UTF-8. Output per decision H1.
+  **Note of 2026-10-17 (#366):** the bound is 128 KiB from `0.2.2`. On Windows the skill's PowerShell form, run through a
+  client that hands PowerShell its script outside the process command line, delivers a report of 70,000 characters or more
+  whole, and 64 KiB was then the only limit left; a larger bound accepts more and refuses nothing it accepted, and the
+  check stays linear and bounded. The input forms (decision G) are unchanged.
 - `--session <id>` optionally resolves the draft's cited identities against that
   session's records, through the engine.
 - The skill's command class is `free`.

@@ -230,7 +230,7 @@ fn a_draft_on_standard_input_is_answered_with_its_verdict() -> TestResult {
 #[test]
 fn oversized_or_non_utf8_drafts_and_relative_files_are_invalid_arguments() -> TestResult {
     let root = OwnedRoot::new()?;
-    for input in [vec![b'a'; 64 * 1024 + 1], vec![b'a', 0xff, b'b']] {
+    for input in [vec![b'a'; 128 * 1024 + 1], vec![b'a', 0xff, b'b']] {
         let output = vsift(&root, &["handoff", "check", "--json"], &input)?;
         assert_eq!(exit(&output), Some(2));
         let value = json(&output)?;
@@ -240,9 +240,12 @@ fn oversized_or_non_utf8_drafts_and_relative_files_are_invalid_arguments() -> Te
             "none"
         );
     }
-    let at_limit = vec![b'a'; 64 * 1024];
-    let output = vsift(&root, &["handoff", "check", "--json"], &at_limit)?;
-    assert_eq!(exit(&output), Some(0), "64 KiB is within the bound");
+    // #366: 128 KiB since 0.2.2 (it was 64 KiB), so a report of 70,000
+    // characters or more is read and checked.
+    for within in [64 * 1024 + 1, 128 * 1024] {
+        let output = vsift(&root, &["handoff", "check", "--json"], &vec![b'a'; within])?;
+        assert_eq!(exit(&output), Some(0), "{within} bytes is within the bound");
+    }
 
     let output = vsift(
         &root,
