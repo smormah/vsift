@@ -26,9 +26,13 @@ on:
   push:
     branches:
       - main
+      # A release branch takes window fixes by pull request (release.md 6.8),
+      # and they pass the same gate.
+      - release/**
   pull_request:
     branches:
       - main
+      - release/**
     # `labeled` and `unlabeled` let the `full-ci` label start (or stop asking for)
     # the full run without a new push.
     types:

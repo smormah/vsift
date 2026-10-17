@@ -3,6 +3,13 @@ name: Release
 # Builds and packages VSift's native release archives (P13 PR 8, ADR 0023
 # section 1 and decision D) and keeps them only as this run's artifacts:
 #
+#   guard      first, in seconds, before anything is built (#337, release.md
+#              6.18): a dispatch runs only on `main`, the release branch
+#              `release/<MAJOR>.<MINOR>.x` of the workspace version or the tag
+#              v<version>, and only the tag publishes; a tag must be on that
+#              release branch, and a pre-release (a candidate) only from a
+#              commit whose latest Nightly run that tested it passed
+#              (governance rule 15). Every other job needs it.
 #   inventory  THIRD-PARTY-NOTICES (cargo-about) and a CycloneDX SBOM
 #              (cargo-cyclonedx) for each target, from the lockfile only.
 #   build      the `vsift` executable per target, built twice on the same
@@ -43,8 +50,11 @@ name: Release
 # Every run is a dry run (ADR 0023 section 1: it builds, checks and plans
 # everything, and writes nothing outside the run: no attestation, release or
 # package) except a manual dispatch on the tag v<version> of smormah/vsift with
-# `dry_run` cleared. Pull requests, pushes and forks never publish: the
-# privileged jobs' conditions and the plan both refuse them, and the lint in
+# `dry_run` cleared. Candidate and stable tags are made on the release branch
+# (ADR 0024, note of 2026-10-17), which takes window fixes by pull request
+# while `main` keeps taking merges. Pull requests, pushes and forks never
+# publish: the guard, the privileged jobs' conditions and the plan all refuse
+# them, and the lint in
 # tools/vsift-governance (workflows/publish.rs) holds this file to those rules.
 # The workflow never runs `npm dist-tag`: `latest` moves only by publishing a
 # stable version with `--tag latest`. The runbook is docs/operations/release.md
@@ -59,11 +69,13 @@ name: Release
 # licences, the toolchain and lockfile, the packaging tool, the launcher and
 # its qualification (npm/, and the console-event helper it uses on Windows)
 # and this workflow. A change elsewhere (documentation, the fixture corpus,
-# other tools) cannot.
+# other tools) cannot. A pull request to a release branch, and a push to one,
+# runs the same dry run as one to `main`.
 on:
   pull_request:
     branches:
       - main
+      - release/**
     paths:
       - .github/workflows/release.yml
       - crates/**
@@ -80,6 +92,7 @@ on:
   push:
     branches:
       - main
+      - release/**
     paths:
       - .github/workflows/release.yml
       - crates/**
@@ -94,13 +107,14 @@ on:
       - LICENSE-APACHE
       - LICENSE-MIT
   # A dispatch is a dry run unless `dry_run` is cleared, and a cleared
-  # `dry_run` publishes only on the tag v<version> (the plan job refuses any
-  # other ref). No tag push or release event starts this workflow: the
-  # maintainer creates the tag under the tag ruleset, then dispatches it.
+  # `dry_run` publishes only on the tag v<version> (the guard job refuses any
+  # other ref in seconds, and the plan job again). No tag push or release
+  # event starts this workflow: the maintainer creates the tag under the tag
+  # ruleset, then dispatches it.
   workflow_dispatch:
     inputs:
       dry_run:
-        description: Dry run (build, check and show the plan; publish nothing). Clear it only on the tag v<version> to publish, after the release environment's approval.
+        description: Dry run (build, check and show the plan; publish nothing). Choose the tag v<version> in "Use workflow from" (not main) and clear it only there to publish, after the release environment's approval.
         type: boolean
         default: true
 
@@ -136,8 +150,226 @@ env:
   VERDACCIO_VERSION: "6.10.4"
 
 jobs:
+  # The first job and the only one without `needs`, so a dispatch on the wrong
+  # ref, or a candidate from a commit the nightly has not passed, is refused in
+  # seconds rather than after the thirteen build and qualification jobs (#337).
+  # It reads the workspace manifest and GitHub's records of this repository,
+  # and nothing else: no build, no secret, no write scope. The plan job's own
+  # check of the ref stays (defence in depth).
+  #
+  # Which refs may run each mode (release.md 6.18):
+  #   dry run (dispatch, dry_run set)  main; release/<MAJOR>.<MINOR>.x of the
+  #                                    workspace version; the tag v<version>
+  #   publish (dry_run cleared)        the tag v<version> only, in smormah/vsift
+  # On the tag, the dry run is the rehearsal of the publish and is held to the
+  # same rules: the tag must still name the commit this run built (an
+  # annotated tag peeled; a re-run of an old run after the tag moved is
+  # refused), that commit must be on the release branch (compared with the
+  # branch head's own commit, so a tag of the branch's name cannot stand in),
+  # the rulesets that apply to the branch must hold the five rule types of
+  # release.md 6.2 step 8, and for a pre-release (a candidate) the latest
+  # Nightly run that tested exactly that commit must have passed, with no run
+  # of it still in progress. A stable version is not asked for a nightly of
+  # its own: its code is its accepted candidate's, which the plan compares
+  # (6.8). The publish job asks all of it again after the approval.
+  #
+  # Why exactly that commit (governance rule 15): a pass of a later commit
+  # does not show that this one passes, because the later commit may hold the
+  # very fix of this one's failure (the stop-the-line fix is such a commit),
+  # and a commit of a release branch is never an ancestor of `main` when
+  # pull requests are squashed. Only a run whose head is the commit tested the
+  # bytes the candidate is built from. The latest such run decides, so a pass
+  # followed by a failed re-run is refused. A scheduled run that found nothing
+  # new on `main` concludes `success` having run nothing, so a run in which
+  # only one job ran is passed over, not counted; only `schedule` and
+  # `workflow_dispatch` runs count; and every job of the deciding run but
+  # `Report a failure` must have concluded `success` (a skipped check is not a
+  # passed one). A commit no nightly tested gets one by dispatch (`gh workflow
+  # run nightly.yml --ref <branch>`).
+  guard:
+    name: Ref and nightly guard
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Check out the workspace manifest
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: /Cargo.toml
+          sparse-checkout-cone-mode: false
+
+      - name: Refuse a wrong ref, or a candidate without a passed nightly, before anything is built
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          GIT_REF: ${{ github.ref }}
+          REPOSITORY: ${{ github.repository }}
+          DRY_RUN_INPUT: ${{ github.event.inputs.dry_run }}
+          SOURCE_COMMIT: ${{ github.sha }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          refuse() {
+            echo "Refused before anything is built: $*" >&2
+            printf '## Release: refused before anything is built\n\n%s\n' "$*" >> "${GITHUB_STEP_SUMMARY}"
+            exit 1
+          }
+          note() {
+            echo "$*"
+            printf '%s\n\n' "$*" >> "${GITHUB_STEP_SUMMARY}"
+          }
+          # nightly_passed: whether the latest Nightly run that tested exactly
+          # SOURCE_COMMIT passed, with no run of it still in progress (the rules are
+          # in the guard job's comment); sets `verdict` either way.
+          nightly_passed() {
+            local runs_filter jobs_filter runs started id status conclusion jobs ran failing
+            runs_filter='.workflow_runs[] | select(.event == "schedule" or .event == "workflow_dispatch") | "\(.run_started_at) \(.id) \(.status) \(.conclusion)"'
+            jobs_filter='.jobs[] | "\(.conclusion // "unfinished")\t\(.name)"'
+            runs="$(gh api "repos/smormah/vsift/actions/workflows/nightly.yml/runs?head_sha=${SOURCE_COMMIT}&per_page=100" --jq "${runs_filter}")" || {
+              verdict="the Nightly runs of ${SOURCE_COMMIT} could not be read"
+              return 1
+            }
+            while read -r started id status conclusion; do
+              if [ -n "${id}" ] && [ "${status}" != completed ]; then
+                verdict="Nightly run ${id} of ${SOURCE_COMMIT} is still ${status}: wait for it to finish, then dispatch again"
+                return 1
+              fi
+            done <<< "${runs}"
+            while read -r started id status conclusion; do
+              [ -n "${id}" ] || continue
+              jobs="$(gh api "repos/smormah/vsift/actions/runs/${id}/jobs?per_page=100" --jq "${jobs_filter}")" || {
+                verdict="the jobs of Nightly run ${id} could not be read"
+                return 1
+              }
+              ran="$(printf '%s\n' "${jobs}" | awk -F '\t' '$2 != "" && $1 != "skipped" { n++ } END { print n + 0 }')"
+              if [ "${ran}" -le 1 ]; then
+                echo "Nightly run ${id} (${started}) ran no check (nothing new on main that night): passed over"
+                continue
+              fi
+              failing="$(printf '%s\n' "${jobs}" | awk -F '\t' '$2 != "" && $2 != "Report a failure" && $1 != "success" { list = list sep $2 " (" $1 ")"; sep = ", " } END { print list }')"
+              if [ "${conclusion}" = success ] && [ -z "${failing}" ]; then
+                verdict="Nightly run ${id} (${started}) passed on ${SOURCE_COMMIT}"
+                return 0
+              fi
+              verdict="the latest Nightly run that tested ${SOURCE_COMMIT}, run ${id} (${started}), concluded ${conclusion}${failing:+, with ${failing}}"
+              return 1
+            done < <(printf '%s\n' "${runs}" | sort -r)
+            verdict="no Nightly run has tested ${SOURCE_COMMIT}"
+            return 1
+          }
+          # on_release_branch: whether SOURCE_COMMIT is on the release branch, read
+          # by the branch head's own commit (a tag of the same name cannot stand in
+          # for the branch); sets `verdict` when it is not. On an error gh prints
+          # GitHub's error body, not the filter's answer: only the exit status counts.
+          on_release_branch() {
+            local head status
+            head="$(gh api "repos/smormah/vsift/git/ref/heads/${release_branch}" --jq .object.sha)" || head=""
+            if ! [[ "${head}" =~ ^[0-9a-f]{40}$ ]]; then
+              verdict="${release_branch} does not exist or could not be read"
+              return 1
+            fi
+            status="$(gh api "repos/smormah/vsift/compare/${SOURCE_COMMIT}...${head}?per_page=1" --jq .status)" || status=""
+            case "${status}" in
+              identical | ahead) return 0 ;;
+              "") verdict="the comparison of ${SOURCE_COMMIT} with ${release_branch} (${head}) could not be read" ;;
+              *) verdict="${SOURCE_COMMIT} is not on ${release_branch} (GitHub's comparison with its head ${head} says '${status}')" ;;
+            esac
+            return 1
+          }
+          # tag_commit: the commit the tag names now, an annotated tag peeled, in
+          # `tagged`; empty when GitHub cannot say. A tag moved after the dispatch
+          # must not get this run's build.
+          tag_commit() {
+            local ref_filter answer type sha
+            ref_filter='"\(.object.type) \(.object.sha)"'
+            tagged=""
+            answer="$(gh api "repos/smormah/vsift/git/ref/tags/${tag}" --jq "${ref_filter}")" || answer=""
+            for _ in 1 2 3 4; do
+              read -r type sha <<< "${answer}"
+              [[ "${sha}" =~ ^[0-9a-f]{40}$ ]] || return 1
+              case "${type}" in
+                commit)
+                  tagged="${sha}"
+                  return 0
+                  ;;
+                tag) answer="$(gh api "repos/smormah/vsift/git/tags/${sha}" --jq "${ref_filter}")" || answer="" ;;
+                *) return 1 ;;
+              esac
+            done
+            return 1
+          }
+          # release_branch_protected: whether the rulesets that apply to the release
+          # branch hold the five rule types of release.md 6.2 step 8; sets `verdict`
+          # when they do not.
+          release_branch_protected() {
+            local rules rule missing
+            rules="$(gh api "repos/smormah/vsift/rules/branches/${release_branch}?per_page=100" --jq '.[].type')" || {
+              verdict="the rules of ${release_branch} could not be read"
+              return 1
+            }
+            missing=""
+            for rule in creation deletion non_fast_forward pull_request required_status_checks; do
+              printf '%s\n' "${rules}" | grep -qx "${rule}" || missing="${missing:+${missing}, }${rule}"
+            done
+            [ -n "${missing}" ] || return 0
+            verdict="the rulesets of ${release_branch} have no ${missing} rule (release.md 6.2 step 8)"
+            return 1
+          }
+
+          if [ "${EVENT_NAME}" != workflow_dispatch ]; then
+            note "A ${EVENT_NAME} run is a dry run of its own branch; the ref and nightly rules apply to a dispatch."
+            exit 0
+          fi
+          version="$(awk '$0 == "[workspace.package]" { section = 1; next } /^\[/ { section = 0 } section && $1 == "version" && $2 == "=" { gsub(/"/, "", $3); print $3; exit }' Cargo.toml)"
+          [[ "${version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]] || refuse "the workspace version in Cargo.toml could not be read ('${version}')"
+          core="${version%%-*}"
+          release_branch="release/${core%.*}.x"
+          tag="v${version}"
+          case "${DRY_RUN_INPUT}" in
+            true) mode="dry run" ;;
+            false) mode=publish ;;
+            *) refuse "the dry_run input '${DRY_RUN_INPUT}' is neither true nor false" ;;
+          esac
+          case "${GIT_REF}" in
+            "refs/tags/${tag}") ;;
+            refs/heads/main | "refs/heads/${release_branch}")
+              if [ "${mode}" = publish ]; then
+                refuse "a publish is dispatched on the tag ${tag} (\"Use workflow from\": Tags), never on a branch; this run is on ${GIT_REF}. Dispatch it on the tag, or leave dry_run set"
+              fi
+              if [ "${GIT_REF}" = "refs/heads/${release_branch}" ] && [ "${REPOSITORY}" = smormah/vsift ] && [[ "${version}" == *-* ]]; then
+                if nightly_passed; then
+                  note "A dry run on ${release_branch}. A candidate tagged on this commit would meet the nightly precondition: ${verdict}."
+                else
+                  note "A dry run on ${release_branch}. **A candidate tagged on this commit would be refused:** ${verdict}."
+                fi
+              else
+                note "A dry run on ${GIT_REF#refs/heads/}: it builds, checks and plans, and publishes nothing."
+              fi
+              exit 0
+              ;;
+            *)
+              refuse "the Release workflow is dispatched as a dry run only on main, ${release_branch} or the tag ${tag}, and publishes only on the tag ${tag}; this run is on ${GIT_REF}"
+              ;;
+          esac
+          [ "${REPOSITORY}" = smormah/vsift ] || refuse "a release tag is dispatched only in smormah/vsift, not in ${REPOSITORY}"
+          tag_commit || tagged=""
+          [ "${tagged}" = "${SOURCE_COMMIT}" ] || refuse "the tag ${tag} names ${tagged:-nothing GitHub could read} now, not ${SOURCE_COMMIT}, the commit this run built (a re-run of a run from before the tag moved): dispatch the tag again"
+          on_release_branch || refuse "the tag ${tag} must be on ${release_branch}, where candidates and stable releases are made: ${verdict}"
+          release_branch_protected || refuse "a release is made only on a protected release branch: ${verdict}"
+          if [[ "${version}" == *-* ]]; then
+            nightly_passed || refuse "a release candidate is made only from a commit whose latest Nightly run passed (governance rule 15): ${verdict}. Run it on that commit with: gh workflow run nightly.yml --repo smormah/vsift --ref ${release_branch} (when the branch's head is the commit), and dispatch again when it has passed"
+            note "The nightly precondition holds: ${verdict}."
+          else
+            note "A stable version: its code is its accepted candidate's, which met the nightly precondition when it was made; the plan compares the two (release.md 6.8)."
+          fi
+          note "The ${mode} of ${tag} (on ${release_branch}) goes on to the build."
+
   inventory:
     name: Notices and SBOMs
+    needs:
+      - guard
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
@@ -186,6 +418,8 @@ jobs:
 
   build:
     name: Build (${{ matrix.target }})
+    needs:
+      - guard
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 90
     permissions:
@@ -558,6 +792,12 @@ jobs:
       version: ${{ steps.plan.outputs.version }}
       tag: ${{ steps.plan.outputs.tag }}
       channel: ${{ steps.plan.outputs.channel }}
+      # The four packages' dist-tags as the plan read them, before anything
+      # was published (`<package> <latest> <next>`, `none` for a tag that is
+      # not set, `unknown` for what could not be read). The publish job takes
+      # its "before" from here: a re-run of failed jobs keeps this output, so a
+      # stale read after a partial publish cannot pass for the old value.
+      tags-before: ${{ steps.plan.outputs.tags-before }}
       plan-sums: ${{ steps.plan-sums.outputs.sums }}
     steps:
       # The full history and every tag: a stable version's plan compares this
@@ -785,14 +1025,19 @@ jobs:
       && startsWith(github.ref, 'refs/tags/v')
       && needs.plan.outputs.mode == 'publish'
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    # Publishing takes a few minutes, the read-back of the dist-tags up to 20
+    # and the GitHub release about one.
+    timeout-minutes: 45
     environment:
       name: release
       url: https://www.npmjs.com/package/vsift-cli/v/${{ needs.plan.outputs.version }}
     concurrency:
       group: release-publish
       cancel-in-progress: false
+    # `actions: read` is for the re-check of the Nightly runs after the
+    # approval; the two write scopes are the publish's own.
     permissions:
+      actions: read
       id-token: write
       contents: write
     env:
@@ -844,20 +1089,171 @@ jobs:
           cp publish-plan/*.cdx.json publish-plan/*.THIRD-PARTY-NOTICES.txt release-assets/
           require_exactly release-assets "${GITHUB_WORKSPACE}/publish-plan/release-assets.sha256"
 
-      # The four packages' dist-tags before anything is published. A
-      # publication moves exactly one tag of each package (`next` for a
-      # pre-release, `latest` for a stable version) and leaves the other where
-      # it was; the steps after the publish check both. `none` stands for a tag
-      # that is not set.
+      # The four packages' dist-tags before anything is published, as the
+      # plan job read them (#403's recovery): never read again here, because a
+      # re-run of failed jobs after a partial publish would read the new tags,
+      # or a stale copy of them. A publication moves exactly one tag of each
+      # package (`next` for a pre-release, `latest` for a stable version) and
+      # leaves the other where it was; the steps after the publish check both.
+      # `none` stands for a tag that is not set; a package the plan could not
+      # read stops the publish here.
       - name: Record the dist-tags before publishing
+        env:
+          TAGS_BEFORE: ${{ needs.plan.outputs.tags-before }}
         run: |
           set -euo pipefail
+          printf '%s\n' "${TAGS_BEFORE}" > "${RUNNER_TEMP}/plan-tags"
+          test "$(cut -d ' ' -f 1 "${RUNNER_TEMP}/plan-tags" | paste -sd ' ' -)" = "@vsift/darwin-arm64 @vsift/win32-x64 @vsift/linux-x64 vsift-cli"
           for package in @vsift/darwin-arm64 @vsift/win32-x64 @vsift/linux-x64 vsift-cli; do
-            latest="$(npm view "${package}" dist-tags.latest)"
-            next="$(npm view "${package}" dist-tags.next)"
-            printf '%s %s %s\n' "${package}" "${latest:-none}" "${next:-none}" >> "${RUNNER_TEMP}/tags-before"
-            echo "${package}: latest ${latest:-none}, next ${next:-none}"
+            read -r name latest next rest < <(grep -m 1 "^${package} " "${RUNNER_TEMP}/plan-tags")
+            if [ -n "${rest:-}" ] || [ "${latest}" = unknown ] || [ "${next}" = unknown ]; then
+              echo "the plan could not read npm's dist-tags of ${name}; dispatch the tag again" >&2
+              exit 1
+            fi
+            printf '%s %s %s\n' "${package}" "${latest}" "${next}" >> "${RUNNER_TEMP}/tags-before"
+            echo "${package}: latest ${latest}, next ${next}"
           done
+
+      # The guard's conditions again, after the approval and just before the
+      # first publication (the maintainer's decision of 2026-10-17): the
+      # approval can come days after the dispatch, and nothing may be published
+      # that no longer qualifies. A dispatch with dry_run cleared, in
+      # smormah/vsift, on the tag of the planned version; the tag still names
+      # the commit this run built; that commit still on its protected release
+      # branch; and for a pre-release (a candidate) the latest Nightly run that
+      # tested exactly that commit still passed. The four functions are the
+      # guard's, character for character (the lint compares them), so the rules
+      # cannot drift apart; only reads of GitHub, no build, no checkout.
+      - name: Re-check the guard's conditions after the approval, before anything is published
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          GIT_REF: ${{ github.ref }}
+          REPOSITORY: ${{ github.repository }}
+          DRY_RUN_INPUT: ${{ github.event.inputs.dry_run }}
+          SOURCE_COMMIT: ${{ github.sha }}
+          VERSION: ${{ needs.plan.outputs.version }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          refuse() {
+            echo "Refused after the approval, before anything is published: $*" >&2
+            printf '## Publish: refused after the approval, nothing is published\n\n%s\n' "$*" >> "${GITHUB_STEP_SUMMARY}"
+            exit 1
+          }
+          # nightly_passed: whether the latest Nightly run that tested exactly
+          # SOURCE_COMMIT passed, with no run of it still in progress (the rules are
+          # in the guard job's comment); sets `verdict` either way.
+          nightly_passed() {
+            local runs_filter jobs_filter runs started id status conclusion jobs ran failing
+            runs_filter='.workflow_runs[] | select(.event == "schedule" or .event == "workflow_dispatch") | "\(.run_started_at) \(.id) \(.status) \(.conclusion)"'
+            jobs_filter='.jobs[] | "\(.conclusion // "unfinished")\t\(.name)"'
+            runs="$(gh api "repos/smormah/vsift/actions/workflows/nightly.yml/runs?head_sha=${SOURCE_COMMIT}&per_page=100" --jq "${runs_filter}")" || {
+              verdict="the Nightly runs of ${SOURCE_COMMIT} could not be read"
+              return 1
+            }
+            while read -r started id status conclusion; do
+              if [ -n "${id}" ] && [ "${status}" != completed ]; then
+                verdict="Nightly run ${id} of ${SOURCE_COMMIT} is still ${status}: wait for it to finish, then dispatch again"
+                return 1
+              fi
+            done <<< "${runs}"
+            while read -r started id status conclusion; do
+              [ -n "${id}" ] || continue
+              jobs="$(gh api "repos/smormah/vsift/actions/runs/${id}/jobs?per_page=100" --jq "${jobs_filter}")" || {
+                verdict="the jobs of Nightly run ${id} could not be read"
+                return 1
+              }
+              ran="$(printf '%s\n' "${jobs}" | awk -F '\t' '$2 != "" && $1 != "skipped" { n++ } END { print n + 0 }')"
+              if [ "${ran}" -le 1 ]; then
+                echo "Nightly run ${id} (${started}) ran no check (nothing new on main that night): passed over"
+                continue
+              fi
+              failing="$(printf '%s\n' "${jobs}" | awk -F '\t' '$2 != "" && $2 != "Report a failure" && $1 != "success" { list = list sep $2 " (" $1 ")"; sep = ", " } END { print list }')"
+              if [ "${conclusion}" = success ] && [ -z "${failing}" ]; then
+                verdict="Nightly run ${id} (${started}) passed on ${SOURCE_COMMIT}"
+                return 0
+              fi
+              verdict="the latest Nightly run that tested ${SOURCE_COMMIT}, run ${id} (${started}), concluded ${conclusion}${failing:+, with ${failing}}"
+              return 1
+            done < <(printf '%s\n' "${runs}" | sort -r)
+            verdict="no Nightly run has tested ${SOURCE_COMMIT}"
+            return 1
+          }
+          # on_release_branch: whether SOURCE_COMMIT is on the release branch, read
+          # by the branch head's own commit (a tag of the same name cannot stand in
+          # for the branch); sets `verdict` when it is not. On an error gh prints
+          # GitHub's error body, not the filter's answer: only the exit status counts.
+          on_release_branch() {
+            local head status
+            head="$(gh api "repos/smormah/vsift/git/ref/heads/${release_branch}" --jq .object.sha)" || head=""
+            if ! [[ "${head}" =~ ^[0-9a-f]{40}$ ]]; then
+              verdict="${release_branch} does not exist or could not be read"
+              return 1
+            fi
+            status="$(gh api "repos/smormah/vsift/compare/${SOURCE_COMMIT}...${head}?per_page=1" --jq .status)" || status=""
+            case "${status}" in
+              identical | ahead) return 0 ;;
+              "") verdict="the comparison of ${SOURCE_COMMIT} with ${release_branch} (${head}) could not be read" ;;
+              *) verdict="${SOURCE_COMMIT} is not on ${release_branch} (GitHub's comparison with its head ${head} says '${status}')" ;;
+            esac
+            return 1
+          }
+          # tag_commit: the commit the tag names now, an annotated tag peeled, in
+          # `tagged`; empty when GitHub cannot say. A tag moved after the dispatch
+          # must not get this run's build.
+          tag_commit() {
+            local ref_filter answer type sha
+            ref_filter='"\(.object.type) \(.object.sha)"'
+            tagged=""
+            answer="$(gh api "repos/smormah/vsift/git/ref/tags/${tag}" --jq "${ref_filter}")" || answer=""
+            for _ in 1 2 3 4; do
+              read -r type sha <<< "${answer}"
+              [[ "${sha}" =~ ^[0-9a-f]{40}$ ]] || return 1
+              case "${type}" in
+                commit)
+                  tagged="${sha}"
+                  return 0
+                  ;;
+                tag) answer="$(gh api "repos/smormah/vsift/git/tags/${sha}" --jq "${ref_filter}")" || answer="" ;;
+                *) return 1 ;;
+              esac
+            done
+            return 1
+          }
+          # release_branch_protected: whether the rulesets that apply to the release
+          # branch hold the five rule types of release.md 6.2 step 8; sets `verdict`
+          # when they do not.
+          release_branch_protected() {
+            local rules rule missing
+            rules="$(gh api "repos/smormah/vsift/rules/branches/${release_branch}?per_page=100" --jq '.[].type')" || {
+              verdict="the rules of ${release_branch} could not be read"
+              return 1
+            }
+            missing=""
+            for rule in creation deletion non_fast_forward pull_request required_status_checks; do
+              printf '%s\n' "${rules}" | grep -qx "${rule}" || missing="${missing:+${missing}, }${rule}"
+            done
+            [ -n "${missing}" ] || return 0
+            verdict="the rulesets of ${release_branch} have no ${missing} rule (release.md 6.2 step 8)"
+            return 1
+          }
+
+          [[ "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]] || refuse "the planned version '${VERSION}' is not a release version"
+          core="${VERSION%%-*}"
+          release_branch="release/${core%.*}.x"
+          tag="v${VERSION}"
+          [ "${EVENT_NAME}" = workflow_dispatch ] && [ "${DRY_RUN_INPUT}" = false ] || refuse "only a dispatch with dry_run cleared publishes; this run is a ${EVENT_NAME} with dry_run '${DRY_RUN_INPUT}'"
+          [ "${GIT_REF}" = "refs/tags/${tag}" ] || refuse "a publish runs only on the tag ${tag}; this run is on ${GIT_REF}"
+          [ "${REPOSITORY}" = smormah/vsift ] || refuse "a release tag is dispatched only in smormah/vsift, not in ${REPOSITORY}"
+          tag_commit || tagged=""
+          [ "${tagged}" = "${SOURCE_COMMIT}" ] || refuse "the tag ${tag} names ${tagged:-nothing GitHub could read} now, not ${SOURCE_COMMIT}, the commit this run built (a re-run of a run from before the tag moved): dispatch the tag again"
+          on_release_branch || refuse "the tag ${tag} must be on ${release_branch}, where candidates and stable releases are made: ${verdict}"
+          release_branch_protected || refuse "a release is made only on a protected release branch: ${verdict}"
+          if [[ "${VERSION}" == *-* ]]; then
+            nightly_passed || refuse "a release candidate is published only while the latest Nightly run that tested its commit passed (governance rule 15): ${verdict}"
+            echo "The nightly precondition still holds: ${verdict}."
+          fi
+          echo "After the approval, ${tag} (${SOURCE_COMMIT}, on ${release_branch}) still qualifies: publishing."
 
       # With trusted publishing npm exchanges the job's OIDC token for a
       # one-publish token and adds npm provenance. NPM_BOOTSTRAP_TOKEN exists
@@ -953,32 +1349,56 @@ jobs:
             npm publish "./npm-packages/${file}" --tag latest --access public --provenance --ignore-scripts
           done
 
+      # npm's public metadata can show a publish minutes late (#403): about a
+      # minute and a half for 0.1.0, two and a half for 0.2.0, and more than
+      # five for one package of 0.2.1, which read right when the job was re-run
+      # nine minutes after it failed. So each package's dist-tags are read
+      # every 30 seconds until 20 minutes have passed (at most 40 rounds),
+      # bypassing npm's own cache; each read is cut off after 20 seconds and
+      # retried at most once inside npm, so a hung read cannot run the job
+      # into its timeout (a round of 8 reads is at most 160 s, and the step
+      # ends within about 23 minutes). A tag that still reads its value from before
+      # the publish, or gives no answer, is still on its way; any other value
+      # is a wrong answer and fails at once, and so does any move of the tag
+      # that must stay. Only a registry that never settles fails on time, and
+      # then the message says the packages were published (release.md 6.5).
       - name: Require next to be this version and latest to be untouched
         if: needs.plan.outputs.channel == 'prerelease'
         env:
           VERSION: ${{ needs.plan.outputs.version }}
         run: |
           set -euo pipefail
+          deadline=$((SECONDS + 1200))
           settled=no
-          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+          for attempt in $(seq 1 40); do
             settled=yes
             while read -r package latest next; do
-              next_now="$(npm view "${package}" dist-tags.next 2>/dev/null || true)"
-              if [ "${next_now}" != "${VERSION}" ]; then
+              next_now="$(timeout 20 npm view "${package}" dist-tags.next --prefer-online --fetch-retries=1 2>/dev/null || true)"
+              latest_now="$(timeout 20 npm view "${package}" dist-tags.latest --prefer-online --fetch-retries=1 2>/dev/null || true)"
+              if [ -n "${next_now}" ] && [ "${next_now}" != "${VERSION}" ] && [ "${next_now}" != "${next}" ]; then
+                echo "${package}: next reads '${next_now}', which is neither ${VERSION} nor its value before the publish (${next}): a wrong answer" >&2
+                exit 1
+              fi
+              if [ -n "${latest_now}" ] && [ "${latest_now}" != "${latest}" ]; then
+                echo "${package}: latest reads '${latest_now}'; it was ${latest} before the publish and a pre-release never moves it" >&2
+                exit 1
+              fi
+              if [ "${next_now}" != "${VERSION}" ] || { [ -z "${latest_now}" ] && [ "${latest}" != none ]; }; then
                 settled=no
-                echo "attempt ${attempt}: ${package} next is '${next_now}', waiting for ${VERSION}"
+                echo "attempt ${attempt}: ${package} next '${next_now:-no answer}', latest '${latest_now:-no answer}'; waiting for next ${VERSION}"
               fi
             done < "${RUNNER_TEMP}/tags-before"
-            if [ "${settled}" = yes ]; then
+            if [ "${settled}" = yes ] || [ "${SECONDS}" -ge "${deadline}" ]; then
               break
             fi
             sleep 30
           done
-          test "${settled}" = yes
+          if [ "${settled}" != yes ]; then
+            echo "npm accepted every publication above, but its metadata did not show next ${VERSION} with latest unchanged on all four packages within 20 minutes. Read the tags with npm view; when they are right, use Re-run failed jobs on this run (release.md 6.5)." >&2
+            exit 1
+          fi
           while read -r package latest next; do
-            latest_now="$(npm view "${package}" dist-tags.latest)"
-            echo "${package}: next ${VERSION}, latest ${latest_now:-none} (before: ${latest})"
-            test "${latest_now:-none}" = "${latest}"
+            echo "${package}: next ${VERSION} (before: ${next}), latest ${latest} (unchanged)"
           done < "${RUNNER_TEMP}/tags-before"
 
       - name: Require latest to be this version and next to be untouched
@@ -987,26 +1407,37 @@ jobs:
           VERSION: ${{ needs.plan.outputs.version }}
         run: |
           set -euo pipefail
+          deadline=$((SECONDS + 1200))
           settled=no
-          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+          for attempt in $(seq 1 40); do
             settled=yes
             while read -r package latest next; do
-              latest_now="$(npm view "${package}" dist-tags.latest 2>/dev/null || true)"
-              if [ "${latest_now}" != "${VERSION}" ]; then
+              latest_now="$(timeout 20 npm view "${package}" dist-tags.latest --prefer-online --fetch-retries=1 2>/dev/null || true)"
+              next_now="$(timeout 20 npm view "${package}" dist-tags.next --prefer-online --fetch-retries=1 2>/dev/null || true)"
+              if [ -n "${latest_now}" ] && [ "${latest_now}" != "${VERSION}" ] && [ "${latest_now}" != "${latest}" ]; then
+                echo "${package}: latest reads '${latest_now}', which is neither ${VERSION} nor its value before the publish (${latest}): a wrong answer" >&2
+                exit 1
+              fi
+              if [ -n "${next_now}" ] && [ "${next_now}" != "${next}" ]; then
+                echo "${package}: next reads '${next_now}'; it was ${next} before the publish and a stable version never moves it" >&2
+                exit 1
+              fi
+              if [ "${latest_now}" != "${VERSION}" ] || { [ -z "${next_now}" ] && [ "${next}" != none ]; }; then
                 settled=no
-                echo "attempt ${attempt}: ${package} latest is '${latest_now}', waiting for ${VERSION}"
+                echo "attempt ${attempt}: ${package} latest '${latest_now:-no answer}', next '${next_now:-no answer}'; waiting for latest ${VERSION}"
               fi
             done < "${RUNNER_TEMP}/tags-before"
-            if [ "${settled}" = yes ]; then
+            if [ "${settled}" = yes ] || [ "${SECONDS}" -ge "${deadline}" ]; then
               break
             fi
             sleep 30
           done
-          test "${settled}" = yes
+          if [ "${settled}" != yes ]; then
+            echo "npm accepted every publication above, but its metadata did not show latest ${VERSION} with next unchanged on all four packages within 20 minutes. Read the tags with npm view; when they are right, use Re-run failed jobs on this run (release.md 6.5): the GitHub release is created then." >&2
+            exit 1
+          fi
           while read -r package latest next; do
-            next_now="$(npm view "${package}" dist-tags.next)"
-            echo "${package}: latest ${VERSION} (before: ${latest}), next ${next_now:-none} (before: ${next})"
-            test "${next_now:-none}" = "${next}"
+            echo "${package}: latest ${VERSION} (before: ${latest}), next ${next} (unchanged)"
           done < "${RUNNER_TEMP}/tags-before"
 
       # A draft first, so a release whose upload fails is never public; then

@@ -9,8 +9,12 @@
 //! version moves `latest` and never `next`, each step refuses the other
 //! channel's version before anything is published, `latest` never moves
 //! backwards, a partial stable publish is completed by a re-run, and a
-//! registry that cannot be reached never fails the plan job. No real service
-//! is contacted and nothing is published.
+//! registry that cannot be reached never fails the plan job. It also runs the
+//! `guard` job's script against a stub `gh` (#337, governance rule 15: which
+//! refs each mode may use, the release branch, the nightly precondition) and
+//! the read-back of the dist-tags against a slow, a never-settling and a
+//! wrong registry (#403). No real service is contacted and nothing is
+//! published.
 //!
 //! The script needs GNU coreutils and `base64 -w`, which the publish job's own
 //! script needs too (it runs on Ubuntu), so the test runs on Linux; on another

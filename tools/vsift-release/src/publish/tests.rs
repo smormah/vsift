@@ -628,7 +628,9 @@ fn the_stable_plan_says_loudly_that_latest_moves_and_lists_what_moves_it()
     assert_eq!(plan.refusal(), None);
     assert_eq!(
         plan.outputs(),
-        "mode=publish\nversion=0.2.0\ntag=v0.2.0\nchannel=stable"
+        "mode=publish\nversion=0.2.0\ntag=v0.2.0\nchannel=stable\ntags-before<<END_OF_TAGS\n\
+         @vsift/darwin-arm64 0.0.0 0.2.0-rc.1\n@vsift/win32-x64 0.0.0 0.2.0-rc.1\n\
+         @vsift/linux-x64 0.0.0 0.2.0-rc.1\nvsift-cli 0.0.0 0.2.0-rc.1\nEND_OF_TAGS"
     );
     let commands: Vec<String> = plan
         .npm
@@ -820,7 +822,8 @@ fn a_stable_plan_on_a_pull_request_reports_what_would_refuse_it_and_carries_on()
         PublishMode::DryRun(DryRunReason::NotDispatched(TriggerEvent::PullRequest))
     );
     assert!(plan.outputs().starts_with("mode=dry-run\n"));
-    assert!(plan.outputs().ends_with("\nchannel=stable"));
+    assert!(plan.outputs().contains("\nchannel=stable"));
+    assert!(!plan.outputs().contains("mode=publish"));
     let markdown = plan.markdown();
     assert!(markdown.starts_with("## Publish plan: dry run, nothing is published"));
     assert!(markdown.contains("a real publication of this plan would move npm's `latest`"));

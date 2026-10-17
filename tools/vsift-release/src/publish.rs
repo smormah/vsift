@@ -44,7 +44,7 @@ use crate::{
     guards::{DistTagMove, Evaluation, Guard, GuardOutcome, Observations, evaluate},
     notes::release_notes,
     npm::{LAUNCHER_PACKAGE, sha256_hex},
-    registry::npm_integrity,
+    registry::{dist_tag_lines, npm_integrity},
     target::ReleaseTarget,
 };
 
@@ -705,6 +705,10 @@ pub(crate) struct PublishPlan {
     /// The evidence ledger's `release_delta` record, for an enforced stable plan
     /// whose guards all passed and that was given the run and date to name.
     pub release_delta: Option<serde_json::Value>,
+    /// The dist-tags the plan saw before anything was published, one line per
+    /// package ([`dist_tag_lines`]), when the registry was read: the publish
+    /// job's "before" values (#403).
+    pub dist_tags: Option<Vec<String>>,
 }
 
 /// The file `npm pack` writes for `package` at `version`: the name without
@@ -884,6 +888,7 @@ pub(crate) fn plan(
         moves,
         candidate,
         release_delta,
+        dist_tags: dist_tag_lines(&observations.registry),
     })
 }
 
@@ -972,13 +977,24 @@ impl PublishPlan {
     /// The plan job's outputs, one `name=value` line each, for
     /// `$GITHUB_OUTPUT`.
     pub(crate) fn outputs(&self) -> String {
-        format!(
+        let mut outputs = format!(
             "mode={}\nversion={}\ntag={}\nchannel={}",
             self.mode.output(),
             self.version.as_str(),
             self.version.git_tag(),
             self.channel().output()
-        )
+        );
+        // A multi-line output in GitHub's delimiter form; no line can be the
+        // delimiter, because each is `<package> <version|none|unknown> ...`.
+        if let Some(lines) = &self.dist_tags {
+            outputs.push_str("\ntags-before<<END_OF_TAGS\n");
+            for line in lines {
+                outputs.push_str(line);
+                outputs.push('\n');
+            }
+            outputs.push_str("END_OF_TAGS");
+        }
+        outputs
     }
 
     fn json(&self) -> Value {

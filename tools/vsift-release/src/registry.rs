@@ -18,6 +18,8 @@
 
 use std::{collections::BTreeMap, fs, io::Read, path::Path};
 
+use crate::publish::ReleaseVersion;
+
 use serde_json::Value;
 use sha2::{Digest, Sha512};
 
@@ -135,6 +137,46 @@ fn read_package(directory: &Path, package: &str) -> PackageState {
     }
 }
 
+/// The dist-tags the plan saw, one line per package in the order observed:
+/// `<package> <latest> <next>`, `none` for a tag that is not set (or a package
+/// npm does not have) and `unknown` for a package whose metadata could not be
+/// read or a tag that is not a release version. `None` when the registry was
+/// not read.
+///
+/// The publish job takes its "before" values from these lines (#403): a
+/// re-run of its failed job keeps the plan job's outputs, so the values are
+/// the ones from before anything was published, never a stale read taken
+/// after. A tag's text is untrusted and becomes a workflow output, so only a
+/// version that parses is written; anything else, a newline or a space in it
+/// included, is `unknown`, which stops the publish.
+pub(crate) fn dist_tag_lines(observation: &RegistryObservation) -> Option<Vec<String>> {
+    let RegistryObservation::Read(packages) = observation else {
+        return None;
+    };
+    let shown = |tag: Option<&String>| match tag {
+        None => String::from("none"),
+        Some(text) if ReleaseVersion::parse(text).is_ok() => text.clone(),
+        Some(_) => String::from("unknown"),
+    };
+    Some(
+        packages
+            .iter()
+            .map(|observed| {
+                let (latest, next) = match &observed.state {
+                    PackageState::Found(record) => {
+                        (shown(record.latest.as_ref()), shown(record.next.as_ref()))
+                    }
+                    PackageState::NotFound => (String::from("none"), String::from("none")),
+                    PackageState::Unreadable(_) => {
+                        (String::from("unknown"), String::from("unknown"))
+                    }
+                };
+                format!("{} {latest} {next}", observed.package)
+            })
+            .collect(),
+    )
+}
+
 /// Reads at most `limit` bytes of a file; a longer file is refused.
 fn read_limited(path: &Path, limit: u64) -> Result<Vec<u8>, String> {
     let file = fs::File::open(path).map_err(|error| error.kind().to_string())?;
@@ -229,9 +271,50 @@ mod tests {
     use std::{error::Error, fs};
 
     use super::{
-        PackageRecord, PackageState, RegistryObservation, base64, file_stem, npm_integrity,
-        parse_metadata, read_directory,
+        PackageObservation, PackageRecord, PackageState, RegistryObservation, base64,
+        dist_tag_lines, file_stem, npm_integrity, parse_metadata, read_directory,
     };
+
+    /// The publish job's "before" values: every state of a package, and a tag
+    /// whose text could smuggle another workflow output, is written safely.
+    #[test]
+    fn the_dist_tags_the_plan_saw_are_written_one_line_per_package() {
+        let found = |latest: Option<&str>, next: Option<&str>| {
+            PackageState::Found(PackageRecord {
+                latest: latest.map(str::to_owned),
+                next: next.map(str::to_owned),
+                versions: std::collections::BTreeMap::new(),
+            })
+        };
+        let observation = RegistryObservation::Read(vec![
+            PackageObservation {
+                package: "@vsift/darwin-arm64",
+                state: found(Some("0.2.1"), Some("0.2.1-rc.3")),
+            },
+            PackageObservation {
+                package: "@vsift/win32-x64",
+                state: found(Some("0.2.1\nmode=publish"), None),
+            },
+            PackageObservation {
+                package: "@vsift/linux-x64",
+                state: PackageState::NotFound,
+            },
+            PackageObservation {
+                package: "vsift-cli",
+                state: PackageState::Unreadable(String::from("the registry answered HTTP 500")),
+            },
+        ]);
+        assert_eq!(
+            dist_tag_lines(&observation),
+            Some(vec![
+                String::from("@vsift/darwin-arm64 0.2.1 0.2.1-rc.3"),
+                String::from("@vsift/win32-x64 unknown none"),
+                String::from("@vsift/linux-x64 none none"),
+                String::from("vsift-cli unknown unknown"),
+            ])
+        );
+        assert_eq!(dist_tag_lines(&RegistryObservation::NotRead), None);
+    }
 
     /// Metadata shaped like the registry's, with a maintainer that must never
     /// reach a plan: every name here is made up.
