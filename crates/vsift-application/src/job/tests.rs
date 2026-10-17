@@ -205,6 +205,10 @@ enum Fault {
     /// Answers with segments that start after the chunk's audio ends, so
     /// nothing in the answer can be placed and the chunk is unusable (#353).
     Garbage,
+    /// Answers with its one segment ending two seconds past the chunk's
+    /// audio, as whisper.cpp ended the first five seconds of F02 and F04 at
+    /// 7.000 s (#274).
+    Overruns,
 }
 
 /// A deterministic recognizer: chunk `i` always says the same words.
@@ -266,6 +270,17 @@ fn garbage(chunk: &PlannedChunk) -> Result<ProviderChunkOutput, SpeechRecognitio
     Ok(output)
 }
 
+/// The answer of a recogniser that ran on past a range cut mid-speech: its one
+/// segment starts inside the chunk's audio and ends two seconds after it.
+fn overrun(chunk: &PlannedChunk) -> Result<ProviderChunkOutput, SpeechRecognitionError> {
+    let mut output = words(chunk)?;
+    let past = chunk.window().duration_micros() / 1_000 + 2_000;
+    for segment in &mut output.segments {
+        segment.end = ChunkTime::from_millis(past).ok_or(SpeechRecognitionError::Io)?;
+    }
+    Ok(output)
+}
+
 impl SpeechRecognizer for FakeRecognizer {
     fn identity(
         &self,
@@ -295,6 +310,7 @@ impl SpeechRecognizer for FakeRecognizer {
                 Err(error)
             }
             Some(Fault::Garbage) => garbage(chunk),
+            Some(Fault::Overruns) => overrun(chunk),
             None => words(chunk),
         };
         std::future::ready(answer)
@@ -1605,6 +1621,82 @@ async fn an_unusable_chunk_resumes_as_a_gap_without_being_asked_again() -> TestR
     );
     assert_eq!(resumed.revision, control.revision);
     assert_eq!(harness.checkpoints(&resolved.spec.job_id)?, 0);
+    Ok(())
+}
+
+/// #274 on the job path that `transcript retranscribe` and a worker's
+/// `retranscribe` step both take: the first five seconds of a clip are one
+/// chunk, and the recogniser ends its only segment two seconds past that
+/// chunk's audio. The job commits the segment cut at the range's end (marked
+/// as cut, the provider's end kept) instead of failing as malformed output, and
+/// a resume over the stored checkpoint validates the same answer the same way
+/// without asking the recogniser again.
+#[tokio::test]
+async fn a_range_cut_mid_speech_commits_its_overrunning_segment_cut_at_the_range_end() -> TestResult
+{
+    let harness = Harness::new()?;
+    harness.recognizer.fault_at(0, Fault::Overruns);
+    let cut = range(0, 5 * SECOND)?;
+    let resolved = harness.resolve(Some(cut))?;
+    let committed = harness.run(&resolved, None).await?;
+    assert_eq!(harness.recognizer.calls.load(Ordering::SeqCst), 1);
+    let segments = committed.revision.segments();
+    assert_eq!(segments.len(), 1);
+    let segment = segments.first().ok_or("no segment")?;
+    assert_eq!(segment.range().end(), cut.end());
+    assert!(segment.range().start() < cut.end());
+    assert!(matches!(
+        segment.origin(),
+        vsift_domain::SegmentOrigin::Asr {
+            chunk: 0,
+            provider_end,
+            trimmed: vsift_domain::ProviderEndTrim::TrimmedToAudioEnd,
+            ..
+        } if provider_end == ChunkTime::from_micros(7 * SECOND)
+    ));
+    assert!(
+        committed.revision.warnings().as_slice().iter().any(
+            |warning| warning.kind() == vsift_domain::TranscriptWarningKind::ProviderEndTrimmed
+        )
+    );
+
+    // The same chunk taken from its checkpoint is judged by the same rule.
+    let harness = Harness::new()?;
+    harness.recognizer.fault_at(0, Fault::Overruns);
+    let resolved = harness.resolve(Some(cut))?;
+    let (owner, _) = harness.store.open_or_create(&resolved.spec, NOW)?;
+    let request = TranscribeRangeRequest {
+        source_segment: &harness.source,
+        range: cut,
+        plan: ChunkPlan::R0,
+        audio_stream: 1,
+        expected: &harness.identity,
+    };
+    let scope = CheckpointScope {
+        checkpoints: &owner,
+        key: &resolved.spec.recognition_key,
+        progress: &NoProgress,
+    };
+    let never = Flag(Arc::new(AtomicBool::new(false)));
+    let (fresh, _) =
+        transcribe_range_checkpointed(request, scope, &harness.audio, &harness.recognizer, &never)
+            .await?;
+    let asked = harness.recognizer.calls.load(Ordering::SeqCst);
+    let (resumed, used) =
+        transcribe_range_checkpointed(request, scope, &harness.audio, &harness.recognizer, &never)
+            .await?;
+    assert_eq!(used.reused, 1);
+    assert_eq!(used.discarded, 0);
+    assert_eq!(harness.recognizer.calls.load(Ordering::SeqCst), asked);
+    assert_eq!(resumed, fresh);
+    assert_eq!(
+        resumed
+            .segments
+            .iter()
+            .map(|merged| merged.segment.range().end())
+            .collect::<Vec<_>>(),
+        [cut.end()]
+    );
     Ok(())
 }
 

@@ -46,9 +46,12 @@ class Random {
 const VIDEOS = [
   'F01.mp4', 'F02.mp4', 'F03.mp4', 'F04.mp4', 'F05.mp4', 'F06.mp4', 'F07.mp4', 'F08.mp4', 'F09.mkv', 'F10.mp4', 'F12.mp4',
 ];
-// F02, F04 and F05 are left out: on the published 0.1.0 their first five seconds do not recognise (the load run's
-// diagnosis lists each clip), and a load campaign needs requests that complete.
-const SPEECH_VIDEOS = ['F01-speech.mp4', 'F03-speech.mp4', 'F06-speech.mp4', 'F07-speech.mp4'];
+// F02, F04 and F05 were left out while the campaign ran the published 0.1.0, where their first five seconds failed as
+// MISSING_CAPABILITY (#274; fixed since 0.2.0-rc.1, the recogniser's end past a cut range is cut to it). They are back so
+// that the worker path recognises a range cut mid-speech; a run of 0.1.0 itself fails on them by design.
+const SPEECH_VIDEOS = [
+  'F01-speech.mp4', 'F02-speech.mp4', 'F03-speech.mp4', 'F04-speech.mp4', 'F05-speech.mp4', 'F06-speech.mp4', 'F07-speech.mp4',
+];
 /**
  * How many recent recorded requests a duplicate or a conflict may name. A workspace keeps at most 4,096 request
  * records and prunes the oldest of removed sessions first (worker-host.md, section 5), so the dedupe window is a
