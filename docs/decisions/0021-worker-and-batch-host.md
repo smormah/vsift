@@ -426,7 +426,7 @@ still answers `COMMAND_NOT_IMPLEMENTED` (PR 4).
   index)`), with the host's `AdmissionWait`; its own bounded admission wait is not
   retried again. *Candidates:* `Engine::candidates` until no `not_analyzed` or
   `deadline_exceeded` window is left, a call analyses nothing (a call that analysed nothing
-  because the admission was busy is the step's `BUSY` instead, note of 2026-10-17), or 16 calls
+  because the admission was busy is the step's `BUSY` instead, note of 2026-10-17), or 16 calls in one try of the step
   (`MAX_CANDIDATE_CALLS`); a whole-source range is clipped by the operation; a stop
   mid-way commits what was analysed and cancels the step. *Retain:* into a hidden
   staging directory beside the bundle's name, renamed once it validates, with the
