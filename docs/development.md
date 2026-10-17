@@ -827,7 +827,7 @@ advisory, and replacement remains appropriate if a maintained safe DACL reader a
 Windows-only `fs4` 1.1.0 (MIT OR Apache-2.0, without default features) reads a session root's
 free space for the checks before a source copy (#266); its review, and why the `windows` crate,
 `fs2` and `sysinfo` were not chosen, is the
-[ADR 0021 note of 2026-10-18](decisions/0021-worker-and-batch-host.md#note-2026-10-18-266-the-free-space-checks-on-windows-and-the-fs4-dependency).
+[ADR 0021 note of 2026-10-17](decisions/0021-worker-and-batch-host.md#note-2026-10-17-266-the-free-space-checks-on-windows-and-the-fs4-dependency).
 `deny.toml` explicitly includes development dependencies in licence and duplicate
 checks; cargo-deny otherwise omits them from these checks by default. Keep the
 explicit settings when evaluating future test-only platform wrappers.

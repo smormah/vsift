@@ -909,7 +909,7 @@ and in parts in Git Bash ([`skill.md`](skill.md), "A long report's check on Wind
 pull request's branch at which the skill changed, gave the `skill` digest `13b485f323a07b5fdb4472bed8a5b911cf087bcff388728a1f292f51dbc71fe2`
 (it was `7f445a9a...`) and the whole-freeze digest `cfaf9783e7b26cc0a0088f0cef117ac469891f3920c090e5383c4e98bb14d9bb` (it was `f52265e7...`); the
 other six components are unchanged, and the pin in `committed_freeze` moved with it. No batch has run under it, and none is run for this change.
-**On 2026-10-18 the freeze is new again (#367).** The skill shortlists the screens of a range with no transcript with
+**On 2026-10-17 the freeze is new again (#367).** The skill shortlists the screens of a range with no transcript with
 `candidates --omit periodic` ([`skill.md`](skill.md), "Shortlisting the screens of a long recording"), on top of #366's text: `freeze write` at
 `7e3330a1c725`, the commit of that pull request's branch, rebased on #366, at which the skill changed, gave the `skill` digest
 `bd205d6c59cd926f5abccb71d71221acfbea1195f9ec1731451acebabd3af54f` (it was `13b485f3...`) and the whole-freeze digest

@@ -666,11 +666,11 @@ L-147, now removed). The text above is kept as it was written.
    the direct rule's for the revision it committed and for a direct run on the same session, and
    the replay returns it). The engine test failed before the change (`complete`, `coverage: null`).
 
-## Note, 2026-10-18 (#266): the free-space checks on Windows, and the `fs4` dependency
+## Note, 2026-10-17 (#266): the free-space checks on Windows, and the `fs4` dependency
 
 The PR 2 notes say a workspace's reserve is checked "on Unix" and that "Windows reports
 `not_enforced`"; the text above is kept as written and this note supersedes it. The
-maintainer decided on 2026-10-18 to add the Windows check after a dependency review.
+maintainer decided on 2026-10-17 to add the Windows check after a dependency review.
 
 **What changed.** The two checks before a source copy, a workspace's reserve (the source's
 size and 1 GiB, a guarantee, `RESOURCE_LIMIT`) and a desktop root's room check (the source's

@@ -312,7 +312,7 @@ freeze (P14)"): `skill` `13b485f3...`, whole freeze `cfaf9783...`.
 
 ### Shortlisting the screens of a long recording (#367; in `0.2.2-rc.1`, not published)
 
-The CLI gained `candidates --omit periodic` (the maintainer's decision of 2026-10-18; [`cli-v1.md`](../contracts/cli-v1.md),
+The CLI gained `candidates --omit periodic` (the maintainer's decision of 2026-10-17; [`cli-v1.md`](../contracts/cli-v1.md),
 "Leaving out periodic candidates"), and the skill uses it where the list was too dense: a range with no transcript, read 5 minutes at
 a time. `SKILL.md` INSPECT_CARDS adds the option to that sentence (the line count stays 300; the fuzz seed copy is the same bytes),
 `references/commands.md` gains its two allowed forms (with and without `--cursor`) and a paragraph on `data.omitted` and the

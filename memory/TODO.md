@@ -11,7 +11,7 @@ Current-state handoff, rewritten in every change; history: git, `CHANGELOG.md`, 
 - **Agent batches 2 and 3 run on `0.2.2-rc.1` (the maintainer's decision)**, each on the maintainer's go after the publish (`-Version 0.2.2-rc.1`, `docs/planning/p14-batch-2-3-checklist.md`), under the freeze committed by #435 (whole `10180cd8...`, `skill` `bd205d6c...`), which the cut keeps; both `freeze check` runs say nothing frozen has changed. The cut moved the `0.2.1-rc.3` batches' records to `p14-agent-trials/batch-2-0.2.1-rc.3/` and `batch-3-0.2.1-rc.3/` (the script refuses a state file of another version, and the release branch cannot rename a work-record path later).
 - **The ledger at the cut:** RQ-07, RQ-10, RQ-15 and RQ-16 are `planned` (their waivers for `0.2.1` are in `prior`: a waived item names no version and would pass silently); RQ-14 and RQ-17 stay `waived`, **for the maintainer to decide whether they carry to `0.2.2`**. `release-evidence --complete-for 0.2.2-rc.1` names 17 of 20 (RQ-01 to RQ-13, RQ-15, RQ-16, RQ-18 and RQ-19); `--complete-for 0.2.1` now names RQ-05 and the four `planned` items (an item has one status).
 - **Records go by pull request to `release/0.2.x`** (the stable plan reads the ledger at the stable commit); the stable `0.2.2` is made on the branch (target Monday or Tuesday), and the records change after its publish goes to `main` (the `Release window` check runs on it).
-- **Found while cutting:** **#404 is closed on GitHub** (closed 2026-10-17 04:02 UTC when #424 merged); the records say it stays open until `0.2.2` is published with the journeys passing on Windows: reopening it is the supervisor's or the maintainer's. The records dated "2026-10-18" (the maintainer's decisions, the register) were written on 2026-10-17 by their commits' dates.
+- **#404 was closed by #424's merge (2026-10-17 04:02 UTC) and the coordinator reopened it the same day;** it stays open until `0.2.2` is published with the journeys passing on Windows.
 
 ## What is in `0.2.2` (cycle 1; all merged to `main`, in `0.2.2-rc.1`, none published)
 
@@ -28,7 +28,7 @@ Current-state handoff, rewritten in every change; history: git, `CHANGELOG.md`, 
 
 ## Open for the maintainer
 
-- **This candidate:** RQ-14 and RQ-17 for `0.2.2` (carry or not; the check will not ask); the go for batch 2 and, separately, batch 3; whether `0.2.1-rc.3` is deprecated at `0.2.2`; moving `next` afterwards (L-108); reopening #404.
+- **This candidate:** RQ-14 and RQ-17 for `0.2.2` (carry or not; the check will not ask); the go for batch 2 and, separately, batch 3; whether `0.2.1-rc.3` is deprecated at `0.2.2`; moving `next` afterwards (L-108).
 - **Standing:** #188 (RQ-14), #176, #246, #374; the Yarn first-day note; ratify or reverse #377's, the Reads change's and #392's choices; the folder answer that differs by platform; L-176 (turn `float_roundtrip` on everywhere, or test without it); whether the `Release window` check becomes required (L-173); RQ-05 for `0.2.1` (recorded `failed`, no waiver); the README's #404 note.
 - **Register reviews `pending`:** 102 of 157 entries; the next free number is **L-178** (parallel pull requests may take numbers; check first).
 

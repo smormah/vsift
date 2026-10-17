@@ -40,7 +40,7 @@ native-tls = { version = "0.2", default-features = false }
 cap-fs-ext = "=4.0.3"
 cap-std = "=4.0.3"
 # Windows only: the free space of a session root's volume, for the checks
-# before a source copy (#266, ADR 0021 note of 2026-10-18). Its only Windows
+# before a source copy (#266, ADR 0021 note of 2026-10-17). Its only Windows
 # dependency, windows-sys 0.61, is already in the lock; without default
 # features it is the filesystem-statistics functions alone (no locks).
 fs4 = { version = "=1.1.0", default-features = false }
