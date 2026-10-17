@@ -271,6 +271,13 @@ pub enum OpenSessionError {
     /// a remediation that says what happened (known limit L-127: changing a
     /// published failure code is not additive within v1).
     SourceCopyTooSlow,
+    /// The copy of the selected source was stopped early because, at the
+    /// fastest speed measured in its first minute or more, it would have ended
+    /// well after the time a copy is allowed (#325). Like
+    /// [`Self::SourceCopyTooSlow`] it says nothing about the source, keeps the
+    /// published code `INVALID_SOURCE` and has its own remediation; nothing was
+    /// activated.
+    SourceCopyWouldBeTooSlow,
     /// The clock could not represent the bounded lifetime.
     InvalidClock,
     /// Storage or coordination rejected the operation.
@@ -303,6 +310,8 @@ impl fmt::Display for OpenSessionError {
             Self::SourceCopyTooSlow => {
                 formatter.write_str("copying the selected source took longer than the time limit")
             }
+            Self::SourceCopyWouldBeTooSlow => formatter
+                .write_str("copying the selected source would take longer than the time limit"),
             Self::InvalidClock => {
                 formatter.write_str("session clock is outside the supported range")
             }

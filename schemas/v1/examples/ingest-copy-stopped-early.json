@@ -1,0 +1,24 @@
+{
+  "schema_version": "1",
+  "command": "ingest",
+  "operation_id": null,
+  "status": "failed",
+  "data": null,
+  "warnings": [],
+  "error": {
+    "code": "INVALID_SOURCE",
+    "message": "The source is invalid or unsupported.",
+    "retryable": false,
+    "retry_after_ms": null,
+    "affected_ids": [],
+    "remediation": [
+      {
+        "summary": "Copying this video into VSift's session would take longer than the ten-minute limit: VSift measured how fast the copy went and stopped it after the first minute or so instead of at ten minutes. The video itself was not judged and may be fine (the code is the closest published one); nothing was committed. This happens with a large video on a slow disk, a network share, a removable drive or a cloud-synced folder that downloads on first read. Report this to the user: copying the video to a local disk and running the same command on that copy usually fixes it (if the folder that holds VSift's sessions is on a slow or network disk, that can be the slow side instead). Running the same command again on the same file measures the copy again from the beginning.",
+        "required_authority": "none",
+        "command": null
+      }
+    ]
+  },
+  "coverage": null,
+  "lifecycle": null
+}

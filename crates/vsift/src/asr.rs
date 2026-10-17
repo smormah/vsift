@@ -790,6 +790,7 @@ pub(crate) const fn snapshot_storage_error(error: &SourceError) -> SessionStorag
         | SourceError::SymbolicLink
         | SourceError::SpecialFile(_)
         | SourceError::Deadline
+        | SourceError::CopyWillRunOut
         | SourceError::ChangedDuringStage
         | SourceError::Cancelled
         | SourceError::Path(_)

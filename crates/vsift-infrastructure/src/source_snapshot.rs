@@ -34,6 +34,23 @@ pub const MAX_SOURCE_BYTES: u64 = 20 * 1024 * 1024 * 1024;
 pub const MAX_SOURCE_READ_DURATION: Duration = Duration::from_secs(600);
 const HEX: &[u8; 16] = b"0123456789abcdef";
 
+/// How long a staging copies before it may say that its copy will not fit
+/// [`MAX_SOURCE_READ_DURATION`] (#325): a minute, so a slow start (a disk
+/// spinning up, a share's first answer) does not decide it.
+const FORECAST_AFTER: Duration = Duration::from_secs(60);
+/// The span over which the copy's speed is measured; the forecast uses the
+/// fastest such span seen so far, which is the optimistic reading.
+const FORECAST_WINDOW: Duration = Duration::from_secs(10);
+/// The blocks a span must hold for its speed to count. A span that one long
+/// read fills (a cloud-synced file that downloads on its first read and is
+/// fast after it) says nothing about the speed of the rest, so it is passed
+/// over.
+const FORECAST_MIN_BLOCKS: u32 = 16;
+/// A copy is stopped early only when, at its fastest measured speed, it would
+/// end after half as long again as the limit (fifteen minutes): a forecast
+/// near the limit is left to the limit itself. Numerator and denominator.
+const FORECAST_MARGIN: (u128, u128) = (3, 2);
+
 /// Container families allowed by the R0 media adapter.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SourceContainer {
@@ -114,7 +131,7 @@ impl SourceSnapshot {
             operation_id,
             (source, &initial),
             None,
-            (cancellation, &mut read_deadline()),
+            (cancellation, &mut copy_clock(initial.len())),
         )
     }
 
@@ -135,13 +152,14 @@ impl SourceSnapshot {
         cancellation: &dyn StageCancellation,
     ) -> Result<Self, SourceError> {
         let crate::ContainedFile { file, metadata } = source;
+        let expected = metadata.len();
         Self::stage_opened(
             store,
             session_id,
             operation_id,
             (file, &metadata),
             None,
-            (cancellation, &mut read_deadline()),
+            (cancellation, &mut copy_clock(expected)),
         )
     }
 
@@ -162,13 +180,14 @@ impl SourceSnapshot {
         cancellation: &dyn StageCancellation,
     ) -> Result<Self, SourceError> {
         let crate::ContainedFile { file, metadata } = source;
+        let expected = metadata.len();
         Self::stage_opened(
             store,
             session_id,
             operation_id,
             (file, &metadata),
             Some(admission),
-            (cancellation, &mut read_deadline()),
+            (cancellation, &mut copy_clock(expected)),
         )
     }
 
@@ -176,17 +195,18 @@ impl SourceSnapshot {
     /// under `admission` when the caller holds it, else under a weight-1
     /// admission taken here.
     ///
-    /// The copy stops at the caller's cancellation or when `time_is_up` says
-    /// so ([`copy_until`]); either way its partial private file is removed.
-    /// Every caller passes [`read_deadline`]; the tests pass a count of blocks
-    /// so that the time is up without ten minutes going by.
+    /// The copy stops at the caller's cancellation or when `clock` says so
+    /// ([`copy_until`]); either way its partial private file is removed.
+    /// Every caller passes [`copy_clock`] for the source's size; the tests
+    /// pass a count of blocks so that the time is up without ten minutes going
+    /// by.
     fn stage_opened(
         store: &FilesystemSessionStore,
         session_id: &SessionId,
         operation_id: &OperationId,
         (mut source, initial): (File, &cap_std::fs::Metadata),
         admission: Option<crate::FilesystemAdmissionPermit>,
-        (cancellation, time_is_up): (&dyn StageCancellation, &mut dyn FnMut() -> bool),
+        (cancellation, clock): (&dyn StageCancellation, &mut dyn FnMut(u64) -> CopyTime),
     ) -> Result<Self, SourceError> {
         if initial.len() > MAX_SOURCE_BYTES {
             return Err(SourceError::TooLarge);
@@ -208,7 +228,7 @@ impl SourceSnapshot {
         let mut output = directory
             .open_with(&file_name, &options)
             .map_err(SourceError::Io)?;
-        let result = copy_until(&mut source, &mut output, cancellation, time_is_up).and_then(
+        let result = copy_until(&mut source, &mut output, cancellation, clock).and_then(
             |(id, bytes, container)| {
                 output.sync_all().map_err(SourceError::Io)?;
                 let final_meta = source.metadata().map_err(SourceError::Io)?;
@@ -574,6 +594,7 @@ pub(crate) fn open_session_error(error: SourceError) -> OpenSessionError {
         // slow to read, or the root slow to write (#325). The code a host
         // gives it stays the one it always was (L-127).
         SourceError::Deadline => OpenSessionError::SourceCopyTooSlow,
+        SourceError::CopyWillRunOut => OpenSessionError::SourceCopyWouldBeTooSlow,
         SourceError::InvalidPath
         | SourceError::NotRegularFile
         | SourceError::TooLarge
@@ -862,11 +883,123 @@ fn read_header(file: &mut File, header: &mut [u8]) -> Result<usize, SourceError>
     Ok(read)
 }
 
-/// Says when a read that starts now has used [`MAX_SOURCE_READ_DURATION`]:
-/// the wall-clock answer to [`copy_until`]'s question.
-fn read_deadline() -> impl FnMut() -> bool {
+/// What a copy's clock answers before the next block (#325).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum CopyTime {
+    /// Go on.
+    Left,
+    /// [`MAX_SOURCE_READ_DURATION`] has passed.
+    Spent,
+    /// At the fastest speed measured so far the copy would end well after
+    /// [`MAX_SOURCE_READ_DURATION`] ([`CopyForecast`]).
+    WillRunOut,
+}
+
+/// Whether a copy of `expected` bytes will fit [`MAX_SOURCE_READ_DURATION`],
+/// told early from the speed it is copied at (#325, the first step of its
+/// design; ADR 0012 note of 2026-10-17).
+///
+/// Pure arithmetic on the time and the bytes the copy reports before each
+/// block, so the decision is tested with any speeds and no clock. It is
+/// cautious on purpose, because stopping a copy that would have finished is
+/// worse than the minutes it saves: it says nothing in the first
+/// [`FORECAST_AFTER`], measures the speed over spans of at least
+/// [`FORECAST_WINDOW`] that hold more than [`FORECAST_MIN_BLOCKS`] blocks,
+/// keeps the fastest, and says [`CopyTime::WillRunOut`] only when even that
+/// speed ends the copy after [`FORECAST_MARGIN`] times the limit. Anything
+/// closer runs until the limit, as before.
+#[derive(Debug)]
+struct CopyForecast {
+    expected: u64,
+    window_started: Duration,
+    window_bytes: u64,
+    window_blocks: u32,
+    /// The fastest span: its bytes and its length.
+    fastest: Option<(u64, Duration)>,
+}
+
+impl CopyForecast {
+    const fn new(expected: u64) -> Self {
+        Self {
+            expected,
+            window_started: Duration::ZERO,
+            window_bytes: 0,
+            window_blocks: 0,
+            fastest: None,
+        }
+    }
+
+    /// The answer before the next block, `elapsed` after the copy started,
+    /// with `copied` bytes done.
+    fn ask(&mut self, elapsed: Duration, copied: u64) -> CopyTime {
+        if elapsed > MAX_SOURCE_READ_DURATION {
+            return CopyTime::Spent;
+        }
+        let span = elapsed.saturating_sub(self.window_started);
+        if span >= FORECAST_WINDOW {
+            let bytes = copied.saturating_sub(self.window_bytes);
+            if self.window_blocks > FORECAST_MIN_BLOCKS && faster(bytes, span, self.fastest) {
+                self.fastest = Some((bytes, span));
+            }
+            self.window_started = elapsed;
+            self.window_bytes = copied;
+            self.window_blocks = 0;
+        }
+        self.window_blocks = self.window_blocks.saturating_add(1);
+        if elapsed < FORECAST_AFTER {
+            return CopyTime::Left;
+        }
+        let Some((bytes, span)) = self.fastest else {
+            return CopyTime::Left;
+        };
+        if bytes == 0 {
+            return CopyTime::Left;
+        }
+        // The end at the fastest speed, elapsed + remaining * span / bytes in
+        // nanoseconds, against the limit with its margin.
+        let remaining = u128::from(self.expected.saturating_sub(copied));
+        let projected = elapsed
+            .as_nanos()
+            .saturating_add(remaining.saturating_mul(span.as_nanos()) / u128::from(bytes));
+        let (numerator, denominator) = FORECAST_MARGIN;
+        let allowed = MAX_SOURCE_READ_DURATION.as_nanos() * numerator / denominator;
+        if projected > allowed {
+            CopyTime::WillRunOut
+        } else {
+            CopyTime::Left
+        }
+    }
+}
+
+/// Whether `bytes` in `span` is faster than the fastest span so far.
+fn faster(bytes: u64, span: Duration, fastest: Option<(u64, Duration)>) -> bool {
+    fastest.is_none_or(|(best_bytes, best_span)| {
+        // bytes / span > best_bytes / best_span, without a division.
+        u128::from(bytes).saturating_mul(best_span.as_nanos())
+            > u128::from(best_bytes).saturating_mul(span.as_nanos())
+    })
+}
+
+/// The wall-clock answer to [`copy_until`]'s question for a staging of
+/// `expected` bytes: [`MAX_SOURCE_READ_DURATION`] from now, and the early
+/// answer of [`CopyForecast`].
+fn copy_clock(expected: u64) -> impl FnMut(u64) -> CopyTime {
     let started = Instant::now();
-    move || started.elapsed() > MAX_SOURCE_READ_DURATION
+    let mut forecast = CopyForecast::new(expected);
+    move |copied| forecast.ask(started.elapsed(), copied)
+}
+
+/// The wall-clock answer for a read that is not a staging (the re-hash of the
+/// original): [`MAX_SOURCE_READ_DURATION`] from now, and nothing early.
+fn read_deadline() -> impl FnMut(u64) -> CopyTime {
+    let started = Instant::now();
+    move |_| {
+        if started.elapsed() > MAX_SOURCE_READ_DURATION {
+            CopyTime::Spent
+        } else {
+            CopyTime::Left
+        }
+    }
 }
 
 /// Copies and hashes a whole source within [`MAX_SOURCE_READ_DURATION`].
@@ -879,20 +1012,23 @@ fn copy_bounded(
 }
 
 /// Copies `source` to `destination` in 64 KiB blocks, hashing what it copies,
-/// until the source ends, `time_is_up` says so ([`SourceError::Deadline`]) or
-/// the caller cancels ([`SourceError::Cancelled`]). Both are asked before
-/// every block, so neither waits for more than one read.
+/// until the source ends, `clock` says the time is spent
+/// ([`SourceError::Deadline`]) or will run out
+/// ([`SourceError::CopyWillRunOut`]), or the caller cancels
+/// ([`SourceError::Cancelled`]). Each is asked before every block, so none
+/// waits for more than one read.
 ///
-/// The limit is on the whole copy, not on progress: a copy that advances
-/// steadily is stopped like one that stalled (#325 holds the design for a
-/// budget a caller can raise and a copy that can be continued). The question
-/// is a parameter and not a clock read here so that a test can make the time
-/// run out after a chosen block instead of waiting ten minutes.
+/// The limit is on the whole copy; a copy that will clearly not fit it is
+/// stopped early ([`CopyForecast`]). #325 holds the rest of the design (a
+/// budget a caller can raise, a copy that can be continued, a stall told
+/// apart). The clock is a parameter given the bytes copied so far, and not a
+/// clock read here, so that a test can make the time run out after a chosen
+/// block instead of waiting ten minutes.
 fn copy_until(
     source: &mut impl Read,
     destination: &mut impl Write,
     cancellation: &dyn StageCancellation,
-    time_is_up: &mut dyn FnMut() -> bool,
+    clock: &mut dyn FnMut(u64) -> CopyTime,
 ) -> Result<(SourceId, u64, SourceContainer), SourceError> {
     let mut hash = Sha256::new();
     let mut header = [0_u8; 12];
@@ -900,8 +1036,10 @@ fn copy_until(
     let mut total = 0_u64;
     let mut buffer = vec![0_u8; 64 * 1024];
     loop {
-        if time_is_up() {
-            return Err(SourceError::Deadline);
+        match clock(total) {
+            CopyTime::Left => {}
+            CopyTime::Spent => return Err(SourceError::Deadline),
+            CopyTime::WillRunOut => return Err(SourceError::CopyWillRunOut),
         }
         if cancellation.is_cancelled() {
             return Err(SourceError::Cancelled);
@@ -960,6 +1098,11 @@ pub enum SourceError {
     /// staging reports it as a slow copy
     /// ([`OpenSessionError::SourceCopyTooSlow`], #325).
     Deadline,
+    /// The copy was stopped early because, at the fastest speed measured, it
+    /// would end well after [`MAX_SOURCE_READ_DURATION`] (#325). Like
+    /// [`Self::Deadline`] it says nothing about the source; a staging reports
+    /// it as [`OpenSessionError::SourceCopyWouldBeTooSlow`].
+    CopyWillRunOut,
     /// Only embedded-track ISO media and Matroska containers are admitted.
     UnsupportedContainer,
     /// The source changed while the private copy was made.
@@ -991,6 +1134,9 @@ impl fmt::Display for SourceError {
             Self::SpecialFile(kind) => kind.fmt(formatter),
             Self::TooLarge => formatter.write_str("source exceeds the byte limit"),
             Self::Deadline => formatter.write_str("source read exceeded the deadline"),
+            Self::CopyWillRunOut => {
+                formatter.write_str("source copy would not finish within the deadline")
+            }
             Self::UnsupportedContainer => {
                 formatter.write_str("source container is unsupported or unsafe")
             }
@@ -1036,9 +1182,9 @@ mod tests {
     use vsift_domain::{DurabilityRequirement, OperationId, SessionId};
 
     use super::{
-        MAX_SOURCE_BYTES, MAX_SOURCE_READ_DURATION, SourceContainer, SourceError, SourceSnapshot,
-        copy_until, open_session_error, open_source, read_deadline, source_path_failure,
-        source_path_fault,
+        CopyForecast, CopyTime, MAX_SOURCE_BYTES, MAX_SOURCE_READ_DURATION, SourceContainer,
+        SourceError, SourceSnapshot, copy_clock, copy_until, open_session_error, open_source,
+        read_deadline, source_path_failure, source_path_fault,
     };
     use crate::FilesystemSessionStore;
 
@@ -1046,6 +1192,9 @@ mod tests {
 
     /// The size of one block of the copy.
     const BLOCK: usize = 64 * 1024;
+    /// [`BLOCK`] as the copy counts bytes.
+    const BLOCK_BYTES: u64 = 64 * 1024;
+    const MIB: u64 = 1024 * 1024;
     const OWNED_PREFIX: &str = "vsift-source-snapshot-unit-";
     static NEXT_ROOT: AtomicU64 = AtomicU64::new(0);
 
@@ -1089,11 +1238,45 @@ mod tests {
 
     /// The time is up from the `ask`-th time the copy asks (it asks before
     /// every block), so the copy stops after `ask - 1` blocks without a clock.
-    fn up_from(ask: usize) -> impl FnMut() -> bool {
+    fn up_from(ask: usize) -> impl FnMut(u64) -> CopyTime {
+        stop_from(ask, CopyTime::Spent)
+    }
+
+    /// The clock answers `answer` from the `ask`-th time the copy asks.
+    fn stop_from(ask: usize, answer: CopyTime) -> impl FnMut(u64) -> CopyTime {
         let mut asked = 0_usize;
-        move || {
+        move |_| {
             asked += 1;
-            asked >= ask
+            if asked >= ask { answer } else { CopyTime::Left }
+        }
+    }
+
+    /// Asks `forecast` before each block of a copy of `blocks` blocks, the
+    /// `n`-th block (from 0) being asked at `at(n)`, until it answers anything
+    /// but [`CopyTime::Left`]; returns that answer and when it came, or
+    /// `None` when the copy ends first.
+    fn run(
+        forecast: &mut CopyForecast,
+        blocks: u64,
+        at: impl Fn(u64) -> Duration,
+    ) -> Option<(CopyTime, Duration)> {
+        for block in 0..blocks {
+            let elapsed = at(block);
+            let answer = forecast.ask(elapsed, block * BLOCK_BYTES);
+            if answer != CopyTime::Left {
+                return Some((answer, elapsed));
+            }
+        }
+        None
+    }
+
+    /// A steady copy of `rate` bytes per second: block `n` is asked when `n`
+    /// blocks are done.
+    fn steady(rate: u64) -> impl Fn(u64) -> Duration {
+        move |block| {
+            let nanos =
+                u128::from(block) * u128::from(BLOCK_BYTES) * 1_000_000_000 / u128::from(rate);
+            Duration::from_nanos(u64::try_from(nanos).unwrap_or(u64::MAX))
         }
     }
 
@@ -1111,7 +1294,7 @@ mod tests {
             &mut Cursor::new(&source),
             &mut copied,
             &NeverCancelled,
-            &mut || false,
+            &mut |_| CopyTime::Left,
         )?;
         assert_eq!(bytes, u64::try_from(source.len())?);
         assert_eq!(container, SourceContainer::IsoMedia);
@@ -1148,7 +1331,7 @@ mod tests {
             &mut Cursor::new(&not_a_video),
             &mut Vec::new(),
             &NeverCancelled,
-            &mut || false,
+            &mut |_| CopyTime::Left,
         );
         assert!(
             matches!(judged, Err(SourceError::UnsupportedContainer)),
@@ -1164,10 +1347,157 @@ mod tests {
     fn the_real_limit_is_ten_minutes_from_the_start_of_the_copy() {
         assert_eq!(MAX_SOURCE_READ_DURATION, Duration::from_mins(10));
         let mut time_is_up = read_deadline();
-        assert!(!time_is_up());
-        assert!(!time_is_up());
+        assert_eq!(time_is_up(0), CopyTime::Left);
+        assert_eq!(time_is_up(u64::MAX), CopyTime::Left);
+        // A staging's clock is not early either at its start.
+        let mut staging = copy_clock(MAX_SOURCE_BYTES);
+        assert_eq!(staging(0), CopyTime::Left);
         let needed = MAX_SOURCE_BYTES / MAX_SOURCE_READ_DURATION.as_secs() / (1024 * 1024);
         assert_eq!(needed, 34);
+    }
+
+    /// #325, the first step: a copy that will clearly not fit the ten minutes is
+    /// stopped soon after its first minute and not at ten. 20 GiB at 2 MiB/s
+    /// would take 170 minutes.
+    #[test]
+    fn a_copy_far_too_slow_for_the_limit_is_stopped_after_its_first_minute() -> TestResult {
+        let mut forecast = CopyForecast::new(MAX_SOURCE_BYTES);
+        let stopped = run(
+            &mut forecast,
+            MAX_SOURCE_BYTES / BLOCK_BYTES,
+            steady(2 * MIB),
+        );
+        let Some((answer, at)) = stopped else {
+            return Err("a copy of 170 minutes was never stopped".into());
+        };
+        assert_eq!(answer, CopyTime::WillRunOut);
+        assert!(at >= Duration::from_mins(1), "{at:?}");
+        assert!(at < Duration::from_secs(61), "{at:?}");
+        Ok(())
+    }
+
+    /// The forecast is cautious: a copy that ends at its fastest speed
+    /// within half as long again as the limit is left to the limit (here 12
+    /// minutes: stopped at ten, as before), and a copy that fits is never
+    /// stopped.
+    #[test]
+    fn a_copy_near_the_limit_or_inside_it_is_not_stopped_early() {
+        // 12 minutes: 20 GiB at 20480 / 720 MiB/s.
+        let rate = MAX_SOURCE_BYTES / 720;
+        let mut forecast = CopyForecast::new(MAX_SOURCE_BYTES);
+        let stopped = run(&mut forecast, MAX_SOURCE_BYTES / BLOCK_BYTES, steady(rate));
+        assert!(
+            matches!(stopped, Some((CopyTime::Spent, at)) if at > MAX_SOURCE_READ_DURATION),
+            "{stopped:?}"
+        );
+
+        // Nine minutes: never stopped.
+        let rate = MAX_SOURCE_BYTES / 540;
+        let mut forecast = CopyForecast::new(MAX_SOURCE_BYTES);
+        let stopped = run(&mut forecast, MAX_SOURCE_BYTES / BLOCK_BYTES, steady(rate));
+        assert_eq!(stopped, None);
+    }
+
+    /// Just over fifteen minutes at a steady speed is stopped early, just
+    /// under is not: the margin is the limit and half of it again.
+    #[test]
+    fn the_margin_is_half_as_long_again_as_the_limit() {
+        let blocks = MAX_SOURCE_BYTES / BLOCK_BYTES;
+        let over = MAX_SOURCE_BYTES / 920;
+        let mut forecast = CopyForecast::new(MAX_SOURCE_BYTES);
+        assert!(matches!(
+            run(&mut forecast, blocks, steady(over)),
+            Some((CopyTime::WillRunOut, _))
+        ));
+        let under = MAX_SOURCE_BYTES / 880;
+        let mut forecast = CopyForecast::new(MAX_SOURCE_BYTES);
+        assert!(matches!(
+            run(&mut forecast, blocks, steady(under)),
+            Some((CopyTime::Spent, _))
+        ));
+    }
+
+    /// A cloud-synced file that downloads on its first read: the first block
+    /// takes five minutes, the rest are fast. The span that one read filled
+    /// says nothing about the rest and is passed over, so the copy is not
+    /// stopped early and ends inside the limit.
+    #[test]
+    fn a_first_read_that_waits_long_and_a_fast_rest_is_not_stopped_early() {
+        let wait = Duration::from_mins(5);
+        let rest = steady(200 * MIB);
+        let blocks = 3 * 1024 * MIB / BLOCK_BYTES;
+        let mut forecast = CopyForecast::new(blocks * BLOCK_BYTES);
+        let stopped = run(&mut forecast, blocks, |block| {
+            if block == 0 {
+                Duration::ZERO
+            } else {
+                wait + rest(block)
+            }
+        });
+        assert_eq!(stopped, None);
+    }
+
+    /// A copy whose every read waits long (a device that hardly answers) has
+    /// no span to measure: nothing is forecast and the limit stops it.
+    #[test]
+    fn a_copy_with_no_measurable_span_is_left_to_the_limit() {
+        let mut forecast = CopyForecast::new(MAX_SOURCE_BYTES);
+        let stopped = run(&mut forecast, 1_000, |block| {
+            Duration::from_secs(20 * block)
+        });
+        assert!(
+            matches!(stopped, Some((CopyTime::Spent, at)) if at > MAX_SOURCE_READ_DURATION),
+            "{stopped:?}"
+        );
+    }
+
+    /// The fastest span decides, not the average: a copy at 100 MiB/s for its
+    /// first half minute that then slows to 1 MiB/s is not stopped early
+    /// (at its fastest it would fit), so the limit stops it, as before. The
+    /// other way round is the forecast's known cost (L-140): a copy that stays
+    /// slow for more than its first minute and then speeds up is judged by the
+    /// speed it showed.
+    #[test]
+    fn the_fastest_span_decides_and_not_the_average() {
+        let fast_blocks = 30 * 100 * MIB / BLOCK_BYTES;
+        let fast = steady(100 * MIB);
+        let slow = steady(MIB);
+        let mut forecast = CopyForecast::new(MAX_SOURCE_BYTES);
+        let stopped = run(&mut forecast, MAX_SOURCE_BYTES / BLOCK_BYTES, |block| {
+            if block <= fast_blocks {
+                fast(block)
+            } else {
+                Duration::from_secs(30) + slow(block - fast_blocks)
+            }
+        });
+        assert!(
+            matches!(stopped, Some((CopyTime::Spent, at)) if at > MAX_SOURCE_READ_DURATION),
+            "{stopped:?}"
+        );
+    }
+
+    /// #325: a staging stopped early by its forecast leaves nothing and is a
+    /// slow copy for the host, with its own cause, not an invalid source.
+    #[test]
+    fn a_copy_stopped_early_is_its_own_cause_and_not_an_invalid_source() {
+        let source = stand_in(4);
+        let mut reader = Cursor::new(&source);
+        let mut copied = Vec::new();
+        let stopped = copy_until(
+            &mut reader,
+            &mut copied,
+            &NeverCancelled,
+            &mut stop_from(2, CopyTime::WillRunOut),
+        );
+        assert!(
+            matches!(stopped, Err(SourceError::CopyWillRunOut)),
+            "{stopped:?}"
+        );
+        assert_eq!(copied.len(), BLOCK);
+        assert_eq!(
+            open_session_error(SourceError::CopyWillRunOut),
+            OpenSessionError::SourceCopyWouldBeTooSlow
+        );
     }
 
     /// #325: a staging whose copy runs out of time fails as a deadline, leaves

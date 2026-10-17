@@ -1145,9 +1145,9 @@ impl From<IdentifierGenerationError> for EngineError {
 /// (#265, #266, #369).
 const fn open_session_failure_code(error: OpenSessionError) -> FailureCode {
     match error {
-        OpenSessionError::InvalidSource | OpenSessionError::SourceCopyTooSlow => {
-            FailureCode::InvalidSource
-        }
+        OpenSessionError::InvalidSource
+        | OpenSessionError::SourceCopyTooSlow
+        | OpenSessionError::SourceCopyWouldBeTooSlow => FailureCode::InvalidSource,
         OpenSessionError::SourceIo
         | OpenSessionError::SourcePath(_)
         | OpenSessionError::SourceIsLink
@@ -1749,6 +1749,10 @@ mod tests {
         // the copy was slow and the video was not judged (L-127).
         assert_eq!(
             EngineError::OpenSession(OpenSessionError::SourceCopyTooSlow).failure_code(),
+            FailureCode::InvalidSource
+        );
+        assert_eq!(
+            EngineError::OpenSession(OpenSessionError::SourceCopyWouldBeTooSlow).failure_code(),
             FailureCode::InvalidSource
         );
         assert_eq!(

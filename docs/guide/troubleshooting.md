@@ -123,7 +123,9 @@ Go through these, in order:
    happens with a big video on a network drive, a memory stick, an SD card or a folder that downloads from the cloud
    when first read. Copy the video to a disk in your computer and open that copy: that usually fixes it. If VSift's
    own folder is on a network drive or a slow disk, that can be the slow side instead. Trying again from the same
-   place starts the copy from the beginning.
+   place starts the copy from the beginning. A copy that clearly cannot fit is stopped after a minute or so instead:
+   its `Fix:` line begins "Copying this video into VSift's session would take longer than the ten-minute limit", and
+   the advice is the same.
 5. **If it is a transcript** (the message comes from `ingest --transcript`): the `Fix:` line names the reason and the
    line. The usual ones are text with no times (`untimed_text`), a timestamp in the wrong form
    (`invalid_timestamp`), cues out of order and a file that is not UTF-8. Export it again as SRT or WebVTT.
