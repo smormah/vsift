@@ -1,0 +1,61 @@
+{
+  "command": "job.run",
+  "coverage": null,
+  "data": {
+    "attempt": 1,
+    "controls": {
+      "admission_capacity": 8,
+      "concurrency": 1,
+      "free_space_reserve": "enforced",
+      "isolation": "process_only",
+      "resource_limits": "not_enforced"
+    },
+    "failure": null,
+    "lifecycle": {
+      "expires_at": "2026-09-25T00:00:00Z",
+      "mode": "ephemeral"
+    },
+    "operation_id": "op_6e1a3c5b7d9f0e2a4c6b8d0f1e3a5c7b",
+    "publication": "process_crash_consistent",
+    "replayed": false,
+    "request_digest": "07d4468ac2947004719ce6269890ce191d3a0f28dc6a509c7b0ffa8bdaa0488f",
+    "session_id": "ses_0123456789abcdef0123456789abcdef",
+    "source_id": "src_sha256_0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+    "status": "partial",
+    "steps": [
+      {
+        "admission_wait_ms": 0,
+        "coverage": {
+          "gaps": [
+            "30000000-55000000"
+          ],
+          "reasons": [
+            "untranscribed_range"
+          ],
+          "truncated": true
+        },
+        "elapsed_ms": 41870,
+        "failure": null,
+        "job_id": "job_8d3e1f0a2b4c6d8e0f1a2b3c4d5e6f70",
+        "kind": "retranscribe",
+        "outputs": {
+          "chunks_reused": 0,
+          "generation": 2,
+          "revision_id": "trv_a5ed9a081a2068b75c956f9befbb4fd4"
+        },
+        "status": "partial"
+      }
+    ]
+  },
+  "error": null,
+  "lifecycle": {
+    "expires_at": "2026-09-25T00:00:00Z",
+    "mode": "ephemeral"
+  },
+  "operation_id": "op_6e1a3c5b7d9f0e2a4c6b8d0f1e3a5c7b",
+  "schema_version": "1",
+  "status": "partial",
+  "warnings": [
+    "The request completed with a stated gap; see the coverage of each partial step."
+  ]
+}

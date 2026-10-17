@@ -411,7 +411,11 @@ The P11 worker examples (checked by `vsift-contract`'s `worker_contract` and
 and retranscribes it, pages its candidates and retains it as `f01-review`;
 `job-run.json` is its complete `job.run` result and `job-run.replayed.json` the same
 result replayed by operation id; `job-run.partial.json` is a candidates request over
-a 150 s range with an undecodable minute, so it is `partial`. Since P11 PR 3 `job run`
+a 150 s range with an undecodable minute, so it is `partial`;
+`job-run.retranscribe-partial.json` (0.2.2, #362, checked by `local_asr_contract`) is
+a `retranscribe` step that committed the revision of
+`transcript-retranscribe.partial.json`, whose second chunk was unusable: the step is
+`partial` and its `coverage` is that direct result's envelope `coverage`. Since P11 PR 3 `job run`
 emits these results: a `failed` or `cancelled` `job.run` response carries the job
 result as its `data` beside its `error`, and a result whose record could not be
 written is presented as `STORAGE_IO` with the result as data.

@@ -129,6 +129,7 @@ fn f01_steps() -> Result<Vec<StepResult>, Box<dyn std::error::Error>> {
                 revision_id: TranscriptRevisionId::parse("trv_1f2e3d4c5b6a79880f1e2d3c4b5a6978")?,
                 generation: StorageGeneration::from_value(2),
                 chunks_reused: 0,
+                untranscribed: Vec::new(),
             },
             timing(21_530, 180),
             Some(&JobId::parse(JOB)?),
@@ -349,36 +350,15 @@ fn a_partial_run_matches_its_frozen_example() -> TestResult {
     Ok(())
 }
 
-/// #353, pinned as it is in 0.2.1: a `retranscribe` step reports the revision
-/// it committed and nothing about that revision's gaps. When the recogniser's
-/// answer for some chunks of the step's run could not be used, the revision
-/// carries them (chunks with an `unusable` outcome, the warning
-/// `provider_chunks_rejected`) and `transcript retranscribe` answers
-/// `partial` for them, but the step, and so the request, stays `complete` with
-/// `coverage: null`: a supervisor reading `job run` or `job batch` is not told,
-/// and learns of the gaps by reading the revision the step names.
-///
-/// The step's outputs cannot say it, which the destructuring below enforces:
-/// adding a member for the gaps stops this test compiling, so the change is
-/// made on purpose, with the schema and the documentation that describe it
-/// (`docs/contracts/cli-v1.md`, ADR 0017 and 0020 notes).
-#[test]
-fn a_retranscribe_step_is_complete_whatever_its_revision_could_not_read() -> TestResult {
-    let outputs = StepOutputs::Retranscribe {
-        revision_id: TranscriptRevisionId::parse("trv_1f2e3d4c5b6a79880f1e2d3c4b5a6978")?,
-        generation: StorageGeneration::from_value(2),
-        chunks_reused: 0,
-    };
-    let StepOutputs::Retranscribe {
-        revision_id: _,
-        generation: _,
-        chunks_reused: _,
-    } = &outputs
-    else {
-        return Err("the outputs are not a retranscription's".into());
-    };
-    let request = frozen_request()?;
-    let result = WorkResult::new(WorkResultParts {
+/// A `retranscribe` step of a session-target request: one step, so the
+/// step's status is the request's.
+fn retranscribe_result(
+    untranscribed: Vec<TimeRange>,
+) -> Result<WorkResult, Box<dyn std::error::Error>> {
+    let request = decode_work_request(
+        br#"{"schema_version":"1","operation_id":"op_6e1a3c5b7d9f0e2a4c6b8d0f1e3a5c7b","durability":"durable","target":{"session_id":"ses_0123456789abcdef0123456789abcdef"},"steps":[{"retranscribe":{"range":null}}]}"#,
+    )?;
+    Ok(WorkResult::new(WorkResultParts {
         operation_id: request.operation_id(),
         request_digest: request.digest(),
         origin: ResultOrigin::Fresh,
@@ -388,13 +368,42 @@ fn a_retranscribe_step_is_complete_whatever_its_revision_could_not_read() -> Tes
         publication: Some(PublicationGuarantee::OsCrashDurable),
         lifecycle: Some(LifecycleResponse::durable_worker(EXPIRES_AT.to_owned())),
         steps: vec![StepResult::finished(
-            &outputs,
+            &StepOutputs::Retranscribe {
+                revision_id: TranscriptRevisionId::parse("trv_1f2e3d4c5b6a79880f1e2d3c4b5a6978")?,
+                generation: StorageGeneration::from_value(2),
+                chunks_reused: 0,
+                untranscribed,
+            },
             timing(21_530, 180),
             Some(&JobId::parse(JOB)?),
         )],
         failure: None,
         controls: controls()?,
-    })?;
+    })?)
+}
+
+fn seconds(from: u64, to: u64) -> Result<TimeRange, Box<dyn std::error::Error>> {
+    Ok(TimeRange::new(
+        MediaTime::from_micros(from * 1_000_000),
+        MediaTime::from_micros(to * 1_000_000),
+    )?)
+}
+
+/// The recorded bytes of a result's first step, as text.
+fn first_step_record(result: &WorkResult) -> Result<String, Box<dyn std::error::Error>> {
+    Ok(String::from_utf8(
+        result.steps().first().ok_or("no step")?.recorded_bytes()?,
+    )?)
+}
+
+/// A `retranscribe` step whose run transcribed all of its range is
+/// `complete` with `coverage: null`, and its recorded bytes are exactly what
+/// `0.2.1` wrote and reads: the outputs gained no member, and a request record
+/// of such a step is unchanged (#362).
+#[test]
+fn a_retranscribe_step_without_an_untranscribed_part_is_presented_and_recorded_as_before()
+-> TestResult {
+    let result = retranscribe_result(Vec::new())?;
     assert_eq!(result.status(), vsift_domain::OperationStatus::Complete);
     let response = job_run(&result)?;
     validate("operation-response.schema.json", &response)?;
@@ -411,6 +420,116 @@ fn a_retranscribe_step_is_complete_whatever_its_revision_could_not_read() -> Tes
         .map(String::as_str)
         .collect();
     assert_eq!(members, ["chunks_reused", "generation", "revision_id"]);
+    assert_eq!(
+        first_step_record(&result)?,
+        r#"{"kind":"retranscribe","status":"complete","elapsed_ms":21530,"admission_wait_ms":180,"job_id":"job_8d3e1f0a2b4c6d8e0f1a2b3c4d5e6f70","outputs":{"revision_id":"trv_1f2e3d4c5b6a79880f1e2d3c4b5a6978","generation":2,"chunks_reused":0},"coverage":null,"failure":null}"#
+    );
+    Ok(())
+}
+
+/// #362: a `retranscribe` step whose run left parts of its range
+/// untranscribed (the recogniser's answer for them could not be used) is
+/// `partial`, and so is the request; the step's `coverage` lists the parts as
+/// `transcript retranscribe` does in its envelope (truncated, the reason
+/// `untranscribed_range`, the list cut at 100 with `gap_list_truncated`), and
+/// the step and the result are recorded and read back exactly. That the
+/// coverage is the direct command's for one real revision is shown in
+/// `local_asr_contract`.
+#[test]
+fn a_retranscribe_step_with_untranscribed_parts_is_partial_and_states_them() -> TestResult {
+    let result = retranscribe_result(vec![seconds(30, 55)?, seconds(80, 105)?])?;
+    assert_eq!(result.status(), vsift_domain::OperationStatus::Partial);
+    let response = job_run(&result)?;
+    validate("operation-response.schema.json", &response)?;
+    validate("job-result.schema.json", &response["data"])?;
+    assert_eq!(response["status"], "partial");
+    assert_eq!(
+        response["warnings"],
+        serde_json::json!([PARTIAL_REQUEST_WARNING])
+    );
+    let step = &response["data"]["steps"][0];
+    assert_eq!(step["status"], "partial");
+    assert_eq!(
+        step["coverage"],
+        serde_json::json!({
+            "truncated": true,
+            "gaps": ["30000000-55000000", "80000000-105000000"],
+            "reasons": ["untranscribed_range"],
+        })
+    );
+    assert_eq!(
+        WorkResult::decode_recorded(&result.recorded_bytes()?)?,
+        result
+    );
+    for step in result.steps() {
+        assert_eq!(&StepResult::decode_recorded(&step.recorded_bytes()?)?, step);
+    }
+
+    // More parts than the envelope lists: the first 100, and the reason that
+    // says the list was cut.
+    let many = (0..101)
+        .map(|index| seconds(index * 60 + 30, index * 60 + 55))
+        .collect::<Result<Vec<_>, _>>()?;
+    let cut = retranscribe_result(many)?;
+    let value = serde_json::to_value(&cut)?;
+    let coverage = &value["steps"][0]["coverage"];
+    assert_eq!(coverage["gaps"].as_array().map(Vec::len), Some(100));
+    assert_eq!(
+        coverage["reasons"],
+        serde_json::json!(["untranscribed_range", "gap_list_truncated"])
+    );
+    assert_eq!(WorkResult::decode_recorded(&cut.recorded_bytes()?)?, cut);
+    Ok(())
+}
+
+/// A recorded step's coverage must be one its kind states: a `retranscribe`
+/// step's only for a gap and only with its own reasons, a `candidates` step's
+/// with the visual reasons, and no other step's at all. Anything else is a
+/// document no host wrote, and is refused.
+#[test]
+fn a_recorded_coverage_its_step_kind_never_states_is_refused() -> TestResult {
+    let partial = first_step_record(&retranscribe_result(vec![seconds(30, 55)?])?)?;
+    let complete = first_step_record(&retranscribe_result(Vec::new())?)?;
+    let partial_coverage = r#""coverage":{"truncated":true,"gaps":["30000000-55000000"],"reasons":["untranscribed_range"]}"#;
+    assert!(partial.contains(partial_coverage), "{partial}");
+    let steps = f01_steps()?;
+    let candidates =
+        String::from_utf8(steps.get(2).ok_or("no candidates step")?.recorded_bytes()?)?;
+    let ingest = String::from_utf8(steps.first().ok_or("no step")?.recorded_bytes()?)?;
+    for changed in [
+        // A complete retranscription that states a coverage.
+        complete.replacen(
+            r#""coverage":null"#,
+            r#""coverage":{"truncated":false,"gaps":[],"reasons":[]}"#,
+            1,
+        ),
+        // A partial one with a visual reason, with no reason or with no gap.
+        partial.replacen("untranscribed_range", "undecodable", 1),
+        partial.replacen(r#"["untranscribed_range"]"#, "[]", 1),
+        partial.replacen(r#"["30000000-55000000"]"#, "[]", 1),
+        // A partial one without its coverage.
+        partial.replacen(partial_coverage, r#""coverage":null"#, 1),
+        // A candidates step with the retranscription's reason.
+        candidates.replacen(r#""reasons":[]"#, r#""reasons":["untranscribed_range"]"#, 1),
+        // An ingest step with a coverage.
+        ingest.replacen(
+            r#""coverage":null"#,
+            r#""coverage":{"truncated":true,"gaps":["0-1"],"reasons":["untranscribed_range"]}"#,
+            1,
+        ),
+    ] {
+        assert!(
+            [&partial, &complete, &candidates, &ingest]
+                .iter()
+                .all(|original| **original != changed),
+            "the change did not apply: {changed}"
+        );
+        assert_eq!(
+            StepResult::decode_recorded(changed.as_bytes()).err(),
+            Some(RecordedResultError::Malformed),
+            "{changed}"
+        );
+    }
     Ok(())
 }
 

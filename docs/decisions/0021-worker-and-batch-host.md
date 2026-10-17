@@ -632,6 +632,39 @@ session id leaves "the abandoned registration" to "normal cleanup".
    `INTEGRITY_FAILURE`): changing a published failure code is not additive within v1 (known limit
    [L-127](../planning/known-limits.md#l-127)).
 
+## Note, 2026-10-17 (#362, 0.2.2): a `retranscribe` step states the parts its run did not transcribe
+
+Section 2's *retranscribe* bullet reported only the revision. Since `0.2.1` (#353) a run in which
+the recogniser's answer for some chunks cannot be used commits its revision with those parts as
+recorded gaps, and `transcript retranscribe` answers `partial` with them; the step stayed `complete`
+with `coverage: null`, so a supervisor reading only the job result was not told (register entry
+L-147, now removed). The text above is kept as it was written.
+
+1. **The step uses the members it already had.** A `retranscribe` step whose run left such parts is
+   `partial` (and so is the request, with its warning), and its `coverage` is exactly the envelope
+   `coverage` of `transcript retranscribe` for the same revision: built by one function of the
+   contract crate from the revision's run (`retranscription_gaps`), `truncated`, the parts as
+   `<from_us>-<to_us>`, the reason `untranscribed_range`, cut at 100 with `gap_list_truncated`.
+   The schema already allowed both for every step, so no member was added and the outputs are
+   unchanged; only the schema's description says which steps state coverage.
+2. **A step without such a part is presented and recorded byte for byte as before** (`coverage:
+   null`), so its request records are read by `0.2.1`. A record that holds a `partial`
+   `retranscribe` step is not: the `0.2.1` reader refuses coverage on any step but `candidates`,
+   so a redelivery of that request to `0.2.1` answers `INTEGRITY_FAILURE` (read from that reader,
+   not run against it). The reader now accepts a step's coverage only with its kind's reasons: a
+   `retranscribe` step's only for a gap, with `untranscribed_range`, a `candidates` step's with
+   the visual reasons, and no other step's.
+3. **Tests:** `a_worker_retranscribe_step_states_the_gap_the_direct_command_states`
+   (`local_asr_contract`, every system: the revision of `transcript-retranscribe.partial.json`,
+   made by the application's own run with a stand-in recogniser, and the frozen example
+   `job-run.retranscribe-partial.json`); the three new tests of `worker_contract` (as before when
+   there is no gap, with its recorded bytes; partial and cut at 100, recorded and read back; a
+   coverage its kind never states is refused); and
+   `a_retranscribe_step_with_an_unusable_chunk_is_partial_with_the_direct_coverage`
+   (`engine_worker`, opt-in, real `FFmpeg` and a stand-in recogniser: the step's coverage equals
+   the direct rule's for the revision it committed and for a direct run on the same session, and
+   the replay returns it). The engine test failed before the change (`complete`, `coverage: null`).
+
 ## Consequences
 
 - The worker request and result are public v1 contracts before any command uses them,

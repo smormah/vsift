@@ -250,7 +250,7 @@ inputs are gone, **for as long as its record is held** (section 5: not the sessi
 
 | What the supervisor sees for a request | Recorded? | Action |
 | --- | --- | --- |
-| `status` `complete` or `partial` (fresh or `replayed`) | yes | acknowledge; `partial` names its gaps in each step's `coverage` |
+| `status` `complete` or `partial` (fresh or `replayed`) | yes | acknowledge; `partial` names its gaps in each step's `coverage` (a `candidates` step's windows, or, since `0.2.2`, the parts a `retranscribe` step's run could not transcribe, #362) |
 | `failed` with `INVALID_ARGUMENT`, `INVALID_SOURCE`, `RESOURCE_LIMIT`, `INTEGRITY_FAILURE`, `UNSUPPORTED_SCHEMA`, `INTERNAL` | yes | acknowledge to a dead-letter queue for a person |
 | `failed` with `MISSING_CAPABILITY` | yes | acknowledge to dead letter **and** mark the host unhealthy: a tool or model is missing or changed; after fixing the host, resubmit under a **new** operation id (L-069) |
 | `failed` with `IDEMPOTENCY_CONFLICT` | the other request is | a producer bug (one id, two requests): dead letter, never retry |

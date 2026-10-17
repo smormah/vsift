@@ -1335,8 +1335,9 @@ and `workspace_not_durable`.
 **Job result** ([`job-result.schema.json`](../../schemas/v1/job-result.schema.json);
 examples [`job-run.json`](../../schemas/v1/examples/job-run.json),
 [`job-run.replayed.json`](../../schemas/v1/examples/job-run.replayed.json),
-[`job-run.partial.json`](../../schemas/v1/examples/job-run.partial.json), each the
-`data` of a `job.run` result). At most 64 KiB; no path and no evidence text.
+[`job-run.partial.json`](../../schemas/v1/examples/job-run.partial.json),
+[`job-run.retranscribe-partial.json`](../../schemas/v1/examples/job-run.retranscribe-partial.json),
+each the `data` of a `job.run` result). At most 64 KiB; no path and no evidence text.
 `operation_id`, `request_digest`, `status` (derived: `cancelled`, then `failed`, then
 `partial` when a step left a stated gap, else `complete`), `replayed` (the recorded
 result of an earlier call, without new work), `attempt`, `session_id`, `source_id`,
@@ -1350,23 +1351,29 @@ requested step: `kind`, `status` (`complete`, `partial`, `failed`, `cancelled`,
 never VSift's own, and `free_space_reserve` `enforced` or `not_enforced`: whether the
 workspace's free-space reserve was checked before the copy).
 The outputs are: ingest `generation`, `revision_id` (an imported transcript or
-`null`); retranscribe `revision_id`, `generation`, `chunks_reused`; candidates
+`null`); retranscribe `revision_id`, `generation`, `chunks_reused` (the parts its run
+did not transcribe are its `coverage`, below); candidates
 `visual_index_id`, `generation`, `candidate_count` (the step analyses until no window
 of its range is left unanalysed; what stays uncovered is its `coverage` and makes it
 `partial`); retain `bundle_name`, `bundle_sha256`, `artifact_count`; close
 `generation`. A `partial` `job.run` result carries the warning "The request completed
 with a stated gap; see the coverage of each partial step."
 
-**A `retranscribe` step does not report gaps (0.2.1).** If the recogniser's answers for some
-chunks of the step's run could not be used (an `unusable` chunk, above), the step and the request
-are still `complete` with `coverage` null: the step's outputs name the revision and nothing about
-its gaps, and the worker schema has no member for them. A supervisor that reads only `job run` or
-`job batch` is therefore not told that part of the recording was not transcribed. It can tell by
-reading the revision the step names, `transcript get --revision <revision_id>`, whose data
-carries the warning `provider_chunks_rejected` and `revision.local_asr.unusable_chunks`, or by a
-`search` of the session, which lists the ranges. `transcript retranscribe` and `job resume`
-answer `partial`. This is deliberate for this release and is pinned by a contract test; reporting
-the gaps in the step is a change to the worker schema for a later release.
+**A `retranscribe` step states the parts its run did not transcribe (0.2.2, #362).** If the
+recogniser's answers for some chunks of the step's run could not be used (an `unusable` chunk,
+above), the step is `partial`, and so is the request, with the worker's warning; the step's
+`coverage` is exactly the envelope `coverage` that `transcript retranscribe` gives for the same
+revision: `truncated` true, the parts as `<from_us>-<to_us>` in start order (the first 100, then
+the reason `gap_list_truncated`) and the reason `untranscribed_range`. A step whose run
+transcribed all of its range is `complete` with `coverage` null, as before; only a `candidates`
+step always states its coverage. The outputs are unchanged. The revision the step names carries
+the rest, as for the direct command: `transcript get --revision <revision_id>` shows the warning
+`provider_chunks_rejected` and `revision.local_asr.unusable_chunks`. In `0.2.1` such a step was
+`complete` with `coverage` null. **Rolling back:** the reader of `0.2.1` and earlier refuses a
+recorded `retranscribe` step that has a `coverage`, so a request record that holds such a
+`partial` step is damaged to it and a redelivery of that request to the older release answers
+`INTEGRITY_FAILURE` (read from that release's reader, not run against it); every other record is
+written byte for byte as before.
 
 **Batch summary** ([`job-batch-data.schema.json`](../../schemas/v1/job-batch-data.schema.json),
 example [`job-batch.json`](../../schemas/v1/examples/job-batch.json) for the requests

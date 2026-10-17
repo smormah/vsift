@@ -29,8 +29,8 @@ use vsift_domain::{
 };
 
 use crate::{
-    CommandName, ConfidenceResponse, LifecycleResponse, OperationResponse, ResultView,
-    render_hidden_characters, sanitize_untrusted_text,
+    CommandName, ConfidenceResponse, CoverageResponse, LifecycleResponse, OperationResponse,
+    ResultView, render_hidden_characters, sanitize_untrusted_text,
     search::{TranscriptCoverageData, bounded, envelope_coverage},
     view::BRIEF_VIEW,
 };
@@ -627,11 +627,23 @@ pub fn finish_retranscription(
     response: OperationResponse<serde_json::Value>,
     revision: &TranscriptRevision,
 ) -> OperationResponse<serde_json::Value> {
-    let gaps = retranscription_gaps(revision);
-    if gaps.is_empty() {
-        return response;
+    match retranscription_coverage(&retranscription_gaps(revision)) {
+        Some(coverage) => response.with_coverage(coverage),
+        None => response,
     }
-    response.with_coverage(envelope_coverage(&gaps))
+}
+
+/// The coverage a retranscription states for the parts its run did not
+/// transcribe (`gaps`, from [`retranscription_gaps`]): `None` when there are
+/// none, else truncated, with the gaps as `<from_us>-<to_us>` and the reason
+/// `untranscribed_range`.
+///
+/// It has one home so that `transcript retranscribe`, `job resume` and a
+/// worker's `retranscribe` step state the same gaps in the same words (#362):
+/// the direct commands put it in the envelope, a worker step in its own
+/// `coverage`.
+pub(crate) fn retranscription_coverage(gaps: &[TimeRange]) -> Option<CoverageResponse> {
+    (!gaps.is_empty()).then(|| envelope_coverage(gaps))
 }
 
 /// Data of a `transcript.get` result: one bounded page of segments.

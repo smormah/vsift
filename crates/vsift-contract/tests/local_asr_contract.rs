@@ -23,18 +23,20 @@ use vsift_application::{
     build_asr_revision, page_transcript, transcribe_range, whole_file_source_segment,
 };
 use vsift_contract::{
-    CANCELLATION_TOO_LATE_WARNING, CHECKPOINT_DISCARDED_WARNING, CommandName,
+    CANCELLATION_TOO_LATE_WARNING, CHECKPOINT_DISCARDED_WARNING, CommandName, FreeSpaceReserve,
     IDEMPOTENCY_CONFLICT_REMEDIATION, JOB_BUSY_REMEDIATION, JOB_CANCELLED_REMEDIATION,
     JOB_INTERRUPTED_REMEDIATION, JOB_NOT_RESUMABLE_REMEDIATION, JOB_SESSION_NOT_OPEN_REMEDIATION,
     JobData, JobPresentation, JobResumeData, LOCAL_ASR_MODEL_REMEDIATION,
     LOCAL_ASR_TOOLS_REMEDIATION, LifecycleResponse, NO_AUDIO_STREAM_REMEDIATION,
-    NO_TRANSCRIPT_REMEDIATION, OperationResponse, PROVIDER_CHUNKS_REJECTED_WARNING,
-    PROVIDER_SEGMENTS_UNPLACED_WARNING, ProgressEventResponse, ProgressReport,
-    RESUMED_FROM_CHECKPOINT_WARNING, ResultView, RetranscribeJob, SUPERSEDED_REMEDIATION,
-    SearchPresentation, SessionJobData, SessionState, SessionStatusData, StatusData,
+    NO_TRANSCRIPT_REMEDIATION, OperationResponse, PARTIAL_REQUEST_WARNING,
+    PROVIDER_CHUNKS_REJECTED_WARNING, PROVIDER_SEGMENTS_UNPLACED_WARNING, ProgressEventResponse,
+    ProgressReport, RESUMED_FROM_CHECKPOINT_WARNING, ResourceLimits, ResultOrigin, ResultView,
+    RetranscribeJob, SUPERSEDED_REMEDIATION, SearchPresentation, SessionJobData, SessionState,
+    SessionStatusData, StatusData, StepOutputs, StepResult, StepStatus, StepTiming,
     TerminalEventResponse, TranscriptEvidenceStream, TranscriptPageData, TranscriptPresentation,
     TranscriptRetranscribeData, TranscriptRevisionData, UNKNOWN_JOB_REMEDIATION,
     UNKNOWN_REVISION_REMEDIATION, UNPINNED_MODEL_REMEDIATION, UNTRANSCRIBED_READ_WARNING,
+    WorkControls, WorkResult, WorkResultParts, WorkerIsolation, decode_work_request,
     finish_retranscription, job_warning_messages, local_asr_failure_summary,
     local_asr_verification_summary, retranscription_gaps, search_response, transcript_get_response,
     transcript_warning_messages,
@@ -44,10 +46,10 @@ use vsift_domain::{
     AsrProviderBuild, AsrRun, AsrRunParts, AttemptFailure, ChunkPlan, ChunkTime, CueText,
     FailureCode, JobId, JobKind, JobState, LanguageTag, MediaTime, OperationId, PageLimit,
     PlannedChunk, ProgressStage, ProgressUpdate, ProviderChunkOutput, ProviderOutputError,
-    ProviderSegment, ProviderToken, ProviderTokenKind, SessionId, Sha256Hex, SourceId,
-    SourceSegment, StorageGeneration, TimeRange, TranscriptRevision, TranscriptRevisionError,
-    TranscriptRevisionId, TranscriptWarningKind, TranscriptWarnings, merge_chunks, plan_chunks,
-    validate_chunk_output,
+    ProviderSegment, ProviderToken, ProviderTokenKind, PublicationGuarantee, SessionId, Sha256Hex,
+    SourceId, SourceSegment, StorageGeneration, TimeRange, TranscriptRevision,
+    TranscriptRevisionError, TranscriptRevisionId, TranscriptWarningKind, TranscriptWarnings,
+    merge_chunks, plan_chunks, validate_chunk_output,
 };
 
 mod common;
@@ -933,6 +935,78 @@ async fn a_run_with_an_unusable_chunk_is_a_partial_result_that_names_its_gap() -
     let coverage = vsift_domain::SearchCoverage::of(&revision, None);
     assert_eq!(coverage.untranscribed(), [range(30 * SECOND, 55 * SECOND)?]);
     assert!(coverage.no_speech().is_empty());
+    Ok(())
+}
+
+/// #362: a worker's `retranscribe` step that committed the revision of
+/// `transcript-retranscribe.partial.json` states the same gap as that direct
+/// result: the step is `partial`, its `coverage` is the direct envelope's
+/// `coverage`, member for member, and the request is `partial` with the
+/// worker's warning. Before this change the step was `complete` with
+/// `coverage: null` (L-147). The `job.run` result is the frozen example
+/// `job-run.retranscribe-partial.json`; its request is one `retranscribe` step
+/// of an existing session, with the same job and session as the direct
+/// example.
+#[tokio::test]
+async fn a_worker_retranscribe_step_states_the_gap_the_direct_command_states() -> TestResult {
+    let revision = unusable_chunk_revision().await?;
+    let direct = serde_json::to_value(finish_retranscription(
+        retranscribe_response(&revision, None)?,
+        &revision,
+    ))?;
+    assert_eq!(direct["status"], "partial");
+
+    let request = decode_work_request(
+        br#"{"schema_version":"1","operation_id":"op_6e1a3c5b7d9f0e2a4c6b8d0f1e3a5c7b","durability":"ephemeral","target":{"session_id":"ses_0123456789abcdef0123456789abcdef"},"steps":[{"retranscribe":{"range":null}}]}"#,
+    )?;
+    let step = StepResult::finished(
+        &StepOutputs::retranscription(&revision, StorageGeneration::from_value(2), 0),
+        StepTiming {
+            elapsed_ms: 41_870,
+            admission_wait_ms: 0,
+        },
+        Some(&JobId::parse(JOB)?),
+    );
+    assert_eq!(step.status(), StepStatus::Partial);
+    let result = WorkResult::new(WorkResultParts {
+        operation_id: request.operation_id(),
+        request_digest: request.digest(),
+        origin: ResultOrigin::Fresh,
+        attempt: NonZeroU32::MIN,
+        session_id: Some(&SessionId::parse(SESSION)?),
+        source_id: Some(&SourceId::from_sha256(&"0123456789abcdef".repeat(4))?),
+        publication: Some(PublicationGuarantee::ProcessCrashConsistent),
+        lifecycle: Some(LifecycleResponse::ephemeral(EXPIRES_AT.to_owned())),
+        steps: vec![step],
+        failure: None,
+        controls: WorkControls {
+            isolation: WorkerIsolation::ProcessOnly,
+            admission_capacity: NonZeroU16::new(8).ok_or("zero")?,
+            concurrency: NonZeroU16::MIN,
+            resource_limits: ResourceLimits::NotEnforced,
+            free_space_reserve: FreeSpaceReserve::Enforced,
+        },
+    })?;
+    let response = serde_json::to_value(
+        OperationResponse::partial(
+            CommandName::JobRun.identifier(),
+            &result,
+            PARTIAL_REQUEST_WARNING,
+        )?
+        .with_operation_id(&OperationId::parse(result.operation_id())?)
+        .with_lifecycle(LifecycleResponse::ephemeral(EXPIRES_AT.to_owned())),
+    )?;
+    validate("operation-response.schema.json", &response)?;
+    validate("job-result.schema.json", &response["data"])?;
+    assert_eq!(response["status"], "partial");
+    let step = &response["data"]["steps"][0];
+    assert_eq!(step["status"], "partial");
+    assert_eq!(step["coverage"], direct["coverage"]);
+    assert_eq!(
+        step["outputs"]["revision_id"],
+        direct["data"]["revision"]["revision_id"]
+    );
+    assert_example("job-run.retranscribe-partial.json", &response)?;
     Ok(())
 }
 

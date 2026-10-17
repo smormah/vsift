@@ -51,6 +51,7 @@ the CLI and write a cited report. P12's named-client trials qualified it:
 **Also in the `0.2.2` cycle (merged on 2026-10-17 as `46005eb`, not released):** a refused `--session-root` folder name says which rule it broke (a colon, a trailing space or dot, a Windows device name, and on Windows a control character); control characters work in a root name on Linux and macOS (#232).
 **Also in the `0.2.2` cycle (merged on 2026-10-17 as `6a0ebf5`, not released):** a video copy that clearly cannot fit the ten-minute limit is stopped after a minute or so instead of at ten, with its own remediation; the code stays `INVALID_SOURCE` (#325, its first step; the rest of #325 needs decisions).
 **Also in the `0.2.2` cycle (merged on 2026-10-17 as `1fdaa88`, not released):** `ingest` refuses a named pipe, a device or a socket without opening it, with a remediation that says it is not a regular file; the codes stay (#264).
+**Also in the `0.2.2` cycle (a pull request of 2026-10-17, not merged when this was written):** a worker's `retranscribe` step (`job run`, `job batch`) whose run could not transcribe part of the recording is `partial` and lists those parts in its `coverage`, exactly as `transcript retranscribe` does; in `0.2.1` it said `complete` (#362; register entry L-147 removed). The whole story is done in that pull request; a request record with such a step is read as damaged by `0.2.1` (a roll back only).
 
 ## Where things stand
 

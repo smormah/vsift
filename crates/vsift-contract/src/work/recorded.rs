@@ -40,6 +40,9 @@ use crate::{
 
 /// The reason a truncated gap list names (see the candidates contract).
 const GAPS_TRUNCATED_REASON: &str = "gap_list_truncated";
+/// The reason a `retranscribe` step's gaps name, as `transcript retranscribe`
+/// does.
+const UNTRANSCRIBED_REASON: &str = crate::search::UNTRANSCRIBED_REASON;
 
 /// Why a recorded step or result could not be read back.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -267,10 +270,31 @@ struct WireCoverage {
 }
 
 impl WireCoverage {
-    fn decode(self) -> Result<CoverageResponse, RecordedResultError> {
-        if self.gaps.len() > MAX_COVERAGE_RANGES
-            || self.reasons.len() > CoverageGapReason::ALL.len() + 1
-        {
+    /// The coverage of a step of `kind`, with only the reasons that kind
+    /// states: a `candidates` step the visual gap reasons, a `retranscribe`
+    /// step `untranscribed_range` (#362), each with `gap_list_truncated`. A
+    /// `retranscribe` step states coverage only for a gap, so its coverage
+    /// is never complete and always names `untranscribed_range` first.
+    fn decode(self, kind: WorkStepKind) -> Result<CoverageResponse, RecordedResultError> {
+        let known: Vec<&str> = match kind {
+            WorkStepKind::Candidates => CoverageGapReason::ALL
+                .iter()
+                .map(|reason| reason.identifier())
+                .collect(),
+            WorkStepKind::Retranscribe => {
+                if !self.truncated
+                    || self.gaps.is_empty()
+                    || self.reasons.first().map(String::as_str) != Some(UNTRANSCRIBED_REASON)
+                {
+                    return Err(RecordedResultError::Malformed);
+                }
+                vec![UNTRANSCRIBED_REASON]
+            }
+            WorkStepKind::Ingest | WorkStepKind::Retain | WorkStepKind::Close => {
+                return Err(RecordedResultError::Malformed);
+            }
+        };
+        if self.gaps.len() > MAX_COVERAGE_RANGES || self.reasons.len() > known.len() + 1 {
             return Err(RecordedResultError::Malformed);
         }
         for gap in &self.gaps {
@@ -283,12 +307,11 @@ impl WireCoverage {
                 return Err(RecordedResultError::Malformed);
             }
         }
-        if !self.reasons.iter().all(|reason| {
-            reason == GAPS_TRUNCATED_REASON
-                || CoverageGapReason::ALL
-                    .iter()
-                    .any(|known| known.identifier() == reason)
-        }) {
+        if !self
+            .reasons
+            .iter()
+            .all(|reason| reason == GAPS_TRUNCATED_REASON || known.contains(&reason.as_str()))
+        {
             return Err(RecordedResultError::Malformed);
         }
         Ok(CoverageResponse::new(
@@ -413,15 +436,20 @@ impl WireStep {
             .outputs
             .map(|outputs| outputs_of(kind, outputs))
             .transpose()?;
-        let coverage = self.coverage.map(WireCoverage::decode).transpose()?;
-        // The states a real step is presented in, and nothing else.
+        let coverage = self
+            .coverage
+            .map(|coverage| coverage.decode(kind))
+            .transpose()?;
+        // The states a real step is presented in, and nothing else. A
+        // `candidates` step always states its coverage; a `retranscribe` step
+        // only when its run left a gap (#362), and other steps never.
         let consistent = match state {
             StepStatus::Complete | StepStatus::Partial => {
                 outputs.is_some()
                     && cause.is_none()
                     && (coverage.as_ref().is_some_and(CoverageResponse::truncated)
                         == (state == StepStatus::Partial))
-                    && (coverage.is_some() == (kind == WorkStepKind::Candidates))
+                    && (kind != WorkStepKind::Candidates || coverage.is_some())
             }
             StepStatus::Failed => {
                 outputs.is_none()

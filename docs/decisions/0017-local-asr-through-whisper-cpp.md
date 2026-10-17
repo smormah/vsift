@@ -583,7 +583,9 @@ worker schema unchanged, and it means a supervisor that reads only `job run` is 
 revision the step names: `transcript get --revision <revision_id>` shows the warning `provider_chunks_rejected` and the count of chunks with an unusable answer
 (`revision.local_asr.unusable_chunks`), and a `search` of the session lists the ranges. `transcript retranscribe`, `job resume` and the other direct commands do answer
 `partial`. A test pins the step's shape (`worker_contract`), and the destructuring in it stops compiling if a member for the gaps is added, so the change is made on purpose,
-with the schema and these words, in a later release.
+with the schema and these words, in a later release. *(Amended 2026-10-17, #362, for `0.2.2`: the step now uses the members it already had: it is `partial`, and its
+`coverage` is the envelope `coverage` `transcript retranscribe` gives for the same revision; the test above was replaced. ADR 0021, note of that date, has the
+detail and the rolling-back statement.)*
 
 ### Rolling back
 

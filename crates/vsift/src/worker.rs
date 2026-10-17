@@ -13,7 +13,10 @@
 //! - **retranscribe** runs [`Engine::retranscribe`] under the operation id
 //!   `op_` + 32 hexadecimal digits of SHA-256(`vsift.job-step.v1`, the
 //!   request's operation id, the step index), so a retried request continues
-//!   or replays its P10 job exactly once.
+//!   or replays its P10 job exactly once. The parts of its range the run could
+//!   not transcribe (unusable recogniser answers, #353) are the step's
+//!   coverage and make it `partial`, as `transcript retranscribe` answers for
+//!   the same revision (#362).
 //! - **candidates** calls [`Engine::candidates`] until no window of the range
 //!   is left unanalysed (each call analyses at most 30); what stays uncovered
 //!   is the step's coverage and makes it `partial`.
@@ -732,11 +735,13 @@ impl Engine {
                             error,
                         })?;
                     Ok(StepDone {
-                        outputs: StepOutputs::Retranscribe {
-                            revision_id: outcome.revision().id().clone(),
-                            generation: outcome.session().generation(),
-                            chunks_reused: outcome.job().chunks_reused(),
-                        },
+                        // The revision's untranscribed parts, by the rule
+                        // `transcript retranscribe` states them (#362).
+                        outputs: StepOutputs::retranscription(
+                            outcome.revision(),
+                            outcome.session().generation(),
+                            outcome.job().chunks_reused(),
+                        ),
                         admission_wait: outcome.job().admission_wait(),
                         job: Some(outcome.job().job_id().clone()),
                     })

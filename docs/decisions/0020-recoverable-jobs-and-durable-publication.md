@@ -501,6 +501,7 @@ Two additions to sections 4 and 5, proposed with [ADR 0017's note of the same da
   not transcribed. It can tell by reading the revision the step names, `transcript get --revision <revision_id>`, whose data carries the warning
   `provider_chunks_rejected` and `revision.local_asr.unusable_chunks`. The direct commands (`transcript retranscribe`, `job resume`) answer `partial`. A contract test pins the
   step's shape and stops compiling if a member for gaps is added, so the change is made on purpose in a later release, with the schema and these words.
+  *(Amended 2026-10-17, #362, for `0.2.2`: the step is now `partial` with the direct command's `coverage`; see ADR 0021, note of that date.)*
 
 ## Consequences
 

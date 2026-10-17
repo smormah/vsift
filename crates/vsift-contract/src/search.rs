@@ -42,7 +42,7 @@ const MAX_PRESENTED_TERM_BYTES: usize = 1_024;
 const SEARCH_SCOPE: &str = "transcript_text";
 
 /// Envelope reason: part of the searched range has no transcript.
-const UNTRANSCRIBED_REASON: &str = "untranscribed_range";
+pub(crate) const UNTRANSCRIBED_REASON: &str = "untranscribed_range";
 
 /// Envelope reason: more untranscribed gaps exist than the envelope lists.
 const GAPS_TRUNCATED_REASON: &str = "gap_list_truncated";

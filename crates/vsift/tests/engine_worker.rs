@@ -1,8 +1,11 @@
 //! Worker requests through the engine (P11 PR 3, ADR 0021 sections 2, 4
 //! and 6): `Engine::run_work_request` in an ephemeral worker workspace.
 //!
-//! Everything here runs without `FFmpeg`: the requests ingest a placeholder
-//! source (a plain ingest runs no provider), retain it and close it. They
+//! Everything here but one opt-in test runs without `FFmpeg`: the requests
+//! ingest a placeholder source (a plain ingest runs no provider), retain it
+//! and close it. The opt-in test transcribes real audio with a stand-in
+//! recognizer (#362) and needs `ffmpeg` and `ffprobe` on `PATH`:
+//! `cargo test -p vsift --locked --test engine_worker -- --ignored`. They
 //! cover the request record's table (replay, conflict, busy, continue), the
 //! refusals that need no write, contained inputs, the X-09 retry and
 //! deadline rules, a shutdown between steps, and S-07: a process killed at
@@ -32,15 +35,19 @@ use std::{
 use jsonschema::{Retrieve, Uri};
 use serde_json::Value;
 use vsift::{
-    AdmissionBudget, AdmissionWait, Cancellation, DurabilityRequirement, Engine, EngineConfig,
-    EngineError, EnginePorts, HostIsolation, JobProgress, LocalAsrVerification, LocalAsrVerifier,
-    ManagedRootLocation, MediaToolVerification, MediaToolVerifier, PlannedChunk, ProgressObserver,
-    ProgressStage, ProviderChunkOutput, RecognizerIdentity, RuntimeDependency, SessionListEntry,
-    SessionRootLocation, SpeechPcm, SpeechRecognitionError, SpeechRecognizer,
-    UserConfigurationLocation, WorkOutcome, WorkRequestRun, WorkerFailure, WorkspaceInitRequest,
-    WorkspacePolicy, WorkspaceRetention,
+    AdmissionBudget, AdmissionWait, Cancellation, ChunkTime, CueText, DurabilityRequirement,
+    Engine, EngineConfig, EngineError, EnginePorts, HostIsolation, JobProgress, LanguageTag,
+    LocalAsrVerification, LocalAsrVerifier, ManagedRootLocation, MediaToolVerification,
+    MediaToolVerifier, PlannedChunk, ProgressObserver, ProgressStage, ProviderChunkOutput,
+    ProviderSegment, RecognizerIdentity, RetranscribeRequest, RuntimeDependency, SessionId,
+    SessionListEntry, SessionRootLocation, SpeechPcm, SpeechRecognitionError, SpeechRecognizer,
+    TranscriptQuery, TranscriptRevision, TranscriptRevisionId, UserConfigurationLocation,
+    WorkOutcome, WorkRequestRun, WorkerFailure, WorkspaceInitRequest, WorkspacePolicy,
+    WorkspaceRetention,
 };
-use vsift_contract::{WorkRequest, decode_work_request};
+use vsift_contract::{
+    CommandName, OperationResponse, WorkRequest, decode_work_request, finish_retranscription,
+};
 use vsift_domain::{
     AsrDecodingProfile, AsrModel, AsrModelProfile, AsrProvider, AsrProviderBuild, FailureCode,
     OperationId, Sha256Hex,
@@ -613,6 +620,163 @@ async fn a_step_stopped_before_its_next_provider_call_fails_as_a_cancellation() 
         FailureCode::Cancelled,
         "{underlying:?}"
     );
+    Ok(())
+}
+
+/// A stand-in recognizer whose answer for the second chunk (index 1) starts
+/// after the chunk's audio ends, which no rule can place: an `unusable`
+/// chunk, as whisper.cpp gave for the recording of #353. Every other chunk is
+/// answered with one segment six seconds in.
+#[derive(Clone)]
+struct SecondChunkUnusable;
+
+impl SpeechRecognizer for SecondChunkUnusable {
+    fn identity(
+        &self,
+    ) -> impl Future<Output = Result<RecognizerIdentity, SpeechRecognitionError>> + Send {
+        std::future::ready(base_identity())
+    }
+
+    fn recognize(
+        &self,
+        chunk: &PlannedChunk,
+        _pcm: &SpeechPcm,
+    ) -> impl Future<Output = Result<ProviderChunkOutput, SpeechRecognitionError>> + Send {
+        let start_ms = if chunk.index() == 1 {
+            chunk.window().duration_micros() / 1_000 + 1_000
+        } else {
+            6_000
+        };
+        std::future::ready(one_segment_at(start_ms, chunk.index()))
+    }
+}
+
+/// One segment of two seconds, `start_ms` into its chunk.
+fn one_segment_at(
+    start_ms: u64,
+    chunk: u32,
+) -> Result<ProviderChunkOutput, SpeechRecognitionError> {
+    let words = format!("words in chunk {chunk}");
+    Ok(ProviderChunkOutput {
+        language: LanguageTag::parse("en").ok(),
+        segments: vec![ProviderSegment {
+            start: ChunkTime::from_millis(start_ms).ok_or(SpeechRecognitionError::Io)?,
+            end: ChunkTime::from_millis(start_ms + 2_000).ok_or(SpeechRecognitionError::Io)?,
+            text: Some(CueText::new(words.clone(), words).map_err(|_| SpeechRecognitionError::Io)?),
+            tokens: Vec::new(),
+        }],
+    })
+}
+
+/// #362: a `retranscribe` step whose run had an unusable chunk is `partial`,
+/// and so is the request, and the step's `coverage` is exactly the coverage
+/// `transcript retranscribe` states: for the revision the step committed, and
+/// for a direct run over the same session with the same recognizer. Before
+/// this change the step was `complete` with `coverage: null` (L-147).
+///
+/// The source is the F05 speech fixture looped four times (about 76 s, three
+/// chunks), so the run decodes real audio: it needs `FFmpeg`. The recognizer
+/// is a stand-in.
+#[tokio::test]
+#[ignore = "requires FFmpeg and FFprobe on PATH"]
+async fn a_retranscribe_step_with_an_unusable_chunk_is_partial_with_the_direct_coverage()
+-> TestResult {
+    let layout = Layout::new()?;
+    let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../fixtures/corpus/generated/F05-speech.mp4");
+    let source = layout.inputs().join("videos/talk.mp4");
+    fs::remove_file(&source)?;
+    let status = Command::new("ffmpeg")
+        .args(["-v", "error", "-n", "-stream_loop", "3", "-i"])
+        .arg(&fixture)
+        .args(["-c", "copy"])
+        .arg(&source)
+        .stdin(Stdio::null())
+        .status()?;
+    if !status.success() {
+        return Err("ffmpeg could not build the looped clip".into());
+    }
+    let engine = layout.init_with(
+        4,
+        EnginePorts::system()
+            .with_media_tool_verifier(PassingMediaTools)
+            .with_speech_recognizer(SecondChunkUnusable, PassingAsrVerifier),
+    )?;
+    let request = ingest_request(OPERATION, r#"{"retranscribe":{"range":null}}"#, "")?;
+    let outcome = engine.run_work_request(layout.run(&request)).await;
+    let value = data(&outcome)?;
+    conforms(&value)?;
+    assert_eq!(value["status"], "partial", "{value}");
+    assert!(value["failure"].is_null());
+    assert_eq!(
+        statuses(&value),
+        [
+            ("ingest".to_owned(), "complete".to_owned()),
+            ("retranscribe".to_owned(), "partial".to_owned())
+        ]
+    );
+    let step = &value["steps"][1];
+    assert_eq!(step["coverage"]["truncated"], true, "{step}");
+    assert_eq!(
+        step["coverage"]["reasons"],
+        serde_json::json!(["untranscribed_range"])
+    );
+    assert!(
+        step["coverage"]["gaps"]
+            .as_array()
+            .is_some_and(|gaps| !gaps.is_empty()),
+        "{step}"
+    );
+
+    // The direct commands' rule over the revision the step names.
+    let session = SessionId::parse(value["session_id"].as_str().ok_or("no session")?)?;
+    let revision_id = TranscriptRevisionId::parse(
+        step["outputs"]["revision_id"]
+            .as_str()
+            .ok_or("no revision")?,
+    )?;
+    let committed = engine.transcript(TranscriptQuery {
+        session: session.clone(),
+        revision: Some(revision_id),
+        from_micros: 0,
+        to_micros: 1_000_000,
+        limit: Some(1),
+        cursor: None,
+    })?;
+    let stated = |revision: &TranscriptRevision| -> Built<Value> {
+        let response = finish_retranscription(
+            OperationResponse::complete(
+                CommandName::TranscriptRetranscribe.identifier(),
+                &serde_json::json!({}),
+            )?,
+            revision,
+        );
+        Ok(serde_json::to_value(response)?)
+    };
+    let of_the_step = stated(committed.revision())?;
+    assert_eq!(of_the_step["status"], "partial");
+    assert_eq!(step["coverage"], of_the_step["coverage"]);
+
+    // A direct run over the same session, with the same recognizer.
+    let direct = engine
+        .retranscribe(RetranscribeRequest {
+            session,
+            range: None,
+            operation_id: None,
+            cancellation: Cancellation::new(),
+            progress: ProgressObserver::none(),
+            admission: AdmissionWait::Immediate,
+        })
+        .await?;
+    let direct = stated(direct.revision())?;
+    assert_eq!(direct["status"], "partial");
+    assert_eq!(step["coverage"], direct["coverage"]);
+
+    // The recorded result is replayed as it was.
+    let replayed = data(&engine.run_work_request(layout.run(&request)).await)?;
+    assert_eq!(replayed["replayed"], true, "{replayed}");
+    assert_eq!(replayed["status"], "partial");
+    assert_eq!(replayed["steps"], value["steps"]);
     Ok(())
 }
 
