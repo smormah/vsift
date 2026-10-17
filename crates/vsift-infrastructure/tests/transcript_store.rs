@@ -127,11 +127,13 @@ fn rewrite_bundle_record(bundle: &Path, old_name: &str, record: &serde_json::Val
 
 /// An initialized session with a staged, not yet activated source.
 struct Staged {
-    root: OwnedRoot,
     workspace: PathBuf,
     store: FilesystemSessionStore,
     session_id: SessionId,
     snapshot: SourceSnapshot,
+    // Last: fields drop in order, and on Windows a folder something still
+    // holds open cannot be removed (#423).
+    root: OwnedRoot,
 }
 
 async fn staged() -> Result<Staged, Box<dyn Error>> {
@@ -162,11 +164,11 @@ async fn staged() -> Result<Staged, Box<dyn Error>> {
         &source,
     )?;
     Ok(Staged {
-        root,
         workspace,
         store,
         session_id,
         snapshot,
+        root,
     })
 }
 

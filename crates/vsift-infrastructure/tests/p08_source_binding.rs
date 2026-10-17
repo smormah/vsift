@@ -58,9 +58,11 @@ impl Drop for OwnedRoot {
 
 /// An open session whose committed source is [`SOURCE`].
 struct Committed {
-    _root: OwnedRoot,
     store: FilesystemSessionStore,
     session_id: SessionId,
+    // Last: fields drop in order, and on Windows a folder something still
+    // holds open cannot be removed (#423).
+    _root: OwnedRoot,
 }
 
 impl Committed {
@@ -99,9 +101,9 @@ impl Committed {
         )?;
         drop(snapshot);
         Ok(Self {
-            _root: root,
             store,
             session_id,
+            _root: root,
         })
     }
 

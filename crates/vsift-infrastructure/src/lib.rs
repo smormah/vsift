@@ -62,6 +62,8 @@ mod source_duration_probe;
 mod source_snapshot;
 mod speech_audio;
 mod system_clock;
+#[cfg(test)]
+mod test_folder;
 mod transcript_record;
 mod transcript_sidecar;
 mod user_dependency_config;

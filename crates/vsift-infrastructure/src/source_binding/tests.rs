@@ -68,9 +68,11 @@ impl Drop for OwnedRoot {
 
 /// An open session whose committed source is a copy of `source`.
 struct CommittedSession {
-    _root: OwnedRoot,
     store: FilesystemSessionStore,
     session_id: SessionId,
+    // Last: fields drop in order, and on Windows a folder something still
+    // holds open cannot be removed (#423).
+    _root: OwnedRoot,
 }
 
 /// A provisioned root with one initialized session that has no source yet.
@@ -113,9 +115,9 @@ async fn committed_session(root: OwnedRoot, source: &Path) -> Built<CommittedSes
     )?;
     drop(snapshot);
     Ok(CommittedSession {
-        _root: root,
         store,
         session_id,
+        _root: root,
     })
 }
 

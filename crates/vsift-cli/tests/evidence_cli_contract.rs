@@ -374,12 +374,14 @@ impl EvidenceControl for Never {
 /// One session of a stand-in source, opened through the binary, with
 /// stand-in tools registered and trusted as the binary would trust real ones.
 struct Harness {
-    root: OwnedRoot,
     session: String,
     session_id: SessionId,
     source: SourceId,
     ffmpeg: PathBuf,
     ffprobe: PathBuf,
+    // Last: fields drop in order, and on Windows a folder something still
+    // holds open cannot be removed (#423).
+    root: OwnedRoot,
 }
 
 impl Harness {
@@ -416,11 +418,11 @@ impl Harness {
         }
         Ok(Self {
             session_id: SessionId::parse(&session)?,
-            root,
             session,
             source: source_id,
             ffmpeg,
             ffprobe,
+            root,
         })
     }
 

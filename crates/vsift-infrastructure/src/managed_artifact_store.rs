@@ -3619,7 +3619,6 @@ mod tests {
         error::Error,
         fs,
         io::{Cursor, Read},
-        path::PathBuf,
     };
 
     use sha2::{Digest, Sha256};
@@ -3635,14 +3634,12 @@ mod tests {
         ReviewedRuntimeAlias, ReviewedRuntimeLayout, TarInventoryError, VERSION_MANIFEST, VERSIONS,
         hex,
     };
-    use crate::ArchiveInventoryBounds;
+    use crate::{ArchiveInventoryBounds, test_folder::TestFolder};
 
-    fn fixture_root() -> Result<PathBuf, Box<dyn Error>> {
-        let mut random = [0_u8; 16];
-        getrandom::fill(&mut random).map_err(|_| std::io::Error::other("random source failed"))?;
-        let parent = std::env::temp_dir().join(format!("vsift-managed-test-{}", hex(&random)));
-        fs::create_dir(&parent)?;
-        Ok(parent)
+    /// Removed when it drops, also when a test fails before its own
+    /// removal (#423).
+    fn fixture_root() -> Result<TestFolder, Box<dyn Error>> {
+        TestFolder::new("vsift-managed-test")
     }
 
     fn abc_integrity() -> Result<ArtifactIntegrity, Box<dyn Error>> {

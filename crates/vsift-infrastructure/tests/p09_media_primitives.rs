@@ -81,10 +81,12 @@ impl Drop for OwnedRoot {
 
 /// A fixture staged into a fresh private session store.
 struct Staged {
-    root: OwnedRoot,
     store: FilesystemSessionStore,
     snapshot: SourceSnapshot,
     conformance: MediaProviderConformance,
+    // Last: fields drop in order, and on Windows a folder something still
+    // holds open cannot be removed (#423).
+    root: OwnedRoot,
 }
 
 impl Staged {
@@ -119,10 +121,10 @@ impl Staged {
             source,
         )?;
         Ok(Self {
-            root,
             store,
             snapshot,
             conformance,
+            root,
         })
     }
 }

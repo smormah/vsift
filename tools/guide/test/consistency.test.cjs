@@ -7,6 +7,22 @@ const path = require('node:path');
 const test = require('node:test');
 const consistency = require('../lib/consistency.cjs');
 
+/**
+ * The folders this file's tests made, removed after the last test whether or
+ * not the tests passed (#423). Only folders `mkdtempSync` made here are listed.
+ */
+const madeFolders = [];
+test.after(() => {
+  for (const folder of madeFolders) fs.rmSync(folder, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+});
+
+/** A new empty folder under the temporary folder, removed after the tests. */
+function madeFolder(prefix) {
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+  madeFolders.push(folder);
+  return folder;
+}
+
 const CONTRACT = [
   '# Contract',
   '',
@@ -25,7 +41,7 @@ const SCHEMA = { $defs: { error: { properties: { code: { enum: ['INVALID_ARGUMEN
 
 /** A small repository with a guide that is consistent; a test then breaks one thing. */
 function repository(overrides = {}) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'guide-consistency-test-'));
+  const root = madeFolder('guide-consistency-test-');
   const files = {
     'docs/contracts/cli-v1.md': CONTRACT,
     'schemas/v1/operation-response.schema.json': JSON.stringify(SCHEMA),

@@ -96,12 +96,14 @@ impl VisualSampler for Slides {
 }
 
 struct Opened {
-    root: OwnedRoot,
     workspace: PathBuf,
     store: FilesystemSessionStore,
     session_id: SessionId,
     source_id: vsift_domain::SourceId,
     generation: StorageGeneration,
+    // Last: fields drop in order, and on Windows a folder something still
+    // holds open cannot be removed (#423).
+    root: OwnedRoot,
 }
 
 async fn open_session() -> Built<Opened> {
@@ -140,12 +142,12 @@ async fn open_session() -> Built<Opened> {
     let source_id = snapshot.id().clone();
     drop(snapshot);
     Ok(Opened {
-        root,
         workspace,
         store,
         session_id,
         source_id,
         generation,
+        root,
     })
 }
 

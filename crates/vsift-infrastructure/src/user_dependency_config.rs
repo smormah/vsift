@@ -374,14 +374,13 @@ mod tests {
 
     use vsift_domain::RuntimeDependency;
 
-    use super::{UserDependencyConfigError, UserDependencyConfigStore, hex};
+    use super::{UserDependencyConfigError, UserDependencyConfigStore};
+    use crate::test_folder::TestFolder;
 
-    fn fixture_root() -> Result<PathBuf, Box<dyn std::error::Error>> {
-        let mut random = [0_u8; 16];
-        getrandom::fill(&mut random).map_err(|_| std::io::Error::other("random source failed"))?;
-        let root = std::env::temp_dir().join(format!("vsift-user-config-test-{}", hex(&random)));
-        fs::create_dir(&root)?;
-        Ok(root)
+    /// Removed when it drops, also when a test fails before its own
+    /// removal (#423).
+    fn fixture_root() -> Result<TestFolder, Box<dyn std::error::Error>> {
+        TestFolder::new("vsift-user-config-test")
     }
 
     #[test]

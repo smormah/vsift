@@ -7,14 +7,41 @@ use std::{
     path::{Path, PathBuf},
 };
 
-fn isolated_config_base() -> Result<PathBuf, Box<dyn std::error::Error>> {
-    let mut random = [0_u8; 16];
-    getrandom::fill(&mut random).map_err(|_| std::io::Error::other("random source failed"))?;
-    let mut suffix = String::with_capacity(32);
-    for byte in random {
-        write!(&mut suffix, "{byte:02x}")?;
+/// A private configuration base for one test: a folder the test creates
+/// itself and removes when the guard drops, also when the test fails.
+///
+/// The base the binary is pointed at is a child of that folder that does not
+/// exist yet, so a test can still see whether a command created it. The guard
+/// removes only the folder it created (`create_dir` fails on one that already
+/// exists), never a path it did not make (#423).
+struct ConfigBase {
+    owned: PathBuf,
+    base: PathBuf,
+}
+
+impl ConfigBase {
+    fn new() -> Result<Self, Box<dyn std::error::Error>> {
+        let mut random = [0_u8; 16];
+        getrandom::fill(&mut random).map_err(|_| std::io::Error::other("random source failed"))?;
+        let mut suffix = String::with_capacity(32);
+        for byte in random {
+            write!(&mut suffix, "{byte:02x}")?;
+        }
+        let owned = std::env::temp_dir().join(format!("vsift-cli-config-test-{suffix}"));
+        std::fs::create_dir(&owned)?;
+        let base = owned.join("base");
+        Ok(Self { owned, base })
     }
-    Ok(std::env::temp_dir().join(format!("vsift-cli-config-test-{suffix}")))
+
+    fn path(&self) -> &Path {
+        &self.base
+    }
+}
+
+impl Drop for ConfigBase {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.owned);
+    }
 }
 
 fn with_config_base<'a>(command: &'a mut Command, base: &Path) -> &'a mut Command {
@@ -37,8 +64,9 @@ fn config_root(base: &Path) -> PathBuf {
 }
 
 fn run(arguments: &[&str]) -> Result<std::process::Output, Box<dyn std::error::Error>> {
-    let base = isolated_config_base()?;
-    Ok(with_config_base(&mut Command::cargo_bin("vsift")?, &base)
+    let config = ConfigBase::new()?;
+    let base = config.path();
+    Ok(with_config_base(&mut Command::cargo_bin("vsift")?, base)
         .args(arguments)
         .output()?)
 }
@@ -193,8 +221,9 @@ fn json_parse_failures_have_one_complete_machine_result() -> Result<(), Box<dyn 
 #[test]
 fn setup_check_json_is_structural_and_environment_independent()
 -> Result<(), Box<dyn std::error::Error>> {
-    let base = isolated_config_base()?;
-    let output = with_config_base(&mut Command::cargo_bin("vsift")?, &base)
+    let config = ConfigBase::new()?;
+    let base = config.path();
+    let output = with_config_base(&mut Command::cargo_bin("vsift")?, base)
         .args(["setup", "check", "--json", "--timeout-seconds", "1"])
         .env("PATH", "")
         .output()?;
@@ -231,8 +260,9 @@ fn setup_check_json_is_structural_and_environment_independent()
 #[test]
 fn the_setup_check_deadline_option_keeps_its_range() -> Result<(), Box<dyn std::error::Error>> {
     for accepted in ["1", "60"] {
-        let base = isolated_config_base()?;
-        let output = with_config_base(&mut Command::cargo_bin("vsift")?, &base)
+        let config = ConfigBase::new()?;
+        let base = config.path();
+        let output = with_config_base(&mut Command::cargo_bin("vsift")?, base)
             .args(["setup", "check", "--json", "--timeout-seconds", accepted])
             .env("PATH", "")
             .output()?;
@@ -258,8 +288,9 @@ fn the_setup_check_deadline_option_keeps_its_range() -> Result<(), Box<dyn std::
 fn off_path_whisper_is_selectable_without_installing_or_disclosing_its_path()
 -> Result<(), Box<dyn std::error::Error>> {
     let binary = Command::cargo_bin("vsift")?.get_program().to_os_string();
-    let base = isolated_config_base()?;
-    let output = with_config_base(&mut Command::cargo_bin("vsift")?, &base)
+    let config = ConfigBase::new()?;
+    let base = config.path();
+    let output = with_config_base(&mut Command::cargo_bin("vsift")?, base)
         .args(["setup", "check", "--json", "--whisper"])
         .arg(&binary)
         .env("PATH", "")
@@ -286,17 +317,18 @@ fn off_path_whisper_is_selectable_without_installing_or_disclosing_its_path()
 fn setup_check_reports_an_unreviewed_model_without_running_or_disclosing_it()
 -> Result<(), Box<dyn std::error::Error>> {
     let binary = Command::cargo_bin("vsift")?.get_program().to_os_string();
-    let base = isolated_config_base()?;
-    std::fs::create_dir_all(&base)?;
+    let config = ConfigBase::new()?;
+    let base = config.path();
+    std::fs::create_dir_all(base)?;
     let model = base.join("ggml-unreviewed-model.bin");
     std::fs::write(&model, b"not a reviewed whisper.cpp model")?;
-    let registered = with_config_base(&mut Command::cargo_bin("vsift")?, &base)
+    let registered = with_config_base(&mut Command::cargo_bin("vsift")?, base)
         .args(["setup", "configure-model", "--json", "--file"])
         .arg(&model)
         .output()?;
     assert!(registered.status.success());
 
-    let output = with_config_base(&mut Command::cargo_bin("vsift")?, &base)
+    let output = with_config_base(&mut Command::cargo_bin("vsift")?, base)
         .args(["setup", "check", "--json"])
         .arg("--ffmpeg")
         .arg(&binary)
@@ -307,7 +339,6 @@ fn setup_check_reports_an_unreviewed_model_without_running_or_disclosing_it()
         .env("PATH", "")
         .output()?;
     let value = parse_stdout(&output)?;
-    let _ = std::fs::remove_dir_all(&base);
 
     assert_eq!(value["verification_scope"], "executable_probe_only");
     assert_eq!(value["local_asr_model"], "not_checked");
@@ -357,8 +388,9 @@ fn invalid_explicit_selection_does_not_fall_back_to_path() -> Result<(), Box<dyn
 #[test]
 fn headless_setup_check_jsonl_returns_one_bounded_terminal_remediation()
 -> Result<(), Box<dyn std::error::Error>> {
-    let base = isolated_config_base()?;
-    let output = with_config_base(&mut Command::cargo_bin("vsift")?, &base)
+    let config = ConfigBase::new()?;
+    let base = config.path();
+    let output = with_config_base(&mut Command::cargo_bin("vsift")?, base)
         .args([
             "setup",
             "check",
@@ -394,9 +426,10 @@ fn headless_setup_check_jsonl_returns_one_bounded_terminal_remediation()
 #[test]
 fn configured_off_path_selection_persists_and_per_call_path_overrides_it()
 -> Result<(), Box<dyn std::error::Error>> {
-    let base = isolated_config_base()?;
+    let config = ConfigBase::new()?;
+    let base = config.path();
     let binary = Command::cargo_bin("vsift")?.get_program().to_os_string();
-    let configured = with_config_base(&mut Command::cargo_bin("vsift")?, &base)
+    let configured = with_config_base(&mut Command::cargo_bin("vsift")?, base)
         .args(["setup", "configure", "whisper", "--executable"])
         .arg(&binary)
         .arg("--json")
@@ -413,7 +446,7 @@ fn configured_off_path_selection_persists_and_per_call_path_overrides_it()
             .contains(&binary.to_string_lossy().to_string())
     );
 
-    let checked = with_config_base(&mut Command::cargo_bin("vsift")?, &base)
+    let checked = with_config_base(&mut Command::cargo_bin("vsift")?, base)
         .args(["setup", "check", "--json"])
         .env("PATH", "")
         .output()?;
@@ -424,7 +457,7 @@ fn configured_off_path_selection_persists_and_per_call_path_overrides_it()
     );
     assert_eq!(checked_value["dependencies"][2]["status"], "available");
 
-    let overridden = with_config_base(&mut Command::cargo_bin("vsift")?, &base)
+    let overridden = with_config_base(&mut Command::cargo_bin("vsift")?, base)
         .args(["setup", "check", "--json", "--whisper", "relative-whisper"])
         .env("PATH", "")
         .output()?;
@@ -434,18 +467,18 @@ fn configured_off_path_selection_persists_and_per_call_path_overrides_it()
         "explicit_path"
     );
     assert_eq!(overridden_value["dependencies"][2]["status"], "unhealthy");
-    std::fs::remove_dir_all(&base)?;
     Ok(())
 }
 
 #[test]
 fn model_registration_is_private_and_does_not_claim_compatibility()
 -> Result<(), Box<dyn std::error::Error>> {
-    let base = isolated_config_base()?;
-    std::fs::create_dir_all(&base)?;
+    let config = ConfigBase::new()?;
+    let base = config.path();
+    std::fs::create_dir_all(base)?;
     let model = base.join("selected-model.bin");
     std::fs::write(&model, b"fixture only; no model parser runs")?;
-    let registered = with_config_base(&mut Command::cargo_bin("vsift")?, &base)
+    let registered = with_config_base(&mut Command::cargo_bin("vsift")?, base)
         .args(["setup", "configure-model", "--file"])
         .arg(&model)
         .arg("--json")
@@ -462,26 +495,26 @@ fn model_registration_is_private_and_does_not_claim_compatibility()
     );
 
     let stored: Value = serde_json::from_slice(&std::fs::read(
-        config_root(&base).join("dependencies-v1.json"),
+        config_root(base).join("dependencies-v1.json"),
     )?)?;
     assert_eq!(
         stored["model"],
         std::fs::canonicalize(&model)?.to_string_lossy().as_ref()
     );
-    let checked = with_config_base(&mut Command::cargo_bin("vsift")?, &base)
+    let checked = with_config_base(&mut Command::cargo_bin("vsift")?, base)
         .args(["setup", "check", "--json"])
         .env("PATH", "")
         .output()?;
     assert_eq!(parse_stdout(&checked)?["local_asr_model"], "not_checked");
-    std::fs::remove_dir_all(&base)?;
     Ok(())
 }
 
 #[test]
 fn invalid_configure_path_has_no_persistent_side_effect() -> Result<(), Box<dyn std::error::Error>>
 {
-    let base = isolated_config_base()?;
-    let output = with_config_base(&mut Command::cargo_bin("vsift")?, &base)
+    let config = ConfigBase::new()?;
+    let base = config.path();
+    let output = with_config_base(&mut Command::cargo_bin("vsift")?, base)
         .args([
             "setup",
             "configure",
@@ -500,33 +533,34 @@ fn invalid_configure_path_has_no_persistent_side_effect() -> Result<(), Box<dyn 
 #[test]
 fn corrupt_user_config_fails_closed_without_an_ambient_probe()
 -> Result<(), Box<dyn std::error::Error>> {
-    let base = isolated_config_base()?;
+    let config = ConfigBase::new()?;
+    let base = config.path();
     let binary = Command::cargo_bin("vsift")?.get_program().to_os_string();
-    let configured = with_config_base(&mut Command::cargo_bin("vsift")?, &base)
+    let configured = with_config_base(&mut Command::cargo_bin("vsift")?, base)
         .args(["setup", "configure", "whisper", "--executable"])
         .arg(&binary)
         .arg("--json")
         .output()?;
     assert!(configured.status.success());
     std::fs::write(
-        config_root(&base).join("dependencies-v1.json"),
+        config_root(base).join("dependencies-v1.json"),
         br#"{"schema_version":1,"unknown":true}"#,
     )?;
-    let checked = with_config_base(&mut Command::cargo_bin("vsift")?, &base)
+    let checked = with_config_base(&mut Command::cargo_bin("vsift")?, base)
         .args(["setup", "check", "--json"])
         .env("PATH", "")
         .output()?;
     let value = parse_stdout(&checked)?;
     assert_eq!(value["error"]["code"], "INTEGRITY_FAILURE");
     assert!(value["data"].is_null());
-    std::fs::remove_dir_all(&base)?;
     Ok(())
 }
 
 #[test]
 fn reviewed_setup_plan_checks_first_and_never_installs() -> Result<(), Box<dyn std::error::Error>> {
-    let base = isolated_config_base()?;
-    let output = with_config_base(&mut Command::cargo_bin("vsift")?, &base)
+    let config = ConfigBase::new()?;
+    let base = config.path();
+    let output = with_config_base(&mut Command::cargo_bin("vsift")?, base)
         .args(["setup", "plan", "--profile", "desktop", "--json"])
         .env("PATH", "")
         .output()?;
@@ -540,9 +574,6 @@ fn reviewed_setup_plan_checks_first_and_never_installs() -> Result<(), Box<dyn s
         value["data"]["dependencies"][0]["required_authority"],
         "user"
     );
-    if base.exists() {
-        std::fs::remove_dir_all(&base)?;
-    }
     Ok(())
 }
 
@@ -568,15 +599,16 @@ fn install_refuses_an_unreadable_plan_without_mutation() -> Result<(), Box<dyn s
 #[test]
 fn setup_plan_uses_configured_off_path_tool_but_does_not_call_it_qualified()
 -> Result<(), Box<dyn std::error::Error>> {
-    let base = isolated_config_base()?;
+    let config = ConfigBase::new()?;
+    let base = config.path();
     let binary = Command::cargo_bin("vsift")?.get_program().to_os_string();
-    let configured = with_config_base(&mut Command::cargo_bin("vsift")?, &base)
+    let configured = with_config_base(&mut Command::cargo_bin("vsift")?, base)
         .args(["setup", "configure", "whisper", "--executable"])
         .arg(&binary)
         .arg("--json")
         .output()?;
     assert!(configured.status.success());
-    let output = with_config_base(&mut Command::cargo_bin("vsift")?, &base)
+    let output = with_config_base(&mut Command::cargo_bin("vsift")?, base)
         .args(["setup", "plan", "--profile", "worker", "--json"])
         .env("PATH", "")
         .output()?;
@@ -589,15 +621,15 @@ fn setup_plan_uses_configured_off_path_tool_but_does_not_call_it_qualified()
         "existing_executable_probe_only"
     );
     assert_planning_target(&value["data"], 2);
-    std::fs::remove_dir_all(&base)?;
     Ok(())
 }
 
 #[test]
 fn headless_plan_jsonl_has_one_terminal_and_no_install_authority()
 -> Result<(), Box<dyn std::error::Error>> {
-    let base = isolated_config_base()?;
-    let output = with_config_base(&mut Command::cargo_bin("vsift")?, &base)
+    let config = ConfigBase::new()?;
+    let base = config.path();
+    let output = with_config_base(&mut Command::cargo_bin("vsift")?, base)
         .args(["setup", "plan", "--profile", "worker", "--events", "jsonl"])
         .env("PATH", "")
         .output()?;
@@ -609,9 +641,6 @@ fn headless_plan_jsonl_has_one_terminal_and_no_install_authority()
     assert_eq!(event["event"], "terminal");
     assert_eq!(event["command"], "setup.plan");
     assert_planning_target(&event["result"]["data"], 3);
-    if base.exists() {
-        std::fs::remove_dir_all(&base)?;
-    }
     Ok(())
 }
 
@@ -697,15 +726,16 @@ fn set_read_only(path: &Path, read_only: bool) -> std::io::Result<()> {
 #[test]
 fn denied_configuration_storage_fails_typed_without_prompting_or_changing_the_record()
 -> Result<(), Box<dyn std::error::Error>> {
-    let base = isolated_config_base()?;
+    let config = ConfigBase::new()?;
+    let base = config.path();
     let binary = Command::cargo_bin("vsift")?.get_program().to_os_string();
-    let configured = with_config_base(&mut Command::cargo_bin("vsift")?, &base)
+    let configured = with_config_base(&mut Command::cargo_bin("vsift")?, base)
         .args(["setup", "configure", "ffmpeg", "--executable"])
         .arg(&binary)
         .arg("--json")
         .output()?;
     assert!(configured.status.success());
-    let root = config_root(&base);
+    let root = config_root(base);
     let record = root.join("dependencies-v1.json");
     let before = std::fs::read(&record)?;
     let result = (|| {
@@ -713,7 +743,7 @@ fn denied_configuration_storage_fails_typed_without_prompting_or_changing_the_re
             // Permission bits do not bind this user, so denial is unobservable.
             return Ok(());
         }
-        let denied = with_config_base(&mut Command::cargo_bin("vsift")?, &base)
+        let denied = with_config_base(&mut Command::cargo_bin("vsift")?, base)
             .args(["setup", "configure", "ffprobe", "--executable"])
             .arg(&binary)
             .arg("--json")
@@ -739,29 +769,30 @@ fn denied_configuration_storage_fails_typed_without_prompting_or_changing_the_re
         Ok::<(), Box<dyn std::error::Error>>(())
     })();
     let _ = allow_record_replacement(&root);
-    std::fs::remove_dir_all(&base)?;
     result
 }
 
 #[test]
 fn read_only_tool_install_is_selectable_without_write_access()
 -> Result<(), Box<dyn std::error::Error>> {
-    let base = isolated_config_base()?;
-    let install = isolated_config_base()?;
-    std::fs::create_dir_all(&install)?;
+    let config = ConfigBase::new()?;
+    let base = config.path();
+    let install_folder = ConfigBase::new()?;
+    let install = install_folder.path();
+    std::fs::create_dir_all(install)?;
     let source = std::path::PathBuf::from(Command::cargo_bin("vsift")?.get_program());
     let tool = install.join(source.file_name().ok_or("binary has no file name")?);
     std::fs::copy(&source, &tool)?;
     set_read_only(&tool, true)?;
     let result = (|| {
         let before = std::fs::metadata(&tool)?;
-        let configured = with_config_base(&mut Command::cargo_bin("vsift")?, &base)
+        let configured = with_config_base(&mut Command::cargo_bin("vsift")?, base)
             .args(["setup", "configure", "whisper", "--executable"])
             .arg(&tool)
             .arg("--json")
             .output()?;
         assert!(configured.status.success());
-        let checked = with_config_base(&mut Command::cargo_bin("vsift")?, &base)
+        let checked = with_config_base(&mut Command::cargo_bin("vsift")?, base)
             .args(["setup", "check", "--json"])
             .env("PATH", "")
             .output()?;
@@ -776,88 +807,80 @@ fn read_only_tool_install_is_selectable_without_write_access()
         Ok::<(), Box<dyn std::error::Error>>(())
     })();
     set_read_only(&tool, false)?;
-    std::fs::remove_dir_all(&install)?;
-    if base.exists() {
-        std::fs::remove_dir_all(&base)?;
-    }
     result
 }
 
 #[test]
 fn saved_plan_acceptance_is_revalidated_without_mutation() -> Result<(), Box<dyn std::error::Error>>
 {
-    let base = isolated_config_base()?;
-    let plans = isolated_config_base()?;
-    std::fs::create_dir_all(&plans)?;
-    let result = (|| {
-        let planned = with_config_base(&mut Command::cargo_bin("vsift")?, &base)
-            .args(["setup", "plan", "--profile", "desktop", "--json"])
+    let config = ConfigBase::new()?;
+    let base = config.path();
+    let plans_folder = ConfigBase::new()?;
+    let plans = plans_folder.path();
+    std::fs::create_dir_all(plans)?;
+    let planned = with_config_base(&mut Command::cargo_bin("vsift")?, base)
+        .args(["setup", "plan", "--profile", "desktop", "--json"])
+        .env("PATH", "")
+        .output()?;
+    assert!(planned.status.success());
+    let plan_file = plans.join("plan.json");
+    std::fs::write(&plan_file, &planned.stdout)?;
+    assert_eq!(parse_stdout(&planned)?["status"], "complete");
+    // A qualified host's real digest would start a real install (P13 PR
+    // 4), which this test must never do; it proves only refusals, so it
+    // accepts with a digest that is not the plan's.
+    let digest = "0".repeat(64);
+    let install = |accept: &str| -> Result<Value, Box<dyn std::error::Error>> {
+        let output = with_config_base(&mut Command::cargo_bin("vsift")?, base)
+            .args(["setup", "install", "--plan"])
+            .arg(&plan_file)
+            .args(["--accept-plan", accept, "--json"])
             .env("PATH", "")
+            .timeout(std::time::Duration::from_secs(30))
             .output()?;
-        assert!(planned.status.success());
-        let plan_file = plans.join("plan.json");
-        std::fs::write(&plan_file, &planned.stdout)?;
-        assert_eq!(parse_stdout(&planned)?["status"], "complete");
-        // A qualified host's real digest would start a real install (P13 PR
-        // 4), which this test must never do; it proves only refusals, so it
-        // accepts with a digest that is not the plan's.
-        let digest = "0".repeat(64);
-        let install = |accept: &str| -> Result<Value, Box<dyn std::error::Error>> {
-            let output = with_config_base(&mut Command::cargo_bin("vsift")?, &base)
-                .args(["setup", "install", "--plan"])
-                .arg(&plan_file)
-                .args(["--accept-plan", accept, "--json"])
-                .env("PATH", "")
-                .timeout(std::time::Duration::from_secs(30))
-                .output()?;
-            assert_eq!(output.status.code(), Some(2));
-            parse_stdout(&output)
-        };
+        assert_eq!(output.status.code(), Some(2));
+        parse_stdout(&output)
+    };
 
-        // An unqualified target has no plan to accept; on a qualified one the
-        // digest does not accept the plan. Neither mutates state.
-        let unchanged = install(&digest)?;
-        assert_eq!(unchanged["error"]["code"], "INVALID_ARGUMENT");
-        assert!(!config_root(&base).exists());
+    // An unqualified target has no plan to accept; on a qualified one the
+    // digest does not accept the plan. Neither mutates state.
+    let unchanged = install(&digest)?;
+    assert_eq!(unchanged["error"]["code"], "INVALID_ARGUMENT");
+    assert!(!config_root(base).exists());
 
-        let binary = Command::cargo_bin("vsift")?.get_program().to_os_string();
-        let configured = with_config_base(&mut Command::cargo_bin("vsift")?, &base)
-            .args(["setup", "configure", "whisper", "--executable"])
-            .arg(&binary)
-            .arg("--json")
-            .output()?;
-        assert!(configured.status.success());
-        let record = config_root(&base).join("dependencies-v1.json");
-        let before = std::fs::read(&record)?;
-        let changed = install(&digest)?;
-        assert_eq!(changed["error"]["code"], "INVALID_ARGUMENT");
-        assert_eq!(changed["data"], Value::Null);
-        assert_eq!(std::fs::read(&record)?, before);
-        Ok::<(), Box<dyn std::error::Error>>(())
-    })();
-    std::fs::remove_dir_all(&plans)?;
-    if base.exists() {
-        std::fs::remove_dir_all(&base)?;
-    }
-    result
+    let binary = Command::cargo_bin("vsift")?.get_program().to_os_string();
+    let configured = with_config_base(&mut Command::cargo_bin("vsift")?, base)
+        .args(["setup", "configure", "whisper", "--executable"])
+        .arg(&binary)
+        .arg("--json")
+        .output()?;
+    assert!(configured.status.success());
+    let record = config_root(base).join("dependencies-v1.json");
+    let before = std::fs::read(&record)?;
+    let changed = install(&digest)?;
+    assert_eq!(changed["error"]["code"], "INVALID_ARGUMENT");
+    assert_eq!(changed["data"], Value::Null);
+    assert_eq!(std::fs::read(&record)?, before);
+    Ok(())
 }
 
 #[test]
 fn unqualified_plan_rejects_corrupt_byo_config_before_probing()
 -> Result<(), Box<dyn std::error::Error>> {
-    let base = isolated_config_base()?;
+    let config = ConfigBase::new()?;
+    let base = config.path();
     let binary = Command::cargo_bin("vsift")?.get_program().to_os_string();
-    let configured = with_config_base(&mut Command::cargo_bin("vsift")?, &base)
+    let configured = with_config_base(&mut Command::cargo_bin("vsift")?, base)
         .args(["setup", "configure", "whisper", "--executable"])
         .arg(&binary)
         .arg("--json")
         .output()?;
     assert!(configured.status.success());
     std::fs::write(
-        config_root(&base).join("dependencies-v1.json"),
+        config_root(base).join("dependencies-v1.json"),
         br#"{"schema_version":1,"unknown":true}"#,
     )?;
-    let output = with_config_base(&mut Command::cargo_bin("vsift")?, &base)
+    let output = with_config_base(&mut Command::cargo_bin("vsift")?, base)
         .args(["setup", "plan", "--profile", "desktop", "--json"])
         .env("PATH", "")
         .output()?;
@@ -865,6 +888,5 @@ fn unqualified_plan_rejects_corrupt_byo_config_before_probing()
     assert_eq!(output.status.code(), Some(7));
     assert_eq!(value["error"]["code"], "INTEGRITY_FAILURE");
     assert_eq!(value["data"], Value::Null);
-    std::fs::remove_dir_all(&base)?;
     Ok(())
 }

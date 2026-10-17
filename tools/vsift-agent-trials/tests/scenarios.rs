@@ -1,6 +1,8 @@
 //! Every committed scenario is consistent with the corpus truth and the
 //! skill, covers the verification rows it must, and never copies truth.
 
+mod common;
+
 use std::{
     collections::BTreeSet,
     error::Error,
@@ -120,10 +122,9 @@ fn the_shipped_check_image_is_the_current_known_one() -> TestResult {
     assert_eq!(digests.len(), CHECK_IMAGES.len());
 
     // A workspace's skill copy names its own image; an unknown one names none.
-    let workspace = std::env::temp_dir().join(format!(
-        "vsift-check-image-{}",
-        vsift_agent_trials::skill::random_hex(8)?
-    ));
+    // Removed when it drops, also when an assertion below fails (#423).
+    let scratch = common::Scratch::new("check-image")?;
+    let workspace = scratch.path();
     let claude = workspace.join(".claude/skills/vsift");
     let codex = workspace.join(".agents/skills/vsift");
     std::fs::create_dir_all(codex.join("assets"))?;
@@ -135,7 +136,6 @@ fn the_shipped_check_image_is_the_current_known_one() -> TestResult {
     );
     std::fs::write(codex.join("assets/image-check.png"), b"not the image")?;
     assert_eq!(workspace_image_code(&directories), None);
-    std::fs::remove_dir_all(&workspace)?;
     Ok(())
 }
 

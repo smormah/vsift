@@ -142,10 +142,12 @@ impl Drop for OwnedRoot {
 }
 
 struct Harness {
-    root: OwnedRoot,
     clock: ControlledClock,
     identifiers: SequentialIdentifiers,
     engine: Engine,
+    // Last: fields drop in order, and on Windows a folder something still
+    // holds open cannot be removed (#423).
+    root: OwnedRoot,
 }
 
 impl Harness {
@@ -163,10 +165,10 @@ impl Harness {
             EnginePorts::new(clock.clone(), identifiers.clone()),
         );
         Ok(Self {
-            root,
             clock,
             identifiers,
             engine,
+            root,
         })
     }
 

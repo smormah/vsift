@@ -7,6 +7,22 @@ const path = require('node:path');
 const test = require('node:test');
 const { checkBlocks, makeSandbox, rememberIdentifiers, substitute } = require('../lib/runner.cjs');
 
+/**
+ * The folders this file's tests made, removed after the last test whether or
+ * not the tests passed (#423). Only folders `mkdtempSync` made here are listed.
+ */
+const madeFolders = [];
+test.after(() => {
+  for (const folder of madeFolders) fs.rmSync(folder, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+});
+
+/** A new empty folder under the temporary folder, removed after the tests. */
+function madeFolder(prefix) {
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+  madeFolders.push(folder);
+  return folder;
+}
+
 const SESSION = 'ses_0123456789abcdef0123456789abcdef';
 const SEGMENT = 'tsg_fedcba9876543210fedcba9876543210';
 const FRAME = 'evd_aaaabbbbccccddddeeeeffff00001111';
@@ -26,12 +42,12 @@ function fakeVsift(table) {
 }
 
 function sandbox() {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'guide-runner-test-'));
+  const root = madeFolder('guide-runner-test-');
   return { root, sandbox: makeSandbox(root) };
 }
 
 function repositoryWith(files) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'guide-repo-test-'));
+  const root = madeFolder('guide-repo-test-');
   for (const [name, text] of Object.entries(files)) {
     fs.mkdirSync(path.dirname(path.join(root, name)), { recursive: true });
     fs.writeFileSync(path.join(root, name), text);

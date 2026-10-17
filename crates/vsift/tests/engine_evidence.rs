@@ -265,13 +265,15 @@ impl EvidenceControl for Never {
 }
 
 struct Harness {
-    root: OwnedRoot,
     engine: Engine,
     verifications: Arc<AtomicUsize>,
     session: SessionId,
     source: SourceId,
     ffmpeg: PathBuf,
     ffprobe: PathBuf,
+    // Last: fields drop in order, and on Windows a folder something still
+    // holds open cannot be removed (#423).
+    root: OwnedRoot,
 }
 
 impl Harness {
@@ -309,13 +311,13 @@ impl Harness {
             })
             .await?;
         Ok(Self {
-            root,
             engine,
             verifications,
             session: opened.session.session_id,
             source: opened.session.source_id,
             ffmpeg,
             ffprobe,
+            root,
         })
     }
 

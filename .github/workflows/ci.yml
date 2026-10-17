@@ -173,6 +173,11 @@ jobs:
           if [ "$LANE" = full ]; then scope=(--workspace); else read -r -a scope <<< "$PACKAGE_ARGUMENTS"; fi
           cargo clippy "${scope[@]}" --all-targets --all-features --locked -- -D warnings
 
+      # The tests remove every folder they make in the temporary folder (#423):
+      # list it now, so the step after the tests can name what they left.
+      - name: List the temporary folder before the tests
+        run: ls -A "${TMPDIR:-/tmp}" | LC_ALL=C sort > "$RUNNER_TEMP/temporary-before.txt"
+
       # Outside the full lane, Ubuntu leaves out the two managed-store kill
       # scenarios that try every arrival of every fault point on Linux (94 kills
       # and reruns, about four minutes even without debug information). Windows
@@ -193,6 +198,19 @@ jobs:
             fi
           fi
           cargo test "${scope[@]}" --locked -- --nocapture "${skip[@]}"
+
+      # A folder guard that drops while something still holds its folder open
+      # leaves the folder behind on Windows (#423). `/tmp` is the user's
+      # temporary folder in Git Bash on Windows; macOS sets `TMPDIR`.
+      - name: Check that the tests left nothing in the temporary folder
+        run: |
+          ls -A "${TMPDIR:-/tmp}" | LC_ALL=C sort > "$RUNNER_TEMP/temporary-after.txt"
+          LC_ALL=C comm -13 "$RUNNER_TEMP/temporary-before.txt" "$RUNNER_TEMP/temporary-after.txt" | grep -E '^(vsift|guide-|scratch-)' > "$RUNNER_TEMP/temporary-left.txt" || true
+          if [ -s "$RUNNER_TEMP/temporary-left.txt" ]; then
+            echo "::error::The tests left $(wc -l < "$RUNNER_TEMP/temporary-left.txt") entries in the temporary folder (#423):"
+            cat "$RUNNER_TEMP/temporary-left.txt"
+            exit 1
+          fi
 
       - name: Record storage probe filesystem (Linux)
         if: runner.os == 'Linux'
