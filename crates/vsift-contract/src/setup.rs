@@ -833,7 +833,8 @@ impl SavedSetupPlan {
     /// `setup.plan` result.
     ///
     /// `error`, `coverage` and `lifecycle` need no check here: a plan that
-    /// holds anything but `null` there is refused while decoding ([`NullOnly`]).
+    /// holds anything but `null` there is refused while decoding, because
+    /// their type has no value but `null`.
     ///
     /// # Errors
     ///
