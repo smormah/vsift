@@ -1,0 +1,24 @@
+{
+  "schema_version": "1",
+  "command": "ingest",
+  "operation_id": null,
+  "status": "failed",
+  "data": null,
+  "warnings": [],
+  "error": {
+    "code": "INVALID_SOURCE",
+    "message": "The source is invalid or unsupported.",
+    "retryable": false,
+    "retry_after_ms": null,
+    "affected_ids": [],
+    "remediation": [
+      {
+        "summary": "The path you gave is not a regular file: it is a named pipe, a device or a socket, and VSift does not open those. Nothing was read or copied, and no storage failed (for a socket the code is the closest published one). VSift reads only regular files, such as a video saved on a disk. Name the video file itself and run the command again. If you do not know which file the user means, ask the user.",
+        "required_authority": "none",
+        "command": null
+      }
+    ]
+  },
+  "coverage": null,
+  "lifecycle": null
+}

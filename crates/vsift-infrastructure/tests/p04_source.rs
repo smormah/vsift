@@ -11,6 +11,8 @@ use std::{
 };
 
 use vsift_application::{InitializeSessionStorage, InitializeSessionStorageRequest};
+#[cfg(unix)]
+use vsift_application::{SourcePathFault, SpecialFileKind};
 use vsift_domain::{DurabilityRequirement, OperationId, SessionId};
 use vsift_infrastructure::{
     FilesystemSessionStore, ProcessCancellation, SourceError, SourceSnapshot,
@@ -124,10 +126,11 @@ async fn playlist_and_external_reference_sources_fail_before_provider_execution(
     Ok(())
 }
 
-/// #264: a named pipe that nothing writes to is refused as not a regular
-/// file. Opening it for reading blocks until a writer appears, so the open
-/// used to wait for ever (`vsift ingest <pipe>` had to be killed); the file
-/// type is now found on a handle that was opened without waiting.
+/// #264: a named pipe that nothing writes to is refused as a named pipe.
+/// Opening it for reading blocks until a writer appears, so the open used to
+/// wait for ever (`vsift ingest <pipe>` had to be killed). Since 0.2.0 the
+/// open did not wait and the handle was found not to be a regular file; now
+/// the directory entry says what it is and nothing opens it.
 #[cfg(unix)]
 #[tokio::test]
 async fn a_named_pipe_with_no_writer_is_refused_and_not_waited_for() -> TestResult {
@@ -145,12 +148,54 @@ async fn a_named_pipe_with_no_writer_is_refused_and_not_waited_for() -> TestResu
     let (sender, receiver) = mpsc::channel();
     std::thread::spawn(move || {
         let result = SourceSnapshot::stage(&store, &session_id, &operation, &pipe);
-        let _ = sender.send(matches!(result, Err(SourceError::NotRegularFile)));
+        let _ = sender.send(matches!(
+            result,
+            Err(SourceError::SpecialFile(SpecialFileKind::NamedPipe))
+        ));
     });
     let refused = receiver
         .recv_timeout(Duration::from_secs(30))
         .map_err(|_| "staging a named pipe with no writer did not return within 30 s")?;
-    assert!(refused, "the pipe was not refused as not a regular file");
+    assert!(refused, "the pipe was not refused as a named pipe");
+    Ok(())
+}
+
+/// #264 with #369: a named pipe the account may not read keeps the answer its
+/// refused open gave before the pipe was refused without an open (access
+/// denied, `STORAGE_IO`): a published failure code stays (known limit L-127).
+/// Asking for read access opens nothing, so it does not wait either. Root may
+/// read anything, so there it is an ordinary pipe and this test has nothing
+/// to show.
+#[cfg(unix)]
+#[tokio::test]
+async fn a_named_pipe_that_may_not_be_read_keeps_the_access_denied_answer() -> TestResult {
+    use std::{os::unix::fs::PermissionsExt as _, sync::mpsc, time::Duration};
+
+    if rustix::process::geteuid().is_root() {
+        return Ok(());
+    }
+    let root = OwnedRoot::create()?;
+    let (store, session_id) = workspace(&root).await?;
+    let pipe = root.0.join("closed.mp4");
+    let made = std::process::Command::new("mkfifo").arg(&pipe).status()?;
+    assert!(made.success(), "mkfifo failed: {made:?}");
+    fs::set_permissions(&pipe, fs::Permissions::from_mode(0o000))?;
+    let operation = OperationId::parse("op_abcdef0123456789")?;
+    let (sender, receiver) = mpsc::channel();
+    std::thread::spawn(move || {
+        let result = SourceSnapshot::stage(&store, &session_id, &operation, &pipe);
+        let _ = sender.send(matches!(
+            result,
+            Err(SourceError::Path(SourcePathFault::AccessDenied))
+        ));
+    });
+    let refused = receiver
+        .recv_timeout(Duration::from_secs(30))
+        .map_err(|_| "staging an unreadable named pipe did not return within 30 s")?;
+    assert!(
+        refused,
+        "the unreadable pipe was not refused as access denied"
+    );
     Ok(())
 }
 
@@ -272,14 +317,15 @@ async fn a_link_is_refused_as_a_source_and_never_followed() -> TestResult {
     Ok(())
 }
 
-/// #264 and #265, what a source can be: a device file is opened and found not to
-/// be a regular file (`NotRegularFile`, `INVALID_SOURCE`); a UNIX socket cannot
-/// be opened at all, so it is an I/O failure (`STORAGE_IO`, an answer that
-/// describes it only loosely, known limit L-127). This pins both, so a change in
-/// either is a decision and not an accident.
+/// #264, what a source can be: a device file and a UNIX socket are refused from
+/// their directory entries, before anything opens them. A device used to be
+/// opened (which can act on it) and found not to be a regular file; a socket
+/// used to fail to open, an untyped I/O failure. Their published codes stay
+/// (`INVALID_SOURCE` and `STORAGE_IO`, known limit L-127, pinned in the
+/// engine), and both now have a cause that says what they are.
 #[cfg(unix)]
 #[tokio::test]
-async fn a_device_is_not_a_regular_file_and_a_socket_cannot_be_opened() -> TestResult {
+async fn a_device_and_a_socket_are_refused_before_they_are_opened() -> TestResult {
     let root = OwnedRoot::create()?;
     let (store, session_id) = workspace(&root).await?;
     let device = SourceSnapshot::stage(
@@ -289,7 +335,10 @@ async fn a_device_is_not_a_regular_file_and_a_socket_cannot_be_opened() -> TestR
         std::path::Path::new("/dev/null"),
     );
     assert!(
-        matches!(device, Err(SourceError::NotRegularFile)),
+        matches!(
+            device,
+            Err(SourceError::SpecialFile(SpecialFileKind::Device))
+        ),
         "{:?}",
         device.err()
     );
@@ -310,7 +359,10 @@ async fn a_device_is_not_a_regular_file_and_a_socket_cannot_be_opened() -> TestR
     drop(listener);
     let _ = fs::remove_file(&socket_path);
     assert!(
-        matches!(socket, Err(SourceError::Io(_))),
+        matches!(
+            socket,
+            Err(SourceError::SpecialFile(SpecialFileKind::Socket))
+        ),
         "{:?}",
         socket.err()
     );

@@ -13,7 +13,7 @@ use cap_std::fs::{Dir, File, OpenOptions};
 use sha2::{Digest, Sha256};
 use vsift_application::{
     ForegroundSessionPort, NeverCancelled, OpenSessionError, SessionStorageError, SourcePathFault,
-    StageCancellation, StagedSessionSource,
+    SpecialFileKind, StageCancellation, StagedSessionSource,
 };
 use vsift_domain::{OperationId, SessionId, SourceId};
 
@@ -569,6 +569,7 @@ pub(crate) fn open_session_error(error: SourceError) -> OpenSessionError {
         SourceError::Io(_) => OpenSessionError::SourceIo,
         SourceError::Path(fault) => OpenSessionError::SourcePath(fault),
         SourceError::SymbolicLink => OpenSessionError::SourceIsLink,
+        SourceError::SpecialFile(kind) => OpenSessionError::SourceSpecialFile(kind),
         // A copy that ran out of time says nothing about the source: it was
         // slow to read, or the root slow to write (#325). The code a host
         // gives it stays the one it always was (L-127).
@@ -613,11 +614,19 @@ pub(crate) fn open_source(path: &Path) -> Result<(File, cap_std::fs::Metadata), 
     // a platform-specific error that would otherwise reach the caller as a
     // storage failure (#265). The open below still follows nothing, so a name
     // swapped for a link in between is not followed either.
-    if directory
-        .symlink_metadata(Path::new(name))
-        .is_ok_and(|entry| entry.file_type().is_symlink())
-    {
-        return Err(SourceError::SymbolicLink);
+    //
+    // A named pipe, a device or a socket is refused from the same entry, before
+    // anything opens it (#264): opening a pipe waits for a writer and opening a
+    // device can act on it. Reading an entry does neither. The handle's own
+    // type is still checked after the open below, which a swap in between
+    // reaches, and that open does not wait either.
+    if let Ok(entry) = directory.symlink_metadata(Path::new(name)) {
+        if entry.file_type().is_symlink() {
+            return Err(SourceError::SymbolicLink);
+        }
+        if let Some(refusal) = refuse_special_file(&directory, name, entry.file_type()) {
+            return Err(refusal);
+        }
     }
     let mut options = OpenOptions::new();
     options.read(true).follow(FollowSymlinks::No);
@@ -641,6 +650,53 @@ pub(crate) fn open_source(path: &Path) -> Result<(File, cap_std::fs::Metadata), 
         return Err(SourceError::NotRegularFile);
     }
     Ok((file, metadata))
+}
+
+/// The refusal of a directory entry that is neither a regular file, a folder
+/// nor a link, read from its type without opening it (#264), or `None` for
+/// any other entry.
+///
+/// An entry the account may not read keeps the answer its refused open gave
+/// before (`STORAGE_IO`, access denied, #369): a published failure code does
+/// not change within v1 (known limit L-127), and asking for read access opens
+/// nothing either.
+#[cfg(unix)]
+fn refuse_special_file(
+    directory: &Dir,
+    name: &std::ffi::OsStr,
+    file_type: cap_std::fs::FileType,
+) -> Option<SourceError> {
+    use cap_std::fs::FileTypeExt as _;
+    let kind = if file_type.is_fifo() {
+        SpecialFileKind::NamedPipe
+    } else if file_type.is_char_device() || file_type.is_block_device() {
+        SpecialFileKind::Device
+    } else if file_type.is_socket() {
+        SpecialFileKind::Socket
+    } else {
+        return None;
+    };
+    let readable = rustix::fs::accessat(
+        directory,
+        name,
+        rustix::fs::Access::READ_OK,
+        rustix::fs::AtFlags::EACCESS,
+    );
+    Some(match readable {
+        Err(rustix::io::Errno::ACCESS) => SourceError::Path(SourcePathFault::AccessDenied),
+        _ => SourceError::SpecialFile(kind),
+    })
+}
+
+/// Windows names none of these kinds in a folder: a named pipe or a device is
+/// a `\\.\` path, which [`is_local_path`] refuses before any entry is read.
+#[cfg(not(unix))]
+const fn refuse_special_file(
+    _directory: &Dir,
+    _name: &std::ffi::OsStr,
+    _file_type: cap_std::fs::FileType,
+) -> Option<SourceError> {
+    None
 }
 
 /// What the operating system said about a path it could not reach, when it
@@ -892,6 +948,11 @@ pub enum SourceError {
     /// is and not as a failed disk (#265). It is reported as the published
     /// `STORAGE_IO` code with a remediation (known limit L-127).
     SymbolicLink,
+    /// The selected path's own directory entry is a named pipe, a device or a
+    /// socket, refused before anything opened it (#264). A handle that turns
+    /// out not to be a regular file after the open (a swap in between) is
+    /// [`Self::NotRegularFile`].
+    SpecialFile(SpecialFileKind),
     /// Selected source exceeds the profile maximum.
     TooLarge,
     /// Reading the source took longer than [`MAX_SOURCE_READ_DURATION`] and
@@ -927,6 +988,7 @@ impl fmt::Display for SourceError {
             Self::InvalidPath => formatter.write_str("source path is invalid"),
             Self::NotRegularFile => formatter.write_str("source is not a regular file"),
             Self::SymbolicLink => formatter.write_str("source is a link, which is not followed"),
+            Self::SpecialFile(kind) => kind.fmt(formatter),
             Self::TooLarge => formatter.write_str("source exceeds the byte limit"),
             Self::Deadline => formatter.write_str("source read exceeded the deadline"),
             Self::UnsupportedContainer => {

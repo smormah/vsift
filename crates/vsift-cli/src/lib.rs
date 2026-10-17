@@ -54,10 +54,10 @@ use vsift_contract::{
     NO_VIDEO_STREAM_REMEDIATION, OperationResponse, SESSION_NOT_PUBLISHED_REMEDIATION,
     SOURCE_ACCESS_DENIED_REMEDIATION, SOURCE_COPY_TOO_SLOW_REMEDIATION,
     SOURCE_IS_FOLDER_REMEDIATION, SOURCE_IS_LINK_REMEDIATION, SOURCE_NO_ROOM_REMEDIATION,
-    SOURCE_NOT_FOUND_REMEDIATION, STALE_PLAN_REMEDIATION, SUPERSEDED_REMEDIATION,
-    TRANSCRIPTION_RUNNING_REMEDIATION, TerminalEventResponse, UNKNOWN_JOB_REMEDIATION,
-    UNKNOWN_REVISION_REMEDIATION, UNOWNED_SESSION_ROOT_REMEDIATION, UNPINNED_MODEL_REMEDIATION,
-    VISUAL_TOOLS_REMEDIATION, WORKSPACE_NOT_DURABLE_REMEDIATION,
+    SOURCE_NOT_FOUND_REMEDIATION, SOURCE_SPECIAL_FILE_REMEDIATION, STALE_PLAN_REMEDIATION,
+    SUPERSEDED_REMEDIATION, TRANSCRIPTION_RUNNING_REMEDIATION, TerminalEventResponse,
+    UNKNOWN_JOB_REMEDIATION, UNKNOWN_REVISION_REMEDIATION, UNOWNED_SESSION_ROOT_REMEDIATION,
+    UNPINNED_MODEL_REMEDIATION, VISUAL_TOOLS_REMEDIATION, WORKSPACE_NOT_DURABLE_REMEDIATION,
     WORKSPACE_POLICY_MISMATCH_REMEDIATION, WORKSPACE_ROOT_REMEDIATION, local_asr_failure_summary,
     local_asr_verification_summary, managed_lifecycle_remediation, media_tool_verification_summary,
     non_private_folder_summary, search_query_rejection_summary, transcript_rejection_summary,
@@ -799,6 +799,10 @@ fn worker_remediation(error: &EngineError) -> Option<String> {
         | EngineError::TranscriptSource(TranscriptSourceError::SourcePath(fault)) => {
             source_path_remediation(*fault)
         }
+        EngineError::OpenSession(OpenSessionError::SourceSpecialFile(_))
+        | EngineError::TranscriptSource(TranscriptSourceError::SpecialFile(_)) => {
+            SOURCE_SPECIAL_FILE_REMEDIATION
+        }
         EngineError::OpenSession(OpenSessionError::SourceNoRoom) => SOURCE_NO_ROOM_REMEDIATION,
         EngineError::OpenSession(OpenSessionError::SourceCopyTooSlow) => {
             SOURCE_COPY_TOO_SLOW_REMEDIATION
@@ -1163,13 +1167,13 @@ where
 mod tests {
     use vsift::{
         EngineError, EnginePorts, FailureCode, JobId, OpenSessionError, SourcePathFault,
-        TranscriptSourceError,
+        SpecialFileKind, TranscriptSourceError,
     };
     use vsift_contract::{
         CommandName, IDEMPOTENCY_CONFLICT_REMEDIATION, JOB_BUSY_REMEDIATION,
         SOURCE_ACCESS_DENIED_REMEDIATION, SOURCE_COPY_TOO_SLOW_REMEDIATION,
         SOURCE_IS_FOLDER_REMEDIATION, SOURCE_NO_ROOM_REMEDIATION, SOURCE_NOT_FOUND_REMEDIATION,
-        TRANSCRIPTION_RUNNING_REMEDIATION,
+        SOURCE_SPECIAL_FILE_REMEDIATION, TRANSCRIPTION_RUNNING_REMEDIATION,
     };
 
     use super::{
@@ -1257,6 +1261,62 @@ mod tests {
         let untyped = CommandFailure::from(EngineError::OpenSession(OpenSessionError::SourceIo));
         assert_eq!(untyped.code, FailureCode::StorageIo);
         assert_eq!(untyped.summary(), None);
+        Ok(())
+    }
+
+    /// #264: a named pipe, a device or a socket named as the video or as a
+    /// supplied transcript is refused before anything opens it. Each keeps the
+    /// code it had (a pipe and a device `INVALID_SOURCE`, exit 3; a socket
+    /// `STORAGE_IO`, exit 7; changing a published code is not additive within
+    /// v1, known limit L-127) and gains one remediation that says what it is.
+    /// The whole answer is the published example.
+    #[test]
+    fn a_special_file_keeps_its_code_and_says_it_is_not_a_regular_file()
+    -> Result<(), Box<dyn std::error::Error>> {
+        for kind in SpecialFileKind::ALL {
+            let (code, exit, example) = match kind {
+                SpecialFileKind::NamedPipe | SpecialFileKind::Device => (
+                    FailureCode::InvalidSource,
+                    ProcessExit::Source,
+                    "ingest-source-special-file.json",
+                ),
+                SpecialFileKind::Socket => (
+                    FailureCode::StorageIo,
+                    ProcessExit::StorageOrIo,
+                    "ingest-source-socket.json",
+                ),
+            };
+            let published: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(
+                std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                    .join("../../schemas/v1/examples")
+                    .join(example),
+            )?)?;
+            for error in [
+                EngineError::OpenSession(OpenSessionError::SourceSpecialFile(kind)),
+                EngineError::TranscriptSource(TranscriptSourceError::SpecialFile(kind)),
+            ] {
+                assert_eq!(error.failure_code(), code, "{kind}");
+                let failure = CommandFailure::from(error);
+                assert_eq!(
+                    failure.summary(),
+                    Some(SOURCE_SPECIAL_FILE_REMEDIATION),
+                    "{kind}"
+                );
+                let mut stdout = Vec::new();
+                let mut stderr = Vec::new();
+                let mut writer = OutputWriter::new(&mut stdout, &mut stderr);
+                let written = write_command_failure(
+                    &mut writer,
+                    OutputMode::Json,
+                    CommandName::Ingest,
+                    failure,
+                );
+                assert_eq!(written, exit, "{kind}");
+                assert!(stderr.is_empty());
+                let value: serde_json::Value = serde_json::from_slice(&stdout)?;
+                assert_eq!(value, published, "{kind}");
+            }
+        }
         Ok(())
     }
 

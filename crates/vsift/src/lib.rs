@@ -169,7 +169,7 @@ pub use vsift_application::{
     MediaToolPreflightFailure, MediaToolVerification, MediaToolVerifier, ModelVerification,
     OpenSessionError, OpenSessionOutcome, PlanAcceptanceError, RecognizerIdentity, Resumability,
     RuntimeDiagnosis, SessionStorageError, SetupProfile, SourcePathFault, SourceProbeError,
-    SpeechPcm, SpeechRecognitionError, SpeechRecognizer, TranscriptBuildError,
+    SpecialFileKind, SpeechPcm, SpeechRecognitionError, SpeechRecognizer, TranscriptBuildError,
     TranscriptQueryError, UnusableChunk, UnusableChunks,
 };
 /// Visual-candidate values that appear in this API.

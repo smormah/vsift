@@ -8,8 +8,9 @@
 //! meets a per-user configuration folder that inherited access for other
 //! accounts; the second, when `session list` meets a `--session-root` folder
 //! that holds no `VSift` ownership marker; the third, when `ingest` could not
-//! copy the video within the ten-minute limit; the last three, when `ingest`
-//! could not open the path it was given (#369).
+//! copy the video within the ten-minute limit; the next three, when `ingest`
+//! could not open the path it was given (#369); the last two, when that path
+//! names a named pipe, a device or a socket (#264).
 
 use std::{fs, io, path::PathBuf};
 
@@ -17,7 +18,8 @@ use serde_json::Value;
 use vsift_contract::{
     CommandName, OperationResponse, PrivateFolder, SOURCE_ACCESS_DENIED_REMEDIATION,
     SOURCE_COPY_TOO_SLOW_REMEDIATION, SOURCE_IS_FOLDER_REMEDIATION, SOURCE_NOT_FOUND_REMEDIATION,
-    TerminalEventResponse, UNOWNED_SESSION_ROOT_REMEDIATION, non_private_folder_summary,
+    SOURCE_SPECIAL_FILE_REMEDIATION, TerminalEventResponse, UNOWNED_SESSION_ROOT_REMEDIATION,
+    non_private_folder_summary,
 };
 use vsift_domain::FailureCode;
 
@@ -102,6 +104,41 @@ fn a_source_copy_that_was_too_slow_matches_the_example() -> TestResult {
 /// message and `retryable` false, and the remediation says which of the three
 /// it is. v1 only grew: nothing of the envelope changed, and the remediation is
 /// the member that was empty.
+/// The answers to a named pipe, a device or a socket named as a source
+/// (#264): each keeps the code it had (`INVALID_SOURCE` for a pipe and a
+/// device, `STORAGE_IO` for a socket), with its fixed message and `retryable`
+/// false, and one remediation says it is not a regular file. v1 only grew: the
+/// remediation is the member that was empty.
+#[test]
+fn a_special_file_matches_its_examples() -> TestResult {
+    for (code, wire, example) in [
+        (
+            FailureCode::InvalidSource,
+            "INVALID_SOURCE",
+            "examples/ingest-source-special-file.json",
+        ),
+        (
+            FailureCode::StorageIo,
+            "STORAGE_IO",
+            "examples/ingest-source-socket.json",
+        ),
+    ] {
+        let response = OperationResponse::<Value>::failure_with_remediation(
+            CommandName::Ingest.identifier(),
+            code,
+            SOURCE_SPECIAL_FILE_REMEDIATION.to_owned(),
+        );
+        let value = serde_json::to_value(&response)?;
+        validate("operation-response.schema.json", &value)?;
+        assert_eq!(value, load(example)?, "{example}");
+        assert_eq!(value["error"]["code"], wire);
+        assert_eq!(value["error"]["retryable"], false);
+        let event = serde_json::to_value(TerminalEventResponse::new(response))?;
+        validate("terminal-event.schema.json", &event)?;
+    }
+    Ok(())
+}
+
 #[test]
 fn a_source_path_that_could_not_be_opened_matches_its_examples() -> TestResult {
     for (summary, example) in [

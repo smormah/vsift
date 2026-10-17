@@ -102,15 +102,23 @@ source bytes, committed generation, `process_crash_consistent` publication (or
 Without `--transcript` it does not start FFmpeg, setup, transcription or indexing;
 supplied-transcript import is described in the next section. The source must be an
 absolute local path to a regular file (a relative path is read from the folder the command
-was run in). A named pipe (FIFO) or a device file
-is refused as `INVALID_SOURCE` at once: since P14 PR 7 (#264) the file type is read
-from a handle opened without waiting, so a pipe that nothing writes to is a refusal, not a
-hang (it used to block `ingest` until the process was killed). So is a folder on Linux and
-macOS, which open it and find it is no regular file; **on Windows, which refuses to open a folder
+was run in). **A named pipe (FIFO), a device file or a UNIX socket is refused without being opened**
+(since `0.2.2`, #264): its directory entry says what it is, and nothing opens it, because opening a pipe
+waits for a writer that may never come (`0.1.0` hung there until it was killed) and opening a device can act
+on it. A named pipe and a device answer `INVALID_SOURCE` (exit 3) and a socket `STORAGE_IO` (exit 7), the
+codes each had before (from `0.2.0` a pipe was opened without waiting and found to be no regular file; a
+socket's open always failed), because changing a published failure code is not additive within v1 (known
+limit L-127). All three now carry one remediation where they had none: the path is not a regular file but a
+named pipe, a device or a socket, VSift does not open those, nothing was read, and to name the video file
+itself (examples [`ingest-source-special-file.json`](../../schemas/v1/examples/ingest-source-special-file.json)
+and [`ingest-source-socket.json`](../../schemas/v1/examples/ingest-source-socket.json)). A supplied transcript's
+path is answered alike. The handle's own type is still checked after the open, which does not wait either, so
+an entry swapped for one of these between the look and the open is refused as `INVALID_SOURCE`, as before.
+A pipe or a device that the account may not read keeps the answer its refused open gave, `STORAGE_IO` with the
+access-denied remediation (below): VSift asks whether it may read the entry, which opens nothing. A folder on Linux and macOS is opened and found to be no regular file, `INVALID_SOURCE`
+with no remediation, as before; **on Windows, which refuses to open a folder
 as a file, a folder is `STORAGE_IO`, as in `0.2.0`, and since `0.2.1` carries a remediation that says it
-is a folder** (see the next paragraph). A UNIX socket cannot be
-opened at all and ends as `STORAGE_IO` with the generic storage remediation (known limit
-L-127); tests pin the pipe, the device and the socket.
+is a folder** (see the next paragraph). Tests pin the pipe, the device and the socket on Linux and macOS.
 **A path that names no file, names a folder (Windows), or may not be read keeps `STORAGE_IO` (exit 7) and, since
 `0.2.1` (#369), says which.** A name that is not a file, or a folder on the way to it that does not exist (the
 commonest first mistake: a mistyped name, or a command run from another folder, since a relative path is read from the

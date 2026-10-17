@@ -13,7 +13,7 @@ use vsift_application::{
     IdentifierGenerationError, JobRunError, JobStoreError, LIVE_JOB_RETRY_AFTER,
     LocalAsrVerificationFailure, ManagedLifecycleRefusal, MediaToolFailure,
     MediaToolPreflightFailure, OpenSessionError, PlanAcceptanceError, SessionStorageError,
-    SourcePathFault, SourceProbeError, TranscriptBuildError, TranscriptQueryError,
+    SourcePathFault, SourceProbeError, SpecialFileKind, TranscriptBuildError, TranscriptQueryError,
     VisualExtensionStop, VisualIndexBuildError, VisualSamplingError,
 };
 use vsift_contract::PrivateFolder;
@@ -397,6 +397,9 @@ impl EngineError {
             // The code the lookup answered before the typed error existed (L-127).
             Self::SessionNotPublished(storage) => storage_failure_code(*storage),
             Self::TranscriptRejected(rejected) => transcript_failure_code(*rejected),
+            Self::TranscriptSource(TranscriptSourceError::SpecialFile(kind)) => {
+                special_file_failure_code(*kind)
+            }
             Self::TranscriptSource(
                 TranscriptSourceError::InvalidPath | TranscriptSourceError::NotRegularFile,
             )
@@ -1149,12 +1152,26 @@ const fn open_session_failure_code(error: OpenSessionError) -> FailureCode {
         | OpenSessionError::SourcePath(_)
         | OpenSessionError::SourceIsLink
         | OpenSessionError::SourceNoRoom => FailureCode::StorageIo,
+        OpenSessionError::SourceSpecialFile(kind) => special_file_failure_code(kind),
         OpenSessionError::InvalidClock => FailureCode::InvalidArgument,
         OpenSessionError::Storage(storage) => storage_failure_code(storage),
         OpenSessionError::SourceProbe(probe) => probe_failure_code(probe),
         OpenSessionError::TranscriptRejected(rejected) => transcript_failure_code(rejected),
         OpenSessionError::TranscriptInvalid(_) => FailureCode::Internal,
         OpenSessionError::Cancelled => FailureCode::Cancelled,
+    }
+}
+
+/// Public code for a source or supplied transcript that names a named pipe, a
+/// device or a socket (#264): the code each kind had before it was refused
+/// without being opened. A pipe and a device were opened and found to be no
+/// regular file (`INVALID_SOURCE`, as documented); a socket cannot be opened
+/// and its failed open was `STORAGE_IO`. Neither changes within v1 (known limit
+/// L-127); the remediation is the same for all three.
+const fn special_file_failure_code(kind: SpecialFileKind) -> FailureCode {
+    match kind {
+        SpecialFileKind::NamedPipe | SpecialFileKind::Device => FailureCode::InvalidSource,
+        SpecialFileKind::Socket => FailureCode::StorageIo,
     }
 }
 
@@ -1214,6 +1231,10 @@ pub enum TranscriptSourceError {
     /// The transcript's own final path component is a link, which is not
     /// followed (#265); reported as the 0.1.0 code, `STORAGE_IO`.
     SymbolicLink,
+    /// The transcript's path names a named pipe, a device or a socket, refused
+    /// before anything opened it (#264); reported with the code each kind had
+    /// before ([`SpecialFileKind`]).
+    SpecialFile(SpecialFileKind),
 }
 
 impl fmt::Display for TranscriptSourceError {
@@ -1228,6 +1249,7 @@ impl fmt::Display for TranscriptSourceError {
             Self::SymbolicLink => {
                 formatter.write_str("supplied transcript is a link, which is not followed")
             }
+            Self::SpecialFile(kind) => write!(formatter, "supplied transcript: {kind}"),
         }
     }
 }
@@ -1500,7 +1522,9 @@ impl From<&ExecutableResolutionError> for ExecutableRejection {
 
 #[cfg(test)]
 mod tests {
-    use vsift_application::{OpenSessionError, SessionStorageError, SourcePathFault};
+    use vsift_application::{
+        OpenSessionError, SessionStorageError, SourcePathFault, SpecialFileKind,
+    };
     use vsift_domain::FailureCode;
     use vsift_infrastructure::{SessionStoreOpenError, UserDependencyConfigError};
 
@@ -1697,6 +1721,27 @@ mod tests {
                     .failure_code(),
                 FailureCode::StorageIo,
                 "{fault}"
+            );
+        }
+        // #264: a named pipe, a device or a socket is refused before it is
+        // opened; each keeps the code it had (a pipe and a device were opened
+        // and found to be no regular file, a socket failed to open), for the
+        // video and for a supplied transcript; the remediation says what it is.
+        for kind in SpecialFileKind::ALL {
+            let code = match kind {
+                SpecialFileKind::NamedPipe | SpecialFileKind::Device => FailureCode::InvalidSource,
+                SpecialFileKind::Socket => FailureCode::StorageIo,
+            };
+            assert_eq!(
+                EngineError::OpenSession(OpenSessionError::SourceSpecialFile(kind)).failure_code(),
+                code,
+                "{kind}"
+            );
+            assert_eq!(
+                EngineError::TranscriptSource(super::TranscriptSourceError::SpecialFile(kind))
+                    .failure_code(),
+                code,
+                "{kind}"
             );
         }
         // #325: a copy that outran its time keeps the code it always had, the
