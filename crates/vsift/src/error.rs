@@ -1019,8 +1019,9 @@ impl EngineError {
     /// Whether the failure is another request holding what an evidence
     /// command or `candidates` needs (#342, #370): the root's capacity, which
     /// the media adapter never waits for (the probe, an extraction, a window
-    /// of analysis), or a session lock another request holds. Nothing was
-    /// committed in any of them.
+    /// of analysis), or a session lock another request holds. The call that
+    /// failed committed nothing; a worker's candidates step that fails `BUSY`
+    /// keeps the windows its earlier calls committed (#433).
     pub(crate) const fn is_media_contention(&self) -> bool {
         matches!(
             self,

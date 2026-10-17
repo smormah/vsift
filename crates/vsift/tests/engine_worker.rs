@@ -18,7 +18,7 @@ use std::{
     ffi::OsStr,
     fs,
     future::Future,
-    num::NonZeroU16,
+    num::{NonZeroU16, NonZeroUsize},
     path::PathBuf,
     process::{Command, Stdio},
     sync::{
@@ -32,10 +32,11 @@ use std::{
 use jsonschema::{Retrieve, Uri};
 use serde_json::Value;
 use vsift::{
-    AdmissionBudget, AdmissionWait, Cancellation, DurabilityRequirement, Engine, EngineConfig,
-    EngineError, EnginePorts, HostIsolation, JobProgress, LocalAsrVerification, LocalAsrVerifier,
-    ManagedRootLocation, MediaToolVerification, MediaToolVerifier, PlannedChunk, ProgressObserver,
-    ProgressStage, ProviderChunkOutput, RecognizerIdentity, RuntimeDependency, SessionListEntry,
+    AdmissionBudget, AdmissionWait, Cancellation, CandidatesRange, CandidatesRequest,
+    DurabilityRequirement, Engine, EngineConfig, EngineError, EnginePorts, HostIsolation,
+    IngestRequest, JobProgress, LocalAsrVerification, LocalAsrVerifier, ManagedRootLocation,
+    MediaToolVerification, MediaToolVerifier, PlannedChunk, ProgressObserver, ProgressStage,
+    ProviderChunkOutput, RecognizerIdentity, RuntimeDependency, SessionListEntry,
     SessionRootLocation, SpeechPcm, SpeechRecognitionError, SpeechRecognizer,
     UserConfigurationLocation, WorkOutcome, WorkRequestRun, WorkerFailure, WorkspaceInitRequest,
     WorkspacePolicy, WorkspaceRetention,
@@ -45,7 +46,7 @@ use vsift_domain::{
     AsrDecodingProfile, AsrModel, AsrModelProfile, AsrProvider, AsrProviderBuild, FailureCode,
     OperationId, Sha256Hex,
 };
-use vsift_infrastructure::{FilesystemSessionStore, WorkerRequestClaim};
+use vsift_infrastructure::{ExecutableResolver, FilesystemSessionStore, WorkerRequestClaim};
 
 type TestResult = Result<(), Box<dyn Error>>;
 type Built<T> = Result<T, Box<dyn Error>>;
@@ -772,6 +773,104 @@ async fn busy_admission_is_retried_within_the_wait() -> TestResult {
     assert_eq!(value["attempt"], 2);
     assert!(value["steps"][0]["admission_wait_ms"].as_u64() >= Some(1));
     assert_eq!(Layout::opened_sessions(&engine)?, 1);
+    Ok(())
+}
+
+/// #433, through the engine: a candidates call that finds the workspace's
+/// capacity taken, with windows of the range already indexed, analyses
+/// nothing and answers `partial`. The step must not end there with a window
+/// `not_analyzed`: it is `BUSY`, retried within the admission wait, and the
+/// request stays resumable; once the capacity is free, the next delivery
+/// completes it.
+///
+/// The source is a real clip of two windows (F02 looped to about 72 s), the
+/// first window is indexed by a call limited to one window, and one of the
+/// workspace's two units is held: the probe (one unit) is admitted, the
+/// second window (two units) is not. Opt-in, because the probe and the
+/// windows need `FFmpeg` and `FFprobe` on `PATH`.
+#[tokio::test]
+#[ignore = "requires FFmpeg and FFprobe on PATH"]
+async fn a_candidates_call_that_finds_the_capacity_taken_is_busy_and_resumable() -> TestResult {
+    let resolver = ExecutableResolver::from_current_path();
+    let (Ok(ffmpeg), Ok(ffprobe)) = (
+        resolver.resolve(OsStr::new("ffmpeg")),
+        resolver.resolve(OsStr::new("ffprobe")),
+    ) else {
+        return Err("FFmpeg and FFprobe must be on PATH".into());
+    };
+    let layout = Layout::new()?;
+    let clip = layout.inputs().join("videos/two-windows.mp4");
+    let looped = Command::new(ffmpeg.path())
+        .args(["-v", "error", "-nostdin", "-y", "-stream_loop", "5", "-i"])
+        .arg(
+            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("../../fixtures/corpus/generated/F02.mp4"),
+        )
+        .args(["-c", "copy"])
+        .arg(&clip)
+        .stdin(Stdio::null())
+        .output()?;
+    if !looped.status.success() {
+        return Err(String::from_utf8_lossy(&looped.stderr).into_owned().into());
+    }
+    let ports = || EnginePorts::system().with_media_tool_verifier(PassingMediaTools);
+    let engine = layout.init_with(2, ports())?;
+    engine.configure_executable(RuntimeDependency::Ffmpeg, ffmpeg.path())?;
+    engine.configure_executable(RuntimeDependency::Ffprobe, ffprobe.path())?;
+    let session = engine
+        .ingest(IngestRequest {
+            source: clip,
+            transcript: None,
+            cancellation: Cancellation::new(),
+            durability: DurabilityRequirement::Ephemeral,
+        })
+        .await?
+        .session
+        .session_id;
+    let one_window =
+        layout.engine_with(ports().with_visual_window_budget(NonZeroUsize::new(1).ok_or("zero")?));
+    let seeded = one_window
+        .candidates(CandidatesRequest {
+            session: session.clone(),
+            range: CandidatesRange {
+                from_micros: 0,
+                to_micros: u64::MAX,
+            },
+            limit: None,
+            cursor: None,
+            cancellation: Cancellation::new(),
+        })
+        .await?;
+    assert_eq!(
+        seeded.analysed_now(),
+        1,
+        "the seed did not index one window"
+    );
+    let text = format!(
+        r#"{{"schema_version":"1","operation_id":"{OPERATION}","durability":"ephemeral","target":{{"session_id":"{}"}},"steps":[{{"candidates":{{"range":null}}}}]}}"#,
+        session.as_str()
+    );
+    let request = decode_work_request(text.as_bytes())?;
+
+    let store = layout.store()?;
+    let permit = store.try_admit(1)?;
+    let mut run = layout.run(&request);
+    run.admission = AdmissionWait::Bounded(AdmissionBudget::new(Duration::from_millis(600))?);
+    let busy = engine.run_work_request(run).await;
+    let value = data(&busy)?;
+    conforms(&value)?;
+    assert_eq!(value["status"], "failed", "{value}");
+    assert_eq!(value["failure"]["code"], "BUSY", "{value}");
+    assert_eq!(value["steps"][0]["kind"], "candidates");
+    assert_eq!(value["steps"][0]["failure"]["code"], "BUSY");
+    assert!(value["steps"][0]["admission_wait_ms"].as_u64() >= Some(1));
+
+    drop(permit);
+    let delivered = engine.run_work_request(layout.run(&request)).await;
+    let value = data(&delivered)?;
+    assert_eq!(value["status"], "complete", "{value}");
+    assert_eq!(value["attempt"], 2);
+    assert_eq!(value["steps"][0]["status"], "complete", "{value}");
     Ok(())
 }
 

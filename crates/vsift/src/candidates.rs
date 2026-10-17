@@ -98,6 +98,7 @@ pub struct CandidatesResults {
     analysed: Vec<TimeRange>,
     gaps: Vec<VisualCoverageGap>,
     analysed_now: usize,
+    stop: Option<VisualExtensionStop>,
 }
 
 impl CandidatesResults {
@@ -160,6 +161,12 @@ impl CandidatesResults {
     #[must_use]
     pub const fn analysed_now(&self) -> usize {
         self.analysed_now
+    }
+
+    /// Why this call stopped before every missing window of the range was
+    /// analysed, if it did; `None` for a warm read.
+    pub(crate) const fn stop(&self) -> Option<VisualExtensionStop> {
+        self.stop
     }
 }
 
@@ -493,5 +500,6 @@ fn page_results(
         analysed,
         gaps,
         analysed_now,
+        stop,
     })
 }
