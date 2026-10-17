@@ -12,6 +12,11 @@ name: CodeQL
 #     lanes"). Otherwise the job succeeds without analysing, in a few seconds;
 #   - every push to `main` and the weekly schedule always analyse, so `main` is
 #     never left unanalysed whatever the pull requests skipped.
+#
+# A pull request to a release branch (`release/**`) is treated like one to `main`
+# (docs/operations/release.md 6.18, L-173): the job reports on it, and analyses it
+# when it touches what CodeQL reads, so a window fix is scanned as any other change.
+# The push and the schedule stay on `main`.
 on:
   push:
     branches:
@@ -19,6 +24,7 @@ on:
   pull_request:
     branches:
       - main
+      - release/**
   schedule:
     - cron: "41 3 * * 3"
 

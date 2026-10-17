@@ -24,6 +24,7 @@ on:
   pull_request:
     branches:
       - main
+      - release/**
     paths:
       - .github/workflows/p14-runbook-walk.yml
       - tools/p14-campaigns/runbook-walk.cjs

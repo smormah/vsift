@@ -126,6 +126,12 @@ minutes and `P14 local upgrade` 13 to 15 on a code pull request, so neither is p
   choice does not depend on the lane (a workflow-only change runs the full lane of tests but gives
   CodeQL nothing new to read) or on the `full-ci` label. A pull request that needs the analysis still
   takes 6 to 8 minutes, in parallel with the lane.
+- **Release branches get the same scanning** (since 2026-10-17, [L-173](planning/known-limits.md#l-173)):
+  CodeQL's `Analyze Rust`, `Security` (the cargo-deny policy and the dependency review) and the nine `P14` path
+  workflows also trigger on pull requests to `release/**`; with `CI` and the Release dry run, a window fix is
+  checked as any change to `main` is. Their pushes and schedules stay on `main`. The `Release window` workflow
+  (`tools/release_window.py`, `tools/test_release_window.py`) is separate: it reports whether every change on a
+  release branch is also on `main` ([`operations/release.md`](operations/release.md) 6.8 and 6.18).
 - **`P14 local upgrade`** (RQ-04's local mode: a build of the change upgrades a published version
   through a loopback registry, on three systems) no longer runs on pull requests that touch
   `crates/`. It is `.github/workflows/p14-local-upgrade.yml`, a reusable and dispatchable workflow

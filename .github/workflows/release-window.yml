@@ -1,0 +1,69 @@
+name: Release window
+
+# Whether every window fix on a release branch is also on `main` (docs/operations/release.md
+# 6.8 and 6.18 step 5, L-173). A fix reaches the release branch by one pull request and
+# `main` by another, and nothing else compares them. `tools/release_window.py` does, on
+# content rather than commit identity (its docstring says why), and fails with the commits
+# and files `main` lacks.
+#
+# It runs:
+#   - on a pull request to `main` that changes the P14 evidence ledger, which is what the
+#     records change after a publish does, and then it also requires the work record and the
+#     shipped documents to be on `main` (`--records`); the pull request's merge ref is
+#     compared, so the pull request itself counts;
+#   - on demand, for example before the cut, when no window fix may be missing from `main`.
+# It is a report, not a rule of the repository: no ruleset requires it, and a deliberate
+# difference is recorded in the pull request that finds it.
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - docs/planning/p14-evidence-ledger.json
+      - tools/release_window.py
+      - tools/test_release_window.py
+      - .github/workflows/release-window.yml
+  workflow_dispatch:
+    inputs:
+      records:
+        description: "Also require the work record and the shipped documents to be on main (the records change after a publish)"
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-window-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  window-fixes:
+    name: Window fixes on main
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Every branch is needed: the release branches and the history back to their cut.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Test the check
+        run: python3 -m unittest discover -s tools -p test_release_window.py
+
+      - name: Compare the release branches with main
+        env:
+          EVENT: ${{ github.event_name }}
+          RECORDS: ${{ github.event.inputs.records }}
+        run: |
+          set -euo pipefail
+          # A pull request is compared as it would merge; a dispatch with `main` as it is.
+          if [ "$EVENT" = pull_request ]; then
+            python3 tools/release_window.py --main HEAD --records
+          elif [ "$RECORDS" = true ]; then
+            python3 tools/release_window.py --main origin/main --records
+          else
+            python3 tools/release_window.py --main origin/main
+          fi

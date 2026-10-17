@@ -18,6 +18,7 @@ on:
   pull_request:
     branches:
       - main
+      - release/**
     paths:
       - .github/workflows/p14-compatibility.yml
       - schemas/**
