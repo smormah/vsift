@@ -112,8 +112,9 @@ Go through these, in order:
    a video in another codec, is refused: re-save it as MP4 or MKV with your video editor or FFmpeg, then open the new
    file. Check that the file plays in an ordinary player.
 2. **Is it a regular file?** A folder, a named pipe or a device is refused (a folder on Windows is reported under
-   [`STORAGE_IO`](#storage_io-a-file-could-not-be-read-or-written), with a line that says it is a folder). So is a link: name
-   the file the link points to.
+   [`STORAGE_IO`](#storage_io-a-file-could-not-be-read-or-written), with a line that says it is a folder; a pipe or a
+   device has a `Fix:` line that says it is not a regular file, and so has a socket, which is reported under
+   `STORAGE_IO`). So is a link: name the file the link points to.
 3. **Is it too big?** Over 20 GiB, or four hours, or very many streams, or pictures larger than 16 megapixels.
    [Limits](limits.md) has the numbers.
 4. **Did it take ten minutes and then fail?** Then nothing is wrong with the video, whatever the first line says.

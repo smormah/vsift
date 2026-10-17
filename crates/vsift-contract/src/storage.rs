@@ -75,6 +75,18 @@ pub const UNOWNED_SESSION_ROOT_REMEDIATION: &str = "The VSift session_root folde
 /// storage failed. The first sentence is stable and the text names no path.
 pub const SOURCE_IS_LINK_REMEDIATION: &str = "The path you gave is a link, and VSift does not follow links. Nothing was read or copied, and no storage failed (the code is the closest published one). Name the file the link points to and run the command again with that path.";
 
+/// Remediation when a source (or a supplied transcript) names a named pipe, a
+/// device or a socket (#264), refused from its directory entry before anything
+/// opened it.
+///
+/// A named pipe and a device keep `INVALID_SOURCE`, the documented answer, and
+/// a socket keeps `STORAGE_IO`, the answer its failed open always gave (within
+/// v1 a published failure code does not change; known limit L-127), so the
+/// text says for the socket that no storage failed. It says the thing was not
+/// opened, because opening one can wait for ever or act on a device. The first
+/// sentence is stable and the text names no path.
+pub const SOURCE_SPECIAL_FILE_REMEDIATION: &str = "The path you gave is not a regular file: it is a named pipe, a device or a socket, and VSift does not open those. Nothing was read or copied, and no storage failed (for a socket the code is the closest published one). VSift reads only regular files, such as a video saved on a disk. Name the video file itself and run the command again. If you do not know which file the user means, ask the user.";
+
 /// Remediation when the path given as a source (or a supplied transcript) names
 /// no file (#369): the name is mistyped, or the command was run from another
 /// folder than the one that holds the file.

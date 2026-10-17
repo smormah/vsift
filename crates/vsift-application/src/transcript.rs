@@ -18,7 +18,7 @@ use vsift_domain::{
     TranscriptSegment, TranscriptSegmentId, TranscriptSegmentParts, align_imported_cues,
 };
 
-use crate::session::SourcePathFault;
+use crate::session::{SourcePathFault, SpecialFileKind};
 
 const IDENTITY_HEX_LENGTH: usize = 32;
 const HEX: &[u8; 16] = b"0123456789abcdef";
@@ -52,6 +52,10 @@ pub enum SuppliedTranscriptError {
     /// The transcript's own final path component is a symbolic link, which is
     /// not followed (#265). Reported as the code 0.1.0 gave (`STORAGE_IO`).
     SymbolicLink,
+    /// The path names a named pipe, a device or a socket, refused from its
+    /// directory entry before anything opened it (#264); reported with the
+    /// code each kind had before ([`SpecialFileKind`]).
+    SpecialFile(SpecialFileKind),
 }
 
 impl fmt::Display for SuppliedTranscriptError {
@@ -69,6 +73,7 @@ impl fmt::Display for SuppliedTranscriptError {
             Self::SymbolicLink => {
                 formatter.write_str("supplied transcript is a link, which is not followed")
             }
+            Self::SpecialFile(kind) => write!(formatter, "supplied transcript: {kind}"),
         }
     }
 }

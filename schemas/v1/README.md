@@ -369,7 +369,12 @@ name, a command run from another folder), names a folder (Windows; Linux and mac
 or is a file the operating system refused to open for reading (#369): `STORAGE_IO`, the code and message 0.2.0
 gave, with one remediation entry that says which of the three it is where it had an empty `remediation`; no field is
 added. They are checked by `storage_contract` and by a unit test of the CLI, which builds each from the typed cause,
-and `source_path_cli_contract` runs the binary. `frame-get.busy.json` is the `frame get` failure when another
+and `source_path_cli_contract` runs the binary. `ingest-source-special-file.json` and `ingest-source-socket.json`
+are the `ingest` failures when the path names a named pipe or a device (`INVALID_SOURCE`) or a socket (`STORAGE_IO`),
+each the code it had before, refused without being opened (#264): one remediation entry that says it is not a
+regular file where `remediation` was empty; no field is added. They are checked by `storage_contract`, by a unit
+test of the CLI that builds each from the typed cause, and on Linux and macOS by `fifo_source_cli_contract`, which
+runs the binary. `frame-get.busy.json` is the `frame get` failure when another
 request holds the session or the root's share of the machine's capacity (#342): `BUSY`, with
 `retryable` true, as it always was, and, since 0.2.1, one remediation entry and `retry_after_ms`
 2000 where it had an empty `remediation` and a null hint; no field is added (the failure shape

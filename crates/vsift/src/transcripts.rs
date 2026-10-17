@@ -256,6 +256,9 @@ fn transcript_source_error(error: SuppliedTranscriptError) -> EngineError {
         SuppliedTranscriptError::SymbolicLink => {
             EngineError::TranscriptSource(TranscriptSourceError::SymbolicLink)
         }
+        SuppliedTranscriptError::SpecialFile(kind) => {
+            EngineError::TranscriptSource(TranscriptSourceError::SpecialFile(kind))
+        }
     }
 }
 

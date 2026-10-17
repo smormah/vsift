@@ -193,6 +193,43 @@ impl fmt::Display for SourcePathFault {
     }
 }
 
+/// What a selected path names when it is neither a regular file nor a folder
+/// nor a link: an entry that `VSift` refuses from its directory entry, before
+/// anything opens it (#264).
+///
+/// Opening such an entry can wait for ever (a named pipe that nothing writes
+/// to) or act on a device (a tape that rewinds, a terminal that becomes the
+/// process's own, a watchdog that starts), so the kind is read without
+/// opening. Each kind keeps the published code it has had since 0.2.0, which
+/// is why one cause has two codes: a named pipe and a device are
+/// `INVALID_SOURCE`, as documented, and a socket is `STORAGE_IO`, because its
+/// open always failed (known limit L-127: a published failure code does not
+/// change within v1). The remediation is the same for all three.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SpecialFileKind {
+    /// A named pipe (FIFO).
+    NamedPipe,
+    /// A character or block device.
+    Device,
+    /// A local (UNIX-domain) socket.
+    Socket,
+}
+
+impl SpecialFileKind {
+    /// Every kind, in declaration order.
+    pub const ALL: [Self; 3] = [Self::NamedPipe, Self::Device, Self::Socket];
+}
+
+impl fmt::Display for SpecialFileKind {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self {
+            Self::NamedPipe => "the selected path is a named pipe, not a regular file",
+            Self::Device => "the selected path is a device, not a regular file",
+            Self::Socket => "the selected path is a socket, not a regular file",
+        })
+    }
+}
+
 /// Expected failure of a foreground session open.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum OpenSessionError {
@@ -214,6 +251,11 @@ pub enum OpenSessionError {
     /// one 0.1.0 gave, with a remediation that says what happened (known limit
     /// L-127: changing a published failure code is not additive within v1).
     SourceIsLink,
+    /// The selected source is a named pipe, a device or a socket, refused from
+    /// its directory entry before anything opened it (#264). The published
+    /// code depends on the kind ([`SpecialFileKind`]) and the remediation says
+    /// what happened.
+    SourceSpecialFile(SpecialFileKind),
     /// The session root's filesystem has no room for the copy of the source:
     /// found before the copy from the source's size and the free space, or
     /// when a write ran out of space (#266). Nothing was activated. The
@@ -254,6 +296,7 @@ impl fmt::Display for OpenSessionError {
             Self::SourceIsLink => {
                 formatter.write_str("selected source is a link, which is not followed")
             }
+            Self::SourceSpecialFile(kind) => kind.fmt(formatter),
             Self::SourceNoRoom => {
                 formatter.write_str("the session root has no room for a copy of the source")
             }
