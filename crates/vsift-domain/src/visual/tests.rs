@@ -546,3 +546,30 @@ proptest! {
         }
     }
 }
+
+/// #367: the periodic omission leaves out exactly the candidates whose reason
+/// is periodic coverage, and leaving nothing out keeps every candidate.
+#[test]
+fn the_periodic_omission_leaves_out_only_periodic_coverage() -> TestResult {
+    use super::CandidateOmission;
+    let analysis = analyse_window(window(0, 25.0)?, &grid(0.0, 25.0, |_| (40, 40)), POLICY)?;
+    let mut kept = Vec::new();
+    for (index, draft) in analysis.candidates.into_iter().enumerate() {
+        let candidate = VisualCandidate::new(
+            VisualCandidateId::parse(format!("vcd_{index:032x}"))?,
+            draft,
+        );
+        assert!(!CandidateOmission::Nothing.leaves_out(&candidate));
+        if !CandidateOmission::PeriodicCoverage.leaves_out(&candidate) {
+            kept.push(candidate.reason());
+        }
+    }
+    assert_eq!(kept, [CandidateReason::FirstFrame]);
+    assert_eq!(CandidateOmission::ALL.len(), 2);
+    assert_eq!(CandidateOmission::default(), CandidateOmission::Nothing);
+    assert_eq!(
+        CandidateOmission::PeriodicCoverage.left_out_reason(),
+        Some(CandidateReason::PeriodicCoverage)
+    );
+    Ok(())
+}

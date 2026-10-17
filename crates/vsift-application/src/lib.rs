@@ -109,9 +109,10 @@ pub use visual::{
     CandidatePage, CandidatePageRequest, CandidateQueryError, ExtendVisualIndexRequest,
     MAX_WINDOWS_PER_EXTENSION, VisualExtensionStop, VisualIndexBuildError, VisualIndexExtension,
     VisualIndexScope, VisualSampler, VisualSamplingError, analysed_ranges, candidate_query_digest,
-    clip_to_source, extend_visual_index, extend_visual_index_within, indexes_any_of,
-    merge_visual_extension, missing_windows, page_candidates, verify_visual_index_identities,
-    visual_candidate_id, visual_coverage_gaps, visual_index_id,
+    candidate_query_digest_omitting, clip_to_source, extend_visual_index,
+    extend_visual_index_within, indexes_any_of, merge_visual_extension, missing_windows,
+    page_candidates, verify_visual_index_identities, visual_candidate_id, visual_coverage_gaps,
+    visual_index_id,
 };
 
 /// Port used to inspect one specialist runtime dependency.

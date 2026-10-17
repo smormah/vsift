@@ -597,6 +597,7 @@ fn first_minute(session: &SessionId) -> CandidatesRequest {
         },
         limit: None,
         cursor: None,
+        omission: vsift::CandidateOmission::Nothing,
         cancellation: Cancellation::new(),
     }
 }

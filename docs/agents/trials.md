@@ -904,6 +904,11 @@ components are unchanged, and the pin in `committed_freeze` moved with it. The s
 ran under kept beside them as `freeze-0.2.1-rc.3.json`; they move aside when the next counted batch is prepared. **No batch has run under the new freeze,
 and no counted batch is run for this change:** under the test and release model of 2026-10-16 an ordinary week's skill wording change gets the
 uncounted skill smoke instead, which the supervisor schedules.
+**Later on 2026-10-17 the freeze is new again (#367).** The skill shortlists the screens of a range with no transcript with
+`candidates --omit periodic` ([`skill.md`](skill.md), "Shortlisting the screens of a long recording"): `freeze write` at `1b27ca616d9b`, the
+commit of that pull request's branch at which the skill changed, gave the `skill` digest `2b304deb98f095d0947fbebd8da1b38cb4657d5cdb4ed873e7f4c93d9395a04b`
+(it was `7f445a9a...`) and the whole-freeze digest `8afb2bf69459c381b2caa0ebc855d150d37f82889114eab70016ffff6e379ab2` (it was `f52265e7...`); the other six
+components are unchanged, and the pin in `committed_freeze` moved with it. No batch has run under it, and none is run for this change.
 **Later on 2026-10-17 the freeze is new once more (#366).** The skill now checks a long report whole through the PowerShell form on Windows
 and in parts in Git Bash ([`skill.md`](skill.md), "A long report's check on Windows"): `freeze write` at `9b4908b00988`, the commit of that
 pull request's branch at which the skill changed, gave the `skill` digest `13b485f323a07b5fdb4472bed8a5b911cf087bcff388728a1f292f51dbc71fe2`

@@ -56,6 +56,7 @@ async fn run(
             },
             limit: arguments.limit,
             cursor: arguments.cursor,
+            omission: arguments.omit.omission(),
             cancellation: cancellation.clone(),
         })
         .await
@@ -73,6 +74,8 @@ fn presentation(results: &CandidatesResults) -> CandidatesPresentation<'_> {
         next_cursor: results.next_cursor(),
         analysed: results.analysed(),
         gaps: results.gaps(),
+        omission: results.omission(),
+        omitted: results.omitted(),
     }
 }
 
@@ -119,6 +122,36 @@ mod tests {
     use vsift_contract::MEDIA_BUSY_REMEDIATION;
 
     use super::candidates_failure;
+    use crate::command::OmitArgument;
+
+    /// #367: every value of `--omit` names one omission of the engine and its
+    /// published identifier, and every omission has a value.
+    #[test]
+    fn every_omission_has_its_omit_value() {
+        use clap::ValueEnum;
+        let values: Vec<(String, &str)> = OmitArgument::value_variants()
+            .iter()
+            .filter_map(|value| {
+                value.to_possible_value().map(|possible| {
+                    (
+                        possible.get_name().to_owned(),
+                        value.omission().identifier(),
+                    )
+                })
+            })
+            .collect();
+        assert_eq!(values.len(), vsift::CandidateOmission::ALL.len());
+        for (name, identifier) in &values {
+            assert_eq!(name, identifier);
+        }
+        for omission in vsift::CandidateOmission::ALL {
+            assert!(
+                values
+                    .iter()
+                    .any(|(_, identifier)| *identifier == omission.identifier())
+            );
+        }
+    }
 
     /// #342: `candidates` met the same contention the evidence commands do,
     /// and answers it the same way: `BUSY`, the remediation and the admission

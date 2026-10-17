@@ -1238,6 +1238,15 @@ Options:
 
           [default: full]
 
+      --omit <OMIT>
+          Which candidates to leave out of the pages. `periodic` leaves out the candidates proposed only because the screen did not change in their 10 s cell (reason `periodic_coverage`), so a shortlist of a long recording holds its changes; the answer then says how many it left out (`omitted`). Nothing is left out of the analysis or the coverage, and a cursor continues only pages of the same choice
+
+          Possible values:
+          - none:     Every candidate: the answer every release gave (the default)
+          - periodic: Candidates whose only reason is `periodic_coverage`
+
+          [default: none]
+
   -h, --help
           Print help (see a summary with '-h')
 ```

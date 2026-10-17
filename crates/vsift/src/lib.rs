@@ -236,11 +236,11 @@ pub use vsift_domain::{
 };
 /// Visual-candidate values that appear in this API.
 pub use vsift_domain::{
-    CandidateChange, CandidateReason, CandidateStability, CoverageGapReason, FrameDimensions,
-    VISUAL_CELL_MICROS, VISUAL_FRAME_HEIGHT, VISUAL_FRAME_WIDTH, VISUAL_SAMPLE_INTERVAL_MICROS,
-    VISUAL_WINDOW_MICROS, VisualCandidate, VisualCandidateId, VisualCoverageGap, VisualDelta,
-    VisualHash, VisualIndex, VisualIndexError, VisualIndexId, VisualIndexProfile,
-    VisualIndexWindow, VisualWindow, VisualWindowOutcome,
+    CandidateChange, CandidateOmission, CandidateReason, CandidateStability, CoverageGapReason,
+    FrameDimensions, VISUAL_CELL_MICROS, VISUAL_FRAME_HEIGHT, VISUAL_FRAME_WIDTH,
+    VISUAL_SAMPLE_INTERVAL_MICROS, VISUAL_WINDOW_MICROS, VisualCandidate, VisualCandidateId,
+    VisualCoverageGap, VisualDelta, VisualHash, VisualIndex, VisualIndexError, VisualIndexId,
+    VisualIndexProfile, VisualIndexWindow, VisualWindow, VisualWindowOutcome,
 };
 /// Search values that appear in this API.
 pub use vsift_domain::{

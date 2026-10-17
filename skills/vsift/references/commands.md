@@ -118,6 +118,8 @@ vsift search <session> --query "<text>" --view brief --limit <n> --json
 vsift search <session> --query "<text>" --from <from-us> --to <to-us> --view brief --limit <n> --json
 vsift candidates <session> --from <from-us> --to <to-us> --view brief --limit <n> --json
 vsift candidates <session> --from <from-us> --to <to-us> --view brief --limit <n> --cursor "<cursor>" --json
+vsift candidates <session> --from <from-us> --to <to-us> --view brief --limit <n> --omit periodic --json
+vsift candidates <session> --from <from-us> --to <to-us> --view brief --limit <n> --omit periodic --cursor "<cursor>" --json
 vsift frame get <session> --candidate <candidate> --json
 vsift frame get <session> --at <us> --json
 vsift frame get <session> --at <us> --select displayed-at --json
@@ -254,6 +256,12 @@ A gap caused by a failure may carry its code in `gaps[].code`.
   at most 5 minutes per call (`--to` at most 300000000 after `--from`): a longer first call can
   run past your tool's time limit with no output. `data.coverage.gaps` of the answer are objects
   with a `reason`; the envelope's `coverage.gaps` are only text.
+- `candidates --omit periodic` leaves out the candidates whose only reason is
+  `periodic_coverage` (the screen did not change in their 10 s cell, so each repeats a screen
+  listed before it): use it to shortlist the screens of a range with no transcript. The answer
+  says what it left out in `data.omitted` (`count` for the whole range); those candidates
+  were analysed and are not a gap. Pass its `next_cursor` back with `--omit periodic` again:
+  a cursor continues only pages of the same `--omit`. VSift before 0.2.2 refuses the option.
 - `session list` and `session clean --expired --dry-run` return one page per call, often one
   session or none: pass `next_cursor` back as `--cursor` until it is null.
 - `frame get --at` takes the first frame at or after the time within 1 s by default;

@@ -30,11 +30,11 @@ use std::{
 };
 
 use vsift_domain::{
-    CoverageGapReason, CursorError, CursorToken, FrameDimensions, MediaTime, PageLimit,
-    QueryDigest, SessionId, SourceId, TimeRange, VISUAL_WINDOW_MICROS, VisualAnalysisError,
-    VisualCandidate, VisualCandidateId, VisualCoverageGap, VisualIndex, VisualIndexError,
-    VisualIndexId, VisualIndexParts, VisualIndexProfile, VisualIndexWindow, VisualSample,
-    VisualWindow, VisualWindowOutcome, analyse_window, visual_window_count,
+    CandidateOmission, CoverageGapReason, CursorError, CursorToken, FrameDimensions, MediaTime,
+    PageLimit, QueryDigest, SessionId, SourceId, TimeRange, VISUAL_WINDOW_MICROS,
+    VisualAnalysisError, VisualCandidate, VisualCandidateId, VisualCoverageGap, VisualIndex,
+    VisualIndexError, VisualIndexId, VisualIndexParts, VisualIndexProfile, VisualIndexWindow,
+    VisualSample, VisualWindow, VisualWindowOutcome, analyse_window, visual_window_count,
 };
 
 use crate::transcript::{derived_identity, sha256_hex};
@@ -643,6 +643,8 @@ pub struct CandidatePageRequest {
     pub limit: PageLimit,
     /// Opaque continuation token from the previous page of the same query.
     pub cursor: Option<String>,
+    /// Which candidates the page leaves out (#367); the cursor is bound to it.
+    pub omission: CandidateOmission,
 }
 
 /// One bounded page of candidates.
@@ -652,6 +654,9 @@ pub struct CandidatePage<'a> {
     pub candidates: Vec<&'a VisualCandidate>,
     /// Token for the next page, absent on the last page.
     pub next_cursor: Option<CursorToken>,
+    /// How many candidates of the whole range the omission left out (the
+    /// same on every page of the range); zero without an omission.
+    pub omitted: usize,
 }
 
 /// Why a candidate page request was rejected.
@@ -691,9 +696,11 @@ pub fn page_candidates<'a>(
     cursor_expires_at_micros: u64,
     now_micros: u64,
 ) -> Result<CandidatePage<'a>, CandidateQueryError> {
-    let digest =
-        candidate_query_digest(index, request.range).map_err(CandidateQueryError::Cursor)?;
-    let matching: Vec<&VisualCandidate> = index.candidates_in(request.range).collect();
+    let digest = candidate_query_digest_omitting(index, request.range, request.omission)
+        .map_err(CandidateQueryError::Cursor)?;
+    let (left_out, matching): (Vec<&VisualCandidate>, Vec<&VisualCandidate>) = index
+        .candidates_in(request.range)
+        .partition(|candidate| request.omission.leaves_out(candidate));
     let start = match &request.cursor {
         None => 0,
         Some(encoded) => {
@@ -728,6 +735,7 @@ pub fn page_candidates<'a>(
     Ok(CandidatePage {
         candidates,
         next_cursor,
+        omitted: left_out.len(),
     })
 }
 
@@ -746,6 +754,26 @@ fn candidate_key(candidate: &VisualCandidate) -> String {
 pub fn candidate_query_digest(
     index: &VisualIndex,
     range: TimeRange,
+) -> Result<QueryDigest, CursorError> {
+    candidate_query_digest_omitting(index, range, CandidateOmission::Nothing)
+}
+
+/// [`candidate_query_digest`] of a query that leaves `omission` out (#367).
+///
+/// Without an omission the material, and so the digest, is exactly the one
+/// every release used, so a cursor issued before the option existed stays
+/// valid. With one, a line naming it is added: a cursor of a page that left
+/// candidates out never continues a page that did not, or the other way
+/// round, because the two sequences differ and a continuation would skip or
+/// repeat candidates; such a cursor is refused as another query's.
+///
+/// # Errors
+///
+/// As [`candidate_query_digest`].
+pub fn candidate_query_digest_omitting(
+    index: &VisualIndex,
+    range: TimeRange,
+    omission: CandidateOmission,
 ) -> Result<QueryDigest, CursorError> {
     let mut material = format!(
         "vsift.candidates.v1\n{}\n{}\n{}\n{}\n{}",
@@ -769,6 +797,10 @@ pub fn candidate_query_digest(
                 }
             }
         }
+    }
+    if omission != CandidateOmission::Nothing {
+        material.push_str("\nomit:");
+        material.push_str(omission.identifier());
     }
     QueryDigest::parse(sha256_hex(material.as_bytes()))
 }

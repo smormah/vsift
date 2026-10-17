@@ -18,6 +18,7 @@
     "range": { "$ref": "candidates-data.schema.json#/$defs/range" },
     "index": { "$ref": "candidates-data.schema.json#/$defs/index" },
     "coverage": { "$ref": "candidates-data.schema.json#/$defs/coverage" },
+    "omitted": { "$ref": "candidates-data.schema.json#/$defs/omitted" },
     "record_count": { "type": "integer", "minimum": 0, "maximum": 100 },
     "next_cursor": { "$ref": "candidates-data.schema.json#/$defs/next_cursor" }
   }

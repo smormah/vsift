@@ -866,6 +866,7 @@ impl Engine {
                     range,
                     limit: None,
                     cursor: None,
+                    omission: vsift_domain::CandidateOmission::Nothing,
                     cancellation: context.work.clone(),
                 })
                 .await?;

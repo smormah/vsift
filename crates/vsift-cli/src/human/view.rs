@@ -774,8 +774,19 @@ pub(crate) struct CandidatesPage {
     pub(crate) range: Range,
     pub(crate) index: VisualIndex,
     pub(crate) coverage: CandidatesCoverage,
+    /// What the page left out at the caller's request (`--omit`, #367);
+    /// absent when nothing was asked to be left out.
+    #[serde(default)]
+    pub(crate) omitted: Option<CandidatesOmitted>,
     pub(crate) items: Vec<VisualCandidate>,
     pub(crate) next_cursor: Option<String>,
+}
+
+/// The candidates a page left out, by reason, over its whole range.
+#[derive(Debug, Deserialize)]
+pub(crate) struct CandidatesOmitted {
+    pub(crate) reason: String,
+    pub(crate) count: u64,
 }
 
 /// The visual-index revision a candidates page was read from.

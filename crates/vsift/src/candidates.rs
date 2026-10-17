@@ -35,9 +35,9 @@ use vsift_application::{
     page_candidates, visual_coverage_gaps, whole_file_source_segment,
 };
 use vsift_domain::{
-    MediaSelection, MediaTime, PageLimit, SessionArtifactKind, SessionId, SourceSegmentId,
-    TimeRange, VISUAL_WINDOW_WEIGHT, VisualCandidate, VisualCoverageGap, VisualIndex,
-    VisualIndexError, VisualIndexProfile, VisualStreamError,
+    CandidateOmission, MediaSelection, MediaTime, PageLimit, SessionArtifactKind, SessionId,
+    SourceSegmentId, TimeRange, VISUAL_WINDOW_WEIGHT, VisualCandidate, VisualCoverageGap,
+    VisualIndex, VisualIndexError, VisualIndexProfile, VisualStreamError,
 };
 use vsift_infrastructure::{
     BoundSource, FfmpegMedia, FfmpegVisualSampler, FilesystemSessionStore,
@@ -80,6 +80,11 @@ pub struct CandidatesRequest {
     /// Opaque continuation token from the previous page of the same range.
     /// A call with a cursor never analyses anything.
     pub cursor: Option<String>,
+    /// Which candidates the pages leave out (#367): [`CandidateOmission::Nothing`]
+    /// for every candidate, as before. It changes only which candidates are
+    /// listed, never what is analysed; a cursor continues only a page of the
+    /// same omission.
+    pub omission: CandidateOmission,
     /// Signal that stops analysis at its next window; windows analysed
     /// before it are still committed.
     pub cancellation: Cancellation,
@@ -98,9 +103,24 @@ pub struct CandidatesResults {
     analysed: Vec<TimeRange>,
     gaps: Vec<VisualCoverageGap>,
     analysed_now: usize,
+    omission: CandidateOmission,
+    omitted: usize,
 }
 
 impl CandidatesResults {
+    /// Which candidates the page leaves out, as requested.
+    #[must_use]
+    pub const fn omission(&self) -> CandidateOmission {
+        self.omission
+    }
+
+    /// How many analysed candidates of the whole range the omission left
+    /// out: the same on every page of the range, zero without an omission.
+    #[must_use]
+    pub const fn omitted(&self) -> usize {
+        self.omitted
+    }
+
     /// Session state observed after the call.
     #[must_use]
     pub const fn session(&self) -> &SessionSnapshot {
@@ -469,11 +489,13 @@ fn page_results(
             range: requested,
             limit,
             cursor: request.cursor.clone(),
+            omission: request.omission,
         },
         expires_at,
         now.saturating_mul(MICROS_PER_SECOND),
     )
     .map_err(EngineError::CandidateQuery)?;
+    let omitted = page.omitted;
     let candidates = page.candidates.into_iter().cloned().collect();
     let next_cursor = page.next_cursor.map(|cursor| cursor.encode());
     let gaps = visual_coverage_gaps(Some(&index), index.duration(), requested, stop);
@@ -493,5 +515,7 @@ fn page_results(
         analysed,
         gaps,
         analysed_now,
+        omission: request.omission,
+        omitted,
     })
 }

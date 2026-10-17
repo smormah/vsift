@@ -153,8 +153,8 @@ vsift candidates <session> --from <from-us> --to <to-us> --view brief --limit <n
   `settled_after_motion` candidates nearest the span; note `representative_us`.
 - A `partial` result lists `data.coverage.gaps` (the envelope's `coverage.gaps` are only text);
   `not_analyzed` means call again for that range, other reasons are real gaps to report. Without a
-  transcript, look at one range of at most 5 minutes at a time, starting where the question points (the
-  first call reports `index.duration_us`).
+  transcript, look at one range of at most 5 minutes at a time, starting where the question points (the first
+  call reports `index.duration_us`), with `--omit periodic`, which leaves out repeats of an unchanged screen.
 - **Stop when** you hold a shortlist no longer than your remaining image budget.
 
 ### 5. VERIFY_SOURCE

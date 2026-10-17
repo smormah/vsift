@@ -1649,6 +1649,27 @@ for a first frame or periodic coverage), `reasons` (`first_frame`, `visual_chang
 hash), `sample_count`, `displayed_dimensions` and `analysis`. Every 10 s of analysed
 video with a decoded frame has a candidate.
 
+**Leaving out periodic candidates (`--omit`, since `0.2.2`, #367).** `candidates ... --omit
+periodic` leaves out of the pages the candidates whose only reason is `periodic_coverage` (the
+screen did not change in their 10 s cell, so each repeats a screen listed before it); `--omit none`
+is the default and every release's answer, byte for byte. On a generated 21-minute walkthrough
+92 of 140 candidates were periodic, and the option took the characters of the skill's
+shortlist from 38,349 to 18,324 with every distinct screen still listed
+([measurement](../planning/candidates-long-recording-0.2.2.md)). **Never silent:** an answer
+asked to leave something out has `data.omitted`, `{"reason": "periodic_coverage", "count": <n>}`,
+where `count` is how many analysed candidates of the whole requested range were left out, the
+same on every page of the range, and present with `0` too; without the option the member is
+absent. The left-out candidates were analysed and stay in the index: they are not a gap, and the
+coverage, status, warning and envelope are the answer without the option's. **The cursor is bound
+to the choice:** a page's `next_cursor` continues only pages with the same `--omit`; given with the
+other choice it is `INVALID_ARGUMENT`, like a cursor of another range, because the two sequences
+differ (a cursor of an answer without the option, from any release, still continues answers without
+it). The option changes nothing that is analysed or stored; it works with `--view brief` and with
+`--events jsonl` (the stream leaves the same records out, and its terminal data carries `omitted`).
+An older binary refuses `--omit` as an unknown option. Example
+[`candidates.omit-periodic.json`](../../schemas/v1/examples/candidates.omit-periodic.json) and its
+brief view [`candidates.omit-periodic.brief.json`](../../schemas/v1/examples/candidates.omit-periodic.brief.json).
+
 **Coverage.** `coverage.searched_range` is the range clipped to the video;
 `coverage.analyzed` lists the analysed parts (merged); `coverage.gaps` lists every gap
 with its `reason` and `dropped_candidates`: `not_analyzed` (call again),
