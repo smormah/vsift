@@ -57,10 +57,11 @@
 //! `p11_worker: passed` when every required stage passed. A stage that
 //! cannot run here is `blocked`, never `passed`.
 
+mod provider_processes;
 mod published_binary;
 
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::BTreeMap,
     env,
     error::Error,
     ffi::OsStr,
@@ -79,6 +80,7 @@ use std::{
 
 use assert_cmd::Command;
 use jsonschema::{Retrieve, Uri};
+use provider_processes::{ProcessIdentity, ProcessTable, named};
 use serde_json::{Value, json};
 use vsift_infrastructure::{ExecutableResolver, FilesystemSessionStore, TrustedExecutable};
 
@@ -1267,9 +1269,13 @@ fn ladder_stage(root: &OwnedRoot, tools: &Tools) -> StageResult {
             events: parse_events(&stdout)?,
             elapsed,
         };
+        let terminal = run.terminal()?;
         ensure(
-            run.code == Some(0) && run.terminal()?["data"]["counts"]["complete"] == 4,
-            &format!("a ladder batch at concurrency {concurrency} did not complete"),
+            run.code == Some(0) && terminal["data"]["counts"]["complete"] == 4,
+            &format!(
+                "a ladder batch at concurrency {concurrency} did not complete: exit {:?}, {} {}",
+                run.code, terminal["data"]["items"], terminal["error"]["code"]
+            ),
         )?;
         let peak_in_flight = run.peak_in_flight();
         ensure(
@@ -1335,53 +1341,25 @@ fn ladder_stage(root: &OwnedRoot, tools: &Tools) -> StageResult {
     }))
 }
 
-/// The processes `parent` started that are still running.
-fn children_of(parent: u32) -> Result<BTreeSet<u32>, StageStop> {
-    #[cfg(windows)]
-    let output = Process::new("powershell.exe")
-        .args([
-            "-NoProfile",
-            "-NonInteractive",
-            "-Command",
-            &format!(
-                "Get-CimInstance Win32_Process -Filter 'ParentProcessId={parent}' | Where-Object {{ $_.Name -ne 'conhost.exe' }} | ForEach-Object {{ $_.ProcessId }}"
-            ),
-        ])
-        .stdin(Stdio::null())
-        .output()?;
-    #[cfg(not(windows))]
-    let output = Process::new("pgrep")
-        .args(["-P", &parent.to_string()])
-        .stdin(Stdio::null())
-        .output()?;
-    Ok(String::from_utf8_lossy(&output.stdout)
-        .split_whitespace()
-        .filter_map(|pid| pid.parse().ok())
-        .collect())
-}
-
-/// Whether process `pid` still runs.
-fn alive(pid: u32) -> Result<bool, StageStop> {
-    #[cfg(windows)]
-    let output = Process::new("powershell.exe")
-        .args([
-            "-NoProfile",
-            "-NonInteractive",
-            "-Command",
-            &format!("if (Get-Process -Id {pid} -ErrorAction SilentlyContinue) {{ 'alive' }}"),
-        ])
-        .stdin(Stdio::null())
-        .output()?;
-    #[cfg(not(windows))]
-    let output = Process::new("kill")
-        .args(["-0", &pid.to_string()])
-        .stdin(Stdio::null())
-        .stderr(Stdio::null())
-        .output()?;
-    #[cfg(windows)]
-    return Ok(String::from_utf8_lossy(&output.stdout).contains("alive"));
-    #[cfg(not(windows))]
-    return Ok(output.status.success());
+/// A listing of the running processes that holds `child`, with its
+/// identity: up to five listings while it runs. A child that ended first is
+/// a failure that says so, with its exit status.
+fn listed_with(child: &mut Child) -> Result<(ProcessTable, ProcessIdentity), StageStop> {
+    for _ in 0..5 {
+        let table = ProcessTable::now()?;
+        if let Some(identity) = table.identify(child.id()) {
+            return Ok((table, identity));
+        }
+        if let Some(status) = child.try_wait()? {
+            return Err(failed(&format!(
+                "the batch ended before its processes were listed: {status}"
+            )));
+        }
+        thread::sleep(Duration::from_millis(200));
+    }
+    Err(failed(
+        "the running batch was in none of five process listings",
+    ))
 }
 
 /// Sends the platform's shutdown signal to `child`: `SIGTERM` on Unix, a
@@ -1565,7 +1543,11 @@ fn shutdown_stage(root: &OwnedRoot, tools: &Tools) -> StageResult {
         }
         thread::sleep(Duration::from_millis(20));
     }
-    let mut providers = children_of(child.id())?;
+    // The batch and its providers by identity, not by number alone: on
+    // Windows a process can name the batch's id as its parent without being
+    // its child, and a provider's id can be reused (#404, `provider_processes`).
+    let (table, batch) = listed_with(&mut child)?;
+    let mut providers = table.children_of(&batch);
     let signalled_after = started.elapsed();
     let sent = Instant::now();
     shut_down(&child)?;
@@ -1580,21 +1562,19 @@ fn shutdown_stage(root: &OwnedRoot, tools: &Tools) -> StageResult {
         thread::sleep(Duration::from_millis(10));
     };
     let stopped_after = sent.elapsed();
-    providers.extend(children_of(child.id())?);
+    providers.extend(ProcessTable::now()?.children_of(&batch));
     let deadline = Instant::now() + DESCENDANT_BUDGET;
     loop {
-        let mut running = Vec::new();
-        for provider in &providers {
-            if alive(*provider)? {
-                running.push(*provider);
-            }
-        }
+        let running = ProcessTable::still_running_now(&providers)?;
         if running.is_empty() {
             break;
         }
         ensure(
             Instant::now() < deadline,
-            &format!("providers still running after the batch ended: {running:?}"),
+            &format!(
+                "providers still running after the batch ended: {}",
+                named(&running)
+            ),
         )?;
         thread::sleep(Duration::from_millis(200));
     }

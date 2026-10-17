@@ -211,10 +211,8 @@ impl<'a> FfmpegMedia<'a> {
                 "-of", "json", "-i"])
             .with_argument(source.provider_path().as_os_str());
         let output = self
-            .supervisor(MAX_PROBE_BYTES)
-            .run(request, cancellation)
-            .await
-            .map_err(MediaError::Process)?;
+            .run_provider(request, MAX_PROBE_BYTES, MAX_DIAGNOSTIC_BYTES, cancellation)
+            .await?;
         validate_outcome(&output)?;
         parse_ffprobe_metadata(&output.stdout.bytes, source.container())
     }
@@ -322,10 +320,8 @@ impl<'a> FfmpegMedia<'a> {
                 "pipe:1",
             ]);
         let output = self
-            .supervisor(MAX_FRAME_BYTES)
-            .run(request, cancellation)
-            .await
-            .map_err(MediaError::Process)?;
+            .run_provider(request, MAX_FRAME_BYTES, MAX_DIAGNOSTIC_BYTES, cancellation)
+            .await?;
         validate_outcome(&output)?;
         let observed = parse_frame_showinfo(&output.stderr.bytes)?;
         if (observed.time_base_numerator, observed.time_base_denominator)
@@ -531,10 +527,13 @@ impl<'a> FfmpegMedia<'a> {
             .with_argument(MAX_WINDOW_SAMPLES.to_string())
             .with_arguments(["-f", "rawvideo", "-pix_fmt", "gray", "pipe:1"]);
         let output = self
-            .supervisor_with(MAX_VISUAL_SAMPLE_BYTES, MAX_VISUAL_DIAGNOSTIC_BYTES)
-            .run(request, cancellation)
-            .await
-            .map_err(MediaError::Process)?;
+            .run_provider(
+                request,
+                MAX_VISUAL_SAMPLE_BYTES,
+                MAX_VISUAL_DIAGNOSTIC_BYTES,
+                cancellation,
+            )
+            .await?;
         validate_outcome(&output)?;
         parse_visual_samples(&output.stdout.bytes, &output.stderr.bytes, &sampling)
     }
@@ -607,10 +606,13 @@ impl<'a> FfmpegMedia<'a> {
                 "pipe:1",
             ]);
         let output = self
-            .supervisor(profile.stdout_limit())
-            .run(request, cancellation)
-            .await
-            .map_err(MediaError::Process)?;
+            .run_provider(
+                request,
+                profile.stdout_limit(),
+                MAX_DIAGNOSTIC_BYTES,
+                cancellation,
+            )
+            .await?;
         validate_outcome(&output)?;
         if output.stdout.bytes.is_empty()
             && matches!(profile, PcmProfile::Speech | PcmProfile::EvidenceWav)
@@ -653,15 +655,53 @@ impl<'a> FfmpegMedia<'a> {
         ProcessRequest::new(executable, cwd, deadline).map_err(MediaError::Request)
     }
 
-    fn supervisor(&self, stdout_limit: usize) -> ProcessSupervisor {
-        self.supervisor_with(stdout_limit, MAX_DIAGNOSTIC_BYTES)
-    }
-
-    fn supervisor_with(&self, stdout_limit: usize, stderr_limit: usize) -> ProcessSupervisor {
+    /// Runs one provider under the supervisor with these output bounds.
+    ///
+    /// It is the only way this adapter starts a provider, so every refusal or
+    /// failure of the supervisor reaches its callers through
+    /// [`supervised_failure`], and a run refused because it was already
+    /// cancelled is always [`MediaError::Cancelled`] (#404).
+    async fn run_provider(
+        &self,
+        request: ProcessRequest,
+        stdout_limit: usize,
+        stderr_limit: usize,
+        cancellation: ProcessCancellation,
+    ) -> Result<ProcessOutcome, MediaError> {
         let stdout = NonZeroUsize::new(stdout_limit).unwrap_or(NonZeroUsize::MIN);
         let stderr = NonZeroUsize::new(stderr_limit).unwrap_or(NonZeroUsize::MIN);
         let policy = SupervisorPolicy::default().with_stream_limits(stdout, stderr);
         ProcessSupervisor::new(policy, self.host_isolation)
+            .run(request, cancellation)
+            .await
+            .map_err(supervised_failure)
+    }
+}
+
+/// A supervised run that did not produce an outcome, as a media error.
+///
+/// A run whose caller had already cancelled before its provider could start
+/// is the cancellation, not a provider that could not run. A worker host's
+/// shutdown lands between two provider calls as often as during one (while
+/// a recognition hashes its model, say), and the next call is then refused
+/// before it starts; reported as [`MediaError::Process`], that refusal became
+/// a probe that "could not run" and a stopped recognition failed with
+/// `MISSING_CAPABILITY`, recorded for good, instead of being cancelled (#404).
+///
+/// Exhaustive on purpose: a new kind of supervisor refusal must be placed
+/// here, not fall through as a provider that could not run.
+fn supervised_failure(error: ProcessError) -> MediaError {
+    match error {
+        ProcessError::CancelledBeforeSpawn => MediaError::Cancelled,
+        ProcessError::IsolationUnavailable
+        | ProcessError::DeadlineOutOfRange
+        | ProcessError::Spawn(_)
+        | ProcessError::PipeUnavailable(_)
+        | ProcessError::StreamRead(..)
+        | ProcessError::OutputTaskFailed
+        | ProcessError::Wait(_)
+        | ProcessError::Terminate(_)
+        | ProcessError::ReapDeadlineExceeded => MediaError::Process(error),
     }
 }
 

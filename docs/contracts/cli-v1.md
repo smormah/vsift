@@ -54,8 +54,13 @@ supervisor's 5 s + 5 s budget. An `ingest` copy is checked every 64 KiB; a
 retranscription stops before its commit, and one already committing completes. Every
 other command is short and keeps the operating system's default (an interruption ends
 it; a commit is never half-visible). On Windows a console event reaches every process
-on the console, and a process that inherited the "ignore Ctrl-C" attribute is never
-told about a Ctrl-C (only Ctrl-Break); see L-053.
+on the console, so `vsift` starts each provider in a console of its own, without a
+window: the event reaches `vsift` alone, which stops its providers itself, and
+`vsift`'s own console interrupt is no longer reported as a provider's own failure
+(#404). A process that inherited the "ignore
+Ctrl-C" attribute is never told about a Ctrl-C (only Ctrl-Break); see L-053. A command
+stopped between two provider calls answers `CANCELLED`, never that a tool could not run
+(#404).
 
 | Command | Contract purpose | Implementation packet |
 | --- | --- | --- |
@@ -1188,9 +1193,14 @@ on Windows) before it starts. The first signal stops the request before its next
 and, after `--drain-timeout-ms` (at once by default), cancels the running step at its
 next boundary: a recognition is left interrupted with its checkpoints, candidates
 keep the windows they committed, a commit in progress completes. The request ends
-`cancelled` (exit 6), resumable: the same request continues it. A second signal
-escalates (providers are killed without the graceful wait); providers are always
-reaped before the process ends.
+`cancelled` (exit 6), resumable: the same request continues it. A step that fails once
+the running step has been cancelled (when the drain time is over, at once without one)
+is recorded `cancelled` too, whatever its own failure was: the stop can reach a step's
+work as a failure of that work, and recording it would end the request for good; a
+failure that was real is answered by the next delivery (#404). A step that fails during
+the drain time is recorded with its own failure: nothing `vsift` does in the drain stops
+a provider. A second signal escalates (providers are killed without the graceful wait); providers are
+always reaped before the process ends.
 
 **Events.** With `--events jsonl`: `lifecycle` `started` (readiness: the workspace's
 publication, the isolation, the admission capacity, concurrency 1), `request_admitted`,
@@ -1261,9 +1271,10 @@ tells a shutdown from a cancelled line by `termination_reason` (L-067).
 
 **Shutdown (O-04, D4).** The first `SIGINT`/`SIGTERM` (console Ctrl-C/Ctrl-Break on
 Windows) stops the reading and every running request before its next step; after
-`--drain-timeout-ms` their running steps are cancelled at the next boundary. Every
-started request stays resumable: delivering the file again continues the stopped
-requests and replays the finished ones. A second signal escalates.
+`--drain-timeout-ms` their running steps are cancelled at the next boundary, and a step
+that fails once it has been cancelled is recorded `cancelled` (as for `job run`, #404; a
+step that fails during the drain time keeps its own failure). Every started request stays resumable: delivering the file again continues the
+stopped requests and replays the finished ones. A second signal escalates.
 
 ### P11 worker contracts and events
 

@@ -58,6 +58,7 @@
 //! here is `blocked`, never `passed`, and the test fails unless every stage
 //! passed.
 
+mod provider_processes;
 mod published_binary;
 
 use std::{
@@ -76,6 +77,7 @@ use std::{
 
 use assert_cmd::Command;
 use jsonschema::{Retrieve, Uri};
+use provider_processes::{ProcessIdentity, ProcessTable, named};
 use serde_json::{Value, json};
 use vsift_infrastructure::{ExecutableResolver, TrustedExecutable};
 
@@ -483,55 +485,6 @@ fn spawn(base: &Path, arguments: &[&str]) -> Result<Child, StageStop> {
     Ok(command.spawn()?)
 }
 
-/// The processes `parent` started that are still running.
-fn children_of(parent: u32) -> Result<BTreeSet<u32>, StageStop> {
-    #[cfg(windows)]
-    let output = Process::new("powershell.exe")
-        .args([
-            "-NoProfile",
-            "-NonInteractive",
-            "-Command",
-            &format!(
-                "Get-CimInstance Win32_Process -Filter 'ParentProcessId={parent}' | ForEach-Object {{ $_.ProcessId }}"
-            ),
-        ])
-        .stdin(Stdio::null())
-        .output()?;
-    #[cfg(not(windows))]
-    let output = Process::new("pgrep")
-        .args(["-P", &parent.to_string()])
-        .stdin(Stdio::null())
-        .output()?;
-    Ok(String::from_utf8_lossy(&output.stdout)
-        .split_whitespace()
-        .filter_map(|pid| pid.parse().ok())
-        .collect())
-}
-
-/// Whether process `pid` still runs.
-fn alive(pid: u32) -> Result<bool, StageStop> {
-    #[cfg(windows)]
-    let output = Process::new("powershell.exe")
-        .args([
-            "-NoProfile",
-            "-NonInteractive",
-            "-Command",
-            &format!("if (Get-Process -Id {pid} -ErrorAction SilentlyContinue) {{ 'alive' }}"),
-        ])
-        .stdin(Stdio::null())
-        .output()?;
-    #[cfg(not(windows))]
-    let output = Process::new("kill")
-        .args(["-0", &pid.to_string()])
-        .stdin(Stdio::null())
-        .stderr(Stdio::null())
-        .output()?;
-    #[cfg(windows)]
-    return Ok(String::from_utf8_lossy(&output.stdout).contains("alive"));
-    #[cfg(not(windows))]
-    return Ok(output.status.success());
-}
-
 /// Sends the platform's interruption to `child`: `SIGINT` on Unix, a
 /// console Ctrl-Break through the helper on Windows (Ctrl-Break, because a
 /// process that inherited "ignore Ctrl-C" is never told about a Ctrl-C).
@@ -574,17 +527,48 @@ struct Ended {
     stopped_after: Duration,
     /// Every provider process seen running before it was stopped, or left
     /// behind with it as their parent.
-    providers: BTreeSet<u32>,
+    providers: BTreeSet<ProcessIdentity>,
+    /// The end of what the run wrote to stderr, for a failing stage's
+    /// diagnostic.
+    stderr_tail: String,
+}
+
+impl Ended {
+    /// The run's answer for a diagnostic, after the end of its stderr (first,
+    /// so the diagnostic's bound does not cut it off).
+    fn shown(&self) -> String {
+        format!("stderr ends {:?}; result {}", self.stderr_tail, self.result)
+    }
+}
+
+/// How much of the end of a run's stderr a diagnostic keeps.
+const STDERR_TAIL_CHARS: usize = 160;
+
+/// The last [`STDERR_TAIL_CHARS`] characters of `bytes`, as text.
+fn tail_of(bytes: &[u8]) -> String {
+    let text = String::from_utf8_lossy(bytes);
+    let skip = text.chars().count().saturating_sub(STDERR_TAIL_CHARS);
+    text.chars().skip(skip).collect()
+}
+
+/// A running command and the providers it was seen running.
+struct Providers {
+    command: ProcessIdentity,
+    seen: BTreeSet<ProcessIdentity>,
 }
 
 /// The providers `child` is running now, waiting up to 10 s for one to
-/// appear, so the check after the interruption is never vacuous.
-fn running_providers(child: &mut Child) -> Result<BTreeSet<u32>, StageStop> {
+/// appear, so the check after the interruption is never vacuous. Processes
+/// are named by identity, not number alone (#404, `provider_processes`).
+fn running_providers(child: &mut Child) -> Result<Providers, StageStop> {
     let started = Instant::now();
     loop {
-        let providers = children_of(child.id())?;
-        if !providers.is_empty() {
-            return Ok(providers);
+        let table = ProcessTable::now()?;
+        if let Some(command) = table.identify(child.id()) {
+            let seen = table.children_of(&command);
+            if !seen.is_empty() {
+                return Ok(Providers { command, seen });
+            }
         }
         ensure(
             child.try_wait()?.is_none(),
@@ -605,48 +589,71 @@ fn finish(
     mut child: Child,
     since: Instant,
     budget: Duration,
-    mut providers: BTreeSet<u32>,
+    providers: Providers,
 ) -> Result<Ended, StageStop> {
-    let pid = child.id();
+    let Providers {
+        command,
+        seen: mut providers,
+    } = providers;
+    // Both streams are read while the run ends: a run that finished its work
+    // before the interruption landed writes a whole answer and its progress,
+    // and with nobody reading, a full pipe would hold it from exiting.
+    let mut stdout_pipe = child.stdout.take().ok_or_else(|| failed("no stdout"))?;
+    let mut stderr_pipe = child.stderr.take().ok_or_else(|| failed("no stderr"))?;
+    let stdout_reader = thread::spawn(move || {
+        let mut text = String::new();
+        stdout_pipe.read_to_string(&mut text).map(|_| text)
+    });
+    let stderr_reader = thread::spawn(move || {
+        let mut bytes = Vec::new();
+        stderr_pipe.read_to_end(&mut bytes).map(|_| bytes)
+    });
+    let stderr_tail = |reader: thread::JoinHandle<std::io::Result<Vec<u8>>>| {
+        reader
+            .join()
+            .ok()
+            .and_then(Result::ok)
+            .map_or_else(String::new, |bytes| tail_of(&bytes))
+    };
     let status = loop {
         if let Some(status) = child.try_wait()? {
             break status;
         }
         if since.elapsed() > budget {
             let _ = child.kill();
-            return Err(failed("the run outlived its budget"));
+            let _ = child.wait();
+            return Err(failed(&format!(
+                "the run outlived its budget; stderr ends {:?}",
+                stderr_tail(stderr_reader)
+            )));
         }
         thread::sleep(Duration::from_millis(100));
     };
     let stopped_after = since.elapsed();
-    let mut stdout = String::new();
-    child
-        .stdout
-        .take()
-        .ok_or_else(|| failed("no stdout"))?
-        .read_to_string(&mut stdout)?;
+    let stdout = stdout_reader
+        .join()
+        .map_err(|_| failed("the stdout reader stopped"))??;
+    let stderr_tail = stderr_tail(stderr_reader);
     ensure(
         stdout.lines().count() == 1,
-        &format!("not exactly one terminal result: {stdout}"),
+        &format!("not exactly one terminal result (stderr ends {stderr_tail:?}): {stdout}"),
     )?;
     let result: Value = serde_json::from_str(stdout.trim_end())?;
     conforms("operation-response.schema.json", &result)?;
     // On Windows an orphan keeps its parent's id; on Unix it is re-parented.
-    providers.extend(children_of(pid)?);
+    providers.extend(ProcessTable::now()?.children_of(&command));
     let deadline = Instant::now() + DESCENDANT_BUDGET;
     loop {
-        let mut running = Vec::new();
-        for provider in &providers {
-            if alive(*provider)? {
-                running.push(*provider);
-            }
-        }
+        let running = ProcessTable::still_running_now(&providers)?;
         if running.is_empty() {
             break;
         }
         ensure(
             Instant::now() < deadline,
-            &format!("providers still running after the command ended: {running:?}"),
+            &format!(
+                "providers still running after the command ended: {}",
+                named(&running)
+            ),
         )?;
         thread::sleep(Duration::from_millis(200));
     }
@@ -655,6 +662,7 @@ fn finish(
         result,
         stopped_after,
         providers,
+        stderr_tail,
     })
 }
 
@@ -1069,7 +1077,7 @@ fn interrupt_stage(base: &Path, control: &Control) -> StageResult {
             && error["code"] == "CANCELLED",
         &format!(
             "the interrupted run did not answer CANCELLED: {}",
-            ended.result
+            ended.shown()
         ),
     )?;
     let job = str_of(&error["affected_ids"][1])?;
@@ -1151,7 +1159,7 @@ fn cancel_stage(base: &Path, control: &Control) -> StageResult {
         ended.code == Some(6) && ended.result["error"]["code"] == "CANCELLED",
         &format!(
             "the cancelled run did not answer CANCELLED: {}",
-            ended.result
+            ended.shown()
         ),
     )?;
     let status = job_status(base, &job)?;
@@ -1292,7 +1300,7 @@ fn candidates_stage(base: &Path, control: &Control) -> StageResult {
     let outcome = if ended.code == Some(0) {
         ensure(
             ended.result["status"] == "partial",
-            &format!("the interrupted call is not partial: {}", ended.result),
+            &format!("the interrupted call is not partial: {}", ended.shown()),
         )?;
         conforms("candidates-data.schema.json", &ended.result["data"])?;
         "partial"
@@ -1301,7 +1309,7 @@ fn candidates_stage(base: &Path, control: &Control) -> StageResult {
             ended.code == Some(6) && ended.result["error"]["code"] == "CANCELLED",
             &format!(
                 "the interrupted call is neither partial nor cancelled: {}",
-                ended.result
+                ended.shown()
             ),
         )?;
         "cancelled"

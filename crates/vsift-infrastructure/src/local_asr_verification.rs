@@ -25,7 +25,7 @@ use vsift_domain::{
 };
 
 use crate::{
-    BoundSource, FfmpegMedia, FfmpegSpeechAudio, FilesystemSessionStore, HostIsolation,
+    BoundSource, FfmpegMedia, FfmpegSpeechAudio, FilesystemSessionStore, HostIsolation, MediaError,
     MediaProviderConformance, MediaToolVerificationAuthority, ProcessCancellation,
     ProcessWorkingDirectory, SourceSnapshot, WhisperCli, WhisperSpeechRecognizer,
     media_tool_verification::{
@@ -245,7 +245,7 @@ impl FixtureAsrVerifier {
         let description = media
             .probe(&bound, self.cancellation.clone())
             .await
-            .map_err(|_| LocalAsrVerificationFailure::FixtureMedia)?;
+            .map_err(|error| fixture_probe_failure(&error))?;
         let stream = description
             .speech_audio_stream()
             .ok_or(LocalAsrVerificationFailure::FixtureMedia)?;
@@ -292,12 +292,7 @@ impl FixtureAsrVerifier {
 impl LocalAsrVerifier for FixtureAsrVerifier {
     async fn verify(&self) -> LocalAsrVerification {
         if self.cancellation.is_cancelled() {
-            return LocalAsrVerification::Failed(LocalAsrVerificationFailure::Transcription(
-                vsift_application::AsrFailure {
-                    stage: vsift_application::AsrStage::Planning,
-                    reason: vsift_application::AsrFailureReason::Cancelled,
-                },
-            ));
+            return LocalAsrVerification::Failed(cancelled_verification());
         }
         let Ok(workspace) = VerificationWorkspace::create(&self.workspace_parent) else {
             return LocalAsrVerification::Failed(LocalAsrVerificationFailure::Workspace);
@@ -306,6 +301,52 @@ impl LocalAsrVerifier for FixtureAsrVerifier {
             Ok(()) => LocalAsrVerification::Verified,
             Err(failure) => LocalAsrVerification::Failed(failure),
         }
+    }
+}
+
+/// A fixture check its caller cancelled: a recognition stopped at planning.
+const fn cancelled_verification() -> LocalAsrVerificationFailure {
+    LocalAsrVerificationFailure::Transcription(vsift_application::AsrFailure {
+        stage: vsift_application::AsrStage::Planning,
+        reason: vsift_application::AsrFailureReason::Cancelled,
+    })
+}
+
+/// Why the fixture's probe failed. A cancelled probe is the caller's
+/// cancellation (a shutdown that arrives while the check stages its fixture,
+/// #404); anything else means the media tools cannot read the reviewed
+/// fixture.
+///
+/// Exhaustive on purpose, as `supervised_failure` is: a new media failure is
+/// placed here rather than taken for the fixture's fault by default.
+const fn fixture_probe_failure(error: &MediaError) -> LocalAsrVerificationFailure {
+    match error {
+        MediaError::Cancelled => cancelled_verification(),
+        MediaError::Source(_)
+        | MediaError::Request(_)
+        | MediaError::Process(_)
+        | MediaError::InvalidSourcePath
+        | MediaError::ProviderRejected
+        | MediaError::Deadline
+        | MediaError::OutputLimit
+        | MediaError::InvalidMetadata
+        | MediaError::InvalidDuration
+        | MediaError::CapacityUnavailable
+        | MediaError::InvalidAudioRange
+        | MediaError::TooManyStreams
+        | MediaError::InvalidDimensions
+        | MediaError::InvalidOrientation
+        | MediaError::InvalidTimeline
+        | MediaError::StreamUnavailable
+        | MediaError::UnsupportedCodec
+        | MediaError::NoFrameWithinTolerance
+        | MediaError::InvalidDecodedOutput
+        | MediaError::NoDecodedAudio
+        | MediaError::InvalidVisualWindow
+        | MediaError::InvalidFrameRequest
+        | MediaError::CropOutsideFrame
+        | MediaError::FrameNotFound
+        | MediaError::TimeBaseMismatch => LocalAsrVerificationFailure::FixtureMedia,
     }
 }
 
@@ -365,12 +406,36 @@ mod tests {
     };
 
     use super::{
-        F01_SPEECH, F01_SPEECH_BYTES, F01_SPEECH_SHA256, LocalAsrFiles, check_transcript,
-        local_asr_fingerprint, normalised, run_within_budget,
+        F01_SPEECH, F01_SPEECH_BYTES, F01_SPEECH_SHA256, LocalAsrFiles, cancelled_verification,
+        check_transcript, fixture_probe_failure, local_asr_fingerprint, normalised,
+        run_within_budget,
     };
-    use crate::{HostIsolation, MediaToolVerificationAuthority, ProcessCancellation};
+    use crate::{HostIsolation, MediaError, MediaToolVerificationAuthority, ProcessCancellation};
 
     type TestResult = Result<(), Box<dyn std::error::Error>>;
+
+    /// #404: a fixture probe its caller cancelled (refused before it
+    /// started, the way a shutdown during the check refuses it) is the
+    /// cancellation; it was reported as a fixture the media tools could not
+    /// read, `MISSING_CAPABILITY`. Any other probe failure still is one.
+    #[test]
+    fn a_cancelled_fixture_probe_is_the_cancellation() {
+        assert_eq!(
+            fixture_probe_failure(&MediaError::Cancelled),
+            cancelled_verification()
+        );
+        for other in [
+            MediaError::ProviderRejected,
+            MediaError::Deadline,
+            MediaError::InvalidMetadata,
+        ] {
+            assert_eq!(
+                fixture_probe_failure(&other),
+                LocalAsrVerificationFailure::FixtureMedia,
+                "{other:?}"
+            );
+        }
+    }
 
     #[tokio::test]
     async fn work_within_its_budget_completes_and_is_not_cancelled() {

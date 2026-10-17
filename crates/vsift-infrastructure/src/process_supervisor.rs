@@ -11,11 +11,11 @@ use std::{
     time::Duration,
 };
 
-#[cfg(windows)]
-use process_wrap::tokio::JobObject;
 #[cfg(unix)]
 use process_wrap::tokio::ProcessGroup;
 use process_wrap::tokio::{ChildWrapper, CommandWrap, KillOnDrop};
+#[cfg(windows)]
+use process_wrap::tokio::{CreationFlags, JobObject};
 use tokio::{
     io::{AsyncRead, AsyncReadExt},
     process::Command,
@@ -23,6 +23,8 @@ use tokio::{
     task::JoinSet,
     time::{Instant, sleep_until, timeout},
 };
+#[cfg(windows)]
+use windows::Win32::System::Threading::CREATE_NO_WINDOW;
 
 use crate::executable::{ExecutableProvenance, TrustedExecutable};
 
@@ -468,6 +470,13 @@ pub struct EffectiveControls {
     pub explicit_working_directory: ControlStatus,
     /// Whether the platform adapter can attempt a graceful tree-wide stop.
     pub graceful_tree_stop: ControlStatus,
+    /// Whether the provider is out of reach of the interrupts sent to the
+    /// host itself, so that only the supervisor decides when it stops: on
+    /// Unix it leads a process group of its own, which a terminal's
+    /// interrupt or a signal to the host's group does not reach; on Windows
+    /// it has a console of its own, which a console Ctrl-C or Ctrl-Break sent
+    /// to the host's console does not reach (#404).
+    pub interrupt_isolation: ControlStatus,
 }
 
 /// Result of a completed, cancelled, limited, or timed-out provider process.
@@ -537,6 +546,7 @@ impl ProcessSupervisor {
             } else {
                 ControlStatus::NotApplied
             },
+            interrupt_isolation: platform_interrupt_isolation(),
         };
         if controls.process_containment == ProcessContainment::Unsupported {
             return Err(ProcessError::IsolationUnavailable);
@@ -987,14 +997,15 @@ async fn force_terminate_and_reap(
 /// Why a provider that ended by itself stopped.
 ///
 /// A provider that failed after the caller asked the operation to stop is
-/// reported as cancelled, not as its own failure: a console Ctrl-C or
-/// Ctrl-Break reaches every process attached to the console, so on Windows
-/// `FFmpeg` or whisper.cpp can die of the very interrupt that cancelled the
-/// caller before the supervisor stops it. Reporting that as a decoding or
-/// recognition failure would record a false gap (an `undecodable` window, a
-/// failed chunk counting towards poisoning it) for media that is fine. A
-/// provider that succeeded keeps its result; the caller's next boundary
-/// sees the cancellation.
+/// reported as cancelled, not as its own failure: the two can meet (a
+/// provider failing on its own just as the caller cancels, or a signal from
+/// outside `VSift` that reaches the provider and the host together), and
+/// reporting that as a decoding or recognition failure would record a false
+/// gap (an `undecodable` window, a failed chunk counting towards poisoning
+/// it) for media that is fine. A host's own console interrupt no longer
+/// reaches a provider at all (see `add_platform_containment`, #404). A
+/// provider that succeeded keeps its result; the caller's next boundary sees
+/// the cancellation.
 #[must_use]
 pub fn completed_termination(status: ExitStatus, cancel_requested: bool) -> TerminationReason {
     if cancel_requested && !status.success() {
@@ -1018,8 +1029,26 @@ fn validate_environment_name(name: &OsStr) -> Result<(), ProcessRequestError> {
     Ok(())
 }
 
+/// Windows: the provider runs in a Job Object (its whole tree is killed with
+/// the job, and with `VSift` when `VSift` ends) and in a console of its own,
+/// created without a window.
+///
+/// The console of its own is what keeps a stop the supervisor's. A console
+/// Ctrl-C or Ctrl-Break reaches every process attached to the console, so a
+/// provider sharing `VSift`'s console died of the very interrupt that stopped
+/// `VSift` (whisper.cpp ends with `STATUS_CONTROL_C_EXIT`, `FFmpeg` stops and
+/// exits with code 255, measured on Windows 11). When that death was seen
+/// before `VSift` had recorded its own cancellation, the run judged it as the
+/// provider's own failure (a recognizer that ended abnormally, audio that
+/// could not be decoded) and a request the shutdown had stopped was recorded
+/// as failed (#404). In a console of its own a provider hears no interrupt; it stops
+/// when the supervisor kills its job, and that stop is always the
+/// cancellation. `CREATE_NO_WINDOW` rather than `DETACHED_PROCESS`: a
+/// provider that starts console programs of its own (a batch-file wrapper,
+/// say) gives them its hidden console instead of a new visible window each.
 #[cfg(windows)]
 fn add_platform_containment(command: &mut CommandWrap) {
+    command.wrap(CreationFlags(CREATE_NO_WINDOW));
     command.wrap(JobObject);
 }
 
@@ -1030,6 +1059,17 @@ fn add_platform_containment(command: &mut CommandWrap) {
 
 #[cfg(not(any(unix, windows)))]
 fn add_platform_containment(_command: &mut CommandWrap) {}
+
+/// Whether this platform's containment also keeps the host's interrupts from
+/// the provider: a process group of its own on Unix, a console of its own on
+/// Windows (`add_platform_containment`).
+const fn platform_interrupt_isolation() -> ControlStatus {
+    if cfg!(any(unix, windows)) {
+        ControlStatus::Applied
+    } else {
+        ControlStatus::NotApplied
+    }
+}
 
 const fn platform_containment() -> ProcessContainment {
     #[cfg(windows)]

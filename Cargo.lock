@@ -2227,6 +2227,7 @@ dependencies = [
  "tokio",
  "vsift-application",
  "vsift-domain",
+ "windows",
  "windows-acl",
 ]
 
