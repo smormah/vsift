@@ -353,3 +353,5 @@ mod tests {
         observer.report(progress);
     }
 }
+
+// A throwaway comment for the CI timing demonstration (to be deleted).
