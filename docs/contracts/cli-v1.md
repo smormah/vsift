@@ -2135,9 +2135,15 @@ explicit selection does not fall back to `PATH` or persist configuration.
 **The probe deadline, and a probe that timed out** (issue
 [#391](https://github.com/smormah/vsift/issues/391), `0.2.1`). The three executable probes
 run one after another, FFmpeg, FFprobe, then whisper.cpp, and **share one deadline**: the
-figure is the time for all of them together, not for each, and there is no retry. A tool that
-is slow to start leaves less for the ones after it, and a probe whose turn comes after the
-deadline is **not started**. Both are reported with the one published value `timed_out`
+figure is the time for all of them together, not for each, and there is no retry. Each tool
+is given what is left of the figure when its turn comes. Since `0.2.2`
+([#419](https://github.com/smormah/vsift/issues/419)) the time the system takes to start a
+tool is not taken from that tool's own time, so a tool that would answer at once is never
+`timed_out` because its own start was slow; the start is still spent from the share of the
+tools after it, and the whole check can take longer than the figure by at most the start of
+the last tool it starts (on a busy Windows desktop a start takes 0.35 s or more,
+[L-170](../planning/known-limits.md#l-170)). A tool that is slow to start or to answer leaves
+less for the ones after it, and a probe whose turn comes after the deadline is **not started**. Both are reported with the one published value `timed_out`
 (`status`, and `remediation.reason`; the readable marker is `[timeout]`), the aggregate
 `status` is `blocked` when it is FFmpeg or FFprobe, and the exit status is unchanged. A tool is
 looked for before the deadline is looked at, so a tool that is not installed is `missing` even

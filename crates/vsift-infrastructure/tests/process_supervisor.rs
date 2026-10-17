@@ -482,11 +482,20 @@ async fn p05_deadline_and_caller_cancellation_reap_the_process_tree() -> Result<
         cancellation_trigger.cancel();
     });
     let cancelled_request = fixture_request("sleep", FIXTURE_DEADLINE)?;
-    let cancelled_outcome = supervisor(64 * 1024)?
+    let cancelled = supervisor(64 * 1024)?
         .run(cancelled_request, cancellation)
-        .await?;
+        .await;
     cancellation_task.await?;
-    assert_eq!(cancelled_outcome.termination, TerminationReason::Cancelled);
+    // A cancellation that lands while the provider is still starting (a
+    // Windows start takes 0.4 s or more on a desktop, L-170) is answered at
+    // once, and the provider is ended when its start returns (#446 review;
+    // that end is pinned by the supervisor's unit tests). One that lands
+    // once it runs ends and reaps it before the run answers.
+    match cancelled {
+        Ok(outcome) => assert_eq!(outcome.termination, TerminationReason::Cancelled),
+        Err(ProcessError::CancelledDuringStart) => {}
+        Err(error) => return Err(error.into()),
+    }
     Ok(())
 }
 
