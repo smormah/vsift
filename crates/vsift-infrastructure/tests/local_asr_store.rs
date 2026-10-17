@@ -726,11 +726,13 @@ fn modified_spliced_records_are_integrity_failures() -> TestResult {
 
 /// An initialized session with an activated F10 import (revision 1).
 struct Imported {
-    root: OwnedRoot,
     workspace: PathBuf,
     store: FilesystemSessionStore,
     session_id: SessionId,
     import: TranscriptRevision,
+    // Last: fields drop in order, and on Windows a folder something still
+    // holds open cannot be removed (#423).
+    root: OwnedRoot,
 }
 
 async fn imported_session() -> Built<Imported> {
@@ -778,11 +780,11 @@ async fn imported_session() -> Built<Imported> {
     )?;
     drop(snapshot);
     Ok(Imported {
-        root,
         workspace,
         store,
         session_id,
         import,
+        root,
     })
 }
 

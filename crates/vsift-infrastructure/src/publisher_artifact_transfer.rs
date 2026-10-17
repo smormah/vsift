@@ -559,7 +559,7 @@ fn pinned_release_route(path: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use std::{fmt::Write as _, fs, path::PathBuf};
+    use std::fs;
 
     use vsift_application::NoProgress;
     use vsift_domain::ArtifactIntegrity;
@@ -570,6 +570,7 @@ mod tests {
         PublisherOrigin, PublisherSourceError, PublisherTransferError, ReviewedPublisherArtifact,
         download_reviewed_publisher_artifact, reviewed_redirect,
     };
+    use crate::test_folder::TestFolder;
 
     fn integrity() -> Result<ArtifactIntegrity, Box<dyn std::error::Error>> {
         Ok(ArtifactIntegrity::from_sha256_hex(
@@ -819,15 +820,9 @@ mod tests {
         result
     }
 
-    fn unique_parent() -> Result<PathBuf, Box<dyn std::error::Error>> {
-        let mut random = [0_u8; 16];
-        getrandom::fill(&mut random).map_err(|_| std::io::Error::other("random source failed"))?;
-        let mut name = String::with_capacity(32);
-        for byte in random {
-            write!(&mut name, "{byte:02x}")?;
-        }
-        let path = std::env::temp_dir().join(format!("vsift-direct-transfer-test-{name}"));
-        fs::create_dir(&path)?;
-        Ok(path)
+    /// Removed when it drops, also when a test fails before its own
+    /// removal (#423).
+    fn unique_parent() -> Result<TestFolder, Box<dyn std::error::Error>> {
+        TestFolder::new("vsift-direct-transfer-test")
     }
 }

@@ -133,10 +133,12 @@ impl Drop for OwnedRoot {
 /// An engine over a private root holding one open session whose transcript
 /// is an import of `texts`, cue `n` (from 1) at `n` seconds for 0.9 s.
 struct Harness {
-    root: OwnedRoot,
     clock: ControlledClock,
     engine: Engine,
     session: SessionId,
+    // Last: fields drop in order, and on Windows a folder something still
+    // holds open cannot be removed (#423).
+    root: OwnedRoot,
 }
 
 impl Harness {
@@ -165,10 +167,10 @@ impl Harness {
         );
         let session = seed(&root, build).await?;
         Ok(Self {
-            root,
             clock,
             engine,
             session,
+            root,
         })
     }
 

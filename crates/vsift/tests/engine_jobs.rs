@@ -235,17 +235,19 @@ impl MediaToolVerifier for PassingMediaTools {
 }
 
 struct Harness {
-    root: OwnedRoot,
     recognizer: Recognizer,
     verifier: CountingVerifier,
+    // Last: fields drop in order, and on Windows a folder something still
+    // holds open cannot be removed (#423).
+    root: OwnedRoot,
 }
 
 impl Harness {
     fn new(recognizer: Recognizer) -> Built<Self> {
         Ok(Self {
-            root: OwnedRoot::new()?,
             recognizer,
             verifier: CountingVerifier::default(),
+            root: OwnedRoot::new()?,
         })
     }
 

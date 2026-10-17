@@ -467,12 +467,7 @@ fn ensure_empty_staging(staging: &Dir) -> Result<(), TarInventoryError> {
 
 #[cfg(test)]
 mod tests {
-    use std::{
-        fmt::Write as _,
-        fs,
-        io::{self, Cursor},
-        path::PathBuf,
-    };
+    use std::{fs, io::Cursor};
 
     use cap_std::fs::Dir;
     use tar::{Builder, EntryType, Header};
@@ -481,6 +476,7 @@ mod tests {
         ReviewedArchiveFile, TarInventoryError, inspect_tar_inventory, inspect_tar_selected_files,
         stage_tar_selected_files,
     };
+    use crate::test_folder::TestFolder;
     use crate::{ArchiveInventoryBounds, ArchiveInventoryError, ReviewedArchiveAlias};
     use vsift_domain::ArtifactIntegrity;
 
@@ -517,16 +513,10 @@ mod tests {
         })
     }
 
-    fn staging_directory() -> Result<(PathBuf, Dir), Box<dyn std::error::Error>> {
-        let mut random = [0_u8; 16];
-        getrandom::fill(&mut random)
-            .map_err(|_| io::Error::other("test random source unavailable"))?;
-        let mut suffix = String::with_capacity(32);
-        for byte in random {
-            write!(&mut suffix, "{byte:02x}")?;
-        }
-        let path = std::env::temp_dir().join(format!("vsift-p06-stage-{suffix}"));
-        fs::create_dir(&path)?;
+    /// The folder is removed when it drops, also when a test fails before
+    /// its own removal (#423); the handle is dropped first.
+    fn staging_directory() -> Result<(TestFolder, Dir), Box<dyn std::error::Error>> {
+        let path = TestFolder::new("vsift-p06-stage")?;
         let directory = Dir::open_ambient_dir(&path, cap_std::ambient_authority())?;
         Ok((path, directory))
     }

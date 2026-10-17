@@ -308,6 +308,21 @@ Do not create a general-purpose `utils` or `helpers` module. Name modules after 
   vsift-contract --test setup_lifecycle_contract`; review the diff.
 - CLI tests execute the compiled binary and verify public output and exit codes.
 - JSON changes require compatibility-focused contract tests.
+- **Temporary folders (#423).** A test that needs a folder creates its own under the
+  system temporary folder, with a name it chooses at random or from the process id, a
+  counter and the clock, through `create_dir` (which fails on a folder that exists, so a
+  guard never adopts one it did not make), and holds it in a guard that removes it on
+  drop, which also runs when an assertion fails. A guard must drop after everything that
+  holds its folder open: on Windows an open folder cannot be removed, so a store or a
+  directory handle still alive when the guard runs leaves the folder behind (empty on
+  most tests, which is how about 7,000 folders built up on one machine). Declare the guard
+  before the handles (locals drop in reverse order) or as the **last** field of a struct
+  (fields drop in declaration order). The library's unit tests use `TestFolder`
+  (`vsift-infrastructure/src/test_folder.rs`); the integration tests keep a small guard
+  of their own; a node test removes its folders in a `test.after` hook. `Quality` in `CI`
+  and `Nightly`, and the guide tools' tests, fail when the tests leave a `vsift*`,
+  `guide-*` or `scratch-*` entry in the temporary folder; what that check does not see is
+  [L-174](planning/known-limits.md#l-174).
 
 - Commit-path fault points (ADR 0020): the session store names every commit boundary
   (`FaultPoint`, from `artifact-install` to `chain-checkpoint-write`). The store's

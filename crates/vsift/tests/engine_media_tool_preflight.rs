@@ -169,17 +169,19 @@ impl Drop for OwnedRoot {
 }
 
 struct Harness {
-    root: OwnedRoot,
     clock: ControlledClock,
     identifiers: SequentialIdentifiers,
+    // Last: fields drop in order, and on Windows a folder something still
+    // holds open cannot be removed (#423).
+    root: OwnedRoot,
 }
 
 impl Harness {
     fn new() -> Result<Self, Box<dyn Error>> {
         Ok(Self {
-            root: OwnedRoot::new()?,
             clock: ControlledClock::at(T0),
             identifiers: SequentialIdentifiers::new(),
+            root: OwnedRoot::new()?,
         })
     }
 

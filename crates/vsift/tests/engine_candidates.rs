@@ -137,11 +137,13 @@ enum Seeded {
 }
 
 struct Harness {
-    root: OwnedRoot,
     clock: ControlledClock,
     engine: Engine,
     session: SessionId,
     source: SourceId,
+    // Last: fields drop in order, and on Windows a folder something still
+    // holds open cannot be removed (#423).
+    root: OwnedRoot,
 }
 
 impl Harness {
@@ -178,11 +180,11 @@ impl Harness {
             })
             .await?;
         Ok(Self {
-            root,
             clock,
             engine,
             session: opened.session.session_id,
             source: opened.session.source_id,
+            root,
         })
     }
 

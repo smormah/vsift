@@ -185,10 +185,12 @@ impl MediaToolVerifier for FixedMediaTools {
 }
 
 struct Harness {
-    root: OwnedRoot,
     ffmpeg: PathBuf,
     ffprobe: PathBuf,
     whisper: PathBuf,
+    // Last: fields drop in order, and on Windows a folder something still
+    // holds open cannot be removed (#423).
+    root: OwnedRoot,
 }
 
 impl Harness {

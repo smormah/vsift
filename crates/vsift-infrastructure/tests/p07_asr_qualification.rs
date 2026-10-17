@@ -275,13 +275,15 @@ fn required_path(name: &str) -> Built<PathBuf> {
 
 /// Tools and storage shared by every measurement.
 struct Bench {
-    root: OwnedRoot,
     store: FilesystemSessionStore,
     session: SessionId,
     ffmpeg: TrustedExecutable,
     ffprobe: TrustedExecutable,
     whisper: TrustedExecutable,
     operations: std::cell::Cell<u64>,
+    // Last: fields drop in order, and on Windows a folder something still
+    // holds open cannot be removed (#423).
+    root: OwnedRoot,
 }
 
 impl Bench {
@@ -306,12 +308,12 @@ impl Bench {
             .await?;
         Ok(Self {
             store: FilesystemSessionStore::open_existing(&store_root)?,
-            root,
             session,
             ffmpeg,
             ffprobe,
             whisper,
             operations: std::cell::Cell::new(1),
+            root,
         })
     }
 

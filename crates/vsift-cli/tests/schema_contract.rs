@@ -6,6 +6,37 @@ use assert_cmd::Command;
 use serde::Deserialize;
 use serde_json::Value;
 
+/// A folder the test creates under the temporary folder and removes when it
+/// drops, also when the test fails (#423). The configuration base the binary
+/// is given is a child that does not exist until something creates it; the
+/// guard removes only the folder it made (`create_dir` fails on one that
+/// already exists).
+struct Scratch(PathBuf);
+
+impl Scratch {
+    fn new(prefix: &str) -> Result<Self, Box<dyn std::error::Error>> {
+        let mut random = [0_u8; 16];
+        getrandom::fill(&mut random).map_err(|_| io::Error::other("random source failed"))?;
+        let mut name = format!("{prefix}-");
+        for byte in random {
+            write!(&mut name, "{byte:02x}")?;
+        }
+        let path = std::env::temp_dir().join(name);
+        fs::create_dir(&path)?;
+        Ok(Self(path))
+    }
+
+    fn base(&self) -> PathBuf {
+        self.0.join("base")
+    }
+}
+
+impl Drop for Scratch {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.0);
+    }
+}
+
 fn schema_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../schemas/v1")
 }
@@ -126,13 +157,8 @@ fn terminal_event_embeds_a_valid_operation_response() -> Result<(), Box<dyn std:
 
 #[test]
 fn emitted_json_matches_frozen_examples() -> Result<(), Box<dyn std::error::Error>> {
-    let mut random = [0_u8; 16];
-    getrandom::fill(&mut random).map_err(|_| io::Error::other("random source failed"))?;
-    let mut suffix = String::with_capacity(32);
-    for byte in random {
-        write!(&mut suffix, "{byte:02x}")?;
-    }
-    let base = std::env::temp_dir().join(format!("vsift-schema-test-{suffix}"));
+    let scratch = Scratch::new("vsift-schema-test")?;
+    let base = scratch.base();
     let setup = Command::cargo_bin("vsift")?
         .args(["setup", "check", "--json", "--timeout-seconds", "1"])
         .env("PATH", "")
@@ -244,13 +270,8 @@ fn emitted_parse_failure_matches_its_frozen_example() -> Result<(), Box<dyn std:
 #[test]
 fn configure_model_json_and_jsonl_output_validate_against_the_schemas()
 -> Result<(), Box<dyn std::error::Error>> {
-    let mut random = [0_u8; 16];
-    getrandom::fill(&mut random).map_err(|_| io::Error::other("random source failed"))?;
-    let mut suffix = String::with_capacity(32);
-    for byte in random {
-        write!(&mut suffix, "{byte:02x}")?;
-    }
-    let base = std::env::temp_dir().join(format!("vsift-schema-model-test-{suffix}"));
+    let scratch = Scratch::new("vsift-schema-model-test")?;
+    let base = scratch.base();
     fs::create_dir_all(&base)?;
     let model = base.join("selected-model.bin");
     fs::write(&model, b"fixture only; no model parser runs")?;
@@ -276,8 +297,6 @@ fn configure_model_json_and_jsonl_output_validate_against_the_schemas()
     validate(&load("terminal-event.schema.json")?, &event)?;
     validate(&operation_schema, &event["result"])?;
     assert_eq!(event["command"], "setup.configure-model");
-
-    fs::remove_dir_all(&base)?;
     Ok(())
 }
 

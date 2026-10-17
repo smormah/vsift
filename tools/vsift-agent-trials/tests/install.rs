@@ -116,10 +116,12 @@ fn probe() -> FakeProbe {
 
 /// A fabricated install below a scratch folder.
 struct Fabricated {
-    scratch: Scratch,
     prefix: PathBuf,
     target: Target,
     node: PathBuf,
+    // Last: fields drop in order, and on Windows a folder something still
+    // holds open cannot be removed (#423).
+    scratch: Scratch,
 }
 
 impl Fabricated {
@@ -176,10 +178,10 @@ impl Fabricated {
         fs::create_dir_all(scratch.path().join("node"))?;
         fs::write(&node, "node")?;
         Ok(Self {
-            scratch,
             prefix,
             target,
             node,
+            scratch,
         })
     }
 

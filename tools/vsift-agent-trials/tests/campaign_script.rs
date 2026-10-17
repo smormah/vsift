@@ -38,10 +38,12 @@ const PINNED_CLAUDE: &str = "2.1.284";
 
 /// A throwaway repository holding a copy of the real script and harness.
 struct Checkout {
-    scratch: Scratch,
     repository: PathBuf,
     config: PathBuf,
     outside: PathBuf,
+    // Last: fields drop in order, and on Windows a folder something still
+    // holds open cannot be removed (#423).
+    scratch: Scratch,
 }
 
 impl Checkout {
@@ -82,10 +84,10 @@ impl Checkout {
         )?;
 
         let checkout = Self {
-            scratch,
             repository,
             config,
             outside,
+            scratch,
         };
         checkout.git(&["init", "--quiet"])?;
         checkout.git(&["add", "--all"])?;
