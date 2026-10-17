@@ -1123,19 +1123,49 @@ async fn terminate_and_reap(
     force_terminate_and_reap(child, policy.forced_shutdown).await
 }
 
+/// Kills the tree and reaps it within `forced_shutdown`.
+///
+/// What the reap waits for is the provider (the group's leader) and the
+/// members of its group that are `VSift`'s own children; on Unix a
+/// descendant that was re-parented (its parent exited) is not `VSift`'s to
+/// wait for, so the reap does not cover it, and only the group signal
+/// reaches it. On Windows the job's end covers the whole tree.
+///
+/// **macOS only** (#436): a kill refused with `PermissionDenied` is not taken
+/// as a failure at once; the reap decides. A signal to a process group whose
+/// members have all exited but are not yet reaped is refused there with
+/// `EPERM` (XNU's `killpg1` leaves zombies out of the group it signals and
+/// answers `EPERM`, not `ESRCH`, when it found no one), so a provider that
+/// ended just as its deadline or cancellation came made the run fail with
+/// `Terminate(PermissionDenied)`. A provider reaped within the budget has
+/// ended, and its status is the answer; one that is not keeps the refusal as
+/// its failure, after the budget (up to 5 s by default) rather than at once.
+/// The same `EPERM` comes from a group with a live member `VSift` may not
+/// signal: if its leader has exited, the run is reported as ended while that
+/// member lives (L-177). Elsewhere a refused kill fails at once, as before:
+/// Linux signals zombies, so it never answers this way for a group that has
+/// ended.
 async fn force_terminate_and_reap(
     child: &mut dyn ChildWrapper,
     forced_shutdown: Duration,
 ) -> Result<ExitStatus, ProcessError> {
-    if let Err(error) = child.start_kill()
-        && error.kind() != std::io::ErrorKind::InvalidInput
-        && error.kind() != std::io::ErrorKind::NotFound
-    {
-        return Err(ProcessError::Terminate(error));
-    }
+    let refused = match child.start_kill() {
+        Ok(()) => None,
+        Err(error)
+            if matches!(
+                error.kind(),
+                std::io::ErrorKind::InvalidInput | std::io::ErrorKind::NotFound
+            ) =>
+        {
+            None
+        }
+        #[cfg(target_os = "macos")]
+        Err(error) if error.kind() == std::io::ErrorKind::PermissionDenied => Some(error),
+        Err(error) => return Err(ProcessError::Terminate(error)),
+    };
     match timeout(forced_shutdown, child.wait()).await {
         Ok(result) => result.map_err(ProcessError::Wait),
-        Err(_) => Err(ProcessError::ReapDeadlineExceeded),
+        Err(_) => Err(refused.map_or(ProcessError::ReapDeadlineExceeded, ProcessError::Terminate)),
     }
 }
 
@@ -1782,10 +1812,71 @@ mod unix_tests {
 
     use tokio::time::Instant;
 
+    use process_wrap::tokio::{CommandWrap, KillOnDrop};
+    use rustix::process::{Pid, WaitId, WaitIdOptions, test_kill_process_group, waitid};
+
     use super::{
         HostIsolation, ProcessCancellation, ProcessRequest, ProcessSupervisor,
-        ProcessWorkingDirectory, SupervisorPolicy, TerminationReason,
+        ProcessWorkingDirectory, SupervisorPolicy, TerminationReason, add_platform_containment,
+        terminate_and_reap,
     };
+
+    /// #436: a provider's group whose leader has exited, and is not yet
+    /// reaped, is ended by its reap with the leader's own status. On macOS
+    /// both signals to such a group are refused with `EPERM` (XNU leaves
+    /// zombies out of the group it signals), which made the run fail with
+    /// `Terminate(PermissionDenied)` when a provider ended just as its
+    /// deadline or cancellation came. Elsewhere the signals succeed, so this
+    /// passes with or without the fix there.
+    #[tokio::test]
+    async fn a_group_whose_leader_has_exited_is_reaped_not_refused()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let mut command = tokio::process::Command::new("/bin/sh");
+        command
+            .args(["-c", "exit 7"])
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null());
+        let mut wrapped = CommandWrap::from(command);
+        add_platform_containment(&mut wrapped);
+        wrapped.wrap(KillOnDrop);
+        let mut child = wrapped.spawn()?;
+        let pid = child
+            .id()
+            .and_then(|id| i32::try_from(id).ok())
+            .and_then(Pid::from_raw)
+            .ok_or("the leader has no process id")?;
+        // Waits, without reaping it, until the leader has exited.
+        let deadline = Instant::now() + Duration::from_secs(60);
+        while waitid(
+            WaitId::Pid(pid),
+            WaitIdOptions::EXITED | WaitIdOptions::NOWAIT | WaitIdOptions::NOHANG,
+        )
+        .map_err(|errno| std::io::Error::from_raw_os_error(errno.raw_os_error()))?
+        .is_none()
+        {
+            if Instant::now() > deadline {
+                return Err("the leader never exited".into());
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        // The scenario itself: a signal to the group is refused on macOS
+        // (no live member to signal) and accepted on Linux (zombies count).
+        let probe = test_kill_process_group(pid);
+        #[cfg(target_os = "macos")]
+        assert_eq!(probe, Err(rustix::io::Errno::PERM), "macOS did not refuse");
+        #[cfg(not(target_os = "macos"))]
+        assert_eq!(probe, Ok(()), "the group of an exited leader was refused");
+        let limit = NonZeroUsize::new(1024).ok_or("test limit must be non-zero")?;
+        let policy =
+            SupervisorPolicy::new(limit, Duration::from_millis(100), Duration::from_secs(20));
+
+        let status =
+            terminate_and_reap(child.as_mut(), policy, &ProcessCancellation::new()).await?;
+
+        assert_eq!(status.code(), Some(7));
+        Ok(())
+    }
 
     /// SEC-04 with a second request: a provider tree that ignores `SIGTERM`
     /// would hold a plain cancellation for the whole graceful budget; an
@@ -1822,5 +1913,109 @@ mod unix_tests {
             "the graceful wait was not skipped"
         );
         Ok(())
+    }
+}
+
+/// #436: a kill refused with `PermissionDenied` is decided by the reap.
+#[cfg(test)]
+mod refused_kill_tests {
+    use std::{future::Future, io, pin::Pin, process::ExitStatus, time::Duration};
+
+    use process_wrap::tokio::ChildWrapper;
+
+    use super::{ProcessError, force_terminate_and_reap};
+
+    /// A tree whose kill is refused with `PermissionDenied`, as macOS refuses
+    /// the kill of a process group whose members have all exited; `ended`
+    /// says whether its reap then finds it gone.
+    #[derive(Debug)]
+    struct RefusingTree {
+        ended: bool,
+    }
+
+    impl ChildWrapper for RefusingTree {
+        fn inner(&self) -> &dyn ChildWrapper {
+            self
+        }
+
+        fn inner_mut(&mut self) -> &mut dyn ChildWrapper {
+            self
+        }
+
+        fn into_inner(self: Box<Self>) -> Box<dyn ChildWrapper> {
+            self
+        }
+
+        fn start_kill(&mut self) -> io::Result<()> {
+            Err(io::Error::from(io::ErrorKind::PermissionDenied))
+        }
+
+        fn wait(&mut self) -> Pin<Box<dyn Future<Output = io::Result<ExitStatus>> + Send + '_>> {
+            let ended = self.ended;
+            Box::pin(async move {
+                if ended {
+                    Ok(exited_with_one())
+                } else {
+                    std::future::pending().await
+                }
+            })
+        }
+    }
+
+    fn exited_with_one() -> ExitStatus {
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::ExitStatusExt;
+            ExitStatus::from_raw(1)
+        }
+        #[cfg(unix)]
+        {
+            use std::os::unix::process::ExitStatusExt;
+            ExitStatus::from_raw(1 << 8)
+        }
+    }
+
+    /// macOS: the group had already gone, so the refusal is not a failure
+    /// and the reap's status is the answer. Before #436 this was
+    /// `Terminate(PermissionDenied)`. Elsewhere a refusal still fails at
+    /// once, without waiting for the reap.
+    #[tokio::test]
+    async fn a_refused_kill_of_a_tree_that_has_ended_is_its_end_on_macos_only()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let mut tree = RefusingTree { ended: true };
+
+        let result = force_terminate_and_reap(&mut tree, Duration::from_secs(20)).await;
+
+        #[cfg(target_os = "macos")]
+        assert_eq!(result?, exited_with_one());
+        #[cfg(not(target_os = "macos"))]
+        assert!(
+            matches!(
+                &result,
+                Err(ProcessError::Terminate(error))
+                    if error.kind() == io::ErrorKind::PermissionDenied
+            ),
+            "{result:?}"
+        );
+        Ok(())
+    }
+
+    /// A tree that refuses its kill and runs on is still a termination
+    /// failure, with the refusal as its cause: on macOS once the budget is
+    /// spent, elsewhere at once.
+    #[tokio::test]
+    async fn a_refused_kill_of_a_tree_that_runs_on_stays_a_termination_failure() {
+        let mut tree = RefusingTree { ended: false };
+
+        let result = force_terminate_and_reap(&mut tree, Duration::from_millis(100)).await;
+
+        assert!(
+            matches!(
+                &result,
+                Err(ProcessError::Terminate(error))
+                    if error.kind() == io::ErrorKind::PermissionDenied
+            ),
+            "{result:?}"
+        );
     }
 }
