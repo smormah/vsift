@@ -85,6 +85,8 @@ none is rewritten; [ADR 0024](../decisions/0024-r0-qualification-and-release-can
 instead. **Status: decided, and partly not built.** The pull-request gate's path rules, the nightly run and the
 nightly precondition of a candidate are separate changes (CI workflows, the release workflow); until they land
 the rules below are followed by hand and the existing CI still runs its full set on every pull request.
+(Note, 2026-10-17: the gate and the nightly were built in #414, and **the nightly precondition is enforced by the
+Release workflow's `guard` job**, which also refuses a dispatch on the wrong ref in seconds; [`release.md`](../operations/release.md) 6.18.)
 
 ### Delivery in cycles (D1 to D5)
 
@@ -136,10 +138,15 @@ round and to a re-pin, a model change or a change to the way VSift calls a tool,
 - **The evidence ledger's completeness check is not relaxed.** An item whose scope a change touched is `passed`, carried by the
   recorded delta, or waived by a recorded decision of the maintainer. The ledger's scopes are coarse (`crates` is in the
   scope of most items, RQ-01 to RQ-12 and RQ-14 to RQ-17), so "limited to what the week touched" does not by itself make the check pass: narrowing the scopes
-  or deciding waivers is a change of its own, with the release-workflow change that enforces the nightly precondition.
-- **The freeze between a candidate's tag and the stable commit (6.8) holds**, so "development continues" in the window means branches
-  and draft pull requests, and merges of work record and documents that 6.8 allows; a change to code, a dependency or a workflow
-  waits for the publish. Replacing this with a release branch would change the candidate check and ADR 0024 decision B, and is not decided here.
+  or deciding waivers is a change of its own (still open on 2026-10-17; the nightly precondition was enforced without it).
+- **Release branches (decided by the maintainer on 2026-10-17, option B; built the same day).** The weekly cut creates
+  `release/<MAJOR>.<MINOR>.x` (one branch per minor line: `release/0.2.x` for every `0.2` release) from a commit of `main` whose
+  nightly passed; the candidate tags and the stable tag are made on it and the stable release is built from it. **`main` keeps
+  taking merges throughout the window**, which replaces the freeze of `main` between a candidate's tag and its stable release
+  (6.8 as it was). Window fixes land on the release branch through a pull request and are brought to `main` by their own pull
+  request. The rule that a stable release is compared with the highest `-rc.N` tag of its own version stays, now on the release
+  branch. [ADR 0024](../decisions/0024-r0-qualification-and-release-candidate.md) decision B carries a dated note; the procedure is
+  [`release.md`](../operations/release.md) 6.8 and 6.18.
 
 ## Rules for implementation sessions
 

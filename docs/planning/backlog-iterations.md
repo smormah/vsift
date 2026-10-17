@@ -94,7 +94,8 @@ One candidate, cut in a weekly window (below). Stories that do not overlap run i
 - Runners and harness: #316, #263, #258, #282, #283; L-166 (a trial home's expired sign-in needed a hand edit of a state file).
 - Trial design: #397 (the strict cold setting refuses compound commands, so it measures the setting), #336 (a claim's identifier its citation does not state).
 - The rule about our code or a dependency's quality, and the cadence, are written (`delivery-governance.md`, `release.md` 6.18). What is
-  still to build: the pull-request gate's path rules, the nightly with its issue-on-failure, and the release workflow's nightly precondition (separate changes).
+  still to build: the pull-request gate's path rules, the nightly with its issue-on-failure, and the release workflow's nightly precondition (separate changes;
+  the first two were built in #414, the third with release branches, #337 and #403 on 2026-10-17).
 
 **Testing:** each fix with its regression test; the gate on each pull request; the nightly on `main`; the candidate cut from a green
 nightly; the long hosted runs for what the cycle touched; an uncounted skill smoke if the skill's wording changes.
@@ -154,7 +155,8 @@ round, not for every candidate.
 
 **Two limits of the model, written down because they bite in the window.** The evidence ledger's completeness check is not relaxed: its item scopes are coarse
 (`crates` is in the scope of most items, RQ-01 to RQ-12 and RQ-14 to RQ-17), so a week that touches `crates` still needs those items passed, carried or waived. And the candidate rule (`release.md` 6.8)
-still freezes code, dependencies and workflows from the candidate's tag to the stable commit, so merges of that kind wait for the publish.
+still freezes code, dependencies and workflows from the candidate's tag to the stable commit, so merges of that kind wait for the publish
+(note, 2026-10-17: since release branches the freeze applies to the release branch only, and `main` keeps taking merges; `release.md` 6.8).
 
 ## Decisions waiting for the maintainer
 
@@ -164,4 +166,5 @@ still freezes code, dependencies and workflows from the candidate's tag to the s
 - Ratifying or reversing the choices of #377, of the Reads change and of #392.
 - The folder answer that differs by platform (`STORAGE_IO` on Windows, `INVALID_SOURCE` on Linux and macOS).
 - RQ-05 stays `failed` for `0.2.1` ([`release-0.2.1.md`](release-0.2.1.md)); the maintainer may still waive it, knowing a waiver does not expire by itself.
-- Whether a release branch should replace the freeze of 6.8 so that development continues in the window.
+- (Decided 2026-10-17: release branches replace the freeze of `main`, option B; `release.md` 6.8 and 6.18.) The release-branch ruleset of
+  `release.md` 6.2 step 8 is the maintainer's setting to create before the first cut on a release branch.

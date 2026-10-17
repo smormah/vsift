@@ -2073,3 +2073,41 @@ The maintainer decided later on 2026-10-16 how work is grouped and when it is te
 2. **The weekly cadence this ADR names applies only to the scheduled drift runs** (fuzzing, the durability campaigns, the weekly published-binary runs), which stay. The candidate is cut in a weekly window, the long hosted runs follow it for what the week touched, and the full-cost items (agent batches 2 and 3, the dependency-quality checks, the full durability campaign) run monthly or with a major change.
 3. **Decisions A and B, the candidate rule, the stable plan's guards and the evidence ledger's completeness check are not changed.** A candidate is additionally to be cut only from a commit whose nightly run passed, to be enforced by the release workflow in a later change.
 
+
+## Note, 2026-10-17 (decision B amended: release branches; the nightly precondition and the ref rules enforced)
+
+The maintainer decided on 2026-10-17 that **candidates and stable releases are made on release branches (option B)**, so that
+development on `main` continues during the weekly window. Decision B is preserved as it was written and is amended by this note;
+the procedure is [`release.md`](../operations/release.md) 6.8 and 6.18, the policy [`delivery-governance.md`](../planning/delivery-governance.md).
+
+1. **Where candidates are made.** The weekly cut creates `release/<MAJOR>.<MINOR>.x` (one branch per minor line; `release/0.2.x` for
+   `0.2.2`, `0.2.3` and the rest of `0.2`) from a commit of `main` whose nightly passed, and tags the first candidate there. Later
+   candidates and the stable tag are made on the same branch, and the stable release is built from it.
+2. **What the freeze covers.** "Freeze from the cut: fixes for findings only" now applies to the release branch. `main` keeps taking
+   merges throughout the window, which replaces the freeze of `main` between a candidate's tag and its stable release. Window fixes
+   land on the release branch through a pull request and are brought to `main` by their own pull request.
+3. **What does not change.** The candidate-to-stable check of decision A, its lists and the rule that a stable release is compared with
+   the highest `-rc.N` tag of its own version (now on the release branch, where the candidate is an ancestor of the stable commit);
+   the stable plan's six guards; the evidence ledger's completeness check; that only the maintainer creates a `v*` tag and approves
+   the `release` environment; that no workflow runs `npm dist-tag`.
+4. **Enforced in the Release workflow** (the change that records this note): a first job, `guard`, which every other job needs, refuses
+   in seconds a dispatch on a ref its mode may not use (a publish only on the tag `v<version>`; a dry run on `main`, the release branch
+   or the tag; #337), a release tag whose commit is not on its release branch, and a candidate whose commit's latest Nightly run that
+   tested it did not pass (governance rule 15). The run must be one whose head is exactly that commit: a later commit's pass does not
+   show that this one passes, because the later commit may hold the fix of this one's failure. **The `publish` job asks the same
+   questions again after the maintainer's approval** (decided the same day), with the guard's own functions. Both require the tag to
+   name the commit the run built (an annotated tag peeled), compare the commit with the release branch head's own commit, refuse while a
+   Nightly run of the commit is still in progress, and require the branch's rulesets to hold the five rule types of `release.md` 6.2
+   step 8 (the maintainer applied them on 2026-10-17), so neither a long wait for the approval nor a re-run of an old run can publish
+   what no longer qualifies. The publish job takes the dist-tags of before the publish from the plan job's read, so a re-run of its
+   failed job compares with them and not with a stale copy. The read-back of the dist-tags after a
+   publish waits up to 20 minutes and fails at once on a wrong answer (#403). The governance lint holds the workflow to both and the
+   shell check runs both.
+
+**What is weaker than it sounds.** A window fix reaches `main` only by a pull request someone opens; pull requests to a release branch
+run `CI` and the Release dry run but not CodeQL, the dependency review or the P14 workflows; the release-branch ruleset is a setting no
+workflow reads in full: the guard reads the rules' types, not their settings ([L-173](../planning/known-limits.md#l-173)); the guard's
+questions are asked at the dispatch and again after the approval, and between that re-check and the first `npm publish` only the job's
+own steps run. A hot fix of a version tagged before this change first brings the current workflows onto its release branch. The read-back
+window is a reading of three publishes, not a bound npm states ([L-172](../planning/known-limits.md#l-172)). Nothing was dispatched as a
+candidate or stable release, tagged, branched on the remote or published by the change that records this note.

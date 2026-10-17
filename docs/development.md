@@ -47,7 +47,10 @@ cargo test --manifest-path fuzz/Cargo.toml --locked
 
 Since 2026-10-16 (the maintainer's test model) the `CI` workflow is a fast gate: a pull request
 runs what its change can affect, and the `Nightly` workflow runs everything on `main`. The aim is
-five minutes for a typical pull request and ten at most.
+five minutes for a typical pull request and ten at most. Since 2026-10-17 a pull request to a release
+branch (`release/**`, [`operations/release.md`](operations/release.md) 6.8) passes the same gate, measured
+against that branch, and the nightly runs on a release branch only when it is dispatched there, which a
+candidate made on the branch needs (the Release workflow's `guard` job refuses it otherwise, 6.18).
 
 **How a lane is chosen.** The first job, `Changes`, runs the tests of `tools/ci_lanes.py`
 (`tools/test_ci_lanes.py`) and then the script itself on the files the change touches (from the
@@ -558,8 +561,9 @@ the shell check by hand on Linux or in Git Bash:
 bash tools/vsift-release/tests/publish-steps.sh .github/workflows/release.yml
 ```
 
-It runs each publishing step of `release.yml`, and the plan job's registry, candidate and evidence
-steps, against stub `npm`, `gh`, `curl` and `cargo` (CI runs it
+It runs each publishing step of `release.yml`, the plan job's registry, candidate and evidence
+steps and the `guard` job's script (which refs each mode may use, the nightly precondition, the
+release branch), against stub `npm`, `gh`, `curl` and `cargo` (CI runs it
 through `cargo test -p vsift-release` on Linux); no real service is touched. To see what a stable
 version would be held to, run `cargo run --locked -p vsift-release -- candidate-delta` at its
 commit in a clone that has the tags. Bumping the workspace version touches only the files of

@@ -53,6 +53,42 @@
 //!    ... --commit ...`, RQ-20) and hands the answer, the run id and the date to
 //!    `publish-plan` (`--evidence`, `--run-id`, `--date`). A `curl` anywhere in
 //!    the workflow takes only the reviewed read-only flags.
+//! 10. **The guard** (#337, governance rule 15, ADR 0024 note of 2026-10-17).
+//!     A job `guard` runs first and is the only job without `needs`, so every
+//!     other job waits for it and a refused dispatch builds nothing. It cannot
+//!     be skipped or ignored (no `if`, no `continue-on-error`), and no job that
+//!     waits for it may run anyway (`always()`, `failure()`, `cancelled()` or
+//!     `continue-on-error` on the job). It refuses a tag that no longer names
+//!     the run's commit. It reads only
+//!     (`actions: read`, `contents: read`), uses no action but the checkout,
+//!     builds and installs nothing, and is handed the event, ref, repository,
+//!     `dry_run` input and commit through `env`. Its script reads the paths of
+//!     [`GUARD_READS`]; `gh api` there reads only [`GUARD_API_PREFIXES`].
+//!     What the script decides is held by the shell check
+//!     (`tools/vsift-release/tests/publish-steps.sh`).
+//! 11. **The read-back window** (#403). The `publish` job takes the dist-tags
+//!     of before the publish from the plan job's `tags-before` output, never
+//!     from a read of its own (a re-run would read the moved or a stale tag),
+//!     and the plan exports them. Each channel's step that reads them back
+//!     polls in a loop bounded by rounds and by a deadline
+//!     (`deadline=$((SECONDS + D))`, `for attempt in $(seq 1 N)`, `sleep S`),
+//!     cuts off every `npm view` with `timeout`, waits at least
+//!     [`MINIMUM_READBACK_SECONDS`] for a quick
+//!     registry and, with the reads' cut-offs counted, leaves
+//!     [`READBACK_MARGIN_MINUTES`] of the `publish` job's `timeout-minutes` for
+//!     the rest of the job; it keeps waiting while the tag that moves has not
+//!     named the version, fails at once, inside the loop, when that tag reads a
+//!     value that is neither the version nor its value before the publish, or
+//!     the tag that stays reads anything but its value before; and it fails
+//!     when the loop ends unsettled.
+//! 12. **The re-check after the approval** (the maintainer's decision of
+//!     2026-10-17). The `publish` job has a step, before every step that
+//!     publishes or releases and with no `if` or `continue-on-error`, that is
+//!     given the guard's `env` and the planned `VERSION`, reads what the guard
+//!     reads, refuses unless the ref is the planned version's tag and the tag
+//!     still names the commit the run built, and carries the guard's four
+//!     functions ([`GUARD_FUNCTIONS`]) character for character, so a long wait
+//!     for the approval cannot publish what no longer qualifies.
 
 use yaml_rust2::{Yaml, yaml::Hash};
 
@@ -164,6 +200,40 @@ impl Channel {
         }
     }
 
+    /// The checks the read-back of this channel makes on every answer, inside
+    /// its loop, each of which must fail the step at once (#403): the tag that
+    /// moves reads neither the version nor its value before the publish, or the
+    /// tag that stays reads anything but its value before. An empty answer is
+    /// no answer and is waited for; only these are wrong ones.
+    fn wrong_answer_checks(self) -> [String; 2] {
+        let (moved, stayed) = match self {
+            Self::PreRelease => ("next", "latest"),
+            Self::Stable => ("latest", "next"),
+        };
+        [
+            format!(
+                r#"if [ -n "${{{moved}_now}}" ] && [ "${{{moved}_now}}" != "${{VERSION}}" ] && [ "${{{moved}_now}}" != "${{{moved}}}" ]; then"#
+            ),
+            format!(
+                r#"if [ -n "${{{stayed}_now}}" ] && [ "${{{stayed}_now}}" != "${{{stayed}}}" ]; then"#
+            ),
+        ]
+    }
+
+    /// The condition under which a package of this channel's read-back is
+    /// still waiting: the tag that moves does not name the version yet, or
+    /// the tag that stays gave no answer although it was set. It must be
+    /// followed by `settled=no`, so a tag that never moved never settles.
+    fn settle_condition(self) -> String {
+        let (moved, stayed) = match self {
+            Self::PreRelease => ("next", "latest"),
+            Self::Stable => ("latest", "next"),
+        };
+        format!(
+            r#"if [ "${{{moved}_now}}" != "${{VERSION}}" ] || {{ [ -z "${{{stayed}_now}}" ] && [ "${{{stayed}}}" != none ]; }}; then"#
+        )
+    }
+
     /// The line an `npm publish` step of this channel opens with, so the
     /// version's own shape is checked in the privileged job as well as in the
     /// plan: a suffix for `next`, none for `latest`.
@@ -199,6 +269,101 @@ const RELEASE_EDIT_FLAGS: [&str; 3] = ["--repo", "--draft=false", "--latest"];
 /// The `gh release` subcommands the workflow may run: it never uploads to a
 /// published release or changes one but to publish its own draft.
 const RELEASE_SUBCOMMANDS: [&str; 3] = ["create", "edit", "view"];
+
+/// The first job, which refuses a wrong ref or a candidate without a passed
+/// nightly before anything is built (#337, governance rule 15).
+const GUARD_JOB: &str = "guard";
+
+/// The guard's whole token: it reads workflow runs and the repository, and
+/// writes nothing.
+const GUARD_PERMISSIONS: [(&str, &str); 2] = [("actions", "read"), ("contents", "read")];
+
+/// The run's facts the guard decides on, each passed through `env` exactly so.
+const GUARD_ENV: [(&str, &str); 5] = [
+    ("EVENT_NAME", "${{ github.event_name }}"),
+    ("GIT_REF", "${{ github.ref }}"),
+    ("REPOSITORY", "${{ github.repository }}"),
+    ("DRY_RUN_INPUT", "${{ github.event.inputs.dry_run }}"),
+    ("SOURCE_COMMIT", "${{ github.sha }}"),
+];
+
+/// What the guard's script must read: every Nightly run whose head is exactly
+/// the commit (never a later or an earlier one, and in any status, so a run
+/// still in progress is seen), each run's jobs, the release branch's head, the
+/// comparison of the commit with that head's own commit (a tag named like the
+/// branch cannot stand in), the commit the tag names now, and the rules that
+/// apply to the release branch.
+const GUARD_READS: [&str; 6] = [
+    "repos/smormah/vsift/actions/workflows/nightly.yml/runs?head_sha=${SOURCE_COMMIT}&per_page=100",
+    "repos/smormah/vsift/actions/runs/${id}/jobs",
+    "repos/smormah/vsift/git/ref/heads/${release_branch}",
+    "repos/smormah/vsift/compare/${SOURCE_COMMIT}...${head}",
+    "repos/smormah/vsift/git/ref/tags/${tag}",
+    "repos/smormah/vsift/rules/branches/${release_branch}",
+];
+
+/// The paths `gh api` may read in the guard and the re-check: GETs of this
+/// repository's Nightly runs, a run's jobs, a comparison, a branch head, a tag
+/// (and an annotated tag's object) and a branch's rules, nothing else.
+const GUARD_API_PREFIXES: [&str; 7] = [
+    "repos/smormah/vsift/actions/workflows/nightly.yml/runs?",
+    "repos/smormah/vsift/actions/runs/",
+    "repos/smormah/vsift/compare/",
+    "repos/smormah/vsift/git/ref/heads/",
+    "repos/smormah/vsift/git/ref/tags/",
+    "repos/smormah/vsift/git/tags/",
+    "repos/smormah/vsift/rules/branches/",
+];
+
+/// The functions the `publish` job's re-check carries as the guard has them,
+/// character for character, so the two cannot drift apart.
+const GUARD_FUNCTIONS: [&str; 4] = [
+    "nightly_passed",
+    "on_release_branch",
+    "tag_commit",
+    "release_branch_protected",
+];
+
+/// The guard's refusal of a tag that no longer names the commit the run built
+/// (a re-run of an old run after the tag moved), which the re-check makes too.
+const TAG_REFUSAL: &str = r#"[ "${tagged}" = "${SOURCE_COMMIT}" ] || refuse"#;
+
+/// Conditions that let a job run although a job it needs failed: no job that
+/// waits for the guard may carry one, or it could run after a refusal.
+const RUN_ANYWAY: [&str; 3] = ["always()", "failure()", "cancelled()"];
+
+/// The planned version, which the re-check is given besides the guard's `env`.
+const RECHECK_VERSION: (&str, &str) = ("VERSION", "${{ needs.plan.outputs.version }}");
+
+/// The re-check's refusals that the guard makes in its own way: the ref must
+/// be the planned version's tag, and the tag must still name this commit.
+const RECHECK_REFUSALS: [&str; 2] = [
+    r#"[ "${GIT_REF}" = "refs/tags/${tag}" ] || refuse"#,
+    TAG_REFUSAL,
+];
+
+/// The shortest read-back window of the dist-tags after a publish (#403): npm
+/// showed one package of `0.2.1` more than five minutes late, and it read right
+/// when the job was re-run about fourteen minutes after the publish; fifteen
+/// minutes is the floor.
+const MINIMUM_READBACK_SECONDS: u64 = 15 * 60;
+
+/// The part of the `publish` job's `timeout-minutes` the read-back must leave
+/// for publishing, the GitHub release and the checks around them.
+const READBACK_MARGIN_MINUTES: u64 = 15;
+
+/// The packages each round of the read-back reads: the four of every release.
+const READBACK_PACKAGES: u64 = 4;
+
+/// The line that ends the read-back's loop once the tags settle or its deadline
+/// has passed, whatever the number of rounds left (#403).
+const READBACK_DEADLINE_BREAK: &str =
+    r#"if [ "${settled}" = yes ] || [ "${SECONDS}" -ge "${deadline}" ]; then"#;
+
+/// The plan job's output the publish job takes its "before" values from, so
+/// a re-run of failed jobs after a partial publish compares with the tags as
+/// they were before it (#403's recovery), never with a stale read.
+const PLAN_TAGS_OUTPUT: &str = "${{ needs.plan.outputs.tags-before }}";
 
 /// Checks the publishing rules of the release workflow.
 pub(super) fn check_publishing(lint: &mut Lint<'_>, workflow: &Hash) {
@@ -249,6 +414,8 @@ pub(super) fn check_publishing(lint: &mut Lint<'_>, workflow: &Hash) {
             ],
         );
     }
+    check_guard(lint, jobs);
+    check_recheck(lint, jobs);
     if let Some(Yaml::Hash(publish)) = get(jobs, PUBLISH_JOB) {
         check_privileged_job(
             lint,
@@ -258,6 +425,7 @@ pub(super) fn check_publishing(lint: &mut Lint<'_>, workflow: &Hash) {
             &["actions/download-artifact", "actions/setup-node"],
         );
         check_channel_steps(lint, publish);
+        check_readback(lint, publish);
         let never_cancelled = matches!(
             get(publish, "concurrency"),
             Some(Yaml::Hash(concurrency))
@@ -570,12 +738,28 @@ fn check_gh_release(
     None
 }
 
-/// `gh api` only reads GitHub's latest release, to confirm a stable release
-/// was marked latest: no method, field or input, no other path.
+/// `gh api` only reads: in `publish`, GitHub's latest release, to confirm a
+/// stable release was marked latest; in `guard`, the Nightly runs, a run's
+/// jobs and a comparison of this repository. No method, field or input (so
+/// every call is a GET), no other path, and no other job.
 fn check_gh_api(lint: &mut Lint<'_>, id: &str, words: &[&str]) {
-    if id != PUBLISH_JOB {
+    let allowed = |path: &str| match id {
+        PUBLISH_JOB => {
+            path == LATEST_RELEASE_PATH
+                || GUARD_API_PREFIXES
+                    .iter()
+                    .any(|prefix| path.starts_with(prefix))
+        }
+        GUARD_JOB => GUARD_API_PREFIXES
+            .iter()
+            .any(|prefix| path.starts_with(prefix)),
+        _ => false,
+    };
+    if id != PUBLISH_JOB && id != GUARD_JOB {
         lint.report(&format!(
-            "job `{id}` runs `gh api`; only the `publish` job reads the latest release"
+            "job `{id}` runs `gh api`; only the `publish` job (the latest release and its \
+             re-check) and the `guard` job (the Nightly runs and the release branch) read through \
+             it"
         ));
     }
     let Some(start) = words.iter().position(|word| *word == "api") else {
@@ -588,13 +772,14 @@ fn check_gh_api(lint: &mut Lint<'_>, id: &str, words: &[&str]) {
         if matches!(*word, "||" | "&&" | ";" | "|") {
             break;
         }
+        let bare = word.trim_matches(|character| matches!(character, '"' | '\''));
         if skip_value {
             skip_value = false;
         } else if *word == "--jq" {
             skip_value = true;
         } else if word.starts_with('-') {
             flags_ok = false;
-        } else if *word == LATEST_RELEASE_PATH {
+        } else if allowed(bare) {
             paths += 1;
         } else {
             flags_ok = false;
@@ -602,8 +787,9 @@ fn check_gh_api(lint: &mut Lint<'_>, id: &str, words: &[&str]) {
     }
     if !flags_ok || paths != 1 {
         lint.report(&format!(
-            "job `{id}` runs `gh api` other than `gh api {LATEST_RELEASE_PATH} --jq <filter>`: \
-             the workflow only reads the latest release, never writes through the API"
+            "job `{id}` runs `gh api` other than a plain read (`gh api <path> --jq <filter>`) of \
+             {GUARD_API_PREFIXES:?} in `guard` and `publish`, or of `{LATEST_RELEASE_PATH}` in \
+             `publish`: the workflow never writes through the API"
         ));
     }
 }
@@ -713,6 +899,16 @@ fn check_step_channel(
 const STABLE_FORWARD_CHECK: &str =
     r#"test "$(printf '%s\n%s\n' "${latest}" "${VERSION}" | sort -V | tail -n 1)" = "${VERSION}""#;
 
+/// The lines of a stable `npm publish` step that read every package's
+/// `latest` again at publish time and refuse unless it is still what the plan
+/// saw or already this version: two stable runs waiting for approval could
+/// otherwise both pass on their plans' values, and the lower one, published
+/// second, would move `latest` backwards.
+const STABLE_FRESH_LATEST: [&str; 2] = [
+    r#"latest_now="$(timeout 20 npm view "${package}" dist-tags.latest --prefer-online --fetch-retries=1 2>/dev/null || true)""#,
+    r#"if [ "${latest_now}" != "${latest}" ] && [ "${latest_now}" != "${VERSION}" ]; then"#,
+];
+
 /// What a step that records the dist-tags before publishing writes.
 const TAGS_RECORD: &str = r#">> "${RUNNER_TEMP}/tags-before""#;
 
@@ -721,12 +917,34 @@ const TAGS_RECORD: &str = r#">> "${RUNNER_TEMP}/tags-before""#;
 const VERIFICATION_MARKS: [&str; 3] = [
     "dist-tags.latest",
     "dist-tags.next",
-    r#"test "${settled}" = yes"#,
+    r#"if [ "${settled}" != yes ]; then"#,
 ];
 
 /// What a stable release step ends with: GitHub's own latest release must be
 /// this tag.
 const LATEST_RELEASE_CHECK: &str = r#"test "${latest_release}" = "${TAG}""#;
+
+/// The stable `npm publish` step reads every package's `latest` again before
+/// publishing and refuses unless it is still the plan's value or this version
+/// ([`STABLE_FRESH_LATEST`]); `publish_at` is the line of its `npm publish`.
+fn check_fresh_latest(lint: &mut Lint<'_>, script: &str, publish_at: usize) {
+    let lines = trimmed_lines(script);
+    let [read, refusal] = STABLE_FRESH_LATEST;
+    let read_at = lines.iter().position(|line| *line == read);
+    let fresh = read_at.is_some_and(|read_at| {
+        fails_at(&lines, refusal)
+            .is_some_and(|refused_at| read_at < refused_at && refused_at < publish_at)
+    });
+    if !fresh {
+        lint.report(&format!(
+            "the stable `npm publish` step does not read `latest` again before publishing \
+             and refuse unless it is still the plan's value or this version \
+             ({STABLE_FRESH_LATEST:?} followed by `exit 1`): a lower stable version \
+             published after a higher one during the approval's wait would move `latest` \
+             backwards"
+        ));
+    }
+}
 
 /// The publish job's dist-tag bookkeeping (P14 PR 8): the tags are recorded
 /// before the first publish, a stable publish checks `latest` only moves
@@ -746,8 +964,21 @@ fn check_channel_steps(lint: &mut Lint<'_>, job: &Hash) {
                 .contains("npm publish")
         });
         let Some(publish_at) = publish_at else {
-            if !published && script.contains(TAGS_RECORD) && script.contains("dist-tags.latest") {
-                recorded = true;
+            let from_plan = matches!(
+                get(step, "env"),
+                Some(Yaml::Hash(env)) if env.values().any(|value| value.as_str() == Some(PLAN_TAGS_OUTPUT))
+            );
+            if !published && script.contains(TAGS_RECORD) {
+                if from_plan && !script.contains("npm view") {
+                    recorded = true;
+                } else {
+                    lint.report(&format!(
+                        "the `publish` job records the dist-tags before publishing from \
+                         something other than the plan's output `{PLAN_TAGS_OUTPUT}`: a re-run of \
+                         failed jobs would compare with the tags it reads then, or with a stale \
+                         copy of them (#403)"
+                    ));
+                }
             }
             continue;
         };
@@ -764,11 +995,13 @@ fn check_channel_steps(lint: &mut Lint<'_>, job: &Hash) {
                      must only move forward"
                 ));
             }
+            check_fresh_latest(lint, script, publish_at);
         }
     }
     if !recorded {
         lint.report(&format!(
-            "job `publish` does not record the dist-tags (`{TAGS_RECORD}`) in a step before it \
+            "job `publish` does not record the dist-tags (`{TAGS_RECORD}`, from \
+             `{PLAN_TAGS_OUTPUT}`) in a step before it \
              publishes, so it cannot check afterwards that only one tag moved"
         ));
     }
@@ -808,6 +1041,416 @@ fn check_channel_steps(lint: &mut Lint<'_>, job: &Hash) {
     }
 }
 
+/// The guard (rule 10, #337, governance rule 15): the first job and the only
+/// one without `needs`, which nothing can skip or ignore, with a read-only
+/// token, the checkout as its one action, the run's facts in `env`, the reads
+/// it decides on and its refusal of a moved tag; no job that waits for it may
+/// run anyway. What it decides is the shell check's to hold.
+#[expect(
+    clippy::too_many_lines,
+    reason = "one rule read top to bottom: the job's place, its token, its steps and its reads"
+)]
+fn check_guard(lint: &mut Lint<'_>, jobs: &Hash) {
+    let Some(Yaml::Hash(guard)) = get(jobs, GUARD_JOB) else {
+        lint.report(
+            "has no `guard` job; a dispatch on a wrong ref, or a candidate from a commit without \
+             a passed nightly, must be refused before anything is built (#337, governance rule \
+             15)",
+        );
+        return;
+    };
+    for (id, job) in jobs {
+        let (Some(id), Yaml::Hash(job)) = (id.as_str(), job) else {
+            continue;
+        };
+        if id == GUARD_JOB {
+            if get(job, "needs").is_some() {
+                lint.report("job `guard` has `needs`; it runs first, before anything is built");
+            }
+        } else {
+            if needs(job).is_empty() {
+                lint.report(&format!(
+                    "job `{id}` has no `needs`, so it can start before the guard has accepted \
+                     the run; only `guard` starts a run, and every other job needs it or a job \
+                     that does"
+                ));
+            }
+            let condition = get(job, "if").and_then(Yaml::as_str).unwrap_or_default();
+            for anyway in RUN_ANYWAY {
+                if condition.contains(anyway) {
+                    lint.report(&format!(
+                        "job `{id}` has `{anyway}` in its condition, which would let it run after \
+                         the guard refused the run"
+                    ));
+                }
+            }
+            if get(job, "continue-on-error").is_some() {
+                lint.report(&format!(
+                    "job `{id}` has `continue-on-error`; a job that waits for the guard may not \
+                     turn a failure into a pass"
+                ));
+            }
+        }
+    }
+    for key in ["if", "continue-on-error"] {
+        if get(guard, key).is_some() {
+            lint.report(&format!(
+                "job `guard` has `{key}`; nothing may skip the guard or ignore its refusal"
+            ));
+        }
+    }
+    let read_only = matches!(
+        get(guard, "permissions"),
+        Some(Yaml::Hash(permissions))
+            if permissions.len() == GUARD_PERMISSIONS.len()
+                && GUARD_PERMISSIONS.iter().all(|(scope, level)| {
+                    get(permissions, scope).and_then(Yaml::as_str) == Some(*level)
+                })
+    );
+    if !read_only {
+        lint.report(&format!(
+            "job `guard` must have exactly the permissions {GUARD_PERMISSIONS:?}: it reads the \
+             Nightly runs and the release branch and writes nothing"
+        ));
+    }
+    let mut decides = false;
+    for step in steps(guard) {
+        let name = get(step, "name")
+            .and_then(Yaml::as_str)
+            .unwrap_or("an unnamed step");
+        for key in ["if", "continue-on-error"] {
+            if get(step, key).is_some() {
+                lint.report(&format!(
+                    "step `{name}` of job `guard` has `{key}`; nothing may skip the guard's \
+                     checks or ignore their refusal"
+                ));
+            }
+        }
+        if let Some(uses) = get(step, "uses").and_then(Yaml::as_str) {
+            let action = uses.split('@').next().unwrap_or_default();
+            if action != "actions/checkout" {
+                lint.report(&format!(
+                    "job `guard` uses `{action}`; it may use only `actions/checkout`"
+                ));
+            }
+        }
+        if let Some(Yaml::String(script)) = get(step, "run") {
+            for forbidden in PRIVILEGED_FORBIDDEN_COMMANDS {
+                if script.contains(forbidden) {
+                    lint.report(&format!(
+                        "job `guard` runs `{forbidden}`; the guard builds and installs nothing, \
+                         so it answers in seconds"
+                    ));
+                }
+            }
+            let given_the_run = matches!(
+                get(step, "env"),
+                Some(Yaml::Hash(env)) if GUARD_ENV
+                    .iter()
+                    .all(|(name, value)| get(env, name).and_then(Yaml::as_str) == Some(*value))
+            );
+            if given_the_run && GUARD_READS.iter().all(|read| script.contains(read)) {
+                decides = true;
+                if !script
+                    .lines()
+                    .any(|line| line.trim().starts_with(TAG_REFUSAL))
+                {
+                    lint.report(&format!(
+                        "job `guard` does not refuse with `{TAG_REFUSAL}`: a release tag must still \
+                         name the commit the run built (a re-run of an old run after the tag moved)"
+                    ));
+                }
+            }
+        }
+    }
+    if !decides {
+        lint.report(&format!(
+            "job `guard` has no step that is given {GUARD_ENV:?} through `env` and reads \
+             {GUARD_READS:?}: the guard decides on the run's own ref and commit, the Nightly runs \
+             of exactly that commit and the release branch"
+        ));
+    }
+}
+
+/// The lines of the shell function `name` in `script`, from `name() {` to the
+/// `}` at the same indentation; `None` when there is no such function.
+fn function_lines<'a>(script: &'a str, name: &str) -> Option<Vec<&'a str>> {
+    let header = format!("{name}() {{");
+    let mut lines = script.lines();
+    let first = lines.by_ref().find(|line| line.trim() == header)?;
+    let indent = first
+        .get(..first.len().saturating_sub(first.trim_start().len()))
+        .unwrap_or_default();
+    let closing = format!("{indent}}}");
+    let mut body = vec![first];
+    for line in lines {
+        body.push(line);
+        if line == closing {
+            return Some(body);
+        }
+    }
+    None
+}
+
+/// The script of the step of `job` that decides as the guard does: given
+/// `env` and reading `reads`, or `None`.
+fn deciding_step<'a>(
+    job: &'a Hash,
+    env: &[(&str, &str)],
+    reads: &[&str],
+) -> Option<(usize, &'a Hash, &'a str)> {
+    steps(job)
+        .into_iter()
+        .enumerate()
+        .find_map(|(index, step)| {
+            let Some(Yaml::String(script)) = get(step, "run") else {
+                return None;
+            };
+            let given = matches!(
+                get(step, "env"),
+                Some(Yaml::Hash(given)) if env
+                    .iter()
+                    .all(|(name, value)| get(given, name).and_then(Yaml::as_str) == Some(*value))
+            );
+            (given && reads.iter().all(|read| script.contains(read))).then_some((
+                index,
+                step,
+                script.as_str(),
+            ))
+        })
+}
+
+/// The re-check after the approval (rule 12): the `publish` job asks the
+/// guard's questions again, with the guard's own functions, before anything
+/// is published.
+fn check_recheck(lint: &mut Lint<'_>, jobs: &Hash) {
+    let (Some(Yaml::Hash(guard)), Some(Yaml::Hash(publish))) =
+        (get(jobs, GUARD_JOB), get(jobs, PUBLISH_JOB))
+    else {
+        return;
+    };
+    let Some((_, _, guard_script)) = deciding_step(guard, &GUARD_ENV, &GUARD_READS) else {
+        // The guard rule reports a guard that does not decide.
+        return;
+    };
+    let mut env: Vec<(&str, &str)> = GUARD_ENV.to_vec();
+    env.push(RECHECK_VERSION);
+    let reads: Vec<&str> = GUARD_READS.to_vec();
+    let Some((at, step, script)) = deciding_step(publish, &env, &reads) else {
+        lint.report(&format!(
+            "the `publish` job has no step that re-checks the guard's conditions after the \
+             approval: given {env:?} through `env` and reading {reads:?}"
+        ));
+        return;
+    };
+    let first_release = steps(publish).into_iter().position(|candidate| {
+        matches!(
+            get(candidate, "run"),
+            Some(Yaml::String(run)) if logical_lines(run).iter().any(|line| {
+                let words = line.split_whitespace().collect::<Vec<_>>().join(" ");
+                words.contains("npm publish") || words.contains("gh release")
+            })
+        )
+    });
+    if first_release.is_some_and(|first| first < at) {
+        lint.report(
+            "the `publish` job publishes or releases before its re-check of the guard's \
+             conditions; the re-check comes first, after the approval",
+        );
+    }
+    for key in ["if", "continue-on-error"] {
+        if get(step, key).is_some() {
+            lint.report(&format!(
+                "the `publish` job's re-check has `{key}`; nothing may skip it or ignore its \
+                 refusal"
+            ));
+        }
+    }
+    let lines = trimmed_lines(script);
+    for refusal in RECHECK_REFUSALS {
+        if !lines.iter().any(|line| line.starts_with(refusal)) {
+            lint.report(&format!(
+                "the `publish` job's re-check does not refuse with `{refusal}`: the ref must be \
+                 the planned version's tag, and the tag must still name the commit this run built"
+            ));
+        }
+    }
+    for name in GUARD_FUNCTIONS {
+        let ours = function_lines(script, name);
+        if ours.is_none() || ours != function_lines(guard_script, name) {
+            lint.report(&format!(
+                "the `publish` job's re-check does not carry the guard's `{name}` function \
+                 character for character, so the two could decide differently"
+            ));
+        }
+    }
+}
+
+/// The lines of a script, trimmed.
+fn trimmed_lines(script: &str) -> Vec<&str> {
+    script.lines().map(str::trim).collect()
+}
+
+/// The index of `line` in `lines` when it is followed by `exit 1`
+/// before its `fi`, so the step fails there; `None` otherwise.
+fn fails_at(lines: &[&str], line: &str) -> Option<usize> {
+    let at = lines.iter().position(|candidate| *candidate == line)?;
+    lines
+        .iter()
+        .skip(at + 1)
+        .take_while(|candidate| **candidate != "fi")
+        .any(|candidate| *candidate == "exit 1")
+        .then_some(at)
+}
+
+/// The read-back of the dist-tags after a publish (rule 11, #403): a loop
+/// bounded by rounds and by a deadline, whose every read is cut off, whose
+/// longest run (the calls' time included) fits the job's timeout, that waits
+/// while a tag has not moved, fails at once on a wrong answer and fails when
+/// it ends unsettled.
+#[expect(
+    clippy::too_many_lines,
+    reason = "one rule read top to bottom: the bound, the reads, the settle and the failures"
+)]
+fn check_readback(lint: &mut Lint<'_>, publish: &Hash) {
+    let timeout_minutes = match get(publish, "timeout-minutes") {
+        Some(Yaml::Integer(minutes)) => u64::try_from(*minutes).ok(),
+        _ => None,
+    };
+    for channel in [Channel::PreRelease, Channel::Stable] {
+        let script = steps(publish).into_iter().find_map(|step| {
+            let condition = get(step, "if").and_then(Yaml::as_str).unwrap_or_default();
+            match get(step, "run") {
+                Some(Yaml::String(script))
+                    if condition.contains(channel.condition())
+                        && VERIFICATION_MARKS.iter().all(|mark| script.contains(mark)) =>
+                {
+                    Some(script.as_str())
+                }
+                _ => None,
+            }
+        });
+        // A missing read-back step is the channel-steps rule's finding.
+        let Some(script) = script else {
+            continue;
+        };
+        let lines = trimmed_lines(script);
+        let name = channel.name();
+        let number_after = |prefix: &str, suffix: &str| {
+            lines.iter().enumerate().find_map(|(at, line)| {
+                line.strip_prefix(prefix)
+                    .and_then(|rest| rest.strip_suffix(suffix))
+                    .and_then(|number| number.parse::<u64>().ok())
+                    .map(|number| (at, number))
+            })
+        };
+        let rounds = number_after("for attempt in $(seq 1 ", "); do");
+        let pause = number_after("sleep ", "");
+        let deadline = number_after("deadline=$((SECONDS + ", "))");
+        let reads: Vec<&&str> = lines
+            .iter()
+            .filter(|line| line.contains("npm view \"${package}\""))
+            .collect();
+        let cut_offs: Vec<Option<u64>> = reads
+            .iter()
+            .map(|line| {
+                line.split_once("\"$(timeout ")
+                    .and_then(|(_, rest)| rest.split_once(" npm view "))
+                    .and_then(|(seconds, _)| seconds.parse::<u64>().ok())
+            })
+            .collect();
+        if reads.is_empty() || cut_offs.iter().any(Option::is_none) {
+            lint.report(&format!(
+                "the {name} read-back runs `npm view` without `timeout <seconds>` in front of it: \
+                 one read that hangs would run the job into its timeout after the publish (#403)"
+            ));
+        }
+        let per_round = READBACK_PACKAGES.saturating_mul(
+            cut_offs
+                .iter()
+                .flatten()
+                .fold(0_u64, |total, seconds| total.saturating_add(*seconds)),
+        );
+        let bounded_by_deadline = lines.contains(&READBACK_DEADLINE_BREAK);
+        match (rounds, pause, deadline) {
+            (Some((loop_at, rounds)), Some((sleep_at, pause)), Some((_, deadline)))
+                if bounded_by_deadline =>
+            {
+                // The least it waits for a registry that answers at once, and the
+                // most it can take when every read hangs until it is cut off.
+                let shortest = rounds.saturating_mul(pause).min(deadline);
+                let longest = rounds
+                    .saturating_mul(pause.saturating_add(per_round))
+                    .min(deadline.saturating_add(pause).saturating_add(per_round));
+                if shortest < MINIMUM_READBACK_SECONDS {
+                    lint.report(&format!(
+                        "the {name} read-back waits {shortest} seconds ({rounds} rounds, {pause} \
+                         seconds apart, a deadline of {deadline}), less than \
+                         {MINIMUM_READBACK_SECONDS} seconds: npm can show a publish more than \
+                         five minutes late (#403)"
+                    ));
+                }
+                let fits = timeout_minutes.is_some_and(|timeout| {
+                    longest.div_ceil(60).saturating_add(READBACK_MARGIN_MINUTES) <= timeout
+                });
+                if !fits {
+                    lint.report(&format!(
+                        "the {name} read-back can take {} minutes with its reads' cut-offs counted, \
+                         which does not leave {READBACK_MARGIN_MINUTES} minutes of the `publish` \
+                         job's `timeout-minutes` ({}) for the rest of the job",
+                        longest.div_ceil(60),
+                        timeout_minutes.map_or_else(|| String::from("not set"), |t| t.to_string())
+                    ));
+                }
+                let inside = |at: usize| loop_at < at && at < sleep_at;
+                for check in channel.wrong_answer_checks() {
+                    if !fails_at(&lines, &check).is_some_and(inside) {
+                        lint.report(&format!(
+                            "the {name} read-back does not fail at once, inside its loop, on a \
+                             wrong answer (`{check}` followed by `exit 1`): it must never fail \
+                             only on time (#403)"
+                        ));
+                    }
+                }
+                let settle = channel.settle_condition();
+                let waits = lines
+                    .iter()
+                    .position(|line| *line == settle)
+                    .is_some_and(|at| {
+                        inside(at)
+                            && lines
+                                .iter()
+                                .skip(at + 1)
+                                .take_while(|line| **line != "fi")
+                                .any(|line| *line == "settled=no")
+                    });
+                if !waits {
+                    lint.report(&format!(
+                        "the {name} read-back does not keep waiting while the tag has not moved \
+                         (`{settle}` followed by `settled=no`, inside its loop): a tag that never \
+                         moved could settle"
+                    ));
+                }
+                let timed_out = VERIFICATION_MARKS
+                    .last()
+                    .is_some_and(|mark| fails_at(&lines, mark).is_some_and(|at| sleep_at < at));
+                if !timed_out {
+                    lint.report(&format!(
+                        "the {name} read-back does not fail when its window ends without the tags \
+                         settling (`if [ \"${{settled}}\" != yes ]; then` after the loop, \
+                         followed by `exit 1`)"
+                    ));
+                }
+            }
+            _ => lint.report(&format!(
+                "the {name} read-back does not poll in a bounded loop (`deadline=$((SECONDS + \
+                 D))`, `for attempt in $(seq 1 N); do`, `{READBACK_DEADLINE_BREAK}` and `sleep \
+                 S`), so its window is not stated (#403)"
+            )),
+        }
+    }
+}
+
 /// The arguments every `vsift-release publish-plan` of the `plan` job carries (P14 PR 8):
 /// the saved registry metadata, the evidence check's answer, and the run and date a delta
 /// record names.
@@ -825,6 +1468,16 @@ fn check_plan_job(lint: &mut Lint<'_>, plan: &Hash) {
         lint.report(
             "job `plan` must export `channel`, which the publish steps' conditions compare \
              (ADR 0024 decision A)",
+        );
+    }
+    let exports_tags = matches!(
+        get(plan, "outputs"),
+        Some(Yaml::Hash(outputs)) if get(outputs, "tags-before").is_some()
+    );
+    if !exports_tags {
+        lint.report(
+            "job `plan` must export `tags-before`, the dist-tags it read before anything was \
+             published, which the publish job compares with (#403)",
         );
     }
     let full_history = steps(plan).into_iter().any(|step| {
@@ -1350,7 +2003,7 @@ mod tests {
                     &text,
                     "          SOURCE_COMMIT: ${{ github.sha }}\n",
                     "          SOURCE_COMMIT: ${{ github.sha }}\n          TOKEN: ${{ secrets.NPM_TOKEN }}\n",
-                    1,
+                    2,
                 )?,
                 "job `plan` names `secrets.NPM_TOKEN`",
             ),
@@ -1503,13 +2156,23 @@ mod tests {
             ),
             (
                 "no verification of a stable publish",
-                mutate(&text, "          test \"${settled}\" = yes\n", "", 2)?,
+                mutate(
+                    &text,
+                    "          if [ \"${settled}\" != yes ]; then\n",
+                    "          if false; then\n",
+                    2,
+                )?,
                 "has no step under `needs.plan.outputs.channel == 'stable'` that reads both \
                  dist-tags back",
             ),
             (
                 "no verification of a pre-release publish",
-                mutate(&text, "          test \"${settled}\" = yes\n", "", 1)?,
+                mutate(
+                    &text,
+                    "          if [ \"${settled}\" != yes ]; then\n",
+                    "          if false; then\n",
+                    1,
+                )?,
                 "has no step under `needs.plan.outputs.channel == 'prerelease'` that reads both \
                  dist-tags back",
             ),
@@ -1738,6 +2401,702 @@ mod tests {
         Ok(())
     }
 
+    /// The guard (#337, governance rule 15) and the read-back window (#403):
+    /// each way the refusal could come after the builds, be skipped, ignored
+    /// or decided on the wrong commit, or the read-back could give up too soon,
+    /// outlast its job or fail only on time, is a deliberately broken copy of
+    /// the real workflow that the lint must name.
+    #[test]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "one auditable list: each guard and read-back rule's violation and its finding"
+    )]
+    fn each_guard_and_readback_rule_refuses_its_violation() -> Result<(), Box<dyn Error>> {
+        let text = release_text()?;
+        let guard_step = "      - name: Refuse a wrong ref, or a candidate without a passed nightly, before anything is built\n";
+        let loop_line = "          for attempt in $(seq 1 40); do\n";
+        let cases: Vec<(&str, String, &str)> = vec![
+            (
+                "no guard job",
+                mutate(
+                    &text,
+                    "  guard:\n    name: Ref and nightly guard\n",
+                    "  gate:\n    name: Ref and nightly guard\n",
+                    1,
+                )?,
+                "has no `guard` job",
+            ),
+            (
+                "a build that starts before the guard",
+                mutate(
+                    &text,
+                    "    name: Build (${{ matrix.target }})\n    needs:\n      - guard\n",
+                    "    name: Build (${{ matrix.target }})\n",
+                    1,
+                )?,
+                "job `build` has no `needs`",
+            ),
+            (
+                "an inventory that starts before the guard",
+                mutate(
+                    &text,
+                    "    name: Notices and SBOMs\n    needs:\n      - guard\n",
+                    "    name: Notices and SBOMs\n",
+                    1,
+                )?,
+                "job `inventory` has no `needs`",
+            ),
+            (
+                "a guard that waits for a build",
+                mutate(
+                    &text,
+                    "    name: Ref and nightly guard\n",
+                    "    name: Ref and nightly guard\n    needs:\n      - inventory\n",
+                    1,
+                )?,
+                "job `guard` has `needs`",
+            ),
+            (
+                "a guard that can be skipped",
+                mutate(
+                    &text,
+                    "    name: Ref and nightly guard\n",
+                    "    name: Ref and nightly guard\n    if: github.event.inputs.dry_run == 'false'\n",
+                    1,
+                )?,
+                "job `guard` has `if`",
+            ),
+            (
+                "a guard whose refusal is ignored",
+                mutate(
+                    &text,
+                    "    name: Ref and nightly guard\n",
+                    "    name: Ref and nightly guard\n    continue-on-error: true\n",
+                    1,
+                )?,
+                "job `guard` has `continue-on-error`",
+            ),
+            (
+                "a guard step that can be skipped",
+                mutate(
+                    &text,
+                    guard_step,
+                    &format!("{guard_step}        if: github.event_name == 'pull_request'\n"),
+                    1,
+                )?,
+                "of job `guard` has `if`",
+            ),
+            (
+                "a guard step whose failure is ignored",
+                mutate(
+                    &text,
+                    guard_step,
+                    &format!("{guard_step}        continue-on-error: true\n"),
+                    1,
+                )?,
+                "of job `guard` has `continue-on-error`",
+            ),
+            (
+                "a guard that may write",
+                mutate(
+                    &text,
+                    "    permissions:\n      actions: read\n      contents: read\n",
+                    "    permissions:\n      actions: write\n      contents: read\n",
+                    1,
+                )?,
+                "job `guard` must have exactly the permissions",
+            ),
+            (
+                "a guard with a scope it does not need",
+                mutate(
+                    &text,
+                    "    permissions:\n      actions: read\n      contents: read\n",
+                    "    permissions:\n      actions: read\n      contents: read\n      issues: read\n",
+                    1,
+                )?,
+                "job `guard` must have exactly the permissions",
+            ),
+            (
+                "a guard that accepts the nightly of a later commit on main",
+                mutate(
+                    &text,
+                    "runs?head_sha=${SOURCE_COMMIT}&per_page=100",
+                    "runs?branch=main&per_page=100",
+                    1,
+                )?,
+                "job `guard` has no step that is given",
+            ),
+            (
+                "a guard that does not look at a run's jobs",
+                mutate(
+                    &text,
+                    "repos/smormah/vsift/actions/runs/${id}/jobs?per_page=100",
+                    "repos/smormah/vsift/actions/runs/${id}?per_page=100",
+                    1,
+                )?,
+                "job `guard` has no step that is given",
+            ),
+            (
+                "a guard that does not check the release branch",
+                mutate(
+                    &text,
+                    "compare/${SOURCE_COMMIT}...${head}",
+                    "compare/${SOURCE_COMMIT}...main",
+                    1,
+                )?,
+                "job `guard` has no step that is given",
+            ),
+            (
+                "a guard that reads the ref from the pull request",
+                mutate(
+                    &text,
+                    "          GIT_REF: ${{ github.ref }}\n",
+                    "          GIT_REF: ${{ github.head_ref }}\n",
+                    1,
+                )?,
+                "job `guard` has no step that is given",
+            ),
+            (
+                "a guard that is not given the commit",
+                mutate(
+                    &text,
+                    "          SOURCE_COMMIT: ${{ github.sha }}\n          GH_TOKEN:",
+                    "          GH_TOKEN:",
+                    1,
+                )?,
+                "job `guard` has no step that is given",
+            ),
+            (
+                "a guard that writes through the API",
+                mutate(
+                    &text,
+                    "gh api \"repos/smormah/vsift/compare/",
+                    "gh api --method POST \"repos/smormah/vsift/compare/",
+                    1,
+                )?,
+                "job `guard` runs `gh api` other than a plain read",
+            ),
+            (
+                "a guard that reads another repository",
+                mutate(
+                    &text,
+                    "gh api \"repos/smormah/vsift/actions/runs/${id}/jobs",
+                    "gh api \"repos/someone/vsift/actions/runs/${id}/jobs",
+                    1,
+                )?,
+                "job `guard` runs `gh api` other than a plain read",
+            ),
+            (
+                "a guard that builds",
+                mutate(
+                    &text,
+                    "          set -euo pipefail\n          refuse() {\n",
+                    "          set -euo pipefail\n          cargo run --locked -p vsift-release -- candidate-delta\n          refuse() {\n",
+                    1,
+                )?,
+                "job `guard` runs `cargo`",
+            ),
+            (
+                "a guard with another action",
+                mutate(
+                    &text,
+                    "      - name: Check out the workspace manifest\n        uses: actions/checkout@",
+                    "      - name: Check out the workspace manifest\n        uses: someone/checkout@",
+                    1,
+                )?,
+                "job `guard` uses `someone/checkout`",
+            ),
+            (
+                "the nightly read from another job",
+                mutate(
+                    &text,
+                    "          mkdir publish-plan\n",
+                    "          mkdir publish-plan\n          gh api repos/smormah/vsift/actions/runs/1/jobs --jq .total_count\n",
+                    1,
+                )?,
+                "job `plan` runs `gh api`; only",
+            ),
+            (
+                "a pre-release read-back of five minutes again",
+                mutate(
+                    &text,
+                    loop_line,
+                    "          for attempt in $(seq 1 10); do\n",
+                    1,
+                )?,
+                "the prerelease read-back waits 300 seconds",
+            ),
+            (
+                "a stable read-back of five minutes again",
+                mutate(
+                    &text,
+                    loop_line,
+                    "          for attempt in $(seq 1 10); do\n",
+                    2,
+                )?,
+                "the stable read-back waits 300 seconds",
+            ),
+            (
+                "a read-back without a bound",
+                mutate(&text, loop_line, "          while true; do\n", 2)?,
+                "the stable read-back does not poll in a bounded loop",
+            ),
+            (
+                "a read-back that outlasts its job",
+                mutate(
+                    &text,
+                    "    # and the GitHub release about one.\n    timeout-minutes: 45\n",
+                    "    # and the GitHub release about one.\n    timeout-minutes: 30\n",
+                    1,
+                )?,
+                "does not leave 15 minutes of the `publish` job's `timeout-minutes` (30)",
+            ),
+            (
+                "a pre-release read-back that waits through a wrong next",
+                mutate(
+                    &text,
+                    "              if [ -n \"${next_now}\" ] && [ \"${next_now}\" != \"${VERSION}\" ] && [ \"${next_now}\" != \"${next}\" ]; then\n",
+                    "              if false; then\n",
+                    1,
+                )?,
+                "the prerelease read-back does not fail at once, inside its loop, on a wrong answer",
+            ),
+            (
+                "a stable read-back that only warns about a moved next",
+                mutate(
+                    &text,
+                    "a stable version never moves it\" >&2\n                exit 1\n",
+                    "a stable version never moves it\" >&2\n                settled=no\n",
+                    1,
+                )?,
+                "the stable read-back does not fail at once, inside its loop, on a wrong answer",
+            ),
+            (
+                "a stable read-back that checks a wrong latest only after the window",
+                mutate(
+                    &text,
+                    "              if [ -n \"${latest_now}\" ] && [ \"${latest_now}\" != \"${VERSION}\" ] && [ \"${latest_now}\" != \"${latest}\" ]; then\n",
+                    "              if false; then\n",
+                    1,
+                )?,
+                "the stable read-back does not fail at once, inside its loop, on a wrong answer",
+            ),
+            (
+                "a stable read-back that passes when its window ends",
+                mutate(
+                    &text,
+                    "the GitHub release is created then.\" >&2\n            exit 1\n",
+                    "the GitHub release is created then.\" >&2\n",
+                    1,
+                )?,
+                "the stable read-back does not fail when its window ends",
+            ),
+        ];
+        for (case, mutated, expected) in cases {
+            let messages = findings(&mutated);
+            assert!(
+                messages.iter().any(|message| message.contains(expected)),
+                "{case}: expected a finding containing {expected:?}, got {messages:#?}"
+            );
+        }
+        Ok(())
+    }
+
+    /// The re-check after the approval (rule 12): each way the `publish` job
+    /// could publish without asking the guard's questions again, or ask them
+    /// differently, is a broken copy the lint must name.
+    #[test]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "one auditable list: each re-check rule's violation and its finding"
+    )]
+    fn each_recheck_rule_refuses_its_violation() -> Result<(), Box<dyn Error>> {
+        let text = release_text()?;
+        let recheck = "      - name: Re-check the guard's conditions after the approval, before anything is published\n";
+        let cases: Vec<(&str, String, &str)> = vec![
+            (
+                "no re-check of the nightly",
+                mutate(
+                    &text,
+                    "runs?head_sha=${SOURCE_COMMIT}&per_page=100",
+                    "runs?branch=main&per_page=100",
+                    2,
+                )?,
+                "has no step that re-checks the guard's conditions",
+            ),
+            (
+                "no read of the commit the tag names",
+                mutate(
+                    &text,
+                    "gh api \"repos/smormah/vsift/git/ref/tags/${tag}\"",
+                    "gh api \"repos/smormah/vsift/compare/${tag}\"",
+                    2,
+                )?,
+                "has no step that re-checks the guard's conditions",
+            ),
+            (
+                "a re-check given another commit",
+                mutate(
+                    &text,
+                    "          SOURCE_COMMIT: ${{ github.sha }}\n          VERSION:",
+                    "          SOURCE_COMMIT: ${{ needs.plan.outputs.tag }}\n          VERSION:",
+                    1,
+                )?,
+                "has no step that re-checks the guard's conditions",
+            ),
+            (
+                "a publish before the re-check",
+                mutate(
+                    &text,
+                    recheck,
+                    &format!(
+                        "      - name: Publish early\n        if: needs.plan.outputs.channel == 'prerelease'\n        env:\n          VERSION: ${{{{ needs.plan.outputs.version }}}}\n        run: |\n          [[ \"${{VERSION}}\" =~ ^[0-9]+\\.[0-9]+\\.[0-9]+-[0-9A-Za-z.-]+$ ]]\n          npm publish ./npm-packages/x.tgz --tag next --access public --provenance --ignore-scripts\n\n{recheck}"
+                    ),
+                    1,
+                )?,
+                "publishes or releases before its re-check",
+            ),
+            (
+                "a re-check that can be skipped",
+                mutate(
+                    &text,
+                    recheck,
+                    &format!("{recheck}        if: needs.plan.outputs.channel == 'prerelease'\n"),
+                    1,
+                )?,
+                "the `publish` job's re-check has `if`",
+            ),
+            (
+                "a re-check whose refusal is ignored",
+                mutate(
+                    &text,
+                    recheck,
+                    &format!("{recheck}        continue-on-error: true\n"),
+                    1,
+                )?,
+                "the `publish` job's re-check has `continue-on-error`",
+            ),
+            (
+                "a re-check that accepts a moved tag",
+                mutate(
+                    &text,
+                    "[ \"${tagged}\" = \"${SOURCE_COMMIT}\" ] || refuse",
+                    "[ -n \"${tagged}\" ] || refuse",
+                    1,
+                )?,
+                "does not refuse with `[ \"${tagged}\" = \"${SOURCE_COMMIT}\" ] || refuse`",
+            ),
+            (
+                "a re-check that accepts any ref",
+                mutate(
+                    &text,
+                    "[ \"${GIT_REF}\" = \"refs/tags/${tag}\" ] || refuse",
+                    "[ -n \"${GIT_REF}\" ] || refuse",
+                    1,
+                )?,
+                "does not refuse with `[ \"${GIT_REF}\" = \"refs/tags/${tag}\" ] || refuse`",
+            ),
+            (
+                "a re-check whose nightly rule drifted from the guard's",
+                mutate(&text, "$2 != \"Report a failure\"", "$2 !~ /Report/", 2)?,
+                "does not carry the guard's `nightly_passed` function",
+            ),
+            (
+                "a re-check that accepts a branch the guard refuses",
+                mutate(
+                    &text,
+                    "              identical | ahead) return 0 ;;\n",
+                    "              identical | ahead | behind) return 0 ;;\n",
+                    2,
+                )?,
+                "does not carry the guard's `on_release_branch` function",
+            ),
+            (
+                "a guard whose nightly rule drifted from the re-check's",
+                mutate(&text, "$2 != \"Report a failure\"", "$2 !~ /Report/", 1)?,
+                "does not carry the guard's `nightly_passed` function",
+            ),
+            (
+                "a re-check that writes through the API",
+                mutate(
+                    &text,
+                    "gh api \"repos/smormah/vsift/git/ref/tags/${tag}\"",
+                    "gh api -X POST \"repos/smormah/vsift/git/ref/tags/${tag}\"",
+                    2,
+                )?,
+                "job `publish` runs `gh api` other than a plain read",
+            ),
+        ];
+        for (case, mutated, expected) in cases {
+            let messages = findings(&mutated);
+            assert!(
+                messages.iter().any(|message| message.contains(expected)),
+                "{case}: expected a finding containing {expected:?}, got {messages:#?}"
+            );
+        }
+        Ok(())
+    }
+
+    /// The review of 2026-10-17 (S1 to S4, N1 to N4): each hole it found is a
+    /// broken copy of the real workflow that the lint must name.
+    #[test]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "one auditable list: each reviewed hole and the finding that closes it"
+    )]
+    fn each_reviewed_hole_is_refused() -> Result<(), Box<dyn Error>> {
+        let text = release_text()?;
+        let next_read = "next_now=\"$(timeout 20 npm view \"${package}\" dist-tags.next --prefer-online --fetch-retries=1 2>/dev/null || true)\"";
+        let cases: Vec<(&str, String, &str)> = vec![
+            (
+                "S1: a guard that accepts a moved tag",
+                mutate(
+                    &text,
+                    "[ \"${tagged}\" = \"${SOURCE_COMMIT}\" ] || refuse",
+                    "[ -n \"${tagged}\" ] || refuse",
+                    1,
+                )?,
+                "job `guard` does not refuse with `[ \"${tagged}\" = \"${SOURCE_COMMIT}\" ] || refuse`",
+            ),
+            (
+                "S1: a re-check that does not peel an annotated tag like the guard",
+                mutate(
+                    &text,
+                    "      tag) answer=\"$(gh api \"repos/smormah/vsift/git/tags/${sha}\" --jq \"${ref_filter}\")\" || answer=\"\" ;;\n",
+                    "",
+                    2,
+                )?,
+                "does not carry the guard's `tag_commit` function",
+            ),
+            (
+                "S2: a read without a cut-off",
+                mutate(
+                    &text,
+                    next_read,
+                    "next_now=\"$(npm view \"${package}\" dist-tags.next --prefer-online 2>/dev/null || true)\"",
+                    1,
+                )?,
+                "the prerelease read-back runs `npm view` without `timeout <seconds>`",
+            ),
+            (
+                "S2: a read-back without its deadline",
+                mutate(
+                    &text,
+                    "if [ \"${settled}\" = yes ] || [ \"${SECONDS}\" -ge \"${deadline}\" ]; then",
+                    "if [ \"${settled}\" = yes ]; then",
+                    2,
+                )?,
+                "the stable read-back does not poll in a bounded loop",
+            ),
+            (
+                "S2: cut-offs that, counted, outlast the job",
+                mutate(
+                    &text,
+                    "latest_now=\"$(timeout 20 npm view",
+                    "latest_now=\"$(timeout 300 npm view",
+                    3,
+                )?,
+                "the stable read-back can take",
+            ),
+            (
+                "S2: a deadline beyond the job's timeout",
+                mutate(
+                    &text,
+                    "deadline=$((SECONDS + 1200))",
+                    "deadline=$((SECONDS + 2400))",
+                    1,
+                )?,
+                "the prerelease read-back can take",
+            ),
+            (
+                "S3: the dist-tags read again in the publish job",
+                mutate(
+                    &text,
+                    "          printf '%s\\n' \"${TAGS_BEFORE}\" > \"${RUNNER_TEMP}/plan-tags\"\n",
+                    "          npm view vsift-cli dist-tags --json > \"${RUNNER_TEMP}/plan-tags\"\n",
+                    1,
+                )?,
+                "records the dist-tags before publishing from something other than the plan's output",
+            ),
+            (
+                "S3: the record not taken from the plan",
+                mutate(
+                    &text,
+                    "          TAGS_BEFORE: ${{ needs.plan.outputs.tags-before }}\n",
+                    "          TAGS_BEFORE: ${{ needs.plan.outputs.version }}\n",
+                    1,
+                )?,
+                "records the dist-tags before publishing from something other than the plan's output",
+            ),
+            (
+                "S3: a plan that does not export what it read",
+                mutate(
+                    &text,
+                    "      tags-before: ${{ steps.plan.outputs.tags-before }}\n",
+                    "",
+                    1,
+                )?,
+                "job `plan` must export `tags-before`",
+            ),
+            (
+                "S4: a candidate read-back that settles on no answer",
+                mutate(
+                    &text,
+                    "if [ \"${next_now}\" != \"${VERSION}\" ] || { [ -z \"${latest_now}\" ] && [ \"${latest}\" != none ]; }; then",
+                    "if [ -z \"${next_now}\" ] || { [ -z \"${latest_now}\" ] && [ \"${latest}\" != none ]; }; then",
+                    1,
+                )?,
+                "the prerelease read-back does not keep waiting while the tag has not moved",
+            ),
+            (
+                "S4: a stable read-back that never marks itself unsettled",
+                mutate(
+                    &text,
+                    "                settled=no\n                echo \"attempt ${attempt}: ${package} latest",
+                    "                echo \"attempt ${attempt}: ${package} latest",
+                    1,
+                )?,
+                "the stable read-back does not keep waiting while the tag has not moved",
+            ),
+            (
+                "N1: a comparison with the branch's name, which a tag of that name would win",
+                mutate(
+                    &text,
+                    "compare/${SOURCE_COMMIT}...${head}",
+                    "compare/${SOURCE_COMMIT}...${release_branch}",
+                    1,
+                )?,
+                "job `guard` has no step that is given",
+            ),
+            (
+                "N2: only completed runs read, so a run in progress is not seen",
+                mutate(
+                    &text,
+                    "runs?head_sha=${SOURCE_COMMIT}&per_page=100",
+                    "runs?head_sha=${SOURCE_COMMIT}&status=completed&per_page=100",
+                    1,
+                )?,
+                "job `guard` has no step that is given",
+            ),
+            (
+                "N2: a re-check that ignores a run in progress, unlike the guard",
+                mutate(
+                    &text,
+                    "    if [ -n \"${id}\" ] && [ \"${status}\" != completed ]; then\n",
+                    "    if false; then\n",
+                    2,
+                )?,
+                "does not carry the guard's `nightly_passed` function",
+            ),
+            (
+                "N3: a job that runs whatever the guard said",
+                mutate(
+                    &text,
+                    "    name: Notices and SBOMs\n",
+                    "    name: Notices and SBOMs\n    if: always()\n",
+                    1,
+                )?,
+                "job `inventory` has `always()` in its condition",
+            ),
+            (
+                "N3: a job that runs unless cancelled",
+                mutate(
+                    &text,
+                    "    name: Publish plan (a dry run publishes nothing)\n",
+                    "    name: Publish plan (a dry run publishes nothing)\n    if: ${{ !cancelled() }}\n",
+                    1,
+                )?,
+                "job `plan` has `cancelled()` in its condition",
+            ),
+            (
+                "N3: a job that turns a failure into a pass",
+                mutate(
+                    &text,
+                    "    name: Build (${{ matrix.target }})\n",
+                    "    name: Build (${{ matrix.target }})\n    continue-on-error: true\n",
+                    1,
+                )?,
+                "job `build` has `continue-on-error`",
+            ),
+            (
+                "N4: a guard that does not read the release branch's rules",
+                mutate(
+                    &text,
+                    "rules/branches/${release_branch}",
+                    "branches/${release_branch}",
+                    1,
+                )?,
+                "job `guard` has no step that is given",
+            ),
+            (
+                "N4: a re-check that asks for fewer rules than the guard",
+                mutate(
+                    &text,
+                    "  for rule in creation deletion non_fast_forward pull_request required_status_checks; do\n",
+                    "  for rule in creation deletion; do\n",
+                    2,
+                )?,
+                "does not carry the guard's `release_branch_protected` function",
+            ),
+        ];
+        for (case, mutated, expected) in cases {
+            let messages = findings(&mutated);
+            assert!(
+                messages.iter().any(|message| message.contains(expected)),
+                "{case}: expected a finding containing {expected:?}, got {messages:#?}"
+            );
+        }
+        Ok(())
+    }
+
+    /// The re-review of 2026-10-17: the stable publish reads `latest` again
+    /// after the approval, so a lower stable version published second cannot
+    /// move it backwards on its plan's stale value.
+    #[test]
+    fn a_stable_publish_that_trusts_the_plans_latest_is_refused() -> Result<(), Box<dyn Error>> {
+        let text = release_text()?;
+        let cases: Vec<(&str, String)> = vec![
+            (
+                "no fresh read",
+                mutate(
+                    &text,
+                    "            latest_now=\"$(timeout 20 npm view \"${package}\" dist-tags.latest --prefer-online --fetch-retries=1 2>/dev/null || true)\"\n            if [ \"${latest_now}\" != \"${latest}\" ]",
+                    "            latest_now=\"${latest}\"\n            if [ \"${latest_now}\" != \"${latest}\" ]",
+                    1,
+                )?,
+            ),
+            (
+                "a refusal that only warns",
+                mutate(
+                    &text,
+                    "nor ${VERSION}: nothing is published\" >&2\n              exit 1\n",
+                    "nor ${VERSION}: nothing is published\" >&2\n",
+                    1,
+                )?,
+            ),
+            (
+                "a check that accepts any version",
+                mutate(
+                    &text,
+                    "if [ \"${latest_now}\" != \"${latest}\" ] && [ \"${latest_now}\" != \"${VERSION}\" ]; then\n              echo \"${package}: latest is",
+                    "if [ -z \"${latest_now}\" ]; then\n              echo \"${package}: latest is",
+                    1,
+                )?,
+            ),
+        ];
+        for (case, mutated) in cases {
+            let messages = findings(&mutated);
+            assert!(
+                messages
+                    .iter()
+                    .any(|message| message
+                        .contains("does not read `latest` again before publishing")),
+                "{case}: {messages:#?}"
+            );
+        }
+        Ok(())
+    }
+
     #[test]
     fn a_release_workflow_without_the_publishing_jobs_is_refused() {
         let text = "name: Release\non:\n  workflow_dispatch:\npermissions: {}\njobs:\n  build:\n    \
@@ -1750,6 +3109,7 @@ mod tests {
             "has no `publish` job",
             "exactly one `workflow_dispatch` input",
             "must export `tarball-sums`",
+            "has no `guard` job",
         ] {
             assert!(
                 messages.iter().any(|message| message.contains(expected)),
