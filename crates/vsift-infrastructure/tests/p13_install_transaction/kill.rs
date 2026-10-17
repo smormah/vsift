@@ -139,6 +139,8 @@ fn media_version(version: u8) -> String {
 struct InstallDone {
     sweep: StageSweep,
     statuses: Vec<&'static str>,
+    /// Each component's outcome in full, so a failed rerun says why (#253).
+    outcomes: String,
 }
 
 /// `setup install` as `Engine::install_setup` composes it once the plan is
@@ -177,6 +179,14 @@ async fn install(store: &ManagedArtifactStore, base: &str, version: u8) -> TestR
     Ok(InstallDone {
         sweep,
         statuses: statuses(&report),
+        outcomes: format!(
+            "{:?}",
+            report
+                .components
+                .iter()
+                .map(|component| component.outcome)
+                .collect::<Vec<_>>()
+        ),
     })
 }
 
@@ -196,7 +206,11 @@ async fn run_command(
                 .iter()
                 .any(|status| !matches!(*status, "activated" | "already_current"))
             {
-                return Err(format!("the install did not complete: {:?}", done.statuses).into());
+                return Err(format!(
+                    "the install did not complete: {:?}: {}",
+                    done.statuses, done.outcomes
+                )
+                .into());
             }
         }
         ManagedCommand::RollbackMedia => {
@@ -981,7 +995,7 @@ const LIST_STRAYS: &str = "Get-CimInstance Win32_Process | Where-Object { $_.Com
 /// thread suspended. The re-check and the end are one script, so no other
 /// process starts between them. The values arrive in the environment.
 #[cfg(windows)]
-const END_STRAY: &str = "$p = Get-CimInstance Win32_Process -Filter ('ProcessId = ' + [int]$env:VSIFT_STRAY_PID); if ($p -and $p.CommandLine -and $p.CreationDate.ToString('o') -eq $env:VSIFT_STRAY_CREATED -and $p.CommandLine.Contains($env:VSIFT_STRAY_FOLDER) -and (Test-Suspended $p.ProcessId)) { Stop-Process -Id $p.ProcessId -Force -ErrorAction SilentlyContinue }";
+const END_STRAY: &str = "$p = Get-CimInstance Win32_Process -Filter ('ProcessId = ' + [int]$env:VSIFT_STRAY_PID); if (-not $p) { 'gone' } elseif (-not ($p.CommandLine -and $p.CreationDate.ToString('o') -eq $env:VSIFT_STRAY_CREATED -and $p.CommandLine.Contains($env:VSIFT_STRAY_FOLDER))) { 'another process' } elseif (-not (Test-Suspended $p.ProcessId)) { 'not suspended' } else { try { Stop-Process -Id $p.ProcessId -Force -ErrorAction Stop; 'ended' } catch { 'not ended: ' + $_.Exception.Message } }";
 
 /// A process the killed host left behind under the test's private folder.
 #[cfg(windows)]
@@ -1054,11 +1068,12 @@ fn strays_under(root: &TestRoot) -> TestResult<Vec<Stray>> {
 }
 
 /// Ends `stray` if it is still the process that was listed (see
-/// [`END_STRAY`]); a refusal means it is already going, and the next listing
-/// shows whether it is.
+/// [`END_STRAY`]) and returns what the script answered (`ended`, `gone`,
+/// `another process`, `not suspended` or why it could not end it); a refusal
+/// means it is already going, and the next listing shows whether it is.
 #[cfg(windows)]
-fn end_stray(root: &TestRoot, stray: &Stray) -> TestResult {
-    powershell(
+fn end_stray(root: &TestRoot, stray: &Stray) -> TestResult<String> {
+    let output = powershell(
         END_STRAY,
         &[
             ("VSIFT_STRAY_FOLDER", &stray_folder(root)?),
@@ -1066,7 +1081,7 @@ fn end_stray(root: &TestRoot, stray: &Stray) -> TestResult {
             ("VSIFT_STRAY_CREATED", &stray.created),
         ],
     )?;
-    Ok(())
+    Ok(String::from_utf8_lossy(&output.stdout).trim().to_owned())
 }
 
 /// Ends the providers a killed host left suspended, and says so.
@@ -1091,8 +1106,14 @@ fn end_stray(root: &TestRoot, stray: &Stray) -> TestResult {
     )
 )]
 fn end_suspended_providers(root: &TestRoot, context: &str) -> TestResult {
-    end_suspended_providers_within(root, context, Duration::from_secs(10))
+    end_suspended_providers_within(root, context, STRAY_WAIT)
 }
+
+/// How long a provider of a killed host may outlive it. Its job ends a
+/// running one at once, so this is a safety stop, not a timing claim: each
+/// listing is a PowerShell start and a query of every process, several
+/// seconds on a loaded machine (#253).
+const STRAY_WAIT: Duration = Duration::from_secs(30);
 
 /// [`end_suspended_providers`] with the wait for a running provider to go.
 #[cfg_attr(
@@ -1107,10 +1128,22 @@ fn end_suspended_providers_within(root: &TestRoot, context: &str, wait: Duration
     {
         let deadline = Instant::now() + wait;
         let mut reported = BTreeSet::new();
+        let mut ended = Vec::new();
         loop {
+            // The deadline is judged on a listing taken after the last
+            // attempt to end: a listing and an end are each a PowerShell
+            // start, several seconds apiece on a loaded machine, so judging
+            // the listing from before the end failed a stray that had just
+            // been ended (#253).
             let strays = strays_under(root)?;
             if strays.is_empty() {
                 return Ok(());
+            }
+            if Instant::now() > deadline {
+                return Err(format!(
+                    "{context}: processes of the killed host were still there after {wait:?}: {strays:?}; ending them answered {ended:?}"
+                )
+                .into());
             }
             for stray in strays.iter().filter(|stray| stray.suspended) {
                 if reported.insert(stray.pid) {
@@ -1119,13 +1152,7 @@ fn end_suspended_providers_within(root: &TestRoot, context: &str, wait: Duration
                         stray.pid, stray.command
                     );
                 }
-                end_stray(root, stray)?;
-            }
-            if Instant::now() > deadline {
-                return Err(format!(
-                    "{context}: processes of the killed host were still there after {wait:?}: {strays:?}"
-                )
-                .into());
+                ended.push((stray.pid, end_stray(root, stray)?));
             }
             std::thread::sleep(Duration::from_millis(100));
         }
@@ -1197,7 +1224,7 @@ fn a_provider_left_suspended_by_a_killed_host_is_ended_and_a_running_one_fails()
         suspended: true,
         command: listed[0].command.clone(),
     };
-    end_stray(&root, &stale)?;
+    assert_eq!(end_stray(&root, &stale)?, "another process");
     assert!(
         suspended.0.try_wait()?.is_none(),
         "a stale listing ended it"
