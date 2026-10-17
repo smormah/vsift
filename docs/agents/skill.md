@@ -274,8 +274,8 @@ and the next bullet said that on a short video "one window may hold the whole tr
   whole transcript is gone).
 - **`references/commands.md`**: `transcript get` reads bounded pages around `search` hits, or a resume card's windows.
 
-`SKILL.md` stays at 300 lines (the guard's limit); the fuzz seed copy is the same bytes. The guard pins the three sentences
-(`search_before_any_transcript_read_is_a_rule_that_always_applies`). The skill never said "locate" for a tool, and its
+`SKILL.md` stays at 300 lines (the guard's limit); the fuzz seed copy is the same bytes. The CLI's skill guard pins the three
+sentences. The skill never said "locate" for a tool, and its
 setup text already says that `setup configure` takes only a path the user gives, never one found by searching the disk; the
 CLI's own advice for a missing tool changed in the same pull request (#396, [L-164](../planning/known-limits.md#l-164)). The
 trial freeze is new (`skill` `7f445a9a...`, whole freeze `f52265e7...`; [trials.md](trials.md), "The freeze (P14)"). **No agent

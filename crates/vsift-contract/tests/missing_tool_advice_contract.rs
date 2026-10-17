@@ -2,7 +2,7 @@
 //! (issue #396).
 //!
 //! `ingest --transcript`, `candidates`, the evidence commands and
-//! `transcript retranscribe` answer `MISSING_CAPABILITY` when FFmpeg, FFprobe
+//! `transcript retranscribe` answer `MISSING_CAPABILITY` when `FFmpeg`, `FFprobe`
 //! or whisper.cpp is not available. Their remediations said "Install or locate
 //! trusted builds", and a cold agent read "locate" as leave to search the
 //! machine for them. They now name the command that registers each tool by

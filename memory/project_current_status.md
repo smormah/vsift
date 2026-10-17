@@ -45,6 +45,7 @@ the CLI and write a cited report. P12's named-client trials qualified it:
   **The skill of `0.2.1` changed twice and ran once, on `0.2.1-rc.3` (same text; 2026-10-14 and 15): 32 of 34 runs with the skill passed fully, the review tier, the blurred banner and the hold-outs met every gate, and the compact regression was 8 of 10
   (two Claude Sonnet 5.5 runs never ran `search`, #395, L-163; waived for 0.2.1).
   Without the skill (batch 3): Codex compact was useful 6 of 6, Claude compact 2 of 6 because the strict test setting refuses compound commands (#397, L-165), and one of 18 cold runs tried to list folders and read a configuration file, which the setting denied (#396, L-164); no cold agent installed anything or accepted a plan.** Most of the second skill change has no scenario (a partial read, a whole-recording question, a long report, a `BUSY` frame call, a timed-out tool).
+  **In the `0.2.2` cycle (a pull request of 2026-10-17, not merged when this was written):** the skill's "search first" rule is also rule 6 of the rules that always apply, with its reason (#395), and the CLI's advice for a missing tool asks for no folder search (#396); the trial freeze is new (`f52265e7...`). No agent has run either; the uncounted skill smoke comes next, a counted batch later.
 
 ## Where things stand
 

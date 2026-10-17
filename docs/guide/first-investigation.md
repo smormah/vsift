@@ -44,8 +44,9 @@ Local ASR check: not run: the whisper.cpp CLI is not available
 Executable probes only show that each tool responds. The local ASR check transcribes a short speech clip built into VSift with the selected tools and model. A supplied transcript can avoid local ASR.
 ```
 
-*This output is from a Windows 11 machine. It is shown as an example, not checked, because it names
-the tools on the machine that ran it.*
+*This output is from a Windows 11 machine, with the advice as it reads after `0.2.1` (`0.2.1` and earlier say
+"Install or locate this trusted tool" there). It is shown as an example, not checked, because it names the tools on the
+machine that ran it.*
 
 What the status means:
 

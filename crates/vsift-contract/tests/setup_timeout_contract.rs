@@ -343,7 +343,7 @@ fn after_the_longest_deadline_more_time_is_not_offered() -> TestResult {
 /// The advice for a missing tool, and for one that was found and failed its
 /// probe, in `setup check` and in a plan that cannot install it (issue #396).
 ///
-/// It said "Install or locate a trusted FFmpeg executable", and a cold agent
+/// It said "Install or locate a trusted `FFmpeg` executable", and a cold agent
 /// read "locate" as leave to search the machine. It now names the command
 /// that makes the tool known to `VSift` with the path the user gives, and
 /// says that no folder search is needed. The published code, reason and

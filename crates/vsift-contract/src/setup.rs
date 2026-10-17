@@ -245,11 +245,11 @@ fn check_next_step(status: &DependencyStatus) -> Option<String> {
 /// The sentence every piece of advice for a missing or failing tool ends
 /// its instructions with (issue #396).
 ///
-/// VSift needs only the absolute path of a tool the user already has, and it
+/// `VSift` needs only the absolute path of a tool the user already has, and it
 /// cannot know where a person or an agent may look. Advice that said
 /// "install or locate" this tool was read by a cold agent as an invitation to
 /// search the machine for it, and it listed folders and tried to read a
-/// configuration file. The advice now says what VSift needs and who knows it.
+/// configuration file. The advice now says what `VSift` needs and who knows it.
 /// The readable output of `setup check` prints it on a line of its own; the
 /// JSON texts and the error remediations carry it inline.
 pub const NO_FOLDER_SEARCH_ADVICE: &str = "No need to search folders: ask the user where it is.";
@@ -257,7 +257,7 @@ pub const NO_FOLDER_SEARCH_ADVICE: &str = "No need to search folders: ask the us
 /// The `next_step` of `setup check` and of `setup plan` for a tool that is
 /// missing, or was found and failed its probe (issue #396).
 ///
-/// It names the two ways a tool becomes known to VSift that need no search:
+/// It names the two ways a tool becomes known to `VSift` that need no search:
 /// install a trusted one, or register one that works with `setup configure`
 /// and the absolute path the user gives; then [`NO_FOLDER_SEARCH_ADVICE`].
 /// The managed installation is not named here: `setup check` reports whether

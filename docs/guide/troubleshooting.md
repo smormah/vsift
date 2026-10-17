@@ -191,9 +191,11 @@ Local ASR check: not run: FFmpeg and FFprobe are needed and must pass their own 
 Executable probes only show that each tool responds. The local ASR check transcribes a short speech clip built into VSift with the selected tools and model. A supplied transcript can avoid local ASR.
 ```
 
-*Both blocks are real output from a Windows 11 machine whose `PATH` had no media tools; they are not checked
-automatically because they depend on the machine.* The fix is the same everywhere: install the tool, or tell
-VSift where it is:
+*Both blocks are output from a Windows 11 machine whose `PATH` had no media tools, with the advice as it reads after
+`0.2.1` ([#396](https://github.com/smormah/vsift/issues/396)); they are not checked automatically because they depend
+on the machine.* In `0.2.1` and earlier the advice begins "Install or locate this trusted tool" (or "Install or locate
+trusted builds"); it asks for the same thing, and nobody needs to search folders for the tool. The fix is the same
+everywhere: install the tool, or tell VSift where it is:
 
 ```console
 vsift setup configure ffmpeg --executable /absolute/path/to/ffmpeg

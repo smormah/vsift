@@ -304,7 +304,11 @@ target with no managed installation: the two tools that were found are
 `manual_selection_required` with a step that says the plan decided nothing for them, and a
 tool that is missing keeps its published step. Both are checked by `vsift-contract`'s
 `setup_timeout_contract`, and the texts through the binary by the CLI's
-`setup_check_deadline_cli`. Local-ASR
+`setup_check_deadline_cli`. Since issue #396 the step of a `missing` or `unhealthy` tool in
+`setup-check.blocked.json`, `setup-plan.unqualified.json`, `setup-plan.unavailable.json` and
+`setup-plan.timed-out.json` names `setup configure <tool> --executable <absolute-path>` and says
+"No need to search folders: ask the user where it is." where it said "Install or locate"; only
+the text changed, and `setup_timeout_contract` pins it. Local-ASR
 provenance names the model profile `base` or `base_q5_1` (P07 increment 3c).
 `search.json` and `search.events.jsonl` search that F10 import for `R-17`: one phrase
 hit, the segment F10-E01 cites, with complete coverage from the supplied transcript,
