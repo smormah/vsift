@@ -899,6 +899,16 @@ fn check_step_channel(
 const STABLE_FORWARD_CHECK: &str =
     r#"test "$(printf '%s\n%s\n' "${latest}" "${VERSION}" | sort -V | tail -n 1)" = "${VERSION}""#;
 
+/// The lines of a stable `npm publish` step that read every package's
+/// `latest` again at publish time and refuse unless it is still what the plan
+/// saw or already this version: two stable runs waiting for approval could
+/// otherwise both pass on their plans' values, and the lower one, published
+/// second, would move `latest` backwards.
+const STABLE_FRESH_LATEST: [&str; 2] = [
+    r#"latest_now="$(timeout 20 npm view "${package}" dist-tags.latest --prefer-online --fetch-retries=1 2>/dev/null || true)""#,
+    r#"if [ "${latest_now}" != "${latest}" ] && [ "${latest_now}" != "${VERSION}" ]; then"#,
+];
+
 /// What a step that records the dist-tags before publishing writes.
 const TAGS_RECORD: &str = r#">> "${RUNNER_TEMP}/tags-before""#;
 
@@ -913,6 +923,28 @@ const VERIFICATION_MARKS: [&str; 3] = [
 /// What a stable release step ends with: GitHub's own latest release must be
 /// this tag.
 const LATEST_RELEASE_CHECK: &str = r#"test "${latest_release}" = "${TAG}""#;
+
+/// The stable `npm publish` step reads every package's `latest` again before
+/// publishing and refuses unless it is still the plan's value or this version
+/// ([`STABLE_FRESH_LATEST`]); `publish_at` is the line of its `npm publish`.
+fn check_fresh_latest(lint: &mut Lint<'_>, script: &str, publish_at: usize) {
+    let lines = trimmed_lines(script);
+    let [read, refusal] = STABLE_FRESH_LATEST;
+    let read_at = lines.iter().position(|line| *line == read);
+    let fresh = read_at.is_some_and(|read_at| {
+        fails_at(&lines, refusal)
+            .is_some_and(|refused_at| read_at < refused_at && refused_at < publish_at)
+    });
+    if !fresh {
+        lint.report(&format!(
+            "the stable `npm publish` step does not read `latest` again before publishing \
+             and refuse unless it is still the plan's value or this version \
+             ({STABLE_FRESH_LATEST:?} followed by `exit 1`): a lower stable version \
+             published after a higher one during the approval's wait would move `latest` \
+             backwards"
+        ));
+    }
+}
 
 /// The publish job's dist-tag bookkeeping (P14 PR 8): the tags are recorded
 /// before the first publish, a stable publish checks `latest` only moves
@@ -963,6 +995,7 @@ fn check_channel_steps(lint: &mut Lint<'_>, job: &Hash) {
                      must only move forward"
                 ));
             }
+            check_fresh_latest(lint, script, publish_at);
         }
     }
     if !recorded {
@@ -2861,7 +2894,7 @@ mod tests {
                     &text,
                     "latest_now=\"$(timeout 20 npm view",
                     "latest_now=\"$(timeout 300 npm view",
-                    2,
+                    3,
                 )?,
                 "the stable read-back can take",
             ),
@@ -3011,6 +3044,54 @@ mod tests {
             assert!(
                 messages.iter().any(|message| message.contains(expected)),
                 "{case}: expected a finding containing {expected:?}, got {messages:#?}"
+            );
+        }
+        Ok(())
+    }
+
+    /// The re-review of 2026-10-17: the stable publish reads `latest` again
+    /// after the approval, so a lower stable version published second cannot
+    /// move it backwards on its plan's stale value.
+    #[test]
+    fn a_stable_publish_that_trusts_the_plans_latest_is_refused() -> Result<(), Box<dyn Error>> {
+        let text = release_text()?;
+        let cases: Vec<(&str, String)> = vec![
+            (
+                "no fresh read",
+                mutate(
+                    &text,
+                    "            latest_now=\"$(timeout 20 npm view \"${package}\" dist-tags.latest --prefer-online --fetch-retries=1 2>/dev/null || true)\"\n            if [ \"${latest_now}\" != \"${latest}\" ]",
+                    "            latest_now=\"${latest}\"\n            if [ \"${latest_now}\" != \"${latest}\" ]",
+                    1,
+                )?,
+            ),
+            (
+                "a refusal that only warns",
+                mutate(
+                    &text,
+                    "nor ${VERSION}: nothing is published\" >&2\n              exit 1\n",
+                    "nor ${VERSION}: nothing is published\" >&2\n",
+                    1,
+                )?,
+            ),
+            (
+                "a check that accepts any version",
+                mutate(
+                    &text,
+                    "if [ \"${latest_now}\" != \"${latest}\" ] && [ \"${latest_now}\" != \"${VERSION}\" ]; then\n              echo \"${package}: latest is",
+                    "if [ -z \"${latest_now}\" ]; then\n              echo \"${package}: latest is",
+                    1,
+                )?,
+            ),
+        ];
+        for (case, mutated) in cases {
+            let messages = findings(&mutated);
+            assert!(
+                messages
+                    .iter()
+                    .any(|message| message
+                        .contains("does not read `latest` again before publishing")),
+                "{case}: {messages:#?}"
             );
         }
         Ok(())

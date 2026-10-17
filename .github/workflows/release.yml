@@ -1307,8 +1307,12 @@ jobs:
       # The stable channel moves `latest`, which this workflow can never take
       # back. Before anything is published, every package's `latest` must be a
       # stable version at or below this one (equal means a re-run completing a
-      # partial publish): the plan checked the same at plan time, and this is
-      # the check at publish time, after the approval's wait.
+      # partial publish). The plan checked that at plan time; this is the check
+      # at publish time, after the approval's wait, so `latest` is read again
+      # here, past npm's cache and cut off like every read, and must still be
+      # what the plan saw or already this version: otherwise another stable
+      # version was published during the wait (a higher one, which this
+      # publish would move `latest` back from) and nothing is published.
       - name: Publish the platform packages, then vsift-cli, under latest (stable)
         if: needs.plan.outputs.channel == 'stable'
         env:
@@ -1319,6 +1323,11 @@ jobs:
           [[ "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
           test "${VERSION}" != "0.0.0"
           while read -r package latest next; do
+            latest_now="$(timeout 20 npm view "${package}" dist-tags.latest --prefer-online --fetch-retries=1 2>/dev/null || true)"
+            if [ "${latest_now}" != "${latest}" ] && [ "${latest_now}" != "${VERSION}" ]; then
+              echo "${package}: latest is '${latest_now:-no answer}' now, not ${latest} as the plan read it nor ${VERSION}: nothing is published" >&2
+              exit 1
+            fi
             [[ "${latest}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
             test "$(printf '%s\n%s\n' "${latest}" "${VERSION}" | sort -V | tail -n 1)" = "${VERSION}"
           done < "${RUNNER_TEMP}/tags-before"

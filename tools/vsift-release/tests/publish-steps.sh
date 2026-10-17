@@ -324,6 +324,22 @@ setup 0.9.0 0.10.0 none
 run record > /dev/null
 check "0.10.0 is above 0.9.0" 1 "$(run publish-latest)"
 
+echo "== latest is read again at publish time: a higher stable published during the approval's wait stops a lower one"
+# Two stable runs waited for approval with the same plan value (latest 0.2.1);
+# 0.2.3 was approved and published first, then 0.2.2 is approved.
+setup 0.2.2 0.2.1 0.2.2-rc.1
+run record > /dev/null
+for p in ${PACKAGES}; do echo "0.2.3" > "${STATE}/${p//\//_}.latest"; done
+check "the lower stable is refused although its plan said latest 0.2.1" 1 "$(run publish-latest)"
+check "nothing published" 0 "$([ ! -s "${STATE}/published.log" ]; echo $?)"
+check "saying latest is 0.2.3 now" 0 "$(grep -q "latest is '0.2.3' now, not 0.2.1" "${WORK}/out.log"; echo $?)"
+check "the fresh read asks npm past its cache, cut off" 0 "$(grep -q 'view @vsift/darwin-arm64 dist-tags.latest --prefer-online --fetch-retries=1' "${STATE}/calls.log"; echo $?)"
+setup 0.2.2 0.2.1 0.2.2-rc.1
+run record > /dev/null
+echo 1 > "${STATE}/vsift-cli.latest.lag"; : > "${STATE}/vsift-cli.latest.stale"
+check "a latest npm does not answer at publish time refuses the publish" 1 "$(run publish-latest)"
+check "nothing published" 0 "$([ ! -s "${STATE}/published.log" ]; echo $?)"
+
 echo "== a re-run after a partial stable publish completes it"
 setup 0.2.0 0.0.0 0.2.0-rc.1
 run record > /dev/null
@@ -484,7 +500,7 @@ run publish-next > /dev/null
 started_at="$(date +%s)"
 check "a read that hangs is cut off and counted as no answer" 0 "$(run verify-next)"
 check "after its 20 seconds, not after the hang" 0 "$([ -s "${STATE}/hung.log" ] && [ $(( $(date +%s) - started_at )) -lt 120 ]; echo $?)"
-check "every read is cut off with timeout and retried at most once" 0 "$(grep -c -- 'dist-tags.next --prefer-online --fetch-retries=1' "${WORKFLOW_FILE}" | grep -qx 2 && grep -c 'timeout 20 npm view' "${WORKFLOW_FILE}" | grep -qx 4; echo $?)"
+check "every read is cut off with timeout and retried at most once" 0 "$(grep -c -- 'dist-tags.next --prefer-online --fetch-retries=1' "${WORKFLOW_FILE}" | grep -qx 2 && grep -c 'timeout 20 npm view' "${WORKFLOW_FILE}" | grep -qx 5; echo $?)"
 
 echo "== the dist-tags before the publish come from the plan job, not from a read in the publish job (#403's recovery)"
 setup 0.2.1 0.2.0 0.2.1-rc.3

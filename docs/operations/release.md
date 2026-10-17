@@ -191,7 +191,8 @@ every file in `.github/workflows/` and fails when a workflow:
      for `latest`); the stable release is marked latest when the draft is created rather
      than by the edit that publishes it; the `npm publish` step of the stable release does not
      first require every package's `latest` to be at or below the version published
-     (`sort -V`); the `publish` job does not record the dist-tags before publishing, does
+     (`sort -V`), or (since 2026-10-17) does not first read `latest` again (`timeout 20 npm view
+     ... --prefer-online`) and refuse unless it is still the plan's value or this version; the `publish` job does not record the dist-tags before publishing, does
      not read both tags back after each channel's publish, or does not confirm that
      GitHub's latest release is the stable tag;
    - (P14 PR 8, the stable path's inputs) the `plan` job does not check out with
@@ -261,10 +262,11 @@ The lint reads the YAML tree, so flow mappings and aliases are seen, and it refu
 merge keys (`<<`). Comments are not part of the tree. Its tests are in
 `tools/vsift-governance/src/workflows.rs` (rule 8 included) and, for rule 7,
 `workflows/publish.rs`, which checks the real `release.yml` and a mutation of it for
-every rule: 124 deliberately broken copies, 28 for the P13 rules, 37 for the channels,
+every rule: 127 deliberately broken copies, 28 for the P13 rules, 37 for the channels,
 the stable path's inputs and the evidence step, 28 for the guard and the read-back
-window, 12 for the re-check after the approval and 19 for the holes an independent
-review found in them (2026-10-17), each of which the lint must name.
+window, 12 for the re-check after the approval, 19 for the holes an independent
+review found in them and 3 for the stable publish's fresh read of `latest` (2026-10-17),
+each of which the lint must name.
 
 *Why the dispatch input is compared as a string:* GitHub compares values of different
 types loosely, turning `null` and `false` both into 0, so `inputs.dry_run == false` is
@@ -383,7 +385,7 @@ for one.
 | --- | --- | --- | --- |
 | `plan` | every run, after all twelve `npm-qualify` jobs | `contents: read` | Requires the downloaded archives to equal `package`'s `SHA256SUMS` output and the tarballs to equal `npm-package`'s `tarball-sums` output, by SHA-256. Reads npm's public metadata of the four packages with anonymous GETs (`https://registry.npmjs.org/<package>`, status and body kept in the runner's temporary folder; of the body only the dist-tags and each version's integrity are used, and nothing of it is printed or uploaded). Runs `vsift-release publish-plan`, which reads every archive back, re-assembles the npm packages and requires each tarball to be its package byte for byte, decides the mode and the channel (below), checks the guards of the channel and writes the plan: `publish-plan.md` (added to the job summary, even when the plan is refused), `publish-plan.json`, the release notes, the SBOM and notices of each target as separate release assets, and the digest lists of the release assets and of every file to attest. Checks out the full history, which the candidate comparison of a stable plan needs. Before the plan it names the accepted candidate (`vsift-release candidate-delta --github-output`) and, when there is one, runs the evidence ledger's completeness check for it (`vsift-governance release-evidence --complete-for <candidate> --commit <candidate commit>`), keeping the check's exit status and output in the runner's temporary folder for the plan to read (`--evidence`); the plan also receives the run's id and the date (`--run-id`, `--date`), which a stable plan that passes records in `release-delta.json` (6.7). Outputs `mode` (`dry-run` or `publish`), `version`, `tag`, `channel` (`prerelease` for a pre-release; for a stable version, the channel `stable`), `tags-before` (since 2026-10-17: the four packages' dist-tags as the plan read them, `none` for a tag that is not set and `unknown` for what could not be read or is not a version, which the publish job compares with; a re-run of failed jobs keeps it) and the plan's own digests. |
 | `attest` | only when publishing | `id-token: write`, `attestations: write` | Downloads the archives, tarballs and plan, requires each to match the earlier jobs' outputs, and creates a Sigstore build-provenance attestation (`actions/attest-build-provenance` v4.2.2, pinned by commit) for every archive, `SHA256SUMS`, SBOM, notices file and npm tarball, named in the plan's `attestation-subjects.sha256`. |
-| `publish` | only when publishing, after `attest`, in the `release` environment | `id-token: write`, `contents: write`, and (since 2026-10-17) `actions: read` | Waits for the maintainer's approval. Checks every file again, records the four packages' dist-tags **from the plan's `tags-before` output** (never read again here, 6.4), **re-checks the `guard` job's conditions after the approval** (the ref is the planned version's tag in `smormah/vsift`, the tag still names the commit this run built, that commit is still on its release branch, the branch's rulesets still hold the five rule types of 6.2 step 8, and for a candidate the latest Nightly run that tested exactly that commit still passed with none still running; the guard's own functions, which the lint compares; 6.18), then with the npm of Node.js 24.21.0 (npm 11.19.0; trusted publishing needs 11.5.1 or later) runs, in this order, `npm publish ./npm-packages/<tarball> --access public --provenance --ignore-scripts` with `--tag next` (channel `prerelease`) or `--tag latest` (channel `stable`) for `@vsift/darwin-arm64`, `@vsift/win32-x64`, `@vsift/linux-x64` and then `vsift-cli`. Each channel has its own step, written out in full and run only for its channel; each checks the version's shape itself first, and the step of the stable release also requires every package's `latest` to be a stable version at or below the one published. It then reads both dist-tags of every package back, every 30 seconds until 20 minutes have passed, past npm's own cache, each read cut off after 20 seconds: a pre-release moved `next` and left `latest` where it was, a stable version moved `latest` and left `next`; a tag that still reads its value from before is waited for, and any other value fails the step at once (6.4, #403). Last, `gh release create v<version> --verify-tag --draft` with the archives, `SHA256SUMS`, SBOMs and notices and the plan's notes (`--prerelease --latest=false` for a pre-release), and `gh release edit` publishes the draft (`--latest` for the stable release, which is then confirmed to be GitHub's latest release). |
+| `publish` | only when publishing, after `attest`, in the `release` environment | `id-token: write`, `contents: write`, and (since 2026-10-17) `actions: read` | Waits for the maintainer's approval. Checks every file again, records the four packages' dist-tags **from the plan's `tags-before` output** (never read again here, 6.4), **re-checks the `guard` job's conditions after the approval** (the ref is the planned version's tag in `smormah/vsift`, the tag still names the commit this run built, that commit is still on its release branch, the branch's rulesets still hold the five rule types of 6.2 step 8, and for a candidate the latest Nightly run that tested exactly that commit still passed with none still running; the guard's own functions, which the lint compares; 6.18), then with the npm of Node.js 24.21.0 (npm 11.19.0; trusted publishing needs 11.5.1 or later) runs, in this order, `npm publish ./npm-packages/<tarball> --access public --provenance --ignore-scripts` with `--tag next` (channel `prerelease`) or `--tag latest` (channel `stable`) for `@vsift/darwin-arm64`, `@vsift/win32-x64`, `@vsift/linux-x64` and then `vsift-cli`. Each channel has its own step, written out in full and run only for its channel; each checks the version's shape itself first, and the step of the stable release also requires every package's `latest` to be a stable version at or below the one published, and (since 2026-10-17) reads `latest` again first and refuses unless it is still what the plan read or already this version: two publishes of a stable version waiting for approval would otherwise both pass on their plans' values, and the lower one, approved second, would move `latest` backwards. It then reads both dist-tags of every package back, every 30 seconds until 20 minutes have passed, past npm's own cache, each read cut off after 20 seconds: a pre-release moved `next` and left `latest` where it was, a stable version moved `latest` and left `next`; a tag that still reads its value from before is waited for, and any other value fails the step at once (6.4, #403). Last, `gh release create v<version> --verify-tag --draft` with the archives, `SHA256SUMS`, SBOMs and notices and the plan's notes (`--prerelease --latest=false` for a pre-release), and `gh release edit` publishes the draft (`--latest` for the stable release, which is then confirmed to be GitHub's latest release). |
 
 **The mode and the channel.** `vsift-release publish-plan` answers `publish` only for a
 `workflow_dispatch` with `dry_run` cleared, in `smormah/vsift`, on the ref
@@ -523,9 +525,14 @@ their assets. The same plan is the run's `publish-plan` artifact.
    creations**, **Restrict deletions**, **Require a pull request before merging** (squash, as on
    `main`), **Require status checks to pass** with `CI result`, `Documentation` and `Governance`
    (the CI workflow runs on pull requests to `release/**`; the Release dry run runs there too,
-   and stays optional as on `main`), and **Block force pushes**; in the bypass list the
-   **Repository admin** role (you), so only you create or delete a release branch, as only you
-   create a `v*` tag. **The `guard` job and the publish job's re-check read the rules that apply
+   and stays optional as on `main`), and **Block force pushes**. **The bypass lists, as applied:**
+   "release branches: creation" lets the **Repository admin** role (you) create and delete a
+   release branch, so only you do, as only you create a `v*` tag; "release branches: changes" lets
+   you bypass it **for pull requests only**, so nobody, you included, pushes to a release branch
+   directly. **What the supervisor saw on 2026-10-17** with a throwaway `release/0.0.x`: creating the
+   branch by push works **once the commit has a passed `CI result`** (it was refused while `main`'s
+   CI was still running on it); a direct push to the branch afterwards is refused with "Changes must
+   be made through a pull request"; deleting the branch works. **The `guard` job and the publish job's re-check read the rules that apply
    to the release branch** (`gh api repos/smormah/vsift/rules/branches/release/<MAJOR>.<MINOR>.x`)
    and refuse a candidate or the stable release unless the rule types `creation`, `deletion`,
    `non_fast_forward`, `pull_request` and `required_status_checks` are all there; they check the
@@ -841,7 +848,7 @@ cleared, only in `smormah/vsift`, only after you approve the `release` environme
 | Accepted candidate | the highest `v<X.Y.Z>-rc.<N>` tag is an ancestor of this commit and differs from it only in version strings, the launcher's README, the installation guide and the work record (6.8) | `candidate.rs`; the plan job's full-history checkout (lint) |
 | Registry read | npm answered for all four packages (a missing package or an unreadable answer fails it) | `registry.rs`; the registry step and `--registry` (lint) |
 | Candidate published | that candidate version is on npm for all four packages | `guards.rs` |
-| `latest` moves forward | on every package `latest` is now a stable version below this one (or already this version with the same bytes: a re-run completing a partial publish); this version is on none of them under another tag or with other bytes | `guards.rs`; the publish job's own check just before publishing (lint: `sort -V` line) |
+| `latest` moves forward | on every package `latest` is now a stable version below this one (or already this version with the same bytes: a re-run completing a partial publish); this version is on none of them under another tag or with other bytes | `guards.rs`; the publish job's own check just before publishing, on the plan's values and on `latest` read again then, which must still be the plan's value or this version (lint: `sort -V` line and the fresh read) |
 | Evidence ledger | the ledger is complete for the candidate (`vsift-governance release-evidence --complete-for <candidate> --commit <candidate commit>`, RQ-20): the plan shows its first lines, and an answer that is missing counts as a failure | `evidence.rs`, `guards.rs`; the plan job's candidate and evidence steps and the plan's `--evidence` argument (lint) |
 
 A failed guard refuses an *enforced* plan (a publish, or a dispatch on the tag with
@@ -1168,7 +1175,8 @@ exact commit, branch head, tag and query, so a read of the branch by name or of 
 fails), a Nightly run still in progress, the branch's rule types, the publish job's re-check of all
 of it after the approval, the "before" values taken from the plan's output (a re-run that reads a
 stale old tag waits; a missing, unreadable or reordered package stops the publish), a read that hangs
-(cut off after 20 seconds) and a candidate read-back that never moves or never answers (175 checks
+(cut off after 20 seconds), a candidate read-back that never moves or never answers, and (after the
+re-review) a lower stable version refused when a higher one moved `latest` during the wait (181 checks
 in all; without `jq` the filters themselves are not run, and the script says so). Run it with `bash tools/vsift-release/tests/publish-steps.sh
 .github/workflows/release.yml` (Linux, or Git Bash on Windows); the Rust test
 `publish_steps` runs it on Linux in CI. No real service is contacted. It cannot prove that
@@ -2899,7 +2907,10 @@ with `gh`, pass `--ref v<version>`. A wrong choice now costs seconds, not the tw
       headSha,event,conclusion,startedAt,url`, then check that its checks ran (step 1). If the bump merged after the
       night's run, dispatch the nightly on `main` and wait for it.
    3. **Create the release branch at that commit:** `git push origin <commit>:refs/heads/release/0.2.x` (for the
-      `0.2` line). If a previous window's `release/0.2.x` is still there, the stable release of that window is published
+      `0.2` line). **Cut only from a commit whose `CI` has finished with a passed `CI result`**: the ruleset refuses
+      the branch's creation while it is still running (seen on 2026-10-17); a commit whose nightly passed has long
+      finished its `CI`. After the cut, expect every direct push to the branch to be refused ("Changes must be made
+      through a pull request"): window fixes, bumps and records reach it by pull request only. If a previous window's `release/0.2.x` is still there, the stable release of that window is published
       and its records are on `main`: delete it first (`git push origin --delete release/0.2.x`); its tags keep its commits.
       If the stable release of that window is not published, the window has slipped (step 6) and there is no new cut.
    4. **Tag the commit** (6.3 step 2): `git tag -a v0.2.2-rc.1 -m "VSift 0.2.2-rc.1" <commit>` and `git push origin
@@ -2907,7 +2918,11 @@ with `gh`, pass `--ref v<version>`. A wrong choice now costs seconds, not the tw
    5. **Dry run on the tag, then publish** (6.3 steps 3 and 4): `gh workflow run release.yml --repo smormah/vsift
       --ref v0.2.2-rc.1 -f dry_run=true`. The `guard` job answers within a minute: the ref, the branch and the
       nightly. Then the publish with `-f dry_run=false` and the maintainer's approval of the `release` environment.
-      The candidate goes to `next`.
+      The candidate goes to `next`. **A "Re-run failed jobs" of a candidate's publish asks the nightly again** (the
+      publish job's re-check runs in every attempt): if a Nightly run of that commit failed between the attempts,
+      the re-run is refused, even when some or all of the packages are already on `next`. Then do not try to force
+      it: the published versions stay as they are (never unpublished), and the recovery is to fix forward with the
+      next candidate (`rc.N+1`), whose own nightly must pass.
 
    **Why the cut is not a scheduled job.** A job that creates the branch would need `contents: write` in a workflow
    that today writes only in its two approved jobs, and a way past the branch ruleset; it would choose the commit by
