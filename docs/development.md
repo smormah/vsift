@@ -801,3 +801,5 @@ checks; cargo-deny otherwise omits them from these checks by default. Keep the
 explicit settings when evaluating future test-only platform wrappers.
 
 Public behaviour belongs in the README or command documentation. Architectural decisions belong in `docs/decisions`. Security assumptions belong in `SECURITY.md` and the relevant design document.
+
+A throwaway documentation line for the CI timing demonstration (to be deleted).
