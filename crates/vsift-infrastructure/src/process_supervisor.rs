@@ -517,11 +517,30 @@ impl ProcessSupervisor {
     ///
     /// Returns a typed isolation, spawn, pipe, wait, termination, or reap failure. Deadlines,
     /// cancellation, output limits, and non-zero provider exits are successful supervised outcomes.
+    ///
+    /// The request's deadline is the provider's own running time: it starts
+    /// once the provider has started, not when this is called: on a busy
+    /// Windows machine the start itself can take seconds (#419).
     pub async fn run(
         &self,
         request: ProcessRequest,
         cancellation: ProcessCancellation,
     ) -> Result<ProcessOutcome, ProcessError> {
+        self.run_started_by(request, cancellation, start_child)
+            .await
+    }
+
+    /// [`ProcessSupervisor::run`] with the operating-system start given, so
+    /// the tests can make a start slow where every real one is fast.
+    async fn run_started_by<S>(
+        &self,
+        request: ProcessRequest,
+        cancellation: ProcessCancellation,
+        start: S,
+    ) -> Result<ProcessOutcome, ProcessError>
+    where
+        S: FnOnce(CommandWrap) -> std::io::Result<Box<dyn ChildWrapper>> + Send + 'static,
+    {
         let hard_isolation = effective_hard_isolation(self.host_isolation);
         let strict_required = request.isolation == IsolationRequirement::StrictWorker
             || self.host_isolation.minimum_requirement() == IsolationRequirement::StrictWorker;
@@ -552,14 +571,10 @@ impl ProcessSupervisor {
             return Err(ProcessError::IsolationUnavailable);
         }
 
-        let deadline = Instant::now()
-            .checked_add(request.deadline)
-            .ok_or(ProcessError::DeadlineOutOfRange)?;
-        let mut spawned = spawn_process(
-            request,
-            self.policy.stdout_limit.get(),
-            self.policy.stderr_limit.get(),
-        )?;
+        // Boxed: the start's state would otherwise be part of every caller's
+        // future, and the callers' futures are already large.
+        let (mut spawned, deadline) =
+            Box::pin(self.start_with_deadline(request, &cancellation, start)).await?;
         let mut captures = StreamCaptures::default();
 
         let trigger = wait_for_trigger(
@@ -627,17 +642,64 @@ impl ProcessSupervisor {
     }
 }
 
+impl ProcessSupervisor {
+    /// Starts the provider and takes its deadline once it runs (#419).
+    ///
+    /// A start can take seconds on a busy Windows machine
+    /// ([`start_off_runtime`]). Counted against the deadline, it left a
+    /// provider given N seconds N minus the start, and a provider that would
+    /// have answered at once was reported as one that did not answer in time
+    /// (#128). The deadline is checked before the start too, so one the clock
+    /// cannot hold never starts a provider.
+    async fn start_with_deadline<S>(
+        &self,
+        request: ProcessRequest,
+        cancellation: &ProcessCancellation,
+        start: S,
+    ) -> Result<(SpawnedProcess, Instant), ProcessError>
+    where
+        S: FnOnce(CommandWrap) -> std::io::Result<Box<dyn ChildWrapper>> + Send + 'static,
+    {
+        let running_time = request.deadline;
+        if Instant::now().checked_add(running_time).is_none() {
+            return Err(ProcessError::DeadlineOutOfRange);
+        }
+        let mut spawned = spawn_process(
+            request,
+            self.policy.stdout_limit.get(),
+            self.policy.stderr_limit.get(),
+            Starting {
+                cancellation,
+                forced_shutdown: self.policy.forced_shutdown,
+            },
+            start,
+        )
+        .await?;
+        let Some(deadline) = Instant::now().checked_add(running_time) else {
+            force_terminate_and_reap(spawned.child.as_mut(), self.policy.forced_shutdown).await?;
+            spawned.drains.abort_all();
+            return Err(ProcessError::DeadlineOutOfRange);
+        };
+        Ok((spawned, deadline))
+    }
+}
+
 struct SpawnedProcess {
     child: Box<dyn ChildWrapper>,
     signals: mpsc::Receiver<StreamSignal>,
     drains: JoinSet<DrainResult>,
 }
 
-fn spawn_process(
+async fn spawn_process<S>(
     request: ProcessRequest,
     stdout_limit: usize,
     stderr_limit: usize,
-) -> Result<SpawnedProcess, ProcessError> {
+    starting: Starting<'_>,
+    start: S,
+) -> Result<SpawnedProcess, ProcessError>
+where
+    S: FnOnce(CommandWrap) -> std::io::Result<Box<dyn ChildWrapper>> + Send + 'static,
+{
     let ProcessRequest {
         executable,
         arguments,
@@ -659,7 +721,7 @@ fn spawn_process(
     let mut wrapped = CommandWrap::from(command);
     add_platform_containment(&mut wrapped);
     wrapped.wrap(KillOnDrop);
-    let mut child = wrapped.spawn().map_err(ProcessError::Spawn)?;
+    let mut child = start_off_runtime(wrapped, starting, start).await?;
     let stdout = child
         .stdout()
         .take()
@@ -688,6 +750,89 @@ fn spawn_process(
         signals,
         drains,
     })
+}
+
+/// The operating-system start of a fully configured provider command.
+fn start_child(mut command: CommandWrap) -> std::io::Result<Box<dyn ChildWrapper>> {
+    command.spawn()
+}
+
+/// Runs `start` on the runtime's blocking pool, so that the start never
+/// holds the thread that drives other requests' timers, pipes and
+/// cancellations (#419).
+///
+/// The start blocks, and on Windows it can block for seconds. `process-wrap`
+/// 10 creates the provider suspended, assigns it to its Job Object and then
+/// resumes it by walking a `CreateToolhelp32Snapshot` of every thread on the
+/// machine, one `Thread32Next` call per thread. Measured on a Windows 11
+/// desktop with about 17,500 threads (release build, 2026-10-17): the snapshot
+/// takes about 30 ms and the walk about 330 ms; six walks at once in one
+/// process take 2.4 to 3.2 s each, because they wait for each other inside
+/// the process, while six in separate processes take about 0.4 s each. On a
+/// runtime thread that time stopped every other task of that thread: four
+/// requests on one current-thread runtime started one after another.
+///
+/// Moving the start does not make it shorter. Removing the walk needs the
+/// provider's main thread, which neither `std` nor `tokio` hands out, or a
+/// process-scoped thread list (`PssCaptureSnapshot`, about 0.5 ms here), and
+/// either way a call that only `unsafe` code can make, which `VSift`'s crates
+/// do not contain (L-170).
+///
+/// The start itself cannot be interrupted, but the run does not wait for it
+/// once its caller cancels: it answers [`ProcessError::CancelledDuringStart`]
+/// at once, and a task of the runtime ends the provider when the start
+/// returns (killed and reaped through its tree, as any stopped run is). That
+/// end comes after the run has answered, so for the rest of the start and the
+/// kill the provider outlives its run (L-170). If the runtime shuts down
+/// first, that task is dropped with it, and so is the child once the start
+/// returns: `KillOnDrop` ends the provider (on Windows the kill-on-close job
+/// ends its whole tree; on Unix only the provider itself is signalled).
+///
+/// A start that returns when the cancellation also has is taken: the run's
+/// wait sees the cancellation first and ends the provider before it answers.
+/// A start task that panicked, or that never ran because the runtime was
+/// shutting down, is [`ProcessError::StartTaskFailed`]; a child it had made
+/// is dropped and ended the same way.
+async fn start_off_runtime<S>(
+    command: CommandWrap,
+    starting: Starting<'_>,
+    start: S,
+) -> Result<Box<dyn ChildWrapper>, ProcessError>
+where
+    S: FnOnce(CommandWrap) -> std::io::Result<Box<dyn ChildWrapper>> + Send + 'static,
+{
+    let mut task = tokio::task::spawn_blocking(move || start(command));
+    tokio::select! {
+        biased;
+        started = &mut task => started
+            .map_err(|_| ProcessError::StartTaskFailed)?
+            .map_err(ProcessError::Spawn),
+        () = starting.cancellation.cancelled() => {
+            tokio::spawn(end_once_started(task, starting.forced_shutdown));
+            Err(ProcessError::CancelledDuringStart)
+        }
+    }
+}
+
+/// What a start needs besides the command: the caller's cancellation, and
+/// the forced budget for ending a provider whose start the caller left.
+#[derive(Clone, Copy)]
+struct Starting<'a> {
+    cancellation: &'a ProcessCancellation,
+    forced_shutdown: Duration,
+}
+
+/// Ends the provider of a start whose run was cancelled before the start
+/// returned (see [`start_off_runtime`]). Nobody waits for this task, so a
+/// failure to end the tree has no one to report to; the dropped child is
+/// then ended by `KillOnDrop` and, on Windows, by its kill-on-close job.
+async fn end_once_started(
+    task: tokio::task::JoinHandle<std::io::Result<Box<dyn ChildWrapper>>>,
+    forced_shutdown: Duration,
+) {
+    if let Ok(Ok(mut child)) = task.await {
+        let _ = force_terminate_and_reap(child.as_mut(), forced_shutdown).await;
+    }
 }
 
 impl Default for ProcessSupervisor {
@@ -1164,6 +1309,13 @@ pub enum ProcessError {
     DeadlineOutOfRange,
     /// The operating system could not create or contain the child.
     Spawn(std::io::Error),
+    /// The caller cancelled while the child was being started. The run did
+    /// not wait for the start; the child is ended once the start returns.
+    CancelledDuringStart,
+    /// The task that starts the child off the async runtime stopped without
+    /// returning (it panicked, or the runtime shut down); any child it had
+    /// made is ended with it.
+    StartTaskFailed,
     /// A configured process pipe was not returned by the child API.
     PipeUnavailable(OutputStream),
     /// Reading a process pipe failed.
@@ -1187,6 +1339,12 @@ impl fmt::Display for ProcessError {
             }
             Self::DeadlineOutOfRange => formatter.write_str("process deadline is out of range"),
             Self::Spawn(_) => formatter.write_str("provider process could not be started"),
+            Self::CancelledDuringStart => {
+                formatter.write_str("provider process was cancelled while it was starting")
+            }
+            Self::StartTaskFailed => {
+                formatter.write_str("provider process start stopped unexpectedly")
+            }
             Self::PipeUnavailable(_) => formatter.write_str("provider process pipe is unavailable"),
             Self::StreamRead(_, _) => {
                 formatter.write_str("provider process output could not be read")
@@ -1217,6 +1375,8 @@ impl Error for ProcessError {
             Self::IsolationUnavailable
             | Self::CancelledBeforeSpawn
             | Self::DeadlineOutOfRange
+            | Self::CancelledDuringStart
+            | Self::StartTaskFailed
             | Self::PipeUnavailable(_)
             | Self::OutputTaskFailed
             | Self::ReapDeadlineExceeded => None,
@@ -1226,7 +1386,17 @@ impl Error for ProcessError {
 
 #[cfg(test)]
 mod tests {
-    use std::{num::NonZeroUsize, path::PathBuf, time::Duration};
+    use std::{
+        num::NonZeroUsize,
+        path::PathBuf,
+        sync::{
+            Arc,
+            atomic::{AtomicBool, Ordering},
+        },
+        time::Duration,
+    };
+
+    use process_wrap::tokio::{ChildWrapper, CommandWrap};
 
     use super::{
         HostIsolation, IsolationRequirement, ProcessCancellation, ProcessError, ProcessRequest,
@@ -1350,6 +1520,218 @@ mod tests {
         let plain = ProcessCancellation::new();
         plain.cancel();
         assert!(plain.is_cancelled() && !plain.is_escalated());
+        Ok(())
+    }
+
+    /// A request for a child that ends at once: this test binary, asked to
+    /// run a test that does not exist.
+    fn quick_child(deadline: Duration) -> Result<ProcessRequest, Box<dyn std::error::Error>> {
+        let executable = crate::TrustedExecutable::explicit(std::env::current_exe()?)?;
+        let directory = ProcessWorkingDirectory::new(std::env::current_dir()?)?;
+        Ok(ProcessRequest::new(executable, directory, deadline)?
+            .with_arguments(["--exact", "no_test_has_this_name"]))
+    }
+
+    fn quick_supervisor() -> Result<ProcessSupervisor, Box<dyn std::error::Error>> {
+        let limit = NonZeroUsize::new(64 * 1024).ok_or("test limit must be non-zero")?;
+        Ok(ProcessSupervisor::new(
+            SupervisorPolicy::new(limit, Duration::from_millis(100), Duration::from_secs(20)),
+            HostIsolation::ProcessOnly,
+        ))
+    }
+
+    /// #419: the deadline is the provider's own running time. A start that
+    /// takes longer than the whole deadline (2.5 s here; a Windows start
+    /// takes up to five on a busy desktop) still leaves the provider its two
+    /// seconds, so a child that ends at once is `Exited`. When the
+    /// deadline was taken before the start, it had passed before the child
+    /// ran and the run was reported as `Deadline` (#128).
+    #[tokio::test]
+    async fn a_slow_start_is_not_taken_from_the_deadline() -> Result<(), Box<dyn std::error::Error>>
+    {
+        let slow_start = |mut command: CommandWrap| {
+            std::thread::sleep(Duration::from_millis(2500));
+            command.spawn()
+        };
+
+        let outcome = quick_supervisor()?
+            .run_started_by(
+                quick_child(Duration::from_secs(2))?,
+                ProcessCancellation::new(),
+                slow_start,
+            )
+            .await?;
+
+        assert_eq!(outcome.termination, TerminationReason::Exited);
+        assert!(outcome.status.success(), "the child failed: {outcome:?}");
+        Ok(())
+    }
+
+    /// A started child that records whether the supervisor tried to kill it.
+    #[derive(Debug)]
+    struct RecordsKill {
+        inner: Box<dyn ChildWrapper>,
+        killed: Arc<AtomicBool>,
+    }
+
+    impl ChildWrapper for RecordsKill {
+        fn inner(&self) -> &dyn ChildWrapper {
+            self.inner.as_ref()
+        }
+
+        fn inner_mut(&mut self) -> &mut dyn ChildWrapper {
+            self.inner.as_mut()
+        }
+
+        fn into_inner(self: Box<Self>) -> Box<dyn ChildWrapper> {
+            self.inner
+        }
+
+        fn start_kill(&mut self) -> std::io::Result<()> {
+            self.killed.store(true, Ordering::SeqCst);
+            self.inner.start_kill()
+        }
+    }
+
+    /// #446 review: a cancellation while the provider is starting is
+    /// answered at once, without waiting for a three-second start, and the
+    /// provider is ended (killed and reaped) when the start returns.
+    #[tokio::test]
+    async fn a_cancellation_during_a_start_is_answered_at_once_and_ends_the_provider()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let killed = Arc::new(AtomicBool::new(false));
+        let start = {
+            let killed = Arc::clone(&killed);
+            move |mut command: CommandWrap| -> std::io::Result<Box<dyn ChildWrapper>> {
+                std::thread::sleep(Duration::from_secs(3));
+                let inner = command.spawn()?;
+                Ok(Box::new(RecordsKill { inner, killed }))
+            }
+        };
+        let cancellation = ProcessCancellation::new();
+        let stopper = {
+            let cancellation = cancellation.clone();
+            tokio::spawn(async move {
+                tokio::time::sleep(Duration::from_millis(100)).await;
+                cancellation.cancel();
+            })
+        };
+        let started = tokio::time::Instant::now();
+
+        let result = quick_supervisor()?
+            .run_started_by(quick_child(Duration::from_secs(60))?, cancellation, start)
+            .await;
+        let answered_after = started.elapsed();
+        stopper.await?;
+
+        assert!(
+            matches!(result, Err(ProcessError::CancelledDuringStart)),
+            "{result:?}"
+        );
+        assert!(
+            answered_after < Duration::from_millis(2500),
+            "the run waited for the start: {answered_after:?}"
+        );
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(60);
+        while !killed.load(Ordering::SeqCst) {
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "the provider was never ended"
+            );
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        Ok(())
+    }
+
+    /// #446 review: a start that never runs, because the runtime it was
+    /// given to has shut down, is `StartTaskFailed`, not a panic, and
+    /// nothing is started.
+    #[test]
+    fn a_start_on_a_runtime_that_has_shut_down_is_start_task_failed()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let gone = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(1)
+            .enable_all()
+            .build()?;
+        let handle = gone.handle().clone();
+        drop(gone);
+        let ran = Arc::new(AtomicBool::new(false));
+        let start = {
+            let ran = Arc::clone(&ran);
+            move |mut command: CommandWrap| {
+                ran.store(true, Ordering::SeqCst);
+                command.spawn()
+            }
+        };
+        let driver = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()?;
+        let supervisor = quick_supervisor()?;
+        let request = quick_child(Duration::from_secs(60))?;
+
+        let result = driver.block_on(async {
+            let _inside = handle.enter();
+            supervisor
+                .run_started_by(request, ProcessCancellation::new(), start)
+                .await
+        });
+
+        assert!(
+            matches!(result, Err(ProcessError::StartTaskFailed)),
+            "{result:?}"
+        );
+        assert!(!ran.load(Ordering::SeqCst), "the start ran");
+        Ok(())
+    }
+
+    /// #419: the start runs off the runtime's thread. On this current-thread
+    /// runtime a ticker keeps ticking while a start blocks for a second;
+    /// with the start on the runtime's own thread it could not tick at all
+    /// until the start had returned.
+    #[tokio::test]
+    async fn the_runtime_keeps_running_while_a_provider_starts()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let starting = Arc::new(AtomicBool::new(false));
+        let finished = Arc::new(AtomicBool::new(false));
+        let ticker = {
+            let starting = Arc::clone(&starting);
+            let finished = Arc::clone(&finished);
+            tokio::spawn(async move {
+                let mut ticks_while_starting = 0_u32;
+                while !finished.load(Ordering::SeqCst) {
+                    tokio::time::sleep(Duration::from_millis(20)).await;
+                    if starting.load(Ordering::SeqCst) {
+                        ticks_while_starting += 1;
+                    }
+                }
+                ticks_while_starting
+            })
+        };
+        let start = {
+            let starting = Arc::clone(&starting);
+            move |mut command: CommandWrap| {
+                starting.store(true, Ordering::SeqCst);
+                std::thread::sleep(Duration::from_secs(1));
+                starting.store(false, Ordering::SeqCst);
+                command.spawn()
+            }
+        };
+
+        let outcome = quick_supervisor()?
+            .run_started_by(
+                quick_child(Duration::from_secs(60))?,
+                ProcessCancellation::new(),
+                start,
+            )
+            .await;
+        finished.store(true, Ordering::SeqCst);
+        let ticks_while_starting = ticker.await?;
+
+        assert_eq!(outcome?.termination, TerminationReason::Exited);
+        assert!(
+            ticks_while_starting >= 5,
+            "the runtime ticked {ticks_while_starting} times during a one-second start"
+        );
         Ok(())
     }
 

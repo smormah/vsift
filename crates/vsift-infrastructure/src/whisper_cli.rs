@@ -471,7 +471,9 @@ impl WhisperCli {
             .run(request, cancellation)
             .await
             .map_err(|error| match error {
-                ProcessError::CancelledBeforeSpawn => WhisperError::Cancelled,
+                ProcessError::CancelledBeforeSpawn | ProcessError::CancelledDuringStart => {
+                    WhisperError::Cancelled
+                }
                 other => WhisperError::Process(other),
             })?;
         match outcome.termination {

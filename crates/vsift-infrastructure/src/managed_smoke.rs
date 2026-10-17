@@ -531,11 +531,14 @@ fn spawn_reason(error: &ProcessError) -> Reason {
             _ if is_executable_format_error(error) => Reason::WrongArchitecture,
             _ => Reason::ProviderFailed,
         },
-        ProcessError::CancelledBeforeSpawn => Reason::Cancelled,
+        ProcessError::CancelledBeforeSpawn | ProcessError::CancelledDuringStart => {
+            Reason::Cancelled
+        }
         ProcessError::IsolationUnavailable | ProcessError::DeadlineOutOfRange => {
             Reason::Preparation
         }
-        ProcessError::PipeUnavailable(_)
+        ProcessError::StartTaskFailed
+        | ProcessError::PipeUnavailable(_)
         | ProcessError::StreamRead(..)
         | ProcessError::OutputTaskFailed
         | ProcessError::Wait(_)

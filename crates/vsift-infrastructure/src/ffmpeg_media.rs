@@ -693,10 +693,13 @@ impl<'a> FfmpegMedia<'a> {
 /// here, not fall through as a provider that could not run.
 fn supervised_failure(error: ProcessError) -> MediaError {
     match error {
-        ProcessError::CancelledBeforeSpawn => MediaError::Cancelled,
+        ProcessError::CancelledBeforeSpawn | ProcessError::CancelledDuringStart => {
+            MediaError::Cancelled
+        }
         ProcessError::IsolationUnavailable
         | ProcessError::DeadlineOutOfRange
         | ProcessError::Spawn(_)
+        | ProcessError::StartTaskFailed
         | ProcessError::PipeUnavailable(_)
         | ProcessError::StreamRead(..)
         | ProcessError::OutputTaskFailed
