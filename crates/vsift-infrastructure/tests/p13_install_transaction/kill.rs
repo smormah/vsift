@@ -1130,21 +1130,16 @@ fn end_suspended_providers_within(root: &TestRoot, context: &str, wait: Duration
         let mut reported = BTreeSet::new();
         let mut ended = Vec::new();
         loop {
-            // The deadline is judged on a listing taken after the last
-            // attempt to end: a listing and an end are each a PowerShell
-            // start, several seconds apiece on a loaded machine, so judging
-            // the listing from before the end failed a stray that had just
-            // been ended (#253).
             let strays = strays_under(root)?;
             if strays.is_empty() {
                 return Ok(());
             }
-            if Instant::now() > deadline {
-                return Err(format!(
-                    "{context}: processes of the killed host were still there after {wait:?}: {strays:?}; ending them answered {ended:?}"
-                )
-                .into());
-            }
+            // Every listing gets its end pass before the deadline is looked
+            // at, so a short wait still shows what the reaper does with what
+            // it found: judged first, a listing that took longer than the
+            // whole wait (a PowerShell start, several seconds on a loaded
+            // machine) failed before anything was tried, and a reaper that
+            // also ended running providers passed the running case (#440).
             for stray in strays.iter().filter(|stray| stray.suspended) {
                 if reported.insert(stray.pid) {
                     eprintln!(
@@ -1153,6 +1148,20 @@ fn end_suspended_providers_within(root: &TestRoot, context: &str, wait: Duration
                     );
                 }
                 ended.push((stray.pid, end_stray(root, stray)?));
+            }
+            if Instant::now() > deadline {
+                // Judged on a listing taken after the last attempt to end:
+                // a listing and an end are each a PowerShell start, so the
+                // listing from before the end fails a stray that has just
+                // been ended (#253).
+                let left = strays_under(root)?;
+                if left.is_empty() {
+                    return Ok(());
+                }
+                return Err(format!(
+                    "{context}: processes of the killed host were still there after {wait:?}: {left:?}; ending them answered {ended:?}"
+                )
+                .into());
             }
             std::thread::sleep(Duration::from_millis(100));
         }
