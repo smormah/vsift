@@ -900,7 +900,7 @@ impl HandoffCommand {
 #[derive(Args, Debug)]
 pub(crate) struct HandoffCheckArguments {
     /// Absolute path of a file holding the whole draft report (at most
-    /// 64 KiB of UTF-8); without it the draft is read from standard input.
+    /// 128 KiB of UTF-8); without it the draft is read from standard input.
     #[arg(long)]
     pub file: Option<PathBuf>,
     /// Open session whose records every cited segment and evidence id must

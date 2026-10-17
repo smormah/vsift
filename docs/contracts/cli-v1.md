@@ -2358,7 +2358,9 @@ decisions G and H). The `handoff` namespace and the command are new in v1 before
 first publication (decision H4; ADR 0008 note of 2026-09-30).
 
 - **Input.** The whole draft report, from standard input or from the file `--file`
-  names (an absolute path). At most 65,536 bytes of strict UTF-8 are read; a larger
+  names (an absolute path). At most 131,072 bytes (128 KiB) of strict UTF-8 are read
+  (65,536 until `0.2.2`; #366 raised it so that a report of 70,000 characters or more,
+  which reaches VSift whole through the PowerShell form, can be checked); a larger
   draft, bytes that are not UTF-8, or a relative, missing or unreadable file is
   `INVALID_ARGUMENT` (exit 2) with fixed-prose remediation, and nothing is checked.
   The agent skill passes the draft in exactly two literal forms, its one pipe or

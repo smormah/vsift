@@ -1376,7 +1376,7 @@ fn check_chunk_checkpoint(data: &[u8]) -> Result<(), Violation> {
     }
 }
 
-/// The command reads at most 64 KiB of UTF-8; anything else is refused
+/// The command reads at most 128 KiB of UTF-8; anything else is refused
 /// before the check. An accepted draft's check is deterministic, bounded,
 /// its verdict is its errors, and every published finding keeps the
 /// grammar that keeps the draft's text out of it: a pointer of schema

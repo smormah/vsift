@@ -56,8 +56,16 @@ pub const HANDOFF_SCHEMA_JSON: &str = include_str!("../../../../skills/vsift/han
 /// The handoff version this check reads (the schema's `handoff_version`).
 pub const HANDOFF_VERSION: &str = "1";
 
-/// The largest report `handoff check` reads: 64 KiB of UTF-8.
-pub const MAX_HANDOFF_REPORT_BYTES: usize = 64 * 1024;
+/// The largest report `handoff check` reads: 128 KiB of UTF-8.
+///
+/// It was 64 KiB until `0.2.2`. #366: on Windows a report of 70,000
+/// characters or more could not be checked in one piece by any form the
+/// skill allows, and once a form that reaches `VSift` without the process
+/// command line was found (PowerShell's here-string through a client that
+/// hands PowerShell its script outside the command line), this bound was
+/// the next limit. 128 KiB holds such a report with room for text that is
+/// not ASCII; the check is linear in the report and stays bounded.
+pub const MAX_HANDOFF_REPORT_BYTES: usize = 128 * 1024;
 
 /// The most findings of one kind (errors, warnings, case notes) a result
 /// lists; `truncated` says when more were found.
@@ -65,7 +73,7 @@ pub const MAX_HANDOFF_FINDINGS: usize = 100;
 
 /// The remediation of a draft larger than [`MAX_HANDOFF_REPORT_BYTES`].
 pub const HANDOFF_DRAFT_TOO_LARGE_REMEDIATION: &str =
-    "The draft report is larger than 64 KiB; shorten it and check it again.";
+    "The draft report is larger than 128 KiB; shorten it and check it again.";
 
 /// The remediation of a draft that is not UTF-8 text.
 pub const HANDOFF_DRAFT_NOT_UTF8_REMEDIATION: &str = "The draft report is not UTF-8 text; pass the report itself, in the quoted heredoc or single-quoted here-string the skill shows, or with --file.";

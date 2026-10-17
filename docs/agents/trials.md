@@ -904,6 +904,11 @@ components are unchanged, and the pin in `committed_freeze` moved with it. The s
 ran under kept beside them as `freeze-0.2.1-rc.3.json`; they move aside when the next counted batch is prepared. **No batch has run under the new freeze,
 and no counted batch is run for this change:** under the test and release model of 2026-10-16 an ordinary week's skill wording change gets the
 uncounted skill smoke instead, which the supervisor schedules.
+**Later on 2026-10-17 the freeze is new once more (#366).** The skill now checks a long report whole through the PowerShell form on Windows
+and in parts in Git Bash ([`skill.md`](skill.md), "A long report's check on Windows"): `freeze write` at `9b4908b00988`, the commit of that
+pull request's branch at which the skill changed, gave the `skill` digest `13b485f323a07b5fdb4472bed8a5b911cf087bcff388728a1f292f51dbc71fe2`
+(it was `7f445a9a...`) and the whole-freeze digest `cfaf9783e7b26cc0a0088f0cef117ac469891f3920c090e5383c4e98bb14d9bb` (it was `f52265e7...`); the
+other six components are unchanged, and the pin in `committed_freeze` moved with it. No batch has run under it, and none is run for this change.
 
 ## Usage capture (P14)
 

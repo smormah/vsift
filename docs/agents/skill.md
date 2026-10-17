@@ -281,6 +281,35 @@ CLI's own advice for a missing tool changed in the same pull request (#396, [L-1
 trial freeze is new (`skill` `7f445a9a...`, whole freeze `f52265e7...`; [trials.md](trials.md), "The freeze (P14)"). **No agent
 has run this text:** it gets the uncounted skill smoke, and the compact tier is measured again only in the next counted batch.
 
+### A long report's check on Windows (#366; 2026-10-17, on `main` once merged, not released)
+
+The skill's two draft forms of `vsift handoff check` stay the only ones, and the check still reads a draft from standard
+input or `--file`. What was measured, on Windows 11 with Claude Code (desktop app 2.42304, Agent SDK 0.3.299), Git for Windows
+2.33.0 (bash 4.4.23) and PowerShell 7, by launching each form the way that client launches it (the measurement and the
+regression test are `crates/vsift-cli/tests/handoff_long_report_windows.rs`):
+
+- **Claude Code's PowerShell tool** hands PowerShell its script in an environment variable and runs it with
+  `Invoke-Expression`, so the here-string never travels on the process command line: reports of 30,000, 40,000, 70,000 and
+  140,000 characters all reached `vsift` whole. Put on the command line instead (`pwsh -Command <script>`, as the client the
+  issue used did), the script fails to start between 30,000 and 40,000 characters (`ENAMETOOLONG`; Windows allows 32,767).
+- **Claude Code's Bash tool** runs `bash -c` with the command inline, single-quoted for `eval` (each apostrophe becomes five
+  characters), and Git Bash cuts that argument at about 8,190 characters: a report of 7,029 characters passed, one of 7,529
+  failed with "unexpected EOF while looking for matching `'`" at line 75, which reproduces the issue's "about 70 lines in";
+  above 32,767 the shell does not start. The same tool also turned a doubled backslash into one in a quoted heredoc, so the
+  Git Bash form does not keep every character either.
+- **The check's own bound was the next limit:** the PowerShell form delivered 70,000 characters and the check refused them as
+  over 64 KiB. It now reads up to 128 KiB (ADR 0023 note of 2026-10-17).
+
+So the form for a long report on Windows is the PowerShell one, which passes neither the command line nor a file. The
+skill says so (`SKILL.md` REPORT, `commands.md` "Checking the draft", `handoff.md`): on Windows use the PowerShell form
+whenever the client has a PowerShell tool, check the whole report in one call, and fall back to parts of at most about
+30,000 characters if the client's PowerShell launch is refused as too long; in Git Bash keep parts of at most about 5,500
+characters (no longer "two parts": the text above the block is cut at line ends into as few parts as needed, then the block
+alone; a `line` counts from its part's first line). `SKILL.md` stays at 300 lines and its fuzz seed copy is the same bytes.
+Not measured: Codex (it cannot run VSift on Windows, [L-076](../planning/known-limits.md#l-076)), newer Git for Windows
+releases, and bash on Linux and macOS. **No agent has run this text**; the trial freeze is new ([trials.md](trials.md), "The
+freeze (P14)"): `skill` `13b485f3...`, whole freeze `cfaf9783...`.
+
 ## Keeping it in step with the CLI
 
 `crates/vsift-cli/src/skill_contract.rs` (unit tests of the CLI crate, run by `cargo
