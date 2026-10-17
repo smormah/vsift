@@ -135,7 +135,8 @@ pub struct RuntimeDiagnosis {
 pub enum UnqualifiedPlanAction {
     /// An executable responded, but compatibility is still unverified.
     ProbeOnly,
-    /// The user must locate or install a trusted executable outside managed setup.
+    /// The user must install a trusted executable outside managed setup, or
+    /// register one they have by its absolute path.
     ManualSelection,
 }
 

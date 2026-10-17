@@ -232,3 +232,25 @@ can disagree); and whether the local-ASR check of `setup check`, which finds the
 and runs under its own budget, should take the probes' results into account. All three are
 in the register ([L-161](../planning/known-limits.md#l-161)). The decision of this ADR is
 unchanged.
+
+## 2026-10-17 note: step 4's manual advice asks for no search (issue #396)
+
+Step 4 returns "a typed, bounded manual path", and a user may "provide an existing absolute
+path". Its text in every release up to `0.2.1` began "Install or locate", in `setup check`, in `setup plan` and in the
+`MISSING_CAPABILITY` remediations of the commands that need the tools. In agent-trial batch 3
+on `0.2.1-rc.3` a cold agent (no skill) in the missing-tools scenario sent one command that
+listed folders and tried to read a configuration file; the strict setting denied it. The logs
+hold no reasoning, so the advice is the likely prompt, not a shown cause. VSift cannot know
+where a person or an agent may look, and it needs only the path of a tool the user already has.
+
+As built for `0.2.2`: the advice names the commands that make a tool known to VSift (install a
+trusted build, or register a working one with `setup configure <tool> --executable
+<absolute-path>`; the readable `setup check` adds the per-call option and, where this target
+has the reviewed managed build, `setup plan` and `setup install`), and ends with "No need to
+search folders: ask the user where it is." `setup check` and `setup plan` share one text for a
+tool. Typed codes, reasons, schemas and exit statuses are unchanged; only text changed, under
+the rule of 2026-10-04 that a published code stays and the remediation carries the fix. The
+advice for a timed-out probe (the note of 2026-10-13) is unchanged. Whether the new words keep
+a cold agent from searching is not shown until the missing-tools cold scenario runs again on a
+build that has them ([L-164](../planning/known-limits.md#l-164)). The decision of this ADR is
+unchanged.

@@ -269,10 +269,17 @@ fn timed_out(kind: ProbeTimeoutKind, seconds: u64) -> DependencyState {
 }
 
 /// Words that tell a reader to get a tool or to point `VSift` at one. None
-/// is true of a tool that was found.
-const INSTALL_ADVICE: [&str; 10] = [
+/// is true of a tool that was found. The advice for a missing tool was
+/// "Install or locate" before issue #396 and is "Install a trusted build" and
+/// `setup configure` since; both are listed, so a timed-out tool gets neither.
+const INSTALL_ADVICE: [&str; 15] = [
     "Install or locate",
     "install or locate",
+    "Install a trusted",
+    "register a working one",
+    "setup configure ",
+    "<absolute-path>",
+    "No need to search folders",
     "setup install",
     "setup plan",
     "reviewed build",
@@ -398,11 +405,75 @@ fn each_tool_and_each_kind_of_timeout_gets_the_timeout_advice_only() -> TestResu
             )?;
             assert!(
                 text.contains(
-                    "  Install or locate this trusted tool, then rerun setup check with its absolute path using --"
+                    "  Install a trusted build or register a working one with setup configure "
+                ),
+                "{text}"
+            );
+            assert!(
+                text.contains(
+                    "
+  No need to search folders: ask the user where it is.
+"
                 ),
                 "{text}"
             );
             assert!(!text.contains("--timeout-seconds"), "{text}");
+        }
+    }
+    Ok(())
+}
+
+/// Issue #396: under a missing tool `setup check` said "Install or locate
+/// this trusted tool", and a cold agent read "locate" as leave to search the
+/// machine. For each tool, missing or found and failing, with and without
+/// managed installation, the advice now names the commands that make the tool
+/// known to `VSift` (`setup configure` with an absolute path, the per-call
+/// option, and `setup plan` with `setup install` only where they are offered)
+/// and says on a line of its own that no folder search is needed.
+#[test]
+fn a_missing_tool_is_told_how_to_register_it_and_that_no_search_is_needed() -> TestResult {
+    let available = || DependencyState::Available {
+        version: String::from("fixture 1"),
+    };
+    for (index, dependency) in RuntimeDependency::ALL.into_iter().enumerate() {
+        let identifier = dependency.identifier();
+        for state in [
+            DependencyState::Missing,
+            DependencyState::Unhealthy {
+                message: String::from("process exited with exit code: 3"),
+            },
+        ] {
+            for managed_install in [
+                ManagedPlanAvailability::Qualified,
+                ManagedPlanAvailability::TargetUnavailable,
+            ] {
+                let mut states = [available(), available(), available()];
+                states[index] = state.clone();
+                let text = setup_check_text(states, RuntimeReadiness::Degraded, managed_install)?;
+                let managed = if managed_install == ManagedPlanAvailability::Qualified {
+                    "Or let VSift install the reviewed build: review setup plan, then accept it with setup install."
+                } else {
+                    "Managed installation is not available for this target."
+                };
+                let expected = format!(
+                    "\n  Install a trusted build or register a working one with setup configure {identifier} --executable <absolute-path>, then rerun setup check (or try a path once with setup check --{identifier} <absolute-path>). {managed}\n  No need to search folders: ask the user where it is.\n"
+                );
+                assert!(
+                    text.contains(&expected),
+                    "{identifier} {managed_install:?}: {text}"
+                );
+                assert_eq!(
+                    text.matches("No need to search folders").count(),
+                    1,
+                    "{text}"
+                );
+                assert_eq!(
+                    text.contains("setup plan"),
+                    managed_install == ManagedPlanAvailability::Qualified,
+                    "{text}"
+                );
+                assert!(!text.to_lowercase().contains("locate"), "{text}");
+            }
         }
     }
     Ok(())

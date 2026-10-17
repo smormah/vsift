@@ -43,7 +43,7 @@ const CLI_DEADLINE: Duration = Duration::from_secs(60);
 const OWNED_PREFIX: &str = "vsift-p06-e2e-";
 const MAX_DIAGNOSTIC_CHARS: usize = 240;
 const QUALIFIED_TARGET: &str = "ubuntu_24_04_x86_64";
-const MISSING_MEDIA_TOOLS: &str = "FFmpeg or FFprobe is not on PATH; install or locate trusted builds, then run setup configure ffmpeg|ffprobe --executable <absolute-path>";
+const MISSING_MEDIA_TOOLS: &str = "FFmpeg or FFprobe is not on PATH; put trusted builds on PATH, or register them with setup configure ffmpeg|ffprobe --executable <absolute-path>";
 
 static NEXT_ROOT: AtomicU64 = AtomicU64::new(0);
 

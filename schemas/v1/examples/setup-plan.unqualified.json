@@ -17,21 +17,21 @@
         "status": "missing",
         "disposition": "manual_selection_required",
         "required_authority": "user",
-        "next_step": "Install or locate trusted FFmpeg, then run setup configure ffmpeg --executable <absolute-path> and setup check."
+        "next_step": "Install a trusted FFmpeg or register a working one with setup configure ffmpeg --executable <absolute-path>, then run setup check. No need to search folders: ask the user where it is."
       },
       {
         "dependency": "ffprobe",
         "status": "missing",
         "disposition": "manual_selection_required",
         "required_authority": "user",
-        "next_step": "Install or locate trusted FFprobe, then run setup configure ffprobe --executable <absolute-path> and setup check."
+        "next_step": "Install a trusted FFprobe or register a working one with setup configure ffprobe --executable <absolute-path>, then run setup check. No need to search folders: ask the user where it is."
       },
       {
         "dependency": "whisper",
         "status": "missing",
         "disposition": "manual_selection_required",
         "required_authority": "user",
-        "next_step": "For local ASR, install or locate a trusted whisper.cpp CLI, then run setup configure whisper --executable <absolute-path> and setup check. A supplied transcript can skip local ASR."
+        "next_step": "Install a trusted whisper.cpp CLI or register a working one with setup configure whisper --executable <absolute-path>, then run setup check. No need to search folders: ask the user where it is. A supplied transcript can skip local ASR."
       }
     ]
   },

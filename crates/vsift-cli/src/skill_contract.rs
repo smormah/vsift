@@ -860,6 +860,46 @@ fn find_spoken_spans_searches_before_it_reads_the_transcript() -> Result<(), Str
     problems.into_result()
 }
 
+/// Issue #395: in agent-trial batch 2 on `0.2.1-rc.3` two compact Claude
+/// runs read a whole 20-second transcript with `transcript get --view brief`
+/// and never ran `search`, although `FIND_SPOKEN_SPANS` said "Always search
+/// first". The bullet said what to do but not that a whole read is no
+/// substitute, and the read that followed it allowed one window to "hold the
+/// whole transcript". The rule is now also one of the rules that always
+/// apply, with its reason, and the window no longer invites a whole read.
+#[test]
+fn search_before_any_transcript_read_is_a_rule_that_always_applies() -> Result<(), String> {
+    let rules = flattened_state("## Rules that always apply", "## The procedure")?;
+    let find = flattened_state("### 3. FIND_SPOKEN_SPANS", "### 4. INSPECT_CARDS")?;
+    let mut problems = Problems::default();
+    for (part, text, wanted) in [
+        (
+            "the rules that always apply",
+            &rules,
+            "**To find what was said, run `search` before any `transcript get`:** its hits are the segment ids and times you cite; a whole-transcript read never replaces it.",
+        ),
+        (
+            "FIND_SPOKEN_SPANS",
+            &find,
+            "**Always search first, before any `transcript get`**, even on a video short enough to read whole: its hits carry the ids you cite; a whole-transcript read is no substitute.",
+        ),
+        (
+            "FIND_SPOKEN_SPANS",
+            &find,
+            "Only then read around the hits with a bounded window, about 15 s either side, never the whole transcript instead:",
+        ),
+    ] {
+        if !text.contains(wanted) {
+            problems.add(format!("{part} no longer says {wanted:?}"));
+        }
+    }
+    if find.contains("may hold the whole transcript") {
+        problems
+            .add("FIND_SPOKEN_SPANS again lets one window hold the whole transcript".to_owned());
+    }
+    problems.into_result()
+}
+
 #[test]
 fn console_commands_parse_and_respect_their_class() -> Result<(), String> {
     let mut problems = Problems::default();

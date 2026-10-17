@@ -37,7 +37,7 @@ const GAPS_TRUNCATED_REASON: &str = "gap_list_truncated";
 pub const VISUAL_COVERAGE_WARNING: &str = "Part of the requested range has no visual candidates because it is not analysed yet or could not be analysed; coverage lists each gap and its reason. Run candidates again for the same range to continue not_analyzed and deadline_exceeded parts.";
 
 /// Remediation when `FFmpeg` or `FFprobe` is missing for visual analysis.
-pub const VISUAL_TOOLS_REMEDIATION: &str = "Visual candidates are found by decoding the video's frames with FFmpeg and FFprobe; Whisper and a model are not needed. Nothing was changed. Install or locate trusted builds, register them with setup configure ffmpeg|ffprobe --executable <path>, then run setup check.";
+pub const VISUAL_TOOLS_REMEDIATION: &str = "Visual candidates are found by decoding the video's frames with FFmpeg and FFprobe; Whisper and a model are not needed. Nothing was changed. Install trusted builds or register working ones with setup configure ffmpeg|ffprobe --executable <path>, then run setup check. No need to search folders: ask the user where each one is.";
 
 /// Remediation when the video has no video stream.
 pub const NO_VIDEO_STREAM_REMEDIATION: &str = "The source has no video stream, so it has no visual candidates. Nothing was changed. Use transcript get or search for its speech instead.";

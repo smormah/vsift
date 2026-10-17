@@ -51,10 +51,13 @@ const SILENT_FOR: Duration = Duration::from_secs(300);
 /// Upper bound for one `vsift` invocation; a hang is killed and fails.
 const CLI_DEADLINE: Duration = Duration::from_secs(120);
 
-/// Words that tell a reader to get a tool or to point `VSift` at one.
-const INSTALL_ADVICE: [&str; 8] = [
+/// Words that tell a reader to get a tool or to point `VSift` at one: the
+/// advice for a missing tool before issue #396 and since.
+const INSTALL_ADVICE: [&str; 10] = [
     "Install or locate",
     "install or locate",
+    "Install a trusted",
+    "No need to search folders",
     "setup install",
     "setup plan",
     "setup configure ",

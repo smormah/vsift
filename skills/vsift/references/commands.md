@@ -57,7 +57,7 @@ whole; do not pipe it into `grep`, `head` or anything else.
 | `vsift session retain` | explicit | Writes a bundle to a new directory the user names; add `--include-source` only if the user asked for the video to be included. |
 | `vsift session clean` | explicit | Removes every expired session of the root, not only yours. `--expired --dry-run` is read-only and may run freely to show what would be removed. |
 | `vsift session init-workspace` | never | Worker-host setup, not an investigation step. |
-| `vsift transcript get` | free | Bounded pages. |
+| `vsift transcript get` | free | Bounded pages around `search` hits (or a resume card's windows); run `search` first to find what was said. |
 | `vsift transcript retranscribe` | free | Only when the session has no usable transcript or a range needs checking (for a stretch a `partial` read lists: once, and only if the question needs it, see handoff.md); always with `--operation-id`. |
 | `vsift search` | free | Literal words, never a pattern. |
 | `vsift candidates` | free | Shortlist only. |

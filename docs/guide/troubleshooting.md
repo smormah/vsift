@@ -168,7 +168,7 @@ a model. When one is missing, the error says which kind of thing, and `setup che
 ```console
 $ vsift ingest ./F04-speech.mp4 --transcript ./F04-speech.srt
 Error: A required local capability is unavailable. (MISSING_CAPABILITY)
-Fix: Importing a supplied transcript needs FFmpeg and FFprobe to measure the video, but not Whisper or a model. Install or locate trusted builds, register them with setup configure, then run setup check.
+Fix: Importing a supplied transcript needs FFmpeg and FFprobe to measure the video, but not Whisper or a model. Install trusted builds or register working ones with setup configure ffmpeg|ffprobe --executable <path>, then run setup check. No need to search folders: ask the user where each one is.
 ```
 
 ```console
@@ -177,11 +177,14 @@ VSift setup check
 Profile: desktop
 Status: blocked
 [missing] FFmpeg (media_processing): not found on PATH [filtered PATH]
-  Install or locate this trusted tool, then rerun setup check with its absolute path using --ffmpeg. Managed installation is not available for this target.
+  Install a trusted build or register a working one with setup configure ffmpeg --executable <absolute-path>, then rerun setup check (or try a path once with setup check --ffmpeg <absolute-path>). Managed installation is not available for this target.
+  No need to search folders: ask the user where it is.
 [missing] FFprobe (media_processing): not found on PATH [filtered PATH]
-  Install or locate this trusted tool, then rerun setup check with its absolute path using --ffprobe. Managed installation is not available for this target.
+  Install a trusted build or register a working one with setup configure ffprobe --executable <absolute-path>, then rerun setup check (or try a path once with setup check --ffprobe <absolute-path>). Managed installation is not available for this target.
+  No need to search folders: ask the user where it is.
 [missing] Whisper (transcription): not found on PATH [filtered PATH]
-  Install or locate this trusted tool, then rerun setup check with its absolute path using --whisper. Managed installation is not available for this target.
+  Install a trusted build or register a working one with setup configure whisper --executable <absolute-path>, then rerun setup check (or try a path once with setup check --whisper <absolute-path>). Managed installation is not available for this target.
+  No need to search folders: ask the user where it is.
 Media executable probes are blocked until FFmpeg and FFprobe respond.
 Local ASR model: not registered (setup configure-model --file <path>)
 Local ASR check: not run: FFmpeg and FFprobe are needed and must pass their own check

@@ -7,8 +7,8 @@ use vsift::{
     ProbeTimeoutKind, RuntimeDependency, RuntimeDiagnosis, RuntimeReadiness,
 };
 use vsift_contract::{
-    DependencyLookup, MAX_PROVIDER_DETAIL_BYTES, ProbeTimeHeadroom, explicit_path_option,
-    probe_deadline_text, sanitize_untrusted_text,
+    DependencyLookup, MAX_PROVIDER_DETAIL_BYTES, NO_FOLDER_SEARCH_ADVICE, ProbeTimeHeadroom,
+    explicit_path_option, probe_deadline_text, sanitize_untrusted_text,
 };
 
 use super::{
@@ -88,18 +88,7 @@ where
         match &status.state {
             DependencyState::Available { .. } => {}
             DependencyState::Missing | DependencyState::Unhealthy { .. } => {
-                text.push_fixed(
-                    "  Install or locate this trusted tool, then rerun setup check with its \
-                     absolute path using ",
-                )
-                .push_value(explicit_path_option(status.dependency))
-                .push_fixed(if managed_install == ManagedPlanAvailability::Qualified {
-                    ". Or let VSift install the reviewed build: review setup plan, then accept \
-                     it with setup install."
-                } else {
-                    ". Managed installation is not available for this target."
-                })
-                .end_line();
+                push_missing_tool_advice(&mut text, status.dependency, managed_install);
             }
             DependencyState::TimedOut(timeout) => push_timeout_advice(&mut text, *timeout),
         }
@@ -118,6 +107,42 @@ where
     text.finish()
 }
 
+/// The advice under a tool that is missing, or was found and failed its
+/// probe (issue #396).
+///
+/// It names every way the tool can become known to `VSift` without anyone
+/// looking for it: install a trusted build, register a working one with
+/// `setup configure` and its absolute path (or try a path once with the
+/// per-call option), or, where this target has it, the reviewed managed
+/// build through `setup plan` and `setup install`. The second line says that
+/// no folder search is needed and who knows the path: the advice once said
+/// "install or locate this trusted tool", and a cold agent read "locate" as
+/// leave to search the machine.
+fn push_missing_tool_advice(
+    text: &mut TerminalText,
+    dependency: RuntimeDependency,
+    managed_install: ManagedPlanAvailability,
+) {
+    text.push_fixed("  Install a trusted build or register a working one with setup configure ")
+        .push_value(dependency.identifier())
+        .push_fixed(
+            " --executable <absolute-path>, then rerun setup check (or try a path once with \
+             setup check ",
+        )
+        .push_value(explicit_path_option(dependency))
+        .push_fixed(" <absolute-path>)")
+        .push_fixed(if managed_install == ManagedPlanAvailability::Qualified {
+            ". Or let VSift install the reviewed build: review setup plan, then accept it with \
+             setup install."
+        } else {
+            ". Managed installation is not available for this target."
+        })
+        .end_line();
+    text.push_fixed("  ")
+        .push_fixed(NO_FOLDER_SEARCH_ADVICE)
+        .end_line();
+}
+
 const fn state_marker(state: &DependencyState) -> &'static str {
     match state {
         DependencyState::Available { .. } => "ok",
@@ -129,8 +154,8 @@ const fn state_marker(state: &DependencyState) -> &'static str {
 
 /// The advice under a tool whose probe timed out (issue #391).
 ///
-/// The tool was found, so nothing here says to install or locate it, and no
-/// managed installation is offered for it. It says which of the two things
+/// The tool was found, so nothing here says to install it or where to
+/// register one, and no managed installation is offered for it. It says which of the two things
 /// happened, under which deadline, why a healthy tool can be this slow, and
 /// what helps. The deadline is the one the three probes share, which is
 /// said, because the tool did not have all of it to itself. More time is
