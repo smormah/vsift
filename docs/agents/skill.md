@@ -281,17 +281,6 @@ CLI's own advice for a missing tool changed in the same pull request (#396, [L-1
 trial freeze is new (`skill` `7f445a9a...`, whole freeze `f52265e7...`; [trials.md](trials.md), "The freeze (P14)"). **No agent
 has run this text:** it gets the uncounted skill smoke, and the compact tier is measured again only in the next counted batch.
 
-### Shortlisting the screens of a long recording (#367; 2026-10-17, on `main` once merged, not released)
-
-The CLI gained `candidates --omit periodic` (the maintainer's decision of 2026-10-18; [`cli-v1.md`](../contracts/cli-v1.md),
-"Leaving out periodic candidates"), and the skill uses it where the list was too dense: a range with no transcript, read 5 minutes at
-a time. `SKILL.md` INSPECT_CARDS adds the option to that sentence (the line count stays 300; the fuzz seed copy is the same bytes),
-`references/commands.md` gains its two allowed forms (with and without `--cursor`) and a paragraph on `data.omitted` and the
-cursor, and `references/budgets.md` gives the measured effect: on a generated 20:57 walkthrough the shortlist went from 38,349 to
-18,324 characters in the same 5 calls, with every distinct screen still listed ([`candidates-long-recording-0.2.2.md`](../planning/candidates-long-recording-0.2.2.md)).
-With a transcript the skill still asks only around its spans and does not use the option. An older `vsift` refuses the option as
-unknown, which the skill says. **No agent has run this text**; the trial freeze is new ([trials.md](trials.md), "The freeze (P14)"):
-`skill` `2b304deb...`, whole freeze `8afb2bf6...`.
 ### A long report's check on Windows (#366; 2026-10-17, on `main` once merged, not released)
 
 The skill's two draft forms of `vsift handoff check` stay the only ones, and the check still reads a draft from standard
@@ -320,6 +309,18 @@ alone; a `line` counts from its part's first line). `SKILL.md` stays at 300 line
 Not measured: Codex (it cannot run VSift on Windows, [L-076](../planning/known-limits.md#l-076)), newer Git for Windows
 releases, and bash on Linux and macOS. **No agent has run this text**; the trial freeze is new ([trials.md](trials.md), "The
 freeze (P14)"): `skill` `13b485f3...`, whole freeze `cfaf9783...`.
+
+### Shortlisting the screens of a long recording (#367; 2026-10-18, on `main` once merged, not released)
+
+The CLI gained `candidates --omit periodic` (the maintainer's decision of 2026-10-18; [`cli-v1.md`](../contracts/cli-v1.md),
+"Leaving out periodic candidates"), and the skill uses it where the list was too dense: a range with no transcript, read 5 minutes at
+a time. `SKILL.md` INSPECT_CARDS adds the option to that sentence (the line count stays 300; the fuzz seed copy is the same bytes),
+`references/commands.md` gains its two allowed forms (with and without `--cursor`) and a paragraph on `data.omitted` and the
+cursor, and `references/budgets.md` gives the measured effect: on a generated 20:57 walkthrough the shortlist went from 38,349 to
+18,324 characters in the same 5 calls, with every distinct screen still listed ([`candidates-long-recording-0.2.2.md`](../planning/candidates-long-recording-0.2.2.md)).
+With a transcript the skill still asks only around its spans and does not use the option. An older `vsift` refuses the option as
+unknown, which the skill says. **No agent has run this text**; the trial freeze is new ([trials.md](trials.md), "The freeze (P14)"):
+`skill` `bd205d6c...`, whole freeze `10180cd8...`.
 
 ## Keeping it in step with the CLI
 
