@@ -185,3 +185,55 @@ retranscription, candidates) keep their full-hash policy. Regression tests:
 `evidence_calls_hash_the_copy_only_when_its_identity_is_new_or_changed` (unit, with the
 test-only hash counter) and the engine's
 `a_modified_source_copy_is_an_integrity_failure_and_nothing_is_committed`.
+
+## 2026-10-17 implementation note: a copy that will clearly not fit its ten minutes is stopped early (#325)
+
+The ten-minute bound on a staging's copy (`MAX_SOURCE_READ_DURATION`, SEC-05) is
+unchanged. What changes is when a hopeless copy says so: it used to run for the full
+ten minutes, then fail. Now `CopyForecast` in `source_snapshot.rs` watches the copy's
+speed and may stop it early. This is the first step of the design in #325; the rest is
+later work (L-140).
+
+The rule is cautious on purpose. Stopping a copy that would have finished is worse
+than the minutes saved by stopping one that would not.
+
+- **When it can decide:** never in the first minute (`FORECAST_AFTER`).
+- **How speed is measured:** over spans of at least 10 seconds (`FORECAST_WINDOW`).
+  A span counts only if it holds more than 16 blocks of 64 KiB
+  (`FORECAST_MIN_BLOCKS`). A span filled by one long read says nothing about the rest
+  of the file, so it is passed over. That read can be a cloud-synced file downloading
+  on first read.
+- **Which speed is used:** the fastest span seen so far, the optimistic reading.
+- **When it stops the copy:** only when, at that fastest speed, the copy would end
+  after half as long again as the limit (`FORECAST_MARGIN`, fifteen minutes). A
+  forecast closer than that is left to the limit, as before.
+
+The answer keeps the published code, `INVALID_SOURCE`, as the copy that runs out of
+time does (L-127). It has its own typed cause
+(`OpenSessionError::SourceCopyWouldBeTooSlow`) and its own remediation
+(`SOURCE_COPY_WOULD_BE_TOO_SLOW_REMEDIATION`, example
+`ingest-copy-stopped-early.json`). The remediation's first sentence says the copy
+would take longer than the limit; the advice is the same.
+
+`job run` copies through the same loop and reaches the same cause. Two reads are not
+forecast: the re-hash of the original and the re-hash of the session's own copy. They
+keep the plain limit.
+
+**The known cost.** A copy that stays slow for more than its first minute and then
+speeds up is judged by the speed it showed. Such a copy can be stopped although it
+would have finished; L-140 records this.
+
+**The numbers are a choice to ratify:** one minute, ten seconds, sixteen blocks, one
+and a half times the limit. They are not measured on real slow storage; the tests
+model speeds.
+
+Tests, in `source_snapshot.rs`:
+- `a_copy_far_too_slow_for_the_limit_is_stopped_after_its_first_minute`;
+- `a_copy_near_the_limit_or_inside_it_is_not_stopped_early`;
+- `the_margin_is_half_as_long_again_as_the_limit`;
+- `a_first_read_that_waits_long_and_a_fast_rest_is_not_stopped_early`;
+- `a_copy_with_no_measurable_span_is_left_to_the_limit`;
+- `the_fastest_span_decides_and_not_the_average`;
+- `a_copy_stopped_early_is_its_own_cause_and_not_an_invalid_source`.
+
+The CLI and contract tests hold the answer.

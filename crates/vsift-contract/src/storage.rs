@@ -150,6 +150,16 @@ pub const SOURCE_NO_ROOM_REMEDIATION: &str = "The folder that holds VSift's sess
 /// L-140), and a test of the CLI, which sees both, holds the two together.
 pub const SOURCE_COPY_TOO_SLOW_REMEDIATION: &str = "Copying this video into VSift's session took longer than the ten-minute limit, so the copy was stopped. The video itself was not judged and may be fine (the code is the closest published one); nothing was committed. This happens with a large video on a slow disk, a network share, a removable drive or a cloud-synced folder that downloads on first read. Report this to the user: copying the video to a local disk and running the same command on that copy usually fixes it (if the folder that holds VSift's sessions is on a slow or network disk, that can be the slow side instead). Running the same command again on the same file starts the copy from the beginning.";
 
+/// Remediation when the copy of the source into the session was stopped early
+/// because, at the fastest speed measured, it would have taken longer than the
+/// ten-minute limit (#325).
+///
+/// The code stays `INVALID_SOURCE`, as for the copy that ran out of time
+/// ([`SOURCE_COPY_TOO_SLOW_REMEDIATION`]), and the advice is the same; the
+/// first sentence differs, because the copy did not run for ten minutes, and
+/// is stable. It names no path, size or speed.
+pub const SOURCE_COPY_WOULD_BE_TOO_SLOW_REMEDIATION: &str = "Copying this video into VSift's session would take longer than the ten-minute limit: VSift measured how fast the copy went and stopped it after the first minute or so instead of at ten minutes. The video itself was not judged and may be fine (the code is the closest published one); nothing was committed. This happens with a large video on a slow disk, a network share, a removable drive or a cloud-synced folder that downloads on first read. Report this to the user: copying the video to a local disk and running the same command on that copy usually fixes it (if the folder that holds VSift's sessions is on a slow or network disk, that can be the slow side instead). Running the same command again on the same file measures the copy again from the beginning.";
+
 /// Remediation when no published session has the given id (#277): it was never
 /// opened, is still being opened by another command, its opening was
 /// interrupted (a crash) and left only a registration, it was cleaned already,

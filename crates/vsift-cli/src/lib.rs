@@ -53,11 +53,12 @@ use vsift_contract::{
     MEDIA_TOOLS_FOR_TRANSCRIPT_REMEDIATION, NO_AUDIO_STREAM_REMEDIATION, NO_TRANSCRIPT_REMEDIATION,
     NO_VIDEO_STREAM_REMEDIATION, OperationResponse, SESSION_NOT_PUBLISHED_REMEDIATION,
     SOURCE_ACCESS_DENIED_REMEDIATION, SOURCE_COPY_TOO_SLOW_REMEDIATION,
-    SOURCE_IS_FOLDER_REMEDIATION, SOURCE_IS_LINK_REMEDIATION, SOURCE_NO_ROOM_REMEDIATION,
-    SOURCE_NOT_FOUND_REMEDIATION, SOURCE_SPECIAL_FILE_REMEDIATION, STALE_PLAN_REMEDIATION,
-    SUPERSEDED_REMEDIATION, TRANSCRIPTION_RUNNING_REMEDIATION, TerminalEventResponse,
-    UNKNOWN_JOB_REMEDIATION, UNKNOWN_REVISION_REMEDIATION, UNOWNED_SESSION_ROOT_REMEDIATION,
-    UNPINNED_MODEL_REMEDIATION, VISUAL_TOOLS_REMEDIATION, WORKSPACE_NOT_DURABLE_REMEDIATION,
+    SOURCE_COPY_WOULD_BE_TOO_SLOW_REMEDIATION, SOURCE_IS_FOLDER_REMEDIATION,
+    SOURCE_IS_LINK_REMEDIATION, SOURCE_NO_ROOM_REMEDIATION, SOURCE_NOT_FOUND_REMEDIATION,
+    SOURCE_SPECIAL_FILE_REMEDIATION, STALE_PLAN_REMEDIATION, SUPERSEDED_REMEDIATION,
+    TRANSCRIPTION_RUNNING_REMEDIATION, TerminalEventResponse, UNKNOWN_JOB_REMEDIATION,
+    UNKNOWN_REVISION_REMEDIATION, UNOWNED_SESSION_ROOT_REMEDIATION, UNPINNED_MODEL_REMEDIATION,
+    VISUAL_TOOLS_REMEDIATION, WORKSPACE_NOT_DURABLE_REMEDIATION,
     WORKSPACE_POLICY_MISMATCH_REMEDIATION, WORKSPACE_ROOT_REMEDIATION, local_asr_failure_summary,
     local_asr_verification_summary, managed_lifecycle_remediation, media_tool_verification_summary,
     non_private_folder_summary, search_query_rejection_summary, transcript_rejection_summary,
@@ -807,6 +808,9 @@ fn worker_remediation(error: &EngineError) -> Option<String> {
         EngineError::OpenSession(OpenSessionError::SourceCopyTooSlow) => {
             SOURCE_COPY_TOO_SLOW_REMEDIATION
         }
+        EngineError::OpenSession(OpenSessionError::SourceCopyWouldBeTooSlow) => {
+            SOURCE_COPY_WOULD_BE_TOO_SLOW_REMEDIATION
+        }
         EngineError::SessionNotPublished(_) => SESSION_NOT_PUBLISHED_REMEDIATION,
         EngineError::WorkspaceNotDurable => WORKSPACE_NOT_DURABLE_REMEDIATION,
         EngineError::AdmissionExceedsCapacity { .. } => ADMISSION_CAPACITY_REMEDIATION,
@@ -1172,8 +1176,9 @@ mod tests {
     use vsift_contract::{
         CommandName, IDEMPOTENCY_CONFLICT_REMEDIATION, JOB_BUSY_REMEDIATION,
         SOURCE_ACCESS_DENIED_REMEDIATION, SOURCE_COPY_TOO_SLOW_REMEDIATION,
-        SOURCE_IS_FOLDER_REMEDIATION, SOURCE_NO_ROOM_REMEDIATION, SOURCE_NOT_FOUND_REMEDIATION,
-        SOURCE_SPECIAL_FILE_REMEDIATION, TRANSCRIPTION_RUNNING_REMEDIATION,
+        SOURCE_COPY_WOULD_BE_TOO_SLOW_REMEDIATION, SOURCE_IS_FOLDER_REMEDIATION,
+        SOURCE_NO_ROOM_REMEDIATION, SOURCE_NOT_FOUND_REMEDIATION, SOURCE_SPECIAL_FILE_REMEDIATION,
+        TRANSCRIPTION_RUNNING_REMEDIATION,
     };
 
     use super::{
@@ -1462,6 +1467,58 @@ mod tests {
                 serde_json::json!({"executable": "vsift", "arguments": ["job", "status", job.as_str()]})
             );
         }
+        Ok(())
+    }
+
+    /// #325, the first step: a copy stopped early because it would not fit
+    /// the ten minutes keeps the same code and exit status (`INVALID_SOURCE`,
+    /// 3) and has its own remediation, whose first sentence says the copy
+    /// would take longer, not that it took ten minutes. The whole answer is the
+    /// published example, in JSON and for a person.
+    #[test]
+    fn a_source_copy_stopped_early_keeps_its_code_and_says_it_would_not_fit()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let example: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../../schemas/v1/examples/ingest-copy-stopped-early.json"),
+        )?)?;
+        let early = || {
+            CommandFailure::from(EngineError::OpenSession(
+                OpenSessionError::SourceCopyWouldBeTooSlow,
+            ))
+        };
+        assert_eq!(
+            early().summary(),
+            Some(SOURCE_COPY_WOULD_BE_TOO_SLOW_REMEDIATION)
+        );
+        let mut stdout = Vec::new();
+        let mut stderr = Vec::new();
+        let mut writer = OutputWriter::new(&mut stdout, &mut stderr);
+        let written =
+            write_command_failure(&mut writer, OutputMode::Json, CommandName::Ingest, early());
+        assert_eq!(written, ProcessExit::Source);
+        assert!(stderr.is_empty());
+        let value: serde_json::Value = serde_json::from_slice(&stdout)?;
+        assert_eq!(value, example);
+
+        let mut stdout = Vec::new();
+        let mut stderr = Vec::new();
+        let mut writer = OutputWriter::new(&mut stdout, &mut stderr);
+        let written =
+            write_command_failure(&mut writer, OutputMode::Human, CommandName::Ingest, early());
+        assert_eq!(written, ProcessExit::Source);
+        assert!(stdout.is_empty());
+        assert_eq!(
+            String::from_utf8(stderr)?,
+            format!(
+                "Error: The source is invalid or unsupported. (INVALID_SOURCE)\nFix: {SOURCE_COPY_WOULD_BE_TOO_SLOW_REMEDIATION}\n"
+            )
+        );
+        assert!(SOURCE_COPY_WOULD_BE_TOO_SLOW_REMEDIATION.contains("ten-minute limit"));
+        assert!(
+            SOURCE_COPY_WOULD_BE_TOO_SLOW_REMEDIATION
+                .starts_with("Copying this video into VSift's session would take longer")
+        );
         Ok(())
     }
 

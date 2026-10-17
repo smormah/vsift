@@ -17,9 +17,9 @@ use std::{fs, io, path::PathBuf};
 use serde_json::Value;
 use vsift_contract::{
     CommandName, OperationResponse, PrivateFolder, SOURCE_ACCESS_DENIED_REMEDIATION,
-    SOURCE_COPY_TOO_SLOW_REMEDIATION, SOURCE_IS_FOLDER_REMEDIATION, SOURCE_NOT_FOUND_REMEDIATION,
-    SOURCE_SPECIAL_FILE_REMEDIATION, TerminalEventResponse, UNOWNED_SESSION_ROOT_REMEDIATION,
-    non_private_folder_summary,
+    SOURCE_COPY_TOO_SLOW_REMEDIATION, SOURCE_COPY_WOULD_BE_TOO_SLOW_REMEDIATION,
+    SOURCE_IS_FOLDER_REMEDIATION, SOURCE_NOT_FOUND_REMEDIATION, SOURCE_SPECIAL_FILE_REMEDIATION,
+    TerminalEventResponse, UNOWNED_SESSION_ROOT_REMEDIATION, non_private_folder_summary,
 };
 use vsift_domain::FailureCode;
 
@@ -94,6 +94,25 @@ fn a_source_copy_that_was_too_slow_matches_the_example() -> TestResult {
     assert_eq!(value, load("examples/ingest-copy-too-slow.json")?);
     assert_eq!(value["error"]["code"], "INVALID_SOURCE");
     assert_eq!(value["error"]["retryable"], false);
+    let event = serde_json::to_value(TerminalEventResponse::new(response))?;
+    validate("terminal-event.schema.json", &event)?;
+    Ok(())
+}
+
+/// The answer to a source copy stopped early because it would not fit the
+/// ten-minute limit (#325): the same code and message as the copy that ran
+/// out of time, and its own remediation.
+#[test]
+fn a_source_copy_stopped_early_matches_the_example() -> TestResult {
+    let response = OperationResponse::<Value>::failure_with_remediation(
+        CommandName::Ingest.identifier(),
+        FailureCode::InvalidSource,
+        SOURCE_COPY_WOULD_BE_TOO_SLOW_REMEDIATION.to_owned(),
+    );
+    let value = serde_json::to_value(&response)?;
+    validate("operation-response.schema.json", &value)?;
+    assert_eq!(value, load("examples/ingest-copy-stopped-early.json")?);
+    assert_eq!(value["error"]["code"], "INVALID_SOURCE");
     let event = serde_json::to_value(TerminalEventResponse::new(response))?;
     validate("terminal-event.schema.json", &event)?;
     Ok(())

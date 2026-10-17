@@ -172,9 +172,14 @@ reserve is `RESOURCE_LIMIT` there.
 says what happened: the copy took longer than the ten-minute limit, the video itself was not judged and may be fine,
 nothing was committed, report it to the user, and copying the video to a local disk and running the same command on
 that copy usually fixes it; the text adds that the folder that holds VSift's sessions can be the slow side instead (example [`ingest-copy-too-slow.json`](../../schemas/v1/examples/ingest-copy-too-slow.json)). Before,
-the same answer came with no remediation and so said only that the video was invalid. The limit is on the whole copy,
-not on its progress, and it is fixed: no option raises it, the partial copy is removed, and running the command again
-starts from the beginning. A 20 GiB source needs about 34 MiB/s sustained to be copied inside it, which a slow disk,
+the same answer came with no remediation and so said only that the video was invalid. The limit is on the whole copy
+and it is fixed: no option raises it, the partial copy is removed, and running the command again starts from the
+beginning. **Since `0.2.2` (#325) a copy that clearly cannot fit the limit is stopped early**, at the earliest after its
+first minute: when, at the fastest speed measured over any ten-second span of its copy (a span of at least sixteen
+64 KiB blocks), it would end after fifteen minutes or more. The answer is the same `INVALID_SOURCE` (exit 3), with a
+remediation whose first sentence says the copy would take longer than the ten-minute limit and was stopped early, and
+the same advice (example [`ingest-copy-stopped-early.json`](../../schemas/v1/examples/ingest-copy-stopped-early.json)).
+A copy whose forecast is closer than that runs until the limit, as before (known limit L-140). A 20 GiB source needs about 34 MiB/s sustained to be copied inside it, which a slow disk,
 a network drive, a removable drive or a cloud-synced folder that downloads on first read may not give (known limit
 L-140). The code stays because changing a published failure code is not additive within v1 (known limit L-127). A
 worker request (`job run`) copies its source with the same limit and reaches the same cause: its result's failure

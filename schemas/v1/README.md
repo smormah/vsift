@@ -363,7 +363,9 @@ folder is not VSift's and what to do; it is checked by `storage_contract` and by
 the copy of the video into the session took longer than the ten-minute limit (#325):
 `INVALID_SOURCE`, as it always was, with the remediation that says the copy was slow and the
 video was not judged; it is checked by `storage_contract` and by a unit test of the CLI, which
-builds it from the typed cause. `ingest-source-not-found.json`, `ingest-source-is-folder.json` and
+builds it from the typed cause. `ingest-copy-stopped-early.json` is the same failure when the copy was stopped early
+because, at the fastest speed measured, it would have taken fifteen minutes or more (#325): the same code and message,
+its own remediation; it is checked the same two ways. `ingest-source-not-found.json`, `ingest-source-is-folder.json` and
 `ingest-source-access-denied.json` are the `ingest` failures when the path it was given names no file (a mistyped
 name, a command run from another folder), names a folder (Windows; Linux and macOS answer `INVALID_SOURCE`, unchanged)
 or is a file the operating system refused to open for reading (#369): `STORAGE_IO`, the code and message 0.2.0
