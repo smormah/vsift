@@ -1076,7 +1076,10 @@ the decisions taken inside this ADR:
   product's behaviour with barriers on, not a disk's.
 - **The load's request mix avoids three clips.** F02, F04 and F05 fail a five-second range of local
   recognition (#274, L-124) while the whole clips recognise; a load campaign needs requests that complete,
-  and the diagnosis phase still lists every clip, with a whole-clip trial for each that fails. The soak
+  and the diagnosis phase still lists every clip, with a whole-clip trial for each that fails.
+  *Note of 2026-10-17:* #274 is fixed since `0.2.0-rc.1` (P14 PR 7, L-130), so the request mix takes the three
+  clips again and a load run recognises a range cut mid-speech through the worker path; a load run of 0.1.0 itself
+  now fails on them, as expected. The soak
   runs the operator's cleaner over every bucket every 30 rounds: a workspace keeps at most 4,096 request
   records and prunes only those of sessions that no longer exist (the runbook, section 5), so the first
   12,000-request run, which cleaned one bucket at a time, met that documented `RESOURCE_LIMIT` at its line
