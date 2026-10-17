@@ -251,6 +251,94 @@ class PlatformTests(unittest.TestCase):
         self.assertEqual(outputs["worker_boundary"], "true")
 
 
+class CodeQLTests(unittest.TestCase):
+    """`Analyze Rust` is required, so it always reports; this decides only whether it analyses."""
+
+    def test_rust_and_what_cargo_resolves_are_analysed(self) -> None:
+        for path in (
+            "crates/vsift-domain/src/lib.rs",
+            "crates/vsift-cli/tests/anything.txt",
+            "fuzz/fuzz_targets/transcript_srt.rs",
+            "tools/p10-crash-campaign/src/main.rs",
+            "tools/vsift-release/Cargo.toml",
+            "Cargo.toml",
+            "Cargo.lock",
+            "rust-toolchain.toml",
+            ".cargo/config.toml",
+            ".github/workflows/codeql.yml",
+            ".github/codeql/codeql-config.yml",
+        ):
+            self.assertTrue(lanes.reads_rust(path), path)
+            self.assertEqual(choose(path)[1]["codeql"], "true", path)
+
+    def test_documentation_and_workflows_that_are_not_codeql_need_no_analysis(self) -> None:
+        for path in (
+            "docs/development.md",
+            "memory/TODO.md",
+            "README.md",
+            "CHANGELOG.md",
+            "npm/vsift-cli/package.json",
+            "skills/vsift/SKILL.md",
+            "schemas/v1/example.json",
+            "tools/ci_lanes.py",
+            "tools/p14-published/upgrade.cjs",
+            ".github/workflows/ci.yml",
+            ".github/workflows/nightly.yml",
+            ".github/workflows/p14-local-upgrade.yml",
+        ):
+            self.assertFalse(lanes.reads_rust(path), path)
+            self.assertEqual(choose(path)[1]["codeql"], "false", path)
+
+    def test_the_choice_is_independent_of_the_lane(self) -> None:
+        # A workflow change runs the full lane of tests but gives CodeQL nothing new to read.
+        selection, outputs = choose(".github/workflows/ci.yml")
+        self.assertEqual(selection.lane, "full")
+        self.assertEqual(outputs["codeql"], "false")
+        # A Rust change in the crates lane is analysed.
+        selection, outputs = choose("crates/vsift-cli/src/main.rs", texts={"crates/vsift-cli/src/main.rs": [PLAIN_RUST]})
+        self.assertEqual(selection.lane, "crates")
+        self.assertEqual(outputs["codeql"], "true")
+
+    def test_one_file_that_it_reads_among_documents_selects_it(self) -> None:
+        self.assertTrue(lanes.codeql_selected(["docs/development.md", "crates/vsift/src/lib.rs"]))
+        self.assertFalse(lanes.codeql_selected(["docs/development.md", "memory/TODO.md"]))
+
+    def test_an_unreadable_change_or_a_request_for_everything_is_analysed(self) -> None:
+        self.assertTrue(lanes.codeql_selected([]))
+        self.assertTrue(lanes.codeql_selected(["docs/development.md"], force_full=True))
+        self.assertEqual(choose()[1]["codeql"], "true")
+
+    def test_the_label_does_not_ask_for_the_analysis(self) -> None:
+        _, outputs = choose("docs/development.md", labels=(lanes.FULL_LABEL,))
+        self.assertEqual(outputs["codeql"], "false")
+
+
+class LocalUpgradeTests(unittest.TestCase):
+    """`P14 local upgrade` runs in the nightly; a pull request gets it only by the label."""
+
+    def test_no_change_asks_for_it_without_the_label(self) -> None:
+        for changed in (
+            ("crates/vsift-cli/src/main.rs",),
+            ("npm/vsift-cli/package.json",),
+            ("schemas/v1/example.json",),
+            ("Cargo.lock",),
+            (".github/workflows/p14-local-upgrade.yml",),
+            ("tools/p14-published/upgrade.cjs",),
+            ("docs/development.md",),
+        ):
+            self.assertEqual(choose(*changed)[1]["local_upgrade"], "false", changed)
+
+    def test_the_full_ci_label_asks_for_it(self) -> None:
+        for changed in (("docs/development.md",), ("crates/vsift-cli/src/main.rs",)):
+            _, outputs = choose(*changed, labels=(lanes.FULL_LABEL,))
+            self.assertEqual(outputs["local_upgrade"], "true", changed)
+
+    def test_other_labels_and_the_full_lane_alone_do_not(self) -> None:
+        _, outputs = choose("Cargo.lock", labels=("dependencies",))
+        self.assertEqual(outputs["lane"], "full")
+        self.assertEqual(outputs["local_upgrade"], "false")
+
+
 class OutputTests(unittest.TestCase):
     def test_outputs_carry_only_fixed_words_and_package_names(self) -> None:
         hostile = "crates/vsift-cli/src/$(curl example.invalid)`x`\n.rs"
