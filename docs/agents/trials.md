@@ -895,6 +895,15 @@ classifications above, between batch 1 and batch 2, as the freeze rule allows): 
 `freeze write`, and batch 1's records and summary stay as graded at the time, so the baseline's safety counts
 (four runs that "failed the gate", all of them classifications of these three kinds) are not comparable with a
 later round's without reading which kind. Usefulness grading did not change.
+**On 2026-10-17 the freeze is new again, in the `0.2.2` cycle and not at a candidate's cut.** The skill's "search first" rule became
+one of the rules that always apply (#395; [`skill.md`](skill.md), "The change for 0.2.2"), and `committed_freeze` fails every pull request
+while the committed files disagree with the tree, so the change that edits the skill writes the freeze: `freeze write` at `8872a4d52b65`,
+the commit of that pull request's branch at which the skill changed, gave the `skill` digest `7f445a9a748fbbcc5eecf24066dacb09936ea637ae77b40c5a56aabdf71bc0a4`
+(it was `256b4840...`) and the whole-freeze digest `f52265e754c26691000c36360c8361a89e5fd4760c76ff43fd6d10ba84ff1a31` (it was `a48567ac...`); the other six
+components are unchanged, and the pin in `committed_freeze` moved with it. The sixth candidate's records stay in `batch-2/` and `batch-3/`, with the file they
+ran under kept beside them as `freeze-0.2.1-rc.3.json`; they move aside when the next counted batch is prepared. **No batch has run under the new freeze,
+and no counted batch is run for this change:** under the test and release model of 2026-10-16 an ordinary week's skill wording change gets the
+uncounted skill smoke instead, which the supervisor schedules.
 
 ## Usage capture (P14)
 

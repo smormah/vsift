@@ -3,7 +3,7 @@
 Batch 3 is the cold final round: no skill, no documents, the CLI on `PATH`, 18 counted runs, run for the second time and the first time for the patch release `0.2.1`, against the
 published `0.2.1-rc.3` (tag `v0.2.1-rc.3` at `fa380021f2aa8db40fdccdb7c410839e8fc10f4c`) from a clean install: every one of the 18 records names the registry's integrity for the
 installed packages (equal to what npm installed), the launcher's digest check and the version line `vsift 0.2.1-rc.3 (fa380021f2aa)`. It ran under the freeze committed in
-[`batch-3/freeze.json`](batch-3/freeze.json) (the same bytes as batch 2's, whole-freeze digest `a48567ac403149561019344cae58e137ae5bce5eb55a022e73cb2143ea60f6ea`; no skill is installed
+`batch-3/freeze.json`, kept since 2026-10-17 as [`batch-3/freeze-0.2.1-rc.3.json`](batch-3/freeze-0.2.1-rc.3.json) (the same bytes as batch 2's, whole-freeze digest `a48567ac403149561019344cae58e137ae5bce5eb55a022e73cb2143ea60f6ea`; no skill is installed
 in a cold run, so each record's skill digest is `none`); `freeze check` answered "nothing frozen has changed". Claude Code 2.1.284 ran on the maintainer's Windows 11 machine under
 the **strict** setting (plain `vsift` commands only; Claude Sonnet 5.5 six runs, Claude Opus 5.5 three) and Codex 0.155.0-alpha.16 in the Linux container under the **realistic** one
 (ordinary read-only helpers inside the container's sandbox; GPT-6-Sol six, GPT-6-Astra three), on 2026-10-15, in about half an hour. The records, the summary and both clients' state are in
