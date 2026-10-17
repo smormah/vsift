@@ -511,8 +511,11 @@ impl WhisperCli {
     /// with the reviewed pinned models (its profile), the decoding profile and
     /// the threads.
     ///
-    /// The model is hashed in full (the base model is about 148 MB), so a run
-    /// calls this before its first chunk and after its last, not per chunk.
+    /// The model is hashed in full (the base model is about 148 MB, about
+    /// 0.3 s in a release build). A run calls this before its first chunk and
+    /// after every chunk the recogniser answered, so that no answer of a
+    /// swapped model is kept or checkpointed (#361); a recognition of a 30 s
+    /// chunk takes seconds, so the hash adds a few per cent.
     ///
     /// # Errors
     ///

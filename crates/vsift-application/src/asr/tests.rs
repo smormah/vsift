@@ -382,7 +382,9 @@ async fn cancellation_mid_run_produces_nothing() -> TestResult {
 }
 
 /// T-05: a model other than the selected one, or one that changes during the
-/// run, fails the run instead of mixing outputs.
+/// run, fails the run instead of mixing outputs. Since #361 the identity is
+/// read after every answer, so a swap fails the run at the first answer given
+/// after it, not when the run ends.
 #[tokio::test]
 async fn model_changes_before_or_during_the_run_fail_it() -> TestResult {
     let audio = FakeAudio::new(Vec::new());
@@ -407,7 +409,23 @@ async fn model_changes_before_or_during_the_run_fail_it() -> TestResult {
             reason: AsrFailureReason::ModelChanged,
         })
     );
-    assert_eq!(swapped.calls.load(Ordering::SeqCst), 3);
+    assert_eq!(swapped.calls.load(Ordering::SeqCst), 1);
+
+    // The same model before the run and after its first answer, another one
+    // after its second: two chunks are asked, the third never.
+    let later = FakeRecognizer::new(identity(DIGEST)?);
+    if let Ok(mut identities) = later.identities.lock() {
+        identities.push(identity(DIGEST)?);
+        identities.push(identity(OTHER_DIGEST)?);
+    }
+    assert_eq!(
+        run(&audio, &later, &Flag(&NEVER)).await?,
+        Err(AsrFailure {
+            stage: AsrStage::RecognizerIdentity,
+            reason: AsrFailureReason::ModelChanged,
+        })
+    );
+    assert_eq!(later.calls.load(Ordering::SeqCst), 2);
 
     let mut missing = FakeRecognizer::new(identity(DIGEST)?);
     missing.output = |_| Err(SpeechRecognitionError::ModelUnavailable);
