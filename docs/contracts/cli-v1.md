@@ -2052,7 +2052,7 @@ depends on the reason:
 
 | `reason` | `next_step` |
 | --- | --- |
-| `missing`, `unhealthy` | unchanged: `Install or locate a trusted FFmpeg executable, then rerun setup check.` (and the FFprobe and whisper.cpp forms) |
+| `missing`, `unhealthy` | the advice of a missing tool: `Install or locate a trusted FFmpeg executable, then rerun setup check.` in `0.2.1` (and the FFprobe and whisper.cpp forms); rewritten since, see "The advice for a missing tool" below |
 | `timed_out`, the tool was started | `FFmpeg was found and started but did not answer before the deadline all tool checks share (30 seconds). A first run after an install or restart can be slow. Run setup check again, or allow more time with --timeout-seconds (up to 60).` |
 | `timed_out`, the tool was not started | `FFprobe was found but not started: the deadline all tool checks share (30 seconds) had already passed. A first run after an install or restart can be slow. Run setup check again, or allow more time with --timeout-seconds (up to 60).` |
 | `timed_out`, started, and the deadline was already the longest (`--timeout-seconds 60`) | `FFmpeg was found and started but did not answer before the deadline all tool checks share (60 seconds); --timeout-seconds cannot allow more. Run setup check again. If it never answers, the tool itself hangs: run it yourself to see.` |
@@ -2087,6 +2087,33 @@ machines; `--timeout-seconds 60` is the most a caller can ask for. The local-ASR
 not use the probes' results: it finds the tools again and runs under its own budget, so one
 answer can say `timed_out` for a tool and `verified` for local ASR, and both are true.
 Example: [`setup-check.timed-out.json`](../../schemas/v1/examples/setup-check.timed-out.json).
+
+**The advice for a missing tool (issue #396, after `0.2.1`).** Under a tool that is `missing` or
+`unhealthy`, every release up to `0.2.1` said "Install or locate this trusted tool" (readable) or
+"Install or locate a trusted FFmpeg executable" (`next_step`), and the media-tool errors said
+"Install or locate trusted builds". In agent-trial batch 3 a cold agent read "locate" as leave to
+search the machine: it tried to list folders and read a configuration file. VSift needs only the
+path of a tool the user has, and cannot know where a person or an agent may look, so the advice now
+names the commands that make a tool known to VSift and says that no folder search is needed:
+
+| Where | Text |
+| --- | --- |
+| `setup check` `remediation.next_step` and `setup plan` `next_step` (`manual_selection_required`), FFmpeg | `Install a trusted FFmpeg or register a working one with setup configure ffmpeg --executable <absolute-path>, then run setup check. No need to search folders: ask the user where it is.` |
+| the same, FFprobe | the same with `FFprobe` and `ffprobe` |
+| the same, whisper.cpp | `Install a trusted whisper.cpp CLI or register a working one with setup configure whisper --executable <absolute-path>, then run setup check. No need to search folders: ask the user where it is. A supplied transcript can skip local ASR.` |
+| readable `setup check`, under the tool | `Install a trusted build or register a working one with setup configure ffmpeg --executable <absolute-path>, then rerun setup check (or try a path once with setup check --ffmpeg <absolute-path>).`, then the managed sentence as before (`Or let VSift install the reviewed build: review setup plan, then accept it with setup install.` where this target has it, `Managed installation is not available for this target.` where not), and on a line of its own `No need to search folders: ask the user where it is.` |
+| `MISSING_CAPABILITY` remediations of `candidates`, the evidence commands, `ingest --transcript` and local ASR | their first sentences as before, then `Install trusted builds or register working ones with setup configure ffmpeg\|ffprobe --executable <path>, then run setup check. No need to search folders: ask the user where each one is.` (`ffmpeg\|ffprobe\|whisper` for local ASR) |
+
+The `setup check` and `setup plan` steps are one text since this change (the plan's said "Install or
+locate trusted FFmpeg, then run setup configure ..."). It does not name the managed installation:
+`setup check` reports it in `remediation.managed_install`, and a plan that can install a tool offers
+it as an action with a step of its own, never with this one (a plan carries this step only where no
+reviewed build is offered). **Compatibility:** the failure codes, `reason`, `required_authority`,
+`managed_install`, `explicit_path_option`, the schemas and the exit statuses are unchanged; only the
+text is new, under the rule of 2026-10-04 that a published code stays and the remediation carries the
+fix. Each `next_step` fits the 240 characters of the `setup check` schema. A plan's steps are part of
+the intent its digest binds, but this step is never in a plan that has an action, so no saved plan
+that `setup install` can accept changes. The advice for a `timed_out` tool (#391) is unchanged.
 
 P06 will distinguish an already suitable provider, an installable missing provider,
 and one requiring user-managed installation or explicit configuration. `setup plan`
@@ -2703,7 +2730,7 @@ root keeps its existing 5-second wait for a creator) before it is refused.
   "verification_scope": "executable_probe_only",
   "local_asr_model": "not_checked",
   "dependencies": [
-    {"dependency": "ffmpeg", "capability": "media_processing", "status": "missing", "detail": null, "lookup": "filtered_path", "validation": "not_validated", "remediation": {"reason": "missing", "managed_install": "catalogue_accepted", "required_authority": "user", "next_step": "Install or locate a trusted FFmpeg executable, then rerun setup check.", "explicit_path_option": "--ffmpeg"}}
+    {"dependency": "ffmpeg", "capability": "media_processing", "status": "missing", "detail": null, "lookup": "filtered_path", "validation": "not_validated", "remediation": {"reason": "missing", "managed_install": "catalogue_accepted", "required_authority": "user", "next_step": "Install a trusted FFmpeg or register a working one with setup configure ffmpeg --executable <absolute-path>, then run setup check. No need to search folders: ask the user where it is.", "explicit_path_option": "--ffmpeg"}}
   ],
   "local_asr": {
     "model": {"status": "not_selected", "profile": null},

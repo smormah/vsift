@@ -227,14 +227,14 @@ impl SetupCheckDependencyResponse {
 /// responded.
 ///
 /// A tool whose probe timed out was found, so it gets advice of its own:
-/// telling its owner to install or locate it is false (issue #391). A tool
-/// that was found and failed its probe keeps the advice of a missing one,
-/// which is true of it: another executable, or a repaired one, is the fix.
+/// telling its owner to install it is false (issue #391). A tool that was
+/// found and failed its probe keeps the advice of a missing one, which is
+/// true of it: another executable, or a repaired one, is the fix.
 fn check_next_step(status: &DependencyStatus) -> Option<String> {
     match &status.state {
         DependencyState::Available { .. } => None,
         DependencyState::Missing | DependencyState::Unhealthy { .. } => {
-            Some(manual_dependency_step(status.dependency).to_owned())
+            Some(missing_tool_step(status.dependency).to_owned())
         }
         DependencyState::TimedOut(timeout) => {
             Some(timed_out_check_step(status.dependency, *timeout))
@@ -242,16 +242,40 @@ fn check_next_step(status: &DependencyStatus) -> Option<String> {
     }
 }
 
-const fn manual_dependency_step(dependency: RuntimeDependency) -> &'static str {
+/// The sentence every piece of advice for a missing or failing tool ends
+/// its instructions with (issue #396).
+///
+/// `VSift` needs only the absolute path of a tool the user already has, and it
+/// cannot know where a person or an agent may look. Advice that said
+/// "install or locate" this tool was read by a cold agent as an invitation to
+/// search the machine for it, and it listed folders and tried to read a
+/// configuration file. The advice now says what `VSift` needs and who knows it.
+/// The readable output of `setup check` prints it on a line of its own; the
+/// JSON texts and the error remediations carry it inline.
+pub const NO_FOLDER_SEARCH_ADVICE: &str = "No need to search folders: ask the user where it is.";
+
+/// The `next_step` of `setup check` and of `setup plan` for a tool that is
+/// missing, or was found and failed its probe (issue #396).
+///
+/// It names the two ways a tool becomes known to `VSift` that need no search:
+/// install a trusted one, or register one that works with `setup configure`
+/// and the absolute path the user gives; then [`NO_FOLDER_SEARCH_ADVICE`].
+/// The managed installation is not named here: `setup check` reports whether
+/// it is offered in `managed_install`, and a plan offers it as an action of
+/// its own, never with this step. Each text fits the 240 characters the
+/// published `setup check` schema allows a `next_step`, which is why the
+/// whisper.cpp form leaves out "for local ASR" and keeps the supplied
+/// transcript's sentence.
+const fn missing_tool_step(dependency: RuntimeDependency) -> &'static str {
     match dependency {
         RuntimeDependency::Ffmpeg => {
-            "Install or locate a trusted FFmpeg executable, then rerun setup check."
+            "Install a trusted FFmpeg or register a working one with setup configure ffmpeg --executable <absolute-path>, then run setup check. No need to search folders: ask the user where it is."
         }
         RuntimeDependency::Ffprobe => {
-            "Install or locate a trusted FFprobe executable, then rerun setup check."
+            "Install a trusted FFprobe or register a working one with setup configure ffprobe --executable <absolute-path>, then run setup check. No need to search folders: ask the user where it is."
         }
         RuntimeDependency::Whisper => {
-            "Install or locate a trusted whisper.cpp CLI executable for local ASR, then rerun setup check. A supplied transcript can skip local ASR."
+            "Install a trusted whisper.cpp CLI or register a working one with setup configure whisper --executable <absolute-path>, then run setup check. No need to search folders: ask the user where it is. A supplied transcript can skip local ASR."
         }
     }
 }
@@ -298,8 +322,8 @@ impl ProbeTimeHeadroom {
 }
 
 /// The `setup check` advice for a tool whose probe timed out: what happened,
-/// under which deadline, and what helps. It never says to install or locate
-/// the tool, because the tool was found.
+/// under which deadline, and what helps. It never says to install the tool,
+/// because the tool was found.
 ///
 /// The two kinds read differently because they are different facts: a tool
 /// that was never started cannot be said to have given no answer. More time
@@ -596,7 +620,7 @@ fn dependency_response(
                     | DependencyState::Missing
                     | DependencyState::Unhealthy { .. },
                     PlannedSupply::Installed | PlannedSupply::NotInstalled,
-                ) => manual_plan_step(planned.dependency),
+                ) => missing_tool_step(planned.dependency),
             },
         ),
     };
@@ -717,20 +741,6 @@ fn action_response(action: &ManagedSetupAction, current: bool) -> SetupPlanActio
                 .to_owned(),
             })
             .collect(),
-    }
-}
-
-const fn manual_plan_step(dependency: RuntimeDependency) -> &'static str {
-    match dependency {
-        RuntimeDependency::Ffmpeg => {
-            "Install or locate trusted FFmpeg, then run setup configure ffmpeg --executable <absolute-path> and setup check."
-        }
-        RuntimeDependency::Ffprobe => {
-            "Install or locate trusted FFprobe, then run setup configure ffprobe --executable <absolute-path> and setup check."
-        }
-        RuntimeDependency::Whisper => {
-            "For local ASR, install or locate a trusted whisper.cpp CLI, then run setup configure whisper --executable <absolute-path> and setup check. A supplied transcript can skip local ASR."
-        }
     }
 }
 

@@ -21,8 +21,8 @@ use vsift_application::{
     SetupProfile, SetupSelectionState, plan_managed_setup,
 };
 use vsift_contract::{
-    DependencyLookup, MAX_PROBE_TIMEOUT, OperationResponse, ProbeTimeHeadroom, SavedSetupPlan,
-    SetupCheckResponse, SetupPlanResponse, probe_deadline_text,
+    DependencyLookup, MAX_PROBE_TIMEOUT, NO_FOLDER_SEARCH_ADVICE, OperationResponse,
+    ProbeTimeHeadroom, SavedSetupPlan, SetupCheckResponse, SetupPlanResponse, probe_deadline_text,
 };
 use vsift_domain::{
     DependencyState, DependencyStatus, FailureCode, ManagedTarget, ProbeTimeout, ProbeTimeoutKind,
@@ -32,10 +32,14 @@ use vsift_domain::{
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
 /// Words that tell a reader to get a tool, or where to point `VSift` at one.
-/// None of them is true of a tool that was found.
-const INSTALL_ADVICE: [&str; 9] = [
+/// None of them is true of a tool that was found. The advice for a missing
+/// tool said "Install or locate" before issue #396 and says "Install a
+/// trusted" and "No need to search folders" since; all are listed.
+const INSTALL_ADVICE: [&str; 11] = [
     "Install or locate",
     "install or locate",
+    "Install a trusted",
+    "No need to search folders",
     "setup install",
     "setup configure",
     "reviewed build",
@@ -337,14 +341,26 @@ fn after_the_longest_deadline_more_time_is_not_offered() -> TestResult {
 }
 
 /// The advice for a missing tool, and for one that was found and failed its
-/// probe, is the published text, unchanged: for those two it is true.
+/// probe, in `setup check` and in a plan that cannot install it (issue #396).
+///
+/// It said "Install or locate a trusted `FFmpeg` executable", and a cold agent
+/// read "locate" as leave to search the machine. It now names the command
+/// that makes the tool known to `VSift` with the path the user gives, and
+/// says that no folder search is needed. The published code, reason and
+/// shape are unchanged: only the text is, which is the rule of 2026-10-04
+/// (a published failure code stays and the remediation carries the fix).
 #[test]
-fn a_missing_or_failing_tool_keeps_its_published_advice() -> TestResult {
+fn a_missing_or_failing_tool_is_told_to_register_it_and_not_to_search() -> TestResult {
     let published = [
-        "Install or locate a trusted FFmpeg executable, then rerun setup check.",
-        "Install or locate a trusted FFprobe executable, then rerun setup check.",
-        "Install or locate a trusted whisper.cpp CLI executable for local ASR, then rerun setup check. A supplied transcript can skip local ASR.",
+        "Install a trusted FFmpeg or register a working one with setup configure ffmpeg --executable <absolute-path>, then run setup check. No need to search folders: ask the user where it is.",
+        "Install a trusted FFprobe or register a working one with setup configure ffprobe --executable <absolute-path>, then run setup check. No need to search folders: ask the user where it is.",
+        "Install a trusted whisper.cpp CLI or register a working one with setup configure whisper --executable <absolute-path>, then run setup check. No need to search folders: ask the user where it is. A supplied transcript can skip local ASR.",
     ];
+    for text in published {
+        assert!(text.contains(NO_FOLDER_SEARCH_ADVICE), "{text}");
+        assert!(!text.to_lowercase().contains("locate"), "{text}");
+        assert!(text.chars().count() <= 240, "{text}");
+    }
     for (state, reason) in [
         (DependencyState::Missing, "missing"),
         (
@@ -354,18 +370,33 @@ fn a_missing_or_failing_tool_keeps_its_published_advice() -> TestResult {
             "unhealthy",
         ),
     ] {
-        let response = check(
-            &diagnosis(
-                [state.clone(), state.clone(), state],
-                RuntimeReadiness::Blocked,
-            ),
+        for managed_install in [
             ManagedPlanAvailability::Qualified,
-        )?;
-        validate("setup-check-response.schema.json", &response)?;
+            ManagedPlanAvailability::TargetUnavailable,
+        ] {
+            let response = check(
+                &diagnosis(
+                    [state.clone(), state.clone(), state.clone()],
+                    RuntimeReadiness::Blocked,
+                ),
+                managed_install,
+            )?;
+            validate("setup-check-response.schema.json", &response)?;
+            for (index, text) in published.into_iter().enumerate() {
+                let item = dependency(&response, index)?;
+                assert_eq!(item["remediation"]["reason"], reason);
+                assert_eq!(next_step(item)?, text, "{reason} {managed_install:?}");
+            }
+        }
+
+        let plan = plan_where_nothing_can_be_installed([state.clone(), state.clone(), state]);
+        let response =
+            serde_json::to_value(OperationResponse::complete("setup.plan", &present(&plan))?)?;
+        validate("setup-plan.schema.json", &response)?;
         for (index, text) in published.into_iter().enumerate() {
-            let item = dependency(&response, index)?;
-            assert_eq!(item["remediation"]["reason"], reason);
-            assert_eq!(next_step(item)?, text, "{reason}");
+            let item = &response["data"]["dependencies"][index];
+            assert_eq!(item["disposition"], "manual_selection_required", "{item}");
+            assert_eq!(item["next_step"], text, "{reason}");
         }
     }
     Ok(())

@@ -876,6 +876,7 @@ mod tests {
             assert!(step.ends_with("then run setup plan again."), "{step}");
             assert!(!step.contains("setup install"), "{step}");
             assert!(!step.contains("nstall or locate"), "{step}");
+            assert!(!step.contains("No need to search folders"), "{step}");
         }
 
         // With a model of the user's own nothing at all is proposed, and the
@@ -1036,6 +1037,7 @@ mod tests {
                 "decides nothing for it",
                 "proposes no install",
                 "nstall or locate",
+                "No need to search folders",
             ] {
                 assert!(!step.contains(untrue), "{untrue}: {step}");
             }

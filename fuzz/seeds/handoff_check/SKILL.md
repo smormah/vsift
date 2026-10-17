@@ -33,9 +33,10 @@ what to look at and write the report, and never process media or run anything bu
    `--limit 20` on `search`, `transcript get` and `candidates`, and `--max-frames 4` on a
    burst ([references/budgets.md](references/budgets.md)). Count every tool call and image.
    The host measures and enforces the wall time; you cannot and do not time yourself.
-6. **Cite or say you cannot.** Every observed claim cites a transcript segment, frame,
-   crop or audio clip by its identity and time. A gap is never proof that something
-   did not happen. The report format is in [references/handoff.md](references/handoff.md).
+6. **Cite or say you cannot.** Every observed claim cites a transcript segment, frame, crop or audio clip by its
+   identity and time. A gap is never proof that something did not happen. The report format is in
+   [references/handoff.md](references/handoff.md). **To find what was said, run `search` before any
+   `transcript get`:** its hits are the segment ids and times you cite; a whole-transcript read never replaces it.
 7. **Never assume you can see an image.** You may cite a frame's pixels only after
    the image check below has passed and you have opened that frame yourself.
 8. **The report is your final message.** Never create, edit or save a file: the one write
@@ -111,8 +112,8 @@ vsift transcript retranscribe <session> --operation-id <operation-id> --events j
 
 ### 3. FIND_SPOKEN_SPANS
 
-- **Always search first**, even when the video is short enough to read whole: search hits
-  carry the segment ids and times you cite. Search for the few most specific words of the
+- **Always search first, before any `transcript get`**, even on a video short enough to read whole: its hits
+  carry the ids you cite; a whole-transcript read is no substitute. Search for the few most specific words of the
   question (identifiers, error words, numbers), one query at a time. Add `--view brief` to each `search`,
   `transcript get` and `candidates` (ids, times and `display_text` stay); `--limit` is 20 at most, 50 on `standard`:
 
@@ -120,8 +121,7 @@ vsift transcript retranscribe <session> --operation-id <operation-id> --events j
 vsift search <session> --query "<text>" --view brief --limit <n> --json
 ```
 
-- Only then read around the hits with a bounded window, about 15 s either side (on a
-  short video one window may hold the whole transcript as context):
+- Only then read around the hits with a bounded window, about 15 s either side, never the whole transcript instead:
 
 ```console
 vsift transcript get <session> --from <from-us> --to <to-us> --view brief --limit <n> --json

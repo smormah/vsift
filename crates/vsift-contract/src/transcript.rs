@@ -949,7 +949,7 @@ pub fn transcript_rejection_summary(error: TranscriptImportError) -> String {
 }
 
 /// Remediation when `FFmpeg` or `FFprobe` is missing for transcript alignment.
-pub const MEDIA_TOOLS_FOR_TRANSCRIPT_REMEDIATION: &str = "Importing a supplied transcript needs FFmpeg and FFprobe to measure the video, but not Whisper or a model. Install or locate trusted builds, register them with setup configure, then run setup check.";
+pub const MEDIA_TOOLS_FOR_TRANSCRIPT_REMEDIATION: &str = "Importing a supplied transcript needs FFmpeg and FFprobe to measure the video, but not Whisper or a model. Install trusted builds or register working ones with setup configure ffmpeg|ffprobe --executable <path>, then run setup check. No need to search folders: ask the user where each one is.";
 
 /// Remediation when a session has no transcript to read.
 pub const NO_TRANSCRIPT_REMEDIATION: &str = "This session has no transcript yet. Open the video again with ingest --transcript to import a SubRip or WebVTT file, or run transcript retranscribe with this session to transcribe its speech locally with whisper.cpp.";

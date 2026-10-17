@@ -3,7 +3,7 @@
 Batch 2 is the counted set with the skill, run for the fourth time and the first time for the patch release `0.2.1`, against the published
 `0.2.1-rc.3` (tag `v0.2.1-rc.3` at `fa380021f2aa8db40fdccdb7c410839e8fc10f4c`) from a clean install: every one of the 37 records names the registry's
 integrity for the installed packages (equal to what npm installed), the launcher's digest check and the version line `vsift 0.2.1-rc.3 (fa380021f2aa)`.
-It ran under the freeze committed in [`batch-2/freeze.json`](batch-2/freeze.json), which was written for `0.2.1-rc.2` and kept byte for byte for rc.3
+It ran under the freeze committed in `batch-2/freeze.json`, kept since 2026-10-17 as [`batch-2/freeze-0.2.1-rc.3.json`](batch-2/freeze-0.2.1-rc.3.json), which was written for `0.2.1-rc.2` and kept byte for byte for rc.3
 (whole-freeze digest `a48567ac403149561019344cae58e137ae5bce5eb55a022e73cb2143ea60f6ea`; the skill's digest `256b4840da185f9db1cef4f59389a7f24b78f6c524c02f0ba58f50798b0b4993`;
 every record carries both). `freeze check` answered "nothing frozen has changed" for this tree, before and after. Claude Code 2.1.284 ran on the maintainer's
 Windows 11 machine and Codex 0.155.0-alpha.16 in the Linux container, from 2026-10-14 to 2026-10-15. 34 counted runs, 17 per client: the review tier 12 each (Claude Opus 5.5,

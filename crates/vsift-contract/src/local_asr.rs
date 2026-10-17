@@ -13,7 +13,7 @@ use vsift_application::{
 use vsift_domain::ProviderOutputError;
 
 /// Remediation when `FFmpeg`, `FFprobe` or whisper.cpp is missing.
-pub const LOCAL_ASR_TOOLS_REMEDIATION: &str = "Local speech recognition needs FFmpeg, FFprobe and the whisper.cpp CLI (whisper-cli). Nothing was changed. Install or locate trusted builds, register them with setup configure ffmpeg|ffprobe|whisper --executable <path>, then run setup check. A supplied SubRip or WebVTT transcript (ingest --transcript) needs no speech recognition.";
+pub const LOCAL_ASR_TOOLS_REMEDIATION: &str = "Local speech recognition needs FFmpeg, FFprobe and the whisper.cpp CLI (whisper-cli). Nothing was changed. Install trusted builds or register working ones with setup configure ffmpeg|ffprobe|whisper --executable <path>, then run setup check. No need to search folders: ask the user where each one is. A supplied SubRip or WebVTT transcript (ingest --transcript) needs no speech recognition.";
 
 /// Remediation when no model is configured or the configured file is unusable.
 pub const LOCAL_ASR_MODEL_REMEDIATION: &str = "Local speech recognition needs a registered whisper.cpp model. Nothing was changed. Register the reviewed multilingual base model (ggml-base.bin) with setup configure-model --file <path>, then retry.";

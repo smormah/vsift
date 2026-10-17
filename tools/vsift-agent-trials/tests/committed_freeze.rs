@@ -60,6 +60,13 @@ fn the_committed_freezes_still_hold() -> TestResult {
 /// visible: changing this constant is the decision to cut another candidate and write a new freeze
 /// (`docs/operations/release.md` section 6.8), and it shows in the diff of a test, not only of a data file.
 ///
+/// The freeze of 2026-10-17 is new on purpose, in the `0.2.2` cycle rather than at a cut: the skill's "search
+/// first" rule became one that always applies (issue #395; `docs/agents/skill.md`, "The change for 0.2.2"), so the
+/// `skill` component changed, `256b4840...` to `7f445a9a...`, and this digest, `a48567ac...` to the value below. The
+/// other six components are the fifth candidate's, byte for byte. It binds the next counted batch; no batch has run
+/// under it. The sixth candidate's batches ran under `a48567ac...`, and that file is kept beside their records as
+/// `freeze-0.2.1-rc.3.json` in both folders.
+///
 /// The fifth candidate's freeze is new on purpose (`0.2.1-rc.2`, 2026-10-11): the agent skill changed again
 /// for the patch release `0.2.1` (the brief view, the coverage of a read, five-minute `candidates` ranges,
 /// `BUSY` while a transcription runs, the newest ids after a range retranscription, a long report checked in
@@ -73,7 +80,7 @@ fn the_committed_freezes_still_hold() -> TestResult {
 /// in `batch-2-rc.3/` and `batch-3-rc.3/`); the first two candidates' was
 /// `1e89b5cc488e7245d1a6d63ec8809c1f8a5c137ee87f5ed05f9b692c2af6e392` (copies in `batch-2-rc.1/` and
 /// `batch-2-rc.2/`).
-const CUT_FREEZE_SHA256: &str = "a48567ac403149561019344cae58e137ae5bce5eb55a022e73cb2143ea60f6ea";
+const CUT_FREEZE_SHA256: &str = "f52265e754c26691000c36360c8361a89e5fd4760c76ff43fd6d10ba84ff1a31";
 
 #[test]
 fn the_committed_freezes_are_the_ones_written_at_the_cut() -> TestResult {

@@ -2,11 +2,14 @@ VSift setup check
 Profile: desktop
 Status: blocked
 [missing] FFmpeg (media_processing): not found on PATH [filtered PATH]
-  Install or locate this trusted tool, then rerun setup check with its absolute path using --ffmpeg. <MANAGED INSTALLATION>
+  Install a trusted build or register a working one with setup configure ffmpeg --executable <absolute-path>, then rerun setup check (or try a path once with setup check --ffmpeg <absolute-path>). <MANAGED INSTALLATION>
+  No need to search folders: ask the user where it is.
 [missing] FFprobe (media_processing): not found on PATH [filtered PATH]
-  Install or locate this trusted tool, then rerun setup check with its absolute path using --ffprobe. <MANAGED INSTALLATION>
+  Install a trusted build or register a working one with setup configure ffprobe --executable <absolute-path>, then rerun setup check (or try a path once with setup check --ffprobe <absolute-path>). <MANAGED INSTALLATION>
+  No need to search folders: ask the user where it is.
 [missing] Whisper (transcription): not found on PATH [filtered PATH]
-  Install or locate this trusted tool, then rerun setup check with its absolute path using --whisper. <MANAGED INSTALLATION>
+  Install a trusted build or register a working one with setup configure whisper --executable <absolute-path>, then rerun setup check (or try a path once with setup check --whisper <absolute-path>). <MANAGED INSTALLATION>
+  No need to search folders: ask the user where it is.
 Media executable probes are blocked until FFmpeg and FFprobe respond.
 Local ASR model: not registered (setup configure-model --file <path>)
 Local ASR check: not run: FFmpeg and FFprobe are needed and must pass their own check

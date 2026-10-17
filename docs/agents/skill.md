@@ -258,6 +258,29 @@ test (the whole-recording limit, the `BUSY` rule, the two-part check, the 5-minu
 rule for a gap and the cut-answer rule) are text shipped, behaviour unmeasured, until a real run shows an agent following
 them.
 
+## The change for 0.2.2 (2026-10-17; on `main` once merged, not released)
+
+One rule, for #395. In agent-trial batch 2 on `0.2.1-rc.3` two compact Claude Sonnet 5.5 runs read the whole 20-second
+transcript with `transcript get --view brief` and never ran `search`, although `FIND_SPOKEN_SPANS` began "Always search
+first, even when the video is short enough to read whole" ([L-163](../planning/known-limits.md#l-163)). Where a compact model
+could skip it: the rule was one bullet inside the third state, it gave its reason only as "search hits carry the segment ids",
+and the next bullet said that on a short video "one window may hold the whole transcript". The change, and nothing else:
+
+- **Rule 6** of "Rules that always apply" (cite or say you cannot) now ends: to find what was said, run `search` before any
+  `transcript get`, because its hits are the segment ids and times you cite, and a whole-transcript read never replaces it.
+  "To find" leaves the resume card's re-verification (`references/resume.md`, a `transcript get` of a known window) as it was.
+- **`FIND_SPOKEN_SPANS`** says "Always search first, before any `transcript get`" and that a whole-transcript read is no
+  substitute; the window after the hits is "never the whole transcript instead" (the sentence about one window holding the
+  whole transcript is gone).
+- **`references/commands.md`**: `transcript get` reads bounded pages around `search` hits, or a resume card's windows.
+
+`SKILL.md` stays at 300 lines (the guard's limit); the fuzz seed copy is the same bytes. The CLI's skill guard pins the three
+sentences. The skill never said "locate" for a tool, and its
+setup text already says that `setup configure` takes only a path the user gives, never one found by searching the disk; the
+CLI's own advice for a missing tool changed in the same pull request (#396, [L-164](../planning/known-limits.md#l-164)). The
+trial freeze is new (`skill` `7f445a9a...`, whole freeze `f52265e7...`; [trials.md](trials.md), "The freeze (P14)"). **No agent
+has run this text:** it gets the uncounted skill smoke, and the compact tier is measured again only in the next counted batch.
+
 ## Keeping it in step with the CLI
 
 `crates/vsift-cli/src/skill_contract.rs` (unit tests of the CLI crate, run by `cargo

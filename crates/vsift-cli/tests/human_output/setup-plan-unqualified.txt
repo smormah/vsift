@@ -6,9 +6,9 @@ Managed installation: unavailable_unqualified
 Plan digest: none (nothing to install from this plan)
 
 ffmpeg: missing, manual_selection_required (needs user authority)
-  Next: Install or locate trusted FFmpeg, then run setup configure ffmpeg --executable <absolute-path> and setup check.
+  Next: Install a trusted FFmpeg or register a working one with setup configure ffmpeg --executable <absolute-path>, then run setup check. No need to search folders: ask the user where it is.
 ffprobe: missing, manual_selection_required (needs user authority)
-  Next: Install or locate trusted FFprobe, then run setup configure ffprobe --executable <absolute-path> and setup check.
+  Next: Install a trusted FFprobe or register a working one with setup configure ffprobe --executable <absolute-path>, then run setup check. No need to search folders: ask the user where it is.
 whisper: missing, manual_selection_required (needs user authority)
-  Next: For local ASR, install or locate a trusted whisper.cpp CLI, then run setup configure whisper --executable <absolute-path> and setup check. A supplied transcript can skip local ASR.
+  Next: Install a trusted whisper.cpp CLI or register a working one with setup configure whisper --executable <absolute-path>, then run setup check. No need to search folders: ask the user where it is. A supplied transcript can skip local ASR.
 Local ASR model: not_checked

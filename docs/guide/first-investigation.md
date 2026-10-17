@@ -28,7 +28,7 @@ $ vsift setup check
 This is the first command to run on any machine, and the one to run again whenever something
 does not work. It looks for the tools and says what it found. On a machine with FFmpeg and
 FFprobe but no speech recognition it prints something like this (your tool versions will differ,
-and so will the words after `Install or locate`, which depend on your system):
+and so will the end of the advice under a missing tool, which depends on your system):
 
 ```text
 VSift setup check
@@ -37,14 +37,16 @@ Status: degraded
 [ok] FFmpeg (media_processing): ffmpeg version 9.0-full_build-www.gyan.dev Copyright (c) 2000-2026 the FFmpeg developers [filtered PATH]
 [ok] FFprobe (media_processing): ffprobe version 9.0-full_build-www.gyan.dev Copyright (c) 2007-2026 the FFmpeg developers [filtered PATH]
 [missing] Whisper (transcription): not found on PATH [filtered PATH]
-  Install or locate this trusted tool, then rerun setup check with its absolute path using --whisper. Managed installation is not available for this target.
+  Install a trusted build or register a working one with setup configure whisper --executable <absolute-path>, then rerun setup check (or try a path once with setup check --whisper <absolute-path>). Managed installation is not available for this target.
+  No need to search folders: ask the user where it is.
 Local ASR model: not registered (setup configure-model --file <path>)
 Local ASR check: not run: the whisper.cpp CLI is not available
 Executable probes only show that each tool responds. The local ASR check transcribes a short speech clip built into VSift with the selected tools and model. A supplied transcript can avoid local ASR.
 ```
 
-*This output is from a Windows 11 machine. It is shown as an example, not checked, because it names
-the tools on the machine that ran it.*
+*This output is from a Windows 11 machine, with the advice as it reads after `0.2.1` (`0.2.1` and earlier say
+"Install or locate this trusted tool" there). It is shown as an example, not checked, because it names the tools on the
+machine that ran it.*
 
 What the status means:
 

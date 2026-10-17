@@ -53,7 +53,7 @@ const WAV_MEDIA_TYPE: &str = "audio/wav";
 pub const EVIDENCE_BUDGET_REMEDIATION: &str = "This session has no room for more evidence: it holds at most 384 evidence artifacts (images, audio clips and their records) within 512 artifacts and 10 GiB. Nothing was changed. Keep what it holds with session retain --output <new-directory>, then open a new session of the same video with ingest and continue there.";
 
 /// Remediation when `FFmpeg` or `FFprobe` is missing for evidence.
-pub const EVIDENCE_TOOLS_REMEDIATION: &str = "Frames, crops and audio clips are decoded from the video with FFmpeg and FFprobe; Whisper and a model are not needed. Nothing was changed. Install or locate trusted builds, register them with setup configure ffmpeg|ffprobe --executable <path>, then run setup check.";
+pub const EVIDENCE_TOOLS_REMEDIATION: &str = "Frames, crops and audio clips are decoded from the video with FFmpeg and FFprobe; Whisper and a model are not needed. Nothing was changed. Install trusted builds or register working ones with setup configure ffmpeg|ffprobe --executable <path>, then run setup check. No need to search folders: ask the user where each one is.";
 
 /// Remediation for a burst range longer than sixty seconds.
 pub const BURST_RANGE_REMEDIATION: &str = "A frame burst covers at most 60 s. Nothing was changed. Run candidates over the longer range to find the moments where the screen changed, then burst or frame get around them, or split the range into bursts of at most 60 s.";

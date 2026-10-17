@@ -234,8 +234,8 @@ pub use session::{
 };
 pub use setup::{
     ConfiguredModelResponse, ConfiguredSelectionResponse, DependencyLookup, MAX_PROBE_TIMEOUT,
-    ProbeTimeHeadroom, SavedSetupPlan, SetupCheckResponse, SetupPlanResponse, explicit_path_option,
-    probe_deadline_text,
+    NO_FOLDER_SEARCH_ADVICE, ProbeTimeHeadroom, SavedSetupPlan, SetupCheckResponse,
+    SetupPlanResponse, explicit_path_option, probe_deadline_text,
 };
 pub use storage::{
     PrivateFolder, SESSION_NOT_PUBLISHED_REMEDIATION, SOURCE_ACCESS_DENIED_REMEDIATION,
