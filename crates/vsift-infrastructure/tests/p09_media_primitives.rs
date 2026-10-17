@@ -636,8 +636,11 @@ async fn every_recorded_candidate_is_extracted_at_its_own_time() -> TestResult {
 #[tokio::test]
 #[ignore = "requires ffmpeg and ffprobe on PATH"]
 async fn wav_clips_report_the_first_decoded_sample() -> TestResult {
+    // The audio-only clip's audio starts at 0. Until #334 its decode began at
+    // 64 ms, a frame late, because even `-ss 0` dropped the first frame; F09's
+    // audio itself starts at 0.75 s.
     for (file, request, expected_start) in [
-        ("F01-audio-only.m4a", range(0, 1_000_000)?, 64_000),
+        ("F01-audio-only.m4a", range(0, 1_000_000)?, 0),
         ("F09.mkv", range(0, 2_000_000)?, 750_000),
     ] {
         let staged = Staged::new(&fixture(file)).await?;
@@ -690,6 +693,96 @@ fn wav_samples(wav: &[u8]) -> Built<usize> {
         .checked_sub(WAV_HEADER_BYTES)
         .map(|bytes| bytes / 2)
         .ok_or_else(|| "a WAV clip shorter than its header".into())
+}
+
+/// Little-endian signed 16-bit samples; a trailing odd byte is not a sample.
+fn pcm_samples(bytes: &[u8]) -> Vec<i16> {
+    bytes
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|pair| i16::from_le_bytes(*pair))
+        .collect()
+}
+
+/// #334, through the real provider: on a source with no video stream the
+/// decode of a range is the range. `F01-audio-only.m4a` is AAC at 16 kHz,
+/// 64 ms frames; an input seek into it dropped the first frame after the
+/// seek, so every range from 32 microseconds to about 47 ms from 2 s decoded
+/// to nothing, longer ones began up to a frame late, and even a range from 0
+/// lost its first 64 ms. Now each range, from the start of the file and from
+/// points inside frames, comes back exactly as long as asked, beginning at the
+/// sample of its start, with the samples a whole-file decode has there.
+#[tokio::test]
+#[ignore = "requires ffmpeg and ffprobe on PATH"]
+async fn a_short_range_of_an_audio_only_source_decodes_exactly_the_range() -> TestResult {
+    let staged = Staged::new(&fixture("F01-audio-only.m4a")).await?;
+    let media = media(&staged.conformance, &staged.store);
+    let cancel = ProcessCancellation::new;
+    let description = media.probe(&staged.snapshot, cancel()).await?;
+    let audio = description
+        .streams
+        .iter()
+        .find(|stream| stream.kind == vsift_domain::MediaStreamKind::Audio)
+        .ok_or("no audio stream")?
+        .index;
+    assert!(
+        description
+            .streams
+            .iter()
+            .all(|stream| stream.kind != vsift_domain::MediaStreamKind::Video),
+        "the fixture must have no video stream"
+    );
+    let selection = MediaSelection {
+        video: None,
+        audio: Some(audio),
+    };
+    let bound = BoundSource::bind(staged.snapshot)?;
+    let whole = media
+        .speech_pcm(
+            &bound,
+            &description,
+            selection,
+            range(0, description.duration.as_micros())?,
+            cancel(),
+        )
+        .await?;
+    assert_eq!(whole.actual_start.as_micros(), 0, "the whole file from 0");
+    let whole_samples = pcm_samples(&whole.pcm_s16le);
+    let samples_of = |micros: u64| usize::try_from((micros * 16_000 + 500_000) / 1_000_000);
+    for start in [0_u64, 500_000, 2_000_000, 2_040_000, 4_123_456] {
+        for micros in [32_u64, 1_000, 20_000, 46_000, 50_000, 100_000, 500_000] {
+            let request = range(start, start + micros)?;
+            let clip = media
+                .wav_clip(&bound, &description, selection, request, cancel())
+                .await
+                .map_err(|error| format!("clip from {start} for {micros}: {error}"))?;
+            let expected = samples_of(micros)?;
+            assert_eq!(
+                wav_samples(&clip.wav)?,
+                expected,
+                "clip from {start} for {micros}"
+            );
+            let first = samples_of(start)?;
+            let actual = clip.actual_start.as_micros();
+            assert!(
+                actual.abs_diff(start) <= 32,
+                "clip from {start} for {micros} began at {actual}"
+            );
+            let decoded = pcm_samples(
+                clip.wav
+                    .get(WAV_HEADER_BYTES..)
+                    .ok_or("a WAV clip shorter than its header")?,
+            );
+            assert_eq!(
+                Some(decoded.as_slice()),
+                whole_samples.get(first..first + expected),
+                "clip from {start} for {micros}: not the whole decode's samples"
+            );
+        }
+    }
+    bound.release_verified()?;
+    Ok(())
 }
 
 /// #332, at the decode boundary and through the real provider. A range whose

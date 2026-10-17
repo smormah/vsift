@@ -1042,7 +1042,8 @@ fn wav_format(bytes: &[u8]) -> Result<(u16, u32, u16, usize), StageStop> {
 fn audio_stage(base: &Path) -> StageResult {
     let mut clips = Vec::new();
     for (file, to, expected_start) in [
-        ("F01-audio-only.m4a", 1_000_000_u64, 64_000_u64),
+        // Until #334 the audio-only clip's decode began 64 ms late.
+        ("F01-audio-only.m4a", 1_000_000_u64, 0_u64),
         ("F09.mkv", 2_000_000, 750_000),
     ] {
         let session = ingest(base, &fixture(file))?;
@@ -1117,10 +1118,13 @@ fn malformed_stage(base: &Path) -> StageResult {
     fs::write(&cut, bytes.get(..bytes.len() * 6 / 10).unwrap_or_default())?;
     let cut_session = ingest(base, &cut)?;
     for (label, session, arguments) in [
+        // The damage is the file's last 2 KB. Until #334 a clip of its first
+        // second was refused too, an artifact of the decode's `-ss 0`; the
+        // stretch that reaches the damaged packets is what must be refused.
         (
             "f11_damaged_tail_audio",
             &damaged,
-            vec!["audio", "--from", "0", "--to", "1000000"],
+            vec!["audio", "--from", "5000000", "--to", "6000000"],
         ),
         (
             "f11_truncated_frame",
@@ -1156,9 +1160,10 @@ fn malformed_stage(base: &Path) -> StageResult {
         )?;
         outcomes.push(json!({"case": label, "code": "INVALID_SOURCE", "remediation": result["error"]["remediation"][0]["summary"].is_string()}));
     }
-    // What decodes stays usable: the damaged file's video and the cut
-    // file's first second.
+    // What decodes stays usable: the damaged file's video and its first
+    // second of audio, and the cut file's first second.
     evidence_ok(base, &["frame", "get", &damaged, "--at", "0"])?;
+    evidence_ok(base, &["audio", &damaged, "--from", "0", "--to", "1000000"])?;
     evidence_ok(base, &["frame", "get", &cut_session, "--at", "1000000"])?;
     Ok(json!({"refusals": outcomes, "decodable_parts_usable": true}))
 }

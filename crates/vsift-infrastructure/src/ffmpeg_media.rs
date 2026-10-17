@@ -69,6 +69,19 @@ const VISUAL_WINDOW_DEADLINE: Duration = Duration::from_secs(120);
 /// reading one second late costs little and leaves the exact bounds to the
 /// `select` expression, which compares raw stream timestamps.
 const VISUAL_SEEK_MARGIN_MICROS: u64 = 1_000_000;
+/// How far before a PCM range its decode starts (#334).
+///
+/// An input `-ss` into a source with no video stream seeks by the audio
+/// stream itself, and the decoder then drops the first frame after the seek
+/// (an AAC frame is 64 ms at 16 kHz): on `F01-audio-only.m4a` the audio
+/// decoded after `-ss 2` began 48 ms late, a range shorter than that came back
+/// empty and longer ones began late, and even `-ss 0` lost the first 64 ms.
+/// With a video stream the seek lands on an earlier key frame and the audio is
+/// exact. So a decode seeks this far early (not at all when the range starts
+/// within it) and cuts the range out in the filter graph, where `atrim` is
+/// sample-exact; a second covers the pre-roll of every codec the reviewed
+/// build decodes and costs a second of decoding.
+const PCM_PRE_ROLL_MICROS: u64 = 1_000_000;
 const MAX_STREAMS: usize = 32;
 const MAX_DURATION_MICROS: u64 = 4 * 60 * 60 * 1_000_000;
 const MAX_FRAME_PIXELS: u64 = 16_000_000;
@@ -566,8 +579,8 @@ impl<'a> FfmpegMedia<'a> {
             return Err(MediaError::UnsupportedCodec);
         }
         profile.check_range(range, description.duration)?;
-        let seek =
-            i64::try_from(range.start().as_micros()).map_err(|_| MediaError::InvalidAudioRange)?;
+        let window = PcmDecodeWindow::for_range(range)?;
+        let seek = window.seek;
         let request = Self::request(source, self.registry.ffmpeg.clone(), profile.deadline())?
             .with_arguments([
                 "-hide_banner",
@@ -580,9 +593,8 @@ impl<'a> FfmpegMedia<'a> {
                 "67108864",
                 "-threads",
                 "2",
-                "-ss",
             ])
-            .with_argument(seconds_arg(seek))
+            .with_arguments(window.seek_arguments())
             .with_arguments(["-protocol_whitelist", "file"]);
         let request = restrict_mov_references(request, source)
             .with_arguments(["-f", source.container().demuxer(), "-i"])
@@ -590,21 +602,10 @@ impl<'a> FfmpegMedia<'a> {
             .with_arguments(["-map"])
             .with_argument(format!("0:{index}"))
             .with_arguments(["-vn", "-sn", "-dn", "-t"])
-            .with_argument(seconds_arg(
-                i64::try_from(range.duration_micros())
-                    .map_err(|_| MediaError::InvalidAudioRange)?,
-            ))
-            .with_arguments([
-                "-af",
-                profile.filter(),
-                "-ac",
-                "1",
-                "-ar",
-                "16000",
-                "-f",
-                "s16le",
-                "pipe:1",
-            ]);
+            .with_argument(seconds_arg(window.read))
+            .with_argument("-af")
+            .with_argument(window.filter(profile))
+            .with_arguments(["-ac", "1", "-ar", "16000", "-f", "s16le", "pipe:1"]);
         let output = self
             .run_provider(
                 request,
@@ -718,14 +719,16 @@ enum PcmProfile {
 
 impl PcmProfile {
     /// The decode boundary: whether `range` of a source `duration` long may be
-    /// handed to `FFmpeg` as a seek and a `-t` length.
+    /// handed to `FFmpeg` as a decode window ([`PcmDecodeWindow`]).
     ///
     /// It must lie inside the source, be no longer than the profile allows,
     /// and be a length that does not round to no output sample
     /// ([`rounds_to_no_pcm_sample`], 31 microseconds or less). `FFmpeg` cuts
-    /// by the rounded count (its `trim` filter computes
+    /// by the rounded count at the 16 kHz output (its `trim` filter computes
     /// `duration_tb = av_rescale_q(duration, AV_TIME_BASE_Q, tb)`, to the
-    /// nearest) and takes a count of none for no limit at all. What came back
+    /// nearest; the length was a `-t` cut until #334 and is now the decode's
+    /// own `atrim`, after the resampler, with the same rounding) and takes a
+    /// count of none for no limit at all. What came back
     /// then was not the range but one whole filter frame: with this decode's
     /// `asetnsamples=n=65536`, up to 65,536 samples of the source, about four
     /// seconds of a 16 kHz track, or what is left of the audio when that is
@@ -783,6 +786,65 @@ impl PcmProfile {
             Self::Clip => "ashowinfo",
             Self::Speech | Self::EvidenceWav => "asetnsamples=n=65536:p=0,ashowinfo",
         }
+    }
+}
+
+/// Where one PCM decode seeks, how long it reads and where in what it reads
+/// the range lies (#334, [`PCM_PRE_ROLL_MICROS`]).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct PcmDecodeWindow {
+    /// The input seek in microseconds; 0 means no `-ss` at all, because even
+    /// `-ss 0` drops the first frame of an audio-only source.
+    seek: i64,
+    /// How far after the seek the range starts.
+    lead: i64,
+    /// The range's length.
+    length: i64,
+    /// The `-t` bound: the lead and the range, so it never cuts the range.
+    read: i64,
+}
+
+impl PcmDecodeWindow {
+    fn for_range(range: TimeRange) -> Result<Self, MediaError> {
+        let start = range.start().as_micros();
+        let seek = start.saturating_sub(PCM_PRE_ROLL_MICROS);
+        let as_micros =
+            |value: u64| i64::try_from(value).map_err(|_| MediaError::InvalidAudioRange);
+        let (seek, lead, length) = (
+            as_micros(seek)?,
+            as_micros(start - seek)?,
+            as_micros(range.duration_micros())?,
+        );
+        Ok(Self {
+            seek,
+            lead,
+            length,
+            read: lead
+                .checked_add(length)
+                .ok_or(MediaError::InvalidAudioRange)?,
+        })
+    }
+
+    fn seek_arguments(self) -> Vec<String> {
+        if self.seek > 0 {
+            vec!["-ss".to_owned(), seconds_arg(self.seek)]
+        } else {
+            Vec::new()
+        }
+    }
+
+    /// The filter graph: resample to the output rate first, so that `atrim`
+    /// rounds its start and its length to the 16 kHz output's samples exactly
+    /// as the `-t` cut it replaces did ([`PcmProfile::check_range`]), then cut
+    /// the range out, then the profile's own filters, whose `ashowinfo` reports
+    /// the first sample of the range itself.
+    fn filter(self, profile: PcmProfile) -> String {
+        format!(
+            "aresample=16000,atrim=start={}:duration={},{}",
+            seconds_arg(self.lead),
+            seconds_arg(self.length),
+            profile.filter()
+        )
     }
 }
 
@@ -1346,8 +1408,9 @@ impl Error for MediaError {
 #[cfg(test)]
 mod tests {
     use super::{
-        MediaError, ObservedFrameTime, PcmProfile, VisualSamplingWindow, parse_ashowinfo_start,
-        parse_ffprobe_metadata, parse_frame_showinfo, parse_visual_samples, seconds_arg,
+        MediaError, ObservedFrameTime, PcmDecodeWindow, PcmProfile, VisualSamplingWindow,
+        parse_ashowinfo_start, parse_ffprobe_metadata, parse_frame_showinfo, parse_visual_samples,
+        seconds_arg,
     };
     use crate::SourceContainer;
     use vsift_domain::{
@@ -1419,6 +1482,49 @@ mod tests {
             let samples = (micros * 16_000 + 500_000) / 1_000_000;
             assert_eq!(handed_over, samples > 0, "{micros}");
         }
+        Ok(())
+    }
+
+    /// #334: a PCM decode seeks a second before its range, or not at all when
+    /// the range starts within the first second (an explicit `-ss 0` already
+    /// loses a frame of an audio-only source), reads the lead and the range,
+    /// and cuts the range out after resampling to the output rate.
+    #[test]
+    fn a_pcm_decode_seeks_early_and_cuts_its_range_in_the_filter()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let window = |start: u64, micros: u64| {
+            vsift_domain::TimeRange::new(
+                MediaTime::from_micros(start),
+                MediaTime::from_micros(start + micros),
+            )
+            .map_err(|_| MediaError::InvalidAudioRange)
+            .and_then(PcmDecodeWindow::for_range)
+        };
+        let inside = window(2_000_000, 20_000)?;
+        assert_eq!(inside.seek_arguments(), ["-ss", "1.000000"]);
+        assert_eq!(seconds_arg(inside.read), "1.020000");
+        assert_eq!(
+            inside.filter(PcmProfile::EvidenceWav),
+            "aresample=16000,atrim=start=1.000000:duration=0.020000,asetnsamples=n=65536:p=0,ashowinfo"
+        );
+        assert_eq!(
+            inside.filter(PcmProfile::Clip),
+            "aresample=16000,atrim=start=1.000000:duration=0.020000,ashowinfo"
+        );
+        let early = window(300_000, 32)?;
+        assert!(early.seek_arguments().is_empty());
+        assert_eq!(early.seek, 0);
+        assert_eq!(seconds_arg(early.read), "0.300032");
+        assert_eq!(
+            early.filter(PcmProfile::Speech),
+            "aresample=16000,atrim=start=0.300000:duration=0.000032,asetnsamples=n=65536:p=0,ashowinfo"
+        );
+        let first = window(0, 30_000_000)?;
+        assert!(first.seek_arguments().is_empty());
+        assert_eq!((first.lead, first.read), (0, 30_000_000));
+        let boundary = window(1_000_000, 5_000_000)?;
+        assert!(boundary.seek_arguments().is_empty());
+        assert_eq!(boundary.lead, 1_000_000);
         Ok(())
     }
 

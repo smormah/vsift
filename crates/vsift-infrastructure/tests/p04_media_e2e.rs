@@ -249,12 +249,11 @@ async fn scenario(
     } else {
         750_000
     };
+    // Every fixture's first decoded sample is where its audio starts. Until
+    // #334 the audio-only clip's began a 64 ms AAC frame late, because the
+    // input seek, even to 0, dropped the first frame of a source without video.
     let audio_start = if is_vfr { 750_000 } else { 0 };
-    let expected_audio_start = if name == "F01-audio-only.m4a" {
-        64_000
-    } else {
-        audio_start
-    };
+    let expected_audio_start = audio_start;
     let selection = MediaSelection {
         video: if name == "F01-audio-only.m4a" {
             None

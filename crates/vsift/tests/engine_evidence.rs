@@ -1031,7 +1031,9 @@ async fn real_bursts_stay_in_budget_and_clips_report_their_first_sample() -> Tes
             cancellation: Cancellation::new(),
         })
         .await?;
-    assert_eq!(actual_times(&clip), [64_000]);
+    // The clip's audio starts at 0; until #334 the decode of a source without
+    // video began a 64 ms AAC frame late.
+    assert_eq!(actual_times(&clip), [0]);
     let file = clip.files().first().ok_or("no clip")?;
     let wav = fs::read(file.path())?;
     assert_eq!(wav.get(..4), Some(b"RIFF".as_slice()));
