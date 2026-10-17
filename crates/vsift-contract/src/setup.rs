@@ -792,7 +792,9 @@ const fn timed_out_plan_step(dependency: RuntimeDependency) -> &'static str {
 /// A saved `setup plan --json` result supplied back for acceptance.
 ///
 /// This is strict request input, not a tolerant response reader: unknown fields
-/// are rejected at every level, and [`SavedSetupPlan::validate_envelope`] rejects
+/// are rejected at every level, the envelope members a successful plan holds as
+/// `null` (`error`, `coverage`, `lifecycle`) are refused while decoding when
+/// they hold anything else, and [`SavedSetupPlan::validate_envelope`] rejects
 /// anything other than an unmodified successful v1 plan. The host performs the
 /// bounded read and decode; this type owns what a valid saved plan is.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -804,28 +806,45 @@ pub struct SavedSetupPlan {
     status: String,
     data: SetupPlanResponse,
     warnings: Vec<String>,
-    error: Option<serde_json::Value>,
-    coverage: Option<serde_json::Value>,
-    lifecycle: Option<serde_json::Value>,
+    error: Option<NullOnly>,
+    coverage: Option<NullOnly>,
+    lifecycle: Option<NullOnly>,
 }
+
+/// The type of an envelope member a saved plan holds as `null`: it has no
+/// value, so `Option<NullOnly>` decodes `null` (or an absent member) as `None`
+/// and refuses every other value while decoding.
+///
+/// These members were `Option<serde_json::Value>` until #394, so any JSON was
+/// decoded into the plan and only [`SavedSetupPlan::validate_envelope`] refused
+/// it. A decoded plan then held whatever the file said, which a strict request
+/// type should not: the hosted fuzz run of `0.2.1-rc.3` found a `lifecycle` of
+/// about 8.2e118 that did not read back the same after being written out. Now a
+/// decoded plan always writes out as `null` there, and reads back the same.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[allow(
+    clippy::empty_enums,
+    reason = "a member with no value is the point; `Infallible` has no serde impls"
+)]
+enum NullOnly {}
 
 impl SavedSetupPlan {
     /// Requires the decoded document to be an unmodified successful v1
     /// `setup.plan` result.
     ///
+    /// `error`, `coverage` and `lifecycle` need no check here: a plan that
+    /// holds anything but `null` there is refused while decoding ([`NullOnly`]).
+    ///
     /// # Errors
     ///
     /// Returns [`FailureCode::InvalidArgument`] when the version, command, status
-    /// or any envelope field differs from what `setup plan --json` emits.
+    /// or any other envelope field differs from what `setup plan --json` emits.
     pub fn validate_envelope(&self) -> Result<(), FailureCode> {
         if self.schema_version != CONTRACT_VERSION
             || self.command != CommandName::SetupPlan.identifier()
             || self.operation_id.is_some()
             || self.status != "complete"
             || !self.warnings.is_empty()
-            || self.error.is_some()
-            || self.coverage.is_some()
-            || self.lifecycle.is_some()
         {
             return Err(FailureCode::InvalidArgument);
         }

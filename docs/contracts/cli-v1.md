@@ -2453,8 +2453,9 @@ first publication (decision H4; ADR 0008 note of 2026-09-30).
 only the reviewed publisher artifacts of the compiled catalogue.
 
 **Before anything changes**, in this order: the saved plan must be a strict,
-unmodified `setup.plan` result (`INVALID_ARGUMENT` otherwise; an unreadable file is
-`STORAGE_IO`); `--artifact-dir` must be absolute (`INVALID_ARGUMENT`); a host whose
+unmodified `setup.plan` result (`INVALID_ARGUMENT` otherwise; since #394 an `error`,
+`coverage` or `lifecycle` member that is not `null` is refused while the file is decoded,
+with the same code and remediation; an unreadable file is `STORAGE_IO`); `--artifact-dir` must be absolute (`INVALID_ARGUMENT`); a host whose
 target has no qualified catalogue has nothing to accept (`INVALID_ARGUMENT` with the
 manual `setup configure` path, and nothing is created); the managed root's install
 guard is taken and **never waited for**: a guard another installation holds is `BUSY`
