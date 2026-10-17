@@ -15,9 +15,9 @@ use vsift_application::{
 };
 use vsift_contract::{
     BundleData, BundleSourceInclusion, CleanData, CleanItem, CleanItemOutcome, CommandName,
-    ConfiguredSelectionResponse, DependencyLookup, LifecycleResponse, ListedSession,
+    ConfiguredSelectionResponse, DependencyLookup, JsonLimits, LifecycleResponse, ListedSession,
     OperationResponse, PageData, SavedSetupPlan, SessionState, SetupCheckResponse,
-    SetupPlanResponse, StatusData, TerminalEventResponse,
+    SetupPlanResponse, StatusData, StrictJsonError, TerminalEventResponse, decode_strict_json,
 };
 use vsift_domain::{
     DependencyState, DependencyStatus, FailureCode, ManagedTarget, RuntimeDependency,
@@ -267,6 +267,48 @@ fn saved_plan_rejects_unknown_fields_at_every_level() -> TestResult {
     Ok(())
 }
 
+/// #394: the members a successful plan holds as `null` are refused while
+/// decoding when they hold anything else, so no decoded plan carries a value
+/// there: the hosted fuzz run found a `lifecycle` of about 8.2e118 that a
+/// decoded plan held and that did not read back the same. The refusal is the
+/// strict decoder's typed one (`INVALID_ARGUMENT`, which `setup install` answers
+/// with the stale-plan remediation), as before for any other change.
+#[test]
+fn saved_plan_refuses_any_value_where_its_envelope_holds_null() -> TestResult {
+    let original = serde_json::to_vec(&unavailable_plan()?)?;
+    let text = std::str::from_utf8(&original)?;
+    let huge = format!("82{}", "0".repeat(117));
+    for member in ["error", "coverage", "lifecycle"] {
+        for value in [huge.as_str(), "8.2e118", "0", "false", "\"\"", "[]", "{}"] {
+            let null = format!("\"{member}\":null");
+            assert_eq!(text.matches(&null).count(), 1, "{member}");
+            let edited = text.replacen(&null, &format!("\"{member}\":{value}"), 1);
+            let refused =
+                decode_strict_json::<SavedSetupPlan>(edited.as_bytes(), JsonLimits::DOCUMENT);
+            assert!(
+                matches!(refused, Err(StrictJsonError::Malformed(_))),
+                "{member} = {value}"
+            );
+            assert_eq!(
+                refused.err().map(|error| error.code()),
+                Some(FailureCode::InvalidArgument)
+            );
+        }
+    }
+    // What is accepted writes out as `null` there and reads back the same.
+    let saved: SavedSetupPlan = decode_strict_json(&original, JsonLimits::DOCUMENT)?;
+    let written = serde_json::to_vec(&saved)?;
+    assert_eq!(
+        serde_json::from_slice::<Value>(&written)?,
+        serde_json::from_slice::<Value>(&original)?
+    );
+    assert_eq!(
+        decode_strict_json::<SavedSetupPlan>(&written, JsonLimits::DOCUMENT)?,
+        saved
+    );
+    Ok(())
+}
+
 #[test]
 fn saved_plan_rejects_a_modified_envelope() -> TestResult {
     let original = serde_json::to_value(unavailable_plan()?)?;
@@ -276,9 +318,6 @@ fn saved_plan_rejects_a_modified_envelope() -> TestResult {
         ("operation_id", serde_json::json!("op_0123456789abcdef")),
         ("status", serde_json::json!("partial")),
         ("warnings", serde_json::json!(["edited"])),
-        ("error", serde_json::json!({})),
-        ("coverage", serde_json::json!({})),
-        ("lifecycle", serde_json::json!({})),
     ] {
         let mut instance = original.clone();
         instance[field] = replacement;

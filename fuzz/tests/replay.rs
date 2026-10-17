@@ -108,6 +108,14 @@ enum Origin {
         format: ArchiveFormat,
         mirrors: &'static str,
     },
+    /// This frozen example with one envelope member's `null` replaced by
+    /// `value`: the shape of the hosted fuzz run's `setup_plan` crash on
+    /// `0.2.1-rc.3`, whose `lifecycle` held a number of about 8.2e118 (#394).
+    EditedExample {
+        example: &'static str,
+        member: &'static str,
+        value: &'static str,
+    },
 }
 
 /// What an archive seed holds.
@@ -169,6 +177,9 @@ const TRANSCRIPT_RECORD_EXAMPLES: &str =
 const REQUEST_EXAMPLES: &str = "crates/vsift-infrastructure/tests/data/worker-requests";
 /// The frozen worker batch whose lines the request seeds quote.
 const BATCH_EXAMPLE: &str = "schemas/v1/examples/job-batch.requests.jsonl";
+
+/// The number of the #394 seed: 82 and 117 zeros, about 8.2e118.
+const HUGE_ENVELOPE_NUMBER: &str = "82000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000";
 
 const SEEDS: &[Seed] = &[
     // The skill's own instructions: a report with one valid handoff block,
@@ -561,6 +572,18 @@ const SEEDS: &[Seed] = &[
         "setup-plan.unqualified.json",
         Origin::Copy("schemas/v1/examples"),
     ),
+    // #394: a plan whose `lifecycle` holds a number of about 8.2e118, which
+    // a decoded plan held, and which did not read back the same; it is now
+    // refused while decoding.
+    seed(
+        Target::SetupPlan,
+        "setup-plan.lifecycle-number.json",
+        Origin::EditedExample {
+            example: "schemas/v1/examples/setup-plan.unavailable.json",
+            member: "lifecycle",
+            value: HUGE_ENVELOPE_NUMBER,
+        },
+    ),
     // Bundles: no artifact, each record the validation decodes, and both.
     seed(
         Target::BundleManifest,
@@ -733,6 +756,18 @@ const SEEDS: &[Seed] = &[
 /// archive seeds mirror (`root/tool`, three bytes).
 const XZ_INVENTORY_TESTS: &str = "crates/vsift-infrastructure/src/xz_tar_inventory.rs";
 const GZIP_INVENTORY_TESTS: &str = "crates/vsift-infrastructure/src/gzip_tar_inventory.rs";
+
+/// `example` with its one `"member":null` replaced by `"member":value`.
+fn edited_example(example: &str, member: &str, value: &str) -> Result<Vec<u8>, Box<dyn Error>> {
+    let text = fs::read_to_string(repository(example))?;
+    let null = format!("\"{member}\":null");
+    if text.matches(&null).count() != 1 {
+        return Err(format!("{example} does not hold {null} once").into());
+    }
+    Ok(text
+        .replacen(&null, &format!("\"{member}\":{value}"), 1)
+        .into_bytes())
+}
 
 const fn seed(target: Target, file: &'static str, origin: Origin) -> Seed {
     Seed {
@@ -1165,6 +1200,11 @@ fn seeds_are_listed_and_match_their_fixtures() -> TestResult {
                 data == archive_seed(tree, format)?
                     && fs::read_to_string(repository(mirrors))?.contains("root/tool")
             }
+            Origin::EditedExample {
+                example,
+                member,
+                value,
+            } => data == edited_example(example, member, value)?,
         };
         assert!(matches, "{} no longer matches its origin", seed.file);
     }
@@ -1384,7 +1424,8 @@ fn the_visual_seeds_derive_from_the_recorded_samples() -> TestResult {
             | Origin::CropPair { .. }
             | Origin::SearchPair { .. }
             | Origin::BundleImage(_)
-            | Origin::Archive { .. } => continue,
+            | Origin::Archive { .. }
+            | Origin::EditedExample { .. } => continue,
         };
         let path = seed_directory(seed.target).join(seed.file);
         if regenerate {
@@ -1530,7 +1571,7 @@ fn seed_archive_bounds() -> Result<ArchiveInventoryBounds, Box<dyn Error>> {
     Ok(ArchiveInventoryBounds::new(8, 4_096)?)
 }
 
-/// The bundle and archive seeds are rebuilt by this test from the examples
+/// The bundle, archive and edited-example seeds are rebuilt by this test from the examples
 /// and the archive crates. After an encoder or example change, run it with
 /// `VSIFT_REGENERATE_FUZZ_SEEDS=1` to rewrite them, and review the diff.
 #[test]
@@ -1540,6 +1581,11 @@ fn the_derived_seeds_are_rebuilt_by_the_harness() -> TestResult {
         let derived = match seed.origin {
             Origin::BundleImage(artifacts) => bundle_image(artifacts)?,
             Origin::Archive { tree, format, .. } => archive_seed(tree, format)?,
+            Origin::EditedExample {
+                example,
+                member,
+                value,
+            } => edited_example(example, member, value)?,
             Origin::Copy(_)
             | Origin::InlineIn(_)
             | Origin::EncodedF01LocalAsr
