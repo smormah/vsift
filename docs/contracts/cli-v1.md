@@ -2047,9 +2047,15 @@ and only for it, that published code is replaced by `INVALID_ARGUMENT` too.
 **Nothing else changes.** A range of 32 to 62 microseconds is shorter than
 a sample too, but its length rounds to one: it is handed to the decode and answered
 exactly as before, with a clip of one sample where the file decodes one, and every range
-from 63 microseconds on is as it was. On some files a range of up to a few tens of
-milliseconds decodes to nothing and is answered as audio that could not be decoded,
-before and now (issue #334, [L-141](../planning/known-limits.md#l-141)). The refusal at
+from 63 microseconds on is as it was. **Since #334 (on `main` after `0.2.1`), the clip is
+the range on a source without a video stream too.** Until then an input seek into such a
+source (an `.m4a`, for one) dropped the codec's first frame after the seek, so a range of up
+to a few tens of milliseconds decoded to nothing and was answered as audio that could not be
+decoded (`INVALID_SOURCE`), and a longer one began up to a frame late (`actual_us` said so) and
+ran on past `to_us`. Every decode now starts a second before the range and cuts the range
+out sample-exactly, so `actual_us` is the requested start (to within one 16 kHz sample when
+the range starts in the first second) and the clip holds the samples of the range
+([L-141](../planning/known-limits.md#l-141)). The refusal at
 31 microseconds follows FFmpeg's rounding as it was measured with FFmpeg 9.0; the same
 entry says what that rests on. `data`
 ([`audio-data.schema.json`](../../schemas/v1/audio-data.schema.json), example

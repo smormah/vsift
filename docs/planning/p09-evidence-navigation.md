@@ -93,6 +93,11 @@ at delta 0 with the candidate's displayed dimensions (1, 4, 2, 3, 3, 3, 1, 2, 4,
 | 0-30.000001 s | over 30 s | `INVALID_ARGUMENT`, 30 s remediation |
 | F01-audio-only 7-8 s | starts after the end | `INVALID_ARGUMENT`, range-start remediation |
 
+*Note of 2026-10-17 (#334):* the first row's "truth" was the decoder's, not the clip's. The audio-only
+clip is a stream copy of F01's audio, which starts at 0; the 64 ms was a frame the decoder dropped after
+the input seek, which only a source without video suffers. Since #334 the clip of 0-1 s starts at 0
+(`actual_start_us` 0, 16,000 samples), and the stage and the adapter's tests expect that.
+
 ## V-07: bounds (`p09_neighbours_burst`, contract tests)
 
 - Neighbours of F01's first frame (count 2) are 50 and 100 ms with
@@ -125,7 +130,10 @@ at delta 0 with the candidate's displayed dimensions (1, 4, 2, 3, 3, 3, 1, 2, 4,
 - `p09_malformed`: F11's damaged audio (`audio`), F11's truncated file (`frame get`),
   and F05 cut to 60 % at run time (`frame get` at 18 s, a burst across the cut) are all
   `INVALID_SOURCE` with nothing committed; the damaged file's video and the cut file's
-  first second still extract.
+  first second still extract. *Since #334 (2026-10-17)* the damaged audio case asks for
+  5 to 6 s, the stretch that reaches the missing last 2 KB; its first second, which the
+  stage asked for before and which was refused only because of the decode's `-ss 0`, now
+  extracts and is checked as usable.
 - `p09_stream_and_bundle`: `--events jsonl` for `frame get` (2 events), `frame
   neighbours` (5), `frame burst` (5), `crop` (2) and `audio` (2) conform to their
   schemas with contiguous sequences and matching counts; `session retain` then `bundle

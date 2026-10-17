@@ -747,3 +747,15 @@ window to the rule, for a binary from the second candidate on (an older publishe
 two recordings is not shown, and a listener's check of the holes on them (the issue's last item) has not been done and stays with the maintainer. The tolerance is derived for one configuration and not measured; how many repeats real recordings gain from the guard
 is known only from a synthetic simulation by a reviewer that is not in the repository (the several-fold above); the share of real recordings that have unplaced stretches, and their sizes, are unknown, and taking "to the next segment" as the stretch is a reading of what the data can say, not
 an observation of what the recogniser does. The guard's cost was not measured on large input beyond a test that merges 128 chunks of dense speech (about 32,000 segments, about 0.7 s in an unoptimised build); the work is meant to be linear in the segments with a logarithmic factor (the covered stretches are kept in a tree), and nothing was measured on real output.
+
+## 2026-10-17 note: a speech chunk is decoded from a second before it (#334)
+
+The decode of a chunk (and of an `audio` clip; it is one function) no longer hands FFmpeg the chunk's start as an input seek and its
+length as `-t`. In a source without a video stream the seek landed on the audio stream and the decoder dropped the first frame after
+it, so a chunk's audio began up to one codec frame late (64 ms for AAC at 16 kHz; even a chunk at 0 lost its first 64 ms), and a very
+short `audio` range decoded to nothing. The decode now seeks one second earlier (not at all within the first second), resamples to
+16 kHz and cuts the chunk out with `atrim`, which keeps #332's rounding at the 16 kHz output. The bound after the decode that the
+2026-10-08 note proposes is not made: `atrim` cuts by timestamps, and a source whose audio timestamps overlap (a clip looped with
+`-stream_loop` and copied) decodes 30.032 s for a 30 s chunk, as it always did. What a recogniser hears: on a 16 kHz source with video, the same bytes as before; on other rates, the same samples except the
+resampler's first few milliseconds, which now fall before the chunk; on an audio-only source, the chunk from its true start. The 100 ms
+floor, the chunk plan and every recorded field are unchanged. Register: L-141.
