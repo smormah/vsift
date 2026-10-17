@@ -1290,6 +1290,13 @@ pub enum SessionRootError {
     InvalidLayout,
     /// The root exists but cannot be opened safely.
     Unavailable,
+    /// The root's own final folder name is one `VSift` does not use (#232):
+    /// empty, holding `:`, ending in a space or a dot, a reserved Windows
+    /// device name, and on Windows a control character or `< > " | ? *`.
+    /// Nothing was created. The code is `STORAGE_IO`, what this case answered
+    /// as [`Self::Unavailable`] before it had a cause (known limit L-127); the
+    /// host's remediation names the rule.
+    NameNotAllowed,
     /// Another process was still creating the root when the bounded wait for
     /// it ended; a retry is expected to succeed.
     ProvisioningInProgress,
@@ -1328,9 +1335,11 @@ impl SessionRootError {
             // A root other accounts can access is storage that cannot be used,
             // whether it was selected or is the platform default, reported like
             // a non-private per-user configuration folder.
-            Self::ParentUnavailable | Self::Missing | Self::Unavailable | Self::NotPrivate => {
-                FailureCode::StorageIo
-            }
+            Self::ParentUnavailable
+            | Self::Missing
+            | Self::Unavailable
+            | Self::NameNotAllowed
+            | Self::NotPrivate => FailureCode::StorageIo,
             // `INVALID_ARGUMENT` would say what happened to a person who named
             // their own folder, but 0.1.0 answered `INTEGRITY_FAILURE` (exit 7)
             // and v1 is additive only, so the code is kept and the remediation
@@ -1359,6 +1368,7 @@ impl fmt::Display for SessionRootError {
             Self::InvalidOwnership => "session root ownership marker is invalid",
             Self::InvalidLayout => "session root layout is invalid",
             Self::Unavailable => "session root is unavailable",
+            Self::NameNotAllowed => "session root's folder name is not allowed",
             Self::ProvisioningInProgress => {
                 "session root is still being created by another process"
             }
@@ -1380,6 +1390,7 @@ impl From<SessionStoreOpenError> for SessionRootError {
         match value {
             SessionStoreOpenError::RootMustBeAbsolute => Self::NotAbsolute,
             SessionStoreOpenError::RootUnavailable => Self::Unavailable,
+            SessionStoreOpenError::RootNameNotAllowed => Self::NameNotAllowed,
             SessionStoreOpenError::RootNotDirectory => Self::NotDirectory,
             SessionStoreOpenError::RootNotPrivate => Self::NotPrivate,
             SessionStoreOpenError::OwnershipMarkerMissing => Self::OwnershipMarkerMissing,
@@ -1685,6 +1696,16 @@ mod tests {
         assert_eq!(
             EngineError::OpenSession(OpenSessionError::InvalidClock).failure_code(),
             FailureCode::InvalidArgument
+        );
+        // #232: a root name VSift does not use keeps the code of the
+        // unavailable root it was reported as; its remediation states the rule.
+        assert_eq!(
+            EngineError::SessionRoot(SessionRootError::NameNotAllowed).failure_code(),
+            EngineError::SessionRoot(SessionRootError::Unavailable).failure_code()
+        );
+        assert_eq!(
+            EngineError::SessionRoot(SessionRootError::NameNotAllowed).failure_code(),
+            FailureCode::StorageIo
         );
         // #265: a link keeps the code 0.1.0 gave it (v1 is additive only); its
         // remediation says what happened (L-127).

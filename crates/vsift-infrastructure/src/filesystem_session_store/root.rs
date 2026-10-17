@@ -439,17 +439,42 @@ pub(super) fn validate_root_selection(root_path: &Path) -> Result<(), SessionSto
     }
     let name = root_path
         .file_name()
-        .and_then(std::ffi::OsStr::to_str)
-        .ok_or(SessionStoreOpenError::RootUnavailable)?;
-    if name.is_empty()
-        || name.contains(':')
-        || name.ends_with(' ')
-        || name.ends_with('.')
-        || is_reserved_windows_name(name)
-    {
-        return Err(SessionStoreOpenError::RootUnavailable);
+        .ok_or(SessionStoreOpenError::RootUnavailable)?
+        .to_str()
+        .ok_or(SessionStoreOpenError::RootNameNotAllowed)?;
+    if !root_name_is_allowed(name) {
+        return Err(SessionStoreOpenError::RootNameNotAllowed);
     }
     Ok(())
+}
+
+/// The rule for a session root's own final folder name (#232).
+///
+/// On every platform: not empty, no `:` (an alternate data stream on
+/// Windows), no trailing space or dot (which Windows drops) and no reserved
+/// Windows device name, so a name means the same folder wherever it is used.
+/// On Windows also no control character and none of `< > " | ? *`, which
+/// Windows refuses in any name; they used to fail later, when the folder was
+/// created, as an unexplained unavailable root. Linux and macOS allow control
+/// characters in a name, and so does `VSift` there: a root such as
+/// `sessions<ESC>[31m` works, and every human output shows it inert (SEC-T02).
+/// What failed on Linux in #232 was the colon in the test's hostile name.
+pub(super) fn root_name_is_allowed(name: &str) -> bool {
+    let portable = !name.is_empty()
+        && !name.contains(':')
+        && !name.ends_with(' ')
+        && !name.ends_with('.')
+        && !is_reserved_windows_name(name);
+    portable && !(cfg!(windows) && name.chars().any(is_refused_by_windows))
+}
+
+/// A character Windows refuses in a file or folder name (the separators are
+/// never part of a final name).
+const fn is_refused_by_windows(character: char) -> bool {
+    matches!(
+        character,
+        '\u{0}'..='\u{1f}' | '<' | '>' | '"' | '|' | '?' | '*'
+    )
 }
 
 pub(super) fn is_reserved_windows_name(name: &str) -> bool {
@@ -966,6 +991,79 @@ pub(super) fn validate_root_layout(root: &Dir) -> Result<OwnershipMarker, Sessio
             .map_err(|error| layout_error(&error, SessionStoreOpenError::InvalidLayout))?;
     }
     Ok(marker)
+}
+
+#[cfg(test)]
+mod root_name_tests {
+    use std::path::Path;
+
+    use super::{SessionStoreOpenError, root_name_is_allowed, validate_root_selection};
+
+    /// The hostile name the SEC-T02 tests put in a parent folder because the
+    /// root refused it on Linux (#232): it holds `:` twice, which is why.
+    const SEC_T02_NAME: &str =
+        "roo\u{202e}ts\u{200b}\u{1b}]8;;https:example.invalid\u{7}x\u{1b}[31m\nForged: line\u{85}";
+    /// The same controls without the colons.
+    const CONTROLS: &str =
+        "roo\u{202e}ts\u{200b}\u{1b}]8;;https//example.invalid\u{7}x\u{1b}[31m\nForged line\u{85}";
+
+    /// #232: what refused the hostile root name on Linux was the colon, which
+    /// every platform refuses on purpose (an alternate data stream on
+    /// Windows), and the refusal now has a cause of its own. The control
+    /// characters themselves are allowed where the system allows them, and
+    /// refused up front on Windows, which never allows them.
+    #[test]
+    fn the_root_name_rule_refuses_the_colon_and_allows_controls_where_the_system_does() {
+        for refused in [
+            "",
+            "a:b",
+            "sessions ",
+            "sessions.",
+            "CON",
+            "nul.txt",
+            "LPT9",
+            SEC_T02_NAME,
+        ] {
+            assert!(!root_name_is_allowed(refused), "{refused:?}");
+        }
+        for allowed in [
+            "sessions",
+            "private sessions",
+            "VSift-sessions",
+            "con-tent",
+            ".hidden",
+        ] {
+            assert!(root_name_is_allowed(allowed), "{allowed:?}");
+        }
+        assert_eq!(root_name_is_allowed(CONTROLS), cfg!(not(windows)));
+        for windows_only in ["a<b", "a>b", "a\"b", "a|b", "a?b", "a*b", "a\u{7}b", "a\nb"] {
+            assert_eq!(
+                root_name_is_allowed(windows_only),
+                cfg!(not(windows)),
+                "{windows_only:?}"
+            );
+        }
+    }
+
+    /// The refusal is the typed `RootNameNotAllowed`, not the generic
+    /// `RootUnavailable` it used to be, and it comes before anything is made.
+    #[test]
+    fn a_refused_root_name_is_its_own_cause() {
+        let base = std::env::temp_dir();
+        assert_eq!(
+            validate_root_selection(&base.join(SEC_T02_NAME)),
+            Err(SessionStoreOpenError::RootNameNotAllowed)
+        );
+        assert_eq!(
+            validate_root_selection(&base.join("vsift-root:stream")),
+            Err(SessionStoreOpenError::RootNameNotAllowed)
+        );
+        assert_eq!(validate_root_selection(&base.join("sessions")), Ok(()));
+        assert_eq!(
+            validate_root_selection(Path::new("relative")),
+            Err(SessionStoreOpenError::RootMustBeAbsolute)
+        );
+    }
 }
 
 #[cfg(test)]

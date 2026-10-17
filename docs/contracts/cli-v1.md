@@ -2775,6 +2775,22 @@ empty folder could be a concurrent creator's first step, so its refusal waits ou
 5 seconds above first. See
 [`session-root-unowned.json`](../../schemas/v1/examples/session-root-unowned.json).
 
+**A session root whose own folder name VSift does not use** is refused before anything is created (#232). The rule,
+on every platform, is for the root's final folder name: not empty, no `:` (an alternate data stream on Windows), no
+trailing space or dot (which Windows drops), and not a device name Windows reserves (`CON`, `PRN`, `AUX`, `NUL`,
+`COM1` to `COM9`, `LPT1` to `LPT9`, with or without an extension), so the name means the same folder wherever it is
+used; a name that is not valid UTF-8 is refused too. On Windows the name may also hold no control character and none of
+`< > " | ? *`, which Windows refuses in any name; there these used to fail later, when the folder was created. **Linux
+and macOS allow control characters in a name, and so does VSift there:** a root whose own name holds an escape
+sequence, a bell, a line break or a C1 control is created and used like any other, and every human output shows its
+path inert (SEC-T02). The answer is `STORAGE_IO` (exit 7), the code the case gave before it had a cause of its own
+(changing a published failure code is not additive within v1, known limit L-127), and since `0.2.2` one remediation
+that states the rule where `remediation` was empty (example
+[`session-root-name-not-allowed.json`](../../schemas/v1/examples/session-root-name-not-allowed.json)). The folders
+above the root are not checked by this rule; they are resolved as the operating system resolves them. Before this was
+written down, a root named with SEC-T02's hostile text was refused on Linux and the control characters were
+suspected; the cause was the two colons the text held (#232).
+
 A folder another VSift process created a moment ago can briefly look
 non-private while that process restricts it, so a folder that is still empty and was
 created within the last 10 seconds is checked again for up to 2 seconds (the session

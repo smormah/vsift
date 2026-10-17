@@ -436,7 +436,7 @@ fn provisioning_is_exclusive_private_and_policy_bounded() -> TestResult {
     );
     assert_eq!(
         FilesystemSessionStore::provision(path.with_file_name("CON"), 3,).err(),
-        Some(SessionStoreOpenError::RootUnavailable)
+        Some(SessionStoreOpenError::RootNameNotAllowed)
     );
     drop(store);
     fs::remove_dir_all(path)?;
@@ -705,9 +705,11 @@ fn provisioning_rejects_parent_traversal_ads_and_invalid_capacity_before_mutatio
         FilesystemSessionStore::provision(&traversal, 1).err(),
         Some(SessionStoreOpenError::RootUnavailable)
     );
+    // A name with a colon has its own cause since #232 (it was the generic
+    // unavailable root); the published code is the same.
     assert_eq!(
         FilesystemSessionStore::provision(&ads, 1).err(),
-        Some(SessionStoreOpenError::RootUnavailable)
+        Some(SessionStoreOpenError::RootNameNotAllowed)
     );
     assert_eq!(
         FilesystemSessionStore::provision(&zero, 0).err(),

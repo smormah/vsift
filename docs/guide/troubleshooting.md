@@ -155,6 +155,10 @@ just ran. In practice:
   session holds a copy of the video, so it needs at least that much room, plus room for the frames) and run it
   again. A full disk has a `Fix:` line of its own; a locked file may have none.
 - **A link where a file is expected.** Name the file itself.
+- **A `--session-root` folder name VSift does not use.** The line begins "The last folder name of the session root
+  you gave is one VSift does not use". The last part of the folder you named must not hold a colon, end with a
+  space or a dot, or be a device name Windows keeps (`CON`, `NUL`, `COM1` and the like); on Windows it must also hold
+  no control character and none of `< > " | ? *`. Name another folder.
 - **An id that does not exist.** A session id with a typo, or one that has been cleaned up, can end here: check
   `vsift session list`. An expired session cannot be used; open the video again.
 - **VSift's own folders are open to other accounts.** The message says so, in fixed words, and the fix is to

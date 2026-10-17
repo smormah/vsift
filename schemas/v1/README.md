@@ -376,7 +376,11 @@ are the `ingest` failures when the path names a named pipe or a device (`INVALID
 each the code it had before, refused without being opened (#264): one remediation entry that says it is not a
 regular file where `remediation` was empty; no field is added. They are checked by `storage_contract`, by a unit
 test of the CLI that builds each from the typed cause, and on Linux and macOS by `fifo_source_cli_contract`, which
-runs the binary. `frame-get.busy.json` is the `frame get` failure when another
+runs the binary. `session-root-name-not-allowed.json` is the failure of any command
+that creates or opens the session root when `--session-root`'s own folder name is one VSift does not use (#232):
+`STORAGE_IO`, the code it had, with one remediation that states the rule where `remediation` was empty; no field is
+added. It is checked by `storage_contract`, and `session_root_name_cli_contract` runs the binary.
+`frame-get.busy.json` is the `frame get` failure when another
 request holds the session or the root's share of the machine's capacity (#342): `BUSY`, with
 `retryable` true, as it always was, and, since 0.2.1, one remediation entry and `retry_after_ms`
 2000 where it had an empty `remediation` and a null hint; no field is added (the failure shape
