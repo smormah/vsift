@@ -1143,8 +1143,17 @@ at most once per operation id:
   operation id, the step's index): `job status <job>` reports it, and a redelivered
   request continues or replays it.
 - *candidates* runs `candidates` over the range (the whole video without one) until no
-  window is left unanalysed, at most 16 calls; what stays uncovered (`undecodable`,
-  `no_decoded_frame`, a candidate budget) is its `coverage` and makes it `partial`.
+  window is left unanalysed, at most 16 calls per try of the step; what stays uncovered
+  (`undecodable`, `no_decoded_frame`, a candidate budget) is its `coverage` and makes it
+  `partial`. A call that analysed nothing because other requests held the workspace's
+  capacity is `BUSY`, and the step is tried again (with 16 calls again) after a backoff
+  within the host's admission wait, as any `BUSY` step is; the windows already analysed
+  are kept. When the wait runs out the request fails `BUSY`, and when the next try would
+  leave less than one second of the request's deadline it fails `DEADLINE_EXCEEDED`;
+  either way it stays resumable.
+  Since `0.2.2` ([#433](https://github.com/smormah/vsift/issues/433)): before, such a call
+  ended the step, and a window was left `not_analyzed` in a `partial` result although the
+  video was fine.
 - *retain* writes the bundle under a hidden staging name beside
   `<bundle-root>/<bundle_name>` and renames it once it validates; its outputs name the
   bundle and the SHA-256 of its manifest. A directory already under the name is

@@ -105,6 +105,7 @@ pub struct CandidatesResults {
     analysed_now: usize,
     omission: CandidateOmission,
     omitted: usize,
+    stop: Option<VisualExtensionStop>,
 }
 
 impl CandidatesResults {
@@ -180,6 +181,12 @@ impl CandidatesResults {
     #[must_use]
     pub const fn analysed_now(&self) -> usize {
         self.analysed_now
+    }
+
+    /// Why this call stopped before every missing window of the range was
+    /// analysed, if it did; `None` for a warm read.
+    pub(crate) const fn stop(&self) -> Option<VisualExtensionStop> {
+        self.stop
     }
 }
 
@@ -517,5 +524,6 @@ fn page_results(
         analysed_now,
         omission: request.omission,
         omitted,
+        stop,
     })
 }

@@ -53,7 +53,9 @@ use std::{
     time::{Duration, Instant},
 };
 
-use vsift_application::{RetryTimer, SessionStorageError, worker_step_operation_id};
+use vsift_application::{
+    RetryTimer, SessionStorageError, VisualExtensionStop, worker_step_operation_id,
+};
 use vsift_contract::{
     BundleSourceInclusion, FreeSpaceReserve, LifecycleResponse, MAX_REQUEST_DEADLINE_MS, Readiness,
     RequestDurability, RequestFailure, RequestRejection, ResourceLimits, ResultOrigin, StepOutputs,
@@ -73,7 +75,7 @@ use vsift_infrastructure::{
 };
 
 use crate::{
-    CandidatesRange, CandidatesRequest, RetranscribeRange, RetranscribeRequest,
+    CandidatesRange, CandidatesRequest, CandidatesResults, RetranscribeRange, RetranscribeRequest,
     engine::{Engine, HostIsolation},
     error::{EngineError, SessionRootError, WorkerFailure},
     progress::{AdmissionWaiting, JobProgress, ProgressObserver},
@@ -847,7 +849,8 @@ impl Engine {
     }
 
     /// Candidates of the range, analysed until no window is left
-    /// unanalysed, at most [`MAX_CANDIDATE_CALLS`] calls.
+    /// unanalysed, at most [`MAX_CANDIDATE_CALLS`] calls (see
+    /// [`CandidatesCall::next`] for when it stops).
     async fn candidates_step(
         &self,
         context: &RequestContext<'_>,
@@ -871,32 +874,33 @@ impl Engine {
                 })
                 .await?;
             calls += 1;
-            let unanalysed = results.gaps().iter().any(|gap| {
-                matches!(
-                    gap.reason,
-                    CoverageGapReason::NotAnalyzed | CoverageGapReason::DeadlineExceeded
-                )
-            });
-            if unanalysed && context.work.is_cancelled() {
+            let call = CandidatesCall::of(&results);
+            if call.left_unanalysed && context.work.is_cancelled() {
                 // Windows analysed before the stop are committed; the rest
                 // wait for the next delivery.
                 return Err(EngineError::Worker(WorkerFailure::Stopped).into());
             }
-            if !unanalysed || results.analysed_now() == 0 || calls >= MAX_CANDIDATE_CALLS {
-                let gaps: Vec<VisualCoverageGap> = results.gaps().to_vec();
-                return Ok(StepDone {
-                    outputs: StepOutputs::Candidates {
-                        visual_index_id: results.index().id().clone(),
-                        generation: results.session().generation(),
-                        candidate_count: u32::try_from(
-                            results.index().candidates_in(results.searched()).count(),
-                        )
-                        .unwrap_or(u32::MAX),
-                        gaps,
-                    },
-                    admission_wait: Duration::ZERO,
-                    job: None,
-                });
+            match call.next(calls) {
+                CandidatesNext::CallAgain => {}
+                CandidatesNext::Contention(stop) => {
+                    return Err(EngineError::VisualAnalysisStopped(stop).into());
+                }
+                CandidatesNext::Done => {
+                    let gaps: Vec<VisualCoverageGap> = results.gaps().to_vec();
+                    return Ok(StepDone {
+                        outputs: StepOutputs::Candidates {
+                            visual_index_id: results.index().id().clone(),
+                            generation: results.session().generation(),
+                            candidate_count: u32::try_from(
+                                results.index().candidates_in(results.searched()).count(),
+                            )
+                            .unwrap_or(u32::MAX),
+                            gaps,
+                        },
+                        admission_wait: Duration::ZERO,
+                        job: None,
+                    });
+                }
             }
         }
     }
@@ -1326,4 +1330,152 @@ fn failure_of(error: &EngineError) -> WorkFailure {
 
 fn millis(duration: Duration) -> u64 {
     u64::try_from(duration.as_millis()).unwrap_or(u64::MAX)
+}
+
+/// What one `candidates` call of a worker's candidates step left (#433).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct CandidatesCall {
+    /// Some window of the range is still `not_analyzed` or `deadline_exceeded`.
+    left_unanalysed: bool,
+    /// How many windows this call analysed.
+    analysed_now: usize,
+    /// Why the call stopped before every missing window, if it did.
+    stop: Option<VisualExtensionStop>,
+}
+
+/// What a candidates step does after one call.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum CandidatesNext {
+    /// Windows are left and the call made progress: call again.
+    CallAgain,
+    /// Nothing more the step can do now: what is left is its coverage.
+    Done,
+    /// The call analysed nothing because other work held the workspace's
+    /// capacity: the step fails `BUSY`, which the worker retries after a
+    /// backoff within the host's admission wait.
+    Contention(VisualExtensionStop),
+}
+
+impl CandidatesCall {
+    fn of(results: &CandidatesResults) -> Self {
+        Self {
+            left_unanalysed: results.gaps().iter().any(|gap| {
+                matches!(
+                    gap.reason,
+                    CoverageGapReason::NotAnalyzed | CoverageGapReason::DeadlineExceeded
+                )
+            }),
+            analysed_now: results.analysed_now(),
+            stop: results.stop(),
+        }
+    }
+
+    /// The step goes on while calls make progress, at most `calls` of
+    /// [`MAX_CANDIDATE_CALLS`].
+    ///
+    /// A call that analysed nothing ends the step, so a window that cannot
+    /// be analysed now does not make it call for ever, **except when the
+    /// call stopped on admission** (#433). A visual window's `FFmpeg` reserves
+    /// two units of the workspace's capacity and never waits for them; with
+    /// other requests' windows holding the capacity, a call that finds it
+    /// taken stops at once. The first call of a step then fails `BUSY` and
+    /// the worker retries it, but a later call, with windows of the range
+    /// already indexed, answers `partial`; ending the step there left a
+    /// window `not_analyzed` (at concurrency 4 in a four-unit workspace,
+    /// 1 in 12 to 1 in 24 local runs, more on a loaded desktop). That
+    /// gap says only that a sibling request was decoding at that moment, not
+    /// anything about the video, so the step answers the contention as the
+    /// `BUSY` it is.
+    const fn next(self, calls: usize) -> CandidatesNext {
+        if !self.left_unanalysed {
+            return CandidatesNext::Done;
+        }
+        if self.analysed_now == 0 {
+            return match self.stop {
+                Some(stop @ VisualExtensionStop::Busy { .. }) => CandidatesNext::Contention(stop),
+                Some(
+                    VisualExtensionStop::Deadline { .. }
+                    | VisualExtensionStop::Cancelled { .. }
+                    | VisualExtensionStop::WindowLimit,
+                )
+                | None => CandidatesNext::Done,
+            };
+        }
+        if calls >= MAX_CANDIDATE_CALLS {
+            CandidatesNext::Done
+        } else {
+            CandidatesNext::CallAgain
+        }
+    }
+}
+
+#[cfg(test)]
+mod candidates_step_tests {
+    use vsift_application::VisualExtensionStop;
+
+    use super::{CandidatesCall, CandidatesNext, MAX_CANDIDATE_CALLS};
+
+    const fn call(
+        left_unanalysed: bool,
+        analysed_now: usize,
+        stop: Option<VisualExtensionStop>,
+    ) -> CandidatesCall {
+        CandidatesCall {
+            left_unanalysed,
+            analysed_now,
+            stop,
+        }
+    }
+
+    /// #433: a call that analysed nothing because the capacity was taken
+    /// is contention, retried as `BUSY`, not the end of the step.
+    #[test]
+    fn a_call_that_found_the_capacity_taken_is_contention() {
+        let busy = VisualExtensionStop::Busy { ordinal: 2 };
+        assert_eq!(
+            call(true, 0, Some(busy)).next(2),
+            CandidatesNext::Contention(busy)
+        );
+        assert_eq!(
+            call(true, 0, Some(busy)).next(MAX_CANDIDATE_CALLS),
+            CandidatesNext::Contention(busy)
+        );
+    }
+
+    /// A call that made progress is followed by another; one that stopped
+    /// on admission after progress is too (the next call meets the
+    /// contention at its first window).
+    #[test]
+    fn a_call_that_made_progress_is_followed_by_another() {
+        assert_eq!(call(true, 1, None).next(1), CandidatesNext::CallAgain);
+        assert_eq!(
+            call(true, 1, Some(VisualExtensionStop::Busy { ordinal: 3 })).next(1),
+            CandidatesNext::CallAgain
+        );
+        assert_eq!(
+            call(true, 30, Some(VisualExtensionStop::WindowLimit)).next(1),
+            CandidatesNext::CallAgain
+        );
+    }
+
+    /// Everything else ends the step with what is left as its coverage: no
+    /// window left, the call limit, and a call that analysed nothing for a
+    /// reason waiting cannot change.
+    #[test]
+    fn the_step_ends_without_progress_or_work_left() {
+        assert_eq!(call(false, 0, None).next(1), CandidatesNext::Done);
+        assert_eq!(call(false, 3, None).next(1), CandidatesNext::Done);
+        assert_eq!(
+            call(true, 1, None).next(MAX_CANDIDATE_CALLS),
+            CandidatesNext::Done
+        );
+        for stop in [
+            None,
+            Some(VisualExtensionStop::Deadline { ordinal: 1 }),
+            Some(VisualExtensionStop::Cancelled { ordinal: 1 }),
+            Some(VisualExtensionStop::WindowLimit),
+        ] {
+            assert_eq!(call(true, 0, stop).next(1), CandidatesNext::Done);
+        }
+    }
 }
