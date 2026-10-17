@@ -494,6 +494,9 @@ The data member of a complete or partial candidates result asked for with --view
 | `coverage.gaps[].reason` | "not_analyzed" \| "deadline_exceeded" \| "undecodable" \| "no_decoded_frame" \| "candidate_budget_exhausted" | yes | not_analyzed: not analysed yet; call candidates again for the range. deadline_exceeded: the window's decode timed out in this call; a later call retries it. undecodable: the media tools could not decode the window (recorded, not retried). no_decoded_frame: a 10 s cell of an analysed window without a decoded frame. candidate_budget_exhausted: the window changed more often than its 32-candidate budget; dropped_candidates says how many change candidates were dropped. |
 | `coverage.gaps[].dropped_candidates` | integer | yes | Change candidates dropped by the window's budget; 0 for every other reason.; 0 to 65535 |
 | `coverage.ranges_truncated` | boolean | yes | True when analyzed or gaps held more than 100 entries and only the first 100 are listed. |
+| `omitted` | object | no | What the page left out at the caller's request (candidates --omit, 0.2.2, #367): reason is the candidate reason whose candidates are not listed (periodic_coverage: the screen did not change in their 10 s cell) and count how many analysed candidates of the whole requested range that was, the same on every page of the range. Present exactly when an omission was asked for, also with count 0, so an answer that lists fewer candidates than the index holds always says so; absent without one. It is never a coverage gap: the candidates were analysed and stay in the index. A cursor continues only pages of the same omission. |
+| `omitted.reason` | "periodic_coverage" | yes |  |
+| `omitted.count` | integer | yes | 0 to 1000000 |
 | `items` | array of object, see [visual-candidate-brief.schema.json](#visual-candidate-briefschemajson) | yes | at most 100 items |
 | `next_cursor` | string or null | yes | 1 to 512 characters |
 
@@ -530,6 +533,9 @@ The data member of a complete or partial candidates result (P08): one bounded pa
 | `coverage.gaps[].reason` | "not_analyzed" \| "deadline_exceeded" \| "undecodable" \| "no_decoded_frame" \| "candidate_budget_exhausted" | yes | not_analyzed: not analysed yet; call candidates again for the range. deadline_exceeded: the window's decode timed out in this call; a later call retries it. undecodable: the media tools could not decode the window (recorded, not retried). no_decoded_frame: a 10 s cell of an analysed window without a decoded frame. candidate_budget_exhausted: the window changed more often than its 32-candidate budget; dropped_candidates says how many change candidates were dropped. |
 | `coverage.gaps[].dropped_candidates` | integer | yes | Change candidates dropped by the window's budget; 0 for every other reason.; 0 to 65535 |
 | `coverage.ranges_truncated` | boolean | yes | True when analyzed or gaps held more than 100 entries and only the first 100 are listed. |
+| `omitted` | object | no | What the page left out at the caller's request (candidates --omit, 0.2.2, #367): reason is the candidate reason whose candidates are not listed (periodic_coverage: the screen did not change in their 10 s cell) and count how many analysed candidates of the whole requested range that was, the same on every page of the range. Present exactly when an omission was asked for, also with count 0, so an answer that lists fewer candidates than the index holds always says so; absent without one. It is never a coverage gap: the candidates were analysed and stay in the index. A cursor continues only pages of the same omission. |
+| `omitted.reason` | "periodic_coverage" | yes |  |
+| `omitted.count` | integer | yes | 0 to 1000000 |
 | `items` | array of object, see [visual-candidate.schema.json](#visual-candidateschemajson) | yes | at most 100 items |
 | `next_cursor` | string or null | yes | 1 to 512 characters |
 
@@ -566,6 +572,9 @@ The data member of the complete or partial terminal result that ends a candidate
 | `coverage.gaps[].reason` | "not_analyzed" \| "deadline_exceeded" \| "undecodable" \| "no_decoded_frame" \| "candidate_budget_exhausted" | yes | not_analyzed: not analysed yet; call candidates again for the range. deadline_exceeded: the window's decode timed out in this call; a later call retries it. undecodable: the media tools could not decode the window (recorded, not retried). no_decoded_frame: a 10 s cell of an analysed window without a decoded frame. candidate_budget_exhausted: the window changed more often than its 32-candidate budget; dropped_candidates says how many change candidates were dropped. |
 | `coverage.gaps[].dropped_candidates` | integer | yes | Change candidates dropped by the window's budget; 0 for every other reason.; 0 to 65535 |
 | `coverage.ranges_truncated` | boolean | yes | True when analyzed or gaps held more than 100 entries and only the first 100 are listed. |
+| `omitted` | object | no | What the page left out at the caller's request (candidates --omit, 0.2.2, #367): reason is the candidate reason whose candidates are not listed (periodic_coverage: the screen did not change in their 10 s cell) and count how many analysed candidates of the whole requested range that was, the same on every page of the range. Present exactly when an omission was asked for, also with count 0, so an answer that lists fewer candidates than the index holds always says so; absent without one. It is never a coverage gap: the candidates were analysed and stay in the index. A cursor continues only pages of the same omission. |
+| `omitted.reason` | "periodic_coverage" | yes |  |
+| `omitted.count` | integer | yes | 0 to 1000000 |
 | `record_count` | integer | yes | 0 to 100 |
 | `next_cursor` | string or null | yes | 1 to 512 characters |
 

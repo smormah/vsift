@@ -903,6 +903,11 @@ fn part_two_examples_render_as_readable_text() -> TestResult {
         (CommandName::Candidates, "candidates.json", "candidates"),
         (
             CommandName::Candidates,
+            "candidates.omit-periodic.json",
+            "candidates-omit-periodic",
+        ),
+        (
+            CommandName::Candidates,
             "candidates.partial.json",
             "candidates-partial",
         ),

@@ -63,7 +63,9 @@ the elapsed time. Add
   read as incomplete instead of trusting it. A smaller range does not help when the revision
   block alone is that large.
 - Ask `candidates` for one range of at most 5 minutes per call (`--to` at most 300000000
-  after `--from`), and with a transcript only around its spans, not across the video.
+  after `--from`), and with a transcript only around its spans, not across the video. Without
+  a transcript add `--omit periodic`: on a generated 21-minute walkthrough it halved what the
+  candidates cost (38,349 to 18,324 characters) and still listed every distinct screen.
 - **A summary or timeline of a whole recording over 5 minutes does not fit these profiles.**
   It needs every transcript segment and more screens than the image budget holds, and can
   need more claims and citations than `handoff.schema.json` allows (50 and 100). If the user

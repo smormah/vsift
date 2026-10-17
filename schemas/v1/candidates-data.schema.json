@@ -14,6 +14,7 @@
     },
     "index": { "$ref": "#/$defs/index" },
     "coverage": { "$ref": "#/$defs/coverage" },
+    "omitted": { "$ref": "#/$defs/omitted" },
     "items": {
       "type": "array",
       "maxItems": 100,
@@ -121,6 +122,16 @@
         { "type": "null" },
         { "type": "string", "minLength": 1, "maxLength": 512 }
       ]
+    },
+    "omitted": {
+      "description": "What the page left out at the caller's request (candidates --omit, 0.2.2, #367): reason is the candidate reason whose candidates are not listed (periodic_coverage: the screen did not change in their 10 s cell) and count how many analysed candidates of the whole requested range that was, the same on every page of the range. Present exactly when an omission was asked for, also with count 0, so an answer that lists fewer candidates than the index holds always says so; absent without one. It is never a coverage gap: the candidates were analysed and stay in the index. A cursor continues only pages of the same omission.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reason", "count"],
+      "properties": {
+        "reason": { "enum": ["periodic_coverage"] },
+        "count": { "type": "integer", "minimum": 0, "maximum": 1000000 }
+      }
     }
   }
 }

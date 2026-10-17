@@ -325,6 +325,11 @@ a read of the 55 s stand-in recording of `transcript-retranscribe.partial.json` 
 length, `partial` with the gap 30-55 s (made by `local_asr_contract`, like that example).
 The contract tests build each brief example from the same code as the full answer and compare;
 they also hold every brief item to be a projection of its full item.
+`candidates.omit-periodic.json` and `candidates.omit-periodic.brief.json` (0.2.2, #367) are the
+F02 page of `candidates.json` asked for with `--omit periodic`: the same candidates without the
+one whose only reason is `periodic_coverage`, and `data.omitted` saying so (`count` 1); every other
+member is the page without the option's. `candidates_contract` builds them and also holds the cursor
+to the choice; `candidates_cli_contract` runs the binary.
 `candidates.json` and `candidates.events.jsonl` page the F02 fixture (three slides,
 A-B-A) indexed from the samples FFmpeg 9.0 decoded from it
 (`crates/vsift-infrastructure/tests/data/visual_samples/F02.json`): four candidates

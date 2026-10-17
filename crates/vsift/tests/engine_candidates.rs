@@ -235,6 +235,7 @@ impl Harness {
             },
             limit: None,
             cursor: None,
+            omission: vsift::CandidateOmission::Nothing,
             cancellation: Cancellation::new(),
         }
     }

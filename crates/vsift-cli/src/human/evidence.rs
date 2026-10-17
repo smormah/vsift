@@ -111,6 +111,13 @@ pub(super) fn candidates(envelope: &Envelope<CandidatesPage>) -> Result<Rendered
     text.push_fixed("Candidates on this page: ")
         .push_unsigned(count(page.items.len()))
         .end_line();
+    if let Some(omitted) = &page.omitted {
+        text.push_fixed("Left out, as asked (--omit): ")
+            .push_unsigned(omitted.count)
+            .push_fixed(" of this range's candidates, those whose only reason is ")
+            .push_value(&omitted.reason)
+            .end_line();
+    }
     for candidate in &page.items {
         push_candidate(&mut text, candidate);
     }

@@ -829,3 +829,150 @@ async fn an_unknown_view_is_a_parse_failure_and_readable_text_ignores_the_view()
     assert_eq!(default.stdout, brief.stdout);
     Ok(())
 }
+
+/// #367: `--omit periodic` through the binary. Without it (or with `--omit
+/// none`) the answer is the default one, byte for byte, with no `omitted`
+/// member. With it, the page lists every other candidate in the same order,
+/// says how many periodic-only ones it left out, keeps the coverage and the
+/// envelope, works with `--view brief` and in a stream, and its cursor is
+/// refused by a page without the omission (and the other way round).
+#[tokio::test]
+async fn leaving_out_periodic_candidates_is_opt_in_and_never_silent() -> TestResult {
+    let root = OwnedRoot::new()?;
+    let session = open_session(&root)?;
+    seed_index(&root, &session)?;
+    let range = ["0", "60000000"];
+    let default = vsift(
+        &root,
+        &candidates(&session, range[0], range[1], &["--json"]),
+    )?;
+    let none = vsift(
+        &root,
+        &candidates(&session, range[0], range[1], &["--omit", "none", "--json"]),
+    )?;
+    assert_eq!(default.stdout, none.stdout);
+    let full = json(&default)?;
+    assert!(full["data"].get("omitted").is_none());
+
+    let output = vsift(
+        &root,
+        &candidates(
+            &session,
+            range[0],
+            range[1],
+            &["--omit", "periodic", "--json"],
+        ),
+    )?;
+    assert_eq!(output.status.code(), Some(0));
+    let omitting = json(&output)?;
+    let items = full["data"]["items"].as_array().ok_or("items")?;
+    let periodic = |item: &&Value| item["reasons"] == serde_json::json!(["periodic_coverage"]);
+    let left_out = items.iter().filter(periodic).count();
+    assert!(left_out > 0, "the seeded window has no periodic candidate");
+    let kept: Vec<Value> = items
+        .iter()
+        .filter(|item| !periodic(item))
+        .cloned()
+        .collect();
+    assert_eq!(omitting["data"]["items"], Value::Array(kept));
+    let stated = serde_json::json!({"reason": "periodic_coverage", "count": left_out});
+    assert_eq!(omitting["data"]["omitted"], stated);
+    for member in ["status", "warnings", "coverage", "error"] {
+        assert_eq!(omitting[member], full[member], "{member}");
+    }
+    assert_eq!(omitting["data"]["coverage"], full["data"]["coverage"]);
+
+    let brief = json(&vsift(
+        &root,
+        &candidates(
+            &session,
+            range[0],
+            range[1],
+            &["--omit", "periodic", "--view", "brief", "--json"],
+        ),
+    )?)?;
+    validate("candidates-brief-data.schema.json", &brief["data"])?;
+    assert_eq!(brief["data"]["omitted"], stated);
+    assert_eq!(ids(&brief)?, ids(&omitting)?);
+
+    let lines = stream(&vsift(
+        &root,
+        &candidates(
+            &session,
+            range[0],
+            range[1],
+            &["--omit", "periodic", "--events", "jsonl"],
+        ),
+    )?)?;
+    let terminal = lines.last().ok_or("no terminal")?;
+    assert_eq!(terminal["result"]["data"]["omitted"], stated);
+    assert_eq!(lines.len() - 1, ids(&omitting)?.len());
+    Ok(())
+}
+
+/// #367: the omitting cursor continues only omitting pages, each saying the
+/// same count, and an unknown `--omit` value is a parse failure.
+#[tokio::test]
+async fn an_omitting_cursor_continues_only_omitting_pages() -> TestResult {
+    let root = OwnedRoot::new()?;
+    let session = open_session(&root)?;
+    seed_index(&root, &session)?;
+    let range = ["0", "60000000"];
+    let stated = json(&vsift(
+        &root,
+        &candidates(
+            &session,
+            range[0],
+            range[1],
+            &["--omit", "periodic", "--json"],
+        ),
+    )?)?["data"]["omitted"]
+        .clone();
+    let first = json(&vsift(
+        &root,
+        &candidates(
+            &session,
+            range[0],
+            range[1],
+            &["--omit", "periodic", "--limit", "1", "--json"],
+        ),
+    )?)?;
+    let cursor = first["data"]["next_cursor"]
+        .as_str()
+        .ok_or("one candidate a page has a next")?
+        .to_owned();
+    let refused = vsift(
+        &root,
+        &candidates(
+            &session,
+            range[0],
+            range[1],
+            &["--cursor", &cursor, "--json"],
+        ),
+    )?;
+    assert_eq!(refused.status.code(), Some(2));
+    assert_eq!(json(&refused)?["error"]["code"], "INVALID_ARGUMENT");
+    let continued = json(&vsift(
+        &root,
+        &candidates(
+            &session,
+            range[0],
+            range[1],
+            &[
+                "--omit", "periodic", "--limit", "1", "--cursor", &cursor, "--json",
+            ],
+        ),
+    )?)?;
+    assert_eq!(continued["data"]["omitted"], stated);
+    let unknown = vsift(
+        &root,
+        &candidates(
+            &session,
+            range[0],
+            range[1],
+            &["--omit", "changes", "--json"],
+        ),
+    )?;
+    assert_eq!(unknown.status.code(), Some(2));
+    Ok(())
+}

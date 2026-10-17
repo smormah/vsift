@@ -57,6 +57,7 @@
       }
     },
     "coverage": { "$ref": "candidates-data.schema.json#/$defs/coverage" },
+    "omitted": { "$ref": "candidates-data.schema.json#/$defs/omitted" },
     "items": {
       "type": "array",
       "maxItems": 100,

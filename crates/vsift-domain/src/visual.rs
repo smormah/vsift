@@ -467,6 +467,54 @@ impl CandidateReason {
     }
 }
 
+/// Which candidates a page of `candidates` leaves out (#367).
+///
+/// A shortlist of the screens of a long recording is mostly periodic
+/// coverage: on a generated 21-minute walkthrough 92 of 140 candidates were
+/// proposed only because nothing changed in their 10 s cell. Leaving those
+/// out is a reader's choice and never a gap: the candidates stay in the
+/// index, the coverage is unchanged, and a page that leaves any out says
+/// which reason it left out and how many candidates of its range that was.
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+pub enum CandidateOmission {
+    /// Every candidate (the default, and the answer every release gave).
+    #[default]
+    Nothing,
+    /// Candidates whose only reason is
+    /// [`CandidateReason::PeriodicCoverage`]: the screen did not change in
+    /// their cell, so each repeats the screen of a candidate before it.
+    PeriodicCoverage,
+}
+
+impl CandidateOmission {
+    /// Every omission, in declaration order.
+    pub const ALL: [Self; 2] = [Self::Nothing, Self::PeriodicCoverage];
+
+    /// Stable identifier used in contracts (the CLI's `--omit` value).
+    #[must_use]
+    pub const fn identifier(self) -> &'static str {
+        match self {
+            Self::Nothing => "none",
+            Self::PeriodicCoverage => "periodic",
+        }
+    }
+
+    /// The reason whose candidates are left out, if any.
+    #[must_use]
+    pub const fn left_out_reason(self) -> Option<CandidateReason> {
+        match self {
+            Self::Nothing => None,
+            Self::PeriodicCoverage => Some(CandidateReason::PeriodicCoverage),
+        }
+    }
+
+    /// Whether `candidate` is left out.
+    #[must_use]
+    pub fn leaves_out(self, candidate: &VisualCandidate) -> bool {
+        self.left_out_reason() == Some(candidate.reason())
+    }
+}
+
 /// What the samples showed about how long a candidate's screen held.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum CandidateStability {

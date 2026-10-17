@@ -105,8 +105,8 @@ pub use transcript::{
     TranscriptWarnings, align_imported_cues,
 };
 pub use visual::{
-    CandidateChange, CandidateDraft, CandidateReason, CandidateStability, CoverageGapReason,
-    MAX_VISUAL_INDEX_DURATION_MICROS, MAX_WINDOW_CANDIDATES, MAX_WINDOW_SAMPLES,
+    CandidateChange, CandidateDraft, CandidateOmission, CandidateReason, CandidateStability,
+    CoverageGapReason, MAX_VISUAL_INDEX_DURATION_MICROS, MAX_WINDOW_CANDIDATES, MAX_WINDOW_SAMPLES,
     VISUAL_BLOCK_COLUMNS, VISUAL_BLOCK_ROWS, VISUAL_BLOCKS, VISUAL_CELL_MICROS, VISUAL_FRAME_BYTES,
     VISUAL_FRAME_HEIGHT, VISUAL_FRAME_WIDTH, VISUAL_LEAD_IN_MICROS, VISUAL_SAMPLE_INTERVAL_MICROS,
     VISUAL_WINDOW_MICROS, VisualAnalysisError, VisualCandidate, VisualChangePolicy,

@@ -310,6 +310,18 @@ Not measured: Codex (it cannot run VSift on Windows, [L-076](../planning/known-l
 releases, and bash on Linux and macOS. **No agent has run this text**; the trial freeze is new ([trials.md](trials.md), "The
 freeze (P14)"): `skill` `13b485f3...`, whole freeze `cfaf9783...`.
 
+### Shortlisting the screens of a long recording (#367; 2026-10-18, on `main` once merged, not released)
+
+The CLI gained `candidates --omit periodic` (the maintainer's decision of 2026-10-18; [`cli-v1.md`](../contracts/cli-v1.md),
+"Leaving out periodic candidates"), and the skill uses it where the list was too dense: a range with no transcript, read 5 minutes at
+a time. `SKILL.md` INSPECT_CARDS adds the option to that sentence (the line count stays 300; the fuzz seed copy is the same bytes),
+`references/commands.md` gains its two allowed forms (with and without `--cursor`) and a paragraph on `data.omitted` and the
+cursor, and `references/budgets.md` gives the measured effect: on a generated 20:57 walkthrough the shortlist went from 38,349 to
+18,324 characters in the same 5 calls, with every distinct screen still listed ([`candidates-long-recording-0.2.2.md`](../planning/candidates-long-recording-0.2.2.md)).
+With a transcript the skill still asks only around its spans and does not use the option. An older `vsift` refuses the option as
+unknown, which the skill says. **No agent has run this text**; the trial freeze is new ([trials.md](trials.md), "The freeze (P14)"):
+`skill` `bd205d6c...`, whole freeze `10180cd8...`.
+
 ## Keeping it in step with the CLI
 
 `crates/vsift-cli/src/skill_contract.rs` (unit tests of the CLI crate, run by `cargo

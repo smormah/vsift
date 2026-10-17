@@ -19,9 +19,9 @@
 
 use serde::Serialize;
 use vsift_domain::{
-    CoverageGapReason, SessionId, SourceSegmentId, TimeRange, VISUAL_CELL_MICROS,
-    VISUAL_FRAME_HEIGHT, VISUAL_FRAME_WIDTH, VISUAL_SAMPLE_INTERVAL_MICROS, VISUAL_WINDOW_MICROS,
-    VisualCandidate, VisualCoverageGap, VisualIndex, VisualWindow,
+    CandidateOmission, CoverageGapReason, SessionId, SourceSegmentId, TimeRange,
+    VISUAL_CELL_MICROS, VISUAL_FRAME_HEIGHT, VISUAL_FRAME_WIDTH, VISUAL_SAMPLE_INTERVAL_MICROS,
+    VISUAL_WINDOW_MICROS, VisualCandidate, VisualCoverageGap, VisualIndex, VisualWindow,
 };
 
 use crate::{
@@ -69,6 +69,34 @@ pub struct CandidatesPresentation<'a> {
     pub analysed: &'a [TimeRange],
     /// Typed gaps in the visual coverage of the searched range.
     pub gaps: &'a [VisualCoverageGap],
+    /// Which candidates the page leaves out (#367).
+    pub omission: CandidateOmission,
+    /// How many candidates of the whole range the omission left out.
+    pub omitted: usize,
+}
+
+/// What a page left out, at the caller's request (`--omit`, #367): the
+/// reason whose candidates are not listed and how many candidates of the
+/// whole requested range that was, the same on every page of the range.
+///
+/// Present exactly when an omission was asked for, also when it left none
+/// out, so an answer that lists fewer candidates than the index holds always
+/// says so; absent otherwise, so the answer without the option is the one
+/// every release gave. It is never a coverage gap: the omitted candidates
+/// were analysed and stay in the index.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+struct OmittedData {
+    reason: &'static str,
+    count: usize,
+}
+
+impl OmittedData {
+    fn new(page: &CandidatesPresentation<'_>) -> Option<Self> {
+        page.omission.left_out_reason().map(|reason| Self {
+            reason: reason.identifier(),
+            count: page.omitted,
+        })
+    }
 }
 
 /// A window of the fixed 60 s grid.
@@ -346,6 +374,8 @@ pub struct CandidatesData {
     range: RangeData,
     index: IndexData,
     coverage: VisualCoverageData,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    omitted: Option<OmittedData>,
     items: Vec<VisualCandidateData>,
     next_cursor: Option<String>,
 }
@@ -359,6 +389,7 @@ impl CandidatesData {
             range: RangeData::new(page.range),
             index: IndexData::new(page.index),
             coverage: VisualCoverageData::new(page),
+            omitted: OmittedData::new(page),
             items: page
                 .candidates
                 .iter()
@@ -387,6 +418,8 @@ pub struct CandidatesBriefData {
     index: IndexData,
     item_constants: ItemConstants,
     coverage: VisualCoverageData,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    omitted: Option<OmittedData>,
     items: Vec<BriefVisualCandidateData>,
     next_cursor: Option<String>,
 }
@@ -403,6 +436,7 @@ impl CandidatesBriefData {
             index: full.index,
             item_constants: ItemConstants::new(page.index, page.source_segment_id),
             coverage: full.coverage,
+            omitted: full.omitted,
             items: full
                 .items
                 .iter()
@@ -422,6 +456,8 @@ pub struct CandidatesStreamData {
     range: RangeData,
     index: IndexData,
     coverage: VisualCoverageData,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    omitted: Option<OmittedData>,
     record_count: usize,
     next_cursor: Option<String>,
 }
@@ -553,6 +589,7 @@ impl CandidatesEvidenceStream {
             range: RangeData::new(page.range),
             index: IndexData::new(page.index),
             coverage: VisualCoverageData::new(page),
+            omitted: OmittedData::new(page),
             record_count: records.len(),
             next_cursor: page.next_cursor.map(str::to_owned),
         };

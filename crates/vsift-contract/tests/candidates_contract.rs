@@ -29,8 +29,8 @@ use vsift_contract::{
     ResultView, VISUAL_COVERAGE_WARNING, candidates_response, candidates_response_with_view,
 };
 use vsift_domain::{
-    FrameDimensions, MediaTime, PageLimit, SessionId, SourceId, TimeRange, VISUAL_BLOCKS,
-    VisualCandidate, VisualChangePolicy, VisualHash, VisualIndex, VisualIndexParts,
+    CandidateOmission, FrameDimensions, MediaTime, PageLimit, SessionId, SourceId, TimeRange,
+    VISUAL_BLOCKS, VisualCandidate, VisualChangePolicy, VisualHash, VisualIndex, VisualIndexParts,
     VisualIndexProfile, VisualIndexWindow, VisualSample, VisualWindow, VisualWindowOutcome,
     analyse_window,
 };
@@ -52,6 +52,8 @@ const PARTIAL_EXAMPLE: &str = "examples/candidates.partial.json";
 const STREAM_EXAMPLE: &str = "examples/candidates.events.jsonl";
 const BRIEF_EXAMPLE: &str = "examples/candidates.brief.json";
 const PARTIAL_BRIEF_EXAMPLE: &str = "examples/candidates.partial.brief.json";
+const OMIT_EXAMPLE: &str = "examples/candidates.omit-periodic.json";
+const OMIT_BRIEF_EXAMPLE: &str = "examples/candidates.omit-periodic.brief.json";
 
 fn schema_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../schemas/v1")
@@ -294,6 +296,24 @@ fn page(
     limit: u16,
     stop: Option<VisualExtensionStop>,
 ) -> Built<Page> {
+    page_omitting(
+        session,
+        index,
+        requested,
+        limit,
+        stop,
+        CandidateOmission::Nothing,
+    )
+}
+
+fn page_omitting(
+    session: &SessionId,
+    index: &VisualIndex,
+    requested: TimeRange,
+    limit: u16,
+    stop: Option<VisualExtensionStop>,
+    omission: CandidateOmission,
+) -> Built<Page> {
     let page = page_candidates(
         session,
         index,
@@ -301,6 +321,7 @@ fn page(
             range: requested,
             limit: PageLimit::new(limit)?,
             cursor: None,
+            omission,
         },
         CURSOR_EXPIRES_US,
         NOW_US,
@@ -323,6 +344,8 @@ fn page(
         next_cursor: next_cursor.as_deref(),
         analysed: &analysed,
         gaps: &gaps,
+        omission,
+        omitted: page.omitted,
     };
     let lifecycle = || LifecycleResponse::ephemeral(EXPIRES_AT.to_owned());
     let json = serde_json::to_value(candidates_response(&presentation, lifecycle())?)?;
@@ -739,5 +762,189 @@ fn the_stream_and_the_full_result_are_unchanged_by_the_brief_view() -> TestResul
     let terminal = lines.last().ok_or("terminal")?;
     assert!(terminal["result"]["data"].get("view").is_none());
     assert!(terminal["result"]["data"].get("item_constants").is_none());
+    Ok(())
+}
+
+/// #367: `--omit periodic` leaves out the candidates whose only reason is
+/// `periodic_coverage`, and says so. The page is the frozen example; it lists
+/// exactly the other candidates of the full page, in the same order and with
+/// the same values; `omitted` names the reason and counts what was left out
+/// (here every periodic candidate of the range); the index, coverage, status
+/// and envelope are the full page's; the stream's terminal data says the same.
+/// Without the option no answer has an `omitted` member (the frozen examples
+/// above are unchanged).
+#[test]
+fn leaving_out_periodic_candidates_says_what_it_left_out() -> TestResult {
+    let session = SessionId::parse(SESSION)?;
+    let index = f02_index(&session)?;
+    let all = page(&session, &index, range(0, 12 * SECOND)?, 20, None)?;
+    let omitting = page_omitting(
+        &session,
+        &index,
+        range(0, 12 * SECOND)?,
+        20,
+        None,
+        CandidateOmission::PeriodicCoverage,
+    )?;
+    for (answer, example) in [
+        (&omitting.json, OMIT_EXAMPLE),
+        (&omitting.brief, OMIT_BRIEF_EXAMPLE),
+    ] {
+        regenerate(
+            example,
+            &format!("{}\n", serde_json::to_string_pretty(answer)?),
+        )?;
+        validate("operation-response.schema.json", answer)?;
+        assert!(
+            *answer == load(example)?,
+            "the result differs from {example}"
+        );
+    }
+    validate("candidates-brief-data.schema.json", &omitting.brief["data"])?;
+    validate("candidates-data.schema.json", &omitting.json["data"])?;
+
+    let periodic = |item: &&Value| item["reasons"] == serde_json::json!(["periodic_coverage"]);
+    let every: Vec<Value> = all.brief["data"]["items"]
+        .as_array()
+        .ok_or("no items")?
+        .clone();
+    let kept: Vec<Value> = every
+        .iter()
+        .filter(|item| !periodic(item))
+        .cloned()
+        .collect();
+    let left_out = every.iter().filter(periodic).count();
+    assert!(left_out > 0, "the fixture has no periodic candidate");
+    assert_eq!(omitting.brief["data"]["items"], Value::Array(kept));
+    let stated = serde_json::json!({"reason": "periodic_coverage", "count": left_out});
+    assert_eq!(omitting.brief["data"]["omitted"], stated);
+    assert_eq!(omitting.json["data"]["omitted"], stated);
+    for member in ["index", "coverage", "range", "session_id", "item_constants"] {
+        assert_eq!(
+            omitting.brief["data"][member], all.brief["data"][member],
+            "{member}"
+        );
+    }
+    for member in ["status", "warnings", "coverage", "lifecycle", "error"] {
+        assert_eq!(omitting.brief[member], all.brief[member], "{member}");
+    }
+    let terminal: Value = serde_json::from_str(omitting.lines.last().ok_or("no terminal")?)?;
+    validate_line(&terminal)?;
+    assert_eq!(terminal["result"]["data"]["omitted"], stated);
+    assert_eq!(
+        terminal["result"]["data"]["record_count"],
+        omitting.lines.len() - 1
+    );
+    for answer in [&all.json, &all.brief] {
+        assert!(answer["data"].get("omitted").is_none());
+    }
+    Ok(())
+}
+
+/// #367: a page that leaves candidates out is still told so when none of
+/// its range's candidates were periodic: `omitted` is there with count 0.
+#[test]
+fn an_omission_that_left_nothing_out_still_says_so() -> TestResult {
+    let session = SessionId::parse(SESSION)?;
+    let index = f02_index(&session)?;
+    let omitting = page_omitting(
+        &session,
+        &index,
+        range(0, SECOND)?,
+        20,
+        None,
+        CandidateOmission::PeriodicCoverage,
+    )?;
+    assert_eq!(
+        omitting.json["data"]["omitted"],
+        serde_json::json!({"reason": "periodic_coverage", "count": 0})
+    );
+    Ok(())
+}
+
+/// #367: the cursor is bound to the omission. Paging with it reads exactly
+/// the candidates it keeps, once each and in order, and the count it states
+/// is the same on every page; a cursor of a page that left candidates out is
+/// refused for a page that does not, and the other way round, because the two
+/// sequences differ.
+#[test]
+fn the_cursor_is_bound_to_the_omission() -> TestResult {
+    let session = SessionId::parse(SESSION)?;
+    let index = f02_index(&session)?;
+    let requested = range(0, 12 * SECOND)?;
+    let request = |cursor: Option<String>, omission| -> Built<CandidatePageRequest> {
+        Ok(CandidatePageRequest {
+            range: requested,
+            limit: PageLimit::new(1)?,
+            cursor,
+            omission,
+        })
+    };
+    let kept: Vec<_> = index
+        .candidates_in(requested)
+        .filter(|candidate| !CandidateOmission::PeriodicCoverage.leaves_out(candidate))
+        .map(|candidate| candidate.id().clone())
+        .collect();
+    let left_out = index.candidates_in(requested).count() - kept.len();
+    let mut read = Vec::new();
+    let mut cursor = None;
+    loop {
+        let page = page_candidates(
+            &session,
+            &index,
+            &request(cursor, CandidateOmission::PeriodicCoverage)?,
+            CURSOR_EXPIRES_US,
+            NOW_US,
+        )?;
+        assert_eq!(page.omitted, left_out);
+        read.extend(
+            page.candidates
+                .iter()
+                .map(|candidate| candidate.id().clone()),
+        );
+        match page.next_cursor {
+            Some(next) => {
+                let encoded = next.encode();
+                assert!(
+                    page_candidates(
+                        &session,
+                        &index,
+                        &request(Some(encoded.clone()), CandidateOmission::Nothing)?,
+                        CURSOR_EXPIRES_US,
+                        NOW_US,
+                    )
+                    .is_err(),
+                    "an omitting cursor continued a page without the omission"
+                );
+                cursor = Some(encoded);
+            }
+            None => break,
+        }
+    }
+    assert_eq!(read, kept);
+
+    let plain = page_candidates(
+        &session,
+        &index,
+        &request(None, CandidateOmission::Nothing)?,
+        CURSOR_EXPIRES_US,
+        NOW_US,
+    )?;
+    assert_eq!(plain.omitted, 0);
+    let plain_cursor = plain.next_cursor.ok_or("one candidate a page has a next")?;
+    assert!(
+        page_candidates(
+            &session,
+            &index,
+            &request(
+                Some(plain_cursor.encode()),
+                CandidateOmission::PeriodicCoverage
+            )?,
+            CURSOR_EXPIRES_US,
+            NOW_US,
+        )
+        .is_err(),
+        "a plain cursor continued an omitting page"
+    );
     Ok(())
 }

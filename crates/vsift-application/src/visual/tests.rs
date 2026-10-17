@@ -2,9 +2,9 @@ use std::{future::Future, num::NonZeroUsize, sync::Mutex};
 
 use proptest::prelude::{ProptestConfig, prop_assert, prop_assert_eq, proptest};
 use vsift_domain::{
-    CoverageGapReason, CursorError, FrameDimensions, MediaTime, PageLimit, SessionId, SourceId,
-    TimeRange, VISUAL_BLOCKS, VisualCandidate, VisualHash, VisualIndex, VisualIndexProfile,
-    VisualSample, VisualWindow, VisualWindowOutcome,
+    CandidateOmission, CoverageGapReason, CursorError, FrameDimensions, MediaTime, PageLimit,
+    SessionId, SourceId, TimeRange, VISUAL_BLOCKS, VisualCandidate, VisualHash, VisualIndex,
+    VisualIndexProfile, VisualSample, VisualWindow, VisualWindowOutcome,
 };
 
 use super::{
@@ -370,6 +370,16 @@ async fn scope_and_range_are_checked_before_sampling() -> TestResult {
     Ok(())
 }
 
+/// A page request that leaves nothing out.
+fn every(range: TimeRange, limit: PageLimit, cursor: Option<String>) -> CandidatePageRequest {
+    CandidatePageRequest {
+        range,
+        limit,
+        cursor,
+        omission: CandidateOmission::Nothing,
+    }
+}
+
 #[tokio::test]
 async fn cursors_survive_unrelated_extensions_and_reject_changes_in_their_range() -> TestResult {
     let fixture = Fixture::new()?;
@@ -384,11 +394,7 @@ async fn cursors_survive_unrelated_extensions_and_reject_changes_in_their_range(
     let first = page_candidates(
         &fixture.session,
         &index,
-        &CandidatePageRequest {
-            range: window_zero,
-            limit,
-            cursor: None,
-        },
+        &every(window_zero, limit, None),
         EXPIRES,
         NOW,
     )?;
@@ -409,11 +415,7 @@ async fn cursors_survive_unrelated_extensions_and_reject_changes_in_their_range(
         let page = page_candidates(
             &fixture.session,
             &extended,
-            &CandidatePageRequest {
-                range: window_zero,
-                limit,
-                cursor: Some(token),
-            },
+            &every(window_zero, limit, Some(token)),
             EXPIRES,
             NOW,
         )?;
@@ -430,11 +432,7 @@ async fn cursors_survive_unrelated_extensions_and_reject_changes_in_their_range(
     let wide_first = page_candidates(
         &fixture.session,
         &extended,
-        &CandidatePageRequest {
-            range: wide,
-            limit,
-            cursor: None,
-        },
+        &every(wide, limit, None),
         EXPIRES,
         NOW,
     )?;
@@ -447,11 +445,7 @@ async fn cursors_survive_unrelated_extensions_and_reject_changes_in_their_range(
         page_candidates(
             session,
             index,
-            &CandidatePageRequest {
-                range: wide,
-                limit,
-                cursor: Some(cursor.to_owned()),
-            },
+            &every(wide, limit, Some(cursor.to_owned())),
             EXPIRES,
             now,
         )
@@ -535,6 +529,7 @@ fn page(
             range: requested,
             limit: PageLimit::new(limit)?,
             cursor,
+            omission: CandidateOmission::Nothing,
         },
         EXPIRES,
         NOW,
@@ -639,6 +634,7 @@ async fn a_cursor_is_reusable_and_bound_to_its_range() -> TestResult {
             range: range(0, 60)?,
             limit: PageLimit::new(5)?,
             cursor: Some(cursor),
+            omission: CandidateOmission::Nothing,
         },
         EXPIRES,
         NOW,
@@ -825,6 +821,7 @@ async fn a_search_hit_time_finds_the_candidate_that_shows_it() -> TestResult {
             range: lead_lag,
             limit: PageLimit::DEFAULT,
             cursor: None,
+            omission: CandidateOmission::Nothing,
         },
         EXPIRES,
         NOW,

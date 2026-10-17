@@ -846,6 +846,7 @@ async fn budget_stage(root: &OwnedRoot, tools: &MediaTools) -> StageResult {
         },
         limit: Some(100),
         cursor: None,
+        omission: vsift::CandidateOmission::Nothing,
         cancellation: Cancellation::new(),
     };
     let mut calls = Vec::new();
