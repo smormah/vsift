@@ -19,6 +19,7 @@ on:
   pull_request:
     branches:
       - main
+      - scratch/ci-demo-base
   schedule:
     - cron: "41 3 * * 3"
 

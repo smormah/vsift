@@ -29,6 +29,7 @@ on:
   pull_request:
     branches:
       - main
+      - scratch/ci-demo-base
     # `labeled` and `unlabeled` let the `full-ci` label start (or stop asking for)
     # the full run without a new push.
     types:
