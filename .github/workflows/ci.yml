@@ -15,6 +15,12 @@ name: CI
 # Whatever the lane, the Nightly workflow runs the full set on `main` every night
 # that something merged. `CI result` is the one check branch protection needs from
 # this workflow: it fails if any job that ran failed or was cancelled.
+#
+# Two slow checks are outside the lanes (decided 2026-10-16). CodeQL's `Analyze
+# Rust` is a required check of its own workflow and analyses a pull request only
+# when it touches what CodeQL reads (codeql.yml; `reads_rust` in tools/ci_lanes.py).
+# `P14 local upgrade` (13 to 15 minutes) runs in the Nightly workflow and on demand,
+# and here only for a pull request that carries the `full-ci` label.
 
 on:
   push:
@@ -67,6 +73,7 @@ jobs:
       npm: ${{ steps.lanes.outputs.npm }}
       platform: ${{ steps.lanes.outputs.platform }}
       worker_boundary: ${{ steps.lanes.outputs.worker_boundary }}
+      local_upgrade: ${{ steps.lanes.outputs.local_upgrade }}
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -321,6 +328,19 @@ jobs:
             --exact p11_strict_linux_attestation_holds_inside_the_hardened_container \
             --nocapture --test-threads=1
 
+  local-upgrade:
+    # `P14 local upgrade` (RQ-04's local mode: the build under test upgrades a
+    # published version, on three systems) is 13 to 15 minutes, so a pull request runs
+    # it only with the `full-ci` label; the Nightly workflow runs it every night and
+    # it can be dispatched on any ref (p14-local-upgrade.yml). It runs in parallel with
+    # the full lane, which takes about as long.
+    name: P14 local upgrade
+    needs: changes
+    if: needs.changes.outputs.local_upgrade == 'true'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/p14-local-upgrade.yml
+
   result:
     # The one check of this workflow that branch protection requires. A job the
     # lanes skipped counts as passed; one that failed or was cancelled does not.
@@ -333,6 +353,7 @@ jobs:
       - npm-launcher
       - fuzz-harness
       - strict-worker-boundary
+      - local-upgrade
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5

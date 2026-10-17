@@ -57,7 +57,7 @@ merge base with `main`):
 | --- | --- | --- |
 | `docs` | Every touched file is prose, the work record or a tool with its own workflow: `docs/` (except the files below that tests read), `memory/`, the top-level `*.md` files, `deny.toml`, `.github/` metadata, the Python drivers in `tools/`, `tools/guide/`, `tools/p14-*/` | `Governance` and `Documentation` |
 | `crates` | Workspace code, or a file a package's tests read | `Governance`, `Documentation`, and `Quality` for the selected packages (format, Clippy and tests); the fuzz harness, the npm launcher and the worker boundary when the change reaches them |
-| `full` | `Cargo.toml` or `Cargo.lock` at the root, any member's `Cargo.toml` or `build.rs`, `rust-toolchain.toml`, `rustfmt.toml`, `.gitattributes`, `.github/workflows/`, `tools/ci_lanes.py` and its tests, any path no rule knows, or the `full-ci` label | Everything, as before the lanes: the whole workspace on Ubuntu, Windows and macOS, the release build, every job |
+| `full` | `Cargo.toml` or `Cargo.lock` at the root, any member's `Cargo.toml` or `build.rs`, `rust-toolchain.toml`, `rustfmt.toml`, `.gitattributes`, `.github/workflows/`, `tools/ci_lanes.py` and its tests, any path no rule knows, or the `full-ci` label | Everything, as before the lanes: the whole workspace on Ubuntu, Windows and macOS, the release build, every job (not the two slow checks below) |
 
 - **The selected packages** are the touched workspace packages and every package that depends
   on them (from `cargo metadata`: normal, build and development edges, transitively), plus the
@@ -107,9 +107,38 @@ merge base with `main`):
 - **`CI result`** is the one check of the workflow that branch protection requires. It passes when
   every job that ran passed; a job the lane skipped counts as passed, a cancelled one does not.
 
+**Two slow checks outside the lanes** (decided 2026-10-16, built 2026-10-17). `CodeQL` took 6 to 8
+minutes and `P14 local upgrade` 13 to 15 on a code pull request, so neither is part of every one.
+
+- **`Analyze Rust` (CodeQL)** is a required check of `main`, so it must report on every pull request;
+  a `paths` filter on the workflow would leave the check missing and block the merge. Its job
+  always runs and decides in its first seconds: it runs `python3 tools/ci_lanes.py --codeql-only`
+  (the lane script, without the toolchain), which compares the change with its base. The
+  analysis (`Initialize CodeQL`, `Analyze`) runs when the change touches something CodeQL reads:
+  any Rust source (`.rs`) anywhere, a `Cargo.toml`, `Cargo.lock` or `build.rs`, `crates/`, `fuzz/`,
+  `.cargo/`, `rust-toolchain.toml`, `.github/codeql/` or `.github/workflows/codeql.yml`
+  (`reads_rust`). Otherwise those steps are skipped and the job succeeds, so a docs-only pull request
+  gets its `Analyze Rust` in seconds instead of minutes. A change that lists no files, and every push
+  to `main` and the weekly schedule, are always analysed, so `main` is never left unanalysed. The
+  choice does not depend on the lane (a workflow-only change runs the full lane of tests but gives
+  CodeQL nothing new to read) or on the `full-ci` label. A pull request that needs the analysis still
+  takes 6 to 8 minutes, in parallel with the lane.
+- **`P14 local upgrade`** (RQ-04's local mode: a build of the change upgrades a published version
+  through a loopback registry, on three systems) no longer runs on pull requests that touch
+  `crates/`. It is `.github/workflows/p14-local-upgrade.yml`, a reusable and dispatchable workflow
+  that runs: **every nightly** (the `Nightly` workflow calls it, and its failure stops the line like
+  any other nightly job); **on a pull request with the `full-ci` label** (the `CI` workflow calls it,
+  in parallel with the full lane); and **on demand**, `gh workflow run p14-local-upgrade.yml --ref
+  <ref>`. The build is of the ref the run is on, so for a release the evidence is the run on the
+  candidate's tag in the weekly window (`gh workflow run p14-local-upgrade.yml --repo smormah/vsift
+  --ref v<candidate>`; the optional `from_version` input defaults to `0.1.0`). Changing the
+  workflow (the full lane) or `tools/p14-published/` (the docs lane) does not run it on the pull
+  request unless the label is on; use the label, or dispatch it from the branch, when you change
+  the upgrade check itself.
+
 **The full run on a pull request (hot fixes).** Add the label `full-ci` to the pull request. The
 label starts a new run at once (the workflow listens for `labeled`) and every push afterwards runs
-the full lane until the label is removed. Use it for a hot fix, a change you suspect the selection
+the full lane, and `P14 local upgrade`, until the label is removed. Use it for a hot fix, a change you suspect the selection
 misjudges, or a release-adjacent change; a change to the workflows or the build files gets the full
 lane anyway. The label must exist in the repository (create it once with `gh label create
 full-ci`).
@@ -118,9 +147,10 @@ full-ci`).
 when `main` moved since the last nightly that ran (a dispatch, `gh workflow run nightly.yml`,
 always runs): `Quality` on all three systems with the whole workspace suite, the exhaustive Linux
 kill scenarios and the release build; the npm launcher on all three; `Documentation`, `Governance`
-(with the lane tests), the fuzz harness replay and the strict worker boundary; and the `Guide`
+(with the lane tests), the fuzz harness replay and the strict worker boundary; the `Guide`
 workflow with its examples against the real binary and the reviewed tools (on pull requests the
-examples run only when `docs/guide/`, `tools/guide/`, `fixtures/corpus/` or `guide.yml` change).
+examples run only when `docs/guide/`, `tools/guide/`, `fixtures/corpus/` or `guide.yml` change);
+and `P14 local upgrade` on three systems (13 to 15 minutes, in parallel with the rest).
 It saves the build cache. **A failed nightly stops the line:** the run opens one issue labelled
 `nightly-failure` (or comments on the one already open) with the run's link and the failed jobs,
 using its own token; the cause is fixed before any further development is merged, and the issue is
