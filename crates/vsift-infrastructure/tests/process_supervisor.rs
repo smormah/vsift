@@ -23,6 +23,42 @@ use vsift_infrastructure::{
 const FIXTURE_MODE: &str = "VSIFT_PROCESS_FIXTURE_MODE";
 const DESCENDANT_MARKER: &str = "VSIFT_DESCENDANT_MARKER";
 
+/// The deadline of every run here whose fixture ends by itself or is ended by
+/// the behaviour under test (an output limit, a cancellation).
+///
+/// It is a safety stop, not a timing claim: no test here says how fast a
+/// provider starts, and each run returns as soon as its condition holds. It is
+/// generous because the supervisor's deadline starts before the spawn, and on
+/// Windows the spawn is slow and uneven (#128; the cost itself is #419,
+/// L-170). `process-wrap`'s Job Object wrapper creates the child suspended and
+/// resumes it by walking a snapshot of every thread on the machine: on a
+/// Windows 11 desktop running about 20,000 threads that took 0.4 s for one
+/// spawn, about 3 s for each of the six tests that spawn at once at the start
+/// of this suite, and 3 to 5 s with other work on the machine. The three
+/// seconds these tests used to give were spent before the fixture ran. A
+/// broken behaviour still fails: a flood that is never limited, an exit that
+/// is never seen or streams that never end reach this deadline and are
+/// reported as `Deadline`, never as the outcome the test expects.
+const FIXTURE_DEADLINE: Duration = Duration::from_secs(60);
+
+/// How long a test waits for its fixture to report its descendant's process
+/// id, which includes the slow spawn of [`FIXTURE_DEADLINE`]. The wait ends as
+/// soon as the id is written.
+const MARKER_WAIT: Duration = Duration::from_secs(60);
+
+/// The deadline of a run that the test itself cancels once the fixture has
+/// reported its descendant: longer than [`MARKER_WAIT`], so the test's
+/// cancellation always comes before the supervisor's deadline.
+const CANCELLED_FIXTURE_DEADLINE: Duration = Duration::from_secs(120);
+
+/// How long the supervisor waits for a killed tree to be reaped and its
+/// streams to close, and how long a test waits for a killed descendant to
+/// leave the process table. Both waits end as soon as their condition holds.
+/// Two of them together stay well under the 60 s the sleeping fixtures sleep,
+/// so a descendant the supervisor failed to stop is still alive when the test
+/// looks for it, and cannot pass the test by ending on its own.
+const REAP_DEADLINE: Duration = Duration::from_secs(20);
+
 #[test]
 fn process_fixture() -> Result<(), Box<dyn Error>> {
     let Ok(mode) = env::var(FIXTURE_MODE) else {
@@ -227,7 +263,7 @@ fn fixture_pid_pressure() -> Result<(), Box<dyn Error>> {
 #[tokio::test]
 async fn p01_uses_exact_arguments_null_stdin_allowlisted_environment_and_explicit_cwd()
 -> Result<(), Box<dyn Error>> {
-    let request = fixture_request("inspect", Duration::from_secs(3))?
+    let request = fixture_request("inspect", FIXTURE_DEADLINE)?
         .with_environment("VSIFT_ALLOWED", "expected")?;
     let outcome = supervisor(64 * 1024)?
         .run(request, ProcessCancellation::new())
@@ -264,7 +300,7 @@ async fn p01_shell_metacharacters_remain_one_argument() -> Result<(), Box<dyn Er
     let executable = TrustedExecutable::explicit(env::current_exe()?)?;
     let working_directory = ProcessWorkingDirectory::new(env::current_dir()?)?;
     let malicious_filter = format!("process_fixture & echo compromised > {}", marker.display());
-    let request = ProcessRequest::new(executable, working_directory, Duration::from_secs(3))?
+    let request = ProcessRequest::new(executable, working_directory, FIXTURE_DEADLINE)?
         .with_arguments(["--exact", malicious_filter.as_str(), "--nocapture"]);
 
     let outcome = supervisor(64 * 1024)?
@@ -301,7 +337,7 @@ async fn p03_caps_stdout_stderr_and_combined_floods_during_read() -> Result<(), 
         ("both-flood", None),
         ("exact-over", Some(OutputStream::Stdout)),
     ] {
-        let request = fixture_request(mode, Duration::from_secs(3))?;
+        let request = fixture_request(mode, FIXTURE_DEADLINE)?;
         let outcome = supervisor(1024)?
             .run(request, ProcessCancellation::new())
             .await?;
@@ -322,7 +358,7 @@ async fn p03_caps_stdout_stderr_and_combined_floods_during_read() -> Result<(), 
 async fn p04_preserves_invalid_bytes_and_handles_no_newline_and_delayed_output()
 -> Result<(), Box<dyn Error>> {
     for mode in ["invalid-bytes", "no-newline", "delayed"] {
-        let request = fixture_request(mode, Duration::from_secs(3))?;
+        let request = fixture_request(mode, FIXTURE_DEADLINE)?;
         let outcome = supervisor(64 * 1024)?
             .run(request, ProcessCancellation::new())
             .await?;
@@ -360,7 +396,7 @@ async fn p05_deadline_and_caller_cancellation_reap_the_process_tree() -> Result<
         tokio::time::sleep(Duration::from_millis(100)).await;
         cancellation_trigger.cancel();
     });
-    let cancelled_request = fixture_request("sleep", Duration::from_secs(5))?;
+    let cancelled_request = fixture_request("sleep", FIXTURE_DEADLINE)?;
     let cancelled_outcome = supervisor(64 * 1024)?
         .run(cancelled_request, cancellation)
         .await?;
@@ -373,23 +409,20 @@ async fn p05_deadline_and_caller_cancellation_reap_the_process_tree() -> Result<
 async fn p06_descendants_and_inherited_pipe_holders_are_terminated() -> Result<(), Box<dyn Error>> {
     for mode in ["descendant", "pipe-holder"] {
         let marker = unique_marker_path(mode);
-        let request = fixture_request(mode, Duration::from_secs(10))?
+        let request = fixture_request(mode, CANCELLED_FIXTURE_DEADLINE)?
             .with_environment(DESCENDANT_MARKER, marker.as_os_str())?;
         let cancellation = ProcessCancellation::new();
         let cancellation_trigger = cancellation.clone();
         let supervisor = supervisor(64 * 1024)?;
         let run = tokio::spawn(async move { supervisor.run(request, cancellation).await });
-        let descendant_result = wait_for_descendant_marker(&marker, Duration::from_secs(5)).await;
+        let descendant_result = wait_for_descendant_marker(&marker, MARKER_WAIT).await;
         cancellation_trigger.cancel();
         let outcome = run.await??;
         let _ = std::fs::remove_file(&marker);
         let descendant_pid = descendant_result?;
 
         assert_eq!(outcome.termination, TerminationReason::Cancelled);
-        assert!(wait_until_process_gone(
-            descendant_pid,
-            Duration::from_secs(3)
-        )?);
+        assert!(wait_until_process_gone(descendant_pid, REAP_DEADLINE)?);
     }
     Ok(())
 }
@@ -729,11 +762,7 @@ fn supervisor(stream_limit: usize) -> Result<ProcessSupervisor, Box<dyn Error>> 
     let stream_limit =
         NonZeroUsize::new(stream_limit).ok_or("test stream limit must be non-zero")?;
     Ok(ProcessSupervisor::new(
-        SupervisorPolicy::new(
-            stream_limit,
-            Duration::from_millis(100),
-            Duration::from_secs(3),
-        ),
+        SupervisorPolicy::new(stream_limit, Duration::from_millis(100), REAP_DEADLINE),
         HostIsolation::ProcessOnly,
     ))
 }
