@@ -1,0 +1,16 @@
+Worker request: partial
+Attempt: 1
+Request digest: 07d4468ac2947004719ce6269890ce191d3a0f28dc6a509c7b0ffa8bdaa0488f
+Session: ses_0123456789abcdef0123456789abcdef
+Source: src_sha256_0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+Publication: process_crash_consistent
+Controls: isolation process_only, admission capacity 8, concurrency 1, resource limits not_enforced, free-space reserve enforced
+Steps:
+  0. retranscribe: partial (41870 ms, 0 ms waiting for admission), job job_8d3e1f0a2b4c6d8e0f1a2b3c4d5e6f70
+     revision trv_a5ed9a081a2068b75c956f9befbb4fd4, 0 chunks reused, generation 2
+     Not covered (us): 30000000-55000000 (untranscribed_range)
+
+Status: partial (the warnings below say what is missing)
+Operation: op_6e1a3c5b7d9f0e2a4c6b8d0f1e3a5c7b
+Lifecycle: ephemeral, expires 2026-09-25T00:00:00Z
+Warning: The request completed with a stated gap; see the coverage of each partial step.

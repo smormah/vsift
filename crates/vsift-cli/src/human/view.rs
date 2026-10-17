@@ -939,10 +939,10 @@ pub(crate) struct StepOutputs {
     pub(crate) artifact_count: Option<u64>,
 }
 
-/// What part of a step's range stayed uncovered.
+/// What part of a step's range stayed uncovered. Its `truncated` member is
+/// not read: a listed gap already says the range is not wholly covered.
 #[derive(Debug, Deserialize)]
 pub(crate) struct StepCoverage {
-    pub(crate) truncated: bool,
     pub(crate) gaps: Vec<String>,
     pub(crate) reasons: Vec<String>,
 }

@@ -8,7 +8,7 @@ Controls: isolation strict_linux, admission capacity 8, concurrency 2, resource 
 Steps:
   0. candidates: partial (9870 ms, 1250 ms waiting for admission)
      visual index vix_5278827a5eb80d85a88983f2e69a5cba, 3 candidates, generation 4
-     Not covered (us): 60000000-120000000 (undecodable; the list is cut)
+     Not covered (us): 60000000-120000000 (undecodable)
 
 Status: partial (the warnings below say what is missing)
 Operation: op_2a4c6e8f0b1d3f5a7c9e1b3d5f7a9c1e

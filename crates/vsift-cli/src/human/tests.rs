@@ -930,6 +930,11 @@ fn part_two_examples_render_as_readable_text() -> TestResult {
         ),
         (
             CommandName::JobRun,
+            "job-run.retranscribe-partial.json",
+            "job-run-retranscribe-partial",
+        ),
+        (
+            CommandName::JobRun,
             "job-run.replayed.json",
             "job-run-replayed",
         ),
@@ -938,6 +943,34 @@ fn part_two_examples_render_as_readable_text() -> TestResult {
         let text = render(command, &example(file)?)?;
         check_snapshot(snapshot, &text)?;
     }
+    Ok(())
+}
+
+/// A worker step's gap list says it was cut only when its reasons say so
+/// (`gap_list_truncated`, after the first 100 gaps), not whenever a gap is
+/// listed: `truncated` means only that part of the step's range is not
+/// covered (#362).
+#[test]
+fn a_step_gap_list_is_called_cut_only_when_it_was() -> TestResult {
+    let mut value = example("job-run.retranscribe-partial.json")?;
+    let text = render(CommandName::JobRun, &value)?;
+    assert!(
+        text.contains(
+            "Not covered (us): 30000000-55000000 (untranscribed_range)
+"
+        ),
+        "{text}"
+    );
+    assert!(!text.contains("cut"), "{text}");
+    value["data"]["steps"][0]["coverage"]["reasons"] =
+        json!(["untranscribed_range", "gap_list_truncated"]);
+    let text = render(CommandName::JobRun, &value)?;
+    assert!(
+        text.contains(
+            "30000000-55000000 (untranscribed_range; the list is cut at 100, use --json for the full coverage)"
+        ),
+        "{text}"
+    );
     Ok(())
 }
 

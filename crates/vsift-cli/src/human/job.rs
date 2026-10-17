@@ -16,6 +16,9 @@ use super::{
     view::{BatchSummary, Envelope, JobResume, RecoverableJob, WorkResult, WorkStep},
 };
 
+/// The coverage reason that says a step's gap list was cut at 100.
+const GAPS_TRUNCATED_REASON: &str = "gap_list_truncated";
+
 /// `job status` and `job cancel`: the job as it is now.
 pub(super) fn status(
     heading: &'static str,
@@ -242,12 +245,25 @@ fn push_step(text: &mut TerminalText, index: u64, step: &WorkStep) {
     if let Some(coverage) = &step.coverage
         && !coverage.gaps.is_empty()
     {
+        // `truncated` says that part of the step's range is not covered,
+        // which every listed gap already shows; only the reason
+        // `gap_list_truncated` says the list itself was cut (#362).
+        let cut = coverage
+            .reasons
+            .iter()
+            .any(|reason| reason == GAPS_TRUNCATED_REASON);
+        let reasons: Vec<&str> = coverage
+            .reasons
+            .iter()
+            .map(String::as_str)
+            .filter(|reason| *reason != GAPS_TRUNCATED_REASON)
+            .collect();
         text.push_fixed("     Not covered (us): ")
             .push_value(&coverage.gaps.join(", "))
             .push_fixed(" (")
-            .push_value(&coverage.reasons.join(", "))
-            .push_fixed(if coverage.truncated {
-                "; the list is cut)"
+            .push_value(&reasons.join(", "))
+            .push_fixed(if cut {
+                "; the list is cut at 100, use --json for the full coverage)"
             } else {
                 ")"
             })

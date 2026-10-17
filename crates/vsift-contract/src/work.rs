@@ -21,12 +21,16 @@ pub use recorded::RecordedResultError;
 use serde::Serialize;
 use vsift_domain::{
     FailureCode, JobId, OperationId, OperationStatus, PublicationGuarantee, SessionId, Sha256Hex,
-    SourceId, StorageGeneration, TranscriptRevisionId, VisualCoverageGap, VisualIndexId,
+    SourceId, StorageGeneration, TimeRange, TranscriptRevision, TranscriptRevisionId,
+    VisualCoverageGap, VisualIndexId,
 };
 
 use crate::{
     CoverageResponse, LifecycleResponse, MAX_REQUEST_STEPS, RequestRejection, WorkRequestDigest,
-    WorkStepKind, candidates::envelope_coverage, request::BundleName,
+    WorkStepKind,
+    candidates::envelope_coverage,
+    request::BundleName,
+    transcript::{retranscription_coverage, retranscription_gaps},
 };
 
 /// Most bytes one serialized result may take: the same bound as a request.
@@ -234,6 +238,13 @@ pub enum StepOutputs {
         generation: StorageGeneration,
         /// Chunks taken from checkpoints of an earlier attempt.
         chunks_reused: u32,
+        /// Parts of the run's range it did not transcribe because the
+        /// recogniser's answer for them could not be used, merged and in
+        /// start order ([`crate::retranscription_gaps`]): the step is
+        /// `partial` when any remain, with the coverage `transcript
+        /// retranscribe` states for the same revision (#362). Build it with
+        /// [`StepOutputs::retranscription`] so the two cannot differ.
+        untranscribed: Vec<TimeRange>,
     },
     /// The visual index after the range was analysed as far as it can be.
     Candidates {
@@ -264,6 +275,24 @@ pub enum StepOutputs {
 }
 
 impl StepOutputs {
+    /// The outputs of a `retranscribe` step that committed `revision` in
+    /// `generation`, reusing `chunks_reused` checkpointed chunks. Its
+    /// untranscribed parts are read from the revision by the rule the direct
+    /// commands use ([`crate::retranscription_gaps`]).
+    #[must_use]
+    pub fn retranscription(
+        revision: &TranscriptRevision,
+        generation: StorageGeneration,
+        chunks_reused: u32,
+    ) -> Self {
+        Self::Retranscribe {
+            revision_id: revision.id().clone(),
+            generation,
+            chunks_reused,
+            untranscribed: retranscription_gaps(revision),
+        }
+    }
+
     const fn kind(&self) -> WorkStepKind {
         match self {
             Self::Ingest { .. } => WorkStepKind::Ingest,
@@ -296,10 +325,19 @@ pub struct StepResult {
 
 impl StepResult {
     /// A step that finished: `partial` when its outputs leave a gap.
+    ///
+    /// A `candidates` step always states its coverage. A `retranscribe` step
+    /// states one only when its run left part of its range untranscribed,
+    /// exactly as `transcript retranscribe` does in its envelope (#362), so a
+    /// step without such a part is presented, and recorded, byte for byte as
+    /// before. Other steps have none.
     #[must_use]
     pub fn finished(outputs: &StepOutputs, timing: StepTiming, job: Option<&JobId>) -> Self {
         let coverage = match outputs {
             StepOutputs::Candidates { gaps, .. } => Some(envelope_coverage(gaps)),
+            StepOutputs::Retranscribe { untranscribed, .. } => {
+                retranscription_coverage(untranscribed)
+            }
             _ => None,
         };
         let state = if coverage.as_ref().is_some_and(CoverageResponse::truncated) {
@@ -416,6 +454,7 @@ impl OutputsData {
                 revision_id,
                 generation,
                 chunks_reused,
+                untranscribed: _,
             } => Self::Retranscribe {
                 revision_id: revision_id.as_str().to_owned(),
                 generation: generation.value(),

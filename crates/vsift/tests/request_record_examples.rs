@@ -76,6 +76,7 @@ fn steps() -> Built<Vec<StepResult>> {
                 revision_id: TranscriptRevisionId::parse("trv_1f2e3d4c5b6a79880f1e2d3c4b5a6978")?,
                 generation: StorageGeneration::from_value(2),
                 chunks_reused: 0,
+                untranscribed: Vec::new(),
             },
             timing(21_530, 180),
             Some(&JobId::parse("job_8d3e1f0a2b4c6d8e0f1a2b3c4d5e6f70")?),

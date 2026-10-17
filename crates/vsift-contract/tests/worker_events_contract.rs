@@ -186,6 +186,7 @@ fn f01_result(request: &WorkRequest) -> Result<WorkResult, Box<dyn std::error::E
                     )?,
                     generation: StorageGeneration::from_value(2),
                     chunks_reused: 0,
+                    untranscribed: Vec::new(),
                 },
                 timing(1_460, 0),
                 Some(&JobId::parse(JOB)?),

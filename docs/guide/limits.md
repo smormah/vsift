@@ -47,9 +47,9 @@ real meetings, accents or noisy rooms, so every accuracy figure below says what 
   that already had a transcript, the words it had that reach into such a stretch are kept whole (unless the new words
   overlap them); a word said there that no transcript has cannot be found. Transcribing just that stretch again may cover it (the audio is
   then cut at other points), and a transcript file you supply can. If most stretches fail, the command fails
-  instead ([troubleshooting](troubleshooting.md#missing_capability-a-tool-or-model-is-missing)). **A worker `job run`
-  or `job batch` request does not report this:** its retranscribe step is `complete` either way, and the revision the
-  step names holds the warning (`transcript get --revision`).
+  instead ([troubleshooting](troubleshooting.md#missing_capability-a-tool-or-model-is-missing)). A worker `job run`
+  or `job batch` request reports it too since `0.2.2`: its retranscribe step is `partial` and lists the same stretches
+  in its `coverage` (in `0.2.1` the step was `complete` either way).
 - **Where two chunks meet, a word or two can still be missing or repeated (0.2.1 and later, [L-155](../planning/known-limits.md#l-155), [L-156](../planning/known-limits.md#l-156) and [L-157](../planning/known-limits.md#l-157)).** The
   recogniser works on 30-second chunks that overlap by five seconds, and VSift joins them. Before this version it could
   drop the end of a sentence at a join, with no sign (found on two real recordings; it is in `0.2.0` and `0.2.1-rc.1`).
