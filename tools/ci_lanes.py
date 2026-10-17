@@ -8,7 +8,8 @@ words (`docs/development.md`, "The CI lanes", is the authoritative description):
   itself runs (the root manifest and lockfile, the toolchain, any member's
   `Cargo.toml` or `build.rs`, `rustfmt.toml`, `.gitattributes`, the workflows, this
   script), a path no rule below knows, the `full-ci` label, or an explicit request.
-  The full lane is the old CI: the whole workspace, all three systems, every job.
+  The full lane is the old CI: the whole workspace, all three systems, every job
+  except the two slow checks below.
 - **crates**: the touched workspace packages, every package that depends on them
   (from `cargo metadata`, normal, build and development edges), and the packages
   whose tests read a touched file outside their own folder (`SHARED_INPUTS`). Lint
@@ -16,6 +17,17 @@ words (`docs/development.md`, "The CI lanes", is the authoritative description):
   a touched file is platform-sensitive (`PLATFORM_MARKERS`, `PLATFORM_PATHS`).
 - **docs**: every touched file is documentation or a tool with its own workflow, so
   only the documentation and governance checks run.
+
+Two slow checks are chosen apart from the lanes (decided 2026-10-16), because a lane
+says what the *tests* need and these two have narrower reasons to run:
+
+- **codeql**: the `CodeQL` workflow's `Analyze Rust` job analyses a pull request only
+  when the change touches something CodeQL reads (`reads_rust`: Rust sources, Cargo
+  manifests and lockfile, the toolchain file, the CodeQL workflow and configuration).
+  The job always reports, so the required check never goes missing; this only decides
+  whether it does the analysis. Pushes to `main` and the weekly schedule always analyse.
+- **local_upgrade**: `P14 local upgrade` (13 to 15 minutes on three systems) runs in
+  the nightly and on demand; a pull request gets it only through the `full-ci` label.
 
 Selection must never be optimistic: when a rule is unsure it chooses more, and the
 nightly run on `main` runs everything regardless. Nothing here runs a shell; every
@@ -41,7 +53,46 @@ SYSTEMS_UBUNTU = ("ubuntu-latest",)
 SYSTEMS_ALL = ("ubuntu-latest", "windows-latest", "macos-latest")
 
 # Requesting the full lane on a pull request: add this label (it stays until removed).
+# It also asks for `P14 local upgrade`, which no other pull request runs.
 FULL_LABEL = "full-ci"
+
+# What CodeQL reads when it analyses Rust without a build (`build-mode: none`): every
+# Rust source file wherever it is (the workspace, the excluded fuzz harness, the tools),
+# the manifests and lockfile it resolves dependencies from, the toolchain, the Cargo
+# configuration, and the workflow and configuration that say how it runs. Nothing else
+# can change what it reports, so a change to none of these needs no analysis.
+CODEQL_FILES = frozenset(
+    {
+        "Cargo.toml",
+        "Cargo.lock",
+        "rust-toolchain.toml",
+        "rust-toolchain",
+        ".github/workflows/codeql.yml",
+    }
+)
+CODEQL_PREFIXES = ("crates/", "fuzz/", ".cargo/", ".github/codeql/")
+CODEQL_FILE_NAMES = frozenset({"Cargo.toml", "Cargo.lock", "build.rs"})
+CODEQL_SUFFIXES = (".rs",)
+
+
+def reads_rust(path: str) -> bool:
+    """Whether CodeQL's Rust analysis reads `path` (a repository-relative POSIX path)."""
+    posix = PurePosixPath(path).as_posix()
+    return (
+        posix in CODEQL_FILES
+        or posix.startswith(CODEQL_PREFIXES)
+        or PurePosixPath(posix).name in CODEQL_FILE_NAMES
+        or posix.endswith(CODEQL_SUFFIXES)
+    )
+
+
+def codeql_selected(changed: Sequence[str], *, force_full: bool = False) -> bool:
+    """Whether a change needs the CodeQL analysis.
+
+    A request for everything, or a change that lists no files, selects it: when the
+    change cannot be read, nothing can be excluded.
+    """
+    return force_full or not changed or any(reads_rust(path) for path in changed)
 
 # Exact paths whose change selects the full lane.
 FULL_FILES = frozenset(
@@ -224,6 +275,8 @@ class Selection:
     fuzz: bool = False
     npm: bool = False
     worker_boundary: bool = False
+    codeql: bool = False
+    local_upgrade: bool = False
     reasons: list[str] = field(default_factory=list)
 
     def outputs(self, workspace: Sequence[Package]) -> dict[str, str]:
@@ -242,6 +295,10 @@ class Selection:
             "fuzz": json.dumps(full or self.fuzz),
             "npm": json.dumps(full or self.npm),
             "worker_boundary": json.dumps(full or self.worker_boundary),
+            # Not part of the lanes: the full lane of a workflow-only change does not
+            # analyse Rust, and only the label (not the lane) asks for the upgrade run.
+            "codeql": json.dumps(self.codeql),
+            "local_upgrade": json.dumps(self.local_upgrade),
         }
 
 
@@ -311,10 +368,13 @@ def select(
     change (whichever exist), for the platform markers.
     """
     selection = Selection()
+    selection.codeql = codeql_selected(changed, force_full=force_full)
+    label_names = set(labels)
+    selection.local_upgrade = FULL_LABEL in label_names
     if force_full:
         selection.lane = "full"
         selection.reasons.append("the full run was requested")
-    if FULL_LABEL in set(labels):
+    if FULL_LABEL in label_names:
         selection.lane = "full"
         selection.reasons.append(f"the pull request has the {FULL_LABEL} label")
     if not changed:
@@ -431,15 +491,55 @@ def cargo_metadata() -> dict[str, object]:
     return json.loads(output)
 
 
+CODEQL_SUMMARY_ANALYSING = (
+    "### CodeQL: analysing\n\n"
+    "The change touches something CodeQL reads, or lists no files.\n"
+)
+CODEQL_SUMMARY_SKIPPED = (
+    "### CodeQL: no analysis needed\n\n"
+    "The change touches no Rust source, Cargo manifest or lockfile, toolchain file, "
+    "or CodeQL workflow or configuration. `main` is analysed on every push and weekly.\n"
+)
+
+
+def main_codeql(arguments: argparse.Namespace) -> int:
+    """The `--codeql-only` mode: the one decision the CodeQL workflow needs.
+
+    It needs neither the toolchain nor the workspace graph, so the job that asks
+    stays a few seconds long on a change that needs no analysis.
+    """
+    force_full = arguments.full or not arguments.base or set(arguments.base) == {"0"}
+    changed = [] if force_full else changed_files(arguments.base, arguments.head)
+    selected = codeql_selected(changed, force_full=force_full)
+    line = f"codeql={json.dumps(selected)}"
+    if arguments.output:
+        with arguments.output.open("a", encoding="utf-8") as handle:
+            handle.write(line + "\n")
+    print(line)
+    if arguments.summary:
+        text = CODEQL_SUMMARY_ANALYSING if selected else CODEQL_SUMMARY_SKIPPED
+        with arguments.summary.open("a", encoding="utf-8") as handle:
+            handle.write(text)
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--base", help="the base revision (a pull request's base, or the push's before)")
     parser.add_argument("--head", default="HEAD", help="the revision under test")
     parser.add_argument("--labels", default="[]", help="the pull request's labels, as a JSON list of names")
     parser.add_argument("--full", action="store_true", help="select the full lane")
+    parser.add_argument(
+        "--codeql-only",
+        action="store_true",
+        help="decide only whether CodeQL analyses (no cargo metadata needed), and write only `codeql`",
+    )
     parser.add_argument("--output", type=Path, help="append name=value lines here (GITHUB_OUTPUT)")
     parser.add_argument("--summary", type=Path, help="append a Markdown summary here (GITHUB_STEP_SUMMARY)")
     arguments = parser.parse_args(argv)
+
+    if arguments.codeql_only:
+        return main_codeql(arguments)
 
     packages = workspace_packages(cargo_metadata())
     try:

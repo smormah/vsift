@@ -23,21 +23,26 @@ name: P14 local upgrade
 # Nothing here can publish to a public registry: the only `npm publish` is
 # tools/p14-published/lib/local-registry.cjs's, which is given the loopback
 # registry and a throwaway token, and no job has an OIDC token or a secret.
+#
+# WHEN IT RUNS (decided 2026-10-16; docs/development.md, "The CI lanes"). It takes 13
+# to 15 minutes on three systems, so it no longer runs on pull requests that touch the
+# crates. It runs:
+#   - every night something merged to `main`, called by the Nightly workflow, whose
+#     failure stops the line;
+#   - on a pull request that carries the `full-ci` label, called by the CI workflow
+#     (a hot fix, or a change the selection may misjudge);
+#   - on demand, for the release window: dispatch it on the candidate's tag, for
+#     example `gh workflow run p14-local-upgrade.yml --repo smormah/vsift --ref
+#     v0.2.2-rc.1`. The build is of the ref the run is on, so the ref decides which
+#     source the evidence of RQ-04 names.
 on:
-  pull_request:
-    branches:
-      - main
-    paths:
-      - .github/workflows/p14-local-upgrade.yml
-      - tools/p14-published/**
-      - crates/**
-      - schemas/**
-      - skills/vsift/**
-      - npm/**
-      - Cargo.toml
-      - Cargo.lock
-      - rust-toolchain.toml
   workflow_dispatch:
+    inputs:
+      from_version:
+        description: The published version the upgrade starts from. Empty means 0.1.0.
+        type: string
+        default: ""
+  workflow_call:
     inputs:
       from_version:
         description: The published version the upgrade starts from. Empty means 0.1.0.

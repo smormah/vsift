@@ -5,7 +5,9 @@ name: Nightly
 # suite on Ubuntu, Windows and macOS (with the exhaustive Linux kill scenarios of
 # the managed store) and the release build, the npm launcher on all three systems,
 # the fuzz harness replay, the strict worker boundary, the documentation and
-# governance checks, and the guide's examples against the real binary and tools.
+# governance checks, the guide's examples against the real binary and tools, and the
+# `P14 local upgrade` workflow (RQ-04's local mode: this build upgrades a published
+# version, on three systems; 13 to 15 minutes, moved here from the pull requests).
 #
 # A scheduled run starts only if `main` moved since the last nightly that ran; a
 # dispatch always runs. A failure is a stop-the-line event: the run opens one issue
@@ -290,6 +292,17 @@ jobs:
       contents: read
     uses: ./.github/workflows/guide.yml
 
+  local-upgrade:
+    # The upgrade from a published version to this build (the P14 local upgrade
+    # workflow, also dispatchable on its own for the release window and called by
+    # the CI workflow for a pull request with the `full-ci` label).
+    name: P14 local upgrade
+    needs: gate
+    if: needs.gate.outputs.run == 'true'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/p14-local-upgrade.yml
+
   report:
     # Stop the line: one open issue labelled `nightly-failure` collects every
     # failed nightly until someone fixes the cause and closes it. Only a run on
@@ -304,6 +317,7 @@ jobs:
       - fuzz-harness
       - strict-worker-boundary
       - guide
+      - local-upgrade
     if: failure() || cancelled()
     runs-on: ubuntu-latest
     timeout-minutes: 10

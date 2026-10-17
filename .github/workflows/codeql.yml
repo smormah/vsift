@@ -1,5 +1,17 @@
 name: CodeQL
 
+# `Analyze Rust` is a required check of `main`, so this workflow cannot be left
+# out of a pull request with a `paths` filter (a skipped workflow reports nothing
+# and the merge waits for ever). Instead the job always runs and always reports,
+# and decides in its first seconds whether there is anything to analyse:
+#
+#   - a pull request is analysed only if it touches something CodeQL reads: Rust
+#     sources, Cargo manifests and lockfile, the toolchain file, this workflow or
+#     the CodeQL configuration (`reads_rust` in tools/ci_lanes.py, the same module
+#     that chooses the lanes of the `CI` workflow; docs/development.md, "The CI
+#     lanes"). Otherwise the job succeeds without analysing, in a few seconds;
+#   - every push to `main` and the weekly schedule always analyse, so `main` is
+#     never left unanalysed whatever the pull requests skipped.
 on:
   push:
     branches:
@@ -29,8 +41,28 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # A pull request is compared with its base, which needs the history.
+          fetch-depth: 0
+
+      - name: Decide whether the change needs the analysis
+        id: decide
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT" != pull_request ]; then
+            echo "codeql=true" >> "$GITHUB_OUTPUT"
+            echo "A push to main and the schedule always analyse."
+          else
+            python3 tools/ci_lanes.py --codeql-only \
+              --base "$BASE" --head HEAD \
+              --output "$GITHUB_OUTPUT" --summary "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: Initialize CodeQL
+        if: steps.decide.outputs.codeql == 'true'
         uses: github/codeql-action/init@977e6ceaea7361825998245d787fa3b4d6b9e5df # codeql-bundle-v2.27.0
         with:
           languages: rust
@@ -38,5 +70,5 @@ jobs:
           queries: security-extended
 
       - name: Analyze
+        if: steps.decide.outputs.codeql == 'true'
         uses: github/codeql-action/analyze@977e6ceaea7361825998245d787fa3b4d6b9e5df # codeql-bundle-v2.27.0
-
