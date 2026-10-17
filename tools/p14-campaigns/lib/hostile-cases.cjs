@@ -36,6 +36,16 @@ const MEDIA_OPS = ['ingest', 'candidates', 'frame', 'audio', 'recognise'];
 const NO_ROOM_REMEDIATION_START = "The folder that holds VSift's sessions does not have room for a copy";
 
 /**
+ * How the remediation of an `ingest` of a symbolic link begins. The link case
+ * requires it beside `STORAGE_IO`, because the code alone is also the answer
+ * of a disk that failed (RQ-10's rule since the maintainer's decision of
+ * 2026-10-18, plan section 32; #265, L-127). It is the stable first sentence
+ * of `SOURCE_IS_LINK_REMEDIATION` in `crates/vsift-contract/src/storage.rs`; a
+ * test here reads the constant and fails if the two part.
+ */
+const LINK_REMEDIATION_START = 'The path you gave is a link, and VSift does not follow links.';
+
+/**
  * @typedef {object} Case
  * @property {string} id
  * @property {string} group
@@ -176,7 +186,7 @@ function cases(context) {
   add({ id: 'sdp-text', group: 'external', file: 'session.sdp.mp4', description: 'an SDP session description named .mp4', build: () => Buffer.from('v=0\no=- 0 0 IN IP4 127.0.0.1\ns=x\nc=IN IP4 127.0.0.1\nt=0 0\nm=video 5004 RTP/AVP 96\na=rtpmap:96 H264/90000\n'), ops: ['ingest'], expect: 'failure' });
   add({ id: 'text-64mib', group: 'external', file: 'text-64mib.mp4', description: '64 MiB of one letter named .mp4', build: () => Buffer.alloc(64 * MIB, 0x41), ops: ['ingest'], expect: 'failure' });
   add({ id: 'random-1mib', group: 'external', file: 'random-1mib.mkv', description: '1 MiB of seeded random bytes named .mkv', build: () => { const random = new Random('random'); const bytes = Buffer.alloc(MIB); for (let index = 0; index < bytes.length; index += 1) bytes[index] = random.int(256); return bytes; }, ops: ['ingest'], expect: 'failure' });
-  add({ id: 'symlink-to-canary', group: 'external', file: 'symlink-to-canary.mp4', description: 'a symbolic link to the canary', build: () => ({ symlink: CANARY_PATH }), ops: ['ingest', 'job_name'], expect: 'failure', codes: [...TYPED, 'INVALID_ARGUMENT'] });
+  add({ id: 'symlink-to-canary', group: 'external', file: 'symlink-to-canary.mp4', description: 'a symbolic link to the canary', build: () => ({ symlink: CANARY_PATH }), ops: ['ingest', 'job_name'], expect: 'failure', answers: { ingest: { codes: ['STORAGE_IO'], remediation: LINK_REMEDIATION_START }, job_name: { codes: ['INVALID_ARGUMENT'] } } });
   add({ id: 'fifo', group: 'external', file: 'fifo.mp4', description: 'a named pipe nobody writes to (a read would block for ever)', build: () => ({ fifo: true }), ops: ['ingest', 'job_name'], expect: 'failure', codes: [...TYPED, 'INVALID_ARGUMENT'] });
   add({ id: 'folder', group: 'external', file: 'folder.mp4', description: 'a folder named like a video', build: () => ({ folder: true }), ops: ['ingest', 'job_name'], expect: 'failure', codes: [...TYPED, 'INVALID_ARGUMENT'] });
 
@@ -280,4 +290,4 @@ async function materialise(directory, spec) {
   throw new Error(`case ${spec.id} built something unknown`);
 }
 
-module.exports = { MIB, TYPED, CANARY_PATH, MEDIA_OPS, NO_ROOM_REMEDIATION_START, NAMES, cases, nameCases, materialise, flipped, srt };
+module.exports = { MIB, TYPED, CANARY_PATH, MEDIA_OPS, NO_ROOM_REMEDIATION_START, LINK_REMEDIATION_START, NAMES, cases, nameCases, materialise, flipped, srt };
