@@ -323,6 +323,21 @@ request replays that job's commit.
   removes closed, expired and abandoned sessions of the workspace; it never touches the
   input root or the bundle root. `session clean` of a session with active work answers
   `BUSY`.
+- **What a killed worker leaves, and when it goes** (#277). A request whose open was cut
+  short by a kill (`SIGKILL`, an out-of-memory kill, a power cut) can leave a session
+  registered but never published: `session list` shows it as `initializing`, with no
+  folder or with a folder that holds no first generation. A request whose open merely
+  failed (a busy root, a source that is refused, a copy that does not fit) removes its own
+  registration at once, unless the root stays busy for five seconds, so a kill is what
+  leaves one. `session status`, `renew` and `close` of
+  such an id answer `STORAGE_IO` or `INVALID_ARGUMENT` (the codes the lookup always gave)
+  with a remediation that says no published session has this id and that it is not a
+  diagnosis of the storage; it is not damage. `session clean --expired` removes it **one day
+  after its open began** (`SessionLifetime::IDLE_SECONDS`, 24 hours), **whatever the
+  workspace's retention**: in a workspace with a one-hour retention such an entry outlives
+  the published sessions around it by 23 hours. A clean that runs sooner leaves it and
+  counts it as not yet eligible. It holds a small registration marker and, at most, a session
+  folder with no published generation; the redelivered request opens a new session of its own.
 - A `retain` step killed mid-copy leaves a hidden staging directory
   `<bundle-root>/.<bundle_name>.<op>.retaining` (L-064); VSift never deletes anything
   in the bundle root. Remove such directories only when no request with that operation

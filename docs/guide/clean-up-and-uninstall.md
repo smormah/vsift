@@ -88,8 +88,9 @@ No sessions.
 
 Cleanup removes every closed, expired or abandoned session of your account, not only the ones from today.
 A session someone else is using at that moment is reported busy and skipped: run it again later. An
-interrupted `ingest` can leave a session listed as `initializing`; cleanup removes it once it has been idle long
-enough. VSift does not claim to erase data securely: the files are deleted the ordinary way.
+interrupted `ingest` (one that was killed; one that failed removes its own) can leave a session listed as
+`initializing`; cleanup removes it one day after that `ingest` began, and `session status` of it says no published
+session has that id. VSift does not claim to erase data securely: the files are deleted the ordinary way.
 
 ## 5. What VSift never removes
 

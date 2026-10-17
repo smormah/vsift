@@ -274,7 +274,9 @@ media, a copy that does not fit, a cancellation) is treated the same way. Only t
 open that made a registration removes it, and only while its session was never published;
 if the removal itself fails (a busy root), the registration stays listed as `initializing`
 and `session clean` removes it as abandoned after the idle interval, as it also removes the
-registration of a process that was killed while it opened a session. On success `data.transcript` (schema
+registration of a process that was killed while it opened a session. That interval is 24 hours
+from the registration (`SessionLifetime::IDLE_SECONDS`) in every root, a worker workspace with a
+shorter retention included (#277). On success `data.transcript` (schema
 [`transcript-revision.schema.json`](../../schemas/v1/transcript-revision.schema.json))
 describes the revision; a plain ingest omits the member, so its output is unchanged.
 The revision is stored as a `transcript_record` session artifact, counted by
