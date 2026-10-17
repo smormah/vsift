@@ -469,6 +469,41 @@ impl Engine {
         Ok(SessionJobs { entries, truncated })
     }
 
+    /// #370: when an evidence or `candidates` call of `session` met
+    /// contention, names the transcription of the same session that is
+    /// running, if one is: its recognition holds its recognizer threads of
+    /// the root's capacity for the whole run, so the call cannot be admitted
+    /// until it ends, and a blind retry would only become a reported gap.
+    ///
+    /// Every other error, and contention while no job of the session is
+    /// live (another session's work, or a lock held for a moment), is
+    /// returned as it was. Looking the job up is best effort: a job listing
+    /// that cannot be read leaves the original answer, which is already the
+    /// published `BUSY`.
+    pub(crate) fn name_running_transcription(
+        &self,
+        session: &SessionId,
+        error: EngineError,
+    ) -> EngineError {
+        if !error.is_media_contention() {
+            return error;
+        }
+        let Ok((Some(store), _)) = self.existing_store() else {
+            return error;
+        };
+        let Ok(views) = store.session_jobs(session) else {
+            return error;
+        };
+        views
+            .into_iter()
+            .filter(|view| view.liveness == JobLiveness::Owned)
+            .max_by_key(|view| view.record.updated_at_unix_seconds)
+            .map_or(error, |view| EngineError::TranscriptionRunning {
+                session: session.clone(),
+                job: view.record.job_id,
+            })
+    }
+
     /// The store, the job's session from the root's job index, and the time.
     fn job_session(
         &self,

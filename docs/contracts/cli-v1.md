@@ -1944,7 +1944,30 @@ and a null `retry_after_ms`. The code, `retryable: true`, the message and exit s
 4 are unchanged, and no field is added: the published failure shape already has both
 (example [`frame-get.busy.json`](../../schemas/v1/examples/frame-get.busy.json)). The
 hint is a first retry, not a prediction of how long other work runs, which the engine
-does not know. The other `BUSY` answers keep their own text and hint
+does not know.
+
+**`BUSY` while a transcription of the same session runs (since `0.2.2`, #370).** A
+recognition reserves its recognizer threads of the root's capacity for its whole run
+(`min(machine threads, 8, capacity)`, "Weighted admission"), which on a desktop root of
+four units and a machine with four threads or more is all of it, so no frame, crop, clip
+or window of `candidates` analysis of that root is admitted until it ends. Reading a frame
+then would be safe for the data (both hold the session shared, and an evidence commit
+merges onto whatever generation the transcription writes); it is refused because the
+capacity is spent, and letting it through needs a capacity design (a unit the recognizer
+leaves free, or one reserved for evidence; known limit L-154), which `0.2.2` does not
+make. What changed is the answer: when such a command meets contention and a job of the
+**same session** is live, the `BUSY` (the same code, `retryable` true, message, exit
+status 4 and `retry_after_ms` 2000) names the session and the job in `error.affected_ids`
+(session first) and carries the remediation `A transcription of this session is running
+(the job in affected_ids) and holds this session root's share of the machine's capacity
+until it ends, so this command could not run. Nothing was committed. Retrying at once will
+not help: run the suggested job status command, and when it no longer reports the job
+running, run the same command again. A transcription of a long recording can take many
+minutes.`, whose `command` is `vsift job status <job>` (example
+[`frame-get.busy-transcription.json`](../../schemas/v1/examples/frame-get.busy-transcription.json)).
+A transcription of **another** session of the root is not named (the session asked about
+owns no live job), and that answer stays the one above. The library reports it as
+`EngineError::TranscriptionRunning`. The other `BUSY` answers keep their own text and hint
 (a job running elsewhere, a managed installation, an admission wait that ended); a
 transcription that finds the capacity in use keeps its own remediation and has no
 `retry_after_ms`.

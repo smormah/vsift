@@ -192,6 +192,23 @@ pub enum EngineError {
         /// The live job.
         job: JobId,
     },
+    /// A frame, crop, audio clip or visual analysis of `session` was refused
+    /// because another request held what it needs while a transcription of
+    /// the same session was running (#370).
+    ///
+    /// A recognition reserves its recognizer threads of the root's admission
+    /// capacity for its whole run, which on a desktop root of four units and a
+    /// machine with four threads or more is all of it, so no evidence
+    /// extraction is admitted until it ends. The answer is `BUSY`, as before;
+    /// it names the session and the running job so that a caller can follow
+    /// the job (`job status`) and ask again once it has ended, rather than
+    /// retrying blind and reporting a gap.
+    TranscriptionRunning {
+        /// The session whose evidence was asked for.
+        session: SessionId,
+        /// The live transcription job of that session.
+        job: JobId,
+    },
     /// The operation id was used earlier in the session for a different
     /// request, whose result is kept (maintainer decision D-4).
     IdempotencyConflict {
@@ -446,6 +463,7 @@ impl EngineError {
             Self::IsolationUnavailable(_) => FailureCode::IsolationUnavailable,
             Self::Worker(failure) => failure.failure_code(),
             Self::JobBusy { .. }
+            | Self::TranscriptionRunning { .. }
             | Self::RetranscriptionSuperseded { .. }
             | Self::AdmissionBusy { .. }
             | Self::ManagedInstallBusy => FailureCode::Busy,
@@ -823,6 +841,9 @@ impl fmt::Display for EngineError {
                 formatter.write_str("the evidence record could not be assembled")
             }
             Self::JobBusy { .. } => formatter.write_str("the job is running in another process"),
+            Self::TranscriptionRunning { .. } => formatter.write_str(
+                "a transcription of the session is running and holds the session root's capacity",
+            ),
             Self::IdempotencyConflict { .. } => {
                 formatter.write_str("the operation id is bound to a different request")
             }
@@ -926,6 +947,7 @@ impl Error for EngineError {
             | Self::ManagedStorageUnavailable
             | Self::ArtifactDirectoryNotAbsolute
             | Self::JobBusy { .. }
+            | Self::TranscriptionRunning { .. }
             | Self::IdempotencyConflict { .. }
             | Self::JobCancelled { .. }
             | Self::RetranscriptionSuperseded { .. }
@@ -950,6 +972,7 @@ impl EngineError {
     pub const fn affected_job(&self) -> Option<&JobId> {
         match self {
             Self::JobBusy { job }
+            | Self::TranscriptionRunning { job, .. }
             | Self::IdempotencyConflict { job }
             | Self::JobCancelled { job }
             | Self::RetranscriptionSuperseded { job }
@@ -966,9 +989,9 @@ impl EngineError {
     #[must_use]
     pub const fn affected_session(&self) -> Option<&SessionId> {
         match self {
-            Self::JobInterrupted { session, .. } | Self::JobSessionNotOpen { session, .. } => {
-                Some(session)
-            }
+            Self::JobInterrupted { session, .. }
+            | Self::JobSessionNotOpen { session, .. }
+            | Self::TranscriptionRunning { session, .. } => Some(session),
             _ => None,
         }
     }
@@ -990,17 +1013,37 @@ impl EngineError {
         }
     }
 
+    /// Whether the failure is another request holding what an evidence
+    /// command or `candidates` needs (#342, #370): the root's capacity, which
+    /// the media adapter never waits for (the probe, an extraction, a window
+    /// of analysis), or a session lock another request holds. Nothing was
+    /// committed in any of them.
+    pub(crate) const fn is_media_contention(&self) -> bool {
+        matches!(
+            self,
+            Self::EvidenceMedia(EvidenceMediaError::Busy)
+                | Self::SourceProbe(SourceProbeError::Busy)
+                | Self::Storage(SessionStorageError::Busy)
+                | Self::VisualAnalysisStopped(VisualExtensionStop::Busy { .. })
+                | Self::VisualIndexBuild(VisualIndexBuildError::Sampling(
+                    VisualSamplingError::Busy
+                ))
+        )
+    }
+
     /// How long a caller should wait before retrying, in milliseconds, when
-    /// the failure says so: a job running in another process.
+    /// the failure says so: a job running in another process, or a media
+    /// call refused while a transcription of its session runs.
     #[must_use]
     pub fn retry_after_ms(&self) -> Option<u64> {
         match self {
-            Self::JobBusy { .. } => u64::try_from(LIVE_JOB_RETRY_AFTER.as_millis()).ok(),
-            Self::ManagedInstallBusy => Some(MANAGED_INSTALL_RETRY_AFTER_MS),
-            Self::AdmissionBusy { retry_after_ms } => Some(*retry_after_ms),
-            Self::Worker(WorkerFailure::Busy) => {
+            Self::JobBusy { .. }
+            | Self::TranscriptionRunning { .. }
+            | Self::Worker(WorkerFailure::Busy) => {
                 u64::try_from(LIVE_JOB_RETRY_AFTER.as_millis()).ok()
             }
+            Self::ManagedInstallBusy => Some(MANAGED_INSTALL_RETRY_AFTER_MS),
+            Self::AdmissionBusy { retry_after_ms } => Some(*retry_after_ms),
             _ => None,
         }
     }
