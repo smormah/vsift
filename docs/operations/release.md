@@ -1110,6 +1110,23 @@ candidate is an ancestor of the stable commit there.
     `vsift-cli` rather than `vsift-cli@next`): they are made on the release branch, and without that
     change `main`'s installation guide would keep the candidate's wording. Its version strings do not
     need to: the next cut's bump sets `main`'s version.
+  - **What the check does not compare line by line (#458, L-173; since 2026-10-18)**, because the records
+    change rewrites the work record as current state instead of copying it, and each of these is named in
+    the report as "excused": (1) **a line a window commit added that the branch's own head no longer has**
+    (a later window commit replaced it; that commit is compared on its own, so the branch's net change is
+    still held to `main`); (2) **`memory/TODO.md` and `memory/project_current_status.md`**, which every
+    change rewrites, when `main`'s last change to the file is not older than the release commit (a
+    newer rewrite; if `main` has not rewritten them since, they are compared line by line); (3) **in
+    `CHANGELOG.md` and the pages directly in `docs/planning/` (the register among them), a line the
+    release commit replaced in place when `main` no longer has the line it replaced, and a new line
+    whose first 60 characters `main` has in a line the cut did not have (the same sentence, reworded)**:
+    a date, a count, a status or a "not published" sentence that both sides rewrote is not reported, a new
+    register entry or bullet that `main` lacks is, and so is a replaced line that `main` kept as the cut had
+    it. Code, configuration, version files, the two shipped documents, the ledger and every other file are
+    compared exactly as before, and the first excuse is the only one that reaches them. None of the three
+    can hide a missing code fix: a fix's code is in files none of them applies to (or in a commit
+    whose later replacement is itself compared), and a fix's own record, its changelog bullet and its
+    register entry, stay compared.
   - **A commit made on the release branch has no scheduled nightly** (the schedule runs on `main`):
     before such a commit is tagged as a candidate, the Nightly workflow is dispatched on the branch
     (`gh workflow run nightly.yml --repo smormah/vsift --ref release/<MAJOR>.<MINOR>.x`) and must pass on
@@ -2985,7 +3002,9 @@ with `gh`, pass `--ref v<version>`. A wrong choice now costs seconds, not the tw
    installation guide says what the stable release says), and checks that every window fix is on `main`: **the `Release window` workflow runs on that pull request by itself**
    (it triggers on a change to `docs/planning/p14-evidence-ledger.json`, which every records change makes) and, as the
    merge ref is compared, requires the work record and the shipped documents of the branch to be on `main` as well as
-   its fixes (`--records`); it fails with the commit, the file and the lines `main` lacks. Bring them, or record
+   its fixes (`--records`); it fails with the commit, the file and the lines `main` lacks (the records change
+   rewrites the handoff files, the register's date and counts and the plan's status as current state, and the
+   check does not report those: 6.8 lists what it excuses, and the report names each). Bring them, or record
    in the pull request why `main` differs, before merging; no ruleset requires the check. After it merges, the release
    branch may stay until the next cut deletes it.
 6. **If the window slips,** the cut waits for the next Friday or Saturday. A candidate already published stays on

@@ -8,6 +8,7 @@ mocked, and nothing leaves the temporary folder.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 import re
 import subprocess
@@ -26,7 +27,23 @@ BASE_FILES = {
     "CHANGELOG.md": "# Changelog\n\n## Unreleased\n",
     "tools/helper.py": "def keep():\n    return 1\n",
     "assets/logo.bin": "BINARY-1",
+    "memory/TODO.md": "# Work record\n\n## Now (2026-10-17): the candidate is cut\n",
+    "memory/project_current_status.md": "As of 2026-10-17: the candidate is cut.\n",
+    "docs/planning/known-limits.md": (
+        "# Register\n\nDate: 2026-10-17 (the cut)\n\n"
+        "| [L-167](#l-167) | Journeys fail on Windows | open |\n"
+        "Counts: 1 high, 50 medium (157 entries).\n\n"
+        "### L-167\n\n- **Next step:** release the fix.\n"
+    ),
+    "docs/operations/install.md": "Install guide.\n\nUse the latest version.\n",
 }
+
+
+# Committer times for the commits of the window tests (the release commit, then `main`'s rewrite).
+BASE_TIME = "2026-10-10T00:00:00+00:00"
+RELEASE_TIME = "2026-10-18T10:00:00+00:00"
+MAIN_LATER = "2026-10-18T12:00:00+00:00"
+MAIN_EARLIER = "2026-10-17T12:00:00+00:00"
 
 
 class Repository:
@@ -37,10 +54,13 @@ class Repository:
         self.git("init", "--quiet", "--initial-branch=main")
         for path, content in BASE_FILES.items():
             self.write(path, content)
-        self.commit("The base (#1)")
+        self.commit("The base (#1)", BASE_TIME)
         self.git("branch", "release/0.2.x")
 
-    def git(self, *arguments: str) -> str:
+    def git(self, *arguments: str, date: str | None = None) -> str:
+        environment = None
+        if date is not None:
+            environment = {**os.environ, "GIT_COMMITTER_DATE": date, "GIT_AUTHOR_DATE": date}
         completed = subprocess.run(
             [
                 "git",
@@ -57,6 +77,7 @@ class Repository:
             check=True,
             capture_output=True,
             text=True,
+            env=environment,
         )
         return completed.stdout
 
@@ -69,9 +90,9 @@ class Repository:
         content = (self.root / path).read_text(encoding="utf-8")
         self.write(path, content.replace(old, new))
 
-    def commit(self, subject: str) -> None:
+    def commit(self, subject: str, date: str | None = None) -> None:
         self.git("add", "--all")
-        self.git("commit", "--quiet", "-m", subject)
+        self.git("commit", "--quiet", "-m", subject, date=date)
 
     def on(self, branch: str) -> None:
         self.git("switch", "--quiet", branch)
@@ -257,6 +278,299 @@ class WindowFixTests(unittest.TestCase):
         )
 
 
+class ExcusedLineTests(unittest.TestCase):
+    """The excuses of L-173 / #458, built from the shapes #457's records change showed.
+
+    Each excuse has a test that it holds, and tests that the strictness it must not lose still
+    holds: a window fix missing from `main` is reported whatever else is excused.
+    """
+
+    def setUp(self) -> None:
+        self._directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self._directory.cleanup)
+        self.repo = Repository(Path(self._directory.name))
+
+    def release(self, subject: str, date: str = RELEASE_TIME) -> None:
+        self.repo.commit(subject, date)
+
+    def main_commit(self, subject: str, date: str = MAIN_LATER) -> None:
+        self.repo.commit(subject, date)
+
+    # Excuse 1: a line a later window commit replaced.
+
+    def replaced_in_the_window(self) -> None:
+        self.repo.on("release/0.2.x")
+        self.repo.edit("crates/engine/src/lib.rs", "retries = 3;", "retries = 4;")
+        self.release("Retry four times (#10)")
+        self.repo.edit("crates/engine/src/lib.rs", "retries = 4;", "retries = 5;")
+        self.release("Retry five times, not four (#11)")
+        self.repo.on("main")
+
+    def test_a_line_that_a_later_window_commit_replaced_is_not_reported(self) -> None:
+        self.replaced_in_the_window()
+        self.repo.edit("crates/engine/src/lib.rs", "retries = 3;", "retries = 5;")
+        self.main_commit("The net fix on main (#12)")
+        code, output = self.repo.check()
+        self.assertEqual(code, window.EXIT_OK, output)
+        self.assertIn(
+            "excused, crates/engine/src/lib.rs: 1 added line(s) replaced by a later window commit",
+            output,
+        )
+
+    def test_the_net_change_of_the_branch_is_still_required_of_main(self) -> None:
+        self.replaced_in_the_window()
+        code, output = self.repo.check()
+        self.assertEqual(code, window.EXIT_MISSING, output)
+        self.assertIn("retries = 5;", output)
+
+    def test_a_replaced_line_that_main_took_in_the_first_form_only_is_reported(self) -> None:
+        self.replaced_in_the_window()
+        self.repo.edit("crates/engine/src/lib.rs", "retries = 3;", "retries = 4;")
+        self.main_commit("The first form on main (#12)")
+        code, output = self.repo.check()
+        self.assertEqual(code, window.EXIT_MISSING, output)
+        self.assertIn("Retry five times, not four (#11)", output)
+        self.assertIn("removed line(s) still on main", output)
+
+    def test_a_line_that_the_head_still_has_is_never_called_superseded(self) -> None:
+        self.repo.on("release/0.2.x")
+        self.repo.edit("tools/helper.py", "return 1", "return 2")
+        self.release("Helper returns two (#10)")
+        self.repo.on("main")
+        code, output = self.repo.check(records=True)
+        self.assertEqual(code, window.EXIT_MISSING, output)
+        self.assertNotIn("replaced by a later window commit", output)
+
+    # Excuse 2: the files rewritten as current state.
+
+    def rewrite_state_on_the_branch(self) -> None:
+        self.repo.on("release/0.2.x")
+        self.repo.edit("memory/TODO.md", "the candidate is cut", "the candidate is published")
+        self.repo.edit(
+            "memory/project_current_status.md", "the candidate is cut", "the candidate is published"
+        )
+        self.release("Records for the candidate (#10)")
+        self.repo.on("main")
+
+    def rewrite_state_on_main(self, date: str) -> None:
+        self.repo.edit("memory/TODO.md", "the candidate is cut", "the stable release is next")
+        self.repo.edit(
+            "memory/project_current_status.md", "the candidate is cut", "the stable release is next"
+        )
+        self.main_commit("Records on main (#12)", date)
+
+    def test_a_current_state_file_that_main_rewrote_later_is_satisfied(self) -> None:
+        self.rewrite_state_on_the_branch()
+        self.rewrite_state_on_main(MAIN_LATER)
+        code, output = self.repo.check(records=True)
+        self.assertEqual(code, window.EXIT_OK, output)
+        self.assertIn(
+            "memory/TODO.md: the handoff, rewritten as current state by every change; "
+            "main rewrote it on 2026-10-18",
+            output,
+        )
+        self.assertIn("memory/project_current_status.md", output)
+
+    def test_a_current_state_file_that_main_rewrote_before_the_branch_is_not(self) -> None:
+        self.rewrite_state_on_the_branch()
+        self.rewrite_state_on_main(MAIN_EARLIER)
+        code, output = self.repo.check(records=True)
+        self.assertEqual(code, window.EXIT_MISSING, output)
+        self.assertIn("memory/TODO.md (record): 1 added line(s) not on main", output)
+
+    def test_a_current_state_file_that_main_never_rewrote_is_not(self) -> None:
+        self.rewrite_state_on_the_branch()
+        code, output = self.repo.check(records=True)
+        self.assertEqual(code, window.EXIT_MISSING, output)
+        self.assertIn("memory/project_current_status.md (record)", output)
+
+    def test_only_the_named_current_state_files_are_excused(self) -> None:
+        self.repo.on("release/0.2.x")
+        self.repo.write("memory/notes.md", "A note the branch wrote.\n")
+        self.release("A note (#10)")
+        self.repo.on("main")
+        self.repo.write("memory/notes.md", "A different note.\n")
+        self.main_commit("Another note (#12)")
+        code, output = self.repo.check(records=True)
+        self.assertEqual(code, window.EXIT_MISSING, output)
+        self.assertIn("memory/notes.md (record)", output)
+
+    def test_a_current_state_rewrite_cannot_hide_a_missing_code_fix(self) -> None:
+        self.repo.on("release/0.2.x")
+        self.repo.edit("crates/engine/src/lib.rs", "retries = 3;", "retries = 5;")
+        self.repo.edit("memory/TODO.md", "the candidate is cut", "a window fix is in")
+        self.release("Retry five times and say so (#10)")
+        self.repo.on("main")
+        self.repo.edit("memory/TODO.md", "the candidate is cut", "main moved on")
+        self.main_commit("Records on main (#12)")
+        for records in (False, True):
+            with self.subTest(records=records):
+                code, output = self.repo.check(records=records)
+                self.assertEqual(code, window.EXIT_MISSING, output)
+                self.assertIn(
+                    "crates/engine/src/lib.rs (fix): 1 added line(s) not on main", output
+                )
+                self.assertIn("memory/TODO.md: the handoff", output)
+
+    # Excuse 3: a line rewritten in place on both sides (the register, the plan pages, the changelog).
+
+    def test_the_registers_date_and_counts_lines_rewritten_on_main_are_satisfied(self) -> None:
+        register = "docs/planning/known-limits.md"
+        self.repo.on("release/0.2.x")
+        self.repo.edit(register, "Date: 2026-10-17 (the cut)", "Date: 2026-10-18 (the branch's records)")
+        self.repo.edit(
+            register,
+            "Counts: 1 high, 50 medium (157 entries).",
+            "Counts: 1 high, 51 medium (159 entries).",
+        )
+        self.release("Records for the candidate (#10)")
+        self.repo.on("main")
+        self.repo.edit(register, "Date: 2026-10-17 (the cut)", "Date: 2026-10-18 (the records change)")
+        self.repo.edit(
+            register,
+            "Counts: 1 high, 50 medium (157 entries).",
+            "Counts: 1 high, 50 medium (158 entries).",
+        )
+        self.main_commit("Records on main (#12)")
+        code, output = self.repo.check(records=True)
+        self.assertEqual(code, window.EXIT_OK, output)
+        self.assertIn("docs/planning/known-limits.md: 2 added line(s) rewritten on main", output)
+
+    def test_a_register_line_that_main_left_as_the_cut_had_it_is_reported(self) -> None:
+        self.repo.on("release/0.2.x")
+        self.repo.edit(
+            "docs/planning/known-limits.md",
+            "- **Next step:** release the fix.",
+            "- **Next step:** the fix is released.",
+        )
+        self.release("Records for the candidate (#10)")
+        self.repo.on("main")
+        code, output = self.repo.check(records=True)
+        self.assertEqual(code, window.EXIT_MISSING, output)
+        self.assertIn(
+            "docs/planning/known-limits.md (record): 1 added line(s) not on main, "
+            "1 removed line(s) still on main",
+            output,
+        )
+
+    def test_a_register_entry_that_main_does_not_have_is_reported(self) -> None:
+        register = "docs/planning/known-limits.md"
+        self.repo.on("release/0.2.x")
+        self.repo.edit(
+            register, "### L-167", "### L-180\n\n- **Next step:** a new limit of the window fix.\n\n### L-167"
+        )
+        self.repo.edit(
+            register,
+            "| [L-167](#l-167) |",
+            "| [L-180](#l-180) | A new limit | open |\n| [L-167](#l-167) |",
+        )
+        self.release("A new limit (#10)")
+        self.repo.on("main")
+        # Main added another entry meanwhile, with a bullet of the same shape.
+        self.repo.edit(
+            register, "### L-167", "### L-181\n\n- **Next step:** another limit.\n\n### L-167"
+        )
+        self.main_commit("Another entry on main (#12)")
+        code, output = self.repo.check(records=True)
+        self.assertEqual(code, window.EXIT_MISSING, output)
+        self.assertIn("### L-180", output)
+        self.assertIn("[L-180](#l-180)", output)
+
+    def test_a_reworded_changelog_sentence_passes_and_a_missing_one_is_reported(self) -> None:
+        self.repo.on("release/0.2.x")
+        self.repo.edit(
+            "CHANGELOG.md",
+            "## Unreleased",
+            "## Unreleased\n\n"
+            "- **Nothing had been run against this release's own bytes when this was written.** Not yet.\n"
+            "- **Retries are five now, for every provider call.** A window fix.",
+        )
+        self.release("The stable commit (#10)")
+        self.repo.on("main")
+        self.repo.edit(
+            "CHANGELOG.md",
+            "## Unreleased",
+            "## Unreleased\n\n"
+            "- **Nothing had been run against this release's own bytes when this was written.** Run on the 18th.",
+        )
+        self.main_commit("Records on main (#12)")
+        code, output = self.repo.check(records=True)
+        self.assertEqual(code, window.EXIT_MISSING, output)
+        self.assertIn("CHANGELOG.md (record): 1 added line(s) not on main", output)
+        self.assertIn("Retries are five now", output)
+        quoted = [line for line in output.splitlines() if line.startswith("    >")]
+        self.assertFalse([line for line in quoted if "Nothing had been run" in line], output)
+
+    def test_a_reworded_changelog_sentence_alone_passes(self) -> None:
+        self.repo.on("release/0.2.x")
+        self.repo.edit("CHANGELOG.md", "## Unreleased", "## Unreleased\n\n- **Not published, not tagged and not announced by this change.** The release is cut here.")
+        self.release("The stable commit (#10)")
+        self.repo.on("main")
+        self.repo.edit("CHANGELOG.md", "## Unreleased", "## Unreleased\n\n- **Not published, not tagged and not announced by this change.** It was published on the 18th.")
+        self.main_commit("Records on main (#12)")
+        code, output = self.repo.check(records=True)
+        self.assertEqual(code, window.EXIT_OK, output)
+        self.assertIn("CHANGELOG.md: 1 added line(s) rewritten on main", output)
+
+    def test_a_line_that_main_still_has_as_the_cut_had_it_is_not_a_rewrite(self) -> None:
+        self.repo.on("release/0.2.x")
+        self.repo.edit("CHANGELOG.md", "# Changelog", "# Changelog (as released)")
+        self.release("A heading (#10)")
+        self.repo.on("main")
+        code, output = self.repo.check(records=True)
+        self.assertEqual(code, window.EXIT_MISSING, output)
+
+    # What stays strict.
+
+    def test_a_code_line_reworded_on_main_is_still_reported(self) -> None:
+        self.repo.on("release/0.2.x")
+        self.repo.edit(
+            "crates/engine/src/lib.rs", "retries = 3;", "retries = 5; // five tries for every call"
+        )
+        self.release("Retry five times (#10)")
+        self.repo.on("main")
+        self.repo.edit("crates/engine/src/lib.rs", "retries = 3;", "retries = 5; // five tries")
+        self.main_commit("The counterpart (#12)")
+        for records in (False, True):
+            with self.subTest(records=records):
+                code, output = self.repo.check(records=records)
+                self.assertEqual(code, window.EXIT_MISSING, output)
+                self.assertIn("1 added line(s) not on main", output)
+
+    def test_a_shipped_document_reworded_on_main_is_still_reported(self) -> None:
+        self.repo.on("release/0.2.x")
+        self.repo.edit(
+            "docs/operations/install.md",
+            "Use the latest version.",
+            "Use the stable version 0.2.2, the latest.",
+        )
+        self.release("The installation guide (#10)")
+        self.repo.on("main")
+        self.repo.edit(
+            "docs/operations/install.md", "Use the latest version.", "Use the stable version 0.2.2."
+        )
+        self.main_commit("The counterpart (#12)")
+        code, output = self.repo.check(records=True)
+        self.assertEqual(code, window.EXIT_MISSING, output)
+        self.assertIn("docs/operations/install.md (record): 1 added line(s) not on main", output)
+        self.assertNotIn("rewritten on main", output)
+
+    def test_a_ledger_line_is_compared_exactly(self) -> None:
+        self.repo.on("release/0.2.x")
+        self.repo.write(
+            "docs/planning/p14-evidence-ledger.json", '{\n  "status": "passed for the candidate"\n}\n'
+        )
+        self.release("The ledger (#10)")
+        self.repo.on("main")
+        self.repo.write(
+            "docs/planning/p14-evidence-ledger.json", '{\n  "status": "passed for the stable release"\n}\n'
+        )
+        self.main_commit("The ledger on main (#12)")
+        code, output = self.repo.check(records=True)
+        self.assertEqual(code, window.EXIT_MISSING, output)
+        self.assertIn("p14-evidence-ledger.json (record)", output)
+
+
 class ClassificationTests(unittest.TestCase):
     def test_kinds(self) -> None:
         self.assertEqual(window.kind_of("crates/vsift/src/lib.rs"), "fix")
@@ -285,6 +599,34 @@ class ClassificationTests(unittest.TestCase):
         self.assertEqual(
             window.normalise("crates/x/src/lib.rs", 'const V: &str = "0.2.2";'),
             'const V: &str = "0.2.2";',
+        )
+
+    def test_the_rewritten_record_pages_are_the_changelog_and_the_planning_pages_only(self) -> None:
+        for path in ("CHANGELOG.md", "docs/planning/known-limits.md", "docs/planning/release-0.2.2.md"):
+            self.assertTrue(window.is_rewritten_record(path), path)
+        for path in (
+            "docs/planning/p14-evidence-ledger.json",
+            "docs/planning/p14-agent-trials/README.md",
+            "docs/operations/install.md",
+            "npm/vsift-cli/README.md",
+            "memory/TODO.md",
+            "crates/vsift/src/lib.rs",
+        ):
+            self.assertFalse(window.is_rewritten_record(path), path)
+
+    def test_a_lead_ignores_list_and_table_markers(self) -> None:
+        self.assertEqual(window.lead("- **Next step:** x"), "Next step:** x")
+        self.assertEqual(window.lead("| `0.2.2` | Not made."), "`0.2.2` | Not made.")
+        self.assertEqual(len(window.lead("a" * 200)), window.LEAD_LENGTH)
+
+    def test_hunks_keep_their_added_and_removed_lines_together(self) -> None:
+        diff = (
+            "diff --git a/f b/f\n--- a/f\n+++ b/f\n@@ -1 +1 @@\n-old\n+new\n"
+            "@@ -5,0 +6 @@\n+inserted\n"
+        )
+        self.assertEqual(
+            window.parse_hunk_groups(diff),
+            [window.Hunk(("new",), ("old",)), window.Hunk(("inserted",), ())],
         )
 
     def test_a_content_line_that_looks_like_a_header_is_content(self) -> None:
