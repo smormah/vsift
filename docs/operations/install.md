@@ -1,22 +1,22 @@
 # Installing VSift
 
-Status: user guide, updated 2026-10-17 (the cut of the first release candidate of 0.2.2, `0.2.2-rc.1`: the candidates of 0.2.2 and the fix of #404) and 2026-10-16 (0.2.1 is published; its known issues and what was run against it) and 2026-10-15 (the release 0.2.1) and 2026-10-10 (section 7 on upgrading from a candidate of a later release: the cut of the patch release's candidate) and 2026-10-09 (P14 PR 12, the release 0.2.0; P14 PR 10 repeated again, the third candidate; P14 PR 11c;
+Status: user guide, updated 2026-10-18 (the release 0.2.2) and 2026-10-17 (the cut of the first release candidate of 0.2.2, `0.2.2-rc.1`: the candidates of 0.2.2 and the fix of #404) and 2026-10-16 (0.2.1 is published; its known issues and what was run against it) and 2026-10-15 (the release 0.2.1) and 2026-10-10 (section 7 on upgrading from a candidate of a later release: the cut of the patch release's candidate) and 2026-10-09 (P14 PR 12, the release 0.2.0; P14 PR 10 repeated again, the third candidate; P14 PR 11c;
 P14 PR 9a; written by P13 PR 11 and PR 12 for the published pre-release;
 [ADR 0023](../decisions/0023-r0-distribution-managed-installation-and-handoff-check.md)).
-**VSift 0.2.1 is the patch release after 0.2.0**, and `npm install vsift-cli` with no tag installs it (it
-replaced 0.2.0 under npm's `latest` dist-tag on 2026-10-15). The npm packages carry npm provenance, and the native archives on its GitHub release carry a Sigstore build-provenance
-attestation, as every file of the release does. 0.2.0 (2026-10-09) was the first release under `latest`; before it, `latest` was an empty `0.0.0` placeholder, a package with no command. The
-pre-release 0.1.0 (2026-10-01), the release candidates of 0.2.0 and the release candidates of 0.2.1 (0.2.1-rc.1, 0.2.1-rc.2 and 0.2.1-rc.3) were installed with `vsift-cli@next`; they stay published, and 0.2.0-rc.1, 0.2.0-rc.2, 0.2.1-rc.1 and 0.2.1-rc.2
-are deprecated (npm warns on an install of any of them and names the release that replaced it). `next` still names 0.2.1-rc.3, the source of 0.2.1. 0.2.1 is not announced. The release candidates of the next patch release, 0.2.2 (the first is 0.2.2-rc.1, cut on 2026-10-17), go to `next` when they are published and are never `latest`; you do not need them.
-**0.2.1 is built from the same source as the third release candidate, 0.2.1-rc.3**, and differs from it only in its version
+**VSift 0.2.2 is the patch release after 0.2.1**, and `npm install vsift-cli` with no tag installs it (it
+replaces 0.2.1 under npm's `latest` dist-tag). The npm packages carry npm provenance, and the native archives on its GitHub release carry a Sigstore build-provenance
+attestation, as every file of the release does. 0.2.0 (2026-10-09) was the first release under `latest` and 0.2.1 (2026-10-15) the one before this; before 0.2.0, `latest` was an empty `0.0.0` placeholder, a package with no command. The
+pre-release 0.1.0 (2026-10-01) and the release candidates of 0.2.0, 0.2.1 and 0.2.2 were installed with `vsift-cli@next`; they stay published, and 0.2.0-rc.1, 0.2.0-rc.2, 0.2.1-rc.1 and 0.2.1-rc.2
+are deprecated (npm warns on an install of any of them and names the release that replaced it). `next` still names 0.2.2-rc.1, the source of 0.2.2; you do not need it. 0.2.2 is not announced.
+**0.2.2 is built from the same source as its release candidate, 0.2.2-rc.1**, and differs from it only in its version
 numbers, this guide, the npm package's README and the project's work record (a mechanical check enforces that:
-[`release.md`](release.md) section 6.8). What was tried on that candidate was tried on that source. The executable carries the
-new version number and commit, so the hosted checks were run again on the published 0.2.1 on 2026-10-15 (`release.md` section 6.17) and are recorded in the release evidence ledger:
-the installs, the archives, the upgrades, the managed install and the checks of the publish passed, and **the worker-host journeys failed twice on hosted Windows**
-(the stage that shuts a worker down while a recognition is running; a known issue of 0.2.1, [#404](https://github.com/smormah/vsift/issues/404); it passed on Ubuntu and macOS and on 0.2.1-rc.3).
-**What 0.2.1 changes for you** since 0.2.0 is in the [changelog](../../CHANGELOG.md): changes to how a long recording is transcribed (a stretch that cannot be
-transcribed is a recorded gap instead of a failed run, and the join of the 30-second pieces no longer drops whole sentences silently at a seam and reports the stretches where words could not be placed, though up to about half a second at the end of a piece can still be missing without a sign; both are shown on stand-in recordings, not on a real one), a shorter
-brief view of transcripts and searches for an AI assistant, and a `setup check` that waits 30 seconds instead of 5. Section 12 has the notes on 0.2.0.
+[`release.md`](release.md) section 6.8). What was tried on that candidate was tried on that source, and it is recorded in the release evidence ledger: the installs, the archives, the offline install, the upgrades,
+the managed install, **the worker-host journeys on all three systems (the stage that failed twice on hosted Windows on 0.2.1, [#404](https://github.com/smormah/vsift/issues/404), passed)**, the campaigns and the checks of the publish passed. The executable carries the
+new version number and commit, so the hosted checks are run again on the published 0.2.2 after its publish.
+**What 0.2.2 changes for you** since 0.2.1 is in the [changelog](../../CHANGELOG.md): a worker host that is stopped while it recognises speech records the
+stopped request as cancelled and resumable, never as a failure that says a tool is missing; on Windows the free space is checked before a video is copied; a copy that clearly
+cannot finish in time stops early; a named pipe, a device or a socket given as the video is refused without being opened; refusals and the advice for a missing tool say why; and
+`candidates --omit periodic` is a new, opt-in option. A worker's request record that 0.2.2 writes can be read as damaged by 0.2.1. Section 12 has the notes on 0.2.1 and 0.2.0.
 The machines in section 1 are R0 targets, not yet a supported platform. The
 evidence gathered so far, with its gaps, is recorded in the release evidence ledger
 ([`p14-evidence-ledger.json`](../planning/p14-evidence-ledger.json)). **What was not tried before this release, and it ships
@@ -25,7 +25,7 @@ without them:** Windows Smart App Control and SmartScreen, a true clean-machine 
 from hosted runners only. **What has been run against these steps.** In P13 they ran on
 hosted runners against a local registry. Since 2026-10-02 (P14) the published packages have also
 been installed from the real registry with npm, pnpm, Yarn and Bun on hosted Windows, macOS and
-Ubuntu runners, first 0.1.0, then each release candidate (the last being 0.2.1-rc.3 on 2026-10-13 to 2026-10-15), 0.2.0 itself on 2026-10-09 and 0.2.1 itself on 2026-10-15; the three archives have been
+Ubuntu runners, first 0.1.0, then each release candidate (the last being 0.2.2-rc.1 on 2026-10-18), 0.2.0 itself on 2026-10-09 and 0.2.1 itself on 2026-10-15; the three archives have been
 downloaded, checked, extracted and run, the offline
 install of the managed tools has been run with the real files, the upgrade and uninstall steps
 (sections 7 and 8) have been walked, and the same bytes have run the supplied-transcript and
@@ -56,13 +56,13 @@ source ([`development.md`](../development.md)) also works.
   24.04 x64 only (ADR 0023 decision E). On Windows and macOS you install FFmpeg,
   FFprobe, whisper.cpp and the speech model yourself and tell VSift where they are
   (section 5.2).
-- **What 0.2.1 promises** (as 0.2.0 did) is the `vsift` command-line grammar, its exit codes and its v1 JSON
+- **What 0.2.2 promises** (as 0.2.0 and 0.2.1 did) is the `vsift` command-line grammar, its exit codes and its v1 JSON
   contracts ([`cli-v1.md`](../contracts/cli-v1.md)). They change only by addition: new commands,
   fields and failure codes may appear, and what exists keeps its meaning. Nothing else is
   promised: the readable text that commands print without `--json` is for people and may
   change, and the accuracy figures were measured on a synthetic corpus. The release
-  qualification of 0.2.1 is recorded in the release evidence ledger, with one item failed: the worker-host journeys on
-  hosted Windows (#404).
+  qualification of 0.2.2 is recorded in the release evidence ledger, with three items waived and none failed
+  (the adversarial isolation evidence of the worker host, the trials of an AI assistant without the skill, and the try-outs of section 4).
 - **Not signed.** The Windows and macOS executables carry no Authenticode signature and
   no Apple notarization. Section 4 says what that means for you and how to check a
   download instead.
@@ -73,13 +73,13 @@ to run the small launcher. Installing from a native archive needs neither.
 ## 2. Install with a package manager
 
 The npm package is `vsift-cli`; the command it installs is `vsift`. **Ask for it without a
-tag:** 0.2.1 is published under the dist-tag `latest`, which is what a plain `vsift-cli` means.
-The dist-tag `next` is for release candidates and you do not need it; it names `0.2.1-rc.3`,
-the candidate 0.2.1 was built from, or a later candidate or release. The empty `0.0.0`
+tag:** 0.2.2 is published under the dist-tag `latest`, which is what a plain `vsift-cli` means.
+The dist-tag `next` is for release candidates and you do not need it; it names `0.2.2-rc.1`,
+the candidate 0.2.2 was built from, or a later candidate or release. The empty `0.0.0`
 placeholder that was `latest` before 0.2.0 has no command: if `vsift` is not found after an
 install and your package manager reports `vsift-cli` at `0.0.0`, it resolved the placeholder
 (for example a registry mirror that has not caught up; Yarn's one-day hold below may do the same,
-which was not tried), and asking for the exact version, `vsift-cli@0.2.1`, installs the
+which was not tried), and asking for the exact version, `vsift-cli@0.2.2`, installs the
 release. Install globally, so the
 `vsift` command is on your `PATH`:
 
@@ -97,7 +97,7 @@ yarn vsift --version
 ```
 
 Recent Yarn 4 releases (4.18.1 checked) hold back any version published less than a day
-ago (`npmMinimalAgeGate`, default one day), so Yarn users get 0.2.1 (as they did 0.2.0) a day after it was
+ago (`npmMinimalAgeGate`, default one day), so Yarn users get 0.2.2 (as they did 0.2.0 and 0.2.1) a day after it was
 published, and every later release a day after its publish. Until then Yarn
 reports that the versions of `vsift-cli` or `@vsift/...` "are quarantined" (seen with the exact
 version of 0.1.0, 6.5 hours after its publish). Wait a day, or exempt VSift in the project's
@@ -475,7 +475,7 @@ folder.
 
 - **npm:** install again: `npm install --global vsift-cli` (likewise for
   pnpm and Bun; Yarn: `yarn add vsift-cli` again in the project). Someone who installed a
-  release candidate of 0.2.0 or 0.2.1 with `@next` is moved to 0.2.1 the same way, because `latest` is the higher
+  release candidate of 0.2.0, 0.2.1 or 0.2.2 with `@next` is moved to 0.2.2 the same way, because `latest` is the higher
   version. A candidate of a later release is newer than `latest`, so the same command installs the older
   `latest` until that release is published: ask for the exact version to stay on the candidate
   (`vsift-cli@<version>`). `@next` is not the way to get releases. The launcher and the
@@ -500,7 +500,7 @@ folder.
   published 0.2.0-rc.1 to the published 0.2.0-rc.2 on the three systems with the same result (runs 37602931887 and
   37611381117), and on 2026-10-08 the published 0.1.0 and the published 0.2.0-rc.2 to the published 0.2.0-rc.3 (runs
   37748859247 and 37752825599). On 2026-10-09, after its publish, the same run upgraded the published 0.1.0 and the published
-  0.2.0-rc.3 to the published 0.2.0 on the three systems with the same result (runs 37999883603 and 38000209110). On 2026-10-15, after its publish, the same run upgraded the published 0.2.0 and the published 0.2.1-rc.3 to the published 0.2.1 on the three systems with the same result (runs 38765075608 and 38765697122).
+  0.2.0-rc.3 to the published 0.2.0 on the three systems with the same result (runs 37999883603 and 38000209110). On 2026-10-15, after its publish, the same run upgraded the published 0.2.0 and the published 0.2.1-rc.3 to the published 0.2.1 on the three systems with the same result (runs 38765075608 and 38765697122). On 2026-10-18, after its publish, the same run upgraded the published 0.2.1 and the published 0.2.1-rc.3 to the published 0.2.2-rc.1 (runs 39082002714 and 39086086198); the runs for 0.2.2 itself happen after its publish.
 
 ## 8. Uninstall
 
@@ -635,9 +635,9 @@ FFmpeg and FFprobe, call the setup `blocked` and tell you to install tools you a
 `vsift setup check --timeout-seconds 30`, or upgrade. In 0.2.1 the limit is 30 seconds, and a tool that did not
 answer in time is told so, with what to do, instead of getting the advice for a missing tool. It was seen once, on one machine, on Windows, and the fix was checked by hand on a second Windows machine; whether macOS and Linux show it was not checked.
 
-**A known issue of 0.2.1: the worker host on Windows** ([#404](https://github.com/smormah/vsift/issues/404), [L-167](../planning/known-limits.md#l-167)). The hosted check that shuts a worker down while a local recognition is running failed twice on Windows, once because
+**A known issue of 0.2.1, fixed in 0.2.2: the worker host on Windows** ([#404](https://github.com/smormah/vsift/issues/404), [L-167](../planning/known-limits.md#l-167)). The hosted check that shuts a worker down while a local recognition is running failed twice on Windows, once because
 two provider processes were still alive when the check looked and once because the cancelled recognition was reported as failed with `MISSING_CAPABILITY`; it passed on Ubuntu and macOS and on the candidate this release was built from. Nobody has seen it
-outside that hosted check. It concerns programs that run `vsift job run` or `vsift job batch` as a worker and stop it, and the next patch release fixes it first: the fix is in the first release candidate of 0.2.2, `0.2.2-rc.1` (cut 2026-10-17), and in the release that follows it, and it has not yet run on hosted Windows. Whether it happens in use is not known: if you run the worker host on Windows and stop a worker while it is recognising speech, a provider process may be left for a moment, or a request may report a failure where a cancellation was expected.
+outside that hosted check. It concerns programs that run `vsift job run` or `vsift job batch` as a worker and stop it, and 0.2.2 fixes it: the stopped request is cancelled and resumable, and on Windows each provider runs in a console of its own; the same hosted check passed on Windows on the release candidate 0.2.2 was built from (2026-10-18), once. On 0.2.1, upgrade. Whether it happens in use on 0.2.1 is not known: if you run the worker host on Windows and stop a worker while it is recognising speech, a provider process may be left for a moment, or a request may report a failure where a cancellation was expected.
 
 **`INTEGRITY_FAILURE` right after `--session-root <folder>`.** If the folder already exists and
 VSift did not create it (an empty folder you made with `mkdir`, say), VSift never adopts it and
