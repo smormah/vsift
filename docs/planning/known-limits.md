@@ -4939,6 +4939,7 @@ that week.**
 - **Mitigation:** the fetch verifies size, SHA-256 and the source's checksum before it places a file, and refuses a different file already in place; reports name items by id and digest; the corpus keeps the frozen truth.
 - **Next step:** the maintainer approves items one by one; each approved item is pinned on a hosted runner; the campaign runner and the manual workflow `P14 real media` follow, then the measurements #380 to #384, #173 to #175 and #150 ask for.
 - **Owner:** cycle 2 (`0.2.3`). **Issue:** [#363](https://github.com/smormah/vsift/issues/363). **Status:** open. **Review:** pending.
+
 ### L-181
 
 **whisper.cpp v1.9.5's binaries are published only under the build release `b5454`, which GitHub marks a pre-release and whose retention upstream does not state; if it is pruned, the managed install of whisper.cpp fails with `DOWNLOAD_FAILED`.**
