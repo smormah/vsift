@@ -1,0 +1,314 @@
+{
+  "schema_version": "1",
+  "set_id": "vsift-real-media",
+  "items": [
+    {
+      "id": "RM01",
+      "status": "proposed",
+      "title": "Editing basics - watchlists",
+      "source_page": "https://commons.wikimedia.org/wiki/File:Editing_basics_-_watchlists.webm",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/e/e6/Editing_basics_-_watchlists.webm",
+      "file_name": "RM01-editing-basics-watchlists.webm",
+      "bytes": 6192962,
+      "sha256": null,
+      "source_checksum": {
+        "algorithm": "sha1",
+        "value": "9cc8ceb7e9cd6b13f78ebf0936b1cb8fffebbdf6"
+      },
+      "source_revision": "2013-01-04T16:33:11Z",
+      "licence": {
+        "id": "CC-BY-SA-3.0",
+        "url": "https://creativecommons.org/licenses/by-sa/3.0/",
+        "statement": "https://commons.wikimedia.org/wiki/File:Editing_basics_-_watchlists.webm"
+      },
+      "author": "Sage Ross (WMF)",
+      "attribution": "\"Editing basics - watchlists\" by Sage Ross (WMF), CC BY-SA 3.0, via Wikimedia Commons",
+      "media": {
+        "duration_s": 135.958,
+        "container": "webm",
+        "video": "VP8 1280x1024",
+        "audio": "Vorbis 44.1 kHz stereo"
+      },
+      "covers": [
+        "screen-ui-small-text"
+      ],
+      "tests": [
+        "#173",
+        "#175",
+        "L-018",
+        "L-028"
+      ],
+      "notes": "A narrated Wikipedia tutorial: page changes, menus and small interface text at 1280x1024. Human English captions exist on Commons (47 cues; the last cue's end is written 99:59:59, a useful sidecar case). Shows the narrator's own Wikipedia account and public user names."
+    },
+    {
+      "id": "RM02",
+      "status": "proposed",
+      "title": "Structured Data on Commons uploads by the Metropolitan Museum of Art 01",
+      "source_page": "https://commons.wikimedia.org/wiki/File:Structured_Data_on_Commons_uploads_by_the_Metropolitan_Museum_of_Art_01.webm",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/5/57/Structured_Data_on_Commons_uploads_by_the_Metropolitan_Museum_of_Art_01.webm",
+      "file_name": "RM02-met-structured-data-demo.webm",
+      "bytes": 26240356,
+      "sha256": null,
+      "source_checksum": {
+        "algorithm": "sha1",
+        "value": "f0083f98901d59513bd95a4dd83bb3605f36a4c7"
+      },
+      "source_revision": "2021-05-08T04:52:23Z",
+      "licence": {
+        "id": "CC-BY-SA-3.0",
+        "url": "https://creativecommons.org/licenses/by-sa/3.0/",
+        "statement": "https://commons.wikimedia.org/wiki/File:Structured_Data_on_Commons_uploads_by_the_Metropolitan_Museum_of_Art_01.webm"
+      },
+      "author": "GFontenelle (WMF); workshop by Jennie Choi, the Metropolitan Museum of Art",
+      "attribution": "\"Structured Data on Commons uploads by the Metropolitan Museum of Art 01\" by GFontenelle (WMF), CC BY-SA 3.0, via Wikimedia Commons",
+      "media": {
+        "duration_s": 774.177,
+        "container": "webm",
+        "video": "VP8 1184x720 25 fps",
+        "audio": "Vorbis 44.1 kHz stereo"
+      },
+      "covers": [
+        "conversational-pauses",
+        "screen-ui-small-text",
+        "long-speech-seams"
+      ],
+      "tests": [
+        "#353",
+        "#383",
+        "#173",
+        "#175",
+        "#381"
+      ],
+      "notes": "A live tool demonstration in a recorded office-hours call (PetScan, QuickStatements): speech with pauses while the presenter works, screen changes, about 31 chunks. Other call participants may be visible in tiles: to be checked before approval."
+    },
+    {
+      "id": "RM03",
+      "status": "proposed",
+      "title": "After the lifting of the block: Case study of Turkey (Wikimania 2021)",
+      "source_page": "https://commons.wikimedia.org/wiki/File:After_the_lifting_of_the_block_Case_study_of_Turkey.webm",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/b/b0/After_the_lifting_of_the_block_Case_study_of_Turkey.webm",
+      "file_name": "RM03-wikimania-turkey-talk.webm",
+      "bytes": 146468542,
+      "sha256": null,
+      "source_checksum": {
+        "algorithm": "sha1",
+        "value": "a6deaabe0f173611af5e1082ddd4637259027435"
+      },
+      "source_revision": "2021-10-27T10:02:15Z",
+      "licence": {
+        "id": "CC-BY-SA-3.0",
+        "url": "https://creativecommons.org/licenses/by-sa/3.0/",
+        "statement": "https://commons.wikimedia.org/wiki/File:After_the_lifting_of_the_block_Case_study_of_Turkey.webm"
+      },
+      "author": "Basak, Khutuck (Wikimania 2021; credit WMF)",
+      "attribution": "\"After the lifting of the block: Case study of Turkey\" by Basak and Khutuck, Wikimania 2021, CC BY-SA 3.0, via Wikimedia Commons",
+      "media": {
+        "duration_s": 1156.125,
+        "container": "webm",
+        "video": "VP9 1920x1080 30 fps",
+        "audio": "Opus 48 kHz stereo"
+      },
+      "covers": [
+        "lecture-or-meeting",
+        "long-speech-seams",
+        "non-english-or-accented",
+        "leading-silence"
+      ],
+      "tests": [
+        "#174",
+        "#380",
+        "#381",
+        "#382",
+        "#384",
+        "L-022"
+      ],
+      "notes": "A pre-recorded 19-minute conference talk by two speakers in Turkish-accented English, about 46 chunks. It opens with music and a title card: its captions put music from 8.2 s and the first words at 13.4 s, so the lead is non-speech rather than silence (to be labelled by listening). Its English captions look machine-made, so they are no reference transcript. A 480p transcode (29,909,095 bytes, no published checksum) is the lighter alternative."
+    },
+    {
+      "id": "RM04",
+      "status": "proposed",
+      "title": "Como contribuir com o Structured Data on Commons",
+      "source_page": "https://commons.wikimedia.org/wiki/File:Como_contribuir_com_o_Structured_Data_on_Commons.webm",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/d/d7/Como_contribuir_com_o_Structured_Data_on_Commons.webm",
+      "file_name": "RM04-como-contribuir-sdc-pt-br.webm",
+      "bytes": 10636205,
+      "sha256": null,
+      "source_checksum": {
+        "algorithm": "sha1",
+        "value": "5a2ab7b99ed3d7281ff3f1b44d3ee10514daa49a"
+      },
+      "source_revision": "2019-10-19T03:43:47Z",
+      "licence": {
+        "id": "CC-BY-SA-4.0",
+        "url": "https://creativecommons.org/licenses/by-sa/4.0/",
+        "statement": "https://commons.wikimedia.org/wiki/File:Como_contribuir_com_o_Structured_Data_on_Commons.webm"
+      },
+      "author": "Ederporto",
+      "attribution": "\"Como contribuir com o Structured Data on Commons\" by Ederporto, CC BY-SA 4.0, via Wikimedia Commons",
+      "media": {
+        "duration_s": 300.404,
+        "container": "webm",
+        "video": "VP9 1280x720 24 fps",
+        "audio": "Opus 48 kHz stereo"
+      },
+      "covers": [
+        "non-english-or-accented",
+        "screen-ui-small-text"
+      ],
+      "tests": [
+        "L-022",
+        "#175"
+      ],
+      "notes": "A Brazilian Portuguese tutorial with interface changes. Commons has Brazilian Portuguese captions (46 cues), a possible reference transcript. The audio track is tagged English in its metadata, which is wrong (a language-detection case)."
+    },
+    {
+      "id": "RM05",
+      "status": "proposed",
+      "title": "President Reagan's Trip to Fullerton and San Bernardino on November 1, 1988",
+      "source_page": "https://commons.wikimedia.org/wiki/File:President_Reagan%27s_Trip_to_Fullerton_and_San_Bernardino_on_November_1,_1988.webm",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/7/7c/President_Reagan%27s_Trip_to_Fullerton_and_San_Bernardino_on_November_1%2C_1988.webm",
+      "file_name": "RM05-reagan-fullerton-1988.webm",
+      "bytes": 112179359,
+      "sha256": null,
+      "source_checksum": {
+        "algorithm": "sha1",
+        "value": "dcd47fbd8dca707828a04e3429cf2d3e4ae044d1"
+      },
+      "source_revision": "2018-06-26T00:33:31Z",
+      "licence": {
+        "id": "CC-BY-3.0",
+        "url": "https://creativecommons.org/licenses/by/3.0/",
+        "statement": "https://commons.wikimedia.org/wiki/File:President_Reagan%27s_Trip_to_Fullerton_and_San_Bernardino_on_November_1,_1988.webm"
+      },
+      "author": "Reagan Library (White House Television Office)",
+      "attribution": "\"President Reagan's Trip to Fullerton and San Bernardino on November 1, 1988\" by the Reagan Library, CC BY 3.0, via Wikimedia Commons",
+      "media": {
+        "duration_s": 953.136,
+        "container": "webm",
+        "video": "VP8 654x480 29.97 fps",
+        "audio": "Vorbis 44.1 kHz stereo"
+      },
+      "covers": [
+        "noisy-speech"
+      ],
+      "tests": [
+        "#150",
+        "L-020"
+      ],
+      "notes": "Archival White House television footage: remarks at a campaign rally in a gymnasium (crowd noise) and at a helicopter landing zone (field microphone), between arrival shots; old analogue video. Its licence was reviewed on Commons. The noise is described by its source, not yet heard."
+    },
+    {
+      "id": "RM06",
+      "status": "proposed",
+      "title": "Space Station Astronaut Discusses Record Breaking Mission with Previous Record Holder",
+      "source_page": "https://commons.wikimedia.org/wiki/File:SPACE_STATION_ASTRONAUT_DISCUSSES_RECORD_BREAKING_MISSION_WITH_PREVIOUS_RECORD_HOLDER.webm",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/4/48/SPACE_STATION_ASTRONAUT_DISCUSSES_RECORD_BREAKING_MISSION_WITH_PREVIOUS_RECORD_HOLDER.webm",
+      "file_name": "RM06-nasa-iss-record-conversation.webm",
+      "bytes": 84997974,
+      "sha256": null,
+      "source_checksum": {
+        "algorithm": "sha1",
+        "value": "a982fbda67f12fccd9d62eead2a2551022ba8ea2"
+      },
+      "source_revision": "2023-12-28T23:21:56Z",
+      "licence": {
+        "id": "public-domain-us-government",
+        "url": "https://www.copyright.gov/title17/92chap1.html#105",
+        "statement": "https://commons.wikimedia.org/wiki/File:SPACE_STATION_ASTRONAUT_DISCUSSES_RECORD_BREAKING_MISSION_WITH_PREVIOUS_RECORD_HOLDER.webm"
+      },
+      "author": "NASA Johnson Space Center",
+      "attribution": "\"Space Station Astronaut Discusses Record Breaking Mission with Previous Record Holder\" by NASA Johnson Space Center, public domain, via Wikimedia Commons",
+      "media": {
+        "duration_s": 631.181,
+        "container": "webm",
+        "video": "VP9 1280x720 59.94 fps",
+        "audio": "Opus 48 kHz stereo"
+      },
+      "covers": [
+        "conversational-pauses",
+        "long-speech-seams"
+      ],
+      "tests": [
+        "#353",
+        "#359",
+        "#381",
+        "#383"
+      ],
+      "notes": "A conversation between an astronaut on the station and a former record holder in Mission Control (NASA employees in their role): two voices, turn-taking and the pauses of a space-to-ground link, about 25 chunks. NASA media carries no endorsement and NASA's logos keep their own rules; the set uses the recording for testing only."
+    },
+    {
+      "id": "RM07",
+      "status": "proposed",
+      "title": "Introduction to Wikidata Lexeme Forms - Lucas Werkmeister - Lexicodays 2024 (480p transcode)",
+      "source_page": "https://commons.wikimedia.org/wiki/File:Introduction_to_Wikidata_Lexeme_Forms_-_Lucas_Werkmeister_-_Lexicodays_2024.webm",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/transcoded/e/ec/Introduction_to_Wikidata_Lexeme_Forms_-_Lucas_Werkmeister_-_Lexicodays_2024.webm/Introduction_to_Wikidata_Lexeme_Forms_-_Lucas_Werkmeister_-_Lexicodays_2024.webm.480p.vp9.webm",
+      "file_name": "RM07-lexeme-forms-480p.webm",
+      "bytes": 21315686,
+      "sha256": null,
+      "source_checksum": {
+        "algorithm": "md5",
+        "value": "78fc96f30f6e04762296e0d458d6402c"
+      },
+      "source_revision": "transcode last modified 2024-06-28T23:58:27Z; original uploaded 2024-06-27T11:57:47Z",
+      "licence": {
+        "id": "CC-BY-SA-4.0",
+        "url": "https://creativecommons.org/licenses/by-sa/4.0/",
+        "statement": "https://commons.wikimedia.org/wiki/File:Introduction_to_Wikidata_Lexeme_Forms_-_Lucas_Werkmeister_-_Lexicodays_2024.webm"
+      },
+      "author": "Lucas Werkmeister",
+      "attribution": "\"Introduction to Wikidata Lexeme Forms - Lucas Werkmeister - Lexicodays 2024\" by Lucas Werkmeister, CC BY-SA 4.0, via Wikimedia Commons (480p transcode)",
+      "media": {
+        "duration_s": 579.163,
+        "container": "webm",
+        "video": "VP9 854x480 (Commons transcode of a VP8 1920x1080 25 fps original)",
+        "audio": "as transcoded by Commons (not read)"
+      },
+      "covers": [
+        "non-english-or-accented",
+        "long-speech-seams"
+      ],
+      "tests": [
+        "L-022",
+        "#381",
+        "#380"
+      ],
+      "notes": "One speaker in German-accented English demonstrating a web tool, about 23 chunks. Commons has human-made English captions (205 cues), the best reference transcript of the set. The original is 254,967,178 bytes, so the 480p transcode is proposed; Commons publishes no checksum for transcodes, so source_checksum is the object store's ETag taken as the MD5 (unconfirmed until the pin) and the pin is otherwise trust on first use."
+    },
+    {
+      "id": "RM08",
+      "status": "proposed",
+      "title": "Mark Carney speaking about climate action and energy security in Calgary, 15 May 2026",
+      "source_page": "https://commons.wikimedia.org/wiki/File:Mark_Carney_speaking_about_climate_action_and_energy_security_in_Calgary,_15_May_2026.webm",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/5/56/Mark_Carney_speaking_about_climate_action_and_energy_security_in_Calgary%2C_15_May_2026.webm",
+      "file_name": "RM08-calgary-vertical-phone.webm",
+      "bytes": 18574821,
+      "sha256": null,
+      "source_checksum": {
+        "algorithm": "sha1",
+        "value": "3f936fd51880b36ed11128b44baadebab92cd36d"
+      },
+      "source_revision": "2026-05-18T00:45:52Z",
+      "licence": {
+        "id": "CC-BY-4.0",
+        "url": "https://creativecommons.org/licenses/by/4.0/",
+        "statement": "https://commons.wikimedia.org/wiki/File:Mark_Carney_speaking_about_climate_action_and_energy_security_in_Calgary,_15_May_2026.webm"
+      },
+      "author": "Jasonhargrove",
+      "attribution": "\"Mark Carney speaking about climate action and energy security in Calgary, 15 May 2026\" by Jasonhargrove, CC BY 4.0, via Wikimedia Commons",
+      "media": {
+        "duration_s": 22.474,
+        "container": "webm",
+        "video": "VP9 1080x1920 30 fps nominal",
+        "audio": "Opus 48 kHz stereo"
+      },
+      "covers": [
+        "vertical-variable-frame-rate",
+        "noisy-speech"
+      ],
+      "tests": [
+        "#363"
+      ],
+      "notes": "Optional. A vertical phone recording of a public speech in a hall, re-encoded to WebM before upload, so its frame rate may no longer vary. The file page carries a transcript and a personality-rights warning (the likeness of a public figure; testing is not a commercial use). A current politician: the maintainer may prefer to leave it out."
+    }
+  ]
+}

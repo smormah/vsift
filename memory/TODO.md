@@ -13,7 +13,7 @@ Current-state handoff, rewritten in every change; history: git, `CHANGELOG.md`, 
 
 ## Next: cycle 2, `0.2.3` (real media, the re-pins and the follow-ups measured on real speech)
 
-- **#363 first** (a small, freely licensed real-media set with an opt-in campaign), then the re-pins (#351, #272, #322, #399: the FFmpeg build planned for 2026-10-31 and whisper.cpp 1.9.5 or later), the seam follow-ups #380 to #384, the evaluations #173, #174, #175, #150, #159. A re-pin is a major change: the monthly round (P07 accuracy, P14 malicious media, the dated scan reading, the full durability campaign; agent batches if the skill changes).
+- **#363 first** (a small, freely licensed real-media set with an opt-in campaign). **Step 1 is in review (2026-10-18, branch `test/363-real-media-set`; an increment, not the whole story):** the design (`docs/planning/real-media-set.md`), the pinned manifest with eight `proposed` Wikimedia Commons items (about 427 MB) and the fetch-and-verify tool `tools/p14-campaigns/real-media.cjs` with its tests (L-180). **Waiting on the maintainer:** approve or decline each item (RM03 alone covers the 15 to 30 minute talk and the lead-in; RM02's call tiles and RM08, a current politician, need a look). **Then:** pin the approved items on a hosted runner, the campaign runner and the manual workflow `P14 real media`, the labels. After it: the re-pins (#351, #272, #322, #399: the FFmpeg build planned for 2026-10-31 and whisper.cpp 1.9.5 or later), the seam follow-ups #380 to #384, the evaluations #173, #174, #175, #150, #159. A re-pin is a major change: the monthly round (P07 accuracy, P14 malicious media, the dated scan reading, the full durability campaign; agent batches if the skill changes).
 - **At the cut of `0.2.3-rc.1`:** set RQ-16 back to `planned` (its waiver for `0.2.2` into `prior`; a waived item passes the check for any version, L-179), list RQ-14 and RQ-17 for the maintainer's decision, move `batch-2/` and `batch-3/` aside if batches run, and delete `release/0.2.x` only after the `Release window` check (6.18 step 2.3).
 - **Cycle 3 (launch readiness) holds the leftovers of cycle 1:** #454 (help that leads a cold agent to cite ids, L-178), #439, #443 (L-175), #316, #258, #263, #397, #336; with the README, the documentation sweep and the LOKI try-out (RQ-17).
 - **Observations for the supervisor (no decision taken):** the hostile-media run's peak was the container's whole 1,024 MiB on `0.2.2-rc.1` (page cache of a 512 MiB copy); a session a kill left `initializing` answers `session status` with `INTEGRITY_FAILURE`; the toolchain re-pin should skip Rust 1.99.0.
@@ -35,7 +35,7 @@ Current-state handoff, rewritten in every change; history: git, `CHANGELOG.md`, 
 
 - **This release:** restating #399's acceptance (Low, under L-137) for `0.2.2`; L-167's severity (lowered to low).
 - **Standing:** #188 (RQ-14), #176, #246, #374; the Yarn first-day note; ratify or reverse #377's, the Reads change's and #392's choices; the folder answer that differs by platform; L-176; whether the `Release window` check becomes required, and its refinement (L-173); RQ-05 for `0.2.1` (recorded `failed`, no waiver).
-- **Register reviews `pending`:** 103 of 158 entries; the next free number is **L-180** (parallel pull requests may take numbers; check first).
+- **Register reviews `pending`:** 104 of 159 entries; the next free number is **L-181** (parallel pull requests may take numbers; check first).
 
 ## What the next session reads first
 
