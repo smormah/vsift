@@ -293,7 +293,7 @@ jobs:
               --env VSIFT_STRICT_WORKER_TEST=1 \
               --volume "${PWD}:/workspace:ro" \
               --workdir /workspace \
-              ubuntu@sha256:a61567bd31828687156d735ea8eb01ba4e37636e225dd6a48ba94136a70d9d61 \
+              ubuntu@sha256:68ee22004a9109b44973313b02ff7b1de250f1de0f5ecb628d73f579aaff33ac \
               "/workspace/${test_binary}" \
               --exact "${test_name}" \
               --nocapture --test-threads=1

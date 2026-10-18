@@ -54,7 +54,7 @@
 # No credential is ever in the image: the Codex sign-in is mounted read-only
 # at run time and copied into a per-run CODEX_HOME on a tmpfs.
 
-ARG UBUNTU_IMAGE=ubuntu@sha256:a61567bd31828687156d735ea8eb01ba4e37636e225dd6a48ba94136a70d9d61
+ARG UBUNTU_IMAGE=ubuntu@sha256:68ee22004a9109b44973313b02ff7b1de250f1de0f5ecb628d73f579aaff33ac
 
 # ---------------------------------------------------------------------------
 # Build tools from Ubuntu's signed archive. The base image has no CA

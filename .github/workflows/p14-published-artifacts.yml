@@ -63,7 +63,7 @@ env:
   PNPM_VERSION: "12.8.1"
   YARN_VERSION: "4.18.1"
   # The Ubuntu 24.04 image the strict-worker job of ci.yml already pins.
-  UBUNTU_IMAGE: ubuntu@sha256:a61567bd31828687156d735ea8eb01ba4e37636e225dd6a48ba94136a70d9d61
+  UBUNTU_IMAGE: ubuntu@sha256:68ee22004a9109b44973313b02ff7b1de250f1de0f5ecb628d73f579aaff33ac
 
 jobs:
   tooling-tests:
