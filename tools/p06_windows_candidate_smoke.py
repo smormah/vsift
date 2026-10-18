@@ -29,7 +29,7 @@ FFMPEG_URL = (
 )
 WHISPER_URL = (
     "https://github.com/ggml-org/whisper.cpp/releases/download/"
-    "v1.9.2/whisper-bin-x64.zip"
+    "b5454/whisper-bin-x64.zip"
 )
 MODEL_URL = (
     "https://huggingface.co/ggerganov/whisper.cpp/resolve/"
@@ -44,8 +44,8 @@ ARCHIVES = {
     ),
     "whisper": (
         WHISPER_URL,
-        8_194_445,
-        "49dcc16de826f20bd53d44f947a1ae49dfa81f86cad67a64d80820cb192d674a",
+        8_928_640,
+        "6ba69e3482d7826214f90a6a9c84ca07782aec1e1d0c6a7c30c994fd5d816ccb",
     ),
 }
 MODEL_SIZE = 147_951_465
@@ -56,19 +56,19 @@ FFMPEG_FILES = {
     "bin/ffprobe.exe": (114_198_528, "1ce64d9fdbfce857de2dd1f157c37eaa61c7501a356273dbcbe8b1674aef5879"),
 }
 WHISPER_FILES = {
-    "whisper-cli.exe": (479_232, "95e3c0b0e778ad9499eb0125f97c1dcf437dd9eb4ea77050b043574f93c2631d"),
-    "whisper.dll": (1_368_064, "792fc523c7ad16e6b9c348e30ad5e5f591165cbcf6a80ca8d0db02a38ce3eea2"),
-    "ggml.dll": (67_584, "894c6237ee7849843213906a2b6a0b371aaa6234048d465f206d910ae846fafb"),
-    "ggml-base.dll": (666_624, "1482359d921b4c1b183d49db1d770f9b5e90d86a618b8b648d4845c2471ad6b0"),
-    "ggml-cpu-alderlake.dll": (809_984, "d1c5411561361f7ce71ff8455ecf01f666f581b0608fa91a1dfe7d3fd6a25bd1"),
-    "ggml-cpu-cannonlake.dll": (853_504, "2ef36f05fa252ff4fdcb8d42ebce1ceba4f3d3de12b93bed15bdee6237dccd63"),
-    "ggml-cpu-cascadelake.dll": (850_944, "505899aaf3f99c5d714361640f561458ea97f8a09eb0614568a66bead2115cb0"),
-    "ggml-cpu-haswell.dll": (811_008, "f8cf2f35a06498d783d77fde42004dd54d2f8236b0d42ac323b94bba65a603c4"),
-    "ggml-cpu-icelake.dll": (850_944, "78ad143ee2e674d037b4840ef33b5748a0659762a26e0ae2b621c4f9451cbde8"),
-    "ggml-cpu-sandybridge.dll": (803_328, "ee47db7dc40fb30eca73e62a05306059c2c3c42aecddf2e8d6ad7e530069b815"),
-    "ggml-cpu-skylakex.dll": (852_992, "164e2793897944a43ee071ce6c0b09018088bdf4dd8b14ac0755c58849cf8c50"),
-    "ggml-cpu-sse42.dll": (790_016, "7318a9a3b95a85b2453c437b274412bbbae89e5ecdf5babb19b99edc06ded063"),
-    "ggml-cpu-x64.dll": (794_112, "af0f1c2f28ff9e3f472481dd969907bda85fa39d4fde17617d4bb0b389301b60"),
+    "whisper-cli.exe": (479_744, "331dba46d6427105d2b802cdbc7eae916ea1c5abf9b0d3b5cfe460d8db8e4366"),
+    "whisper.dll": (1_370_112, "034396d75bb5720c1851674ff64a96192b58f6927b68d334ebd254ce6cad9674"),
+    "ggml.dll": (62_464, "31fe18616d872af9b6134b47a6dff8072ae4ecbe5df0273f4f8dc36766c9db8e"),
+    "ggml-base.dll": (693_248, "bede0d6b2d387236ecd2b5dd676d51c8984b5b6e0ae461a12174e9c01345c5f0"),
+    "ggml-cpu-alderlake.dll": (1_009_664, "d8f5c56ea490394eeae8b271650f2647aecd039a542d6df9e0140726e62a4603"),
+    "ggml-cpu-cannonlake.dll": (1_049_600, "74127b40abd4f595d9db6af0fa313a02e18ff42fc228bfa05281e7c788dd4507"),
+    "ggml-cpu-cascadelake.dll": (1_061_376, "4b11c427b844eeac87529af9a8d94b35aad2024666beb2a35e59fe3077e4b81e"),
+    "ggml-cpu-haswell.dll": (1_010_688, "1306b1014c8118d27234d8ddc0e66ced1f8c8476bf85071595fd182ea9b7263b"),
+    "ggml-cpu-icelake.dll": (1_061_376, "2b4dc4c66e7d8fe2807283816e9cf3b7f7d0556f59df34069871e37eab8aed40"),
+    "ggml-cpu-sandybridge.dll": (1_026_560, "04edbdebc01a1d421062a960881a4f34d520d99693999518243f332406444c6e"),
+    "ggml-cpu-skylakex.dll": (1_049_600, "1774714cf93621406ff35344b54715619a83242ae3e331e44d98a3b35ce801be"),
+    "ggml-cpu-sse42.dll": (862_720, "f060318772c4c2dbac312bbfff6ea700b85dbc502bb38585a7186d06d549301a"),
+    "ggml-cpu-x64.dll": (866_816, "4b4b05caba40d4309b5d710ef74c59ba190516b8489f27bdb1ba11ae33c6e9d3"),
 }
 
 

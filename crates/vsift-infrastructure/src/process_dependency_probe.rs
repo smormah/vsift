@@ -32,7 +32,10 @@ pub const DEFAULT_PROBE_TIMEOUT: Duration = Duration::from_secs(30);
 const MAX_DIAGNOSTIC_LENGTH: usize = 240;
 /// Detail when a tool responded but printed no line that is safe to echo.
 const DETECTED_DETAIL: &str = "detected";
-const REVIEWED_WHISPER_DETAIL: &str = "whisper.cpp v1.9.2 (reviewed build)";
+const REVIEWED_WHISPER_DETAIL: &str = "whisper.cpp v1.9.5 (reviewed build)";
+/// The earlier pin's detail, unchanged from `0.2.2` so that a machine that
+/// still runs it reads the same as before the re-pin.
+const SUPERSEDED_WHISPER_DETAIL: &str = "whisper.cpp v1.9.2 (reviewed build)";
 const UNRECOGNISED_WHISPER_DETAIL: &str = "whisper-cli (build not recognised)";
 /// Log prefixes of the ggml backend loader, whose lines name absolute library paths.
 const LOADER_LOG_PREFIXES: [&str; 3] = ["load_backend:", "ggml_", "register_backend"];
@@ -358,7 +361,8 @@ fn contains_path_shape(text: &str) -> bool {
 async fn build_identity_detail(executable: &TrustedExecutable) -> String {
     match identify_whisper_build(executable).await {
         Ok(identity) => match identity.recognition() {
-            WhisperBuildRecognition::ReviewedV1_9_2 => String::from(REVIEWED_WHISPER_DETAIL),
+            WhisperBuildRecognition::ReviewedV1_9_5 => String::from(REVIEWED_WHISPER_DETAIL),
+            WhisperBuildRecognition::ReviewedV1_9_2 => String::from(SUPERSEDED_WHISPER_DETAIL),
             WhisperBuildRecognition::Unrecognised => String::from(UNRECOGNISED_WHISPER_DETAIL),
         },
         Err(_) => String::from(UNRECOGNISED_WHISPER_DETAIL),

@@ -22,13 +22,33 @@ use crate::TrustedExecutable;
 pub const MAX_WHISPER_EXECUTABLE_BYTES: u64 = 64 * 1024 * 1024;
 const HASH_CHUNK_BYTES: usize = 64 * 1024;
 
-/// The whisper.cpp v1.9.2 CLI builds reviewed in P06.
+/// The whisper.cpp v1.9.5 CLI builds reviewed for the current pin.
 ///
+/// Both come from upstream's build release `b5454` of the v1.9.5 commit.
 /// Windows: `Release/whisper-cli.exe` from the official x64 CPU archive
 /// (`docs/planning/p06-windows-artifact-candidate.md`). Ubuntu: `whisper-cli`
 /// from the reviewed Ubuntu 24.04 x86-64 catalogue
 /// (`docs/planning/p06-ubuntu-artifact-candidate.md`).
 const REVIEWED_BUILDS: [(u64, &str); 2] = [
+    (
+        479_744,
+        "331dba46d6427105d2b802cdbc7eae916ea1c5abf9b0d3b5cfe460d8db8e4366",
+    ),
+    (
+        976_312,
+        "110a858e128d1fbc5a75899b42a1de8a7a4c10856bfe45dad1adc278f6459d14",
+    ),
+];
+
+/// The whisper.cpp v1.9.2 CLI builds reviewed in P06, the pin of `0.2.2` and
+/// earlier.
+///
+/// Still recognised because they are still what runs on many machines: a
+/// managed install keeps its selected version until `setup install` applies a
+/// new plan, and a user's own build stays until they replace it. Recognising
+/// them names the build exactly; it does not make it current, and it lacks the
+/// fixes the re-pin brought (known limit L-137).
+const SUPERSEDED_BUILDS: [(u64, &str); 2] = [
     (
         479_232,
         "95e3c0b0e778ad9499eb0125f97c1dcf437dd9eb4ea77050b043574f93c2631d",
@@ -42,7 +62,10 @@ const REVIEWED_BUILDS: [(u64, &str); 2] = [
 /// Whether an executable is one of the reviewed whisper.cpp builds.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum WhisperBuildRecognition {
-    /// Byte-identical to a reviewed whisper.cpp v1.9.2 CLI build.
+    /// Byte-identical to a reviewed whisper.cpp v1.9.5 CLI build, the current pin.
+    ReviewedV1_9_5,
+    /// Byte-identical to a reviewed whisper.cpp v1.9.2 CLI build, the earlier
+    /// pin, which lacks upstream's memory-safety fixes of v1.9.3 to v1.9.5.
     ReviewedV1_9_2,
     /// Any other build; it may still work but nothing about it was reviewed.
     Unrecognised,
@@ -78,10 +101,14 @@ impl WhisperBuildIdentity {
     #[must_use]
     pub fn recognition(self) -> WhisperBuildRecognition {
         let digest = self.sha256_hex();
-        if REVIEWED_BUILDS
-            .iter()
-            .any(|(bytes, sha256)| *bytes == self.bytes && *sha256 == digest)
-        {
+        let matches = |builds: &[(u64, &str)]| {
+            builds
+                .iter()
+                .any(|(bytes, sha256)| *bytes == self.bytes && *sha256 == digest)
+        };
+        if matches(&REVIEWED_BUILDS) {
+            WhisperBuildRecognition::ReviewedV1_9_5
+        } else if matches(&SUPERSEDED_BUILDS) {
             WhisperBuildRecognition::ReviewedV1_9_2
         } else {
             WhisperBuildRecognition::Unrecognised
@@ -224,6 +251,42 @@ mod tests {
             .recognition(),
             WhisperBuildRecognition::ReviewedV1_9_2
         );
+        Ok(())
+    }
+
+    /// The re-pin's builds are the current reviewed ones, told apart from the
+    /// earlier pin even where the Ubuntu executable kept its size.
+    #[test]
+    fn the_v1_9_5_builds_are_the_current_reviewed_ones() -> Result<(), Box<dyn std::error::Error>> {
+        for (bytes, sha256) in [
+            (
+                479_744,
+                "331dba46d6427105d2b802cdbc7eae916ea1c5abf9b0d3b5cfe460d8db8e4366",
+            ),
+            (
+                976_312,
+                "110a858e128d1fbc5a75899b42a1de8a7a4c10856bfe45dad1adc278f6459d14",
+            ),
+        ] {
+            let identity = WhisperBuildIdentity {
+                bytes,
+                sha256: digest(sha256)?,
+            };
+            assert_eq!(
+                identity.recognition(),
+                WhisperBuildRecognition::ReviewedV1_9_5
+            );
+            let mut changed = identity.sha256;
+            changed[0] ^= 1;
+            assert_eq!(
+                WhisperBuildIdentity {
+                    bytes,
+                    sha256: changed,
+                }
+                .recognition(),
+                WhisperBuildRecognition::Unrecognised
+            );
+        }
         Ok(())
     }
 }

@@ -327,6 +327,8 @@ interchangeable upstream binary channel:
 | whisper.cpp CLI | The [v1.9.4 release](https://github.com/ggml-org/whisper.cpp/releases/tag/v1.9.4) has no attached assets (GitHub release API observed 2026-09-12). The [v1.9.2 release](https://github.com/ggml-org/whisper.cpp/releases/tag/v1.9.2) includes Ubuntu x64 and Windows x64 CLI archives but no macOS CLI archive; its macOS XCFramework is a library, not the CLI required by the existing process adapter. | Do not claim a three-target managed CLI from either release. A pinned earlier asset, reviewed first-party build, or explicit BYO macOS limitation needs an accepted target decision. |
 | Multilingual `base` model | ADR 0005 names it as a candidate, conditional on P07 accuracy/resource gates; it does not select an exact model artifact and digest. | A model downloaded using a provider script or user-supplied checksum cannot become the reviewed VSift trust anchor. Select an exact hosted artifact, licence and digest independently. |
 
+**2026-10-18, why a v release can have no assets:** since v1.9.3 whisper.cpp's release workflow attaches binaries only to the build release of the same commit (`b4938` for v1.9.3, `b5130` for v1.9.4, `b5454` for v1.9.5), and the `v` release's notes name it. The re-pin to v1.9.5 takes `b5454`'s Ubuntu and Windows x64 CPU archives ([`p06-ubuntu-artifact-candidate.md`](p06-ubuntu-artifact-candidate.md#2026-10-18-re-pin-whispercpp-v195-build-b5454)); that the build release's retention is not stated is [L-181](known-limits.md#l-181). There is still no macOS CLI archive (only an XCFramework).
+
 ## Required resolution before managed install
 
 1. Record a per-target component matrix: exact origin and release, immutable

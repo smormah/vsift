@@ -2303,9 +2303,13 @@ timed out, the first started and the two after it not). Provider `detail` is not
 channel. Paths are not echoed in the response. `detail` for FFmpeg and FFprobe is
 only their `ffmpeg version ...` / `ffprobe version ...` banner line, or `detected`
 when none is safe to show; whisper output is never echoed, and its `detail` is
-`whisper.cpp v1.9.2 (reviewed build)` when the executable is byte-identical to a
-build reviewed in P06, otherwise `whisper-cli (build not recognised)`. No line that
-looks like a path or a ggml loader log is ever shown.
+`whisper.cpp v1.9.5 (reviewed build)` when the executable is byte-identical to a
+build of the current pin (since `0.2.3`; Ubuntu's managed `whisper-cli` and the official
+Windows x64 CPU build), `whisper.cpp v1.9.2 (reviewed build)` when it is byte-identical
+to a build of the earlier pin (`0.2.2` and earlier; still what a managed install made by
+those releases runs until `setup install` runs again), otherwise
+`whisper-cli (build not recognised)`. No line that looks like a path or a ggml loader
+log is ever shown.
 
 `setup plan --profile <desktop|worker>` probes configured executables or filtered
 `PATH` like `setup check`, without per-call path options and under the same default

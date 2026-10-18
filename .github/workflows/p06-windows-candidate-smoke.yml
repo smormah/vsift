@@ -20,5 +20,14 @@ jobs:
       - name: Test candidate archive guardrails
         run: python -m unittest discover -s tools -p test_p06_windows_candidate_smoke.py
 
+      - name: Test the re-pin inventory
+        run: python -m unittest discover -s tools -p test_p06_archive_inventory.py
+
+      # Every entry of the pinned archive with its size and SHA-256, read on this
+      # runner: the evidence a re-pin's per-file pins are copied from. It checks
+      # the archive against its pin and runs none of its bytes.
+      - name: Inventory the pinned whisper.cpp archive
+        run: python tools/p06_archive_inventory.py windows-whisper
+
       - name: Run pinned candidate compatibility smoke
         run: python tools/p06_windows_candidate_smoke.py

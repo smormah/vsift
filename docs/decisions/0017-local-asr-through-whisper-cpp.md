@@ -773,3 +773,16 @@ reported as `model_changed` first. The cost is one hash of the model per recogni
 per 30 s chunk), the per-chunk read this ADR's earlier notes left out for its cost. Ending the job on `model_changed` was the other option and was not
 taken: it changes a published, retryable failure. Left: a swap undone between the two reads around one chunk, and checkpoints written by earlier releases
 (register L-146).
+
+## 2026-10-18 note: the reviewed whisper.cpp is v1.9.5 (#322, #399)
+
+Changes no decision of this ADR. The reviewed build moves from v1.9.2 to **v1.9.5** (upstream's binaries of build release `b5454`,
+commit `d1be6fde11ac`; the review is in [`p06-ubuntu-artifact-candidate.md`](../planning/p06-ubuntu-artifact-candidate.md#2026-10-18-re-pin-whispercpp-v195-build-b5454)),
+which holds the memory-safety fixes the note of 2026-10-08 lists and the fix of CVE-2026-110810 ([L-137](../planning/known-limits.md#l-137)).
+The adapter is unchanged: v1.9.5's command-line source was compared with v1.9.2's, and no flag of decoding profile `r0-v1`, no default and no
+line of the `-ojf` writer changed, so the parser and the v1.9.2 fixtures stand. v1.9.5 exits 3 for a missing model and 11 when an input or
+output file failed, both read as a failed provider like any non-zero exit. The 100 ms floor of 2026-10-08 stays: it guards any whisper.cpp a
+user registers. Hosted accuracy (T-04) is identical to v1.9.2's on the same runner CPUs. The build is part of the recogniser's identity, so a
+transcript made with v1.9.2 keeps that provenance, and recognition with v1.9.5 is recognition by another build (a resume across the change
+is the `model_changed` case of the 2026-10-17 note). `setup check` names the new bytes `whisper.cpp v1.9.5 (reviewed build)` and still names
+v1.9.2's `whisper.cpp v1.9.2 (reviewed build)`, which a managed install made by `0.2.2` or earlier keeps until `setup install` runs again.

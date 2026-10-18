@@ -9,6 +9,8 @@ On 2026-09-21 the exact set below was accepted into reviewed source for
 hosted candidate experiment into a production installer, real-speech or P06
 E2E test.
 
+**2026-10-18:** the whisper.cpp row below is the pin of `0.2.2` and earlier; `main` pins v1.9.5 from the build release `b5454`, reviewed in [the section of that date](#2026-10-18-re-pin-whispercpp-v195-build-b5454).
+
 | Component | Direct publisher origin | Bytes | Independently calculated SHA-256 |
 | --- | --- | ---: | --- |
 | FFmpeg/FFprobe LGPL build | [BtbN 2026-08-31 month-end release](https://github.com/BtbN/FFmpeg-Builds/releases/tag/autobuild-2026-08-31-13-27), `ffmpeg-n9.0.1-11-ge47273f4d9-linux64-lgpl-9.0.tar.xz` | 113,372,924 | `204fc02692b11249c3e688ad18538ce2939129a1fc6abc32a6b2638a024496cf` |
@@ -387,3 +389,74 @@ The reasoning, and what existing installs do, are in the addendum's "The next pi
 This candidate is **not accepted**: the maintainer has not accepted it into the catalogue, the retention
 rule forbids pinning it, two bounds and the compiled-component inventory are open, and the candidate-time
 reading of RQ-13 is not done.
+
+## 2026-10-18 re-pin: whisper.cpp v1.9.5 (build b5454)
+
+Cycle 2 ([#322](https://github.com/smormah/vsift/issues/322), [#399](https://github.com/smormah/vsift/issues/399),
+[L-137](known-limits.md#l-137)). This section is the review of the new whisper.cpp bytes, in the form of the
+review above, and the catalogue on `main` now pins them (revision `ubuntu-24.04-x86_64-2026-10-18-r3`,
+for `0.2.3`; the published releases up to `0.2.2` keep v1.9.2). FFmpeg and the models are unchanged.
+**The maintainer has not reviewed this re-pin yet**, and the binaries' retention is open
+([L-181](known-limits.md#l-181)).
+
+| Item | Earlier pin (`0.2.2` and before) | Re-pin |
+| --- | --- | --- |
+| Release | [v1.9.2](https://github.com/ggml-org/whisper.cpp/releases/tag/v1.9.2) (2026-08-04), its own assets | [v1.9.5](https://github.com/ggml-org/whisper.cpp/releases/tag/v1.9.5) (2026-10-06), whose assets are those of the build release [`b5454`](https://github.com/ggml-org/whisper.cpp/releases/tag/b5454) that its notes name |
+| Source commit | `306c88f4d1286aec1bf96e544632897886af5501` | `d1be6fde11ac6e0407606b4e42fe72d34add8037` (the annotated tag `v1.9.5` and the tag `b5454` both resolve to it) |
+| Build | upstream's release workflow at the tag | upstream's release workflow on `master` at that commit (`WHISPER_BUILD_IS_DEV=OFF`, `GGML_CPU_ALL_VARIANTS=ON`, `GGML_BACKEND_DL=ON`, Ubuntu 22.04 runner), with a GitHub SLSA build-provenance attestation naming the commit and upstream run 37476924266 (read through the attestation API; the signature was not verified here) |
+| Archive | `whisper-bin-ubuntu-x64.tar.gz`, 9,497,583 bytes, `46811a3e…f753b1` | `whisper-bin-ubuntu-x64.tar.gz`, **10,364,195** bytes, SHA-256 **`a72becf15d7917f990f6313867a52638b82b7f9ef237fb0c980dac56a135781c`** (GitHub's published digest for the asset and the attestation's subject; the hosted download matched it) |
+| Entries / expanded bytes | 44 / 24,519,182 | 47 / 28,128,870 (the tar stream is about 28.2 MB, under the reviewed 30,000,000 cap, which is unchanged) |
+| Selected files | 19 | the same 19 roles: `LICENSE` (same bytes), `whisper-cli` (976,312 bytes, `110a858e…`), `libggml.so.0.26.0`, `libggml-base.so.0.26.0`, `libwhisper.so.1.9.5`, the generic and 13 optimised CPU backends |
+| Archive links | 8 | 8, the same names with the new versions (ggml 0.18.1 to 0.26.0, whisper and parakeet 1.9.2 to 1.9.5); the two parakeet links stay unselected |
+
+**How the per-file values were read without a download to a developer machine.** Upstream publishes only
+the archive's digest. `tools/p06_archive_inventory.py` (new, with its tests) fetches a pinned archive on a
+hosted runner with the smokes' bounded, HTTPS-only download, checks its size and SHA-256 against the pin,
+then walks the archive index and hashes every regular file without extracting anything or running it. The
+`P06 Ubuntu candidate smoke` and `P06 Windows candidate smoke` workflows run it before their other steps and
+print the inventory as JSON and in the job summary. The first dispatch (runs
+[39159588381](https://github.com/smormah/vsift/actions/runs/39159588381) and
+[39159591141](https://github.com/smormah/vsift/actions/runs/39159591141), with the archive pins already moved and
+the per-file pins not) gave the inventory and failed, as expected, at the first per-file check; the per-file pins
+were copied from it into the catalogue (`WHISPER_FILES`), `tools/p06_ubuntu_candidate_smoke.py` and the opt-in
+`p06_whisper_archive` test.
+
+**What changed upstream that VSift could meet** (a reading of `examples/cli/cli.cpp`, `src/whisper.cpp`,
+`include/whisper.h` and the build files at both tags; nothing was run here):
+
+- **The command line VSift passes** (`-m -f -of -ojf -np -l auto -t <n> -p 1 -bs 5 -bo 5 -sns -ng`): no flag,
+  default or help line changed, and the `-ojf` writer is untouched, so the parser and its v1.9.2 fixtures still
+  describe the output. New: exit status 3 when the model file is missing and 11 when an input or output file
+  failed (before, a JSON file that could not be written still exited 0). The adapter reads any non-zero exit,
+  and a missing JSON file, as `ProviderFailed`, so its behaviour is the same. The backend loader now runs after
+  `-np` silences the log, so the loader line no longer reaches standard error (VSift ignores it either way).
+- **Model loading:** the loader rejects a tensor header with `n_dims` outside 0 to 4 and a tensor type outside
+  ggml's types (the two model-file fixes, CVE-2026-110810 among them), and a VAD model whose layer count is not
+  4; the file format is unchanged, and both pinned models load (P07 below). `include/whisper.h` is byte-identical.
+- **Recognition:** the short-audio read is clamped (`8631825d`); decoder 0's random generator is re-seeded per
+  call, which matters only for several calls on one state (VSift runs one chunk per process); an integer
+  overflow in `whisper_full_parallel` is fixed (VSift passes `-p 1`); the rest is new accelerator back ends
+  (Vitis AI, compiled out here, and an Apple encoder read from the variable `ANEFORGE_ENCODER`, which VSift
+  never sets: the child's environment is cleared).
+- **ggml** moves from 0.18.1 to 0.26.0 (most of the 582 commits are back ends for other hardware).
+
+**Hosted evidence on the re-pin's branch (2026-10-18), all green:**
+
+- `P06 Ubuntu candidate smoke` [39162404765](https://github.com/smormah/vsift/actions/runs/39162404765): the
+  inventory, the Rust layout check of the real archive through the production staging (47 entries, 19 files, 25
+  runtime names), and F01 through the new build: inference 0.90 s, largest child peak RSS 291,604 KiB (Linux
+  6.17, glibc 2.39).
+- `P07 local ASR` [39163129897](https://github.com/smormah/vsift/actions/runs/39163129897) (Ubuntu): the adapter,
+  the checkpoint with `setup check` verification, and T-04 for both profiles. **Accuracy is identical to v1.9.2's**
+  (run 39082010927 on `v0.2.2-rc.1`): `base` clean WER 3.25%, F08 61.53%, `base_q5_1` 4.06% and 46.15%, the same
+  known misses and no unexpected one; `base` real-time factor 0.248 (0.254 before), peak 319 MiB (321).
+- `P13 managed smoke` [39163133718](https://github.com/smormah/vsift/actions/runs/39163133718): the smoke of the
+  pinned tools before activation, the install through the CLI from an empty base (`setup check`:
+  `whisper.cpp v1.9.5 (reviewed build) [managed version]`; warm `setup check` 0.64 s) and the kill-and-rerun
+  install stage with the A-08 journey on the managed tools.
+
+**Not shown:** an upgrade of a machine that has the v1.9.2 managed install (the plan proposes v1.9.5 because the
+selected version is not the catalogue's; the two-version lifecycle is tested with stand-in files only); a
+crafted model file against the new loader (the hostile-media campaign on the candidate); the candidate's dated
+scan reading. The trial harness's own whisper.cpp (the Codex container's source build and scenario A-08) still
+names v1.9.2: those are frozen trial inputs and move with the next freeze.

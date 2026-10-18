@@ -119,6 +119,10 @@ reference machine on every runner.
 | [36175016465](https://github.com/smormah/vsift/actions/runs/36175016465) | ubuntu-24.04, generic CPU backend only | 3.245 | 322 MiB | 2.919 | 235 MiB |
 | [36199691655](https://github.com/smormah/vsift/actions/runs/36199691655) | ubuntu-24.04, optimised backends (#153) | 0.244 | 319 MiB | 0.298 | 232 MiB |
 | [36199691655](https://github.com/smormah/vsift/actions/runs/36199691655) | windows-2025, AMD | 0.264 | 336 MiB | 0.342 | 249 MiB |
+| [39082010927](https://github.com/smormah/vsift/actions/runs/39082010927) | ubuntu-24.04, v1.9.2 (`v0.2.2-rc.1`) | 0.254 | 321 MiB | 0.305 | 232 MiB |
+| [39082010927](https://github.com/smormah/vsift/actions/runs/39082010927) | windows-2025, Intel (Family 6 Model 207), v1.9.2 | 0.361 | 336 MiB | 0.305 | 250 MiB |
+| [39163129897](https://github.com/smormah/vsift/actions/runs/39163129897) | ubuntu-24.04, **v1.9.5** (the re-pin's branch) | 0.248 | 319 MiB | 0.294 | 234 MiB |
+| [39163129897](https://github.com/smormah/vsift/actions/runs/39163129897) | windows-2025, Intel (Family 6 Model 207), **v1.9.5** | 0.355 | 336 MiB | 0.290 | 250 MiB |
 
 The first Ubuntu figures are from before #153, when the reviewed Ubuntu file set
 held only ggml's generic `libggml-cpu-x64.so`. With the optimised backends pinned,
@@ -127,6 +131,8 @@ slightly between CPU backends. An Intel AVX-512 Windows runner (run
 [36198903762](https://github.com/smormah/vsift/actions/runs/36198903762)) heard F05's
 "invoice" as "in voice" with `base`, a reviewed known miss, so journey tests check only
 words every reviewed host hears (ADR 0017).
+
+**The re-pin to whisper.cpp v1.9.5 (2026-10-18, #322, #399):** the last four rows compare v1.9.2 and v1.9.5 on the same runner images and CPU models. Accuracy is identical on each: `base` clean WER 3.25% on Ubuntu and 4.06% on the Intel Windows runner (F05's "invoice" heard as "in voice", as on the AVX-512 runner above), `base_q5_1` 4.06%, F08 61.53% and 46.15%, the same known misses and no unexpected one; timing and memory are within a few percent. The review of the new build is in [`p06-ubuntu-artifact-candidate.md`](p06-ubuntu-artifact-candidate.md#2026-10-18-re-pin-whispercpp-v195-build-b5454).
 
 ## Seam finding and fix
 

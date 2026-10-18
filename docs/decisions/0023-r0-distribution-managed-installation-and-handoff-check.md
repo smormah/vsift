@@ -1353,3 +1353,19 @@ already implied and the first refresh candidate made concrete.
   check and is **not accepted**; the catalogue stays at `ubuntu-24.04-x86_64-2026-09-22-r2`
   ([L-132](../planning/known-limits.md#l-132)). The archive bounds in the installer (the tar stream cap and
   `MAX_XZ_ARCHIVE_BYTES`) are reviewed numbers: a larger build raises them by a recorded decision, not silently.
+
+## Note, 2026-10-18 (cycle 2: the whisper.cpp refresh, #322, #399)
+
+Status: **Accepted**; this note changes no accepted decision. It applies the refresh rule of the note of 2026-10-04 to whisper.cpp.
+
+- **The catalogue is revision `ubuntu-24.04-x86_64-2026-10-18-r3`** on `main`: whisper.cpp v1.9.5 replaces v1.9.2, with the review repeated for
+  the new bytes (provenance, the publisher's digest, size, the full inventory, the archive bounds, the licence text, the hosted smoke and the
+  upstream difference; [`p06-ubuntu-artifact-candidate.md`](../planning/p06-ubuntu-artifact-candidate.md#2026-10-18-re-pin-whispercpp-v195-build-b5454)).
+  The tar stream cap (30,000,000 bytes) is unchanged and still above the new stream (about 28.2 MB); the entry and expanded-size bounds are the
+  new archive's exact values (47 and 28,128,870). FFmpeg and the model are unchanged.
+- **The retention part of the rule is open.** whisper.cpp now publishes a release's binaries only under the build release of the same commit
+  (`b5454`, marked pre-release) and states no retention for it, so "a pin is a retained build" cannot be shown as it was for FFmpeg's month-end
+  build ([L-181](../planning/known-limits.md#l-181)). The stop-new-plans date (2028-08-01) still follows the FFmpeg pin. Accepting a build release
+  as the pin is the maintainer's decision.
+- **Existing installs are not moved:** a managed install made by `0.2.2` or earlier keeps v1.9.2 selected until a new plan is accepted, as
+  [L-132](../planning/known-limits.md#l-132) says of FFmpeg ([L-137](../planning/known-limits.md#l-137)).

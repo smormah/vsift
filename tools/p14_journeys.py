@@ -146,7 +146,7 @@ NOT_RUN_ELSEWHERE = {
 SYSTEM_LABELS = {
     "ubuntu": "Ubuntu 24.04 x64: tools installed by the published binary's own `setup install`",
     "windows": "Windows x64: the repository's pinned FFmpeg (BtbN win64 LGPL 9.0.1), "
-               "whisper.cpp v1.9.2 and the base model",
+               "whisper.cpp v1.9.5 and the base model",
     "macos": "macOS 15 arm64: Homebrew's FFmpeg and whisper.cpp (not reviewed artifacts) "
              "with the pinned base model",
 }

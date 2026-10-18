@@ -13,6 +13,11 @@
 //! The flags were checked against `whisper-cli --help` of the reviewed v1.9.2
 //! build; the relevant help lines are recorded in
 //! `crates/vsift-infrastructure/tests/fixtures/whisper-1.9.2/help-flags.txt`.
+//! For the re-pin to v1.9.5 the command line's source (`examples/cli/cli.cpp`)
+//! was compared with v1.9.2's: no flag the adapter passes, no default and no
+//! line of the `-ojf` writer changed, so the v1.9.2 fixtures still describe the
+//! output. v1.9.5 adds exit status 3 (model file missing) and 11 (an input or
+//! output file failed), which the adapter reads like any other non-zero exit.
 //! Translation (`-tr`) is never requested: evidence stays in the spoken language.
 
 use std::{

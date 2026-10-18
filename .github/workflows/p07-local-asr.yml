@@ -36,7 +36,7 @@ jobs:
       - name: Test staging guardrails
         run: python -m unittest discover -s tools -p test_p07_local_asr_tools.py
 
-      - name: Stage pinned FFmpeg, whisper.cpp v1.9.2 and both pinned models
+      - name: Stage pinned FFmpeg, whisper.cpp v1.9.5 and both pinned models
         run: python tools/p07_local_asr_tools.py "${{ runner.temp }}/vsift-p07-local-asr"
 
       - name: Show toolchain and host
