@@ -22,11 +22,12 @@ use crate::{
     StagedManagedCandidate, StagedManagedPayload,
 };
 
-const CATALOGUE_REVISION: &str = "ubuntu-24.04-x86_64-2026-09-22-r2";
+const CATALOGUE_REVISION: &str = "ubuntu-24.04-x86_64-2026-10-18-r3";
 const STOP_NEW_PLANS_AT: u64 = 1_848_700_800;
 const STOP_NEW_PLANS_DATE: &str = "2028-08-01T00:00:00Z";
 const FFMPEG_URL: &str = "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-08-31-13-27/ffmpeg-n9.0.1-11-ge47273f4d9-linux64-lgpl-9.0.tar.xz";
-const WHISPER_URL: &str = "https://github.com/ggml-org/whisper.cpp/releases/download/v1.9.2/whisper-bin-ubuntu-x64.tar.gz";
+const WHISPER_URL: &str =
+    "https://github.com/ggml-org/whisper.cpp/releases/download/b5454/whisper-bin-ubuntu-x64.tar.gz";
 const MODEL_URL: &str = "https://huggingface.co/ggerganov/whisper.cpp/resolve/80da2d8bfee42b0e836fc3a9890373e5defc00a6/ggml-base.bin";
 const MODEL_BYTES: u64 = 147_951_465;
 const MODEL_SHA256: &str = "60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe";
@@ -770,8 +771,14 @@ fn ffmpeg_artifact() -> Result<AcceptedManagedArtifact, ManagedCatalogueError> {
     })
 }
 
-/// The reviewed regular files selected from the whisper.cpp v1.9.2 Ubuntu x64
+/// The reviewed regular files selected from the whisper.cpp v1.9.5 Ubuntu x64
 /// archive: name, bytes, SHA-256 and whether it is executable.
+///
+/// Since v1.9.3 upstream publishes a release's binaries only under the build
+/// release of the same commit, and the v1.9.5 release names it: `b5454`, built
+/// from `d1be6fde11ac` (the tag's commit) by upstream's release workflow with
+/// `WHISPER_BUILD_IS_DEV=OFF`. The sizes and digests were read from the archive
+/// on a hosted runner (`tools/p06_archive_inventory.py`).
 ///
 /// The first six are the CLI, its libraries and notice; the alias table in
 /// [`whisper_artifact`] refers to them by position. The rest are ggml's
@@ -788,117 +795,117 @@ const WHISPER_FILES: [(&str, u64, &str, bool); 19] = [
     (
         "whisper-cli",
         976_312,
-        "61fa94d25ba9a4695118883011f35e8521c158145ec73bcd8805a7c11760e6d7",
+        "110a858e128d1fbc5a75899b42a1de8a7a4c10856bfe45dad1adc278f6459d14",
         true,
     ),
     (
-        "libggml.so.0.18.1",
-        54_936,
-        "1985fa3dc169a16715a0998da0a075b29be8f68ea2501e3c043be53be7f11857",
+        "libggml.so.0.26.0",
+        55_184,
+        "25406a47ddc7a6b45adb4995ad5efbc6a7ef6efbc43e64a506d978d11dd6fec8",
         false,
     ),
     (
-        "libggml-base.so.0.18.1",
-        910_680,
-        "bc41368cecccc3db8b4f52ad168b51413ee6c005a772b1d3e4f4b3bb47777553",
+        "libggml-base.so.0.26.0",
+        931_232,
+        "8cd57970d5ba71529442758c0b42cb820ed319e03be0691aead74ef298d3f51f",
         false,
     ),
     (
         "libggml-cpu-x64.so",
-        878_024,
-        "b7c084e19dc63a83acf9d6dac8d2cba089026996bf805659e10d650d5a51c216",
+        942_168,
+        "c19a80e868a34bdb197e2901c8f785a77640d6e56055134514b5fa2807171af5",
         false,
     ),
     (
-        "libwhisper.so.1.9.2",
-        611_280,
-        "afd9560fa2dd20a7c0f9aa682f9c4f339b2d223f2ad6fa200fc229bc3b1606d6",
+        "libwhisper.so.1.9.5",
+        615_800,
+        "1517f17d5188f7ef70cbb66a2b8ce258c510d20c25018d18e2801351de13cd55",
         false,
     ),
     (
         "libggml-cpu-alderlake.so",
-        1_013_360,
-        "53633ffd2a2c668ae08a283b38821a88c61523de2e407096a0c1b6a1cad1d41e",
+        1_280_320,
+        "d33aa9c10d716534dff77655da446f09516ee4583b695e8cc1aa447e57848dac",
         false,
     ),
     (
         "libggml-cpu-cannonlake.so",
-        1_074_912,
-        "b28b1ac4709a87c8868921b30eae141aaf8f4d8fb620b584d453cfef5eb698f0",
+        1_362_352,
+        "0cb6e59a34c9798a512398e820942ee18ce99c1e0b308ec593e78655759eaafe",
         false,
     ),
     (
         "libggml-cpu-cascadelake.so",
-        1_070_816,
-        "643f51af219a74b86178992eabbcb683d9f37a38b81d1e9ad63605874331477c",
+        1_374_344,
+        "a0286798b10092eabaf5f81ce9ae664aa78d3c609ed2138fa8a7ca22da73ef7d",
         false,
     ),
     (
         "libggml-cpu-cooperlake.so",
-        1_070_816,
-        "e02b7d041ddbf19a9f1a0a0f61d54e6d8bb6072b6ee09c001e2dd0b4c3b74398",
+        1_374_344,
+        "4169f4b9c975e46ddc386b695f64fb3a38a3dacd40bbb15465a2a5dbcabb9a1f",
         false,
     ),
     (
         "libggml-cpu-haswell.so",
-        1_017_456,
-        "4e6e0cfe5f94806bf38e3f75d8128df6c65ab8c8c9cf279e392bd9c0b6d5c1f7",
+        1_284_416,
+        "a63377026e388671d7925e729fced52d9dd85d1bca780dce97bc2c74817053d4",
         false,
     ),
     (
         "libggml-cpu-icelake.so",
-        1_070_816,
-        "89248d02d6aa6f06f64a654139f9c1e7cedf4215407f49c8930af98db2df8bf3",
+        1_374_344,
+        "3f28f5a44dd3640cf179d4f678ea9bdacc536ad69b6b5fb5efd155b6b91c49c8",
         false,
     ),
     (
         "libggml-cpu-ivybridge.so",
-        951_704,
-        "c7b66231986e403482de7ef7474b59523ef5968f1c923f12519a30fdc4567741",
+        1_213_104,
+        "8b22efecdde26d41d3d864f2d5f6e29c31e0951d6453465d1f4fbda50b9eaa4b",
         false,
     ),
     (
         "libggml-cpu-piledriver.so",
-        951_704,
-        "5e0e0bc4c3ab21bc4ff43386d1f683c9b07f9a7ce0f6786b0dab7a19570991d5",
+        1_209_008,
+        "e04b72d641d4ae129c05a2ca167dae4843eb0ecae5d40a31a5d98ae480641b11",
         false,
     ),
     (
         "libggml-cpu-sandybridge.so",
-        959_896,
-        "fccf45830c2929fe8261064c987fc94da85afdb7fc57cfaae52132cbbeda825c",
+        1_217_200,
+        "806218b034614ad31dbe4fbae48bcc0282c966bbe9f0085380d1c49b6b0f7d0b",
         false,
     ),
     (
         "libggml-cpu-sapphirerapids.so",
-        1_337_176,
-        "fb4f9e70b2d83220165afad2073be0ea36ad8e91829f84753c7e9bf7e0b38a54",
+        1_636_576,
+        "d190abfe2ad900b24da89c883f633dc621f69ba12b2f5664659826374c1f4cfb",
         false,
     ),
     (
         "libggml-cpu-skylakex.so",
-        1_074_912,
-        "089070b665ba61e8c34f61c9f6d7cf86df5d71847522ecb434d23afb16d466fb",
+        1_362_352,
+        "66d8e2a22ef39225eb2d80e3a1dd9c8a7dd2be41966760c27f22e79623611dd5",
         false,
     ),
     (
         "libggml-cpu-sse42.so",
-        881_976,
-        "f0d5d2cf7dbfd3081be59b6ba97a34399c4954a2f8b1ba8d80d9894545225f8e",
+        950_184,
+        "58e6f62fa6bc2732c5a8b6323377ae62ba6cc1ebad9dfd298b6548819bd94375",
         false,
     ),
     (
         "libggml-cpu-zen4.so",
-        1_070_816,
-        "d17c9e99888b523b1699603b9453594fd47d1e2e686c77dff32d125f7b0c6c36",
+        1_374_344,
+        "42bb25dff93816eb12327a1b82c04ae436dd17eebf30da556143ec9acffd9582",
         false,
     ),
 ];
 
 fn whisper_artifact() -> Result<AcceptedManagedArtifact, ManagedCatalogueError> {
     let integrity = integrity(
-        9_497_583,
-        "46811a3ecf584307480a220b9ef5ff81b7b22dc41577cbc274ce3afc61f753b1",
+        10_364_195,
+        "a72becf15d7917f990f6313867a52638b82b7f9ef237fb0c980dac56a135781c",
     )?;
     validate_source(WHISPER_URL, PublisherOrigin::GitHubRelease, integrity)?;
     let base_files = WHISPER_FILES;
@@ -923,15 +930,15 @@ fn whisper_artifact() -> Result<AcceptedManagedArtifact, ManagedCatalogueError> 
     }
     Ok(AcceptedManagedArtifact {
         component: ManagedComponent::WhisperCli,
-        version: String::from("whisper.cpp-v1.9.2-ubuntu-x64"),
+        version: String::from("whisper.cpp-v1.9.5-ubuntu-x64"),
         publisher: String::from("ggml-org whisper.cpp"),
         source_url: String::from(WHISPER_URL),
         integrity,
         format: ManagedArtifactFormat::TarGz,
         archive_limits: Some(ReviewedArchiveLimits {
             max_stream_bytes: 30_000_000,
-            entries: 44,
-            expanded_bytes: 24_519_182,
+            entries: 47,
+            expanded_bytes: 28_128_870,
         }),
         selected_files: base_files
             .into_iter()
@@ -947,8 +954,8 @@ fn whisper_artifact() -> Result<AcceptedManagedArtifact, ManagedCatalogueError> 
         archive_links: whisper_archive_links(),
         runtime_copies: whisper_runtime_copies(),
         licence: String::from("MIT"),
-        notice_url: String::from("https://github.com/ggml-org/whisper.cpp/blob/v1.9.2/LICENSE"),
-        source_code_url: String::from("https://github.com/ggml-org/whisper.cpp/tree/v1.9.2"),
+        notice_url: String::from("https://github.com/ggml-org/whisper.cpp/blob/v1.9.5/LICENSE"),
+        source_code_url: String::from("https://github.com/ggml-org/whisper.cpp/tree/v1.9.5"),
         trust_limit: String::from(
             "Hosted Ubuntu 24.04 x86-64 tone-audio model-backed inference passed; real-speech accuracy, arbitrary Ubuntu hosts and the production installer remain unqualified.",
         ),
@@ -959,13 +966,13 @@ fn whisper_artifact() -> Result<AcceptedManagedArtifact, ManagedCatalogueError> 
 fn whisper_archive_links() -> Vec<ReviewedArchiveLink> {
     [
         ("libwhisper.so", "libwhisper.so.1"),
-        ("libwhisper.so.1", "libwhisper.so.1.9.2"),
+        ("libwhisper.so.1", "libwhisper.so.1.9.5"),
         ("libparakeet.so", "libparakeet.so.1"),
-        ("libparakeet.so.1", "libparakeet.so.1.9.2"),
+        ("libparakeet.so.1", "libparakeet.so.1.9.5"),
         ("libggml.so", "libggml.so.0"),
-        ("libggml.so.0", "libggml.so.0.18.1"),
+        ("libggml.so.0", "libggml.so.0.26.0"),
         ("libggml-base.so", "libggml-base.so.0"),
-        ("libggml-base.so.0", "libggml-base.so.0.18.1"),
+        ("libggml-base.so.0", "libggml-base.so.0.26.0"),
     ]
     .into_iter()
     .map(|(name, target)| ReviewedArchiveLink {
@@ -977,12 +984,12 @@ fn whisper_archive_links() -> Vec<ReviewedArchiveLink> {
 
 fn whisper_runtime_copies() -> Vec<ReviewedRuntimeCopy> {
     [
-        ("libggml.so.0", "libggml.so.0.18.1"),
-        ("libggml.so", "libggml.so.0.18.1"),
-        ("libggml-base.so.0", "libggml-base.so.0.18.1"),
-        ("libggml-base.so", "libggml-base.so.0.18.1"),
-        ("libwhisper.so.1", "libwhisper.so.1.9.2"),
-        ("libwhisper.so", "libwhisper.so.1.9.2"),
+        ("libggml.so.0", "libggml.so.0.26.0"),
+        ("libggml.so", "libggml.so.0.26.0"),
+        ("libggml-base.so.0", "libggml-base.so.0.26.0"),
+        ("libggml-base.so", "libggml-base.so.0.26.0"),
+        ("libwhisper.so.1", "libwhisper.so.1.9.5"),
+        ("libwhisper.so", "libwhisper.so.1.9.5"),
     ]
     .into_iter()
     .map(|(name, source_selected)| ReviewedRuntimeCopy {

@@ -4,6 +4,8 @@ Date: 2026-09-13. Target: Windows 11 x64 desktop. This is a read-only source and
 archive-inventory review, **not** an accepted installer catalogue or permission to
 activate downloads. P06 and its source gate remain open.
 
+**2026-10-18:** the whisper.cpp v1.9.2 values below are the earlier pin; the hosted checks now stage v1.9.5 from the build release `b5454` ([the section of that date](#2026-10-18-re-pin-whispercpp-v195-build-b5454)).
+
 Availability risk: the initially selected 2026-09-09 BtbN asset is a *daily* build, not a
 month-end retained build. Its [pinned source retention policy](https://github.com/BtbN/FFmpeg-Builds/blob/847e5e1cacc2945ac46528d34d754bd36051680c/README.md#release-retention-policy)
 keeps only the last 14 daily builds and month-end builds for two years. The
@@ -188,3 +190,27 @@ adapter and checkpoint on the candidate too ([`p14-qualification.md`](p14-qualif
 is a tone-audio compatibility smoke, not a real-speech or Windows 11 qualification, and the candidate is
 **not accepted**, for the reasons given for Ubuntu (a daily build kept about two weeks, three added
 libraries in the recipe).
+
+## 2026-10-18 re-pin: whisper.cpp v1.9.5 (build b5454)
+
+The Windows side of the re-pin reviewed in
+[`p06-ubuntu-artifact-candidate.md`](p06-ubuntu-artifact-candidate.md#2026-10-18-re-pin-whispercpp-v195-build-b5454)
+(provenance, the upstream reading and the open retention question, [L-181](known-limits.md#l-181)). On Windows the
+pin is not an install: it is the build the hosted checks stage (`tools/p06_windows_candidate_smoke.py`, through
+`tools/p07_local_asr_tools.py`) and the bytes `setup check` names `whisper.cpp v1.9.5 (reviewed build)`. A user's
+own whisper.cpp is what runs on a desktop.
+
+| Item | Earlier pin | Re-pin |
+| --- | --- | --- |
+| Archive | `v1.9.2/whisper-bin-x64.zip`, 8,194,445 bytes, `49dcc16d…2d674a` | [`b5454/whisper-bin-x64.zip`](https://github.com/ggml-org/whisper.cpp/releases/tag/b5454), **8,928,640** bytes, SHA-256 **`6ba69e3482d7826214f90a6a9c84ca07782aec1e1d0c6a7c30c994fd5d816ccb`** (GitHub's published digest and the attestation's subject) |
+| Entries | | 41 regular files under `Release/`, 23,147,520 expanded bytes, no directory entries or links |
+| Selected files | 13 | the same 13: `whisper-cli.exe` (479,744 bytes, `331dba46…8e4366`), `whisper.dll`, `ggml.dll`, `ggml-base.dll` and nine CPU back ends |
+
+The archive now also holds `llama.dll` (for `whisper-talk-llama.exe`) and `SDL2.dll`; neither is selected,
+and `whisper-cli.exe` ran without them. The inventory is from `P06 Windows candidate smoke`
+[39159591141](https://github.com/smormah/vsift/actions/runs/39159591141); the pinned smoke passed in
+[39162408084](https://github.com/smormah/vsift/actions/runs/39162408084) (F01 decoded and transcribed with only
+the 13 files), and `P07 local ASR` [39163129897](https://github.com/smormah/vsift/actions/runs/39163129897) passed
+on an Intel runner (Family 6 Model 207) with accuracy identical to v1.9.2's on the same CPU model (run
+39082010927): `base` clean WER 4.06% (F05's "invoice" heard as "in voice", the backend difference ADR 0017
+records), F08 61.53%, real-time factor 0.355 (0.361 before), peak 336 MiB; `base_q5_1` 4.06%, 46.15%, 0.290, 250 MiB.

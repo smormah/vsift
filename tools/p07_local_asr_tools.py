@@ -2,7 +2,7 @@
 
 Only a disposable GitHub Actions runner may run this. It downloads, over HTTPS
 with bounded sizes, the reviewed FFmpeg/FFprobe build and the reviewed
-whisper.cpp v1.9.2 CPU build for the runner's platform (the P06 candidate
+whisper.cpp v1.9.5 CPU build for the runner's platform (the P06 candidate
 pins in p06_ubuntu_candidate_smoke.py and p06_windows_candidate_smoke.py)
 and both pinned whisper.cpp models. Every download is checked against its
 pinned size and SHA-256 before use, and fails closed. Only the reviewed files

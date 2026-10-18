@@ -147,7 +147,7 @@ disposition of every finding:
 | --- | --- |
 | Cargo | `cargo deny check` (advisories, licences, bans, sources) for the workspace and the fuzz crate; the lockfile at the commit |
 | GitHub | Open CodeQL, Dependabot and secret-scanning alerts by severity; the pinned actions' own advisories |
-| Native tools | The reviewed FFmpeg build (BtbN, 9.0.1, the 2026-08-31 snapshot), whisper.cpp v1.9.2 and the `base` model: advisories for those versions from their publishers and public databases; FFmpeg's fixes are read by ancestry **and** by release-branch cherry-pick (section 19) |
+| Native tools | The reviewed FFmpeg build (BtbN, 9.0.1, the 2026-08-31 snapshot), whisper.cpp (v1.9.2 up to `0.2.2`; v1.9.5, build release `b5454`, on `main` for `0.2.3`) and the `base` model: advisories for those versions from their publishers and public databases; FFmpeg's fixes are read by ancestry **and** by release-branch cherry-pick (section 19) |
 | Runtime and build | The Linux build's glibc and OpenSSL 3 requirement; the Ubuntu image digests used by the strict container and the Codex image; Node.js 24.21.0 and npm 11.19.0 in the publish job |
 | Inventory | The SBOM (Rust graph only) against the catalogue's three artifacts and the notices |
 

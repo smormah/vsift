@@ -118,7 +118,7 @@ pub fn local_asr_verification_summary(failure: LocalAsrVerificationFailure) -> S
     }
 }
 
-const WHISPER_REMEDY: &str = "Nothing was committed. Reinstall the reviewed whisper.cpp v1.9.2 CLI or register a working build with setup configure whisper --executable <path>, then retry.";
+const WHISPER_REMEDY: &str = "Nothing was committed. Reinstall the reviewed whisper.cpp v1.9.5 CLI or register a working build with setup configure whisper --executable <path>, then retry.";
 const MEDIA_TOOL_REMEDY: &str = "Nothing was changed. Reinstall FFmpeg and FFprobe from a trusted build or register a working pair with setup configure, then retry.";
 
 /// The prose for a recognition that failed during `setup check`. It is the

@@ -354,9 +354,12 @@ vsift setup check                                  # each tool now reports [mana
 - **The plan** is read-only and lists, for each component still needed, the publisher, the
   exact address, the exact size, the SHA-256, the licence and notice link, and every file
   it will install. The three components are the FFmpeg and FFprobe build from BtbN
-  FFmpeg-Builds (113 MB), the whisper.cpp v1.9.2 command-line build (9.5 MB) and the
-  multilingual `base` model from the whisper.cpp model repository (148 MB): about 271 MB
-  in three downloads. Keep at least 1 GB of disk free while installing (a cautious figure,
+  FFmpeg-Builds (113 MB), the whisper.cpp v1.9.5 command-line build (10.4 MB; the
+  release's binaries are under its build release `b5454`) and the multilingual `base`
+  model from the whisper.cpp model repository (148 MB): about 272 MB in three downloads.
+  `0.2.2` and earlier install whisper.cpp v1.9.2; after an upgrade, a managed install
+  keeps the version it has until you run `setup plan` and `setup install` again, which
+  then installs v1.9.5 and selects it. Keep at least 1 GB of disk free while installing (a cautious figure,
   not a measurement; the plan has the exact sizes). Licence information is disclosure, not
   legal clearance.
 - **The digest** is the plan's own fingerprint: copy the `Plan digest:` line of the plan
@@ -417,7 +420,8 @@ whenever it cannot install safely.
 
 Install FFmpeg and FFprobe with whatever you normally use, and, for local speech
 recognition, whisper.cpp's `whisper-cli` and a model. VSift does not review, pin or
-redistribute these builds. whisper.cpp v1.9.2 publishes no macOS command-line build, so there you
+redistribute these builds. whisper.cpp publishes no macOS command-line build (v1.9.5 has only a
+library framework for Apple systems), so there you
 build it from its source or take it from a package manager. Tools on your `PATH` are found
 automatically; tools elsewhere are registered once, with absolute paths:
 
