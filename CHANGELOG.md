@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+- **`lzma-rust2` 0.20.1 to 0.22.0, the XZ decoder of the managed FFmpeg archive (cycle 2, dependency upkeep; the two exact pins and lockfiles, no source change).** It replaces the Dependabot pull request #194, which missed the fuzz crate's own pin (`fuzz/Cargo.toml`); that pin moves here too. 0.21.0 and 0.22.0 harden the decoder this adapter uses:
+  - it no longer allocates the whole dictionary a stream header declares before decoding anything, and the XZ index parser no longer reserves memory for the record count it declares;
+  - every reserved header bit is checked;
+  - corrupt data at the end of input is reported as corrupt, not as a cut-short stream.
+
+  VSift's adapter (`xz_tar_inventory.rs`) needs no change, and no failure code or message changes. `cargo deny check` passes (Apache-2.0, Rust 1.85, as before). The adapter's five unit tests pass. The stable fuzz replay passes, with the derived `.tar.xz` seeds byte-identical. A five-minute libFuzzer pass of `xz_tar_inventory` (12,480 runs) found nothing. The source review ([`p06-provisioning-source-review.md`](docs/planning/p06-provisioning-source-review.md)) has a dated note. The XZ bounds of [L-132](docs/planning/known-limits.md#l-132) are unchanged.
 - **The real-media set, step 2 continued: the set's eight items, hand downloads, the test-media release and a private local set (#363; tooling and records only, nothing that ships changes).** Wikimedia refuses the tool's neutral user agent, and the maintainer decided on 2026-10-19 that it carries no contact details.
   - **Sources that accept the tool first:** RM06 (the approved NASA conversation) is now NASA Johnson's own upload to the Internet Archive, and two items were added under the maintainer's go: RM09, NASA's Crew-8 arrival (28 minutes outdoors, five of them before the first word) and RM10, a Census Bureau screen recording of its data site. All three are fetched and pinned (the two Internet Archive files against their published SHA-1; NASA publishes none). The set is eight approved items, 440,841,704 bytes; the tool now enforces at most eight and 500 MB.
   - **upload.wikimedia.org is provenance only:** the tool never contacts it. RM01, RM03, RM04, RM05 and RM07, which exist on no other allowed source, are pinned from copies the maintainer downloads by hand with the new `real-media.cjs pin --item RMnn --from-file <file>` (exact size and the source's published checksum; the copy given is left as it is).

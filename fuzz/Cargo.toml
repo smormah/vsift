@@ -41,7 +41,7 @@ vsift-application = { version = "0.2.2", path = "../crates/vsift-application" }
 # archive tests build theirs (a tar, then gzip or xz around it), with the
 # workspace's pinned versions and settings; all three are already in the graph.
 flate2 = { version = "=1.1.10", default-features = false, features = ["rust_backend"] }
-lzma-rust2 = { version = "=0.20.1", default-features = false, features = ["std", "xz", "encoder"] }
+lzma-rust2 = { version = "=0.22.0", default-features = false, features = ["std", "xz", "encoder"] }
 tar = { version = "=0.4.46", default-features = false }
 
 [[bin]]
