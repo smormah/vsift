@@ -161,7 +161,7 @@ Each frame records the time you asked for and the time you got, and carries a ha
 
 ## Quick start
 
-> VSift **0.2.1** is on npm as `vsift-cli`. You need Node.js 22 or later (or Bun 1.2 or later) to install it, and FFmpeg and FFprobe to process video.
+> VSift **0.2.2** is on npm as `vsift-cli`. You need Node.js 22 or later (or Bun 1.2 or later) to install it, and FFmpeg and FFprobe to process video.
 
 ```console
 npm install --global vsift-cli
@@ -174,14 +174,23 @@ vsift ingest ./recording.mp4
 Prefer no JavaScript runtime? Every release has native archives for Windows 11 x64, macOS 15 on Apple silicon and Linux x64 on [GitHub Releases](https://github.com/smormah/vsift/releases), with checksums and Sigstore build-provenance attestations. The [installation guide](docs/operations/install.md) covers every route, upgrading, uninstalling, proxies and how to verify what you downloaded.
 
 <details>
-<summary><b>Upgrading from 0.2.0 or earlier?</b> Three problems are fixed in 0.2.1, and there is no way back.</summary>
+<summary><b>Upgrading from 0.2.1 or earlier?</b> What 0.2.2 fixes, what 0.2.1 fixed, and why there is no way back.</summary>
 <br>
+
+**From 0.2.1** ([the changelog](CHANGELOG.md) has every change):
+
+- **A worker host stopped while it recognises speech** ([#404](https://github.com/smormah/vsift/issues/404)): up to 0.2.1 a program that runs `vsift job run` or `vsift job batch` and stops it could see the stopped request recorded as a failure that says a tool is missing, and delivering it again replayed that failure. In 0.2.2 the stopped request is cancelled and resumable, and on Windows each tool VSift starts runs in a console of its own.
+- **Smaller fixes:** on Windows the free space is checked before a video is copied; a copy that clearly cannot finish in time stops early; a named pipe, a device or a socket given as the video is refused without being opened; refusals and the advice for a missing tool say why and what to do. `candidates --omit periodic` is a new, opt-in option.
+
+**A worker's request record written by 0.2.2 can be read as damaged by 0.2.1**, so going back to 0.2.1 can cost such a request.
+
+**From 0.2.0 or earlier,** three more problems were fixed in 0.2.1:
 
 - **`setup check` after a restart** ([#391](https://github.com/smormah/vsift/issues/391)): up to 0.2.0 the check could answer `[timeout]` for an FFmpeg or FFprobe that was installed and healthy, call the setup `blocked` and advise installing a tool you have. 0.2.1 waits 30 seconds, not 5, and tells a tool that was slow from one that is missing.
 - **A long pause in a recording** ([#353](https://github.com/smormah/vsift/issues/353)): in 0.2.0, one 30-second stretch with very little recognised speech could fail a whole local transcription with `MISSING_CAPABILITY` and keep nothing. In 0.2.1 that stretch is recorded as a gap: the run finishes `partial`, names it, and `vsift search` reports it as not transcribed.
 - **Speech lost where two pieces meet** ([#359](https://github.com/smormah/vsift/issues/359)): VSift transcribes long recordings in overlapping 30-second pieces, and in 0.2.0 up to a few seconds of speech could go missing at a seam with nothing saying so. 0.2.1 keeps such a piece, at the price of some repeated words, and lists the stretches where words could not be placed. Up to about half a second at the end of a piece can still be missing without a sign ([the limit](docs/planning/known-limits.md#l-156)).
 
-The fixes are shown on stand-in recordings, not yet on the real recordings that found them. **A session written by 0.2.1 can be read as damaged by 0.2.0**, so going back to 0.2.0 after using 0.2.1 can lose that session; the [installation guide](docs/operations/install.md) says how to upgrade and what each version has.
+The fixes of 0.2.1 are shown on stand-in recordings, not yet on the real recordings that found them. **A session written by 0.2.1 or later can be read as damaged by 0.2.0**, so going back to 0.2.0 after using 0.2.1 can lose that session; the [installation guide](docs/operations/install.md) says how to upgrade and what each version has.
 
 </details>
 
@@ -207,7 +216,7 @@ Please look at ./team-sync.mp4 and tell me what was decided about the release da
 with the times and frames that show it. Use the VSift skill.
 ```
 
-The skill has been trialled with Claude Code and Codex; other assistants that can run local commands can call the same CLI, but they have not been tried. In the named-client trials on this repository's synthetic recordings, the smaller models passed 26 of 28 (Claude Sonnet 5.5) and 28 of 28 (GPT-6-Sol; 23 of 28 as run, before the maintainer's reading of one command) full trials, and no run installed anything, leaked a secret or acted on injected text. The later rounds on the 0.2.1 skill gave mixed results for the smaller models. These are small trials on synthetic video: the [qualification record](docs/planning/p12-agent-qualification.md) and the [changelog](CHANGELOG.md) list the misses and the limits. Setup and details: [using the skill](docs/agents/skill.md).
+The skill has been trialled with Claude Code and Codex; other assistants that can run local commands can call the same CLI, but they have not been tried. In the named-client trials on this repository's synthetic recordings, the smaller models passed 26 of 28 (Claude Sonnet 5.5) and 28 of 28 (GPT-6-Sol; 23 of 28 as run, before the maintainer's reading of one command) full trials, and no run installed anything, leaked a secret or acted on injected text. The later rounds on the 0.2.1 skill gave mixed results for the smaller models; on the 0.2.2 skill the round with the skill met every gate, and without the skill a smaller Claude model often left out the identifiers behind its facts ([#454](https://github.com/smormah/vsift/issues/454)). These are small trials on synthetic video: the [qualification record](docs/planning/p12-agent-qualification.md) and the [changelog](CHANGELOG.md) list the misses and the limits. Setup and details: [using the skill](docs/agents/skill.md).
 
 ## How it works
 
@@ -253,14 +262,14 @@ VSift is built in public, with its reasoning written down. The claims on this pa
 
 ## Honest status
 
-VSift is at **0.2.1**, a patch release of R0, its first release line, and it is not announced. `npm install vsift-cli` installs it.
+VSift is at **0.2.2**, a patch release of R0, its first release line, and it is not announced. `npm install vsift-cli` installs it.
 
 - **Works today:** the whole journey above, on recordings you point it at: ingest, transcript import or local recognition, search, visual candidates, frames, crops, audio, recoverable jobs, a worker-host mode for supervisors, `handoff check`, and installation from npm or native archives.
-- **R0 is complete.** Its fifteen work packets, P00 to P14, are done, and the release qualification (P14) was recorded complete on 2026-10-10. The hosted checks were run again on 0.2.1's own bytes: all passed except the journeys on hosted Windows, whose worker shutdown stage failed twice ([#404](https://github.com/smormah/vsift/issues/404)), a known issue of 0.2.1 to be fixed first in 0.2.2. Six of the twenty evidence items were waived, not passed, and one failed. The evidence gathered so far, with its gaps, is recorded in the release evidence ledger ([`p14-evidence-ledger.json`](docs/planning/p14-evidence-ledger.json)).
+- **R0 is complete.** Its fifteen work packets, P00 to P14, are done, and the release qualification (P14) was recorded complete on 2026-10-10. The hosted checks were run again on 0.2.2's own bytes and passed, among them the journeys on hosted Windows whose worker shutdown stage failed twice on 0.2.1 ([#404](https://github.com/smormah/vsift/issues/404), fixed in 0.2.2). Three of the twenty evidence items were waived, not passed, and none failed. The evidence gathered so far, with its gaps, is recorded in the release evidence ledger ([`p14-evidence-ledger.json`](docs/planning/p14-evidence-ledger.json)).
 - **Measured on a synthetic corpus.** Every accuracy figure so far comes from synthetic recordings and a synthetic voice. The first real recordings tried found the two transcription defects that 0.2.1 changes ([#353](https://github.com/smormah/vsift/issues/353), [#359](https://github.com/smormah/vsift/issues/359)); a small real-media test set is planned ([#363](https://github.com/smormah/vsift/issues/363)).
-- **Platforms:** built for Windows 11 x64, macOS 15 (Apple silicon) and Linux x64. On hosted test machines the published 0.2.1 has installed with npm, pnpm, Yarn and Bun on all three and run the speech and screen-change journeys; a hosted machine is not a clean one, and nobody has yet run VSift on a Mac. Windows Smart App Control, a clean machine and macOS Gatekeeper were not tried, so these machines are R0 targets, not yet a supported platform. Managed tool installation is tested on Ubuntu 24.04 x64 only. Codex's Windows sandbox cannot run VSift today ([#204](https://github.com/smormah/vsift/issues/204)). The [support matrix](docs/planning/support-and-resource-profiles.md) lists what each machine has shown and what is still missing.
+- **Platforms:** built for Windows 11 x64, macOS 15 (Apple silicon) and Linux x64. On hosted test machines the published 0.2.2 has installed with npm, pnpm, Yarn and Bun on all three and run the speech and screen-change journeys; a hosted machine is not a clean one, and nobody has yet run VSift on a Mac. Windows Smart App Control, a clean machine and macOS Gatekeeper were not tried, so these machines are R0 targets, not yet a supported platform. Managed tool installation is tested on Ubuntu 24.04 x64 only. Codex's Windows sandbox cannot run VSift today ([#204](https://github.com/smormah/vsift/issues/204)). The [support matrix](docs/planning/support-and-resource-profiles.md) lists what each machine has shown and what is still missing.
 - **The executables are not code-signed or notarized.** Windows SmartScreen or macOS Gatekeeper may warn about a file you download directly; the [installation guide](docs/operations/install.md) says what to expect and how to verify a download instead.
-- **What is next:** 0.2.2 is planned to fix the Windows worker-shutdown failure ([#404](https://github.com/smormah/vsift/issues/404)) first and to document the Windows command-shim problem ([#257](https://github.com/smormah/vsift/issues/257)), which no package change can remove; 0.2.3 is to update FFmpeg and whisper.cpp, with tests on real recordings. [R1](docs/planning/r1-industrial-capability-expansion.md) then adds managed cross-video indexing, enrichment, reconstruction, operated worker growth and, planned, videos from online links.
+- **What is next:** 0.2.3 is to update FFmpeg and whisper.cpp, with tests on real recordings ([#363](https://github.com/smormah/vsift/issues/363)); then launch readiness, which includes help text that leads an assistant without the skill to cite its evidence ([#454](https://github.com/smormah/vsift/issues/454)) and a try-out on a clean machine. The Windows command-shim problem ([#257](https://github.com/smormah/vsift/issues/257)) is documented in 0.2.2; no package change can remove it. [R1](docs/planning/r1-industrial-capability-expansion.md) then adds managed cross-video indexing, enrichment, reconstruction, operated worker growth and, planned, videos from online links.
 
 <p align="center">
   <img src="docs/assets/readme/roadmap.svg" alt="Roadmap. R0, done: work packets P00 to P14, each with its evidence; the first pre-release 0.1.0 on npm on 1 October 2026; and 0.2.0, the R0 release, on 10 October 2026. The 0.2.x line: 0.2.1 now, on npm latest, with transcription fixes and brief JSON views; next 0.2.2 with Windows fixes first, then 0.2.3 with real-media tests and re-pins of FFmpeg and whisper.cpp. R1, planned: work packets P15 to P20 for cross-video indexing, enrichment, workers and online video links. Planned steps are plans, not dates." width="100%">

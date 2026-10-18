@@ -714,12 +714,13 @@ cargo run --locked -p vsift-governance -- public-claims
 cargo run --locked -p vsift-governance -- release-evidence --complete-for <version> --commit <40 hex digits>
 ```
 
-For example `--complete-for 0.2.1 --commit e9ab6e62673328a1645254a4a32e552a2a2f61bf` is the check of the
-release 0.2.1 (it names the stable commit; a candidate's version, such as `0.2.1-rc.3`, is checked as a candidate). When this was written (2026-10-16) it answered that
-RQ-05 is `failed` for 0.2.1 (the journeys on hosted Windows, #404) and named nothing else; for 0.2.0 the same check passed.
-Since the cut of `0.2.2-rc.1` (2026-10-17) it also names RQ-07, RQ-10, RQ-15 and RQ-16, which are `planned` for that
-candidate (their waivers for 0.2.1 are kept in each item's `prior`): an item holds one status, the current one, so the
-check of an earlier version reads the ledger as it is now. `--complete-for 0.2.2-rc.1` is the check of the candidate.
+For example `--complete-for 0.2.2 --commit 0dadc69df4f5c5c3264be72f04be26a600620fe1` is the check of the
+release 0.2.2 (it names the stable commit; a candidate's version, such as `0.2.2-rc.1`, is checked as a candidate). Since the
+records change after its publish (2026-10-18) it answers "VSift release evidence is complete for 0.2.2 at 0dadc69df4f5.", with
+three items `waived` and none a pass (RQ-14, RQ-16, RQ-17: the check passes a waived item for any version, L-179). An item holds
+one status, the current one, and `release_delta` one record, so the check of an earlier version reads the ledger as it is now:
+`--complete-for 0.2.1` now says that `release_delta` is for `0.2.2` and names the items whose entries are `0.2.2`'s (the
+entries for `0.2.1` are in each item's `prior`); when `0.2.1`'s records were made (2026-10-16) it named RQ-05 alone.
 
 - **The ledger's shape** (schema version 1; the Rust types in
   `tools/vsift-governance/src/release_evidence/schema.rs` are the schema, and every struct
@@ -732,7 +733,7 @@ check of an earlier version reads the ledger as it is now. `--complete-for 0.2.2
   typed `reference` of `workflow_run`, `pull_request`, `issue` or `record`, with a `date` and a
   `note`), `issues`, `decision`, `reason` and `date`. `release_delta` is null until a stable
   release is published and its ledger follow-up copies the stable plan's `release-delta.json`
-  (P14 PR 8's delta check) into it; it holds the record of `0.2.1` since 2026-10-16 (and held `0.2.0`'s from 2026-10-10 to then; nothing
+  (P14 PR 8's delta check) into it; it holds the record of `0.2.2` since 2026-10-18 (and held `0.2.1`'s from 2026-10-16 and `0.2.0`'s from 2026-10-10 to then; nothing
   copies it for you: [L-103](planning/known-limits.md#l-103)).
 - **Changing an evidence item's status** is a change to the ledger: set `status`, give the
   version and commit it is for (`applies_to`) and at least one typed link (a workflow run, a

@@ -901,8 +901,8 @@ while the committed files disagree with the tree, so the change that edits the s
 the commit of that pull request's branch at which the skill changed, gave the `skill` digest `7f445a9a748fbbcc5eecf24066dacb09936ea637ae77b40c5a56aabdf71bc0a4`
 (it was `256b4840...`) and the whole-freeze digest `f52265e754c26691000c36360c8361a89e5fd4760c76ff43fd6d10ba84ff1a31` (it was `a48567ac...`); the other six
 components are unchanged, and the pin in `committed_freeze` moved with it. The sixth candidate's records stayed in `batch-2/` and `batch-3/`, with the file they
-ran under kept beside them as `freeze-0.2.1-rc.3.json`, until the cut of `0.2.2-rc.1` moved them aside (below). **No batch has run under the new freeze,
-and no counted batch is run for this change:** under the test and release model of 2026-10-16 an ordinary week's skill wording change gets the
+ran under kept beside them as `freeze-0.2.1-rc.3.json`, until the cut of `0.2.2-rc.1` moved them aside (below). **No batch ran under this freeze,
+and no counted batch was run for this change:** under the test and release model of 2026-10-16 an ordinary week's skill wording change gets the
 uncounted skill smoke instead, which the supervisor schedules.
 **Later on 2026-10-17 the freeze is new once more (#366).** The skill now checks a long report whole through the PowerShell form on Windows
 and in parts in Git Bash ([`skill.md`](skill.md), "A long report's check on Windows"): `freeze write` at `9b4908b00988`, the commit of that
@@ -919,7 +919,8 @@ components are unchanged, and the pin in `committed_freeze` moved with it. No ba
 so `batch-2/freeze.json` and `batch-3/freeze.json` are unchanged (whole-freeze digest `10180cd88ec994dc48079f3aed46e5343a43b79264056e7b6af206c4b85f74c0`, `skill`
 `bd205d6c...`, written at `7e3330a1c725`), both `freeze check` runs answer `nothing frozen has changed`, and the pin in `committed_freeze` is the same. **The maintainer decided that
 batches 2 and 3 run on this candidate**, against the published `0.2.2-rc.1` (`-Version 0.2.2-rc.1`), each on the maintainer's own go after the publish, batch 3 with
-`-AllowGraderChange` as before. **The cut moved the sixth candidate's records aside**, because the campaign script refuses a state file recorded for another version: `records/`,
+`-AllowGraderChange` as before. **They ran on 2026-10-18** (their records, state files and summaries are in `docs/planning/p14-agent-trials/batch-2/` and `batch-3/`, the readings
+beside them, and the results are in `docs/planning/release-0.2.2.md`; the release `0.2.2` has the same skill). **The cut moved the sixth candidate's records aside**, because the campaign script refuses a state file recorded for another version: `records/`,
 `state-claude.json`, `state-codex.json`, `summary.json` and `SUMMARY.md` of each batch are in `docs/planning/p14-agent-trials/batch-2-0.2.1-rc.3/` and `batch-3-0.2.1-rc.3/`, and
 the file they ran under (`freeze-0.2.1-rc.3.json`, whole-freeze digest `a48567ac...`) is `freeze.json` there; nothing in them changed, and `batch-2/` and `batch-3/` hold
 only the freeze this candidate's batches run under. The move is in the cut because a later change on the release branch could not make it (`release.md` 6.8: a work-record path

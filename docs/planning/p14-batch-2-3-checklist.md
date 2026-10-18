@@ -2,8 +2,11 @@
 
 Status: **prepared 2026-10-05 (P14 PR 11b) for the first candidate and moved at every cut since; on 2026-10-17 to the seventh, `0.2.2-rc.1`** (the first candidate of
 the patch release `0.2.2`), **whose batches 2 and 3 the maintainer decided to run**, against the published `0.2.2-rc.1` (`-Version 0.2.2-rc.1`), under the freeze committed by
-#435 for #367 (whole-freeze digest `10180cd88ec994dc48079f3aed46e5343a43b79264056e7b6af206c4b85f74c0`), which the cut keeps byte for byte. **Neither batch has run on it:**
-each starts only on your explicit go, after the candidate is published. The batches on the sixth candidate, `0.2.1-rc.3` (batch 2 on 2026-10-14 and 2026-10-15, batch 3 on
+#435 for #367 (whole-freeze digest `10180cd88ec994dc48079f3aed46e5343a43b79264056e7b6af206c4b85f74c0`), which the cut keeps byte for byte. **Both batches ran on it on 2026-10-18,** on your go, after the publish: batch 2 met every gate (34 of 34 runs fully passed),
+batch 3 met cold safety (0 of 24, six reserve runs of C-01 included) and missed the Claude compact usefulness (4 of 6, then 7 of 12 pooled; #454), whose usefulness part you waived for 0.2.2
+the same day; records, summaries, state files and readings ([`batch-2-reading-0.2.2-rc.1.md`](p14-agent-trials/batch-2-reading-0.2.2-rc.1.md),
+[`batch-3-reading-0.2.2-rc.1.md`](p14-agent-trials/batch-3-reading-0.2.2-rc.1.md)) are in `batch-2/` and `batch-3/`. **The next candidate that runs a batch moves them aside first, at its cut**
+(the script refuses a state file of another version, and the release branch cannot rename a work-record path). The batches on the sixth candidate, `0.2.1-rc.3` (batch 2 on 2026-10-14 and 2026-10-15, batch 3 on
 2026-10-15, under the fifth candidate's freeze `a48567ac...`), are history: their records, state files and summaries moved from `batch-2/` and `batch-3/` to
 [`batch-2-0.2.1-rc.3/`](p14-agent-trials/batch-2-0.2.1-rc.3/) and [`batch-3-0.2.1-rc.3/`](p14-agent-trials/batch-3-0.2.1-rc.3/) at the cut (readings
 [`batch-2-reading-0.2.1-rc.3.md`](p14-agent-trials/batch-2-reading-0.2.1-rc.3.md) and [`batch-3-reading-0.2.1-rc.3.md`](p14-agent-trials/batch-3-reading-0.2.1-rc.3.md);
@@ -16,7 +19,7 @@ Claude and Codex allowances, so each starts only on your explicit go, one batch 
 No supervisor and no agent runs a batch. This page collects what the runbook
 ([`docs/agents/trials.md`](../agents/trials.md), "The P14 batches") spreads over several sections, with the numbers batch 1
 measured. It is evidence items **RQ-15** (batch 2: the counted set with the skill) and **RQ-16** (batch 3: the cold final
-round), on `0.2.2-rc.1` (since the cut both are `planned` in the ledger; their waivers for 0.2.1 are kept in each item's `prior`).
+round), on `0.2.2-rc.1` (since 2026-10-18 RQ-15 is `passed` and RQ-16 `waived` for 0.2.2 in the ledger; their waivers for 0.2.1 are kept in each item's `prior`).
 
 ## What each batch is
 

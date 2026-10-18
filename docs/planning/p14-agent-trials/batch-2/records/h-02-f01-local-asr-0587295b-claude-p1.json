@@ -1,0 +1,619 @@
+{
+  "calls": [
+    {
+      "actions": [
+        {
+          "verdict": "skill_read"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 0,
+      "step": 1,
+      "summary": "Skill vsift"
+    },
+    {
+      "actions": [
+        {
+          "verdict": "skill_read"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 1,
+      "step": 3,
+      "summary": "Read <workspace>\\.claude\\skills\\vsift\\references\\safety.md"
+    },
+    {
+      "actions": [
+        {
+          "verdict": "skill_read"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 2,
+      "step": 4,
+      "summary": "Read <workspace>\\.claude\\skills\\vsift\\references\\commands.md"
+    },
+    {
+      "actions": [
+        {
+          "verdict": "skill_read"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 3,
+      "step": 5,
+      "summary": "Read <workspace>\\.claude\\skills\\vsift\\references\\lifecycle.md"
+    },
+    {
+      "actions": [
+        {
+          "verdict": "skill_read"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 4,
+      "step": 6,
+      "summary": "Read <workspace>\\.claude\\skills\\vsift\\references\\handoff.md"
+    },
+    {
+      "actions": [
+        {
+          "image_check": true,
+          "path": "<workspace>/.claude/skills/vsift/assets/image-check.png",
+          "verdict": "image_open"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 5,
+      "step": 7,
+      "summary": "Read <workspace>\\.claude\\skills\\vsift\\assets\\image-check.png"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "setup",
+            "check",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "setup.check",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 6,
+      "step": 9,
+      "summary": "vsift setup check --json"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "ingest",
+            "walkthrough.mp4",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "ingest",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 7,
+      "step": 10,
+      "summary": "vsift ingest walkthrough.mp4 --json"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "transcript",
+            "retranscribe",
+            "ses_3372c3cd91b6251852cb44c5fc2a517a",
+            "--operation-id",
+            "op_retx3372c3cd91b6251852cb44c501",
+            "--events",
+            "jsonl"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "transcript.retranscribe",
+          "verdict": "vsift"
+        },
+        {
+          "verdict": "housekeeping"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 8,
+      "step": 12,
+      "summary": "vsift transcript retranscribe ses_3372c3cd91b6251852cb44c5fc2a517a --operation-id op_retx3372c3cd91b6251852cb44c501 --events jsonl | tail -n 1"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "search",
+            "ses_3372c3cd91b6251852cb44c5fc2a517a",
+            "--query",
+            "build",
+            "--view",
+            "brief",
+            "--limit",
+            "20",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "search",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 9,
+      "step": 14,
+      "summary": "vsift search ses_3372c3cd91b6251852cb44c5fc2a517a --query \"build\" --view brief --limit 20 --json"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "candidates",
+            "ses_3372c3cd91b6251852cb44c5fc2a517a",
+            "--from",
+            "0",
+            "--to",
+            "6000000",
+            "--view",
+            "brief",
+            "--limit",
+            "20",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "candidates",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 10,
+      "step": 16,
+      "summary": "vsift candidates ses_3372c3cd91b6251852cb44c5fc2a517a --from 0 --to 6000000 --view brief --limit 20 --json"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "frame",
+            "get",
+            "ses_3372c3cd91b6251852cb44c5fc2a517a",
+            "--candidate",
+            "vcd_1c1aa81ed83a8bf1e92b0a8906044e07",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "frame.get",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 11,
+      "step": 17,
+      "summary": "vsift frame get ses_3372c3cd91b6251852cb44c5fc2a517a --candidate vcd_1c1aa81ed83a8bf1e92b0a8906044e07 --json"
+    },
+    {
+      "actions": [
+        {
+          "image_check": false,
+          "path": "<session-root>/sessions/ses_3372c3cd91b6251852cb44c5fc2a517a/artifacts/artifact-5d83d2d0cfd026f2e88e95708ab26ee20233c3e8d67f02fda778090763345250.png",
+          "verdict": "image_open"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 12,
+      "step": 18,
+      "summary": "Read <session-root>\\sessions\\ses_3372c3cd91b6251852cb44c5fc2a517a\\artifacts\\artifact-5d83d2d0cfd026f2e88e95708ab26ee20233c3e8d67f02fda778090763345250.png"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "session",
+            "retain",
+            "ses_3372c3cd91b6251852cb44c5fc2a517a",
+            "--output",
+            "evidence-bundle-phase-1",
+            "--json"
+          ],
+          "class": "explicit",
+          "machine_output": true,
+          "operation": "session.retain",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 13,
+      "step": 21,
+      "summary": "vsift session retain ses_3372c3cd91b6251852cb44c5fc2a517a --output evidence-bundle-phase-1 --json"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "bundle",
+            "validate",
+            "evidence-bundle-phase-1",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "bundle.validate",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 14,
+      "step": 22,
+      "summary": "vsift bundle validate evidence-bundle-phase-1 --json"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "handoff",
+            "check",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "handoff.check",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 15,
+      "step": 24,
+      "summary": "vsift handoff check --json <<'VSIFT_HANDOFF'\n**Release note:** Service status healthy, reporting build 2048 [c1: e1, e2].\n\n## Problem\n\nThe question is what state the service is in and which build it reports, for a one-line release note [c1: e1, e2].\n\n## Expected\n\nNot stated in the video.\n\n## Actual\n\nThe narrator says (local speech recognition, 00:00.000-00:05.260) [e1]:\n\n> `The service status is h..."
+    }
+  ],
+  "client": {
+    "arguments": [
+      "-p",
+      "This is a recording of a service readout, walkthrough.mp4; there is no transcript. Write me a one-line release note: the state the service is in and the build it reports. Use the VSift skill and the compact budget. When you have written the handoff, keep the evidence: I authorise you to retain the session to a new folder named evidence-bundle-phase-1 in this directory with vsift session retain (wi...",
+      "--output-format",
+      "stream-json",
+      "--verbose",
+      "--model",
+      "claude-opus-5-5",
+      "--max-turns",
+      "60",
+      "--setting-sources",
+      "project",
+      "--permission-mode",
+      "dontAsk",
+      "--no-session-persistence",
+      "--strict-mcp-config"
+    ],
+    "environment_names": [
+      "PATH",
+      "SystemRoot",
+      "windir",
+      "SystemDrive",
+      "ComSpec",
+      "PATHEXT",
+      "OS",
+      "PROCESSOR_ARCHITECTURE",
+      "NUMBER_OF_PROCESSORS",
+      "ProgramData",
+      "CLAUDE_CODE_GIT_BASH_PATH",
+      "LOCALAPPDATA",
+      "APPDATA",
+      "XDG_CONFIG_HOME",
+      "XDG_CACHE_HOME",
+      "HOME",
+      "USERPROFILE",
+      "TEMP",
+      "TMP",
+      "TMPDIR",
+      "CLAUDE_CONFIG_DIR",
+      "DISABLE_AUTOUPDATER",
+      "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"
+    ],
+    "kind": "claude_code",
+    "model": "claude-opus-5-5",
+    "version": "2.1.284 (Claude Code)"
+  },
+  "client_setup": [
+    "marked the trial workspace as trusted in the client home"
+  ],
+  "cold": null,
+  "cold_assertions": [],
+  "cold_setting": null,
+  "deviations": [],
+  "fixture_hashes": {
+    "fixtures/corpus/generated/F01-speech.mp4": "f8222a928243160c8dbf5b1a9bc24277e49ac47c11fe5526826462877678e881",
+    "walkthrough.mp4": "f8222a928243160c8dbf5b1a9bc24277e49ac47c11fe5526826462877678e881"
+  },
+  "freeze_sha256": "10180cd88ec994dc48079f3aed46e5343a43b79264056e7b6af206c4b85f74c0",
+  "handoff": {
+    "budget": {
+      "profile": "compact"
+    },
+    "capabilities": {
+      "image_access": "verified",
+      "image_check_code": "<check-code>",
+      "local_asr": "verified",
+      "media_tools": "available",
+      "transcript_basis": "local_asr"
+    },
+    "citations": [
+      {
+        "id": "e1",
+        "revision_id": "trv_e8d6c0b7a78efe487c28f70deaf08f7e",
+        "segment_id": "tsg_776c5f05c8626281f49ea5b864a8bd39",
+        "type": "transcript_segment"
+      },
+      {
+        "actual_us": 0,
+        "candidate_id": "vcd_1c1aa81ed83a8bf1e92b0a8906044e07",
+        "delta_us": 0,
+        "evidence_id": "evd_37e9cbe7e5325984ea15addad35f400b",
+        "id": "e2",
+        "pixels_inspected": true,
+        "requested_us": 0,
+        "type": "frame"
+      }
+    ],
+    "claims": [
+      {
+        "certainty": "high",
+        "citations": [
+          "e1",
+          "e2"
+        ],
+        "id": "c1",
+        "kind": "observed",
+        "section": "actual",
+        "statement": "The service status is healthy and the reported build is 2048, as spoken by the narrator and shown on the status slide.",
+        "support": "supported"
+      }
+    ],
+    "gaps": [],
+    "handoff_version": "1",
+    "lifecycle": {
+      "action": "retained",
+      "mode": "retained",
+      "policy": "user_stated"
+    },
+    "question": "What state is the service in and what build does it report, for a one-line release note?",
+    "status": "complete",
+    "untrusted_instructions": []
+  },
+  "holdout": true,
+  "install": {
+    "command_shims": [
+      "vsift",
+      "vsift.cmd",
+      "vsift.ps1"
+    ],
+    "ignore_scripts": true,
+    "launcher": {
+      "actual_sha256": "b88cf7276fda4f6057d98bfcb3267a6c4cb7148e91987e77450f3c6df90b6dd5",
+      "actual_size": 10118656,
+      "matches": true,
+      "package": "@vsift/win32-x64",
+      "recorded_sha256": "b88cf7276fda4f6057d98bfcb3267a6c4cb7148e91987e77450f3c6df90b6dd5",
+      "recorded_size": 10118656,
+      "version_exit_code": 0,
+      "version_line": "vsift 0.2.2-rc.1 (43a033dbf813)"
+    },
+    "node_version": "v22.16.0",
+    "npm_version": "11.4.2",
+    "packages": [
+      {
+        "integrity_installed": "sha512-8hIA1viKicezxvuuCLAwFp36U4JTdUANHCVQ5Oji5lsyAPQ0G8e3DbViqBxXF/va0FShr5XkQqb54tAZqDD7Mw==",
+        "integrity_registry": "sha512-8hIA1viKicezxvuuCLAwFp36U4JTdUANHCVQ5Oji5lsyAPQ0G8e3DbViqBxXF/va0FShr5XkQqb54tAZqDD7Mw==",
+        "name": "vsift-cli",
+        "resolved": "https://registry.npmjs.org/vsift-cli/-/vsift-cli-0.2.2-rc.1.tgz",
+        "version": "0.2.2-rc.1"
+      },
+      {
+        "integrity_installed": "sha512-z9dT1uPain5dsuRCbxacEU2FlLLsL+GGpX9FrjW9o1dU94m5luyk1wOBPzjKny5QaaBWK2xX/0WbL7mhCu9vgg==",
+        "integrity_registry": "sha512-z9dT1uPain5dsuRCbxacEU2FlLLsL+GGpX9FrjW9o1dU94m5luyk1wOBPzjKny5QaaBWK2xX/0WbL7mhCu9vgg==",
+        "name": "@vsift/win32-x64",
+        "resolved": "https://registry.npmjs.org/@vsift/win32-x64/-/win32-x64-0.2.2-rc.1.tgz",
+        "version": "0.2.2-rc.1"
+      }
+    ],
+    "platform": "windows x86_64",
+    "registry": "https://registry.npmjs.org/",
+    "schema_version": 1,
+    "source": "registry",
+    "version": "0.2.2-rc.1"
+  },
+  "interpretation": {
+    "checks": [],
+    "human_review": null,
+    "key_facts": [
+      {
+        "claims": [
+          "c1"
+        ],
+        "event": "F01-E01",
+        "satisfied": true,
+        "term": "healthy"
+      },
+      {
+        "claims": [
+          "c1"
+        ],
+        "event": "F01-E01",
+        "satisfied": true,
+        "term": "build"
+      },
+      {
+        "claims": [
+          "c1"
+        ],
+        "event": "F01-E01",
+        "satisfied": true,
+        "term": "2048"
+      }
+    ],
+    "passed": true
+  },
+  "invalid_reasons": [],
+  "mechanical": {
+    "checks": [
+      {
+        "details": [],
+        "name": "handoff_valid",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "citations_resolve",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "citation_times_in_truth_windows",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "command_policy",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "stream_recognised",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "budgets",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "image_check",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "no_canary",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "report_text",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "client_configuration",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "commands_required",
+        "passed": true
+      }
+    ],
+    "passed": true
+  },
+  "mode": "skill",
+  "phase": 1,
+  "record_version": 1,
+  "reported_usage": {
+    "cache_creation_input_tokens": 37827,
+    "cached_input_tokens": 550489,
+    "cost_micro_usd": 506198,
+    "input_tokens": 26,
+    "output_tokens": 4669,
+    "reasoning_output_tokens": 0,
+    "source": "result_event"
+  },
+  "run": {
+    "exit_code": 0,
+    "raw_stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "raw_stdout_sha256": "cafdad4dc414cac2a5384479e482b3ed26793f8a2b7864e1207c33c9980ac715",
+    "started_unix_s": 1792283991,
+    "timed_out": false,
+    "wall_ms": 94355
+  },
+  "scenario": {
+    "id": "H-02-f01-local-asr",
+    "sha256": "c6995a148c1f3452fcc611b012d4e50fbb35fe85b7708c66e23ab5f36e2b6e03",
+    "tests": [
+      "A-08"
+    ]
+  },
+  "settings_sha256": "bfa1a8315a7659aa8992ae7c5d046d1b140f37c848c05ca4e0d560252781d883",
+  "setup_check": {
+    "dependencies": [
+      {
+        "dependency": "ffmpeg",
+        "lookup": "configured_user_path",
+        "status": "available"
+      },
+      {
+        "dependency": "ffprobe",
+        "lookup": "configured_user_path",
+        "status": "available"
+      },
+      {
+        "dependency": "whisper",
+        "lookup": "configured_user_path",
+        "status": "available"
+      }
+    ],
+    "exit_code": 0,
+    "local_asr": "verified",
+    "status": "ready"
+  },
+  "shim_use": {
+    "cmd": 0,
+    "posix": 9,
+    "powershell": 0
+  },
+  "skill_sha256": "bd205d6c59cd926f5abccb71d71221acfbea1195f9ec1731451acebabd3af54f",
+  "skill_source": "installed_package",
+  "tools_source": "registered",
+  "trial_id": "h-02-f01-local-asr-0587295b",
+  "usage": {
+    "image_bytes": 32658,
+    "images_per_step": 1,
+    "images_total": 2,
+    "tool_calls": 11,
+    "wall_time_s": 94
+  },
+  "usage_limit": null,
+  "valid": true,
+  "vsift": {
+    "commit": "43a033dbf81346b967b293a150e13306828cac50",
+    "sha256": "b88cf7276fda4f6057d98bfcb3267a6c4cb7148e91987e77450f3c6df90b6dd5"
+  }
+}

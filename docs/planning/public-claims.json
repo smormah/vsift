@@ -252,6 +252,13 @@
       "note": "The file name of the maintainer checklist for the stable release 0.2.1 (docs/planning/release-0.2.1-stable-steps.md), which section 6.17 points at; a name, not a quality."
     },
     {
+      "kind": "non_claim",
+      "id": "NC-812",
+      "documents": ["docs/operations/release.md"],
+      "text": "0.2.2 stable steps",
+      "note": "The file name of the maintainer checklist for the stable release 0.2.2 (docs/planning/release-0.2.2-stable-steps.md), which section 6.20 points at; a name, not a quality."
+    },
+    {
       "kind": "claim",
       "id": "CL-002",
       "rung": "now",

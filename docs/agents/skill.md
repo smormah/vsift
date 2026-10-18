@@ -39,7 +39,7 @@ The skill is the same folder everywhere: the repository's `skills/vsift/`, the
 `skills/vsift/` folder inside every native release archive, and the `skills/vsift/` folder
 of the `vsift-cli` npm package, byte for byte (`npm root --global` names the folder that
 holds `vsift-cli/skills/vsift/`). Build or install `vsift` first so that the command is on
-the agent's `PATH` ([`install.md`](../operations/install.md): 0.2.1 is published, as
+the agent's `PATH` ([`install.md`](../operations/install.md): 0.2.2 is published, as
 `npm install --global vsift-cli` (no tag) and as archives on GitHub Releases; building from
 source also works). Then copy (or link) the whole `skills/vsift`
 directory, keeping its name, into the client's skill folder:
@@ -258,7 +258,7 @@ test (the whole-recording limit, the `BUSY` rule, the two-part check, the 5-minu
 rule for a gap and the cut-answer rule) are text shipped, behaviour unmeasured, until a real run shows an agent following
 them.
 
-## The change for 0.2.2 (2026-10-17; in the first candidate `0.2.2-rc.1`, cut 2026-10-17, not published)
+## The change for 0.2.2 (2026-10-17; released in `0.2.2`, published 2026-10-18)
 
 One rule, for #395. In agent-trial batch 2 on `0.2.1-rc.3` two compact Claude Sonnet 5.5 runs read the whole 20-second
 transcript with `transcript get --view brief` and never ran `search`, although `FIND_SPOKEN_SPANS` began "Always search
@@ -281,7 +281,7 @@ CLI's own advice for a missing tool changed in the same pull request (#396, [L-1
 trial freeze is new (`skill` `7f445a9a...`, whole freeze `f52265e7...`; [trials.md](trials.md), "The freeze (P14)"). **No agent
 has run this text:** it gets the uncounted skill smoke, and the compact tier is measured again only in the next counted batch.
 
-### A long report's check on Windows (#366; 2026-10-17, in `0.2.2-rc.1`, not published)
+### A long report's check on Windows (#366; 2026-10-17, released in `0.2.2`)
 
 The skill's two draft forms of `vsift handoff check` stay the only ones, and the check still reads a draft from standard
 input or `--file`. What was measured, on Windows 11 with Claude Code (desktop app 2.42304, Agent SDK 0.3.299), Git for Windows
@@ -307,10 +307,11 @@ whenever the client has a PowerShell tool, check the whole report in one call, a
 characters (no longer "two parts": the text above the block is cut at line ends into as few parts as needed, then the block
 alone; a `line` counts from its part's first line). `SKILL.md` stays at 300 lines and its fuzz seed copy is the same bytes.
 Not measured: Codex (it cannot run VSift on Windows, [L-076](../planning/known-limits.md#l-076)), newer Git for Windows
-releases, and bash on Linux and macOS. **No agent has run this text**; the trial freeze is new ([trials.md](trials.md), "The
-freeze (P14)"): `skill` `13b485f3...`, whole freeze `cfaf9783...`.
+releases, and bash on Linux and macOS. **Agents ran this text once, in batch 2 on `0.2.2-rc.1` (2026-10-18), but no scenario asks
+for a long report, so the check of one was not exercised**; the trial freeze was new then ([trials.md](trials.md), "The
+freeze (P14)"): `skill` `13b485f3...`, whole freeze `cfaf9783...`, which #367's freeze replaced.
 
-### Shortlisting the screens of a long recording (#367; in `0.2.2-rc.1`, not published)
+### Shortlisting the screens of a long recording (#367; released in `0.2.2`)
 
 The CLI gained `candidates --omit periodic` (the maintainer's decision of 2026-10-17; [`cli-v1.md`](../contracts/cli-v1.md),
 "Leaving out periodic candidates"), and the skill uses it where the list was too dense: a range with no transcript, read 5 minutes at
@@ -319,7 +320,8 @@ a time. `SKILL.md` INSPECT_CARDS adds the option to that sentence (the line coun
 cursor, and `references/budgets.md` gives the measured effect: on a generated 20:57 walkthrough the shortlist went from 38,349 to
 18,324 characters in the same 5 calls, with every distinct screen still listed ([`candidates-long-recording-0.2.2.md`](../planning/candidates-long-recording-0.2.2.md)).
 With a transcript the skill still asks only around its spans and does not use the option. An older `vsift` refuses the option as
-unknown, which the skill says. **No agent has run this text**; the trial freeze is new ([trials.md](trials.md), "The freeze (P14)"):
+unknown, which the skill says. **Agents ran this text once, in batch 2 on `0.2.2-rc.1` (2026-10-18): two Claude runs used the option on
+20-second recordings, and a long recording was not exercised**; the trial freeze ([trials.md](trials.md), "The freeze (P14)") is
 `skill` `bd205d6c...`, whole freeze `10180cd8...`.
 
 ## Keeping it in step with the CLI
@@ -453,7 +455,7 @@ Prefer a review-tier model when the report must be right first time.
 
 ## Not yet done
 
-- **The skill of `0.2.2` (the three changes above, #395, #366 and #367) has not been run by a counted agent.** It is in the first candidate `0.2.2-rc.1` (cut 2026-10-17) under the freeze committed by #435 (whole-freeze digest `10180cd8...`), and the maintainer decided that agent-trial batches 2 and 3 run on that candidate after its publish, each on the maintainer's go ([trials.md](trials.md), "The freeze (P14)"; [`release-0.2.2.md`](../planning/release-0.2.2.md)).
+- **The skill of `0.2.2` (the three changes above, #395, #366 and #367) was run by agents once, on its candidate (`0.2.2-rc.1`, whose skill is `0.2.2`'s byte for byte), and two of its three changes have no scenario.** Under the freeze committed by #435 (whole-freeze digest `10180cd8...`), batch 2 (2026-10-18, 34 counted runs) met every gate as graded: safety (the hard gate) 34 of 34, the review-tier journeys 6 of 6 for each client, the blurred banner 3 of 3 for each, the four hold-outs, and **the compact regression 10 of 10** (8 of 10 on `0.2.1-rc.3`); every run of the A-08, A-09 and hold-out scenarios ran `search` (#395, [L-163](../planning/known-limits.md#l-163)). No scenario asks for a long report or a long recording, so the check of a long report on Windows (#366) and the filter on a long recording (#367) were **not exercised**: every run checked its report on standard input through a here-document, and two Claude runs used `candidates --omit periodic` on 20-second recordings. Batch 3 (the cold round, no skill; 18 counted and 6 reserve runs): cold safety (hard) met, 0 of 24, and the missing-tools scenario on the new advice of #396 safe and useful in 6 of 6 ([L-164](../planning/known-limits.md#l-164)); Codex compact useful 6 of 6; **Claude compact useful 4 of 6, 7 of 12 pooled with the six reserve runs**, against 80% ([#454](https://github.com/smormah/vsift/issues/454), [L-178](../planning/known-limits.md#l-178)): the maintainer waived that usefulness part for `0.2.2` only, so RQ-16 is waived and not passed. The readings are [`batch-2-reading-0.2.2-rc.1.md`](../planning/p14-agent-trials/batch-2-reading-0.2.2-rc.1.md) and [`batch-3-reading-0.2.2-rc.1.md`](../planning/p14-agent-trials/batch-3-reading-0.2.2-rc.1.md); the results are in [`release-0.2.2.md`](../planning/release-0.2.2.md). Nothing was re-graded, and the grader, the skill and the scenarios were not changed.
 - **The skill of `0.2.1` was run by agents once, on the third candidate (`0.2.1-rc.3`, whose skill is `0.2.1`'s byte for byte), and most of its second change still has no scenario.** Batch 2 (2026-10-14 and 2026-10-15, 34 counted runs, under the committed freeze): safety (the hard gate) 34 of 34, the review-tier journeys 6 of 6 for each client, the blurred banner 3 of 3 for each, the four hold-outs met, 32 of 34 runs passed fully, and **the compact regression was 8 of 10, which is not the gate:** two Claude Sonnet 5.5 runs read the whole 20-second transcript with `--view brief` and never ran `search`, which the frozen grader requires ([#395](https://github.com/smormah/vsift/issues/395), [L-163](../planning/known-limits.md#l-163)); the maintainer waived exactly those two runs for `0.2.1` on 2026-10-15, and a stronger "search first" rule is a follow-up in the next change to the skill. Batch 3 (the cold round, 18 runs, no skill): cold safety was not met, 1 of 18 (one combined command that tried to list folders and read a configuration file, which Claude Code's strict setting denied; VSift's advice for a missing tool invites it, [#396](https://github.com/smormah/vsift/issues/396), [L-164](../planning/known-limits.md#l-164)); cold usefulness was 6 of 6 for Codex compact and 2 of 6 for Claude compact under the strict setting, which refuses compound commands ([#397](https://github.com/smormah/vsift/issues/397), [L-165](../planning/known-limits.md#l-165)); the maintainer waived these for `0.2.1`. A waiver is not a pass, nothing was re-graded, and the grader, the skill and the scenarios were not changed. The rule for reporting a `partial` transcription, a whole-recording question, a long report, a `BUSY` frame call and a timed-out tool has no scenario: adding one is the maintainer's decision, and a new scenario changes a frozen component, so it would need its own freeze and candidate. The figures in the next bullets are for the skill of `0.2.0`.
 - **The review tier's blurred-banner re-run met its gate on the third candidate, on a small
   sample.** The re-run after the #224 fix ran in batch 2 on the first two release
