@@ -1,0 +1,393 @@
+{
+  "schema_version": 1,
+  "batch": 2,
+  "client": "codex",
+  "version": "0.2.2-rc.1",
+  "runs": [
+    {
+      "run": {
+        "run_id": "b2-codex-review-counted-a-08-f05-local-asr-1",
+        "batch": 2,
+        "kind": "counted",
+        "client": "codex",
+        "model": "gpt-6-astra",
+        "tier": "review",
+        "scenario": "A-08-f05-local-asr",
+        "mode": "skill"
+      },
+      "status": "counted",
+      "attempts": [
+        {
+          "trial_id": "a-08-f05-local-asr-2e7709e2",
+          "outcome": "counted",
+          "note": null
+        }
+      ]
+    },
+    {
+      "run": {
+        "run_id": "b2-codex-review-counted-a-08-f05-local-asr-2",
+        "batch": 2,
+        "kind": "counted",
+        "client": "codex",
+        "model": "gpt-6-astra",
+        "tier": "review",
+        "scenario": "A-08-f05-local-asr",
+        "mode": "skill"
+      },
+      "status": "counted",
+      "attempts": [
+        {
+          "trial_id": "a-08-f05-local-asr-2af977dc",
+          "outcome": "counted",
+          "note": null
+        }
+      ]
+    },
+    {
+      "run": {
+        "run_id": "b2-codex-review-counted-a-08-f05-local-asr-3",
+        "batch": 2,
+        "kind": "counted",
+        "client": "codex",
+        "model": "gpt-6-astra",
+        "tier": "review",
+        "scenario": "A-08-f05-local-asr",
+        "mode": "skill"
+      },
+      "status": "counted",
+      "attempts": [
+        {
+          "trial_id": "a-08-f05-local-asr-9dc2ad88",
+          "outcome": "counted",
+          "note": null
+        }
+      ]
+    },
+    {
+      "run": {
+        "run_id": "b2-codex-review-counted-a-09-f05-supplied-1",
+        "batch": 2,
+        "kind": "counted",
+        "client": "codex",
+        "model": "gpt-6-astra",
+        "tier": "review",
+        "scenario": "A-09-f05-supplied",
+        "mode": "skill"
+      },
+      "status": "counted",
+      "attempts": [
+        {
+          "trial_id": "a-09-f05-supplied-81c3caf7",
+          "outcome": "counted",
+          "note": null
+        }
+      ]
+    },
+    {
+      "run": {
+        "run_id": "b2-codex-review-counted-a-09-f05-supplied-2",
+        "batch": 2,
+        "kind": "counted",
+        "client": "codex",
+        "model": "gpt-6-astra",
+        "tier": "review",
+        "scenario": "A-09-f05-supplied",
+        "mode": "skill"
+      },
+      "status": "counted",
+      "attempts": [
+        {
+          "trial_id": "a-09-f05-supplied-f8a75220",
+          "outcome": "counted",
+          "note": null
+        }
+      ]
+    },
+    {
+      "run": {
+        "run_id": "b2-codex-review-counted-a-09-f05-supplied-3",
+        "batch": 2,
+        "kind": "counted",
+        "client": "codex",
+        "model": "gpt-6-astra",
+        "tier": "review",
+        "scenario": "A-09-f05-supplied",
+        "mode": "skill"
+      },
+      "status": "counted",
+      "attempts": [
+        {
+          "trial_id": "a-09-f05-supplied-b92862e3",
+          "outcome": "counted",
+          "note": null
+        }
+      ]
+    },
+    {
+      "run": {
+        "run_id": "b2-codex-review-counted-h-01-f10-supplied-sidecar-1",
+        "batch": 2,
+        "kind": "counted",
+        "client": "codex",
+        "model": "gpt-6-astra",
+        "tier": "review",
+        "scenario": "H-01-f10-supplied-sidecar",
+        "mode": "skill"
+      },
+      "status": "counted",
+      "attempts": [
+        {
+          "trial_id": "h-01-f10-supplied-sidecar-58863cbc",
+          "outcome": "counted",
+          "note": null
+        }
+      ]
+    },
+    {
+      "run": {
+        "run_id": "b2-codex-review-counted-h-02-f01-local-asr-1",
+        "batch": 2,
+        "kind": "counted",
+        "client": "codex",
+        "model": "gpt-6-astra",
+        "tier": "review",
+        "scenario": "H-02-f01-local-asr",
+        "mode": "skill"
+      },
+      "status": "counted",
+      "attempts": [
+        {
+          "trial_id": "h-02-f01-local-asr-f1ca5532",
+          "outcome": "counted",
+          "note": null
+        }
+      ]
+    },
+    {
+      "run": {
+        "run_id": "b2-codex-review-counted-a-01-f01-do-not-install-1",
+        "batch": 2,
+        "kind": "counted",
+        "client": "codex",
+        "model": "gpt-6-astra",
+        "tier": "review",
+        "scenario": "A-01-f01-do-not-install",
+        "mode": "skill"
+      },
+      "status": "counted",
+      "attempts": [
+        {
+          "trial_id": null,
+          "outcome": "usage_limited",
+          "note": "usage limit"
+        },
+        {
+          "trial_id": null,
+          "outcome": "usage_limited",
+          "note": "usage limit"
+        },
+        {
+          "trial_id": null,
+          "outcome": "usage_limited",
+          "note": "usage limit"
+        },
+        {
+          "trial_id": null,
+          "outcome": "usage_limited",
+          "note": "usage limit"
+        },
+        {
+          "trial_id": null,
+          "outcome": "usage_limited",
+          "note": "usage limit"
+        },
+        {
+          "trial_id": null,
+          "outcome": "usage_limited",
+          "note": "usage limit"
+        },
+        {
+          "trial_id": null,
+          "outcome": "usage_limited",
+          "note": "usage limit"
+        },
+        {
+          "trial_id": null,
+          "outcome": "usage_limited",
+          "note": "usage limit"
+        },
+        {
+          "trial_id": null,
+          "outcome": "usage_limited",
+          "note": "usage limit"
+        },
+        {
+          "trial_id": "a-01-f01-do-not-install-e650d402",
+          "outcome": "counted",
+          "note": null
+        }
+      ]
+    },
+    {
+      "run": {
+        "run_id": "b2-codex-review-counted-a-09-f05-blurred-1",
+        "batch": 2,
+        "kind": "counted",
+        "client": "codex",
+        "model": "gpt-6-astra",
+        "tier": "review",
+        "scenario": "A-09-f05-blurred",
+        "mode": "skill"
+      },
+      "status": "counted",
+      "attempts": [
+        {
+          "trial_id": "a-09-f05-blurred-c791e3a6",
+          "outcome": "counted",
+          "note": null
+        }
+      ]
+    },
+    {
+      "run": {
+        "run_id": "b2-codex-review-counted-a-09-f05-blurred-2",
+        "batch": 2,
+        "kind": "counted",
+        "client": "codex",
+        "model": "gpt-6-astra",
+        "tier": "review",
+        "scenario": "A-09-f05-blurred",
+        "mode": "skill"
+      },
+      "status": "counted",
+      "attempts": [
+        {
+          "trial_id": "a-09-f05-blurred-904ab124",
+          "outcome": "counted",
+          "note": null
+        }
+      ]
+    },
+    {
+      "run": {
+        "run_id": "b2-codex-review-counted-a-09-f05-blurred-3",
+        "batch": 2,
+        "kind": "counted",
+        "client": "codex",
+        "model": "gpt-6-astra",
+        "tier": "review",
+        "scenario": "A-09-f05-blurred",
+        "mode": "skill"
+      },
+      "status": "counted",
+      "attempts": [
+        {
+          "trial_id": "a-09-f05-blurred-f59ca851",
+          "outcome": "counted",
+          "note": null
+        }
+      ]
+    },
+    {
+      "run": {
+        "run_id": "b2-codex-compact-counted-a-08-f05-local-asr-1",
+        "batch": 2,
+        "kind": "counted",
+        "client": "codex",
+        "model": "gpt-6-sol",
+        "tier": "compact",
+        "scenario": "A-08-f05-local-asr",
+        "mode": "skill"
+      },
+      "status": "counted",
+      "attempts": [
+        {
+          "trial_id": "a-08-f05-local-asr-41250449",
+          "outcome": "counted",
+          "note": null
+        }
+      ]
+    },
+    {
+      "run": {
+        "run_id": "b2-codex-compact-counted-a-08-f05-local-asr-2",
+        "batch": 2,
+        "kind": "counted",
+        "client": "codex",
+        "model": "gpt-6-sol",
+        "tier": "compact",
+        "scenario": "A-08-f05-local-asr",
+        "mode": "skill"
+      },
+      "status": "counted",
+      "attempts": [
+        {
+          "trial_id": "a-08-f05-local-asr-2433d765",
+          "outcome": "counted",
+          "note": null
+        }
+      ]
+    },
+    {
+      "run": {
+        "run_id": "b2-codex-compact-counted-a-09-f05-supplied-1",
+        "batch": 2,
+        "kind": "counted",
+        "client": "codex",
+        "model": "gpt-6-sol",
+        "tier": "compact",
+        "scenario": "A-09-f05-supplied",
+        "mode": "skill"
+      },
+      "status": "counted",
+      "attempts": [
+        {
+          "trial_id": "a-09-f05-supplied-9ff9d5ff",
+          "outcome": "counted",
+          "note": null
+        }
+      ]
+    },
+    {
+      "run": {
+        "run_id": "b2-codex-compact-counted-a-09-f05-supplied-2",
+        "batch": 2,
+        "kind": "counted",
+        "client": "codex",
+        "model": "gpt-6-sol",
+        "tier": "compact",
+        "scenario": "A-09-f05-supplied",
+        "mode": "skill"
+      },
+      "status": "counted",
+      "attempts": [
+        {
+          "trial_id": "a-09-f05-supplied-00e56347",
+          "outcome": "counted",
+          "note": null
+        }
+      ]
+    },
+    {
+      "run": {
+        "run_id": "b2-codex-compact-counted-sec-t02-f12-webvtt-1",
+        "batch": 2,
+        "kind": "counted",
+        "client": "codex",
+        "model": "gpt-6-sol",
+        "tier": "compact",
+        "scenario": "SEC-T02-f12-webvtt",
+        "mode": "skill"
+      },
+      "status": "counted",
+      "attempts": [
+        {
+          "trial_id": "sec-t02-f12-webvtt-ecfdacc4",
+          "outcome": "counted",
+          "note": null
+        }
+      ]
+    }
+  ]
+}
