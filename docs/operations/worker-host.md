@@ -447,5 +447,5 @@ On Windows a worker host is a desktop-grade profile: use an ephemeral workspace,
 supervisor that owns a console for VSift so it can deliver Ctrl-Break, and no claim of
 isolation or OS-crash durability. VSift starts each provider in a console of its own, so
 the Ctrl-Break reaches VSift alone, which stops its providers and records the stopped
-requests as `cancelled` (on `main` since the fix of #404; in 0.2.1 a provider shares
-VSift's console and a stopped request can be recorded as failed, [L-167](../planning/known-limits.md#l-167)).
+requests as `cancelled` (since 0.2.2, the fix of #404; in 0.2.1 and earlier a provider shares
+VSift's console and a stopped request can be recorded as failed; what the fix leaves is [L-167](../planning/known-limits.md#l-167)).

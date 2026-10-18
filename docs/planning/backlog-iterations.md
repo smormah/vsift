@@ -1,6 +1,6 @@
 # Delivery cycles after 0.2.1 (the cycle map; decided 2026-10-16)
 
-Status: **the maintainer's delivery model of 2026-10-16**, recorded here. It replaces the first version of this page
+Status: **the maintainer's delivery model of 2026-10-16**, recorded here. **Position, 2026-10-18: cycle 1 is delivered as `0.2.2`; cycle 2 (`0.2.3`) is next.** It replaces the first version of this page
 (written 2026-10-15, with iterations A to D), which the maintainer reshaped the next day: four larger cycles instead of small
 iterations, with the test review folded into the first one. The stories inside each cycle are still a plan and are
 re-ordered by the supervisor as findings arrive; the decisions below are not. The policy behind them (the standing
@@ -12,10 +12,12 @@ window as an operating procedure is [`release.md`](../operations/release.md) 6.1
 | Version | State |
 | --- | --- |
 | `0.2.0` | The first stable release (R0, packets P00 to P14), 2026-10-09. Superseded by `0.2.1`; not deprecated. |
-| `0.2.1` | **The current stable release**, published 2026-10-15 (tag `v0.2.1` at `e9ab6e626733`; npm `latest`). It fixes #353 (a sparse chunk failed a whole transcription), #359 (speech dropped at chunk seams) and #391 (`setup check` called a slow tool missing), and adds `--view brief`, coverage on `transcript get`, the missing-path remediations and the second skill text. Verified from outside the same day. The hosted checks of its bytes passed except the journeys on hosted Windows (#404), **a known issue of `0.2.1` by the maintainer's decision of 2026-10-16**; the ledger records that item (RQ-05) as `failed`, with no waiver. |
+| `0.2.1` | The previous stable release, published 2026-10-15 (tag `v0.2.1` at `e9ab6e626733`), superseded by `0.2.2` on 2026-10-18. It carried the fixes of #353, #359 and #391 and added `--view brief`, coverage on `transcript get`, the missing-path remediations and the second skill text. Its journeys on hosted Windows failed (#404), a known issue of `0.2.1` (decided 2026-10-16); the ledger records RQ-05 `failed` for it. |
 | `0.2.1-rc.1`, `0.2.1-rc.2` | Deprecated on npm (2026-10-15): "Superseded by 0.2.1. Install vsift-cli." |
-| `0.2.1-rc.3` | The accepted candidate; npm `next`; not deprecated. |
-| `0.2.2` | **Cycle 1, started 2026-10-16. The first candidate, `0.2.2-rc.1`, was cut (2026-10-17) from `main` at `f50ae6b7` plus the version bump, tagged on `release/0.2.x` and published on 2026-10-18; its evidence is recorded (every hosted run passed; RQ-14, RQ-16 and RQ-17 waived for `0.2.2`). The stable `0.2.2` is next.** The cold help that #454 found missing is cycle 3's (L-178), and the cut of `0.2.3-rc.1` sets RQ-16 back to `planned` (L-179). The plan and the window are [`release-0.2.2.md`](release-0.2.2.md); the runbook is [`release.md`](../operations/release.md) 6.19. |
+| `0.2.1-rc.3` | The accepted candidate of `0.2.1`; no longer `next`; deprecated on 2026-10-18 ("Superseded by 0.2.2. Install vsift-cli."). |
+| `0.2.2-rc.1` | The only candidate of `0.2.2`, cut 2026-10-17 from `main` at `f50ae6b7` plus the version bump and published on 2026-10-18 from `release/0.2.x`; npm `next` (kept there by the maintainer's decision); deprecated on 2026-10-18 ("Superseded by 0.2.2. Install vsift-cli."). |
+| `0.2.2` | **The current stable release: cycle 1, delivered.** Published 2026-10-18 from `release/0.2.x` (tag `v0.2.2` at `0dadc69df4f5`; npm `latest`; publish run 39127747535), with the evidence of its candidate and the hosted checks of its own bytes, the journeys on hosted Windows among them (#404's fix). RQ-14, RQ-16 and RQ-17 are waived for `0.2.2`, none a pass. The plan and its records are [`release-0.2.2.md`](release-0.2.2.md); the runbook's records are [`release.md`](../operations/release.md) 6.19 and 6.20. |
+| `0.2.3` | **Cycle 2, next.** Not started. Its cut sets RQ-16 back to `planned` (L-179) and lists RQ-14 and RQ-17 for a decision. |
 
 The `0.2.x` line is R0 maintenance. R1 (packets P15 to P20, issues #25 to #30) is planned in
 [`r1-industrial-capability-expansion.md`](r1-industrial-capability-expansion.md) and not started.
@@ -71,6 +73,8 @@ now has its implementation, regression tests and a release. The entries for #366
 
 ## Cycle 1: `0.2.2`, the fixes found during 0.2.1, with the test review folded in
 
+**Delivered as `0.2.2`, published 2026-10-18** (one candidate, `0.2.2-rc.1`; [`release-0.2.2.md`](release-0.2.2.md) has what shipped and the evidence). The section below is the plan as it was written for the cycle. **Left over, and moved to cycle 3:** [#439](https://github.com/smormah/vsift/issues/439) (a managed install's rerun after a kill failed once at activation on Windows), [#443](https://github.com/smormah/vsift/issues/443) (a session root left without its user's access entry under a race on Windows, L-175), [#316](https://github.com/smormah/vsift/issues/316), [#258](https://github.com/smormah/vsift/issues/258) and [#263](https://github.com/smormah/vsift/issues/263) (hosted runners), [#397](https://github.com/smormah/vsift/issues/397) and [#336](https://github.com/smormah/vsift/issues/336) (trial design), and [#454](https://github.com/smormah/vsift/issues/454) (the cold help, L-178).
+
 One candidate, cut in a weekly window (below). Stories that do not overlap run in parallel (D1).
 
 **First:**
@@ -112,6 +116,8 @@ nightly; the long hosted runs for what the cycle touched; an uncounted skill smo
 
 ## Cycle 2: `0.2.3`, real media, the re-pins and the follow-ups measured on real speech
 
+**Next** (after `0.2.2`, 2026-10-18); not started.
+
 - **#363 first:** a small, freely licensed real-media test set with an opt-in campaign. The real defects of `0.2.0` (#353, #359, #391) were found by
   real recordings and a second machine, not by the synthetic corpus.
 - **The re-pins:** the FFmpeg build planned for 2026-10-31 and whisper.cpp 1.9.5 or later: #351, #272, #322, #399.
@@ -126,7 +132,8 @@ nightly; the long hosted runs for what the cycle touched; an uncounted skill smo
 - **The README as the front page (D4).** It starts early, in a separate design session during cycle 1.
 - **The documentation sweep:** #177, #286, #374, #219, #224, #246.
 - **The clean-machine try-out (RQ-17).**
-- **Help text for agents without the skill** (the cold-agent variant must be usable from `--help` alone).
+- **Help text for agents without the skill** (the cold-agent variant must be usable from `--help` alone): #454, a short typical investigation in `vsift --help` that names citing ids, then batch 3's cold scenarios again (L-178).
+- **Left over from cycle 1 (2026-10-18):** #439 and #443 (Windows findings of the cycle, cause or fix not known), #316, #258 and #263 (hosted runners), #397 and #336 (trial design), with #454 above.
 - **A launch checklist:** names held on every chosen channel, the claims rung.
 
 ## R1 (P15 to P20)
