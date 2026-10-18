@@ -1,0 +1,122 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/smormah/vsift/tools/p14-campaigns/real-media/manifest.schema.json",
+  "title": "VSift real-media set manifest",
+  "description": "The pinned list of freely licensed real recordings the opt-in real-media campaign fetches on demand (#363, docs/planning/real-media-set.md). The media is never in the repository. lib/real-media.cjs enforces these rules and those a schema cannot express: unique ids, file names and URLs, at most 786432000 bytes for the items that are not withdrawn, the allowed hosts, and what an approval needs.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "set_id", "items"],
+  "properties": {
+    "schema_version": { "const": "1" },
+    "set_id": { "const": "vsift-real-media" },
+    "items": { "type": "array", "items": { "$ref": "#/$defs/item" } }
+  },
+  "$defs": {
+    "httpsUrl": { "type": "string", "pattern": "^https://[^/@:]+(/|$)" },
+    "item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id", "status", "title", "source_page", "url", "file_name", "bytes", "sha256",
+        "source_checksum", "licence", "author", "attribution", "media", "covers", "tests"
+      ],
+      "properties": {
+        "id": { "type": "string", "pattern": "^RM[0-9]{2}$" },
+        "status": {
+          "description": "proposed: listed for the maintainer's review, never fetched. approved: the maintainer approved it (approval says when); fetched once pinned. withdrawn: kept for the record, never fetched, not counted.",
+          "enum": ["proposed", "approved", "withdrawn"]
+        },
+        "title": { "type": "string", "minLength": 1 },
+        "source_page": { "$ref": "#/$defs/httpsUrl", "description": "The page that describes the file and states its licence." },
+        "url": { "$ref": "#/$defs/httpsUrl", "description": "The file itself, on an allowed host (upload.wikimedia.org, archive.org and its storage nodes)." },
+        "file_name": {
+          "type": "string",
+          "pattern": "^RM[0-9]{2}-[a-z0-9]+(?:-[a-z0-9]+)*\\.(webm|ogv|mp4|mkv|mov|m4a|ogg|opus|wav|flac|mp3)$",
+          "description": "The name the file gets under <destination>/<id>/; it starts with the item id."
+        },
+        "bytes": { "type": "integer", "minimum": 1, "maximum": 314572800, "description": "The exact size; a transfer is stopped beyond it." },
+        "sha256": {
+          "oneOf": [{ "type": "null" }, { "type": "string", "pattern": "^[0-9a-f]{64}$" }],
+          "description": "The pinned SHA-256. Null until the item is pinned (real-media.cjs pin), after its approval."
+        },
+        "source_checksum": {
+          "description": "The checksum the source itself publishes (the Commons API's SHA-1, the Internet Archive's MD5 or SHA-1), verified on every fetch as well.",
+          "oneOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["algorithm", "value"],
+              "properties": {
+                "algorithm": { "enum": ["sha1", "md5"] },
+                "value": { "type": "string", "pattern": "^[0-9a-f]{32}([0-9a-f]{8})?$" }
+              }
+            }
+          ]
+        },
+        "source_revision": { "type": "string", "description": "The source's own version of the file, such as the Commons upload timestamp." },
+        "licence": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "url", "statement"],
+          "properties": {
+            "id": { "type": "string", "pattern": "^(CC0-1\\.0|CC-BY-[1-4]\\.0|CC-BY-SA-[1-4]\\.0|public-domain|public-domain-us-government)$" },
+            "url": { "$ref": "#/$defs/httpsUrl", "description": "The licence text." },
+            "statement": { "$ref": "#/$defs/httpsUrl", "description": "Where the source states that this file is under it." }
+          }
+        },
+        "author": { "type": "string", "minLength": 1 },
+        "attribution": { "type": "string", "minLength": 1, "description": "The text shown wherever the item is named in a report, and written to ATTRIBUTION.txt beside the file." },
+        "media": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["duration_s", "container", "video", "audio"],
+          "properties": {
+            "duration_s": { "type": "number", "exclusiveMinimum": 0 },
+            "container": { "type": "string" },
+            "video": { "type": ["string", "null"] },
+            "audio": { "type": ["string", "null"] }
+          }
+        },
+        "covers": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "conversational-pauses", "long-speech-seams", "screen-ui-small-text", "noisy-speech",
+              "non-english-or-accented", "leading-silence", "lecture-or-meeting", "vertical-variable-frame-rate"
+            ]
+          }
+        },
+        "tests": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "pattern": "^(#[0-9]{1,5}|L-[0-9]{3})$" },
+          "description": "The issues and register entries the item is meant to help settle."
+        },
+        "approval": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["date", "by"],
+          "properties": {
+            "date": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" },
+            "by": { "const": "maintainer" }
+          }
+        },
+        "labels": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Hand-made labels, reviewed like corpus truth: never derived by running VSift on the item.",
+          "properties": {
+            "speech_start_us": { "type": "integer", "minimum": 0 },
+            "changes_us": { "type": "array", "items": { "type": "integer", "minimum": 0 } },
+            "reference_transcript": { "$ref": "#/$defs/httpsUrl" },
+            "note": { "type": "string" }
+          }
+        },
+        "notes": { "type": "string" }
+      }
+    }
+  }
+}

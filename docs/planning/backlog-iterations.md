@@ -119,7 +119,9 @@ nightly; the long hosted runs for what the cycle touched; an uncounted skill smo
 **Next** (after `0.2.2`, 2026-10-18); not started.
 
 - **#363 first:** a small, freely licensed real-media test set with an opt-in campaign. The real defects of `0.2.0` (#353, #359, #391) were found by
-  real recordings and a second machine, not by the synthetic corpus.
+  real recordings and a second machine, not by the synthetic corpus. **The design, the pinned manifest with eight proposed items and the
+  fetch-and-verify tool are in [`real-media-set.md`](real-media-set.md) (2026-10-18); the maintainer approves the items one by one, then the
+  campaign runner and its manual workflow follow.**
 - **The re-pins:** the FFmpeg build planned for 2026-10-31 and whisper.cpp 1.9.5 or later: #351, #272, #322, #399.
 - **The seam follow-ups, measured on real speech:** #380 to #384 (#381 is the half-second tolerance).
 - **Evaluations:** #173, #174, #175, #150 and #159.

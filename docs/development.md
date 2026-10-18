@@ -699,6 +699,17 @@ Three rules of the malicious-media campaign, all learned from one case that test
   The same case answering anything else is new and fails the run. When a tracked case passes, the summary
   says to remove it from the list.
 
+### The real-media set (#363)
+
+A small set of freely licensed real recordings ([`planning/real-media-set.md`](planning/real-media-set.md)).
+**The media is never in the repository:** `tools/p14-campaigns/real-media/manifest.json` pins each item's URL, size,
+SHA-256, the source's own checksum, licence and attribution, and `node tools/p14-campaigns/real-media.cjs` checks the
+manifest (`check`), prints the attributions (`attribution`) and fetches approved items into an absolute folder outside the
+repository (`fetch <dir>`), verified before they are placed; `pin` records the SHA-256 of a newly approved item. **Fetching
+is a download:** run it on a hosted runner, or on a workstation only with its owner's word, and only for items the
+maintainer approved. The tool's tests (`real-media.test.cjs`, in the command above) read local bytes only. The campaign
+that runs VSift over the items is the next change.
+
 ## Governance checks, release evidence and public claims
 
 `cargo run --locked -p vsift-governance -- check` is the Governance job. Besides the delivery
