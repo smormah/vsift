@@ -18,32 +18,34 @@ or Bun 1.2 or later, runs the launcher.
 
 ## Which version you get
 
-**Version 0.2.1 is the patch release after 0.2.0**, and the commands above, without a tag, install it: it
-replaces 0.2.0 under the dist-tag `latest`, where 0.2.0 (2026-10-09) was the first release. It has not been
-announced. Yarn 4 holds back a version for a day after it is published, so Yarn users get 0.2.1 a day
-after the publish (the installation guide has the setting that lets it through).
+**Version 0.2.2 is the patch release after 0.2.1**, and the commands above, without a tag, install it: it
+replaces 0.2.1 under the dist-tag `latest`, where 0.2.0 (2026-10-09) was the first release and 0.2.1
+(2026-10-15) the one before this. It has not been announced. Yarn 4 holds back a version for a day after it is
+published, so Yarn users get 0.2.2 a day after the publish (the installation guide has the setting that lets it through).
 
-The dist-tag `next` is for release candidates and you do not need it: it names `0.2.1-rc.3`,
-the release candidate that 0.2.1 was built from, or a later candidate or release. The older
-candidates stay published; `0.2.1-rc.1` and `0.2.1-rc.2` are deprecated and superseded. The release candidates of
-the next patch release, 0.2.2 (the first is `0.2.2-rc.1`), go to `next` when they are published and never to `latest`.
+The dist-tag `next` is for release candidates and you do not need it: it names `0.2.2-rc.1`,
+the release candidate that 0.2.2 was built from, or a later candidate or release. The older
+candidates stay published; `0.2.0-rc.1`, `0.2.0-rc.2`, `0.2.1-rc.1` and `0.2.1-rc.2` are deprecated and superseded.
 
-## What changed since 0.2.0
+## What changed since 0.2.1
 
-The changelog has the detail. In short: a long recording whose transcription used to fail as a missing
-speech recogniser now finishes with a recorded gap, and the join of the 30-second pieces no longer drops
-whole sentences silently at a seam and reports the stretches where words could not be placed (up to about half a second at the end of a piece can still be missing without a sign; both are shown on stand-in recordings, not on a real one, and the installation guide's
-notes on 0.2.0 say what to do if you are still on it); `transcript get`, `search` and `candidates` take a
-shorter `--view brief` for an AI assistant; `vsift setup check` waits 30 seconds for the tools instead of 5 and no
-longer tells you to install a tool that only answered late; and the agent skill has new wording.
+The changelog has the detail. In short: a worker host (`vsift job run`, `vsift job batch`) that is stopped while
+it recognises speech now records the stopped request as cancelled and resumable, never as a failure that says a
+tool is missing, and on Windows each tool it starts runs in a console of its own (the hosted check that failed
+twice on Windows on 0.2.1 passed on the candidate); on Windows the free space is checked before a video is
+copied; a copy that clearly cannot finish in time stops early; a named pipe, a device or a socket given as the
+video is refused without being opened; refusals and the advice for a missing tool say why and what to do; and
+`candidates --omit periodic` is a new, opt-in option. No command or JSON field was removed; the changes to the
+answers are additive. A worker's request record that 0.2.2 writes can be read as damaged by 0.2.1, so going back
+to 0.2.1 can cost such a request.
 
 ## What was not tried
 
-0.2.1 is built from the same source as the release candidate `0.2.1-rc.3` and differs from it
+0.2.2 is built from the same source as the release candidate `0.2.2-rc.1` and differs from it
 only in its version numbers, this README and the installation guide. That candidate was tried on hosted runners and in
-trials with the agent skill, on a synthetic corpus and a synthetic voice; the executables of 0.2.1 itself are checked after
-its publish. The measured figures come from a synthetic corpus and a synthetic voice; the two real recordings tried on 0.2.0 found
-the defects that 0.2.1 changes, and the fixes were not tried on them. Two things were not tried before this release, and it ships without them:
+trials with the agent skill, on a synthetic corpus and a synthetic voice; the executables of 0.2.2 itself are checked after
+its publish. In the trials without the skill, a smaller model often stated the right facts without citing the
+identifiers VSift returned for them (the help is to say how; the agent skill does). Two things were not tried before this release, and it ships without them:
 
 - **Windows Smart App Control, SmartScreen and macOS Gatekeeper** have not been seen reacting
   to VSift, and no machine without a developer's tools has installed this package. The

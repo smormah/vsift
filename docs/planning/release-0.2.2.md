@@ -1,6 +1,6 @@
 # The patch release 0.2.2: the plan
 
-Status: **the plan for the patch release `0.2.2` (cycle 1 of [`backlog-iterations.md`](backlog-iterations.md)) and the record of its evidence. Position on 2026-10-18: the first candidate, `0.2.2-rc.1`, is cut, tagged on `release/0.2.x` and PUBLISHED (npm `next`, 2026-10-18), and its evidence is recorded below ("The evidence on 0.2.2-rc.1"); the stable `0.2.2` is not made.** It is the first candidate made in the weekly window of [`release.md`](../operations/release.md) 6.18 and the first on a release branch: the maintainer's runbook for it is `release.md` 6.19. `0.2.1` stays npm `latest` until the stable `0.2.2` is published; nothing is announced.
+Status: **the plan for the patch release `0.2.2` (cycle 1 of [`backlog-iterations.md`](backlog-iterations.md)) and the record of its evidence. Position on 2026-10-18: the first candidate, `0.2.2-rc.1`, is cut, tagged on `release/0.2.x` and PUBLISHED (npm `next`, 2026-10-18), and its evidence is recorded below ("The evidence on 0.2.2-rc.1"). The stable commit `0.2.2` is prepared on `release/0.2.x` by the pull request whose title starts "The stable release 0.2.2"; it is not tagged or published, and the maintainer's checklist is [`release-0.2.2-stable-steps.md`](release-0.2.2-stable-steps.md).** It is the first candidate made in the weekly window of [`release.md`](../operations/release.md) 6.18 and the first on a release branch: the maintainer's runbook for it is `release.md` 6.19. `0.2.1` stays npm `latest` until the stable `0.2.2` is published; nothing is announced.
 
 ## What this release is, and why
 
@@ -15,7 +15,7 @@ Status: **the plan for the patch release `0.2.2` (cycle 1 of [`backlog-iteration
 | `main` | At `43a033dbf813` (the merge of #453), carrying `0.2.2-rc.1`, when this was recorded; it keeps taking merges during the window. |
 | `release/0.2.x` | **Created by the cut at `43a033dbf813`** (2026-10-18 00:00, the maintainer's local time), after the commit's `CI` and its nightly (run 39058441764) had passed. It is the first release branch of the project; it takes changes by pull request only (this record is one). |
 | `0.2.2-rc.1` | **Published 2026-10-18** (annotated tag `v0.2.2-rc.1` at `43a033dbf813` on `release/0.2.x`; Release run 39078284454, first attempt): npm `next` on all four packages, a GitHub pre-release with ten assets; GitHub's latest release stays `v0.2.1`. Its evidence is recorded below. |
-| `0.2.2` | Not made. Its stable commit is the next pull request to `release/0.2.x` (6.18 step 5), with its own planning page, once this record has merged; the publish waits for the maintainer's approval. |
+| `0.2.2` | **Stable commit prepared 2026-10-18 on `release/0.2.x`; not tagged, not published.** Built from the source of `0.2.2-rc.1` with only the version text, the launcher's README, the installation guide and the work record changed (`vsift-release candidate-delta` against `v0.2.2-rc.1`: 5 version-string files, 2 shipped documents, the work record, nothing refused). The checklist is [`release-0.2.2-stable-steps.md`](release-0.2.2-stable-steps.md). The publish moves `latest` from `0.2.1` to `0.2.2` and leaves `next` at `0.2.2-rc.1`, on the maintainer's approval. |
 
 ## What is in it
 
