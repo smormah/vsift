@@ -66,6 +66,7 @@ mod system_clock;
 mod test_folder;
 mod transcript_record;
 mod transcript_sidecar;
+mod transient_rename;
 mod user_dependency_config;
 mod verified_artifact_transfer;
 mod visual_index_record;

@@ -37,6 +37,9 @@ use crate::{
     },
     stage_gzip_tar_selected_files, stage_tar_selected_files, stage_xz_tar_selected_files,
     transfer_verified,
+    transient_rename::{
+        TRANSIENT_RENAME_WAIT, is_transient_rename_refusal, rename_retrying_transient_refusals,
+    },
     verified_artifact_transfer::StreamingArtifactVerifier,
 };
 
@@ -1796,11 +1799,7 @@ impl PreparedManagedRuntime<'_, '_> {
                 ManagedArtifactError::UnsafeStorage,
             ))?;
         drop(runtime);
-        if artifact
-            .stage
-            .rename(RUNTIME, &versions, &version_name)
-            .is_err()
-        {
+        if publish_runtime_folder(&artifact.stage, &versions, &version_name).is_err() {
             self.runtime = artifact.stage.open_dir_nofollow(RUNTIME).ok();
             return Err(ManagedRuntimePublicationError::Storage(
                 ManagedArtifactError::Io,
@@ -3364,14 +3363,29 @@ fn write_current_pointer(
         .map_err(ManagedRuntimePublicationError::Storage)?;
     faults.reach(FaultPoint::ManagedPointerPrepared);
     inject_publication_fault(fault, ManagedPublicationBoundary::PointerPrepared)?;
-    current
-        .rename(&pending_name, current, identity.current_name())
-        .map_err(|_| ManagedRuntimePublicationError::Storage(ManagedArtifactError::Io))?;
+    // Replacing the pointer is refused while another handle holds the old one
+    // without delete sharing, as a scanner can (#439): tried again within a
+    // bound.
+    rename_retrying_transient_refusals(TRANSIENT_RENAME_WAIT, is_transient_rename_refusal, || {
+        current.rename(&pending_name, current, identity.current_name())
+    })
+    .map_err(|_| ManagedRuntimePublicationError::Storage(ManagedArtifactError::Io))?;
     faults.reach(FaultPoint::ManagedPointerReplaced);
     faults.trace(ManagedTrace::Step(ManagedStep::PointerReplaced));
     flush_directory(current, ManagedFolder::Current, faults)
         .map_err(ManagedRuntimePublicationError::Storage)?;
     inject_publication_fault(fault, ManagedPublicationBoundary::PointerReplaced)
+}
+
+/// Renames a stage's runtime copy into `versions-v1` as `version_name`.
+///
+/// Windows refuses the folder's rename while anything holds a file in it open,
+/// as a scanner can a moment after the smoke ran the files (#439); that refusal
+/// is tried again within a bound.
+fn publish_runtime_folder(stage: &Dir, versions: &Dir, version_name: &str) -> std::io::Result<()> {
+    rename_retrying_transient_refusals(TRANSIENT_RENAME_WAIT, is_transient_rename_refusal, || {
+        stage.rename(RUNTIME, versions, version_name)
+    })
 }
 
 /// The first line of a selection pointer written before P13 PR 6: the
@@ -4011,6 +4025,124 @@ mod tests {
         })();
         fs::remove_dir_all(parent)?;
         result
+    }
+
+    /// What another handle on a file lets others do while it is open.
+    #[cfg(windows)]
+    #[derive(Clone, Copy)]
+    enum Sharing {
+        /// Read, write and delete (the sharing `std` opens with).
+        ReadWriteDelete,
+        /// Read and write, not delete.
+        ReadWrite,
+    }
+
+    /// Holds `path` open on another thread for `hold`, as a scanner does a
+    /// moment after a file is written, and returns once it is held.
+    #[cfg(windows)]
+    fn hold_open_for(
+        path: std::path::PathBuf,
+        sharing: Sharing,
+        hold: std::time::Duration,
+    ) -> Result<std::thread::JoinHandle<()>, Box<dyn Error>> {
+        use std::os::windows::fs::OpenOptionsExt as _;
+        /// `FILE_SHARE_READ | FILE_SHARE_WRITE`.
+        const READ_WRITE: u32 = 0x1 | 0x2;
+        /// `FILE_SHARE_DELETE`.
+        const DELETE: u32 = 0x4;
+        let share_mode = match sharing {
+            Sharing::ReadWriteDelete => READ_WRITE | DELETE,
+            Sharing::ReadWrite => READ_WRITE,
+        };
+        let (opened, was_opened) = std::sync::mpsc::channel();
+        let holder = std::thread::spawn(move || {
+            let file = fs::OpenOptions::new()
+                .read(true)
+                .share_mode(share_mode)
+                .open(&path);
+            let _ = opened.send(file.is_ok());
+            std::thread::sleep(hold);
+            drop(file);
+        });
+        if was_opened.recv()? {
+            Ok(holder)
+        } else {
+            Err("the file could not be held open".into())
+        }
+    }
+
+    /// Windows refuses the runtime folder's rename while a file in it is open,
+    /// whatever sharing the handle allows, and the pointer's replacement while
+    /// the old pointer is held without delete sharing; a scanner does either for
+    /// a moment just after the files are written (#439). Before the bounded
+    /// retry each refusal failed the activation with a storage failure.
+    #[cfg(windows)]
+    #[test]
+    fn a_publication_outlasts_a_file_held_open_for_a_moment() -> Result<(), Box<dyn Error>> {
+        let hold = std::time::Duration::from_millis(300);
+        let parent = fixture_root()?;
+        let store = ManagedArtifactStore::at(parent.join("managed"))?;
+        let guard = store.try_install_guard()?;
+        let (archive, integrity) = reviewed_tar()?;
+        let selected = [selected_tool()?];
+        let publish = |identity: &ManagedRuntimeIdentity,
+                       held: &dyn Fn(&std::path::Path) -> std::path::PathBuf,
+                       sharing: Sharing|
+         -> Result<(), Box<dyn Error>> {
+            let artifact = store.import_verified(&archive[..], integrity)?;
+            let payload = artifact.stage_reviewed_payload(
+                ReviewedPayloadArchive::Tar {
+                    max_tar_bytes: 10_000,
+                },
+                reviewed_bounds()?,
+                &[],
+                &selected,
+            )?;
+            let mut runtime = payload.prepare_reviewed_runtime(ReviewedRuntimeLayout {
+                max_bytes: 3,
+                aliases: &[],
+                executables: &["tool"],
+            })?;
+            let holder = hold_open_for(held(&artifact.stage_path), sharing, hold)?;
+            let published = runtime.publish_and_select(&guard, identity);
+            holder.join().map_err(|_| "the holder thread failed")?;
+            // The publication's own failure is the one reported; the fixture
+            // folder removes what it leaves.
+            published?;
+            runtime.discard()?;
+            payload.discard()?;
+            artifact.discard()?;
+            Ok(())
+        };
+
+        let first = ManagedRuntimeIdentity::new("whisper-cli", "1.9.2-windows-x64")?;
+        publish(
+            &first,
+            &|stage: &std::path::Path| stage.join(RUNTIME).join("tool"),
+            Sharing::ReadWriteDelete,
+        )?;
+        let second = ManagedRuntimeIdentity::new("whisper-cli", "1.9.3-windows-x64")?;
+        let pointer = parent
+            .join("managed")
+            .join(super::CURRENT)
+            .join(first.current_name());
+        publish(
+            &second,
+            &|_: &std::path::Path| pointer.clone(),
+            Sharing::ReadWrite,
+        )?;
+
+        assert_eq!(
+            store
+                .open_selected_runtime("whisper-cli")?
+                .ok_or("selected runtime missing")?
+                .identity(),
+            &second
+        );
+        store.open_published_runtime(&first)?;
+        drop(guard);
+        drop(store);
+        Ok(())
     }
 
     #[test]
