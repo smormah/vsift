@@ -59,18 +59,28 @@ file it applies to:
    branch's); if `main` has not rewritten them since, they are compared line by line as before. They
    hold no code, configuration or shipped text, and a window fix has its own durable record in the
    changelog and the register, which are still compared.
-3. *A line rewritten in place on both sides* (`CHANGELOG.md` and the `.md` pages of `docs/planning/`
-   only, the register among them). Either the release commit replaced a line of the cut (a hunk with
-   removed and added lines) and `main` no longer has the line it replaced, or `main` has a line that
-   is not in the cut and begins as the added line does (the same sentence, reworded). A new line with
+3. *A line rewritten in place on both sides* (`CHANGELOG.md`, the `.md` pages directly in
+   `docs/planning/`, the register among them, and the `.md` pages of the trial records,
+   `docs/planning/p14-agent-trials/` and its subfolders outside their `records/` folders; #481, run
+   39237738669). Either the release commit replaced a line of the cut (a hunk with removed and added
+   lines) and `main` no longer has the line it replaced, or `main` has a line that is not in the cut and
+   begins as the added line does (the same sentence, reworded), or contains all the added line's words in
+   order (the same sentence with words added, such as a link to a file `main` moved). A new line with
    no such counterpart still fails, and so does a replaced line that `main` kept as the cut had it:
    `main` has then not taken the change. So the register's date and counts lines, which both sides
    rewrite, are not reported, while a new entry (its heading and its table row are new lines) that
    `main` lacks is.
 
-Code, configuration, version files, shipped documents (`docs/operations/install.md`,
-`npm/vsift-cli/README.md`), the ledger and every other file are compared exactly as before: excuse 1
-is the only one that reaches them, and it cannot excuse a line the branch still has. Every excuse is
+The trial pages are in excuse 3 because they are prose work records that name the trial freeze a
+candidate was run on: a later freeze makes `main` rewrite those lines in its own words (#468 rewrote the
+readings and the README for the new freeze, while the release branch still names the old one). The
+`.md` suffix is what keeps the trial's `freeze.json` and `state` and `summary` files, and everything in a
+`records/` folder, strict: they are data, and a changed digest there is a different fact, not a reworded one.
+
+Code, configuration, JSON (the ledger, the trials' `freeze.json` and `records/`), version files, shipped
+documents (`docs/operations/install.md`, `npm/vsift-cli/README.md`) and every other file are compared
+exactly as before: excuse 1 is the only one that reaches them, and it cannot excuse a line the branch
+still has. Every excuse is
 named in the report, so a reader sees what was not compared.
 
 The script runs `git` with explicit arguments (no shell), reads local objects only, writes
@@ -125,11 +135,18 @@ CURRENT_STATE_FILES = {
     "memory/project_current_status.md": "the status, rewritten as current state by every change",
 }
 # The prose pages of the work record in which a line can be rewritten in place on both sides
-# (excuse 3): the changelog and the pages directly in `docs/planning/`, the register among them.
+# (excuse 3): the changelog, the pages directly in `docs/planning/` (the register among them), and the
+# Markdown pages of the trial records, which name the trial freeze that a later freeze changes.
 REWRITTEN_RECORD_FILES = frozenset({"CHANGELOG.md"})
 REWRITTEN_RECORD_FOLDER = "docs/planning/"
+REWRITTEN_TRIAL_FOLDER = "docs/planning/p14-agent-trials/"
+# A folder of raw run records inside the trial folder: data, compared exactly whatever its suffix.
+TRIAL_DATA_FOLDER = "records"
 # How much of a line's beginning says that it is the same sentence reworded.
 LEAD_LENGTH = 60
+# A line with fewer words than this is too short for "all its words, in order" to say it is the same sentence.
+MINIMUM_WORDS_FOR_EXTENSION = 6
+MARKDOWN_LINK_TARGET = re.compile(r"\]\([^)]*\)")
 # A line shorter than this (a closing brace, a bare `end`) says nothing about a change.
 MINIMUM_SIGNIFICANT_LENGTH = 3
 # How much of a line is quoted in the output.
@@ -194,13 +211,46 @@ def is_rewritten_record(path: str) -> bool:
     posix = PurePosixPath(path).as_posix()
     if posix in REWRITTEN_RECORD_FILES:
         return True
-    rest = posix[len(REWRITTEN_RECORD_FOLDER) :]
-    return posix.startswith(REWRITTEN_RECORD_FOLDER) and "/" not in rest and rest.endswith(".md")
+    if not posix.endswith(".md"):
+        return False
+    if posix.startswith(REWRITTEN_TRIAL_FOLDER):
+        folders = PurePosixPath(posix[len(REWRITTEN_TRIAL_FOLDER) :]).parts[:-1]
+        return TRIAL_DATA_FOLDER not in folders
+    return posix.startswith(REWRITTEN_RECORD_FOLDER) and "/" not in posix[len(REWRITTEN_RECORD_FOLDER) :]
 
 
 def lead(line: str) -> str:
     """The opening of a normalised line without list or table markers: its identity as a sentence."""
     return line.lstrip("-*#| ").strip()[:LEAD_LENGTH]
+
+
+def words(line: str) -> list[str]:
+    """The words of a line without Markdown link targets, emphasis, code marks and edge punctuation."""
+    plain = MARKDOWN_LINK_TARGET.sub("", line)
+    for mark in "[]`*_":
+        plain = plain.replace(mark, "")
+    tokens = (token.strip(",.;:()\"'|") for token in plain.split())
+    return [token for token in tokens if token]
+
+
+def is_extension_of(line: str, candidates: Sequence[list[str]]) -> bool:
+    """Whether a line of `main` carries all the words of `line`, in order, with words added.
+
+    This is the same sentence with an insertion (a link to a file that `main` moved, a date), which
+    the 60-character lead cannot see when the insertion comes early. A line too short to be a
+    sentence never matches.
+    """
+    wanted = words(line)
+    if len(wanted) < MINIMUM_WORDS_FOR_EXTENSION:
+        return False
+    wanted_set = set(wanted)
+    for candidate in candidates:
+        if len(candidate) < len(wanted) or not wanted_set.issubset(candidate):
+            continue
+        remaining = iter(candidate)
+        if all(word in remaining for word in wanted):
+            return True
+    return False
 
 
 def significant(line: str) -> bool:
@@ -459,10 +509,12 @@ def compare_change(
     # Excuse 3 needs the cut's file: a line of `main` that the cut does not have is `main`'s own.
     rewritable = is_rewritten_record(change.path)
     main_new_leads: set[str] = set()
+    main_new_words: list[list[str]] = []
     if rewritable:
         on_cut = file_lines(repository, cut, change.path, cache) or []
         cut_lines = {normalise(change.path, line) for line in on_cut}
         main_new_leads = {lead(line) for line in main_lines - cut_lines if lead(line)}
+        main_new_words = [words(line) for line in main_lines - cut_lines]
 
     absent: list[str] = []
     superseded = 0
@@ -481,7 +533,11 @@ def compare_change(
                 continue
             if compared not in head_lines:
                 superseded += 1
-            elif rewritable and (replaced_on_main or lead(compared) in main_new_leads):
+            elif rewritable and (
+                replaced_on_main
+                or lead(compared) in main_new_leads
+                or is_extension_of(compared, main_new_words)
+            ):
                 rewritten += 1
             else:
                 absent.append(compared)
