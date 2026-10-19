@@ -113,6 +113,7 @@ test('seam joins count the gaps between segments of two chunks at a seam against
   });
   const result = checks.seamJoins(gapped);
   assert.equal(result.seam_joins.bins.up_to_500_ms, 1);
+  assert.deepEqual(result.seam_joins.within_tolerance_at_us, [25 * SECOND]);
   assert.equal(result.control_joins.bins.up_to_250_ms, 1);
   assert.ok(result.seam_joins.count >= 4, `${result.seam_joins.count}`);
   assert.ok(result.seam_joins.within_tolerance_share > 0 && result.seam_joins.within_tolerance_share < 1);

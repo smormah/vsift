@@ -246,7 +246,8 @@ property checks are pure functions in `lib/real-media-checks.cjs`, tested on han
    longer), against the same gaps between consecutive segments of one chunk away from its seams (the control: ordinary
    pauses). The seam guard leaves a stretch of what the chunks heard uncovered only when it is no longer than the tolerance,
    so a hole it left is a seam gap of up to half a second; `within_tolerance_share` is the share of joins with a gap above
-   zero and up to half a second. A measurement, not a check.
+   zero and up to half a second, and `within_tolerance_at_us` where each such gap starts, for a listener. A measurement, not a
+   check.
 6. **Rejected segments** (#383): the kinds and counts of `provider_segments_rejected`, and where `unplaced_ranges` lie
    against the labelled speech.
 7. **Candidates at visible changes** (#175): with `changes_us` labelled, the share of labelled changes a candidate's
@@ -540,3 +541,36 @@ question for the first time on real speech: most matched segments agree to withi
 3.06 s and its maximum 4.26 s, far beyond the half-second tolerance; segments that move that much are different
 segmentations of the same words as much as timestamp noise, which the next step should separate before the tolerance is
 changed.
+
+### 14.2 The seam tolerance measured on real speech (#381, hosted, 2026-10-19)
+
+The timing differences of 14.1 compare two chunk plans, so they mix timestamp noise with segments cut differently. What the
+tolerance decides is narrower: a stretch of what two chunks of **one** plan heard that no kept segment covers, of up to half a
+second, is left. Such a stretch is a gap of up to half a second where one chunk's kept segment meets the next chunk's at a
+seam (`seam_joins`, check 5). Within one chunk whisper.cpp writes segments that touch, so the same gaps between one chunk's
+own segments are the control. Hosted `P14 real media` run 39224705780 (Ubuntu 24.04, whisper.cpp and `base` as `P07 local
+ASR` stages them, the merge of `main` at `a5f35b2d`), both chunk plans of each item:
+
+| | Seam joins (whole / shifted plan) | Seam gaps of 0 to 0.5 s | Of which up to 0.1 s / 0.25 s (both plans) | Seam gaps over 0.5 s | Joins inside one chunk | Their gaps of 0 to 0.5 s |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| RM06 | 29 / 26 | 4 / 1 | 2 / 4 | 5 / 2 | 90 / 80 | 0 / 1 |
+| RM09 | 59 / 58 | 5 / 4 | 2 / 4 | 12 / 12 | 187 / 159 | 1 / 0 |
+| RM10 | 7 / 8 | 1 / 0 | 0 / 1 | 0 / 3 | 22 / 20 | 0 / 0 |
+| All six revisions | 187 | **15** (8 per cent) | 4 / 9 | 34 | 558 | **2** (0.4 per cent) |
+
+- **What the tolerance leaves is a merge artefact, and rare.** One seam join in twelve has a gap of up to half a second,
+  against one join in 280 inside a chunk, so those gaps are where the guard left a stretch, not pauses. Over the six
+  revisions (about 84 minutes of audio) that is one such stretch every five to six minutes, each at most half a second, 9 of
+  the 15 at most 0.25 s. Whether they hold a word is not known: the merge dropped what was there, and nobody has listened.
+  From this change the campaign lists where each one starts (`within_tolerance_at_us`) for a listener.
+- **The gaps over half a second at seams** (34) are not the tolerance's: the guard closes every such stretch of what the chunks
+  heard, so these are stretches no chunk wrote anything for (pauses, or speech both chunks missed), or, on `main` before #382,
+  copies the repeat rule dropped.
+- **Identical text in two plans:** median start and end differences 40 ms on RM06 and RM09 (0 on RM10); the 95th percentiles
+  of about one second for ends and up to 3 s for starts are segments cut differently (#174), not noise of one segment's times.
+- **The decision: the tolerance stays half a second** (the maintainer's, 2026-10-19, recorded on #381; L-156). The derivation still bounds it (a larger value
+  could lose speech beyond a window's edge). A smaller one is safe at the edge, and would make the guard restore a copy for 6
+  of the 15 stretches at 0.25 s, or 11 at 0.1 s. Since #382 such a copy is kept even where its words repeat, so the price is
+  that many more repeats. With nothing known about what the 15 stretches hold, no value below half a second can be shown to
+  lose less than it repeats. **What would change it:** a listener finds words in the listed stretches. The figure to reach for
+  is then 0.1 s, about twice the median noise.

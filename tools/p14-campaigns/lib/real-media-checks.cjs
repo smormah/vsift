@@ -346,8 +346,10 @@ const JOIN_BINS = Object.freeze([
  * seam. Pauses make such gaps too, so the same gaps between consecutive segments
  * of one chunk, away from its seams, are the control: if the seam joins have no
  * more gaps of up to half a second than the control, the tolerance leaves
- * nothing beyond ordinary pauses. A measurement, not a check: what the segments
- * the merge dropped said is not in any answer.
+ * nothing beyond ordinary pauses. The times of the seam gaps of up to half a
+ * second are listed (`within_tolerance_at_us`, where the gap starts) for a
+ * listener: what they hold is not in any answer, because the merge dropped it.
+ * A measurement, not a check.
  * @param {Array<{ start_us: number, end_us: number, carried_from?: string, alignment?: object }>} segments one revision
  * @returns {{ seam_joins: object, control_joins: object }}
  */
@@ -359,6 +361,7 @@ function seamJoins(segments) {
     .sort((a, b) => a.start_us - b.start_us || a.end_us - b.end_us);
   const empty = () => Object.fromEntries(JOIN_BINS.map((bin) => [bin.name, 0]));
   const seamCounts = empty();
+  const withinTolerance = [];
   const controlCounts = empty();
   const bin = (gap) => JOIN_BINS.find((entry) => gap < entry.below_us).name;
   const nearSeam = (at) => seamList.some((seam) => at >= seam.from_us - SEAM_MARGIN_US && at <= seam.to_us + SEAM_MARGIN_US);
@@ -369,6 +372,7 @@ function seamJoins(segments) {
     const chunks = [before.alignment.chunk_index, after.alignment.chunk_index];
     if (chunks[1] === chunks[0] + 1 && nearSeam(after.start_us)) {
       seamCounts[bin(gap)] += 1;
+      if (gap > 0 && gap <= SEAM_TOLERANCE_US) withinTolerance.push(before.end_us);
     } else if (chunks[1] === chunks[0] && !nearSeam(before.end_us) && !nearSeam(after.start_us)) {
       controlCounts[bin(gap)] += 1;
     }
@@ -379,7 +383,7 @@ function seamJoins(segments) {
     return all > 0 ? (counts.up_to_100_ms + counts.up_to_250_ms + counts.up_to_500_ms) / all : null;
   };
   return {
-    seam_joins: { count: total(seamCounts), bins: seamCounts, within_tolerance_share: share(seamCounts) },
+    seam_joins: { count: total(seamCounts), bins: seamCounts, within_tolerance_share: share(seamCounts), within_tolerance_at_us: withinTolerance },
     control_joins: { count: total(controlCounts), bins: controlCounts, within_tolerance_share: share(controlCounts) },
   };
 }

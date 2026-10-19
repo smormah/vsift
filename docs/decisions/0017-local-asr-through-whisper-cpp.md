@@ -868,3 +868,14 @@ The 2026-10-11 note's `a_copy_that_the_kept_neighbour_also_wrote_can_stand_twice
 are the earlier forms of the first and the last two of these, renamed. L-157 is deleted; L-155 says what repeats are left. **The
 maintainer decided on 2026-10-19:** keep a copy that carries time as a visible repeat, the one-word allowance at four words, and L-157
 deleted.
+## 2026-10-19 note: the seam tolerance, measured on real speech, stays half a second (#381)
+
+Changes no decision. The note of 2026-10-11 derived `SEAM_COVERAGE_TOLERANCE_MICROS` (half a second, the edge margin) as an upper
+bound and said it was not measured. The real-media campaign now measures what it leaves (`seam_joins`): the gaps where one chunk's
+kept segment meets the next chunk's at a seam, against the gaps between one chunk's own segments, which whisper.cpp writes touching.
+On RM06, RM09 and RM10 (hosted run 39224705780, both chunk plans; [`real-media-set.md`](../planning/real-media-set.md) section 14.2),
+15 of 187 seam joins had a gap of up to half a second (4 up to 0.1 s, 9 up to 0.25 s), against 2 of 558 joins inside a chunk; two plans'
+copies of the same text differ by a median of 40 ms. **The value stays:** a smaller one would restore a copy for 6 (at 0.25 s) or 11
+(at 0.1 s) of the 15 stretches, each kept even where its words repeat (the note on #382), and with nothing known about what the stretches
+hold no smaller value can be shown to lose less than it repeats. **The maintainer decided on 2026-10-19 that it stays.** The campaign lists
+where each stretch starts, for a listener; if they hold words, 0.1 s is the figure to try. L-156 has the figures.
