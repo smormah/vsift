@@ -1,6 +1,7 @@
 # The visual change rule on real recordings (#175, L-028)
 
-Status (2026-10-19, cycle 2, `0.2.3`): **an evaluation, first measurement done; no rule changed.** Issue:
+Status (2026-10-19, cycle 2, `0.2.3`): **an evaluation, first measurement done; no rule changed. The maintainer decided on
+2026-10-19 to keep the thresholds (section 4).** Issue:
 [#175](https://github.com/smormah/vsift/issues/175). Register: [L-028](known-limits.md#l-028). The real-media set and its
 campaign: [`real-media-set.md`](real-media-set.md).
 
@@ -138,7 +139,10 @@ timing) or a `motion_start` candidate's span holds it, and it reports the one-se
 (the share of the recording within a second of some candidate) so that a reader can see when the loose figure is
 uninformative (`labelledChanges` in `tools/p14-campaigns/lib/real-media-checks.cjs`, with its test).
 
-## 4. Recommendation (for the maintainer's decision)
+## 4. Recommendation, and the maintainer's decision
+
+**Decided by the maintainer on 2026-10-19 (recorded on #175): keep the thresholds** of `r0-visual-v1`, as recommended
+below (points 1 and 2); points 3 to 5 stand as the evaluation's findings and next steps.
 
 1. **Keep the thresholds of `r0-visual-v1` (4 for two blocks, 6 for one).** On the one real screen recording measured,
    compression noise stays at 1 level, there is no false change, and every change candidate stands on a change a person
