@@ -326,6 +326,64 @@ function timingDifferences(segmentsA, segmentsB) {
   return { matched: starts.length, start: summary(starts), end: summary(ends) };
 }
 
+/** The bins of `seamJoins`, by the gap between one kept segment's end and the next one's start. */
+const JOIN_BINS = Object.freeze([
+  { name: 'overlap', below_us: 0 },
+  { name: 'touch', below_us: 1 },
+  { name: 'up_to_100_ms', below_us: 100_001 },
+  { name: 'up_to_250_ms', below_us: 250_001 },
+  { name: 'up_to_500_ms', below_us: SEAM_TOLERANCE_US + 1 },
+  { name: 'up_to_1_s', below_us: 1_000_001 },
+  { name: 'over_1_s', below_us: Infinity },
+]);
+
+/**
+ * How the merge joins two chunks' segments at its seams, against how one
+ * chunk's own segments follow each other (#381, L-156). The seam guard leaves a
+ * stretch of what the chunks heard uncovered when it is no longer than the
+ * tolerance (half a second), so a hole it left is a gap of at most that between
+ * a segment of one chunk and the next segment, of the following chunk, at a
+ * seam. Pauses make such gaps too, so the same gaps between consecutive segments
+ * of one chunk, away from its seams, are the control: if the seam joins have no
+ * more gaps of up to half a second than the control, the tolerance leaves
+ * nothing beyond ordinary pauses. A measurement, not a check: what the segments
+ * the merge dropped said is not in any answer.
+ * @param {Array<{ start_us: number, end_us: number, carried_from?: string, alignment?: object }>} segments one revision
+ * @returns {{ seam_joins: object, control_joins: object }}
+ */
+function seamJoins(segments) {
+  const plan = chunkPlan(segments);
+  const seamList = seams(plan);
+  const fresh = segments
+    .filter((segment) => !segment.carried_from && segment.alignment && Number.isInteger(segment.alignment.chunk_index))
+    .sort((a, b) => a.start_us - b.start_us || a.end_us - b.end_us);
+  const empty = () => Object.fromEntries(JOIN_BINS.map((bin) => [bin.name, 0]));
+  const seamCounts = empty();
+  const controlCounts = empty();
+  const bin = (gap) => JOIN_BINS.find((entry) => gap < entry.below_us).name;
+  const nearSeam = (at) => seamList.some((seam) => at >= seam.from_us - SEAM_MARGIN_US && at <= seam.to_us + SEAM_MARGIN_US);
+  for (let index = 1; index < fresh.length; index += 1) {
+    const before = fresh[index - 1];
+    const after = fresh[index];
+    const gap = after.start_us - before.end_us;
+    const chunks = [before.alignment.chunk_index, after.alignment.chunk_index];
+    if (chunks[1] === chunks[0] + 1 && nearSeam(after.start_us)) {
+      seamCounts[bin(gap)] += 1;
+    } else if (chunks[1] === chunks[0] && !nearSeam(before.end_us) && !nearSeam(after.start_us)) {
+      controlCounts[bin(gap)] += 1;
+    }
+  }
+  const total = (counts) => Object.values(counts).reduce((sum, value) => sum + value, 0);
+  const share = (counts) => {
+    const all = total(counts);
+    return all > 0 ? (counts.up_to_100_ms + counts.up_to_250_ms + counts.up_to_500_ms) / all : null;
+  };
+  return {
+    seam_joins: { count: total(seamCounts), bins: seamCounts, within_tolerance_share: share(seamCounts) },
+    control_joins: { count: total(controlCounts), bins: controlCounts, within_tolerance_share: share(controlCounts) },
+  };
+}
+
 function mergeRanges(ranges) {
   const sorted = [...ranges].filter((range) => range.to_us > range.from_us).sort((a, b) => a.from_us - b.from_us);
   const out = [];
@@ -490,6 +548,8 @@ module.exports = {
   seamComparison,
   seamRepeats,
   timingDifferences,
+  seamJoins,
+  JOIN_BINS,
   coverageProblems,
   mergeRanges,
   failureFinding,

@@ -241,6 +241,12 @@ property checks are pure functions in `lib/real-media-checks.cjs`, tested on han
    unique) are paired, and the differences of their starts and ends summarised (median, 95th percentile, maximum, how many
    exceed half a second). It is a measurement, not a check. A measurement of the raw chunk outputs before the merge would
    need an engine-level `--ignored` test; it is not built, because the segments' own alignment already names the chunk.
+   **Seam joins** (`seam_joins`, since #381's measurement): in each revision, the gap between a kept segment of one chunk and
+   the next kept segment, of the following chunk, at a seam, binned (overlap, touching, up to 100 ms, 250 ms, 500 ms, 1 s,
+   longer), against the same gaps between consecutive segments of one chunk away from its seams (the control: ordinary
+   pauses). The seam guard leaves a stretch of what the chunks heard uncovered only when it is no longer than the tolerance,
+   so a hole it left is a seam gap of up to half a second; `within_tolerance_share` is the share of joins with a gap above
+   zero and up to half a second. A measurement, not a check.
 6. **Rejected segments** (#383): the kinds and counts of `provider_segments_rejected`, and where `unplaced_ranges` lie
    against the labelled speech.
 7. **Candidates at visible changes** (#175): with `changes_us` labelled, the share of labelled changes a candidate's
