@@ -50,16 +50,17 @@ real meetings, accents or noisy rooms, so every accuracy figure below says what 
   instead ([troubleshooting](troubleshooting.md#missing_capability-a-tool-or-model-is-missing)). A worker `job run`
   or `job batch` request reports it too since `0.2.2`: its retranscribe step is `partial` and lists the same stretches
   in its `coverage` (in `0.2.1` the step was `complete` either way).
-- **Where two chunks meet, a word or two can still be missing or repeated (0.2.1 and later, [L-155](../planning/known-limits.md#l-155), [L-156](../planning/known-limits.md#l-156) and [L-157](../planning/known-limits.md#l-157)).** The
+- **Where two chunks meet, a word or two can still be missing or repeated (0.2.1 and later, [L-155](../planning/known-limits.md#l-155) and [L-156](../planning/known-limits.md#l-156)).** The
   recogniser works on 30-second chunks that overlap by five seconds, and VSift joins them. Before this version it could
   drop the end of a sentence at a join, with no sign (found on two real recordings; it is in `0.2.0` and `0.2.1-rc.1`).
   In `0.2.1`, VSift keeps a piece of speech again whenever leaving it out would leave more than half a
   second of what the chunks heard in no segment, so up to about one word at the end of a copy can still be missing (with no
-  sign), and where the two chunks wrote the overlap differently the same words can appear twice. VSift looks for a repeat at one
-  place only, the last kept segment of the earlier chunk against the first of the later, and removes it only when at least two
-  words match exactly, so a repeat elsewhere, or one that differs by a word, stays. VSift judges by time, not by words, so it
-  can also keep a copy twice where nothing was lost. The step that removes repeated words can, rarely, drop a copy that runs
-  on past the end of the one it repeats: its words are still there once, but the stretch it covered then has no segment.
+  sign), and where the two chunks wrote the overlap differently the same words can appear twice. Since `0.2.3` VSift looks
+  for a repeat in every pair of overlapping pieces of two neighbouring chunks, and lets one word differ among four or more
+  (earlier versions looked at one pair per join and wanted every word equal). It removes a repeated piece only when what else
+  is kept covers its time, so a piece that runs on past the one it repeats stays, and its words appear twice; earlier versions
+  dropped it, and the stretch it covered then had no segment. VSift judges by time, not by words, so it can still keep a copy
+  twice where nothing was lost.
   **The cost of the fix is mostly repeats, not holes; both are in the transcript.** The cause was worked out from the
   times in a report, not from the recogniser's own output of the recordings, and the fix has not been tried on them.
 - **Words the recogniser wrote that VSift could not place are listed, not found (0.2.1 and later, [L-158](../planning/known-limits.md#l-158) and [L-159](../planning/known-limits.md#l-159)).** When

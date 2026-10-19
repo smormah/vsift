@@ -824,3 +824,47 @@ job started by an earlier version and resumed by this one places its rejected se
 `what_follows_a_rejected_segment_bounds_its_words` and `a_rejected_segment_near_the_audios_end_is_bounded_by_the_audios_end` (the 2026-10-11 note's `..._is_bounded_only_by_what_starts_inside_it`, renamed; each failed
 on the earlier rule), the contract test `words_that_no_segment_holds_are_listed_and_the_run_stays_complete` and
 `a_search_over_words_that_no_segment_holds_is_partial_and_names_the_stretch`.
+## 2026-10-19 note: the repeat rule compares every overlapping pair and keeps a copy that carries time (#380, #382)
+
+Amends rule 3 of `merge_chunks` as the note of 2026-10-11 (#359) left it; the guard, rules 1 and 2, the tolerance and the chunk plan
+are unchanged.
+
+**What was wrong.** Rule 3 compared one pair per seam (the last kept segment of the earlier chunk and the first of the later one),
+wanted every compared word equal, and dropped a later copy whose words all occur in the earlier one whatever its time. So a copy the guard
+restored anywhere else stood twice (#380: on two real recordings of `0.2.1`, 13 and 8 strict repeat pairs, restored copies that differ
+from the other chunk's text by a word, and two segments wholly inside the one before them), and a contained copy that carried new time was
+dropped, leaving a stretch with no segment that a search called transcribed, a stretch the guard had sometimes just covered (#382, L-157).
+
+**The decisions.**
+
+1. **Every pair** of kept segments of consecutive chunks whose times overlap is compared, in start order, the earlier chunk's first. A
+   repeat inside one chunk, or between chunks that are not consecutive, is not looked for: two chunks that are not neighbours share no audio.
+2. **One inner word may differ among four or more** compared words (`MIN_FUZZY_SEAM_WORDS`); the first and the last must match, and runs
+   of two or three must match exactly, as before. Why four: one different word in a shorter run leaves one or two in common, which the
+   rule already refuses to call a repeat (`MIN_SEAM_DUPLICATE_WORDS`). Why not the first or the last: that is where a copy meets the words
+   around it, so a difference there is more likely another word than the same word heard differently. The cost: a trim can take a word
+   only one chunk wrote, keeping the earlier chunk's version of the same audio.
+3. **A contained copy is dropped only when what else is kept covers its time to within the tolerance**; otherwise it is kept whole.
+   This is the guard's trade applied to rule 3 (a repeat is visible, a hole is not), and the alternative that the issue named. Two other
+   designs were considered: listing the time a dropped copy leaves as `unplaced_ranges` (no repeat, but a `partial` search wherever two
+   chunks' ends for one sentence differ by more than half a second, and a member whose meaning is "words no segment holds" stretched to
+   words a segment holds at another time), and running the guard again after rule 3 (the same result as this, by a second pass). So
+   **the guard's guarantee now holds after the whole merge**: no stretch of the union of the chunks' segments longer than the tolerance
+   is covered by no kept segment. A trim never changes a segment's time.
+
+**What it costs and what it changes.** Two chunks that end the same sentence more than half a second apart, where rule 1 kept both,
+now keep both copies (until now the later one was dropped). How often that happens on real speech, against the repeats the wider rule
+removes, is what the hosted campaign measures: repeated word triples at seams went from 13 to 6 on RM06, 79 to 80 on RM09 and 7 to 7 on
+RM10 (`P14 real media` runs 39217761933 and 39224192022, which recognised the same words).
+`seam_duplicates_removed` counts each trim or drop, so it can be larger than one per seam. No field, code, warning text or stored member
+changes. The frozen copy of the earlier merge (`asr/previous_merge.rs`) is unchanged: where it lost nothing, with unique words, the
+merge still gives its result, because rule 3 does not act on unique words. **Tests** (each failed on the rule before):
+`a_copy_the_guard_restored_is_removed_when_what_is_kept_covers_its_time`, `a_repeat_beyond_the_first_pair_of_a_seam_is_trimmed`,
+`a_repeat_that_differs_by_one_inner_word_is_trimmed`, `a_contained_copy_that_carries_time_beyond_the_tolerance_is_kept`,
+`the_repeat_rule_keeps_a_restored_copy_that_carries_new_time`, `the_repeat_rule_no_longer_undoes_what_the_guard_restored`, the property
+`with_repeated_words_no_hole_is_left_and_only_repeats_are_dropped` and its sweep `the_repeated_vocabulary_layouts_reach_the_repeat_rule`.
+The 2026-10-11 note's `a_copy_that_the_kept_neighbour_also_wrote_can_stand_twice`,
+`the_repeat_rule_can_still_drop_a_restored_copy_that_carries_new_time` and `the_guard_can_expose_a_segment_to_the_repeat_rule_that_the_old_merge_kept`
+are the earlier forms of the first and the last two of these, renamed. L-157 is deleted; L-155 says what repeats are left. **The
+maintainer decided on 2026-10-19:** keep a copy that carries time as a visible repeat, the one-word allowance at four words, and L-157
+deleted.

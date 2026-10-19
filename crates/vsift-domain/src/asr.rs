@@ -68,10 +68,9 @@ const SEAM_EDGE_MICROS: u64 = 500_000;
 /// the union longer than this is covered by no kept segment, the guard restores
 /// dropped segments over it, and a stretch no longer than this is left. So the
 /// transcript has no hole longer than this in the time of any segment that a
-/// chunk's validated output holds, except where the repeat rule dropped a
-/// segment whose words a kept segment has (rule 3, which runs after the guard
-/// and decides by words, so it can leave a longer stretch of time where no word
-/// is lost). **Words in a rejected segment were written but sit outside the
+/// chunk's validated output holds; since #382 the repeat rule (rule 3, which
+/// runs after the guard and decides by words) drops a copy only where that
+/// still holds. **Words in a rejected segment were written but sit outside the
 /// union, because their time could not be placed: they are not covered by this
 /// guarantee but reported by [`MergedTranscript::unplaced`], where they can be
 /// placed at all.** The guarantee is on the union and not on each dropped segment because a bound per
@@ -111,6 +110,20 @@ pub const SEAM_COVERAGE_TOLERANCE_MICROS: u64 = SEAM_EDGE_MICROS;
 /// Fewest shared words that identify seam text as a duplicate rather than a
 /// genuine repeat.
 const MIN_SEAM_DUPLICATE_WORDS: usize = 2;
+/// Fewest compared words among which the repeat rule lets one differ (#380):
+/// four, so at least three match exactly, the first and the last among them.
+///
+/// Why. Two chunks that heard the same speech often write it with one word
+/// different ("setting" and "settings", a number as digits and as a word), and
+/// the rule that wanted every word equal never found such a repeat (#380, on two
+/// real recordings). A shorter run with a word different is too likely to be two
+/// different phrases: of two or three words, one different leaves one or two in
+/// common, which is what [`MIN_SEAM_DUPLICATE_WORDS`] refuses to call a repeat.
+/// The first and the last compared word must match because they are where a
+/// copy meets the words around it: a difference there is more likely a
+/// different word than the same word heard differently, and trimming it would
+/// take a word that only one chunk wrote out of every segment.
+const MIN_FUZZY_SEAM_WORDS: usize = 4;
 /// 20 ms of 16 kHz audio.
 const SILENCE_FRAME_SAMPLES: usize = 320;
 /// Full-scale amplitude of signed 16-bit PCM, squared.
@@ -1718,24 +1731,26 @@ enum Side {
 ///    no such hole in the union, the result is theirs (a test holds that against
 ///    a frozen copy of them); where they leave one, the guard adds segments to
 ///    what rules 1 and 2 keep. A run in which no words were lost may still be
-///    changed, because words and time are not the same, and **rule 3, which runs
-///    after the guard, can then drop a segment that the earlier merge kept**
-///    (a restored segment can contain the words of a later copy that carries new
-///    time), so "only adds" holds where rule 3 does not act.
-/// 3. At each seam, the last kept segment of the earlier chunk and the first
-///    kept segment of the later one are compared when their times overlap. If
-///    the earlier one's normalised words end with at least two words the later
-///    one starts with, those words are trimmed from the later copy, which is
-///    dropped when nothing remains; a later copy wholly contained in the earlier
-///    one is dropped. Repeats at times that do not overlap are genuine and kept.
-///    **Only that one pair is compared**, so a restored segment that is not the
-///    first of its chunk to be kept, or whose neighbour is not the last of the
-///    earlier chunk to be kept, is never trimmed, and a repeat that differs by a
-///    word is never found. This rule decides about words, not time, and its
-///    containment can drop a segment that carries new time (a later copy whose
-///    few words all occur in the earlier one, while it runs on past it): the
-///    guarantee of the guard is therefore on time before this rule, and after it
-///    holds except where this rule has dropped a copy by its words.
+///    changed, because words and time are not the same, and rule 3, which runs
+///    after the guard and since #380 compares every overlapping pair, can trim
+///    or drop a segment that the earlier merge kept, so "only adds" holds where
+///    rule 3 does not act.
+/// 3. Every pair of kept segments of consecutive chunks whose times overlap is
+///    compared, the earlier chunk's first (#380). If the earlier one's
+///    normalised words end with at least two words the later one starts with
+///    (one inner word may differ among four or more), those words are trimmed
+///    from the later copy; a later copy whose words all occur in the earlier one
+///    is dropped, **unless dropping it would leave a stretch of the union longer
+///    than the tolerance covered by no kept segment** (#382): then it is kept
+///    whole and its words stand twice. Repeats at times that do not overlap are
+///    genuine and kept. So **the guard's guarantee holds after this rule too**:
+///    no stretch of the union longer than the tolerance is covered by no kept
+///    segment. Why: a copy's words being inside the earlier segment's says
+///    nothing about its time (one sentence whose ends differ by a second, and a
+///    short phrase said again after it, look the same to words), so a copy that
+///    carries time is kept, as the guard keeps one: a repeat can be seen, a
+///    hole cannot. A repeat inside one chunk, or between chunks that are not
+///    consecutive, is not looked for.
 ///
 /// Last, [`MergedTranscript::unplaced`] is what the chunks' rejected segments
 /// leave uncovered: [`ChunkSegments::unplaced`] less the kept segments, where
@@ -1806,7 +1821,13 @@ fn assemble(chunks: &[ChunkSegments], kept: BTreeSet<(usize, usize)>) -> MergedT
         })
         .collect();
     ordered.sort_by_key(|(index, segment)| (segment.range.start(), segment.range.end(), *index));
-    let warnings = remove_seam_duplicates(&mut ordered, chunks);
+    let union = merged(
+        chunks
+            .iter()
+            .flat_map(|chunk| chunk.segments.iter().map(|segment| span(segment.range)))
+            .collect(),
+    );
+    let warnings = remove_seam_duplicates(&mut ordered, chunks, &union);
     let unplaced = uncovered_unplaced_stretches(chunks, &ordered);
     MergedTranscript {
         segments: ordered
@@ -2034,58 +2055,157 @@ fn covering(
         .collect()
 }
 
+/// Rule 3 of [`merge_chunks`]: repeats where two consecutive chunks wrote the
+/// same speech.
+///
+/// **Every pair** of kept segments of consecutive chunks whose times overlap is
+/// compared, in start order, the earlier chunk's segment first (#380; until
+/// `0.2.3` only the last kept segment of the earlier chunk and the first of the
+/// later one were, so a copy the guard restored anywhere else stood twice).
+/// When the earlier segment's words end with words the later one starts with
+/// ([`shared_seam_words`], which lets one word of four or more differ), those
+/// words are trimmed from the later copy; a later copy whose words all occur in
+/// the earlier one is dropped, **but only when no stretch of the union longer
+/// than [`SEAM_COVERAGE_TOLERANCE_MICROS`] would then be covered by no kept
+/// segment** (#382). Otherwise it is kept whole: its words stand twice, and the
+/// time it carries keeps a segment. A trim never changes a segment's time.
+/// Each trim or drop counts one `seam_duplicates_removed`.
+///
+/// Why a contained copy that carries time is kept. Its words being inside the
+/// earlier segment's says nothing about its time: two copies of one sentence
+/// whose ends differ by a second, and a short phrase that the earlier segment
+/// happens to hold ("yes yes") said again after it, look the same to words. The
+/// first loses nothing if dropped, the second loses words, and a dropped copy
+/// left a stretch of time with no segment that a search called transcribed. The
+/// guard's trade is applied here too: a repeat can be seen, a hole cannot. So
+/// the guard's guarantee (no hole of the union longer than the tolerance) holds
+/// after this rule as before it.
 fn remove_seam_duplicates(
     ordered: &mut Vec<(usize, AsrSegmentDraft)>,
     chunks: &[ChunkSegments],
+    union: &[Span],
 ) -> TranscriptWarnings {
     let mut warnings = TranscriptWarnings::default();
-    for (seam, later_chunk) in chunks.iter().enumerate().skip(1) {
-        let earlier = ordered.iter().rposition(|(index, _)| *index == seam - 1);
-        let later = ordered.iter().position(|(index, _)| *index == seam);
-        let (Some(earlier), Some(later)) = (earlier, later) else {
-            continue;
-        };
-        let (first, second) = (&ordered[earlier].1, &ordered[later].1);
-        if first.range.start() >= second.range.end() || second.range.start() >= first.range.end() {
+    let mut later = 0;
+    while later < ordered.len() {
+        if remove_one_seam_duplicate(ordered, chunks, union, later, &mut warnings) {
             continue;
         }
-        let earlier_words = normalized_words(first.text.text());
-        let later_words = normalized_words(second.text.text());
-        let shared = shared_seam_words(&earlier_words, &later_words);
-        if shared == 0 {
-            continue;
-        }
-        let remaining = (shared < later_words.len())
-            .then(|| without_leading_words(second.text.text(), shared))
-            .flatten();
-        match remaining {
-            Some(text) => ordered[later].1.text = text,
-            None => {
-                ordered.remove(later);
-            }
-        }
-        warnings.add(
-            TranscriptWarningKind::SeamDuplicatesRemoved,
-            1,
-            later_chunk.chunk.ordinal(),
-        );
+        later += 1;
     }
     warnings
 }
 
+/// Compares the kept segment at `later` with every kept segment of the chunk
+/// before its own that overlaps it in time, trimming or dropping it as rule 3
+/// says; `true` when it was dropped (so `later` now names the next segment).
+fn remove_one_seam_duplicate(
+    ordered: &mut Vec<(usize, AsrSegmentDraft)>,
+    chunks: &[ChunkSegments],
+    union: &[Span],
+    later: usize,
+    warnings: &mut TranscriptWarnings,
+) -> bool {
+    let Some(chunk) = ordered.get(later).map(|(index, _)| *index) else {
+        return false;
+    };
+    let Some(previous) = chunk.checked_sub(1) else {
+        return false;
+    };
+    let ordinal = chunks
+        .get(chunk)
+        .map_or(NonZeroU32::MAX, |later_chunk| later_chunk.chunk.ordinal());
+    for earlier in 0..ordered.len() {
+        if earlier == later || ordered[earlier].0 != previous {
+            continue;
+        }
+        let (first, second) = (&ordered[earlier].1, &ordered[later].1);
+        if first.range.start() >= second.range.end() || second.range.start() >= first.range.end() {
+            continue;
+        }
+        let later_words = normalized_words(second.text.text());
+        let shared = shared_seam_words(&normalized_words(first.text.text()), &later_words);
+        if shared == 0 {
+            continue;
+        }
+        if shared < later_words.len()
+            && let Some(text) = without_leading_words(second.text.text(), shared)
+        {
+            ordered[later].1.text = text;
+            warnings.add(TranscriptWarningKind::SeamDuplicatesRemoved, 1, ordinal);
+            continue;
+        }
+        if dropping_leaves_a_hole(ordered, later, union) {
+            continue;
+        }
+        ordered.remove(later);
+        warnings.add(TranscriptWarningKind::SeamDuplicatesRemoved, 1, ordinal);
+        return true;
+    }
+    false
+}
+
+/// Whether dropping the kept segment at `index` would leave a stretch of the
+/// union longer than [`SEAM_COVERAGE_TOLERANCE_MICROS`] that no other kept
+/// segment covers and that overlaps it (#382).
+fn dropping_leaves_a_hole(
+    ordered: &[(usize, AsrSegmentDraft)],
+    index: usize,
+    union: &[Span],
+) -> bool {
+    let Some((_, candidate)) = ordered.get(index) else {
+        return false;
+    };
+    let (start, end) = span(candidate.range);
+    let mut covered = SpanSet::default();
+    for (position, (_, segment)) in ordered.iter().enumerate() {
+        if position != index {
+            covered.insert(span(segment.range));
+        }
+    }
+    union
+        .iter()
+        .filter(|&&(from, until)| from < end && start < until)
+        .flat_map(|&stretch| covered.gaps_within(stretch))
+        .any(|(from, until)| {
+            until - from > SEAM_COVERAGE_TOLERANCE_MICROS && from < end && start < until
+        })
+}
+
 /// Number of leading words of `later` repeated at the end of `earlier`, or
 /// all of `later` when it appears whole inside `earlier`; zero when fewer than
-/// [`MIN_SEAM_DUPLICATE_WORDS`] words are shared.
+/// [`MIN_SEAM_DUPLICATE_WORDS`] words are shared. Words are compared by
+/// [`same_seam_words`], which lets one word differ among
+/// [`MIN_FUZZY_SEAM_WORDS`] or more.
 fn shared_seam_words(earlier: &[String], later: &[String]) -> usize {
     if later.len() >= MIN_SEAM_DUPLICATE_WORDS
-        && earlier.windows(later.len()).any(|window| window == later)
+        && earlier
+            .windows(later.len())
+            .any(|window| same_seam_words(window, later))
     {
         return later.len();
     }
     (MIN_SEAM_DUPLICATE_WORDS..=earlier.len().min(later.len()))
         .rev()
-        .find(|length| earlier[earlier.len() - length..] == later[..*length])
+        .find(|length| same_seam_words(&earlier[earlier.len() - length..], &later[..*length]))
         .unwrap_or(0)
+}
+
+/// Whether two equally long runs of normalised words are the same speech for
+/// rule 3: equal, or, from [`MIN_FUZZY_SEAM_WORDS`] words, different in one
+/// word that is neither the first nor the last (#380).
+fn same_seam_words(one: &[String], other: &[String]) -> bool {
+    if one.len() != other.len() {
+        return false;
+    }
+    let different = one.iter().zip(other).filter(|(a, b)| a != b).count();
+    if different == 0 {
+        return true;
+    }
+    different == 1
+        && one.len() >= MIN_FUZZY_SEAM_WORDS
+        && one.first() == other.first()
+        && one.last() == other.last()
 }
 
 /// Lowercase words with punctuation removed, for comparing seam text.
