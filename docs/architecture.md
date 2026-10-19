@@ -56,8 +56,8 @@ FFmpeg, FFprobe, `whisper.cpp`, OCR engines, and future local models are externa
 The P02 process boundary implements:
 
 - canonical absolute executable selection with explicit provenance;
-- exact argument arrays, null stdin, a canonical working directory and a cleared,
-  explicitly allowlisted child environment;
+- exact argument arrays, null stdin, the provider's own canonical folder as its working
+  directory (#469) and a cleared, explicitly allowlisted child environment;
 - independent concurrent stdout/stderr drains capped at 64 KiB per stream;
 - one operation deadline, caller cancellation, graceful/forced escalation and final reap;
 - Windows Job Object or Unix process-group descendant lifecycle containment; and

@@ -100,3 +100,48 @@ isolated crate of VSift's own; the maintainer decided on 2026-10-17 that this wa
 creates the child inside its job itself, was looked at and not adopted: one young release
 from one maintainer, and its own process start without the `tokio` pipes and wait the
 supervisor is built on. What remains is register entry L-170.
+
+## Note — 2026-10-19: every provider runs in its own folder (#469)
+
+**What went wrong.** Windows starts no process whose working directory is longer than 258
+characters: `CreateProcessW` fails with `ERROR_DIRECTORY` (267), whatever `LongPathsEnabled`
+says (measured on Windows 11 with it set, at 259 characters). The media adapter ran `FFmpeg`
+and `FFprobe` in the folder of the private source copy, and whisper.cpp ran in its chunk
+folder. Those folders lie deep inside the per-user folder (the media-tool check's workspace,
+117 characters below `%LOCALAPPDATA%`) or the session root (56 characters below it for a
+session's copy, 72 for its recognition work folder), so a `LOCALAPPDATA` of 142 characters or
+more, or a session root of about 203, stopped every provider from starting. The start failure
+became `MISSING_CAPABILITY`, with the advice to reinstall a working `FFmpeg`, while `setup
+check`, which already ran the tools from their own folder, called them available.
+
+**The decision.** Every provider (`FFmpeg`, `FFprobe` and whisper.cpp, in the media adapter,
+the speech recognizer, `setup check`'s probe and the managed-install smoke) runs with its own
+executable's folder as its working directory (`ProcessWorkingDirectory::of_executable`).
+Everything a provider reads or writes is named by an absolute path, as before. Windows starts
+a program only from a path shorter than `MAX_PATH` (L-094), so the folder of one it can start
+is always a valid working directory, and `setup check` and the media commands now start the
+tools the same way. `FFmpeg` 6 and later open an input path of any length, and whisper.cpp
+reads the extended-length paths VSift gives it: the media-tool and speech checks pass in a
+folder deeper than 300 characters with the gyan.dev `FFmpeg` 9.0 build on Windows 11 and, in
+`P07 local ASR` run 39220885864, with the pinned BtbN `FFmpeg` and whisper.cpp v1.9.5 on
+hosted Windows Server 2025 and Ubuntu 24.04. So nothing else has to be short; what an older
+`FFmpeg` would do is L-193.
+
+**SEC-02 is not weakened.** A working directory matters to library search, and on Windows the
+program's own folder is searched before the working directory, so making them the same folder
+adds no location; on Unix the working directory is not searched for libraries. The executable
+is still named by its canonical absolute path, and the environment is still cleared. A
+provider that writes into its working directory now writes into its own installation, which
+the managed-install smoke's recheck refuses as before.
+
+**The private-root check, too.** A private folder's DACL was read by the plain path
+(`GetNamedSecurityInfoW`), which Windows refuses at `MAX_PATH` or more, so a per-user folder
+whose own path passed 260 characters failed as unsafe storage. It is now read by the
+canonical, extended-length path (`private_user_root::security_read_path`); what is checked is
+unchanged (ADR 0026).
+
+**Tests:** `crates/vsift-infrastructure/tests/long_provider_paths.rs` starts a stand-in
+provider for a source copy and a chunk folder deeper than 300 characters (both failed with
+`ERROR_DIRECTORY` before the change) and, opt-in, runs the media-tool and speech checks there
+with the real tools; `a_root_deeper_than_max_path_is_created_and_validated` covers the DACL
+read.

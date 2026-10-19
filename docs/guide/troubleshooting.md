@@ -259,6 +259,18 @@ FFmpeg build can use up on its first start, and a `[timeout]` line was followed 
 which was wrong ([#391](https://github.com/smormah/vsift/issues/391), [L-161](../planning/known-limits.md#l-161); seen on
 one Windows 11 machine). There, run the check again, or run `vsift setup check --timeout-seconds 30`.
 
+**On Windows, `MISSING_CAPABILITY` from every media command when `setup check` is fine, in `0.2.2` and earlier.** If
+the `Fix:` line says the tools "failed VSift's media-tool check at the probe step (process_failure)" and tells you to
+reinstall FFmpeg and FFprobe, or `candidates` and `frame get` fail with no `Fix:` line right after an `ingest` that
+worked, the tools are not the problem: the folder VSift ran them in was too long for Windows to start a program in
+([#469](https://github.com/smormah/vsift/issues/469)). It happens when your per-user folder (`%LOCALAPPDATA%`) is 142
+characters or longer, or a `--session-root` about 203 or longer (187 for speech recognition). Do not reinstall
+anything. Use a shorter `--session-root`, or run VSift with `LOCALAPPDATA` set to a shorter folder of your own. From
+`0.2.3` VSift starts each tool from the tool's own folder, so neither length matters. Two limits stay: the path of
+`vsift`, FFmpeg or whisper.cpp itself must be shorter than 260 characters, or Windows cannot start it ([Problems
+installing or starting VSift](#problems-installing-or-starting-vsift)); and an FFmpeg older than 6.0, which added long
+paths on Windows, may not open a session's copy of the video past 260 characters (not tried; FFmpeg 9.0 does, [L-193](../planning/known-limits.md#l-193)).
+
 **`MISSING_CAPABILITY` from `transcript retranscribe` when `setup check` is fine.** If the `Fix:` line begins
 `Local speech recognition failed at the output_validation step (malformed_output)` and names
 `too_many_rejected_segments`, nothing is missing: VSift checked the tools on a built-in clip before it ran, and they
