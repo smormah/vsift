@@ -181,6 +181,88 @@ pub struct AcceptedManagedCatalogue {
     pub artifacts: Vec<AcceptedManagedArtifact>,
     /// Compatibility checks that must pass before publication.
     pub compatibility: ReviewedCompatibilityPolicy,
+    /// Earlier reviewed versions this catalogue's pins replace, so that a
+    /// machine still running one can be told (never part of a plan digest).
+    pub superseded: Vec<SupersededManagedVersion>,
+}
+
+impl AcceptedManagedCatalogue {
+    /// The update to report when `selected_version` of `component` is what
+    /// the managed store selects now.
+    ///
+    /// Only a version this catalogue lists as superseded yields one: any
+    /// other version that differs from the pin (one a later release installed,
+    /// say, before `VSift` itself was downgraded) is not called older, because
+    /// nothing here says it is.
+    #[must_use]
+    pub fn update_for(
+        &self,
+        component: ManagedComponent,
+        selected_version: &str,
+    ) -> Option<ManagedUpdate> {
+        let superseded = self
+            .superseded
+            .iter()
+            .find(|entry| entry.component == component && entry.version == selected_version)?;
+        let current = self
+            .artifacts
+            .iter()
+            .find(|artifact| artifact.component == component)?;
+        (current.version != selected_version).then(|| ManagedUpdate {
+            component,
+            selected_version: superseded.version.clone(),
+            reviewed_version: current.version.clone(),
+            reason: superseded.reason,
+        })
+    }
+}
+
+/// Why the current pin of a component replaced an earlier reviewed version.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SupersessionReason {
+    /// The current pin carries fixes for security defects the earlier
+    /// version has (advisories, records or memory-safety fixes upstream).
+    SecurityFixes,
+    /// Any other reason: a refresh, a retention move or a non-security fix.
+    Maintenance,
+}
+
+impl SupersessionReason {
+    /// Stable public identifier.
+    #[must_use]
+    pub const fn identifier(self) -> &'static str {
+        match self {
+            Self::SecurityFixes => "security_fixes",
+            Self::Maintenance => "maintenance",
+        }
+    }
+
+    /// Every reason, in identifier order of the public contract.
+    pub const ALL: [Self; 2] = [Self::SecurityFixes, Self::Maintenance];
+}
+
+/// An earlier reviewed version of one component and why it was replaced.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SupersededManagedVersion {
+    /// The component the version belongs to.
+    pub component: ManagedComponent,
+    /// Its immutable managed-version key, as an earlier catalogue pinned it.
+    pub version: String,
+    /// Why the current pin replaced it.
+    pub reason: SupersessionReason,
+}
+
+/// A managed version in use that the current catalogue supersedes.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ManagedUpdate {
+    /// The component.
+    pub component: ManagedComponent,
+    /// The version the managed store selects now.
+    pub selected_version: String,
+    /// The version the current catalogue pins.
+    pub reviewed_version: String,
+    /// Why the pin moved.
+    pub reason: SupersessionReason,
 }
 
 /// Why managed actions are or are not available in a setup plan.
@@ -973,9 +1055,10 @@ mod tests {
     };
 
     use super::{
-        AcceptedManagedArtifact, AcceptedManagedCatalogue, ManagedPlanAvailability,
+        AcceptedManagedArtifact, AcceptedManagedCatalogue, ManagedPlanAvailability, ManagedUpdate,
         PlanAcceptanceError, PlannedSupply, ReviewedCompatibilityPolicy, ReviewedManagedFile,
-        SetupDependencyDisposition, SetupProfile, SetupSelectionState, plan_managed_setup,
+        SetupDependencyDisposition, SetupProfile, SetupSelectionState, SupersededManagedVersion,
+        SupersessionReason, plan_managed_setup,
     };
     use crate::RuntimeDiagnosis;
 
@@ -1037,7 +1120,56 @@ mod tests {
                 audio_sample_rate_hz: 16_000,
                 audio_channels: 1,
             },
+            superseded: Vec::new(),
         })
+    }
+
+    /// Only a version the catalogue lists as superseded, for its own
+    /// component, is reported, with the pin that replaces it and the reason;
+    /// the pin itself and an unknown version are not.
+    #[test]
+    fn only_a_listed_superseded_version_is_an_update() -> Result<(), Box<dyn std::error::Error>> {
+        let mut catalogue = catalogue()?;
+        catalogue.superseded = vec![
+            SupersededManagedVersion {
+                component: ManagedComponent::WhisperCli,
+                version: String::from("old-1"),
+                reason: SupersessionReason::SecurityFixes,
+            },
+            SupersededManagedVersion {
+                component: ManagedComponent::MediaTools,
+                version: String::from("old-0"),
+                reason: SupersessionReason::Maintenance,
+            },
+        ];
+        assert_eq!(
+            catalogue.update_for(ManagedComponent::WhisperCli, "old-1"),
+            Some(ManagedUpdate {
+                component: ManagedComponent::WhisperCli,
+                selected_version: String::from("old-1"),
+                reviewed_version: String::from("version-1"),
+                reason: SupersessionReason::SecurityFixes,
+            })
+        );
+        assert_eq!(
+            catalogue
+                .update_for(ManagedComponent::MediaTools, "old-0")
+                .map(|update| update.reason),
+            Some(SupersessionReason::Maintenance)
+        );
+        for (component, version) in [
+            (ManagedComponent::WhisperCli, "version-1"),
+            (ManagedComponent::WhisperCli, "newer-than-the-pin"),
+            (ManagedComponent::MediaTools, "old-1"),
+            (ManagedComponent::WhisperModel, "old-1"),
+        ] {
+            assert_eq!(catalogue.update_for(component, version), None, "{version}");
+        }
+        assert_eq!(
+            SupersessionReason::ALL.map(SupersessionReason::identifier),
+            ["security_fixes", "maintenance"]
+        );
+        Ok(())
     }
 
     fn diagnosis(missing: &[RuntimeDependency]) -> RuntimeDiagnosis {

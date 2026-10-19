@@ -1389,3 +1389,15 @@ section 3 treats a refusal that ends by itself.
   held without read sharing, the case [L-136](../planning/known-limits.md#l-136) records for the
   session store), and it is left as L-136 decides; [L-182](../planning/known-limits.md#l-182) keeps
   what is not covered under watch.
+
+## Note, 2026-10-19 (cycle 2: telling a machine that its managed version is superseded)
+
+Status: **Accepted**; this note changes no accepted decision. The rule of the 2026-10-18 note on the whisper.cpp refresh stands (a new pin moves no
+install), and the maintainer decided on 2026-10-18 (recorded on [#322](https://github.com/smormah/vsift/issues/322)) that a
+machine still on a superseded version is told. So the catalogue carries a **supersession list** beside its pins: each earlier
+reviewed version it replaces and why (`security_fixes` or `maintenance`), kept across re-pins because a machine can skip
+releases. It is not part of the plan digest. `setup check` compares the versions it opens with that list and reports a match in
+the additive `managed_updates` array and in its text, with the step (`setup plan`, then `setup install`); a version the list does
+not name is never called older. The list holds whisper.cpp v1.9.2 (`security_fixes`); FFmpeg gains its entry with its re-pin.
+What the report does not cover is [L-183](../planning/known-limits.md#l-183). A hosted run upgrades a real `0.2.2` managed install
+(`p13_managed_upgrade_real`, run [39178431571](https://github.com/smormah/vsift/actions/runs/39178431571)).

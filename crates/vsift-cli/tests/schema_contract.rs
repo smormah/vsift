@@ -72,6 +72,10 @@ fn every_published_example_validates_against_its_schema() -> Result<(), Box<dyn 
             "examples/setup-check.timed-out.json",
         ),
         (
+            "setup-check-response.schema.json",
+            "examples/setup-check.managed-update.json",
+        ),
+        (
             "operation-response.schema.json",
             "examples/operation-error.json",
         ),
@@ -113,6 +117,10 @@ fn strict_schemas_reject_unknown_fields() -> Result<(), Box<dyn std::error::Erro
         (
             "setup-check-response.schema.json",
             "examples/setup-check.timed-out.json",
+        ),
+        (
+            "setup-check-response.schema.json",
+            "examples/setup-check.managed-update.json",
         ),
         (
             "operation-response.schema.json",

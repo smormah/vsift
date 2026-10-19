@@ -295,6 +295,10 @@ and passed with the pinned base model, and `setup-check.blocked.json` the check 
 nothing installed (local ASR `not_run`, `media_tools_unavailable`); both are checked
 by `vsift-contract`'s `setup_local_asr_contract` and `schema_conformance`, and the
 blocked one against the binary's output by the CLI's `schema_contract`.
+`setup-check.managed-update.json` (since `0.2.3`) is a ready check on a machine whose managed install was
+made by `0.2.2`: its whisper.cpp v1.9.2 is listed in `managed_updates`, superseded by the v1.9.5 pin for
+`security_fixes`, with the step. Every `setup check` example has the array, empty when nothing is
+superseded; it is checked by `vsift-contract`'s `setup_managed_update_contract`.
 `setup-check.timed-out.json` is the check on a machine whose three tools were found and
 whose probes timed out under the default 30-second deadline they share, the first started
 and the two after it not (issue #391): each is `timed_out`, the setup is `blocked`, and each

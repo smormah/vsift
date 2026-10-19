@@ -319,7 +319,10 @@ where
                 setup::present_setup_check(
                     report.diagnosis(),
                     *report.local_asr(),
-                    report.managed_install(),
+                    setup::ManagedSetupFacts {
+                        availability: report.managed_install(),
+                        updates: report.managed_updates(),
+                    },
                     config.profile,
                     mode,
                     |dependency| report.lookup(dependency),

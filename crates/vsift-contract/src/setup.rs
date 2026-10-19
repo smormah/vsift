@@ -5,8 +5,9 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 use vsift_application::{
     LocalAsrCheckOutcome, LocalAsrSetupStatus, ManagedPlanAvailability, ManagedPlanObservation,
-    ManagedSetupAction, ManagedSetupPlan, ObservedModel, PlannedSupply, RuntimeDiagnosis,
-    SetupDependencyDisposition, SetupModelDisposition, SetupProfile,
+    ManagedSetupAction, ManagedSetupPlan, ManagedUpdate, ObservedModel, PlannedSupply,
+    RuntimeDiagnosis, SetupDependencyDisposition, SetupModelDisposition, SetupProfile,
+    SupersessionReason,
 };
 use vsift_domain::ManagedComponent;
 use vsift_domain::{
@@ -69,6 +70,54 @@ pub struct SetupCheckResponse {
     local_asr_model: &'static str,
     dependencies: Vec<SetupCheckDependencyResponse>,
     local_asr: LocalAsrSetupResponse,
+    managed_updates: Vec<ManagedUpdateResponse>,
+}
+
+/// One entry of `managed_updates` (since `0.2.3`): a managed version this
+/// check used that the current catalogue supersedes.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+struct ManagedUpdateResponse {
+    component: &'static str,
+    selected_version: String,
+    reviewed_version: String,
+    reason: &'static str,
+    next_step: String,
+}
+
+impl ManagedUpdateResponse {
+    fn new(update: &ManagedUpdate) -> Self {
+        Self {
+            component: update.component.identifier(),
+            selected_version: update.selected_version.clone(),
+            reviewed_version: update.reviewed_version.clone(),
+            reason: update.reason.identifier(),
+            next_step: managed_update_next_step(update),
+        }
+    }
+}
+
+/// What to do about a superseded managed version, for the JSON `next_step`
+/// and the human text alike.
+///
+/// The step is the ordinary managed install: the current plan proposes the
+/// new pin because the selected version is not the catalogue's, and
+/// accepting it installs and selects that pin; the earlier version stays
+/// installed, and `setup rollback` can select it again. Versions are
+/// canonical managed keys of at most 64 bytes, so the text stays well under
+/// the 240-byte bound of a `next_step`.
+#[must_use]
+pub fn managed_update_next_step(update: &ManagedUpdate) -> String {
+    let why = match update.reason {
+        SupersessionReason::SecurityFixes => {
+            ", which carries security fixes the selected one lacks"
+        }
+        SupersessionReason::Maintenance => "",
+    };
+    format!(
+        "The reviewed build is now {}{why}: review setup plan, then accept it with setup \
+         install, which installs and selects it.",
+        update.reviewed_version
+    )
 }
 
 impl SetupCheckResponse {
@@ -108,7 +157,16 @@ impl SetupCheckResponse {
                 })
                 .collect(),
             local_asr: LocalAsrSetupResponse::new(*local_asr),
+            managed_updates: Vec::new(),
         }
+    }
+
+    /// Adds the managed versions the check used that the current catalogue
+    /// supersedes (the additive `managed_updates` array; empty when none).
+    #[must_use]
+    pub fn with_managed_updates(mut self, updates: &[ManagedUpdate]) -> Self {
+        self.managed_updates = updates.iter().map(ManagedUpdateResponse::new).collect();
+        self
     }
 }
 

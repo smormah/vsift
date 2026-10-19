@@ -536,3 +536,50 @@ fn setup_install_sweeps_abandoned_stages_once_the_plan_is_accepted() -> TestResu
     assert_eq!(stages(&base.managed_root())?, 0);
     Ok(())
 }
+
+/// What `setup check` says about the selected managed whisper.cpp, on every
+/// platform: the v1.9.2 that `0.2.2` and earlier installed is reported, in
+/// JSON and in text, as superseded by the current pin for its security
+/// fixes, with the step; the current pin and a version the catalogue does
+/// not list are not reported (`managed_updates` is then empty).
+#[test]
+fn setup_check_names_a_superseded_managed_whisper_and_the_step() -> TestResult {
+    const SUPERSEDED: &str = "whisper.cpp-v1.9.2-ubuntu-x64";
+    const PINNED: &str = "whisper.cpp-v1.9.5-ubuntu-x64";
+    let base = Base::new()?;
+    let store = base.store()?;
+    publish(&store, SUPERSEDED)?;
+
+    let check = base.run(&["setup", "check", "--json"])?;
+    let value = json(&check)?;
+    validate("setup-check-response.schema.json", &value)?;
+    let updates = value["managed_updates"]
+        .as_array()
+        .ok_or("setup check has no managed_updates array")?;
+    assert_eq!(updates.len(), 1, "{updates:?}");
+    assert_eq!(updates[0]["component"], "whisper_cli");
+    assert_eq!(updates[0]["selected_version"], SUPERSEDED);
+    assert_eq!(updates[0]["reviewed_version"], PINNED);
+    assert_eq!(updates[0]["reason"], "security_fixes");
+
+    let human = base.run(&["setup", "check"])?;
+    let text = String::from_utf8(human.stdout)?;
+    assert!(
+        text.contains(
+            "[update, security] whisper_cli: the selected managed version is whisper.cpp-v1.9.2-ubuntu-x64"
+        ),
+        "{text}"
+    );
+    assert!(
+        text.contains("review setup plan, then accept it with setup install"),
+        "{text}"
+    );
+
+    for version in [PINNED, "whisper.cpp-v9.9.9-ubuntu-x64"] {
+        publish(&store, version)?;
+        let value = json(&base.run(&["setup", "check", "--json"])?)?;
+        validate("setup-check-response.schema.json", &value)?;
+        assert_eq!(value["managed_updates"], serde_json::json!([]), "{version}");
+    }
+    Ok(())
+}

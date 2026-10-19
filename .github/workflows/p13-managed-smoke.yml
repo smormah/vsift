@@ -8,6 +8,11 @@ on:
         required: false
         default: ""
         type: string
+      upgrade_from:
+        description: "The published release whose real managed install the managed-upgrade job makes and then upgrades with this ref's build (0.2.3, L-137); empty means 0.2.2, the last release that pins whisper.cpp v1.9.2"
+        required: false
+        default: "0.2.2"
+        type: string
   schedule:
     # Weekly, Wednesday 04:53 UTC (P14 PR 3, RQ-06, L-099): nothing else watches the
     # publishers' files between releases. A scheduled run always tests the highest
@@ -235,3 +240,67 @@ jobs:
           path: .vsift/e2e-runs/
           retention-days: 90
           if-no-files-found: warn
+
+  # 0.2.3 (L-137): an earlier release's real managed install, upgraded by
+  # this ref's build. The earlier release (`upgrade_from`, 0.2.2 by default)
+  # is installed from the public npm registry with scripts disabled and
+  # installs its own catalogue from the publishers (whisper.cpp v1.9.2);
+  # then this build's `setup check` must name its whisper.cpp as superseded,
+  # its `setup plan` and `setup install` must install only the new pin, its
+  # `setup check` must report v1.9.5 with the local-ASR check run now, and a
+  # transcription must hear the words. The earlier release is the "from"
+  # binary only; the build under test is always this ref's.
+  managed-upgrade:
+    name: Managed upgrade from a published release (Ubuntu 24.04)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22.23.3"
+          package-manager-cache: false
+
+      - name: Resolve the earlier release
+        id: earlier
+        env:
+          REQUESTED: ${{ inputs.upgrade_from || '0.2.2' }}
+        run: python tools/p14_journeys.py resolve-version --requested "$REQUESTED"
+
+      - name: Check out the source of the earlier release's tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ steps.earlier.outputs.tag }}
+          path: tag-source
+          persist-credentials: false
+
+      - name: Install the earlier release as the binary the upgrade starts from
+        env:
+          VERSION: ${{ steps.earlier.outputs.version }}
+        run: |
+          python tools/p14_journeys.py select-source --version "$VERSION" --tag-source "$GITHUB_WORKSPACE/tag-source" --workflow-source "$GITHUB_WORKSPACE" --tests-from workflow-ref
+          python tools/p14_journeys.py install --export-environment
+
+      - name: Show toolchain and host
+        run: |
+          rustup show active-toolchain
+          cat /etc/os-release
+          uname -m
+          nproc
+
+      - name: Install with the earlier release, upgrade with this build, transcribe
+        env:
+          VSIFT_P13_REAL_UPGRADE: "1"
+        run: >-
+          cargo test --release --locked -p vsift-cli
+          --test p13_managed_upgrade_real -- --ignored --exact --nocapture

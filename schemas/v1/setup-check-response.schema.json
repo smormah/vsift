@@ -102,6 +102,22 @@
         }
       }
     },
+    "managed_updates": {
+      "description": "Added in 0.2.3, absent from earlier builds: each managed version this check opened (the managed tier of a tool no per-call or configured path selects, or the managed model when none is configured) that the current catalogue lists as superseded, in component order; empty when none. selected_version is what the managed store selects now, reviewed_version the version this release pins; reason security_fixes means the pin carries fixes for security defects of the selected version, maintenance any other reason. next_step says what to do: review setup plan and accept it with setup install, which installs and selects the pin. A version the catalogue does not list (a later release's, say) is never reported.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["component", "selected_version", "reviewed_version", "reason", "next_step"],
+        "properties": {
+          "component": { "enum": ["ffmpeg_ffprobe", "whisper_cli", "whisper_model"] },
+          "selected_version": { "type": "string", "minLength": 1, "maxLength": 64 },
+          "reviewed_version": { "type": "string", "minLength": 1, "maxLength": 64 },
+          "reason": { "enum": ["security_fixes", "maintenance"] },
+          "next_step": { "type": "string", "maxLength": 240 }
+        }
+      }
+    },
     "dependencies": {
       "type": "array",
       "minItems": 3,

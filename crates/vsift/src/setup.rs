@@ -8,8 +8,8 @@ use std::{
 
 use vsift_application::{
     DiagnoseRuntime, LocalAsrSetupStatus, ManagedPlanAvailability, ManagedPlanObservation,
-    ManagedSetupPlan, ObservedModel, RuntimeDiagnosis, SetupProfile, SetupSelectionState,
-    plan_managed_setup,
+    ManagedSetupPlan, ManagedUpdate, ObservedModel, RuntimeDiagnosis, SetupProfile,
+    SetupSelectionState, plan_managed_setup,
 };
 use vsift_contract::{DependencyLookup, SavedSetupPlan, SetupPlanResponse};
 use vsift_domain::RuntimeDependency;
@@ -109,9 +109,18 @@ pub struct SetupCheckReport {
     managed: [bool; 3],
     local_asr: LocalAsrSetupStatus,
     managed_install: ManagedPlanAvailability,
+    managed_updates: Vec<ManagedUpdate>,
 }
 
 impl SetupCheckReport {
+    /// The managed versions this check used that the current catalogue
+    /// supersedes, in component order: each names the pin that replaces it
+    /// and why, so the user can plan and install it.
+    #[must_use]
+    pub fn managed_updates(&self) -> &[ManagedUpdate] {
+        &self.managed_updates
+    }
+
     /// The registered model and the local-ASR functional verification
     /// (maintainer decision D4).
     #[must_use]
@@ -300,6 +309,16 @@ impl Engine {
                 request.local_asr_budget,
             )
             .await?;
+        // Only versions the check already opened (and verified) are compared,
+        // so this adds no hashing. A version is reported only when the
+        // catalogue lists it as superseded (`update_for`).
+        let catalogue =
+            accepted_ubuntu_catalogue().map_err(|_| EngineError::ReviewedPolicyInvalid)?;
+        let managed_updates = lookup
+            .opened_versions()
+            .into_iter()
+            .filter_map(|(component, version)| catalogue.update_for(component, &version))
+            .collect();
         drop((held, managed_model));
         Ok(SetupCheckReport {
             diagnosis,
@@ -308,6 +327,7 @@ impl Engine {
             managed,
             local_asr,
             managed_install: self.managed_install_availability()?,
+            managed_updates,
         })
     }
 

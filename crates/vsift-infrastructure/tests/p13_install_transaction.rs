@@ -481,6 +481,7 @@ impl Fixture {
             stop_new_plans_date: String::from("fixture-date"),
             artifacts: vec![media, whisper, model],
             compatibility: policy()?,
+            superseded: Vec::new(),
         };
         let files = BTreeMap::from([
             (MEDIA_FILE.to_owned(), media_bytes),

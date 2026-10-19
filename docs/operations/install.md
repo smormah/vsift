@@ -488,8 +488,21 @@ folder.
 - **Archive:** extract the new archive over an empty folder and replace the old one, after
   the checks of section 3.
 - **Managed tools** do not change with VSift. A newer VSift can carry a newer reviewed
-  catalogue: run `vsift setup plan` again, read it, and accept it with `setup install`; the
-  old versions stay as the previous version until the next install.
+  catalogue, and since `0.2.3` `vsift setup check` says so: a line such as
+  `[update, security] whisper_cli: the selected managed version is whisper.cpp-v1.9.2-ubuntu-x64`
+  (and `managed_updates` in its JSON), with `security` when the new pin carries security fixes
+  the old version lacks. `0.2.3` is such a case: a managed install made by `0.2.2` or earlier has
+  whisper.cpp v1.9.2, and `0.2.3` pins v1.9.5. To move to the new pins:
+
+  ```console
+  vsift setup plan --profile desktop --json > plan.json   # read it; components already current are skipped
+  vsift setup install --plan plan.json --accept-plan <the plan digest>
+  vsift setup check                                        # the whisper line now says v1.9.5, and no update line is left
+  ```
+
+  Only what changed is downloaded (for `0.2.3`, the 10.4 MB whisper.cpp build). The old version
+  stays installed as the previous version: `vsift setup rollback whisper_cli` selects it again,
+  and `vsift setup remove whisper_cli --version <the old key>` deletes it.
 - **Sessions, configuration and managed tools** are kept. Going back to an older VSift is
   not supported: it may refuse a session a newer one wrote
   ([L-044](../planning/known-limits.md#l-044)).

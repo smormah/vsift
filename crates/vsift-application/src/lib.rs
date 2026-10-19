@@ -80,11 +80,12 @@ pub use provisioning::{
     AcceptedManagedArtifact, AcceptedManagedCatalogue, CompatibilitySmoke, CompatibilitySmokeCheck,
     CompatibilitySmokeFailure, CompatibilitySmokeFailureReason, CompatibilitySmokeVerdict,
     ManagedPlanAvailability, ManagedPlanObservation, ManagedSetupAction, ManagedSetupPlan,
-    ObservedModel, PlanAcceptanceError, PlannedSupply, ReviewedArchiveLimits, ReviewedArchiveLink,
-    ReviewedArchiveSelection, ReviewedCompatibilityPolicy, ReviewedManagedFile,
-    ReviewedRuntimeCopy, SetupDependencyDisposition, SetupModelDisposition, SetupProfile,
-    SetupSelectionState, SmokeStageOutcome, StageDisposal, StageRetentionReason,
-    StagedManagedComponent, plan_managed_setup, smoke_before_activation,
+    ManagedUpdate, ObservedModel, PlanAcceptanceError, PlannedSupply, ReviewedArchiveLimits,
+    ReviewedArchiveLink, ReviewedArchiveSelection, ReviewedCompatibilityPolicy,
+    ReviewedManagedFile, ReviewedRuntimeCopy, SetupDependencyDisposition, SetupModelDisposition,
+    SetupProfile, SetupSelectionState, SmokeStageOutcome, StageDisposal, StageRetentionReason,
+    StagedManagedComponent, SupersededManagedVersion, SupersessionReason, plan_managed_setup,
+    smoke_before_activation,
 };
 pub use storage::{
     AuthorizedSessionGenerationPublication, AuthorizedSessionStorageInitialization,

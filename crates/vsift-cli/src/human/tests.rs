@@ -11,8 +11,9 @@ use std::{env, fs, path::PathBuf, time::Duration};
 use serde_json::{Value, json};
 use vsift::{
     DependencyState, DependencyStatus, LocalAsrCheckOutcome, LocalAsrModelStatus,
-    LocalAsrNotRunReason, LocalAsrSetupStatus, ManagedPlanAvailability, ProbeTimeout,
-    ProbeTimeoutKind, RuntimeDependency, RuntimeDiagnosis, RuntimeReadiness,
+    LocalAsrNotRunReason, LocalAsrSetupStatus, ManagedComponent, ManagedPlanAvailability,
+    ManagedUpdate, ProbeTimeout, ProbeTimeoutKind, RuntimeDependency, RuntimeDiagnosis,
+    RuntimeReadiness, SupersessionReason,
 };
 use vsift_contract::{
     CommandName, ConfiguredModelResponse, ConfiguredSelectionResponse, DependencyLookup,
@@ -252,6 +253,7 @@ fn setup_check_text(
             verification: LocalAsrCheckOutcome::NotRun(LocalAsrNotRunReason::ModelNotSelected),
         },
         managed_install,
+        &[],
         ExecutionProfile::Desktop,
         &|_| DependencyLookup::FilteredPath,
     )
@@ -259,6 +261,71 @@ fn setup_check_text(
     let text = rendered.as_str().to_owned();
     assert_terminal_safe(&text);
     Ok(text)
+}
+
+/// A superseded managed version is a line of its own with the reason in its
+/// marker, and the step under it in the JSON `next_step`'s words; nothing is
+/// printed when the list is empty.
+#[test]
+fn a_superseded_managed_version_gets_a_marked_line_and_the_step() -> TestResult {
+    let diagnosis = RuntimeDiagnosis {
+        readiness: RuntimeReadiness::Ready,
+        dependencies: RuntimeDependency::ALL
+            .into_iter()
+            .map(|dependency| DependencyStatus {
+                dependency,
+                state: DependencyState::Available {
+                    version: String::from("detected"),
+                },
+            })
+            .collect(),
+    };
+    let local_asr = LocalAsrSetupStatus {
+        model: LocalAsrModelStatus::NotSelected,
+        verification: LocalAsrCheckOutcome::NotRun(LocalAsrNotRunReason::ModelNotSelected),
+    };
+    for (reason, marker) in [
+        (SupersessionReason::SecurityFixes, "[update, security] "),
+        (SupersessionReason::Maintenance, "[update] "),
+    ] {
+        let update = ManagedUpdate {
+            component: ManagedComponent::WhisperCli,
+            selected_version: String::from("whisper.cpp-v1.9.2-ubuntu-x64"),
+            reviewed_version: String::from("whisper.cpp-v1.9.5-ubuntu-x64"),
+            reason,
+        };
+        let rendered = setup_check(
+            &diagnosis,
+            local_asr,
+            ManagedPlanAvailability::Qualified,
+            std::slice::from_ref(&update),
+            ExecutionProfile::Desktop,
+            &|_| DependencyLookup::ManagedVersion,
+        )
+        .map_err(|_| "the setup check is too large to render")?;
+        let text = rendered.as_str();
+        assert_terminal_safe(text);
+        assert!(
+            text.contains(&format!(
+                "{marker}whisper_cli: the selected managed version is whisper.cpp-v1.9.2-ubuntu-x64
+  {}
+",
+                vsift_contract::managed_update_next_step(&update)
+            )),
+            "{text}"
+        );
+    }
+    let quiet = setup_check(
+        &diagnosis,
+        local_asr,
+        ManagedPlanAvailability::Qualified,
+        &[],
+        ExecutionProfile::Desktop,
+        &|_| DependencyLookup::ManagedVersion,
+    )
+    .map_err(|_| "the setup check is too large to render")?;
+    assert!(!quiet.as_str().contains("[update"));
+    Ok(())
 }
 
 fn timed_out(kind: ProbeTimeoutKind, seconds: u64) -> DependencyState {

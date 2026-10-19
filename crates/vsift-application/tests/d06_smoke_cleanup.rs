@@ -189,6 +189,7 @@ fn test_catalogue() -> Result<AcceptedManagedCatalogue, Box<dyn std::error::Erro
             audio_sample_rate_hz: 16_000,
             audio_channels: 1,
         },
+        superseded: Vec::new(),
     })
 }
 
