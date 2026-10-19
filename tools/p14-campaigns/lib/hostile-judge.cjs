@@ -7,9 +7,19 @@
 // time, memory and process bounds, with no network, no file outside the root
 // and nothing a terminal would act on in its output.
 
+/**
+ * The bounds. `memoryBytes` is the container's limit (`--memory 1g`), which
+ * the kernel enforces: reaching it is reclaim of page cache, not a finding,
+ * and going past it is an out-of-memory kill, which is. `anonBytes` is the
+ * bound on the non-cache memory the wrapper samples (`anon_peak`: VSift and
+ * every provider it ran), the maintainer's decision of 2026-10-19 (L-194):
+ * the container's own peak counts the page cache of what an operation reads
+ * and writes, so it reached the limit on a 512 MiB copy that held 9 MiB.
+ */
 const BOUNDS = Object.freeze({
   wallMs: 120_000,
   memoryBytes: 1024 * 1024 * 1024,
+  anonBytes: 512 * 1024 * 1024,
   pids: 128,
 });
 
@@ -113,7 +123,7 @@ function judge(o) {
   if (o.run.timedOut) findings.push(`did not finish within ${BOUNDS.wallMs / 1000} s (a hang)`);
   else if (o.run.durationMs > BOUNDS.wallMs) findings.push(`took ${Math.round(o.run.durationMs / 1000)} s, above the ${BOUNDS.wallMs / 1000} s bound`);
   if (o.run.oomKilled || (metrics && metrics.oomKills > 0) || (o.run.code === 137 && !o.run.timedOut)) findings.push('the container ran out of memory');
-  if (metrics && metrics.memoryPeak !== null && metrics.memoryPeak > BOUNDS.memoryBytes) findings.push(`memory peaked at ${Math.round(metrics.memoryPeak / 1048576)} MiB, above the ${BOUNDS.memoryBytes / 1048576} MiB limit`);
+  if (metrics && metrics.anonPeak !== null && metrics.anonPeak > BOUNDS.anonBytes) findings.push(`non-cache memory reached ${Math.round(metrics.anonPeak / 1048576)} MiB, above the ${BOUNDS.anonBytes / 1048576} MiB bound`);
   if (metrics && metrics.pidsPeak !== null && metrics.pidsPeak > BOUNDS.pids) findings.push(`${metrics.pidsPeak} processes at once, above the ${BOUNDS.pids} limit`);
   if (o.run.network !== null && o.run.network !== 'none') findings.push(`the container's network was ${o.run.network}, not none`);
 

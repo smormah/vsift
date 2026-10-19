@@ -192,7 +192,7 @@ test('the summary shows VSift\'s own memory beside the container\'s count when t
   const summary = { ok: true, known: [], fresh: [], fixed: [], containmentOk: true, cases: 1, operations: 1, findings: 0, slowestSeconds: 2.3, peakMiB: 1024, findingsList: [], containment: [] };
   const entry = { id: 'mp4-free-512mib', group: 'metadata', description: 'a 512 MiB free-space box', results: [{ op: 'ingest', outcome: 'complete', ok: true, findings: [], ...withOwn }] };
   const text = media.markdown({ ...summary, ownPeakMiB: 8, anonPeakMiB: 9, results: [entry] });
-  assert.match(text, /largest memory peak was 1024 MiB of the 1,024 MiB limit \(the container's count, page cache included\); VSift's own largest resident peak was 8 MiB/);
+  assert.match(text, /largest memory peak was 1024 MiB of the 1,024 MiB limit \(the container's count, page cache included\); VSift's own largest resident peak was 8 MiB and the largest non-cache memory sampled in a container 9 MiB of the 512 MiB bound/);
   assert.match(text, /ingest: complete \(2\.3 s, 1024 MiB, own 8 MiB, anon 9 MiB\)/);
   // A report of the older wrapper reads as before.
   assert.doesNotMatch(media.markdown({ ...summary, ownPeakMiB: null, anonPeakMiB: null, results: [] }), /own largest/);

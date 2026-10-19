@@ -199,7 +199,7 @@ function markdown(report, tracked = TRACKED) {
   const lines = [`## P14 malicious media (RQ-10): ${headline}`, ''];
   const own = report.ownPeakMiB === null || report.ownPeakMiB === undefined
     ? ''
-    : ` (the container's count, page cache included); VSift's own largest resident peak was ${report.ownPeakMiB} MiB and the largest anonymous memory sampled in a container ${report.anonPeakMiB} MiB`;
+    : ` (the container's count, page cache included); VSift's own largest resident peak was ${report.ownPeakMiB} MiB and the largest non-cache memory sampled in a container ${report.anonPeakMiB} MiB of the ${judge.BOUNDS.anonBytes / 1048576} MiB bound`;
   lines.push(`${report.cases} inputs, ${report.operations} operations, ${report.findings} finding(s); the slowest operation took ${report.slowestSeconds} s and the largest memory peak was ${report.peakMiB} MiB of the 1,024 MiB limit${own}; no operation had a network.`, '');
   lines.push('| Group | Input | What it is | Operations: outcome (seconds, cgroup MiB, own MiB, anon MiB) |', '| --- | --- | --- | --- |');
   for (const entry of report.results) {
