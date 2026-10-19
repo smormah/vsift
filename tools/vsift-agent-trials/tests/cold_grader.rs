@@ -68,7 +68,7 @@ impl Bench {
     }
 
     /// The same bench with the trial folder at `trial`: a spelling with no `~`
-    /// (a Windows short name such as `SEBAST~1`, which the temporary folder
+    /// (a Windows short name such as `EXAMPL~1`, which the temporary folder
     /// can carry) or backslash in it, so that an absolute path into the
     /// workspace is a literal word on every host.
     fn at(mut self, trial: &str) -> Self {
