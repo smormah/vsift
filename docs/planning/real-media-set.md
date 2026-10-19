@@ -197,9 +197,8 @@ before it is used. Like the other campaigns it drives the binary it is given, ne
 session root per item under a new `run-<time>` folder of `--work` (it deletes nothing), and it is never part of an ordinary
 pull-request run. It writes `report.json` and `summary.md` there and exits 1 when an item fails a property check. The
 property checks are pure functions in `lib/real-media-checks.cjs`, tested on hand-made answers
-(`test/real-media-checks.test.cjs`). **On Windows, keep `--work` short** (for example `C:\dev\vsift-real-media-work`): a
-per-user folder longer than about 141 characters, or a session root of about 205, makes every media command fail
-(section 12). Per item:
+(`test/real-media-checks.test.cjs`). The length of `--work` no longer matters on Windows for a `vsift` built from `main` at
+`d82d118d` or later (#469, fixed by #478; section 12). Per item:
 
 | Step | Commands | What it records |
 | --- | --- | --- |
@@ -370,8 +369,10 @@ characters or more, `ingest` succeeds and then `candidates` and `frame get` fail
 all. Both look like paths beyond Windows' 260-character limit handed to FFmpeg (the media-tool check copies its fixture deep
 inside the per-user folder; a session's copy lies deep inside its root). Measured with the release build of this branch
 (`vsift 0.2.2`, from `main` at `79fdc502`) and the gyan.dev FFmpeg 9.0 build, on Windows 11. It was found because the
-campaign's first working folder was deep inside a temporary folder; until it is fixed, the campaign's `--work` must be short
-on Windows (section 7).
+campaign's first working folder was deep inside a temporary folder. **Fixed by #478 (`d82d118d`, 2026-10-19):** the cause
+was the providers' working directory (Windows starts no process whose working directory is longer than 258 characters), and
+every provider now runs in its own executable's folder, so a long per-user folder or session root no longer fails media
+commands; the advice to keep the campaign's `--work` short is withdrawn. `0.2.2` and earlier still have the defect.
 
 ## 13. The private local set (decided 2026-10-19)
 
