@@ -2294,6 +2294,41 @@ response carries a `local_asr` object:
   `--timeout-seconds 1`, issue [#391](https://github.com/smormah/vsift/issues/391)). Both
   statements are then true: the probe had no answer within its deadline, and the tools work.
 
+**A superseded managed version in `setup check`** (since `0.2.3`). A managed install keeps the
+versions it installed when VSift is upgraded: a new pin moves no install until `setup plan` and
+`setup install` run again. So the response carries a `managed_updates` array, always present and
+empty when there is nothing to say:
+
+```json
+"managed_updates": [
+  {"component": "whisper_cli", "selected_version": "whisper.cpp-v1.9.2-ubuntu-x64",
+   "reviewed_version": "whisper.cpp-v1.9.5-ubuntu-x64", "reason": "security_fixes",
+   "next_step": "The reviewed build is now whisper.cpp-v1.9.5-ubuntu-x64, which carries security fixes the selected one lacks: review setup plan, then accept it with setup install, which installs and selects it."}
+]
+```
+
+- An entry is a managed version **this check opened** (the managed tier of a tool that no per-call
+  or configured path selects, or the managed model when none is configured) that the release's
+  catalogue **lists as superseded**. `component` is `ffmpeg_ffprobe`, `whisper_cli` or
+  `whisper_model`; `selected_version` is the managed-version key the store selects now and
+  `reviewed_version` the one this release pins (the keys `setup list` shows).
+- `reason` is `security_fixes` when the catalogue records that the pin carries fixes for security
+  defects of the selected version (whisper.cpp v1.9.2, which lacks the fixes of v1.9.3 to v1.9.5
+  and of CVE-2026-110810, L-137), and `maintenance` otherwise. It is the reviewers' statement in
+  the catalogue, not a scan of the machine.
+- `next_step` is the step in words, at most 240 bytes: review `setup plan`, then accept it with
+  `setup install`. The plan proposes the pin because the selected version is not the catalogue's;
+  installing it selects it, and the earlier version stays installed (`setup rollback` selects it
+  again, `setup remove --version` deletes it).
+- A version the catalogue does not list is never reported, even when it differs from the pin (one a
+  later release installed before VSift itself was downgraded, say): nothing in this release says it
+  is older. Human text prints `[update, security] <component>: the selected managed version is
+  <key>` (or `[update]`) with the step under it. The exit status is unchanged.
+- **What it does not cover:** a version the check did not open (a tool the user configured instead
+  is not looked at), `setup plan` and `setup list` (they show the selected versions and the plan's
+  states, not the reason), and the earlier releases themselves, which have no such field. The
+  catalogue lists only whisper.cpp v1.9.2 today; FFmpeg's entry comes with its re-pin.
+
 Schema [`setup-check-response.schema.json`](../../schemas/v1/setup-check-response.schema.json)
 (the object is optional for responses from earlier builds); examples
 [`setup-check.local-asr.json`](../../schemas/v1/examples/setup-check.local-asr.json),
@@ -3053,7 +3088,7 @@ unknown or missing fields, invalid enums, more than 1,048,576 input bytes, and n
 deeper than 64 containers (a P11 job request or batch line: 65,536 bytes and 16 levels).
 Within major v1, readers must ignore additive response
 fields; producers must not reinterpret or remove existing fields without a new major.
-Additive response fields so far: the `setup check` `local_asr` object (P07), a
+Additive response fields so far: the `setup check` `local_asr` object (P07) and, in `0.2.3`, its `managed_updates` array, a
 transcript segment's `display_text` and its speaker's `display_label` (2026-09-29), and,
 in `0.2.1`, `transcript get`'s `transcript_coverage` (also in its stream's terminal
 data), the `view` and `item_constants` members of the brief answers (the option `--view`
@@ -3084,7 +3119,7 @@ producer emits it every time, and a test pins that.
 | C-05 | bounded/sanitized output and broken stdout/stderr behavior |
 | C-06 | strict bounded JSON decoding and schema/identifier rejection, including the P11 job request (`vsift-contract` `request` tests, `worker_contract`, fuzz targets `job_request` and `job_batch_line`), the recorded steps and results of a request record (`recorded_steps_and_results_read_back_exactly`, fuzz target `request_record`) and `handoff check` (P13 PR 5: the `handoff` unit tests, `handoff_contract`, `handoff_differential` against `jsonschema`, `handoff_cli_contract` through the binary, fuzz target `handoff_check`) |
 | C-07 | checked time/range/crop invariants and property tests |
-| C-08 | schema examples and old-reader/additive-v1 compatibility, including the `setup check` `local_asr` object (`setup_local_asr_contract`, `engine_setup_local_asr`), a segment's `display_text` and `display_label` (`vsift-contract` `text` tests, `display_text_makes_hidden_characters_visible_and_keeps_text_raw`, and SEC-T02's `sec_t02_adversarial_evidence` through the binary), the failure remediation of an `ingest` path that names no file, a folder or a file that may not be read (`storage_contract`, `source_path_cli_contract`, #369) and the P11 event kinds (`worker_events_contract`: a reader that knows only `evidence` and `terminal` skips `progress`, `lifecycle` and `result` and still sees a contiguous sequence), the `0.2.1` views and coverage of a read (the brief answers are a projection of the full ones and match their frozen examples: `transcript_contract`, `local_asr_contract`, `search_contract`, `candidates_contract`; a complete read and a stream are what `0.1.0` published but for `transcript_coverage`: `a_complete_read_is_what_was_published_but_for_the_new_member`, `a_stream_is_what_was_published_but_for_the_new_terminal_member`; the brief view is refused for a stream before anything is read or analysed, through the binary: `transcript_cli_contract`, `search_cli_contract`, `candidates_cli_contract`; a read over a gap is `partial` as a search is: `a_read_over_a_gap_is_partial_and_names_the_gap`, `a_read_and_a_search_agree_on_every_range`, `a_read_over_a_gap_is_partial_as_a_search_over_it_is`) |
+| C-08 | schema examples and old-reader/additive-v1 compatibility, including the `setup check` `local_asr` object (`setup_local_asr_contract`, `engine_setup_local_asr`), a segment's `display_text` and `display_label` (`vsift-contract` `text` tests, `display_text_makes_hidden_characters_visible_and_keeps_text_raw`, and SEC-T02's `sec_t02_adversarial_evidence` through the binary), the failure remediation of an `ingest` path that names no file, a folder or a file that may not be read (`storage_contract`, `source_path_cli_contract`, #369) and the P11 event kinds (`worker_events_contract`: a reader that knows only `evidence` and `terminal` skips `progress`, `lifecycle` and `result` and still sees a contiguous sequence), the `0.2.1` views and coverage of a read (the brief answers are a projection of the full ones and match their frozen examples: `transcript_contract`, `local_asr_contract`, `search_contract`, `candidates_contract`; a complete read and a stream are what `0.1.0` published but for `transcript_coverage`: `a_complete_read_is_what_was_published_but_for_the_new_member`, `a_stream_is_what_was_published_but_for_the_new_terminal_member`; the brief view is refused for a stream before anything is read or analysed, through the binary: `transcript_cli_contract`, `search_cli_contract`, `candidates_cli_contract`; a read over a gap is `partial` as a search is: `a_read_over_a_gap_is_partial_and_names_the_gap`, `a_read_and_a_search_agree_on_every_range`, `a_read_over_a_gap_is_partial_as_a_search_over_it_is`); and `setup check`'s `managed_updates` (`0.2.3`: always present, empty when nothing is superseded, valid without it: `setup_managed_update_contract`; through the binary on every platform: `setup_check_names_a_superseded_managed_whisper_and_the_step`; on real bytes: `p13_managed_upgrade_real`) |
 | C-09 | legal job and cancellation terminal transitions (`vsift-domain` `job` tests over the whole state graph; `job` use-case tests of cancellation serialized with the commit); the public job commands, `--operation-id` and interruptions through the binary (`job_cli_contract`, `interrupt_cli_contract`, the job examples in `local_asr_contract`); `job run` through the binary: results and events against their schemas, replay, conflict, busy, refusals, sentinels and shutdown (`job_run_cli_contract`), and the request path through the engine (`engine_worker`); `job batch` through the binary: events, summary, limits, O-02, O-03, X-08 and O-04 (`job_batch_cli_contract`), and the batch through the engine (`engine_batch`, opt-in `engine_batch_tools`) |
 | C-10 | unknown confidence, speaker metadata, time normalization, requested/actual timing, imported-transcript offset conversion, local-ASR provenance and carried segments (`local_asr_contract`, `local_asr_store`), and that an id of a superseded revision still resolves in a read, a handoff check and a retained bundle (`superseded_ids_cli_contract`) |
 

@@ -235,7 +235,7 @@ pub use session::{
 pub use setup::{
     ConfiguredModelResponse, ConfiguredSelectionResponse, DependencyLookup, MAX_PROBE_TIMEOUT,
     NO_FOLDER_SEARCH_ADVICE, ProbeTimeHeadroom, SavedSetupPlan, SetupCheckResponse,
-    SetupPlanResponse, explicit_path_option, probe_deadline_text,
+    SetupPlanResponse, explicit_path_option, managed_update_next_step, probe_deadline_text,
 };
 pub use storage::{
     PrivateFolder, SESSION_NOT_PUBLISHED_REMEDIATION, SESSION_ROOT_NAME_REMEDIATION,

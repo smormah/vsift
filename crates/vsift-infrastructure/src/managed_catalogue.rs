@@ -7,7 +7,7 @@ use std::{collections::HashSet, error::Error, fmt};
 use vsift_application::{
     AcceptedManagedArtifact, AcceptedManagedCatalogue, ManagedSetupAction, ReviewedArchiveLimits,
     ReviewedArchiveLink, ReviewedArchiveSelection, ReviewedCompatibilityPolicy,
-    ReviewedManagedFile, ReviewedRuntimeCopy,
+    ReviewedManagedFile, ReviewedRuntimeCopy, SupersededManagedVersion, SupersessionReason,
 };
 use vsift_domain::{
     ArtifactIntegrity, ArtifactIntegrityError, AsrModelProfile, ManagedArtifactFormat,
@@ -146,7 +146,25 @@ pub fn accepted_ubuntu_catalogue() -> Result<AcceptedManagedCatalogue, ManagedCa
         stop_new_plans_date: String::from(STOP_NEW_PLANS_DATE),
         artifacts,
         compatibility: compatibility_policy()?,
+        superseded: superseded_versions(),
     })
+}
+
+/// The earlier reviewed versions the current pins replace, and why.
+///
+/// `setup check` names one of these when the managed store still selects it
+/// (a machine that installed with an earlier release). A re-pin adds the
+/// version it replaces here, with `SecurityFixes` when the new pin carries
+/// fixes for security defects of the old one, and keeps the earlier entries:
+/// a machine can skip releases. whisper.cpp v1.9.2 lacks v1.9.3 to v1.9.5's
+/// memory-safety fixes and the fix of CVE-2026-110810 (L-137). `FFmpeg` and
+/// the model have not been re-pinned yet, so they have no entry.
+fn superseded_versions() -> Vec<SupersededManagedVersion> {
+    vec![SupersededManagedVersion {
+        component: ManagedComponent::WhisperCli,
+        version: String::from("whisper.cpp-v1.9.2-ubuntu-x64"),
+        reason: SupersessionReason::SecurityFixes,
+    }]
 }
 
 /// Returns the reviewed compatibility policy that any selected provider set must meet.
@@ -1074,7 +1092,7 @@ fn validate_source(
 mod tests {
     use std::collections::HashSet;
 
-    use vsift_application::ManagedSetupAction;
+    use vsift_application::{ManagedSetupAction, SupersessionReason};
     use vsift_domain::{AsrModelProfile, ManagedComponent, ManagedTarget, ReviewedAsrModel};
 
     use super::{
@@ -1117,6 +1135,40 @@ mod tests {
             ),
             AsrModelProfile::Unreviewed
         );
+        Ok(())
+    }
+
+    /// The v1.9.2 managed install of `0.2.2` and earlier is named, with its
+    /// security reason, and nothing the catalogue pins now is superseded.
+    #[test]
+    fn the_earlier_whisper_pin_is_superseded_for_its_security_fixes()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let catalogue = accepted_ubuntu_catalogue()?;
+        let update = catalogue
+            .update_for(
+                ManagedComponent::WhisperCli,
+                "whisper.cpp-v1.9.2-ubuntu-x64",
+            )
+            .ok_or("v1.9.2 is not reported as superseded")?;
+        assert_eq!(update.reviewed_version, "whisper.cpp-v1.9.5-ubuntu-x64");
+        assert_eq!(update.reason, SupersessionReason::SecurityFixes);
+        let mut seen = HashSet::new();
+        for entry in &catalogue.superseded {
+            assert!(seen.insert((entry.component.identifier(), entry.version.clone())));
+            assert!(
+                catalogue
+                    .artifacts
+                    .iter()
+                    .all(|artifact| artifact.version != entry.version),
+                "a pinned version is listed as superseded"
+            );
+        }
+        for artifact in &catalogue.artifacts {
+            assert_eq!(
+                catalogue.update_for(artifact.component, &artifact.version),
+                None
+            );
+        }
         Ok(())
     }
 

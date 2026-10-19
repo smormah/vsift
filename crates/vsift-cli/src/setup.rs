@@ -8,8 +8,8 @@ use std::{io::Write, path::Path};
 
 use vsift::{
     Cancellation, Engine, FailureCode, LocalAsrSetupStatus, MANAGED_INSTALL_RETRY_AFTER_MS,
-    ManagedPlanAvailability, ManagedRemovalTarget, ProgressObserver, RuntimeDependency,
-    RuntimeDiagnosis, SetupInstallRequest,
+    ManagedPlanAvailability, ManagedRemovalTarget, ManagedUpdate, ProgressObserver,
+    RuntimeDependency, RuntimeDiagnosis, SetupInstallRequest,
 };
 use vsift_contract::{
     CommandName, DependencyLookup, JsonLimits, OperationResponse, STALE_PLAN_REMEDIATION,
@@ -28,6 +28,15 @@ use crate::{
     output::{OutputMode, OutputWriter, ProcessExit, setup_exit},
 };
 
+/// What a setup check found about managed installation on this host.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct ManagedSetupFacts<'report> {
+    /// Whether managed installation can supply a missing tool here.
+    pub(crate) availability: ManagedPlanAvailability,
+    /// The managed versions the check opened that the catalogue supersedes.
+    pub(crate) updates: &'report [ManagedUpdate],
+}
+
 /// Writes one completed setup check and returns its compatible exit status.
 ///
 /// `lookup` reports where the executable probed for each dependency came from.
@@ -37,7 +46,7 @@ use crate::{
 pub(crate) fn present_setup_check<L, StandardOutput, StandardError>(
     diagnosis: &RuntimeDiagnosis,
     local_asr: LocalAsrSetupStatus,
-    managed_install: ManagedPlanAvailability,
+    managed: ManagedSetupFacts<'_>,
     profile: ExecutionProfile,
     mode: OutputMode,
     lookup: L,
@@ -48,17 +57,28 @@ where
     StandardOutput: Write,
     StandardError: Write,
 {
+    let ManagedSetupFacts {
+        availability: managed_install,
+        updates: managed_updates,
+    } = managed;
     let response = SetupCheckResponse::new(
         diagnosis,
         profile.into(),
         &lookup,
         managed_install,
         &local_asr,
-    );
+    )
+    .with_managed_updates(managed_updates);
     let output_result = match mode {
         OutputMode::Human => {
-            match crate::human::setup_check(diagnosis, local_asr, managed_install, profile, &lookup)
-            {
+            match crate::human::setup_check(
+                diagnosis,
+                local_asr,
+                managed_install,
+                managed_updates,
+                profile,
+                &lookup,
+            ) {
                 Ok(text) => writer.write_rendered_stdout(&text),
                 Err(_) => Err(crate::output::OutputError::TooLarge),
             }
@@ -249,7 +269,7 @@ mod tests {
     };
     use vsift_contract::DependencyLookup;
 
-    use super::present_setup_check;
+    use super::{ManagedSetupFacts, present_setup_check};
 
     const NOTHING_REGISTERED: LocalAsrSetupStatus = LocalAsrSetupStatus {
         model: LocalAsrModelStatus::NotSelected,
@@ -308,7 +328,10 @@ mod tests {
             let exit = present_setup_check(
                 &diagnosis(readiness, state),
                 NOTHING_REGISTERED,
-                ManagedPlanAvailability::Qualified,
+                ManagedSetupFacts {
+                    availability: ManagedPlanAvailability::Qualified,
+                    updates: &[],
+                },
                 ExecutionProfile::Desktop,
                 OutputMode::Json,
                 filtered_path,
@@ -336,7 +359,10 @@ mod tests {
                 },
             ),
             NOTHING_REGISTERED,
-            ManagedPlanAvailability::Qualified,
+            ManagedSetupFacts {
+                availability: ManagedPlanAvailability::Qualified,
+                updates: &[],
+            },
             ExecutionProfile::Desktop,
             OutputMode::Human,
             filtered_path,
@@ -357,7 +383,10 @@ mod tests {
         present_setup_check(
             &diagnosis(RuntimeReadiness::Blocked, &DependencyState::Missing),
             NOTHING_REGISTERED,
-            ManagedPlanAvailability::Qualified,
+            ManagedSetupFacts {
+                availability: ManagedPlanAvailability::Qualified,
+                updates: &[],
+            },
             ExecutionProfile::Worker,
             OutputMode::Human,
             |dependency| match dependency {
@@ -425,7 +454,10 @@ mod tests {
             let exit = present_setup_check(
                 &ready,
                 local_asr,
-                ManagedPlanAvailability::Qualified,
+                ManagedSetupFacts {
+                    availability: ManagedPlanAvailability::Qualified,
+                    updates: &[],
+                },
                 ExecutionProfile::Desktop,
                 OutputMode::Human,
                 filtered_path,

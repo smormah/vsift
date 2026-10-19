@@ -1163,6 +1163,12 @@ The data member of the complete or partial terminal result that ends a search --
 | `local_asr.verification.not_run_reason` | null \| "media_tools_unavailable" \| "whisper_unavailable" \| "model_not_selected" \| "model_not_pinned" | yes |  |
 | `local_asr.verification.check` | null \| "preparation" \| "fixture_probe" \| "planning" \| "recognizer_identity" \| "audio_extraction" \| "recognition" \| "output_validation" \| "assembly" \| "transcript" \| "budget" | yes |  |
 | `local_asr.verification.reason` | null \| "fixture_integrity" \| "workspace" \| "fixture_media" \| "unexpected_transcript" \| "budget_exceeded" \| "invalid_range" \| "too_many_chunks" \| "model_changed" \| "model_unavailable" \| "unpinned_model" \| "cancelled" \| "deadline" \| "busy" \| "resource_limit" \| "audio_unavailable" \| "provider_failed" \| "unparseable_output" \| "malformed_output" \| "abnormal_termination" \| "io" \| "invalid_run" | yes |  |
+| `managed_updates` | array of object | no | Added in 0.2.3, absent from earlier builds: each managed version this check opened (the managed tier of a tool no per-call or configured path selects, or the managed model when none is configured) that the current catalogue lists as superseded, in component order; empty when none. selected_version is what the managed store selects now, reviewed_version the version this release pins; reason security_fixes means the pin carries fixes for security defects of the selected version, maintenance any other reason. next_step says what to do: review setup plan and accept it with setup install, which installs and selects the pin. A version the catalogue does not list (a later release's, say) is never reported. |
+| `managed_updates[].component` | "ffmpeg_ffprobe" \| "whisper_cli" \| "whisper_model" | yes |  |
+| `managed_updates[].selected_version` | string | yes | 1 to 64 characters |
+| `managed_updates[].reviewed_version` | string | yes | 1 to 64 characters |
+| `managed_updates[].reason` | "security_fixes" \| "maintenance" | yes |  |
+| `managed_updates[].next_step` | string | yes | at most 240 characters |
 | `dependencies` | array of object | yes | exactly 3 items |
 | `dependencies[].dependency` | "ffmpeg" \| "ffprobe" \| "whisper" | yes |  |
 | `dependencies[].capability` | "media_processing" \| "transcription" | yes |  |

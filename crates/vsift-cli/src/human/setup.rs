@@ -3,12 +3,13 @@
 
 use vsift::{
     DependencyState, LocalAsrCheckOutcome, LocalAsrModelStatus, LocalAsrNotRunReason,
-    LocalAsrSetupStatus, LocalAsrVerificationSource, ManagedPlanAvailability, ProbeTimeout,
-    ProbeTimeoutKind, RuntimeDependency, RuntimeDiagnosis, RuntimeReadiness,
+    LocalAsrSetupStatus, LocalAsrVerificationSource, ManagedPlanAvailability, ManagedUpdate,
+    ProbeTimeout, ProbeTimeoutKind, RuntimeDependency, RuntimeDiagnosis, RuntimeReadiness,
+    SupersessionReason,
 };
 use vsift_contract::{
     DependencyLookup, MAX_PROVIDER_DETAIL_BYTES, NO_FOLDER_SEARCH_ADVICE, ProbeTimeHeadroom,
-    explicit_path_option, probe_deadline_text, sanitize_untrusted_text,
+    explicit_path_option, managed_update_next_step, probe_deadline_text, sanitize_untrusted_text,
 };
 
 use super::{
@@ -31,6 +32,7 @@ pub(crate) fn setup_check<L>(
     diagnosis: &RuntimeDiagnosis,
     local_asr: LocalAsrSetupStatus,
     managed_install: ManagedPlanAvailability,
+    managed_updates: &[ManagedUpdate],
     profile: ExecutionProfile,
     lookup: &L,
 ) -> Result<RenderedText, TooLarge>
@@ -93,6 +95,9 @@ where
             DependencyState::TimedOut(timeout) => push_timeout_advice(&mut text, *timeout),
         }
     }
+    for update in managed_updates {
+        push_managed_update(&mut text, update);
+    }
     if diagnosis.readiness == RuntimeReadiness::Blocked {
         text.push_fixed("Media executable probes are blocked until FFmpeg and FFprobe respond.")
             .end_line();
@@ -140,6 +145,23 @@ fn push_missing_tool_advice(
         .end_line();
     text.push_fixed("  ")
         .push_fixed(NO_FOLDER_SEARCH_ADVICE)
+        .end_line();
+}
+
+/// A managed version in use that the current catalogue supersedes: which
+/// one, what replaces it, and the step, the same words as the JSON
+/// `next_step`. The versions are catalogue keys, never provider text.
+fn push_managed_update(text: &mut TerminalText, update: &ManagedUpdate) {
+    text.push_fixed(match update.reason {
+        SupersessionReason::SecurityFixes => "[update, security] ",
+        SupersessionReason::Maintenance => "[update] ",
+    })
+    .push_value(update.component.identifier())
+    .push_fixed(": the selected managed version is ")
+    .push_value(&update.selected_version)
+    .end_line();
+    text.push_fixed("  ")
+        .push_value(&managed_update_next_step(update))
         .end_line();
 }
 

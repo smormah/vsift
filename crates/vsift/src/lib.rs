@@ -182,7 +182,8 @@ pub use vsift_application::{
     CompatibilitySmokeCheck, CompatibilitySmokeFailure, CompatibilitySmokeFailureReason,
     ComponentInstallFailure, ComponentInstallOutcome, ComponentInstallReport,
     DownloadFailureReason, InstallFailureReason, InstallStep, ManagedInstallReport,
-    ManagedPlanAvailability, StageDisposal, StageRetentionReason,
+    ManagedPlanAvailability, ManagedUpdate, StageDisposal, StageRetentionReason,
+    SupersessionReason,
 };
 /// Managed-lifecycle values that appear in this API (P13 PR 6).
 pub use vsift_application::{
