@@ -599,7 +599,7 @@ async fn a_transcript_read_states_the_coverage_of_the_range_it_was_asked_for() -
     assert_eq!(coverage.searched(), Some(span(20, 50)?));
     assert_eq!(coverage.transcribed(), [span(20, 30)?]);
     assert_eq!(coverage.untranscribed(), [span(30, 50)?]);
-    assert!(coverage.no_speech().is_empty());
+    assert_eq!(coverage.no_speech(), []);
     assert!(!coverage.is_complete());
     // It is the one rule: the search's coverage for the same revision and range.
     assert_eq!(
@@ -615,7 +615,7 @@ async fn a_transcript_read_states_the_coverage_of_the_range_it_was_asked_for() -
     // A range clear of the gap is complete.
     let clear = harness.engine.transcript(read(0, 30, 20))?;
     assert!(clear.coverage().is_complete());
-    assert!(clear.coverage().untranscribed().is_empty());
+    assert_eq!(clear.coverage().untranscribed(), []);
     assert_eq!(clear.coverage().searched(), Some(span(0, 30)?));
     Ok(())
 }

@@ -177,7 +177,7 @@ fn assert_refused_as_not_private(
         !stdout.contains(unique_name),
         "the output carried a user path"
     );
-    assert!(output.stderr.is_empty());
+    assert_eq!(output.stderr, [] as [u8; 0]);
     Ok(())
 }
 

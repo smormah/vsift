@@ -266,7 +266,7 @@ async fn a_run_transcribes_every_chunk_and_builds_a_valid_revision() -> TestResu
         transcription.language.as_ref().map(LanguageTag::as_str),
         Some("en")
     );
-    assert!(transcription.warnings.as_slice().is_empty());
+    assert_eq!(transcription.warnings.as_slice(), []);
 
     let source = source()?;
     let session = SessionId::parse("ses_0123456789abcdef")?;
@@ -648,7 +648,7 @@ async fn one_unusable_chunk_of_ten_is_a_recorded_gap_and_the_run_is_kept() -> Te
         coverage.untranscribed(),
         [range(105 * SECOND, 125 * SECOND)?]
     );
-    assert!(coverage.no_speech().is_empty());
+    assert_eq!(coverage.no_speech(), []);
     Ok(())
 }
 
@@ -848,7 +848,10 @@ async fn a_run_that_could_not_read_a_chunk_does_not_claim_there_was_no_speech() 
         let audio = FakeAudio::new(Vec::new());
         let transcription =
             transcribe_with(&source, range(0, 55 * SECOND)?, &audio, &recognizer).await??;
-        assert!(transcription.segments.is_empty());
+        assert_eq!(
+            transcription.segments,
+            [] as [vsift_domain::MergedSegment; 0]
+        );
         let revision = build_asr_revision(AsrRevisionRequest {
             session_id: &SessionId::parse("ses_0123456789abcdef")?,
             source_id: &SourceId::from_sha256(DIGEST)?,
@@ -921,7 +924,7 @@ async fn a_run_without_speech_is_recorded_without_segments() -> TestResult {
         transcription,
         splice: None,
     })?;
-    assert!(revision.segments().is_empty());
+    assert_eq!(revision.segments(), []);
     let warnings: Vec<_> = revision
         .warnings()
         .as_slice()
@@ -1392,7 +1395,7 @@ async fn whole_source_retranscription_replaces_everything() -> TestResult {
             .iter()
             .all(|segment| segment.carried_from().is_none())
     );
-    assert!(revision.inherited().is_empty());
+    assert_eq!(revision.inherited(), []);
     assert_eq!(revision.supersedes(), Some(base.id()));
     Ok(())
 }
@@ -1498,7 +1501,7 @@ async fn a_range_run_keeps_the_earlier_text_of_a_chunk_it_could_not_read() -> Te
             range(14 * SECOND, 35 * SECOND)?,
         ]
     );
-    assert!(coverage.no_speech().is_empty());
+    assert_eq!(coverage.no_speech(), []);
     // What the run itself did not transcribe is the same ranges, from the run.
     assert_eq!(revision_gaps(&revision), [range(10 * SECOND, 35 * SECOND)?]);
     Ok(())
@@ -1538,7 +1541,7 @@ async fn a_range_run_without_a_gap_replaces_the_earlier_text_as_before() -> Test
         .filter(|(_, text)| text.starts_with("imported"))
         .collect();
     assert_eq!(kept, [(5, "imported cue 1".to_owned())]);
-    assert!(revision_gaps(&revision).is_empty());
+    assert_eq!(revision_gaps(&revision), [] as [vsift_domain::TimeRange; 0]);
     Ok(())
 }
 

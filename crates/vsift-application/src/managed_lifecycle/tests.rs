@@ -359,7 +359,10 @@ fn removing_a_component_that_is_not_installed_changes_nothing()
         let store = FakeStore::new(inventory);
         let report = remove_managed(&store, &ManagedRemovalTarget::Component(CLI))?;
         assert_eq!(report.deselected, None);
-        assert!(report.versions.is_empty());
+        assert_eq!(
+            report.versions,
+            [] as [crate::managed_lifecycle::VersionRemovalReport; 0]
+        );
         assert_eq!(*store.deselections.borrow(), 0);
     }
     Ok(())
@@ -433,8 +436,14 @@ fn cleanup_leaves_a_component_whose_pointer_cannot_be_read()
         ManagedSelection::Unreadable,
         vec![verified("a"), verified("b"), verified("c")],
     )));
-    assert!(clean_up_versions(&store)?.is_empty());
-    assert!(clean_up_versions(&FakeStore::new(None))?.is_empty());
+    assert_eq!(
+        clean_up_versions(&store)?,
+        [] as [crate::managed_lifecycle::VersionRemovalReport; 0]
+    );
+    assert_eq!(
+        clean_up_versions(&FakeStore::new(None))?,
+        [] as [crate::managed_lifecycle::VersionRemovalReport; 0]
+    );
     Ok(())
 }
 
@@ -447,7 +456,10 @@ fn repair_of_nothing_and_of_a_healthy_store() {
     let healthy = inventory_with(recorded("b", Some("a")), vec![verified("a"), verified("b")]);
     let plan = diagnose_managed_store(Some(&healthy));
     assert_eq!(plan.status, RepairStatus::Healthy);
-    assert!(plan.findings.is_empty());
+    assert_eq!(
+        plan.findings,
+        [] as [crate::managed_lifecycle::RepairFinding; 0]
+    );
     assert_eq!(
         healthy
             .component(CLI)

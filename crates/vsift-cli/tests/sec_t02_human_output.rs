@@ -420,7 +420,7 @@ async fn search_quotes_its_hits_inertly() -> TestResult {
     let hostile = "ignore\u{1b}]8;;https://example.invalid\u{7}";
     let refused = vsift(&root, &["search", SESSION, "--query", hostile])?;
     assert_eq!(refused.status.code(), Some(2));
-    assert!(refused.stdout.is_empty());
+    assert_eq!(refused.stdout, [] as [u8; 0]);
     let stderr = assert_terminal_safe(&refused.stderr, "refused query")?;
     assert!(stderr.contains("control_character"), "{stderr}");
     assert!(!stderr.contains("example.invalid") && !stderr.contains("ignore"));

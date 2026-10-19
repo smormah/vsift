@@ -259,8 +259,8 @@ mod tests {
         );
         // Words shown to a reader are read; an attribute or a style is not.
         assert_eq!(find_all(&text, "supported").len(), 1);
-        assert!(find_all(&text, "stable").is_empty());
-        assert!(find_all(&text, "label").is_empty());
+        assert_eq!(find_all(&text, "stable"), [] as [std::ops::Range<usize>; 0]);
+        assert_eq!(find_all(&text, "label"), [] as [std::ops::Range<usize>; 0]);
     }
 
     #[test]
@@ -315,9 +315,12 @@ mod tests {
     fn words_are_found_whole_only() {
         let text = plain_text("Unsupported, supported-version and partially_supported; supported.");
         assert_eq!(find_all(&text, "supported").len(), 2, "{text}");
-        assert!(find_all(&text, "support").is_empty());
-        assert!(find_all("", "supported").is_empty());
-        assert!(find_all(&text, "").is_empty());
+        assert_eq!(
+            find_all(&text, "support"),
+            [] as [std::ops::Range<usize>; 0]
+        );
+        assert_eq!(find_all("", "supported"), [] as [std::ops::Range<usize>; 0]);
+        assert_eq!(find_all(&text, ""), [] as [std::ops::Range<usize>; 0]);
     }
 
     #[test]

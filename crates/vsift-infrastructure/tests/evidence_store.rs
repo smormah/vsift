@@ -504,7 +504,7 @@ async fn identical_files_are_kept_and_conflicting_ones_fail() -> TestResult {
     opened.commit(&first, 10)?;
     let known = opened.known()?;
     let second = extract_frame_at(&opened.call(&known), &video, frame_at(1_040_000)).await?;
-    assert!(second.media.is_empty());
+    assert_eq!(second.media, [] as [vsift_application::ExtractedMedia; 0]);
     opened.commit(&second, 11)?;
     let status = opened.store.session_status(&opened.session_id)?;
     assert_eq!(status.artifact_count(), 3, "one image and two records");

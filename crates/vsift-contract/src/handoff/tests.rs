@@ -382,6 +382,9 @@ fn a_path_after_any_ecma_space_is_refused() -> TestResult {
     }
     let mut draft = handoff();
     draft["claims"][0]["statement"] = json!("The ratio a/b is 7.");
-    assert!(checker.schema_error_pointers(&draft).is_empty());
+    assert_eq!(
+        checker.schema_error_pointers(&draft),
+        [] as [std::string::String; 0]
+    );
     Ok(())
 }

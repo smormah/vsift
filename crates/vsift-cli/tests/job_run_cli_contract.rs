@@ -444,7 +444,7 @@ fn the_event_stream_follows_the_contract() -> TestResult {
                 .iter()
                 .filter(|event| event["event"] == "progress")
                 .collect();
-            assert!(!progress.is_empty());
+            assert_ne!(progress, [] as [&serde_json::Value; 0]);
             for event in progress {
                 assert_eq!(event["stage"], "running_request");
                 assert_eq!(event["unit"], "steps");

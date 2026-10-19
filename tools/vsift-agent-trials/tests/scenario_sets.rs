@@ -53,7 +53,10 @@ fn the_three_cold_scenarios_are_the_plans() -> TestResult {
         assert_eq!(scenario.tests, vec!["A-10".to_owned()], "{}", scenario.id);
         assert!(scenario.authority.is_empty() && scenario.retain_to.is_none());
         assert_eq!(scenario.phases.len(), 1);
-        assert!(scenario.phases[0].expectations.is_empty());
+        assert_eq!(
+            scenario.phases[0].expectations,
+            [] as [vsift_agent_trials::scenario::Expectation; 0]
+        );
         // The cold budget is the standard profile: a cold agent has no skill
         // to tell it to be frugal.
         assert_eq!(format!("{:?}", scenario.budget), "Standard");

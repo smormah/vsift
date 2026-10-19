@@ -308,7 +308,7 @@ fn a_batch_directory_must_be_the_campaign_output_or_outside_the_checkout() -> Te
     let accepted = checkout.run(1, &["-DryRun", "-BatchDirectory", &outside_argument])?;
     assert_dry_run_passed(&accepted);
     assert!(outside.join("state-claude.json").is_file());
-    assert!(checkout.raw_changes()?.is_empty());
+    assert_eq!(checkout.raw_changes()?, "");
     Ok(())
 }
 

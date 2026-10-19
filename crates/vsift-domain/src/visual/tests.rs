@@ -393,7 +393,7 @@ fn cells_without_frames_are_gaps_and_an_empty_window_is_all_gaps() -> TestResult
 
     let empty = analyse_window(window(0, 30.0)?, &[], POLICY)?;
     assert_eq!(empty.sample_count, 0);
-    assert!(empty.candidates.is_empty());
+    assert_eq!(empty.candidates, [] as [crate::visual::CandidateDraft; 0]);
     assert_eq!(empty.frameless_cells.len(), 3);
     identify(&empty)?;
     Ok(())

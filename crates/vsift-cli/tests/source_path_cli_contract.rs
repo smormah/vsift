@@ -257,7 +257,7 @@ fn the_human_form_prints_the_same_remediation() -> TestResult {
         .arg(base.0.join("sessions"))
         .args(["ingest", "no-such-video.mp4"])
         .output()?;
-    assert!(output.stdout.is_empty());
+    assert_eq!(output.stdout, [] as [u8; 0]);
     assert_eq!(output.status.code(), Some(7), "{output:?}");
     assert_eq!(
         String::from_utf8(output.stderr)?,

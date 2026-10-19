@@ -301,7 +301,7 @@ fn phrases_do_not_cross_segments() -> TestResult {
         None,
         PageLimit::DEFAULT,
     );
-    assert!(slice.hits.is_empty());
+    assert_eq!(slice.hits, [] as [crate::search::SearchHit<'_>; 0]);
     Ok(())
 }
 
@@ -550,7 +550,7 @@ fn an_unusable_window_is_untranscribed_not_silent() -> TestResult {
             range(70 * SECOND, 100 * SECOND)?
         ]
     );
-    assert!(coverage.no_speech().is_empty());
+    assert_eq!(coverage.no_speech(), []);
     assert!(!coverage.is_complete());
 
     // Beside a silent neighbour, the unusable window is still not no speech,
@@ -774,7 +774,7 @@ fn text_kept_inside_an_unusable_gap_is_covered_and_the_rest_of_the_gap_is_not() 
             range(32 * SECOND, 50 * SECOND)?
         ]
     );
-    assert!(coverage.no_speech().is_empty());
+    assert_eq!(coverage.no_speech(), []);
     // The kept text is what a search finds there.
     assert_eq!(
         revision
@@ -916,7 +916,7 @@ fn an_earlier_window_is_not_counted_over_what_the_superseded_revision_left_untra
         coverage.transcribed(),
         [range(0, 10 * SECOND)?, range(35 * SECOND, 100 * SECOND)?]
     );
-    assert!(coverage.no_speech().is_empty());
+    assert_eq!(coverage.no_speech(), []);
     Ok(())
 }
 
@@ -1049,7 +1049,7 @@ fn words_that_no_segment_holds_are_not_covered_by_the_window_they_were_written_i
             range(70 * SECOND, 100 * SECOND)?
         ]
     );
-    assert!(coverage.no_speech().is_empty());
+    assert_eq!(coverage.no_speech(), []);
     // A search that stays clear of the stretches is as complete as before.
     assert!(SearchCoverage::of(&revision, Some(range(15 * SECOND, 39 * SECOND)?)).is_complete());
     assert!(!SearchCoverage::of(&revision, Some(range(5 * SECOND, 12 * SECOND)?)).is_complete());
@@ -1210,9 +1210,9 @@ fn a_later_run_far_away_does_not_cover_words_that_no_segment_holds() -> TestResu
         [range(10 * SECOND, 14 * SECOND)?]
     );
     // A run over the stretch itself replaces it, and records nothing there.
-    assert!(
-        base.carried_untranscribed_for(range(5 * SECOND, 20 * SECOND)?, &inherited)
-            .is_empty()
+    assert_eq!(
+        base.carried_untranscribed_for(range(5 * SECOND, 20 * SECOND)?, &inherited),
+        [] as [crate::timeline::TimeRange; 0]
     );
     // Without the stretch, there is nothing to record.
     let plain = local_asr(
@@ -1220,10 +1220,9 @@ fn a_later_run_far_away_does_not_cover_words_that_no_segment_holds() -> TestResu
         &[(0, 2 * SECOND, 3 * SECOND, "first words")],
         &[0, 25 * SECOND, 50 * SECOND],
     )?;
-    assert!(
-        plain
-            .carried_untranscribed_for(range(60 * SECOND, 70 * SECOND)?, &inherited)
-            .is_empty()
+    assert_eq!(
+        plain.carried_untranscribed_for(range(60 * SECOND, 70 * SECOND)?, &inherited),
+        [] as [crate::timeline::TimeRange; 0]
     );
     Ok(())
 }
@@ -1298,7 +1297,10 @@ fn what_a_revision_must_record_is_what_the_inherited_provenance_would_be_counted
         ))
     };
     // Nothing inherited, nothing to count over it: nothing is recorded.
-    assert!(revision.carried_untranscribed_for(replaced, &[]).is_empty());
+    assert_eq!(
+        revision.carried_untranscribed_for(replaced, &[]),
+        [] as [crate::timeline::TimeRange; 0]
+    );
     // A run whose windows lie elsewhere claims nothing of it.
     let elsewhere = entry(TranscriptProvenance::LocalAsr(run(
         range(60 * SECOND, 70 * SECOND)?,
@@ -1306,10 +1308,9 @@ fn what_a_revision_must_record_is_what_the_inherited_provenance_would_be_counted
             audio: range(60 * SECOND, 70 * SECOND)?,
         }],
     )?))?;
-    assert!(
-        revision
-            .carried_untranscribed_for(range(0, 10 * SECOND)?, &[elsewhere])
-            .is_empty()
+    assert_eq!(
+        revision.carried_untranscribed_for(range(0, 10 * SECOND)?, &[elsewhere]),
+        [] as [crate::timeline::TimeRange; 0]
     );
     // A run that read 30-100 s claims the part of it from 30 s on, and only that.
     let from_thirty = entry(TranscriptProvenance::LocalAsr(run(
@@ -1422,7 +1423,7 @@ fn an_unusable_window_does_not_inherit_the_coverage_of_the_revision_it_replaced(
     // what `transcript retranscribe` reports as its gaps.
     let own = SearchCoverage::of(&revision, Some(range(20 * SECOND, 50 * SECOND)?));
     assert_eq!(own.untranscribed(), [range(20 * SECOND, 50 * SECOND)?]);
-    assert!(own.transcribed().is_empty());
+    assert_eq!(own.transcribed(), []);
     Ok(())
 }
 

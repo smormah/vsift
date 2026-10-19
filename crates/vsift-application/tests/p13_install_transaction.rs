@@ -332,7 +332,7 @@ async fn a_fresh_plan_activates_every_component_in_dependency_order() -> TestRes
     assert_eq!(journal.staged, [MEDIA, WHISPER, MODEL]);
     assert_eq!(journal.smoked, [vec![MEDIA], vec![WHISPER, MODEL]]);
     assert_eq!(journal.activated, [MEDIA, WHISPER, MODEL]);
-    assert!(journal.discarded.is_empty());
+    assert_eq!(journal.discarded, [] as [vsift_domain::ManagedComponent; 0]);
     assert!(
         report
             .components
@@ -385,7 +385,7 @@ async fn a_rerun_continues_after_the_components_already_current() -> TestResult 
     );
     let journal = installer.journal();
     assert!(journal.staged.is_empty() && journal.smoked.is_empty());
-    assert!(journal.activated.is_empty());
+    assert_eq!(journal.activated, [] as [vsift_domain::ManagedComponent; 0]);
     Ok(())
 }
 

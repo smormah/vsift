@@ -226,7 +226,7 @@ fn a_folder_vsift_did_not_create_is_refused_with_a_remediation_and_left_untouche
         diagnostics.contains("does not exist yet"),
         "the fix is stated: {diagnostics}"
     );
-    assert!(human.stdout.is_empty());
+    assert_eq!(human.stdout, [] as [u8; 0]);
 
     // Nothing was created in, changed in or removed from the person's folder.
     assert_eq!(names(&folder)?, ["notes.txt"]);

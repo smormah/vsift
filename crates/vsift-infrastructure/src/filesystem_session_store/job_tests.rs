@@ -579,7 +579,7 @@ fn a_cancel_request_reaches_the_owner_and_wins_before_the_commit() -> TestResult
         Err(JobStoreError::Transition(_))
     ));
     owner.apply(&JobChange::Cancel, now()?)?;
-    assert!(chunk_files(&fixture, &job)?.is_empty());
+    assert_eq!(chunk_files(&fixture, &job)?, [] as [std::string::String; 0]);
     drop(owner);
     assert_eq!(
         cancel_job(&other, &session, &job, now()?)?,
@@ -773,7 +773,10 @@ fn a_resumed_job_commits_the_byte_identical_revision() -> TestResult {
     assert_eq!(outcome.report.chunks_reused, 2);
     assert_eq!(recognizer.calls(), 3);
     assert_eq!(encode_transcript_record(&outcome.revision)?, control);
-    assert!(chunk_files(&fixture, &outcome.report.job_id)?.is_empty());
+    assert_eq!(
+        chunk_files(&fixture, &outcome.report.job_id)?,
+        [] as [std::string::String; 0]
+    );
     Ok(())
 }
 

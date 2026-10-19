@@ -293,13 +293,13 @@ async fn every_failed_smoke_discards_or_reports_and_never_activates() -> TestRes
                 assert!(store.activated.is_empty(), "{check:?}/{reason:?}");
                 match ownership {
                     FakeOwnership::Proved => {
-                        assert!(store.staged.is_empty());
+                        assert_eq!(store.staged, [] as [vsift_domain::ManagedComponent; 0]);
                         assert_eq!(store.removed, components);
-                        assert!(store.retained.is_empty());
+                        assert_eq!(store.retained, [] as [vsift_domain::ManagedComponent; 0]);
                     }
                     FakeOwnership::Unproved | FakeOwnership::UnexpectedEntry => {
                         assert_eq!(store.staged, components);
-                        assert!(store.removed.is_empty());
+                        assert_eq!(store.removed, [] as [vsift_domain::ManagedComponent; 0]);
                         assert_eq!(store.retained, components);
                     }
                 }
@@ -333,7 +333,7 @@ async fn a_single_component_failure_cleans_only_that_stage() -> TestResult {
         ));
         let store = store.lock().unwrap_or_else(PoisonError::into_inner);
         assert_eq!(store.removed, [component]);
-        assert!(store.activated.is_empty());
+        assert_eq!(store.activated, [] as [vsift_domain::ManagedComponent; 0]);
     }
     Ok(())
 }
@@ -356,9 +356,18 @@ async fn a_passing_smoke_returns_unactivated_candidates() -> TestResult {
         .collect();
     let store_view = store.lock().unwrap_or_else(PoisonError::into_inner);
     assert_eq!(store_view.staged, components);
-    assert!(store_view.removed.is_empty());
-    assert!(store_view.retained.is_empty());
-    assert!(store_view.activated.is_empty());
+    assert_eq!(
+        store_view.removed,
+        [] as [vsift_domain::ManagedComponent; 0]
+    );
+    assert_eq!(
+        store_view.retained,
+        [] as [vsift_domain::ManagedComponent; 0]
+    );
+    assert_eq!(
+        store_view.activated,
+        [] as [vsift_domain::ManagedComponent; 0]
+    );
     Ok(())
 }
 
@@ -395,13 +404,16 @@ async fn invalid_requests_run_no_smoke_and_clean_up() -> TestResult {
         } if stages.len() == 2
             && stages.iter().all(|(_, disposal)| *disposal == StageDisposal::Discarded)
     ));
-    assert!(smoke.calls().is_empty());
-    assert!(
+    assert_eq!(
+        smoke.calls(),
+        [] as [std::vec::Vec<vsift_domain::ManagedComponent>; 0]
+    );
+    assert_eq!(
         store
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
-            .activated
-            .is_empty()
+            .activated,
+        [] as [vsift_domain::ManagedComponent; 0]
     );
     Ok(())
 }

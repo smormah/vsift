@@ -96,8 +96,8 @@ fn t01_f10_srt_and_webvtt_sidecars_are_equivalent() -> TestResult {
         texts(&srt.transcript)[0],
         "This synthetic sidecar is aligned with\nan explicit 500 millisecond offset."
     );
-    assert!(srt.transcript.warnings().as_slice().is_empty());
-    assert!(vtt.transcript.warnings().as_slice().is_empty());
+    assert_eq!(srt.transcript.warnings().as_slice(), []);
+    assert_eq!(vtt.transcript.warnings().as_slice(), []);
     let bytes = fs::read(corpus("F10.srt"))?;
     assert_eq!(srt.sidecar.bytes(), u64::try_from(bytes.len())?);
     assert_eq!(srt.sidecar.sha256().len(), 64);
@@ -127,7 +127,7 @@ fn t02_f10_offset_aligns_the_dialog_cue_with_fixture_truth() -> TestResult {
     assert_eq!(dialog.range.start().as_micros(), 5_000_000);
     assert_eq!(dialog.range.end().as_micros(), 9_000_000);
     assert_eq!(aligned.len(), 3);
-    assert!(warnings.as_slice().is_empty());
+    assert_eq!(warnings.as_slice(), []);
     Ok(())
 }
 
@@ -431,7 +431,7 @@ fn t01_unclosed_and_oversized_markup_stays_text() -> TestResult {
     assert_eq!(texts(&parsed)[0], unclosed);
     assert_eq!(texts(&parsed)[1], oversized_tag);
     assert_eq!(texts(&parsed)[2], braces);
-    assert!(parsed.warnings().as_slice().is_empty());
+    assert_eq!(parsed.warnings().as_slice(), []);
     Ok(())
 }
 

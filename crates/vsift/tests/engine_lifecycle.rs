@@ -330,7 +330,7 @@ async fn open_status_renew_close_and_clean_use_the_injected_clock_and_identifier
             decision: CleanDecision::Removed,
         }]
     );
-    assert!(engine.list_sessions(None)?.entries().is_empty());
+    assert_eq!(engine.list_sessions(None)?.entries(), []);
     // The original source is never touched by cleanup.
     assert_eq!(
         fs::read(harness.root.path("original media.mp4"))?,
@@ -400,13 +400,13 @@ async fn read_only_operations_never_create_a_missing_session_root() -> TestResul
     let harness = Harness::new()?;
     let root = harness.root.path("sessions");
 
-    assert!(harness.engine.list_sessions(None)?.entries().is_empty());
+    assert_eq!(harness.engine.list_sessions(None)?.entries(), []);
     let cleaned = harness.engine.clean_sessions(CleanRequest {
         scope: CleanScope::Expired,
         mode: CleanMode::Remove,
         cursor: None,
     })?;
-    assert!(cleaned.entries().is_empty());
+    assert_eq!(cleaned.entries(), []);
     let missing = harness.engine.session_status(&session(1)?);
     assert_eq!(
         missing,
@@ -748,7 +748,7 @@ async fn a_workspace_decides_the_durability_of_its_sessions() -> TestResult {
         Err(EngineError::WorkspaceNotDurable) => {}
         other => return Err(format!("expected WorkspaceNotDurable, got {other:?}").into()),
     }
-    assert!(harness.engine.list_sessions(None)?.entries().is_empty());
+    assert_eq!(harness.engine.list_sessions(None)?.entries(), []);
     // The workspace's free-space reserve is checked before the copy, on
     // Windows too since #266 (it reported `NotEnforced` there before).
     let opened = harness

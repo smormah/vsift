@@ -1250,7 +1250,10 @@ mod tests {
         );
 
         assert_eq!(missing.actions.len(), 1);
-        assert!(available.actions.is_empty());
+        assert_eq!(
+            available.actions,
+            [] as [crate::provisioning::ManagedSetupAction; 0]
+        );
         assert_eq!(available.availability, ManagedPlanAvailability::NotRequired);
         assert_ne!(missing.digest, available.digest);
         assert_eq!(
@@ -1290,8 +1293,14 @@ mod tests {
         );
         assert!(unsupported.digest.is_none());
         assert!(expired.digest.is_none());
-        assert!(unsupported.actions.is_empty());
-        assert!(expired.actions.is_empty());
+        assert_eq!(
+            unsupported.actions,
+            [] as [crate::provisioning::ManagedSetupAction; 0]
+        );
+        assert_eq!(
+            expired.actions,
+            [] as [crate::provisioning::ManagedSetupAction; 0]
+        );
         Ok(())
     }
 
@@ -1372,7 +1381,10 @@ mod tests {
             Some(incomplete),
         );
         assert_eq!(plan.availability, ManagedPlanAvailability::CatalogueInvalid);
-        assert!(plan.actions.is_empty());
+        assert_eq!(
+            plan.actions,
+            [] as [crate::provisioning::ManagedSetupAction; 0]
+        );
         assert!(plan.digest.is_none());
         Ok(())
     }
@@ -1391,7 +1403,10 @@ mod tests {
             Some(invalid),
         );
         assert_eq!(plan.availability, ManagedPlanAvailability::CatalogueInvalid);
-        assert!(plan.actions.is_empty());
+        assert_eq!(
+            plan.actions,
+            [] as [crate::provisioning::ManagedSetupAction; 0]
+        );
         assert!(plan.digest.is_none());
         Ok(())
     }
@@ -1627,7 +1642,10 @@ mod tests {
             plan.availability,
             ManagedPlanAvailability::TargetUnavailable
         );
-        assert!(plan.actions.is_empty());
+        assert_eq!(
+            plan.actions,
+            [] as [crate::provisioning::ManagedSetupAction; 0]
+        );
         for (_, disposition) in &plan.dependencies {
             assert_eq!(*disposition, SetupDependencyDisposition::ManualSelection);
         }

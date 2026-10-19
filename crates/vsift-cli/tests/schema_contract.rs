@@ -265,7 +265,7 @@ fn emitted_parse_failure_matches_its_frozen_example() -> Result<(), Box<dyn std:
         ])
         .output()?;
     assert_eq!(parse.status.code(), Some(2));
-    assert!(parse.stderr.is_empty());
+    assert_eq!(parse.stderr, [] as [u8; 0]);
     assert_eq!(
         serde_json::from_slice::<Value>(&parse.stdout)?,
         load("examples/parse-failure.json")?

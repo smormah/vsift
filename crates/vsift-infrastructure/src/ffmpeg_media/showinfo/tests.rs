@@ -129,7 +129,7 @@ fn listings_hold_every_frame_inside_their_bounds_in_the_stream_time_base() -> Te
         .collect();
     assert_eq!(times, vec![1_000_000, 1_050_000, 1_100_000, 1_150_000]);
     assert_eq!(listing.tail(), ListingTail::MoreMayFollow);
-    assert!(parse_frame_listing(b"", &window)?.frames().is_empty());
+    assert_eq!(parse_frame_listing(b"", &window)?.frames(), []);
     let mismatch = format!("{}{lines}", CONFIG.replace("1/10240", "1/1000"));
     assert!(matches!(
         parse_frame_listing(mismatch.as_bytes(), &window),

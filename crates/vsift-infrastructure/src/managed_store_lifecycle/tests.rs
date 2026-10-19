@@ -249,7 +249,10 @@ fn the_inventory_reports_the_selection_its_previous_version_and_verification() -
     for other in [ManagedComponent::MediaTools, ManagedComponent::WhisperModel] {
         let component = inventory.component(other).ok_or("missing component")?;
         assert_eq!(component.selection, ManagedSelection::None);
-        assert!(component.versions.is_empty());
+        assert_eq!(
+            component.versions,
+            [] as [vsift_application::ManagedVersionRecord; 0]
+        );
     }
     assert_eq!(inventory.stale_stages, 0);
     assert_eq!(inventory.unexpected_entries, 0);
@@ -561,11 +564,17 @@ fn removing_a_component_deselects_first_then_removes_every_version() -> TestResu
     assert_eq!(report.failure_code(), None);
     assert_eq!(selected(&store)?, None);
     let cli = maintainer.inventory()?.ok_or("no root")?;
-    assert!(cli.component(CLI).ok_or("no cli")?.versions.is_empty());
+    assert_eq!(
+        cli.component(CLI).ok_or("no cli")?.versions,
+        [] as [vsift_application::ManagedVersionRecord; 0]
+    );
     // Again: nothing to do, nothing changes.
     let again = remove_managed(&maintainer, &ManagedRemovalTarget::Component(CLI))?;
     assert_eq!(again.deselected, None);
-    assert!(again.versions.is_empty());
+    assert_eq!(
+        again.versions,
+        [] as [vsift_application::VersionRemovalReport; 0]
+    );
     Ok(())
 }
 

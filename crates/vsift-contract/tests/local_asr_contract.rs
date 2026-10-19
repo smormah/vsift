@@ -934,7 +934,7 @@ async fn a_run_with_an_unusable_chunk_is_a_partial_result_that_names_its_gap() -
     // the same reason, and the recording's end as nothing was examined there.
     let coverage = vsift_domain::SearchCoverage::of(&revision, None);
     assert_eq!(coverage.untranscribed(), [range(30 * SECOND, 55 * SECOND)?]);
-    assert!(coverage.no_speech().is_empty());
+    assert_eq!(coverage.no_speech(), []);
     Ok(())
 }
 
@@ -1088,7 +1088,7 @@ async fn text_kept_in_an_unreadable_part_is_listed_as_not_transcribed_by_the_run
     // A search of the revision counts the kept words as transcribed: it lists
     // less than the run did not transcribe, and nothing under the kept words.
     let coverage = vsift_domain::SearchCoverage::of(&second, None);
-    assert!(!coverage.untranscribed().is_empty());
+    assert_ne!(coverage.untranscribed(), []);
     assert_ne!(coverage.untranscribed(), not_transcribed);
     for gap in coverage.untranscribed() {
         assert!(gap.end().as_micros() <= 25 * SECOND, "{gap:?}");
@@ -1127,7 +1127,10 @@ fn a_run_without_an_unusable_chunk_is_presented_exactly_as_before() -> TestResul
                 .get("unplaced_ranges")
                 .is_none()
         );
-        assert!(retranscription_gaps(revision).is_empty());
+        assert_eq!(
+            retranscription_gaps(revision),
+            [] as [vsift_domain::TimeRange; 0]
+        );
     }
     // And the frozen example, byte for byte, is still what is produced.
     let (_, second) = f01_revisions()?;
@@ -1244,7 +1247,7 @@ async fn words_that_no_segment_holds_are_listed_and_the_run_stays_complete() -> 
         outcome.map_err(|failure| format!("the run failed: {failure:?}"))?,
         None,
     )?;
-    assert!(revision.unplaced().is_empty());
+    assert_eq!(revision.unplaced(), []);
     let value = serde_json::to_value(finish_retranscription(
         retranscribe_response(&revision, None)?,
         &revision,
@@ -1951,7 +1954,10 @@ async fn a_read_over_a_gap_is_partial_and_names_the_gap() -> TestResult {
         full["data"]["transcript_coverage"]
     );
     // The page still holds what was read: the words of the first chunk.
-    assert!(!full["data"]["items"].as_array().ok_or("items")?.is_empty());
+    assert_ne!(
+        full["data"]["items"].as_array().ok_or("items")?.as_slice(),
+        [] as [serde_json::Value; 0]
+    );
 
     // The stream ends in the same status, coverage and member.
     let (segments, coverage) = segments_in(&revision, window)?;
@@ -2223,18 +2229,19 @@ async fn text_kept_in_an_unreadable_stretch_covers_where_it_is() -> TestResult {
     )?;
     assert_eq!(over_kept["status"], "complete");
     assert!(over_kept["coverage"].is_null());
-    assert!(
-        !over_kept["data"]["items"]
+    assert_ne!(
+        over_kept["data"]["items"]
             .as_array()
             .ok_or("items")?
-            .is_empty()
+            .as_slice(),
+        [] as [serde_json::Value; 0]
     );
 
     // The whole stretch the run could not read: only what the words leave open.
     let stretch = get(&second, range(0, 25 * SECOND)?, ResultView::Full)?;
     assert_eq!(stretch["status"], "partial");
     let named = gaps_of(&stretch)?;
-    assert!(!named.is_empty());
+    assert_ne!(named, [] as [std::string::String; 0]);
     assert_ne!(named, ["0-25000000"], "the kept words cover nothing");
     // The run read nothing of 0-25 s, and the one segment revision 1 had there,
     // the recorded F01 words at 0-5.26 s, is kept: what is open is the rest.
@@ -2747,7 +2754,7 @@ fn a_first_run_with_no_segments_leaves_false_gaps_and_no_silence_after_a_range_r
     let first = revision_by_chunk_outcome(2, silent)?;
     let source = first.source_segment().clone();
     assert_eq!(source.range(), range(0, 55 * SECOND)?);
-    assert!(first.segments().is_empty());
+    assert_eq!(first.segments(), []);
     let whole = source.range();
 
     let before = get(&first, whole, ResultView::Full)?;

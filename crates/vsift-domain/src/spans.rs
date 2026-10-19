@@ -350,7 +350,7 @@ mod tests {
         let joined = join_nearest(spans.clone(), 1_024, None);
         let elapsed = started.elapsed();
         assert_eq!(joined.len(), 1_024);
-        assert!(subtract(&spans, &joined).is_empty());
+        assert_eq!(subtract(&spans, &joined), [] as [(u64, u64); 0]);
         assert!(
             elapsed < std::time::Duration::from_secs(30),
             "joining took {elapsed:?}"
@@ -430,8 +430,8 @@ mod tests {
         }
         // Nothing, and nothing over a degenerate span.
         assert_eq!(SpanSet::default().gaps_within((5, 9)), vec![(5, 9)]);
-        assert!(set.gaps_within((7, 7)).is_empty());
-        assert!(set.gaps_within((9, 7)).is_empty());
+        assert_eq!(set.gaps_within((7, 7)), [] as [(u64, u64); 0]);
+        assert_eq!(set.gaps_within((9, 7)), [] as [(u64, u64); 0]);
     }
 
     /// Spans that touch or overlap become one, so a gap is never reported

@@ -204,7 +204,10 @@ mod tests {
             strings: vec!["c:\\vsift-trials".to_owned()],
             user_names: Vec::new(),
         };
-        assert!(text_problems("All fine at 10:32.", &markers).is_empty());
+        assert_eq!(
+            text_problems("All fine at 10:32.", &markers),
+            [] as [std::string::String; 0]
+        );
         for bad in [
             "see C:\\vsift-trials\\a",
             "open hxxps://x or https://x",

@@ -90,7 +90,7 @@ RUN curl --proto '=https' --tlsv1.2 --fail --silent --show-error --location \
 # The source is built where the harness's compiled-in default repository
 # points (CARGO_MANIFEST_DIR/../..), the path the `harness` image copies it to.
 WORKDIR /opt/vsift/src
-# rustup installs the toolchain rust-toolchain.toml names (1.98.1) and checks
+# rustup installs the toolchain rust-toolchain.toml names (1.99.1) and checks
 # each component against the channel manifest's hashes.
 COPY rust-toolchain.toml ./
 RUN rustup toolchain install && rustc --version

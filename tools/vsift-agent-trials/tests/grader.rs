@@ -1430,7 +1430,10 @@ fn a_codex_configuration_notice_in_the_stream_invalidates_the_trial() -> TestRes
         1
     );
     let stream = "{\"type\":\"item.completed\",\"item\":{\"id\":\"item_1\",\"type\":\"error\",\"message\":\"stream disconnected before completion; retrying 1/5\"}}";
-    assert!(configuration_warnings(ClientKind::Codex, stream, "").is_empty());
+    assert_eq!(
+        configuration_warnings(ClientKind::Codex, stream, ""),
+        [] as [std::string::String; 0]
+    );
     Ok(())
 }
 

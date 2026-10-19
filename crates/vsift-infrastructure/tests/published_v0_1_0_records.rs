@@ -49,14 +49,14 @@ fn session_of(bytes: &[u8]) -> Result<SessionId, Box<dyn Error>> {
 #[test]
 fn an_imported_transcript_revision_of_0_1_0_decodes() -> TestResult {
     let revision = decode_transcript_record(&frozen("bundle-transcript-record.json")?)?;
-    assert!(!revision.segments().is_empty());
+    assert_ne!(revision.segments(), []);
     Ok(())
 }
 
 #[test]
 fn a_local_asr_transcript_revision_of_0_1_0_decodes() -> TestResult {
     let revision = decode_transcript_record(&frozen("bundle-transcript-record.asr.json")?)?;
-    assert!(!revision.segments().is_empty());
+    assert_ne!(revision.segments(), []);
     Ok(())
 }
 
@@ -64,7 +64,7 @@ fn a_local_asr_transcript_revision_of_0_1_0_decodes() -> TestResult {
 fn the_evidence_record_of_0_1_0_decodes_and_its_identities_still_derive() -> TestResult {
     let bytes = frozen("bundle-evidence-record.json")?;
     let record = decode_evidence_record(&bytes, &session_of(&bytes)?)?;
-    assert!(!record.items().is_empty());
+    assert_ne!(record.items(), []);
     Ok(())
 }
 
@@ -72,6 +72,6 @@ fn the_evidence_record_of_0_1_0_decodes_and_its_identities_still_derive() -> Tes
 fn the_visual_index_record_of_0_1_0_decodes() -> TestResult {
     let bytes = frozen("bundle-visual-index-record.json")?;
     let index = decode_visual_index_record(&bytes, &session_of(&bytes)?)?;
-    assert!(!index.windows().is_empty());
+    assert_ne!(index.windows(), []);
     Ok(())
 }

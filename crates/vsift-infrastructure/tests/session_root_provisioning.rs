@@ -144,7 +144,10 @@ fn assert_single_valid_root(scratch: &Scratch) -> TestResult {
             "session-initialize.lock",
         ]
     );
-    assert!(sorted_names(&root.join("sessions"))?.is_empty());
+    assert_eq!(
+        sorted_names(&root.join("sessions"))?,
+        [] as [std::string::String; 0]
+    );
     assert_eq!(fs::read(root.join("ownership.json"))?, MARKER);
     let store = FilesystemSessionStore::open_existing(&root)?;
     assert_eq!(store.admission_capacity(), 4);

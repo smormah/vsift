@@ -1208,7 +1208,10 @@ mod tests {
         assert_eq!(catalogue.compatibility.inference_deadline_seconds, 180);
         for artifact in catalogue.artifacts {
             assert!(artifact.source_url.starts_with("https://"));
-            assert!(!artifact.files.is_empty());
+            assert_ne!(
+                artifact.files,
+                [] as [vsift_application::ReviewedManagedFile; 0]
+            );
             let unique = artifact
                 .files
                 .iter()

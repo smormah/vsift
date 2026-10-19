@@ -420,7 +420,10 @@ async fn passing_media_tools_run_from_the_stage_and_stay_unactivated() -> TestRe
         assert!(is_within(ffprobe, &runtime)?);
         assert!(workspace.starts_with(&stage_path));
         assert!(workspace.ends_with("smoke.pending"));
-        assert!(requests.speech.is_empty());
+        assert_eq!(
+            requests.speech,
+            [] as [(std::path::PathBuf, std::path::PathBuf, std::path::PathBuf); 0]
+        );
     }
     assert!(!stage_path.join("smoke.pending").exists());
     root.assert_nothing_activated()?;
@@ -468,7 +471,10 @@ async fn banner_failures_are_typed_and_the_stage_is_discarded() -> TestResult {
             stages,
             [(ManagedComponent::MediaTools, StageDisposal::Discarded)]
         );
-        assert!(verifiers.requests().media.is_empty());
+        assert_eq!(
+            verifiers.requests().media,
+            [] as [(std::path::PathBuf, std::path::PathBuf, std::path::PathBuf); 0]
+        );
         root.assert_nothing_activated()?;
         root.assert_only_marker_remains()?;
     }
@@ -897,7 +903,10 @@ async fn a_staged_model_is_smoked_with_selected_companions() -> TestResult {
         assert!(is_within(model, &stage_path.join("runtime.pending"))?);
         assert_eq!(fs::canonicalize(whisper)?, fs::canonicalize(FIXTURE_TOOL)?);
         assert!(workspace.starts_with(&stage_path));
-        assert!(requests.media.is_empty());
+        assert_eq!(
+            requests.media,
+            [] as [(std::path::PathBuf, std::path::PathBuf, std::path::PathBuf); 0]
+        );
     }
     root.assert_nothing_activated()?;
     for candidate in candidates {
@@ -1060,7 +1069,10 @@ async fn a_cancelled_smoke_runs_nothing() -> TestResult {
         stages,
         [(ManagedComponent::MediaTools, StageDisposal::Discarded)]
     );
-    assert!(verifiers.requests().media.is_empty());
+    assert_eq!(
+        verifiers.requests().media,
+        [] as [(std::path::PathBuf, std::path::PathBuf, std::path::PathBuf); 0]
+    );
     root.assert_only_marker_remains()?;
     Ok(())
 }

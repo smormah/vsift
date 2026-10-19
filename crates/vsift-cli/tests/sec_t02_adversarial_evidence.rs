@@ -395,7 +395,7 @@ async fn the_evidence_stream_stays_one_record_per_line() -> TestResult {
             ],
         )?;
         assert_eq!(output.status.code(), Some(0));
-        assert!(output.stderr.is_empty());
+        assert_eq!(output.stderr, [] as [u8; 0]);
         let text = std::str::from_utf8(&output.stdout)?;
         assert!(
             !text
@@ -572,7 +572,7 @@ fn control_characters_reject_the_import_at_their_line() -> TestResult {
                 ],
             )?;
             assert_eq!(output.status.code(), Some(3), "{label} {extension}");
-            assert!(output.stderr.is_empty());
+            assert_eq!(output.stderr, [] as [u8; 0]);
             let value = json(&output)?;
             assert_eq!(
                 value["error"]["code"], "INVALID_SOURCE",

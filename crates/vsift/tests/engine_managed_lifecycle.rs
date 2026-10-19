@@ -202,7 +202,7 @@ fn with_nothing_installed_every_command_answers_and_nothing_is_created() -> Test
         Some(ManagedLifecycleRefusal::NotInstalled)
     );
     let removal = engine.remove_managed(&ManagedRemovalTarget::Component(CLI))?;
-    assert!(removal.versions.is_empty());
+    assert_eq!(removal.versions, [] as [vsift::VersionRemovalReport; 0]);
     assert_eq!(removal.failure_code(), None);
     let sweep = engine.remove_managed(&ManagedRemovalTarget::StaleStages)?;
     assert_eq!(sweep.stages.map(|stages| stages.removed), Some(0));

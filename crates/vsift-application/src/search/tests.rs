@@ -151,7 +151,7 @@ fn an_empty_result_has_no_cursor_and_keeps_its_coverage() -> TestResult {
         EXPIRES,
         NOW,
     )?;
-    assert!(page.hits.is_empty());
+    assert_eq!(page.hits, [] as [vsift_domain::SearchHit<'_>; 0]);
     assert!(page.next_cursor.is_none());
     assert!(page.coverage.is_complete());
 
@@ -192,7 +192,7 @@ fn cursors_are_reusable_and_bound_to_the_normalised_query() -> TestResult {
     let second = again("R-17")?;
     assert_eq!(again("R-17")?, second);
     assert_eq!(again("r17")?, second);
-    assert!(!second.is_empty());
+    assert_ne!(second, [] as [u32; 0]);
     Ok(())
 }
 

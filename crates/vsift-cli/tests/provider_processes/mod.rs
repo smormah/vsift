@@ -400,7 +400,10 @@ mod tests {
         let batch = before.identify(548).ok_or("the batch is not listed")?;
         let providers = before.children_of(&batch);
         let reused = ProcessTable::of(vec![listed(760, 4, Some(12_000), "powershell.exe")]);
-        assert!(reused.still_running(&providers).is_empty());
+        assert_eq!(
+            reused.still_running(&providers),
+            [] as [crate::provider_processes::ProcessIdentity; 0]
+        );
         let unchanged = ProcessTable::of(vec![listed(760, 1, Some(9_500), "whisper-cli.exe")]);
         let running = unchanged.still_running(&providers);
         assert_eq!(named(&running), "760 whisper-cli.exe");
@@ -424,10 +427,9 @@ mod tests {
             .collect()
         );
         assert_eq!(table.still_running(&providers).len(), 1);
-        assert!(
-            ProcessTable::of(Vec::new())
-                .still_running(&providers)
-                .is_empty()
+        assert_eq!(
+            ProcessTable::of(Vec::new()).still_running(&providers),
+            [] as [crate::provider_processes::ProcessIdentity; 0]
         );
         Ok(())
     }
