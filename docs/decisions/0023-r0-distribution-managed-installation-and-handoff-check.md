@@ -1369,3 +1369,23 @@ Status: **Accepted**; this note changes no accepted decision. It applies the ref
   as the pin is the maintainer's decision.
 - **Existing installs are not moved:** a managed install made by `0.2.2` or earlier keeps v1.9.2 selected until a new plan is accepted, as
   [L-132](../planning/known-limits.md#l-132) says of FFmpeg ([L-137](../planning/known-limits.md#l-137)).
+
+## Note, 2026-10-18 (#439: a rename Windows refuses for a moment)
+
+Status: **Accepted**; this note changes no accepted decision. It records how the publication of
+section 3 treats a refusal that ends by itself.
+
+- **Both renames of an activation are tried again on Windows** when Windows refuses them because
+  another handle is open: the rename of the stage's `runtime.pending` into `versions-v1`
+  (`ERROR_ACCESS_DENIED`, which Windows returns while any file inside the folder is open, whatever
+  that handle's sharing) and the rename of the pending pointer over `<component>.current`
+  (`ERROR_SHARING_VIOLATION`, while another handle holds the old pointer without delete sharing).
+  The attempts pause 5 ms, doubling to 100 ms, for at most two seconds; then the refusal is the
+  storage failure it was (`STORAGE_IO`), and the previous selection stays. A failed rename changes
+  nothing, so an attempt starts from the same state, and the installation guard keeps every other
+  VSift writer out. Unix renames are not tried again.
+- **Why not more:** the one failure of #439 was not traced to a step (no OS error was captured). Of
+  the other steps, only the recheck of each runtime file can meet another process's handle (a file
+  held without read sharing, the case [L-136](../planning/known-limits.md#l-136) records for the
+  session store), and it is left as L-136 decides; [L-182](../planning/known-limits.md#l-182) keeps
+  what is not covered under watch.
