@@ -755,7 +755,9 @@ its answers (`lib/real-media-checks.cjs`, tested with `real-media-checks.test.cj
 runs it on Ubuntu. **On Windows keep `--work` short:** a long per-user folder or session root makes the media commands fail
 (planning page, section 12). Wikimedia refuses the tool, so upload.wikimedia.org is a provenance-only source: its items are
 pinned from hand downloads (`pin --item RMnn --from-file <file>`) and every fetch contacts the project's test-media release
-(`mirror_url`); `release-files <media dir> <out dir>` prepares that release for a person to create. A private manifest of the
+(`mirror_url`); `release-files <media dir> <out dir> [--partial]` prepares that release for a person to create, with
+`--partial` from the items already pinned and the upload command for the rest; the hosted run reports an item the release
+does not hold yet as not yet mirrored. A private manifest of the
 maintainer's own recordings runs with `--private-manifest <file>`, locally only, reported by measurements alone (planning
 page, section 13).
 

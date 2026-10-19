@@ -435,6 +435,25 @@ function privateReport(report) {
   };
 }
 
+/**
+ * Whether an item's file may be investigated: `ready` when it is there with its
+ * pinned size and SHA-256 (or, for an item not yet pinned in the manifest, the
+ * checksum its source publishes, which the hosted cross-check verified it
+ * against; a private item with no SHA-256 by size alone); `missing` when it is
+ * not there; `differs` otherwise. A missing public item in a run over whatever
+ * the test-media release holds is "not yet mirrored", not a failure.
+ * @param {object} item
+ * @param {{ exists: boolean, size: number | null, digest: (algorithm: string) => string }} file
+ * @returns {'ready' | 'missing' | 'differs'}
+ */
+function mediaState(item, file) {
+  if (!file.exists) return 'missing';
+  if (file.size !== item.bytes) return 'differs';
+  if (item.sha256) return file.digest('sha256') === item.sha256 ? 'ready' : 'differs';
+  if (item.source_checksum) return file.digest(item.source_checksum.algorithm) === item.source_checksum.value ? 'ready' : 'differs';
+  return item.private ? 'ready' : 'differs';
+}
+
 function markdown(run) {
   const lines = ['# Real-media campaign', '', `- Binary: ${run.binary.version} (SHA-256 \`${run.binary.sha256}\`)`,
     `- Started ${run.started}, finished ${run.finished}; ${run.platform}`, `- Setup: ${run.setup.passed ? 'passed' : `**failed**: ${run.setup.findings.join('; ')}`}`, '',
@@ -442,6 +461,10 @@ function markdown(run) {
     '| --- | --- | --- | --- | --- | --- | --- | --- |'];
   const fmt = (value) => (typeof value === 'number' ? value.toFixed(3) : 'n/a');
   for (const item of run.items) {
+    if (item.not_yet_mirrored) {
+      lines.push(`| ${item.id} | not yet mirrored | n/a | n/a | n/a | n/a | n/a | the test-media release does not hold it yet (not a failure) |`);
+      continue;
+    }
     const m = item.measurements || {};
     const t = m.transcription;
     const s = m.seams_of_whole_run;
@@ -450,7 +473,7 @@ function markdown(run) {
       : (item.verdict.findings.length === 0 ? 'none' : item.verdict.findings.join('<br>'));
     lines.push(`| ${item.id} | ${item.verdict.passed ? 'pass' : '**fail**'} | ${t ? `${t.seconds.toFixed(0)} s (${t.real_time_factor.toFixed(2)})` : 'n/a'} | ${s ? `${fmt(s.seam_recall)} / ${fmt(s.control_recall)}` : 'n/a'} | ${m.seam_repeats ? m.seam_repeats.count : 'n/a'} | ${m.timing_differences && m.timing_differences.start.p95_us !== null ? `${(m.timing_differences.start.p95_us / 1000).toFixed(0)} ms` : 'n/a'} | ${m.candidates ? fmt(m.candidates.per_minute) : 'n/a'} | ${findings} |`);
   }
-  const attributed = run.items.filter((item) => !item.private);
+  const attributed = run.items.filter((item) => !item.private && !item.not_yet_mirrored);
   if (attributed.length > 0) {
     lines.push('', '## Attribution', '');
     for (const item of attributed) lines.push(`- ${item.id}: ${item.attribution}`);
@@ -460,4 +483,4 @@ function markdown(run) {
   return lines.join('\n');
 }
 
-module.exports = { SECOND, setup, investigate, privateReport, markdown, measurementsOnly, shiftPoint };
+module.exports = { SECOND, setup, investigate, privateReport, markdown, measurementsOnly, shiftPoint, mediaState };

@@ -7,7 +7,12 @@ name: P14 real media
 # which refuses the tool), held to its pinned size and SHA-256 (an item not yet
 # pinned is pinned here and its digest printed: the hosted cross-check), then
 # runs the campaign against a release build of the checked-out commit with the
-# pinned FFmpeg, whisper.cpp and model that `P07 local ASR` stages.
+# pinned FFmpeg, whisper.cpp and model that `P07 local ASR` stages. The release
+# can hold only some of the items (it starts with three, 2026-10-19): an item
+# it does not hold yet is reported "not yet mirrored", not as a failure, and
+# the campaign runs on the others (--available-only); a run in which no item
+# could be investigated fails. An item not yet pinned in the manifest is pinned
+# from the release against the checksum its source publishes.
 #
 # Advisory evidence (the maintainer's decision of 2026-10-18): the job fails when
 # an item fails a property check, and a finding becomes an issue after a person
@@ -137,6 +142,7 @@ jobs:
             --ffprobe "$(command -v ffprobe)" \
             --whisper "$VSIFT_TEST_WHISPER_CLI" \
             --model "$VSIFT_TEST_WHISPER_MODEL" \
+            --available-only \
             $ITEM_ARGUMENTS
 
       - name: Put the result in the job summary

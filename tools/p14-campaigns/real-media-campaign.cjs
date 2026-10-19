@@ -10,7 +10,7 @@
 //
 //   node real-media-campaign.cjs --vsift <exe> --media <dir> --work <dir>
 //     --ffmpeg <exe> --ffprobe <exe> --whisper <exe> --model <file>
-//     [--item RMnn]... [--manifest <file>]
+//     [--item RMnn]... [--manifest <file>] [--available-only]
 //   node real-media-campaign.cjs --vsift <exe> --private-manifest <file> --work <dir>
 //     --ffmpeg <exe> --ffprobe <exe> --whisper <exe> --model <file> [--item Pnn]...
 //
@@ -22,6 +22,10 @@
 // item's audio under its licence: never commit or upload them). The report is
 // `report.json` and `summary.md` in the run folder; the process exits 1 when an
 // item fails a property check (advisory evidence: a finding becomes an issue).
+// With --available-only (the hosted run) an approved item whose file is not
+// there is reported "not yet mirrored" and is not a failure; a run in which no
+// item could be investigated fails. An item not yet pinned in the manifest is
+// held to the checksum its source publishes.
 //
 // A private manifest (section 13) lists the maintainer's own recordings, kept
 // outside every repository with the files beside it. It runs only on a local
@@ -45,11 +49,16 @@ const STEP_TIMEOUT_MS = 4 * 60 * 60 * 1000;
 const REPOSITORY = path.resolve(__dirname, '..', '..');
 
 function parse(argv) {
-  const options = { items: [], manifest: path.join(__dirname, 'real-media', 'manifest.json'), privateManifest: null };
+  const options = { items: [], manifest: path.join(__dirname, 'real-media', 'manifest.json'), privateManifest: null, availableOnly: false };
   const names = { '--vsift': 'vsift', '--media': 'media', '--work': 'work', '--ffmpeg': 'ffmpeg', '--ffprobe': 'ffprobe',
     '--whisper': 'whisper', '--model': 'model', '--manifest': 'manifest', '--private-manifest': 'privateManifest' };
   for (let index = 0; index < argv.length; index += 2) {
     const flag = argv[index];
+    if (flag === '--available-only') {
+      options.availableOnly = true;
+      index -= 1;
+      continue;
+    }
     const value = argv[index + 1];
     if (value === undefined) throw new Error(`${flag} needs a value`);
     if (flag === '--item') options.items.push(value);
@@ -64,7 +73,11 @@ function parse(argv) {
 }
 
 function sha256(file) {
-  const hash = crypto.createHash('sha256');
+  return digestOf(file, 'sha256');
+}
+
+function digestOf(file, algorithm) {
+  const hash = crypto.createHash(algorithm);
   const descriptor = fs.openSync(file, 'r');
   try {
     const buffer = Buffer.alloc(1 << 20);
@@ -109,7 +122,7 @@ function main() {
     fileOf = (item) => path.join(folder, item.file_name);
   } else {
     const manifest = media.readManifest(path.resolve(options.manifest));
-    selected = media.selectApproved(manifest, options.items).filter((item) => item.sha256 !== null);
+    selected = media.selectApproved(manifest, options.items);
     fileOf = (item) => path.join(options.media, item.id, item.file_name);
   }
   if (process.platform === 'win32' && options.work.length > 60) {
@@ -135,8 +148,14 @@ function main() {
     log(item.private ? `${item.id} (private)` : `${item.id}: ${item.title}`);
     const folder = path.join(runFolder, item.id);
     fs.mkdirSync(folder);
-    const verified = fs.existsSync(file) && fs.statSync(file).size === item.bytes && (item.sha256 === null || sha256(file) === item.sha256);
-    if (!verified) {
+    const exists = fs.existsSync(file);
+    const state = campaign.mediaState(item, { exists, size: exists ? fs.statSync(file).size : null, digest: (algorithm) => digestOf(file, algorithm) });
+    if (state === 'missing' && options.availableOnly && !item.private) {
+      result.items.push({ id: item.id, title: item.title, not_yet_mirrored: true, verdict: { passed: true, findings: [] } });
+      log(`  ${item.id}: not yet mirrored (not a failure)`);
+      continue;
+    }
+    if (state !== 'ready') {
       const finding = item.private ? 'the private file is missing or differs from its manifest entry' : 'the media file is missing or differs from its pin: fetch it with real-media.cjs';
       result.items.push(item.private
         ? { id: item.id, private: true, verdict: { passed: false, failed_checks: [{ check: 'media', findings: 1 }] }, failure_codes: [], measurements: {} }
@@ -157,7 +176,9 @@ function main() {
     }
   }
   result.finished = new Date().toISOString();
-  result.passed = result.setup.passed && result.items.length > 0 && result.items.every((item) => item.verdict.passed);
+  const ran = result.items.filter((item) => !item.not_yet_mirrored);
+  // A run in which nothing could be investigated proves nothing: it fails.
+  result.passed = result.setup.passed && ran.length > 0 && ran.every((item) => item.verdict.passed);
   fs.writeFileSync(path.join(runFolder, 'report.json'), `${JSON.stringify(result, null, 2)}\n`);
   fs.writeFileSync(path.join(runFolder, 'summary.md'), campaign.markdown(result));
   log(`report: ${path.join(runFolder, 'report.json')}`);
