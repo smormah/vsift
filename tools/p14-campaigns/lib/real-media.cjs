@@ -113,6 +113,7 @@ const ErrorCode = Object.freeze({
   PARTIAL_PRESENT: 'partial_present',
   SOURCE_FILE_REFUSED: 'source_file_refused',
   PRIVATE_REFUSED: 'private_refused',
+  NOT_FOUND: 'not_found',
 });
 
 /** A typed refusal: `code` is one of `ErrorCode`, the message is fixed prose plus the item id. */
@@ -475,7 +476,7 @@ async function pinFromFile(item, destination, file) {
     throw new RealMediaError(ErrorCode.SOURCE_FILE_REFUSED, `${item.id}: its source publishes no checksum, so a local copy cannot be checked against it`);
   }
   const open = localOpen(file);
-  if (item.sha256 === null) return { sha256: await pinItem(item, destination, open), outcome: 'pinned' };
+  if (item.sha256 === null) return { sha256: await pinItem(item, destination, open, { local: true }), outcome: 'pinned' };
   return { sha256: item.sha256, outcome: await fetchItem(item, destination, open) };
 }
 
@@ -588,7 +589,8 @@ function httpsOpen(url) {
           response.on('end', () => {
             const retry = response.headers['retry-after'];
             const said = refusalText(text);
-            reject(new RealMediaError(ErrorCode.TRANSPORT_REFUSED,
+            // Not found is its own kind: on the mirror it means the asset is not uploaded yet.
+            reject(new RealMediaError(status === 404 ? ErrorCode.NOT_FOUND : ErrorCode.TRANSPORT_REFUSED,
               `the server answered HTTP ${status}${retry ? ` (Retry-After: ${String(retry).slice(0, 40)})` : ''}${said ? `: ${said}` : ''}`));
           });
           return;
@@ -738,7 +740,34 @@ async function fetchItem(item, destination, open) {
  * @param {(url: string) => Promise<{ stream: AsyncIterable<Buffer> & { destroy(): void }, length: number | null }>} open
  * @returns {Promise<string>} the SHA-256
  */
-async function pinItem(item, destination, open) {
+/**
+ * Where a pin fetches from: the source, unless the source refuses the tool;
+ * then the mirror, which is checked against the checksum the source publishes
+ * (so a copy on the mirror is held to the source all the same). An item whose
+ * source refuses the tool and publishes no checksum cannot be pinned this way.
+ */
+function pinUrl(item) {
+  if (allowedUrl(item.url)) return item.url;
+  if (item.mirror_url && item.source_checksum) return item.mirror_url;
+  throw new RealMediaError(ErrorCode.NOT_PINNED, `${item.id}: its source refuses the tool and there is no mirror copy with a published checksum to check; pin a hand-downloaded copy with --from-file`);
+}
+
+/**
+ * How the hosted cross-check reports an item it could not take: an asset not
+ * yet uploaded to the mirror (or a source the tool may not contact, with no
+ * mirror copy yet) is `not_yet_mirrored`, which is not a failure; anything else
+ * is `refused`.
+ * @param {object} item
+ * @param {unknown} error
+ * @returns {'not_yet_mirrored' | 'refused'}
+ */
+function crossCheckOutcome(item, error) {
+  if (!(error instanceof RealMediaError)) return 'refused';
+  if (error.code === ErrorCode.NOT_FOUND && item.mirror_url) return 'not_yet_mirrored';
+  return 'refused';
+}
+
+async function pinItem(item, destination, open, { local = false } = {}) {
   if (item.status !== 'approved') throw new RealMediaError(ErrorCode.NOT_APPROVED, `${item.id} is not approved`);
   if (item.sha256 !== null) throw new RealMediaError(ErrorCode.ALREADY_PINNED, `${item.id} is pinned already; fetch it instead`);
   const folder = path.join(destination, item.id);
@@ -746,7 +775,7 @@ async function pinItem(item, destination, open) {
   fs.mkdirSync(folder, { recursive: true, mode: 0o700 });
   if (fs.existsSync(final)) throw new RealMediaError(ErrorCode.EXISTING_DIFFERS, `${item.id}: a file is already at its place; it is left as it is`);
   const partial = path.join(folder, `.${item.file_name}.partial`);
-  const digests = await download(item, partial, open, item.url);
+  const digests = await download(item, partial, open, local ? null : pinUrl(item));
   fs.renameSync(partial, final);
   writeAttribution(folder, item);
   return digests.sha256;
@@ -755,37 +784,60 @@ async function pinItem(item, destination, open) {
 /**
  * The test-media release, prepared for the maintainer's review (the release is
  * created by a person, never by a tool or a workflow). Every approved item must
- * be pinned, carry a mirror_url of one and the same `test-media-*` tag, and be
- * present in `source` with exactly its pinned size and SHA-256, so the assets
- * are verbatim copies. Returns the attribution and notes texts and the
- * `gh release create` command (a pre-release that is never "latest"; no
- * release or publishing workflow runs on a tag outside `v*`).
+ * carry a mirror_url of one and the same `test-media-*` tag. An item is an
+ * asset only when it is pinned and present in `source` with exactly its pinned
+ * size and SHA-256, so the assets are verbatim copies.
+ *
+ * Without `partial`, every approved item must be such an asset. With
+ * `partial` (decided 2026-10-19: the release starts with the items already
+ * pinned and takes the rest later), the items that are not yet pinned or
+ * present are listed as still to come, the notes say so, and `upload` gives
+ * the `gh release upload` command for them, to run once they are pinned.
+ * Returns the attribution and notes texts and the `gh release create` command
+ * (a pre-release that is never "latest"; no release or publishing workflow
+ * runs on a tag outside `v*`).
  * @param {object} manifest a valid manifest
  * @param {string} source the folder the items were fetched or pinned into
+ * @param {{ partial?: boolean }} [options]
  */
-function releasePlan(manifest, source) {
+function releasePlan(manifest, source, { partial = false } = {}) {
   const approved = manifest.items.filter((item) => item.status === 'approved');
   const tags = new Set(approved.map((item) => (item.mirror_url ? item.mirror_url.slice(MIRROR_PREFIX.length - 'test-media-'.length).split('/')[0] : null)));
   if (approved.length === 0 || tags.size !== 1 || tags.has(null)) {
     throw new RealMediaError(ErrorCode.MANIFEST_INVALID, 'every approved item needs a mirror_url of one and the same test-media release');
   }
   const [tag] = tags;
-  const assets = approved.map((item) => {
-    if (item.sha256 === null) throw new RealMediaError(ErrorCode.NOT_PINNED, `${item.id} is not pinned yet`);
-    const file = path.join(source, item.id, item.file_name);
-    if (!fs.existsSync(file) || fs.statSync(file).size !== item.bytes || digestOfFile(file, 'sha256') !== item.sha256) {
+  const fileOf = (item) => path.join(source, item.id, item.file_name);
+  const present = [];
+  const toCome = [];
+  for (const item of approved) {
+    const file = fileOf(item);
+    const exists = fs.existsSync(file);
+    if (item.sha256 === null || !exists) {
+      if (!partial) {
+        throw new RealMediaError(item.sha256 === null ? ErrorCode.NOT_PINNED : ErrorCode.EXISTING_DIFFERS,
+          item.sha256 === null ? `${item.id} is not pinned yet` : `${item.id}: the file in the media folder is missing or is not the pinned one`);
+      }
+      toCome.push(item);
+      continue;
+    }
+    // A file that is there but differs from its pin is never an asset, partial or not.
+    if (fs.statSync(file).size !== item.bytes || digestOfFile(file, 'sha256') !== item.sha256) {
       throw new RealMediaError(ErrorCode.EXISTING_DIFFERS, `${item.id}: the file in the media folder is missing or is not the pinned one`);
     }
-    return file;
-  });
+    present.push(item);
+  }
+  if (present.length === 0) throw new RealMediaError(ErrorCode.NOT_PINNED, 'no approved item is pinned and present yet');
+  const assets = present.map(fileOf);
   const attribution = [
     'VSift test media: verbatim copies of freely licensed recordings, kept for testing VSift.',
     'They are not VSift and are not covered by its licence; each keeps its own licence, below.',
     '',
-    ...approved.map((item) => `${attributionText(item)}SHA-256: ${item.sha256}\n`),
+    ...present.map((item) => `${attributionText(item)}SHA-256: ${item.sha256}\n`),
+    ...(toCome.length > 0 ? [`Still to come (not yet in this release): ${toCome.map((item) => item.id).join(', ')}.`, ''] : []),
   ].join('\n');
   const notes = [
-    `Test media for VSift's opt-in real-media campaign (#363): ${approved.length} recordings, verbatim, with their attribution in ATTRIBUTION.txt.`,
+    `Test media for VSift's opt-in real-media campaign (#363): ${present.length} of ${approved.length} recordings, verbatim, with their attribution in ATTRIBUTION.txt.`,
     '',
     '**This is not a VSift release.** Nothing here is VSift or under its licence; install VSift from npm (`vsift-cli`).',
     '',
@@ -793,8 +845,12 @@ function releasePlan(manifest, source) {
     '',
     '| Asset | Bytes | SHA-256 | Licence | Source |',
     '| --- | ---: | --- | --- | --- |',
-    ...approved.map((item) => `| ${item.file_name} | ${item.bytes} | \`${item.sha256}\` | ${item.licence.id} | ${item.source_page} |`),
+    ...present.map((item) => `| ${item.file_name} | ${item.bytes} | \`${item.sha256}\` | ${item.licence.id} | ${item.source_page} |`),
     '',
+    ...(toCome.length > 0 ? [
+      `**Still to come:** ${toCome.map((item) => `${item.id} (${item.file_name}, ${item.bytes} bytes)`).join(', ')}. They are added to this release once they are pinned; until then the hosted campaign reports them as not yet mirrored.`,
+      '',
+    ] : []),
   ].join('\n');
   const quote = (text) => `"${text}"`;
   const command = (notesFile, attributionFile) => [
@@ -802,7 +858,12 @@ function releasePlan(manifest, source) {
     `--title ${quote(`VSift test media ${tag.slice('test-media-'.length)} (not a VSift release)`)}`,
     `--notes-file ${quote(notesFile)}`, ...assets.map(quote), quote(attributionFile),
   ].join(' ');
-  return { tag, assets, attribution, notes, command };
+  // The later upload adds the files still to come and replaces ATTRIBUTION.txt
+  // (--clobber touches only the files named: the new ones do not exist yet).
+  const upload = (attributionFile) => (toCome.length === 0 ? null : [
+    'gh release upload', tag, '--repo smormah/vsift', '--clobber', ...toCome.map((item) => quote(fileOf(item))), quote(attributionFile),
+  ].join(' '));
+  return { tag, assets, present: present.map((item) => item.id), toCome: toCome.map((item) => item.id), attribution, notes, command, upload };
 }
 
 module.exports = {
@@ -833,6 +894,8 @@ module.exports = {
   refuseHostedPrivateRun,
   localOpen,
   pinFromFile,
+  pinUrl,
+  crossCheckOutcome,
   releasePlan,
   manifestProblems,
   uncoveredShapes,

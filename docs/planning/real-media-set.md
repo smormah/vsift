@@ -439,9 +439,21 @@ node tools/p14-campaigns/real-media.cjs pin C:\dev\vsift-real-media --item RM01 
 `url` and `source_checksum` stay as the provenance, and every fetch contacts the mirror. The tag lies outside the `release
 tags` ruleset (`refs/tags/v*`), no workflow runs on a tag push or a release event (`release.yml` is dispatched by hand and
 publishes only on `v<version>`), and the release is a pre-release that is never "latest", so nothing that reads VSift's
-releases sees it. Once the five hand downloads are pinned, `node tools/p14-campaigns/real-media.cjs release-files
-C:\dev\vsift-real-media <an empty output folder>` checks that every approved file is present with its pinned SHA-256,
-writes `ATTRIBUTION.txt` and `NOTES.md`, and prints the command for the coordinator to review and run:
+releases sees it. `node tools/p14-campaigns/real-media.cjs release-files C:\dev\vsift-real-media <an empty output
+folder>` checks that every approved file is present with its pinned SHA-256, writes `ATTRIBUTION.txt` and `NOTES.md`, and
+prints the command for the coordinator to review and run.
+
+**A partial release first (decided 2026-10-19):** the release starts with the three items already pinned (RM06, RM09,
+RM10) and takes the five hand-downloaded ones later. `release-files ... --partial` takes the approved items that are pinned
+and present, names the rest in `NOTES.md` and `ATTRIBUTION.txt` as still to come, and prints both the `gh release create`
+command for the three and the `gh release upload --clobber` command for the five (with `ATTRIBUTION.txt`, rewritten by a
+second `release-files` run without `--partial`), followed by `gh release edit --notes-file` for the full notes. A file that
+is present but differs from its pin is refused in either mode. The hosted run works on whatever the release holds: an item
+it does not hold yet is reported **not yet mirrored**, which is not a failure (`cross-check` takes the others, and the
+campaign runs with `--available-only`); a run in which no item could be investigated fails. An item whose source refuses
+the tool and that is not yet pinned in the manifest is pinned from the release against the checksum its source publishes
+(the Commons SHA-1, RM07's ETag as MD5), so a hand-downloaded copy uploaded to the release is held to Commons all the same.
+The full release, once all eight are there:
 
 ```console
 gh release create test-media-2026-10-19 --repo smormah/vsift --target main --prerelease --latest=false
@@ -449,8 +461,9 @@ gh release create test-media-2026-10-19 --repo smormah/vsift --target main --pre
   "C:\dev\vsift-real-media\RM01\RM01-editing-basics-watchlists.webm" ... (the eight files) "<out>\ATTRIBUTION.txt"
 ```
 
-The assets are the eight verbatim files (440,841,704 bytes) and `ATTRIBUTION.txt`. Until the release exists a hosted
-`cross-check` refuses the items (HTTP 404 from the mirror) and the campaign has run only locally.
+The assets are the eight verbatim files (440,841,704 bytes) and `ATTRIBUTION.txt`; the partial release's are RM06,
+RM09 and RM10 (144,048,950 bytes) and `ATTRIBUTION.txt`. Until the release exists, a hosted run reports every item as not
+yet mirrored and fails for want of anything to investigate.
 
 ### 14.1 The first real runs (2026-10-19, local)
 

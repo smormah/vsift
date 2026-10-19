@@ -190,3 +190,29 @@ test('a shifted run that kept the same chunk plan is reported, and its seam chec
   assert.equal(report.measurements.shift_achieved, false);
   assert.equal(report.checks.seams.not_run, 'the shifted run kept the chunk plan of the whole run');
 });
+
+test('a file is investigated only at its pin, or at its source checksum before it is pinned; a missing one is told apart', () => {
+  const crypto = require('node:crypto');
+  const bytes = Buffer.from('stand-in media');
+  const digest = (algorithm) => crypto.createHash(algorithm).update(bytes).digest('hex');
+  const there = { exists: true, size: bytes.length, digest };
+  const pinned = { bytes: bytes.length, sha256: digest('sha256'), source_checksum: null };
+  assert.equal(campaign.mediaState(pinned, there), 'ready');
+  assert.equal(campaign.mediaState({ ...pinned, sha256: '0'.repeat(64) }, there), 'differs');
+  assert.equal(campaign.mediaState({ ...pinned, bytes: 1 }, there), 'differs');
+  assert.equal(campaign.mediaState(pinned, { exists: false, size: null, digest }), 'missing');
+  const unpinned = { bytes: bytes.length, sha256: null, source_checksum: { algorithm: 'sha1', value: digest('sha1') } };
+  assert.equal(campaign.mediaState(unpinned, there), 'ready');
+  assert.equal(campaign.mediaState({ ...unpinned, source_checksum: { algorithm: 'sha1', value: '0'.repeat(40) } }, there), 'differs');
+  assert.equal(campaign.mediaState({ ...unpinned, source_checksum: null }, there), 'differs', 'nothing to check a public file against');
+  assert.equal(campaign.mediaState({ bytes: bytes.length, sha256: null, private: true }, there), 'ready');
+});
+
+test('the summary shows an item not yet mirrored as such, and the hosted run asks for it', () => {
+  const summary = campaign.markdown({ binary: { version: 'v', sha256: '0' }, started: 's', finished: 'f', platform: 'p', setup: { passed: true, findings: [] },
+    items: [{ id: 'RM01', title: 'T', not_yet_mirrored: true, verdict: { passed: true, findings: [] } }] });
+  assert.match(summary, /\| RM01 \| not yet mirrored \|/);
+  assert.doesNotMatch(summary, /## Attribution/);
+  const workflow = fs.readFileSync(path.join(__dirname, '..', '..', '..', '.github', 'workflows', 'p14-real-media.yml'), 'utf8');
+  assert.match(workflow, /real-media-campaign\.cjs[\s\S]*--available-only/);
+});

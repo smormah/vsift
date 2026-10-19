@@ -31,11 +31,14 @@
 //   it has one, and never a source that refuses the tool (upload.wikimedia.org).
 // cross-check: the hosted check of the pins: fetches every approved item (or those
 //   named), each held to its pin, pins any not yet pinned, prints each SHA-256 and
-//   fails if any item was refused.
+//   fails if any item was refused. An item the test-media release does not hold
+//   yet is reported "not yet mirrored", which is not a failure.
 // release-files: prepares the test-media release for review: checks that every
 //   approved item is pinned and present with its pinned digest, writes
 //   ATTRIBUTION.txt and NOTES.md to the output folder and prints the
 //   `gh release create` command. It never creates the release: a person does.
+//   With --partial it takes the approved items already pinned and present, says
+//   which are still to come, and prints the `gh release upload` command for them.
 //
 // Fetch and pin download media: run them only for items the maintainer approved,
 // and only where downloading is allowed (a hosted runner, or the maintainer's own
@@ -49,10 +52,12 @@ const DEFAULT_MANIFEST = path.join(__dirname, 'real-media', 'manifest.json');
 
 function parse(argv) {
   const [command, ...rest] = argv;
-  const options = { command, manifest: DEFAULT_MANIFEST, items: [], positional: [], fromFile: null };
+  const options = { command, manifest: DEFAULT_MANIFEST, items: [], positional: [], fromFile: null, partial: false };
   for (let index = 0; index < rest.length; index += 1) {
     const argument = rest[index];
-    if (argument === '--manifest' || argument === '--item' || argument === '--from-file') {
+    if (argument === '--partial') {
+      options.partial = true;
+    } else if (argument === '--manifest' || argument === '--item' || argument === '--from-file') {
       const value = rest[index + 1];
       if (value === undefined) throw new media.RealMediaError(media.ErrorCode.MANIFEST_INVALID, `${argument} needs a value`);
       if (argument === '--manifest') options.manifest = path.resolve(value);
@@ -114,11 +119,18 @@ async function main(argv) {
     const manifest = media.readManifest(options.manifest);
     const source = media.checkDestination(options.positional[0], REPOSITORY);
     const out = media.checkDestination(options.positional[1], REPOSITORY);
-    const plan = media.releasePlan(manifest, source);
+    const plan = media.releasePlan(manifest, source, { partial: options.partial });
     const fs = require('node:fs');
     fs.writeFileSync(path.join(out, 'ATTRIBUTION.txt'), plan.attribution);
     fs.writeFileSync(path.join(out, 'NOTES.md'), plan.notes);
+    process.stdout.write(`assets now: ${plan.present.join(', ')}${plan.toCome.length > 0 ? `; still to come: ${plan.toCome.join(', ')}` : ''}\n`);
     process.stdout.write(`${plan.command(path.join(out, 'NOTES.md'), path.join(out, 'ATTRIBUTION.txt'))}\n`);
+    const upload = plan.upload(path.join(out, 'ATTRIBUTION.txt'));
+    if (upload) {
+      process.stdout.write('later, once the items still to come are pinned, run release-files again without --partial (it rewrites ATTRIBUTION.txt and NOTES.md for every item), then:\n');
+      process.stdout.write(`${upload}\n`);
+      process.stdout.write(`gh release edit ${plan.tag} --repo smormah/vsift --notes-file "${path.join(out, 'NOTES.md')}"\n`);
+    }
     return 0;
   }
   if (options.command === 'cross-check') {
@@ -131,22 +143,29 @@ async function main(argv) {
     const manifest = media.readManifest(options.manifest);
     const destination = media.checkDestination(options.positional[0], REPOSITORY);
     let failed = 0;
+    let taken = 0;
     for (const item of media.selectApproved(manifest, options.items)) {
       try {
         if (item.sha256 === null) {
-          process.stdout.write(`${item.id} pinned here: sha256 ${await media.pinItem(item, destination, media.httpsOpen)}\n`);
+          process.stdout.write(`${item.id} pinned here: sha256 ${await media.pinItem(item, destination, media.httpsOpen)} (checked against the source's ${item.source_checksum ? item.source_checksum.algorithm : 'nothing: trust on first use'})\n`);
         } else {
           const outcome = await media.fetchItem(item, destination, media.httpsOpen);
           process.stdout.write(`${item.id} ${outcome}: sha256 ${item.sha256} matches the pin\n`);
         }
+        taken += 1;
       } catch (error) {
+        if (media.crossCheckOutcome(item, error) === 'not_yet_mirrored') {
+          process.stdout.write(`${item.id} not yet mirrored: the test-media release does not hold it yet (not a failure)\n`);
+          continue;
+        }
         failed += 1;
         process.stdout.write(`${item.id} refused: ${error instanceof media.RealMediaError ? `${error.code}: ${error.message}` : 'unexpected failure'}\n`);
       }
     }
+    process.stdout.write(`${taken} item(s) taken, ${failed} refused\n`);
     return failed === 0 ? 0 : 1;
   }
-  process.stderr.write('usage: real-media.cjs check|attribution [<manifest>] | fetch|cross-check <dir> [--item RMnn]... | release-files <media dir> <out dir> | pin <dir> --item RMnn [--from-file <file>]\n');
+  process.stderr.write('usage: real-media.cjs check|attribution [<manifest>] | fetch|cross-check <dir> [--item RMnn]... | release-files <media dir> <out dir> [--partial] | pin <dir> --item RMnn [--from-file <file>]\n');
   return 2;
 }
 

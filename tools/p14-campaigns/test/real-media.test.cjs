@@ -24,7 +24,7 @@ function item(overrides = {}) {
     status: 'approved',
     title: 'A stand-in recording',
     source_page: 'https://commons.wikimedia.org/wiki/File:Stand-in.webm',
-    url: 'https://upload.wikimedia.org/wikipedia/commons/a/ab/Stand-in.webm',
+    url: 'https://archive.org/download/stand-in/Stand-in.webm',
     file_name: 'RM01-stand-in.webm',
     bytes: BYTES.length,
     sha256: hex('sha256', BYTES),
@@ -417,4 +417,53 @@ test('the committed manifest\'s mirror is one test-media release, outside the re
   const [tag] = tags;
   assert.match(tag, /^test-media-\d{4}-\d{2}-\d{2}$/);
   assert.doesNotMatch(tag, /^v/);
+});
+
+test('a partial release takes the items pinned and present, names the rest, and gives the later upload', (t) => {
+  const { destination } = scratch(t);
+  const mirror = (id) => `${media.MIRROR_PREFIX}2026-10-19/${id}-stand-in.webm`;
+  const ready = item({ id: 'RM06', file_name: 'RM06-stand-in.webm', url: 'https://archive.org/download/x/6.webm', mirror_url: mirror('RM06') });
+  const unpinned = item({ id: 'RM01', file_name: 'RM01-stand-in.webm', url: 'https://upload.wikimedia.org/wikipedia/commons/a/ab/1.webm', sha256: null, mirror_url: mirror('RM01') });
+  const absent = item({ id: 'RM03', file_name: 'RM03-stand-in.webm', url: 'https://archive.org/download/x/3.webm', mirror_url: mirror('RM03') });
+  fs.mkdirSync(path.join(destination, 'RM06'));
+  fs.writeFileSync(path.join(destination, 'RM06', 'RM06-stand-in.webm'), BYTES);
+  const set = manifest([unpinned, absent, ready]);
+  assert.throws(() => media.releasePlan(set, destination), { code: media.ErrorCode.NOT_PINNED });
+  const plan = media.releasePlan(set, destination, { partial: true });
+  assert.deepEqual(plan.present, ['RM06']);
+  assert.deepEqual(plan.toCome, ['RM01', 'RM03']);
+  assert.deepEqual(plan.assets, [path.join(destination, 'RM06', 'RM06-stand-in.webm')]);
+  assert.match(plan.notes, /1 of 3 recordings/);
+  assert.match(plan.notes, /\*\*Still to come:\*\* RM01 \(RM01-stand-in\.webm, \d+ bytes\), RM03/);
+  assert.match(plan.attribution, /Still to come \(not yet in this release\): RM01, RM03\./);
+  assert.doesNotMatch(plan.attribution, /RM01: /);
+  const upload = plan.upload('C:\out\ATTRIBUTION.txt');
+  assert.equal(upload, `gh release upload test-media-2026-10-19 --repo smormah/vsift --clobber "${path.join(destination, 'RM01', 'RM01-stand-in.webm')}" "${path.join(destination, 'RM03', 'RM03-stand-in.webm')}" "C:\out\ATTRIBUTION.txt"`);
+  fs.writeFileSync(path.join(destination, 'RM06', 'RM06-stand-in.webm'), 'changed');
+  assert.throws(() => media.releasePlan(set, destination, { partial: true }), { code: media.ErrorCode.EXISTING_DIFFERS }, 'a file that differs from its pin is never an asset');
+  fs.writeFileSync(path.join(destination, 'RM06', 'RM06-stand-in.webm'), BYTES);
+  assert.equal(media.releasePlan(manifest([ready]), destination, { partial: true }).upload('C:\out\ATTRIBUTION.txt'), null, 'nothing still to come, no upload');
+});
+
+test('a source that refuses the tool is pinned from the mirror against its published checksum, and only then', async (t) => {
+  const mirror = `${media.MIRROR_PREFIX}2026-10-19/RM01-stand-in.webm`;
+  const wikimedia = item({ url: 'https://upload.wikimedia.org/wikipedia/commons/a/ab/1.webm', sha256: null, mirror_url: mirror });
+  assert.equal(media.pinUrl(wikimedia), mirror);
+  assert.equal(media.pinUrl(item()), item().url);
+  assert.throws(() => media.pinUrl({ ...wikimedia, source_checksum: null }), { code: media.ErrorCode.NOT_PINNED });
+  assert.throws(() => media.pinUrl({ ...wikimedia, mirror_url: undefined }), { code: media.ErrorCode.NOT_PINNED });
+  const transport = serving(BYTES);
+  assert.equal(await media.pinItem(wikimedia, scratch(t).destination, transport.open), hex('sha256', BYTES));
+  assert.deepEqual(transport.asked, [mirror]);
+  const other = Buffer.from(BYTES);
+  other[3] ^= 1;
+  await assert.rejects(media.pinItem(wikimedia, scratch(t).destination, serving(other).open), { code: media.ErrorCode.DIGEST_MISMATCH });
+});
+
+test('an asset the release does not hold yet is "not yet mirrored", which is not a failure; anything else is refused', () => {
+  const mirrored = item({ mirror_url: `${media.MIRROR_PREFIX}2026-10-19/RM01-stand-in.webm` });
+  assert.equal(media.crossCheckOutcome(mirrored, new media.RealMediaError(media.ErrorCode.NOT_FOUND, 'HTTP 404')), 'not_yet_mirrored');
+  assert.equal(media.crossCheckOutcome(item(), new media.RealMediaError(media.ErrorCode.NOT_FOUND, 'HTTP 404')), 'refused');
+  assert.equal(media.crossCheckOutcome(mirrored, new media.RealMediaError(media.ErrorCode.DIGEST_MISMATCH, 'x')), 'refused');
+  assert.equal(media.crossCheckOutcome(mirrored, new Error('x')), 'refused');
 });
