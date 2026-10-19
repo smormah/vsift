@@ -50,6 +50,20 @@ real meetings, accents or noisy rooms, so every accuracy figure below says what 
   instead ([troubleshooting](troubleshooting.md#missing_capability-a-tool-or-model-is-missing)). A worker `job run`
   or `job batch` request reports it too since `0.2.2`: its retranscribe step is `partial` and lists the same stretches
   in its `coverage` (in `0.2.1` the step was `complete` either way).
+- **A transcript segment can start seconds before its first word ([L-024](../planning/known-limits.md#l-024)).** The
+  recogniser often starts the first segment of a 30-second chunk at the chunk's first instant, whatever the audio holds, so
+  after a pause, noise or a silent stretch a cited start can come before the words: on real recordings by 1 to 4 seconds
+  where it could be compared, and by about 15 seconds after a long silent lead. Such a segment's
+  `alignment.provider_start_us` is 0. The words are inside the segment; to place them, listen to the segment's clip
+  (`vsift audio`) or read the frames around it. Such a segment also counts as transcribed over the time it claims.
+  `0.2.3` says so and changes nothing in the times; word-level times are to be evaluated in R1.
+- **A recording in two languages can lose speech, or show it in the wrong language, where a chunk is heard as the other
+  language ([L-188](../planning/known-limits.md#l-188)).** The recogniser decides the language of each 30-second chunk on its
+  own. On an English briefing with answers in Russian, one chunk heard as Russian wrote nothing for about 18 seconds of
+  English, and another wrote a 25-second Russian segment over an English question. Where the chunks are cut decides which
+  stretches are affected, and `transcript get` and `search` call them transcribed: VSift does not yet flag such a chunk. If a
+  recording mixes languages, listen around each change of language (`vsift audio`) before relying on "not found", or supply a
+  transcript (`ingest --transcript`). A fix is planned for R1.
 - **Where two chunks meet, a word or two can still be missing or repeated (0.2.1 and later, [L-155](../planning/known-limits.md#l-155) and [L-156](../planning/known-limits.md#l-156)).** The
   recogniser works on 30-second chunks that overlap by five seconds, and VSift joins them. Before this version it could
   drop the end of a sentence at a join, with no sign (found on two real recordings; it is in `0.2.0` and `0.2.1-rc.1`).

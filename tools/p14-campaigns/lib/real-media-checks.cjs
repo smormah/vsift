@@ -388,6 +388,80 @@ function seamJoins(segments) {
   };
 }
 
+/** A recogniser's start this close to its chunk's first sample counts as the chunk's start. */
+const CHUNK_START_SLACK_US = 20_000;
+
+function summaryOf(values) {
+  const sorted = [...values].sort((a, b) => a - b);
+  return {
+    count: sorted.length,
+    median_us: quantile(sorted, 0.5),
+    p95_us: quantile(sorted, 0.95),
+    max_us: sorted.length > 0 ? sorted[sorted.length - 1] : null,
+  };
+}
+
+/**
+ * Segments that start at their chunk's first sample (#174, L-024). The `base`
+ * model often starts the first segment of a chunk at the chunk's start whatever
+ * the audio holds, so after a pause, noise or a silent lead the segment claims
+ * seconds before its first word, and the claim depends on where the chunk was
+ * cut. For each such fresh segment of `segments` this measures how long it is,
+ * and, where the other plan wrote the same words (three or more, once each) in
+ * a segment that does not start at its own chunk's start, how much later the
+ * other plan started them: the time the segment claims before the speech, as far
+ * as two cuts can tell. The run's first chunk is counted apart (its start is the
+ * range's start, not a seam). A measurement, not a check.
+ * @param {Array<object>} segments one revision
+ * @param {Array<object>} otherSegments the other chunk plan's revision
+ * @returns {{ segments: number, at_chunk_start: number, first_chunk: number, longer_than_10_s: number, length: object, lead_against_other_plan: object }}
+ */
+function chunkStartSegments(segments, otherSegments) {
+  const fresh = (list) => list.filter((segment) => !segment.carried_from && segment.alignment && Number.isInteger(segment.alignment.chunk_index));
+  const atChunkStart = (segment) => {
+    const alignment = segment.alignment;
+    const offset = Number.isInteger(alignment.provider_start_us)
+      ? alignment.provider_start_us
+      : segment.start_us - alignment.chunk_audio_start_us;
+    return offset <= CHUNK_START_SLACK_US;
+  };
+  const own = fresh(segments);
+  const firstChunk = own.length > 0 ? Math.min(...own.map((segment) => segment.alignment.chunk_index)) : null;
+  const key = (segment) => words(segment.text).join(' ');
+  const others = new Map();
+  for (const segment of fresh(otherSegments)) {
+    const text = key(segment);
+    if (text.split(' ').length < 3) continue;
+    if (!others.has(text)) others.set(text, []);
+    others.get(text).push(segment);
+  }
+  const lengths = [];
+  const leads = [];
+  let first = 0;
+  let longer = 0;
+  for (const segment of own.filter(atChunkStart)) {
+    if (segment.alignment.chunk_index === firstChunk) {
+      first += 1;
+      continue;
+    }
+    const length = segment.end_us - segment.start_us;
+    lengths.push(length);
+    if (length > 10_000_000) longer += 1;
+    const candidates = others.get(key(segment));
+    if (!candidates || candidates.length !== 1 || atChunkStart(candidates[0])) continue;
+    const lead = candidates[0].start_us - segment.start_us;
+    if (Math.abs(lead) <= MATCH_SLACK_US * 4) leads.push(lead);
+  }
+  return {
+    segments: own.length,
+    at_chunk_start: lengths.length,
+    first_chunk: first,
+    longer_than_10_s: longer,
+    length: summaryOf(lengths),
+    lead_against_other_plan: summaryOf(leads),
+  };
+}
+
 function mergeRanges(ranges) {
   const sorted = [...ranges].filter((range) => range.to_us > range.from_us).sort((a, b) => a.from_us - b.from_us);
   const out = [];
@@ -554,6 +628,7 @@ module.exports = {
   timingDifferences,
   seamJoins,
   JOIN_BINS,
+  chunkStartSegments,
   coverageProblems,
   mergeRanges,
   failureFinding,
