@@ -251,7 +251,11 @@ per-user folder longer than about 141 characters, or a session root of about 205
    the change rule with what changed in the native frames ([`visual-thresholds-real-media.md`](visual-thresholds-real-media.md)).
 8. **Speech start** (#174): with `speech_start_us` labelled, the first segment's start minus it.
 9. **Small text** (#173): the crop of the labelled small-text region is at native size and legible to a person; recorded by
-   hand, as a yes or no per crop.
+   hand, as a yes or no per crop. **Measured mechanically since 2026-10-19:** for an item that covers
+   `screen-ui-small-text`, each of the three frames is cut into a grid of native crops of at most 480x120. Each crop's
+   PNG is read back and checked to be at native size, and the height of every line of text in it is measured
+   (`lib/small-text.cjs`; `measurements.small_text`). The report gives the line heights; legibility stays a person's
+   judgement ([`small-text-real-media.md`](small-text-real-media.md)).
 10. **Timings:** seconds and real-time factor per step and item, against the budgets of the
     [qualification profiles](support-and-resource-profiles.md); a run several times slower than the last one is a finding.
 

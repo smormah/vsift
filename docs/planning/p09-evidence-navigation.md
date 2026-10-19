@@ -232,7 +232,10 @@ two-generation session's, set by process start-up (fastest calls 104-116 ms thro
   most 29 s either side (`search_window`).
 - **Tiny text:** measured on synthetic 5x7 glyphs at scale 4 only; real screen text
   with anti-aliasing, subpixel rendering and compression is not in the corpus, and
-  crops are never upscaled.
+  crops are never upscaled. **Note (2026-10-19, #173):** on a real screen recording
+  (RM10) the text is about 7 to 10 px type, and on synthetic text compressed like it
+  legibility depends on the frame's compression more than on size; enlarging does not
+  help ([`small-text-real-media.md`](small-text-real-media.md), L-018).
 - **Paths:** delivered paths are absolute and, on Windows, in the extended-length form
   `\\?\C:\...` the engine returns, kept verbatim because it is valid and long-path
   safe (hosts may display it as they wish); they are valid only while the session
