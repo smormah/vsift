@@ -450,7 +450,7 @@ async fn p04_preserves_invalid_bytes_and_handles_no_newline_and_delayed_output()
 
         assert_eq!(outcome.termination, TerminationReason::Exited);
         assert!(outcome.stdout.complete);
-        assert!(!outcome.stdout.bytes.is_empty());
+        assert_ne!(outcome.stdout.bytes, [] as [u8; 0]);
     }
     Ok(())
 }

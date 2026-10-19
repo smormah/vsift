@@ -200,7 +200,10 @@ mod tests {
             1
         );
         let quoted = "{\"type\":\"item.completed\",\"item\":{\"type\":\"command_execution\",\"aggregated_output\":\"{\\\"text\\\":\\\"bwrap: Can't bind mount\\\"}\"}}";
-        assert!(configuration_warnings(ClientKind::Codex, quoted, "").is_empty());
+        assert_eq!(
+            configuration_warnings(ClientKind::Codex, quoted, ""),
+            [] as [std::string::String; 0]
+        );
     }
 
     #[test]
@@ -211,8 +214,14 @@ mod tests {
             "not json at all: has not been trusted",
         ]
         .join("\n");
-        assert!(configuration_warnings(ClientKind::ClaudeCode, &stdout, "").is_empty());
-        assert!(configuration_warnings(ClientKind::Codex, &stdout, "").is_empty());
+        assert_eq!(
+            configuration_warnings(ClientKind::ClaudeCode, &stdout, ""),
+            [] as [std::string::String; 0]
+        );
+        assert_eq!(
+            configuration_warnings(ClientKind::Codex, &stdout, ""),
+            [] as [std::string::String; 0]
+        );
         let notice = "{\"type\":\"system\",\"subtype\":\"warning\",\"message\":\"Invalid settings in .claude/settings.json\"}";
         assert_eq!(
             configuration_warnings(ClientKind::ClaudeCode, notice, "").len(),

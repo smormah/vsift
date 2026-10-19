@@ -660,7 +660,7 @@ async fn a_later_run_that_reads_the_unread_part_covers_it() -> TestResult {
     let (transcribed, untranscribed) = chain.coverage()?;
     assert!(untranscribed.is_empty(), "{untranscribed:?}");
     assert_eq!(transcribed, seconds(0..70));
-    assert!(chain.newest()?.carried_untranscribed().is_empty());
+    assert_eq!(chain.newest()?.carried_untranscribed(), []);
     Ok(())
 }
 
@@ -684,7 +684,7 @@ async fn a_chain_without_an_unread_part_records_nothing_and_covers_the_source() 
             let (transcribed, untranscribed) = chain.coverage()?;
             assert!(untranscribed.is_empty(), "{from}-{to}: {untranscribed:?}");
             assert_eq!(transcribed, seconds(0..70));
-            assert!(chain.newest()?.carried_untranscribed().is_empty());
+            assert_eq!(chain.newest()?.carried_untranscribed(), []);
         }
     }
     Ok(())
@@ -914,17 +914,17 @@ async fn a_cue_over_the_runs_own_text_is_replaced_and_one_beside_it_or_over_noth
 async fn ranges_apart_record_nothing_and_cover_what_was_read() -> TestResult {
     let mut chain = Chain::bounded(0, 10, &[]).await?;
     assert!(chain.step(20, 30, &[]).await?);
-    assert!(chain.newest()?.carried_untranscribed().is_empty());
+    assert_eq!(chain.newest()?.carried_untranscribed(), []);
     let (transcribed, untranscribed) = chain.coverage()?;
     assert_eq!(transcribed, union(&[seconds(0..10), seconds(20..30)]));
     assert_eq!(untranscribed, union(&[seconds(10..20), seconds(30..70)]));
     assert!(chain.step(40, 50, &[Answer::Nothing]).await?);
-    assert!(chain.newest()?.carried_untranscribed().is_empty());
+    assert_eq!(chain.newest()?.carried_untranscribed(), []);
     // Over an imported file, with every run read, there is nothing unread to record.
     let mut file = Chain::imported(&[(5, 7), (40, 42)])?;
     assert!(file.step(10, 20, &[]).await?);
     assert!(file.step(30, 38, &[Answer::Nothing]).await?);
-    assert!(file.newest()?.carried_untranscribed().is_empty());
+    assert_eq!(file.newest()?.carried_untranscribed(), []);
     assert!(file.coverage()?.1.is_empty());
     Ok(())
 }
@@ -943,7 +943,7 @@ async fn an_unread_part_under_a_carried_file_is_the_one_thing_that_is_recorded()
     assert!(chain.holds_a_part_a_run_read_and_cannot_vouch_for());
     // The file is carried (the cue at 5 s), and claims the whole source.
     assert!(chain.step(0, 3, &[Answer::Words]).await?);
-    assert!(!chain.newest()?.carried_untranscribed().is_empty());
+    assert_ne!(chain.newest()?.carried_untranscribed(), []);
     Ok(())
 }
 
@@ -987,7 +987,7 @@ async fn words_that_no_segment_holds_are_recorded_and_not_counted_as_transcribed
     );
     // The same chain with every answer read cleanly records nothing.
     let clean = Chain::local(&[Answer::Words; 3]).await?;
-    assert!(clean.newest()?.unplaced().is_empty());
+    assert_eq!(clean.newest()?.unplaced(), []);
     assert!(clean.coverage()?.1.is_empty());
     Ok(())
 }
@@ -1001,13 +1001,13 @@ async fn later_runs_neither_hide_nor_keep_words_that_no_segment_holds() -> TestR
     // Over the stretch: the run reads it again and holds the words it hears.
     let mut over = Chain::local(&[Answer::Unplaced, Answer::Words, Answer::Words]).await?;
     assert!(over.step(0, 10, &[Answer::Words]).await?);
-    assert!(over.newest()?.unplaced().is_empty());
+    assert_eq!(over.newest()?.unplaced(), []);
     assert!(over.coverage()?.1.is_empty(), "{:?}", over.coverage()?.1);
 
     // Far from it: the stretch stays untranscribed, and the revision records it.
     let mut far = Chain::local(&[Answer::Unplaced, Answer::Words, Answer::Words]).await?;
     assert!(far.step(40, 65, &[Answer::Words, Answer::Words]).await?);
-    assert!(far.newest()?.unplaced().is_empty());
+    assert_eq!(far.newest()?.unplaced(), []);
     assert_eq!(far.coverage()?.1, seconds(1..3));
     assert_eq!(far.newest()?.carried_untranscribed(), [range(1, 3)?]);
 

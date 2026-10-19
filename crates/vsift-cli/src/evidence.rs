@@ -397,7 +397,7 @@ mod tests {
             write_command_failure(&mut writer, OutputMode::Json, CommandName::FrameGet, busy());
         assert_eq!(written, ProcessExit::Retryable);
         assert_eq!(written.code(), 4);
-        assert!(stderr.is_empty());
+        assert_eq!(stderr, [] as [u8; 0]);
         let value: serde_json::Value = serde_json::from_slice(&stdout)?;
         assert_eq!(value, example);
 
@@ -411,7 +411,7 @@ mod tests {
             busy(),
         );
         assert_eq!(written, ProcessExit::Retryable);
-        assert!(stdout.is_empty());
+        assert_eq!(stdout, [] as [u8; 0]);
         assert_eq!(
             String::from_utf8(stderr)?,
             format!(

@@ -1362,7 +1362,7 @@ mod tests {
         assert_eq!(from_full.session_ids.len(), 4);
         assert_eq!(from_full.next_bucket, Some(8));
         let empty = page(&[], None, 256)?;
-        assert!(empty.session_ids.is_empty());
+        assert_eq!(empty.session_ids, [] as [vsift_domain::SessionId; 0]);
         assert_eq!(empty.next_bucket, None);
         Ok(())
     }

@@ -173,7 +173,7 @@ fn an_unusable_tool_fails_the_preflight_before_mutation_with_typed_remediation()
     let output = vsift(&root, &ingest_arguments(source, sidecar, &["--json"]))?;
 
     assert_eq!(output.status.code(), Some(2));
-    assert!(output.stderr.is_empty());
+    assert_eq!(output.stderr, [] as [u8; 0]);
     let value: Value = serde_json::from_slice(&output.stdout)?;
     assert_preflight_failure(&value, PROCESS_FAILURE_MARKER)?;
     assert!(!root.sessions().exists(), "a session root was created");

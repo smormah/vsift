@@ -3121,7 +3121,10 @@ fn the_merge_reports_a_marked_stretch_only_where_nothing_kept_covers_it() -> Tes
         window_1,
         &[(500, 5_000, "kept four"), (14_000, 16_000, "kept five")],
     )?;
-    assert!(merge_chunks(&[first, covering]).unplaced.is_empty());
+    assert_eq!(
+        merge_chunks(&[first, covering]).unplaced,
+        [] as [crate::timeline::TimeRange; 0]
+    );
     Ok(())
 }
 
@@ -3319,7 +3322,7 @@ fn asr_revision_over(
 #[test]
 fn a_local_asr_revision_may_hold_no_segment() -> TestResult {
     let revision = TranscriptRevision::new(asr_revision(Vec::new())?)?;
-    assert!(revision.segments().is_empty());
+    assert_eq!(revision.segments(), []);
     assert_eq!(
         revision.provenance().alignment_origin().identifier(),
         "local_asr"

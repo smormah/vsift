@@ -1515,7 +1515,7 @@ mod tests {
             "aresample=16000,atrim=start=1.000000:duration=0.020000,ashowinfo"
         );
         let early = window(300_000, 32)?;
-        assert!(early.seek_arguments().is_empty());
+        assert_eq!(early.seek_arguments(), [] as [std::string::String; 0]);
         assert_eq!(early.seek, 0);
         assert_eq!(seconds_arg(early.read), "0.300032");
         assert_eq!(
@@ -1523,10 +1523,10 @@ mod tests {
             "aresample=16000,atrim=start=0.300000:duration=0.000032,asetnsamples=n=65536:p=0,ashowinfo"
         );
         let first = window(0, 30_000_000)?;
-        assert!(first.seek_arguments().is_empty());
+        assert_eq!(first.seek_arguments(), [] as [std::string::String; 0]);
         assert_eq!((first.lead, first.read), (0, 30_000_000));
         let boundary = window(1_000_000, 5_000_000)?;
-        assert!(boundary.seek_arguments().is_empty());
+        assert_eq!(boundary.seek_arguments(), [] as [std::string::String; 0]);
         assert_eq!(boundary.lead, 1_000_000);
         Ok(())
     }
@@ -1696,7 +1696,10 @@ mod tests {
             shifted.first().map(|frame| frame.time.as_micros()),
             Some(250_000)
         );
-        assert!(parse_visual_samples(&[], b"", &visual_window(0, 1)?)?.is_empty());
+        assert_eq!(
+            parse_visual_samples(&[], b"", &visual_window(0, 1)?)?,
+            [] as [crate::ffmpeg_media::RawGrayFrame; 0]
+        );
         Ok(())
     }
 

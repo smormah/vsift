@@ -1244,7 +1244,7 @@ mod tests {
                 );
                 assert_eq!(written, ProcessExit::StorageOrIo, "{fault}");
                 assert_eq!(written.code(), 7, "{fault}");
-                assert!(stderr.is_empty());
+                assert_eq!(stderr, [] as [u8; 0]);
                 let value: serde_json::Value = serde_json::from_slice(&stdout)?;
                 assert_eq!(value, published, "{fault}");
 
@@ -1258,7 +1258,7 @@ mod tests {
                     failure(),
                 );
                 assert_eq!(written, ProcessExit::StorageOrIo, "{fault}");
-                assert!(stdout.is_empty());
+                assert_eq!(stdout, [] as [u8; 0]);
                 assert_eq!(
                     String::from_utf8(stderr)?,
                     format!(
@@ -1325,7 +1325,7 @@ mod tests {
                     failure,
                 );
                 assert_eq!(written, exit, "{kind}");
-                assert!(stderr.is_empty());
+                assert_eq!(stderr, [] as [u8; 0]);
                 let value: serde_json::Value = serde_json::from_slice(&stdout)?;
                 assert_eq!(value, published, "{kind}");
             }
@@ -1392,7 +1392,7 @@ mod tests {
         );
         assert_eq!(written, ProcessExit::Source);
         assert_eq!(written.code(), 3);
-        assert!(stderr.is_empty());
+        assert_eq!(stderr, [] as [u8; 0]);
         let value: serde_json::Value = serde_json::from_slice(&stdout)?;
         assert_eq!(value, example);
 
@@ -1406,7 +1406,7 @@ mod tests {
             too_slow(),
         );
         assert_eq!(written, ProcessExit::Source);
-        assert!(stdout.is_empty());
+        assert_eq!(stdout, [] as [u8; 0]);
         let text = String::from_utf8(stderr)?;
         assert_eq!(
             text,
@@ -1505,7 +1505,7 @@ mod tests {
         let written =
             write_command_failure(&mut writer, OutputMode::Json, CommandName::Ingest, early());
         assert_eq!(written, ProcessExit::Source);
-        assert!(stderr.is_empty());
+        assert_eq!(stderr, [] as [u8; 0]);
         let value: serde_json::Value = serde_json::from_slice(&stdout)?;
         assert_eq!(value, example);
 
@@ -1515,7 +1515,7 @@ mod tests {
         let written =
             write_command_failure(&mut writer, OutputMode::Human, CommandName::Ingest, early());
         assert_eq!(written, ProcessExit::Source);
-        assert!(stdout.is_empty());
+        assert_eq!(stdout, [] as [u8; 0]);
         assert_eq!(
             String::from_utf8(stderr)?,
             format!(
@@ -1587,7 +1587,7 @@ mod tests {
 
             assert_eq!(exit, ProcessExit::Success);
             assert!(String::from_utf8(stdout)?.contains("Usage:"));
-            assert!(stderr.is_empty());
+            assert_eq!(stderr, [] as [u8; 0]);
         }
         Ok(())
     }
@@ -1612,7 +1612,7 @@ mod tests {
         assert_eq!(stdout.last(), Some(&b'\n'));
         assert!(!stdout[..stdout.len().saturating_sub(1)].contains(&b'\n'));
         assert_eq!(value["error"]["code"], "INVALID_ARGUMENT");
-        assert!(stderr.is_empty());
+        assert_eq!(stderr, [] as [u8; 0]);
         Ok(())
     }
 
@@ -1644,7 +1644,7 @@ mod tests {
         assert_eq!(exit, ProcessExit::StorageOrIo);
         assert_eq!(value["command"], "setup.install");
         assert_eq!(value["error"]["code"], "STORAGE_IO");
-        assert!(stderr.is_empty());
+        assert_eq!(stderr, [] as [u8; 0]);
         Ok(())
     }
 }

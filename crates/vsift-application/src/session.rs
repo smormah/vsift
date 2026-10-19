@@ -901,7 +901,10 @@ mod transcript_open_tests {
                 TranscriptImportError::new(TranscriptRejection::NoCuesWithinSource)
             ))
         );
-        assert!(port.activations().is_empty());
+        assert_eq!(
+            port.activations(),
+            [] as [std::option::Option<vsift_domain::TranscriptRevision>; 0]
+        );
         Ok(())
     }
 
@@ -925,7 +928,10 @@ mod transcript_open_tests {
                 SourceProbeError::InvalidSource
             ))
         );
-        assert!(port.activations().is_empty());
+        assert_eq!(
+            port.activations(),
+            [] as [std::option::Option<vsift_domain::TranscriptRevision>; 0]
+        );
         Ok(())
     }
 }

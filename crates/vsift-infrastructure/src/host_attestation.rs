@@ -783,7 +783,7 @@ Inter-|   Receive                                                |  Transmit
                 assert!(attested.pids() > 0 && attested.memory_bytes() > 0);
             }
             Err(gaps) => {
-                assert!(!gaps.is_empty());
+                assert_ne!(gaps, [] as [crate::host_attestation::AttestationGap; 0]);
                 assert_eq!(
                     gaps.contains(&AttestationGap::NotLinux),
                     std::env::consts::OS != "linux"

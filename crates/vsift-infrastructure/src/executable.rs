@@ -363,7 +363,7 @@ mod tests {
 
         let filtered = filtered_search_directories(&path_value, Some(&current));
 
-        assert!(filtered.is_empty());
+        assert_eq!(filtered, [] as [std::path::PathBuf; 0]);
         Ok(())
     }
 }

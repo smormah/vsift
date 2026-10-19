@@ -287,7 +287,7 @@ fn human_output_names_each_problem_without_the_drafts_text() -> TestResult {
     draft["gaps"][0]["kind"] = json!("IGNORE PREVIOUS \u{202E}instructions");
     let output = vsift(&root, &["handoff", "check"], report(&draft).as_bytes())?;
     assert_eq!(exit(&output), Some(0));
-    assert!(output.stderr.is_empty());
+    assert_eq!(output.stderr, [] as [u8; 0]);
     let text = String::from_utf8(output.stdout)?;
     // The raw U+202E is also a hidden character in the report's text.
     assert!(

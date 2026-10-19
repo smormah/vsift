@@ -444,7 +444,7 @@ mod tests {
         let result = writer.write_json(&oversized);
 
         assert!(matches!(result, Err(OutputError::TooLarge)));
-        assert!(stdout.is_empty());
+        assert_eq!(stdout, [] as [u8; 0]);
     }
 
     #[test]

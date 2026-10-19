@@ -161,7 +161,7 @@ fn malformed_sidecars_fail_before_mutation_with_typed_remediation() -> TestResul
         ],
     )?;
     assert_eq!(output.status.code(), Some(3));
-    assert!(output.stderr.is_empty());
+    assert_eq!(output.stderr, [] as [u8; 0]);
     let value = json(&output)?;
     assert_eq!(value["command"], "ingest");
     assert_eq!(value["error"]["code"], "INVALID_SOURCE");

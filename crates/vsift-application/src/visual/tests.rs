@@ -213,14 +213,14 @@ async fn a_long_source_is_indexed_thirty_windows_per_call_with_stable_identities
     for ordinal in 0..30 {
         assert_eq!(ids(&first_index, ordinal), ids(&second_index, ordinal));
     }
-    assert!(
+    assert_eq!(
         visual_coverage_gaps(
             Some(&second_index),
             scope.duration,
             range(0, 45 * 60)?,
             None
-        )
-        .is_empty()
+        ),
+        [] as [vsift_domain::VisualCoverageGap; 0]
     );
     let third = extend(scope, Some(&second_index), range(0, 45 * 60)?, &sampler).await?;
     assert_eq!(third.revision, None);
@@ -308,7 +308,7 @@ async fn a_rejected_window_is_recorded_once_and_never_decoded_again() -> TestRes
     let again = FakeSampler::new(still);
     let repeated = extend(scope, Some(&index), range(0, 3 * 60)?, &again).await?;
     assert_eq!(repeated.revision, None);
-    assert!(again.calls().is_empty());
+    assert_eq!(again.calls(), [] as [u32; 0]);
 
     let broken = FakeSampler::failing(still, vec![(0, VisualSamplingError::Io)]);
     assert_eq!(

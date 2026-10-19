@@ -579,7 +579,7 @@ async fn human_output_is_readable_text() -> TestResult {
     )?)?;
     let output = vsift(&root, &candidates(&session, "0", "60000000", &[]))?;
     assert_eq!(output.status.code(), Some(0));
-    assert!(output.stderr.is_empty());
+    assert_eq!(output.stderr, [] as [u8; 0]);
     let text = String::from_utf8(output.stdout)?;
     assert!(
         text.starts_with(&format!("Visual candidates of session {session}\n")),
@@ -587,7 +587,7 @@ async fn human_output_is_readable_text() -> TestResult {
     );
     assert!(!text.contains("\"command\""), "{text}");
     let identities = ids(&page)?;
-    assert!(!identities.is_empty());
+    assert_ne!(identities, [] as [std::string::String; 0]);
     for identity in identities {
         assert!(
             text.lines().any(|line| line.starts_with(&identity)),
@@ -659,7 +659,7 @@ async fn the_brief_view_is_the_full_page_without_what_every_candidate_repeats() 
             brief["data"]["items"].as_array().ok_or("items")?,
             full["data"]["items"].as_array().ok_or("items")?,
         );
-        assert!(!full_items.is_empty());
+        assert_ne!(full_items.as_slice(), [] as [serde_json::Value; 0]);
         assert_eq!(brief_items.len(), full_items.len());
         for (brief_item, full_item) in brief_items.iter().zip(full_items) {
             assert!(is_projection_of(brief_item, full_item));

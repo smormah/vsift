@@ -280,7 +280,10 @@ fn between_the_cold_rounds_only_the_cold_parts_must_hold() -> TestResult {
     let only: Vec<String> = ["grader", "cold", "settings", "truth"]
         .map(str::to_owned)
         .to_vec();
-    assert!(freeze::check(&root, &file, Some(&only))?.is_empty());
+    assert_eq!(
+        freeze::check(&root, &file, Some(&only))?,
+        [] as [std::string::String; 0]
+    );
     fs::write(
         root.join("tools/vsift-agent-trials/src/grade.rs"),
         "a changed grader",
@@ -319,6 +322,9 @@ fn the_real_repository_has_a_freezable_state() -> TestResult {
     let file = scratch.path().join("freeze.json");
     let written = freeze::write(&repository(), "0000", &file)?;
     assert_eq!(written.freeze_sha256.len(), 64);
-    assert!(freeze::check(&repository(), &file, None)?.is_empty());
+    assert_eq!(
+        freeze::check(&repository(), &file, None)?,
+        [] as [std::string::String; 0]
+    );
     Ok(())
 }

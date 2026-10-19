@@ -227,7 +227,7 @@ fn json_lines_mode_ends_with_the_same_remediation() -> TestResult {
         "--events", "jsonl", "crop", SESSION, EVIDENCE, "--rect", "10",
     ])?;
     assert_eq!(output.status.code(), Some(2));
-    assert!(output.stderr.is_empty());
+    assert_eq!(output.stderr, [] as [u8; 0]);
     let text = String::from_utf8(output.stdout)?;
     let lines: Vec<&str> = text.lines().collect();
     assert_eq!(lines.len(), 1, "{lines:?}");

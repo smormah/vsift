@@ -1314,7 +1314,7 @@ mod tests {
         let mut copied = Vec::new();
         let stopped = copy_until(&mut reader, &mut copied, &NeverCancelled, &mut up_from(1));
         assert!(matches!(stopped, Err(SourceError::Deadline)), "{stopped:?}");
-        assert!(copied.is_empty());
+        assert_eq!(copied, [] as [u8; 0]);
         assert_eq!(reader.position(), 0);
 
         // The bytes are not judged before the copy ends: a file that is no

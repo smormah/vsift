@@ -369,7 +369,7 @@ mod tests {
             .ok_or("no field")?;
         let foreign = ack.line().replacen(" request ", " renew ", 1);
         let events = parse_events(&format!("{without}\n{foreign}\n"));
-        assert!(events.acks.is_empty());
+        assert_eq!(events.acks, [] as [crate::protocol::Ack; 0]);
         assert_eq!(events.malformed, vec![1, 2]);
         Ok(())
     }
@@ -387,7 +387,7 @@ mod tests {
         assert_eq!(events.starts.len(), 1);
         assert_eq!(events.failures.len(), 1);
         assert_eq!(events.failures[0].code, "STORAGE_IO");
-        assert!(events.malformed.is_empty());
+        assert_eq!(events.malformed, [] as [usize; 0]);
         Ok(())
     }
 
@@ -398,7 +398,7 @@ mod tests {
         let events = parse_events(&format!(
             "{truncated}\nACK x\nFAIL 1 2 renew storage_io\nSTART 1 2 nothing\n{line} extra\n"
         ));
-        assert!(events.acks.is_empty());
+        assert_eq!(events.acks, [] as [crate::protocol::Ack; 0]);
         assert_eq!(events.malformed, vec![1, 2, 3, 4, 5]);
         Ok(())
     }

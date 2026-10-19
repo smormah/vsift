@@ -656,7 +656,7 @@ fn the_brief_result_is_a_projection_of_the_full_result() -> TestResult {
             page.brief["data"]["items"].as_array().ok_or("items")?,
             page.json["data"]["items"].as_array().ok_or("items")?,
         );
-        assert!(!full_items.is_empty());
+        assert_ne!(full_items.as_slice(), [] as [serde_json::Value; 0]);
         assert_eq!(brief_items.len(), full_items.len());
         let constants = &page.brief["data"]["item_constants"];
         for (brief_item, full_item) in brief_items.iter().zip(full_items) {

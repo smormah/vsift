@@ -192,7 +192,7 @@ fn setup_without_a_leaf_displays_help_and_does_not_probe() -> Result<(), Box<dyn
     assert!(output.status.success());
     assert!(stdout.contains("Usage: setup [COMMAND]"));
     assert!(!stdout.contains("Status:"));
-    assert!(output.stderr.is_empty());
+    assert_eq!(output.stderr, [] as [u8; 0]);
     Ok(())
 }
 
@@ -211,7 +211,7 @@ fn json_parse_failures_have_one_complete_machine_result() -> Result<(), Box<dyn 
         assert_eq!(value["command"], "parse");
         assert_eq!(value["status"], "failed");
         assert_eq!(value["error"]["code"], "INVALID_ARGUMENT");
-        assert!(output.stderr.is_empty());
+        assert_eq!(output.stderr, [] as [u8; 0]);
         assert_eq!(output.stdout.last(), Some(&b'\n'));
         assert!(!output.stdout[..output.stdout.len().saturating_sub(1)].contains(&b'\n'));
     }
@@ -250,7 +250,7 @@ fn setup_check_json_is_structural_and_environment_independent()
                 .all(|item| item["remediation"]["required_authority"] == "user")
         );
     }
-    assert!(output.stderr.is_empty());
+    assert_eq!(output.stderr, [] as [u8; 0]);
     Ok(())
 }
 
@@ -419,7 +419,7 @@ fn headless_setup_check_jsonl_returns_one_bounded_terminal_remediation()
         event["result"]["data"]["dependencies"][0]["remediation"]["required_authority"],
         "user"
     );
-    assert!(output.stderr.is_empty());
+    assert_eq!(output.stderr, [] as [u8; 0]);
     Ok(())
 }
 
@@ -758,7 +758,7 @@ fn denied_configuration_storage_fails_typed_without_prompting_or_changing_the_re
         assert_eq!(value["error"]["code"], "STORAGE_IO");
         assert_eq!(value["error"]["retryable"], false);
         assert_eq!(value["error"]["remediation"], serde_json::json!([]));
-        assert!(denied.stderr.is_empty());
+        assert_eq!(denied.stderr, [] as [u8; 0]);
         assert_eq!(std::fs::read(&record)?, before);
         for entry in std::fs::read_dir(&root)? {
             assert!(

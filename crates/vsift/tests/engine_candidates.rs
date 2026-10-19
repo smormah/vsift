@@ -312,7 +312,7 @@ async fn an_indexed_range_is_read_warm_with_typed_gaps() -> TestResult {
     let complete = harness.engine.candidates(harness.request(0, 60)).await?;
     assert_eq!(complete.analysed_now(), 0);
     assert_eq!(complete.index().id(), index.id());
-    assert!(complete.gaps().is_empty());
+    assert_eq!(complete.gaps(), []);
     let expected: Vec<&str> = index
         .windows()
         .iter()

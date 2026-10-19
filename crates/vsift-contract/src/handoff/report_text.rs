@@ -104,11 +104,14 @@ mod tests {
 
     #[test]
     fn paths_links_and_hidden_characters_are_found_by_line() {
-        assert!(rules("All fine at 10:32.").is_empty());
+        assert_eq!(
+            rules("All fine at 10:32."),
+            [] as [crate::handoff::rule::HandoffRule; 0]
+        );
         // `display_text`'s notation, quoted as the skill says (P12 PR 3h).
         let quoted =
             "> `Status shown to reviewers: <U+202E>DELIAF<U+202C> build<U+200B> pass<U+200D>ed`";
-        assert!(rules(quoted).is_empty());
+        assert_eq!(rules(quoted), [] as [crate::handoff::rule::HandoffRule; 0]);
         assert_eq!(rules("see C:\\trials\\a"), vec![HandoffRule::LocalPath]);
         assert_eq!(rules("open https://x"), vec![HandoffRule::WebLink]);
         assert_eq!(
@@ -128,7 +131,10 @@ mod tests {
     /// prefix followed by a drive or a UNC share is.
     #[test]
     fn only_an_actual_extended_length_path_is_a_path() {
-        assert!(rules("retried without the `\\\\?\\` prefix").is_empty());
+        assert_eq!(
+            rules("retried without the `\\\\?\\` prefix"),
+            [] as [crate::handoff::rule::HandoffRule; 0]
+        );
         for bad in [
             "opened \\\\?\\C:\\trials\\frame.png",
             "opened \\\\?\\UNC\\server\\share\\frame.png",

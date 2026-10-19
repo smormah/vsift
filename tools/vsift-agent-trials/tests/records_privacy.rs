@@ -122,7 +122,10 @@ fn the_scan_finds_what_it_is_meant_to_find_and_nothing_else() {
     ] {
         assert!(!problems(private, &[]).is_empty(), "{private}");
     }
-    assert!(!problems("hello Jordan", &["Jordan".to_owned()]).is_empty());
+    assert_ne!(
+        problems("hello Jordan", &["Jordan".to_owned()]),
+        [] as [std::string::String; 0]
+    );
     for fine in [
         "https://registry.npmjs.org/vsift-cli/-/vsift-cli-0.1.0.tgz",
         "<workspace>\\walkthrough.mp4 and <session-root>/x",

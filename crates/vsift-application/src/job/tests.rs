@@ -1173,7 +1173,10 @@ async fn a_checkpoint_stored_for_a_window_under_the_floor_is_not_reused_as_speec
         )
         .await?;
         assert_eq!((used.reused, used.discarded), (0, 1));
-        assert!(transcription.segments.is_empty());
+        assert_eq!(
+            transcription.segments,
+            [] as [vsift_domain::MergedSegment; 0]
+        );
         assert_eq!(
             transcription
                 .run
@@ -1198,7 +1201,7 @@ async fn a_checkpoint_stored_for_a_window_under_the_floor_is_not_reused_as_speec
         transcribe_range_checkpointed(request, scope, &harness.audio, &harness.recognizer, &never)
             .await?;
     assert_eq!((used.reused, used.discarded), (1, 0));
-    assert!(again.segments.is_empty());
+    assert_eq!(again.segments, [] as [vsift_domain::MergedSegment; 0]);
     assert_eq!(harness.audio.calls.load(Ordering::SeqCst), 0);
     assert_eq!(harness.recognizer.calls.load(Ordering::SeqCst), 0);
     Ok(())
@@ -2414,6 +2417,6 @@ fn record_changes_follow_the_state_graph() -> TestResult {
     assert_eq!(restarted.state, JobState::Queued);
     assert_eq!(restarted.epoch, 1);
     assert_eq!(restarted.attempt, 0);
-    assert!(restarted.failures.is_empty());
+    assert_eq!(restarted.failures, [] as [vsift_domain::AttemptFailure; 0]);
     Ok(())
 }

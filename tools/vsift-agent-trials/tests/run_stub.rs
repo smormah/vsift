@@ -644,7 +644,7 @@ async fn codex_gets_its_sandbox_and_the_session_root_as_writable() -> TestResult
         assert_eq!(fs::metadata(&base)?.permissions().mode() & 0o777, 0o700);
     }
     #[cfg(not(unix))]
-    assert!(record.client_setup.is_empty());
+    assert_eq!(record.client_setup, [] as [std::string::String; 0]);
     assert!(
         !trial
             .root

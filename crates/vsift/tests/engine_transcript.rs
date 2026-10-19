@@ -568,7 +568,7 @@ async fn a_cancelled_ingest_leaves_nothing_behind() -> TestResult {
         failed.map_err(|error| error.failure_code()).map(|_| ()),
         Err(FailureCode::Cancelled)
     );
-    assert!(harness.engine.list_sessions(None)?.entries().is_empty());
+    assert_eq!(harness.engine.list_sessions(None)?.entries(), []);
     assert_eq!(registration_markers(&harness)?, 0);
     assert_eq!(
         fs::read_dir(harness.root.path("sessions").join("sessions"))?.count(),
@@ -769,7 +769,7 @@ async fn failed_opens_listings_and_scans_side_by_side_leave_nothing_and_never_fa
             None => break,
         }
     }
-    assert!(harness.engine.list_sessions(None)?.entries().is_empty());
+    assert_eq!(harness.engine.list_sessions(None)?.entries(), []);
     assert_eq!(registration_markers(&harness)?, 0);
     assert_eq!(
         fs::read_dir(harness.root.path("sessions").join("sessions"))?.count(),
@@ -869,7 +869,7 @@ async fn f10_import_pages_and_cites_the_dialog_window() -> TestResult {
         revision.source_segment().range().end().as_micros(),
         12_000_000
     );
-    assert!(revision.warnings().as_slice().is_empty());
+    assert_eq!(revision.warnings().as_slice(), []);
     let session = opened.session.session_id;
     let status = harness.engine.session_status(&session)?;
     assert_eq!(status.artifact_count(), 1);

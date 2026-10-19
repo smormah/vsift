@@ -591,10 +591,22 @@ mod tests {
         ] {
             assert!(!fact(term).stated_in(text), "{term} in {text}");
         }
-        assert!(time_alternatives("2.5 seconds").is_empty());
-        assert!(time_alternatives("E-409").is_empty());
+        assert_eq!(
+            time_alternatives("2.5 seconds"),
+            [] as [std::vec::Vec<std::string::String>; 0]
+        );
+        assert_eq!(
+            time_alternatives("E-409"),
+            [] as [std::vec::Vec<std::string::String>; 0]
+        );
         assert_eq!(time_alternatives("at 9:05"), vec![fact_words("at 9.05")]);
-        assert!(time_alternatives("ratio 1:100").is_empty());
-        assert!(time_alternatives("ab10:32").is_empty());
+        assert_eq!(
+            time_alternatives("ratio 1:100"),
+            [] as [std::vec::Vec<std::string::String>; 0]
+        );
+        assert_eq!(
+            time_alternatives("ab10:32"),
+            [] as [std::vec::Vec<std::string::String>; 0]
+        );
     }
 }

@@ -472,7 +472,7 @@ fn what_an_earlier_revision_left_untranscribed_is_recorded_and_checked_on_readin
         unread,
         AsrChunkOutcome::Unusable { audio: unread },
     )?;
-    assert!(second.carried_untranscribed().is_empty());
+    assert_eq!(second.carried_untranscribed(), []);
     // A later run over 5.3-5.4 s, far from it, silent.
     let quiet = range(5_300_000, 5_400_000)?;
     let third = splice(&second, 3, quiet, AsrChunkOutcome::Silent { audio: quiet })?;
@@ -674,10 +674,9 @@ fn what_a_record_lists_as_unplaced_is_checked_on_reading() -> TestResult {
     let mut empty = value.clone();
     empty["unplaced_ranges"] = serde_json::json!([]);
     assert!(!conforms_to_record_schema(&empty)?);
-    assert!(
-        decode_transcript_record(&serde_json::to_vec(&empty)?)?
-            .unplaced()
-            .is_empty()
+    assert_eq!(
+        decode_transcript_record(&serde_json::to_vec(&empty)?)?.unplaced(),
+        []
     );
     // An import is not a run: its record has no such member.
     let mut import: serde_json::Value = serde_json::from_slice(&fs::read(repository(

@@ -249,7 +249,10 @@ fn the_examples_and_the_skeleton_agree() -> TestResult {
     let oracle = Oracle::new()?;
     for base in bases()? {
         assert_eq!(oracle.disagreement(&base), None);
-        assert!(oracle.checker.schema_error_pointers(&base).is_empty());
+        assert_eq!(
+            oracle.checker.schema_error_pointers(&base),
+            [] as [std::string::String; 0]
+        );
     }
     Ok(())
 }

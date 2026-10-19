@@ -137,7 +137,10 @@ async fn a_skill_trial_without_an_install_is_what_p12_prepared() -> TestResult {
     assert!(manifest.trial_id.starts_with("a-01-f01-do-not-install-"));
     assert_eq!(manifest.skill_source, SkillSource::Repository);
     assert!(manifest.install.is_none() && manifest.setup_check.is_none());
-    assert!(manifest.client_path_directories.is_empty());
+    assert_eq!(
+        manifest.client_path_directories,
+        [] as [std::path::PathBuf; 0]
+    );
     assert!(!manifest.holdout);
     assert!(layout.workspace().join("TASK.md").is_file());
     for directory in layout.skill_directories() {

@@ -520,7 +520,7 @@ async fn a_run_that_hears_no_speech_is_recorded() -> TestResult {
         .plain_session(&engine, fixture("F01-speech.mp4"))
         .await?;
     let outcome = engine.retranscribe(request(&session, None)).await?;
-    assert!(outcome.revision().segments().is_empty());
+    assert_eq!(outcome.revision().segments(), []);
     assert!(
         outcome
             .revision()
@@ -530,7 +530,7 @@ async fn a_run_that_hears_no_speech_is_recorded() -> TestResult {
             .any(|warning| warning.kind() == TranscriptWarningKind::NoSpeechRecognised)
     );
     let read_back = engine.transcript(read(&session, None))?;
-    assert!(read_back.segments().is_empty());
+    assert_eq!(read_back.segments(), []);
     Ok(())
 }
 
@@ -601,12 +601,7 @@ async fn a_range_under_a_tenth_of_a_second_is_recorded_and_never_decoded_or_reco
             "{length}"
         );
     }
-    assert!(
-        engine
-            .transcript(read(&session, None))?
-            .segments()
-            .is_empty()
-    );
+    assert_eq!(engine.transcript(read(&session, None))?.segments(), []);
 
     // The other side of the floor: a range of exactly 100 ms is decoded, to
     // its own length within a sample. Whether it is then recognised depends on

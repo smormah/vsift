@@ -811,7 +811,7 @@ async fn a_fresh_install_activates_every_component_and_a_rerun_fetches_nothing()
             .iter()
             .all(|component| component.stage == Some(StageDisposal::Discarded))
     );
-    assert!(root.stages()?.is_empty());
+    assert_eq!(root.stages()?, [] as [std::path::PathBuf; 0]);
     assert_eq!(root.selected(MEDIA)?.as_deref(), Some("fixture-media-1"));
     assert_eq!(
         root.selected(WHISPER)?.as_deref(),
@@ -931,7 +931,7 @@ async fn a_dropped_download_is_discarded_and_a_rerun_restarts_at_zero() -> TestR
             .iter()
             .all(|request| !request.has_header("range"))
     );
-    assert!(root.stages()?.is_empty());
+    assert_eq!(root.stages()?, [] as [std::path::PathBuf; 0]);
     Ok(())
 }
 
@@ -1081,7 +1081,7 @@ async fn a_full_disk_keeps_the_previous_version_selected_and_usable() -> TestRes
         statuses(&report),
         ["failed", "already_current", "already_current"]
     );
-    assert!(root.stages()?.is_empty());
+    assert_eq!(root.stages()?, [] as [std::path::PathBuf; 0]);
     let media = root
         .store()?
         .open_selected_runtime(MEDIA)?
@@ -1128,7 +1128,7 @@ async fn cancellation_during_a_download_discards_the_stage() -> TestResult {
     );
     assert_eq!(report.failure_code(), Some(FailureCode::Cancelled));
     assert_eq!(failure(&report, 1)?.reason, InstallFailureReason::Blocked);
-    assert!(root.stages()?.is_empty());
+    assert_eq!(root.stages()?, [] as [std::path::PathBuf; 0]);
     assert!(!root.root().join("versions-v1").exists());
     Ok(())
 }
@@ -1165,7 +1165,7 @@ async fn a_failed_smoke_publishes_nothing_and_removes_the_stage() -> TestResult 
     );
     assert_eq!(report.failure_code(), Some(FailureCode::MissingCapability));
     assert_eq!(report.components[0].stage, Some(StageDisposal::Discarded));
-    assert!(root.stages()?.is_empty());
+    assert_eq!(root.stages()?, [] as [std::path::PathBuf; 0]);
     assert!(!root.root().join("versions-v1").exists());
     Ok(())
 }
@@ -1191,7 +1191,7 @@ async fn an_untrusted_certificate_fails_with_the_tls_reason() -> TestResult {
         download_failure(DownloadFailureReason::Tls)
     );
     assert_eq!(report.failure_code(), Some(FailureCode::DownloadFailed));
-    assert!(root.stages()?.is_empty());
+    assert_eq!(root.stages()?, [] as [std::path::PathBuf; 0]);
     Ok(())
 }
 
@@ -1220,7 +1220,7 @@ async fn a_proxy_demanding_authentication_fails_without_leaking_credentials() ->
             "{base}"
         );
         assert!(!format!("{report:?}").contains(SENTINEL));
-        assert!(root.stages()?.is_empty());
+        assert_eq!(root.stages()?, [] as [std::path::PathBuf; 0]);
     }
     let requests = proxy.requests();
     assert!(requests.iter().any(|request| request.method == "CONNECT"));
@@ -1271,7 +1271,7 @@ async fn redirects_leave_only_the_reviewed_route() -> TestResult {
         match expected {
             Some(expected) => {
                 assert_eq!(failure(&report, 0)?, expected, "{target}");
-                assert!(root.stages()?.is_empty());
+                assert_eq!(root.stages()?, [] as [std::path::PathBuf; 0]);
             }
             None => assert_eq!(statuses(&report), ["activated"; 3], "{target}"),
         }
@@ -1330,7 +1330,7 @@ async fn an_offline_import_is_verified_like_a_download() -> TestResult {
                 failure(&report, 0)?,
                 ComponentInstallFailure::at(InstallStep::Import, reason)
             );
-            assert!(root.stages()?.is_empty());
+            assert_eq!(root.stages()?, [] as [std::path::PathBuf; 0]);
         } else {
             assert_eq!(statuses(&report), ["activated"; 3], "{report:?}");
             assert_eq!(root.selected(MODEL)?.as_deref(), Some("fixture-model-1"));

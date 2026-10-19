@@ -174,7 +174,7 @@ mod tests {
                     EngineError::IsolationUnavailable(gaps.clone()).failure_code(),
                     FailureCode::IsolationUnavailable
                 );
-                assert!(!gaps.gaps().is_empty());
+                assert_ne!(gaps.gaps(), []);
                 assert_eq!(
                     gaps.gaps().contains(&IsolationGap::NotLinux),
                     std::env::consts::OS != "linux"

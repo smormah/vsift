@@ -893,7 +893,7 @@ mod tests {
             seed: 20_260_930,
         })?;
         let events = parse_managed_events(&read_text(&acks_path, MAX_ACK_BYTES)?);
-        assert!(events.malformed.is_empty());
+        assert_eq!(events.malformed, [] as [usize; 0]);
         assert!(events.acks.len() > 10, "{}", events.acks.len());
         let findings = verify_managed(&root, &events.acks, None);
         assert!(findings.clean(), "{:?}", findings.lines("TEST"));

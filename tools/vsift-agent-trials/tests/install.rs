@@ -284,7 +284,10 @@ fn a_hoisted_layout_is_found_as_well_as_the_nested_one() -> TestResult {
     let (registry, installed) = consistent(fabricated.target, REGISTRY);
     let proof = fabricated.proof(&registry, &installed, &probe())?;
     assert_eq!(proof.native_executable, fabricated.native(true));
-    assert!(proof.evidence.not_published_because().is_empty());
+    assert_eq!(
+        proof.evidence.not_published_because(),
+        [] as [std::string::String; 0]
+    );
     Ok(())
 }
 
