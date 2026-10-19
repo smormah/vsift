@@ -31,9 +31,16 @@
 //! 8. no workflow moves a dist-tag (`npm dist-tag`, `pnpm dist-tag`, `yarn npm tag` or
 //!    a call of the registry's `dist-tags` endpoint): `latest` moves only by publishing a
 //!    stable version from the release workflow's `publish` job, and no workflow but that
-//!    job publishes a package (npm, pnpm, Yarn, Bun or cargo).
+//!    job publishes a package (npm, pnpm, Yarn, Bun or cargo);
+//! 9. the self-hosted runner policy (ADR 0025, the `runners` module): every
+//!    runner label is visible and is a GitHub-hosted image or the one approved
+//!    self-hosted runner, `loki`, and a workflow with a job there is started
+//!    only by `schedule` or `workflow_dispatch`, is not the release path,
+//!    holds no write scope but its hosted report job's `issues: write`, names
+//!    no secret, keeps no credential in the checkout and bounds the job's time.
 
 mod publish;
+mod runners;
 
 use std::{fs, path::Path};
 
@@ -158,6 +165,7 @@ pub(crate) fn check_workflow(messages: &mut Vec<String>, relative_path: &str, te
     lint.check_triggers(workflow);
     lint.check_top_level_permissions(workflow);
     lint.check_jobs(workflow);
+    runners::check_runners(&mut lint, workflow);
     if lint.release {
         lint.check_release_text(workflow);
         publish::check_publishing(&mut lint, workflow);

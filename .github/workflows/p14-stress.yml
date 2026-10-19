@@ -20,6 +20,11 @@ name: P14 stress
 #   delivery    the external-delivery simulation: workers killed at random,
 #               requests redelivered and duplicated (hundreds of processes)
 #
+# The runner also has two suites this workflow does not run: `batch-277` (#277's
+# opt-in batch test) and `repro` (one named test, many runs, several copies at
+# once); the LOKI overnight workflow runs them, and these suites, on Windows
+# every night (ADR 0025, docs/operations/loki-runner.md).
+#
 # The tests run from Cargo-built binaries of the checked-out source: this is
 # race evidence for the code, not for the published binary. Everything runs on
 # hosted runners, never on a developer's machine: the suites kill processes
@@ -40,7 +45,12 @@ on:
       - .github/workflows/p14-stress.yml
       - tools/p14-campaigns/stress.cjs
       - tools/p14-campaigns/lib/repeat.cjs
+      - tools/p14-campaigns/lib/repro.cjs
       - tools/p14-campaigns/test/repeat.test.cjs
+      - tools/p14-campaigns/test/repro.test.cjs
+      # The LOKI overnight lane drives this runner; its tools are tested here
+      # because its own workflow never runs on a pull request (ADR 0025).
+      - tools/loki/**
   workflow_dispatch:
     inputs:
       runs:
@@ -93,8 +103,8 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           package-manager-cache: false
 
-      - name: Test the campaign tools
-        run: node --test "tools/p14-campaigns/test/*.test.cjs"
+      - name: Test the campaign tools and the LOKI overnight tools
+        run: node --test "tools/p14-campaigns/test/*.test.cjs" "tools/loki/test/*.test.cjs"
 
   stress:
     name: ${{ matrix.suite }} (${{ matrix.os }})

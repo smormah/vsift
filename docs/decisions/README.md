@@ -28,3 +28,4 @@ Architecture decision records explain decisions that constrain future implementa
 - [0022: Agent skill and named-client qualification](0022-agent-skill-and-named-client-qualification.md) (Accepted 2026-09-30)
 - [0023: R0 distribution, managed installation and handoff check](0023-r0-distribution-managed-installation-and-handoff-check.md) (Accepted 2026-10-01, with P13's completion and the 0.1.0 pre-release)
 - [0024: R0 qualification and the release candidate](0024-r0-qualification-and-release-candidate.md) (Accepted 2026-10-10, with P14's completion and the stable release 0.2.0; Proposed 2026-10-02 as the P14 plan, its decisions A-H confirmed by the maintainer the same day)
+- [0025: The self-hosted runner policy (LOKI, the overnight test machine)](0025-self-hosted-runner-policy.md) (Accepted 2026-10-19, the maintainer's decision on #472, with the overnight lane)

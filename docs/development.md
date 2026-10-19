@@ -166,6 +166,45 @@ using its own token; the cause is fixed before any further development is merged
 closed when a nightly passes again. A run on any ref but `main` prints the report instead of filing
 it.
 
+**The overnight lane (LOKI).** Load, stress, soak and Windows reproduction runs never run on a
+developer's machine. `.github/workflows/loki-overnight.yml` runs them on **LOKI**, the maintainer's
+clean Windows 11 test machine, through a self-hosted runner labelled `loki`
+([ADR 0025](decisions/0025-self-hosted-runner-policy.md); the machine's set-up is
+[`operations/loki-runner.md`](operations/loki-runner.md)). It sits beside the nightly, not inside
+it: the nightly is the hosted, stop-the-line check of everything on three systems; the overnight lane
+is hours of repetition on one real Windows desktop, and a failure there is a finding to triage (an
+issue labelled `loki-overnight-failure`), not a stopped line. Neither replaces the other, and neither
+is release evidence by itself.
+
+- **Every night at 02:07 UK time** (two UTC schedules, one for GMT and one for BST; the planning job
+  runs only the one in season) it runs the nightly set: the race and stress suites of `P14 stress`
+  on Windows (`locks`, `admission`, `supervisor-loaded`, `roots-loaded`, `engine`,
+  `delivery`) and `batch-277` (#277's opt-in batch test), each repeating until its minutes pass
+  (260 in all; `NIGHTLY` in `tools/loki/lib/overnight.cjs`). It runs on `main` whether or not
+  `main` moved: more nights are more samples.
+- **By dispatch** (`gh workflow run loki-overnight.yml --ref <branch>`), any of those suites plus
+  `supervisor` and `roots`, with `minutes` each (at most 300 together), and `repro`: one named
+  test, `repro_runs` times, `repro_copies` at once, with `repro_burners` busy processes per CPU,
+  which is how a rare failure under load gets a rate (#439, #443):
+
+  ```console
+  gh workflow run loki-overnight.yml --ref <branch> -f suites=repro -f minutes=240     -f repro_package=vsift-infrastructure -f repro_target=session_root_provisioning     -f repro_filter=concurrent_processes_create_one_root_and_every_one_adopts_it     -f repro_runs=2000 -f repro_copies=4 -f repro_burners=1
+  ```
+
+  `repro_target` is `lib` or an integration-test binary, `repro_filter` the test's path
+  (`repro_match=substring` to match part of it, `repro_ignored=only` for an opt-in test). A filter
+  that matches no test fails the run. `real-media` is the slot of #363's campaign: named, it is
+  reported as not run until the campaign exists.
+- **What it keeps:** the summary of every suite in the job summary, and the results with the output
+  of every failed or hung repetition as the artifact `loki-overnight-<attempt>` (90 days).
+- **The policy** (the governance workflow lint, rule 9): a job may name `loki` only in a workflow
+  started by nothing but `schedule` and `workflow_dispatch`, never in the release workflow; such a
+  workflow writes nothing but its hosted report job's issues, names no secret, and its LOKI job reads
+  only, has no token, keeps no credential in its checkout and has a timeout. Every `runs-on` must be a
+  label the lint can read. On LOKI a job-started hook (`tools/loki/job-guard.cjs`) refuses any other
+  job before its first step. The LOKI tools' tests run in the planning job and, on a pull request
+  that changes them, in `P14 stress`'s tooling job.
+
 ## Fuzzing
 
 `fuzz/` holds `cargo-fuzz` targets for the parsers of untrusted input
@@ -653,8 +692,8 @@ copy in every Quality job that selects their packages, and every night.
 
 `tools/p14-campaigns/` holds Node.js tools (CommonJS, no dependency) for the campaigns that stress
 the product on hosted runners ([`planning/p14-qualification.md`](planning/p14-qualification.md)
-section 18 has the results and what each does and does not show). **They are for hosted runners and
-disposable machines only.** They kill processes, fill disks, mount file systems, build containers,
+section 18 has the results and what each does and does not show). **They are for hosted runners,
+LOKI (the overnight lane above) and disposable machines only.** They kill processes, fill disks, mount file systems, build containers,
 create hostile files and install packages; never run one on a machine whose state you care about. What
 is safe locally is the tooling's own tests, which need no network, no container and no published
 package:
@@ -667,6 +706,7 @@ node --test "tools/p14-campaigns/test/*.test.cjs"
 | --- | --- | --- |
 | Fuzzing (RQ-07) | `Fuzz` | `gh workflow run fuzz.yml --ref <branch> -f seconds=3600` |
 | Race and stress repetitions (RQ-08) | `P14 stress` | `gh workflow run p14-stress.yml --ref <branch>`; inputs `runs` (200), `long_runs` (1500, the supervisor and root-creation suites, plain and with every CPU busy) and `delivery_runs` (100) |
+| The same suites on a Windows desktop every night, `batch-277`, and `repro` (a rate for one test under load) | `LOKI overnight` (never on a pull request; its tools' tests run in `P14 stress`) | `gh workflow run loki-overnight.yml --ref <branch>` (the overnight lane above) |
 | Load ladder, 100-request batch, cancel, warm page and soak (RQ-09) | `P14 load` | `gh workflow run p14-load.yml --ref <branch>`; inputs `phases`, `ladder_requests` (24), `batch_requests` (100), `soak_requests` (1000) and `soak_minutes` (270) |
 | Malicious media (RQ-10) | `P14 malicious media` | `gh workflow run p14-malicious-media.yml --ref <branch>` (the pull request's run is already the full set) |
 | The worker runbook walk (RQ-12) | `P14 runbook walk` | `gh workflow run p14-runbook-walk.yml --ref <branch>` |

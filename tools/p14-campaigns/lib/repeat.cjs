@@ -146,12 +146,16 @@ function killTree(pid, deps = {}) {
  */
 function renderMarkdown(result) {
   const t = result.totals;
+  // A budget run repeats until its minutes pass; what it was asked is then a least count.
+  const asked = result.until === 'budget'
+    ? `at least ${result.runsAsked} (repeated for ${result.minutesBudget} min)`
+    : `${result.runsAsked}`;
   const lines = [
     `### ${result.suite} on ${result.host.os}: ${result.verdict.ok ? 'passed' : 'FAILED'}`,
     '',
     `| Repetitions asked | completed | passed | failed | hung | total time | per repetition (min / median / max) |`,
     `| --- | --- | --- | --- | --- | --- | --- |`,
-    `| ${result.runsAsked} | ${t.completed} | ${t.passed} | ${t.failed} | ${t.timedOut} | ${t.secondsTotal} s | ${t.secondsMin} / ${t.secondsMedian} / ${t.secondsMax} s |`,
+    `| ${asked} | ${t.completed} | ${t.passed} | ${t.failed} | ${t.timedOut} | ${t.secondsTotal} s | ${t.secondsMin} / ${t.secondsMedian} / ${t.secondsMax} s |`,
     '',
   ];
   if (result.verdict.reasons.length > 0) {
@@ -164,7 +168,8 @@ function renderMarkdown(result) {
     lines.push('');
   }
   const load = result.burners ? ` ${result.burners} busy processes kept every CPU occupied.` : '';
-  lines.push(`Tests per repetition: ${result.testsPerRepetition}.${load} Commit ${result.commit}. ${result.cargoVersion}.`, '');
+  const copies = result.copies > 1 ? ` ${result.copies} copies of the test ran at once.` : '';
+  lines.push(`Tests per repetition: ${result.testsPerRepetition}.${load}${copies} Commit ${result.commit}. ${result.cargoVersion}.`, '');
   return lines.join('\n');
 }
 

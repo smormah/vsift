@@ -94,6 +94,7 @@ class DocumentationLaneTests(unittest.TestCase):
             "tools/test_p14_journeys.py",
             "tools/guide/check-examples.cjs",
             "tools/p14-published/lib/verify.cjs",
+            "tools/loki/job-guard.cjs",
             ".github/ISSUE_TEMPLATE/bug_report.yml",
             "deny.toml",
         )
