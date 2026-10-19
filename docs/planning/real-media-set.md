@@ -574,3 +574,7 @@ ASR` stages them, the merge of `main` at `a5f35b2d`), both chunk plans of each i
   that many more repeats. With nothing known about what the 15 stretches hold, no value below half a second can be shown to
   lose less than it repeats. **What would change it:** a listener finds words in the listed stretches. The figure to reach for
   is then 0.1 s, about twice the median noise.
+- **A second run** (39229213722, this measurement's final form) recognised the whole runs identically and the shifted runs a
+  little differently: 12 of 185 seam joins with a gap of up to half a second, against 2 of 569 inside a chunk. **Where to
+  listen** (the start of each such gap, in seconds, whole run unless marked): RM06 99.96, 124.96, 149.82, 503.0 and 482.44
+  (shifted); RM09 554.52, 629.04, 678.0, 1,051.52, 1,379.4 and 768.52 (shifted); RM10 178.14.
