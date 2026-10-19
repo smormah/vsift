@@ -1,0 +1,261 @@
+name: LOKI overnight
+
+# The overnight lane (ADR 0025; docs/operations/loki-runner.md): the Windows load,
+# stress and reproduction runs that must never run on the maintainer's development
+# machine, on LOKI, the maintainer's own clean Windows 11 test machine, through a
+# self-hosted GitHub Actions runner with the label `loki`.
+#
+#   locks, admission, supervisor, supervisor-loaded, roots, roots-loaded, engine,
+#   delivery    the race and stress suites of P14 stress (RQ-08) on Windows
+#   batch-277   #277's opt-in test: 40 rounds of 20 requests at concurrency 4
+#   repro       one named test, many runs, several copies at once and every CPU
+#               kept busy, for the load rates of #439 and #443
+#   real-media  the slot of #363's real-media campaign: reported as not run until
+#               the campaign exists
+#
+# Every night at 02:07 United Kingdom time the nightly set runs, each suite
+# repeating until its minutes pass (tools/loki/lib/overnight.cjs, `NIGHTLY`). A
+# dispatch names its suites, or takes the nightly set when it names none:
+#
+#   gh workflow run loki-overnight.yml --ref <branch> -f suites=repro \
+#     -f repro_package=vsift-infrastructure -f repro_target=session_root_provisioning \
+#     -f repro_filter=concurrent_processes_create_one_root_and_every_one_adopts_it \
+#     -f repro_runs=2000 -f repro_copies=4 -f repro_burners=1 -f minutes=240
+#
+# The self-hosted runner policy (the governance workflow lint, rule 9) holds this
+# workflow to: only `schedule` and `workflow_dispatch`; never the release path; the
+# LOKI job reads only (`contents: read`), names no secret and no token, keeps no
+# credential in its checkout and has a timeout. The planning and report jobs run on
+# GitHub-hosted runners; the report job alone may write, and only issues. On LOKI
+# itself a job-started hook (tools/loki/job-guard.cjs) refuses any job that is not
+# this workflow started by its schedule or a dispatch on a branch.
+#
+# A failure is a finding (governance rule 14): the run opens one issue labelled
+# `loki-overnight-failure`, or comments on the one already open, as the nightly
+# does. It does not stop the line; the finding is triaged like any other.
+on:
+  schedule:
+    # 02:07 British Summer Time (01:07 UTC) and 02:07 Greenwich Mean Time (02:07
+    # UTC). GitHub's cron is UTC, so both are listed and the plan job runs only the
+    # one whose season London is in (`SCHEDULES` in tools/loki/lib/overnight.cjs).
+    - cron: "7 1 * * *"
+    - cron: "7 2 * * *"
+  workflow_dispatch:
+    inputs:
+      suites:
+        description: Comma-separated suites (locks, admission, supervisor, supervisor-loaded, roots, roots-loaded, engine, delivery, batch-277, repro, real-media); empty runs the nightly set
+        type: string
+        default: ""
+      minutes:
+        description: Minutes each named suite repeats for; for repro, the most its runs may take (all suites together at most 300)
+        type: string
+        default: "30"
+      repro_package:
+        description: "repro: the test's package (for example vsift-infrastructure)"
+        type: string
+        default: ""
+      repro_target:
+        description: "repro: lib, or the integration-test binary (for example session_root_provisioning)"
+        type: string
+        default: ""
+      repro_filter:
+        description: "repro: the test's path (for example kill::installs_killed_by_the_operating_system_at_spread_moments_are_consistent)"
+        type: string
+        default: ""
+      repro_match:
+        description: "repro: how the filter matches"
+        type: choice
+        options:
+          - exact
+          - substring
+        default: exact
+      repro_ignored:
+        description: "repro: whether ignored tests run (only, for an opt-in test)"
+        type: choice
+        options:
+          - "no"
+          - only
+          - include
+        default: "no"
+      repro_runs:
+        description: "repro: how many runs of the test"
+        type: string
+        default: "1000"
+      repro_copies:
+        description: "repro: copies of the test running at once (1 to 8)"
+        type: string
+        default: "4"
+      repro_burners:
+        description: "repro: busy processes per CPU while it runs (0 to 4)"
+        type: string
+        default: "1"
+
+permissions:
+  contents: read
+
+concurrency:
+  # One runner: a second run waits for the first rather than cancelling it.
+  group: loki-overnight
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: "22.23.3"
+  CARGO_TERM_COLOR: never
+
+jobs:
+  plan:
+    name: Plan the night
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      run: ${{ steps.plan.outputs.run }}
+      plan: ${{ steps.plan.outputs.plan }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up the pinned Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          package-manager-cache: false
+
+      - name: Test the overnight tools
+        run: node --test "tools/loki/test/*.test.cjs" "tools/p14-campaigns/test/repro.test.cjs" "tools/p14-campaigns/test/repeat.test.cjs"
+
+      - name: Decide what runs tonight
+        id: plan
+        env:
+          EVENT: ${{ github.event_name }}
+          SCHEDULE: ${{ github.event.schedule }}
+          SUITES: ${{ inputs.suites }}
+          MINUTES: ${{ inputs.minutes }}
+          REPRO_PACKAGE: ${{ inputs.repro_package }}
+          REPRO_TARGET: ${{ inputs.repro_target }}
+          REPRO_FILTER: ${{ inputs.repro_filter }}
+          REPRO_MATCH: ${{ inputs.repro_match }}
+          REPRO_IGNORED: ${{ inputs.repro_ignored }}
+          REPRO_RUNS: ${{ inputs.repro_runs }}
+          REPRO_COPIES: ${{ inputs.repro_copies }}
+          REPRO_BURNERS: ${{ inputs.repro_burners }}
+        run: node tools/loki/overnight.cjs plan
+
+  overnight:
+    name: Overnight suites (LOKI)
+    needs: plan
+    if: needs.plan.outputs.run == 'true'
+    runs-on: [self-hosted, loki]
+    # The suites' 300 minutes, the builds, and one repetition that hangs past its
+    # suite's budget (each is stopped after 25 minutes).
+    timeout-minutes: 330
+    permissions:
+      contents: read
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          clean: true
+
+      - name: Set up the pinned Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          package-manager-cache: false
+
+      # Every folder the tests make in the temporary directory goes inside one
+      # folder of this run's, which the last step removes.
+      - name: Make the job's own temporary folder
+        run: node tools/loki/work-folder.cjs prepare
+
+      # The toolchain of rust-toolchain.toml, installed for the runner's user on
+      # the first night and reused after that.
+      - name: Install the pinned toolchain and show the host
+        run: |
+          rustup toolchain install
+          rustup show active-toolchain
+          cargo --version
+          node --version
+          Get-CimInstance Win32_OperatingSystem | Select-Object Caption,Version,BuildNumber | ConvertTo-Json -Compress
+          Get-CimInstance Win32_Processor | Measure-Object -Property NumberOfLogicalProcessors -Sum | Select-Object Sum | ConvertTo-Json -Compress
+          Get-Volume -FilePath $env:RUNNER_TEMP | Select-Object FileSystemType,SizeRemaining,Size | ConvertTo-Json -Compress
+
+      - name: Run the suites
+        env:
+          PLAN: ${{ needs.plan.outputs.plan }}
+        run: node tools/loki/overnight.cjs run --out "$env:RUNNER_TEMP\loki-out" --commit "$env:GITHUB_SHA"
+
+      - name: Put the result in the job summary
+        if: always()
+        run: |
+          $summary = Join-Path $env:RUNNER_TEMP 'loki-out\summary.md'
+          if (Test-Path -LiteralPath $summary) { Get-Content -LiteralPath $summary | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY }
+
+      - name: Keep the results and the output of every failed repetition
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: loki-overnight-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/loki-out
+          if-no-files-found: warn
+          retention-days: 90
+
+      - name: Remove the job's temporary folder and build output
+        if: always()
+        run: node tools/loki/work-folder.cjs clean
+
+  report:
+    # One open issue labelled `loki-overnight-failure` collects every failed night
+    # until someone triages it. Only a run on `main` writes; any other ref prints
+    # what it would have written. A dispatch whose inputs the plan refuses is the
+    # dispatcher's mistake, not a finding, so it files nothing; a scheduled plan
+    # that fails does.
+    name: Report a failure
+    needs:
+      - plan
+      - overnight
+    if: (failure() || cancelled()) && (github.event_name == 'schedule' || needs.overnight.result == 'failure' || needs.overnight.result == 'cancelled')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Open or update the loki-overnight-failure issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RESULTS: ${{ toJSON(needs) }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          failed="$(echo "$RESULTS" | jq -r '[to_entries[] | select(.value.result == "failure" or .value.result == "cancelled") | "\(.key) (\(.value.result))"] | join(", ")')"
+          {
+            echo "The LOKI overnight run failed: ${RUN_URL}"
+            echo
+            echo "- Commit: ${GITHUB_SHA}"
+            echo "- Event: ${GITHUB_EVENT_NAME}"
+            echo "- Jobs: ${failed:-see the run}"
+            echo
+            echo "A failure is a finding (governance rule 14): read the run's summary and the kept output of the failed repetitions, then file or update the issue it belongs to before anything is repeated. A cancelled LOKI job usually means the runner was offline or paused (docs/operations/loki-runner.md). Close this issue when it is triaged."
+          } > report.md
+          if [ "$GITHUB_REF" != refs/heads/main ]; then
+            echo "Not main ($GITHUB_REF): the report is printed, not filed."
+            cat report.md
+            exit 0
+          fi
+          gh label create loki-overnight-failure --repo "$GITHUB_REPOSITORY" --color D93F0B \
+            --description "A LOKI overnight run failed; a finding to triage" 2>/dev/null || true
+          open="$(gh issue list --repo "$GITHUB_REPOSITORY" --label loki-overnight-failure --state open --limit 1 --json number --jq '.[0].number // ""')"
+          if [ -n "$open" ]; then
+            gh issue comment "$open" --repo "$GITHUB_REPOSITORY" --body-file report.md
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "LOKI overnight run failed" \
+              --label loki-overnight-failure --body-file report.md
+          fi

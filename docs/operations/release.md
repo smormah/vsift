@@ -256,12 +256,26 @@ every file in `.github/workflows/` and fails when a workflow:
    publishes a package (`npm`, `pnpm`, `yarn`, `bun` or `cargo` followed by `publish`)
    anywhere but the release workflow's `publish` job. Reads such as `npm view <package>
    dist-tags` are not refused. `latest` therefore moves only by publishing a stable
-   version.
+   version;
+9. in **every** workflow (2026-10-19, [ADR 0025](../decisions/0025-self-hosted-runner-policy.md),
+   the self-hosted runner policy): names a `runs-on` label that is neither a GitHub-hosted image
+   nor the `loki` runner's, or one the lint cannot read (an expression other than a literal
+   matrix value, outside the one listed job, `ci.yml`'s `quality`), or a runner group; reaches the
+   self-hosted runner without naming `loki`; or has a job on `loki` and is `release.yml`, is
+   triggered by anything but `schedule` and `workflow_dispatch`, holds any write scope but a
+   GitHub-hosted job's `issues: write`, runs a job in an environment, names a secret but
+   `secrets.GITHUB_TOKEN` or passes secrets to a reusable workflow, or its `loki` job has
+   permissions other than exactly `contents: read`, names a secret or `github.token`, checks out
+   without `persist-credentials: false` or has no literal `timeout-minutes` of 1 to 720. The
+   release workflow therefore never runs on a self-hosted runner, as `--deny-self-hosted-runners`
+   assumes when its attestations are verified.
 
 The lint reads the YAML tree, so flow mappings and aliases are seen, and it refuses
 merge keys (`<<`). Comments are not part of the tree. Its tests are in
-`tools/vsift-governance/src/workflows.rs` (rule 8 included) and, for rule 7,
-`workflows/publish.rs`, which checks the real `release.yml` and a mutation of it for
+`tools/vsift-governance/src/workflows.rs` (rule 8 included), for rule 9
+`workflows/runners/tests.rs` (27 broken copies of the real `loki-overnight.yml`, the overnight job
+moved into a copy of the real `release.yml`, and synthetic workflows for matrices, computed runners,
+reusable workflows and the hosted labels), and, for rule 7, `workflows/publish.rs`, which checks the real `release.yml` and a mutation of it for
 every rule: 127 deliberately broken copies, 28 for the P13 rules, 37 for the channels,
 the stable path's inputs and the evidence step, 28 for the guard and the read-back
 window, 12 for the re-check after the approval, 19 for the holes an independent

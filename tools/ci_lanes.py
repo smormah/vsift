@@ -194,8 +194,9 @@ SHARED_INPUTS: tuple[SharedInput, ...] = (
 
 # Paths that no job of the fast gate other than Documentation and Governance reads:
 # prose, the work record, repository metadata, and tools that have workflows of their
-# own (the Guide, the P14 workflows, the Python drivers). Governance reads many of
-# these and runs on every change.
+# own (the Guide, the P14 workflows, the Python drivers, the LOKI overnight tools,
+# whose tests the `P14 stress` workflow runs on a pull request that changes them).
+# Governance reads many of these and runs on every change.
 DOCUMENT_PREFIXES = (
     "docs/",
     "memory/",
@@ -203,6 +204,7 @@ DOCUMENT_PREFIXES = (
     "tools/guide/",
     "tools/p14-campaigns/",
     "tools/p14-published/",
+    "tools/loki/",
 )
 DOCUMENT_FILES = frozenset(
     {

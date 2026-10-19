@@ -117,3 +117,23 @@ test('the summary names the suite, the counts and each failing test', () => {
   assert.match(text, /`p::q` \| 1/);
   assert.match(text, /Tests per repetition: 120/);
 });
+
+test('a budget run states its least count and a repro run its copies', () => {
+  const totals = tally([{ rep: 1, outcome: 'passed', seconds: 3, tests: [] }]);
+  const text = renderMarkdown({
+    suite: 'repro',
+    host: { os: 'win32 10.0.26200' },
+    runsAsked: 5,
+    minutesBudget: 30,
+    until: 'budget',
+    copies: 4,
+    totals,
+    verdict: verdict(totals, 5),
+    testsPerRepetition: 1,
+    commit: 'abc',
+    cargoVersion: 'cargo 1.98.1',
+  });
+  assert.match(text, /\| at least 5 \(repeated for 30 min\) \| 1 \|/);
+  assert.match(text, /4 copies of the test ran at once\./);
+  assert.match(text, /only 1 of 5 repetitions ran/);
+});

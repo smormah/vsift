@@ -397,6 +397,14 @@ npm's trusted-publisher settings and "disallow bypass 2FA tokens".
   reviewed flags only, no credential; nothing of the maintainer-naming metadata is printed or
   uploaded). Not covered: the first stable publish is the first time `--tag latest` goes
   through trusted publishing and `gh release edit --latest` runs (L-105).
+  *2026-10-19 (ADR 0025, the self-hosted runner LOKI):* a self-hosted runner on a public, personal
+  repository is reached by any workflow that names its label, a pull request's own copy included.
+  Lint rule 9 lets a job name `loki` only in a workflow started by nothing but `schedule` and
+  `workflow_dispatch`, never `release.yml`, with no write scope but a hosted job's `issues: write`, no
+  secret, a read-only LOKI job without a token, `persist-credentials: false` and a timeout; LOKI's
+  job-started hook refuses every other job before its first step, and outside collaborators' runs
+  need the maintainer's approval. What remains (a merged change or a dispatch by someone with write
+  access runs code on LOKI; the hook depends on the runner's own `.env`) is L-186.
 - **SEC-23 (checksums from the same compromised server):** the managed trust anchor
   stays in reviewed source, never in a downloaded checksum; release archives carry
   Sigstore build provenance tied to the protected commit, npm packages carry npm
