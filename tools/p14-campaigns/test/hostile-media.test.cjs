@@ -184,3 +184,32 @@ test('the summary says which findings are filed and which are new', () => {
   assert.match(none, /NEW FINDINGS/);
   assert.match(none, /`symlink-to-canary` ingest: .* \(NEW\)/);
 });
+
+test('the summary shows VSift\'s own memory beside the container\'s count when the wrapper reports it (L-194)', () => {
+  const withOwn = { seconds: 2.3, memoryPeakMiB: 1024, ownPeakMiB: 8, anonPeakMiB: 9, fileEndMiB: 1000, limitHits: 412 };
+  assert.equal(media.figures(withOwn), '2.3 s, 1024 MiB, own 8 MiB, anon 9 MiB');
+  assert.equal(media.figures({ seconds: 0.1, memoryPeakMiB: 7, ownPeakMiB: null, anonPeakMiB: null }), '0.1 s, 7 MiB');
+  const summary = { ok: true, known: [], fresh: [], fixed: [], containmentOk: true, cases: 1, operations: 1, findings: 0, slowestSeconds: 2.3, peakMiB: 1024, findingsList: [], containment: [] };
+  const entry = { id: 'mp4-free-512mib', group: 'metadata', description: 'a 512 MiB free-space box', results: [{ op: 'ingest', outcome: 'complete', ok: true, findings: [], ...withOwn }] };
+  const text = media.markdown({ ...summary, ownPeakMiB: 8, anonPeakMiB: 9, results: [entry] });
+  assert.match(text, /largest memory peak was 1024 MiB of the 1,024 MiB limit \(the container's count, page cache included\); VSift's own largest resident peak was 8 MiB/);
+  assert.match(text, /ingest: complete \(2\.3 s, 1024 MiB, own 8 MiB, anon 9 MiB\)/);
+  // A report of the older wrapper reads as before.
+  assert.doesNotMatch(media.markdown({ ...summary, ownPeakMiB: null, anonPeakMiB: null, results: [] }), /own largest/);
+});
+
+// The wrapper reads /proc and the cgroup, so it runs only where they exist (the
+// campaign's hosted Ubuntu runner, and the Tooling tests job beside it).
+test('the wrapper reports the command\'s exit and its own resident peak', { skip: process.platform !== 'linux' }, () => {
+  const childProcess = require('node:child_process');
+  const wrapper = path.join(__dirname, '..', 'case-wrapper.sh');
+  // A command that holds about 64 MiB for half a second, then exits 3.
+  const hold = 'const b = Buffer.alloc(64 * 1048576, 1); setTimeout(() => process.exit(b[0] + 2), 500);';
+  const run = childProcess.spawnSync('sh', [wrapper, process.execPath, '-e', hold], { encoding: 'utf8' });
+  assert.equal(run.status, 3);
+  const metrics = judge.readMetrics(run.stderr);
+  assert.ok(metrics, run.stderr);
+  assert.equal(metrics.exit, 3);
+  assert.ok(metrics.ownPeak >= 64 * 1048576, `own peak ${metrics.ownPeak}`);
+  assert.ok(metrics.ownPeak < 1024 * 1048576, `own peak ${metrics.ownPeak}`);
+});

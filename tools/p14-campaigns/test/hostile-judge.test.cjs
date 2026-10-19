@@ -76,8 +76,19 @@ test('the first remediation of a failed command is read, and nothing else is tak
 });
 
 test('the container\'s own metrics are read from the last line', () => {
-  assert.deepEqual(j.readMetrics(`noise\n${METRICS(2)}\n`), { exit: 1, memoryPeak: 300000000, pidsPeak: 20, oomKills: 2 });
+  // A line of the wrapper before L-194 has no own figures: they read as null.
+  assert.deepEqual(j.readMetrics(`noise\n${METRICS(2)}\n`), { exit: 1, memoryPeak: 300000000, pidsPeak: 20, ownPeak: null, anonPeak: null, fileEnd: null, limitHits: 0, oomKills: 2 });
   assert.equal(j.readMetrics('nothing here'), null);
+});
+
+test('the wrapper\'s own figures tell VSift\'s memory from the page cache (L-194)', () => {
+  const line = 'P14-METRICS exit=0 memory_peak=1073741824 pids_peak=7 own_peak=8388608 anon_peak=9437184 file_end=1048576000 memory_events=low 0,high 0,max 412,oom 0,oom_kill 0,oom_group_kill 0,';
+  assert.deepEqual(j.readMetrics(`${line}\n`), { exit: 0, memoryPeak: 1073741824, pidsPeak: 7, ownPeak: 8388608, anonPeak: 9437184, fileEnd: 1048576000, limitHits: 412, oomKills: 0 });
+  // A peak at the limit is reclaim, not a finding; only a peak above it or an OOM kill is.
+  const verdict = j.judge({ spec: { id: 'x', expect: 'any' }, op: 'ingest', first: true, run: { code: 0, stdout: JSON.stringify({ status: 'complete', data: {} }), stderr: `${line}\n`, durationMs: 2000, timedOut: false, oomKilled: false, network: 'none' }, canaries: [] });
+  assert.equal(verdict.ok, true);
+  assert.equal(j.readMetrics(line.replace('own_peak=8388608', 'own_peak=0')).ownPeak, 0);
+  assert.equal(j.readMetrics(line.replace('file_end=1048576000', 'file_end=unknown')).fileEnd, null);
 });
 
 test('raw control characters are found, JSON-escaped ones are not', () => {

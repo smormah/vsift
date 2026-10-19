@@ -17,8 +17,15 @@ const BOUNDS = Object.freeze({
 const FOLLOW_UP_CODES = ['INVALID_ARGUMENT'];
 
 /**
+ * The wrapper's last `P14-METRICS` line (case-wrapper.sh). `memoryPeak` is the
+ * cgroup's high-water mark, page cache included (L-194); `ownPeak` (the
+ * command's own resident high-water mark), `anonPeak` (the cgroup's sampled
+ * anonymous memory), `fileEnd` (the page cache charged at the end) and
+ * `limitHits` (how often the cgroup reached its limit and the kernel had to
+ * reclaim) say what of it the command held. A line of an older wrapper lacks
+ * them, and they are null.
  * @param {string} stderr
- * @returns {{ exit: number|null, memoryPeak: number|null, pidsPeak: number|null, oomKills: number|null }|null}
+ * @returns {{ exit: number|null, memoryPeak: number|null, pidsPeak: number|null, ownPeak: number|null, anonPeak: number|null, fileEnd: number|null, limitHits: number|null, oomKills: number|null }|null}
  */
 function readMetrics(stderr) {
   const lines = String(stderr).split('\n').filter((line) => line.startsWith('P14-METRICS '));
@@ -29,8 +36,20 @@ function readMetrics(stderr) {
     return found ? Number(found[1]) : null;
   };
   const events = /memory_events=(.*)$/.exec(line);
-  const oom = events ? /oom_kill (\d+)/.exec(events[1]) : null;
-  return { exit: number('exit'), memoryPeak: number('memory_peak'), pidsPeak: number('pids_peak'), oomKills: oom ? Number(oom[1]) : null };
+  const event = (name) => {
+    const found = events ? new RegExp(`(?:^|,)${name} (\\d+)`).exec(events[1]) : null;
+    return found ? Number(found[1]) : null;
+  };
+  return {
+    exit: number('exit'),
+    memoryPeak: number('memory_peak'),
+    pidsPeak: number('pids_peak'),
+    ownPeak: number('own_peak'),
+    anonPeak: number('anon_peak'),
+    fileEnd: number('file_end'),
+    limitHits: event('max'),
+    oomKills: event('oom_kill'),
+  };
 }
 
 /** Raw bytes a terminal would act on: C0 controls but tab and line feed, DEL, and C1 controls. */

@@ -118,6 +118,24 @@ function commandFor(op, spec, session) {
   }
 }
 
+/** A metric in bytes as whole MiB, or null when the wrapper did not report it. */
+function mebibytes(metrics, name) {
+  return metrics && metrics[name] !== null && metrics[name] !== undefined ? Math.round(metrics[name] / 1048576) : null;
+}
+
+/**
+ * One operation's figures in the summary: its time, the cgroup's memory peak
+ * (page cache included), and, from a wrapper that reports them, VSift's own
+ * resident peak and the sampled anonymous memory of everything it ran (L-194).
+ */
+function figures(result) {
+  const parts = [`${result.seconds} s`];
+  if (result.memoryPeakMiB !== null) parts.push(`${result.memoryPeakMiB} MiB`);
+  if (result.ownPeakMiB !== null && result.ownPeakMiB !== undefined) parts.push(`own ${result.ownPeakMiB} MiB`);
+  if (result.anonPeakMiB !== null && result.anonPeakMiB !== undefined) parts.push(`anon ${result.anonPeakMiB} MiB`);
+  return parts.join(', ');
+}
+
 async function runCase(spec, canaries) {
   const results = [];
   let session = null;
@@ -142,14 +160,18 @@ async function runCase(spec, canaries) {
       ok: verdict.ok,
       findings: verdict.findings,
       seconds: Math.round(answered.durationMs / 100) / 10,
-      memoryPeakMiB: verdict.metrics && verdict.metrics.memoryPeak !== null ? Math.round(verdict.metrics.memoryPeak / 1048576) : null,
+      memoryPeakMiB: mebibytes(verdict.metrics, 'memoryPeak'),
+      ownPeakMiB: mebibytes(verdict.metrics, 'ownPeak'),
+      anonPeakMiB: mebibytes(verdict.metrics, 'anonPeak'),
+      fileEndMiB: mebibytes(verdict.metrics, 'fileEnd'),
+      limitHits: verdict.metrics ? verdict.metrics.limitHits : null,
       pidsPeak: verdict.metrics ? verdict.metrics.pidsPeak : null,
       exit: answered.code,
     });
   }
   if (spec.expect === 'refused') {
     const finding = judge.refusedSomewhere(results);
-    if (finding) results.push({ op: '(case)', outcome: 'not refused', ok: false, findings: [finding], seconds: 0, memoryPeakMiB: null, pidsPeak: null, exit: null });
+    if (finding) results.push({ op: '(case)', outcome: 'not refused', ok: false, findings: [finding], seconds: 0, memoryPeakMiB: null, ownPeakMiB: null, anonPeakMiB: null, fileEndMiB: null, limitHits: null, pidsPeak: null, exit: null });
   }
   return results;
 }
@@ -175,10 +197,13 @@ function markdown(report, tracked = TRACKED) {
       ? `FINDINGS, all tracked (${report.known.map((entry) => `#${entry.issue}`).filter((issue, index, all) => all.indexOf(issue) === index).join(', ')})`
       : 'NEW FINDINGS';
   const lines = [`## P14 malicious media (RQ-10): ${headline}`, ''];
-  lines.push(`${report.cases} inputs, ${report.operations} operations, ${report.findings} finding(s); the slowest operation took ${report.slowestSeconds} s and the largest memory peak was ${report.peakMiB} MiB of the 1,024 MiB limit; no operation had a network.`, '');
-  lines.push('| Group | Input | What it is | Operations: outcome (seconds, MiB) |', '| --- | --- | --- | --- |');
+  const own = report.ownPeakMiB === null || report.ownPeakMiB === undefined
+    ? ''
+    : ` (the container's count, page cache included); VSift's own largest resident peak was ${report.ownPeakMiB} MiB and the largest anonymous memory sampled in a container ${report.anonPeakMiB} MiB`;
+  lines.push(`${report.cases} inputs, ${report.operations} operations, ${report.findings} finding(s); the slowest operation took ${report.slowestSeconds} s and the largest memory peak was ${report.peakMiB} MiB of the 1,024 MiB limit${own}; no operation had a network.`, '');
+  lines.push('| Group | Input | What it is | Operations: outcome (seconds, cgroup MiB, own MiB, anon MiB) |', '| --- | --- | --- | --- |');
   for (const entry of report.results) {
-    const ops = entry.results.map((result) => `${result.ok ? '' : '**FAIL** '}${result.op}: ${result.outcome} (${result.seconds} s${result.memoryPeakMiB === null ? '' : `, ${result.memoryPeakMiB} MiB`})`).join('; ');
+    const ops = entry.results.map((result) => `${result.ok ? '' : '**FAIL** '}${result.op}: ${result.outcome} (${figures(result)})`).join('; ');
     lines.push(`| ${entry.group} | \`${entry.id}\` | ${entry.description.replace(/\|/g, '\\|').slice(0, 150)} | ${ops.replace(/\|/g, '\\|')} |`);
   }
   lines.push('');
@@ -274,6 +299,8 @@ async function main() {
     findings: findingsList.length + containment.filter((check) => !check.ok).length,
     slowestSeconds: Math.max(0, ...all.map((result) => result.seconds)),
     peakMiB: Math.max(0, ...all.map((result) => result.memoryPeakMiB || 0)),
+    ownPeakMiB: all.some((result) => typeof result.ownPeakMiB === 'number') ? Math.max(0, ...all.map((result) => result.ownPeakMiB || 0)) : null,
+    anonPeakMiB: all.some((result) => typeof result.anonPeakMiB === 'number') ? Math.max(0, ...all.map((result) => result.anonPeakMiB || 0)) : null,
     results,
     findingsList,
     containment,
@@ -296,4 +323,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { WORKSPACE, WORKER_WORKSPACE, SMALL_MOUNT, TRACKED, sessionRoot, smallFilesystem, commandFor, markdown };
+module.exports = { WORKSPACE, WORKER_WORKSPACE, SMALL_MOUNT, TRACKED, sessionRoot, smallFilesystem, commandFor, markdown, figures };
