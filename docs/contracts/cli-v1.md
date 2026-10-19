@@ -2499,7 +2499,11 @@ first publication (decision H4; ADR 0008 note of 2026-09-30).
   not end before it starts, given budget limits are the profile's unless
   `budget.overrides`); and the whole report's text holds no local path, drive letter
   or home folder, no live link and no raw hidden or control character. A citation no
-  claim or instruction uses is a warning.
+  claim or instruction uses is a warning. The schema's patterns are ECMA-262 regular
+  expressions, and `\s` in them is every ECMA-262 space: TAB to CR, every Unicode space
+  separator, U+2028, U+2029 and the BOM. Up to `0.2.2` the check knew only ten of
+  them, so a path written after, for example, a THIN SPACE (U+2009) passed (#387); the
+  stricter check is a correction (the maintainer's decision of 2026-10-19).
 - **`--session <session>`** also resolves every cited identity in that session's
   committed records: each citation's `segment_id` (any revision), `evidence_id` (with
   its citation type), a crop's `parent_evidence_id`, and the resume card's evidence

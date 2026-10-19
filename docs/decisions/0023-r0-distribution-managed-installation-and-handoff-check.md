@@ -647,6 +647,13 @@ the supervisor on 2026-09-30:
   generated drafts, with error locations compared pointer by pointer
   (`crates/vsift-contract/tests/handoff_differential.rs`). ECMA-262's `\s` is written
   out as the class `jsonschema` uses, so the two agree on every space character.
+  **Note of 2026-10-18 (cycle 2, dependency upkeep):** `jsonschema` 0.56 translated
+  `\s` to only ten of ECMA-262's 25 space characters. 0.58.6 (Dependabot #387) uses the
+  whole ECMA-262 class, so the handoff check's class is now ECMA-262's as well. A path
+  after one of the 15 spaces 0.56 left out (U+1680, U+2000 to U+2002, U+2004 to
+  U+200A, U+2028, U+202F, U+205F, U+3000) was accepted up to `0.2.2` and is refused
+  from `0.2.3`; the maintainer accepted the stricter check as a correction on 2026-10-19.
+  The differential test agrees again on all 14,380 mutations.
 - **Dependency review: `regex`** (the schema's 17 patterns). Promoted from a
   transitive development dependency to a production dependency of `vsift-contract`,
   with `default-features = false, features = ["std"]` (no Unicode tables: the
