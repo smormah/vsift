@@ -513,9 +513,7 @@ const fn map_media_error(error: &MediaError) -> MediaToolFailure {
         MediaError::Deadline => MediaToolFailure::Deadline,
         MediaError::Cancelled => MediaToolFailure::Cancelled,
         MediaError::OutputLimit => MediaToolFailure::OutputLimit,
-        MediaError::Source(_) | MediaError::InvalidSourcePath | MediaError::CapacityUnavailable => {
-            MediaToolFailure::Workspace
-        }
+        MediaError::Source(_) | MediaError::CapacityUnavailable => MediaToolFailure::Workspace,
         MediaError::InvalidMetadata
         | MediaError::InvalidDuration
         | MediaError::InvalidAudioRange

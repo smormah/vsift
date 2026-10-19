@@ -36,7 +36,7 @@ corresponding supported deployment profile. Each row references the verification
 | ID | Abuse case | Required control | Verification |
 | --- | --- | --- | --- |
 | SEC-01 P0 | Shell/argument injection through path, query, filter or transcript | No shell; typed allowlisted options; separate path arguments; no raw filter/extra-args API | P-01, M-01, C-04 |
-| SEC-02 P0 | PATH/current-directory executable hijack or DLL/library search pollution | Absolute approved provider path; private working directory; sanitized env; disclose BYO trust and verify managed identity | P-02, D-01 |
+| SEC-02 P0 | PATH/current-directory executable hijack or DLL/library search pollution | Absolute approved provider path; the provider's own folder as its working directory, which adds no library search location (since #469; it was a private VSift folder, which Windows refuses past 258 characters; ADR 0003 note of 2026-10-19; accepted by the maintainer on 2026-10-19); sanitized env; disclose BYO trust and verify managed identity | P-02, D-01 |
 | SEC-03 P0 | Huge stdout/stderr, blocked pipes, malicious terminal escapes | Concurrent capped drains; output deadline; terminate excessive producer; escape control sequences before display | P-03, P-04, C-05 |
 | SEC-04 P0 | Child spawns descendants, ignores cancellation or survives parent | Qualified process containment, escalation, reaping, inherited limit policy; no released slot before cleanup | P-05 through P-08 |
 | SEC-05 P0 | Media decompression bomb / huge dimensions / infinite or corrupt streams | Byte, time, pixel, stream, artifact and disk limits; decoder isolation and watchdog | M-02/M-03, X-07 |

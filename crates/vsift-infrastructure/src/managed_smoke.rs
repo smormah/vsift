@@ -3,8 +3,9 @@
 //! It runs a staged, unactivated runtime's executables before anything is
 //! published or selected. Every executable runs by its explicit absolute path
 //! inside the private stage, through the [`ProcessSupervisor`], never through a
-//! shell, with its working directory in a private smoke directory created
-//! inside the same stage. The digest-bound [`ReviewedCompatibilityPolicy`]
+//! shell, in its own folder (as every provider runs since #469); the
+//! fixture workspaces are in a private smoke directory created inside the
+//! same stage. The digest-bound [`ReviewedCompatibilityPolicy`]
 //! sets the stream bound, the generated-file bounds, the deadlines and the
 //! audio format.
 //!
@@ -27,7 +28,7 @@
 //!    inference deadline and with the transcript file bounded by the policy.
 //! 5. **Recheck.** The smoke directory must be empty (it is then removed) and
 //!    every runtime must still match its review, so a provider that wrote into
-//!    its own installation fails.
+//!    its own installation (its working directory included) fails.
 //!
 //! A component that needs another uses the staged one when it is among the
 //! candidates, and otherwise an already selected provider from
@@ -347,10 +348,8 @@ impl<V: SmokeFixtureVerifiers> StagedCompatibilitySmoke<V> {
         plan: &SmokePlan,
         smoke_path: &Path,
     ) -> Result<(), CompatibilitySmokeFailure> {
-        let working = ProcessWorkingDirectory::new(smoke_path)
-            .map_err(|_| failure(Check::Banner, Reason::Preparation))?;
         for probe in &plan.banners {
-            self.banner(probe, &working)
+            self.banner(probe)
                 .await
                 .map_err(|reason| failure(Check::Banner, reason))?;
         }
@@ -369,19 +368,17 @@ impl<V: SmokeFixtureVerifiers> StagedCompatibilitySmoke<V> {
         Ok(())
     }
 
-    async fn banner(
-        &self,
-        probe: &BannerProbe,
-        working: &ProcessWorkingDirectory,
-    ) -> Result<(), Reason> {
+    async fn banner(&self, probe: &BannerProbe) -> Result<(), Reason> {
         let limit = NonZeroUsize::new(self.policy.stream_limit_bytes).ok_or(Reason::Preparation)?;
         let supervisor = ProcessSupervisor::new(
             SupervisorPolicy::default().with_stream_limits(limit, limit),
             self.host_isolation,
         );
+        let working = ProcessWorkingDirectory::of_executable(&probe.executable)
+            .map_err(|_| Reason::Preparation)?;
         let request = ProcessRequest::new(
             probe.executable.clone(),
-            working.clone(),
+            working,
             Duration::from_secs(self.policy.media_deadline_seconds),
         )
         .map_err(|_| Reason::Preparation)?

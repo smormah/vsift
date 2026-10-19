@@ -188,12 +188,9 @@ impl ProcessDependencyProbe {
                 };
             }
         };
-        let Some(working_directory_path) = executable.path().parent() else {
-            return DependencyState::Unhealthy {
-                message: String::from("provider executable has no working directory"),
-            };
-        };
-        let working_directory = match ProcessWorkingDirectory::new(working_directory_path) {
+        // The executable's own folder, exactly as the media and speech
+        // adapters run it (#469), so this check and the media commands agree.
+        let working_directory = match ProcessWorkingDirectory::of_executable(&executable) {
             Ok(directory) => directory,
             Err(error) => {
                 return DependencyState::Unhealthy {

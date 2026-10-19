@@ -84,7 +84,6 @@ const fn speech_audio_error(error: &MediaError) -> SpeechAudioError {
         MediaError::Source(_)
         | MediaError::Request(_)
         | MediaError::Process(_)
-        | MediaError::InvalidSourcePath
         | MediaError::InvalidMetadata
         | MediaError::InvalidDuration
         | MediaError::TooManyStreams

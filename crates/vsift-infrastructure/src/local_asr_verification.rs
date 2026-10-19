@@ -325,7 +325,6 @@ const fn fixture_probe_failure(error: &MediaError) -> LocalAsrVerificationFailur
         MediaError::Source(_)
         | MediaError::Request(_)
         | MediaError::Process(_)
-        | MediaError::InvalidSourcePath
         | MediaError::ProviderRejected
         | MediaError::Deadline
         | MediaError::OutputLimit

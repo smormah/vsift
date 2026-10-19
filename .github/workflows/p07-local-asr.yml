@@ -53,6 +53,11 @@ jobs:
       - name: Local-ASR checkpoint, including setup check verification (base)
         run: cargo test --release --locked -p vsift-cli --test p07_local_asr_e2e -- --ignored --nocapture
 
+      # #469: the media-tool and speech checks in a folder deeper than
+      # Windows' MAX_PATH, with the pinned FFmpeg and whisper.cpp.
+      - name: Providers in a folder deeper than MAX_PATH (base)
+        run: cargo test --release --locked -p vsift-infrastructure --test long_provider_paths -- --ignored --nocapture
+
       - name: T-04 accuracy, timing and memory for both profiles
         run: cargo test --release --locked -p vsift-infrastructure --test p07_asr_qualification -- --ignored --nocapture
 

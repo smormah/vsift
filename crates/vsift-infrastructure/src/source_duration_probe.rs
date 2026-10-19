@@ -54,9 +54,7 @@ impl SourceDurationProbe<SourceSnapshot> for FfprobeSourceDuration {
                 MediaError::Deadline => SourceProbeError::Deadline,
                 MediaError::Cancelled => SourceProbeError::Cancelled,
                 MediaError::OutputLimit => SourceProbeError::ResourceLimit,
-                MediaError::Process(_) | MediaError::Request(_) | MediaError::InvalidSourcePath => {
-                    SourceProbeError::Io
-                }
+                MediaError::Process(_) | MediaError::Request(_) => SourceProbeError::Io,
                 _ => SourceProbeError::InvalidSource,
             })
     }

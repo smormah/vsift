@@ -223,9 +223,7 @@ const fn evidence_media_error(error: &MediaError) -> EvidenceMediaError {
         | MediaError::InvalidDimensions
         | MediaError::InvalidOrientation
         | MediaError::TimeBaseMismatch => EvidenceMediaError::Undecodable,
-        MediaError::Source(_) | MediaError::Process(_) | MediaError::InvalidSourcePath => {
-            EvidenceMediaError::Unavailable
-        }
+        MediaError::Source(_) | MediaError::Process(_) => EvidenceMediaError::Unavailable,
         MediaError::Request(_)
         | MediaError::InvalidMetadata
         | MediaError::InvalidDuration
