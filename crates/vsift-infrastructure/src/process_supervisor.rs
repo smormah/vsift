@@ -167,6 +167,35 @@ impl ProcessWorkingDirectory {
         Ok(Self(canonical))
     }
 
+    /// The folder that holds `executable`: the working directory every media
+    /// and speech provider runs in (#469).
+    ///
+    /// Windows starts no process whose working directory is longer than 258
+    /// characters (`CreateProcessW` fails with `ERROR_DIRECTORY`, whatever
+    /// `LongPathsEnabled` says), so a provider run in the folder of the file it
+    /// reads could not start once a long per-user folder or session root
+    /// pushed that folder past the limit. An executable's own folder never
+    /// has that problem: Windows starts a program only from a path shorter
+    /// than `MAX_PATH` (L-094), so the folder of one it can start is a valid
+    /// working directory, and `setup check` runs the tools from the same
+    /// folder. It adds nothing to the library search either: the program's
+    /// own folder is searched before the working directory anyway (SEC-02).
+    /// Providers are given absolute paths for everything they read or write,
+    /// so nothing depends on the working directory's contents.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::new`]; a canonical executable path always has a folder,
+    /// so [`ProcessRequestError::WorkingDirectoryNotDirectory`] stands for
+    /// one that has none.
+    pub fn of_executable(executable: &TrustedExecutable) -> Result<Self, ProcessRequestError> {
+        let folder = executable
+            .path()
+            .parent()
+            .ok_or(ProcessRequestError::WorkingDirectoryNotDirectory)?;
+        Self::new(folder)
+    }
+
     /// Returns the canonical directory path.
     #[must_use]
     pub fn path(&self) -> &Path {

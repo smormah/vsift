@@ -200,24 +200,20 @@ impl<'a> FfmpegMedia<'a> {
             .check_before_provider_call()
             .map_err(MediaError::Source)?;
         let source = binding.snapshot();
-        let request = Self::request(
-            source,
-            self.registry.ffprobe.clone(),
-            Duration::from_secs(15),
-        )?
-        .with_arguments([
-            "-v",
-            "error",
-            "-hide_banner",
-            "-max_alloc",
-            "67108864",
-            "-protocol_whitelist",
-            "file",
-            "-probesize",
-            "5000000",
-            "-analyzeduration",
-            "5000000",
-        ]);
+        let request = Self::request(self.registry.ffprobe.clone(), Duration::from_secs(15))?
+            .with_arguments([
+                "-v",
+                "error",
+                "-hide_banner",
+                "-max_alloc",
+                "67108864",
+                "-protocol_whitelist",
+                "file",
+                "-probesize",
+                "5000000",
+                "-analyzeduration",
+                "5000000",
+            ]);
         let request = restrict_mov_references(request, source)
             .with_arguments(["-f", source.container().demuxer(), "-show_entries",
                 "format=duration,start_time:stream=index,codec_type,codec_name,time_base,start_pts,width,height:stream_tags=language,rotate:stream_side_data=rotation",
@@ -293,27 +289,23 @@ impl<'a> FfmpegMedia<'a> {
             "select='gte(pts\\,{})*isnan(prev_selected_t)',showinfo",
             bound.presentation_timestamp
         );
-        let request = Self::request(
-            source,
-            self.registry.ffmpeg.clone(),
-            Duration::from_secs(30),
-        )?
-        .with_arguments([
-            "-hide_banner",
-            "-nostdin",
-            "-loglevel",
-            "info",
-            "-nostats",
-            "-xerror",
-            "-max_alloc",
-            "67108864",
-            "-threads",
-            "2",
-            "-copyts",
-            "-ss",
-        ])
-        .with_argument(seconds_arg(seek))
-        .with_arguments(["-protocol_whitelist", "file"]);
+        let request = Self::request(self.registry.ffmpeg.clone(), Duration::from_secs(30))?
+            .with_arguments([
+                "-hide_banner",
+                "-nostdin",
+                "-loglevel",
+                "info",
+                "-nostats",
+                "-xerror",
+                "-max_alloc",
+                "67108864",
+                "-threads",
+                "2",
+                "-copyts",
+                "-ss",
+            ])
+            .with_argument(seconds_arg(seek))
+            .with_arguments(["-protocol_whitelist", "file"]);
         let request = restrict_mov_references(request, source)
             .with_arguments(["-f", source.container().demuxer(), "-i"])
             .with_argument(source.provider_path().as_os_str())
@@ -510,7 +502,7 @@ impl<'a> FfmpegMedia<'a> {
             end = seconds_arg(raw_end),
             interval = seconds_arg(as_argument(VISUAL_SAMPLE_INTERVAL_MICROS)?),
         );
-        let request = Self::request(source, self.registry.ffmpeg.clone(), VISUAL_WINDOW_DEADLINE)?
+        let request = Self::request(self.registry.ffmpeg.clone(), VISUAL_WINDOW_DEADLINE)?
             .with_arguments([
                 "-hide_banner",
                 "-nostdin",
@@ -581,7 +573,7 @@ impl<'a> FfmpegMedia<'a> {
         profile.check_range(range, description.duration)?;
         let window = PcmDecodeWindow::for_range(range)?;
         let seek = window.seek;
-        let request = Self::request(source, self.registry.ffmpeg.clone(), profile.deadline())?
+        let request = Self::request(self.registry.ffmpeg.clone(), profile.deadline())?
             .with_arguments([
                 "-hide_banner",
                 "-nostdin",
@@ -643,16 +635,19 @@ impl<'a> FfmpegMedia<'a> {
         })
     }
 
+    /// A provider request that runs `executable` in its own folder.
+    ///
+    /// Until #469 it ran in the folder of the source copy, which Windows
+    /// refuses as a working directory once a long per-user folder or session
+    /// root makes it longer than 258 characters; the copy is always given to
+    /// the provider by its absolute path, which `FFmpeg` opens at any length
+    /// ([`ProcessWorkingDirectory::of_executable`]).
     fn request(
-        source: &SourceSnapshot,
         executable: TrustedExecutable,
         deadline: Duration,
     ) -> Result<ProcessRequest, MediaError> {
-        let provider_path = source.provider_path();
-        let parent = provider_path
-            .parent()
-            .ok_or(MediaError::InvalidSourcePath)?;
-        let cwd = ProcessWorkingDirectory::new(parent).map_err(MediaError::Request)?;
+        let cwd =
+            ProcessWorkingDirectory::of_executable(&executable).map_err(MediaError::Request)?;
         ProcessRequest::new(executable, cwd, deadline).map_err(MediaError::Request)
     }
 
@@ -1312,8 +1307,6 @@ pub enum MediaError {
     Request(ProcessRequestError),
     /// Trusted supervisor could not run the provider.
     Process(ProcessError),
-    /// Snapshot had no canonical private parent.
-    InvalidSourcePath,
     /// Provider rejected or could not decode the selected media.
     ProviderRejected,
     /// Provider operation exceeded its deadline.
@@ -1369,7 +1362,6 @@ impl fmt::Display for MediaError {
             Self::Source(_) => "source binding failed",
             Self::Request(_) => "provider request is invalid",
             Self::Process(_) => "provider process failed",
-            Self::InvalidSourcePath => "source snapshot path is invalid",
             Self::ProviderRejected => "provider rejected selected media",
             Self::Deadline => "media operation timed out",
             Self::Cancelled => "media operation was cancelled",

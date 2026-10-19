@@ -304,6 +304,24 @@ pub(crate) enum OwnAccess {
     Unreadable,
 }
 
+/// The path a DACL is read by: the canonical, extended-length form (`\?\C:\...`).
+///
+/// `GetNamedSecurityInfoW`, which `windows-acl` calls, refuses a plain path of
+/// `MAX_PATH` (260) characters or more, so a private root under a long
+/// per-user folder failed its own validation (#469); the extended-length form
+/// is read at any length. Every caller has already checked that the last
+/// component is the directory it holds, not a link, so the canonical form
+/// names the same directory. A path that cannot be canonicalized (one whose
+/// owner lost its own entry, say) is read as it is given, as before.
+#[cfg(windows)]
+pub(crate) fn security_read_path(path: &Path) -> Option<String> {
+    fs::canonicalize(path)
+        .unwrap_or_else(|_| path.to_path_buf())
+        .into_os_string()
+        .into_string()
+        .ok()
+}
+
 /// Reads the DACL at `path` and classifies it. The owner of a directory can
 /// read its DACL even without an entry of its own, so a root that lost the
 /// user's entry is still told apart from one that cannot be read at all.
@@ -311,10 +329,10 @@ pub(crate) enum OwnAccess {
 pub(crate) fn own_access(path: &Path) -> OwnAccess {
     use windows_acl::acl::{ACL, AceType};
 
-    let (Some(user_sid), Some(path)) = (current_user_sid(), path.to_str()) else {
+    let (Some(user_sid), Some(path)) = (current_user_sid(), security_read_path(path)) else {
         return OwnAccess::Unreadable;
     };
-    let Ok(entries) = ACL::from_file_path(path, false).and_then(|acl| acl.all()) else {
+    let Ok(entries) = ACL::from_file_path(&path, false).and_then(|acl| acl.all()) else {
         return OwnAccess::Unreadable;
     };
     let trusted = trusted_principals(&user_sid);
@@ -409,8 +427,8 @@ pub(crate) fn validate_private_root(path: &Path, _root: &Dir) -> Result<(), Priv
     use windows_acl::acl::{ACL, AceType};
 
     let user_sid = current_user_sid().ok_or(PrivateRootError::UnsafeStorage)?;
-    let path = path.to_str().ok_or(PrivateRootError::UnsafeStorage)?;
-    let acl = ACL::from_file_path(path, false).map_err(|_| PrivateRootError::UnsafeStorage)?;
+    let path = security_read_path(path).ok_or(PrivateRootError::UnsafeStorage)?;
+    let acl = ACL::from_file_path(&path, false).map_err(|_| PrivateRootError::UnsafeStorage)?;
     let entries = acl.all().map_err(|_| PrivateRootError::UnsafeStorage)?;
     let trusted = trusted_principals(&user_sid);
     let current_user_allowed = entries
@@ -761,6 +779,36 @@ mod windows_tests {
         let restricted = creator.join().map_err(|_| "creator thread failed")?;
         assert_eq!(restricted, Ok(()));
         assert_eq!(outcome, Ok(()));
+        Ok(())
+    }
+
+    /// #469: a private root whose plain path is longer than `MAX_PATH`, as
+    /// `%LOCALAPPDATA%\vsift` is under a long per-user folder, is created,
+    /// validated and reopened; its DACL was read by the plain path, which
+    /// Windows refuses at that length, so it failed as unsafe storage.
+    #[test]
+    fn a_root_deeper_than_max_path_is_created_and_validated() -> TestResult {
+        let parent = HostileParent::new()?;
+        let mut deep = parent.0.clone();
+        let mut index = 0_u32;
+        while deep.as_os_str().len() < 300 {
+            deep.push(format!(
+                "a-made-up-folder-name-that-only-makes-the-path-long-{index}"
+            ));
+            index += 1;
+        }
+        let root = deep.join("vsift");
+        assert!(!root.as_os_str().to_string_lossy().starts_with(r"\\?\"));
+
+        let created = open_private_root_with_creation(&root, true);
+
+        assert!(matches!(created, Ok(Some((_, true)))), "{created:?}");
+        drop(created);
+        assert!(matches!(
+            open_private_root_with_creation(&root, true),
+            Ok(Some((_, false)))
+        ));
+        assert_eq!(own_access(&root), OwnAccess::Private);
         Ok(())
     }
 

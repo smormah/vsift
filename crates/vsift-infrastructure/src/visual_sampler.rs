@@ -83,7 +83,6 @@ const fn visual_sampling_error(error: &MediaError) -> VisualSamplingError {
         MediaError::Source(_)
         | MediaError::Request(_)
         | MediaError::Process(_)
-        | MediaError::InvalidSourcePath
         | MediaError::InvalidMetadata
         | MediaError::InvalidDuration
         | MediaError::InvalidAudioRange

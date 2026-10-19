@@ -489,7 +489,7 @@ impl FfmpegMedia<'_> {
                 .map(seconds_arg)
                 .map_err(|_| MediaError::InvalidFrameRequest)
         };
-        let request = Self::request(source, self.registry.ffmpeg.clone(), EVIDENCE_DEADLINE)?
+        let request = Self::request(self.registry.ffmpeg.clone(), EVIDENCE_DEADLINE)?
             .with_arguments([
                 "-hide_banner",
                 "-nostdin",

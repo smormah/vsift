@@ -895,11 +895,11 @@ pub(super) fn validate_platform_root_permissions(
         .ok()
         .and_then(|mut sid| sid_to_string(sid.as_mut_ptr().cast()).ok())
         .ok_or(SessionStoreOpenError::RootNotPrivate)?;
-    let path = root_path
-        .to_str()
+    // The extended-length form, read at any length (#469).
+    let path = crate::private_user_root::security_read_path(root_path)
         .ok_or(SessionStoreOpenError::RootNotPrivate)?;
     let acl =
-        ACL::from_file_path(path, false).map_err(|_| SessionStoreOpenError::RootNotPrivate)?;
+        ACL::from_file_path(&path, false).map_err(|_| SessionStoreOpenError::RootNotPrivate)?;
     let entries = acl
         .all()
         .map_err(|_| SessionStoreOpenError::RootNotPrivate)?;

@@ -416,6 +416,9 @@ impl WhisperCli {
 
     /// Recognizes one chunk's samples in `workspace` and returns the parsed output.
     ///
+    /// `workspace` holds the chunk's files, which whisper.cpp is given by
+    /// absolute path; whisper.cpp itself runs in its own folder (#469).
+    ///
     /// The chunk's WAV and JSON files are created fresh (an existing file of
     /// either name fails the run rather than being reused) and removed again
     /// whatever the outcome.
@@ -459,13 +462,15 @@ impl WhisperCli {
     ) -> Result<ProviderChunkOutput, WhisperError> {
         let wav = workspace.path().join(format!("{stem}.wav"));
         let base = workspace.path().join(stem);
-        let request = ProcessRequest::new(
-            self.executable.clone(),
-            workspace.clone(),
-            WHISPER_CHUNK_DEADLINE,
-        )
-        .map_err(WhisperError::Request)?
-        .with_arguments(self.argv(&wav, &base));
+        // The chunk files are named by absolute paths; whisper.cpp runs in
+        // its own folder, because Windows starts no process in a folder
+        // longer than 258 characters and a session's work folder can be
+        // (#469, `ProcessWorkingDirectory::of_executable`).
+        let cwd = ProcessWorkingDirectory::of_executable(&self.executable)
+            .map_err(WhisperError::Request)?;
+        let request = ProcessRequest::new(self.executable.clone(), cwd, WHISPER_CHUNK_DEADLINE)
+            .map_err(WhisperError::Request)?
+            .with_arguments(self.argv(&wav, &base));
         let stdout = NonZeroUsize::new(WHISPER_STDOUT_LIMIT).unwrap_or(NonZeroUsize::MIN);
         let stderr = NonZeroUsize::new(WHISPER_STDERR_LIMIT).unwrap_or(NonZeroUsize::MIN);
         let supervisor = ProcessSupervisor::new(
