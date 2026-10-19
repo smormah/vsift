@@ -40,10 +40,13 @@ on:
       - tools/p14-campaigns/lib/real-media.cjs
       - tools/p14-campaigns/lib/real-media-checks.cjs
       - tools/p14-campaigns/lib/real-media-campaign.cjs
+      - tools/p14-campaigns/lib/small-text.cjs
       - tools/p14-campaigns/real-media/**
       - tools/p14-campaigns/test/real-media.test.cjs
       - tools/p14-campaigns/test/real-media-checks.test.cjs
       - tools/p14-campaigns/test/real-media-campaign.test.cjs
+      - tools/p14-campaigns/test/small-text.test.cjs
+      - tools/p14-campaigns/test/png-fixture.cjs
   workflow_dispatch:
     inputs:
       items:

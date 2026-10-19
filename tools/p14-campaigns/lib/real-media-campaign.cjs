@@ -14,6 +14,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const checks = require('./real-media-checks.cjs');
+const smallText = require('./small-text.cjs');
 
 const SECOND = 1_000_000;
 const CANDIDATE_RANGE_US = 300 * SECOND;
@@ -364,6 +365,7 @@ function investigate(item, file, run, where) {
   const frameFindings = [];
   const chosen = visual.items.length > 0 ? [...new Set([0, Math.floor(visual.items.length / 2), visual.items.length - 1])].map((index) => visual.items[index]) : [];
   let cropParent = null;
+  const parents = [];
   for (const candidate of chosen) {
     const frame = record(at('frame get', ['frame', 'get', session, '--candidate', candidate.candidate_id]));
     const selection = frame.json && frame.json.data && frame.json.data.selections && frame.json.data.selections[0];
@@ -373,6 +375,7 @@ function investigate(item, file, run, where) {
     }
     if (selection.actual_us !== candidate.representative_us) frameFindings.push(`frame of candidate at ${candidate.representative_us} us is at ${selection.actual_us} us`);
     cropParent = cropParent || frame.json.data.items[0];
+    if (frame.json.data.items[0]) parents.push(frame.json.data.items[0]);
   }
   if (cropParent) {
     const width = Math.min(480, cropParent.frame.width);
@@ -382,6 +385,9 @@ function investigate(item, file, run, where) {
     if (!image) frameFindings.push('crop gave no image');
     else if (image.width !== width || image.height !== height) frameFindings.push(`crop of ${width}x${height} came back ${image.width}x${image.height}, not at native size`);
     report.measurements.crop = image ? { width: image.width, height: image.height } : null;
+  }
+  if ((item.covers || []).includes('screen-ui-small-text') && parents.length > 0) {
+    report.measurements.small_text = measureSmallText(at, record, session, parents, where.readFile || fs.readFileSync, frameFindings);
   }
   report.checks.frames = { passed: frameFindings.length === 0, findings: frameFindings };
 
@@ -394,6 +400,44 @@ function investigate(item, file, run, where) {
   report.checks.no_failure = { passed: failures.length === 0, findings: failures };
   report.measurements.steps = answers.filter(Boolean).map((answer) => ({ step: answer.step, exit: answer.exit, seconds: Number(answer.seconds.toFixed(2)), status: answer.json ? answer.json.status : null, code: answer.json && answer.json.error ? answer.json.error.code : null }));
   return report;
+}
+
+/**
+ * Check 9's measurement (#173, L-018): each frame cut into a grid of crops of
+ * at most 480x120, each crop read back from the PNG VSift wrote and checked to
+ * be at native size, and the height in pixels of every line of text in it
+ * (`small-text.cjs`). A person still judges legibility; this says how small
+ * the text is that VSift hands over unscaled. Step labels are fixed phrases.
+ */
+function measureSmallText(at, record, session, parents, readFile, findings) {
+  const heights = [];
+  let crops = 0;
+  let notNative = 0;
+  let unread = 0;
+  for (const parent of parents) {
+    for (const rect of smallText.cropGrid(parent.frame.width, parent.frame.height)) {
+      const answer = record(at('crop (small text)', ['crop', session, parent.evidence_id, '--rect', `${rect.x},${rect.y},${rect.width},${rect.height}`]));
+      const data = answer.json && answer.json.data;
+      const image = data && data.items && data.items[0] && data.items[0].image;
+      const file = data && data.files && data.files[0] && data.files[0].path;
+      if (!image || !file) {
+        unread += 1;
+        continue;
+      }
+      crops += 1;
+      try {
+        const png = smallText.readPng(readFile(file));
+        if (png.width !== rect.width || png.height !== rect.height || image.width !== rect.width || image.height !== rect.height) notNative += 1;
+        heights.push(...smallText.textLineHeights(png));
+      } catch (error) {
+        if (!(error instanceof smallText.PngError)) throw error;
+        unread += 1;
+      }
+    }
+  }
+  if (notNative > 0) findings.push(`${notNative} small-text crop(s) did not come back at native size`);
+  if (unread > 0) findings.push(`${unread} small-text crop(s) gave no image that could be read`);
+  return { frames: parents.length, crops, not_native: notNative, unread, line_heights: smallText.summariseHeights(heights) };
 }
 
 /** The string members a private report may keep: VSift's own codes and enumerations, never content. */
@@ -458,8 +502,8 @@ function mediaState(item, file) {
 function markdown(run) {
   const lines = ['# Real-media campaign', '', `- Binary: ${run.binary.version} (SHA-256 \`${run.binary.sha256}\`)`,
     `- Started ${run.started}, finished ${run.finished}; ${run.platform}`, `- Setup: ${run.setup.passed ? 'passed' : `**failed**: ${run.setup.findings.join('; ')}`}`, '',
-    '| Item | Verdict | Transcription (RTF) | Seam recall / control | Repeats at seams | Timing diff p95 | Candidates per min | Findings |',
-    '| --- | --- | --- | --- | --- | --- | --- | --- |'];
+    '| Item | Verdict | Transcription (RTF) | Seam recall / control | Repeats at seams | Timing diff p95 | Candidates per min | Text lines, smallest / median | Findings |',
+    '| --- | --- | --- | --- | --- | --- | --- | --- | --- |'];
   const fmt = (value) => (typeof value === 'number' ? value.toFixed(3) : 'n/a');
   for (const item of run.items) {
     if (item.not_yet_mirrored) {
@@ -472,7 +516,7 @@ function markdown(run) {
     const findings = item.private
       ? (item.verdict.failed_checks.length === 0 ? 'none' : item.verdict.failed_checks.map((entry) => `${entry.check} (${entry.findings})`).join('<br>'))
       : (item.verdict.findings.length === 0 ? 'none' : item.verdict.findings.join('<br>'));
-    lines.push(`| ${item.id} | ${item.verdict.passed ? 'pass' : '**fail**'} | ${t ? `${t.seconds.toFixed(0)} s (${t.real_time_factor.toFixed(2)})` : 'n/a'} | ${s ? `${fmt(s.seam_recall)} / ${fmt(s.control_recall)}` : 'n/a'} | ${m.seam_repeats ? m.seam_repeats.count : 'n/a'} | ${m.timing_differences && m.timing_differences.start.p95_us !== null ? `${(m.timing_differences.start.p95_us / 1000).toFixed(0)} ms` : 'n/a'} | ${m.candidates ? fmt(m.candidates.per_minute) : 'n/a'} | ${findings} |`);
+    lines.push(`| ${item.id} | ${item.verdict.passed ? 'pass' : '**fail**'} | ${t ? `${t.seconds.toFixed(0)} s (${t.real_time_factor.toFixed(2)})` : 'n/a'} | ${s ? `${fmt(s.seam_recall)} / ${fmt(s.control_recall)}` : 'n/a'} | ${m.seam_repeats ? m.seam_repeats.count : 'n/a'} | ${m.timing_differences && m.timing_differences.start.p95_us !== null ? `${(m.timing_differences.start.p95_us / 1000).toFixed(0)} ms` : 'n/a'} | ${m.candidates ? fmt(m.candidates.per_minute) : 'n/a'} | ${m.small_text && m.small_text.line_heights.lines > 0 ? `${m.small_text.line_heights.min_px} / ${m.small_text.line_heights.median_px} px (${m.small_text.line_heights.lines})` : 'n/a'} | ${findings} |`);
   }
   const attributed = run.items.filter((item) => !item.private && !item.not_yet_mirrored);
   if (attributed.length > 0) {

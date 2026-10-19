@@ -11,6 +11,7 @@ const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
 const campaign = require('../lib/real-media-campaign.cjs');
+const { png } = require('./png-fixture.cjs');
 
 const SECOND = 1_000_000;
 const SECRETS = ['zebrafinch', 'Quillmorton', 'Alice', 'Hartwell', 'Secret Meeting', 'paid-tutorial', 'invoice'];
@@ -215,4 +216,44 @@ test('the summary shows an item not yet mirrored as such, and the hosted run ask
   assert.doesNotMatch(summary, /## Attribution/);
   const workflow = fs.readFileSync(path.join(__dirname, '..', '..', '..', '.github', 'workflows', 'p14-real-media.yml'), 'utf8');
   assert.match(workflow, /real-media-campaign\.cjs[\s\S]*--available-only/);
+});
+
+test('the frames of a screen recording are cut into native crops whose lines of text are measured (#173)', (t) => {
+  const { run } = standIn();
+  const files = new Map();
+  /** A crop of light grey with one 9-row and one 12-row "line of text" (strokes every 4 pixels). */
+  const textCrop = (width, height) => {
+    const luma = Buffer.alloc(width * height, 230);
+    for (const [top, rows] of [[20, 9], [50, 12]]) {
+      for (let y = top; y < Math.min(height, top + rows); y += 1) for (let x = 8; x < width - 8; x += 4) luma[y * width + x] = 30;
+    }
+    return png(width, height, 0, 1, luma);
+  };
+  let shrink = true;
+  const screen = (step, args, extra) => {
+    if (args[0] !== 'crop') return run(step, args, extra);
+    const [x, y, width, height] = args[args.indexOf('--rect') + 1].split(',').map(Number);
+    const file = `crop-${files.size}.png`;
+    // The first crop of the grid comes back a pixel short: a crop that is not native is a finding.
+    const returned = shrink && step === 'crop (small text)' ? width - 1 : width;
+    if (step === 'crop (small text)') shrink = false;
+    files.set(file, textCrop(returned, height));
+    return { step, exit: 0, seconds: 0.1, json: { status: 'complete', error: null,
+      data: { files: [{ path: file }], items: [{ image: { width: returned, height }, crop: { x, y, width, height } }] } } };
+  };
+  const screenItem = { ...PRIVATE_ITEM, id: 'RM10', private: undefined, title: 'T', attribution: 'A', tests: ['#173'], covers: ['screen-ui-small-text'] };
+  const report = campaign.investigate(screenItem, FILE, screen, { folder: scratch(t), copyFile: () => {}, exists: () => false, writeFile: () => {},
+    readFile: (file) => files.get(file) });
+  const measured = report.measurements.small_text;
+  // Two chosen frames of 1280x720, each a grid of 3 x 6 crops.
+  assert.equal(measured.frames, 2);
+  assert.equal(measured.crops, 36);
+  assert.equal(measured.not_native, 1);
+  assert.equal(measured.line_heights.lines, 72);
+  assert.equal(measured.line_heights.min_px, 9);
+  assert.equal(measured.line_heights.max_px, 12);
+  assert.deepEqual(report.checks.frames.findings, ['1 small-text crop(s) did not come back at native size']);
+  // An item that is not a screen recording is not cut up.
+  const other = campaign.investigate({ ...screenItem, covers: ['conversational-pauses'] }, FILE, run, { folder: scratch(t), copyFile: () => {}, exists: () => false, writeFile: () => {} });
+  assert.equal(other.measurements.small_text, undefined);
 });
