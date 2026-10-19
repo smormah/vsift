@@ -17,10 +17,10 @@ use std::{fs, io, path::PathBuf};
 use serde_json::Value;
 use vsift_contract::{
     CommandName, OperationResponse, PrivateFolder, SESSION_ROOT_NAME_REMEDIATION,
-    SOURCE_ACCESS_DENIED_REMEDIATION, SOURCE_COPY_TOO_SLOW_REMEDIATION,
-    SOURCE_COPY_WOULD_BE_TOO_SLOW_REMEDIATION, SOURCE_IS_FOLDER_REMEDIATION,
-    SOURCE_NOT_FOUND_REMEDIATION, SOURCE_SPECIAL_FILE_REMEDIATION, TerminalEventResponse,
-    UNOWNED_SESSION_ROOT_REMEDIATION, non_private_folder_summary,
+    SESSION_ROOT_OWN_ACCESS_REMEDIATION, SOURCE_ACCESS_DENIED_REMEDIATION,
+    SOURCE_COPY_TOO_SLOW_REMEDIATION, SOURCE_COPY_WOULD_BE_TOO_SLOW_REMEDIATION,
+    SOURCE_IS_FOLDER_REMEDIATION, SOURCE_NOT_FOUND_REMEDIATION, SOURCE_SPECIAL_FILE_REMEDIATION,
+    TerminalEventResponse, UNOWNED_SESSION_ROOT_REMEDIATION, non_private_folder_summary,
 };
 use vsift_domain::FailureCode;
 
@@ -132,6 +132,35 @@ fn a_session_root_name_not_allowed_matches_the_example() -> TestResult {
     let value = serde_json::to_value(&response)?;
     validate("operation-response.schema.json", &value)?;
     assert_eq!(value, load("examples/session-root-name-not-allowed.json")?);
+    let event = serde_json::to_value(TerminalEventResponse::new(response))?;
+    validate("terminal-event.schema.json", &event)?;
+    Ok(())
+}
+
+/// The answer to a session root whose permissions no longer hold an entry for
+/// the current user (Windows, #443): `STORAGE_IO`, the code the case always had,
+/// with one remediation that says how to recover the folder where
+/// `remediation` was empty.
+#[test]
+fn a_session_root_without_its_users_own_entry_matches_the_example() -> TestResult {
+    let response = OperationResponse::<Value>::failure_with_remediation(
+        CommandName::SessionList.identifier(),
+        FailureCode::StorageIo,
+        SESSION_ROOT_OWN_ACCESS_REMEDIATION.to_owned(),
+    );
+    let value = serde_json::to_value(&response)?;
+    validate("operation-response.schema.json", &value)?;
+    assert_eq!(
+        value,
+        load("examples/session-root-own-access-missing.json")?
+    );
+    let summary = SESSION_ROOT_OWN_ACCESS_REMEDIATION;
+    assert!(summary.starts_with(
+        "The VSift session_root folder's permissions no longer include your own account"
+    ));
+    assert!(summary.contains("icacls \"<folder>\" /grant"));
+    assert!(summary.contains("delete the folder"));
+    assert!(!summary.contains(":\\"), "the remediation names no path");
     let event = serde_json::to_value(TerminalEventResponse::new(response))?;
     validate("terminal-event.schema.json", &event)?;
     Ok(())

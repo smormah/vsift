@@ -17,6 +17,7 @@ mod npm_packages;
 mod public_claims;
 mod release_evidence;
 mod repository;
+mod unsafe_code;
 mod workflows;
 
 const DEFAULT_LEDGER: &str = "docs/planning/delivery-ledger.json";
@@ -302,6 +303,7 @@ fn validate(
     validate_fault_injection_features(&mut messages, repository_root);
     workflows::validate_workflows(&mut messages, repository_root);
     npm_packages::validate_npm_packages(&mut messages, repository_root);
+    unsafe_code::validate_unsafe_code(&mut messages, repository_root);
     let repository = repository::DiskRepository::new(repository_root);
     release_evidence::validate_release_evidence(&mut messages, &repository);
     public_claims::validate_public_claims(&mut messages, &repository);

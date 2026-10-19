@@ -1,0 +1,44 @@
+[package]
+name = "vsift-windows-security"
+description = "The one place VSift calls Windows directly: creating a directory with its private security descriptor at creation (ADR 0026)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+# Already in the lock (fs4, process-wrap, tokio and others resolve this exact
+# version); named directly for the three functions this crate calls. No new
+# crate.
+[target.'cfg(windows)'.dependencies]
+windows-sys.workspace = true
+
+[target.'cfg(windows)'.dev-dependencies]
+# Already a workspace dependency; the tests read back the stored DACL and the
+# current user's SID with it, as the infrastructure crate does.
+windows-acl.workspace = true
+
+# The workspace forbids `unsafe_code`, and a forbid cannot be relaxed, so this
+# crate cannot take the workspace's lints. It repeats them and adds the rules
+# for its few `unsafe` blocks (ADR 0026): `unsafe_code` is denied and allowed
+# only at each block, every block needs its `// SAFETY:` comment, and a block
+# holds one unsafe operation. The governance check compares this table with
+# the workspace's and refuses this crate if a rule is missing.
+[lints.rust]
+missing_docs = "warn"
+unsafe_code = "deny"
+unsafe_op_in_unsafe_fn = "deny"
+
+[lints.clippy]
+all = { level = "deny", priority = -1 }
+pedantic = { level = "deny", priority = -1 }
+dbg_macro = "deny"
+expect_used = "deny"
+panic = "deny"
+todo = "deny"
+unimplemented = "deny"
+unwrap_used = "deny"
+undocumented_unsafe_blocks = "deny"
+multiple_unsafe_ops_per_block = "deny"

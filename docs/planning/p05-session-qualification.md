@@ -204,3 +204,12 @@ read (`private_root_acl`, `private_storage_cli_contract`) check the SDDL is prot
 has no inherited entry and no `BUILTIN\Users` entry, and that a pre-existing
 permissive root is refused with its DACL and contents unchanged; the creation tests
 fail when the DACL replacement is disabled.
+
+**Note of 2026-10-19 ([ADR 0026](../decisions/0026-windows-directories-created-with-their-security-descriptor.md), #443):**
+the protected DACL is now the security descriptor each directory is **created** with, not a
+replacement made right after creation; the replacement's path-based writes are gone, and with
+them the race in which a parent's write reached a new root (#206, #443). A root that lost the
+current user's entry is refused with `STORAGE_IO` and its own remediation. Evidence:
+`private_user_root`'s Windows tests (the exact DACL at every created level, and
+`a_late_parent_write_cannot_take_a_new_folder_back_to_an_earlier_state`, which fails with the
+earlier order) and `session_root_own_access_cli_contract`.

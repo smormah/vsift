@@ -66,6 +66,17 @@ pub fn non_private_folder_summary(folder: PrivateFolder) -> String {
 /// no path.
 pub const SESSION_ROOT_NAME_REMEDIATION: &str = "The last folder name of the session root you gave is one VSift does not use, so nothing was created or changed, and no storage failed (the code is the closest published one). The name must not be empty, hold a colon, end with a space or a dot, or be a name Windows keeps for a device (CON, PRN, AUX, NUL, COM1 to COM9, LPT1 to LPT9, with or without an extension); on Windows it must also hold no control character and none of < > \" | ? *. Give --session-root a folder whose last name avoids these, and run the command again.";
 
+/// Remediation for a session root whose permissions no longer hold an entry
+/// for the current user (Windows, #443).
+///
+/// Before ADR 0026 several commands that used a new session root at the same
+/// moment could leave it with only `SYSTEM` and Administrators. Such a root
+/// refuses every open; `VSift` never gives the entry back itself, because it
+/// cannot tell who removed it. The code stays `STORAGE_IO`, what the case
+/// answered before it had a cause (L-127). The first sentence is stable, and
+/// the text names no path: `<folder>` stands for it.
+pub const SESSION_ROOT_OWN_ACCESS_REMEDIATION: &str = "The VSift session_root folder's permissions no longer include your own account, so VSift cannot open it and changed nothing. Only SYSTEM and Administrators keep access: earlier versions of VSift could leave a new session folder like this on Windows when several commands used it for the first time at once. It is the disposable-session folder: the directory given with --session-root, or VSift-sessions under LOCALAPPDATA. To use it again, give your account its access back from a Command Prompt, with that folder's path: icacls \"<folder>\" /grant \"%USERDOMAIN%\\%USERNAME%:(OI)(CI)F\". Or, as sessions are disposable, delete the folder (if Windows refuses, run the same icacls command first) and retry; VSift creates it again, private to you. VSift does not change the folder's permissions itself.";
+
 /// Remediation for an existing session root that holds no `VSift` ownership
 /// marker (#261).
 ///

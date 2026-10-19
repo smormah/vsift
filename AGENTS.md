@@ -32,7 +32,7 @@ capability as implemented. Work only on an active packet whose predecessors are 
 ## Rust standards
 
 - Stable Rust only; the repository toolchain and MSRV are explicit.
-- `unsafe` is forbidden in VSift crates. A future exception requires an accepted ADR and a narrowly isolated crate.
+- `unsafe` is forbidden in VSift crates. The one exception is `crates/vsift-windows-security`, which creates a Windows directory with its security descriptor ([ADR 0026](docs/decisions/0026-windows-directories-created-with-their-security-descriptor.md)); any change to it follows that ADR's review rule. The governance check refuses `unsafe` anywhere else. A further exception requires an accepted ADR and a narrowly isolated crate.
 - Do not use `unwrap`, `expect`, `panic`, `todo`, or `unimplemented` in production or test code.
 - Prefer owned, readable domain values over lifetime-heavy or prematurely zero-copy designs.
 - Use exhaustive enums and newtypes instead of boolean switches and magic strings.

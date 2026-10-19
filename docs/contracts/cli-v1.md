@@ -2827,10 +2827,10 @@ owner lets go ([issue #66](https://github.com/smormah/vsift/issues/66)).
 Every folder VSift creates for itself is private to the current user whatever its
 parent grants: the per-user configuration folder and any missing parent of it, the
 session root and its created parent, each retained bundle, and the managed-data
-folder. On Windows each gets its own protected DACL (no inheritance from the parent)
-granting only the current user, SYSTEM and Administrators; on Unix it is created
-owner-only (0o700). This happens before anything is written into the folder, and the
-result is still validated.
+folder. On Windows each is created with its own protected DACL (no inheritance from the
+parent) granting only the current user, SYSTEM and Administrators, set by Windows as the
+folder comes into being (since `0.2.3`, ADR 0026; earlier versions replaced the DACL just
+after creation); on Unix it is created owner-only (0o700). The result is still validated.
 
 An existing folder is never changed. When the per-user configuration folder or the
 session root exists but another account can access it (on Unix: group or other mode
@@ -2887,6 +2887,16 @@ that states the rule where `remediation` was empty (example
 above the root are not checked by this rule; they are resolved as the operating system resolves them. Before this was
 written down, a root named with SEC-T02's hostile text was refused on Linux and the control characters were
 suspected; the cause was the two colons the text held (#232).
+
+**A session root whose permissions no longer include the current user** (Windows) is refused
+without being changed. Before `0.2.3` several commands that used a new session root at the same
+moment could leave it with only SYSTEM and Administrators in its DACL (#443); every later command
+was refused with a bare `STORAGE_IO`. Since `0.2.3` the answer is still `STORAGE_IO` (exit 7), the
+code the case had, with one remediation, where `remediation` was empty, that says how to recover
+the folder: give the account its entry back with `icacls "<folder>" /grant
+"%USERDOMAIN%\%USERNAME%:(OI)(CI)F"`, or delete it (example
+[`session-root-own-access-missing.json`](../../schemas/v1/examples/session-root-own-access-missing.json)).
+VSift does not give the entry back itself: it cannot tell who removed it.
 
 A folder another VSift process created a moment ago can briefly look
 non-private while that process restricts it, so a folder that is still empty and was

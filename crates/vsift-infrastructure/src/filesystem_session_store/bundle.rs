@@ -18,19 +18,16 @@ use super::{
     FilesystemSessionStore, MAX_SESSION_ARTIFACT_BYTES, MAX_SESSION_ARTIFACTS, SESSIONS_DIRECTORY,
     StoredArtifact, StoredArtifactKind,
     chain::read_committed_manifest,
-    copy_and_hash_bounded, create_private_child_directory, create_regular_file, hash_bounded,
-    map_open_error, map_storage_io, open_regular_file,
+    copy_and_hash_bounded, create_regular_file, hash_bounded, map_open_error, map_storage_io,
+    open_regular_file,
     publication::evidence_artifact_count,
     read_bounded_manifest,
     reads::{read_evidence_artifact, read_transcript_artifact, read_visual_index_artifact},
-    root::{
-        map_restrict_error, validate_platform_root_permissions, validate_root_selection,
-        validate_same_object,
-    },
+    root::{validate_platform_root_permissions, validate_root_selection, validate_same_object},
     sha256_hex,
     stored::{parse_versioned_json, validate_artifact_record},
 };
-use crate::private_user_root::restrict_new_directory;
+use crate::private_user_root::create_private_child;
 
 impl FilesystemSessionStore {
     /// Explicitly exports one committed session to a new private data-only directory.
@@ -78,7 +75,9 @@ impl FilesystemSessionStore {
         let canonical_parent = fs::canonicalize(parent_path).map_err(map_storage_io)?;
         let parent = Dir::open_ambient_dir(&canonical_parent, cap_std::ambient_authority())
             .map_err(map_storage_io)?;
-        create_private_child_directory(&parent, Path::new(name)).map_err(|error| {
+        // Private from its first instant, whatever the chosen parent would
+        // pass on (ADR 0026).
+        create_private_child(&parent, &canonical_parent, Path::new(name)).map_err(|error| {
             if error.kind() == io::ErrorKind::AlreadyExists {
                 SessionStorageError::StateConflict
             } else {
@@ -88,12 +87,6 @@ impl FilesystemSessionStore {
         let bundle = parent
             .open_dir_nofollow(Path::new(name))
             .map_err(map_storage_io)?;
-        // The export is private whatever the chosen parent would pass on.
-        if let Err(error) = restrict_new_directory(&canonical_parent.join(name)) {
-            drop(bundle);
-            let _ = parent.remove_dir(Path::new(name));
-            return Err(map_open_error(map_restrict_error(error)));
-        }
         if let Err(error) = validate_platform_root_permissions(output_path, &bundle) {
             drop(bundle);
             let _ = parent.remove_dir(Path::new(name));

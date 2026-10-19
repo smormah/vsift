@@ -83,6 +83,9 @@ proptest.workspace = true
 fs4.workspace = true
 windows.workspace = true
 windows-acl.workspace = true
+# The one crate allowed `unsafe` (ADR 0026): every directory VSift creates as
+# private on Windows is created with its security descriptor.
+vsift-windows-security.workspace = true
 
 
 [target.'cfg(unix)'.dependencies]

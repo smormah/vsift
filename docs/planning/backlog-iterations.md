@@ -125,6 +125,7 @@ nightly; the long hosted runs for what the cycle touched; an uncounted skill smo
 - **The re-pins:** the FFmpeg build planned for 2026-10-31 and whisper.cpp 1.9.5 or later: #351, #272, #322, #399.
 - **The seam follow-ups, measured on real speech:** #380 to #384 (#381 is the half-second tolerance).
 - **Evaluations:** #173, #174, #175, #150 and #159.
+- **Windows private folders (#443, with #206), moved from cycle 3 on 2026-10-19:** every private folder created with its security descriptor, in the one crate allowed `unsafe` ([ADR 0026](../decisions/0026-windows-directories-created-with-their-security-descriptor.md), the maintainer's decision of 2026-10-19).
 
 **Testing:** this is the cycle that needs the monthly round (a re-pin is a major change): the dependency-quality checks (`P07 local ASR` accuracy,
 `P14 malicious media`, the dated scan reading), agent batches 2 and 3 if the skill changes, and the full durability campaign.
@@ -135,7 +136,7 @@ nightly; the long hosted runs for what the cycle touched; an uncounted skill smo
 - **The documentation sweep:** #177, #286, #374, #219, #224, #246.
 - **The clean-machine try-out (RQ-17).**
 - **Help text for agents without the skill** (the cold-agent variant must be usable from `--help` alone): #454, a short typical investigation in `vsift --help` that names citing ids, then batch 3's cold scenarios again (L-178).
-- **Left over from cycle 1 (2026-10-18):** #439 and #443 (Windows findings of the cycle, cause or fix not known), #316, #258 and #263 (hosted runners), #397 and #336 (trial design), with #454 above.
+- **Left over from cycle 1 (2026-10-18):** #439 (a Windows finding of the cycle, cause not known; #443 moved to cycle 2), #316, #258 and #263 (hosted runners), #397 and #336 (trial design), with #454 above.
 - **A launch checklist:** names held on every chosen channel, the claims rung.
 
 ## R1 (P15 to P20)
