@@ -127,7 +127,7 @@ folder deeper than 300 characters with the gyan.dev `FFmpeg` 9.0 build on Window
 hosted Windows Server 2025 and Ubuntu 24.04. So nothing else has to be short; what an older
 `FFmpeg` would do is L-193.
 
-**SEC-02 is not weakened.** A working directory matters to library search, and on Windows the
+**SEC-02 is not weakened; the maintainer accepted the change on 2026-10-19** (the threat model's SEC-02 row records the decision). A working directory matters to library search, and on Windows the
 program's own folder is searched before the working directory, so making them the same folder
 adds no location; on Unix the working directory is not searched for libraries. The executable
 is still named by its canonical absolute path, and the environment is still cleared. A
