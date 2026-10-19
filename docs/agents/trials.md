@@ -67,7 +67,9 @@ The **mechanical** result is decided by the program; model prose cannot change i
   (`vsift_contract::HandoffChecker`), so the grader and the command cannot disagree; a
   detail names a finding by its JSON pointer or line, its rule and its fixed prose,
   never by quoting the draft, and every schema verdict is cross-checked against
-  `jsonschema` (a disagreement fails the check as a grader defect);
+  `jsonschema` (a disagreement fails the check as a grader defect). **Since `jsonschema` 0.58.6 (2026-10-19, Dependabot #387)** both read the schema's `\s`
+  as ECMA-262 does, so a statement that writes a path after one of 15 Unicode spaces the 0.56 class lacked (THIN SPACE, IDEOGRAPHIC SPACE and others) now fails
+  this check, where it passed before; the recorded batches' verdicts stand as graded, and the freeze does not see the change (L-184);
 - `citations_resolve`: every cited identity is in the retained bundle with the
   citation's type (a segment by `segment_id`, a frame, crop or clip by `evidence_id`),
   and every optional member the handoff gives (times, revision, requested/actual/delta,

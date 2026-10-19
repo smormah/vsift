@@ -22,9 +22,9 @@
 //!
 //! **Patterns** are ECMA-262 regular expressions matched anywhere in the
 //! string, run by the `regex` crate without its Unicode tables. The one Perl
-//! class the schema uses, `\s`, is written out as the class `jsonschema`
-//! translates it to, so the command and the grader's earlier verdicts
-//! agree; any other class escape (`\d`, `\w`, `\b`, ...) and `.` are
+//! class the schema uses, `\s`, is written out as ECMA-262 defines it, the
+//! class `jsonschema` 0.58.6 translates it to, so the command and the
+//! grader agree; any other class escape (`\d`, `\w`, `\b`, ...) and `.` are
 //! refused at compile time.
 //!
 //! **Errors** name the instance location as an RFC 6901 pointer built from
@@ -45,9 +45,14 @@ use super::rule::{HandoffFinding, HandoffRule};
 /// The one draft this validator implements.
 const DRAFT_2020_12: &str = "https://json-schema.org/draft/2020-12/schema";
 
-/// The class `jsonschema` 0.56 translates the ECMA-262 `\s` to
-/// (`jsonschema-regex`); written out so both read `\s` alike.
-const ECMA_SPACE_MEMBERS: &str = r" \t\n\r\x0B\x0C ﻿  ";
+/// The members of ECMA-262's `\s` (`WhiteSpace` and `LineTerminator`): TAB
+/// to CR, SPACE, every `Zs` character (NO-BREAK SPACE, OGHAM SPACE MARK,
+/// U+2000 to U+200A, U+202F, U+205F, U+3000), the line terminators U+2028
+/// and U+2029, and the BOM. `jsonschema` 0.58.6 translates `\s` to the same
+/// class; 0.56 knew only ten of them, and this constant copied that list
+/// until the update to 0.58.6 (Dependabot #387).
+const ECMA_SPACE_MEMBERS: &str =
+    r"\t-\r \x{A0}\x{1680}\x{2000}-\x{200A}\x{2028}\x{2029}\x{202F}\x{205F}\x{3000}\x{FEFF}";
 
 /// Guards schema compilation against a reference cycle.
 const MAX_SCHEMA_DEPTH: usize = 64;
@@ -1168,11 +1173,15 @@ mod tests {
     fn patterns_translate_or_are_refused() {
         assert_eq!(
             translate_pattern(r"^a\sb$").as_deref(),
-            Some(r"^a[ \t\n\r\x0B\x0C ﻿  ]b$")
+            Some(
+                r"^a[\t-\r \x{A0}\x{1680}\x{2000}-\x{200A}\x{2028}\x{2029}\x{202F}\x{205F}\x{3000}\x{FEFF}]b$"
+            )
         );
         assert_eq!(
             translate_pattern(r"[\s(=]").as_deref(),
-            Some(r"[ \t\n\r\x0B\x0C ﻿  (=]")
+            Some(
+                r"[\t-\r \x{A0}\x{1680}\x{2000}-\x{200A}\x{2028}\x{2029}\x{202F}\x{205F}\x{3000}\x{FEFF}(=]"
+            )
         );
         for refused in [r"\d", r"\w", r"\bx", "a.b", "(?=x)", r"\1", "[a"] {
             assert_eq!(translate_pattern(refused), None, "{refused}");

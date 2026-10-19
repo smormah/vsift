@@ -341,3 +341,47 @@ fn findings_are_bounded_and_the_bound_is_reported() -> TestResult {
     );
     Ok(())
 }
+
+/// The statement rule refuses a path after a space, and its `\s` is
+/// ECMA-262's: SPACE, every `Zs` character, the BOM and both line
+/// terminators (TAB to CR are control characters, which the statement's
+/// other pattern refuses anyway). `jsonschema` 0.56 knew only some of them
+/// (#387): a path after a THIN SPACE or an IDEOGRAPHIC SPACE passed the check.
+#[test]
+fn a_path_after_any_ecma_space_is_refused() -> TestResult {
+    let checker = HandoffChecker::new()?;
+    let ecma_spaces = [
+        ' ', '\u{00A0}', '\u{1680}', '\u{2000}', '\u{2001}', '\u{2002}', '\u{2003}', '\u{2004}',
+        '\u{2005}', '\u{2006}', '\u{2007}', '\u{2008}', '\u{2009}', '\u{200A}', '\u{2028}',
+        '\u{2029}', '\u{202F}', '\u{205F}', '\u{3000}', '\u{FEFF}',
+    ];
+    for space in ecma_spaces {
+        let mut draft = handoff();
+        draft["claims"][0]["statement"] = json!(format!("The log names{space}/etc/hosts."));
+        // The BOM is also refused by the invisible-character rule, at the
+        // same pointer, so a statement can carry two errors.
+        let refused = checker.schema_error_pointers(&draft);
+        assert!(
+            !refused.is_empty()
+                && refused
+                    .iter()
+                    .all(|pointer| pointer == "/claims/0/statement"),
+            "a path after U+{:04X}: {refused:?}",
+            u32::from(space)
+        );
+        // The same character with no path after it is an ordinary space.
+        draft["claims"][0]["statement"] = json!(format!("The log names{space}hosts."));
+        let refused = checker.schema_error_pointers(&draft);
+        // Except the BOM, which the statement's invisible-character rule refuses.
+        assert_eq!(
+            refused.is_empty(),
+            space != '\u{FEFF}',
+            "U+{:04X} without a path: {refused:?}",
+            u32::from(space)
+        );
+    }
+    let mut draft = handoff();
+    draft["claims"][0]["statement"] = json!("The ratio a/b is 7.");
+    assert!(checker.schema_error_pointers(&draft).is_empty());
+    Ok(())
+}
