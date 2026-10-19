@@ -786,3 +786,41 @@ user registers. Hosted accuracy (T-04) is identical to v1.9.2's on the same runn
 transcript made with v1.9.2 keeps that provenance, and recognition with v1.9.5 is recognition by another build (a resume across the change
 is the `model_changed` case of the 2026-10-17 note). `setup check` names the new bytes `whisper.cpp v1.9.5 (reviewed build)` and still names
 v1.9.2's `whisper.cpp v1.9.2 (reviewed build)`, which a managed install made by `0.2.2` or earlier keeps until `setup install` runs again.
+
+## 2026-10-19 note: every rejected segment with a word is placed, and a search says what a stretch is (#383, #384)
+
+Amends the note of 2026-10-11 (#359), section 2, "which kinds of rejected segment have a stretch", and its paragraph *What to do about a
+stretch*; nothing else of it changes.
+
+**What was seen.** Two real recordings (0.2.1, #383) each had one stretch in mid-sentence, 5.12 s and 6.16 s, at the end of a chunk,
+with the next chunk's first segment at its window start, a count of rejected segments, no `unplaced_ranges`, and coverage that called
+the stretch transcribed; on one of them an earlier release had kept the end of the sentence there. That matches the kind "nothing after it
+inside its audio", which was only counted. The raw recogniser output was not captured, so the match is the strongest evidence there is, not
+proof.
+
+**The decision: every rejected segment with a letter or digit is placed** (`unplaced_stretch` in `crates/vsift-domain/src/asr.rs`). Its
+words lie after the start of what the recogniser wrote before them and before the start of what it wrote after them, so the stretch runs
+from the segment's own start (never before it, whatever its end says; an empty range included) or, for a start at or after the audio's end
+(a time in the padding of the 30 s window), from the start of the latest segment before it that starts inside the audio (or the audio's
+start); and **until** the next segment's start, or the audio's end when no segment after it starts inside the audio. The merge still takes
+out what any kept segment of any chunk covers (a chunk's tail is heard by the next chunk's first seconds) and drops what is left at half a
+second or less. Only text with no letter or digit has no stretch. The cliff of the earlier rule (a next segment 0.1 s before the audio's
+end gave almost the whole rest of the chunk, one at its end gave none) is gone. **The cost, accepted for the rule that coverage is stated
+truthfully:** a pause or silent tail over which the recogniser wrote words that cannot be placed is now listed as untranscribed, so more
+searches are `partial` and each stretch can be longer than what was lost ([L-159](../planning/known-limits.md#l-159)). How much more, on
+real speech, is what the hosted campaign measures: on RM06, RM09 and RM10 it added no stretch (`P14 real media` runs 39217761933 and
+39220841090).
+
+**A search's warning fits the cause (#384).** When a gap of a `search` overlaps a stretch the revision lists, the warning is
+`UNPLACED_WORDS_SEARCH_WARNING` (`vsift-contract`): it says the stretch is an upper bound, that transcribing the range again may fill it but
+may give it back, and that a transcript file is the sure way. Every other partial search keeps the published text word for word. The
+skill's own rule already says to retranscribe once and then offer a transcript file, so it does not change. **Decided by the maintainer on
+2026-10-19:** no bounded list for now; the revision block keeps every stretch, at most 1,024 (L-159). L-158 lowered to low, also the
+maintainer's decision of 2026-10-19.
+
+**Compatibility.** No stored member, field, code or reason is new: more revisions hold `unplaced_ranges` than before, which `0.2.0` and
+earlier and `0.2.1-rc.1` read as damage ([L-160](../planning/known-limits.md#l-160)). A checkpoint holds the recogniser's raw answer, so a
+job started by an earlier version and resumed by this one places its rejected segments by this rule. **Tests:** `each_kind_of_rejected_segment_leaves_the_stretch_it_can_or_none`,
+`what_follows_a_rejected_segment_bounds_its_words` and `a_rejected_segment_near_the_audios_end_is_bounded_by_the_audios_end` (the 2026-10-11 note's `..._is_bounded_only_by_what_starts_inside_it`, renamed; each failed
+on the earlier rule), the contract test `words_that_no_segment_holds_are_listed_and_the_run_stays_complete` and
+`a_search_over_words_that_no_segment_holds_is_partial_and_names_the_stretch`.

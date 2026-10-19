@@ -50,6 +50,43 @@ const GAPS_TRUNCATED_REASON: &str = "gap_list_truncated";
 /// Fixed warning of a search whose range is not fully transcribed.
 pub const UNTRANSCRIBED_SEARCH_WARNING: &str = "Part of the searched range has no transcript, so words said there cannot be found; coverage lists the gaps. Run transcript retranscribe to transcribe them.";
 
+/// Fixed warning of a search whose untranscribed gaps include a stretch where
+/// the recogniser wrote words that no segment holds (the revision's
+/// `local_asr.unplaced_ranges`; #359, #384), in place of
+/// [`UNTRANSCRIBED_SEARCH_WARNING`].
+///
+/// Why a text of its own. The plain warning's advice, to retranscribe, does not
+/// fit this cause: transcribing the range again cuts the audio at other points
+/// and may cover it, but the recogniser may write the same words with the same
+/// fault and give the same stretch back. So this one says that the stretch is
+/// an upper bound (a search can call more time untranscribed than was lost),
+/// that a retry may give it back, and what fills it for certain: a transcript
+/// file supplied with `ingest --transcript`. It claims neither that such a file
+/// exists nor that it covers the range. The plain text stays, word for word,
+/// for every search whose gaps are all of other causes, so a client that reads
+/// it is answered as before.
+pub const UNPLACED_WORDS_SEARCH_WARNING: &str = "Part of the searched range has no transcript, so words said there cannot be found; coverage lists the gaps. Some of them are stretches where the recogniser wrote words VSift could not place in time (the revision's local_asr.unplaced_ranges); each is an upper bound, because the words took only part of it. Transcribing just that range again (transcript retranscribe with --from and --to) cuts the audio at other points and may fill it, but it may give the same stretch back; a transcript file you already have is the sure way: open the video with ingest --transcript.";
+
+/// The warning of a search that is not complete: the one for unplaced words
+/// when a gap overlaps a stretch the revision lists as unplaced, else the plain
+/// one.
+fn untranscribed_search_warning(
+    revision: &TranscriptRevision,
+    coverage: &SearchCoverage,
+) -> &'static str {
+    let unplaced = revision.unplaced();
+    let overlaps = coverage.untranscribed().iter().any(|gap| {
+        unplaced
+            .iter()
+            .any(|stretch| stretch.start() < gap.end() && gap.start() < stretch.end())
+    });
+    if overlaps {
+        UNPLACED_WORDS_SEARCH_WARNING
+    } else {
+        UNTRANSCRIBED_SEARCH_WARNING
+    }
+}
+
 /// Everything a host presents about one page of search results.
 ///
 /// The fields borrow the engine's typed result, so every host presents the
@@ -281,6 +318,7 @@ pub(crate) fn envelope_coverage(gaps: &[TimeRange]) -> CoverageResponse {
 /// searched range is not fully transcribed, the `partial` status and warning.
 fn finish(
     response: OperationResponse<serde_json::Value>,
+    revision: &TranscriptRevision,
     coverage: &SearchCoverage,
     lifecycle: LifecycleResponse,
 ) -> OperationResponse<serde_json::Value> {
@@ -290,7 +328,7 @@ fn finish(
     if coverage.is_complete() {
         response
     } else {
-        response.with_warnings(&[UNTRANSCRIBED_SEARCH_WARNING])
+        response.with_warnings(&[untranscribed_search_warning(revision, coverage)])
     }
 }
 
@@ -325,7 +363,7 @@ pub fn search_response_with_view(
         ResultView::Full => OperationResponse::complete(command, &SearchData::new(page))?,
         ResultView::Brief => OperationResponse::complete(command, &SearchBriefData::new(page))?,
     };
-    Ok(finish(response, page.coverage, lifecycle))
+    Ok(finish(response, page.revision, page.coverage, lifecycle))
 }
 
 /// One `search` page as a JSON Lines evidence stream.
@@ -371,6 +409,7 @@ impl SearchEvidenceStream {
         };
         let result = finish(
             OperationResponse::complete(command.identifier(), &data)?,
+            page.revision,
             page.coverage,
             lifecycle,
         );

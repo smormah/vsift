@@ -64,15 +64,16 @@ real meetings, accents or noisy rooms, so every accuracy figure below says what 
   times in a report, not from the recogniser's own output of the recordings, and the fix has not been tried on them.
 - **Words the recogniser wrote that VSift could not place are listed, not found (0.2.1 and later, [L-158](../planning/known-limits.md#l-158) and [L-159](../planning/known-limits.md#l-159)).** When
   the recogniser writes words whose times do not fit its audio (an empty or backwards range, or one that runs past the
-  chunk), VSift drops them and counts them (`provider_segments_rejected`). If such a segment has a word in it, starts
-  inside the audio and is followed there by another segment, the revision lists the stretch from its start to the next
-  segment's start (`local_asr.unplaced_ranges`) as where the words may lie, less what kept words cover, if that is more than half a second.
+  chunk), VSift drops them and counts them (`provider_segments_rejected`). If such a segment has a word in it, the revision
+  lists the stretch from its start to the next segment's start, or to the end of the chunk's audio when nothing follows it
+  there (`local_asr.unplaced_ranges`), as where the words may lie, less what kept words cover, if that is more than half a second.
+  Since `0.2.3` that includes a segment with an empty range, one placed after its audio ends and the last of a chunk,
+  which earlier releases only counted, so a loss there was not listed; a pause where the recogniser wrote words can now be
+  listed too. Only a rejected segment with no letter or digit is just counted.
   The run stays `complete` (it read everything), and `search` lists the stretch as not transcribed: a word said there cannot
   be found. A `transcript get` over the stretch answers `partial` and lists it too: it shows no words there, which is not a silence. Each stretch is an upper bound: the words took only part of it, so `search` can call more time untranscribed than
   was lost. Retranscribing just the stretch may give the same stretch; a transcript file you supply (`ingest --transcript`)
-  is the sure remedy. A rejected segment with no word, one with an empty range, one that starts after its audio ends, and one
-  that nothing follows in its audio (the last of a chunk, or of the last chunk) are only counted, so a loss there is not
-  listed. The list is stored in the session, and **`0.2.0` and earlier, and `0.2.1-rc.1`, read a revision that holds it as
+  is the sure remedy. The list is stored in the session, and **`0.2.0` and earlier, and `0.2.1-rc.1`, read a revision that holds it as
   damaged** (`INTEGRITY_FAILURE`). They read the newest revision first: if that one holds it they can read nothing of the
   session; if only an older one does, they read the newest normally and refuse the older ones (by id, in `handoff check --session`
   and in `bundle validate`). Use the newer version, or discard the session.

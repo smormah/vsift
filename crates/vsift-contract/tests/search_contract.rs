@@ -20,8 +20,9 @@ use vsift_application::{
 };
 use vsift_contract::{
     CommandName, EvidenceStream, LifecycleResponse, OperationResponse, ResultView,
-    SearchEvidenceStream, SearchPresentation, UNTRANSCRIBED_SEARCH_WARNING,
-    search_query_rejection_summary, search_response, search_response_with_view,
+    SearchEvidenceStream, SearchPresentation, UNPLACED_WORDS_SEARCH_WARNING,
+    UNTRANSCRIBED_SEARCH_WARNING, search_query_rejection_summary, search_response,
+    search_response_with_view,
 };
 use vsift_domain::{
     AsrChunkOutcome, AsrChunkRecord, AsrDecodingProfile, AsrModel, AsrModelProfile, AsrProvider,
@@ -548,7 +549,10 @@ fn an_incompletely_transcribed_range_is_a_partial_result() -> TestResult {
 /// stretch as a gap with the published reason, and says in the revision it
 /// presents (`local_asr.unplaced_ranges`) where the words may lie; a search that
 /// stays clear of the stretch is complete. Without such words the same run is
-/// covered whole, as it always was.
+/// covered whole, as it always was. **The warning fits the cause (#384):** a
+/// search whose gaps include such a stretch says that it is an upper bound and
+/// that a retry may give it back, and one whose gaps are all of another cause
+/// keeps the plain warning, word for word.
 #[test]
 fn a_search_over_words_that_no_segment_holds_is_partial_and_names_the_stretch() -> TestResult {
     let revision = revision_with_words_that_no_segment_holds()?;
@@ -576,6 +580,34 @@ fn a_search_over_words_that_no_segment_holds_is_partial_and_names_the_stretch() 
         page.json["data"]["revision"]["local_asr"]["unplaced_ranges"],
         serde_json::json!([{"from_us": 1_000_000, "to_us": 3_000_000}])
     );
+    assert_eq!(
+        page.json["warnings"],
+        serde_json::json!([UNPLACED_WORDS_SEARCH_WARNING])
+    );
+    // The brief view and the stream's terminal event say the same.
+    assert_eq!(
+        page.brief["warnings"],
+        serde_json::json!([UNPLACED_WORDS_SEARCH_WARNING])
+    );
+    let terminal = parsed(&page.lines)?
+        .pop()
+        .ok_or("the stream has no terminal event")?;
+    assert_eq!(
+        terminal["result"]["warnings"],
+        serde_json::json!([UNPLACED_WORDS_SEARCH_WARNING])
+    );
+    // Where the only gap is audio no run read, the warning is the plain one.
+    let unread = search(
+        &revision,
+        "queue",
+        Some(range(6 * SECOND, 12 * SECOND)?),
+        20,
+    )?;
+    assert_eq!(unread.json["status"], "partial");
+    assert_eq!(
+        unread.json["warnings"],
+        serde_json::json!([UNTRANSCRIBED_SEARCH_WARNING])
+    );
     // The word that was kept is found; the one that was rejected is not.
     assert_eq!(page.json["data"]["hits"].as_array().map(Vec::len), Some(1));
     let lost = search(&revision, "E-409", None, 20)?;
@@ -598,6 +630,10 @@ fn a_search_over_words_that_no_segment_holds_is_partial_and_names_the_stretch() 
     assert_eq!(
         over.json["coverage"]["gaps"],
         serde_json::json!(["1000000-2000000"])
+    );
+    assert_eq!(
+        over.json["warnings"],
+        serde_json::json!([UNPLACED_WORDS_SEARCH_WARNING])
     );
     Ok(())
 }

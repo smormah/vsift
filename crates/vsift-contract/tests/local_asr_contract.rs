@@ -1226,18 +1226,41 @@ async fn words_that_no_segment_holds_are_listed_and_the_run_stays_complete() -> 
     let coverage = vsift_domain::SearchCoverage::of(&revision, None);
     assert_eq!(coverage.untranscribed(), [range(SECOND, 3 * SECOND)?]);
 
-    // A rejected segment that leaves no stretch (nothing follows it) is the
-    // count it always was, and the plain warning.
-    let trailing = ProviderChunkOutput {
-        language: LanguageTag::parse("en").ok(),
-        segments: vec![
-            answered(600, 900, "words that were placed")?,
-            answered(3_000, 3_500, "more words that were placed")?,
-            answered(5_000, 5_000, "a stray last word")?,
-        ],
+    // A rejected segment that nothing follows in its chunk is listed too since
+    // #383, up to the audio's end, less what the next chunk kept (nothing here).
+    let trailing = |last: &str| -> Built<ProviderChunkOutput> {
+        Ok(ProviderChunkOutput {
+            language: LanguageTag::parse("en").ok(),
+            segments: vec![
+                answered(600, 900, "words that were placed")?,
+                answered(3_000, 3_500, "more words that were placed")?,
+                answered(5_000, 5_000, last)?,
+            ],
+        })
     };
     let recogniser = StandInRecogniser {
-        first: Some(trailing),
+        first: Some(trailing("a stray last word")?),
+        rest_described: true,
+    };
+    let (source, outcome) = transcribe_stand_in(55, 0, &recogniser).await?;
+    let revision = stand_in_revision(
+        &source,
+        1,
+        outcome.map_err(|failure| format!("the run failed: {failure:?}"))?,
+        None,
+    )?;
+    assert_eq!(revision.unplaced(), [range(5 * SECOND, 30 * SECOND)?]);
+    let value = serde_json::to_value(finish_retranscription(
+        retranscribe_response(&revision, None)?,
+        &revision,
+    ))?;
+    let warnings = value["warnings"].as_array().ok_or("no warnings")?;
+    assert!(warnings.contains(&Value::from(PROVIDER_SEGMENTS_UNPLACED_WARNING)));
+
+    // One with no letter or digit is not a word: the count it always was, and
+    // the plain warning.
+    let recogniser = StandInRecogniser {
+        first: Some(trailing("...")?),
         rest_described: true,
     };
     let (source, outcome) = transcribe_stand_in(55, 0, &recogniser).await?;
