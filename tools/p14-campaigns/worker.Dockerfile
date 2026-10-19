@@ -12,7 +12,7 @@
 # worker's per-user folder (a volume), as a user's `setup install` would. The
 # Ubuntu packages are the archive's current versions when the image is built
 # (not pinned: the image is rebuilt for every run and says so in the job).
-FROM ubuntu@sha256:a61567bd31828687156d735ea8eb01ba4e37636e225dd6a48ba94136a70d9d61
+FROM ubuntu@sha256:68ee22004a9109b44973313b02ff7b1de250f1de0f5ecb628d73f579aaff33ac
 
 RUN apt-get update \
  && apt-get install --no-install-recommends --yes libgomp1 ca-certificates \
