@@ -130,4 +130,6 @@ heard and the same candidates were found.
 Real screen recordings with heavier compression noise, cursor movement, animation,
 overlapping cells, and changes shorter than the 0.5 s sampling interval that fall
 between samples. The change thresholds are four to six times the measured noise of the
-synthetic corpus; they are not calibrated against real recordings.
+synthetic corpus. **Since 2026-10-19 (#175)** they are measured on one real screen
+recording, without labels: no false change, the noise floor 1 level, small edits partly
+missed ([`visual-thresholds-real-media.md`](visual-thresholds-real-media.md)).

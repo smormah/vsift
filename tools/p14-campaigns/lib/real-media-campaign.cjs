@@ -229,12 +229,13 @@ function investigate(item, file, run, where) {
   const visualFindings = [];
   if (visual.gaps.length > 0) visualFindings.push(`candidates left ${visual.gaps.length} range(s) not analysed or timed out after ten rounds`);
   const labels = item.labels || {};
-  if (Array.isArray(labels.changes_us) && labels.changes_us.length > 0) {
-    const hit = labels.changes_us.filter((change) => visual.items.some((candidate) => Math.abs(candidate.representative_us - change) <= SECOND));
-    report.measurements.labelled_change_recall = hit.length / labels.changes_us.length;
-  } else {
-    report.measurements.labelled_change_recall = null;
-  }
+  const changes = Array.isArray(labels.changes_us) ? labels.changes_us : [];
+  // Check 7 (#175): a labelled change counts when a candidate's change window
+  // brackets it; the loose one-second figure is kept beside its chance figure.
+  const labelled = checks.labelledChanges(changes, visual.items, durationUs);
+  report.measurements.candidates.chance_within_1s = labelled.chance_within_1s;
+  report.measurements.labelled_changes = changes.length > 0 ? labelled : null;
+  report.measurements.labelled_change_recall = changes.length > 0 ? labelled.bracketed_share : null;
   report.checks.candidates = { passed: visualFindings.length === 0, findings: visualFindings };
 
   const first = record(at('transcript retranscribe (whole)', ['transcript', 'retranscribe', session]));
