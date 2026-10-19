@@ -171,6 +171,11 @@ cursor; page sizes 0 and 101 and a lone `--from`/`--to` are parse errors, like
   order 1001-to-1017 edit, which moves one block by 6-7. Unchanged consecutive samples
   of the synthetic corpus differ by at most 1 level. Real recordings with heavier
   compression noise are not measured.
+  **Note (2026-10-19, #175):** measured on one real screen recording (RM10, H.264
+  1280x720, heavily compressed): unchanged samples differ by 1 level at the 99th
+  percentile, no false change; a line of text is seen 94% of the time, a word 65%, a
+  cursor or one character 19%. The rule is unchanged; the recommendation to keep it is
+  the maintainer's decision ([evaluation](../planning/visual-thresholds-real-media.md)).
 - Each sample is compared with the previous sample and with the first sample of the
   current screen state, so slow drift is caught. Unchanged samples merge into one
   candidate whose `span` runs to the next candidate or the window end, with its

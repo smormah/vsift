@@ -243,8 +243,12 @@ per-user folder longer than about 141 characters, or a session root of about 205
    need an engine-level `--ignored` test; it is not built, because the segments' own alignment already names the chunk.
 6. **Rejected segments** (#383): the kinds and counts of `provider_segments_rejected`, and where `unplaced_ranges` lie
    against the labelled speech.
-7. **Candidates at visible changes** (#175): with `changes_us` labelled, the share of labelled changes with a candidate within
-   one second, and the candidates per minute of a still screen (false changes).
+7. **Candidates at visible changes** (#175): with `changes_us` labelled, the share of labelled changes a candidate's
+   `change_window` brackets (half a second of slack each side for the labeller) or a motion candidate's span holds; the
+   share with a candidate within one second is kept beside its chance figure (the share of the recording within a second
+   of some candidate: seven in eight of RM10's still moments, so the loose figure alone says little); and the candidates
+   per minute of a still screen (false changes). **Without labels**, the measurement `mode: visual` (section 8) compares
+   the change rule with what changed in the native frames ([`visual-thresholds-real-media.md`](visual-thresholds-real-media.md)).
 8. **Speech start** (#174): with `speech_start_us` labelled, the first segment's start minus it.
 9. **Small text** (#173): the crop of the labelled small-text region is at native size and legible to a person; recorded by
    hand, as a yes or no per crop.
@@ -263,6 +267,9 @@ the run's own words only where a check needs them (a lost word sequence), never 
   running it decides, item by item.
 - **Hosted, by manual dispatch only:** the workflow `P14 real media` ([`p14-real-media.yml`](../../.github/workflows/p14-real-media.yml)),
   **on Ubuntu 24.04 only** (decided 2026-10-18): `gh workflow run p14-real-media.yml --ref <branch> [-f items="RM01 RM04"]`.
+  With `-f mode=visual` it runs, instead of the campaign, the measurement of the visual change rule on the fetched items
+  (#175: `crates/vsift-infrastructure/tests/p08_real_media_visual.rs`, which decodes each item twice and keeps numbers only,
+  as `visual-measurement.json` in the report artifact); `-f mode=both` runs the two.
   It fetches the approved items with `real-media.cjs cross-check` into the runner's temporary folder **from the test-media
   release**, never from Wikimedia (a pinned item must match
   its pin; one not yet pinned is pinned there and its SHA-256 printed, which is the hosted cross-check of a pin made
@@ -281,6 +288,8 @@ the run's own words only where a check needs them (a lost word sequence), never 
 
 - **Seams (#380 to #384):** checks 3 to 6 give the measurements each issue asks for "on real recordings first"; each issue's
   next step is decided on them, and the register entries L-155 to L-159 are rewritten with the numbers.
+- **#175:** the first real figures, without labels, are in [`visual-thresholds-real-media.md`](visual-thresholds-real-media.md)
+  (RM10, 2026-10-19: no false change; the recommendation is to keep the thresholds).
 - **#173, #174, #175:** checks 7 to 9, once the labels exist, give the first real figures; a threshold or profile change is a
   new visual profile version (#175) with its own review.
 - **#150 and L-020, L-022:** with a reference transcript, a coarse word-recall figure per item (noisy, accented, non-English).

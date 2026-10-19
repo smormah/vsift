@@ -292,8 +292,10 @@ pub enum VisualChangePolicy {
     /// smallest real edit (F04's order 1001 becoming 1017) moves one block
     /// by 6-7. The first proposal (two blocks at 6, or one at 12) missed that
     /// edit, so the single-block threshold is 6 and the per-block count
-    /// threshold 4: still four to six times the observed noise. Real screen
-    /// recordings with heavier compression noise are unmeasured.
+    /// threshold 4: still four to six times the observed noise. On one real
+    /// screen recording (RM10, heavily compressed H.264, 2026-10-19, #175)
+    /// unchanged samples also differ by 1 level at the 99th percentile and the
+    /// rule made no false change (`docs/planning/visual-thresholds-real-media.md`).
     R0,
 }
 

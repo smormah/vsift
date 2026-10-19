@@ -85,9 +85,10 @@ real meetings, accents or noisy rooms, so every accuracy figure below says what 
 
 ## The pictures: screen changes and frames
 
-- **Tested only on drawn video** ([L-028](../planning/known-limits.md#l-028)). The size of a change VSift counts was
-  set on synthetic screens. Real recordings with heavy compression noise may show false changes or miss subtle
-  ones.
+- **Small changes are often not listed** ([L-028](../planning/known-limits.md#l-028)). The size of a change VSift
+  counts was set on synthetic screens. On a real, heavily compressed screen recording it listed no false change, and
+  it saw nearly every new line of text, caption or page. But it saw only about half of the changed words, and few
+  cursor moves or single changed characters. Look at the frames themselves when a small edit matters.
 - **It looks twice a second** ([L-029](../planning/known-limits.md#l-029)). A change shorter than half a second
   can fall between looks and is not reported, and the coverage lines cannot say so. A burst of frames around a
   moment finds it if you suspect one.

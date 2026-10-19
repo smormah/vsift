@@ -469,6 +469,15 @@ or a change to the sampling argv), run it with `VSIFT_RECORD_VISUAL_SAMPLES=1`, 
 the diff and the report, then regenerate the fuzz seeds as above. Never edit the
 manifest to make the gate pass.
 
+The same decode measures the change rule on real recordings (#175):
+`tests/p08_real_media_visual.rs` compares the rule's view of each pair of consecutive
+samples with the native frames. It runs hosted, in `P14 real media` with `mode: visual`,
+never on a development machine; its control over the synthetic corpus runs anywhere:
+
+```console
+cargo test --release -p vsift-infrastructure --locked --test p08_real_media_visual -- --ignored --exact measures_the_change_rule_on_the_synthetic_corpus --nocapture
+```
+
 The same gate through the `candidates` command, with the lead/lag, continuation,
 stream and bundle, damaged-media, V-03 motion and S-11 stages, is the opt-in
 checkpoint (see [the E2E spine](planning/e2e-test-spine.md)):

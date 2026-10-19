@@ -24,6 +24,10 @@ name: P14 real media
 # Triggers: a pull request that changes the campaign's tools runs their tests (no
 # media, no network); a manual dispatch runs the campaign
 # (`gh workflow run p14-real-media.yml --ref <branch> [-f items="RM01 RM04"]`).
+# With `-f mode=visual` it runs, instead of the campaign, the measurement of the
+# visual change rule on the fetched items (#175, L-028:
+# crates/vsift-infrastructure/tests/p08_real_media_visual.rs), which decodes each
+# recording twice and keeps numbers only; `-f mode=both` runs the two.
 # It cannot publish anything: `contents: read` only, no secret.
 on:
   pull_request:
@@ -46,6 +50,14 @@ on:
         description: Item ids separated by spaces (for example "RM01 RM04"); empty means every approved item
         type: string
         default: ""
+      mode:
+        description: What to run on the fetched items
+        type: choice
+        options:
+          - campaign
+          - visual
+          - both
+        default: campaign
 
 permissions: {}
 
@@ -127,9 +139,11 @@ jobs:
         run: python tools/p07_local_asr_tools.py "${{ runner.temp }}/vsift-tools"
 
       - name: Build the commit's vsift
+        if: inputs.mode != 'visual'
         run: cargo build --release --locked -p vsift-cli
 
       - name: Run the campaign
+        if: inputs.mode != 'visual'
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/work"
@@ -144,6 +158,19 @@ jobs:
             --model "$VSIFT_TEST_WHISPER_MODEL" \
             --available-only \
             $ITEM_ARGUMENTS
+
+      - name: Measure the visual change rule (#175)
+        if: inputs.mode != 'campaign'
+        env:
+          ITEMS: ${{ inputs.items }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/report"
+          VSIFT_REAL_MEDIA_DIR="$RUNNER_TEMP/real-media" \
+          VSIFT_REAL_MEDIA_ITEMS="$ITEMS" \
+          VSIFT_VISUAL_MEASUREMENT_OUT="$RUNNER_TEMP/report/visual-measurement.json" \
+            cargo test --release -p vsift-infrastructure --locked --test p08_real_media_visual \
+            -- --ignored --exact measures_the_change_rule_on_real_recordings --nocapture
 
       - name: Put the result in the job summary
         if: always()

@@ -153,3 +153,29 @@ test('a missing run the recogniser explains is classified, and only a plain loss
   assert.equal(flips.passed, false);
   assert.equal(checks.script([{ word: 'хорошо' }, { word: 'ok' }]), 'cyrillic');
 });
+
+test('a labelled change counts when a change window or a motion span brackets it, not merely a nearby candidate (#175)', () => {
+  const candidates = [
+    { representative_us: 10 * SECOND, reasons: ['visual_change'], change_window: { from_us: 9.5 * SECOND, to_us: 10 * SECOND }, span: { from_us: 10 * SECOND, to_us: 12 * SECOND } },
+    { representative_us: 12 * SECOND, reasons: ['motion_start'], change_window: { from_us: 11.5 * SECOND, to_us: 12 * SECOND }, span: { from_us: 12 * SECOND, to_us: 15 * SECOND } },
+    { representative_us: 30 * SECOND, reasons: ['first_frame'], change_window: null, span: { from_us: 30 * SECOND, to_us: 40 * SECOND } },
+  ];
+  const result = checks.labelledChanges([
+    9.2 * SECOND, // inside the window widened by half a second
+    13.5 * SECOND, // inside the motion, 1.5 s from its candidate
+    14 * SECOND, // inside the motion
+    30.6 * SECOND, // within a second of a candidate, but no change of it holds the label
+    50 * SECOND, // nothing near
+  ], candidates, 60 * SECOND);
+  assert.equal(result.labelled, 5);
+  assert.equal(result.bracketed, 3);
+  assert.equal(result.bracketed_share, 0.6);
+  // The loose rule counts 9.2 s (by the 10 s candidate) and 30.6 s, a moment no change holds.
+  assert.equal(result.within_1s, 2);
+  assert.equal(result.within_1s_share, 0.4);
+  // Seconds 9 to 13 and 29 to 31 are within a second of a candidate: 6 of 60.
+  assert.equal(result.chance_within_1s, 0.1);
+  const none = checks.labelledChanges([], candidates, 60 * SECOND);
+  assert.equal(none.bracketed_share, null);
+  assert.equal(none.chance_within_1s, 0.1);
+});

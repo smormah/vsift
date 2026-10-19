@@ -430,6 +430,51 @@ function languageFlips(...comparisons) {
   };
 }
 
+/** How far a person's label of a change may lie outside a candidate's change window and still be its change. */
+const LABEL_TOLERANCE_US = 500_000;
+/** The loose distance of check 7's first form: a candidate within one second of the label. */
+const LOOSE_US = 1_000_000;
+
+/**
+ * Check 7 (#175): how many labelled changes (`changes_us`, a person's times)
+ * a candidate accounts for. A labelled change is *bracketed* when a change
+ * candidate's `change_window` holds it, widened by `LABEL_TOLERANCE_US` each
+ * side for the labeller's own timing, or when a `motion_start` candidate's
+ * span holds it (the motion is one candidate). The loose figure (any
+ * candidate within a second) is kept with its *chance* figure: the share of
+ * the recording that lies within a second of some candidate, which a label
+ * placed at random would score. On a busy screen recording the chance is
+ * high (seven in eight of RM10's still moments, run 39219218493), so the loose figure
+ * alone says little; the bracketed one is the check.
+ * @param {number[]} changes the labelled times, microseconds
+ * @param {Array<{ representative_us: number, reasons?: string[], span?: { from_us: number, to_us: number }, change_window?: { from_us: number, to_us: number } | null }>} candidates
+ * @param {number} durationUs
+ */
+function labelledChanges(changes, candidates, durationUs) {
+  const bracketing = (at) => candidates.some((candidate) => {
+    const window = candidate.change_window;
+    if (window && window.from_us - LABEL_TOLERANCE_US <= at && at <= window.to_us + LABEL_TOLERANCE_US) return true;
+    const span = candidate.span;
+    return (candidate.reasons || []).includes('motion_start') && Boolean(span) && span.from_us <= at && at < span.to_us;
+  });
+  const near = (at) => candidates.some((candidate) => Math.abs(candidate.representative_us - at) <= LOOSE_US);
+  const reach = mergeRanges(candidates.map((candidate) => ({
+    from_us: Math.max(0, candidate.representative_us - LOOSE_US),
+    to_us: Math.min(durationUs, candidate.representative_us + LOOSE_US),
+  })).filter((range) => range.to_us > range.from_us));
+  const covered = reach.reduce((total, range) => total + range.to_us - range.from_us, 0);
+  const bracketed = changes.filter(bracketing).length;
+  const within = changes.filter(near).length;
+  return {
+    labelled: changes.length,
+    bracketed,
+    bracketed_share: changes.length > 0 ? bracketed / changes.length : null,
+    within_1s: within,
+    within_1s_share: changes.length > 0 ? within / changes.length : null,
+    chance_within_1s: durationUs > 0 ? covered / durationUs : null,
+  };
+}
+
 module.exports = {
   SEAM_TOLERANCE_US,
   languageFlips,
@@ -450,4 +495,6 @@ module.exports = {
   failureFinding,
   describe,
   itemVerdict,
+  labelledChanges,
+  LABEL_TOLERANCE_US,
 };
