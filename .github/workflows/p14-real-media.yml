@@ -1,0 +1,164 @@
+name: P14 real media
+
+# #363 (docs/planning/real-media-set.md): the opt-in campaign over the small,
+# freely licensed real-media set. The media is never in the repository: the
+# runner fetches each approved item of tools/p14-campaigns/real-media/manifest.json
+# over HTTPS from the project's own test-media release (never from Wikimedia,
+# which refuses the tool), held to its pinned size and SHA-256 (an item not yet
+# pinned is pinned here and its digest printed: the hosted cross-check), then
+# runs the campaign against a release build of the checked-out commit with the
+# pinned FFmpeg, whisper.cpp and model that `P07 local ASR` stages.
+#
+# Advisory evidence (the maintainer's decision of 2026-10-18): the job fails when
+# an item fails a property check, and a finding becomes an issue after a person
+# has listened or looked; no release gate reads it. Ubuntu only, by the same
+# decision. Only the report is kept; the media and the listening clips stay on the
+# runner and go with it. Private items (the maintainer's own recordings) never
+# run here: the campaign refuses them whenever CI is set.
+#
+# Triggers: a pull request that changes the campaign's tools runs their tests (no
+# media, no network); a manual dispatch runs the campaign
+# (`gh workflow run p14-real-media.yml --ref <branch> [-f items="RM01 RM04"]`).
+# It cannot publish anything: `contents: read` only, no secret.
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/p14-real-media.yml
+      - tools/p14-campaigns/real-media.cjs
+      - tools/p14-campaigns/real-media-campaign.cjs
+      - tools/p14-campaigns/lib/real-media.cjs
+      - tools/p14-campaigns/lib/real-media-checks.cjs
+      - tools/p14-campaigns/lib/real-media-campaign.cjs
+      - tools/p14-campaigns/real-media/**
+      - tools/p14-campaigns/test/real-media.test.cjs
+      - tools/p14-campaigns/test/real-media-checks.test.cjs
+      - tools/p14-campaigns/test/real-media-campaign.test.cjs
+  workflow_dispatch:
+    inputs:
+      items:
+        description: Item ids separated by spaces (for example "RM01 RM04"); empty means every approved item
+        type: string
+        default: ""
+
+permissions: {}
+
+concurrency:
+  group: p14-real-media-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  NODE_VERSION: "22.23.3"
+
+jobs:
+  tooling-tests:
+    name: Tooling tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up the pinned Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          package-manager-cache: false
+
+      - name: Test the campaign tools
+        run: node --test "tools/p14-campaigns/test/*.test.cjs"
+
+      - name: Check the manifest
+        run: node tools/p14-campaigns/real-media.cjs check
+
+  campaign:
+    name: Real-media campaign (ubuntu-24.04)
+    if: github.event_name == 'workflow_dispatch'
+    needs: tooling-tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 330
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up the pinned Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          package-manager-cache: false
+
+      - name: Choose the items
+        env:
+          ITEMS: ${{ inputs.items }}
+        run: |
+          set -euo pipefail
+          arguments=""
+          for item in $ITEMS; do
+            case "$item" in RM[0-9][0-9]) arguments="$arguments --item $item";; *) echo "an item id is RM followed by two digits"; exit 1;; esac
+          done
+          echo "ITEM_ARGUMENTS=$arguments" >> "$GITHUB_ENV"
+
+      - name: Fetch the approved items and cross-check their pins
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/real-media"
+          # shellcheck disable=SC2086
+          node tools/p14-campaigns/real-media.cjs cross-check "$RUNNER_TEMP/real-media" $ITEM_ARGUMENTS | tee "$RUNNER_TEMP/cross-check.txt"
+
+      - name: Stage pinned FFmpeg, whisper.cpp v1.9.2 and both pinned models
+        run: python tools/p07_local_asr_tools.py "${{ runner.temp }}/vsift-tools"
+
+      - name: Build the commit's vsift
+        run: cargo build --release --locked -p vsift-cli
+
+      - name: Run the campaign
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/work"
+          # shellcheck disable=SC2086
+          node tools/p14-campaigns/real-media-campaign.cjs \
+            --vsift "$GITHUB_WORKSPACE/target/release/vsift" \
+            --media "$RUNNER_TEMP/real-media" \
+            --work "$RUNNER_TEMP/work" \
+            --ffmpeg "$(command -v ffmpeg)" \
+            --ffprobe "$(command -v ffprobe)" \
+            --whisper "$VSIFT_TEST_WHISPER_CLI" \
+            --model "$VSIFT_TEST_WHISPER_MODEL" \
+            $ITEM_ARGUMENTS
+
+      - name: Put the result in the job summary
+        if: always()
+        run: |
+          mkdir -p "$RUNNER_TEMP/report"
+          if [ -f "$RUNNER_TEMP/cross-check.txt" ]; then
+            { echo '## Pins'; echo; echo '```'; cat "$RUNNER_TEMP/cross-check.txt"; echo '```'; echo; } >> "$GITHUB_STEP_SUMMARY"
+            cp "$RUNNER_TEMP/cross-check.txt" "$RUNNER_TEMP/report/"
+          fi
+          for run in "$RUNNER_TEMP"/work/run-*; do
+            if [ -f "$run/summary.md" ]; then
+              cat "$run/summary.md" >> "$GITHUB_STEP_SUMMARY"
+              cp "$run/summary.md" "$run/report.json" "$RUNNER_TEMP/report/"
+            fi
+          done
+
+      - name: Keep the report (never the media or the listening clips)
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: p14-real-media
+          path: ${{ runner.temp }}/report
+          if-no-files-found: warn
+          retention-days: 90

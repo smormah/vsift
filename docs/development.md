@@ -747,8 +747,17 @@ SHA-256, the source's own checksum, licence and attribution, and `node tools/p14
 manifest (`check`), prints the attributions (`attribution`) and fetches approved items into an absolute folder outside the
 repository (`fetch <dir>`), verified before they are placed; `pin` records the SHA-256 of a newly approved item. **Fetching
 is a download:** run it on a hosted runner, or on a workstation only with its owner's word, and only for items the
-maintainer approved. The tool's tests (`real-media.test.cjs`, in the command above) read local bytes only. The campaign
-that runs VSift over the items is the next change.
+maintainer approved. The tool's tests (`real-media.test.cjs`, in the command above) read local bytes only;
+`cross-check <dir>` is the hosted form, which fetches every approved item, pins any not yet pinned and prints each SHA-256.
+The campaign, `node tools/p14-campaigns/real-media-campaign.cjs --vsift <exe> --media <dir> --work <dir> --ffmpeg <exe>
+--ffprobe <exe> --whisper <exe> --model <file>` (absolute paths), runs VSift over the fetched items and checks properties of
+its answers (`lib/real-media-checks.cjs`, tested with `real-media-checks.test.cjs`); the manual workflow `P14 real media`
+runs it on Ubuntu. **On Windows keep `--work` short:** a long per-user folder or session root makes the media commands fail
+(planning page, section 12). Wikimedia refuses the tool, so upload.wikimedia.org is a provenance-only source: its items are
+pinned from hand downloads (`pin --item RMnn --from-file <file>`) and every fetch contacts the project's test-media release
+(`mirror_url`); `release-files <media dir> <out dir>` prepares that release for a person to create. A private manifest of the
+maintainer's own recordings runs with `--private-manifest <file>`, locally only, reported by measurements alone (planning
+page, section 13).
 
 ## Governance checks, release evidence and public claims
 

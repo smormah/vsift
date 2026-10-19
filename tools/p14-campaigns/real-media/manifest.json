@@ -4,10 +4,15 @@
   "items": [
     {
       "id": "RM01",
-      "status": "proposed",
+      "status": "approved",
+      "approval": {
+        "date": "2026-10-18",
+        "by": "maintainer"
+      },
       "title": "Editing basics - watchlists",
       "source_page": "https://commons.wikimedia.org/wiki/File:Editing_basics_-_watchlists.webm",
       "url": "https://upload.wikimedia.org/wikipedia/commons/e/e6/Editing_basics_-_watchlists.webm",
+      "mirror_url": "https://github.com/smormah/vsift/releases/download/test-media-2026-10-19/RM01-editing-basics-watchlists.webm",
       "file_name": "RM01-editing-basics-watchlists.webm",
       "bytes": 6192962,
       "sha256": null,
@@ -38,7 +43,7 @@
         "L-018",
         "L-028"
       ],
-      "notes": "A narrated Wikipedia tutorial: page changes, menus and small interface text at 1280x1024. Human English captions exist on Commons (47 cues; the last cue's end is written 99:59:59, a useful sidecar case). Shows the narrator's own Wikipedia account and public user names."
+      "notes": "A narrated Wikipedia tutorial: page changes, menus and small interface text at 1280x1024. Human English captions exist on Commons (47 cues; the last cue's end is written 99:59:59, a useful sidecar case). Shows the narrator's own Wikipedia account and public user names. Commons refuses the tool (HTTP 429 to the neutral user agent, 2026-10-18): this item is pinned from a copy the maintainer downloads by hand (pin --from-file, against the Commons SHA-1) and fetched by every run from the test-media release."
     },
     {
       "id": "RM02",
@@ -79,14 +84,19 @@
         "#175",
         "#381"
       ],
-      "notes": "A live tool demonstration in a recorded office-hours call (PetScan, QuickStatements): speech with pauses while the presenter works, screen changes, about 31 chunks. Other call participants may be visible in tiles: to be checked before approval."
+      "notes": "A live tool demonstration in a recorded office-hours call (PetScan, QuickStatements): speech with pauses while the presenter works, screen changes, about 31 chunks. Other call participants may be visible in tiles: to be checked before approval. Held by the maintainer on 2026-10-18 until its call tiles are checked for visible participants; it stays proposed and is never fetched until then."
     },
     {
       "id": "RM03",
-      "status": "proposed",
+      "status": "approved",
+      "approval": {
+        "date": "2026-10-18",
+        "by": "maintainer"
+      },
       "title": "After the lifting of the block: Case study of Turkey (Wikimania 2021)",
       "source_page": "https://commons.wikimedia.org/wiki/File:After_the_lifting_of_the_block_Case_study_of_Turkey.webm",
       "url": "https://upload.wikimedia.org/wikipedia/commons/b/b0/After_the_lifting_of_the_block_Case_study_of_Turkey.webm",
+      "mirror_url": "https://github.com/smormah/vsift/releases/download/test-media-2026-10-19/RM03-wikimania-turkey-talk.webm",
       "file_name": "RM03-wikimania-turkey-talk.webm",
       "bytes": 146468542,
       "sha256": null,
@@ -122,14 +132,19 @@
         "#384",
         "L-022"
       ],
-      "notes": "A pre-recorded 19-minute conference talk by two speakers in Turkish-accented English, about 46 chunks. It opens with music and a title card: its captions put music from 8.2 s and the first words at 13.4 s, so the lead is non-speech rather than silence (to be labelled by listening). Its English captions look machine-made, so they are no reference transcript. A 480p transcode (29,909,095 bytes, no published checksum) is the lighter alternative."
+      "notes": "A pre-recorded 19-minute conference talk by two speakers in Turkish-accented English, about 46 chunks. It opens with music and a title card: its captions put music from 8.2 s and the first words at 13.4 s, so the lead is non-speech rather than silence (to be labelled by listening). Its English captions look machine-made, so they are no reference transcript. A 480p transcode (29,909,095 bytes, no published checksum) is the lighter alternative. Commons refuses the tool (HTTP 429 to the neutral user agent, 2026-10-18): this item is pinned from a copy the maintainer downloads by hand (pin --from-file, against the Commons SHA-1) and fetched by every run from the test-media release."
     },
     {
       "id": "RM04",
-      "status": "proposed",
+      "status": "approved",
+      "approval": {
+        "date": "2026-10-18",
+        "by": "maintainer"
+      },
       "title": "Como contribuir com o Structured Data on Commons",
       "source_page": "https://commons.wikimedia.org/wiki/File:Como_contribuir_com_o_Structured_Data_on_Commons.webm",
       "url": "https://upload.wikimedia.org/wikipedia/commons/d/d7/Como_contribuir_com_o_Structured_Data_on_Commons.webm",
+      "mirror_url": "https://github.com/smormah/vsift/releases/download/test-media-2026-10-19/RM04-como-contribuir-sdc-pt-br.webm",
       "file_name": "RM04-como-contribuir-sdc-pt-br.webm",
       "bytes": 10636205,
       "sha256": null,
@@ -159,14 +174,19 @@
         "L-022",
         "#175"
       ],
-      "notes": "A Brazilian Portuguese tutorial with interface changes. Commons has Brazilian Portuguese captions (46 cues), a possible reference transcript. The audio track is tagged English in its metadata, which is wrong (a language-detection case)."
+      "notes": "A Brazilian Portuguese tutorial with interface changes. Commons has Brazilian Portuguese captions (46 cues), a possible reference transcript. The audio track is tagged English in its metadata, which is wrong (a language-detection case). Commons refuses the tool (HTTP 429 to the neutral user agent, 2026-10-18): this item is pinned from a copy the maintainer downloads by hand (pin --from-file, against the Commons SHA-1) and fetched by every run from the test-media release."
     },
     {
       "id": "RM05",
-      "status": "proposed",
+      "status": "approved",
+      "approval": {
+        "date": "2026-10-18",
+        "by": "maintainer"
+      },
       "title": "President Reagan's Trip to Fullerton and San Bernardino on November 1, 1988",
       "source_page": "https://commons.wikimedia.org/wiki/File:President_Reagan%27s_Trip_to_Fullerton_and_San_Bernardino_on_November_1,_1988.webm",
       "url": "https://upload.wikimedia.org/wikipedia/commons/7/7c/President_Reagan%27s_Trip_to_Fullerton_and_San_Bernardino_on_November_1%2C_1988.webm",
+      "mirror_url": "https://github.com/smormah/vsift/releases/download/test-media-2026-10-19/RM05-reagan-fullerton-1988.webm",
       "file_name": "RM05-reagan-fullerton-1988.webm",
       "bytes": 112179359,
       "sha256": null,
@@ -195,34 +215,38 @@
         "#150",
         "L-020"
       ],
-      "notes": "Archival White House television footage: remarks at a campaign rally in a gymnasium (crowd noise) and at a helicopter landing zone (field microphone), between arrival shots; old analogue video. Its licence was reviewed on Commons. The noise is described by its source, not yet heard."
+      "notes": "Archival White House television footage: remarks at a campaign rally in a gymnasium (crowd noise) and at a helicopter landing zone (field microphone), between arrival shots; old analogue video. Its licence was reviewed on Commons. The noise is described by its source, not yet heard. Commons refuses the tool (HTTP 429 to the neutral user agent, 2026-10-18): this item is pinned from a copy the maintainer downloads by hand (pin --from-file, against the Commons SHA-1) and fetched by every run from the test-media release."
     },
     {
       "id": "RM06",
-      "status": "proposed",
+      "status": "approved",
+      "approval": {
+        "date": "2026-10-18",
+        "by": "maintainer"
+      },
       "title": "Space Station Astronaut Discusses Record Breaking Mission with Previous Record Holder",
-      "source_page": "https://commons.wikimedia.org/wiki/File:SPACE_STATION_ASTRONAUT_DISCUSSES_RECORD_BREAKING_MISSION_WITH_PREVIOUS_RECORD_HOLDER.webm",
-      "url": "https://upload.wikimedia.org/wikipedia/commons/4/48/SPACE_STATION_ASTRONAUT_DISCUSSES_RECORD_BREAKING_MISSION_WITH_PREVIOUS_RECORD_HOLDER.webm",
-      "file_name": "RM06-nasa-iss-record-conversation.webm",
-      "bytes": 84997974,
-      "sha256": null,
+      "source_page": "https://archive.org/details/jsc2023m000168_NTV_VF_Astronauts_Discuss_Record_Breaking_Mission_230912-MP4.mp4",
+      "url": "https://archive.org/download/jsc2023m000168_NTV_VF_Astronauts_Discuss_Record_Breaking_Mission_230912-MP4.mp4/jsc2023m000168_NTV_VF_Astronauts_Discuss_Record_Breaking_Mission_230912-MP4.ia.mp4",
+      "mirror_url": "https://github.com/smormah/vsift/releases/download/test-media-2026-10-19/RM06-nasa-iss-record-conversation.mp4",
+      "file_name": "RM06-nasa-iss-record-conversation.mp4",
+      "bytes": 60378293,
+      "sha256": "a48781d5ce3496f908429ae3006a090b8fb6159cafaee94a985d6dd2f64933ca",
       "source_checksum": {
         "algorithm": "sha1",
-        "value": "a982fbda67f12fccd9d62eead2a2551022ba8ea2"
+        "value": "55317b4a6e3188277a42cd24d12d917023d703d5"
       },
-      "source_revision": "2023-12-28T23:21:56Z",
       "licence": {
         "id": "public-domain-us-government",
         "url": "https://www.copyright.gov/title17/92chap1.html#105",
-        "statement": "https://commons.wikimedia.org/wiki/File:SPACE_STATION_ASTRONAUT_DISCUSSES_RECORD_BREAKING_MISSION_WITH_PREVIOUS_RECORD_HOLDER.webm"
+        "statement": "https://www.nasa.gov/nasa-brand-center/images-and-media/"
       },
       "author": "NASA Johnson Space Center",
-      "attribution": "\"Space Station Astronaut Discusses Record Breaking Mission with Previous Record Holder\" by NASA Johnson Space Center, public domain, via Wikimedia Commons",
+      "attribution": "\"Space Station Astronaut Discusses Record Breaking Mission with Previous Record Holder\" by NASA Johnson Space Center, public domain, via the Internet Archive",
       "media": {
-        "duration_s": 631.181,
-        "container": "webm",
-        "video": "VP9 1280x720 59.94 fps",
-        "audio": "Opus 48 kHz stereo"
+        "duration_s": 623.851,
+        "container": "mp4",
+        "video": "H.264 854x480 59.94 fps",
+        "audio": "AAC 48 kHz"
       },
       "covers": [
         "conversational-pauses",
@@ -234,14 +258,19 @@
         "#381",
         "#383"
       ],
-      "notes": "A conversation between an astronaut on the station and a former record holder in Mission Control (NASA employees in their role): two voices, turn-taking and the pauses of a space-to-ground link, about 25 chunks. NASA media carries no endorsement and NASA's logos keep their own rules; the set uses the recording for testing only."
+      "notes": "The same recording as the Commons copy approved on 2026-10-18 (Commons refuses the tool): NASA Johnson's own public-affairs upload to the Internet Archive, whose caption file is identical to the NASA library's. A conversation between an astronaut on the station and a former record holder in Mission Control (NASA employees in their role), with the pauses of a space-to-ground link (the longest caption gaps 1.3 to 1.8 s), about 25 chunks. The item's creator field names a staff address, which is not repeated here."
     },
     {
       "id": "RM07",
-      "status": "proposed",
+      "status": "approved",
+      "approval": {
+        "date": "2026-10-18",
+        "by": "maintainer"
+      },
       "title": "Introduction to Wikidata Lexeme Forms - Lucas Werkmeister - Lexicodays 2024 (480p transcode)",
       "source_page": "https://commons.wikimedia.org/wiki/File:Introduction_to_Wikidata_Lexeme_Forms_-_Lucas_Werkmeister_-_Lexicodays_2024.webm",
       "url": "https://upload.wikimedia.org/wikipedia/commons/transcoded/e/ec/Introduction_to_Wikidata_Lexeme_Forms_-_Lucas_Werkmeister_-_Lexicodays_2024.webm/Introduction_to_Wikidata_Lexeme_Forms_-_Lucas_Werkmeister_-_Lexicodays_2024.webm.480p.vp9.webm",
+      "mirror_url": "https://github.com/smormah/vsift/releases/download/test-media-2026-10-19/RM07-lexeme-forms-480p.webm",
       "file_name": "RM07-lexeme-forms-480p.webm",
       "bytes": 21315686,
       "sha256": null,
@@ -272,11 +301,11 @@
         "#381",
         "#380"
       ],
-      "notes": "One speaker in German-accented English demonstrating a web tool, about 23 chunks. Commons has human-made English captions (205 cues), the best reference transcript of the set. The original is 254,967,178 bytes, so the 480p transcode is proposed; Commons publishes no checksum for transcodes, so source_checksum is the object store's ETag taken as the MD5 (unconfirmed until the pin) and the pin is otherwise trust on first use."
+      "notes": "One speaker in German-accented English demonstrating a web tool, about 23 chunks. Commons has human-made English captions (205 cues), the best reference transcript of the set. The original is 254,967,178 bytes, so the 480p transcode is proposed; Commons publishes no checksum for transcodes, so source_checksum is the object store's ETag taken as the MD5 (unconfirmed until the pin) and the pin is otherwise trust on first use. Commons refuses the tool (HTTP 429 to the neutral user agent, 2026-10-18): this item is pinned from a copy the maintainer downloads by hand (pin --from-file, against the Commons SHA-1) and fetched by every run from the test-media release. A hand-downloaded transcode has no published SHA-1; its ETag is recorded as the MD5 to compare."
     },
     {
       "id": "RM08",
-      "status": "proposed",
+      "status": "withdrawn",
       "title": "Mark Carney speaking about climate action and energy security in Calgary, 15 May 2026",
       "source_page": "https://commons.wikimedia.org/wiki/File:Mark_Carney_speaking_about_climate_action_and_energy_security_in_Calgary,_15_May_2026.webm",
       "url": "https://upload.wikimedia.org/wikipedia/commons/5/56/Mark_Carney_speaking_about_climate_action_and_energy_security_in_Calgary%2C_15_May_2026.webm",
@@ -308,7 +337,92 @@
       "tests": [
         "#363"
       ],
-      "notes": "Optional. A vertical phone recording of a public speech in a hall, re-encoded to WebM before upload, so its frame rate may no longer vary. The file page carries a transcript and a personality-rights warning (the likeness of a public figure; testing is not a commercial use). A current politician: the maintainer may prefer to leave it out."
+      "notes": "Optional. A vertical phone recording of a public speech in a hall, re-encoded to WebM before upload, so its frame rate may no longer vary. The file page carries a transcript and a personality-rights warning (the likeness of a public figure; testing is not a commercial use). A current politician: the maintainer may prefer to leave it out. Declined by the maintainer on 2026-10-18 (a current politician; the vertical shape is optional): withdrawn, never fetched, its id never reused."
+    },
+    {
+      "id": "RM09",
+      "status": "approved",
+      "approval": {
+        "date": "2026-10-19",
+        "by": "maintainer"
+      },
+      "title": "NASA's SpaceX Crew-8 Crew Arrival at Kennedy Space Center (25 February 2024)",
+      "source_page": "https://images.nasa.gov/details/KSC-20240225-MH-JBS01-0001-CCP_SpaceX_Crew_8_Arrival_KSC-M4585",
+      "url": "https://images-assets.nasa.gov/video/KSC-20240225-MH-JBS01-0001-CCP_SpaceX_Crew_8_Arrival_KSC-M4585/KSC-20240225-MH-JBS01-0001-CCP_SpaceX_Crew_8_Arrival_KSC-M4585~mobile.mp4",
+      "mirror_url": "https://github.com/smormah/vsift/releases/download/test-media-2026-10-19/RM09-nasa-crew-8-arrival.mp4",
+      "file_name": "RM09-nasa-crew-8-arrival.mp4",
+      "bytes": 72873726,
+      "sha256": "ee5501f1e25c8240a8e2dae61eebabf9446615d4c3558c3efbb098a1cc4bf41a",
+      "source_checksum": null,
+      "licence": {
+        "id": "public-domain-us-government",
+        "url": "https://www.copyright.gov/title17/92chap1.html#105",
+        "statement": "https://www.nasa.gov/nasa-brand-center/images-and-media/"
+      },
+      "author": "NASA (video: Ben Smegelsky)",
+      "attribution": "\"NASA's SpaceX Crew-8 Crew Arrival\" by NASA/Ben Smegelsky, public domain, via the NASA Image and Video Library",
+      "media": {
+        "duration_s": 1682.133,
+        "container": "mp4",
+        "video": "H.264 320x180 15 fps (the library's ~mobile rendition)",
+        "audio": "AAC 22.05 kHz"
+      },
+      "covers": [
+        "leading-silence",
+        "noisy-speech",
+        "lecture-or-meeting",
+        "long-speech-seams"
+      ],
+      "tests": [
+        "#174",
+        "#150",
+        "L-020",
+        "#380",
+        "#381"
+      ],
+      "notes": "Chosen on 2026-10-19 under the maintainer's go for public, freely licensed items of the design's shapes. The crew's arrival at the runway and their remarks outdoors, 28 minutes: the first caption is at 5:17, so about five minutes of arrival with no speech (aircraft and wind noise, to be heard) come before the first word. NASA publishes no checksum: the pin is trust on first use over HTTPS, cross-checked by a second, hosted fetch. NASA media carries no endorsement. Looked at on 2026-10-19 (sixteen frames): the crew, NASA officials at a lectern and the aircraft; no member of the public is shown."
+    },
+    {
+      "id": "RM10",
+      "status": "approved",
+      "approval": {
+        "date": "2026-10-19",
+        "by": "maintainer"
+      },
+      "title": "How to Create a Map from a Table Using data.census.gov (U.S. Census Bureau, 2022)",
+      "source_page": "https://archive.org/details/yt_wJJiJfJpK0o",
+      "url": "https://archive.org/download/yt_wJJiJfJpK0o/wJJiJfJpK0o.ia.mp4",
+      "mirror_url": "https://github.com/smormah/vsift/releases/download/test-media-2026-10-19/RM10-census-map-from-table.mp4",
+      "file_name": "RM10-census-map-from-table.mp4",
+      "bytes": 10796931,
+      "sha256": "a035daeb8df36e75f138edaf58b31d4cdc3d1514592063d2842063b58bb8bf90",
+      "source_checksum": {
+        "algorithm": "sha1",
+        "value": "d20f17d2fc6af14796e7983fefa9e26f09ec675c"
+      },
+      "licence": {
+        "id": "public-domain-us-government",
+        "url": "https://www.copyright.gov/title17/92chap1.html#105",
+        "statement": "https://www.copyright.gov/title17/92chap1.html#105"
+      },
+      "author": "U.S. Census Bureau",
+      "attribution": "\"How to Create a Map from a Table Using data.census.gov\" by the U.S. Census Bureau, public domain (a US government work), via the Internet Archive",
+      "media": {
+        "duration_s": 201.201,
+        "container": "mp4",
+        "video": "H.264 1280x720 30 fps",
+        "audio": "AAC 48 kHz"
+      },
+      "covers": [
+        "screen-ui-small-text"
+      ],
+      "tests": [
+        "#173",
+        "#175",
+        "L-018",
+        "L-028"
+      ],
+      "notes": "Chosen on 2026-10-19 under the maintainer's go. A narrated screen recording of the Census Bureau's data site: a table of county figures is opened, filtered and mapped, with small interface text and numbers. A US government work; the Internet Archive copy is a mirror of the Bureau's own channel made by an archive user, which the go allows for government works. The licence rests on 17 U.S.C. 105: no Census page states it for this file. Looked at on 2026-10-19 (nine frames): the presenter (Census Bureau staff, named on screen in her role), then the site; the video carries burned-in captions, on-screen text that matches the speech. No private person's data is shown."
     }
   ]
 }

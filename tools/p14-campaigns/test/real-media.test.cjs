@@ -108,14 +108,14 @@ test('bytes that do not match the pinned SHA-256 are never placed, and the parti
   other[100] ^= 1;
   const pinned = item({ source_checksum: { algorithm: 'sha1', value: hex('sha1', other) } });
   await assert.rejects(media.fetchItem(pinned, destination, serving(other).open), { code: media.ErrorCode.DIGEST_MISMATCH });
-  assert.deepEqual(listing(path.join(destination, 'RM01')), ['ATTRIBUTION.txt']);
+  assert.deepEqual(listing(path.join(destination, 'RM01')), []);
 });
 
 test('bytes that do not match the checksum the source publishes are refused', async (t) => {
   const { destination } = scratch(t);
   const wrongSource = item({ source_checksum: { algorithm: 'md5', value: '0'.repeat(32) } });
   await assert.rejects(media.fetchItem(wrongSource, destination, serving(BYTES).open), { code: media.ErrorCode.DIGEST_MISMATCH });
-  assert.deepEqual(listing(path.join(destination, 'RM01')), ['ATTRIBUTION.txt']);
+  assert.deepEqual(listing(path.join(destination, 'RM01')), []);
 });
 
 test('a transfer is stopped at the pinned size, and a short one is refused', async (t) => {
@@ -124,7 +124,7 @@ test('a transfer is stopped at the pinned size, and a short one is refused', asy
   await assert.rejects(media.fetchItem(item(), destination, serving(longer, { length: null }).open), { code: media.ErrorCode.SIZE_MISMATCH });
   const shorter = BYTES.subarray(0, BYTES.length - 1);
   await assert.rejects(media.fetchItem(item(), destination, serving(shorter, { length: null }).open), { code: media.ErrorCode.SIZE_MISMATCH });
-  assert.deepEqual(listing(path.join(destination, 'RM01')), ['ATTRIBUTION.txt']);
+  assert.deepEqual(listing(path.join(destination, 'RM01')), []);
 });
 
 test('a server that keeps sending is cut off just past the pinned size, not read to its end', async (t) => {
@@ -141,13 +141,13 @@ test('a server that keeps sending is cut off just past the pinned size, not read
   });
   await assert.rejects(media.fetchItem(item(), destination, endless), { code: media.ErrorCode.SIZE_MISMATCH });
   assert.ok(produced <= Math.ceil(BYTES.length / 7000) + 2, `read ${produced} chunks`);
-  assert.deepEqual(listing(path.join(destination, 'RM01')), ['ATTRIBUTION.txt']);
+  assert.deepEqual(listing(path.join(destination, 'RM01')), []);
 });
 
 test('an announced length other than the pinned size is refused before anything is written', async (t) => {
   const { destination } = scratch(t);
   await assert.rejects(media.fetchItem(item(), destination, serving(BYTES, { length: BYTES.length + 1 }).open), { code: media.ErrorCode.SIZE_MISMATCH });
-  assert.deepEqual(listing(path.join(destination, 'RM01')), ['ATTRIBUTION.txt']);
+  assert.deepEqual(listing(path.join(destination, 'RM01')), []);
 });
 
 test('a partial file of an earlier run is never overwritten', async (t) => {
@@ -185,7 +185,7 @@ test('pinning refuses bytes the source checksum does not match', async (t) => {
   const other = Buffer.from(BYTES);
   other[0] ^= 1;
   await assert.rejects(media.pinItem(item({ sha256: null }), destination, serving(other).open), { code: media.ErrorCode.DIGEST_MISMATCH });
-  assert.deepEqual(listing(path.join(destination, 'RM01')), ['ATTRIBUTION.txt']);
+  assert.deepEqual(listing(path.join(destination, 'RM01')), []);
 });
 
 test('an item whose source publishes no checksum is pinned on first use, and later fetches are held to that pin', async (t) => {
@@ -214,7 +214,13 @@ test('the destination must be absolute, exist, and lie outside the repository', 
 });
 
 test('only HTTPS on an allowed host is fetched, and the real transport refuses before connecting', async () => {
-  assert.ok(media.allowedUrl('https://upload.wikimedia.org/wikipedia/commons/a/ab/x.webm'));
+  assert.ok(media.sourceUrl('https://upload.wikimedia.org/wikipedia/commons/a/ab/x.webm'));
+  assert.equal(media.allowedUrl('https://upload.wikimedia.org/wikipedia/commons/a/ab/x.webm'), false, 'a provenance-only source is never contacted');
+  assert.ok(media.allowedUrl('https://images-assets.nasa.gov/video/x/x~medium.mp4'));
+  assert.ok(media.allowedUrl(`${media.MIRROR_PREFIX}2026-10-19/RM01-x.webm`));
+  assert.ok(media.allowedUrl('https://release-assets.githubusercontent.com/github-production-release-asset/1/2'));
+  assert.equal(media.allowedUrl('https://github.com/someone/else/releases/download/test-media-1/x.webm'), false);
+  assert.equal(media.allowedUrl('https://github.com/smormah/vsift/releases/download/v0.2.2/vsift.tgz'), false);
   assert.ok(media.allowedUrl('https://archive.org/download/item/x.mp4'));
   assert.ok(media.allowedUrl('https://ia800300.us.archive.org/1/items/item/x.mp4'));
   for (const refused of [
@@ -275,4 +281,140 @@ test('the committed manifest is valid, within its size, and covers every require
   for (const entry of committed.items) {
     assert.ok(entry.status !== 'approved' || entry.approval, `${entry.id} is approved without a recorded approval`);
   }
+});
+
+test('a refusal page is shown as its reason, and never with the address it echoes back', () => {
+  const page = '<!DOCTYPE html><html><head><title>Wikimedia Error</title><style>body { font: 15px sans-serif; }</style></head>'
+    + '<body><h1>Error</h1><p>Too many requests. Please contact the operators.</p><p>Sensitive client information</p>'
+    + '<p>IP address: 203.0.113.7</p></body></html>';
+  const said = media.refusalText(page);
+  assert.match(said, /^Wikimedia Error Error Too many requests\. Please contact the operators\.$/);
+  assert.doesNotMatch(media.refusalText('client 198.51.100.4 and 2001:db8::1 were refused'), /198\.51|2001:db8/);
+  assert.ok(media.refusalText('x'.repeat(1000)).length <= 300);
+});
+
+test('a copy downloaded by hand is pinned only when its size and the source checksum match, and is left as it is', async (t) => {
+  const { destination } = scratch(t);
+  const hand = path.join(path.dirname(destination), 'downloads');
+  fs.mkdirSync(hand);
+  const copy = path.join(hand, 'Editing_basics_-_watchlists.webm');
+  fs.writeFileSync(copy, BYTES);
+  const unpinned = item({ sha256: null });
+  assert.deepEqual(await media.pinFromFile(unpinned, destination, copy), { sha256: hex('sha256', BYTES), outcome: 'pinned' });
+  assert.deepEqual(listing(path.join(destination, 'RM01')), ['ATTRIBUTION.txt', 'RM01-stand-in.webm']);
+  assert.ok(fs.readFileSync(copy).equals(BYTES), 'the copy given is not moved or changed');
+  const again = scratch(t).destination;
+  assert.deepEqual(await media.pinFromFile(item(), again, copy), { sha256: hex('sha256', BYTES), outcome: 'fetched' });
+});
+
+test('a hand-downloaded copy of the wrong size, with the wrong checksum, or of an item with no published checksum is refused', async (t) => {
+  const { destination } = scratch(t);
+  const hand = path.join(path.dirname(destination), 'downloads');
+  fs.mkdirSync(hand);
+  const other = Buffer.from(BYTES);
+  other[9] ^= 1;
+  const wrong = path.join(hand, 'wrong.webm');
+  fs.writeFileSync(wrong, other);
+  await assert.rejects(media.pinFromFile(item({ sha256: null }), destination, wrong), { code: media.ErrorCode.DIGEST_MISMATCH });
+  const short = path.join(hand, 'short.webm');
+  fs.writeFileSync(short, BYTES.subarray(1));
+  await assert.rejects(media.pinFromFile(item({ sha256: null }), destination, short), { code: media.ErrorCode.SIZE_MISMATCH });
+  await assert.rejects(media.pinFromFile(item({ sha256: null, source_checksum: null }), destination, wrong), { code: media.ErrorCode.SOURCE_FILE_REFUSED });
+  await assert.rejects(media.pinFromFile(item({ sha256: null }), destination, 'relative.webm'), { code: media.ErrorCode.SOURCE_FILE_REFUSED });
+  await assert.rejects(media.pinFromFile(item({ sha256: null }), destination, hand), { code: media.ErrorCode.SOURCE_FILE_REFUSED });
+  assert.deepEqual(listing(path.join(destination, 'RM01')), []);
+});
+
+test('a source that refuses the tool is never contacted, and a mirror is the test-media release asset of the item', async () => {
+  await assert.rejects(media.httpsOpen('https://upload.wikimedia.org/wikipedia/commons/e/e6/x.webm'), /never contacted/);
+  const mirrored = item({ mirror_url: `${media.MIRROR_PREFIX}2026-10-19/RM01-stand-in.webm` });
+  assert.deepEqual(media.manifestProblems(manifest([mirrored])), []);
+  assert.equal(media.fetchUrl(mirrored), mirrored.mirror_url);
+  assert.equal(media.fetchUrl(item()), item().url);
+  for (const bad of [`${media.MIRROR_PREFIX}2026-10-19/RM01-other.webm`, 'https://github.com/smormah/vsift/releases/download/v0.2.2/RM01-stand-in.webm',
+    'https://example.com/test-media-1/RM01-stand-in.webm']) {
+    assert.ok(media.manifestProblems(manifest([item({ mirror_url: bad })])).some((problem) => /mirror_url/.test(problem)), bad);
+  }
+});
+
+function privateItem(overrides = {}) {
+  return { id: 'P01', status: 'approved', private: true, file_name: 'Secret Meeting With Alice.mp4', bytes: 10, sha256: null,
+    covers: ['conversational-pauses'], approval: { date: '2026-10-19', by: 'maintainer' }, ...overrides };
+}
+
+test('a private manifest is valid only outside the repository, with private items only, and never echoes a value', (t) => {
+  const { repository } = scratch(t);
+  const outside = path.join(path.dirname(repository), 'private');
+  fs.mkdirSync(outside);
+  const file = path.join(outside, 'private-manifest.json');
+  const write = (items, setId = 'vsift-real-media-private') => fs.writeFileSync(file, JSON.stringify({ schema_version: '1', set_id: setId, items }));
+  write([privateItem(), privateItem({ id: 'P02', file_name: 'paid tutorial.mkv' })]);
+  assert.equal(media.readPrivateManifest(file, repository).items.length, 2);
+  write([privateItem({ title: 'Alice and Bob', bytes: 0 }), privateItem({ id: 'P01' })]);
+  assert.throws(() => media.readPrivateManifest(file, repository), (error) => {
+    assert.equal(error.code, media.ErrorCode.MANIFEST_INVALID);
+    assert.doesNotMatch(error.message, /Alice|Bob|Secret|Meeting/);
+    return true;
+  });
+  write([item()]);
+  assert.throws(() => media.readPrivateManifest(file, repository), { code: media.ErrorCode.MANIFEST_INVALID });
+  const within = path.join(repository, 'private-manifest.json');
+  fs.copyFileSync(file, within);
+  assert.throws(() => media.readPrivateManifest(within, repository), { code: media.ErrorCode.PRIVATE_REFUSED });
+  assert.throws(() => media.readPrivateManifest('private-manifest.json', repository), { code: media.ErrorCode.PRIVATE_REFUSED });
+  assert.ok(media.manifestProblems(manifest([privateItem()])).some((problem) => /belongs in a private manifest/.test(problem)));
+});
+
+test('private items run on a local machine only', () => {
+  assert.throws(() => media.refuseHostedPrivateRun({ GITHUB_ACTIONS: 'true' }), { code: media.ErrorCode.PRIVATE_REFUSED });
+  assert.throws(() => media.refuseHostedPrivateRun({ CI: '1' }), { code: media.ErrorCode.PRIVATE_REFUSED });
+  assert.doesNotThrow(() => media.refuseHostedPrivateRun({}));
+});
+
+test('a pin is anchored at the source, and a fetch of a pinned item contacts the mirror', async (t) => {
+  const mirror = `${media.MIRROR_PREFIX}2026-10-19/RM01-stand-in.webm`;
+  const pinning = serving(BYTES);
+  await media.pinItem(item({ sha256: null, url: 'https://archive.org/download/x/x.webm', mirror_url: mirror }), scratch(t).destination, pinning.open);
+  assert.deepEqual(pinning.asked, ['https://archive.org/download/x/x.webm']);
+  const fetching = serving(BYTES);
+  await media.fetchItem(item({ mirror_url: mirror }), scratch(t).destination, fetching.open);
+  assert.deepEqual(fetching.asked, [mirror]);
+});
+
+test('the set holds at most eight approved items and 500 MB', () => {
+  const nine = Array.from({ length: 9 }, (_, n) => item({ id: `RM${String(n + 1).padStart(2, '0')}`, file_name: `RM${String(n + 1).padStart(2, '0')}-x.webm`, url: `https://archive.org/download/x/${n}.webm`, bytes: 1000 }));
+  assert.ok(media.manifestProblems(manifest(nine)).some((problem) => /9 items are approved, more than 8/.test(problem)));
+  const heavy = [item({ bytes: 300_000_000 }), item({ id: 'RM02', file_name: 'RM02-x.webm', url: 'https://archive.org/download/x/2.webm', bytes: 200_000_001 })];
+  assert.ok(media.manifestProblems(manifest(heavy)).some((problem) => /approved items hold 500000001 bytes, more than 500000000/.test(problem)));
+});
+
+test('the release is prepared from verbatim, pinned files only, as a pre-release on a tag no release workflow uses', (t) => {
+  const { destination } = scratch(t);
+  const mirrored = (id, bytes) => item({ id, file_name: `${id}-stand-in.webm`, url: `https://archive.org/download/x/${id}.webm`, bytes: bytes.length,
+    sha256: hex('sha256', bytes), source_checksum: { algorithm: 'sha1', value: hex('sha1', bytes) }, mirror_url: `${media.MIRROR_PREFIX}2026-10-19/${id}-stand-in.webm` });
+  const second = Buffer.from('second stand-in');
+  const items = [mirrored('RM01', BYTES), mirrored('RM02', second)];
+  for (const [entry, bytes] of [[items[0], BYTES], [items[1], second]]) {
+    fs.mkdirSync(path.join(destination, entry.id));
+    fs.writeFileSync(path.join(destination, entry.id, entry.file_name), bytes);
+  }
+  const plan = media.releasePlan(manifest(items), destination);
+  assert.equal(plan.tag, 'test-media-2026-10-19');
+  const command = plan.command('C:\out\NOTES.md', 'C:\out\ATTRIBUTION.txt');
+  assert.match(command, /^gh release create test-media-2026-10-19 --repo smormah\/vsift --target main --prerelease --latest=false /);
+  assert.ok(command.includes(`"${path.join(destination, 'RM02', 'RM02-stand-in.webm')}"`));
+  assert.match(plan.attribution, /RM01: A stand-in recording[\s\S]*SHA-256: [0-9a-f]{64}/);
+  assert.match(plan.notes, /\*\*This is not a VSift release\.\*\*/);
+  fs.writeFileSync(path.join(destination, 'RM02', 'RM02-stand-in.webm'), 'changed');
+  assert.throws(() => media.releasePlan(manifest(items), destination), { code: media.ErrorCode.EXISTING_DIFFERS });
+  assert.throws(() => media.releasePlan(manifest([items[0], { ...items[1], mirror_url: `${media.MIRROR_PREFIX}2026-10-20/RM02-stand-in.webm` }]), destination), { code: media.ErrorCode.MANIFEST_INVALID });
+});
+
+test('the committed manifest\'s mirror is one test-media release, outside the release tags (v*)', () => {
+  const committed = media.readManifest(MANIFEST);
+  const tags = new Set(committed.items.filter((entry) => entry.status === 'approved').map((entry) => entry.mirror_url.split('/releases/download/')[1].split('/')[0]));
+  assert.equal(tags.size, 1);
+  const [tag] = tags;
+  assert.match(tag, /^test-media-\d{4}-\d{2}-\d{2}$/);
+  assert.doesNotMatch(tag, /^v/);
 });
