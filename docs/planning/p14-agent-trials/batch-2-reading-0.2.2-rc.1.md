@@ -3,7 +3,7 @@
 Batch 2 is the counted set with the skill, run for the fifth time and the first time for the patch release `0.2.2`, against the published
 `0.2.2-rc.1` (tag `v0.2.2-rc.1` at `43a033dbf81346b967b293a150e13306828cac50`) from a clean install: every one of the 34 records names the registry's
 integrity for the installed packages (equal to what npm installed), the launcher's digest check and the version line `vsift 0.2.2-rc.1 (43a033dbf813)`.
-It ran under the freeze committed by #435 in [`batch-2/freeze.json`](batch-2/freeze.json), which the cut of `0.2.2-rc.1` kept byte for byte
+It ran under the freeze committed by #435 in `batch-2/freeze.json`, kept since 2026-10-19 as [`batch-2/freeze-0.2.2-rc.1.json`](batch-2/freeze-0.2.2-rc.1.json), which the cut of `0.2.2-rc.1` kept byte for byte
 (whole-freeze digest `10180cd88ec994dc48079f3aed46e5343a43b79264056e7b6af206c4b85f74c0`; the skill's digest `bd205d6c59cd926f5abccb71d71221acfbea1195f9ec1731451acebabd3af54f`;
 every record carries both). The batch ran from a clean worktree detached at the tag's commit, with Claude Code 2.1.284 on the maintainer's Windows 11 machine and Codex
 0.155.0-alpha.16 in the Linux container, on 2026-10-18 from 00:22 to 07:10 UTC. 34 counted runs, 17 per client: the review tier 12 each (Claude Opus 5.5, GPT-6-Astra) and the

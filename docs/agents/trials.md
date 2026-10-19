@@ -927,6 +927,15 @@ beside them, and the results are in `docs/planning/release-0.2.2.md`; the releas
 the file they ran under (`freeze-0.2.1-rc.3.json`, whole-freeze digest `a48567ac...`) is `freeze.json` there; nothing in them changed, and `batch-2/` and `batch-3/` hold
 only the freeze this candidate's batches run under. The move is in the cut because a later change on the release branch could not make it (`release.md` 6.8: a work-record path
 may be edited or added there, never deleted or renamed).
+**On 2026-10-19 the freeze is new again, in the `0.2.3` cycle and not at a cut, and this time the `grader` component changed** (#468, the toolchain re-pin to
+Rust 1.99.1). Its new pedantic clippy lint `assert_is_empty` fires in the test modules of the grader's `src` (`client_warnings.rs`, `handoff.rs`, `truth.rs`), which the
+`grader` digest covers, and the maintainer decided on 2026-10-19 to rewrite every site rather than allow the lint and to accept a new grader freeze. No grading
+code changed: every rewritten line is an `assert!(x.is_empty())` in a `#[cfg(test)]` module that became `assert_eq!(x, ...)` against an empty value. `freeze write` at
+`f30144e7a5a3`, the commit of that pull request's branch at which the grader changed, gave the `grader` digest `9ecd1121eb3080c04533266ebcb8930f162c5274823ddaee45c8f47611b27fa4` (it was `57507fad...`)
+and the whole-freeze digest `302930904439c2eb49e43396f30d2088481d1a6fb7f47467dd29f08a1e0bb073` (it was `10180cd8...`); the other six components are unchanged, and the pin in `committed_freeze`
+moved with it. **The seventh candidate's batches ran under `10180cd8...`, and that file is kept beside their records as `freeze-0.2.2-rc.1.json` in both folders.**
+No batch has run under the new freeze. Batch 3 checks its cold components against batch 1's freeze, so it needs `-AllowGraderChange` (as since 2026-10-04); cycle 3's batch-3
+rerun uses it, by the same decision.
 
 ## Usage capture (P14)
 

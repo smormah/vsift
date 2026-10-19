@@ -60,6 +60,14 @@ fn the_committed_freezes_still_hold() -> TestResult {
 /// visible: changing this constant is the decision to cut another candidate and write a new freeze
 /// (`docs/operations/release.md` section 6.8), and it shows in the diff of a test, not only of a data file.
 ///
+/// The freeze of 2026-10-19 is new on purpose (#468, the toolchain re-pin to Rust 1.99.1), and this time the
+/// `grader` component changed, `57507fad...` to `9ecd1121...`: the new pedantic lint `clippy::assert_is_empty`
+/// fires in the test modules of the grader's `src`, and the maintainer decided on 2026-10-19 to rewrite every
+/// site (`assert!(x.is_empty())` to `assert_eq!` against an empty value) and accept a new grader freeze. No
+/// grading code changed. This digest moved `10180cd8...` to the value below; the other six components are
+/// unchanged. The seventh candidate's batches ran under `10180cd8...`, and that file is kept beside their records
+/// as `freeze-0.2.2-rc.1.json` in both folders. No batch has run under the new freeze.
+///
 /// The freeze of 2026-10-17 is new on purpose (#367), written on top of #366's: the skill shortlists the screens
 /// of a range with no transcript with `candidates --omit periodic` (`docs/agents/skill.md`, "Shortlisting the screens
 /// of a long recording"), so the `skill` component changed, `13b485f3...` to `bd205d6c...`, and this digest,
@@ -90,7 +98,7 @@ fn the_committed_freezes_still_hold() -> TestResult {
 /// in `batch-2-rc.3/` and `batch-3-rc.3/`); the first two candidates' was
 /// `1e89b5cc488e7245d1a6d63ec8809c1f8a5c137ee87f5ed05f9b692c2af6e392` (copies in `batch-2-rc.1/` and
 /// `batch-2-rc.2/`).
-const CUT_FREEZE_SHA256: &str = "10180cd88ec994dc48079f3aed46e5343a43b79264056e7b6af206c4b85f74c0";
+const CUT_FREEZE_SHA256: &str = "302930904439c2eb49e43396f30d2088481d1a6fb7f47467dd29f08a1e0bb073";
 
 #[test]
 fn the_committed_freezes_are_the_ones_written_at_the_cut() -> TestResult {
