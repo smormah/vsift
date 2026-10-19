@@ -13,6 +13,7 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const https = require('node:https');
 const path = require('node:path');
+const { Readable } = require('node:stream');
 
 /** The manifest's own version; a reader refuses any other. */
 const SCHEMA_VERSION = '1';
@@ -22,6 +23,9 @@ const SET_ID = 'vsift-real-media';
 const MAX_ITEM_BYTES = 300 * 1024 * 1024;
 /** Every item that is not withdrawn, together. */
 const MAX_SET_BYTES = 750 * 1024 * 1024;
+/** The set itself, its approved items: at most eight, and 500 MB together (the maintainer's limits of 2026-10-19). */
+const MAX_APPROVED_ITEMS = 8;
+const MAX_APPROVED_BYTES = 500_000_000;
 const MAX_REDIRECTS = 5;
 /** A transfer that sends nothing for this long is abandoned. */
 const IDLE_TIMEOUT_MS = 60_000;
@@ -33,13 +37,28 @@ const IDLE_TIMEOUT_MS = 60_000;
 const USER_AGENT = 'vsift-real-media-fetch/1';
 
 /**
- * The hosts a file may be fetched from, and the hosts a redirect may lead to.
- * Each is a source with stable, versioned URLs (docs/planning/real-media-set.md
- * section 3). A host is added in the reviewed change that adds an item from it.
+ * The hosts an item's source `url` may name: sources with stable, versioned
+ * URLs (docs/planning/real-media-set.md section 3). A host is added in the
+ * reviewed change that adds an item from it.
  */
-const ALLOWED_HOSTS = Object.freeze(['upload.wikimedia.org', 'archive.org']);
-/** Host suffixes for the Internet Archive's storage nodes, to which archive.org/download redirects. */
-const ALLOWED_HOST_SUFFIXES = Object.freeze(['.us.archive.org']);
+const SOURCE_HOSTS = Object.freeze(['upload.wikimedia.org', 'archive.org', 'images-assets.nasa.gov']);
+/** The Internet Archive's storage nodes (ia*.us, dn*.ca, dn*.eu ...), to which archive.org/download redirects. */
+const SOURCE_HOST_SUFFIXES = Object.freeze(['.archive.org']);
+/**
+ * Sources that refuse the tool's neutral user agent (Wikimedia answers its
+ * downloads with HTTP 429 until a client gives contact details, which the
+ * maintainer declined on 2026-10-19). Their `url` is kept as provenance only and
+ * is never contacted: such an item is fetched from the mirror, or pinned from a
+ * copy the maintainer downloaded by hand (`pin --from-file`). A source that
+ * refuses is never retried with another user agent.
+ */
+const PROVENANCE_ONLY_HOSTS = Object.freeze(['upload.wikimedia.org']);
+/** The project's own test-media release, the only mirror; every hosted run fetches from it. */
+const MIRROR_PREFIX = 'https://github.com/smormah/vsift/releases/download/test-media-';
+/** Where GitHub sends a release-asset download. */
+const MIRROR_REDIRECT_HOSTS = Object.freeze(['release-assets.githubusercontent.com', 'objects.githubusercontent.com']);
+/** Every host the tool contacts, for the first request or a redirect. */
+const ALLOWED_HOSTS = Object.freeze([...SOURCE_HOSTS.filter((host) => !PROVENANCE_ONLY_HOSTS.includes(host)), 'github.com', ...MIRROR_REDIRECT_HOSTS]);
 
 const STATUSES = Object.freeze(['proposed', 'approved', 'withdrawn']);
 /**
@@ -65,7 +84,12 @@ const ITEM_REQUIRED = Object.freeze([
   'id', 'status', 'title', 'source_page', 'url', 'file_name', 'bytes', 'sha256',
   'source_checksum', 'licence', 'author', 'attribution', 'media', 'covers', 'tests',
 ]);
-const ITEM_OPTIONAL = Object.freeze(['source_revision', 'approval', 'labels', 'notes']);
+const ITEM_OPTIONAL = Object.freeze(['source_revision', 'mirror_url', 'approval', 'labels', 'notes']);
+/** A private item (the maintainer's own recording, local use only): no source, licence or title is recorded. */
+const PRIVATE_REQUIRED = Object.freeze(['id', 'status', 'private', 'file_name', 'bytes', 'sha256', 'covers', 'approval']);
+const PRIVATE_OPTIONAL = Object.freeze(['labels', 'notes', 'tests']);
+const PRIVATE_SET_ID = 'vsift-real-media-private';
+const PRIVATE_ID = /^P[0-9]{2}$/;
 const LICENCE_KEYS = Object.freeze(['id', 'url', 'statement']);
 const LICENCE_ID = /^(CC0-1\.0|CC-BY-[1-4]\.0|CC-BY-SA-[1-4]\.0|public-domain|public-domain-us-government)$/;
 const MEDIA_KEYS = Object.freeze(['duration_s', 'container', 'video', 'audio']);
@@ -87,6 +111,8 @@ const ErrorCode = Object.freeze({
   DIGEST_MISMATCH: 'digest_mismatch',
   EXISTING_DIFFERS: 'existing_differs',
   PARTIAL_PRESENT: 'partial_present',
+  SOURCE_FILE_REFUSED: 'source_file_refused',
+  PRIVATE_REFUSED: 'private_refused',
 });
 
 /** A typed refusal: `code` is one of `ErrorCode`, the message is fixed prose plus the item id. */
@@ -116,16 +142,52 @@ function unknownKeys(value, allowed) {
  * @param {string} text
  * @returns {boolean}
  */
-function allowedUrl(text) {
+function parsedHttps(text) {
   let url;
   try {
     url = new URL(text);
   } catch {
-    return false;
+    return null;
   }
-  if (url.protocol !== 'https:' || url.username || url.password || url.port) return false;
+  if (url.protocol !== 'https:' || url.username || url.password || url.port) return null;
+  return url;
+}
+
+function archiveHost(host) {
+  return SOURCE_HOST_SUFFIXES.some((suffix) => host.endsWith(suffix));
+}
+
+/**
+ * Whether a URL may be named as an item's source: HTTPS, no credentials, no
+ * port, on a source host (a provenance-only host included).
+ * @param {string} text
+ * @returns {boolean}
+ */
+function sourceUrl(text) {
+  const url = parsedHttps(text);
+  if (!url) return false;
   const host = url.hostname.toLowerCase();
-  return ALLOWED_HOSTS.includes(host) || ALLOWED_HOST_SUFFIXES.some((suffix) => host.endsWith(suffix));
+  return SOURCE_HOSTS.includes(host) || archiveHost(host);
+}
+
+/**
+ * Whether a URL may be contacted, as a first request or a redirect: HTTPS, no
+ * credentials, no port, on a host that accepts the tool (never a
+ * provenance-only one); on github.com only the test-media release.
+ * @param {string} text
+ * @returns {boolean}
+ */
+function allowedUrl(text) {
+  const url = parsedHttps(text);
+  if (!url) return false;
+  const host = url.hostname.toLowerCase();
+  if (host === 'github.com') return url.href.startsWith(MIRROR_PREFIX);
+  return ALLOWED_HOSTS.includes(host) || archiveHost(host);
+}
+
+/** The URL a fetch contacts: the mirror when there is one, else the source. */
+function fetchUrl(item) {
+  return item.mirror_url || item.url;
 }
 
 function httpsPage(text) {
@@ -153,7 +215,11 @@ function checkItem(item, index, problems) {
     if (typeof item[key] !== 'string' || item[key].trim().length === 0) problems.push(`${label}: ${key} must be a non-empty string`);
   }
   if (typeof item.source_page !== 'string' || !httpsPage(item.source_page)) problems.push(`${label}: source_page must be an HTTPS URL`);
-  if (typeof item.url !== 'string' || !allowedUrl(item.url)) problems.push(`${label}: url must be HTTPS on an allowed host`);
+  if (typeof item.url !== 'string' || !sourceUrl(item.url)) problems.push(`${label}: url must be HTTPS on an allowed host`);
+  if ('mirror_url' in item && (typeof item.mirror_url !== 'string' || !item.mirror_url.startsWith(MIRROR_PREFIX)
+    || !allowedUrl(item.mirror_url) || !item.mirror_url.endsWith(`/${item.file_name}`))) {
+    problems.push(`${label}: mirror_url must be the test-media release's asset of the item's file_name`);
+  }
   if (typeof item.file_name !== 'string' || !FILE_NAME.test(item.file_name)) {
     problems.push(`${label}: file_name must be the item id, a lowercase slug and a media extension`);
   } else if (id && !item.file_name.startsWith(`${id}-`)) {
@@ -214,6 +280,40 @@ function checkItem(item, index, problems) {
   }
 }
 
+const PRIVATE_FILE_NAME = /^[^\\/:*?"<>|\x00-\x1f]{1,200}$/;
+
+/**
+ * The problems of a private item. Its messages name members only, never a
+ * value: a private manifest's file names and notes must not reach a log.
+ */
+function checkPrivateItem(item, index, problems) {
+  const where = `items[${index}]`;
+  if (!isObject(item)) {
+    problems.push(`${where}: not an object`);
+    return;
+  }
+  for (const key of PRIVATE_REQUIRED) if (!(key in item)) problems.push(`${where}: missing ${key}`);
+  for (const key of unknownKeys(item, [...PRIVATE_REQUIRED, ...PRIVATE_OPTIONAL])) {
+    problems.push(`${where}: a member not allowed in a private item (only ${[...PRIVATE_REQUIRED, ...PRIVATE_OPTIONAL].join(', ')})`);
+    break;
+  }
+  const label = typeof item.id === 'string' && PRIVATE_ID.test(item.id) ? item.id : where;
+  if (label === where) problems.push(`${where}: a private id is P followed by two digits`);
+  if (item.private !== true) problems.push(`${label}: private must be true`);
+  if (item.status !== 'approved') problems.push(`${label}: a private item is approved (the maintainer's consent) or left out`);
+  const approval = item.approval;
+  if (!isObject(approval) || unknownKeys(approval, ['date', 'by']).length > 0 || !DATE.test(String(approval.date)) || approval.by !== 'maintainer') {
+    problems.push(`${label}: approval must be {date: YYYY-MM-DD, by: "maintainer"}`);
+  }
+  if (typeof item.file_name !== 'string' || !PRIVATE_FILE_NAME.test(item.file_name) || item.file_name.startsWith('.') || item.file_name.trim() !== item.file_name) {
+    problems.push(`${label}: file_name must be a plain file name beside the private manifest`);
+  }
+  if (!Number.isSafeInteger(item.bytes) || item.bytes < 1) problems.push(`${label}: bytes must be a positive integer`);
+  if (item.sha256 !== null && (typeof item.sha256 !== 'string' || !SHA256.test(item.sha256))) problems.push(`${label}: sha256 must be null or 64 lowercase hexadecimal digits`);
+  if (!Array.isArray(item.covers) || item.covers.length === 0 || item.covers.some((cover) => !COVERS.includes(cover))) problems.push(`${label}: covers must list known shapes`);
+  if ('notes' in item && typeof item.notes !== 'string') problems.push(`${label}: notes must be a string`);
+}
+
 /**
  * Every problem with a manifest, as fixed prose naming the member; an empty
  * list means it is valid. The rules are those of
@@ -223,15 +323,27 @@ function checkItem(item, index, problems) {
  * @param {unknown} manifest the parsed JSON
  * @returns {string[]}
  */
-function manifestProblems(manifest) {
+function manifestProblems(manifest, { privateSet = false } = {}) {
   const problems = [];
   if (!isObject(manifest)) return ['the manifest must be a JSON object'];
   for (const key of TOP_KEYS) if (!(key in manifest)) problems.push(`missing ${key}`);
   for (const key of unknownKeys(manifest, TOP_KEYS)) problems.push(`unknown member ${key}`);
   if (manifest.schema_version !== SCHEMA_VERSION) problems.push(`schema_version must be "${SCHEMA_VERSION}"`);
-  if (manifest.set_id !== SET_ID) problems.push(`set_id must be "${SET_ID}"`);
+  const setId = privateSet ? PRIVATE_SET_ID : SET_ID;
+  if (manifest.set_id !== setId) problems.push(`set_id must be "${setId}"`);
   if (!Array.isArray(manifest.items)) return [...problems, 'items must be a list'];
-  manifest.items.forEach((item, index) => checkItem(item, index, problems));
+  if (privateSet) {
+    manifest.items.forEach((item, index) => checkPrivateItem(item, index, problems));
+    for (const key of ['id', 'file_name']) {
+      const values = manifest.items.filter(isObject).map((item) => item[key]);
+      if (new Set(values).size !== values.length) problems.push(`a ${key} is used twice`);
+    }
+    return problems;
+  }
+  manifest.items.forEach((item, index) => {
+    if (isObject(item) && 'private' in item) problems.push(`items[${index}]: a private item belongs in a private manifest outside the repository, never here`);
+    else checkItem(item, index, problems);
+  });
   const items = manifest.items.filter(isObject);
   for (const key of ['id', 'file_name', 'url']) {
     const seen = new Set();
@@ -243,6 +355,10 @@ function manifestProblems(manifest) {
   const total = items.filter((item) => item.status !== 'withdrawn' && Number.isSafeInteger(item.bytes))
     .reduce((sum, item) => sum + item.bytes, 0);
   if (total > MAX_SET_BYTES) problems.push(`the items that are not withdrawn hold ${total} bytes, more than ${MAX_SET_BYTES}`);
+  const approved = items.filter((item) => item.status === 'approved' && Number.isSafeInteger(item.bytes));
+  if (approved.length > MAX_APPROVED_ITEMS) problems.push(`${approved.length} items are approved, more than ${MAX_APPROVED_ITEMS}`);
+  const approvedBytes = approved.reduce((sum, item) => sum + item.bytes, 0);
+  if (approvedBytes > MAX_APPROVED_BYTES) problems.push(`the approved items hold ${approvedBytes} bytes, more than ${MAX_APPROVED_BYTES}`);
   return problems;
 }
 
@@ -271,6 +387,96 @@ function readManifest(file) {
   const problems = manifestProblems(manifest);
   if (problems.length > 0) throw new RealMediaError(ErrorCode.MANIFEST_INVALID, `the manifest is invalid: ${problems.join('; ')}`);
   return manifest;
+}
+
+/**
+ * Reads and validates a private manifest. It must be named by an absolute
+ * path that lies outside the repository, and its problems are reported by
+ * member, never with a value.
+ * @param {string} file
+ * @param {string} repository the repository's root
+ * @returns {object}
+ */
+function readPrivateManifest(file, repository) {
+  if (typeof file !== 'string' || !path.isAbsolute(file)) throw new RealMediaError(ErrorCode.PRIVATE_REFUSED, 'the private manifest must be named by an absolute path');
+  let real;
+  try {
+    real = fs.realpathSync.native(file);
+  } catch {
+    throw new RealMediaError(ErrorCode.PRIVATE_REFUSED, 'the private manifest could not be read');
+  }
+  const root = fs.realpathSync.native(repository);
+  if (inside(real, root)) throw new RealMediaError(ErrorCode.PRIVATE_REFUSED, 'the private manifest must lie outside the repository');
+  let manifest;
+  try {
+    manifest = JSON.parse(fs.readFileSync(real, 'utf8'));
+  } catch {
+    throw new RealMediaError(ErrorCode.MANIFEST_INVALID, 'the private manifest could not be read as JSON');
+  }
+  const problems = manifestProblems(manifest, { privateSet: true });
+  if (problems.length > 0) throw new RealMediaError(ErrorCode.MANIFEST_INVALID, `the private manifest is invalid: ${problems.join('; ')}`);
+  return manifest;
+}
+
+/**
+ * Private items run on a local machine only: a run in CI (the CI or
+ * GITHUB_ACTIONS variable set) is refused before anything is read.
+ * @param {Record<string, string | undefined>} env
+ */
+function refuseHostedPrivateRun(env) {
+  if (env.CI || env.GITHUB_ACTIONS) throw new RealMediaError(ErrorCode.PRIVATE_REFUSED, 'private items run on a local machine only, never in CI');
+}
+
+/**
+ * A transport over a local file the maintainer downloaded by hand, for
+ * `pin --from-file`: the same size bound and checksums apply as to a download.
+ * The source must be an existing regular file named by an absolute path.
+ * @param {string} file
+ */
+function localOpen(file) {
+  if (typeof file !== 'string' || !path.isAbsolute(file)) throw new RealMediaError(ErrorCode.SOURCE_FILE_REFUSED, 'the local file must be named by an absolute path');
+  let stat;
+  try {
+    stat = fs.statSync(file);
+  } catch {
+    throw new RealMediaError(ErrorCode.SOURCE_FILE_REFUSED, 'the local file could not be read');
+  }
+  if (!stat.isFile()) throw new RealMediaError(ErrorCode.SOURCE_FILE_REFUSED, 'the local file must be a regular file');
+  // The file is opened only when the transfer is read, so a copy refused on its
+  // size before reading leaves no open handle behind.
+  async function* chunks() {
+    const handle = await fs.promises.open(file, 'r');
+    try {
+      const buffer = Buffer.alloc(1 << 20);
+      for (;;) {
+        const { bytesRead } = await handle.read(buffer, 0, buffer.length, null);
+        if (bytesRead === 0) return;
+        yield Buffer.from(buffer.subarray(0, bytesRead));
+      }
+    } finally {
+      await handle.close();
+    }
+  }
+  return async () => ({ stream: Readable.from(chunks()), length: stat.size });
+}
+
+/**
+ * Pins (or, when pinned already, verifies and places) an approved item from a
+ * local copy downloaded by hand. A local copy is accepted only against the
+ * checksum its source publishes, so an item without one is refused.
+ * @param {object} item
+ * @param {string} destination a folder `checkDestination` accepted
+ * @param {string} file the local copy
+ * @returns {Promise<{ sha256: string, outcome: string }>}
+ */
+async function pinFromFile(item, destination, file) {
+  if (item.status !== 'approved') throw new RealMediaError(ErrorCode.NOT_APPROVED, `${item.id} is not approved`);
+  if (item.source_checksum === null) {
+    throw new RealMediaError(ErrorCode.SOURCE_FILE_REFUSED, `${item.id}: its source publishes no checksum, so a local copy cannot be checked against it`);
+  }
+  const open = localOpen(file);
+  if (item.sha256 === null) return { sha256: await pinItem(item, destination, open), outcome: 'pinned' };
+  return { sha256: item.sha256, outcome: await fetchItem(item, destination, open) };
 }
 
 /**
@@ -323,6 +529,28 @@ function checkDestination(destination, repository) {
 }
 
 /**
+ * What a refusal page says, as one short line of plain text: styles, scripts
+ * and markup dropped, control and non-ASCII characters folded, and anything
+ * the page echoes back about the client removed (Wikimedia's error page prints
+ * the client's IP address), so a log never repeats it. It is data, never
+ * followed.
+ * @param {string} page
+ * @returns {string}
+ */
+function refusalText(page) {
+  return String(page)
+    .replace(/<(style|script)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, ' ')
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/[^\x20-\x7e]+/g, ' ')
+    .replace(/Sensitive client information[\s\S]*$/i, ' ')
+    .replace(/\b\d{1,3}(?:\.\d{1,3}){3}\b/g, '[address]')
+    .replace(/\b[0-9a-f]{0,4}(?::[0-9a-f]{0,4}){2,7}\b/gi, '[address]')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 300);
+}
+
+/**
  * The transport the tool uses: Node's HTTPS client, refusing any URL or
  * redirect that `allowedUrl` refuses, following at most `MAX_REDIRECTS`.
  * @param {string} url
@@ -332,7 +560,10 @@ function httpsOpen(url) {
   return new Promise((resolve, reject) => {
     const follow = (current, redirects) => {
       if (!allowedUrl(current)) {
-        reject(new RealMediaError(ErrorCode.TRANSPORT_REFUSED, 'a request or redirect left HTTPS or the allowed hosts'));
+        const host = parsedHttps(current) ? new URL(current).hostname.toLowerCase() : '';
+        reject(new RealMediaError(ErrorCode.TRANSPORT_REFUSED, PROVENANCE_ONLY_HOSTS.includes(host)
+          ? 'this source refuses the tool, so it is never contacted: fetch the item from the test-media release (mirror_url) or pin a copy downloaded by hand with pin --from-file'
+          : 'a request or redirect left HTTPS or the allowed hosts'));
         return;
       }
       const request = https.get(current, { headers: { 'User-Agent': USER_AGENT }, timeout: IDLE_TIMEOUT_MS }, (response) => {
@@ -347,8 +578,19 @@ function httpsOpen(url) {
           return;
         }
         if (status !== 200) {
-          response.resume();
-          reject(new RealMediaError(ErrorCode.TRANSPORT_REFUSED, `the server answered HTTP ${status}`));
+          // A refusal's own text says why (a rate limit names its policy); it is
+          // read up to 32 KiB and shown on one line as data, never followed.
+          let text = '';
+          response.setEncoding('utf8');
+          response.on('data', (part) => {
+            if (text.length < 32768) text += part;
+          });
+          response.on('end', () => {
+            const retry = response.headers['retry-after'];
+            const said = refusalText(text);
+            reject(new RealMediaError(ErrorCode.TRANSPORT_REFUSED,
+              `the server answered HTTP ${status}${retry ? ` (Retry-After: ${String(retry).slice(0, 40)})` : ''}${said ? `: ${said}` : ''}`));
+          });
           return;
         }
         const header = response.headers['content-length'];
@@ -395,13 +637,18 @@ function attributionText(item) {
   ].join('\n');
 }
 
+/** Writes the attribution beside a placed file; nothing is written for a file that was refused. */
+function writeAttribution(folder, item) {
+  fs.writeFileSync(path.join(folder, 'ATTRIBUTION.txt'), attributionText(item));
+}
+
 /**
  * Streams one file to `<destination>/<id>/.<file>.partial`, never more than the
  * pinned size, hashing as it goes; returns the digests. The partial file is
  * created exclusively and removed again on any failure.
  */
-async function download(item, partial, open) {
-  const { stream, length } = await open(item.url);
+async function download(item, partial, open, url) {
+  const { stream, length } = await open(url);
   if (length !== null && length !== item.bytes) {
     stream.destroy();
     throw new RealMediaError(ErrorCode.SIZE_MISMATCH, `${item.id}: the server announced ${length} bytes, the manifest pins ${item.bytes}`);
@@ -461,24 +708,27 @@ async function fetchItem(item, destination, open) {
   const folder = path.join(destination, item.id);
   const final = path.join(folder, item.file_name);
   fs.mkdirSync(folder, { recursive: true, mode: 0o700 });
-  fs.writeFileSync(path.join(folder, 'ATTRIBUTION.txt'), attributionText(item));
   if (fs.existsSync(final)) {
-    if (fs.statSync(final).size === item.bytes && digestOfFile(final, 'sha256') === item.sha256) return 'present';
+    if (fs.statSync(final).size === item.bytes && digestOfFile(final, 'sha256') === item.sha256) {
+      writeAttribution(folder, item);
+      return 'present';
+    }
     throw new RealMediaError(ErrorCode.EXISTING_DIFFERS, `${item.id}: a different file is already at its place; it is left as it is`);
   }
   const partial = path.join(folder, `.${item.file_name}.partial`);
-  const digests = await download(item, partial, open);
+  const digests = await download(item, partial, open, fetchUrl(item));
   if (digests.sha256 !== item.sha256) {
     fs.rmSync(partial, { force: true });
     throw new RealMediaError(ErrorCode.DIGEST_MISMATCH, `${item.id}: the SHA-256 does not match the pinned digest`);
   }
   fs.renameSync(partial, final);
+  writeAttribution(folder, item);
   return 'fetched';
 }
 
 /**
- * Pins an approved item that has no SHA-256 yet: fetches it bounded by its
- * size, verifies the checksum its source publishes where it publishes one,
+ * Pins an approved item that has no SHA-256 yet: fetches it from its source
+ * (never the mirror: a pin is anchored at the source) bounded by its size, verifies the checksum its source publishes where it publishes one,
  * keeps the file and returns the SHA-256 for the reviewer to write into the
  * manifest. Without a source checksum (a Commons transcode, for which the
  * source publishes none) the pin is trust on first use over HTTPS, which the
@@ -495,11 +745,64 @@ async function pinItem(item, destination, open) {
   const final = path.join(folder, item.file_name);
   fs.mkdirSync(folder, { recursive: true, mode: 0o700 });
   if (fs.existsSync(final)) throw new RealMediaError(ErrorCode.EXISTING_DIFFERS, `${item.id}: a file is already at its place; it is left as it is`);
-  fs.writeFileSync(path.join(folder, 'ATTRIBUTION.txt'), attributionText(item));
   const partial = path.join(folder, `.${item.file_name}.partial`);
-  const digests = await download(item, partial, open);
+  const digests = await download(item, partial, open, item.url);
   fs.renameSync(partial, final);
+  writeAttribution(folder, item);
   return digests.sha256;
+}
+
+/**
+ * The test-media release, prepared for the maintainer's review (the release is
+ * created by a person, never by a tool or a workflow). Every approved item must
+ * be pinned, carry a mirror_url of one and the same `test-media-*` tag, and be
+ * present in `source` with exactly its pinned size and SHA-256, so the assets
+ * are verbatim copies. Returns the attribution and notes texts and the
+ * `gh release create` command (a pre-release that is never "latest"; no
+ * release or publishing workflow runs on a tag outside `v*`).
+ * @param {object} manifest a valid manifest
+ * @param {string} source the folder the items were fetched or pinned into
+ */
+function releasePlan(manifest, source) {
+  const approved = manifest.items.filter((item) => item.status === 'approved');
+  const tags = new Set(approved.map((item) => (item.mirror_url ? item.mirror_url.slice(MIRROR_PREFIX.length - 'test-media-'.length).split('/')[0] : null)));
+  if (approved.length === 0 || tags.size !== 1 || tags.has(null)) {
+    throw new RealMediaError(ErrorCode.MANIFEST_INVALID, 'every approved item needs a mirror_url of one and the same test-media release');
+  }
+  const [tag] = tags;
+  const assets = approved.map((item) => {
+    if (item.sha256 === null) throw new RealMediaError(ErrorCode.NOT_PINNED, `${item.id} is not pinned yet`);
+    const file = path.join(source, item.id, item.file_name);
+    if (!fs.existsSync(file) || fs.statSync(file).size !== item.bytes || digestOfFile(file, 'sha256') !== item.sha256) {
+      throw new RealMediaError(ErrorCode.EXISTING_DIFFERS, `${item.id}: the file in the media folder is missing or is not the pinned one`);
+    }
+    return file;
+  });
+  const attribution = [
+    'VSift test media: verbatim copies of freely licensed recordings, kept for testing VSift.',
+    'They are not VSift and are not covered by its licence; each keeps its own licence, below.',
+    '',
+    ...approved.map((item) => `${attributionText(item)}SHA-256: ${item.sha256}\n`),
+  ].join('\n');
+  const notes = [
+    `Test media for VSift's opt-in real-media campaign (#363): ${approved.length} recordings, verbatim, with their attribution in ATTRIBUTION.txt.`,
+    '',
+    '**This is not a VSift release.** Nothing here is VSift or under its licence; install VSift from npm (`vsift-cli`).',
+    '',
+    'The pinned manifest, with each file\'s source, licence and SHA-256, is `tools/p14-campaigns/real-media/manifest.json`; the design is `docs/planning/real-media-set.md`.',
+    '',
+    '| Asset | Bytes | SHA-256 | Licence | Source |',
+    '| --- | ---: | --- | --- | --- |',
+    ...approved.map((item) => `| ${item.file_name} | ${item.bytes} | \`${item.sha256}\` | ${item.licence.id} | ${item.source_page} |`),
+    '',
+  ].join('\n');
+  const quote = (text) => `"${text}"`;
+  const command = (notesFile, attributionFile) => [
+    'gh release create', tag, '--repo smormah/vsift', '--target main', '--prerelease', '--latest=false',
+    `--title ${quote(`VSift test media ${tag.slice('test-media-'.length)} (not a VSift release)`)}`,
+    `--notes-file ${quote(notesFile)}`, ...assets.map(quote), quote(attributionFile),
+  ].join(' ');
+  return { tag, assets, attribution, notes, command };
 }
 
 module.exports = {
@@ -507,8 +810,15 @@ module.exports = {
   SET_ID,
   MAX_ITEM_BYTES,
   MAX_SET_BYTES,
+  MAX_APPROVED_ITEMS,
+  MAX_APPROVED_BYTES,
   USER_AGENT,
   ALLOWED_HOSTS,
+  SOURCE_HOSTS,
+  PROVENANCE_ONLY_HOSTS,
+  MIRROR_PREFIX,
+  PRIVATE_REQUIRED,
+  PRIVATE_OPTIONAL,
   COVERS,
   REQUIRED_COVERS,
   TOP_KEYS,
@@ -517,12 +827,20 @@ module.exports = {
   ErrorCode,
   RealMediaError,
   allowedUrl,
+  sourceUrl,
+  fetchUrl,
+  readPrivateManifest,
+  refuseHostedPrivateRun,
+  localOpen,
+  pinFromFile,
+  releasePlan,
   manifestProblems,
   uncoveredShapes,
   readManifest,
   selectApproved,
   checkDestination,
   httpsOpen,
+  refusalText,
   attributionText,
   fetchItem,
   pinItem,

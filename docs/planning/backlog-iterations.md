@@ -120,8 +120,9 @@ nightly; the long hosted runs for what the cycle touched; an uncounted skill smo
 
 - **#363 first:** a small, freely licensed real-media test set with an opt-in campaign. The real defects of `0.2.0` (#353, #359, #391) were found by
   real recordings and a second machine, not by the synthetic corpus. **The design, the pinned manifest with eight proposed items and the
-  fetch-and-verify tool are in [`real-media-set.md`](real-media-set.md) (2026-10-18); the maintainer approves the items one by one, then the
-  campaign runner and its manual workflow follow.**
+  fetch-and-verify tool are in [`real-media-set.md`](real-media-set.md) (2026-10-18), with the maintainer's decisions (six items approved,
+  the campaign advisory, Ubuntu only), the campaign runner and its manual workflow. No recording is fetched yet: Wikimedia refuses the
+  tool's downloads until its user agent carries contact details, which the maintainer decides (L-180).**
 - **The re-pins:** the FFmpeg build planned for 2026-10-31 and whisper.cpp 1.9.5 or later: #351, #272, #322, #399.
 - **The seam follow-ups, measured on real speech:** #380 to #384 (#381 is the half-second tolerance).
 - **Evaluations:** #173, #174, #175, #150 and #159.

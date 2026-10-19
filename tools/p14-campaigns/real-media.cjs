@@ -9,7 +9,9 @@
 //   node real-media.cjs check [<manifest>]
 //   node real-media.cjs attribution [<manifest>]
 //   node real-media.cjs fetch <absolute destination> [--manifest <file>] [--item RMnn]...
-//   node real-media.cjs pin <absolute destination> --item RMnn [--manifest <file>]
+//   node real-media.cjs pin <absolute destination> --item RMnn [--from-file <absolute file>] [--manifest <file>]
+//   node real-media.cjs cross-check <absolute destination> [--item RMnn]... [--manifest <file>]
+//   node real-media.cjs release-files <absolute media dir> <absolute output dir> [--manifest <file>]
 //
 // check: validates the manifest and lists its items and the shapes it covers.
 // attribution: prints the attribution and licence of every item that is not withdrawn.
@@ -21,7 +23,19 @@
 //   but this run's own partial file.
 // pin: for an approved item whose SHA-256 is not yet pinned: fetches it bounded
 //   by its size, verifies the source's own checksum and prints the SHA-256 to
-//   write into the manifest in a reviewed change.
+//   write into the manifest in a reviewed change. With --from-file it takes a copy
+//   the maintainer downloaded by hand instead (for a source that refuses the tool):
+//   the exact size and the source's published checksum are checked, then the file
+//   is copied into place with its ATTRIBUTION.txt; the copy given is left as it is.
+//   A fetch contacts an item's mirror_url (the project's test-media release) when
+//   it has one, and never a source that refuses the tool (upload.wikimedia.org).
+// cross-check: the hosted check of the pins: fetches every approved item (or those
+//   named), each held to its pin, pins any not yet pinned, prints each SHA-256 and
+//   fails if any item was refused.
+// release-files: prepares the test-media release for review: checks that every
+//   approved item is pinned and present with its pinned digest, writes
+//   ATTRIBUTION.txt and NOTES.md to the output folder and prints the
+//   `gh release create` command. It never creates the release: a person does.
 //
 // Fetch and pin download media: run them only for items the maintainer approved,
 // and only where downloading is allowed (a hosted runner, or the maintainer's own
@@ -35,13 +49,14 @@ const DEFAULT_MANIFEST = path.join(__dirname, 'real-media', 'manifest.json');
 
 function parse(argv) {
   const [command, ...rest] = argv;
-  const options = { command, manifest: DEFAULT_MANIFEST, items: [], positional: [] };
+  const options = { command, manifest: DEFAULT_MANIFEST, items: [], positional: [], fromFile: null };
   for (let index = 0; index < rest.length; index += 1) {
     const argument = rest[index];
-    if (argument === '--manifest' || argument === '--item') {
+    if (argument === '--manifest' || argument === '--item' || argument === '--from-file') {
       const value = rest[index + 1];
       if (value === undefined) throw new media.RealMediaError(media.ErrorCode.MANIFEST_INVALID, `${argument} needs a value`);
       if (argument === '--manifest') options.manifest = path.resolve(value);
+      else if (argument === '--from-file') options.fromFile = value;
       else options.items.push(value);
       index += 1;
     } else {
@@ -75,6 +90,11 @@ async function main(argv) {
     if (options.command === 'pin') {
       if (options.items.length !== 1) throw new media.RealMediaError(media.ErrorCode.NOT_APPROVED, 'pin takes exactly one --item');
       const [item] = media.selectApproved(manifest, options.items);
+      if (options.fromFile) {
+        const pinned = await media.pinFromFile(item, destination, options.fromFile);
+        process.stdout.write(`${item.id} ${pinned.outcome} from a local copy (size and the source's ${item.source_checksum.algorithm} checked): sha256 ${pinned.sha256}\n`);
+        return 0;
+      }
       const sha256 = await media.pinItem(item, destination, media.httpsOpen);
       process.stdout.write(`${item.id} sha256 ${sha256}\n`);
       return 0;
@@ -85,7 +105,48 @@ async function main(argv) {
     }
     return 0;
   }
-  process.stderr.write('usage: real-media.cjs check|attribution [<manifest>] | fetch <dir> [--item RMnn]... | pin <dir> --item RMnn\n');
+  if (options.command === 'release-files') {
+    // The test-media release, prepared for review: every approved item must be
+    // pinned and present in <media dir> with its pinned digest (the assets are
+    // verbatim copies); the attribution and the notes are written to <out dir>,
+    // and the gh command is printed, never run.
+    if (options.positional.length !== 2) throw new media.RealMediaError(media.ErrorCode.DESTINATION_REFUSED, 'name the media folder and an output folder, both absolute');
+    const manifest = media.readManifest(options.manifest);
+    const source = media.checkDestination(options.positional[0], REPOSITORY);
+    const out = media.checkDestination(options.positional[1], REPOSITORY);
+    const plan = media.releasePlan(manifest, source);
+    const fs = require('node:fs');
+    fs.writeFileSync(path.join(out, 'ATTRIBUTION.txt'), plan.attribution);
+    fs.writeFileSync(path.join(out, 'NOTES.md'), plan.notes);
+    process.stdout.write(`${plan.command(path.join(out, 'NOTES.md'), path.join(out, 'ATTRIBUTION.txt'))}\n`);
+    return 0;
+  }
+  if (options.command === 'cross-check') {
+    // The hosted cross-check of the pins: every approved item fetched here,
+    // independently of the machine that pinned it. A pinned item must match its
+    // pin (fetch refuses anything else); an unpinned one is pinned here and its
+    // SHA-256 printed for the reviewer to compare. Every item is tried and the
+    // run fails if any one failed.
+    if (options.positional.length !== 1) throw new media.RealMediaError(media.ErrorCode.DESTINATION_REFUSED, 'name exactly one absolute destination folder');
+    const manifest = media.readManifest(options.manifest);
+    const destination = media.checkDestination(options.positional[0], REPOSITORY);
+    let failed = 0;
+    for (const item of media.selectApproved(manifest, options.items)) {
+      try {
+        if (item.sha256 === null) {
+          process.stdout.write(`${item.id} pinned here: sha256 ${await media.pinItem(item, destination, media.httpsOpen)}\n`);
+        } else {
+          const outcome = await media.fetchItem(item, destination, media.httpsOpen);
+          process.stdout.write(`${item.id} ${outcome}: sha256 ${item.sha256} matches the pin\n`);
+        }
+      } catch (error) {
+        failed += 1;
+        process.stdout.write(`${item.id} refused: ${error instanceof media.RealMediaError ? `${error.code}: ${error.message}` : 'unexpected failure'}\n`);
+      }
+    }
+    return failed === 0 ? 0 : 1;
+  }
+  process.stderr.write('usage: real-media.cjs check|attribution [<manifest>] | fetch|cross-check <dir> [--item RMnn]... | release-files <media dir> <out dir> | pin <dir> --item RMnn [--from-file <file>]\n');
   return 2;
 }
 
