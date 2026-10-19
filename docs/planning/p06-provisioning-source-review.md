@@ -180,6 +180,20 @@ inventory after size/SHA-256 verification without running an executable.
 There is still no selected-file extraction or activation, so D-04 and P06
 remain open.
 
+**Note of 2026-10-18 (cycle 2, dependency upkeep):** `lzma-rust2` moves from 0.20.1
+to 0.22.0, with the same features (`std` and `xz`; `encoder` for tests and the fuzz
+harness). It still declares Apache-2.0 and Rust 1.85; the repository was not archived
+and had a push on 2026-10-18. The two releases between (0.21.0 of 2026-09-18 and
+0.22.0 of 2026-10-11, [changelog](https://github.com/hasenbanck/lzma-rust2/blob/main/CHANGELOG.md))
+harden the decoder this adapter uses: it no longer allocates the dictionary a stream
+header declares before decoding, the XZ index parser no longer reserves memory for a
+declared record count, every reserved header bit is checked, and `XzStream` decodes the
+input it still holds once told the input ends, so corrupt data there is reported as
+corrupt. `XzStream::new_mem_limit`, `process`, `Action` and `Status` are unchanged, so
+the adapter is unchanged; `cargo deny check` passed, the adapter's unit tests and the
+stable fuzz replay passed (the encoder still writes the derived seeds byte for byte),
+and a five-minute libFuzzer pass of `xz_tar_inventory` found nothing.
+
 The next read-only increment (`5454dcb`) verifies exact path, regular-file
 type, size and SHA-256 for a nonempty reviewed file selection while the bounded
 tar reader consumes the whole archive. The gzip/tar and XZ/tar adapters use the
