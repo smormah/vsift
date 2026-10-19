@@ -17,8 +17,10 @@ name: P14 real media
 # Advisory evidence (the maintainer's decision of 2026-10-18): the job fails when
 # an item fails a property check, and a finding becomes an issue after a person
 # has listened or looked; no release gate reads it. Ubuntu only, by the same
-# decision. Only the report is kept; the media and the listening clips stay on the
-# runner and go with it. Private items (the maintainer's own recordings) never
+# decision. Only the report is kept, with at most twelve native crops of public,
+# openly licensed screen recordings for a person to judge small text (#173, the
+# maintainer's decision of 2026-10-19; their attribution beside them); the media
+# and the listening clips stay on the runner and go with it. Private items (the maintainer's own recordings) never
 # run here: the campaign refuses them whenever CI is set.
 #
 # Triggers: a pull request that changes the campaign's tools runs their tests (no
@@ -40,10 +42,13 @@ on:
       - tools/p14-campaigns/lib/real-media.cjs
       - tools/p14-campaigns/lib/real-media-checks.cjs
       - tools/p14-campaigns/lib/real-media-campaign.cjs
+      - tools/p14-campaigns/lib/small-text.cjs
       - tools/p14-campaigns/real-media/**
       - tools/p14-campaigns/test/real-media.test.cjs
       - tools/p14-campaigns/test/real-media-checks.test.cjs
       - tools/p14-campaigns/test/real-media-campaign.test.cjs
+      - tools/p14-campaigns/test/small-text.test.cjs
+      - tools/p14-campaigns/test/png-fixture.cjs
   workflow_dispatch:
     inputs:
       items:
@@ -185,9 +190,18 @@ jobs:
               cat "$run/summary.md" >> "$GITHUB_STEP_SUMMARY"
               cp "$run/summary.md" "$run/report.json" "$RUNNER_TEMP/report/"
             fi
+            # #173: the few native crops the campaign kept of public, openly licensed
+            # screen recordings (four an item, twelve a run), with their attribution.
+            for crops in "$run"/RM[0-9][0-9]/crops; do
+              if [ -d "$crops" ]; then
+                item="$(basename "$(dirname "$crops")")"
+                mkdir -p "$RUNNER_TEMP/report/crops/$item"
+                cp "$crops"/*.png "$crops"/ATTRIBUTION.txt "$RUNNER_TEMP/report/crops/$item/"
+              fi
+            done
           done
 
-      - name: Keep the report (never the media or the listening clips)
+      - name: Keep the report and the kept crops (never the media or the listening clips)
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:

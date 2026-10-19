@@ -95,7 +95,10 @@ real meetings, accents or noisy rooms, so every accuracy figure below says what 
 - **No real motion has been measured** ([L-030](../planning/known-limits.md#l-030)). The practice recordings
   draw no scrolling, cursor movement or loading animation, so how well VSift sees those is unknown.
 - **VSift does not read text in a picture.** It gives you the frame; you (or an assistant that can open images)
-  read it. A crop at native size helps with small text.
+  read it. A crop at native size helps with small text. **Small numbers can be misread** ([L-018](../planning/known-limits.md#l-018)):
+  in a compressed recording, a frame taken while the screen moves can turn a digit into a different one, and
+  enlarging the picture does not bring it back. Read numbers from a frame where the screen has settled, and check them
+  against a neighbouring frame (`frame neighbours`) or the transcript.
 - **Candidates are places to look, not findings.**
 
 ## Where and how it was tested
