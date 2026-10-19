@@ -159,6 +159,11 @@ just ran. In practice:
   you gave is one VSift does not use". The last part of the folder you named must not hold a colon, end with a
   space or a dot, or be a device name Windows keeps (`CON`, `NUL`, `COM1` and the like); on Windows it must also hold
   no control character and none of `< > " | ? *`. Name another folder.
+- **A session folder that no longer lets you in (Windows).** The line begins "The VSift session_root
+  folder's permissions no longer include your own account". Earlier versions could leave a new session folder
+  with only SYSTEM and Administrators when several commands first used it at once. Give your account its access
+  back with the `icacls` command the line shows, using the folder's path, or delete the folder; VSift does not
+  change it for you.
 - **An id that does not exist.** A session id with a typo, or one that has been cleaned up, can end here: check
   `vsift session list`. An expired session cannot be used; open the video again.
 - **VSift's own folders are open to other accounts.** The message says so, in fixed words, and the fix is to

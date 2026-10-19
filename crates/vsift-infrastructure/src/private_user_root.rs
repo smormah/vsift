@@ -1,14 +1,22 @@
 //! Shared private-root checks for per-user dependency configuration and managed data.
 //!
 //! A directory `VSift` creates for itself is made private by `VSift`, never by
-//! the directory it is created in. On Windows a new directory inherits every
-//! inheritable entry of its parent's DACL, and a real per-user profile can
-//! carry entries for other principals there (sandbox groups, `AppContainer`
-//! capability SIDs), so an inherited DACL is not private. Each new directory
-//! therefore receives its own protected DACL before anything is written into
-//! it, and the post-creation validation still runs as defence in depth. An
-//! existing directory is never modified: when it fails validation it is
-//! rejected as [`PrivateRootError::NotPrivate`].
+//! the directory it is created in, and it is private **from its first
+//! instant**. On Unix the creation mode (0o700) does that. On Windows a new
+//! directory would inherit every inheritable entry of its parent's DACL, and a
+//! real per-user profile can carry entries for other principals there (sandbox
+//! groups, `AppContainer` capability SIDs), so each one is created with its own
+//! security descriptor (`vsift_windows_security`, ADR 0026): a protected DACL
+//! granting only the current user, `LocalSystem` and Administrators. Nothing
+//! writes a new directory's permissions afterwards. Until ADR 0026 the DACL was
+//! replaced by path-based writes just after creation, and each such write on a
+//! parent made Windows rewrite the DACLs of the folders inside it while their
+//! own creators were changing them, which left a session root with no entry
+//! for its own user (#206, #443).
+//!
+//! The post-creation validation still runs as defence in depth. An existing
+//! directory is never modified: when it fails validation it is rejected as
+//! [`PrivateRootError::NotPrivate`].
 
 use std::{
     fs, io,
@@ -18,7 +26,7 @@ use std::{
 };
 
 use cap_fs_ext::DirExt;
-use cap_std::fs::{Dir, DirBuilder};
+use cap_std::fs::Dir;
 
 /// A failure to obtain a private, non-link per-user directory.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -47,9 +55,9 @@ pub(crate) fn open_private_root(
 /// Returns whether this call created the final private directory.
 ///
 /// Missing ancestors and the final directory are each created private to the
-/// current user. When the final directory this call created cannot be made
-/// private, or fails validation, it is removed again while still empty, so a
-/// later call starts from nothing instead of meeting an unusable directory.
+/// current user. When the final directory this call created fails validation,
+/// it is removed again while still empty, so a later call starts from nothing
+/// instead of meeting an unusable directory.
 pub(crate) fn open_private_root_with_creation(
     path: &Path,
     create: bool,
@@ -65,15 +73,13 @@ pub(crate) fn open_private_root_with_creation(
             create_missing_private_ancestors(parent)?;
             let parent_dir = Dir::open_ambient_dir(parent, cap_std::ambient_authority())
                 .map_err(|_| PrivateRootError::Io)?;
-            parent_dir
-                .create_dir_with(name, &private_directory_builder())
-                .map_err(|error| {
-                    if error.kind() == io::ErrorKind::AlreadyExists {
-                        PrivateRootError::Busy
-                    } else {
-                        PrivateRootError::Io
-                    }
-                })?;
+            create_private_child(&parent_dir, parent, name).map_err(|error| {
+                if error.kind() == io::ErrorKind::AlreadyExists {
+                    PrivateRootError::Busy
+                } else {
+                    PrivateRootError::Io
+                }
+            })?;
             created = true;
         }
         Err(_) => return Err(PrivateRootError::Io),
@@ -86,11 +92,7 @@ pub(crate) fn open_private_root_with_creation(
     let path_metadata = fs::symlink_metadata(path).map_err(|_| PrivateRootError::Io)?;
     validate_same_directory_object(&path_metadata, &root)?;
     if created {
-        // The held handle pins the new directory (it is opened without delete
-        // sharing), so the path-based DACL change below reaches this object.
-        let secured =
-            restrict_new_directory(path).and_then(|()| validate_private_root(path, &root));
-        if let Err(error) = secured {
+        if let Err(error) = validate_private_root(path, &root) {
             drop(root);
             // Removes only an empty directory; nothing was written into it.
             let _ = parent_dir.remove_dir(name);
@@ -103,7 +105,9 @@ pub(crate) fn open_private_root_with_creation(
 }
 
 /// Longest time an opener waits for a concurrent creator to make a
-/// just-created directory private. Restricting takes milliseconds.
+/// just-created directory private. Since ADR 0026 a directory `VSift` creates
+/// is private from its first instant; the wait remains for a creator of an
+/// earlier version, which restricted the directory after creating it.
 const CONCURRENT_CREATION_WAIT: Duration = Duration::from_secs(2);
 /// How recently an empty directory must have been created to be treated as a
 /// concurrent creator's directory that is not yet private.
@@ -154,27 +158,17 @@ fn is_recent_and_empty(root: &Dir) -> bool {
 /// Creates one directory private to the current user unless the path exists.
 ///
 /// An existing entry is left untouched and reported as success; the caller's
-/// own validation decides whether it is usable. A directory this call created
-/// but could not make private is removed again.
+/// own validation decides whether it is usable.
 pub(crate) fn create_private_directory(path: &Path) -> Result<(), PrivateRootError> {
     let parent = path.parent().ok_or(PrivateRootError::Unavailable)?;
     let name = Path::new(path.file_name().ok_or(PrivateRootError::Unavailable)?);
     let parent_dir = Dir::open_ambient_dir(parent, cap_std::ambient_authority())
         .map_err(|_| PrivateRootError::Io)?;
-    match parent_dir.create_dir_with(name, &private_directory_builder()) {
-        Ok(()) => {}
-        Err(error) if error.kind() == io::ErrorKind::AlreadyExists => return Ok(()),
-        Err(_) => return Err(PrivateRootError::Io),
+    match create_private_child(&parent_dir, parent, name) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == io::ErrorKind::AlreadyExists => Ok(()),
+        Err(_) => Err(PrivateRootError::Io),
     }
-    let created = parent_dir
-        .open_dir_nofollow(name)
-        .map_err(|_| PrivateRootError::UnsafeStorage)?;
-    if let Err(error) = restrict_new_directory(path) {
-        drop(created);
-        let _ = parent_dir.remove_dir(name);
-        return Err(error);
-    }
-    Ok(())
 }
 
 /// Creates each missing ancestor of a private root, top down, privately.
@@ -194,235 +188,82 @@ fn create_missing_private_ancestors(directory: &Path) -> Result<(), PrivateRootE
     Ok(())
 }
 
-/// The builder for every private directory created here.
+/// Creates `name` inside `parent`, the held directory at `parent_path`,
+/// private to the current user from its first instant.
 ///
-/// On Unix the requested mode is 0o700. The umask can only clear bits, so a
-/// new directory never grants group or other access whatever the umask is.
-fn private_directory_builder() -> DirBuilder {
-    #[allow(unused_mut, reason = "Unix configures the creation mode")]
-    let mut builder = DirBuilder::new();
-    #[cfg(unix)]
-    {
-        use cap_std::fs::DirBuilderExt;
-        builder.mode(0o700);
-    }
-    builder
+/// On Unix the directory is created relative to the held handle with mode
+/// 0o700 (a umask can only clear bits). On Windows it is created with its own
+/// security descriptor (ADR 0026): owned by the current user, with a protected
+/// DACL of full control, inherited by everything later created inside, for the
+/// current user, `LocalSystem` and Administrators, and nothing else; the path is
+/// the canonical (verbatim) form of `parent_path` joined with `name`. Nothing
+/// writes the directory's permissions afterwards.
+///
+/// # Errors
+///
+/// The operating system's error, `AlreadyExists` when the name exists.
+pub(crate) fn create_private_child(
+    parent: &Dir,
+    parent_path: &Path,
+    name: &Path,
+) -> io::Result<()> {
+    create_private_child_observed(parent, parent_path, name, |_| {})
 }
 
-/// Makes a directory this process has just created private to the current user.
-///
-/// Unix sets the owner-only mode when the directory is created, so nothing
-/// remains to do here; validation still checks the mode and owner.
+/// [`create_private_child`], calling `observe` with the new directory's path
+/// the moment it exists, before the call returns: tests use it to act at that
+/// instant, as a concurrent process could.
 #[cfg(unix)]
-#[allow(
-    clippy::unnecessary_wraps,
-    reason = "the Windows implementation can fail to replace the DACL"
-)]
-pub(crate) fn restrict_new_directory(_path: &Path) -> Result<(), PrivateRootError> {
+pub(crate) fn create_private_child_observed(
+    parent: &Dir,
+    parent_path: &Path,
+    name: &Path,
+    observe: impl FnOnce(&Path),
+) -> io::Result<()> {
+    use cap_std::fs::{DirBuilder, DirBuilderExt as _};
+    let mut builder = DirBuilder::new();
+    builder.mode(0o700);
+    parent.create_dir_with(name, &builder)?;
+    observe(&parent_path.join(name));
     Ok(())
 }
 
-/// Makes a directory this process has just created private to the current user.
-///
-/// The directory's inherited DACL is replaced by a protected one: inheritance
-/// from the parent is disabled, and only the current user, `LocalSystem` and
-/// the local Administrators group (the principals the validator trusts, and
-/// the ones a default Windows profile grants) keep full control, inherited by
-/// everything later created inside. Every inherited entry and every entry for
-/// another principal is removed.
-///
-/// `windows-acl` writes each DACL change with
-/// `PROTECTED_DACL_SECURITY_INFORMATION`, so the first added entry already
-/// disables inheritance; the entries it copied from the inherited DACL are
-/// removed afterwards. **The result is read back and repeated until it is the
-/// DACL described above** ([`restriction::restrict`]), which narrows a failure
-/// seen on hosted runners (#206): a root made while processes were also
-/// creating its parent was left with no entry for the current user, which the
-/// validator refuses. In the diagnostics of the failing runs the DACL held only
-/// inherited entries after this function's own adds, so removing the user's
-/// inherited entry removed its only entry. The mechanism is a hypothesis: a write
-/// from the parent's own restriction landing on this directory between the adds
-/// and the removals. The repeat repairs that state when the read-back sees it;
-/// it cannot see a write that lands after the final read-back. The caller must
-/// hold a handle to the new directory, which stops the path from being replaced
-/// while the DACL is changed.
-///
-/// Never call this for a directory `VSift` did not just create.
+/// [`create_private_child`], calling `observe` with the new directory's path
+/// the moment it exists, before the call returns: tests use it to act at that
+/// instant, as a concurrent process could.
 #[cfg(windows)]
-pub(crate) fn restrict_new_directory(path: &Path) -> Result<(), PrivateRootError> {
-    let path = path.to_str().ok_or(PrivateRootError::UnsafeStorage)?;
-    let user_sid = current_user_sid().ok_or(PrivateRootError::Io)?;
-    restriction::restrict(
-        &mut WindowsDacl { path },
-        &user_sid,
-        restriction::RESTRICT_PASSES,
-    )
-    .map(|_passes| ())
+pub(crate) fn create_private_child_observed(
+    _parent: &Dir,
+    parent_path: &Path,
+    name: &Path,
+    observe: impl FnOnce(&Path),
+) -> io::Result<()> {
+    let user_sid = current_user_sid()
+        .ok_or_else(|| io::Error::other("the current user's SID is unavailable"))?;
+    let descriptor = vsift_windows_security::PrivateDirectoryDescriptor::for_owner(&user_sid)
+        .map_err(io::Error::other)?;
+    let path = fs::canonicalize(parent_path)?.join(name);
+    vsift_windows_security::create_directory(&path, &descriptor)?;
+    observe(&path);
+    Ok(())
 }
 
-/// The directory's DACL, read and changed through `windows-acl`. Every
-/// operation reads the DACL afresh, so none works from a stale copy.
+/// The principals a private directory may grant access to: the current user,
+/// `LocalSystem` and the local Administrators group. The one list, used by
+/// every validator.
 #[cfg(windows)]
-struct WindowsDacl<'a> {
-    path: &'a str,
-}
-
-#[cfg(windows)]
-impl restriction::DaclEditor for WindowsDacl<'_> {
-    fn entries(&mut self) -> Result<Vec<restriction::Entry>, PrivateRootError> {
-        let acl = windows_acl::acl::ACL::from_file_path(self.path, false)
-            .map_err(|_| PrivateRootError::Io)?;
-        Ok(acl
-            .all()
-            .map_err(|_| PrivateRootError::Io)?
-            .into_iter()
-            .map(|entry| restriction::Entry {
-                allows: is_allow_entry(entry.entry_type),
-                sid: entry.string_sid,
-                flags: entry.flags,
-            })
-            .collect())
-    }
-
-    fn allow(&mut self, sid: &str) -> Result<(), PrivateRootError> {
-        /// `FILE_ALL_ACCESS`: full control of a file or directory.
-        const FULL_CONTROL: u32 = 0x001F_01FF;
-        let mut acl = windows_acl::acl::ACL::from_file_path(self.path, false)
-            .map_err(|_| PrivateRootError::Io)?;
-        let mut raw = windows_acl::helper::string_to_sid(sid).map_err(|_| PrivateRootError::Io)?;
-        acl.allow(raw.as_mut_ptr().cast(), true, FULL_CONTROL)
-            .map_err(|_| PrivateRootError::Io)?;
-        Ok(())
-    }
-
-    fn remove(&mut self, sid: &str, inherited_only: bool) -> Result<(), PrivateRootError> {
-        let mut acl = windows_acl::acl::ACL::from_file_path(self.path, false)
-            .map_err(|_| PrivateRootError::Io)?;
-        // The SID is rebuilt from its string form: `windows-acl` keeps an
-        // entry's raw SID in a vector whose length is not set.
-        let mut raw = windows_acl::helper::string_to_sid(sid).map_err(|_| PrivateRootError::Io)?;
-        acl.remove_entry(
-            raw.as_mut_ptr().cast(),
-            None,
-            inherited_only.then_some(restriction::INHERITED_ACE),
-        )
-        .map_err(|_| PrivateRootError::Io)?;
-        Ok(())
-    }
-}
-
-/// How a new directory's DACL is made private, apart from the Windows calls
-/// that read and change it, so the order of the steps can be tested on every
-/// platform against a model of how Windows treats them.
-#[cfg(any(windows, test))]
-mod restriction {
-    use super::PrivateRootError;
-
-    /// `ACE_HEADER` flag marking an entry that came from the parent.
-    pub(super) const INHERITED_ACE: u8 = 0x10;
-    /// `LocalSystem`.
-    pub(super) const SYSTEM: &str = "S-1-5-18";
-    /// The local Administrators group.
-    pub(super) const ADMINISTRATORS: &str = "S-1-5-32-544";
-    /// How many times the whole sequence may be repeated until the DACL read
-    /// back is the private one. Each pass is bounded and none waits for anything:
-    /// the first pass protects the DACL, so the second settles what the first
-    /// left; the others are headroom. A write that lands after the last
-    /// read-back is not seen.
-    pub(super) const RESTRICT_PASSES: u32 = 4;
-
-    /// One DACL entry: the string SID it names, its `ACE_HEADER` flags and
-    /// whether it grants access (as opposed to denying it).
-    #[derive(Clone, Debug, Eq, PartialEq)]
-    pub(super) struct Entry {
-        pub(super) sid: String,
-        pub(super) flags: u8,
-        pub(super) allows: bool,
-    }
-
-    /// Reading and changing one directory's DACL.
-    pub(super) trait DaclEditor {
-        /// The entries as stored now.
-        fn entries(&mut self) -> Result<Vec<Entry>, PrivateRootError>;
-        /// Adds explicit, inheritable full control for `sid`.
-        fn allow(&mut self, sid: &str) -> Result<(), PrivateRootError>;
-        /// Removes `sid`'s entries; with `inherited_only`, only those that came
-        /// from the parent.
-        fn remove(&mut self, sid: &str, inherited_only: bool) -> Result<(), PrivateRootError>;
-    }
-
-    /// The principals a private directory may grant access to: the current user,
-    /// `LocalSystem` (`S-1-5-18`) and the local Administrators group
-    /// (`S-1-5-32-544`). The one list, used by the restriction and by the
-    /// validator.
-    pub(super) fn trusted(user_sid: &str) -> [&str; 3] {
-        [user_sid, SYSTEM, ADMINISTRATORS]
-    }
-
-    /// Whether every trusted principal has at least one explicit entry that
-    /// grants access, and no entry is inherited or names anyone else. A
-    /// duplicate entry for a trusted principal is accepted, and so is any mix
-    /// of rights it carries: this is the shape of the DACL, not its exact
-    /// content.
-    pub(super) fn is_private(entries: &[Entry], user_sid: &str) -> bool {
-        let trusted = trusted(user_sid);
-        trusted.iter().all(|sid| {
-            entries
-                .iter()
-                .any(|entry| entry.sid == *sid && entry.allows && entry.flags & INHERITED_ACE == 0)
-        }) && entries
-            .iter()
-            .all(|entry| trusted.contains(&entry.sid.as_str()) && entry.flags & INHERITED_ACE == 0)
-    }
-
-    /// Makes the DACL private, reading it back after each pass and repeating
-    /// until it is, at most `passes` times. Returns how many passes it took.
-    ///
-    /// A pass adds an explicit entry for each trusted principal, then removes
-    /// every entry for anyone else and the inherited copy of each trusted
-    /// principal's entry. Where an inherited copy and the explicit entry were
-    /// folded into one, removing the copy removes the principal's only entry;
-    /// the read-back finds it missing and the next pass adds it again, on a DACL
-    /// that is protected by then.
-    ///
-    /// # Errors
-    ///
-    /// `Io` when a Windows call fails; `NotPrivate` when the DACL is still not
-    /// private after `passes` passes, so a caller that maps the two apart keeps
-    /// the private-folder explanation.
-    pub(super) fn restrict(
-        editor: &mut impl DaclEditor,
-        user_sid: &str,
-        passes: u32,
-    ) -> Result<u32, PrivateRootError> {
-        let trusted = trusted(user_sid);
-        for pass in 1..=passes {
-            for sid in trusted {
-                editor.allow(sid)?;
-            }
-            for entry in editor.entries()? {
-                if trusted.contains(&entry.sid.as_str()) {
-                    if entry.flags & INHERITED_ACE == 0 {
-                        continue;
-                    }
-                    // Only a trusted principal's copied inherited entries go.
-                    editor.remove(&entry.sid, true)?;
-                } else {
-                    editor.remove(&entry.sid, false)?;
-                }
-            }
-            if is_private(&editor.entries()?, user_sid) {
-                return Ok(pass);
-            }
-        }
-        Err(PrivateRootError::NotPrivate)
-    }
+pub(crate) fn trusted_principals(user_sid: &str) -> [&str; 3] {
+    [
+        user_sid,
+        vsift_windows_security::SYSTEM_SID,
+        vsift_windows_security::ADMINISTRATORS_SID,
+    ]
 }
 
 /// Whether an entry grants access, in any of the four forms of an allow entry
 /// (as opposed to denying it, or being a kind this code does not know).
 #[cfg(windows)]
-fn is_allow_entry(kind: windows_acl::acl::AceType) -> bool {
+pub(crate) fn is_allow_entry(kind: windows_acl::acl::AceType) -> bool {
     use windows_acl::acl::AceType;
 
     matches!(
@@ -436,13 +277,59 @@ fn is_allow_entry(kind: windows_acl::acl::AceType) -> bool {
 
 /// The string SID of the account running this process.
 #[cfg(windows)]
-fn current_user_sid() -> Option<String> {
+pub(crate) fn current_user_sid() -> Option<String> {
     use windows_acl::helper::{current_user, name_to_sid, sid_to_string};
 
     let username = current_user()?;
     name_to_sid(&username, None)
         .ok()
         .and_then(|mut sid| sid_to_string(sid.as_mut_ptr().cast()).ok())
+}
+
+/// What a directory's DACL says about the current user, read without opening
+/// the directory itself.
+#[cfg(windows)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum OwnAccess {
+    /// The DACL grants the current user access and no one the validator does
+    /// not trust.
+    Private,
+    /// The DACL grants someone the validator does not trust.
+    Shared,
+    /// The DACL grants only trusted principals, and the current user is not
+    /// among them: its own entry is gone, the state #443's race left a session
+    /// root in. Only its owner (or an administrator) can give it back.
+    OwnEntryMissing,
+    /// The DACL could not be read.
+    Unreadable,
+}
+
+/// Reads the DACL at `path` and classifies it. The owner of a directory can
+/// read its DACL even without an entry of its own, so a root that lost the
+/// user's entry is still told apart from one that cannot be read at all.
+#[cfg(windows)]
+pub(crate) fn own_access(path: &Path) -> OwnAccess {
+    use windows_acl::acl::{ACL, AceType};
+
+    let (Some(user_sid), Some(path)) = (current_user_sid(), path.to_str()) else {
+        return OwnAccess::Unreadable;
+    };
+    let Ok(entries) = ACL::from_file_path(path, false).and_then(|acl| acl.all()) else {
+        return OwnAccess::Unreadable;
+    };
+    let trusted = trusted_principals(&user_sid);
+    let shared = entries.iter().any(|entry| {
+        entry.entry_type == AceType::Unknown
+            || (is_allow_entry(entry.entry_type) && !trusted.contains(&entry.string_sid.as_str()))
+    });
+    let user_allowed = entries
+        .iter()
+        .any(|entry| is_allow_entry(entry.entry_type) && entry.string_sid == user_sid);
+    match (shared, user_allowed) {
+        (true, _) => OwnAccess::Shared,
+        (false, true) => OwnAccess::Private,
+        (false, false) => OwnAccess::OwnEntryMissing,
+    }
 }
 
 #[cfg(unix)]
@@ -525,7 +412,7 @@ pub(crate) fn validate_private_root(path: &Path, _root: &Dir) -> Result<(), Priv
     let path = path.to_str().ok_or(PrivateRootError::UnsafeStorage)?;
     let acl = ACL::from_file_path(path, false).map_err(|_| PrivateRootError::UnsafeStorage)?;
     let entries = acl.all().map_err(|_| PrivateRootError::UnsafeStorage)?;
-    let trusted = restriction::trusted(&user_sid);
+    let trusted = trusted_principals(&user_sid);
     let current_user_allowed = entries
         .iter()
         .any(|entry| is_allow_entry(entry.entry_type) && entry.string_sid == user_sid);
@@ -559,10 +446,10 @@ mod windows_tests {
     use windows_acl::acl::ACL;
 
     use super::{
-        CONCURRENT_CREATION_WAIT, PrivateRootError, WindowsDacl, create_private_directory,
-        open_private_root, open_private_root_with_creation, restrict_new_directory,
-        restriction::{ADMINISTRATORS, DaclEditor, Entry, RESTRICT_PASSES, SYSTEM, restrict},
-        validate_existing_private_root, validate_private_root,
+        CONCURRENT_CREATION_WAIT, OwnAccess, PrivateRootError, create_private_child_observed,
+        create_private_directory, current_user_sid, open_private_root,
+        open_private_root_with_creation, own_access, validate_existing_private_root,
+        validate_private_root,
     };
 
     type TestResult = Result<(), Box<dyn Error>>;
@@ -571,6 +458,8 @@ mod windows_tests {
     const USERS: &str = "S-1-5-32-545";
     /// `NT AUTHORITY\Authenticated Users`, granted on the parent afterwards.
     const AUTHENTICATED_USERS: &str = "S-1-5-11";
+    const SYSTEM: &str = "S-1-5-18";
+    const ADMINISTRATORS: &str = "S-1-5-32-544";
     const INHERITED_ACE: u8 = 0x10;
 
     /// A temporary parent whose DACL passes read access for `BUILTIN\Users`
@@ -607,20 +496,25 @@ mod windows_tests {
             .join("icacls.exe"))
     }
 
+    /// Runs `icacls.exe` with explicit arguments (never a shell).
+    fn run_icacls(arguments: &[&std::ffi::OsStr]) -> TestResult {
+        let status = Command::new(icacls()?).args(arguments).output()?.status;
+        if !status.success() {
+            return Err(format!("icacls {arguments:?} failed").into());
+        }
+        Ok(())
+    }
+
     /// Grants `sid` inheritable read access on `directory`; Windows also
     /// propagates it to every existing child whose DACL is not protected.
     fn grant_inheritable(directory: &Path, sid: &str) -> TestResult {
-        let status = Command::new(icacls()?)
-            .arg(directory)
-            .arg("/grant")
-            .arg(format!("*{sid}:(OI)(CI)(RX)"))
-            .arg("/Q")
-            .output()?
-            .status;
-        if !status.success() {
-            return Err("icacls could not grant the fixture entry".into());
-        }
-        Ok(())
+        let grant = format!("*{sid}:(OI)(CI)(RX)");
+        run_icacls(&[
+            directory.as_os_str(),
+            "/grant".as_ref(),
+            grant.as_ref(),
+            "/Q".as_ref(),
+        ])
     }
 
     /// Each DACL entry as its string SID and header flags.
@@ -635,20 +529,38 @@ mod windows_tests {
             .collect())
     }
 
+    fn sorted_dacl(directory: &Path) -> Result<Vec<(String, u8)>, Box<dyn Error>> {
+        let mut entries = dacl(directory)?;
+        entries.sort();
+        Ok(entries)
+    }
+
+    /// The three explicit, inheritable entries a private directory holds.
+    fn private_dacl(user: &str) -> Vec<(String, u8)> {
+        let mut expected = vec![
+            (user.to_owned(), 0x03_u8),
+            (SYSTEM.to_owned(), 0x03),
+            (ADMINISTRATORS.to_owned(), 0x03),
+        ];
+        expected.sort();
+        expected
+    }
+
     fn grants(entries: &[(String, u8)], sid: &str) -> bool {
         entries.iter().any(|(entry_sid, _)| entry_sid == sid)
     }
 
-    /// Asserts that `directory` is private, inherits nothing, and does not
+    /// Asserts that `directory` holds exactly the private DACL and does not
     /// take on an entry added to its parent afterwards (its DACL is protected).
     fn assert_private_and_protected(parent: &Path, directory: &Path) -> TestResult {
+        let user = current_user_sid().ok_or("no current user")?;
         let held = cap_std::fs::Dir::open_ambient_dir(directory, cap_std::ambient_authority())?;
         assert_eq!(validate_private_root(directory, &held), Ok(()));
-        let entries = dacl(directory)?;
-        assert!(!grants(&entries, USERS), "the broad principal kept access");
-        assert!(
-            entries.iter().all(|(_, flags)| flags & INHERITED_ACE == 0),
-            "an inherited entry remained"
+        assert_eq!(
+            sorted_dacl(directory)?,
+            private_dacl(&user),
+            "{}",
+            directory.display()
         );
         grant_inheritable(parent, AUTHENTICATED_USERS)?;
         assert!(
@@ -657,6 +569,19 @@ mod windows_tests {
         );
         assert_eq!(validate_private_root(directory, &held), Ok(()));
         Ok(())
+    }
+
+    /// Gives the current user its full-control entry back when dropped, so a
+    /// fixture the user was locked out of can still be removed.
+    struct RestoreAccess(PathBuf);
+
+    impl Drop for RestoreAccess {
+        fn drop(&mut self) {
+            if let Some(user) = current_user_sid() {
+                let grant = format!("*{user}:(OI)(CI)F");
+                let _ = run_icacls(&[self.0.as_os_str(), "/grant".as_ref(), grant.as_ref()]);
+            }
+        }
     }
 
     #[test]
@@ -691,185 +616,81 @@ mod windows_tests {
         Ok(())
     }
 
-    /// The real DACL ends as one explicit, inheritable entry for each of the
-    /// three trusted principals and nothing else, even where the parent already
-    /// grants the same three (the case #206 lost the current user's entry in),
-    /// and restricting it again changes nothing.
-    #[test]
-    fn a_restricted_directory_has_one_explicit_entry_for_each_trusted_principal() -> TestResult {
-        let user = super::current_user_sid().ok_or("no current user")?;
-        let parent = HostileParent::new()?;
-        let first = parent.0.join("first");
-        fs::create_dir(&first)?;
-        assert_eq!(restrict_new_directory(&first), Ok(()));
-        // A child of a directory that grants the three the same inheritable
-        // full control inherits all three.
-        let child = first.join("child");
-        fs::create_dir(&child)?;
-        assert_eq!(restrict_new_directory(&child), Ok(()));
-        for directory in [&first, &child] {
-            assert_eq!(
-                sorted_dacl(directory)?,
-                private_dacl(&user),
-                "{directory:?}"
-            );
-        }
-        let before = dacl(&child)?;
-        assert_eq!(restrict_new_directory(&child), Ok(()));
-        assert_eq!(dacl(&child)?, before);
-        Ok(())
-    }
-
-    /// A DACL editor on the real directory that, once, between a pass's adds and
-    /// its removals, rewrites the DACL to what the parent propagates to it: the
-    /// state the hosted runner's diagnostics showed after the restriction's own
-    /// adds (#206), made on demand. `icacls /reset`, the system's own way to
-    /// replace a DACL with the inherited one, makes the write, independently of
-    /// the code under test.
-    struct LateParentWrite<'a> {
-        real: WindowsDacl<'a>,
-        directory: &'a Path,
-        rewrites: u32,
-    }
-
-    impl DaclEditor for LateParentWrite<'_> {
-        fn entries(&mut self) -> Result<Vec<Entry>, PrivateRootError> {
-            if self.rewrites == 0 {
-                self.rewrites = 1;
-                let reset = icacls()
-                    .map_err(|_| PrivateRootError::Io)
-                    .and_then(|program| {
-                        Command::new(program)
-                            .arg(self.directory)
-                            .arg("/reset")
-                            .arg("/Q")
-                            .output()
-                            .map_err(|_| PrivateRootError::Io)
-                    })?;
-                if !reset.status.success() {
-                    return Err(PrivateRootError::Io);
-                }
-            }
-            self.real.entries()
-        }
-
-        fn allow(&mut self, sid: &str) -> Result<(), PrivateRootError> {
-            self.real.allow(sid)
-        }
-
-        fn remove(&mut self, sid: &str, inherited_only: bool) -> Result<(), PrivateRootError> {
-            self.real.remove(sid, inherited_only)
-        }
-    }
-
-    /// Gives a directory its inherited DACL back when dropped, so a fixture the
-    /// current user was locked out of can still be removed.
-    struct RestoreAccess(PathBuf);
-
-    impl Drop for RestoreAccess {
-        fn drop(&mut self) {
-            if let Ok(program) = icacls() {
-                let _ = Command::new(program)
-                    .arg(&self.0)
-                    .arg("/reset")
-                    .arg("/Q")
-                    .output();
-            }
-        }
-    }
-
-    /// The three explicit, inheritable entries a private directory ends with.
-    fn private_dacl(user: &str) -> Vec<(String, u8)> {
-        let mut expected = vec![
-            (user.to_owned(), 0x03_u8),
-            (SYSTEM.to_owned(), 0x03),
-            (ADMINISTRATORS.to_owned(), 0x03),
-        ];
-        expected.sort();
-        expected
-    }
-
-    fn sorted_dacl(directory: &Path) -> Result<Vec<(String, u8)>, Box<dyn Error>> {
-        let mut entries = dacl(directory)?;
-        entries.sort();
-        Ok(entries)
-    }
-
-    /// The failure of #206, on the real DACL: the parent's rewrite lands on the
-    /// directory after the restriction's adds and before its removals, so the
-    /// DACL holds only inherited entries when the removals start.
-    ///
-    /// One pass is all the restriction used to make. On the real system it
-    /// leaves `LocalSystem` and Administrators and no entry for the current
-    /// user, which the validator refuses; the old code returned `Ok` here, so
-    /// the creator went on with that DACL. The repeated restriction finds the
-    /// entry missing on its read-back and adds it again: two passes. (A hosted
-    /// run that shows no failure does not show this repair fired; this test
-    /// does.)
-    #[test]
-    fn a_write_from_the_parent_between_the_adds_and_the_removals_is_repaired() -> TestResult {
-        let user = super::current_user_sid().ok_or("no current user")?;
-        let parent = HostileParent::new()?;
-        // A parent that grants the three principals inheritable full control,
-        // as the restriction itself leaves every directory it makes.
-        let granting = parent.0.join("granting");
-        fs::create_dir(&granting)?;
-        assert_eq!(restrict_new_directory(&granting), Ok(()));
-
-        let one_pass = granting.join("one-pass");
-        fs::create_dir(&one_pass)?;
-        // Held from before the restriction, as a creator holds its new
-        // directory: with no entry for the user the path can no longer be
-        // opened. Dropped first, the guard gives the access back so that the
-        // fixture can be removed even when an assertion below fails.
-        let _restore = RestoreAccess(one_pass.clone());
-        let held = cap_std::fs::Dir::open_ambient_dir(&one_pass, cap_std::ambient_authority())?;
-        let mut editor = LateParentWrite {
-            real: WindowsDacl {
-                path: one_pass.to_str().ok_or("fixture path is not UTF-8")?,
-            },
-            directory: &one_pass,
-            rewrites: 0,
-        };
-        assert_eq!(
-            restrict(&mut editor, &user, 1),
-            Err(PrivateRootError::NotPrivate)
-        );
-        assert_eq!(editor.rewrites, 1);
-        let entries = dacl(&one_pass)?;
-        assert!(
-            !grants(&entries, &user),
-            "the user kept an entry: {entries:?}"
-        );
-        assert!(grants(&entries, SYSTEM) && grants(&entries, ADMINISTRATORS));
-        assert_eq!(
-            validate_private_root(&one_pass, &held),
-            Err(PrivateRootError::NotPrivate)
-        );
-
-        let repeated = granting.join("repeated");
-        fs::create_dir(&repeated)?;
-        let mut editor = LateParentWrite {
-            real: WindowsDacl {
-                path: repeated.to_str().ok_or("fixture path is not UTF-8")?,
-            },
-            directory: &repeated,
-            rewrites: 0,
-        };
-        assert_eq!(restrict(&mut editor, &user, RESTRICT_PASSES), Ok(2));
-        assert_eq!(editor.rewrites, 1);
-        assert_eq!(sorted_dacl(&repeated)?, private_dacl(&user));
-        let held = cap_std::fs::Dir::open_ambient_dir(&repeated, cap_std::ambient_authority())?;
-        assert_eq!(validate_private_root(&repeated, &held), Ok(()));
-        Ok(())
-    }
-
     #[test]
     fn a_single_created_directory_is_private_and_protected() -> TestResult {
         let parent = HostileParent::new()?;
         let directory = parent.0.join("sessions-parent");
         assert_eq!(create_private_directory(&directory), Ok(()));
         assert_private_and_protected(&parent.0, &directory)
+    }
+
+    /// #443's mechanism, made on demand. A path-based DACL write on a parent
+    /// makes Windows rewrite the DACL of each folder inside it from what it
+    /// read of that folder a moment before. With several first users at once
+    /// (the instrumented runs of #443), such a write from the parent's creator
+    /// landed on a new root after its own creator's last check, carrying the
+    /// root's DACL from an earlier moment, and the root kept it.
+    ///
+    /// Here that late write carries the folder's DACL as it was the instant
+    /// the folder came into being, as Windows' propagation computes it: a
+    /// folder that inherited from its parent then is given its parent's
+    /// inheritable entries again (`icacls /reset` writes exactly that), and a
+    /// folder whose DACL was already protected keeps it (nothing is written).
+    ///
+    /// A folder created with its security descriptor (ADR 0026) is protected
+    /// and private from that instant, so the late write changes nothing. A
+    /// folder created and then restricted, as before, inherited from the
+    /// parent at that instant (here `BUILTIN\Users`): the late write gives
+    /// those entries back and the folder is no longer private, with its creator
+    /// already done.
+    #[test]
+    fn a_late_parent_write_cannot_take_a_new_folder_back_to_an_earlier_state() -> TestResult {
+        let user = current_user_sid().ok_or("no current user")?;
+        let parent = HostileParent::new()?;
+        let held = cap_std::fs::Dir::open_ambient_dir(&parent.0, cap_std::ambient_authority())?;
+        let mut first_instant = None;
+        create_private_child_observed(&held, &parent.0, Path::new("root"), |created| {
+            first_instant = Some(dacl(created).map_err(|error| error.to_string()));
+        })?;
+        let first_instant = first_instant.ok_or("the creation was not observed")??;
+        let root = parent.0.join("root");
+        let _restore = RestoreAccess(root.clone());
+        if first_instant
+            .iter()
+            .any(|(_, flags)| flags & INHERITED_ACE != 0)
+        {
+            run_icacls(&[root.as_os_str(), "/reset".as_ref(), "/Q".as_ref()])?;
+        }
+
+        assert_eq!(sorted_dacl(&root)?, private_dacl(&user));
+        assert!(!grants(&dacl(&root)?, USERS), "the stale write reached it");
+        let opened = cap_std::fs::Dir::open_ambient_dir(&root, cap_std::ambient_authority())?;
+        assert_eq!(validate_private_root(&root, &opened), Ok(()));
+        Ok(())
+    }
+
+    /// A directory that has lost the current user's entry, with only
+    /// `LocalSystem` and Administrators left (#443's broken root), is told
+    /// apart from one that grants someone else and from a private one, by its
+    /// DACL alone: its owner can read it without an entry of its own.
+    #[test]
+    fn a_folder_without_the_users_own_entry_is_recognised() -> TestResult {
+        let user = current_user_sid().ok_or("no current user")?;
+        let parent = HostileParent::new()?;
+        let root = parent.0.join("root");
+        assert_eq!(create_private_directory(&root), Ok(()));
+        assert_eq!(own_access(&root), OwnAccess::Private);
+
+        let _restore = RestoreAccess(root.clone());
+        let remove = format!("*{user}");
+        run_icacls(&[root.as_os_str(), "/remove:g".as_ref(), remove.as_ref()])?;
+        assert_eq!(sorted_dacl(&root)?.len(), 2);
+        assert_eq!(own_access(&root), OwnAccess::OwnEntryMissing);
+
+        grant_inheritable(&root, USERS)?;
+        assert_eq!(own_access(&root), OwnAccess::Shared);
+        assert_eq!(own_access(&parent.0.join("absent")), OwnAccess::Unreadable);
+        Ok(())
     }
 
     #[test]
@@ -898,8 +719,11 @@ mod windows_tests {
         Ok(())
     }
 
+    /// An earlier version's creator restricted a directory after creating it;
+    /// an opener still gives such a creator a moment to finish.
     #[test]
     fn an_opener_waits_for_a_concurrent_creator_to_make_a_new_directory_private() -> TestResult {
+        let user = current_user_sid().ok_or("no current user")?;
         let parent = HostileParent::new()?;
         let fresh = parent.0.join("vsift");
         fs::create_dir(&fresh)?;
@@ -918,7 +742,20 @@ mod windows_tests {
         let creator_path = fresh.clone();
         let creator = thread::spawn(move || {
             thread::sleep(Duration::from_millis(30));
-            restrict_new_directory(&creator_path)
+            let grants = [
+                format!("*{user}:(OI)(CI)F"),
+                format!("*{SYSTEM}:(OI)(CI)F"),
+                format!("*{ADMINISTRATORS}:(OI)(CI)F"),
+            ];
+            run_icacls(&[
+                creator_path.as_os_str(),
+                "/inheritance:r".as_ref(),
+                "/grant:r".as_ref(),
+                grants[0].as_ref(),
+                grants[1].as_ref(),
+                grants[2].as_ref(),
+            ])
+            .map_err(|error| error.to_string())
         });
         let outcome = validate_existing_private_root(&fresh, &held, CONCURRENT_CREATION_WAIT);
         let restricted = creator.join().map_err(|_| "creator thread failed")?;
@@ -926,241 +763,48 @@ mod windows_tests {
         assert_eq!(outcome, Ok(()));
         Ok(())
     }
+
+    /// Nothing the creation leaves is inherited, on any level it creates.
+    #[test]
+    fn no_created_level_holds_an_inherited_entry() -> TestResult {
+        let parent = HostileParent::new()?;
+        let root = parent.0.join("a").join("b").join("c");
+        assert!(matches!(
+            open_private_root_with_creation(&root, true),
+            Ok(Some((_, true)))
+        ));
+        for level in [parent.0.join("a"), parent.0.join("a").join("b"), root] {
+            assert!(
+                dacl(&level)?
+                    .iter()
+                    .all(|(_, flags)| flags & INHERITED_ACE == 0),
+                "{}",
+                level.display()
+            );
+        }
+        Ok(())
+    }
 }
 
-/// The order of the restriction's steps against a model of how Windows treated
-/// them on a hosted runner (P14 PR 7, #206), on every platform.
-///
-/// The model is read off the diagnostics of the reproduction (run 37166883594,
-/// `windows-2025`): a directory created while its parent's DACL was being
-/// rewritten held only inherited entries (`0x13`) for the three trusted
-/// principals, the current user first; adding explicit entries changed
-/// nothing (they were folded into the inherited ones); removing the user's
-/// inherited entry left `LocalSystem` and Administrators explicit (`0x03`) and
-/// the user with no entry at all. A directory created in a quiet sequence was
-/// observed to behave differently (the added entries replace the inherited
-/// ones), which the second model covers. The real system's version of the
-/// failure is the Windows test
-/// `a_write_from_the_parent_between_the_adds_and_the_removals_is_repaired`.
-#[cfg(test)]
-mod restriction_tests {
-    use super::{
-        PrivateRootError,
-        restriction::{DaclEditor, Entry, INHERITED_ACE, RESTRICT_PASSES, is_private, restrict},
-    };
+/// The Unix creation mode, which the umask can only narrow.
+#[cfg(all(test, unix))]
+mod unix_tests {
+    use std::{error::Error, fs, os::unix::fs::PermissionsExt as _, path::Path};
 
-    const USER: &str = "S-1-5-21-1-2-3-1001";
-    const SYSTEM: &str = "S-1-5-18";
-    const ADMINISTRATORS: &str = "S-1-5-32-544";
-    const USERS: &str = "S-1-5-32-545";
-
-    fn entry(sid: &str, flags: u8) -> Entry {
-        Entry {
-            sid: sid.to_owned(),
-            flags,
-            allows: true,
-        }
-    }
-
-    /// How Windows treats an entry added for a principal that already has an
-    /// inherited one.
-    #[derive(Clone, Copy)]
-    enum Adding {
-        /// Folded into the inherited entry: nothing changes (the hosted runner).
-        FoldedIntoInherited,
-        /// Replaces the inherited entry with an explicit one (a quiet sequence).
-        ReplacesInherited,
-    }
-
-    struct Model {
-        entries: Vec<Entry>,
-        adding: Adding,
-    }
-
-    impl Model {
-        fn inheriting(sids: &[&str], adding: Adding) -> Self {
-            Self {
-                entries: sids.iter().map(|sid| entry(sid, 0x13)).collect(),
-                adding,
-            }
-        }
-    }
-
-    impl DaclEditor for Model {
-        fn entries(&mut self) -> Result<Vec<Entry>, PrivateRootError> {
-            Ok(self.entries.clone())
-        }
-
-        fn allow(&mut self, sid: &str) -> Result<(), PrivateRootError> {
-            let inherited = self
-                .entries
-                .iter()
-                .position(|existing| existing.sid == sid && existing.flags & INHERITED_ACE != 0);
-            let explicit = self
-                .entries
-                .iter()
-                .any(|existing| existing.sid == sid && existing.flags & INHERITED_ACE == 0);
-            match (inherited, explicit, self.adding) {
-                (_, true, _) | (Some(_), false, Adding::FoldedIntoInherited) => {}
-                (Some(index), false, Adding::ReplacesInherited) => {
-                    self.entries[index].flags = 0x03;
-                }
-                (None, false, _) => self.entries.push(entry(sid, 0x03)),
-            }
-            Ok(())
-        }
-
-        fn remove(&mut self, sid: &str, inherited_only: bool) -> Result<(), PrivateRootError> {
-            self.entries.retain(|existing| {
-                existing.sid != sid || (inherited_only && existing.flags & INHERITED_ACE == 0)
-            });
-            // Writing the DACL protected makes every entry left explicit.
-            for existing in &mut self.entries {
-                existing.flags &= !INHERITED_ACE;
-            }
-            Ok(())
-        }
-    }
-
-    /// A model on which nothing a pass does can settle the DACL.
-    struct Stubborn;
-
-    impl DaclEditor for Stubborn {
-        fn entries(&mut self) -> Result<Vec<Entry>, PrivateRootError> {
-            Ok(vec![entry(USERS, 0x13)])
-        }
-
-        fn allow(&mut self, _sid: &str) -> Result<(), PrivateRootError> {
-            Ok(())
-        }
-
-        fn remove(&mut self, _sid: &str, _inherited_only: bool) -> Result<(), PrivateRootError> {
-            Ok(())
-        }
-    }
-
-    fn user_has_an_entry(model: &Model) -> bool {
-        model.entries.iter().any(|existing| existing.sid == USER)
-    }
-
-    /// One pass, which is all the restriction used to make, ends with no entry
-    /// for the current user when the user's is the first inherited one: the
-    /// validator then refuses the root (#206). This is the failure, on the model.
-    #[test]
-    fn one_pass_loses_the_users_entry_when_added_entries_fold_into_inherited_ones() {
-        let mut model =
-            Model::inheriting(&[USER, SYSTEM, ADMINISTRATORS], Adding::FoldedIntoInherited);
-
-        assert_eq!(
-            restrict(&mut model, USER, 1),
-            Err(PrivateRootError::NotPrivate)
-        );
-
-        assert!(!user_has_an_entry(&model), "{:?}", model.entries);
-        assert!(!is_private(&model.entries, USER));
-    }
+    use super::create_private_child_observed;
+    use crate::test_folder::TestFolder;
 
     #[test]
-    fn the_read_back_pass_restores_the_entry_the_first_pass_removed() {
-        let mut model =
-            Model::inheriting(&[USER, SYSTEM, ADMINISTRATORS], Adding::FoldedIntoInherited);
-
-        assert_eq!(restrict(&mut model, USER, RESTRICT_PASSES), Ok(2));
-
-        assert!(is_private(&model.entries, USER), "{:?}", model.entries);
-        assert!(user_has_an_entry(&model));
-    }
-
-    /// Whichever principal's entry the first removal takes, and whether or not
-    /// Windows folds the added entries into the inherited ones, and whoever else
-    /// the parent granted, the result is the private DACL.
-    #[test]
-    fn every_order_and_every_way_windows_adds_an_entry_ends_private() {
-        let orders = [
-            [USER, SYSTEM, ADMINISTRATORS],
-            [SYSTEM, ADMINISTRATORS, USER],
-            [ADMINISTRATORS, USER, SYSTEM],
-            [SYSTEM, USER, ADMINISTRATORS],
-        ];
-        for adding in [Adding::FoldedIntoInherited, Adding::ReplacesInherited] {
-            for order in orders {
-                for extra in [None, Some(USERS)] {
-                    let mut sids = order.to_vec();
-                    sids.extend(extra);
-                    let mut model = Model::inheriting(&sids, adding);
-
-                    let outcome = restrict(&mut model, USER, RESTRICT_PASSES);
-                    assert!(
-                        matches!(outcome, Ok(1 | 2)),
-                        "{order:?} {extra:?}: {outcome:?}"
-                    );
-                    assert!(
-                        is_private(&model.entries, USER),
-                        "{order:?} {extra:?}: {:?}",
-                        model.entries
-                    );
-                }
-            }
-        }
-    }
-
-    #[test]
-    fn a_private_dacl_is_left_as_it_is() {
-        let mut model = Model {
-            entries: vec![
-                entry(USER, 0x03),
-                entry(SYSTEM, 0x03),
-                entry(ADMINISTRATORS, 0x03),
-            ],
-            adding: Adding::FoldedIntoInherited,
-        };
-        let before = model.entries.clone();
-
-        assert_eq!(restrict(&mut model, USER, RESTRICT_PASSES), Ok(1));
-
-        assert_eq!(model.entries, before);
-    }
-
-    /// The loop is bounded: a DACL that cannot be made private is an error, not
-    /// a wait. The error is `NotPrivate`, the one callers answer with the
-    /// private-folder explanation, not the `Io` of a failed Windows call.
-    #[test]
-    fn a_dacl_that_cannot_be_settled_is_not_private_after_the_passes() {
-        assert_eq!(
-            restrict(&mut Stubborn, USER, RESTRICT_PASSES),
-            Err(PrivateRootError::NotPrivate)
-        );
-    }
-
-    #[test]
-    fn is_private_requires_an_explicit_entry_for_each_trusted_principal_and_no_other() {
-        let private = [
-            entry(USER, 0x03),
-            entry(SYSTEM, 0x03),
-            entry(ADMINISTRATORS, 0x03),
-        ];
-        assert!(is_private(&private, USER));
-        assert!(
-            !is_private(&private[1..], USER),
-            "the user's entry is missing"
-        );
-        assert!(
-            !is_private(&private[..2], USER),
-            "Administrators are missing"
-        );
-        let mut inherited = private.to_vec();
-        inherited[0].flags = 0x13;
-        assert!(!is_private(&inherited, USER), "an inherited entry remained");
-        let mut others = private.to_vec();
-        others.push(entry(USERS, 0x03));
-        assert!(!is_private(&others, USER), "another principal has access");
-        let mut denied = private.to_vec();
-        denied[0].allows = false;
-        assert!(!is_private(&denied, USER), "the user's entry only denies");
-        // The shape is what is checked: a duplicate for a trusted principal is
-        // accepted.
-        let mut duplicated = private.to_vec();
-        duplicated.push(entry(SYSTEM, 0x03));
-        assert!(is_private(&duplicated, USER));
+    fn a_created_child_is_owner_only_from_its_first_instant() -> Result<(), Box<dyn Error>> {
+        let folder = TestFolder::new("vsift-private-child")?;
+        let held = cap_std::fs::Dir::open_ambient_dir(&*folder, cap_std::ambient_authority())?;
+        let mut mode_then = None;
+        create_private_child_observed(&held, &folder, Path::new("root"), |created| {
+            mode_then = fs::metadata(created)
+                .ok()
+                .map(|metadata| metadata.permissions().mode() & 0o777);
+        })?;
+        assert_eq!(mode_then.map(|mode| mode & 0o077), Some(0));
+        Ok(())
     }
 }

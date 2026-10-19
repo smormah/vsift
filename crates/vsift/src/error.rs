@@ -1312,6 +1312,13 @@ pub enum SessionRootError {
     /// A worker workspace needs an explicit absolute root that is not the
     /// platform's per-user session cache.
     WorkspaceRootNotExplicit,
+    /// Windows: the root's permissions grant only trusted principals and no
+    /// longer hold an entry for the current user, so it cannot be opened (the
+    /// state #443's race left a new root in before ADR 0026). Nothing was
+    /// changed: `VSift` never gives the entry back itself. The code is
+    /// `STORAGE_IO`, what this case answered as [`Self::Unavailable`] before it
+    /// had a cause; the host's remediation says how to recover the folder.
+    OwnAccessMissing,
 }
 
 impl SessionRootError {
@@ -1340,6 +1347,7 @@ impl SessionRootError {
             | Self::Missing
             | Self::Unavailable
             | Self::NameNotAllowed
+            | Self::OwnAccessMissing
             | Self::NotPrivate => FailureCode::StorageIo,
             // `INVALID_ARGUMENT` would say what happened to a person who named
             // their own folder, but 0.1.0 answered `INTEGRITY_FAILURE` (exit 7)
@@ -1370,6 +1378,9 @@ impl fmt::Display for SessionRootError {
             Self::InvalidLayout => "session root layout is invalid",
             Self::Unavailable => "session root is unavailable",
             Self::NameNotAllowed => "session root's folder name is not allowed",
+            Self::OwnAccessMissing => {
+                "session root's permissions hold no entry for the current user"
+            }
             Self::ProvisioningInProgress => {
                 "session root is still being created by another process"
             }
@@ -1400,6 +1411,7 @@ impl From<SessionStoreOpenError> for SessionRootError {
             SessionStoreOpenError::RootAlreadyExists => Self::AlreadyExists,
             SessionStoreOpenError::InvalidAdmissionCapacity => Self::InvalidAdmissionCapacity,
             SessionStoreOpenError::DurabilityUnavailable => Self::DurabilityUnavailable,
+            SessionStoreOpenError::RootOwnerAccessMissing => Self::OwnAccessMissing,
         }
     }
 }
@@ -1783,11 +1795,30 @@ mod tests {
         );
     }
 
+    /// #443: a root that lost its user's own entry keeps the code of the
+    /// unavailable root it was reported as; its remediation says how to
+    /// recover it.
+    #[test]
+    fn a_root_without_its_users_entry_keeps_the_unavailable_roots_code() {
+        assert_eq!(
+            EngineError::SessionRoot(SessionRootError::OwnAccessMissing).failure_code(),
+            EngineError::SessionRoot(SessionRootError::Unavailable).failure_code()
+        );
+        assert_eq!(
+            SessionRootError::from(SessionStoreOpenError::RootOwnerAccessMissing),
+            SessionRootError::OwnAccessMissing
+        );
+    }
+
     #[test]
     fn store_open_failures_map_through_the_root_error() {
         for (error, code) in [
             (
                 SessionStoreOpenError::RootNotPrivate,
+                FailureCode::StorageIo,
+            ),
+            (
+                SessionStoreOpenError::RootOwnerAccessMissing,
                 FailureCode::StorageIo,
             ),
             (

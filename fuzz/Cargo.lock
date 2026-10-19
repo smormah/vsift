@@ -1458,8 +1458,16 @@ dependencies = [
  "tokio",
  "vsift-application",
  "vsift-domain",
+ "vsift-windows-security",
  "windows",
  "windows-acl",
+]
+
+[[package]]
+name = "vsift-windows-security"
+version = "0.2.2"
+dependencies = [
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

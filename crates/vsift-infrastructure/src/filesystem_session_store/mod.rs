@@ -165,6 +165,14 @@ pub enum SessionStoreOpenError {
     /// qualified (anything but Ubuntu 24.04 on local ext4, ADR 0010);
     /// nothing was created.
     DurabilityUnavailable,
+    /// Windows: the root's DACL grants only trusted principals and no longer
+    /// holds an entry for the current user, so the root cannot be opened; the
+    /// state the race of #443 left a new root in before ADR 0026. The root is
+    /// left exactly as found: `VSift` cannot tell who removed the entry, so it
+    /// never gives it back itself. The published code is that of
+    /// [`Self::RootUnavailable`], which this case answered before it had a
+    /// cause of its own.
+    RootOwnerAccessMissing,
 }
 
 impl fmt::Display for SessionStoreOpenError {
@@ -182,6 +190,9 @@ impl fmt::Display for SessionStoreOpenError {
             Self::InvalidAdmissionCapacity => "session storage admission capacity is invalid",
             Self::DurabilityUnavailable => {
                 "durable publication is not qualified for this session storage root"
+            }
+            Self::RootOwnerAccessMissing => {
+                "session storage root's permissions hold no entry for the current user"
             }
         };
         formatter.write_str(message)

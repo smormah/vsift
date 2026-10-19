@@ -23,9 +23,8 @@ use super::{
 };
 use super::{is_storage_failure, map_committed_io};
 use crate::{
-    durable_profile::storage_capabilities,
-    file_lock::HeldFileLock,
-    private_user_root::{PrivateRootError, restrict_new_directory},
+    durable_profile::storage_capabilities, file_lock::HeldFileLock,
+    private_user_root::create_private_child,
 };
 
 impl FilesystemSessionStore {
@@ -133,7 +132,9 @@ impl FilesystemSessionStore {
         if durable && !dir_offers_os_crash_durability(&parent) {
             return Err(SessionStoreOpenError::DurabilityUnavailable);
         }
-        create_private_child_directory(&parent, Path::new(name))
+        // Private from its first instant (ADR 0026): nothing writes the root's
+        // permissions after this, so no other creator's write can reach them.
+        create_private_child(&parent, &canonical_parent, Path::new(name))
             .map_err(map_provision_create_error)?;
         let root = parent
             .open_dir_nofollow(Path::new(name))
@@ -145,14 +146,6 @@ impl FilesystemSessionStore {
             let _ = parent.remove_dir(Path::new(name));
             return Err(SessionStoreOpenError::DurabilityUnavailable);
         }
-        // Made private before anything is written into it, whatever the
-        // parent's permissions would have passed on. The held handle pins it.
-        if let Err(error) = restrict_new_directory(&canonical_parent.join(name)) {
-            drop(root);
-            let _ = parent.remove_dir(Path::new(name));
-            return Err(map_restrict_error(error));
-        }
-
         // The exclusive directory creation above makes this process the one
         // creator. Everything else it writes is covered by the provisioning lock,
         // so a concurrent opener can tell this root from an abandoned one.
@@ -213,9 +206,9 @@ impl FilesystemSessionStore {
             return Err(SessionStoreOpenError::RootNotDirectory);
         }
         let opened_path =
-            fs::canonicalize(root_path).map_err(|_| SessionStoreOpenError::RootUnavailable)?;
+            fs::canonicalize(root_path).map_err(|_| unopenable_root_error(root_path))?;
         let root = Dir::open_ambient_dir(&opened_path, cap_std::ambient_authority())
-            .map_err(|_| SessionStoreOpenError::RootUnavailable)?;
+            .map_err(|_| unopenable_root_error(root_path))?;
         validate_same_object(&metadata, &root)?;
         let canonical =
             fs::canonicalize(root_path).map_err(|_| SessionStoreOpenError::RootUnavailable)?;
@@ -518,14 +511,25 @@ pub(super) fn map_provision_create_error(error: io::Error) -> SessionStoreOpenEr
     }
 }
 
-/// How a failed restriction of a directory this process just created is
-/// reported: a DACL that could not be made private is the private-folder answer
-/// (`RootNotPrivate`, with its remediation), anything else a storage failure.
-pub(super) const fn map_restrict_error(error: PrivateRootError) -> SessionStoreOpenError {
-    match error {
-        PrivateRootError::NotPrivate => SessionStoreOpenError::RootNotPrivate,
-        _ => SessionStoreOpenError::RootUnavailable,
+/// Why an existing root that is a directory could not be opened.
+///
+/// On Windows a root whose DACL grants only trusted principals but has lost
+/// the current user's entry (#443) refuses every open; its owner can still
+/// read the DACL, which tells that case apart, so it is answered with its own
+/// cause and remediation instead of a bare storage failure. It is never
+/// repaired here. Anything else stays `RootUnavailable`.
+fn unopenable_root_error(root_path: &Path) -> SessionStoreOpenError {
+    #[cfg(windows)]
+    {
+        if crate::private_user_root::own_access(root_path)
+            == crate::private_user_root::OwnAccess::OwnEntryMissing
+        {
+            return SessionStoreOpenError::RootOwnerAccessMissing;
+        }
     }
+    #[cfg(unix)]
+    let _ = root_path;
+    SessionStoreOpenError::RootUnavailable
 }
 
 /// Creates the coordination directory and takes the provisioning lock in it.
@@ -919,8 +923,14 @@ pub(super) fn validate_platform_root_permissions(
                     | AceType::AccessAllowCallbackObject
             ) && !trusted.contains(&entry.string_sid.as_str()))
     });
-    if !current_user_allowed || unsafe_entry {
+    if unsafe_entry {
         return Err(SessionStoreOpenError::RootNotPrivate);
+    }
+    if !current_user_allowed {
+        // Opened through another trusted entry (an elevated administrator):
+        // the user's own entry is gone, which is #443's broken root, not a
+        // root shared with other accounts.
+        return Err(SessionStoreOpenError::RootOwnerAccessMissing);
     }
     Ok(())
 }
@@ -1071,34 +1081,6 @@ mod root_name_tests {
             validate_root_selection(Path::new("relative")),
             Err(SessionStoreOpenError::RootMustBeAbsolute)
         );
-    }
-}
-
-#[cfg(test)]
-mod restrict_error_tests {
-    use super::{PrivateRootError, SessionStoreOpenError, map_restrict_error};
-
-    /// A directory that could not be made private keeps the private-folder
-    /// answer (and its remediation); every other failure of the restriction is
-    /// a storage failure.
-    #[test]
-    fn a_dacl_that_could_not_be_made_private_is_the_private_folder_answer() {
-        assert_eq!(
-            map_restrict_error(PrivateRootError::NotPrivate),
-            SessionStoreOpenError::RootNotPrivate
-        );
-        for other in [
-            PrivateRootError::Io,
-            PrivateRootError::UnsafeStorage,
-            PrivateRootError::Unavailable,
-            PrivateRootError::Busy,
-        ] {
-            assert_eq!(
-                map_restrict_error(other),
-                SessionStoreOpenError::RootUnavailable,
-                "{other:?}"
-            );
-        }
     }
 }
 

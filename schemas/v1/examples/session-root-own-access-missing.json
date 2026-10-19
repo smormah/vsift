@@ -1,0 +1,24 @@
+{
+  "schema_version": "1",
+  "command": "session.list",
+  "operation_id": null,
+  "status": "failed",
+  "data": null,
+  "warnings": [],
+  "error": {
+    "code": "STORAGE_IO",
+    "message": "Storage or output I/O prevented completion.",
+    "retryable": false,
+    "retry_after_ms": null,
+    "affected_ids": [],
+    "remediation": [
+      {
+        "summary": "The VSift session_root folder's permissions no longer include your own account, so VSift cannot open it and changed nothing. Only SYSTEM and Administrators keep access: earlier versions of VSift could leave a new session folder like this on Windows when several commands used it for the first time at once. It is the disposable-session folder: the directory given with --session-root, or VSift-sessions under LOCALAPPDATA. To use it again, give your account its access back from a Command Prompt, with that folder's path: icacls \"<folder>\" /grant \"%USERDOMAIN%\\%USERNAME%:(OI)(CI)F\". Or, as sessions are disposable, delete the folder (if Windows refuses, run the same icacls command first) and retry; VSift creates it again, private to you. VSift does not change the folder's permissions itself.",
+        "required_authority": "none",
+        "command": null
+      }
+    ]
+  },
+  "coverage": null,
+  "lifecycle": null
+}

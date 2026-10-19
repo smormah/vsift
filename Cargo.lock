@@ -2238,6 +2238,7 @@ dependencies = [
  "tokio",
  "vsift-application",
  "vsift-domain",
+ "vsift-windows-security",
  "windows",
  "windows-acl",
 ]
@@ -2251,6 +2252,14 @@ dependencies = [
  "serde_json",
  "sha2",
  "tar",
+]
+
+[[package]]
+name = "vsift-windows-security"
+version = "0.2.2"
+dependencies = [
+ "windows-acl",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
