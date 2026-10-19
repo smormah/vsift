@@ -166,7 +166,11 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/report"
-          VSIFT_REAL_MEDIA_DIR="$RUNNER_TEMP/real-media"           VSIFT_REAL_MEDIA_ITEMS="$ITEMS"           VSIFT_VISUAL_MEASUREMENT_OUT="$RUNNER_TEMP/report/visual-measurement.json"             cargo test --release -p vsift-infrastructure --locked --test p08_real_media_visual             -- --ignored --exact measures_the_change_rule_on_real_recordings --nocapture
+          VSIFT_REAL_MEDIA_DIR="$RUNNER_TEMP/real-media" \
+          VSIFT_REAL_MEDIA_ITEMS="$ITEMS" \
+          VSIFT_VISUAL_MEASUREMENT_OUT="$RUNNER_TEMP/report/visual-measurement.json" \
+            cargo test --release -p vsift-infrastructure --locked --test p08_real_media_visual \
+            -- --ignored --exact measures_the_change_rule_on_real_recordings --nocapture
 
       - name: Put the result in the job summary
         if: always()
