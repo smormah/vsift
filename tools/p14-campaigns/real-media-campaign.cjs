@@ -143,6 +143,7 @@ function main() {
     setup: campaign.setup(run, options),
     items: [],
   };
+  let keptCrops = 0;
   for (const item of selected) {
     const file = fileOf(item);
     log(item.private ? `${item.id} (private)` : `${item.id}: ${item.title}`);
@@ -163,7 +164,10 @@ function main() {
       log(`  ${item.id}: FAIL: ${finding}`);
       continue;
     }
-    const report = campaign.investigate(item, file, run, { folder });
+    // Crops kept for a person (#173): at most KEPT_CROPS_PER_ITEM of an item, KEPT_CROPS_PER_RUN in the run.
+    const keepCrops = Math.max(0, campaign.KEPT_CROPS_PER_RUN - keptCrops);
+    const report = campaign.investigate(item, file, run, { folder, keepCrops });
+    keptCrops += ((report.measurements.small_text && report.measurements.small_text.kept_crops) || []).length;
     if (item.private) {
       const kept = campaign.privateReport(report);
       result.items.push(kept);

@@ -257,3 +257,66 @@ test('the frames of a screen recording are cut into native crops whose lines of 
   const other = campaign.investigate({ ...screenItem, covers: ['conversational-pauses'] }, FILE, run, { folder: scratch(t), copyFile: () => {}, exists: () => false, writeFile: () => {} });
   assert.equal(other.measurements.small_text, undefined);
 });
+
+/** A stand-in whose small-text crops hold one "line of text" whose height grows with each crop (5, 6, 7 ... px). */
+function screenStandIn() {
+  const { run } = standIn();
+  const files = new Map();
+  const screen = (step, args, extra) => {
+    if (args[0] !== 'crop') return run(step, args, extra);
+    const [, , width, height] = args[args.indexOf('--rect') + 1].split(',').map(Number);
+    const rows = 5 + (files.size % 20);
+    const luma = Buffer.alloc(width * height, 230);
+    for (let y = 30; y < 30 + rows; y += 1) for (let x = 8; x < width - 8; x += 4) luma[y * width + x] = 30;
+    const file = `crop-${files.size}.png`;
+    files.set(file, png(width, height, 0, 1, luma));
+    return { step, exit: 0, seconds: 0.1, json: { status: 'complete', error: null, data: { files: [{ path: file }], items: [{ image: { width, height } }] } } };
+  };
+  return { screen, readFile: (file) => files.get(file) };
+}
+
+const OPEN_SCREEN = { id: 'RM10', status: 'approved', title: 'T', attribution: 'A by the U.S. Census Bureau, public domain', tests: ['#173'], covers: ['screen-ui-small-text'],
+  licence: { id: 'public-domain-us-government', url: 'https://example.invalid/licence' } };
+
+test('a public, openly licensed item keeps a handful of crops with its smallest text, with its attribution (#173)', (t) => {
+  const { screen, readFile } = screenStandIn();
+  const copies = [];
+  const written = new Map();
+  const folder = scratch(t);
+  const report = campaign.investigate(OPEN_SCREEN, FILE, screen, { folder, keepCrops: 12, readFile, exists: () => false,
+    copyFile: (from, to) => copies.push([from, path.relative(folder, to)]), writeFile: (file, text) => written.set(path.relative(folder, file), text) });
+  const kept = report.measurements.small_text.kept_crops;
+  assert.equal(campaign.KEPT_CROPS_PER_ITEM, 4);
+  assert.equal(kept.length, 4, 'at most four of one item, whatever the run allows');
+  // The crops with the smallest text, ties to the earlier crop. The stand-in's file 0 is the campaign's
+  // own top-left crop; the grid's crops are files 1 to 36, with lines of 6 to 24 px, then 5 px again.
+  assert.deepEqual(kept.map((entry) => entry.smallest_line_px), [5, 6, 6, 7]);
+  assert.deepEqual(copies.map(([, to]) => to), [1, 2, 3, 4].map((n) => path.join('crops', `RM10-crop-${n}.png`)));
+  assert.deepEqual(copies.map(([from]) => from), ['crop-20.png', 'crop-1.png', 'crop-21.png', 'crop-2.png']);
+  assert.match(written.get(path.join('crops', 'ATTRIBUTION.txt')), /^A by the U\.S\. Census Bureau, public domain\nLicence: public-domain-us-government/);
+  assert.equal(report.measurements.small_text.files, undefined, 'the run\'s own file paths are not reported');
+  // The run's budget is honoured: none left, none kept.
+  const { screen: again, readFile: readAgain } = screenStandIn();
+  const spent = campaign.investigate(OPEN_SCREEN, FILE, again, { folder: scratch(t), keepCrops: 0, readFile: readAgain, exists: () => false, copyFile: () => assert.fail('copied'), writeFile: () => {} });
+  assert.deepEqual(spent.measurements.small_text.kept_crops, []);
+});
+
+test('a private item\'s crops are never kept, nor those of an item without an open licence (#173)', (t) => {
+  for (const item of [{ ...PRIVATE_ITEM, covers: ['screen-ui-small-text'] }, { ...OPEN_SCREEN, licence: { id: 'all-rights-reserved', url: 'https://example.invalid' } }, { ...OPEN_SCREEN, licence: undefined }]) {
+    const { screen, readFile } = screenStandIn();
+    const copies = [];
+    const written = [];
+    const folder = scratch(t);
+    const report = campaign.investigate(item, FILE, screen, { folder, keepCrops: 12, readFile, exists: () => true,
+      copyFile: (from, to) => copies.push(to), writeFile: (file) => written.push(file) });
+    assert.deepEqual(copies.filter((to) => to.endsWith('.png')), [], `${item.id}: no crop copied`);
+    assert.deepEqual(written.filter((file) => file.includes(`${path.sep}crops${path.sep}`)), [], `${item.id}: nothing written beside crops`);
+    assert.equal(fs.existsSync(path.join(folder, 'crops')), false, `${item.id}: no crops folder`);
+    assert.deepEqual(report.measurements.small_text.kept_crops, []);
+    if (item.private) {
+      const kept = campaign.privateReport(report);
+      assert.ok(kept.measurements.small_text.line_heights.lines > 0, 'the private item is still measured');
+      assert.deepEqual(kept.measurements.small_text.kept_crops, []);
+    }
+  }
+});

@@ -1,6 +1,7 @@
 # Small on-screen text in real recordings (#173, L-018)
 
-Status (2026-10-19, cycle 2, `0.2.3`): **an evaluation, first measurement done; nothing that ships changes.** Issue:
+Status (2026-10-19, cycle 2, `0.2.3`): **an evaluation, first measurement done, the maintainer's decisions taken (section 4);
+nothing that ships changes. A person's look at real crops is next.** Issue:
 [#173](https://github.com/smormah/vsift/issues/173). Register: [L-018](known-limits.md#l-018). The real-media set and its
 campaign: [`real-media-set.md`](real-media-set.md).
 
@@ -65,13 +66,13 @@ pixel.
   encoder discarded, and interpolation would only invent it.
 - **The worst case is not illegibility:** it is a **plausible wrong digit**.
 
-## 4. Recommendation (for the maintainer's decision)
+## 4. The maintainer's decisions (2026-10-19, recorded on #173)
 
-1. **Keep P09's decision: crops at native size, never upscaled by VSift.** Enlarging does not recover detail lost to
-   compression, which dominates on real recordings. An agent or person who wants a bigger view can still scale the
-   image itself, as the register says.
-2. **The agent-side alternative that matters is the choice of frame, not its scale.** Read small text, and above all
-   numbers:
+1. **Crops stay unscaled.** VSift keeps P09's decision: crops at native size, never upscaled. Enlarging does not
+   recover detail lost to compression, which dominates on real recordings. An agent or person who wants a bigger view
+   can still scale the image itself.
+2. **The advice on small numbers goes into the skill and the help text in cycle 3, with #454.** The agent-side
+   alternative that matters is the choice of frame, not its scale. Read small text, and above all numbers:
    - from a frame where the screen has settled: a candidate with stability `settled`, or a frame shortly after the
      change rather than during it;
    - after comparing a neighbouring frame (`frame neighbours`, `frame burst`);
@@ -79,18 +80,20 @@ pixel.
      agrees.
 
    **Documented now** in the user guide's limits page ([`limits.md`](../guide/limits.md), "VSift does not read text in
-   a picture"). **Not in the skill:** the skill already marks unreadable pixels as unsupported and offers neighbours
-   and bursts, but saying "compare a second frame before citing a small number" is a skill change. That needs a new
-   agent-trial freeze, so it is the maintainer's decision.
-3. **A person's yes or no on the real crops is still missing** (check 9 of the campaign). Two ways to get it, for the
-   maintainer to choose:
-   - (a) allow the hosted run to keep a few native crops of **public-domain** items (RM10 is a US government work) in
-     its report artifact, for a person to judge;
-   - (b) the maintainer looks at RM10's crops in a local campaign run.
-
-   Today the workflow keeps only the report, by the maintainer's decision of 2026-10-18.
-4. **Measure again** when RM01 (1280x1024, VP8) is mirrored. It is one dispatch: `gh workflow run
-   p14-real-media.yml --ref main -f items="RM01 RM10"`.
+   a picture"). The skill and `--help` say it with #454 (help that leads a cold agent), under that cycle's freeze; the
+   skill is not changed here.
+3. **The hosted run may keep a handful of native crops of public, openly licensed items, for a person to judge
+   legibility (check 9). A private item's crops are never kept.** Built with this decision (the pull request of #173):
+   - **How many:** at most **4 crops an item and 12 a run.** Four crops of an item's smallest text are enough for a
+     person's yes or no per item; twelve cover three screen recordings in one artifact.
+   - **Which:** the crops whose smallest line of text is smallest, ties to the earlier crop. Each is VSift's own PNG,
+     unscaled, named `<id>-crop-<n>.png`, with the item's attribution and licence in `ATTRIBUTION.txt` beside them.
+   - **Whose:** only an item that is not private and whose licence is public domain, CC0, CC BY or CC BY-SA
+     (`mayKeepCrops` in `lib/real-media-campaign.cjs`). A private item is still measured, by numbers only.
+   - **Where:** under `crops/<id>/` in the `p14-real-media` artifact (90 days); the report lists them as
+     `measurements.small_text.kept_crops`. The media and the listening clips still never leave the runner.
+4. **Next:** the person's yes or no on RM10's kept crops, from one campaign dispatch of this change; then RM01 once it
+   is mirrored: `gh workflow run p14-real-media.yml --ref main -f items="RM01 RM10"`.
 
 ## 5. Limits of this measurement
 

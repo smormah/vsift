@@ -1315,12 +1315,13 @@ Counts: 1 high, 50 medium, 111 low (162 entries).
 - **Mitigation:** native pixels are exact (pixel-equal to FFmpeg's decode). The user guide's limits page says to read
   small numbers from a settled frame and compare a neighbouring frame. The skill already treats unreadable pixels as
   no support and offers neighbours and bursts.
-- **Next step:** the maintainer decides:
-  - whether the skill says "compare a second frame before citing a small number" (a skill change, a new freeze);
-  - how a person's yes or no on real crops is obtained (crops of public-domain items kept by the hosted run, or a
-    local look).
-
-  Then measure RM01 once it is mirrored.
+- **Decided by the maintainer on 2026-10-19:** crops stay unscaled. The advice on small numbers ("read them from a
+  settled frame and compare a neighbouring one") goes into the skill and the help text in cycle 3, with #454, under
+  that cycle's freeze. The hosted run may keep a handful of crops of public, openly licensed items for a person to
+  judge, and never a private item's. Built: at most 4 crops an item and 12 a run, those with the smallest text, with
+  the item's attribution.
+- **Next step:** a person's yes or no on RM10's kept crops (check 9); RM01 once it is mirrored; the skill and help
+  text with #454.
 - **Owner:** unscheduled. **Issue:** [#173](https://github.com/smormah/vsift/issues/173). **Status:** open. **Review:** pending.
 
 ### L-019

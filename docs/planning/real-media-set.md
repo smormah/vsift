@@ -155,7 +155,8 @@ pins:
 
 **Where the files go.** Locally, a folder the person running the campaign names, outside the repository (for example
 `%LOCALAPPDATA%\vsift-real-media` or `~/.cache/vsift-real-media`); on a hosted runner, the runner's temporary folder, gone with
-the runner. **The media is never uploaded as a workflow artifact**; only the campaign's report is.
+the runner. **The media is never uploaded as a workflow artifact**; only the campaign's report is, with at most twelve native
+crops of public, openly licensed screen recordings for a person to judge small text (decision 10).
 
 ## 5. Attribution
 
@@ -255,7 +256,9 @@ per-user folder longer than about 141 characters, or a session root of about 205
    `screen-ui-small-text`, each of the three frames is cut into a grid of native crops of at most 480x120. Each crop's
    PNG is read back and checked to be at native size, and the height of every line of text in it is measured
    (`lib/small-text.cjs`; `measurements.small_text`). The report gives the line heights; legibility stays a person's
-   judgement ([`small-text-real-media.md`](small-text-real-media.md)).
+   judgement ([`small-text-real-media.md`](small-text-real-media.md)), on the crops the run keeps for it: at most 4 an
+   item with the smallest text and 12 a run, of public, openly licensed items only, never a private item's
+   (`kept_crops`, decision 10).
 10. **Timings:** seconds and real-time factor per step and item, against the budgets of the
     [qualification profiles](support-and-resource-profiles.md); a run several times slower than the last one is a finding.
 
@@ -279,7 +282,7 @@ the run's own words only where a check needs them (a lost word sequence), never 
   its pin; one not yet pinned is pinned there and its SHA-256 printed, which is the hosted cross-check of a pin made
   elsewhere), stages the pinned FFmpeg, whisper.cpp and models as `P07 local ASR` does
   ([`p07_local_asr_tools.py`](../../tools/p07_local_asr_tools.py)), builds the commit's `vsift`, runs the campaign and keeps
-  only `report.json`, `summary.md` and the pin lines (90 days). It has `contents: read` and no secret. A pull request that
+  only `report.json`, `summary.md`, the pin lines and the kept crops (decision 10) (90 days). It has `contents: read` and no secret. A pull request that
   changes the campaign's tools runs their tests and `real-media.cjs check` only. It is not scheduled: the items are long
   enough that a run costs real runner time (the 15 to 30 minute lecture alone transcribes in roughly 6 to 12 minutes at the
   `base` model's measured real-time factor), so it runs when a change touches transcription, the merge or the visual index,
@@ -319,6 +322,10 @@ the run's own words only where a check needs them (a lost word sequence), never 
 8. **2026-10-19: a VSift test-media release** of verbatim copies with their attribution, from which every hosted run fetches.
    The maintainer consented; the coordinator reviews and runs the `gh release create` command (section 14), never a tool.
 9. **2026-10-19: a private local set** of two of the maintainer's own recordings, for local runs only (section 13).
+10. **2026-10-19 (recorded on #173): kept crops.** The hosted run may keep a handful of native crops of public, openly
+    licensed items for a person to judge legibility; a private item's crops are never kept. Built as at most 4 crops an
+    item and 12 a run, the crops with the smallest text, with the item's attribution
+    ([`small-text-real-media.md`](small-text-real-media.md) section 4).
 
 ## 11. What the set must never contain
 

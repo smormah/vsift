@@ -17,6 +17,26 @@ const checks = require('./real-media-checks.cjs');
 const smallText = require('./small-text.cjs');
 
 const SECOND = 1_000_000;
+/**
+ * Crops a run may keep for a person to judge legibility (#173; the maintainer's
+ * decision of 2026-10-19): at most this many of one item, chosen by the
+ * smallest text they hold, and at most `KEPT_CROPS_PER_RUN` in a whole run.
+ * Four crops of the smallest text are enough for a yes or no per item; twelve
+ * cover three screen recordings, a handful of images, in one artifact.
+ */
+const KEPT_CROPS_PER_ITEM = 4;
+const KEPT_CROPS_PER_RUN = 12;
+/** The licences under which a crop may be kept: public domain and open licences (manifest.schema.json's closed list). */
+const OPEN_LICENCE = /^(public-domain|public-domain-us-government|CC0-1\.0|CC-BY-\d\.\d|CC-BY-SA-\d\.\d)$/;
+
+/**
+ * Whether an item's crops may leave the run: never a private item's (the
+ * maintainer's own recordings), and only under a public-domain or open licence.
+ * @param {object} item
+ */
+function mayKeepCrops(item) {
+  return item.private !== true && Boolean(item.licence) && OPEN_LICENCE.test(String(item.licence.id));
+}
 const CANDIDATE_RANGE_US = 300 * SECOND;
 /** A recording longer than this is not investigated: the campaign is for short real recordings. */
 const MAX_DURATION_US = 4 * 60 * 60 * SECOND;
@@ -388,6 +408,14 @@ function investigate(item, file, run, where) {
   }
   if ((item.covers || []).includes('screen-ui-small-text') && parents.length > 0) {
     report.measurements.small_text = measureSmallText(at, record, session, parents, where.readFile || fs.readFileSync, frameFindings);
+    // A handful of the crops with the smallest text, for a person to judge (check 9);
+    // never a private item's, and only under an open licence.
+    const keep = mayKeepCrops(item) ? Math.min(KEPT_CROPS_PER_ITEM, Math.max(0, where.keepCrops || 0)) : 0;
+    report.measurements.small_text.kept_crops = keepCrops(item, report.measurements.small_text, keep, where.folder, copyFile, writeFile);
+  }
+  if (report.measurements.small_text) {
+    // The file paths are the run's own and never part of a report.
+    delete report.measurements.small_text.files;
   }
   report.checks.frames = { passed: frameFindings.length === 0, findings: frameFindings };
 
@@ -411,6 +439,7 @@ function investigate(item, file, run, where) {
  */
 function measureSmallText(at, record, session, parents, readFile, findings) {
   const heights = [];
+  const files = [];
   let crops = 0;
   let notNative = 0;
   let unread = 0;
@@ -428,7 +457,9 @@ function measureSmallText(at, record, session, parents, readFile, findings) {
       try {
         const png = smallText.readPng(readFile(file));
         if (png.width !== rect.width || png.height !== rect.height || image.width !== rect.width || image.height !== rect.height) notNative += 1;
-        heights.push(...smallText.textLineHeights(png));
+        const lines = smallText.textLineHeights(png);
+        heights.push(...lines);
+        if (lines.length > 0) files.push({ file, smallest_px: Math.min(...lines), lines: lines.length });
       } catch (error) {
         if (!(error instanceof smallText.PngError)) throw error;
         unread += 1;
@@ -437,7 +468,33 @@ function measureSmallText(at, record, session, parents, readFile, findings) {
   }
   if (notNative > 0) findings.push(`${notNative} small-text crop(s) did not come back at native size`);
   if (unread > 0) findings.push(`${unread} small-text crop(s) gave no image that could be read`);
-  return { frames: parents.length, crops, not_native: notNative, unread, line_heights: smallText.summariseHeights(heights) };
+  return { frames: parents.length, crops, not_native: notNative, unread, line_heights: smallText.summariseHeights(heights), files };
+}
+
+/**
+ * Copies up to `count` crops with the smallest text (ties to the earlier
+ * crop) to `<folder>/crops/`, with the item's attribution and licence beside
+ * them, and returns their names relative to the run folder.
+ */
+function keepCrops(item, measured, count, folder, copyFile, writeFile) {
+  if (count <= 0 || measured.files.length === 0) return [];
+  const chosen = measured.files
+    .map((entry, order) => ({ ...entry, order }))
+    .sort((a, b) => a.smallest_px - b.smallest_px || a.order - b.order)
+    .slice(0, count);
+  const crops = path.join(folder, 'crops');
+  fs.mkdirSync(crops, { recursive: true });
+  const kept = [];
+  chosen.forEach((entry, index) => {
+    const name = `${item.id}-crop-${index + 1}.png`;
+    copyFile(entry.file, path.join(crops, name));
+    kept.push({ file: `${item.id}/crops/${name}`, smallest_line_px: entry.smallest_px, lines: entry.lines });
+  });
+  writeFile(path.join(crops, 'ATTRIBUTION.txt'), `${item.attribution}
+Licence: ${item.licence.id} (${item.licence.url})
+Native crops of frames of ${item.id}, unscaled, for a person to judge whether small text is legible (#173).
+`);
+  return kept;
 }
 
 /** The string members a private report may keep: VSift's own codes and enumerations, never content. */
@@ -528,4 +585,4 @@ function markdown(run) {
   return lines.join('\n');
 }
 
-module.exports = { SECOND, setup, investigate, privateReport, markdown, measurementsOnly, shiftPoint, mediaState };
+module.exports = { KEPT_CROPS_PER_ITEM, KEPT_CROPS_PER_RUN, mayKeepCrops, SECOND, setup, investigate, privateReport, markdown, measurementsOnly, shiftPoint, mediaState };
