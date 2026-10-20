@@ -417,4 +417,8 @@ verifier's text and level checks need the utterances:
 A new generation of the set is committed the same way: run `release-assets` on its output,
 have the new WAVs uploaded under new names, and commit only the clips and the two records.
 The verifier rewrote `noisy-speech-verification.json` after `utterance_release` was added
-(only `provenance_sha256` changed).
+(only `provenance_sha256` changed). The coordinator uploaded the twelve WAVs to the release
+on 2026-10-20 after checking each SHA-256, and `noisy-speech-check` run
+https://github.com/smormah/vsift/actions/runs/39464704551 fetched all twelve by digest,
+verified the 51 committed clips with them (the verification file byte for byte) and rebuilt
+all 51 clips identical to the committed ones.
