@@ -10,7 +10,7 @@
 //
 //   node real-media-campaign.cjs --vsift <exe> --media <dir> --work <dir>
 //     --ffmpeg <exe> --ffprobe <exe> --whisper <exe> --model <file>
-//     [--item RMnn]... [--manifest <file>] [--available-only]
+//     [--item RMnn]... [--manifest <file>] [--available-only] [--keep-segments RMnn:<from>-<to>]...
 //   node real-media-campaign.cjs --vsift <exe> --private-manifest <file> --work <dir>
 //     --ffmpeg <exe> --ffprobe <exe> --whisper <exe> --model <file> [--item Pnn]...
 //
@@ -47,7 +47,7 @@ const STEP_TIMEOUT_MS = 4 * 60 * 60 * 1000;
 const REPOSITORY = path.resolve(__dirname, '..', '..');
 
 function parse(argv) {
-  const options = { items: [], manifest: path.join(__dirname, 'real-media', 'manifest.json'), privateManifest: null, availableOnly: false };
+  const options = { items: [], keepSegments: [], manifest: path.join(__dirname, 'real-media', 'manifest.json'), privateManifest: null, availableOnly: false };
   const names = { '--vsift': 'vsift', '--media': 'media', '--work': 'work', '--ffmpeg': 'ffmpeg', '--ffprobe': 'ffprobe',
     '--whisper': 'whisper', '--model': 'model', '--manifest': 'manifest', '--private-manifest': 'privateManifest' };
   for (let index = 0; index < argv.length; index += 2) {
@@ -60,6 +60,7 @@ function parse(argv) {
     const value = argv[index + 1];
     if (value === undefined) throw new Error(`${flag} needs a value`);
     if (flag === '--item') options.items.push(value);
+    else if (flag === '--keep-segments') options.keepSegments.push(value);
     else if (names[flag]) options[names[flag]] = value;
     else throw new Error(`unknown option ${flag}`);
   }
@@ -151,6 +152,9 @@ function main() {
     items: [],
   };
   let keptCrops = 0;
+  // #485: the transcript segments a person asked to read, of public items only.
+  const keepSegments = campaign.parseKeepSegments(options.keepSegments);
+  if (options.privateManifest && keepSegments.size > 0) throw new Error('--keep-segments keeps the text of public items only, never with --private-manifest');
   for (const item of selected) {
     const file = fileOf(item);
     log(item.private ? `${item.id} (private)` : `${item.id}: ${item.title}`);
@@ -173,7 +177,7 @@ function main() {
     }
     // Crops kept for a person (#173): at most KEPT_CROPS_PER_ITEM of an item, KEPT_CROPS_PER_RUN in the run.
     const keepCrops = Math.max(0, campaign.KEPT_CROPS_PER_RUN - keptCrops);
-    const report = campaign.investigate(item, file, run, { folder, keepCrops });
+    const report = campaign.investigate(item, file, run, { folder, keepCrops, keepSegments });
     keptCrops += ((report.measurements.small_text && report.measurements.small_text.kept_crops) || []).length;
     if (item.private) {
       const kept = campaign.privateReport(report);

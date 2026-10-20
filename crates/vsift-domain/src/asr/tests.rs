@@ -2843,6 +2843,191 @@ fn a_copy_the_guard_restored_is_removed_when_what_is_kept_covers_its_time() -> T
     Ok(())
 }
 
+/// #485 (L-201), fixed by the maintainer's decision of 2026-10-20: a chunk that
+/// writes one sentence twice in a row (a recogniser repetition) no longer hides
+/// what the next chunk heard there. The layout is RM09's seam at 925 to 930 s
+/// (hosted run 39466921335), shifted to start at 0: chunk 0 writes "i am sure
+/// all will be well" over 0 to 22.5 s and again over 22.5 to 29.5 s; chunk 1
+/// writes new words over 25.0 to 27.96 s, then goes on. That segment's midpoint
+/// lies in chunk 0's core, and until the fix chunk 0's repeated copy counted as
+/// hearing something there, so rule 1 dropped it, and the copy covered its time,
+/// so the guard had no hole to close: its words were in no segment and a search
+/// called the time transcribed. Now the repeated copy claims no time, so the
+/// next chunk's words are kept; the repeated copy stays, a visible repeat.
+#[test]
+fn a_repeated_copy_in_one_chunk_no_longer_hides_the_next_chunks_words() -> TestResult {
+    let window_0 = (0, 30 * SECOND);
+    let window_1 = (25 * SECOND, 55 * SECOND);
+    let first = with(
+        draft(0, window_0, 0, 22_500_000, "i am sure all will be well")?,
+        draft(
+            0,
+            window_0,
+            22_500_000,
+            29_500_000,
+            "i am sure all will be well",
+        )?,
+    );
+    let second = with(
+        with(
+            draft(
+                1,
+                window_1,
+                25 * SECOND,
+                27_960_000,
+                "we shall continue human spaceflight",
+            )?,
+            draft(
+                1,
+                window_1,
+                27_960_000,
+                29_380_000,
+                "yeah besides we will introduce you",
+            )?,
+        ),
+        draft(
+            1,
+            window_1,
+            29_380_000,
+            31_060_000,
+            "and we will see each other again",
+        )?,
+    );
+    let chunks = [first, second];
+    let words = |merged_transcript: &super::MergedTranscript| -> Vec<String> {
+        merged_transcript
+            .segments
+            .iter()
+            .map(|kept| kept.segment.text().text().to_owned())
+            .collect()
+    };
+    // The merge before the fix (the earlier merge lost them too) dropped them.
+    assert!(
+        !words(&previous_merge_as_transcript(&chunks))
+            .contains(&"we shall continue human spaceflight".to_owned())
+    );
+    let merged_transcript = merge_chunks(&chunks);
+    let kept_words = words(&merged_transcript);
+    assert!(
+        kept_words.contains(&"we shall continue human spaceflight".to_owned()),
+        "{kept_words:?}"
+    );
+    assert_eq!(
+        kept_words
+            .iter()
+            .filter(|text| text.as_str() == "i am sure all will be well")
+            .count(),
+        2,
+        "the repeated copy is kept: nothing is removed by the rule"
+    );
+    let kept = kept_spans(&merged_transcript.segments);
+    for (start, end) in holes_of_the_union(&chunks, &kept) {
+        assert!(end - start <= SEAM_COVERAGE_TOLERANCE_MICROS);
+    }
+    Ok(())
+}
+
+/// #485: a speaker who says the same thing twice, in two segments, keeps both,
+/// and where the next chunk also heard the second saying the words are never
+/// lost: the second saying claims no time, so the next chunk's copy is kept by
+/// rule 1 and then trimmed by rule 3 as a repeat whose time is covered. Only
+/// words that both chunks wrote are removed, never one of the two sayings.
+#[test]
+fn a_sentence_said_twice_is_kept_twice() -> TestResult {
+    let window_0 = (0, 30 * SECOND);
+    let window_1 = (25 * SECOND, 55 * SECOND);
+    // Alone in one chunk: both sayings stay.
+    let alone = with(
+        draft(
+            0,
+            window_0,
+            10 * SECOND,
+            12 * SECOND,
+            "we will go there now",
+        )?,
+        draft(
+            0,
+            window_0,
+            12 * SECOND,
+            14 * SECOND,
+            "we will go there now",
+        )?,
+    );
+    let (kept, _) = texts(&[alone, empty(1, window_1)?]);
+    assert_eq!(kept, ["we will go there now", "we will go there now"]);
+    // At a seam, with the next chunk's copy of the second saying.
+    let first = with(
+        draft(0, window_0, 23 * SECOND, 25_500_000, "we will go there now")?,
+        draft(0, window_0, 25_500_000, 28 * SECOND, "we will go there now")?,
+    );
+    let second = with(
+        draft(1, window_1, 25_600_000, 28_100_000, "we will go there now")?,
+        draft(1, window_1, 28_100_000, 30 * SECOND, "and then we stop")?,
+    );
+    let (kept, _) = texts(&[first, second]);
+    assert_eq!(
+        kept.iter()
+            .filter(|text| text.as_str() == "we will go there now")
+            .count(),
+        2,
+        "{kept:?}"
+    );
+    assert!(kept.contains(&"and then we stop".to_owned()), "{kept:?}");
+    Ok(())
+}
+
+/// #485: what counts as a repeat of the segment before. The same words (two or
+/// more, one inner word allowed to differ among four or more) are; segments that
+/// only share their first words, a one-word "no" said twice, a difference at the
+/// first or last word, and a first segment are not. A segment that only shares a
+/// prefix still claims its time, so the merge of such a layout is the earlier
+/// merge's.
+#[test]
+fn only_a_segment_with_the_same_words_as_the_one_before_is_a_repeat() -> TestResult {
+    let window_0 = (0, 30 * SECOND);
+    let chunk_of = |pairs: &[(&str, &str)]| -> Built<Vec<bool>> {
+        let mut answers = Vec::new();
+        for (before, after) in pairs {
+            let chunk = with(
+                draft(0, window_0, 2 * SECOND, 4 * SECOND, before)?,
+                draft(0, window_0, 4 * SECOND, 6 * SECOND, after)?,
+            );
+            answers.push(super::repeats_the_segment_before(&chunk, 1));
+            assert!(
+                !super::repeats_the_segment_before(&chunk, 0),
+                "a first segment repeats nothing"
+            );
+        }
+        Ok(answers)
+    };
+    assert_eq!(
+        chunk_of(&[
+            ("i am sure all will be well", "I am sure, all will be well."),
+            ("we open the settings page", "we open the settings window"),
+            ("we open the settings page", "we open the"),
+            ("no", "no"),
+            ("so we open the file now", "so we open a file now"),
+            ("we open the file now", "they open the file now"),
+            ("we open the file now", "we open the file again"),
+        ])?,
+        [true, false, false, false, true, false, false]
+    );
+    // A neighbour copy over a segment that only shares a prefix with the one
+    // before it is dropped as before: the merge is the earlier merge's.
+    let window_1 = (25 * SECOND, 55 * SECOND);
+    let first = with(
+        draft(0, window_0, 20 * SECOND, 24 * SECOND, "we open the")?,
+        draft(0, window_0, 24 * SECOND, 29_500_000, "we open the file now")?,
+    );
+    let second = draft(1, window_1, 25 * SECOND, 28 * SECOND, "the file now")?;
+    let chunks = [first, second];
+    assert_eq!(
+        merge_chunks(&chunks).segments,
+        previous_merge_as_transcript(&chunks).segments
+    );
+    Ok(())
+}
+
 /// The frozen merge as a [`super::MergedTranscript`], for comparisons that only
 /// look at its segments.
 fn previous_merge_as_transcript(chunks: &[ChunkSegments]) -> super::MergedTranscript {

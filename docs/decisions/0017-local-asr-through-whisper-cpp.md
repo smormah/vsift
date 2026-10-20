@@ -879,3 +879,19 @@ copies of the same text differ by a median of 40 ms. **The value stays:** a smal
 (at 0.1 s) of the 15 stretches, each kept even where its words repeat (the note on #382), and with nothing known about what the stretches
 hold no smaller value can be shown to lose less than it repeats. **The maintainer decided on 2026-10-19 that it stays.** The campaign lists
 where each stretch starts, for a listener; if they hold words, 0.1 s is the figure to try. L-156 has the figures.
+
+## 2026-10-20 note: a segment that repeats the one before it in its chunk claims no time (#485)
+
+Amends rules 1 and 2 of `merge_chunks`; the guard, rule 3 and the tolerance are unchanged. On RM09 (hosted runs 39466921335 and
+39486605862, `real-media-set.md` section 14.5) chunk 36 wrote one sentence twice, and rule 1 dropped chunk 37's segment over
+925.00 to 927.96 s because the repeated copy owned that time; the guard saw no hole because the copy covered it, so the words were in
+no segment and coverage called the stretch transcribed (L-201). **The decision (the maintainer's, 2026-10-20, the narrowest of three
+options):** a segment whose normalised words repeat those of the segment just before it in the same chunk (at least two words,
+compared as rule 3 compares them, so one inner word may differ among four or more) claims no time: it does not make its chunk count
+as having a segment at that time in rule 1, and it does not stand in for a neighbour's cut segment in rule 2. It is kept by its own
+chunk as any segment is, so the rule only lets another chunk's words be kept as well and removes nothing; a sentence a speaker says
+twice keeps both segments. The broader options, restoring any dropped segment whose words no kept segment holds, or treating the
+repetition in recognition (with #474), were not taken. After the fix RM09's chunk 37 segment is kept, and the seam's missing words
+went from 16 to 9 (the rest are the language limit, L-188). Tests: `a_repeated_copy_in_one_chunk_no_longer_hides_the_next_chunks_words`
+(it failed before), `a_sentence_said_twice_is_kept_twice`, `only_a_segment_with_the_same_words_as_the_one_before_is_a_repeat`;
+the properties against the frozen earlier merge, which use unique words, are unchanged.
