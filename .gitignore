@@ -13,6 +13,10 @@
 *.profdata
 __pycache__/
 
+# The noisy-speech set's utterance WAVs live in the test-media release, never in git
+# (maintainer decision, 2026-10-20; tools/fetch_p07_noisy_utterances.py fetches them).
+/fixtures/corpus/noisy-speech/generated/speech/
+
 # Environment and secrets
 .env
 .env.*
