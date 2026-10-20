@@ -125,6 +125,29 @@ test('seam joins count the gaps between segments of two chunks at a seam against
   assert.equal(overlapping.seam_joins.bins.overlap, 1);
 });
 
+test('segments at their chunk start are counted, with how much later the other plan started the same words (#174)', () => {
+  const withOffset = (list) => list.map((segment) => ({
+    ...segment,
+    alignment: { ...segment.alignment, provider_start_us: segment.start_us - segment.alignment.chunk_audio_start_us },
+  }));
+  const a = withOffset(run(speech(120), 0, 'a'));
+  const b = withOffset(run(speech(120), 15 * SECOND, 'b'));
+  // Plan A's chunk 2 (50 s) writes its first sentence from the chunk's start,
+  // 4 s before plan B, which heard it mid-chunk, starts it.
+  const early = a.map((segment) => (segment.start_us === 50 * SECOND
+    ? { ...segment, end_us: 55 * SECOND } : segment));
+  const lateInB = b.map((segment) => (segment.start_us === 50 * SECOND
+    ? { ...segment, start_us: 54 * SECOND, end_us: 55 * SECOND, alignment: { ...segment.alignment, provider_start_us: 54 * SECOND - segment.alignment.chunk_audio_start_us } } : segment));
+  const result = checks.chunkStartSegments(early, lateInB);
+  assert.equal(result.first_chunk, 1, 'the run start is counted apart');
+  assert.ok(result.at_chunk_start >= 3, `${result.at_chunk_start}`);
+  assert.equal(result.lead_against_other_plan.max_us, 4 * SECOND);
+  assert.equal(result.longer_than_10_s, 0);
+  // Carried segments and segments mid-chunk are not counted.
+  const mid = checks.chunkStartSegments(b.filter((segment) => !segment.carried_from), a);
+  assert.equal(mid.first_chunk + mid.at_chunk_start <= mid.segments, true);
+});
+
 test('a coverage statement that adds up passes, and each way of not adding up is named', () => {
   const searched = { from_us: 0, to_us: 100 };
   const good = { searched_range: searched, transcribed_ranges: [{ from_us: 0, to_us: 60 }], untranscribed_ranges: [{ from_us: 60, to_us: 100 }], no_speech_ranges: [{ from_us: 10, to_us: 20 }], ranges_truncated: false };

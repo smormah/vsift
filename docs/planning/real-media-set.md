@@ -256,7 +256,11 @@ property checks are pure functions in `lib/real-media-checks.cjs`, tested on han
    of some candidate: seven in eight of RM10's still moments, so the loose figure alone says little); and the candidates
    per minute of a still screen (false changes). **Without labels**, the measurement `mode: visual` (section 8) compares
    the change rule with what changed in the native frames ([`visual-thresholds-real-media.md`](visual-thresholds-real-media.md)).
-8. **Speech start** (#174): with `speech_start_us` labelled, the first segment's start minus it.
+8. **Speech start** (#174): with `speech_start_us` labelled, the first segment's start minus it. **Without labels**
+   (`chunk_start_segments`, since #174's measurement): in each revision, the segments that start at their chunk's first sample
+   (the recogniser's own start within 20 ms of it), the run's first chunk counted apart, their lengths, how many are longer than
+   10 s, and, where the other chunk plan wrote the same words (three or more, once each) in a segment that does not start at its
+   chunk's start, how much later it started them: the time such a segment claims before its words, as far as two cuts can tell.
 9. **Small text** (#173): the crop of the labelled small-text region is at native size and legible to a person; recorded by
    hand, as a yes or no per crop. **Measured mechanically since 2026-10-19:** for an item that covers
    `screen-ui-small-text`, each of the three frames is cut into a grid of native crops of at most 480x120. Each crop's
@@ -578,3 +582,37 @@ ASR` stages them, the merge of `main` at `a5f35b2d`), both chunk plans of each i
   little differently (hosted runs do not always recognise alike, #486): 12 of 185 seam joins with a gap of up to half a second, against 2 of 569 inside a chunk. **Where to
   listen** (the start of each such gap, in seconds, whole run unless marked): RM06 99.96, 124.96, 149.82, 503.0 and 482.44
   (shifted); RM09 554.52, 629.04, 678.0, 1,051.52, 1,379.4 and 768.52 (shifted); RM10 178.14.
+### 14.3 Segments that start at their chunk's start, measured on real speech (#174, hosted, 2026-10-19)
+
+The `base` model often starts the first segment of a chunk at the chunk's first sample, whatever the audio holds (L-024). After
+a pause, noise or a silent lead such a segment claims time before its first word, and how much depends on where the chunk was
+cut (14.1: RM09's first briefing words cited from 300.00 s, the chunk's start, about 15 s early; from 315.00 s in a plan cut
+elsewhere). Hosted run 39224705780 (Ubuntu, both chunk plans of each item; `chunk_start_segments`, check 8) measured it without
+labels. The run's first chunk is counted apart.
+
+| | Segments at their chunk's start (whole / shifted plan) | Their length: median, 95th percentile, maximum | Longer than 10 s | Same words started later by the other plan, mid-chunk |
+| --- | --- | --- | ---: | --- |
+| RM06 | 18 of 167 / 20 of 152 | 5.2 s, 7.4 s, 8.0 s / 5.4 s, 12.0 s, 12.0 s | 0 / 2 | 1 pair: 2.7 s later / none |
+| RM09 | 39 of 366 / 43 of 316 | 5.3 s, 19.0 s, 22.5 s / 5.8 s, 13.3 s, 24.0 s | 4 / 6 | 3 pairs, median 1.0 s, max 3.1 s / 6 pairs, median 3.7 s, max 4.1 s |
+| RM10 | 5 of 41 / 4 of 42 | 6.3 s, 9.4 s, 9.4 s / 6.1 s, 7.0 s, 7.0 s | 0 / 0 | none |
+
+- **About one segment in nine starts at its chunk's first sample.** Many are honest, because speech that runs across a seam does
+  start there. Where the other plan heard the same words mid-chunk (10 pairs), it started them **1 to 4 s later**. That is
+  what a citation of such a segment can claim before the words. The pairing needs the same three words or more in both plans,
+  so the longest claims (RM09's 15 to 17 s, 14.1 and #383) are not among the pairs, and the 12 segments over 10 s are where to
+  look for them.
+- **It can hide missing words, too.** A segment that claims 17 s before its words covers that time in coverage, so words said
+  there that no chunk kept are called transcribed (RM09 at 1,040 s, #383; L-158 (b)); whether that is what hides RM09's seam
+  loss at 922 to 929 s is #485.
+- **What could be done (#174). The maintainer decided on 2026-10-19: option 3 in `0.2.3`, option 1 evaluated in R1:**
+  1. **Token times from whisper.cpp's DTW alignment** (`-dtw base`). Each word gets a time, and a segment's start is its first
+     word's, in noise too. Cost: a new decoding profile (`r0-v2`) and P07 accuracy re-qualified on it; the word times need a
+     parser of the `t_dtw` field and a stored member, which older releases read as damage (as with L-160).
+  2. **Trim a chunk-start segment to the first 20 ms frame above -50 dBFS**, the rule that already calls a chunk silent. It is
+     exact and deterministic, but it helps only silent leads (F09's 0.75 s to 4.0 s); in noise like RM09's lead nothing is
+     below the threshold. It needs the trim stored with the segment and the frames at hand on a resume, which a checkpoint does
+     not keep today.
+  3. **Say it, and change nothing in the times.** The guide's limits page says so from this change (it did not before), and
+     each segment's `alignment.provider_start_us` of 0 already marks the kind. Free, and it fixes nothing.
+- **The measurement's own limits:** two plans of one recogniser, not a labelled truth; `speech_start_us` labels (check 8) would
+  give the error itself.

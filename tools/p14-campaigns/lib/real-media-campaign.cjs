@@ -307,6 +307,11 @@ function investigate(item, file, run, where) {
       report.measurements.timing_differences = checks.timingDifferences(a.segments, b.segments);
       // How each plan joins two chunks' segments, against one chunk's own joins (#381).
       report.measurements.seam_joins = { whole_run: checks.seamJoins(a.segments), shifted_run: checks.seamJoins(b.segments) };
+      // Segments that start at their chunk's first sample, and how much later the other plan started the same words (#174).
+      report.measurements.chunk_start_segments = {
+        whole_run: checks.chunkStartSegments(a.segments, b.segments),
+        shifted_run: checks.chunkStartSegments(b.segments, a.segments),
+      };
       // Two plans with the same seams compare nothing: the check is then not run, and says so.
       const startsA = new Set(checks.seams(checks.chunkPlan(a.segments)).map((seam) => seam.from_us));
       const seamsB = checks.seams(checks.chunkPlan(b.segments));
