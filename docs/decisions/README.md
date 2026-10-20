@@ -30,3 +30,4 @@ Architecture decision records explain decisions that constrain future implementa
 - [0024: R0 qualification and the release candidate](0024-r0-qualification-and-release-candidate.md) (Accepted 2026-10-10, with P14's completion and the stable release 0.2.0; Proposed 2026-10-02 as the P14 plan, its decisions A-H confirmed by the maintainer the same day)
 - [0025: The self-hosted runner policy (LOKI, the overnight test machine)](0025-self-hosted-runner-policy.md) (Accepted 2026-10-19, the maintainer's decision on #472, with the overnight lane)
 - [0026: Windows directories created with their security descriptor (the one `unsafe` crate)](0026-windows-directories-created-with-their-security-descriptor.md) (Accepted 2026-10-19, the maintainer's choice on #443)
+- [0027: The road to 1.0: a 0.3.0 that matches and goes beyond the existing tool, then 1.0.0](0027-the-road-to-1-0.md) (Accepted 2026-10-21, the maintainer's replan)
