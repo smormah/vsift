@@ -1,0 +1,4797 @@
+{
+  "generator": "tools/generate_p07_noisy_speech.py v1",
+  "purpose": "Test fixtures only. Kokoro is never a VSift runtime dependency.",
+  "set_id": "vsift-noisy-speech-v1",
+  "manifest_sha256": "9aea13472e7f1b32bb1e7506a231aa836d4bfa5449ed1f4ac8118f1ad61633d6",
+  "synthesis": {
+    "engine": "Kokoro text-to-speech (test fixture generation only)",
+    "model": {
+      "repository": "hexgrad/Kokoro-82M",
+      "revision": "f3ff3571791e39611d31c381e3a41a3af07b4987",
+      "licence": "Apache-2.0",
+      "files": [
+        {
+          "path": "kokoro/config.json",
+          "url": "https://huggingface.co/hexgrad/Kokoro-82M/resolve/f3ff3571791e39611d31c381e3a41a3af07b4987/config.json",
+          "bytes": 2351,
+          "sha256": "5abb01e2403b072bf03d04fde160443e209d7a0dad49a423be15196b9b43c17f",
+          "pinned_by": "git-blob-sha1"
+        },
+        {
+          "path": "kokoro/kokoro-v1_0.pth",
+          "url": "https://huggingface.co/hexgrad/Kokoro-82M/resolve/f3ff3571791e39611d31c381e3a41a3af07b4987/kokoro-v1_0.pth",
+          "bytes": 327212226,
+          "sha256": "496dba118d1a58f5f3db2efc88dbdc216e0483fc89fe6e47ee1f2c53f18ad1e4",
+          "pinned_by": "sha256"
+        },
+        {
+          "path": "kokoro/voices/af_heart.pt",
+          "url": "https://huggingface.co/hexgrad/Kokoro-82M/resolve/f3ff3571791e39611d31c381e3a41a3af07b4987/voices/af_heart.pt",
+          "bytes": 523425,
+          "sha256": "0ab5709b8ffab19bfd849cd11d98f75b60af7733253ad0d67b12382a102cb4ff",
+          "pinned_by": "sha256"
+        },
+        {
+          "path": "kokoro/voices/ef_dora.pt",
+          "url": "https://huggingface.co/hexgrad/Kokoro-82M/resolve/f3ff3571791e39611d31c381e3a41a3af07b4987/voices/ef_dora.pt",
+          "bytes": 523420,
+          "sha256": "d9d69b0f8a2b87a345f269d89639f89dfbd1a6c9da0c498ae36dd34afcf35530",
+          "pinned_by": "sha256"
+        }
+      ]
+    },
+    "voices": {
+      "en-US": {
+        "voice": "af_heart",
+        "kokoro_lang_code": "a"
+      },
+      "es": {
+        "voice": "ef_dora",
+        "kokoro_lang_code": "e"
+      }
+    },
+    "speed": 1.0,
+    "seed": 731,
+    "seed_policy": "torch.manual_seed reset before every sentence",
+    "inter_sentence_pause_us": 300000,
+    "torch_threads": 1,
+    "deterministic_algorithms": true,
+    "sample_rate": 24000,
+    "sample_format": "mono signed 16-bit little-endian PCM WAV, round(x * 32767)",
+    "environment": {
+      "python": "3.12.15",
+      "platform": "Linux-7.0.0-1017-azure-x86_64-with-glibc2.39",
+      "machine": "x86_64",
+      "cpu": "AMD EPYC 9V45 96-Core Processor",
+      "distributions": {
+        "espeakng-loader": "0.2.4",
+        "en-core-web-sm": "3.8.0",
+        "huggingface-hub": "1.33.0",
+        "kokoro": "0.9.4",
+        "misaki": "0.9.4",
+        "num2words": "0.5.14",
+        "numpy": "2.2.6",
+        "phonemizer-fork": "3.3.2",
+        "spacy": "3.8.7",
+        "tokenizers": "0.23.2",
+        "torch": "2.14.0+cpu",
+        "transformers": "5.17.0"
+      },
+      "espeak_ng": "1.52.0",
+      "spacy_model_wheel": {
+        "path": "wheels/en_core_web_sm-3.8.0-py3-none-any.whl",
+        "url": "https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl",
+        "bytes": 12806118,
+        "sha256": "1932429db727d4bff3deed6b34cfc05df17794f4a52eeb26cf8928f7c1a0fb85",
+        "pinned_by": "sha256"
+      }
+    },
+    "resolved_distributions": [
+      {
+        "name": "addict",
+        "version": "2.4.0",
+        "url": "https://files.pythonhosted.org/packages/6a/00/b08f23b7d7e1e14ce01419a467b583edbb93c6cdb8654e54a9cc579cd61f/addict-2.4.0-py3-none-any.whl",
+        "sha256": "249bb56bbfd3cdc2a004ea0ff4c2b6ddc84d53bc2194761636eb314d5cfa5dfc"
+      },
+      {
+        "name": "annotated-doc",
+        "version": "0.0.5",
+        "url": "https://files.pythonhosted.org/packages/3e/30/e900b21425a860e195f32e37657aa1f7c7f2b1bfb26f03ca209b90933c06/annotated_doc-0.0.5-py3-none-any.whl",
+        "sha256": "117bac03a25ede5df5440e855b32d556049ca169ead221505badf432fed4b101"
+      },
+      {
+        "name": "annotated-types",
+        "version": "0.8.0",
+        "url": "https://files.pythonhosted.org/packages/99/91/8acff4f5e50511b911bbccb72b8628a49c68ce14148cd9f6431094859a90/annotated_types-0.8.0-py3-none-any.whl",
+        "sha256": "f072f4d804ea359e4eaf198b1af7a8b0943881a87f31bb764f8bf219bb9419e0"
+      },
+      {
+        "name": "anyio",
+        "version": "4.15.1",
+        "url": "https://files.pythonhosted.org/packages/12/b8/4bd346e22b28902df4d651910f5242c28d84e4a5c2435ca5c3f797ed7e2e/anyio-4.15.1-py3-none-any.whl",
+        "sha256": "6152fdbbf9a77fdec97731721bebf7c4c44f7c29b424b0065826173efc7ed101"
+      },
+      {
+        "name": "attrs",
+        "version": "26.1.0",
+        "url": "https://files.pythonhosted.org/packages/64/b4/17d4b0b2a2dc85a6df63d1157e028ed19f90d4cd97c36717afef2bc2f395/attrs-26.1.0-py3-none-any.whl",
+        "sha256": "c647aa4a12dfbad9333ca4e71fe62ddc36f4e63b2d260a37a8b83d2f043ac309"
+      },
+      {
+        "name": "babel",
+        "version": "2.18.0",
+        "url": "https://files.pythonhosted.org/packages/77/f5/21d2de20e8b8b0408f0681956ca2c69f1320a3848ac50e6e7f39c6159675/babel-2.18.0-py3-none-any.whl",
+        "sha256": "e2b422b277c2b9a9630c1d7903c2a00d0830c409c59ac8cae9081c92f1aeba35"
+      },
+      {
+        "name": "blis",
+        "version": "1.3.3",
+        "url": "https://files.pythonhosted.org/packages/d5/ad/58deaa3ad856dd3cc96493e40ffd2ed043d18d4d304f85a65cde1ccbf644/blis-1.3.3-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl",
+        "sha256": "1ef6d6e2b599a3a2788eb6d9b443533961265aa4ec49d574ed4bb846e548dcdb"
+      },
+      {
+        "name": "catalogue",
+        "version": "2.0.10",
+        "url": "https://files.pythonhosted.org/packages/9e/96/d32b941a501ab566a16358d68b6eb4e4acc373fab3c3c4d7d9e649f7b4bb/catalogue-2.0.10-py3-none-any.whl",
+        "sha256": "58c2de0020aa90f4a2da7dfad161bf7b3b054c86a5f09fcedc0b2b740c109a9f"
+      },
+      {
+        "name": "certifi",
+        "version": "2026.10.19",
+        "url": "https://files.pythonhosted.org/packages/c4/51/29046e48f693c54e5b7412216d447a1d8362c9653148d98c02cdf65fa733/certifi-2026.10.19-py3-none-any.whl",
+        "sha256": "42d35340cc5b9ba78e818ddbff0c5b1c2b779de448a340fd1b989f5fa8670e1b"
+      },
+      {
+        "name": "charset-normalizer",
+        "version": "3.5.2",
+        "url": "https://files.pythonhosted.org/packages/7f/c5/38806a25ab5e65fc178f39affeda20858efafede2fce1ffc2556cfc9fe73/charset_normalizer-3.5.2-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl",
+        "sha256": "3d31298449090ab8d47b7b1b2a555ff73cac7ed438a08b7ac160980c7ebed649"
+      },
+      {
+        "name": "click",
+        "version": "8.5.0",
+        "url": "https://files.pythonhosted.org/packages/58/50/6c0d534c5f134586a8e1ba4e330569e32f057e33372ae556463212fb4cd3/click-8.5.0-py3-none-any.whl",
+        "sha256": "255bc9599cf7748b4b1a446ccc735421bd08a2ae529a8b88597d3de5664ee360"
+      },
+      {
+        "name": "cloudpathlib",
+        "version": "0.26.0",
+        "url": "https://files.pythonhosted.org/packages/97/aa/c333f1be2afab2d033d51a66cb105f4bfc885b0c546e1168fb889a416b9d/cloudpathlib-0.26.0-py3-none-any.whl",
+        "sha256": "abcd7f54bcbb2fbb79c0e96b79241f08866760aee6276586882b3558672d571b"
+      },
+      {
+        "name": "cloudpickle",
+        "version": "3.1.2",
+        "url": "https://files.pythonhosted.org/packages/88/39/799be3f2f0f38cc727ee3b4f1445fe6d5e4133064ec2e4115069418a5bb6/cloudpickle-3.1.2-py3-none-any.whl",
+        "sha256": "9acb47f6afd73f60dc1df93bb801b472f05ff42fa6c84167d25cb206be1fbf4a"
+      },
+      {
+        "name": "confection",
+        "version": "0.1.5",
+        "url": "https://files.pythonhosted.org/packages/0c/00/3106b1854b45bd0474ced037dfe6b73b90fe68a68968cef47c23de3d43d2/confection-0.1.5-py3-none-any.whl",
+        "sha256": "e29d3c3f8eac06b3f77eb9dfb4bf2fc6bcc9622a98ca00a698e3d019c6430b14"
+      },
+      {
+        "name": "csvw",
+        "version": "4.1.1",
+        "url": "https://files.pythonhosted.org/packages/fe/9e/a4e6f6aea5f0dedd53523c653c8f368eb6a2392bce09d36ac36de1db2c0f/csvw-4.1.1-py2.py3-none-any.whl",
+        "sha256": "fce2c461899290771eaec28c770e2fd0f6bc1324edb81d688c89e09cf222fcdb"
+      },
+      {
+        "name": "curated-tokenizers",
+        "version": "0.0.10",
+        "url": "https://files.pythonhosted.org/packages/37/fb/20d524a76f8bd226733931b67063c87ecead3b58a7cc3543c27ca46b63c7/curated_tokenizers-0.0.10-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl",
+        "sha256": "841743db1da4a4a1298675584771ed973945c31ea9f6dde9f06e9eb6b3974bf3"
+      },
+      {
+        "name": "curated-transformers",
+        "version": "0.1.1",
+        "url": "https://files.pythonhosted.org/packages/d6/67/3b72b3fdfcadab61bc8f59c17e63770e526ffabd583ed32f174a7c01af85/curated_transformers-0.1.1-py2.py3-none-any.whl",
+        "sha256": "d716063d73d803c6925d2dab56fde9b9ab8e89e663c2c0587804944ba488ff01"
+      },
+      {
+        "name": "cymem",
+        "version": "2.0.13",
+        "url": "https://files.pythonhosted.org/packages/eb/12/678d16f7aa1996f947bf17b8cfb917ea9c9674ef5e2bd3690c04123d5680/cymem-2.0.13-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl",
+        "sha256": "f190a92fe46197ee64d32560eb121c2809bb843341733227f51538ce77b3410d"
+      },
+      {
+        "name": "dlinfo",
+        "version": "2.0.0",
+        "url": "https://files.pythonhosted.org/packages/da/90/022c79d6e5e6f843268c10b84d4a021ee3afba0621d3c176d3ff2024bfc8/dlinfo-2.0.0-py3-none-any.whl",
+        "sha256": "b32cc18e3ea67c0ca9ca409e5b41eed863bd1363dbc9dd3de90fedf11b61e7bc"
+      },
+      {
+        "name": "docopt",
+        "version": "0.6.2",
+        "url": "https://files.pythonhosted.org/packages/a2/55/8f8cab2afd404cf578136ef2cc5dfb50baa1761b68c9da1fb1e4eed343c9/docopt-0.6.2.tar.gz",
+        "sha256": "49b3a825280bd66b3aa83585ef59c4a8c82f2c8a522dbe754a8bc8d08c85c491"
+      },
+      {
+        "name": "en-core-web-sm",
+        "version": "3.8.0",
+        "url": "file:///home/runner/work/_temp/p07-assets/wheels/en_core_web_sm-3.8.0-py3-none-any.whl",
+        "sha256": "1932429db727d4bff3deed6b34cfc05df17794f4a52eeb26cf8928f7c1a0fb85"
+      },
+      {
+        "name": "espeakng-loader",
+        "version": "0.2.4",
+        "url": "https://files.pythonhosted.org/packages/de/1e/25ec5ab07528c0fbb215a61800a38eca05c8a99445515a02d7fa5debcb32/espeakng_loader-0.2.4-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+        "sha256": "08721baf27d13d461f6be6eed9a65277e70d68234ff484fd8b9897b222cdcb6d"
+      },
+      {
+        "name": "filelock",
+        "version": "3.32.3",
+        "url": "https://files.pythonhosted.org/packages/a7/8e/50f46a9c0ce8d2861a394c1347caae037ea0431d2f67d7feb151cbc4649a/filelock-3.32.3-py3-none-any.whl",
+        "sha256": "7f0ca4bcc0e181c60dbbd8aa9ab5b120ebb99e4e064e83636340056f833a1f09"
+      },
+      {
+        "name": "fsspec",
+        "version": "2026.7.0",
+        "url": "https://files.pythonhosted.org/packages/fd/3c/6a2bf344106328fd04963664a60b9bb6496fc25df8e962fcdc1367285fb9/fsspec-2026.7.0-py3-none-any.whl",
+        "sha256": "b57ddbafedfaef7018c1ecab32aa200a9d7ca26b77965f64e48b70061249d279"
+      },
+      {
+        "name": "h11",
+        "version": "0.16.0",
+        "url": "https://files.pythonhosted.org/packages/04/4b/29cac41a4d98d144bf5f6d33995617b185d14b22401f75ca86f384e87ff1/h11-0.16.0-py3-none-any.whl",
+        "sha256": "63cf8bbe7522de3bf65932fda1d9c2772064ffb3dae62d55932da54b31cb6c86"
+      },
+      {
+        "name": "hf-xet",
+        "version": "1.7.0",
+        "url": "https://files.pythonhosted.org/packages/a3/4c/2bf3b66c215d409655f28de1622393dde04c9461280d48c7924bb3b2decd/hf_xet-1.7.0-cp38-abi3-manylinux2014_x86_64.manylinux_2_17_x86_64.whl",
+        "sha256": "2814a6e999d13464c4d679b788cc5d784eb5a4edfc638a31f10e9a11ab531ef8"
+      },
+      {
+        "name": "httpcore",
+        "version": "1.0.9",
+        "url": "https://files.pythonhosted.org/packages/7e/f5/f66802a942d491edb555dd61e3a9961140fd64c90bce1eafd741609d334d/httpcore-1.0.9-py3-none-any.whl",
+        "sha256": "2d400746a40668fc9dec9810239072b40b4484b640a8c38fd654a024c7a1bf55"
+      },
+      {
+        "name": "httpx",
+        "version": "0.28.1",
+        "url": "https://files.pythonhosted.org/packages/2a/39/e50c7c3a983047577ee07d2a9e53faf5a69493943ec3f6a384bdc792deb2/httpx-0.28.1-py3-none-any.whl",
+        "sha256": "d909fcccc110f8c7faf814ca82a9a4d816bc5a6dbfea25d6591d6985b8ba59ad"
+      },
+      {
+        "name": "huggingface-hub",
+        "version": "1.33.0",
+        "url": "https://files.pythonhosted.org/packages/fc/16/963096d224b80909432dc16561a615fd33d2d13beef3ce4c63fa25e40867/huggingface_hub-1.33.0-py3-none-any.whl",
+        "sha256": "04e434b06e100eddbce9a6e817d72693a7884b10a79bd67ab48080d5c07eb899"
+      },
+      {
+        "name": "idna",
+        "version": "3.20",
+        "url": "https://files.pythonhosted.org/packages/58/a2/bb081bab032533a855d44de1d56f8e8426114ff1ba5d1f07a438a0a654f8/idna-3.20-py3-none-any.whl",
+        "sha256": "ab7ae7122974553370f0bdb919e1a960b2cd1bc1ef0276416d896db81c14582c"
+      },
+      {
+        "name": "isodate",
+        "version": "0.7.2",
+        "url": "https://files.pythonhosted.org/packages/15/aa/0aca39a37d3c7eb941ba736ede56d689e7be91cab5d9ca846bde3999eba6/isodate-0.7.2-py3-none-any.whl",
+        "sha256": "28009937d8031054830160fce6d409ed342816b543597cece116d966c6d99e15"
+      },
+      {
+        "name": "jinja2",
+        "version": "3.1.6",
+        "url": "https://download.pytorch.org/whl/jinja2-3.1.6-py3-none-any.whl",
+        "sha256": "85ece4451f492d0c13c5dd7c13a64681a86afae63a5f347908daf103ce6d2f67"
+      },
+      {
+        "name": "joblib",
+        "version": "1.6.0",
+        "url": "https://files.pythonhosted.org/packages/18/53/84099323c2ec4be98d935f63c033ac4151ee83836ca1050ede3b3aadf155/joblib-1.6.0-py3-none-any.whl",
+        "sha256": "3dbbf9f6e4b592a2357b854608e980fe6390d131d7a82f011a377ef2ebef7aba"
+      },
+      {
+        "name": "jsonschema",
+        "version": "4.26.0",
+        "url": "https://files.pythonhosted.org/packages/69/90/f63fb5873511e014207a475e2bb4e8b2e570d655b00ac19a9a0ca0a385ee/jsonschema-4.26.0-py3-none-any.whl",
+        "sha256": "d489f15263b8d200f8387e64b4c3a75f06629559fb73deb8fdfb525f2dab50ce"
+      },
+      {
+        "name": "jsonschema-specifications",
+        "version": "2025.9.1",
+        "url": "https://files.pythonhosted.org/packages/41/45/1a4ed80516f02155c51f51e8cedb3c1902296743db0bbc66608a0db2814f/jsonschema_specifications-2025.9.1-py3-none-any.whl",
+        "sha256": "98802fee3a11ee76ecaca44429fda8a41bff98b00a0f2838151b113f210cc6fe"
+      },
+      {
+        "name": "kokoro",
+        "version": "0.9.4",
+        "url": "https://files.pythonhosted.org/packages/ea/cc/75f41633c75224ba820a4533163bc8b070b6bf25416014074c63284c2d4e/kokoro-0.9.4-py3-none-any.whl",
+        "sha256": "a129dc6364a286bd6a92c396e9862459d3d3e45f2c15596ed5a94dcee5789efd"
+      },
+      {
+        "name": "langcodes",
+        "version": "3.5.1",
+        "url": "https://files.pythonhosted.org/packages/dd/c1/d10b371bcba7abce05e2b33910e39c33cfa496a53f13640b7b8e10bb4d2b/langcodes-3.5.1-py3-none-any.whl",
+        "sha256": "b6a9c25c603804e2d169165091d0cdb23934610524a21d226e4f463e8e958a72"
+      },
+      {
+        "name": "language-tags",
+        "version": "1.3.1",
+        "url": "https://files.pythonhosted.org/packages/0a/21/b48b9e8408b3faec9fb7cb2f68352c7724add35a980c948eaceb29ac41e4/language_tags-1.3.1-py3-none-any.whl",
+        "sha256": "f7db7ef8879523019603e09644a86d95ba60595ce5e5ea82d46e8971b0f68f7b"
+      },
+      {
+        "name": "loguru",
+        "version": "0.7.3",
+        "url": "https://files.pythonhosted.org/packages/0c/29/0348de65b8cc732daa3e33e67806420b2ae89bdce2b04af740289c5c6c8c/loguru-0.7.3-py3-none-any.whl",
+        "sha256": "31a33c10c8e1e10422bfd431aeb5d351c7cf7fa671e3c4df004162264b28220c"
+      },
+      {
+        "name": "markdown-it-py",
+        "version": "4.2.0",
+        "url": "https://files.pythonhosted.org/packages/b3/81/4da04ced5a082363ecfa159c010d200ecbd959ae410c10c0264a38cac0f5/markdown_it_py-4.2.0-py3-none-any.whl",
+        "sha256": "9f7ebbcd14fe59494226453aed97c1070d83f8d24b6fc3a3bcf9a38092641c4a"
+      },
+      {
+        "name": "markupsafe",
+        "version": "3.0.3",
+        "url": "https://download.pytorch.org/whl/markupsafe-3.0.3-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl",
+        "sha256": "d6dd0be5b5b189d31db7cda48b91d7e0a9795f31430b7f271219ab30f1d3ac9d"
+      },
+      {
+        "name": "mdurl",
+        "version": "0.1.2",
+        "url": "https://files.pythonhosted.org/packages/b3/38/89ba8ad64ae25be8de66a6d463314cf1eb366222074cfda9ee839c56a4b4/mdurl-0.1.2-py3-none-any.whl",
+        "sha256": "84008a41e51615a49fc9966191ff91509e3c40b939176e643fd50a5c2196b8f8"
+      },
+      {
+        "name": "misaki",
+        "version": "0.9.4",
+        "url": "https://files.pythonhosted.org/packages/82/ec/0ee4110ddb54278b8f21c40a140370ae8f687036c4edf578316602697c56/misaki-0.9.4-py3-none-any.whl",
+        "sha256": "90e2eeb169786c014c429e5058d2ea6bcd02d651f2a24450ba6c9ffc0f8da15a"
+      },
+      {
+        "name": "mpmath",
+        "version": "1.3.0",
+        "url": "https://files.pythonhosted.org/packages/43/e3/7d92a15f894aa0c9c4b49b8ee9ac9850d6e63b03c9c32c0367a13ae62209/mpmath-1.3.0-py3-none-any.whl",
+        "sha256": "a0b2b9fe80bbcd81a6647ff13108738cfb482d481d826cc0e02f5b35e5c88d2c"
+      },
+      {
+        "name": "murmurhash",
+        "version": "1.0.15",
+        "url": "https://files.pythonhosted.org/packages/ff/30/ea8f601a9bf44db99468696efd59eb9cff1157cd55cb586d67116697583f/murmurhash-1.0.15-cp312-cp312-manylinux1_x86_64.manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_5_x86_64.whl",
+        "sha256": "5a301decfaccfec70fe55cb01dde2a012c3014a874542eaa7cc73477bb749616"
+      },
+      {
+        "name": "networkx",
+        "version": "3.6.1",
+        "url": "https://files.pythonhosted.org/packages/9e/c9/b2622292ea83fbb4ec318f5b9ab867d0a28ab43c5717bb85b0a5f6b3b0a4/networkx-3.6.1-py3-none-any.whl",
+        "sha256": "d47fbf302e7d9cbbb9e2555a0d267983d2aa476bac30e90dfbe5669bd57f3762"
+      },
+      {
+        "name": "num2words",
+        "version": "0.5.14",
+        "url": "https://files.pythonhosted.org/packages/d6/5b/545e9267a1cc080c8a1be2746113a063e34bcdd0f5173fd665a5c13cb234/num2words-0.5.14-py3-none-any.whl",
+        "sha256": "1c8e5b00142fc2966fd8d685001e36c4a9911e070d1b120e1beb721fa1edb33d"
+      },
+      {
+        "name": "numpy",
+        "version": "2.2.6",
+        "url": "https://files.pythonhosted.org/packages/8c/3d/1e1db36cfd41f895d266b103df00ca5b3cbe965184df824dec5c08c6b803/numpy-2.2.6-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+        "sha256": "fd83c01228a688733f1ded5201c678f0c53ecc1006ffbc404db9f7a899ac6249"
+      },
+      {
+        "name": "packaging",
+        "version": "26.3",
+        "url": "https://files.pythonhosted.org/packages/63/34/ba1c580383c9eada3711951fef0795c80b829a078d72188184bcab9dd527/packaging-26.3-py3-none-any.whl",
+        "sha256": "d7193f7c8e4e93f444fde0262bf90af30e16fa0ad0ad44cb553c87339b23cd1c"
+      },
+      {
+        "name": "phonemizer-fork",
+        "version": "3.3.2",
+        "url": "https://files.pythonhosted.org/packages/64/f1/0dcce21b0ae16a82df4b6583f8f3ad8e55b35f7e98b6bf536a4dd225fa08/phonemizer_fork-3.3.2-py3-none-any.whl",
+        "sha256": "97305c76f4183b3825dae8f4c032265fe78c9946ce58c47d4b62161349264b74"
+      },
+      {
+        "name": "preshed",
+        "version": "3.0.13",
+        "url": "https://files.pythonhosted.org/packages/51/94/8c9bc48a6ea4903f53a1a0031ce8e35687526949f25821762ef21493c007/preshed-3.0.13-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl",
+        "sha256": "8b8de3f58043070a354477995acdd98626ce43e4193c708ebd0f694e467f5155"
+      },
+      {
+        "name": "pydantic",
+        "version": "2.14.1",
+        "url": "https://files.pythonhosted.org/packages/35/ea/a56b9fe5066f3537b7882f77e9c5dfb26d8c2eefdaed9b5fc73d57b4dc22/pydantic-2.14.1-py3-none-any.whl",
+        "sha256": "9195d967ec791692a04438115466764fb8b9a27b31f14a760437694f40d6b454"
+      },
+      {
+        "name": "pydantic-core",
+        "version": "2.50.1",
+        "url": "https://files.pythonhosted.org/packages/90/24/48cd98388e4ac2c08d0800af36d15413db15e20387f1038123a2c86cb2f6/pydantic_core-2.50.1-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+        "sha256": "93ba4e9d8210d941c200431a56b2c0400b131865947903937ed3ec5404307d2e"
+      },
+      {
+        "name": "pygments",
+        "version": "2.21.0",
+        "url": "https://files.pythonhosted.org/packages/71/46/17f022dd3e953bf20a04a028a21ec746d942f8d2af30fa0f124fa0e6a684/pygments-2.21.0-py3-none-any.whl",
+        "sha256": "2363c69b61c4a97c838da3b130dcd6468f4848992b21a82f2a63ec34377137d9"
+      },
+      {
+        "name": "pyparsing",
+        "version": "3.3.3",
+        "url": "https://files.pythonhosted.org/packages/38/bb/d215ee7c73b61497b28a5503f9f53523f294fcc936762b7caf90e0c1c2b5/pyparsing-3.3.3-py3-none-any.whl",
+        "sha256": "ece8c00a69cf01b45d0b1dedabb469c90d8caf996d4fda40f147627a122849a4"
+      },
+      {
+        "name": "python-dateutil",
+        "version": "2.9.0.post0",
+        "url": "https://files.pythonhosted.org/packages/ec/57/56b9bcc3c9c6a792fcbaf139543cee77261f3651ca9da0c93f5c1221264b/python_dateutil-2.9.0.post0-py2.py3-none-any.whl",
+        "sha256": "a8b2bc7bffae282281c8140a97d3aa9c14da0b136dfe83f850eea9a5f7470427"
+      },
+      {
+        "name": "pyyaml",
+        "version": "6.0.3",
+        "url": "https://files.pythonhosted.org/packages/8b/9d/b3589d3877982d4f2329302ef98a8026e7f4443c765c46cfecc8858c6b4b/pyyaml-6.0.3-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl",
+        "sha256": "ba1cc08a7ccde2d2ec775841541641e4548226580ab850948cbfda66a1befcdc"
+      },
+      {
+        "name": "rdflib",
+        "version": "7.6.0",
+        "url": "https://files.pythonhosted.org/packages/10/c2/6604a71269e0c1bd75656d5a001432d16f2cc5b8c057140ec797155c295e/rdflib-7.6.0-py3-none-any.whl",
+        "sha256": "30c0a3ebf4c0e09215f066be7246794b6492e054e782d7ac2a34c9f70a15e0dd"
+      },
+      {
+        "name": "referencing",
+        "version": "0.37.0",
+        "url": "https://files.pythonhosted.org/packages/2c/58/ca301544e1fa93ed4f80d724bf5b194f6e4b945841c5bfd555878eea9fcb/referencing-0.37.0-py3-none-any.whl",
+        "sha256": "381329a9f99628c9069361716891d34ad94af76e461dcb0335825aecc7692231"
+      },
+      {
+        "name": "regex",
+        "version": "2026.9.29",
+        "url": "https://files.pythonhosted.org/packages/26/83/d2fbd2e4e3afb1167daa825187d196f313cbaa1a4768f311fb041bb0e3d2/regex-2026.9.29-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl",
+        "sha256": "39ab5894d971f9ac68baa6eca5c50387db579cfcacf36ae8df3feceb1815e6d0"
+      },
+      {
+        "name": "requests",
+        "version": "2.34.2",
+        "url": "https://files.pythonhosted.org/packages/a0/f4/c67b0b3f1b9245e8d266f0f112c500d50e5b4e83cb6f3b71b6528104182a/requests-2.34.2-py3-none-any.whl",
+        "sha256": "2a0d60c172f83ac6ab31e4554906c0f3b3588d37b5cb939b1c061f4907e278e0"
+      },
+      {
+        "name": "rfc3986",
+        "version": "1.5.0",
+        "url": "https://files.pythonhosted.org/packages/c4/e5/63ca2c4edf4e00657584608bee1001302bbf8c5f569340b78304f2f446cb/rfc3986-1.5.0-py2.py3-none-any.whl",
+        "sha256": "a86d6e1f5b1dc238b218b012df0aa79409667bb209e58da56d0b94704e712a97"
+      },
+      {
+        "name": "rich",
+        "version": "15.0.0",
+        "url": "https://files.pythonhosted.org/packages/82/3b/64d4899d73f91ba49a8c18a8ff3f0ea8f1c1d75481760df8c68ef5235bf5/rich-15.0.0-py3-none-any.whl",
+        "sha256": "33bd4ef74232fb73fe9279a257718407f169c09b78a87ad3d296f548e27de0bb"
+      },
+      {
+        "name": "rpds-py",
+        "version": "2026.9.1",
+        "url": "https://files.pythonhosted.org/packages/1d/6d/b26eb1e75395925b3a142ed351cbed2ec8212f5c9d937aee3df32c701baa/rpds_py-2026.9.1-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+        "sha256": "addeda51556dac7c1a2f14cda62db8b621cd12afba3091d03a96c72932387eab"
+      },
+      {
+        "name": "safetensors",
+        "version": "0.8.0",
+        "url": "https://files.pythonhosted.org/packages/28/50/f203ff3a3ddfe19308efc83c5a3a29ed02bf786732ec35e68bf9162f3365/safetensors-0.8.0-cp310-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+        "sha256": "fd6f3f93c9a0a7cc2788ee63fb763353d4bd2e89b0751bc78fcf7dda00bea774"
+      },
+      {
+        "name": "segments",
+        "version": "2.4.0",
+        "url": "https://files.pythonhosted.org/packages/be/60/eef9acce946177f92c9aabf432224d87ab908bafafac516a36ab924199f3/segments-2.4.0-py2.py3-none-any.whl",
+        "sha256": "4021dc67f201cc03c864c74c618bdb163b1af629da3040babbaa37d8813f3db0"
+      },
+      {
+        "name": "setuptools",
+        "version": "78.1.0",
+        "url": "https://download.pytorch.org/whl/setuptools-78.1.0-py3-none-any.whl",
+        "sha256": "3e386e96793c8702ae83d17b853fb93d3e09ef82ec62722e61da5cd22376dcd8"
+      },
+      {
+        "name": "shellingham",
+        "version": "1.5.4",
+        "url": "https://files.pythonhosted.org/packages/e0/f9/0595336914c5619e5f28a1fb793285925a8cd4b432c9da0a987836c7f822/shellingham-1.5.4-py2.py3-none-any.whl",
+        "sha256": "7ecfff8f2fd72616f7481040475a65b2bf8af90a56c89140852d1120324e8686"
+      },
+      {
+        "name": "six",
+        "version": "1.17.0",
+        "url": "https://files.pythonhosted.org/packages/b7/ce/149a00dd41f10bc29e5921b496af8b574d8413afcd5e30dfa0ed46c2cc5e/six-1.17.0-py2.py3-none-any.whl",
+        "sha256": "4721f391ed90541fddacab5acf947aa0d3dc7d27b2e1e8eda2be8970586c3274"
+      },
+      {
+        "name": "smart-open",
+        "version": "7.7.1",
+        "url": "https://files.pythonhosted.org/packages/8a/c5/14732c140fa0af0e59345949eaf9016c75ad3f076586f2413e3d3566a8da/smart_open-7.7.1-py3-none-any.whl",
+        "sha256": "cb62dc45f519bf39b612564d326d2a17556f3a6056e3c3a86a07215d670d45bc"
+      },
+      {
+        "name": "spacy",
+        "version": "3.8.7",
+        "url": "https://files.pythonhosted.org/packages/f9/19/b60e1ebf4985ee2b33d85705b89a5024942b65dad04dbdc3fb46f168b410/spacy-3.8.7-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+        "sha256": "d9d83e006df66decccefa3872fa958b3756228fb216d83783595444cf42ca10c"
+      },
+      {
+        "name": "spacy-curated-transformers",
+        "version": "0.3.1",
+        "url": "https://files.pythonhosted.org/packages/42/d8/f053d43125ae4ad14f3e2a12a475a656128233f1f40a272c6e09a05c73e8/spacy_curated_transformers-0.3.1-py2.py3-none-any.whl",
+        "sha256": "503559b6a1d6e44ec2c978e18ed871ce5c3d56871dc9216c0e1523428204e610"
+      },
+      {
+        "name": "spacy-legacy",
+        "version": "3.0.12",
+        "url": "https://files.pythonhosted.org/packages/c3/55/12e842c70ff8828e34e543a2c7176dac4da006ca6901c9e8b43efab8bc6b/spacy_legacy-3.0.12-py2.py3-none-any.whl",
+        "sha256": "476e3bd0d05f8c339ed60f40986c07387c0a71479245d6d0f4298dbd52cda55f"
+      },
+      {
+        "name": "spacy-loggers",
+        "version": "1.0.5",
+        "url": "https://files.pythonhosted.org/packages/33/78/d1a1a026ef3af911159398c939b1509d5c36fe524c7b644f34a5146c4e16/spacy_loggers-1.0.5-py3-none-any.whl",
+        "sha256": "196284c9c446cc0cdb944005384270d775fdeaf4f494d8e269466cfa497ef645"
+      },
+      {
+        "name": "srsly",
+        "version": "2.5.4",
+        "url": "https://files.pythonhosted.org/packages/6f/ff/ab344759a04c5ec6238aefc7f23669fdd0069e4c299d05a0799ea9ee7ded/srsly-2.5.4-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl",
+        "sha256": "bb463e076e5efe61784c439493dc012e27fd05b4ddcf78f3353345c5d7e462c3"
+      },
+      {
+        "name": "sympy",
+        "version": "1.14.0",
+        "url": "https://files.pythonhosted.org/packages/a2/09/77d55d46fd61b4a135c444fc97158ef34a095e5681d0a6c10b75bf356191/sympy-1.14.0-py3-none-any.whl",
+        "sha256": "e091cc3e99d2141a0ba2847328f5479b05d94a6635cb96148ccb3f34671bd8f5"
+      },
+      {
+        "name": "termcolor",
+        "version": "3.3.0",
+        "url": "https://files.pythonhosted.org/packages/33/d1/8bb87d21e9aeb323cc03034f5eaf2c8f69841e40e4853c2627edf8111ed3/termcolor-3.3.0-py3-none-any.whl",
+        "sha256": "cf642efadaf0a8ebbbf4bc7a31cec2f9b5f21a9f726f4ccbb08192c9c26f43a5"
+      },
+      {
+        "name": "thinc",
+        "version": "8.3.11",
+        "url": "https://files.pythonhosted.org/packages/7f/e4/592ac8e8538bcb6fee3f97f92509918e61630566ace31d4fd703e3efb2fc/thinc-8.3.11-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl",
+        "sha256": "7addbd7684bb599fcd76341a080010795067889f5c68ed2900b503f860505de7"
+      },
+      {
+        "name": "tokenizers",
+        "version": "0.23.2",
+        "url": "https://files.pythonhosted.org/packages/2c/ca/ca6b93c7820df123b2662a9469e8facc826ccc94e98fdd0d615f6431e73a/tokenizers-0.23.2-cp310-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+        "sha256": "41c2f84d172449b4dadb9cdc508e3e364076613c35b16e76ecfe47a60d1e3305"
+      },
+      {
+        "name": "torch",
+        "version": "2.14.0+cpu",
+        "url": "https://download-r2.pytorch.org/whl/cpu/torch-2.14.0%2Bcpu-cp312-cp312-manylinux_2_28_x86_64.whl",
+        "sha256": "a09987c95ec4cffdb6df798d3d641558110a334cfccce22f2f046d83142bc260"
+      },
+      {
+        "name": "tqdm",
+        "version": "4.70.1",
+        "url": "https://files.pythonhosted.org/packages/a7/03/921a3d3c75785aca9ebfbfcabfbc3a1be12e2ab5265deb026d55a5a3f83e/tqdm-4.70.1-py3-none-any.whl",
+        "sha256": "c293e525e6fef9c20e8728fd4612df02a0aa31bb5fe91ecd93e123b1b7bffa73"
+      },
+      {
+        "name": "transformers",
+        "version": "5.17.0",
+        "url": "https://files.pythonhosted.org/packages/e8/d0/c502b60d684adbd98a8dc7d5bb866842772b816ac4354e4608be240041ae/transformers-5.17.0-py3-none-any.whl",
+        "sha256": "78ec1ce21579b38dfb83950a0658cd119f87212a2fcfdff478096ce9d6c03801"
+      },
+      {
+        "name": "typer",
+        "version": "0.27.3",
+        "url": "https://files.pythonhosted.org/packages/07/ea/2e31b67051e91a133189e9c000c222502ddc6969856416de0d095de4c0b0/typer-0.27.3-py3-none-any.whl",
+        "sha256": "e50022f28b82a86313e54501317a1db64bf8f8d036ff8cfe5ca7e47675454aff"
+      },
+      {
+        "name": "typer-slim",
+        "version": "0.24.0",
+        "url": "https://files.pythonhosted.org/packages/a7/24/5480c20380dfd18cf33d14784096dca45a24eae6102e91d49a718d3b6855/typer_slim-0.24.0-py3-none-any.whl",
+        "sha256": "d5d7ee1ee2834d5020c7c616ed5e0d0f29b9a4b1dd283bdebae198ec09778d0e"
+      },
+      {
+        "name": "typing-extensions",
+        "version": "4.16.0",
+        "url": "https://files.pythonhosted.org/packages/49/d3/b8441a820a491ddfc024b0b0cf0393375b75ea13866d9c66727e54c2fc80/typing_extensions-4.16.0-py3-none-any.whl",
+        "sha256": "481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8"
+      },
+      {
+        "name": "typing-inspection",
+        "version": "0.4.4",
+        "url": "https://files.pythonhosted.org/packages/67/81/4add07e5172b7ac40d8ed5ff580409a7801a4fe26d529bdd915401dabfbe/typing_inspection-0.4.4-py3-none-any.whl",
+        "sha256": "65b8397ba37ccbce054456aaccddfc91e6e3083c92824df348d96ca832f3f147"
+      },
+      {
+        "name": "uritemplate",
+        "version": "4.2.0",
+        "url": "https://files.pythonhosted.org/packages/a9/99/3ae339466c9183ea5b8ae87b34c0b897eda475d2aec2307cae60e5cd4f29/uritemplate-4.2.0-py3-none-any.whl",
+        "sha256": "962201ba1c4edcab02e60f9a0d3821e82dfc5d2d6662a21abd533879bdb8a686"
+      },
+      {
+        "name": "urllib3",
+        "version": "2.8.0",
+        "url": "https://files.pythonhosted.org/packages/92/9d/c4e665119135114480843e7ab388fa94d8480650450e6f8e26b70d323a4c/urllib3-2.8.0-py3-none-any.whl",
+        "sha256": "0cf3cae568d36aa9576b28dfb35f11328f1cb974ca7647d9475ebb86c75ac6e3"
+      },
+      {
+        "name": "wasabi",
+        "version": "1.1.3",
+        "url": "https://files.pythonhosted.org/packages/06/7c/34330a89da55610daa5f245ddce5aab81244321101614751e7537f125133/wasabi-1.1.3-py3-none-any.whl",
+        "sha256": "f76e16e8f7e79f8c4c8be49b4024ac725713ab10cd7f19350ad18a8e3f71728c"
+      },
+      {
+        "name": "weasel",
+        "version": "0.4.3",
+        "url": "https://files.pythonhosted.org/packages/a4/74/a148b41572656904a39dfcfed3f84dd1066014eed94e209223ae8e9d088d/weasel-0.4.3-py3-none-any.whl",
+        "sha256": "08f65b5d0dbded4879e08a64882de9b9514753d9eaa4c4e2a576e33666ac12cf"
+      },
+      {
+        "name": "wrapt",
+        "version": "2.5.1",
+        "url": "https://files.pythonhosted.org/packages/4a/5a/2a34ba5a468e9d3d6e5b0733280e1ae3c850bfc5f1d681fc0e97f564d1f2/wrapt-2.5.1-cp312-cp312-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl",
+        "sha256": "bfaa998ceeea4d0aa72b40cdd0023d19409504e244b439ff2aa9f01729341c5f"
+      }
+    ],
+    "utterances": [
+      {
+        "passage": "EN01",
+        "language": "en-US",
+        "voice": "af_heart",
+        "speed": 1.0,
+        "file": "speech/EN01-utterance.wav",
+        "sha256": "590d5cf15b8b5459b164167c5a3e8496c0332619810907986634106d618bbc5c",
+        "bytes": 744044,
+        "frames": 372000,
+        "clipped_samples": 0,
+        "sentences": [
+          {
+            "text": "The nightly import started at 10:32 and stopped after 2.5 minutes.",
+            "engine_text": "The nightly import started at 10:32 and stopped after 2.5 minutes.",
+            "start_frame": 0,
+            "frames": 133800,
+            "phonemes": [
+              "ðə nˈItli ˈɪmpˌɔɹt stˈɑɹTᵻd æt tˈɛn:θˈɜɹTi tˈu ænd stˈɑpt ˈæftəɹ tˈu pYnt fˈIv mˈɪnəts."
+            ],
+            "words": [
+              {
+                "text": "The",
+                "start_us": 275000,
+                "end_us": 375000
+              },
+              {
+                "text": "nightly",
+                "start_us": 375000,
+                "end_us": 700000
+              },
+              {
+                "text": "import",
+                "start_us": 700000,
+                "end_us": 1175000
+              },
+              {
+                "text": "started",
+                "start_us": 1175000,
+                "end_us": 1512500
+              },
+              {
+                "text": "at",
+                "start_us": 1512500,
+                "end_us": 1612500
+              },
+              {
+                "text": "10:32",
+                "start_us": 1612500,
+                "end_us": 3112500
+              },
+              {
+                "text": "and",
+                "start_us": 3112500,
+                "end_us": 3250000
+              },
+              {
+                "text": "stopped",
+                "start_us": 3250000,
+                "end_us": 3600000
+              },
+              {
+                "text": "after",
+                "start_us": 3600000,
+                "end_us": 3912500
+              },
+              {
+                "text": "2.5",
+                "start_us": 3912500,
+                "end_us": 4662500
+              },
+              {
+                "text": "minutes",
+                "start_us": 4662500,
+                "end_us": 5325000
+              }
+            ]
+          },
+          {
+            "text": "The log shows error E-409 on the second batch.",
+            "engine_text": "The log shows error E-409 on the second batch.",
+            "start_frame": 141000,
+            "frames": 82800,
+            "phonemes": [
+              "ðə lˈɔɡ ʃˈOz ˈɛɹəɹ ˈi fˈɔɹ O nˈIn ˌɔn ðə sˈɛkənd bˈæʧ."
+            ],
+            "words": [
+              {
+                "text": "The",
+                "start_us": 275000,
+                "end_us": 375000
+              },
+              {
+                "text": "log",
+                "start_us": 375000,
+                "end_us": 725000
+              },
+              {
+                "text": "shows",
+                "start_us": 725000,
+                "end_us": 1037500
+              },
+              {
+                "text": "error",
+                "start_us": 1037500,
+                "end_us": 1350000
+              },
+              {
+                "text": "E-409",
+                "start_us": 1350000,
+                "end_us": 2087500
+              },
+              {
+                "text": "on",
+                "start_us": 2087500,
+                "end_us": 2187500
+              },
+              {
+                "text": "the",
+                "start_us": 2187500,
+                "end_us": 2275000
+              },
+              {
+                "text": "second",
+                "start_us": 2275000,
+                "end_us": 2587500
+              },
+              {
+                "text": "batch",
+                "start_us": 2587500,
+                "end_us": 3175000
+              }
+            ]
+          },
+          {
+            "text": "I open the settings page, check the retry limit, and confirm that it is still set to three.",
+            "engine_text": "I open the settings page, check the retry limit, and confirm that it is still set to three.",
+            "start_frame": 231000,
+            "frames": 141000,
+            "phonemes": [
+              "ˌI ˈOpᵊn ðə sˈɛTɪŋz pˈAʤ, ʧˈɛk ðə ɹitɹˈI lˈɪmət, ænd kənfˈɜɹm ðæt ɪt ɪz stˈɪl sˈɛt tə θɹˈi."
+            ],
+            "words": [
+              {
+                "text": "I",
+                "start_us": 275000,
+                "end_us": 425000
+              },
+              {
+                "text": "open",
+                "start_us": 425000,
+                "end_us": 712500
+              },
+              {
+                "text": "the",
+                "start_us": 712500,
+                "end_us": 812500
+              },
+              {
+                "text": "settings",
+                "start_us": 812500,
+                "end_us": 1225000
+              },
+              {
+                "text": "page",
+                "start_us": 1225000,
+                "end_us": 1800000
+              },
+              {
+                "text": "check",
+                "start_us": 1937500,
+                "end_us": 2200000
+              },
+              {
+                "text": "the",
+                "start_us": 2200000,
+                "end_us": 2300000
+              },
+              {
+                "text": "retry",
+                "start_us": 2300000,
+                "end_us": 2725000
+              },
+              {
+                "text": "limit",
+                "start_us": 2725000,
+                "end_us": 3300000
+              },
+              {
+                "text": "and",
+                "start_us": 3375000,
+                "end_us": 3500000
+              },
+              {
+                "text": "confirm",
+                "start_us": 3500000,
+                "end_us": 4025000
+              },
+              {
+                "text": "that",
+                "start_us": 4025000,
+                "end_us": 4137500
+              },
+              {
+                "text": "it",
+                "start_us": 4137500,
+                "end_us": 4225000
+              },
+              {
+                "text": "is",
+                "start_us": 4225000,
+                "end_us": 4350000
+              },
+              {
+                "text": "still",
+                "start_us": 4350000,
+                "end_us": 4637500
+              },
+              {
+                "text": "set",
+                "start_us": 4637500,
+                "end_us": 4875000
+              },
+              {
+                "text": "to",
+                "start_us": 4875000,
+                "end_us": 5012500
+              },
+              {
+                "text": "three",
+                "start_us": 5012500,
+                "end_us": 5625000
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "passage": "EN02",
+        "language": "en-US",
+        "voice": "af_heart",
+        "speed": 1.0,
+        "file": "speech/EN02-utterance.wav",
+        "sha256": "65c90212418f1741357613e5413afa77edfe68a798fe1073b094533c1f47005d",
+        "bytes": 774044,
+        "frames": 387000,
+        "clipped_samples": 0,
+        "sentences": [
+          {
+            "text": "Order 1017 moves from queued to failed when the warehouse service times out.",
+            "engine_text": "Order 1017 moves from queued to failed when the warehouse service times out.",
+            "start_frame": 0,
+            "frames": 135600,
+            "phonemes": [
+              "ˈɔɹdəɹ tˈɛn sˌɛvəntˈin mˈuvz fɹʌm kjˈud tə fˈAld wˌɛn ðə wˈɛɹhˌWs sˈɜɹvəs tˈImz ˈWt."
+            ],
+            "words": [
+              {
+                "text": "Order",
+                "start_us": 275000,
+                "end_us": 575000
+              },
+              {
+                "text": "1017",
+                "start_us": 575000,
+                "end_us": 1837500
+              },
+              {
+                "text": "moves",
+                "start_us": 1837500,
+                "end_us": 2200000
+              },
+              {
+                "text": "from",
+                "start_us": 2200000,
+                "end_us": 2412500
+              },
+              {
+                "text": "queued",
+                "start_us": 2412500,
+                "end_us": 2800000
+              },
+              {
+                "text": "to",
+                "start_us": 2800000,
+                "end_us": 2937500
+              },
+              {
+                "text": "failed",
+                "start_us": 2937500,
+                "end_us": 3550000
+              },
+              {
+                "text": "when",
+                "start_us": 3550000,
+                "end_us": 3687500
+              },
+              {
+                "text": "the",
+                "start_us": 3687500,
+                "end_us": 3775000
+              },
+              {
+                "text": "warehouse",
+                "start_us": 3775000,
+                "end_us": 4200000
+              },
+              {
+                "text": "service",
+                "start_us": 4200000,
+                "end_us": 4550000
+              },
+              {
+                "text": "times",
+                "start_us": 4550000,
+                "end_us": 4850000
+              },
+              {
+                "text": "out",
+                "start_us": 4850000,
+                "end_us": 5400000
+              }
+            ]
+          },
+          {
+            "text": "The dashboard still reports a healthy status, so the alert never fires.",
+            "engine_text": "The dashboard still reports a healthy status, so the alert never fires.",
+            "start_frame": 142800,
+            "frames": 119400,
+            "phonemes": [
+              "ðə dˈæʃbˌɔɹd stˈɪl ɹəpˈɔɹts ɐ hˈɛlθi stˈATəs, sˌO ði əlˈɜɹt nˈɛvəɹ fˈIəɹz."
+            ],
+            "words": [
+              {
+                "text": "The",
+                "start_us": 250000,
+                "end_us": 325000
+              },
+              {
+                "text": "dashboard",
+                "start_us": 325000,
+                "end_us": 925000
+              },
+              {
+                "text": "still",
+                "start_us": 925000,
+                "end_us": 1200000
+              },
+              {
+                "text": "reports",
+                "start_us": 1200000,
+                "end_us": 1637500
+              },
+              {
+                "text": "a",
+                "start_us": 1637500,
+                "end_us": 1700000
+              },
+              {
+                "text": "healthy",
+                "start_us": 1700000,
+                "end_us": 2075000
+              },
+              {
+                "text": "status",
+                "start_us": 2075000,
+                "end_us": 2850000
+              },
+              {
+                "text": "so",
+                "start_us": 2950000,
+                "end_us": 3087500
+              },
+              {
+                "text": "the",
+                "start_us": 3087500,
+                "end_us": 3225000
+              },
+              {
+                "text": "alert",
+                "start_us": 3225000,
+                "end_us": 3600000
+              },
+              {
+                "text": "never",
+                "start_us": 3600000,
+                "end_us": 3912500
+              },
+              {
+                "text": "fires",
+                "start_us": 3912500,
+                "end_us": 4725000
+              }
+            ]
+          },
+          {
+            "text": "We need the status to change before the next delivery window opens at noon.",
+            "engine_text": "We need the status to change before the next delivery window opens at noon.",
+            "start_frame": 269400,
+            "frames": 117600,
+            "phonemes": [
+              "wˌi nˈid ðə stˈATəs tə ʧˈAnʤ bəfˈɔɹ ðə nˈɛkst dəlˈɪvəɹi wˈɪndO ˈOpᵊnz æt nˈun."
+            ],
+            "words": [
+              {
+                "text": "We",
+                "start_us": 275000,
+                "end_us": 375000
+              },
+              {
+                "text": "need",
+                "start_us": 375000,
+                "end_us": 562500
+              },
+              {
+                "text": "the",
+                "start_us": 562500,
+                "end_us": 650000
+              },
+              {
+                "text": "status",
+                "start_us": 650000,
+                "end_us": 1075000
+              },
+              {
+                "text": "to",
+                "start_us": 1075000,
+                "end_us": 1212500
+              },
+              {
+                "text": "change",
+                "start_us": 1212500,
+                "end_us": 1762500
+              },
+              {
+                "text": "before",
+                "start_us": 1762500,
+                "end_us": 2062500
+              },
+              {
+                "text": "the",
+                "start_us": 2062500,
+                "end_us": 2150000
+              },
+              {
+                "text": "next",
+                "start_us": 2150000,
+                "end_us": 2412500
+              },
+              {
+                "text": "delivery",
+                "start_us": 2412500,
+                "end_us": 3125000
+              },
+              {
+                "text": "window",
+                "start_us": 3125000,
+                "end_us": 3512500
+              },
+              {
+                "text": "opens",
+                "start_us": 3512500,
+                "end_us": 3925000
+              },
+              {
+                "text": "at",
+                "start_us": 3925000,
+                "end_us": 4025000
+              },
+              {
+                "text": "noon",
+                "start_us": 4025000,
+                "end_us": 4650000
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "passage": "EN03",
+        "language": "en-US",
+        "voice": "af_heart",
+        "speed": 1.0,
+        "file": "speech/EN03-utterance.wav",
+        "sha256": "69267f0e7c611c24663b2dd0fe13de1398e635fd5532b54abf0d9aa32e42a913",
+        "bytes": 824444,
+        "frames": 412200,
+        "clipped_samples": 0,
+        "sentences": [
+          {
+            "text": "The orange p95 line climbs to 840 milliseconds while the blue median stays near 120.",
+            "engine_text": "The orange p95 line climbs to 840 milliseconds while the blue median stays near 120.",
+            "start_frame": 0,
+            "frames": 193200,
+            "phonemes": [
+              "ði ˈɔɹᵊnʤ pˈi nˈIndi fˈIv lˈIn klˈImz tʊ ˈAt hˈʌndɹəd fˈɔɹTi mˈɪləsˌɛkəndz wˌIl ðə blˈu mˈidiən stˈAz nˌɪɹ wˈʌn hˈʌndɹəd twˈɛnti."
+            ],
+            "words": [
+              {
+                "text": "The",
+                "start_us": 250000,
+                "end_us": 387500
+              },
+              {
+                "text": "orange",
+                "start_us": 387500,
+                "end_us": 862500
+              },
+              {
+                "text": "p95",
+                "start_us": 862500,
+                "end_us": 1875000
+              },
+              {
+                "text": "line",
+                "start_us": 1875000,
+                "end_us": 2500000
+              },
+              {
+                "text": "climbs",
+                "start_us": 2500000,
+                "end_us": 2900000
+              },
+              {
+                "text": "to",
+                "start_us": 2900000,
+                "end_us": 3037500
+              },
+              {
+                "text": "840",
+                "start_us": 3037500,
+                "end_us": 3950000
+              },
+              {
+                "text": "milliseconds",
+                "start_us": 3950000,
+                "end_us": 5012500
+              },
+              {
+                "text": "while",
+                "start_us": 5012500,
+                "end_us": 5187500
+              },
+              {
+                "text": "the",
+                "start_us": 5187500,
+                "end_us": 5275000
+              },
+              {
+                "text": "blue",
+                "start_us": 5275000,
+                "end_us": 5500000
+              },
+              {
+                "text": "median",
+                "start_us": 5500000,
+                "end_us": 5962500
+              },
+              {
+                "text": "stays",
+                "start_us": 5962500,
+                "end_us": 6375000
+              },
+              {
+                "text": "near",
+                "start_us": 6375000,
+                "end_us": 6600000
+              },
+              {
+                "text": "120",
+                "start_us": 6600000,
+                "end_us": 7800000
+              }
+            ]
+          },
+          {
+            "text": "After the cache is cleared, both lines fall back below 200.",
+            "engine_text": "After the cache is cleared, both lines fall back below 200.",
+            "start_frame": 200400,
+            "frames": 103200,
+            "phonemes": [
+              "ˈæftəɹ ðə kˈæʃ ɪz klˈɪɹd, bˈOθ lˈInz fˈɔl bˈæk bəlˈO tˈu hˈʌndɹəd."
+            ],
+            "words": [
+              {
+                "text": "After",
+                "start_us": 275000,
+                "end_us": 537500
+              },
+              {
+                "text": "the",
+                "start_us": 537500,
+                "end_us": 625000
+              },
+              {
+                "text": "cache",
+                "start_us": 625000,
+                "end_us": 937500
+              },
+              {
+                "text": "is",
+                "start_us": 937500,
+                "end_us": 1075000
+              },
+              {
+                "text": "cleared",
+                "start_us": 1075000,
+                "end_us": 1650000
+              },
+              {
+                "text": "both",
+                "start_us": 1775000,
+                "end_us": 2075000
+              },
+              {
+                "text": "lines",
+                "start_us": 2075000,
+                "end_us": 2425000
+              },
+              {
+                "text": "fall",
+                "start_us": 2425000,
+                "end_us": 2625000
+              },
+              {
+                "text": "back",
+                "start_us": 2625000,
+                "end_us": 2900000
+              },
+              {
+                "text": "below",
+                "start_us": 2900000,
+                "end_us": 3187500
+              },
+              {
+                "text": "200",
+                "start_us": 3187500,
+                "end_us": 4025000
+              }
+            ]
+          },
+          {
+            "text": "Please attach the graph and the exact time of the spike to the ticket.",
+            "engine_text": "Please attach the graph and the exact time of the spike to the ticket.",
+            "start_frame": 310800,
+            "frames": 101400,
+            "phonemes": [
+              "plˈiz ətˈæʧ ðə ɡɹˈæf ænd ði ɪɡzˈækt tˈIm ʌv ðə spˈIk tə ðə tˈɪkət."
+            ],
+            "words": [
+              {
+                "text": "Please",
+                "start_us": 250000,
+                "end_us": 562500
+              },
+              {
+                "text": "attach",
+                "start_us": 562500,
+                "end_us": 900000
+              },
+              {
+                "text": "the",
+                "start_us": 900000,
+                "end_us": 1000000
+              },
+              {
+                "text": "graph",
+                "start_us": 1000000,
+                "end_us": 1650000
+              },
+              {
+                "text": "and",
+                "start_us": 1650000,
+                "end_us": 1787500
+              },
+              {
+                "text": "the",
+                "start_us": 1787500,
+                "end_us": 1875000
+              },
+              {
+                "text": "exact",
+                "start_us": 1875000,
+                "end_us": 2325000
+              },
+              {
+                "text": "time",
+                "start_us": 2325000,
+                "end_us": 2562500
+              },
+              {
+                "text": "of",
+                "start_us": 2562500,
+                "end_us": 2637500
+              },
+              {
+                "text": "the",
+                "start_us": 2637500,
+                "end_us": 2725000
+              },
+              {
+                "text": "spike",
+                "start_us": 2725000,
+                "end_us": 3100000
+              },
+              {
+                "text": "to",
+                "start_us": 3100000,
+                "end_us": 3187500
+              },
+              {
+                "text": "the",
+                "start_us": 3187500,
+                "end_us": 3275000
+              },
+              {
+                "text": "ticket",
+                "start_us": 3275000,
+                "end_us": 3975000
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "passage": "EN04",
+        "language": "en-US",
+        "voice": "af_heart",
+        "speed": 1.0,
+        "file": "speech/EN04-utterance.wav",
+        "sha256": "70f569ff2558a49e0dfb2fc1138969aef043f654b44be8c8f0a5591bd32fcc44",
+        "bytes": 751244,
+        "frames": 375600,
+        "clipped_samples": 0,
+        "sentences": [
+          {
+            "text": "Build 2048 passed every check except the upload step.",
+            "engine_text": "Build 2048 passed every check except the upload step.",
+            "start_frame": 0,
+            "frames": 103200,
+            "phonemes": [
+              "bˈɪld twˈɛnti fˈɔɹTi ˈAt pˈæst ˈɛvəɹi ʧˈɛk ɪksˈɛpt ði ˈʌplˌOd stˈɛp."
+            ],
+            "words": [
+              {
+                "text": "Build",
+                "start_us": 275000,
+                "end_us": 550000
+              },
+              {
+                "text": "2048",
+                "start_us": 550000,
+                "end_us": 1462500
+              },
+              {
+                "text": "passed",
+                "start_us": 1462500,
+                "end_us": 1825000
+              },
+              {
+                "text": "every",
+                "start_us": 1825000,
+                "end_us": 2137500
+              },
+              {
+                "text": "check",
+                "start_us": 2137500,
+                "end_us": 2600000
+              },
+              {
+                "text": "except",
+                "start_us": 2600000,
+                "end_us": 2912500
+              },
+              {
+                "text": "the",
+                "start_us": 2912500,
+                "end_us": 3025000
+              },
+              {
+                "text": "upload",
+                "start_us": 3025000,
+                "end_us": 3475000
+              },
+              {
+                "text": "step",
+                "start_us": 3475000,
+                "end_us": 4050000
+              }
+            ]
+          },
+          {
+            "text": "The installer stops halfway and shows code K-204 in a small grey box.",
+            "engine_text": "The installer stops halfway and shows code K-204 in a small grey box.",
+            "start_frame": 110400,
+            "frames": 132000,
+            "phonemes": [
+              "ði ɪnstˈɔləɹ stˈɑps hˌæfwˈA ænd ʃˈOz kˈOd kˈA tˈu O fˈɔɹ ɪn ɐ smˈɔl ɡɹˈA bˈɑks."
+            ],
+            "words": [
+              {
+                "text": "The",
+                "start_us": 250000,
+                "end_us": 375000
+              },
+              {
+                "text": "installer",
+                "start_us": 375000,
+                "end_us": 925000
+              },
+              {
+                "text": "stops",
+                "start_us": 925000,
+                "end_us": 1250000
+              },
+              {
+                "text": "halfway",
+                "start_us": 1250000,
+                "end_us": 2075000
+              },
+              {
+                "text": "and",
+                "start_us": 2075000,
+                "end_us": 2225000
+              },
+              {
+                "text": "shows",
+                "start_us": 2225000,
+                "end_us": 2525000
+              },
+              {
+                "text": "code",
+                "start_us": 2525000,
+                "end_us": 2800000
+              },
+              {
+                "text": "K-204",
+                "start_us": 2800000,
+                "end_us": 3775000
+              },
+              {
+                "text": "in",
+                "start_us": 3775000,
+                "end_us": 3862500
+              },
+              {
+                "text": "a",
+                "start_us": 3862500,
+                "end_us": 3937500
+              },
+              {
+                "text": "small",
+                "start_us": 3937500,
+                "end_us": 4325000
+              },
+              {
+                "text": "grey",
+                "start_us": 4325000,
+                "end_us": 4600000
+              },
+              {
+                "text": "box",
+                "start_us": 4600000,
+                "end_us": 5250000
+              }
+            ]
+          },
+          {
+            "text": "Restarting the machine does not help, and the same code appears on the second laptop.",
+            "engine_text": "Restarting the machine does not help, and the same code appears on the second laptop.",
+            "start_frame": 249600,
+            "frames": 126000,
+            "phonemes": [
+              "ɹistˈɑɹTɪŋ ðə məʃˈin dˈʌz nˌɑt hˈɛlp, ænd ðə sˈAm kˈOd əpˈɪɹz ˌɔn ðə sˈɛkənd lˈæptˌɑp."
+            ],
+            "words": [
+              {
+                "text": "Restarting",
+                "start_us": 275000,
+                "end_us": 875000
+              },
+              {
+                "text": "the",
+                "start_us": 875000,
+                "end_us": 962500
+              },
+              {
+                "text": "machine",
+                "start_us": 962500,
+                "end_us": 1400000
+              },
+              {
+                "text": "does",
+                "start_us": 1400000,
+                "end_us": 1562500
+              },
+              {
+                "text": "not",
+                "start_us": 1562500,
+                "end_us": 1775000
+              },
+              {
+                "text": "help",
+                "start_us": 1775000,
+                "end_us": 2350000
+              },
+              {
+                "text": "and",
+                "start_us": 2450000,
+                "end_us": 2562500
+              },
+              {
+                "text": "the",
+                "start_us": 2562500,
+                "end_us": 2662500
+              },
+              {
+                "text": "same",
+                "start_us": 2662500,
+                "end_us": 3000000
+              },
+              {
+                "text": "code",
+                "start_us": 3000000,
+                "end_us": 3300000
+              },
+              {
+                "text": "appears",
+                "start_us": 3300000,
+                "end_us": 3712500
+              },
+              {
+                "text": "on",
+                "start_us": 3712500,
+                "end_us": 3812500
+              },
+              {
+                "text": "the",
+                "start_us": 3812500,
+                "end_us": 3912500
+              },
+              {
+                "text": "second",
+                "start_us": 3912500,
+                "end_us": 4237500
+              },
+              {
+                "text": "laptop",
+                "start_us": 4237500,
+                "end_us": 5000000
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "passage": "EN05",
+        "language": "en-US",
+        "voice": "af_heart",
+        "speed": 1.0,
+        "file": "speech/EN05-utterance.wav",
+        "sha256": "9e5d53d77e1ca698cec72df770f78c09fb9827f4317ec3a84d872b552cb87839",
+        "bytes": 885644,
+        "frames": 442800,
+        "clipped_samples": 0,
+        "sentences": [
+          {
+            "text": "Invoice 316 was created twice because the submit button stayed enabled.",
+            "engine_text": "Invoice 316 was created twice because the submit button stayed enabled.",
+            "start_frame": 0,
+            "frames": 147000,
+            "phonemes": [
+              "ˈɪnvˌYs θɹˈi hˈʌndɹəd sˌɪkstˈin wʌz kɹiˈATᵻd twˈIs bəkˈʌz ðə səbmˈɪt bˈʌtn stˈAd ɪnˈAbᵊld."
+            ],
+            "words": [
+              {
+                "text": "Invoice",
+                "start_us": 275000,
+                "end_us": 750000
+              },
+              {
+                "text": "316",
+                "start_us": 750000,
+                "end_us": 2012500
+              },
+              {
+                "text": "was",
+                "start_us": 2012500,
+                "end_us": 2200000
+              },
+              {
+                "text": "created",
+                "start_us": 2200000,
+                "end_us": 2662500
+              },
+              {
+                "text": "twice",
+                "start_us": 2662500,
+                "end_us": 3412500
+              },
+              {
+                "text": "because",
+                "start_us": 3412500,
+                "end_us": 3775000
+              },
+              {
+                "text": "the",
+                "start_us": 3775000,
+                "end_us": 3912500
+              },
+              {
+                "text": "submit",
+                "start_us": 3912500,
+                "end_us": 4350000
+              },
+              {
+                "text": "button",
+                "start_us": 4350000,
+                "end_us": 4662500
+              },
+              {
+                "text": "stayed",
+                "start_us": 4662500,
+                "end_us": 5100000
+              },
+              {
+                "text": "enabled",
+                "start_us": 5100000,
+                "end_us": 5875000
+              }
+            ]
+          },
+          {
+            "text": "The second copy has a total of 127.50 instead of 125.00.",
+            "engine_text": "The second copy has a total of 127.50 instead of 125.00.",
+            "start_frame": 154200,
+            "frames": 150000,
+            "phonemes": [
+              "ðə sˈɛkənd kˈɑpi hæz ɐ tˈOTᵊl ʌv wˈʌn hˈʌndɹəd twˈɛnti sˈɛvən pYnt fˈIv ɪnstˈɛd ʌv wˈʌn hˈʌndɹəd twˈɛnti fˈIv."
+            ],
+            "words": [
+              {
+                "text": "The",
+                "start_us": 250000,
+                "end_us": 362500
+              },
+              {
+                "text": "second",
+                "start_us": 362500,
+                "end_us": 700000
+              },
+              {
+                "text": "copy",
+                "start_us": 700000,
+                "end_us": 1225000
+              },
+              {
+                "text": "has",
+                "start_us": 1225000,
+                "end_us": 1387500
+              },
+              {
+                "text": "a",
+                "start_us": 1387500,
+                "end_us": 1487500
+              },
+              {
+                "text": "total",
+                "start_us": 1487500,
+                "end_us": 1900000
+              },
+              {
+                "text": "of",
+                "start_us": 1900000,
+                "end_us": 2050000
+              },
+              {
+                "text": "127.50",
+                "start_us": 2050000,
+                "end_us": 4100000
+              },
+              {
+                "text": "instead",
+                "start_us": 4100000,
+                "end_us": 4462500
+              },
+              {
+                "text": "of",
+                "start_us": 4462500,
+                "end_us": 4550000
+              },
+              {
+                "text": "125.00",
+                "start_us": 4550000,
+                "end_us": 5975000
+              }
+            ]
+          },
+          {
+            "text": "Delete the duplicate, keep the original record, and send a short note to the billing team.",
+            "engine_text": "Delete the duplicate, keep the original record, and send a short note to the billing team.",
+            "start_frame": 311400,
+            "frames": 131400,
+            "phonemes": [
+              "dəlˈit ðə dˈupləkət, kˈip ði əɹˈɪʤənᵊl ɹˈɛkəɹd, ænd sˈɛnd ɐ ʃˈɔɹt nˈOt tə ðə bˈɪlɪŋ tˈim."
+            ],
+            "words": [
+              {
+                "text": "Delete",
+                "start_us": 275000,
+                "end_us": 625000
+              },
+              {
+                "text": "the",
+                "start_us": 625000,
+                "end_us": 737500
+              },
+              {
+                "text": "duplicate",
+                "start_us": 737500,
+                "end_us": 1475000
+              },
+              {
+                "text": "keep",
+                "start_us": 1587500,
+                "end_us": 1837500
+              },
+              {
+                "text": "the",
+                "start_us": 1837500,
+                "end_us": 1975000
+              },
+              {
+                "text": "original",
+                "start_us": 1975000,
+                "end_us": 2400000
+              },
+              {
+                "text": "record",
+                "start_us": 2400000,
+                "end_us": 3000000
+              },
+              {
+                "text": "and",
+                "start_us": 3075000,
+                "end_us": 3200000
+              },
+              {
+                "text": "send",
+                "start_us": 3200000,
+                "end_us": 3412500
+              },
+              {
+                "text": "a",
+                "start_us": 3412500,
+                "end_us": 3525000
+              },
+              {
+                "text": "short",
+                "start_us": 3525000,
+                "end_us": 3850000
+              },
+              {
+                "text": "note",
+                "start_us": 3850000,
+                "end_us": 4125000
+              },
+              {
+                "text": "to",
+                "start_us": 4125000,
+                "end_us": 4212500
+              },
+              {
+                "text": "the",
+                "start_us": 4212500,
+                "end_us": 4300000
+              },
+              {
+                "text": "billing",
+                "start_us": 4300000,
+                "end_us": 4625000
+              },
+              {
+                "text": "team",
+                "start_us": 4625000,
+                "end_us": 5225000
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "passage": "EN06",
+        "language": "en-US",
+        "voice": "af_heart",
+        "speed": 1.0,
+        "file": "speech/EN06-utterance.wav",
+        "sha256": "dc28115a804d468e865c7ed2cc1a08478780401b23e1edde873312b03217f260",
+        "bytes": 775244,
+        "frames": 387600,
+        "clipped_samples": 0,
+        "sentences": [
+          {
+            "text": "Yesterday the sync job copied 64 files and skipped four.",
+            "engine_text": "Yesterday the sync job copied 64 files and skipped four.",
+            "start_frame": 0,
+            "frames": 107400,
+            "phonemes": [
+              "jˈɛstəɹdˌA ðə sˈɪŋk ʤˈɑb kˈɑpɪd sˈɪksti fˈɔɹ fˈIlz ænd skˈɪpt fˈɔɹ."
+            ],
+            "words": [
+              {
+                "text": "Yesterday",
+                "start_us": 300000,
+                "end_us": 800000
+              },
+              {
+                "text": "the",
+                "start_us": 800000,
+                "end_us": 937500
+              },
+              {
+                "text": "sync",
+                "start_us": 937500,
+                "end_us": 1212500
+              },
+              {
+                "text": "job",
+                "start_us": 1212500,
+                "end_us": 1612500
+              },
+              {
+                "text": "copied",
+                "start_us": 1612500,
+                "end_us": 1975000
+              },
+              {
+                "text": "64",
+                "start_us": 1975000,
+                "end_us": 2550000
+              },
+              {
+                "text": "files",
+                "start_us": 2550000,
+                "end_us": 3137500
+              },
+              {
+                "text": "and",
+                "start_us": 3137500,
+                "end_us": 3275000
+              },
+              {
+                "text": "skipped",
+                "start_us": 3275000,
+                "end_us": 3600000
+              },
+              {
+                "text": "four",
+                "start_us": 3600000,
+                "end_us": 4225000
+              }
+            ]
+          },
+          {
+            "text": "Each skipped file is larger than the limit of 512 megabytes.",
+            "engine_text": "Each skipped file is larger than the limit of 512 megabytes.",
+            "start_frame": 114600,
+            "frames": 114600,
+            "phonemes": [
+              "ˈiʧ skˈɪpt fˈIl ɪz lˈɑɹʤəɹ ðən ðə lˈɪmət ʌv fˈIv hˈʌndɹəd twˈɛlv mˈɛɡəbˌIts."
+            ],
+            "words": [
+              {
+                "text": "Each",
+                "start_us": 275000,
+                "end_us": 537500
+              },
+              {
+                "text": "skipped",
+                "start_us": 537500,
+                "end_us": 875000
+              },
+              {
+                "text": "file",
+                "start_us": 875000,
+                "end_us": 1412500
+              },
+              {
+                "text": "is",
+                "start_us": 1412500,
+                "end_us": 1587500
+              },
+              {
+                "text": "larger",
+                "start_us": 1587500,
+                "end_us": 1975000
+              },
+              {
+                "text": "than",
+                "start_us": 1975000,
+                "end_us": 2087500
+              },
+              {
+                "text": "the",
+                "start_us": 2087500,
+                "end_us": 2175000
+              },
+              {
+                "text": "limit",
+                "start_us": 2175000,
+                "end_us": 2687500
+              },
+              {
+                "text": "of",
+                "start_us": 2687500,
+                "end_us": 2862500
+              },
+              {
+                "text": "512",
+                "start_us": 2862500,
+                "end_us": 3700000
+              },
+              {
+                "text": "megabytes",
+                "start_us": 3700000,
+                "end_us": 4525000
+              }
+            ]
+          },
+          {
+            "text": "Split the archive into smaller parts, run the job again, and check that the counter reaches 68.",
+            "engine_text": "Split the archive into smaller parts, run the job again, and check that the counter reaches 68.",
+            "start_frame": 236400,
+            "frames": 151200,
+            "phonemes": [
+              "splˈɪt ði ˈɑɹkˌIv ˈɪntu smˈɔləɹ pˈɑɹts, ɹˈʌn ðə ʤˈɑb əɡˈɛn, ænd ʧˈɛk ðæt ðə kˈWntəɹ ɹˈiʧᵻz sˈɪksti ˈAt."
+            ],
+            "words": [
+              {
+                "text": "Split",
+                "start_us": 275000,
+                "end_us": 512500
+              },
+              {
+                "text": "the",
+                "start_us": 512500,
+                "end_us": 625000
+              },
+              {
+                "text": "archive",
+                "start_us": 625000,
+                "end_us": 1112500
+              },
+              {
+                "text": "into",
+                "start_us": 1112500,
+                "end_us": 1362500
+              },
+              {
+                "text": "smaller",
+                "start_us": 1362500,
+                "end_us": 1750000
+              },
+              {
+                "text": "parts",
+                "start_us": 1750000,
+                "end_us": 2350000
+              },
+              {
+                "text": "run",
+                "start_us": 2462500,
+                "end_us": 2662500
+              },
+              {
+                "text": "the",
+                "start_us": 2662500,
+                "end_us": 2750000
+              },
+              {
+                "text": "job",
+                "start_us": 2750000,
+                "end_us": 3012500
+              },
+              {
+                "text": "again",
+                "start_us": 3012500,
+                "end_us": 3625000
+              },
+              {
+                "text": "and",
+                "start_us": 3725000,
+                "end_us": 3862500
+              },
+              {
+                "text": "check",
+                "start_us": 3862500,
+                "end_us": 4125000
+              },
+              {
+                "text": "that",
+                "start_us": 4125000,
+                "end_us": 4237500
+              },
+              {
+                "text": "the",
+                "start_us": 4237500,
+                "end_us": 4325000
+              },
+              {
+                "text": "counter",
+                "start_us": 4325000,
+                "end_us": 4750000
+              },
+              {
+                "text": "reaches",
+                "start_us": 4750000,
+                "end_us": 5112500
+              },
+              {
+                "text": "68",
+                "start_us": 5112500,
+                "end_us": 6050000
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "passage": "ES01",
+        "language": "es",
+        "voice": "ef_dora",
+        "speed": 1.0,
+        "file": "speech/ES01-utterance.wav",
+        "sha256": "5aa1d1b8ea472f6effefd35d901c0555e2bed516960e4cedab60b7419f159087",
+        "bytes": 678044,
+        "frames": 339000,
+        "clipped_samples": 0,
+        "sentences": [
+          {
+            "text": "El proceso nocturno empezó tarde y se detuvo después de pocos minutos.",
+            "engine_text": "El proceso nocturno empezó tarde y se detuvo después de pocos minutos.",
+            "start_frame": 0,
+            "frames": 110400,
+            "phonemes": [
+              "el pɾoθˈeso noktˈuɾno ˌempeθˈo tˈaɾðe i se ðetˈuβo ðespwˈes ðe pˈokos minˈutos."
+            ],
+            "words": null
+          },
+          {
+            "text": "El registro muestra el error E-409 en el segundo lote.",
+            "engine_text": "El registro muestra el error E-409 en el segundo lote.",
+            "start_frame": 117600,
+            "frames": 102000,
+            "phonemes": [
+              "el rexˈistɾo mwˈestɾa el erˈoɾ e kwˌatɾoθjˈentos nwˈeβe en el seɣˈundo lˈote."
+            ],
+            "words": null
+          },
+          {
+            "text": "Abro la página de ajustes y compruebo que el límite de reintentos no ha cambiado.",
+            "engine_text": "Abro la página de ajustes y compruebo que el límite de reintentos no ha cambiado.",
+            "start_frame": 226800,
+            "frames": 112200,
+            "phonemes": [
+              "ˈaβɾo la pˈaxina ðe axˈustes i kˌompɾuˈeβo ke el lˈimite ðe rAntˈɛntos nˈo ˈa kambjˈaðo."
+            ],
+            "words": null
+          }
+        ]
+      },
+      {
+        "passage": "ES02",
+        "language": "es",
+        "voice": "ef_dora",
+        "speed": 1.0,
+        "file": "speech/ES02-utterance.wav",
+        "sha256": "611d0d03a21cafb7bc18cb6995cd8c2904d195afc22a7362d51d2ba5c70352da",
+        "bytes": 727244,
+        "frames": 363600,
+        "clipped_samples": 0,
+        "sentences": [
+          {
+            "text": "El pedido 731 pasa de pendiente a fallido cuando el servicio del almacén no responde.",
+            "engine_text": "El pedido 731 pasa de pendiente a fallido cuando el servicio del almacén no responde.",
+            "start_frame": 0,
+            "frames": 149400,
+            "phonemes": [
+              "el peðˈiðo sˌeteθjˈɛntos tɾˌAntaiˈuno pˈasa ðe pendjˈɛnte a faʎˈiðo kwˌando el seɾβˈiθjo ðel ˌalmaθˈen nˈo respˈonde."
+            ],
+            "words": null
+          },
+          {
+            "text": "El panel sigue mostrando un estado correcto, así que la alerta nunca se activa.",
+            "engine_text": "El panel sigue mostrando un estado correcto, así que la alerta nunca se activa.",
+            "start_frame": 156600,
+            "frames": 114600,
+            "phonemes": [
+              "el panˈel sˈiɣe mostɾˈando ˈun estˈaðo korˈekto, asˈi ke la alˈeɾta nˈunka se aktˈiβa."
+            ],
+            "words": null
+          },
+          {
+            "text": "Necesitamos que el estado cambie antes del próximo envío.",
+            "engine_text": "Necesitamos que el estado cambie antes del próximo envío.",
+            "start_frame": 278400,
+            "frames": 85200,
+            "phonemes": [
+              "nˌeθesitˈamos ke el estˈaðo kˈambje ˈantes ðel pɾˈoksimo embˈio."
+            ],
+            "words": null
+          }
+        ]
+      },
+      {
+        "passage": "ES03",
+        "language": "es",
+        "voice": "ef_dora",
+        "speed": 1.0,
+        "file": "speech/ES03-utterance.wav",
+        "sha256": "78f2e7364dd3634407314dc65aff01046710f94cec8eb1f111ba0eb1f60dbc3b",
+        "bytes": 722444,
+        "frames": 361200,
+        "clipped_samples": 0,
+        "sentences": [
+          {
+            "text": "La línea naranja sube a 840 milisegundos mientras la mediana azul se queda cerca de 120.",
+            "engine_text": "La línea naranja sube a 840 milisegundos mientras la mediana azul se queda cerca de 120.",
+            "start_frame": 0,
+            "frames": 166800,
+            "phonemes": [
+              "la lˈinea naɾˈaŋxa sˈuβe a ˌoʧoθjˈentos kwaɾˈɛnta mˌiliseɣˈundos mjˌentɾas la meðjˈana aθˈul se kˈeða θˈeɾka ðe θjˈento βˈAnte."
+            ],
+            "words": null
+          },
+          {
+            "text": "Después de vaciar la caché, las dos líneas bajan otra vez.",
+            "engine_text": "Después de vaciar la caché, las dos líneas bajan otra vez.",
+            "start_frame": 174000,
+            "frames": 87600,
+            "phonemes": [
+              "despwˈes ðe βaθjˈaɾ la kaʧˈe, las ðˈos lˈineas βˈaxan ˈotɾa βˈeθ."
+            ],
+            "words": null
+          },
+          {
+            "text": "Adjunta el gráfico y la hora exacta del pico a la incidencia.",
+            "engine_text": "Adjunta el gráfico y la hora exacta del pico a la incidencia.",
+            "start_frame": 268800,
+            "frames": 92400,
+            "phonemes": [
+              "aðxˈunta el ɣɾˈafiko i la ˈoɾa eksˈakta ðel pˈiko a la ˌinθiðˈɛnθja."
+            ],
+            "words": null
+          }
+        ]
+      },
+      {
+        "passage": "ES04",
+        "language": "es",
+        "voice": "ef_dora",
+        "speed": 1.0,
+        "file": "speech/ES04-utterance.wav",
+        "sha256": "4d393d0ce0edb400b6633a432aa7f0a46ffd045755bb0b6594aef897eb3ab4e8",
+        "bytes": 775244,
+        "frames": 387600,
+        "clipped_samples": 0,
+        "sentences": [
+          {
+            "text": "La compilación 512 pasó todas las pruebas excepto la de subida.",
+            "engine_text": "La compilación 512 pasó todas las pruebas excepto la de subida.",
+            "start_frame": 0,
+            "frames": 111600,
+            "phonemes": [
+              "la kˌompilaθjˈon kinjˈɛntos ðˈoθe pasˈo tˈoðas las pɾuˈeβas eksθˈepːto la ðe suβˈiða."
+            ],
+            "words": null
+          },
+          {
+            "text": "El instalador se detiene a mitad de camino y muestra el código K-204 en un recuadro gris.",
+            "engine_text": "El instalador se detiene a mitad de camino y muestra el código K-204 en un recuadro gris.",
+            "start_frame": 118800,
+            "frames": 146400,
+            "phonemes": [
+              "el ˌinstalaðˈoɾ se ðetjˈene a mitˈad ðe kamˈino i mwˈestɾa el kˈoðiɣo kˈa dosθjˈentos kwˈatɾo en ˈun rekwˈaðɾo ɣɾˈis."
+            ],
+            "words": null
+          },
+          {
+            "text": "Reiniciar el equipo no sirve, y el mismo código aparece en el segundo portátil.",
+            "engine_text": "Reiniciar el equipo no sirve, y el mismo código aparece en el segundo portátil.",
+            "start_frame": 272400,
+            "frames": 115200,
+            "phonemes": [
+              "rˌAniθjˈaɾ el ekˈipo nˈo sˈiɾβe, i el mˈismo kˈoðiɣo ˌapaɾˈeθe en el seɣˈundo poɾtˈatil."
+            ],
+            "words": null
+          }
+        ]
+      },
+      {
+        "passage": "ES05",
+        "language": "es",
+        "voice": "ef_dora",
+        "speed": 1.0,
+        "file": "speech/ES05-utterance.wav",
+        "sha256": "51702f993701fafcdf12c603baaa9f89eb92872f6f30cdc5405ee5675e633778",
+        "bytes": 818444,
+        "frames": 409200,
+        "clipped_samples": 0,
+        "sentences": [
+          {
+            "text": "La factura 316 se creó dos veces porque el botón de enviar seguía activo.",
+            "engine_text": "La factura 316 se creó dos veces porque el botón de enviar seguía activo.",
+            "start_frame": 0,
+            "frames": 127200,
+            "phonemes": [
+              "la faktˈuɾa tɾesθjˈentos ðjˌɛθisˈAs se kɾeˈo ðˈos βˈeθes pˌoɾke el βotˈon de embjˈaɾ seɣˈia aktˈiβo."
+            ],
+            "words": null
+          },
+          {
+            "text": "La segunda copia tiene un total de 250 en lugar de 245.",
+            "engine_text": "La segunda copia tiene un total de 250 en lugar de 245.",
+            "start_frame": 134400,
+            "frames": 127800,
+            "phonemes": [
+              "la seɣˈunda kˈopja tjˈene ˈun totˈal ðe ðosθjˈentos θinkwˈɛnta en luɣˈaɾ ðe ðosθjˈentos kwaɾˌɛntaiθˈinko."
+            ],
+            "words": null
+          },
+          {
+            "text": "Borra el duplicado, conserva el registro original y envía una nota breve al equipo de facturación.",
+            "engine_text": "Borra el duplicado, conserva el registro original y envía una nota breve al equipo de facturación.",
+            "start_frame": 269400,
+            "frames": 139800,
+            "phonemes": [
+              "bˈora el ðˌuplikˈaðo, konsˈeɾβa el rexˈistɾo ˌoɾixinˈal i embˈia ˈuna nˈota βɾˈeβe al ekˈipo ðe fˌaktuɾaθjˈon."
+            ],
+            "words": null
+          }
+        ]
+      },
+      {
+        "passage": "ES06",
+        "language": "es",
+        "voice": "ef_dora",
+        "speed": 1.0,
+        "file": "speech/ES06-utterance.wav",
+        "sha256": "8c94b4c2762de5e4a62cdeb17497b32b65a157fcbf5550abfcab671d9d42f55d",
+        "bytes": 788444,
+        "frames": 394200,
+        "clipped_samples": 0,
+        "sentences": [
+          {
+            "text": "Ayer la tarea de sincronización copió 64 archivos y omitió varios.",
+            "engine_text": "Ayer la tarea de sincronización copió 64 archivos y omitió varios.",
+            "start_frame": 0,
+            "frames": 117000,
+            "phonemes": [
+              "aʝˈeɾ la taɾˈea ðe sˌinkɾonˌiθaθjˈon kopjˈo sɛsˌɛntaikwˈatɾo aɾʧˈiβos i ˌomitjˈo βˈaɾjos."
+            ],
+            "words": null
+          },
+          {
+            "text": "Cada archivo omitido supera el límite de 512 megabytes.",
+            "engine_text": "Cada archivo omitido supera el límite de 512 megabytes.",
+            "start_frame": 124200,
+            "frames": 100800,
+            "phonemes": [
+              "kˈaða aɾʧˈiβo ˌomitˈiðo supˈeɾa el lˈimite ðe kinjˈɛntos ðˈoθe mˌeɣaβˈites."
+            ],
+            "words": null
+          },
+          {
+            "text": "Divide el paquete en partes más pequeñas, vuelve a lanzar la tarea y comprueba que el contador llega a 68.",
+            "engine_text": "Divide el paquete en partes más pequeñas, vuelve a lanzar la tarea y comprueba que el contador llega a 68.",
+            "start_frame": 232200,
+            "frames": 162000,
+            "phonemes": [
+              "diβˈiðe el pakˈete em pˈaɾtes mˈas pekˈeɲas, bwˈelβe a lanθˈaɾ la taɾˈea i kˌompɾuˈeβa ke el kˌontaðˈoɾ ʎˈeɣa a sɛsˌɛntaiˈoʧo."
+            ],
+            "words": null
+          }
+        ]
+      }
+    ]
+  },
+  "assembly": {
+    "ffmpeg_version": "ffmpeg version n9.0.1-11-ge47273f4d9-20260831 Copyright (c) 2000-2026 the FFmpeg developers",
+    "ffmpeg_sha256": "ed57193f048a65bfb0aa3c360639d7f7109ca014405201e3ea478c9ca4ea20fc",
+    "track_sample_rate": 24000,
+    "encoded_sample_rate": 16000,
+    "placement_policy": {
+      "lead_in_us": 2000000,
+      "tail_us": 1000000,
+      "max_clip_us": 29000000,
+      "note": "every clip fits one 30 s R0 recognition window"
+    },
+    "noise_seeds": {
+      "passage_seed_base": 150000,
+      "noise_only_seed": 150999,
+      "rule": "the passage at manifest position n (from 1) uses base + n at every level"
+    },
+    "reference_speech_rms": 0.04730311847600508,
+    "timing_note": "speech_start_us/speech_end_us are exact by construction; the sentences' word timings are Kokoro's own (English only) and are generation facts, not truth",
+    "clips": [
+      {
+        "clip": "EN01-clean",
+        "passage": "EN01",
+        "language": "en-US",
+        "level": "clean",
+        "snr_db": null,
+        "speech_start_us": 2000000,
+        "speech_end_us": 17500000,
+        "noise": null,
+        "file": "EN01-clean.m4a",
+        "sha256": "4209f19bb0d3c3e6965617b9094eda8f01ad3de891cafac05c7b5ae1ab0d12ca",
+        "bytes": 123775,
+        "track_frames": 444000,
+        "track_sha256": "28a2e9aa56f763d01b8427968bd62358f3d1720e1111b14c586c46b7b56f54c0",
+        "command_template": [
+          "<FFMPEG>",
+          "-hide_banner",
+          "-loglevel",
+          "error",
+          "-nostdin",
+          "-n",
+          "-i",
+          "<TRACK>",
+          "-map",
+          "0:a:0",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "64k",
+          "-ar",
+          "16000",
+          "-ac",
+          "1",
+          "-fflags",
+          "+bitexact",
+          "-movflags",
+          "+faststart",
+          "<OUTPUT>/EN01-clean.m4a"
+        ]
+      },
+      {
+        "clip": "EN01-snr20",
+        "passage": "EN01",
+        "language": "en-US",
+        "level": "snr20",
+        "snr_db": 20,
+        "speech_start_us": 2000000,
+        "speech_end_us": 17500000,
+        "noise": {
+          "recipe": "office-v1",
+          "seed": 150001,
+          "power_ratio": 100.0,
+          "speech_rms": 0.048145608974524426,
+          "unscaled_noise_rms": 1.7232685387974676,
+          "noise_gain": 0.00279385411446793,
+          "mix_gain": 1.0,
+          "covers": "whole clip",
+          "snr_db": 20
+        },
+        "file": "EN01-snr20.m4a",
+        "sha256": "7ea3f4d5057a440efad5afef4958fd75a72b14ca9ad8100075545df70e04b2d1",
+        "bytes": 155333,
+        "track_frames": 444000,
+        "track_sha256": "89c65b569b4c4b0a7302c4efbc884e2c3b88e124befbe1d474fe19ef28309e78",
+        "command_template": [
+          "<FFMPEG>",
+          "-hide_banner",
+          "-loglevel",
+          "error",
+          "-nostdin",
+          "-n",
+          "-i",
+          "<TRACK>",
+          "-map",
+          "0:a:0",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "64k",
+          "-ar",
+          "16000",
+          "-ac",
+          "1",
+          "-fflags",
+          "+bitexact",
+          "-movflags",
+          "+faststart",
+          "<OUTPUT>/EN01-snr20.m4a"
+        ]
+      },
+      {
+        "clip": "EN01-snr10",
+        "passage": "EN01",
+        "language": "en-US",
+        "level": "snr10",
+        "snr_db": 10,
+        "speech_start_us": 2000000,
+        "speech_end_us": 17500000,
+        "noise": {
+          "recipe": "office-v1",
+          "seed": 150001,
+          "power_ratio": 10.0,
+          "speech_rms": 0.048145608974524426,
+          "unscaled_noise_rms": 1.7232685387974676,
+          "noise_gain": 0.008834942451951445,
+          "mix_gain": 1.0,
+          "covers": "whole clip",
+          "snr_db": 10
+        },
+        "file": "EN01-snr10.m4a",
+        "sha256": "3685758d99896dbcc0af338b00da1063ca6a30bd6c6148ad26bc14d7f3d4b18a",
+        "bytes": 153392,
+        "track_frames": 444000,
+        "track_sha256": "c69077ae52a4238d744b3bb37bc0a7711e61ca63571934f6d9b621ee05889161",
+        "command_template": [
+          "<FFMPEG>",
+          "-hide_banner",
+          "-loglevel",
+          "error",
+          "-nostdin",
+          "-n",
+          "-i",
+          "<TRACK>",
+          "-map",
+          "0:a:0",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "64k",
+          "-ar",
+          "16000",
+          "-ac",
+          "1",
+          "-fflags",
+          "+bitexact",
+          "-movflags",
+          "+faststart",
+          "<OUTPUT>/EN01-snr10.m4a"
+        ]
+      },
+      {
+        "clip": "EN01-snr05",
+        "passage": "EN01",
+        "language": "en-US",
+        "level": "snr05",
+        "snr_db": 5,
+        "speech_start_us": 2000000,
+        "speech_end_us": 17500000,
+        "noise": {
+          "recipe": "office-v1",
+          "seed": 150001,
+          "power_ratio": 3.1622776601683795,
+          "speech_rms": 0.048145608974524426,
+          "unscaled_noise_rms": 1.7232685387974676,
+          "noise_gain": 0.01571099625118405,
+          "mix_gain": 1.0,
+          "covers": "whole clip",
+          "snr_db": 5
+        },
+        "file": "EN01-snr05.m4a",
+        "sha256": "fa79809181a647745521dff5f619ce5d0ff9147b11412f88024486fb38cb34e8",
+        "bytes": 150264,
+        "track_frames": 444000,
+        "track_sha256": "53958da9c2ce5d7c74feee8e1c73819f37541ebf1cc04204ac577eb16c2e4ef8",
+        "command_template": [
+          "<FFMPEG>",
+          "-hide_banner",
+          "-loglevel",
+          "error",
+          "-nostdin",
+          "-n",
+          "-i",
+          "<TRACK>",
+          "-map",
+          "0:a:0",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "64k",
+          "-ar",
+          "16000",
+          "-ac",
+          "1",
+          "-fflags",
+          "+bitexact",
+          "-movflags",
+          "+faststart",
+          "<OUTPUT>/EN01-snr05.m4a"
+        ]
+      },
+      {
+        "clip": "EN02-clean",
+        "passage": "EN02",
+        "language": "en-US",
+        "level": "clean",
+        "snr_db": null,
+        "speech_start_us": 2000000,
+        "speech_end_us": 18125000,
+        "noise": null,
+        "file": "EN02-clean.m4a",
+        "sha256": "a82873a10666753b566a86c85423bde141a4c8612bffe428a92be5dc23d0af57",
+        "bytes": 128904,
+        "track_frames": 459000,
+        "track_sha256": "efac00d82042e8c894d874e2be6ed48b9c40c24ca6b843894695e6f4b8a7b037",
+        "command_template": [
+          "<FFMPEG>",
+          "-hide_banner",
+          "-loglevel",
+          "error",
+          "-nostdin",
+          "-n",
+          "-i",
+          "<TRACK>",
+          "-map",
+          "0:a:0",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "64k",
+          "-ar",
+          "16000",
+          "-ac",
+          "1",
+          "-fflags",
+          "+bitexact",
+          "-movflags",
+          "+faststart",
+          "<OUTPUT>/EN02-clean.m4a"
+        ]
+      },
+      {
+        "clip": "EN02-snr20",
+        "passage": "EN02",
+        "language": "en-US",
+        "level": "snr20",
+        "snr_db": 20,
+        "speech_start_us": 2000000,
+        "speech_end_us": 18125000,
+        "noise": {
+          "recipe": "office-v1",
+          "seed": 150002,
+          "power_ratio": 100.0,
+          "speech_rms": 0.048291963376586186,
+          "unscaled_noise_rms": 1.7252884673550946,
+          "noise_gain": 0.002799066028107105,
+          "mix_gain": 1.0,
+          "covers": "whole clip",
+          "snr_db": 20
+        },
+        "file": "EN02-snr20.m4a",
+        "sha256": "47443d2fda170a58f345916effd27d41175733839226ccfb37b007b9955d1b6c",
+        "bytes": 158366,
+        "track_frames": 459000,
+        "track_sha256": "e3acdf976ecc65631b6ece97adedeb2d278ecf4dcbb441f9c3a393b45b59d335",
+        "command_template": [
+          "<FFMPEG>",
+          "-hide_banner",
+          "-loglevel",
+          "error",
+          "-nostdin",
+          "-n",
+          "-i",
+          "<TRACK>",
+          "-map",
+          "0:a:0",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "64k",
+          "-ar",
+          "16000",
+          "-ac",
+          "1",
+          "-fflags",
+          "+bitexact",
+          "-movflags",
+          "+faststart",
+          "<OUTPUT>/EN02-snr20.m4a"
+        ]
+      },
+      {
+        "clip": "EN02-snr10",
+        "passage": "EN02",
+        "language": "en-US",
+        "level": "snr10",
+        "snr_db": 10,
+        "speech_start_us": 2000000,
+        "speech_end_us": 18125000,
+        "noise": {
+          "recipe": "office-v1",
+          "seed": 150002,
+          "power_ratio": 10.0,
+          "speech_rms": 0.048291963376586186,
+          "unscaled_noise_rms": 1.7252884673550946,
+          "noise_gain": 0.008851423970019333,
+          "mix_gain": 1.0,
+          "covers": "whole clip",
+          "snr_db": 10
+        },
+        "file": "EN02-snr10.m4a",
+        "sha256": "9ae5f074b680fc75d819e5b6e789990ed6dd15503dd77b2c6dfe883b769eb331",
+        "bytes": 159417,
+        "track_frames": 459000,
+        "track_sha256": "0fc114423ea6f1943a1ecf40101204cb1e799698e7518367b786ea031a697e07",
+        "command_template": [
+          "<FFMPEG>",
+          "-hide_banner",
+          "-loglevel",
+          "error",
+          "-nostdin",
+          "-n",
+          "-i",
+          "<TRACK>",
+          "-map",
+          "0:a:0",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "64k",
+          "-ar",
+          "16000",
+          "-ac",
+          "1",
+          "-fflags",
+          "+bitexact",
+          "-movflags",
+          "+faststart",
+          "<OUTPUT>/EN02-snr10.m4a"
+        ]
+      },
+      {
+        "clip": "EN02-snr05",
+        "passage": "EN02",
+        "language": "en-US",
+        "level": "snr05",
+        "snr_db": 5,
+        "speech_start_us": 2000000,
+        "speech_end_us": 18125000,
+        "noise": {
+          "recipe": "office-v1",
+          "seed": 150002,
+          "power_ratio": 3.1622776601683795,
+          "speech_rms": 0.048291963376586186,
+          "unscaled_noise_rms": 1.7252884673550946,
+          "noise_gain": 0.015740304995410362,
+          "mix_gain": 1.0,
+          "covers": "whole clip",
+          "snr_db": 5
+        },
+        "file": "EN02-snr05.m4a",
+        "sha256": "92746f8f4b3177d77231f8a458681d8421aa018ce07b9f32c250b53651c73c6a",
+        "bytes": 155467,
+        "track_frames": 459000,
+        "track_sha256": "36f8a9b6eeeec56490a5218085185efc8d9479cda8ffb7e01b0ed91b6588068b",
+        "command_template": [
+          "<FFMPEG>",
+          "-hide_banner",
+          "-loglevel",
+          "error",
+          "-nostdin",
+          "-n",
+          "-i",
+          "<TRACK>",
+          "-map",
+          "0:a:0",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "64k",
+          "-ar",
+          "16000",
+          "-ac",
+          "1",
+          "-fflags",
+          "+bitexact",
+          "-movflags",
+          "+faststart",
+          "<OUTPUT>/EN02-snr05.m4a"
+        ]
+      },
+      {
+        "clip": "EN03-clean",
+        "passage": "EN03",
+        "language": "en-US",
+        "level": "clean",
+        "snr_db": null,
+        "speech_start_us": 2000000,
+        "speech_end_us": 19175000,
+        "noise": null,
+        "file": "EN03-clean.m4a",
+        "sha256": "be88aae4a16e40954fe6c47e466bffcddd31bcabca3df88c25adf6a54b301ba1",
+        "bytes": 137340,
+        "track_frames": 484200,
+        "track_sha256": "e176a6850225b7c01181136623dbadfd58b32b397e4153f51e7095b0ce8441fc",
+        "command_template": [
+          "<FFMPEG>",
+          "-hide_banner",
+          "-loglevel",
+          "error",
+          "-nostdin",
+          "-n",
+          "-i",
+          "<TRACK>",
+          "-map",
+          "0:a:0",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "64k",
+          "-ar",
+          "16000",
+          "-ac",
+          "1",
+          "-fflags",
+          "+bitexact",
+          "-movflags",
+          "+faststart",
+          "<OUTPUT>/EN03-clean.m4a"
+        ]
+      },
+      {
+        "clip": "EN03-snr20",
+        "passage": "EN03",
+        "language": "en-US",
+        "level": "snr20",
+        "snr_db": 20,
+        "speech_start_us": 2000000,
+        "speech_end_us": 19175000,
+        "noise": {
+          "recipe": "office-v1",
+          "seed": 150003,
+          "power_ratio": 100.0,
+          "speech_rms": 0.048566807109561065,
+          "unscaled_noise_rms": 1.7089705207341586,
+          "noise_gain": 0.002841875065738243,
+          "mix_gain": 1.0,
+          "covers": "whole clip",
+          "snr_db": 20
+        },
+        "file": "EN03-snr20.m4a",
+        "sha256": "67eee6a6765826f9fa35493919776d6b2637be42608fe89993062dc7dc7b9380",
+        "bytes": 166222,
+        "track_frames": 484200,
+        "track_sha256": "f5b6022de63195efaf0232c38f50ef56f9f565850fa2bb6bd320ec32379b8e88",
+        "command_template": [
+          "<FFMPEG>",
+          "-hide_banner",
+          "-loglevel",
+          "error",
+          "-nostdin",
+          "-n",
+          "-i",
+          "<TRACK>",
+          "-map",
+          "0:a:0",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "64k",
+          "-ar",
+          "16000",
+          "-ac",
+          "1",
+          "-fflags",
+          "+bitexact",
+          "-movflags",
+          "+faststart",
+          "<OUTPUT>/EN03-snr20.m4a"
+        ]
+      },
+      {
+        "clip": "EN03-snr10",
+        "passage": "EN03",
+        "language": "en-US",
+        "level": "snr10",
+        "snr_db": 10,
+        "speech_start_us": 2000000,
+        "speech_end_us": 19175000,
+        "noise": {
+          "recipe": "office-v1",
+          "seed": 150003,
+          "power_ratio": 10.0,
+          "speech_rms": 0.048566807109561065,
+          "unscaled_noise_rms": 1.7089705207341586,
+          "noise_gain": 0.008986798033373591,
+          "mix_gain": 1.0,
+          "covers": "whole clip",
+          "snr_db": 10
+        },
+        "file": "EN03-snr10.m4a",
+        "sha256": "22efe93f4886593f233aaad628a142ba5684ee4e7ba6e36a336c27f82a7fe953",
+        "bytes": 167253,
+        "track_frames": 484200,
+        "track_sha256": "47d295a1154560a431a4af1103466f40713e201992a74e7365f41c3bbe00f9e4",
+        "command_template": [
+          "<FFMPEG>",
+          "-hide_banner",
+          "-loglevel",
+          "error",
+          "-nostdin",
+          "-n",
+          "-i",
+          "<TRACK>",
+          "-map",
+          "0:a:0",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "64k",
+          "-ar",
+          "16000",
+          "-ac",
+          "1",
+          "-fflags",
+          "+bitexact",
+          "-movflags",
+          "+faststart",
+          "<OUTPUT>/EN03-snr10.m4a"
+        ]
+      },
+      {
+        "clip": "EN03-snr05",
+        "passage": "EN03",
+        "language": "en-US",
+        "level": "snr05",
+        "snr_db": 5,
+        "speech_start_us": 2000000,
+        "speech_end_us": 19175000,
+        "noise": {
+          "recipe": "office-v1",
+          "seed": 150003,
+          "power_ratio": 3.1622776601683795,
+          "speech_rms": 0.048566807109561065,
+          "unscaled_noise_rms": 1.7089705207341586,
+          "noise_gain": 0.015981037904926543,
+          "mix_gain": 1.0,
+          "covers": "whole clip",
+          "snr_db": 5
+        },
+        "file": "EN03-snr05.m4a",
+        "sha256": "317930fc39c0f8ea02a36288451f70c7a0a04a023e1d324ae604afe86f1faaee",
+        "bytes": 165140,
+        "track_frames": 484200,
+        "track_sha256": "20d0742baf507b59e201f647220d0f39dc0bb33e161637a8c7cf6922bad9dec8",
+        "command_template": [
+          "<FFMPEG>",
+          "-hide_banner",
+          "-loglevel",
+          "error",
+          "-nostdin",
+          "-n",
+          "-i",
+          "<TRACK>",
+          "-map",
+          "0:a:0",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "64k",
+          "-ar",
+          "16000",
+          "-ac",
+          "1",
+          "-fflags",
+          "+bitexact",
+          "-movflags",
+          "+faststart",
+          "<OUTPUT>/EN03-snr05.m4a"
+        ]
+      },
+      {
+        "clip": "EN04-clean",
+        "passage": "EN04",
+        "language": "en-US",
+        "level": "clean",
+        "snr_db": null,
+        "speech_start_us": 2000000,
+        "speech_end_us": 17650000,
+        "noise": null,
+        "file": "EN04-clean.m4a",
+        "sha256": "8a8aee4f07bee650e50c74210ef0b11cd6b4461316a37acc91765b6283a2adbb",
+        "bytes": 124625,
+        "track_frames": 447600,
+        "track_sha256": "5ad6e6f9729970769dccdf3e018b2cd89f64cc8cb6c62a25d27f9df8a6bba051",
+        "command_template": [
+          "<FFMPEG>",
+          "-hide_banner",
+          "-loglevel",
+          "error",
+          "-nostdin",
+          "-n",
+          "-i",
+          "<TRACK>",
+          "-map",
+          "0:a:0",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "64k",
+          "-ar",
+          "16000",
+          "-ac",
+          "1",
+          "-fflags",
+          "+bitexact",
+          "-movflags",
+          "+faststart",
+          "<OUTPUT>/EN04-clean.m4a"
+        ]
+      },
+      {
+        "clip": "EN04-snr20",
+        "passage": "EN04",
+        "language": "en-US",
+        "level": "snr20",
+        "snr_db": 20,
+        "speech_start_us": 2000000,
+        "speech_end_us": 17650000,
+        "noise": {
+          "recipe": "office-v1",
+          "seed": 150004,
+          "power_ratio": 100.0,
+          "speech_rms": 0.04737708759525029,
+          "unscaled_noise_rms": 1.7405167226859986,
+          "noise_gain": 0.002722012778029335,
+          "mix_gain": 1.0,
+          "covers": "whole clip",
+          "snr_db": 20
+        },
+        "file": "EN04-snr20.m4a",
+        "sha256": "49c3d98eb51b6d68797b584798e63fd6aaa6ede369525c1e52cb8f2d9f8d71d7",
+        "bytes": 154310,
+        "track_frames": 447600,
+        "track_sha256": "f5e2ecfcf28b4f35b31341bd686d5751a3d799c6bb13fdddc91cdbeaabd5c96e",
+        "command_template": [
+          "<FFMPEG>",
+          "-hide_banner",
+          "-loglevel",
+          "error",
+          "-nostdin",
+          "-n",
+          "-i",
+          "<TRACK>",
+          "-map",
+          "0:a:0",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "64k",
+          "-ar",
+          "16000",
+          "-ac",
+          "1",
+          "-fflags",
+          "+bitexact",
+          "-movflags",
+          "+faststart",
+          "<OUTPUT>/EN04-snr20.m4a"
+        ]
+      },
+      {
+        "clip": "EN04-snr10",
+        "passage": "EN04",
+        "language": "en-US",
+        "level": "snr10",
+        "snr_db": 10,
+        "speech_start_us": 2000000,
+        "speech_end_us": 17650000,
+        "noise": {
+          "recipe": "office-v1",
+          "seed": 150004,
+          "power_ratio": 10.0,
+          "speech_rms": 0.04737708759525029,
+          "unscaled_noise_rms": 1.7405167226859986,
+          "noise_gain": 0.008607760198655036,
+          "mix_gain": 1.0,
+          "covers": "whole clip",
+          "snr_db": 10
+        },
+        "file": "EN04-snr10.m4a",
+        "sha256": "cd2694aee9a69b6e5e262e2c2a605bad1b0472e3223b348a053c8f7f3e49da6c",
+        "bytes": 154786,
+        "track_frames": 447600,
+        "track_sha256": "d2056b74dc751a27b0db125305764f69527b0d279aeaf1d9df8ca480ffea6061",
+        "command_template": [
+          "<FFMPEG>",
+          "-hide_banner",
+          "-loglevel",
+          "error",
+          "-nostdin",
+          "-n",
+          "-i",
+          "<TRACK>",
+          "-map",
+          "0:a:0",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "64k",
+          "-ar",
+          "16000",
+          "-ac",
+          "1",
+          "-fflags",
+          "+bitexact",
+          "-movflags",
+          "+faststart",
+          "<OUTPUT>/EN04-snr10.m4a"
+        ]
+      },
+      {
+        "clip": "EN04-snr05",
+        "passage": "EN04",
+        "language": "en-US",
+        "level": "snr05",
+        "snr_db": 5,
+        "speech_start_us": 2000000,
+        "speech_end_us": 17650000,
+        "noise": {
+          "recipe": "office-v1",
+          "seed": 150004,
+          "power_ratio": 3.1622776601683795,
+          "speech_rms": 0.04737708759525029,
+          "unscaled_noise_rms": 1.7405167226859986,
+          "noise_gain": 0.0153070027278208,
+          "mix_gain": 1.0,
+          "covers": "whole clip",
+          "snr_db": 5
+        },
+        "file": "EN04-snr05.m4a",
+        "sha256": "0d5a0713dd5b4b083c1843c54a1621c1c8dc0c1b56212a9a71022b5e401b399a",
+        "bytes": 153212,
+        "track_frames": 447600,
+        "track_sha256": "3212c3f5b4c9ee307ccab528cd867310ef3a1fbf6b727cfe9f3e3fed83aef4c7",
+        "command_template": [
+          "<FFMPEG>",
+          "-hide_banner",
+          "-loglevel",
+          "error",
+          "-nostdin",
+          "-n",
+          "-i",
+          "<TRACK>",
+          "-map",
+          "0:a:0",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "64k",
+          "-ar",
+          "16000",
+          "-ac",
+          "1",
+          "-fflags",
+          "+bitexact",
+          "-movflags",
+          "+faststart",
+          "<OUTPUT>/EN04-snr05.m4a"
+        ]
+      },
+      {
+        "clip": "EN05-clean",
+        "passage": "EN05",
+        "language": "en-US",
+        "level": "clean",
+        "snr_db": null,
+        "speech_start_us": 2000000,
+        "speech_end_us": 20450000,
+        "noise": null,
+        "file": "EN05-clean.m4a",
+        "sha256": "ab42f0a0ddb5baac58698e4b335f69787cd3c023431ad57d02cc96bedeb2ef92",
+        "bytes": 151536,
+        "track_frames": 514800,
+        "track_sha256": "acf4deae8b1203d35d74d66cb58790927f1160e594dcd19fd180097abfa67cd9",
+        "command_template": [
+          "<FFMPEG>",
+          "-hide_banner",
+          "-loglevel",
+          "error",
+          "-nostdin",
+          "-n",
+          "-i",
+          "<TRACK>",
+          "-map",
+          "0:a:0",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "64k",
+          "-ar",
+          "16000",
+          "-ac",
+          "1",
+          "-fflags",
+          "+bitexact",
+          "-movflags",
+          "+faststart",
+          "<OUTPUT>/EN05-clean.m4a"
+        ]
+      },
+      {
+        "clip": "EN05-snr20",
+        "passage": "EN05",
+        "language": "en-US",
+        "level": "snr20",
+        "snr_db": 20,
+        "speech_start_us": 2000000,
+        "speech_end_us": 20450000,
+        "noise": {
+          "recipe": "office-v1",
+          "seed": 150005,
+          "power_ratio": 100.0,
+          "speech_rms": 0.04943966343598487,
+          "unscaled_noise_rms": 1.7222151413436515,
+          "noise_gain": 0.0028707019378201868,
+          "mix_gain": 1.0,
+          "covers": "whole clip",
+          "snr_db": 20
+        },
+        "file": "EN05-snr20.m4a",
+        "sha256": "1ded87244d05cd638fdd5d87a854a2540ce72533e56147fa033abba76a94345e",
+        "bytes": 179280,
+        "track_frames": 514800,
+        "track_sha256": "0cce792cc44ac94bd65ff056df95f02666bde9af561ed47bf7bb8630620cde6b",
+        "command_template": [
+          "<FFMPEG>",
+          "-hide_banner",
+          "-loglevel",
+          "error",
+          "-nostdin",
+          "-n",
+          "-i",
+          "<TRACK>",
+          "-map",
+          "0:a:0",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "64k",
+          "-ar",
+          "16000",
+          "-ac",
+          "1",
+          "-fflags",
+          "+bitexact",
+          "-movflags",
+          "+faststart",
+          "<OUTPUT>/EN05-snr20.m4a"
+        ]
+      },
+      {
+        "clip": "EN05-snr10",
+        "passage": "EN05",
+        "language": "en-US",
+        "level": "snr10",
+        "snr_db": 10,
+        "speech_start_us": 2000000,
+        "speech_end_us": 20450000,
+        "noise": {
+          "recipe": "office-v1",
+          "seed": 150005,
+          "power_ratio": 10.0,
+          "speech_rms": 0.04943966343598487,
+          "unscaled_noise_rms": 1.7222151413436515,
+          "noise_gain": 0.00907795660697085,
+          "mix_gain": 1.0,
+          "covers": "whole clip",
+          "snr_db": 10
+        },
+        "file": "EN05-snr10.m4a",
+        "sha256": "52e3654931ceddae0af25875c73a290345dfb86d833d4fe432d3e2203ca4575c",
+        "bytes": 179429,
+        "track_frames": 514800,
+        "track_sha256": "08bdbeae5e32ce525d338ca8f2c6a3fb2bda88c515881bff0547a271d2048fb1",
+        "command_template": [
+          "<FFMPEG>",
+          "-hide_banner",
+          "-loglevel",
+          "error",
+          "-nostdin",
+          "-n",
+          "-i",
+          "<TRACK>",
+          "-map",
+          "0:a:0",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "64k",
+          "-ar",
+          "16000",
+          "-ac",
+          "1",
+          "-fflags",
+          "+bitexact",
+          "-movflags",
+          "+faststart",
+          "<OUTPUT>/EN05-snr10.m4a"
+        ]
+      },
+      {
+        "clip": "EN05-snr05",
+        "passage": "EN05",
+        "language": "en-US",
+        "level": "snr05",
+        "snr_db": 5,
+        "speech_start_us": 2000000,
+        "speech_end_us": 20450000,
+        "noise": {
+          "recipe": "office-v1",
+          "seed": 150005,
+          "power_ratio": 3.1622776601683795,
+          "speech_rms": 0.04943966343598487,
+          "unscaled_noise_rms": 1.7222151413436515,
+          "noise_gain": 0.01614314331940307,
+          "mix_gain": 1.0,
+          "covers": "whole clip",
+          "snr_db": 5
+        },
+        "file": "EN05-snr05.m4a",
+        "sha256": "7daab88162c31ab5cd100d98a42a874580f8ddbcda1ca0e759bb385309c42945",
+        "bytes": 174121,
+        "track_frames": 514800,
+        "track_sha256": "0407afb33b3bd9c525596e961ed04f62caadb0f1a55f1342820d9cf604d0ade1",
+        "command_template": [
+          "<FFMPEG>",
+          "-hide_banner",
+          "-loglevel",
+          "error",
+          "-nostdin",
+          "-n",
+          "-i",
+          "<TRACK>",
+          "-map",
+          "0:a:0",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "64k",
+          "-ar",
+          "16000",
+          "-ac",
+          "1",
+          "-fflags",
+          "+bitexact",
+          "-movflags",
+          "+faststart",
+          "<OUTPUT>/EN05-snr05.m4a"
+        ]
+      },
+      {
+        "clip": "EN06-clean",
+        "passage": "EN06",
+        "language": "en-US",
+        "level": "clean",
+        "snr_db": null,
+        "speech_start_us": 2000000,
+        "speech_end_us": 18150000,
+        "noise": null,
+        "file": "EN06-clean.m4a",
+        "sha256": "2885f3be19685706a4b090894ba737313a3aaa58c4f8edd6aa72540954f8b25c",
+        "bytes": 130968,
+        "track_frames": 459600,
+        "track_sha256": "8a74b7d41d9c458f50b460f4595841823769200e24d4cfc647209ba051b98f35",
+        "command_template": [
+          "<FFMPEG>",
+          "-hide_banner",
+          "-loglevel",
+          "error",
+          "-nostdin",
+          "-n",
+          "-i",
+          "<TRACK>",
+          "-map",
+          "0:a:0",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "64k",
+          "-ar",
+          "16000",
+          "-ac",
+          "1",
+          "-fflags",
+          "+bitexact",
+          "-movflags",
+          "+faststart",
+          "<OUTPUT>/EN06-clean.m4a"
+        ]
+      },
+      {
+        "clip": "EN06-snr20",
+        "passage": "EN06",
+        "language": "en-US",
+        "level": "snr20",
+        "snr_db": 20,
+        "speech_start_us": 2000000,
+        "speech_end_us": 18150000,
+        "noise": {
+          "recipe": "office-v1",
+          "seed": 150006,
+          "power_ratio": 100.0,
+          "speech_rms": 0.04839837445753107,
+          "unscaled_noise_rms": 1.7355546749767448,
+          "noise_gain": 0.0027886401480367983,
+          "mix_gain": 1.0,
+          "covers": "whole clip",
+          "snr_db": 20
+        },
+        "file": "EN06-snr20.m4a",
+        "sha256": "f74c1464481221095ccc7f6fbfa70dd31151720900fed3cae2133e8b0c7c82c8",
+        "bytes": 158716,
+        "track_frames": 459600,
+        "track_sha256": "090191df2296cec2dadd8422a1f2d616e721991ad2ad9a11bc882ad70126caf0",
+        "command_template": [
+          "<FFMPEG>",
+          "-hide_banner",
+          "-loglevel",
+          "error",
+          "-nostdin",
+          "-n",
+          "-i",
+          "<TRACK>",
+          "-map",
+          "0:a:0",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "64k",
+          "-ar",
+          "16000",
+          "-ac",
+          "1",
+          "-fflags",
+          "+bitexact",
+          "-movflags",
+          "+faststart",
+          "<OUTPUT>/EN06-snr20.m4a"
+        ]
+      },
+      {
+        "clip": "EN06-snr10",
+        "passage": "EN06",
+        "language": "en-US",
+        "level": "snr10",
+        "snr_db": 10,
+        "speech_start_us": 2000000,
+        "speech_end_us": 18150000,
+        "noise": {
+          "recipe": "office-v1",
+          "seed": 150006,
+          "power_ratio": 10.0,
+          "speech_rms": 0.04839837445753107,
+          "unscaled_noise_rms": 1.7355546749767448,
+          "noise_gain": 0.00881845444238541,
+          "mix_gain": 1.0,
+          "covers": "whole clip",
+          "snr_db": 10
+        },
+        "file": "EN06-snr10.m4a",
+        "sha256": "e9f4764c3d8cf7c15f92175627d0301ba8f185f259629338872417738954627d",
+        "bytes": 157496,
+        "track_frames": 459600,
+        "track_sha256": "b59ca5a7472b585d093a97de138894ac8a490b568d0209102d495284a6d75833",
+        "command_template": [
+          "<FFMPEG>",
+          "-hide_banner",
+          "-loglevel",
+          "error",
+          "-nostdin",
+          "-n",
+          "-i",
+          "<TRACK>",
+          "-map",
+          "0:a:0",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "64k",
+          "-ar",
+          "16000",
+          "-ac",
+          "1",
+          "-fflags",
+          "+bitexact",
+          "-movflags",
+          "+faststart",
+          "<OUTPUT>/EN06-snr10.m4a"
+        ]
+      },
+      {
+        "clip": "EN06-snr05",
+        "passage": "EN06",
+        "language": "en-US",
+        "level": "snr05",
+        "snr_db": 5,
+        "speech_start_us": 2000000,
+        "speech_end_us": 18150000,
+        "noise": {
+          "recipe": "office-v1",
+          "seed": 150006,
+          "power_ratio": 3.1622776601683795,
+          "speech_rms": 0.04839837445753107,
+          "unscaled_noise_rms": 1.7355546749767448,
+          "noise_gain": 0.015681675963260245,
+          "mix_gain": 1.0,
+          "covers": "whole clip",
+          "snr_db": 5
+        },
+        "file": "EN06-snr05.m4a",
+        "sha256": "d076b341b6464d73866c86999895b761843fec8517554360df2fa72e4ae26798",
+        "bytes": 155522,
+        "track_frames": 459600,
+        "track_sha256": "d7114360c23878611078a0f47ec98cd539dcdbbe45ac9b97bf98e3cc3ba18ae7",
+        "command_template": [
+          "<FFMPEG>",
+          "-hide_banner",
+          "-loglevel",
+          "error",
+          "-nostdin",
+          "-n",
+          "-i",
+          "<TRACK>",
+          "-map",
+          "0:a:0",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "64k",
+          "-ar",
+          "16000",
+          "-ac",
+          "1",
+          "-fflags",
+          "+bitexact",
+          "-movflags",
+          "+faststart",
+          "<OUTPUT>/EN06-snr05.m4a"
+        ]
+      },
+      {
+        "clip": "ES01-clean",
+        "passage": "ES01",
+        "language": "es",
+        "level": "clean",
+        "snr_db": null,
+        "speech_start_us": 2000000,
+        "speech_end_us": 16125000,
+        "noise": null,
+        "file": "ES01-clean.m4a",
+        "sha256": "eb7495b7426ca51b8bdb1d036a2f7dd000202091755904464766b81a4c1899f7",
+        "bytes": 113694,
+        "track_frames": 411000,
+        "track_sha256": "5f7ad4c823c62c977489a5fb2ceb7be9ea14c14b903a9550077f835dfa5f0d39",
+        "command_template": [
+          "<FFMPEG>",
+          "-hide_banner",
+          "-loglevel",
+          "error",
+          "-nostdin",
+          "-n",
+          "-i",
+          "<TRACK>",
+          "-map",
+          "0:a:0",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "64k",
+          "-ar",
+          "16000",
+          "-ac",
+          "1",
+          "-fflags",
+          "+bitexact",
+          "-movflags",
+          "+faststart",
+          "<OUTPUT>/ES01-clean.m4a"
+        ]
+      },
+      {
+        "clip": "ES01-snr20",
+        "passage": "ES01",
+        "language": "es",
+        "level": "snr20",
+        "snr_db": 20,
+        "speech_start_us": 2000000,
+        "speech_end_us": 16125000,
+        "noise": {
+          "recipe": "office-v1",
+          "seed": 150007,
+          "power_ratio": 100.0,
+          "speech_rms": 0.045764081134160695,
+          "unscaled_noise_rms": 1.760640242873519,
+          "noise_gain": 0.002599286328902133,
+          "mix_gain": 1.0,
+          "covers": "whole clip",
+          "snr_db": 20
+        },
+        "file": "ES01-snr20.m4a",
+        "sha256": "a9f5e5cf2944c8fabf2b5c0d267b6df9f446591d5435f531282d73da1d8093b2",
+        "bytes": 137619,
+        "track_frames": 411000,
+        "track_sha256": "e6be1f22ce67f5722189c55bdaa0474def49783b06ae6fddd17e464210303886",
+        "command_template": [
+          "<FFMPEG>",
+          "-hide_banner",
+          "-loglevel",
+          "error",
+          "-nostdin",
+          "-n",
+          "-i",
+          "<TRACK>",
+          "-map",
+          "0:a:0",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "64k",
+          "-ar",
+          "16000",
+          "-ac",
+          "1",
+          "-fflags",
+          "+bitexact",
+          "-movflags",
+          "+faststart",
+          "<OUTPUT>/ES01-snr20.m4a"
+        ]
+      },
+      {
+        "clip": "ES01-snr10",
+        "passage": "ES01",
+        "language": "es",
+        "level": "snr10",
+        "snr_db": 10,
+        "speech_start_us": 2000000,
+        "speech_end_us": 16125000,
+        "noise": {
+          "recipe": "office-v1",
+          "seed": 150007,
+          "power_ratio": 10.0,
+          "speech_rms": 0.045764081134160695,
+          "unscaled_noise_rms": 1.760640242873519,
+          "noise_gain": 0.008219665090268294,
+          "mix_gain": 1.0,
+          "covers": "whole clip",
+          "snr_db": 10
+        },
+        "file": "ES01-snr10.m4a",
+        "sha256": "f4c09ec5d26d6fad25eac11e523e1898a70d91a8f8c99c685faf1d336481934a",
+        "bytes": 141577,
+        "track_frames": 411000,
+        "track_sha256": "28d449f712ced8c05facad5f19b86e18a853aa0cd6a052fc133c209e8720598b",
+        "command_template": [
+          "<FFMPEG>",
+          "-hide_banner",
+          "-loglevel",
+          "error",
+          "-nostdin",
+          "-n",
+          "-i",
+          "<TRACK>",
+          "-map",
+          "0:a:0",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "64k",
+          "-ar",
+          "16000",
+          "-ac",
+          "1",
+          "-fflags",
+          "+bitexact",
+          "-movflags",
+          "+faststart",
+          "<OUTPUT>/ES01-snr10.m4a"
+        ]
+      },
+      {
+        "clip": "ES01-snr05",
+        "passage": "ES01",
+        "language": "es",
+        "level": "snr05",
+        "snr_db": 5,
+        "speech_start_us": 2000000,
+        "speech_end_us": 16125000,
+        "noise": {
+          "recipe": "office-v1",
+          "seed": 150007,
+          "power_ratio": 3.1622776601683795,
+          "speech_rms": 0.045764081134160695,
+          "unscaled_noise_rms": 1.760640242873519,
+          "noise_gain": 0.014616861187439831,
+          "mix_gain": 1.0,
+          "covers": "whole clip",
+          "snr_db": 5
+        },
+        "file": "ES01-snr05.m4a",
+        "sha256": "d778309350db2ea2463cf8f4fe4915436977279b8ea12d258cd64850322d651a",
+        "bytes": 139272,
+        "track_frames": 411000,
+        "track_sha256": "59f369bf0c6cdd3f8d88f5e301a834a1ca75fec69f15e4c6f0026c907755a127",
+        "command_template": [
+          "<FFMPEG>",
+          "-hide_banner",
+          "-loglevel",
+          "error",
+          "-nostdin",
+          "-n",
+          "-i",
+          "<TRACK>",
+          "-map",
+          "0:a:0",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "64k",
+          "-ar",
+          "16000",
+          "-ac",
+          "1",
+          "-fflags",
+          "+bitexact",
+          "-movflags",
+          "+faststart",
+          "<OUTPUT>/ES01-snr05.m4a"
+        ]
+      },
+      {
+        "clip": "ES02-clean",
+        "passage": "ES02",
+        "language": "es",
+        "level": "clean",
+        "snr_db": null,
+        "speech_start_us": 2000000,
+        "speech_end_us": 17150000,
+        "noise": null,
+        "file": "ES02-clean.m4a",
+        "sha256": "99bf34082110d3204e357a80e75a8fd68e4e14014ed03263eaeb0d764cd60f21",
+        "bytes": 120696,
+        "track_frames": 435600,
+        "track_sha256": "fd0de25e6c26db7cf9af77aab6ac8e01b65ccbb0035434f252536ce910775fef",
+        "command_template": [
+          "<FFMPEG>",
+          "-hide_banner",
+          "-loglevel",
+          "error",
+          "-nostdin",
+          "-n",
+          "-i",
+          "<TRACK>",
+          "-map",
+          "0:a:0",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "64k",
+          "-ar",
+          "16000",
+          "-ac",
+          "1",
+          "-fflags",
+          "+bitexact",
+          "-movflags",
+          "+faststart",
+          "<OUTPUT>/ES02-clean.m4a"
+        ]
+      },
+      {
+        "clip": "ES02-snr20",
+        "passage": "ES02",
+        "language": "es",
+        "level": "snr20",
+        "snr_db": 20,
+        "speech_start_us": 2000000,
+        "speech_end_us": 17150000,
+        "noise": {
+          "recipe": "office-v1",
+          "seed": 150008,
+          "power_ratio": 100.0,
+          "speech_rms": 0.04553712019360368,
+          "unscaled_noise_rms": 1.7310333497842227,
+          "noise_gain": 0.0026306321711987808,
+          "mix_gain": 1.0,
+          "covers": "whole clip",
+          "snr_db": 20
+        },
+        "file": "ES02-snr20.m4a",
+        "sha256": "c4b64ae9db6f4e27f2da130c148a9b895e8473236c168ddbbfb69c18ab06ec67",
+        "bytes": 145099,
+        "track_frames": 435600,
+        "track_sha256": "82ece1653abbe3c1ddfda0a946281f67fac99368150021c3bb40b9e64545bde0",
+        "command_template": [
+          "<FFMPEG>",
+          "-hide_banner",
+          "-loglevel",
+          "error",
+          "-nostdin",
+          "-n",
+          "-i",
+          "<TRACK>",
+          "-map",
+          "0:a:0",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "64k",
+          "-ar",
+          "16000",
+          "-ac",
+          "1",
+          "-fflags",
+          "+bitexact",
+          "-movflags",
+          "+faststart",
+          "<OUTPUT>/ES02-snr20.m4a"
+        ]
+      },
+      {
+        "clip": "ES02-snr10",
+        "passage": "ES02",
+        "language": "es",
+        "level": "snr10",
+        "snr_db": 10,
+        "speech_start_us": 2000000,
+        "speech_end_us": 17150000,
+        "noise": {
+          "recipe": "office-v1",
+          "seed": 150008,
+          "power_ratio": 10.0,
+          "speech_rms": 0.04553712019360368,
+          "unscaled_noise_rms": 1.7310333497842227,
+          "noise_gain": 0.008318789347102142,
+          "mix_gain": 1.0,
+          "covers": "whole clip",
+          "snr_db": 10
+        },
+        "file": "ES02-snr10.m4a",
+        "sha256": "37c581eda260b3c22952aebc2fae6e9bbf69e378a1755dbf699c4939d33b7820",
+        "bytes": 147708,
+        "track_frames": 435600,
+        "track_sha256": "d45198f708bba83d2d4bf0169d5abf8778e33cd5f911c95a57c20caf4137eae8",
+        "command_template": [
+          "<FFMPEG>",
+          "-hide_banner",
+          "-loglevel",
+          "error",
+          "-nostdin",
+          "-n",
+          "-i",
+          "<TRACK>",
+          "-map",
+          "0:a:0",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "64k",
+          "-ar",
+          "16000",
+          "-ac",
+          "1",
+          "-fflags",
+          "+bitexact",
+          "-movflags",
+          "+faststart",
+          "<OUTPUT>/ES02-snr10.m4a"
+        ]
+      },
+      {
+        "clip": "ES02-snr05",
+        "passage": "ES02",
+        "language": "es",
+        "level": "snr05",
+        "snr_db": 5,
+        "speech_start_us": 2000000,
+        "speech_end_us": 17150000,
+        "noise": {
+          "recipe": "office-v1",
+          "seed": 150008,
+          "power_ratio": 3.1622776601683795,
+          "speech_rms": 0.04553712019360368,
+          "unscaled_noise_rms": 1.7310333497842227,
+          "noise_gain": 0.014793131812402877,
+          "mix_gain": 1.0,
+          "covers": "whole clip",
+          "snr_db": 5
+        },
+        "file": "ES02-snr05.m4a",
+        "sha256": "7411837e3be5639ee5017dfeb55932791b6daee7cba229c9d05192d05cdcbe63",
+        "bytes": 147761,
+        "track_frames": 435600,
+        "track_sha256": "429fa78fee54eb6f8a7dfd175e5252837b68d998ad950f540a317afa68f6b581",
+        "command_template": [
+          "<FFMPEG>",
+          "-hide_banner",
+          "-loglevel",
+          "error",
+          "-nostdin",
+          "-n",
+          "-i",
+          "<TRACK>",
+          "-map",
+          "0:a:0",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "64k",
+          "-ar",
+          "16000",
+          "-ac",
+          "1",
+          "-fflags",
+          "+bitexact",
+          "-movflags",
+          "+faststart",
+          "<OUTPUT>/ES02-snr05.m4a"
+        ]
+      },
+      {
+        "clip": "ES03-clean",
+        "passage": "ES03",
+        "language": "es",
+        "level": "clean",
+        "snr_db": null,
+        "speech_start_us": 2000000,
+        "speech_end_us": 17050000,
+        "noise": null,
+        "file": "ES03-clean.m4a",
+        "sha256": "7d9cce50afe096b77d8e9ab93b267aa3f948e7636ffe756100387d7c1a022c30",
+        "bytes": 119556,
+        "track_frames": 433200,
+        "track_sha256": "ce1ad26989a1e850f39041b6ef2b5711d2173713fc400ecc9102e108d38763f5",
+        "command_template": [
+          "<FFMPEG>",
+          "-hide_banner",
+          "-loglevel",
+          "error",
+          "-nostdin",
+          "-n",
+          "-i",
+          "<TRACK>",
+          "-map",
+          "0:a:0",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "64k",
+          "-ar",
+          "16000",
+          "-ac",
+          "1",
+          "-fflags",
+          "+bitexact",
+          "-movflags",
+          "+faststart",
+          "<OUTPUT>/ES03-clean.m4a"
+        ]
+      },
+      {
+        "clip": "ES03-snr20",
+        "passage": "ES03",
+        "language": "es",
+        "level": "snr20",
+        "snr_db": 20,
+        "speech_start_us": 2000000,
+        "speech_end_us": 17050000,
+        "noise": {
+          "recipe": "office-v1",
+          "seed": 150009,
+          "power_ratio": 100.0,
+          "speech_rms": 0.045527298333107306,
+          "unscaled_noise_rms": 1.7210117342567688,
+          "noise_gain": 0.0026453798906123436,
+          "mix_gain": 1.0,
+          "covers": "whole clip",
+          "snr_db": 20
+        },
+        "file": "ES03-snr20.m4a",
+        "sha256": "b58efaf4224891b87c5a021c1fdec2f8bec66440ffb0e95f49e507d339e18708",
+        "bytes": 143502,
+        "track_frames": 433200,
+        "track_sha256": "e116bad65bb7594b754e2c11aa233b013ed1759689d645e8370b5dea7ccf8695",
+        "command_template": [
+          "<FFMPEG>",
+          "-hide_banner",
+          "-loglevel",
+          "error",
+          "-nostdin",
+          "-n",
+          "-i",
+          "<TRACK>",
+          "-map",
+          "0:a:0",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "64k",
+          "-ar",
+          "16000",
+          "-ac",
+          "1",
+          "-fflags",
+          "+bitexact",
+          "-movflags",
+          "+faststart",
+          "<OUTPUT>/ES03-snr20.m4a"
+        ]
+      },
+      {
+        "clip": "ES03-snr10",
+        "passage": "ES03",
+        "language": "es",
+        "level": "snr10",
+        "snr_db": 10,
+        "speech_start_us": 2000000,
+        "speech_end_us": 17050000,
+        "noise": {
+          "recipe": "office-v1",
+          "seed": 150009,
+          "power_ratio": 10.0,
+          "speech_rms": 0.045527298333107306,
+          "unscaled_noise_rms": 1.7210117342567688,
+          "noise_gain": 0.008365425730742084,
+          "mix_gain": 1.0,
+          "covers": "whole clip",
+          "snr_db": 10
+        },
+        "file": "ES03-snr10.m4a",
+        "sha256": "666323fc23997a32d60262d76798e46f733d2087d80def483f2685994c4754f5",
+        "bytes": 146720,
+        "track_frames": 433200,
+        "track_sha256": "14df52237975a16982e4ef387f7c9d2a8999eebe2016ec69dfb7bd54142d21cd",
+        "command_template": [
+          "<FFMPEG>",
+          "-hide_banner",
+          "-loglevel",
+          "error",
+          "-nostdin",
+          "-n",
+          "-i",
+          "<TRACK>",
+          "-map",
+          "0:a:0",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "64k",
+          "-ar",
+          "16000",
+          "-ac",
+          "1",
+          "-fflags",
+          "+bitexact",
+          "-movflags",
+          "+faststart",
+          "<OUTPUT>/ES03-snr10.m4a"
+        ]
+      },
+      {
+        "clip": "ES03-snr05",
+        "passage": "ES03",
+        "language": "es",
+        "level": "snr05",
+        "snr_db": 5,
+        "speech_start_us": 2000000,
+        "speech_end_us": 17050000,
+        "noise": {
+          "recipe": "office-v1",
+          "seed": 150009,
+          "power_ratio": 3.1622776601683795,
+          "speech_rms": 0.045527298333107306,
+          "unscaled_noise_rms": 1.7210117342567688,
+          "noise_gain": 0.014876064333188459,
+          "mix_gain": 1.0,
+          "covers": "whole clip",
+          "snr_db": 5
+        },
+        "file": "ES03-snr05.m4a",
+        "sha256": "8e9acd536bc5a9c32247be83ab1ed96faa1fc60d115ae703658d2e1105f28117",
+        "bytes": 146656,
+        "track_frames": 433200,
+        "track_sha256": "348d5fe5bd5cde91cf7aa0b040b1eb6a7c1a544815111423593435d709d194fb",
+        "command_template": [
+          "<FFMPEG>",
+          "-hide_banner",
+          "-loglevel",
+          "error",
+          "-nostdin",
+          "-n",
+          "-i",
+          "<TRACK>",
+          "-map",
+          "0:a:0",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "64k",
+          "-ar",
+          "16000",
+          "-ac",
+          "1",
+          "-fflags",
+          "+bitexact",
+          "-movflags",
+          "+faststart",
+          "<OUTPUT>/ES03-snr05.m4a"
+        ]
+      },
+      {
+        "clip": "ES04-clean",
+        "passage": "ES04",
+        "language": "es",
+        "level": "clean",
+        "snr_db": null,
+        "speech_start_us": 2000000,
+        "speech_end_us": 18150000,
+        "noise": null,
+        "file": "ES04-clean.m4a",
+        "sha256": "e1a44216389ae51c18afc8579d9fa38c319b3908d6e8a3d11f92e3b28daa8401",
+        "bytes": 132127,
+        "track_frames": 459600,
+        "track_sha256": "e4a7ab891ba864aa3b8b7ff98f63e1449cddfc58cd5c2f68744a1d620bf6501a",
+        "command_template": [
+          "<FFMPEG>",
+          "-hide_banner",
+          "-loglevel",
+          "error",
+          "-nostdin",
+          "-n",
+          "-i",
+          "<TRACK>",
+          "-map",
+          "0:a:0",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "64k",
+          "-ar",
+          "16000",
+          "-ac",
+          "1",
+          "-fflags",
+          "+bitexact",
+          "-movflags",
+          "+faststart",
+          "<OUTPUT>/ES04-clean.m4a"
+        ]
+      },
+      {
+        "clip": "ES04-snr20",
+        "passage": "ES04",
+        "language": "es",
+        "level": "snr20",
+        "snr_db": 20,
+        "speech_start_us": 2000000,
+        "speech_end_us": 18150000,
+        "noise": {
+          "recipe": "office-v1",
+          "seed": 150010,
+          "power_ratio": 100.0,
+          "speech_rms": 0.045907194210715666,
+          "unscaled_noise_rms": 1.7101265608051346,
+          "noise_gain": 0.002684432559722502,
+          "mix_gain": 1.0,
+          "covers": "whole clip",
+          "snr_db": 20
+        },
+        "file": "ES04-snr20.m4a",
+        "sha256": "33b932a877313ec0390ff3897d6cf1b983e9d40430240a57e477eb1b5121ce24",
+        "bytes": 155176,
+        "track_frames": 459600,
+        "track_sha256": "a27932e385ec2507c771b637f878a74c7e29b282813dd79bdc847f29b90fc08b",
+        "command_template": [
+          "<FFMPEG>",
+          "-hide_banner",
+          "-loglevel",
+          "error",
+          "-nostdin",
+          "-n",
+          "-i",
+          "<TRACK>",
+          "-map",
+          "0:a:0",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "64k",
+          "-ar",
+          "16000",
+          "-ac",
+          "1",
+          "-fflags",
+          "+bitexact",
+          "-movflags",
+          "+faststart",
+          "<OUTPUT>/ES04-snr20.m4a"
+        ]
+      },
+      {
+        "clip": "ES04-snr10",
+        "passage": "ES04",
+        "language": "es",
+        "level": "snr10",
+        "snr_db": 10,
+        "speech_start_us": 2000000,
+        "speech_end_us": 18150000,
+        "noise": {
+          "recipe": "office-v1",
+          "seed": 150010,
+          "power_ratio": 10.0,
+          "speech_rms": 0.045907194210715666,
+          "unscaled_noise_rms": 1.7101265608051346,
+          "noise_gain": 0.008488921113839086,
+          "mix_gain": 1.0,
+          "covers": "whole clip",
+          "snr_db": 10
+        },
+        "file": "ES04-snr10.m4a",
+        "sha256": "032aad1410eb2183066564a5eda8ecffb901e238d63b46331eceb21439206d31",
+        "bytes": 155757,
+        "track_frames": 459600,
+        "track_sha256": "3c1799293cbcac807268cca217173b51338df88e44a236ea73051d3aa87bee62",
+        "command_template": [
+          "<FFMPEG>",
+          "-hide_banner",
+          "-loglevel",
+          "error",
+          "-nostdin",
+          "-n",
+          "-i",
+          "<TRACK>",
+          "-map",
+          "0:a:0",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "64k",
+          "-ar",
+          "16000",
+          "-ac",
+          "1",
+          "-fflags",
+          "+bitexact",
+          "-movflags",
+          "+faststart",
+          "<OUTPUT>/ES04-snr10.m4a"
+        ]
+      },
+      {
+        "clip": "ES04-snr05",
+        "passage": "ES04",
+        "language": "es",
+        "level": "snr05",
+        "snr_db": 5,
+        "speech_start_us": 2000000,
+        "speech_end_us": 18150000,
+        "noise": {
+          "recipe": "office-v1",
+          "seed": 150010,
+          "power_ratio": 3.1622776601683795,
+          "speech_rms": 0.045907194210715666,
+          "unscaled_noise_rms": 1.7101265608051346,
+          "noise_gain": 0.015095673630184726,
+          "mix_gain": 1.0,
+          "covers": "whole clip",
+          "snr_db": 5
+        },
+        "file": "ES04-snr05.m4a",
+        "sha256": "b0c9b9fe581a3c57fd928cb8885259650a44468407bac43654c6e9657048a9f0",
+        "bytes": 155689,
+        "track_frames": 459600,
+        "track_sha256": "cdff8202a968cec18f3bcad85e3f605cd910d4ca0a75ada0174573ebe6444a1c",
+        "command_template": [
+          "<FFMPEG>",
+          "-hide_banner",
+          "-loglevel",
+          "error",
+          "-nostdin",
+          "-n",
+          "-i",
+          "<TRACK>",
+          "-map",
+          "0:a:0",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "64k",
+          "-ar",
+          "16000",
+          "-ac",
+          "1",
+          "-fflags",
+          "+bitexact",
+          "-movflags",
+          "+faststart",
+          "<OUTPUT>/ES04-snr05.m4a"
+        ]
+      },
+      {
+        "clip": "ES05-clean",
+        "passage": "ES05",
+        "language": "es",
+        "level": "clean",
+        "snr_db": null,
+        "speech_start_us": 2000000,
+        "speech_end_us": 19050000,
+        "noise": null,
+        "file": "ES05-clean.m4a",
+        "sha256": "0662dd046e79c2385fb14cbc165be20055923cdcda0cc84bab45218b6e813613",
+        "bytes": 139065,
+        "track_frames": 481200,
+        "track_sha256": "482dd6f4b667287c6e2414206541bd0c8e8b4e72e4f6e94ad0fbc07e4fda8de8",
+        "command_template": [
+          "<FFMPEG>",
+          "-hide_banner",
+          "-loglevel",
+          "error",
+          "-nostdin",
+          "-n",
+          "-i",
+          "<TRACK>",
+          "-map",
+          "0:a:0",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "64k",
+          "-ar",
+          "16000",
+          "-ac",
+          "1",
+          "-fflags",
+          "+bitexact",
+          "-movflags",
+          "+faststart",
+          "<OUTPUT>/ES05-clean.m4a"
+        ]
+      },
+      {
+        "clip": "ES05-snr20",
+        "passage": "ES05",
+        "language": "es",
+        "level": "snr20",
+        "snr_db": 20,
+        "speech_start_us": 2000000,
+        "speech_end_us": 19050000,
+        "noise": {
+          "recipe": "office-v1",
+          "seed": 150011,
+          "power_ratio": 100.0,
+          "speech_rms": 0.047122976481039885,
+          "unscaled_noise_rms": 1.7304795297222781,
+          "noise_gain": 0.0027231166663151786,
+          "mix_gain": 1.0,
+          "covers": "whole clip",
+          "snr_db": 20
+        },
+        "file": "ES05-snr20.m4a",
+        "sha256": "93603a4a54d0d6b8a208a432138cf8f6250578cd228f33c9d7c6d3d25ffa5cd4",
+        "bytes": 160606,
+        "track_frames": 481200,
+        "track_sha256": "4ca5d143417372e9b0446b117fbb3b811e7de3a556875dbb41bfbbdbd7ac871b",
+        "command_template": [
+          "<FFMPEG>",
+          "-hide_banner",
+          "-loglevel",
+          "error",
+          "-nostdin",
+          "-n",
+          "-i",
+          "<TRACK>",
+          "-map",
+          "0:a:0",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "64k",
+          "-ar",
+          "16000",
+          "-ac",
+          "1",
+          "-fflags",
+          "+bitexact",
+          "-movflags",
+          "+faststart",
+          "<OUTPUT>/ES05-snr20.m4a"
+        ]
+      },
+      {
+        "clip": "ES05-snr10",
+        "passage": "ES05",
+        "language": "es",
+        "level": "snr10",
+        "snr_db": 10,
+        "speech_start_us": 2000000,
+        "speech_end_us": 19050000,
+        "noise": {
+          "recipe": "office-v1",
+          "seed": 150011,
+          "power_ratio": 10.0,
+          "speech_rms": 0.047122976481039885,
+          "unscaled_noise_rms": 1.7304795297222781,
+          "noise_gain": 0.00861125099992068,
+          "mix_gain": 1.0,
+          "covers": "whole clip",
+          "snr_db": 10
+        },
+        "file": "ES05-snr10.m4a",
+        "sha256": "bb9a3f2414b298f8860d2c46302908ef804b28cb6605daad0bbf13436cb24c20",
+        "bytes": 162759,
+        "track_frames": 481200,
+        "track_sha256": "c9a64cb218f5a76b4c0f453964b28367112f55cfbb2f62f0944b21489bbe6086",
+        "command_template": [
+          "<FFMPEG>",
+          "-hide_banner",
+          "-loglevel",
+          "error",
+          "-nostdin",
+          "-n",
+          "-i",
+          "<TRACK>",
+          "-map",
+          "0:a:0",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "64k",
+          "-ar",
+          "16000",
+          "-ac",
+          "1",
+          "-fflags",
+          "+bitexact",
+          "-movflags",
+          "+faststart",
+          "<OUTPUT>/ES05-snr10.m4a"
+        ]
+      },
+      {
+        "clip": "ES05-snr05",
+        "passage": "ES05",
+        "language": "es",
+        "level": "snr05",
+        "snr_db": 5,
+        "speech_start_us": 2000000,
+        "speech_end_us": 19050000,
+        "noise": {
+          "recipe": "office-v1",
+          "seed": 150011,
+          "power_ratio": 3.1622776601683795,
+          "speech_rms": 0.047122976481039885,
+          "unscaled_noise_rms": 1.7304795297222781,
+          "noise_gain": 0.015313210347836035,
+          "mix_gain": 1.0,
+          "covers": "whole clip",
+          "snr_db": 5
+        },
+        "file": "ES05-snr05.m4a",
+        "sha256": "2b9d1c8c77c83af6567b463512fa4e21562ceed42dbcc615aa6119b3031b971f",
+        "bytes": 162617,
+        "track_frames": 481200,
+        "track_sha256": "0c4ee233005fada53d97d6b1bcab6ab85978b46fbdacfa3ee788ed0dff2a05cf",
+        "command_template": [
+          "<FFMPEG>",
+          "-hide_banner",
+          "-loglevel",
+          "error",
+          "-nostdin",
+          "-n",
+          "-i",
+          "<TRACK>",
+          "-map",
+          "0:a:0",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "64k",
+          "-ar",
+          "16000",
+          "-ac",
+          "1",
+          "-fflags",
+          "+bitexact",
+          "-movflags",
+          "+faststart",
+          "<OUTPUT>/ES05-snr05.m4a"
+        ]
+      },
+      {
+        "clip": "ES06-clean",
+        "passage": "ES06",
+        "language": "es",
+        "level": "clean",
+        "snr_db": null,
+        "speech_start_us": 2000000,
+        "speech_end_us": 18425000,
+        "noise": null,
+        "file": "ES06-clean.m4a",
+        "sha256": "5b87135d2d3346639adf6c8f30945d70b6f815ba33afd2cbd122824cf7418e36",
+        "bytes": 132937,
+        "track_frames": 466200,
+        "track_sha256": "198e635c6813fab4a99e1df9b62abe6e83a17f023780efc56add04cd3fd43031",
+        "command_template": [
+          "<FFMPEG>",
+          "-hide_banner",
+          "-loglevel",
+          "error",
+          "-nostdin",
+          "-n",
+          "-i",
+          "<TRACK>",
+          "-map",
+          "0:a:0",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "64k",
+          "-ar",
+          "16000",
+          "-ac",
+          "1",
+          "-fflags",
+          "+bitexact",
+          "-movflags",
+          "+faststart",
+          "<OUTPUT>/ES06-clean.m4a"
+        ]
+      },
+      {
+        "clip": "ES06-snr20",
+        "passage": "ES06",
+        "language": "es",
+        "level": "snr20",
+        "snr_db": 20,
+        "speech_start_us": 2000000,
+        "speech_end_us": 18425000,
+        "noise": {
+          "recipe": "office-v1",
+          "seed": 150012,
+          "power_ratio": 100.0,
+          "speech_rms": 0.046597745818210946,
+          "unscaled_noise_rms": 1.7195140603985342,
+          "noise_gain": 0.0027099368880653947,
+          "mix_gain": 1.0,
+          "covers": "whole clip",
+          "snr_db": 20
+        },
+        "file": "ES06-snr20.m4a",
+        "sha256": "82a7bf38dbe0a91977e678a9473c2b16f598cb42ae6f352b2eefda5a7ddd0182",
+        "bytes": 156207,
+        "track_frames": 466200,
+        "track_sha256": "89e3fca8a4810db8d025e94a78fbb06fd77d03e696414818164a3d0a9d287477",
+        "command_template": [
+          "<FFMPEG>",
+          "-hide_banner",
+          "-loglevel",
+          "error",
+          "-nostdin",
+          "-n",
+          "-i",
+          "<TRACK>",
+          "-map",
+          "0:a:0",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "64k",
+          "-ar",
+          "16000",
+          "-ac",
+          "1",
+          "-fflags",
+          "+bitexact",
+          "-movflags",
+          "+faststart",
+          "<OUTPUT>/ES06-snr20.m4a"
+        ]
+      },
+      {
+        "clip": "ES06-snr10",
+        "passage": "ES06",
+        "language": "es",
+        "level": "snr10",
+        "snr_db": 10,
+        "speech_start_us": 2000000,
+        "speech_end_us": 18425000,
+        "noise": {
+          "recipe": "office-v1",
+          "seed": 150012,
+          "power_ratio": 10.0,
+          "speech_rms": 0.046597745818210946,
+          "unscaled_noise_rms": 1.7195140603985342,
+          "noise_gain": 0.008569572881595416,
+          "mix_gain": 1.0,
+          "covers": "whole clip",
+          "snr_db": 10
+        },
+        "file": "ES06-snr10.m4a",
+        "sha256": "48f6626dc867bb3e9301b7e41ee996e138f4e44178670c8fa566c40fdbd95ec5",
+        "bytes": 158043,
+        "track_frames": 466200,
+        "track_sha256": "cf41a54b8ebc12637798991af4f72d100a02064af8c215b24f76bd6d4daa6c62",
+        "command_template": [
+          "<FFMPEG>",
+          "-hide_banner",
+          "-loglevel",
+          "error",
+          "-nostdin",
+          "-n",
+          "-i",
+          "<TRACK>",
+          "-map",
+          "0:a:0",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "64k",
+          "-ar",
+          "16000",
+          "-ac",
+          "1",
+          "-fflags",
+          "+bitexact",
+          "-movflags",
+          "+faststart",
+          "<OUTPUT>/ES06-snr10.m4a"
+        ]
+      },
+      {
+        "clip": "ES06-snr05",
+        "passage": "ES06",
+        "language": "es",
+        "level": "snr05",
+        "snr_db": 5,
+        "speech_start_us": 2000000,
+        "speech_end_us": 18425000,
+        "noise": {
+          "recipe": "office-v1",
+          "seed": 150012,
+          "power_ratio": 3.1622776601683795,
+          "speech_rms": 0.046597745818210946,
+          "unscaled_noise_rms": 1.7195140603985342,
+          "noise_gain": 0.015239095008169046,
+          "mix_gain": 1.0,
+          "covers": "whole clip",
+          "snr_db": 5
+        },
+        "file": "ES06-snr05.m4a",
+        "sha256": "98cb8d82e7f5d9b05c3e985b7862614f0dccdde43b6355d2184223f8ec4d1900",
+        "bytes": 157789,
+        "track_frames": 466200,
+        "track_sha256": "4679725b25c30fa9870ff6cb9fddb5619c7ff47b6aadeb237260252525248660",
+        "command_template": [
+          "<FFMPEG>",
+          "-hide_banner",
+          "-loglevel",
+          "error",
+          "-nostdin",
+          "-n",
+          "-i",
+          "<TRACK>",
+          "-map",
+          "0:a:0",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "64k",
+          "-ar",
+          "16000",
+          "-ac",
+          "1",
+          "-fflags",
+          "+bitexact",
+          "-movflags",
+          "+faststart",
+          "<OUTPUT>/ES06-snr05.m4a"
+        ]
+      },
+      {
+        "clip": "noise-only-snr20",
+        "passage": null,
+        "language": null,
+        "level": "snr20",
+        "snr_db": 20,
+        "speech_start_us": null,
+        "speech_end_us": null,
+        "noise": {
+          "recipe": "office-v1",
+          "seed": 150999,
+          "power_ratio": 100.0,
+          "speech_rms": 0.04730311847600508,
+          "unscaled_noise_rms": 1.7235841323571177,
+          "noise_gain": 0.002744462401804249,
+          "mix_gain": 1.0,
+          "covers": "whole clip",
+          "speech_rms_definition": "pooled RMS of every utterance of the set",
+          "snr_db": 20
+        },
+        "file": "noise-only-snr20.m4a",
+        "sha256": "a94a97f500cee6ee2630a3e7ca9e900f6ce3f64997b1e8d75ac72d9e7bd09b28",
+        "bytes": 201295,
+        "track_frames": 672000,
+        "track_sha256": "1abe09f98f0e3c3d45c9d74f722b6dbbe633d81f3d55869d2ca82f804f261439",
+        "command_template": [
+          "<FFMPEG>",
+          "-hide_banner",
+          "-loglevel",
+          "error",
+          "-nostdin",
+          "-n",
+          "-i",
+          "<TRACK>",
+          "-map",
+          "0:a:0",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "64k",
+          "-ar",
+          "16000",
+          "-ac",
+          "1",
+          "-fflags",
+          "+bitexact",
+          "-movflags",
+          "+faststart",
+          "<OUTPUT>/noise-only-snr20.m4a"
+        ]
+      },
+      {
+        "clip": "noise-only-snr10",
+        "passage": null,
+        "language": null,
+        "level": "snr10",
+        "snr_db": 10,
+        "speech_start_us": null,
+        "speech_end_us": null,
+        "noise": {
+          "recipe": "office-v1",
+          "seed": 150999,
+          "power_ratio": 10.0,
+          "speech_rms": 0.04730311847600508,
+          "unscaled_noise_rms": 1.7235841323571177,
+          "noise_gain": 0.00867875214239763,
+          "mix_gain": 1.0,
+          "covers": "whole clip",
+          "speech_rms_definition": "pooled RMS of every utterance of the set",
+          "snr_db": 10
+        },
+        "file": "noise-only-snr10.m4a",
+        "sha256": "743cdd465075a07d9128c76f260d159b778c0e3b0ee7c3a180203224014d05a2",
+        "bytes": 227308,
+        "track_frames": 672000,
+        "track_sha256": "129fbbe45389bead437c671284be02e77a4833758c04759fe825f0a972c1cbb4",
+        "command_template": [
+          "<FFMPEG>",
+          "-hide_banner",
+          "-loglevel",
+          "error",
+          "-nostdin",
+          "-n",
+          "-i",
+          "<TRACK>",
+          "-map",
+          "0:a:0",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "64k",
+          "-ar",
+          "16000",
+          "-ac",
+          "1",
+          "-fflags",
+          "+bitexact",
+          "-movflags",
+          "+faststart",
+          "<OUTPUT>/noise-only-snr10.m4a"
+        ]
+      },
+      {
+        "clip": "noise-only-snr05",
+        "passage": null,
+        "language": null,
+        "level": "snr05",
+        "snr_db": 5,
+        "speech_start_us": null,
+        "speech_end_us": null,
+        "noise": {
+          "recipe": "office-v1",
+          "seed": 150999,
+          "power_ratio": 3.1622776601683795,
+          "speech_rms": 0.04730311847600508,
+          "unscaled_noise_rms": 1.7235841323571177,
+          "noise_gain": 0.015433246239656898,
+          "mix_gain": 1.0,
+          "covers": "whole clip",
+          "speech_rms_definition": "pooled RMS of every utterance of the set",
+          "snr_db": 5
+        },
+        "file": "noise-only-snr05.m4a",
+        "sha256": "75152222aea57696a2ca4e736f2d0731c392677e3fac0cc4e3eae5295ee91293",
+        "bytes": 227299,
+        "track_frames": 672000,
+        "track_sha256": "e83e78643a21a27137d903e8b30fdfa7dec1526ac37d0aca0c3020705e4c561f",
+        "command_template": [
+          "<FFMPEG>",
+          "-hide_banner",
+          "-loglevel",
+          "error",
+          "-nostdin",
+          "-n",
+          "-i",
+          "<TRACK>",
+          "-map",
+          "0:a:0",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "64k",
+          "-ar",
+          "16000",
+          "-ac",
+          "1",
+          "-fflags",
+          "+bitexact",
+          "-movflags",
+          "+faststart",
+          "<OUTPUT>/noise-only-snr05.m4a"
+        ]
+      }
+    ]
+  },
+  "utterance_release": {
+    "tag": "test-media-2026-10-19",
+    "base_url": "https://github.com/smormah/vsift/releases/download/test-media-2026-10-19/",
+    "assets": {
+      "EN01": "noisy-speech-EN01-utterance.wav",
+      "EN02": "noisy-speech-EN02-utterance.wav",
+      "EN03": "noisy-speech-EN03-utterance.wav",
+      "EN04": "noisy-speech-EN04-utterance.wav",
+      "EN05": "noisy-speech-EN05-utterance.wav",
+      "EN06": "noisy-speech-EN06-utterance.wav",
+      "ES01": "noisy-speech-ES01-utterance.wav",
+      "ES02": "noisy-speech-ES02-utterance.wav",
+      "ES03": "noisy-speech-ES03-utterance.wav",
+      "ES04": "noisy-speech-ES04-utterance.wav",
+      "ES05": "noisy-speech-ES05-utterance.wav",
+      "ES06": "noisy-speech-ES06-utterance.wav"
+    },
+    "note": "the utterance WAVs are not in the repository (maintainer decision, 2026-10-20); tools/fetch_p07_noisy_utterances.py fetches them by the bytes and SHA-256 recorded under synthesis.utterances, for the rebuild and the verifier"
+  }
+}
