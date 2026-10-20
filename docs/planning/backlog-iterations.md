@@ -19,7 +19,7 @@ earlier plan: where they disagree with this section, this section wins, and each
 | `0.2.4` | **A hot fix from `release/0.2.x`: the FFmpeg update** ([#351](https://github.com/smormah/vsift/issues/351), [#272](https://github.com/smormah/vsift/issues/272)). It needs the month-end build of 2026-10-31, so it cannot be in `0.2.3`. | Early November, outside the weekly window | Early November, after the hot fix's checks |
 | `0.3.0` | **A normal stable release** that adds what the scope below lists. | About Friday 27 November | About 30 November or 1 December |
 | The announcement | **The word goes out with `0.3.0`.** The README (D4) and the launch checklist, which were cycle 3's items, are done in November. | | Early December |
-| `1.0.0` | The first release with a stability promise. [#188](https://github.com/smormah/vsift/issues/188) (RQ-14, adversarial containment) is required, produced as denied-action probes that the maintainer reviews before they run, and so is [#176](https://github.com/smormah/vsift/issues/176)'s API stability promise. Any `0.3.0` feature that was not qualified at its cut is decided here. | End of December or the first week of January | |
+| `1.0.0` | The first release with a stability promise. [#188](https://github.com/smormah/vsift/issues/188) (RQ-14, adversarial containment) is required, produced as denied-action probes that the maintainer reviews before they run, and so is [#176](https://github.com/smormah/vsift/issues/176)'s API stability promise. Any `0.3.0` feature that was not qualified at its cut is decided here. The probes' stand-in provider and harness are written by the maintainer by hand; their techniques are not described in public documents. | End of December or the first week of January | |
 
 **The `0.3.0` scope.** The reference is an existing tool for coding agents that investigates videos, talkthrough-mcp
 (MIT, Python). VSift matches it where its users would look, then goes further. Nothing of its code, text or tests is
@@ -30,7 +30,9 @@ table goes into public documents.
   - OCR: on-screen text, searchable together with the transcript (the part of P16 that R1 held).
   - Speaker labels (P16 and [#108](https://github.com/smormah/vsift/issues/108)).
   - Online links: direct HTTPS video links ([#407](https://github.com/smormah/vsift/issues/407), slice 1 of [#406](https://github.com/smormah/vsift/issues/406)) and public pages through an optional yt-dlp component ([#409](https://github.com/smormah/vsift/issues/409), slice 3).
-  - Clock time on results (the time of day a moment was recorded, where the recording says it).
+  - **Time anchoring** (decided 2026-10-21; it replaces "clock time on results"): every cited moment carries the position in the video, which anyone can check against the file, and the time it happened in the world, with the evidence for that claim. Two stages, both in `0.3.0`:
+    - **Stage 1:** the recording's metadata and a user-supplied `--recorded-at`, the time zone handled honestly, and the source and the confidence on every time.
+    - **Stage 2:** anchors from clocks visible on screen (read by OCR), rollover precision to the second, cross-checks that report conflicts instead of hiding them, and detection of cuts and pauses.
 - **Beyond it:**
   - "What changed on screen" between two times.
   - Search across kept sessions (a first step towards P18's catalogue; nothing is indexed unless the user keeps a session).
@@ -188,7 +190,7 @@ nightly; the long hosted runs for what the cycle touched; an uncounted skill smo
 
 **Reshaped on 2026-10-21 (the road to 1.0, above; [ADR 0027](../decisions/0027-the-road-to-1-0.md)).** R1 starts after `1.0.0`, with P15's decision packet, and not before the maintainer says.
 - **Moved out of R1 into `0.3.0`:** P16's OCR and speaker labels, slices 1 and 3 of #406 (#407 and #409), and #474 (the language of each chunk).
-- **Required for `1.0.0`:** #188 (adversarial containment) and #176's API stability promise.
+- **Required for `1.0.0`:** #188 (adversarial containment; the stand-in provider and its harness are written by the maintainer by hand, and the probes' techniques are not described in public documents) and #176's API stability promise.
 - **R1 keeps:** P15, P17 (stitching), P18 (the catalogue; `0.3.0`'s search across kept sessions is a first step), P19, P20, #408, #410, #107, #368, #147 and #174, with the rest of P16 (VAD, embeddings, visual tags) and the items below that `0.3.0` and `1.0.0` do not take.
 
 The list below is the earlier plan; read it with this reshaping. Planned inside it:

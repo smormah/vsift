@@ -47,7 +47,10 @@ that order wrong.
    30 November or 1 December. Its scope is:
    - **Matching the reference tool:** OCR (on-screen text, searchable together with the transcript);
      speaker labels; online links (direct HTTPS video links, #407, and public pages through an optional
-     yt-dlp component, #409); and clock time on results.
+     yt-dlp component, #409); and **time anchoring**: every cited moment carries the position in the video, which anyone can check against the file, and the time it happened in the world, with the evidence for that claim. It has two stages, both in `0.3.0`. Stage 1 reads the
+     recording's metadata and a user-supplied `--recorded-at`, handles the time zone honestly, and puts the source and the confidence on every
+     time. Stage 2 adds anchors from clocks visible on screen (read by OCR), rollover precision to the second, cross-checks that report conflicts,
+     and detection of cuts and pauses.
    - **Going beyond it:** "what changed on screen" between two times; search across kept sessions;
      and the language of each chunk (#474, moved back from R1).
    - **Not chosen:** an MCP server, which stays R2 (ADR 0011), and ready-made workflow prompts.
@@ -60,7 +63,10 @@ that order wrong.
 6. **`1.0.0` follows at the end of December or in the first week of January.** It requires
    [#188](https://github.com/smormah/vsift/issues/188) (RQ-14, adversarial containment of the strict
    worker), produced as denied-action probes that the maintainer reviews before they run, and the API
-   stability promise of [#176](https://github.com/smormah/vsift/issues/176).
+   stability promise of [#176](https://github.com/smormah/vsift/issues/176). **The stand-in provider and its
+   harness are written by the maintainer by hand**, because agent sessions are stopped by an automated safety
+   check when they author such code; for the same reason, the probes' techniques are not described in public
+   documents (this ADR, the plan, the register or the changelog). Public text says only that the evidence exists and what it covers.
 7. **R1 is reshaped and follows `1.0.0`.** P16's OCR and speaker labels, slices 1 and 3 of #406
    (#407 and #409) and #474 move into `0.3.0`. R1 keeps P15, P17 (stitching), P18 (the catalogue;
    `0.3.0`'s search across kept sessions is a first step towards it), P19, P20, #408 (HLS and DASH links),
