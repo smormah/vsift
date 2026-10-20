@@ -376,8 +376,8 @@ struct StoredAsrTranscript {
     /// that were rejected and that no segment holds (#359), in start order and
     /// merged. Written only when there is any, so every other record is written
     /// exactly as before; a release before it reads the member as damage. Only
-    /// a run that rejected a segment with words, with another segment after it
-    /// and nothing kept over the stretch, has it, and a record of a chain whose
+    /// a run that rejected a segment with words and kept nothing over the
+    /// stretch where they may lie has it, and a record of a chain whose
     /// base had one may also carry `carried_untranscribed`. **This decoder is
     /// more lenient than the schema, on purpose**: the schema asks for at least
     /// one stretch, and an empty list is read here as no stretch, as it is for

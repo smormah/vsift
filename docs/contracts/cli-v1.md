@@ -819,13 +819,12 @@ merge restores: there is no new warning, outcome or reason for it.
 
 **Words the recogniser wrote that no segment holds (since the second candidate of `0.2.1`, #359).** A segment whose times cannot
 be placed in its audio is rejected (`provider_segments_rejected`), as before; the count carries no time, so a reader could not
-tell where words may be missing. When a rejected segment has a letter or digit in its text, **a range that is not empty** (an empty
-range says nothing about where its words lie, and a stretch listed for text that a recogniser wrote for silence would report the
-silence as untranscribed; whether whisper.cpp writes such text with an empty range has not been checked on real output, so the
-decision is to count it only, and its cost is that words in such a segment are dropped with no sign beyond the count; a reversed
-range is a fault of a segment that did give a start, and is taken from that start), a start inside its chunk's audio, and another segment of
-the chunk (a marker or another rejected segment included) that starts after it inside the audio, **the stretch from the rejected
-segment's own start, never before it, to the start of the next segment is where its words may lie**: an upper bound, because the
+tell where words may be missing. When a rejected segment has a letter or digit in its text, **the stretch from the rejected
+segment's own start, never before it, to the start of the next segment of the chunk (a marker or another rejected segment
+included), or to the end of the chunk's audio when no segment after it starts inside the audio, is where its words may lie**
+(an empty or reversed range is a fault of a segment that did give a start, and is taken from that start; a segment that starts at
+or after its audio's end, in the padding of the 30 s window the recogniser works in, is placed after the start of the latest
+segment before it that starts inside the audio, or from the audio's start when none does): an upper bound, because the
 words took part of it, cut to the chunk's window and the source (the audio of a chunk may begin a frame before its window, and a
 stored revision refuses a stretch outside what its run covered). The run lists such a stretch, less everything any kept segment of any chunk covers, **if what is left is
 longer than the tolerance**, as the revision's `local_asr.unplaced_ranges` (`{from_us, to_us}`, in start order, merged, at most
@@ -833,21 +832,22 @@ longer than the tolerance**, as the revision's `local_asr.unplaced_ranges` (`{fr
 that presents one, so `transcript retranscribe`, `job resume`, `transcript get` and `search`; the readable text prints the first 100
 and says how many more, **but the JSON carries the whole list in the revision block of every such result, up to 1,024 stretches,
 about 45 KB at the bound**; a client that limits what it reads should expect that, and the brief view of `transcript get`
-and `search` (`--view brief`, #365) keeps the revision block, so it does not shrink it). The others are only counted, as before, and are **a limit and not a claim that nothing was lost**: a
-segment with no letter or digit, one with an empty range, one that starts at or after its audio's end (the recogniser works in a
-window padded to 30 s and what it writes there is not about the audio), and one that nothing follows inside the audio (nothing
-bounds its words, and a stretch to the audio's end would list a silent tail as untranscribed; what lies at a chunk's end is also in
-the next chunk's first seconds only if there is one, which is not so for the last chunk of a run or a chunk whose neighbour is
-silent or unusable). The bound has a cliff: a next segment 0.1 s before the audio's end gives a stretch of nearly all that is left
-of the chunk, one at or after its end gives none. **The run's status is not changed:** it is `complete`, `coverage` is `null`, and
+and `search` (`--view brief`, #365) keeps the revision block, so it does not shrink it). **Since `0.2.3` (#383) every rejected
+segment with a letter or digit is placed so**: until then a segment with an empty range, one that starts at or after its audio's
+end, and one that nothing follows inside the audio (the last of a chunk) were only counted, and gaps on two real recordings
+matched those kinds (words missing at a seam, coverage complete, no stretch listed). Placing them can list a pause or a silent tail
+where the recogniser wrote words as untranscribed, which is the price of never calling a stretch whose words may be missing
+transcribed; what a kept segment of any chunk covers (the next chunk's first seconds hear a chunk's tail) is still taken out. Only a
+segment with no letter or digit is counted with no stretch: punctuation is not a word. **The run's status is not changed:** it is `complete`, `coverage` is `null`, and
 `data.untranscribed_ranges` is absent, because the run read everything; the changed warning prose says what the list means. A later
 `search` of the revision **does not count such a stretch as transcribed**: it lists it in `transcript_coverage.untranscribed_ranges`
 and in the envelope's `coverage` with the published reason `untranscribed_range` (status `partial` for a search whose range
 includes it, and for a `transcript get` of such a range since the reads change, which uses the same rule), unless a segment of the revision covers it (its own words, or earlier text it kept) or a window the run found silent
-does; a search of a range that does not include it is as complete as before. That search's fixed warning, "Run transcript
-retranscribe to transcribe them", is published and unchanged and **does not fit this cause**: transcribing just the stretch again
-cuts the audio at other points and may cover it, and may give the same stretch; **supplying a transcript** the user has
-(`ingest --transcript`) is the sure remedy. A later retranscription far from the stretch keeps it untranscribed by the same record
+does; a search of a range that does not include it is as complete as before. Up to `0.2.2` that search's fixed warning was the
+plain one ("Run transcript retranscribe to transcribe them"), which **does not fit this cause**: transcribing just the stretch
+again cuts the audio at other points and may cover it, and may give the same stretch; **supplying a transcript** the user has
+(`ingest --transcript`) is the sure remedy. Since `0.2.3` (#384) a search whose gaps overlap such a stretch has a warning that
+says so (its text is under `search`, below); every other partial search keeps the plain one. A later retranscription far from the stretch keeps it untranscribed by the same record
 as a part some run could not read (`carried_untranscribed`, above); one over the stretch replaces it with what it reads. When the
 revision has such a stretch, the warning `provider_segments_rejected` has this fixed prose in the envelope's `warnings` (in place of
 the plain one): "Some recognised segments had times outside their audio and were not used, and for some of them the recogniser
@@ -1570,7 +1570,13 @@ transcript, `gaps` lists those parts as `"<from_us>-<to_us>"` (merged, at most 1
 and `reasons` holds distinct identifiers (`untranscribed_range`, plus
 `gap_list_truncated` beyond 100 gaps). Such a result has status `partial`, the fixed
 warning `Part of the searched range has no transcript, so words said there cannot be
-found; ...`, and exits 0 like any supported partial result. A complete search has
+found; ...`, and exits 0 like any supported partial result. Since `0.2.3` (#384), when a gap overlaps a stretch the revision
+lists in `local_asr.unplaced_ranges` the warning is instead the fixed prose "Part of the searched range has no transcript, so
+words said there cannot be found; coverage lists the gaps. Some of them are stretches where the recogniser wrote words VSift
+could not place in time (the revision's local_asr.unplaced_ranges); each is an upper bound, because the words took only part of
+it. Transcribing just that range again (transcript retranscribe with --from and --to) cuts the audio at other points and may
+fill it, but it may give the same stretch back; a transcript file you already have is the sure way: open the video with ingest
+--transcript."; a search whose gaps are all of other causes keeps the earlier text word for word. A complete search has
 `coverage: {"truncated": false, "gaps": [], "reasons": []}`. Since `0.2.1` (#359) a stretch
 that the revision lists in `local_asr.unplaced_ranges` (words the recogniser wrote that no
 segment holds, above) is in `untranscribed_ranges` and not in `transcribed_ranges`, unless a

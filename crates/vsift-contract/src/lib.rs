@@ -225,8 +225,8 @@ pub use navigation::{
 };
 pub use search::{
     MAX_COVERAGE_RANGES, SearchBriefData, SearchData, SearchEvidenceStream, SearchPresentation,
-    SearchStreamData, UNTRANSCRIBED_SEARCH_WARNING, search_query_rejection_summary,
-    search_response, search_response_with_view,
+    SearchStreamData, UNPLACED_WORDS_SEARCH_WARNING, UNTRANSCRIBED_SEARCH_WARNING,
+    search_query_rejection_summary, search_response, search_response_with_view,
 };
 pub use session::{
     BundleData, BundleSourceInclusion, CleanData, CleanItem, CleanItemOutcome, ListedSession,

@@ -2788,22 +2788,23 @@ fn around(x: (u64, u64, &str)) -> Vec<(u64, u64, &str)> {
     ]
 }
 
-/// #359, every kind of rejected segment and what it leaves, in a chunk of 30 s
-/// whose audio fills its window. A stretch runs from the segment's own start to
-/// the next segment's start, and only a rejected segment that gives a start
-/// inside the audio, a range that is not empty (a reversed one is not), a word
-/// in its text, and another segment after it inside the audio has one; the
-/// others stay counted and have none.
+/// #359 and #383, every kind of rejected segment and what it leaves, in a chunk
+/// of 30 s whose audio fills its window. A stretch runs from the segment's own
+/// start to the next segment's start, whatever its range says; **since #383 an
+/// empty range is placed too** (it was only counted, so its words could be
+/// missing with no sign). Only text with no letter or digit leaves none.
 #[test]
 fn each_kind_of_rejected_segment_leaves_the_stretch_it_can_or_none() -> TestResult {
     type Kind<'a> = (&'a str, (u64, u64, &'a str), Vec<(u64, u64)>);
     let window = (0, 30 * SECOND);
     let table: [Kind; 7] = [
-        // The empty range says nothing about where its words lie, and text that a
-        // recogniser writes for silence would list the silence as untranscribed
-        // (whether whisper.cpp gives such text an empty range has not been
-        // checked on real output; the cost is registered as L-158).
-        ("empty", (2_000, 2_000, "words nobody placed"), vec![]),
+        // An empty range gives a start, and its words lie after it, before the
+        // next thing the recogniser wrote.
+        (
+            "empty",
+            (2_000, 2_000, "words nobody placed"),
+            vec![(2_000, 6_000)],
+        ),
         // A reversed range keeps its start: from there to the next segment.
         (
             "reversed",
@@ -2842,14 +2843,11 @@ fn each_kind_of_rejected_segment_leaves_the_stretch_it_can_or_none() -> TestResu
     Ok(())
 }
 
-/// #359, what follows a rejected segment decides where its words end: a marker
-/// (it says that what follows is not speech) or another rejected segment bound
-/// it as a kept segment does, and each rejected one has its own stretch. A
-/// rejected segment that is last, or followed only by segments that start at or
-/// after the audio's end, has none: nothing bounds its words, and a stretch to
-/// the audio's end would list a silent tail as untranscribed. That is a limit,
-/// and it has a cliff: the next segment 0.1 s before the audio's end gives a
-/// stretch of almost all the rest of the chunk, and one at its end gives none.
+/// #359 and #383, what follows a rejected segment decides where its words end: a
+/// marker (it says that what follows is not speech) or another rejected segment
+/// bound it as a kept segment does, and each rejected one has its own stretch.
+/// **A rejected segment that is last in its chunk is bounded by the audio's
+/// end** (#383; it was only counted, and a gap on a real recording matched it).
 #[test]
 fn what_follows_a_rejected_segment_bounds_its_words() -> TestResult {
     let window = (0, 30 * SECOND);
@@ -2886,7 +2884,8 @@ fn what_follows_a_rejected_segment_bounds_its_words() -> TestResult {
         )?,
         [(2_000, 3_000), (3_000, 6_000)]
     );
-    // Another segment at the same start leaves no stretch.
+    // Another segment at the same start leaves no stretch: the words lie at
+    // that start, which the next segment answers for.
     assert_eq!(
         unplaced_by(
             window,
@@ -2901,7 +2900,7 @@ fn what_follows_a_rejected_segment_bounds_its_words() -> TestResult {
         )?,
         []
     );
-    // Last in the chunk: nothing bounds it.
+    // Last in the chunk: its words lie, at most, up to the audio's end.
     assert_eq!(
         unplaced_by(
             window,
@@ -2914,17 +2913,36 @@ fn what_follows_a_rejected_segment_bounds_its_words() -> TestResult {
                 (20_000, 19_900, "a stray last word"),
             ],
         )?,
-        []
+        [(20_000, 30_000)]
+    );
+    // Last with an empty range: the same.
+    assert_eq!(
+        unplaced_by(
+            window,
+            30_000,
+            &[
+                (0, 1_500, "kept one"),
+                (6_000, 8_000, "kept two"),
+                (9_000, 10_000, "kept three"),
+                (11_000, 12_000, "kept four"),
+                (24_880, 24_880, "the end of a sentence"),
+            ],
+        )?,
+        [(24_880, 30_000)]
     );
     Ok(())
 }
 
-/// #359, the same rule at the end of a chunk's audio: a rejected segment that
-/// starts at or after the audio's end names no time in it, and one followed
-/// only by segments that start at or after it has nothing to bound its words.
-/// The bound has a cliff there, which these cases pin.
+/// #359 and #383, the same rule at the end of a chunk's audio. A rejected
+/// segment that starts at or after the audio's end names a time in the padding
+/// of the 30 s window, so its words lie after the start of the latest segment
+/// before it that starts inside the audio and before the audio's end; one
+/// followed only by such segments is bounded by the audio's end. **The cliff
+/// the earlier rule had is gone** (a next segment 0.1 s before the audio's end
+/// gave a stretch of almost the whole rest of the chunk, one at its end gave
+/// none): both now reach the audio's end, or that next segment's start.
 #[test]
-fn a_rejected_segment_near_the_audios_end_is_bounded_only_by_what_starts_inside_it() -> TestResult {
+fn a_rejected_segment_near_the_audios_end_is_bounded_by_the_audios_end() -> TestResult {
     let window = (0, 30 * SECOND);
     // The audio is 5.001 s here. Kept segments first, then a tail.
     let kept = [
@@ -2941,7 +2959,9 @@ fn a_rejected_segment_near_the_audios_end_is_bounded_only_by_what_starts_inside_
         kept.iter().chain(tail).copied().collect()
     };
     let short = (0, 5 * SECOND);
-    // Starting at or after the audio's end names no time in it.
+    // Starting at or after the audio's end: after the last start inside the
+    // audio (4.7 s), up to the audio's end, cut to the window's end (5 s); both
+    // segments in the padding say the same.
     assert_eq!(
         unplaced_by(
             short,
@@ -2951,21 +2971,24 @@ fn a_rejected_segment_near_the_audios_end_is_bounded_only_by_what_starts_inside_
                 (7_100, 8_000, "more padding")
             ]),
         )?,
-        []
+        [(4_700, 5_000), (4_700, 5_000)]
     );
-    // Followed only by a segment that starts after the audio's end: none.
+    // Followed only by a segment that starts after the audio's end: up to the
+    // audio's end (cut to the window), and that segment's words after the 4.9 s
+    // start before it.
     assert_eq!(
         unplaced_by(
             short,
             5_001,
             &with(&[(4_900, 4_800, "a stray word"), (5_200, 6_000, "padding")]),
         )?,
-        []
+        [(4_900, 5_000), (4_900, 5_000)]
     );
-    // The cliff, in a chunk whose audio fills its window of 30 s: a rejected
-    // segment at 10 s followed by one that starts at 29.9 s, 0.1 s before the
-    // audio's end, has a stretch of 19.9 s; one followed by a segment that starts
-    // at the audio's end has none.
+    // In a chunk whose audio fills its window of 30 s, a rejected segment at
+    // 10 s followed by one that starts at 29.9 s, 0.1 s before the audio's end,
+    // reaches 29.9 s; one followed by a segment that starts at the audio's end
+    // reaches the audio's end, and that segment's own words lie after the start
+    // before it.
     let padding = [
         (0, 500, "kept one"),
         (600, 1_100, "kept two"),
@@ -2993,7 +3016,7 @@ fn a_rejected_segment_near_the_audios_end_is_bounded_only_by_what_starts_inside_
             30_000,
             &after_padding(&[(10_000, 9_900, "words"), (30_000, 31_000, "in the padding")]),
         )?,
-        []
+        [(10_000, 30_000), (10_000, 30_000)]
     );
     Ok(())
 }

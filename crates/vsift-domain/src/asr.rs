@@ -1328,15 +1328,9 @@ pub fn validate_chunk_output(
             .filter(|range| range.start() >= source.start() && range.end() <= source.end())
         else {
             rejected = rejected.saturating_add(1);
-            unplaced.extend(limits.and_then(|limits| {
-                unplaced_stretch(
-                    audio,
-                    limits,
-                    &text,
-                    (segment.start, segment.end),
-                    starts.get(position + 1).copied(),
-                )
-            }));
+            unplaced.extend(
+                limits.and_then(|limits| unplaced_stretch(audio, limits, &text, &starts, position)),
+            );
             continue;
         };
         if trim == ProviderEndTrim::TrimmedToAudioEnd {
@@ -1377,50 +1371,47 @@ pub fn validate_chunk_output(
     })
 }
 
-/// The stretch of `audio` in which the words of a rejected segment may lie, or
-/// `None` when no stretch can be said (#359).
+/// The stretch of `audio` in which the words of the rejected segment at
+/// `position` (of the chunk's segments in provider order, whose starts are
+/// `starts`) may lie, or `None` when its text has no word (#359, #383).
 ///
 /// A rejected segment names a time that cannot be placed in its audio, so it
-/// cannot say how long its words took. What can be said is where they start, when
-/// the segment gives a start inside the audio, and where they end by: the
-/// recogniser wrote its segments in order, so words that start at the segment's
-/// start end before the next thing it wrote begins. The stretch runs from the
-/// segment's own start (never before it, whatever its end says) to the start of
-/// the next segment in provider order, whatever that is (a marker, a rejected
-/// segment, a kept one). It is an upper bound, not a measurement: the words took
-/// part of it. [`merge_chunks`] takes what the kept segments cover out of it and
-/// reports the rest if it is longer than [`SEAM_COVERAGE_TOLERANCE_MICROS`].
+/// cannot say how long its words took. What can be said is where they lie at
+/// most: the recogniser wrote its segments in order, so the words of one come
+/// after the start of the thing it wrote before them and before the start of the
+/// thing it wrote after them. The stretch is an upper bound, not a measurement:
+/// the words took part of it. [`merge_chunks`] takes what the kept segments of
+/// every chunk cover out of it and reports the rest if it is longer than
+/// [`SEAM_COVERAGE_TOLERANCE_MICROS`].
 ///
-/// Nothing is said, and the segment stays only counted, when
+/// - **From** the segment's own start when that lies inside the audio (never
+///   before it, whatever its end says: a reversed or empty range is a fault of
+///   a segment that did state a start). A segment that starts at or after the
+///   audio's end names a time in the padding of the 30 s window the recogniser
+///   works in, so it is placed after the start of the latest segment before it
+///   that starts inside the audio, or from the audio's start when none does.
+/// - **Until** the start of the next segment in provider order (a marker, a
+///   rejected segment or a kept one), or the audio's end when no segment after
+///   it starts inside the audio: the last segment of a chunk, and one followed
+///   only by times in the padding, may have said its words up to the end of
+///   what the chunk heard.
 ///
-/// - its text has no letter or digit: punctuation alone is not a word, so
-///   nothing a reader could look for is lost;
-/// - its range is empty (`start` equals `end`): an empty range says nothing
-///   about where its words lie. Recognisers are known to write text for
-///   silence, and the stretch to the next segment of such text at the start of
-///   a chunk that speaks only from 20 s would be twenty seconds reported as
-///   untranscribed, which would turn a search of an ordinary recording
-///   `partial`; **whether whisper.cpp writes such text with an empty range has
-///   not been checked on real output**, so this is a decision made to avoid that
-///   alarm, and its cost is that words in such a segment are dropped with no
-///   sign beyond the count (L-158 in `docs/planning/known-limits.md`). A reversed range (`end` before `start`) is
-///   a fault of a segment that did state a start, and keeps its stretch, from
-///   that start;
-/// - it starts at or after the audio's end: words the recogniser places after
-///   the audio ended are not about the audio, as an end past it is not evidence
-///   that speech continued there ([`TranscriptWarningKind::ProviderEndTrimmed`]),
-///   and the recogniser works in a window padded to 30 s, so a time after the
-///   audio's end is a time in the padding;
-/// - no segment starts after it inside the audio: nothing bounds its words, and
-///   a stretch to the audio's end would list a silent tail as untranscribed.
-///   That is a limit, not a claim that nothing was lost. The words of a chunk's
-///   last segment are usually also in the next chunk's first seconds, but not
-///   for the last chunk of a run, nor for one whose neighbour is silent or
-///   unusable.
+/// **Every rejected segment that has a word is placed** (#383). Until then a
+/// segment with an empty range, a start at or after the audio's end, or nothing
+/// after it inside the audio was only counted, and gaps on real recordings
+/// matched those kinds (#383: a chunk of a lecture kept nothing after 27:24.880,
+/// the next chunk's first segment started at 27:30.000, an earlier release had
+/// kept the end of the sentence there, and coverage called the five seconds
+/// transcribed). Listing them
+/// can call a pause or a silent tail untranscribed where the recogniser wrote
+/// words for it; that over-report is the price of never calling a stretch whose
+/// words may be missing transcribed (L-158, L-159), and a kept segment of any
+/// chunk, or a window found silent, still covers what it covers.
 ///
-/// The bound has a cliff. A next segment 0.1 s before the audio's end gives a
-/// stretch of nearly all that is left of the chunk; one at or after the audio's
-/// end gives none. Both follow from "up to the next thing the recogniser wrote".
+/// Nothing is said for text with no letter or digit: punctuation alone is not
+/// a word, so nothing a reader could look for is lost. A next segment that
+/// starts where this one does leaves no stretch: the words lie at that start,
+/// which the next segment's own start (kept, or listed in turn) answers for.
 ///
 /// The stretch is cut to `limits` ([`unplaced_limits`]): the audio that was
 /// decoded can begin a frame before the chunk's window, and a stretch that
@@ -1429,16 +1420,33 @@ fn unplaced_stretch(
     audio: TimeRange,
     limits: TimeRange,
     text: &CueText,
-    (start, end): (ChunkTime, ChunkTime),
-    next: Option<ChunkTime>,
+    starts: &[ChunkTime],
+    position: usize,
 ) -> Option<TimeRange> {
-    if start == end || !text.text().chars().any(char::is_alphanumeric) {
+    if !text.text().chars().any(char::is_alphanumeric) {
         return None;
     }
     let decoded = audio.duration_micros();
-    let from = start.as_micros();
-    let until = next?.as_micros();
-    if from >= decoded || until >= decoded || from >= until {
+    let inside = |time: &ChunkTime| time.as_micros() < decoded;
+    let own = starts.get(position)?;
+    let from = if inside(own) {
+        own.as_micros()
+    } else {
+        starts
+            .get(..position)
+            .unwrap_or_default()
+            .iter()
+            .rev()
+            .find(|earlier| inside(earlier))
+            .map_or(0, |earlier| earlier.as_micros())
+    };
+    let until = starts
+        .get(position + 1..)
+        .unwrap_or_default()
+        .first()
+        .filter(|next| inside(next))
+        .map_or(decoded, |next| next.as_micros());
+    if from >= until {
         return None;
     }
     let first = audio.start().as_micros().checked_add(from)?;
@@ -1632,10 +1640,11 @@ pub struct ChunkSegments {
     /// Accepted segments in provider order.
     pub segments: Vec<AsrSegmentDraft>,
     /// Where the recogniser wrote words that were rejected and so are in no
-    /// segment (#359): for each rejected segment with a word in its text, a
-    /// range that is not empty, a start inside the chunk's audio, and another
-    /// segment after it there, the stretch from its start to the next one's. An
-    /// upper bound on where the words were said, not a measurement.
+    /// segment (#359, #383): for each rejected segment with a word in its text,
+    /// the stretch of the chunk's audio from its start (or, for a start in the
+    /// padding past the audio, the start of the latest segment before it that
+    /// starts inside the audio) to the next segment's start or the audio's end.
+    /// An upper bound on where the words were said, not a measurement.
     /// [`merge_chunks`] takes the parts of it that kept segments cover out and
     /// reports what is left, if it is longer than the tolerance
     /// ([`SEAM_COVERAGE_TOLERANCE_MICROS`]), as [`MergedTranscript::unplaced`].
