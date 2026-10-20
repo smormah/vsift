@@ -275,7 +275,11 @@ property checks are pure functions in `lib/real-media-checks.cjs`, tested on han
 
 The report is JSON plus a short Markdown summary, with the binary's `--version` and SHA-256 (never its path), the tools' and
 model's identities, the machine's class, the items' ids and digests, and the attribution section. It holds measurements and
-the run's own words only where a check needs them (a lost word sequence), never a whole transcript.
+the run's own words only where a check needs them (a lost word sequence), never a whole transcript. **Since #486** it also
+names the machine that recognised (`runner`: the CPU model, the logical CPU count and which of the CPU flags that decide
+whisper.cpp's kernels it has, read on that machine) and, for each revision, the recogniser threads VSift gave whisper.cpp
+(`threads`) and, for a public item only, `segment_fingerprints`: each segment's start, end, chunk and the first 16 hex digits of
+the SHA-256 of its text, so two runs can be compared segment by segment from their reports without any text leaving the run.
 
 ## 8. How it runs
 
@@ -624,3 +628,30 @@ labels. The run's first chunk is counted apart.
      each segment's `alignment.provider_start_us` of 0 already marks the kind. Free, and it fixes nothing.
 - **The measurement's own limits:** two plans of one recogniser, not a labelled truth; `speech_start_us` labels (check 8) would
   give the error itself.
+
+### 14.4 The same binary recognises differently on another CPU (#486, hosted, 2026-10-20)
+
+From #486's first step the report names the machine that recognised (`runner`), the recogniser threads of each revision
+(`threads`) and each public revision's segments as times and text digests (`segment_fingerprints`). The same commit was then
+dispatched twice (runs 39466357442 and 39466382364): the same `vsift` binary (SHA-256 `beca9662aaa5...`), the same pinned
+whisper.cpp, model and media, and 4 recogniser threads on 4 logical CPUs in both. The runners differed:
+
+| | Run 39466357442 | Run 39466382364 |
+| --- | --- | --- |
+| CPU | AMD EPYC 9V45 (AVX-512, AVX-512 VNNI and BF16) | AMD EPYC 7763 (AVX2, no AVX-512) |
+| Real-time factor (RM06 / RM09 / RM10) | 0.14 / 0.13 / 0.14 | 0.26 / 0.25 / 0.24 |
+| RM06 whole run | 167 segments | 167 segments, **147 identical in order**; the first difference is segment 19 (75.00 s), whose end is 79.24 s in one and 79.32 s in the other |
+| RM09 whole run | 368 segments | 368 segments, **different from the first segment on** (25.00 to 35.00 s against 25.00 to 55.00 s, in the silent lead); 344 texts in common; the shifted run's start point moved with it (283 s against 66 s) |
+| RM10 whole and shifted runs | 41 and 42 segments | **identical**, segment for segment |
+
+- **The thread count is not the cause:** it was 4 in every run, set by VSift from the runner's 4 logical CPUs
+  (`recognizer_threads`), as in every earlier hosted run.
+- **The difference follows the CPU in this pair.** ggml, whisper.cpp's tensor library, picks its kernels from the CPU's
+  features, and floating-point sums in a different order give slightly different numbers; a beam search can turn that into
+  another timestamp or another segmentation. Two runs on the same CPU model were not part of this pair, so whether one CPU
+  model always recognises alike is not shown. Earlier runs did not record the CPU, so they cannot be sorted by it.
+- **What it means:** hosted before-and-after figures mean something only within one CPU model. A user's two machines can give
+  two slightly different transcripts of one recording; nothing VSift publishes claims otherwise (L-200).
+- **The rule from now on (the maintainer's decision of 2026-10-20, recorded on #486):** a before-and-after comparison of hosted
+  runs counts only a pair whose reports name the same CPU model (`runner.cpu_model`); a pair on two models is reported as such
+  and is not evidence of a change. Exact comparisons are made on LOKI, one fixed machine, once its lane runs.
