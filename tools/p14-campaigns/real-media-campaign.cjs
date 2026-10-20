@@ -87,6 +87,16 @@ function digestOf(file, algorithm) {
   return hash.digest('hex');
 }
 
+/** `/proc/cpuinfo` on Linux, for the runner's CPU flags (#486); `null` elsewhere or when it cannot be read. */
+function readCpuinfo() {
+  if (process.platform !== 'linux') return null;
+  try {
+    return fs.readFileSync('/proc/cpuinfo', 'utf8');
+  } catch {
+    return null;
+  }
+}
+
 /** Runs `vsift` with the run's per-user folders and returns its answer, timed. */
 function runner(vsift, user, log) {
   const env = { ...process.env, LOCALAPPDATA: user, APPDATA: path.join(user, 'roaming'), XDG_CONFIG_HOME: path.join(user, 'config'),
@@ -134,6 +144,8 @@ function main() {
   const result = {
     binary: { version: versionLine, sha256: sha256(options.vsift) },
     platform: `${process.platform} ${process.arch}, ${os.cpus().length} logical CPUs`,
+    // Which machine recognised (#486): read here, on the machine running the campaign.
+    runner: campaign.runnerIdentity({ cpus: os.cpus(), cpuinfo: readCpuinfo() }),
     started: started.toISOString(),
     setup: campaign.setup(run, options),
     items: [],

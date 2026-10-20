@@ -275,7 +275,11 @@ property checks are pure functions in `lib/real-media-checks.cjs`, tested on han
 
 The report is JSON plus a short Markdown summary, with the binary's `--version` and SHA-256 (never its path), the tools' and
 model's identities, the machine's class, the items' ids and digests, and the attribution section. It holds measurements and
-the run's own words only where a check needs them (a lost word sequence), never a whole transcript.
+the run's own words only where a check needs them (a lost word sequence), never a whole transcript. **Since #486** it also
+names the machine that recognised (`runner`: the CPU model, the logical CPU count and which of the CPU flags that decide
+whisper.cpp's kernels it has, read on that machine) and, for each revision, the recogniser threads VSift gave whisper.cpp
+(`threads`) and, for a public item only, `segment_fingerprints`: each segment's start, end, chunk and the first 16 hex digits of
+the SHA-256 of its text, so two runs can be compared segment by segment from their reports without any text leaving the run.
 
 ## 8. How it runs
 

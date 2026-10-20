@@ -11,6 +11,7 @@
 // codes only, no listening clip is kept, and `privateReport` keeps measurements
 // only, with no title, name, file name or text.
 
+const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 const checks = require('./real-media-checks.cjs');
@@ -38,6 +39,52 @@ function mayKeepCrops(item) {
   return item.private !== true && Boolean(item.licence) && OPEN_LICENCE.test(String(item.licence.id));
 }
 const CANDIDATE_RANGE_US = 300 * SECOND;
+/**
+ * The CPU features that decide which kernels whisper.cpp's ggml runs (#486):
+ * runners of one image can differ in them, and floating-point results with them.
+ */
+const RECORDED_CPU_FLAGS = Object.freeze(['sse4_2', 'avx', 'avx2', 'fma', 'f16c', 'avx512f', 'avx512bw', 'avx512vl', 'avx512_vnni', 'avx512_bf16', 'avx_vnni', 'amx_tile']);
+
+/**
+ * The machine a run recognised on (#486): its CPU model, its logical CPU count
+ * and which of `RECORDED_CPU_FLAGS` it has. Read on the machine that runs the
+ * campaign (the hosted runner), from `os.cpus()` and, on Linux, the first
+ * `flags` line of `/proc/cpuinfo`. A machine's identity, not a person's: no
+ * host name, user or address is read.
+ * @param {{ cpus: Array<{ model: string }>, cpuinfo: string | null }} source
+ * @returns {{ cpu_model: string | null, logical_cpus: number, cpu_flags: string[] | null }}
+ */
+function runnerIdentity(source) {
+  const cpus = Array.isArray(source.cpus) ? source.cpus : [];
+  const model = cpus.length > 0 && typeof cpus[0].model === 'string' ? cpus[0].model.replace(/\s+/g, ' ').trim() : null;
+  const line = typeof source.cpuinfo === 'string' ? source.cpuinfo.split('\n').find((entry) => /^flags\s*:/.test(entry)) : undefined;
+  const present = line ? new Set(line.replace(/^flags\s*:/, '').trim().split(/\s+/)) : null;
+  return {
+    cpu_model: model,
+    logical_cpus: cpus.length,
+    cpu_flags: present ? RECORDED_CPU_FLAGS.filter((flag) => present.has(flag)) : null,
+  };
+}
+
+/**
+ * One revision's segments as times, chunk and a digest of the text (#486): two
+ * runs can then be compared segment by segment from their reports alone,
+ * without any transcript text leaving the run. The digest is the first 16 hex
+ * digits of the SHA-256 of the text as VSift returned it. Never computed for a
+ * private item.
+ * @param {Array<{ start_us: number, end_us: number, text: string, carried_from?: object, alignment?: { chunk_index?: number } }>} segments
+ * @returns {Array<[number, number, number | null, string]>}
+ */
+function segmentFingerprints(segments) {
+  return segments
+    .filter((segment) => !segment.carried_from)
+    .map((segment) => [
+      segment.start_us,
+      segment.end_us,
+      segment.alignment && Number.isInteger(segment.alignment.chunk_index) ? segment.alignment.chunk_index : null,
+      crypto.createHash('sha256').update(String(segment.text), 'utf8').digest('hex').slice(0, 16),
+    ]);
+}
 /** A recording longer than this is not investigated: the campaign is for short real recordings. */
 const MAX_DURATION_US = 4 * 60 * 60 * SECOND;
 
@@ -166,6 +213,8 @@ function summariseRevision(answer) {
     no_audio_chunks: asr.no_audio_chunks,
     unplaced_ranges: unplaced.length,
     unplaced_us: checks.mergeRanges(unplaced).reduce((total, range) => total + range.to_us - range.from_us, 0),
+    // The recogniser threads VSift gave whisper.cpp for this run (#486).
+    threads: Number.isInteger(asr.threads) ? asr.threads : null,
     warnings: (revision.warnings || []).map((warning) => ({ code: warning.code, count: warning.count === undefined ? null : warning.count })),
     status: answer.json.status,
   };
@@ -266,6 +315,8 @@ function investigate(item, file, run, where) {
   if (revisionA) {
     const a = allSegments(at, session, revisionA.revision_id, durationUs);
     answers.push(a.first, ...(a.failed ? [a.failed] : []));
+    // Times and text digests, for comparing two runs (#486); never a private item's.
+    if (!isPrivate && report.measurements.transcription) report.measurements.transcription.segment_fingerprints = segmentFingerprints(a.segments);
     // A range transcription is widened to the segments of the revision it
     // replaces, so the shifted run starts at a segment boundary of the whole run:
     // the one nearest the middle of a chunk step, which puts each new seam far
@@ -298,6 +349,7 @@ function investigate(item, file, run, where) {
 
     if (revisionB) {
       const b = allSegments(at, session, revisionB.revision_id, durationUs);
+      if (!isPrivate && report.measurements.shifted_transcription) report.measurements.shifted_transcription.segment_fingerprints = segmentFingerprints(b.segments);
       answers.push(b.first, ...(b.failed ? [b.failed] : []));
       const compared = { from_us: shiftUs, to_us: durationUs };
       const seamsOfA = checks.seamComparison(a.segments, b.segments, compared);
@@ -565,7 +617,8 @@ function mediaState(item, file) {
 
 function markdown(run) {
   const lines = ['# Real-media campaign', '', `- Binary: ${run.binary.version} (SHA-256 \`${run.binary.sha256}\`)`,
-    `- Started ${run.started}, finished ${run.finished}; ${run.platform}`, `- Setup: ${run.setup.passed ? 'passed' : `**failed**: ${run.setup.findings.join('; ')}`}`, '',
+    `- Started ${run.started}, finished ${run.finished}; ${run.platform}`,
+    ...(run.runner ? [`- Runner: ${run.runner.cpu_model || 'CPU model unknown'}, ${run.runner.logical_cpus} logical CPUs; flags ${run.runner.cpu_flags ? run.runner.cpu_flags.join(' ') || 'none of those recorded' : 'not read'}`] : []), `- Setup: ${run.setup.passed ? 'passed' : `**failed**: ${run.setup.findings.join('; ')}`}`, '',
     '| Item | Verdict | Transcription (RTF) | Seam recall / control | Repeats at seams | Timing diff p95 | Candidates per min | Text lines, smallest / median | Findings |',
     '| --- | --- | --- | --- | --- | --- | --- | --- | --- |'];
   const fmt = (value) => (typeof value === 'number' ? value.toFixed(3) : 'n/a');
@@ -592,4 +645,4 @@ function markdown(run) {
   return lines.join('\n');
 }
 
-module.exports = { KEPT_CROPS_PER_ITEM, KEPT_CROPS_PER_RUN, mayKeepCrops, SECOND, setup, investigate, privateReport, markdown, measurementsOnly, shiftPoint, mediaState };
+module.exports = { KEPT_CROPS_PER_ITEM, KEPT_CROPS_PER_RUN, RECORDED_CPU_FLAGS, mayKeepCrops, SECOND, setup, investigate, privateReport, markdown, measurementsOnly, shiftPoint, mediaState, runnerIdentity, segmentFingerprints };

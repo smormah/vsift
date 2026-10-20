@@ -50,7 +50,7 @@ function standIn() {
     else if (first === 'transcript' && second === 'retranscribe') {
       const shifted = args.includes('--from');
       answer = ok({ revision: { revision_id: shifted ? 'trv_b' : 'trv_a', segment_count: 24, carried_segment_count: shifted ? 3 : 0, language: 'en',
-        local_asr: { chunk_count: 5, transcribed_chunks: 5, silent_chunks: 0, no_audio_chunks: 0, unplaced_ranges: [] }, warnings: [{ code: 'seam_duplicates_removed', count: 1 }] } });
+        local_asr: { chunk_count: 5, transcribed_chunks: 5, silent_chunks: 0, no_audio_chunks: 0, threads: 4, unplaced_ranges: [] }, warnings: [{ code: 'seam_duplicates_removed', count: 1 }] } });
     } else if (first === 'transcript' && second === 'get') {
       answer = ok({ items: byRevision[args[args.indexOf('--revision') + 1]], next_cursor: null, transcript_coverage: coverage });
     } else if (first === 'search') {
@@ -110,6 +110,44 @@ test('the same run of a public item would carry those words, so the private test
   const report = campaign.investigate(publicItem, FILE, run, { folder: scratch(t), copyFile: () => {}, exists: () => true });
   assert.ok(leaks(JSON.stringify(report)).length > 0);
   assert.ok(leaks(steps.join('\n')).length > 0, 'a public search label names its words');
+});
+
+test("the runner is named by its CPU model, logical CPUs and the CPU flags that decide the recogniser's kernels (#486)", () => {
+  const cpus = [{ model: 'Example  CPU   9000 @ 2.0GHz' }, { model: 'Example  CPU   9000 @ 2.0GHz' }];
+  const cpuinfo = ['processor\t: 0', 'flags\t\t: fpu sse4_2 avx avx2 fma f16c avx512f unknownflag', 'processor\t: 1', ''].join('\n');
+  assert.deepEqual(campaign.runnerIdentity({ cpus, cpuinfo }), {
+    cpu_model: 'Example CPU 9000 @ 2.0GHz',
+    logical_cpus: 2,
+    cpu_flags: ['sse4_2', 'avx', 'avx2', 'fma', 'f16c', 'avx512f'],
+  });
+  assert.deepEqual(campaign.runnerIdentity({ cpus: [], cpuinfo: null }), { cpu_model: null, logical_cpus: 0, cpu_flags: null });
+  const summary = campaign.markdown({ binary: { version: 'vsift 0.0.0', sha256: '0'.repeat(64) }, started: 's', finished: 'f', platform: 'p',
+    runner: campaign.runnerIdentity({ cpus, cpuinfo }), setup: { passed: true, findings: [] }, items: [] });
+  assert.match(summary, /- Runner: Example CPU 9000 @ 2\.0GHz, 2 logical CPUs; flags sse4_2 avx avx2 fma f16c avx512f/);
+});
+
+test("a public item's revisions are kept as times and text digests with their thread count, and a private item's are not (#486)", (t) => {
+  const publicItem = { ...PRIVATE_ITEM, id: 'RM01', private: undefined, title: 'T', attribution: 'A', tests: ['#363'] };
+  const shown = campaign.investigate(publicItem, FILE, standIn().run, { folder: scratch(t), copyFile: () => {}, exists: () => true, writeFile: () => {} });
+  const whole = shown.measurements.transcription;
+  assert.equal(whole.threads, 4);
+  assert.equal(whole.segment_fingerprints.length, segments(0, 'a').length);
+  for (const entry of [...whole.segment_fingerprints, ...shown.measurements.shifted_transcription.segment_fingerprints]) {
+    assert.equal(entry.length, 4);
+    assert.ok(Number.isInteger(entry[0]) && Number.isInteger(entry[1]));
+    assert.match(entry[3], /^[0-9a-f]{16}$/);
+  }
+  assert.deepEqual(leaks(JSON.stringify(whole.segment_fingerprints)), [], 'a digest carries no word');
+  // Carried segments belong to the other run and are left out.
+  assert.equal(shown.measurements.shifted_transcription.segment_fingerprints.length, segments(15 * SECOND, 'b').filter((s) => !s.carried_from).length);
+  // The same text gives the same digest in both revisions, so two runs compare segment by segment.
+  assert.equal(whole.segment_fingerprints[10][3], campaign.segmentFingerprints([segments(0, 'a')[10]])[0][3]);
+  const hidden = campaign.investigate(PRIVATE_ITEM, FILE, standIn().run, { folder: scratch(t), copyFile: () => {}, exists: () => true, writeFile: () => {} });
+  assert.equal(hidden.measurements.transcription.segment_fingerprints, undefined);
+  assert.equal(hidden.measurements.shifted_transcription.segment_fingerprints, undefined);
+  const kept = campaign.privateReport(hidden);
+  assert.equal(JSON.stringify(kept).includes('segment_fingerprints'), false);
+  assert.equal(kept.measurements.transcription.threads, 4, 'the thread count is a measurement and is kept');
 });
 
 test('a private report keeps only codes and enumerations among its strings, whatever a check writes', () => {
