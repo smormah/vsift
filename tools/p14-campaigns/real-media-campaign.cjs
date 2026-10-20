@@ -33,9 +33,7 @@
 // reported by measurements and failure codes only: no title, name, file name or
 // text reaches a report or a log line, and no listening clip is kept.
 //
-// On Windows keep --work short: a per-user folder longer than about 141
-// characters, or a session root of about 205, makes VSift's media commands fail
-// (section 12). Node.js 22, no dependency.
+// Node.js 22, no dependency.
 
 const childProcess = require('node:child_process');
 const crypto = require('node:crypto');
@@ -124,9 +122,6 @@ function main() {
     const manifest = media.readManifest(path.resolve(options.manifest));
     selected = media.selectApproved(manifest, options.items);
     fileOf = (item) => path.join(options.media, item.id, item.file_name);
-  }
-  if (process.platform === 'win32' && options.work.length > 60) {
-    log(`warning: --work is ${options.work.length} characters; on Windows a long work folder makes VSift's media commands fail (real-media-set.md section 12)`);
   }
   const started = new Date();
   const runFolder = path.join(options.work, `run-${started.toISOString().replace(/[:.]/g, '-')}`);

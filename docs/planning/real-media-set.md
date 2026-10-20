@@ -1,7 +1,8 @@
 # The real-media set and its opt-in campaign (#363)
 
-Status (2026-10-19, cycle 2, `0.2.3`): **step 1** (the design, the candidates, the manifest and the fetch-and-verify tool)
-is merged (#460). **Step 2** (in review) holds the maintainer's decisions (section 10), the campaign runner and its manual
+Status (2026-10-20, cycle 2, `0.2.3`): **step 1** (the design, the candidates, the manifest and the fetch-and-verify tool)
+is merged (#460). **All eight items are pinned** (2026-10-20: the five hand downloads, checked against Commons; the release
+`test-media-2026-10-19` holds all eight since 2026-10-20). **Step 2** (#465, merged) holds the maintainer's decisions (section 10), the campaign runner and its manual
 hosted workflow, and what followed Wikimedia's refusal of the tool (sections 12 and 14): **the set is eight approved items
 (440,841,704 bytes)**. Three come from sources that accept the tool's neutral user agent (the Internet Archive and NASA's
 library) and are fetched and pinned; five are Wikimedia files with no copy elsewhere, which the maintainer downloads by hand
@@ -438,12 +439,12 @@ three quarters of the set's budget, so it is not used.
 
 | Id | Recording | Licence | Where it comes from | Bytes | Pinned SHA-256 |
 | --- | --- | --- | --- | ---: | --- |
-| RM01 | Editing basics - watchlists (Sage Ross, WMF) | CC BY-SA 3.0 | Commons, downloaded by hand | 6,192,962 | not yet |
-| RM03 | After the lifting of the block: Case study of Turkey (Wikimania 2021) | CC BY-SA 3.0 | Commons, by hand | 146,468,542 | not yet |
-| RM04 | Como contribuir com o Structured Data on Commons (Ederporto) | CC BY-SA 4.0 | Commons, by hand | 10,636,205 | not yet |
-| RM05 | President Reagan's Trip to Fullerton and San Bernardino, 1 November 1988 (Reagan Library) | CC BY 3.0 | Commons, by hand | 112,179,359 | not yet |
+| RM01 | Editing basics - watchlists (Sage Ross, WMF) | CC BY-SA 3.0 | Commons, downloaded by hand | 6,192,962 | `dfbf5ca9...` |
+| RM03 | After the lifting of the block: Case study of Turkey (Wikimania 2021) | CC BY-SA 3.0 | Commons, by hand | 146,468,542 | `80fccac2...` |
+| RM04 | Como contribuir com o Structured Data on Commons (Ederporto) | CC BY-SA 4.0 | Commons, by hand | 10,636,205 | `40361e5a...` |
+| RM05 | President Reagan's Trip to Fullerton and San Bernardino, 1 November 1988 (Reagan Library) | CC BY 3.0 | Commons, by hand | 112,179,359 | `4aa842a5...` |
 | RM06 | Space Station Astronaut Discusses Record Breaking Mission (NASA Johnson) | Public domain | [Internet Archive](https://archive.org/details/jsc2023m000168_NTV_VF_Astronauts_Discuss_Record_Breaking_Mission_230912-MP4.mp4), NASA Johnson's own upload; SHA-1 checked | 60,378,293 | `a48781d5...` |
-| RM07 | Introduction to Wikidata Lexeme Forms, Lexicodays 2024 (480p transcode) | CC BY-SA 4.0 | Commons, by hand (ETag compared as MD5) | 21,315,686 | not yet |
+| RM07 | Introduction to Wikidata Lexeme Forms, Lexicodays 2024 (480p transcode) | CC BY-SA 4.0 | Commons, by hand (ETag compared as MD5) | 21,315,686 | `afd19162...` |
 | RM09 | NASA's SpaceX Crew-8 Crew Arrival at Kennedy Space Center | Public domain | [NASA Image and Video Library](https://images.nasa.gov/details/KSC-20240225-MH-JBS01-0001-CCP_SpaceX_Crew_8_Arrival_KSC-M4585) (no checksum published: trust on first use, cross-checked hosted) | 72,873,726 | `ee5501f1...` |
 | RM10 | How to Create a Map from a Table Using data.census.gov (U.S. Census Bureau) | Public domain | [Internet Archive](https://archive.org/details/yt_wJJiJfJpK0o) mirror of the Bureau's channel; SHA-1 checked | 10,796,931 | `a035daeb...` |
 
@@ -496,6 +497,13 @@ gh release create test-media-2026-10-19 --repo smormah/vsift --target main --pre
 The assets are the eight verbatim files (440,841,704 bytes) and `ATTRIBUTION.txt`; the partial release's are RM06,
 RM09 and RM10 (144,048,950 bytes) and `ATTRIBUTION.txt`. Until the release exists, a hosted run reports every item as not
 yet mirrored and fails for want of anything to investigate.
+
+**The hand pins (2026-10-20).** The maintainer downloaded RM01, RM03, RM04, RM05 and RM07 in a browser, and the
+coordinator pinned each with `pin --from-file`: every size and Commons SHA-1 matched, and RM07's ETag matched as its MD5 (so
+the ETag is confirmed as the transcode's MD5). Their SHA-256 values are in the manifest, each checked again against the
+copies in `C:\dev\vsift-real-media` before it was written, with that provenance in the item's notes. `release-files` now
+accepts all eight; the coordinator uploaded the five to the release on 2026-10-20 with the renewed `ATTRIBUTION.txt`
+and notes.
 
 ### 14.1 The first real runs (2026-10-19, local)
 

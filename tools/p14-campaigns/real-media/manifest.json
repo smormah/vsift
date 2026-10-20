@@ -15,7 +15,7 @@
       "mirror_url": "https://github.com/smormah/vsift/releases/download/test-media-2026-10-19/RM01-editing-basics-watchlists.webm",
       "file_name": "RM01-editing-basics-watchlists.webm",
       "bytes": 6192962,
-      "sha256": null,
+      "sha256": "dfbf5ca97f3f1896d56a3acbc297401fe43c5d29204d8926e7761554c5fdf860",
       "source_checksum": {
         "algorithm": "sha1",
         "value": "9cc8ceb7e9cd6b13f78ebf0936b1cb8fffebbdf6"
@@ -43,7 +43,7 @@
         "L-018",
         "L-028"
       ],
-      "notes": "A narrated Wikipedia tutorial: page changes, menus and small interface text at 1280x1024. Human English captions exist on Commons (47 cues; the last cue's end is written 99:59:59, a useful sidecar case). Shows the narrator's own Wikipedia account and public user names. Commons refuses the tool (HTTP 429 to the neutral user agent, 2026-10-18): this item is pinned from a copy the maintainer downloads by hand (pin --from-file, against the Commons SHA-1) and fetched by every run from the test-media release."
+      "notes": "A narrated Wikipedia tutorial: page changes, menus and small interface text at 1280x1024. Human English captions exist on Commons (47 cues; the last cue's end is written 99:59:59, a useful sidecar case). Shows the narrator's own Wikipedia account and public user names. Commons refuses the tool (HTTP 429 to the neutral user agent, 2026-10-18): this item is pinned from a copy the maintainer downloads by hand (pin --from-file, against the Commons SHA-1) and fetched by every run from the test-media release. Pinned on 2026-10-20 from the maintainer's hand download (pin --from-file): the exact size and the Commons SHA-1 matched."
     },
     {
       "id": "RM02",
@@ -99,7 +99,7 @@
       "mirror_url": "https://github.com/smormah/vsift/releases/download/test-media-2026-10-19/RM03-wikimania-turkey-talk.webm",
       "file_name": "RM03-wikimania-turkey-talk.webm",
       "bytes": 146468542,
-      "sha256": null,
+      "sha256": "80fccac22c32f5f8534283b6e34d1d27c630cc36bb9852d4307adef7b5628a30",
       "source_checksum": {
         "algorithm": "sha1",
         "value": "a6deaabe0f173611af5e1082ddd4637259027435"
@@ -132,7 +132,7 @@
         "#384",
         "L-022"
       ],
-      "notes": "A pre-recorded 19-minute conference talk by two speakers in Turkish-accented English, about 46 chunks. It opens with music and a title card: its captions put music from 8.2 s and the first words at 13.4 s, so the lead is non-speech rather than silence (to be labelled by listening). Its English captions look machine-made, so they are no reference transcript. A 480p transcode (29,909,095 bytes, no published checksum) is the lighter alternative. Commons refuses the tool (HTTP 429 to the neutral user agent, 2026-10-18): this item is pinned from a copy the maintainer downloads by hand (pin --from-file, against the Commons SHA-1) and fetched by every run from the test-media release."
+      "notes": "A pre-recorded 19-minute conference talk by two speakers in Turkish-accented English, about 46 chunks. It opens with music and a title card: its captions put music from 8.2 s and the first words at 13.4 s, so the lead is non-speech rather than silence (to be labelled by listening). Its English captions look machine-made, so they are no reference transcript. A 480p transcode (29,909,095 bytes, no published checksum) is the lighter alternative. Commons refuses the tool (HTTP 429 to the neutral user agent, 2026-10-18): this item is pinned from a copy the maintainer downloads by hand (pin --from-file, against the Commons SHA-1) and fetched by every run from the test-media release. Pinned on 2026-10-20 from the maintainer's hand download (pin --from-file): the exact size and the Commons SHA-1 matched."
     },
     {
       "id": "RM04",
@@ -147,7 +147,7 @@
       "mirror_url": "https://github.com/smormah/vsift/releases/download/test-media-2026-10-19/RM04-como-contribuir-sdc-pt-br.webm",
       "file_name": "RM04-como-contribuir-sdc-pt-br.webm",
       "bytes": 10636205,
-      "sha256": null,
+      "sha256": "40361e5af11150af5c457ef1f3a90fefbcca2c5918d90beb09b723f621cbfd10",
       "source_checksum": {
         "algorithm": "sha1",
         "value": "5a2ab7b99ed3d7281ff3f1b44d3ee10514daa49a"
@@ -174,7 +174,7 @@
         "L-022",
         "#175"
       ],
-      "notes": "A Brazilian Portuguese tutorial with interface changes. Commons has Brazilian Portuguese captions (46 cues), a possible reference transcript. The audio track is tagged English in its metadata, which is wrong (a language-detection case). Commons refuses the tool (HTTP 429 to the neutral user agent, 2026-10-18): this item is pinned from a copy the maintainer downloads by hand (pin --from-file, against the Commons SHA-1) and fetched by every run from the test-media release."
+      "notes": "A Brazilian Portuguese tutorial with interface changes. Commons has Brazilian Portuguese captions (46 cues), a possible reference transcript. The audio track is tagged English in its metadata, which is wrong (a language-detection case). Commons refuses the tool (HTTP 429 to the neutral user agent, 2026-10-18): this item is pinned from a copy the maintainer downloads by hand (pin --from-file, against the Commons SHA-1) and fetched by every run from the test-media release. Pinned on 2026-10-20 from the maintainer's hand download (pin --from-file): the exact size and the Commons SHA-1 matched."
     },
     {
       "id": "RM05",
@@ -189,7 +189,7 @@
       "mirror_url": "https://github.com/smormah/vsift/releases/download/test-media-2026-10-19/RM05-reagan-fullerton-1988.webm",
       "file_name": "RM05-reagan-fullerton-1988.webm",
       "bytes": 112179359,
-      "sha256": null,
+      "sha256": "4aa842a5ce23ced8e96995255fdbe2cd6e1ea8e5ba9809167d1a5c3eb7c6cac6",
       "source_checksum": {
         "algorithm": "sha1",
         "value": "dcd47fbd8dca707828a04e3429cf2d3e4ae044d1"
@@ -215,7 +215,7 @@
         "#150",
         "L-020"
       ],
-      "notes": "Archival White House television footage: remarks at a campaign rally in a gymnasium (crowd noise) and at a helicopter landing zone (field microphone), between arrival shots; old analogue video. Its licence was reviewed on Commons. The noise is described by its source, not yet heard. Commons refuses the tool (HTTP 429 to the neutral user agent, 2026-10-18): this item is pinned from a copy the maintainer downloads by hand (pin --from-file, against the Commons SHA-1) and fetched by every run from the test-media release."
+      "notes": "Archival White House television footage: remarks at a campaign rally in a gymnasium (crowd noise) and at a helicopter landing zone (field microphone), between arrival shots; old analogue video. Its licence was reviewed on Commons. The noise is described by its source, not yet heard. Commons refuses the tool (HTTP 429 to the neutral user agent, 2026-10-18): this item is pinned from a copy the maintainer downloads by hand (pin --from-file, against the Commons SHA-1) and fetched by every run from the test-media release. Pinned on 2026-10-20 from the maintainer's hand download (pin --from-file): the exact size and the Commons SHA-1 matched."
     },
     {
       "id": "RM06",
@@ -273,7 +273,7 @@
       "mirror_url": "https://github.com/smormah/vsift/releases/download/test-media-2026-10-19/RM07-lexeme-forms-480p.webm",
       "file_name": "RM07-lexeme-forms-480p.webm",
       "bytes": 21315686,
-      "sha256": null,
+      "sha256": "afd191629e79c69508050c27ae90ef057c3b483de2488f5e580b0f8c46361ce5",
       "source_checksum": {
         "algorithm": "md5",
         "value": "78fc96f30f6e04762296e0d458d6402c"
@@ -301,7 +301,7 @@
         "#381",
         "#380"
       ],
-      "notes": "One speaker in German-accented English demonstrating a web tool, about 23 chunks. Commons has human-made English captions (205 cues), the best reference transcript of the set. The original is 254,967,178 bytes, so the 480p transcode is proposed; Commons publishes no checksum for transcodes, so source_checksum is the object store's ETag taken as the MD5 (unconfirmed until the pin) and the pin is otherwise trust on first use. Commons refuses the tool (HTTP 429 to the neutral user agent, 2026-10-18): this item is pinned from a copy the maintainer downloads by hand (pin --from-file, against the Commons SHA-1) and fetched by every run from the test-media release. A hand-downloaded transcode has no published SHA-1; its ETag is recorded as the MD5 to compare."
+      "notes": "One speaker in German-accented English demonstrating a web tool, about 23 chunks. Commons has human-made English captions (205 cues), the best reference transcript of the set. The original is 254,967,178 bytes, so the 480p transcode is proposed; Commons publishes no checksum for transcodes, so source_checksum is the object store's ETag taken as the MD5 (unconfirmed until the pin) and the pin is otherwise trust on first use. Commons refuses the tool (HTTP 429 to the neutral user agent, 2026-10-18): this item is pinned from a copy the maintainer downloads by hand (pin --from-file, against the Commons SHA-1) and fetched by every run from the test-media release. A hand-downloaded transcode has no published SHA-1; its ETag is recorded as the MD5 to compare. Pinned on 2026-10-20 from the maintainer's hand download (pin --from-file): the exact size and the server's ETag taken as the MD5 matched, so the ETag is confirmed as this transcode's MD5."
     },
     {
       "id": "RM08",
