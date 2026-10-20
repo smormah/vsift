@@ -292,12 +292,18 @@ the SHA-256 of its text, so two runs can be compared segment by segment from the
   With `-f mode=visual` it runs, instead of the campaign, the measurement of the visual change rule on the fetched items
   (#175: `crates/vsift-infrastructure/tests/p08_real_media_visual.rs`, which decodes each item twice and keeps numbers only,
   as `visual-measurement.json` in the report artifact); `-f mode=both` runs the two.
+  With `-f keep_segments="RM09:915-940"` (#485; whole seconds, at most four ranges and 120 s an item) the campaign also keeps,
+  as text, the transcript segments of both revisions that overlap each range, with their chunk, its audio window and the
+  recogniser's own times, in `kept-segments/<item>/segments.json` of the artifact beside the item's attribution, so a person can
+  read a seam finding without a local run. **Only for a public, openly licensed item**, by the rule that keeps crops: never a
+  private item's (the campaign refuses `--keep-segments` with `--private-manifest`, and a test drives a private item and one
+  without an open licence and finds nothing written).
   It fetches the approved items with `real-media.cjs cross-check` into the runner's temporary folder **from the test-media
   release**, never from Wikimedia (a pinned item must match
   its pin; one not yet pinned is pinned there and its SHA-256 printed, which is the hosted cross-check of a pin made
   elsewhere), stages the pinned FFmpeg, whisper.cpp and models as `P07 local ASR` does
   ([`p07_local_asr_tools.py`](../../tools/p07_local_asr_tools.py)), builds the commit's `vsift`, runs the campaign and keeps
-  only `report.json`, `summary.md`, the pin lines and the kept crops (decision 10) (90 days). It has `contents: read` and no secret. A pull request that
+  only `report.json`, `summary.md`, the pin lines, the kept crops (decision 10) and any segments asked for (#485) (90 days). It has `contents: read` and no secret. A pull request that
   changes the campaign's tools runs their tests and `real-media.cjs check` only. It is not scheduled: the items are long
   enough that a run costs real runner time (the 15 to 30 minute lecture alone transcribes in roughly 6 to 12 minutes at the
   `base` model's measured real-time factor), so it runs when a change touches transcription, the merge or the visual index,
@@ -655,3 +661,59 @@ whisper.cpp, model and media, and 4 recogniser threads on 4 logical CPUs in both
 - **The rule from now on (the maintainer's decision of 2026-10-20, recorded on #486):** a before-and-after comparison of hosted
   runs counts only a pair whose reports name the same CPU model (`runner.cpu_model`); a pair on two models is reported as such
   and is not evidence of a change. Exact comparisons are made on LOKI, one fixed machine, once its lane runs.
+
+### 14.5 What the two chunks of RM09's seam at 925 to 930 s hold (#485, hosted, 2026-10-20)
+
+#485: the whole run's seam check finds 16 to 19 words missing at 922 to 929 s that the shifted run heard mid-chunk, and the
+revision calls the stretch transcribed and lists nothing. Hosted run 39466921335 kept the segments of both revisions over 915
+to 940 s (`keep_segments="RM09:915-940"`; the recording is public domain; the text is in the run's artifact,
+`kept-segments/RM09/segments.json`). In words, without quoting the speech at length:
+
+- **Whole run, chunk 36 (audio 900 to 930 s):** one Russian sentence of the cosmonaut's ("I am sure everything will be fine,
+  crewed spaceflight will go on"), written **twice**, as two segments with the same text: 900.00 to 922.50 s (from the chunk's
+  first sample, #174's pattern) and 922.50 to 929.50 s. The second is a recogniser repetition: it says nothing new and covers
+  the time in which the next words were said.
+- **Whole run, chunk 37 (audio 925 to 955 s):** its first kept segment starts at 927.96 s, 2.96 s into its audio (English: the
+  interpreter's "we'll see each other again" and the host's thanks follow).
+- **Shifted run, chunk 25 (audio 908 to 938 s), which heard the stretch mid-chunk:** the same sentence once (915.00 to
+  920.80 s), then the words that are missing from the whole run, in Russian and English (920.80 to 927.70 s: "and I think all
+  will be well, and we shall continue human spaceflight"; 927.70 to 930.90 s: "we will surely see each other again").
+
+**So the missing words are in neither chunk's kept segments of the whole run.** Chunk 36 repeated its sentence instead of writing
+them. Whether chunk 37 wrote them in the 2.96 s before its first kept segment cannot be read from any answer, because the merge's
+dropped segments are not published. The merge's rules make it likely: a segment of chunk 37 over 925.00 to 927.96 s would have its
+midpoint in chunk 36's core, where chunk 36 has a segment (the repeated copy), so rule 1 drops it, and the repeated copy covers
+its time, so the guard has nothing to restore. The synthetic layout `a_repeated_copy_in_one_chunk_can_hide_the_next_chunks_words`
+(`crates/vsift-domain/src/asr/tests.rs`) reproduces exactly that, and pins it as a limit (L-201).
+
+**Where a fix could belong, for the maintainer's decision (#485); nothing is fixed:**
+
+1. **The merge, narrowly:** a segment whose text repeats the segment before it in the same chunk (the same words, at the next
+   time) is a recogniser loop, and owns no time: rule 1 lets the neighbour chunk's segment there be kept, and the guard judges
+   holes without it. The repeated copy could be kept or dropped (dropping it removes a repeat). It needs the loop to be told
+   from speech that does repeat ("no, no"), by the same word-count floor as the repeat rule.
+2. **The guard, broadly:** restore a dropped segment whose words no kept segment holds even where its time is covered. It finds
+   more losses of this kind and others, and brings back many copies that differ only by recognition (more repeats, L-155).
+3. **Recognition:** whisper.cpp's repetition on this chunk is the root, and on a mixed-language chunk (#474) it is the
+   recogniser's. A per-chunk check for a repeated segment could also mark the chunk's coverage as doubtful. It is part of #474's
+   design in R1.
+
+Option 1 is the smallest change that would have kept these words. Whether it holds on more recordings needs the dropped segments
+of a run, which a future option of the campaign (or an engine-level measurement) would have to keep. Hosted runs recognise
+slightly differently by CPU (#486, L-200); this run's CPU was not recorded (its branch predates the runner field).
+
+**The fix (the maintainer's decision of 2026-10-20: option 1) and the run after it.** A segment that repeats the one before it in
+its own chunk now claims no time in the merge's rules 1 and 2 (`repeats_the_segment_before`, `crates/vsift-domain/src/asr.rs`).
+Hosted run 39486605862 kept the same range on the fixed branch:
+
+- **Whole run, the seam at 925 to 930 s:** chunk 36 wrote the same two copies as before (identical times and text), and **chunk
+  37's segment over 925.00 to 927.96 s is now kept**: "will be okay and we'll continue human spaceflight" (its first 2.96 s, the
+  segment rule 1 had dropped). So the words were in chunk 37 all along, as the merge's rules suggested.
+- **The whole run's seam check at that seam:** before, `loss`, 16 words at about 922.1 to 929.0 s (run 39466921335); after, `loss`,
+  9 words at about 922.3 to 926.1 s, and `script`, 7 words at about 927.9 to 929.6 s. What is left is the Russian half of the
+  sentence ("and I think all will be well"), which chunk 37 heard as English, and its next words, written in another script: the
+  language limit of L-188, not the merge. The finding (eight words or more) still shows at that seam, with 9 words.
+- **Elsewhere the two runs are not a pair:** this branch predates the `runner` field (#494), so neither run names its CPU, and by
+  the maintainer's decision of 2026-10-20 (#486) a before-and-after comparison counts only a pair on the same CPU model. The
+  shifted runs started at different points (283 s before, 66 s after), which happens on different CPUs (section 14.4), so the
+  rest of the two reports is not compared. The seam above is read from the kept segments themselves.

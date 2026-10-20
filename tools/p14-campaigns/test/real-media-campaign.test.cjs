@@ -358,3 +358,51 @@ test('a private item\'s crops are never kept, nor those of an item without an op
     }
   }
 });
+
+const OPEN_SPEECH = { id: 'RM09', status: 'approved', title: 'T', attribution: 'A by NASA, public domain', tests: ['#485'], covers: ['conversational-pauses'],
+  licence: { id: 'public-domain-us-government', url: 'https://example.invalid/licence' } };
+
+test('the segments a person asked for of a public, openly licensed item are kept as text, with its attribution (#485)', (t) => {
+  const { run } = standIn();
+  const written = new Map();
+  const folder = scratch(t);
+  const keepSegments = campaign.parseKeepSegments(['RM09:40-55']);
+  const report = campaign.investigate(OPEN_SPEECH, FILE, run, { folder, keepSegments, copyFile: () => {}, exists: () => true,
+    writeFile: (file, text) => written.set(file, text) });
+  const kept = JSON.parse(written.get(path.join(folder, 'kept-segments', 'segments.json')));
+  assert.equal(kept.item, 'RM09');
+  assert.equal(kept.licence.id, 'public-domain-us-government');
+  assert.deepEqual(kept.ranges, [{ from_us: 40 * SECOND, to_us: 55 * SECOND }]);
+  // The whole revision's segments over 40 to 55 s: 40-45, 45-50, 50-55; nothing outside the range.
+  assert.deepEqual(kept.whole.map((segment) => [segment.start_us / SECOND, segment.end_us / SECOND]), [[40, 45], [45, 50], [50, 55]]);
+  assert.ok(kept.whole.every((segment) => typeof segment.text === 'string' && Number.isInteger(segment.chunk) && segment.chunk_audio_us.length === 2));
+  assert.ok(kept.shifted.length >= 3);
+  assert.match(written.get(path.join(folder, 'kept-segments', 'ATTRIBUTION.txt')), /A by NASA, public domain\nLicence: public-domain-us-government/);
+  assert.deepEqual(report.measurements.kept_segments, { file: 'RM09/kept-segments/segments.json', ranges: kept.ranges, whole: 3, shifted: kept.shifted.length });
+  // An item not asked for keeps nothing.
+  const other = campaign.investigate({ ...OPEN_SPEECH, id: 'RM06' }, FILE, standIn().run, { folder: scratch(t), keepSegments, copyFile: () => {}, exists: () => true, writeFile: () => {} });
+  assert.equal(other.measurements.kept_segments, undefined);
+});
+
+test('a private item\'s segments are never kept, nor those of an item without an open licence (#485)', (t) => {
+  const asked = new Map([['P01', [{ from_us: 0, to_us: 60 * SECOND }]], ['RM09', [{ from_us: 0, to_us: 60 * SECOND }]]]);
+  for (const item of [PRIVATE_ITEM, { ...OPEN_SPEECH, licence: { id: 'all-rights-reserved', url: 'https://example.invalid' } }, { ...OPEN_SPEECH, licence: undefined }]) {
+    const written = [];
+    const folder = scratch(t);
+    const report = campaign.investigate(item, FILE, standIn().run, { folder, keepSegments: asked, copyFile: () => {}, exists: () => true, writeFile: (file) => written.push(file) });
+    assert.deepEqual(written.filter((file) => file.includes('kept-segments')), [], `${item.id}: nothing written`);
+    assert.equal(fs.existsSync(path.join(folder, 'kept-segments')), false, `${item.id}: no folder`);
+    assert.equal(report.measurements.kept_segments, undefined);
+    if (item.private) assert.deepEqual(leaks(JSON.stringify(campaign.privateReport(report))), []);
+  }
+});
+
+test('a range to keep is a public item\'s, in whole seconds, and bounded (#485)', () => {
+  assert.deepEqual([...campaign.parseKeepSegments(['RM09:915-940', 'RM09:1000-1010']).entries()],
+    [['RM09', [{ from_us: 915 * SECOND, to_us: 940 * SECOND }, { from_us: 1000 * SECOND, to_us: 1010 * SECOND }]]]);
+  for (const bad of ['P01:0-10', 'RM9:0-10', 'RM09:10-10', 'RM09:20-10', 'RM09:1.5-3', 'RM09:0-10;rm', 'RM09:0-121']) {
+    assert.throws(() => campaign.parseKeepSegments([bad]), /keep-segments/, bad);
+  }
+  assert.throws(() => campaign.parseKeepSegments(['RM09:0-1', 'RM09:2-3', 'RM09:4-5', 'RM09:6-7', 'RM09:8-9']), /at most 4 ranges/);
+  assert.equal(campaign.parseKeepSegments([]).size, 0);
+});

@@ -55,6 +55,10 @@ on:
         description: Item ids separated by spaces (for example "RM01 RM04"); empty means every approved item
         type: string
         default: ""
+      keep_segments:
+        description: Transcript segments to keep in the artifact, as text, for a public item only (#485), for example "RM09:915-940" (whole seconds; at most 120 s an item); empty keeps none
+        type: string
+        default: ""
       mode:
         description: What to run on the fetched items
         type: choice
@@ -133,6 +137,17 @@ jobs:
           done
           echo "ITEM_ARGUMENTS=$arguments" >> "$GITHUB_ENV"
 
+      - name: Choose the segments to keep (#485)
+        env:
+          KEEP: ${{ inputs.keep_segments }}
+        run: |
+          set -euo pipefail
+          arguments=""
+          for range in $KEEP; do
+            case "$range" in RM[0-9][0-9]:[0-9]*-[0-9]*) arguments="$arguments --keep-segments $range";; *) echo "a range is RMnn:<from>-<to> in whole seconds"; exit 1;; esac
+          done
+          echo "KEEP_ARGUMENTS=$arguments" >> "$GITHUB_ENV"
+
       - name: Fetch the approved items and cross-check their pins
         run: |
           set -euo pipefail
@@ -162,7 +177,7 @@ jobs:
             --whisper "$VSIFT_TEST_WHISPER_CLI" \
             --model "$VSIFT_TEST_WHISPER_MODEL" \
             --available-only \
-            $ITEM_ARGUMENTS
+            $ITEM_ARGUMENTS $KEEP_ARGUMENTS
 
       - name: Measure the visual change rule (#175)
         if: inputs.mode != 'campaign'
@@ -192,6 +207,14 @@ jobs:
             fi
             # #173: the few native crops the campaign kept of public, openly licensed
             # screen recordings (four an item, twelve a run), with their attribution.
+            # #485: the transcript segments asked for, of public, openly licensed items only.
+            for kept in "$run"/RM[0-9][0-9]/kept-segments; do
+              if [ -d "$kept" ]; then
+                item="$(basename "$(dirname "$kept")")"
+                mkdir -p "$RUNNER_TEMP/report/kept-segments/$item"
+                cp "$kept"/segments.json "$kept"/ATTRIBUTION.txt "$RUNNER_TEMP/report/kept-segments/$item/"
+              fi
+            done
             for crops in "$run"/RM[0-9][0-9]/crops; do
               if [ -d "$crops" ]; then
                 item="$(basename "$(dirname "$crops")")"

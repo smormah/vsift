@@ -1710,7 +1710,9 @@ enum Side {
 ///    is kept by the chunk whose core contains the segment's midpoint. A copy
 ///    from another chunk is kept only when the owning chunk has no segment at
 ///    that time at all, so a recognizer miss in one chunk never loses speech
-///    the other chunk heard.
+///    the other chunk heard. A segment that repeats the one before it in its
+///    own chunk (a recogniser loop) does not count as a segment at that time
+///    (#485): it claims no time here or in rule 2.
 /// 2. A kept segment within 0.5 s of an inner window edge was probably cut by
 ///    that edge. It is dropped when the neighbour across that edge has a
 ///    segment spanning the cut segment's midpoint that is not itself cut at
@@ -1782,8 +1784,10 @@ fn keep_by_rules_one_and_two(chunks: &[ChunkSegments]) -> BTreeSet<(usize, usize
                 .unwrap_or(index);
             if owner != index {
                 // The owning chunk decides, unless it heard nothing at this
-                // time; then this copy is the only one and is kept.
-                if !overlapping(&chunks[owner].segments, segment) {
+                // time; then this copy is the only one and is kept. A segment
+                // of the owner that repeats the one before it claims no time
+                // (#485), so it does not count as hearing something here.
+                if !claims_time_over(&chunks[owner], segment) {
                     kept.insert((index, position));
                 }
                 continue;
@@ -1982,11 +1986,51 @@ fn uncovered_unplaced_stretches(
     to_ranges(&join_nearest(stretches, MAX_UNPLACED_STRETCHES, None))
 }
 
-fn overlapping(segments: &[AsrSegmentDraft], segment: &AsrSegmentDraft) -> bool {
-    segments.iter().any(|candidate| {
-        candidate.range.start() < segment.range.end()
-            && candidate.range.end() > segment.range.start()
-    })
+/// Whether a segment of `chunk` that claims time overlaps `segment`: what rule
+/// 1 asks of the owning chunk before it drops another chunk's copy.
+fn claims_time_over(chunk: &ChunkSegments, segment: &AsrSegmentDraft) -> bool {
+    chunk
+        .segments
+        .iter()
+        .enumerate()
+        .any(|(position, candidate)| {
+            candidate.range.start() < segment.range.end()
+                && candidate.range.end() > segment.range.start()
+                && !repeats_the_segment_before(chunk, position)
+        })
+}
+
+/// Whether the segment at `position` of `chunk` repeats the segment just before
+/// it in the same chunk: the same normalised words, at least
+/// [`MIN_SEAM_DUPLICATE_WORDS`] of them, compared as rule 3 compares them (one
+/// inner word may differ among [`MIN_FUZZY_SEAM_WORDS`] or more). Such a segment
+/// **claims no time** in rules 1 and 2 (#485, the maintainer's decision of
+/// 2026-10-20): it does not make the owning chunk count as having heard
+/// something at its time, and it does not stand in for a neighbour's segment cut
+/// at a window edge. It is still kept by its own chunk as any segment is.
+///
+/// Why. A recogniser that loops writes the sentence it just wrote again, over
+/// the time in which the next words were said (RM09 at 925 to 930 s: the next
+/// chunk's words there were dropped by rule 1 because the repeated copy owned
+/// the time, and the guard saw no hole because the copy covered it). The rule
+/// only lets the other chunk's words be kept as well; it removes nothing. A
+/// speaker who says the same thing twice keeps both segments, and where the
+/// neighbour chunk also heard the second time it is kept too, a visible repeat.
+/// Segments that only share their first words, or with fewer than
+/// [`MIN_SEAM_DUPLICATE_WORDS`] words, are not repeats.
+fn repeats_the_segment_before(chunk: &ChunkSegments, position: usize) -> bool {
+    let Some(before) = position
+        .checked_sub(1)
+        .and_then(|before| chunk.segments.get(before))
+    else {
+        return false;
+    };
+    let Some(segment) = chunk.segments.get(position) else {
+        return false;
+    };
+    let words = normalized_words(segment.text.text());
+    words.len() >= MIN_SEAM_DUPLICATE_WORDS
+        && same_seam_words(&normalized_words(before.text.text()), &words)
 }
 
 /// Each chunk's `[start, end)` core: overlap midpoints to overlap midpoints.
@@ -2050,10 +2094,11 @@ fn covering(
         .segments
         .iter()
         .enumerate()
-        .filter(|(_, candidate)| {
+        .filter(|(position, candidate)| {
             candidate.range.start().as_micros() <= middle
                 && candidate.range.end().as_micros() > middle
                 && !cut_at(chunks, neighbour, candidate, facing)
+                && !repeats_the_segment_before(&chunks[neighbour], *position)
         })
         .map(|(position, _)| (neighbour, position))
         .collect()

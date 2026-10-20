@@ -813,7 +813,10 @@ neither the first nor the last compared may differ, because two chunks often wri
 else is kept covers its time to within the tolerance**; otherwise it is kept whole and its words stand twice. Up to `0.2.2` such a
 copy was dropped whatever its time, so a restored copy that carried new time, or one the guard had exposed to the rule, could leave
 a stretch with no segment that `search` called transcribed. A repeat inside one chunk, or between chunks that are not consecutive,
-is not looked for. In a synthetic simulation by a reviewer (not in the repository, and not measured on real recordings) lost words fell
+is not looked for. **Since `0.2.3` (#485, the maintainer's decision of 2026-10-20) a segment that repeats the one before it in
+its own chunk** (the same words, two or more, compared as the repeat rule compares them) **claims no time**: a recogniser that
+loops over the time of the next words no longer makes the merge drop what the neighbour chunk heard there. The repeated copy
+stays, a visible repeat; a speaker who says the same thing twice keeps both segments. In a synthetic simulation by a reviewer (not in the repository, and not measured on real recordings) lost words fell
 by about 98 per cent while repeated words rose several-fold, and the output often differed from the earlier merge's where that
 had lost no word. Where rules 1 to 3 alone leave no hole beyond the tolerance in the union, the result is theirs (a test holds
 that against a frozen copy of them); where they leave one, the guard adds segments to what rules 1 and 2 keep, and the repeat rule,

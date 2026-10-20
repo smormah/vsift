@@ -85,6 +85,89 @@ function segmentFingerprints(segments) {
       crypto.createHash('sha256').update(String(segment.text), 'utf8').digest('hex').slice(0, 16),
     ]);
 }
+
+/**
+ * The most source time a run may keep the transcript segments of, per item
+ * (#485): two minutes, enough to read a seam or two, never a whole recording.
+ */
+const MAX_KEPT_SEGMENT_US = 120 * SECOND;
+/** The most ranges one item may keep segments of (#485). */
+const MAX_KEPT_SEGMENT_RANGES = 4;
+
+/**
+ * Whether an item's transcript segments may leave the run (#485): the same rule
+ * as for crops, never a private item's and only under a public-domain or open
+ * licence, because the text is the recording's words.
+ * @param {object} item
+ */
+function mayKeepSegments(item) {
+  return mayKeepCrops(item);
+}
+
+/**
+ * Reads the campaign's `--keep-segments` values, `RMnn:<from>-<to>` in whole
+ * seconds, into ranges by item (#485). A private item's id (`Pnn`) is refused
+ * here, as is a range that is empty or reversed, more than
+ * `MAX_KEPT_SEGMENT_RANGES` ranges of one item, or more than
+ * `MAX_KEPT_SEGMENT_US` of one item in all.
+ * @param {string[]} values
+ * @returns {Map<string, Array<{ from_us: number, to_us: number }>>}
+ */
+function parseKeepSegments(values) {
+  const byItem = new Map();
+  for (const value of values) {
+    const match = /^(RM[0-9]{2}):([0-9]{1,6})-([0-9]{1,6})$/.exec(String(value));
+    if (!match) throw new Error(`--keep-segments ${value}: write RMnn:<from>-<to> in whole seconds, for a public item`);
+    const [, id, from, to] = match;
+    const range = { from_us: Number(from) * SECOND, to_us: Number(to) * SECOND };
+    if (range.to_us <= range.from_us) throw new Error(`--keep-segments ${value}: the range is empty or reversed`);
+    const list = byItem.get(id) || [];
+    list.push(range);
+    if (list.length > MAX_KEPT_SEGMENT_RANGES) throw new Error(`--keep-segments: at most ${MAX_KEPT_SEGMENT_RANGES} ranges of ${id}`);
+    if (list.reduce((total, entry) => total + entry.to_us - entry.from_us, 0) > MAX_KEPT_SEGMENT_US) {
+      throw new Error(`--keep-segments: at most ${MAX_KEPT_SEGMENT_US / SECOND} s of ${id} in all`);
+    }
+    byItem.set(id, list);
+  }
+  return byItem;
+}
+
+/**
+ * Writes the segments of both revisions that overlap `ranges` to
+ * `<folder>/kept-segments/segments.json`, with the item's attribution and
+ * licence beside them, for a person reading a seam finding (#485): each
+ * segment's times, its chunk and that chunk's audio window, the recogniser's
+ * own start and end in the chunk, whether it was carried from the other
+ * revision, and its text as VSift returned it. Returns what the report lists.
+ * The caller decides whether the item may keep text (`mayKeepSegments`).
+ */
+function keepSegments(item, ranges, revisions, folder, writeFile) {
+  const overlapping = (list) => list
+    .filter((segment) => ranges.some((range) => segment.start_us < range.to_us && range.from_us < segment.end_us))
+    .map((segment) => {
+      const alignment = segment.alignment || {};
+      return {
+        segment_id: segment.segment_id || null,
+        start_us: segment.start_us,
+        end_us: segment.end_us,
+        chunk: Number.isInteger(alignment.chunk_index) ? alignment.chunk_index : null,
+        chunk_audio_us: Number.isInteger(alignment.chunk_audio_start_us) ? [alignment.chunk_audio_start_us, alignment.chunk_audio_end_us] : null,
+        provider_us: Number.isInteger(alignment.provider_start_us) ? [alignment.provider_start_us, alignment.provider_end_us] : null,
+        carried: Boolean(segment.carried_from),
+        text: segment.text,
+      };
+    });
+  const kept = { whole: overlapping(revisions.whole), shifted: overlapping(revisions.shifted) };
+  const where = path.join(folder, 'kept-segments');
+  fs.mkdirSync(where, { recursive: true });
+  writeFile(path.join(where, 'segments.json'), `${JSON.stringify({ item: item.id, attribution: item.attribution, licence: item.licence, ranges, ...kept }, null, 1)}
+`);
+  writeFile(path.join(where, 'ATTRIBUTION.txt'), `${item.attribution}
+Licence: ${item.licence.id} (${item.licence.url})
+Transcript segments of ${item.id} as VSift recognised them, for a person reading a seam finding (#485).
+`);
+  return { file: `${item.id}/kept-segments/segments.json`, ranges, whole: kept.whole.length, shifted: kept.shifted.length };
+}
 /** A recording longer than this is not investigated: the campaign is for short real recordings. */
 const MAX_DURATION_US = 4 * 60 * 60 * SECOND;
 
@@ -384,6 +467,11 @@ function investigate(item, file, run, where) {
 `);
         report.measurements.revisions_file = `${item.id}/revisions.json`;
       }
+      // The segments a person asked to read (#485): a public, openly licensed item only.
+      const asked = (where.keepSegments && where.keepSegments.get && where.keepSegments.get(item.id)) || [];
+      if (asked.length > 0 && mayKeepSegments(item)) {
+        report.measurements.kept_segments = keepSegments(item, asked, { whole: a.segments, shifted: b.segments }, where.folder, writeFile);
+      }
 
       const worst = [...seamsOfA.lost_runs, ...seamsOfB.lost_runs].sort((x, y) => y.words - x.words)[0];
       const firstSeam = checks.seams(checks.chunkPlan(a.segments))[0];
@@ -645,4 +733,4 @@ function markdown(run) {
   return lines.join('\n');
 }
 
-module.exports = { KEPT_CROPS_PER_ITEM, KEPT_CROPS_PER_RUN, RECORDED_CPU_FLAGS, mayKeepCrops, SECOND, setup, investigate, privateReport, markdown, measurementsOnly, shiftPoint, mediaState, runnerIdentity, segmentFingerprints };
+module.exports = { KEPT_CROPS_PER_ITEM, KEPT_CROPS_PER_RUN, MAX_KEPT_SEGMENT_US, MAX_KEPT_SEGMENT_RANGES, RECORDED_CPU_FLAGS, mayKeepCrops, mayKeepSegments, parseKeepSegments, SECOND, setup, investigate, privateReport, markdown, measurementsOnly, shiftPoint, mediaState, runnerIdentity, segmentFingerprints };
