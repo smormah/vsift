@@ -251,6 +251,23 @@ Real-time factor (`base`) 0.243 and 0.264, peak memory 316 and 336 MiB.
   `[("snr20", Some(1_000)), ("snr10", Some(1_000)), ("snr05", Some(1_500))]`; the test
   fails when `base` exceeds a limit, and its report says `"gated": true` with `"met"`.
 
+### The gate's first run (2026-10-20)
+
+[Run 39468148258](https://github.com/smormah/vsift/actions/runs/39468148258) (`P07 local ASR` on
+the branch rebased onto `main` at `b417d8d4`, head `acf35944`; both jobs green; windows-2025
+on an AMD Family 25 Model 17) gated every noisy level for `base` and met each limit:
+
+| `base` | `clean` (not gated) | `snr20` (<= 10%) | `snr10` (<= 10%) | `snr05` (<= 15%) |
+| --- | ---: | ---: | ---: | ---: |
+| Ubuntu | 4.90% | 5.33% met | 4.47% met | 7.24% met |
+| Windows | 4.90% | 5.33% met | 5.11% met | 7.24% met |
+
+`base_q5_1` (reported only) gave 4.90 to 5.33% at 20 and 10 dB and 7.24 to 7.67% at 5 dB.
+The rates moved by at most two errors a level from the first run, on other CPUs (L-023).
+Over noise alone, `base_q5_1` on Windows wrote a **140-word repetition loop** at 10 dB ("I'm
+going to be a little bit more patient." over and over, in one 28 s window), and `base`
+wrote only exclamation marks at 5 dB, which the word count records as 0 words (L-199).
+
 ### Decision (maintainer, 2026-10-20, recorded on #150)
 
 1. **Gate A.** For `base`, the noisy-speech set's pooled word error rate is gated per
