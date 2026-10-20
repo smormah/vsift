@@ -1024,7 +1024,7 @@ async fn noisy_speech_set(
             ));
         }
         println!(
-            "  noisy-speech {level:>6}: WER {:>7} over {} words ({}), critical terms {}/{terms} found, missed {missed:?}",
+            "  noisy-speech {level:>6}: WER {:>7} over {} words ({}), {}, critical terms {}/{terms} found, missed {missed:?}",
             percent(pooled.wer_basis_points()),
             pooled.reference_words,
             by_language
@@ -1035,6 +1035,11 @@ async fn noisy_speech_set(
                 ))
                 .collect::<Vec<_>>()
                 .join(", "),
+            match (limit, met) {
+                (Some(limit), Some(true)) => format!("gated <= {}: met", percent(limit)),
+                (Some(limit), _) => format!("gated <= {}: NOT met", percent(limit)),
+                (None, _) => String::from("not gated"),
+            },
             terms - missed.len(),
         );
         level_reports.push(json!({
