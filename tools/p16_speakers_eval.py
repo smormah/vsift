@@ -1025,11 +1025,12 @@ def run_candidate(candidate: Candidate, tools: Path, inventory: dict, wav: Path,
     elif candidate.engine == "tdrz":
         if whisper_cli is None or (speakers is not None and speakers != 2):
             return None, {"skipped": "tinydiarize marks turns only; scored for two speakers"}
-        prefix = work / f"{wav.stem}.tdrz"
+        prefix = work / f"{wav.stem}-tdrz"
         argv = [str(whisper_cli), "-m", str(tools / "models" / TINYDIARIZE.name), "-f", str(wav), "-l", "en",
                 "-t", str(THREADS * 2), "-tdrz", "-oj", "-of", str(prefix), "-np"]
         measured = run_measured(argv)
-        path = prefix.with_suffix(".json")
+        # whisper-cli appends ".json" to the -of prefix.
+        path = prefix.parent / f"{prefix.name}.json"
         turns = alternating_turns(parse_whisper_json(path.read_text(encoding="utf-8", errors="replace"))) \
             if measured.returncode == 0 and path.is_file() else None
     else:
@@ -1043,12 +1044,13 @@ def run_candidate(candidate: Candidate, tools: Path, inventory: dict, wav: Path,
 
 
 def transcribe(whisper_cli: Path, model: Path, wav: Path, work: Path) -> list[dict]:
-    prefix = work / f"{wav.stem}.whisper"
+    prefix = work / f"{wav.stem}-whisper"
     measured = run_measured([str(whisper_cli), "-m", str(model), "-f", str(wav), "-l", "en", "-t", str(THREADS * 2),
                              "-oj", "-of", str(prefix), "-np"])
-    path = prefix.with_suffix(".json")
+    path = prefix.parent / f"{prefix.name}.json"
     if measured.returncode != 0 or not path.is_file():
-        raise EvaluationError(f"whisper.cpp could not transcribe {wav.name}")
+        raise EvaluationError(f"whisper.cpp could not transcribe {wav.name} (exit {measured.returncode}): "
+                              f"{measured.stderr[-600:]}")
     return parse_whisper_json(path.read_text(encoding="utf-8", errors="replace"))
 
 
