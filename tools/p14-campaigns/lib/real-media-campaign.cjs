@@ -305,6 +305,8 @@ function investigate(item, file, run, where) {
       report.measurements.seams_of_whole_run = seamsOfA;
       report.measurements.seams_of_shifted_run = seamsOfB;
       report.measurements.timing_differences = checks.timingDifferences(a.segments, b.segments);
+      // How each plan joins two chunks' segments, against one chunk's own joins (#381).
+      report.measurements.seam_joins = { whole_run: checks.seamJoins(a.segments), shifted_run: checks.seamJoins(b.segments) };
       // Two plans with the same seams compare nothing: the check is then not run, and says so.
       const startsA = new Set(checks.seams(checks.chunkPlan(a.segments)).map((seam) => seam.from_us));
       const seamsB = checks.seams(checks.chunkPlan(b.segments));

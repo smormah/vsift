@@ -96,8 +96,12 @@ const SEAM_EDGE_MICROS: u64 = 500_000;
 /// largest value that is safe. The right edge is the mirror image. The overlap
 /// (5 s in the R0 plan) does not enter this bound. A smaller value would be as
 /// safe at the window's edge and would restore more copies that differ by
-/// timestamp noise; whether half a second is the right amount of that noise for
-/// real speech has not been measured. A test finds the largest tolerance for
+/// timestamp noise. **Measured on real speech (#381;
+/// `docs/planning/real-media-set.md` section 14.2):** two chunk plans' copies of
+/// the same text differ by a median of 40 ms, and 15 of 187 seam joins of three
+/// recordings had a gap of up to this tolerance (9 of them up to 0.25 s),
+/// against 2 of 558 joins inside one chunk; what those stretches hold is not
+/// known, so the value stays (known limit L-156). A test finds the largest tolerance for
 /// which two chunk layouts lose nothing beyond a window's edge by binary search,
 /// so it checks the arithmetic of the code against this derivation (a change to
 /// the margin moves it), not the choice.

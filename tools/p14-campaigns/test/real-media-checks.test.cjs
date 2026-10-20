@@ -102,6 +102,29 @@ test('timing differences pair fresh segments of the same text and count those be
   assert.equal(result.end.max_us, 200_000);
 });
 
+test('seam joins count the gaps between segments of two chunks at a seam against the gaps of one chunk (#381)', () => {
+  const segments = run(speech(120), 0, 'a');
+  // A seam join (chunk 0's last to chunk 1's first, at 25 s) with a gap of 0.3 s,
+  // and a gap of 0.2 s between two segments of chunk 1 away from any seam (at 40 s).
+  const gapped = segments.map((segment) => {
+    if (segment.start_us === 25 * SECOND) return { ...segment, start_us: 25_300_000 };
+    if (segment.start_us === 40 * SECOND) return { ...segment, start_us: 40_200_000 };
+    return segment;
+  });
+  const result = checks.seamJoins(gapped);
+  assert.equal(result.seam_joins.bins.up_to_500_ms, 1);
+  assert.deepEqual(result.seam_joins.within_tolerance_at_us, [25 * SECOND]);
+  assert.equal(result.control_joins.bins.up_to_250_ms, 1);
+  assert.ok(result.seam_joins.count >= 4, `${result.seam_joins.count}`);
+  assert.ok(result.seam_joins.within_tolerance_share > 0 && result.seam_joins.within_tolerance_share < 1);
+  // Touching segments are no gap, overlaps are their own bin, and carried text is left out.
+  const plain = checks.seamJoins(segments);
+  assert.equal(plain.seam_joins.within_tolerance_share, 0);
+  assert.equal(plain.seam_joins.bins.touch, plain.seam_joins.count);
+  const overlapping = checks.seamJoins(segments.map((segment) => (segment.start_us === 50 * SECOND ? { ...segment, start_us: 49 * SECOND } : segment)));
+  assert.equal(overlapping.seam_joins.bins.overlap, 1);
+});
+
 test('a coverage statement that adds up passes, and each way of not adding up is named', () => {
   const searched = { from_us: 0, to_us: 100 };
   const good = { searched_range: searched, transcribed_ranges: [{ from_us: 0, to_us: 60 }], untranscribed_ranges: [{ from_us: 60, to_us: 100 }], no_speech_ranges: [{ from_us: 10, to_us: 20 }], ranges_truncated: false };

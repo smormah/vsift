@@ -799,7 +799,8 @@ sentence: no stretch longer than half a second of **the union of every segment t
 covered by no kept segment; since `0.2.3` (#382) that holds after the repeat rule (the rule that removes a seam duplicate by its
 words) too. Half a second is the tolerance, `SEAM_COVERAGE_TOLERANCE_MICROS`, the edge margin: the largest value for which a segment that
 runs past a neighbour window's edge is never lost beyond it, in one configuration worked out in the constant's rustdoc, which is an
-upper bound and not a measurement of real speech. The rule is on the union and not on each segment because a bound per segment
+upper bound and not a measurement of real speech; on three real recordings (#381, `real-media-set.md` section 14.2) it left a
+stretch of up to half a second at 15 of 187 seam joins, and the value stays. The rule is on the union and not on each segment because a bound per segment
 stacks (two dropped copies, each leaving the tolerance at ends that face each other, leave twice of it). A segment that the earlier
 rules dropped is **restored**, whole, with its own range and alignment, as many as it takes to close each hole in the order the
 rustdoc gives. **It judges time and not words**, so it can restore a copy whose words the kept neighbour also wrote, and then the
