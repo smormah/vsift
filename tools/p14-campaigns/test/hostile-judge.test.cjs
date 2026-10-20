@@ -76,8 +76,19 @@ test('the first remediation of a failed command is read, and nothing else is tak
 });
 
 test('the container\'s own metrics are read from the last line', () => {
-  assert.deepEqual(j.readMetrics(`noise\n${METRICS(2)}\n`), { exit: 1, memoryPeak: 300000000, pidsPeak: 20, oomKills: 2 });
+  // A line of the wrapper before L-194 has no own figures: they read as null.
+  assert.deepEqual(j.readMetrics(`noise\n${METRICS(2)}\n`), { exit: 1, memoryPeak: 300000000, pidsPeak: 20, ownPeak: null, anonPeak: null, fileEnd: null, limitHits: 0, oomKills: 2 });
   assert.equal(j.readMetrics('nothing here'), null);
+});
+
+test('the wrapper\'s own figures tell VSift\'s memory from the page cache (L-194)', () => {
+  const line = 'P14-METRICS exit=0 memory_peak=1073741824 pids_peak=7 own_peak=8388608 anon_peak=9437184 file_end=1048576000 memory_events=low 0,high 0,max 412,oom 0,oom_kill 0,oom_group_kill 0,';
+  assert.deepEqual(j.readMetrics(`${line}\n`), { exit: 0, memoryPeak: 1073741824, pidsPeak: 7, ownPeak: 8388608, anonPeak: 9437184, fileEnd: 1048576000, limitHits: 412, oomKills: 0 });
+  // A peak at the limit is reclaim, not a finding; non-cache memory above 512 MiB or an OOM kill is (L-194).
+  const verdict = j.judge({ spec: { id: 'x', expect: 'any' }, op: 'ingest', first: true, run: { code: 0, stdout: JSON.stringify({ status: 'complete', data: {} }), stderr: `${line}\n`, durationMs: 2000, timedOut: false, oomKilled: false, network: 'none' }, canaries: [] });
+  assert.equal(verdict.ok, true);
+  assert.equal(j.readMetrics(line.replace('own_peak=8388608', 'own_peak=0')).ownPeak, 0);
+  assert.equal(j.readMetrics(line.replace('file_end=1048576000', 'file_end=unknown')).fileEnd, null);
 });
 
 test('raw control characters are found, JSON-escaped ones are not', () => {
@@ -114,7 +125,7 @@ test('a hang, an out-of-memory, too much memory, too many processes and a networ
   assert.match(findings({ oomKilled: true }), /ran out of memory/);
   assert.match(findings({ code: 137 }), /ran out of memory/);
   assert.match(findings({ stderr: `${METRICS(1)}\n` }), /ran out of memory/);
-  assert.match(findings({ stderr: 'P14-METRICS exit=1 memory_peak=2000000000 pids_peak=20 memory_events=\n' }), /above the 1024 MiB limit/);
+  assert.match(findings({ stderr: 'P14-METRICS exit=1 memory_peak=900000000 pids_peak=20 own_peak=9000000 anon_peak=600000000 file_end=0 memory_events=max 0,oom_kill 0,\n' }), /non-cache memory reached 572 MiB, above the 512 MiB bound/);
   assert.match(findings({ stderr: 'P14-METRICS exit=1 memory_peak=1 pids_peak=500 memory_events=\n' }), /500 processes/);
   assert.match(findings({ network: 'bridge' }), /network was bridge/);
 });
@@ -154,4 +165,18 @@ test('a job result carries its failure code in its data', () => {
   assert.equal(j.codeOf({ status: 'failed', data: { failure: { code: 'INVALID_ARGUMENT' } } }), 'INVALID_ARGUMENT');
   assert.equal(j.codeOf({ error: { code: 'RESOURCE_LIMIT' } }), 'RESOURCE_LIMIT');
   assert.equal(j.codeOf(null), null);
+});
+
+test('RQ-10 judges non-cache memory against 512 MiB, not the container peak (the maintainer, 2026-10-19, L-194)', () => {
+  const judged = (line) => j.judge({ spec: spec(), op: 'ingest', first: true, run: run({ stderr: `${line}\n` }), canaries: [] });
+  const line = (anon, peak = 1073741824) => `P14-METRICS exit=1 memory_peak=${peak} pids_peak=7 own_peak=9437184 anon_peak=${anon} file_end=1045430272 memory_events=low 0,high 0,max 692,oom 0,oom_kill 0,`;
+  // The 512 MiB copy of run 39224059060: the container at its limit, 1 MiB of non-cache memory.
+  assert.equal(judged(line(1048576)).ok, true);
+  // At the bound it holds; one byte over is a finding, whatever the container's peak.
+  assert.equal(judged(line(512 * 1048576, 600 * 1048576)).ok, true);
+  assert.match(judged(line(512 * 1048576 + 1, 600 * 1048576)).findings.join('; '), /non-cache memory reached 512 MiB, above the 512 MiB bound/);
+  assert.equal(j.BOUNDS.anonBytes, 512 * 1048576);
+  assert.equal(j.BOUNDS.memoryBytes, 1024 * 1048576);
+  // An out-of-memory kill stays a finding.
+  assert.match(judged(line(1048576).replace('oom_kill 0', 'oom_kill 1')).findings.join('; '), /ran out of memory/);
 });

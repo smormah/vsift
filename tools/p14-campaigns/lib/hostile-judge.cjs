@@ -7,9 +7,19 @@
 // time, memory and process bounds, with no network, no file outside the root
 // and nothing a terminal would act on in its output.
 
+/**
+ * The bounds. `memoryBytes` is the container's limit (`--memory 1g`), which
+ * the kernel enforces: reaching it is reclaim of page cache, not a finding,
+ * and going past it is an out-of-memory kill, which is. `anonBytes` is the
+ * bound on the non-cache memory the wrapper samples (`anon_peak`: VSift and
+ * every provider it ran), the maintainer's decision of 2026-10-19 (L-194):
+ * the container's own peak counts the page cache of what an operation reads
+ * and writes, so it reached the limit on a 512 MiB copy that held 9 MiB.
+ */
 const BOUNDS = Object.freeze({
   wallMs: 120_000,
   memoryBytes: 1024 * 1024 * 1024,
+  anonBytes: 512 * 1024 * 1024,
   pids: 128,
 });
 
@@ -17,8 +27,15 @@ const BOUNDS = Object.freeze({
 const FOLLOW_UP_CODES = ['INVALID_ARGUMENT'];
 
 /**
+ * The wrapper's last `P14-METRICS` line (case-wrapper.sh). `memoryPeak` is the
+ * cgroup's high-water mark, page cache included (L-194); `ownPeak` (the
+ * command's own resident high-water mark), `anonPeak` (the cgroup's sampled
+ * anonymous memory), `fileEnd` (the page cache charged at the end) and
+ * `limitHits` (how often the cgroup reached its limit and the kernel had to
+ * reclaim) say what of it the command held. A line of an older wrapper lacks
+ * them, and they are null.
  * @param {string} stderr
- * @returns {{ exit: number|null, memoryPeak: number|null, pidsPeak: number|null, oomKills: number|null }|null}
+ * @returns {{ exit: number|null, memoryPeak: number|null, pidsPeak: number|null, ownPeak: number|null, anonPeak: number|null, fileEnd: number|null, limitHits: number|null, oomKills: number|null }|null}
  */
 function readMetrics(stderr) {
   const lines = String(stderr).split('\n').filter((line) => line.startsWith('P14-METRICS '));
@@ -29,8 +46,20 @@ function readMetrics(stderr) {
     return found ? Number(found[1]) : null;
   };
   const events = /memory_events=(.*)$/.exec(line);
-  const oom = events ? /oom_kill (\d+)/.exec(events[1]) : null;
-  return { exit: number('exit'), memoryPeak: number('memory_peak'), pidsPeak: number('pids_peak'), oomKills: oom ? Number(oom[1]) : null };
+  const event = (name) => {
+    const found = events ? new RegExp(`(?:^|,)${name} (\\d+)`).exec(events[1]) : null;
+    return found ? Number(found[1]) : null;
+  };
+  return {
+    exit: number('exit'),
+    memoryPeak: number('memory_peak'),
+    pidsPeak: number('pids_peak'),
+    ownPeak: number('own_peak'),
+    anonPeak: number('anon_peak'),
+    fileEnd: number('file_end'),
+    limitHits: event('max'),
+    oomKills: event('oom_kill'),
+  };
 }
 
 /** Raw bytes a terminal would act on: C0 controls but tab and line feed, DEL, and C1 controls. */
@@ -94,7 +123,7 @@ function judge(o) {
   if (o.run.timedOut) findings.push(`did not finish within ${BOUNDS.wallMs / 1000} s (a hang)`);
   else if (o.run.durationMs > BOUNDS.wallMs) findings.push(`took ${Math.round(o.run.durationMs / 1000)} s, above the ${BOUNDS.wallMs / 1000} s bound`);
   if (o.run.oomKilled || (metrics && metrics.oomKills > 0) || (o.run.code === 137 && !o.run.timedOut)) findings.push('the container ran out of memory');
-  if (metrics && metrics.memoryPeak !== null && metrics.memoryPeak > BOUNDS.memoryBytes) findings.push(`memory peaked at ${Math.round(metrics.memoryPeak / 1048576)} MiB, above the ${BOUNDS.memoryBytes / 1048576} MiB limit`);
+  if (metrics && metrics.anonPeak !== null && metrics.anonPeak > BOUNDS.anonBytes) findings.push(`non-cache memory reached ${Math.round(metrics.anonPeak / 1048576)} MiB, above the ${BOUNDS.anonBytes / 1048576} MiB bound`);
   if (metrics && metrics.pidsPeak !== null && metrics.pidsPeak > BOUNDS.pids) findings.push(`${metrics.pidsPeak} processes at once, above the ${BOUNDS.pids} limit`);
   if (o.run.network !== null && o.run.network !== 'none') findings.push(`the container's network was ${o.run.network}, not none`);
 

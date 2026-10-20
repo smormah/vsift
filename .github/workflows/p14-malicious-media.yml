@@ -34,6 +34,7 @@ on:
     paths:
       - .github/workflows/p14-malicious-media.yml
       - tools/p14-campaigns/hostile-media.cjs
+      - tools/p14-campaigns/case-wrapper.sh
       - tools/p14-campaigns/lib/hostile-cases.cjs
       - tools/p14-campaigns/lib/hostile-judge.cjs
       - tools/p14-campaigns/lib/mp4.cjs
