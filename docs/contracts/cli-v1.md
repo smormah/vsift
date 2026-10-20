@@ -796,23 +796,28 @@ could drop a segment whole because the neighbouring chunk had a segment that spa
 one ran past the neighbour's end (into audio only its own chunk heard) or began before it; the words in the part the kept
 segment did not have were then in no segment, and `search` still listed the stretch as transcribed. **The rule now**, in one
 sentence: no stretch longer than half a second of **the union of every segment that any chunk's validated output holds** is
-covered by no kept segment, except where the repeat rule (the existing rule that removes a seam duplicate by its words) dropped a
-copy. Half a second is the tolerance, `SEAM_COVERAGE_TOLERANCE_MICROS`, the edge margin: the largest value for which a segment that
+covered by no kept segment; since `0.2.3` (#382) that holds after the repeat rule (the rule that removes a seam duplicate by its
+words) too. Half a second is the tolerance, `SEAM_COVERAGE_TOLERANCE_MICROS`, the edge margin: the largest value for which a segment that
 runs past a neighbour window's edge is never lost beyond it, in one configuration worked out in the constant's rustdoc, which is an
 upper bound and not a measurement of real speech. The rule is on the union and not on each segment because a bound per segment
 stacks (two dropped copies, each leaving the tolerance at ends that face each other, leave twice of it). A segment that the earlier
 rules dropped is **restored**, whole, with its own range and alignment, as many as it takes to close each hole in the order the
 rustdoc gives. **It judges time and not words**, so it can restore a copy whose words the kept neighbour also wrote, and then the
-same words stand twice where nothing was lost: **a repeat is visible, a hole is not**, and the fix errs towards repeats. The repeat
-rule trims the later copy's leading words (two or more, exactly) and counts `seam_duplicates_removed` only for **one pair per seam**,
-the last kept segment of the earlier chunk and the first of the later one, so a restored segment elsewhere is never trimmed, a repeat
-that differs by a word is never found, and its containment test can drop a restored copy that carries new time, or a copy that
-the guard has exposed to it and the earlier merge kept (the words stay, once, and the stretch of time the copy covered is then in
-no segment). In a synthetic simulation by a reviewer (not in the repository, and not measured on real recordings) lost words fell
+same words stand twice where nothing was lost: **a repeat is visible, a hole is not**, and the fix errs towards repeats. **The
+repeat rule since `0.2.3` (#380, #382)** compares **every pair** of kept segments of consecutive chunks whose times overlap (up to
+`0.2.2` only the last kept segment of the earlier chunk and the first of the later one, so a restored segment elsewhere was never
+trimmed). It trims the later copy's leading words that the earlier one ends with (two or more; among four or more, one word that is
+neither the first nor the last compared may differ, because two chunks often write the same word differently) and counts
+`seam_duplicates_removed` once per trim or drop. A later copy whose words all occur in the earlier one is dropped **only when what
+else is kept covers its time to within the tolerance**; otherwise it is kept whole and its words stand twice. Up to `0.2.2` such a
+copy was dropped whatever its time, so a restored copy that carried new time, or one the guard had exposed to the rule, could leave
+a stretch with no segment that `search` called transcribed. A repeat inside one chunk, or between chunks that are not consecutive,
+is not looked for. In a synthetic simulation by a reviewer (not in the repository, and not measured on real recordings) lost words fell
 by about 98 per cent while repeated words rose several-fold, and the output often differed from the earlier merge's where that
 had lost no word. Where rules 1 to 3 alone leave no hole beyond the tolerance in the union, the result is theirs (a test holds
-that against a frozen copy of them); where they leave one, the guard adds segments to what rules 1 and 2 keep, and **the repeat rule,
-which runs after it, can then drop a segment that the earlier merge kept**, so "only adds" holds where that rule does not act. A
+that against a frozen copy of them); where they leave one, the guard adds segments to what rules 1 and 2 keep, and the repeat rule,
+which runs after it, can then trim or drop a segment that the earlier merge kept (never leaving a hole beyond the tolerance), so
+"only adds" holds where that rule does not act. A
 run in which no *words* were lost may still change, because time and words are not the same. Up to the
 tolerance can still be missing at the end of a dropped copy (about one word), with no sign. Nothing new is reported for what the
 merge restores: there is no new warning, outcome or reason for it.

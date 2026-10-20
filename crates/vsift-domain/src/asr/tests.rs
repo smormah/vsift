@@ -1265,10 +1265,12 @@ fn an_overrunning_final_segment_of_a_chunk_stitches_without_a_gap_or_a_repeat() 
     Ok(())
 }
 
-/// T-03: identical and time-shifted copies of seam text are kept once.
+/// T-03: identical and time-shifted copies of seam text are kept once, when
+/// what is kept covers the dropped copy's time to within the tolerance (#382).
 #[test]
 fn seam_duplicates_are_removed() -> TestResult {
-    // Both chunks own a copy by midpoint (26.4 s and 27.8 s straddle 27.5 s).
+    // Both chunks own a copy by midpoint (26.4 s and 27.5 s, the boundary of
+    // the cores); the later copy ends 0.5 s after the earlier one, the tolerance.
     let first = draft(
         0,
         (0, 30 * SECOND),
@@ -1279,8 +1281,8 @@ fn seam_duplicates_are_removed() -> TestResult {
     let second = draft(
         1,
         (25 * SECOND, 55 * SECOND),
-        26_600_000,
-        29_000_000,
+        27_000_000,
+        28_000_000,
         "service is healthy",
     )?;
     let (kept, duplicates) = texts(&[first, second]);
@@ -1299,6 +1301,137 @@ fn seam_duplicates_are_removed() -> TestResult {
     let (kept, duplicates) = texts(&[first, second]);
     assert_eq!(kept, ["the build is", "2048."]);
     assert_eq!(duplicates, 1);
+    Ok(())
+}
+
+/// #382: a later copy whose words are all in the earlier segment is kept whole
+/// when dropping it would leave more than the tolerance of its time in no kept
+/// segment. Here the two chunks end the same sentence 1.5 s apart (27.5 s and
+/// 29.0 s): until #382 the later copy was dropped and 27.5 to 29.0 s was in no
+/// segment, called transcribed; now the words stand twice, which can be seen.
+#[test]
+fn a_contained_copy_that_carries_time_beyond_the_tolerance_is_kept() -> TestResult {
+    let first = draft(
+        0,
+        (0, 30 * SECOND),
+        25_300_000,
+        27_500_000,
+        "Service is healthy.",
+    )?;
+    let second = draft(
+        1,
+        (25 * SECOND, 55 * SECOND),
+        26_600_000,
+        29_000_000,
+        "service is healthy",
+    )?;
+    let (kept, duplicates) = texts(&[first, second]);
+    assert_eq!(kept, ["Service is healthy.", "service is healthy"]);
+    assert_eq!(duplicates, 0);
+    Ok(())
+}
+
+/// #380: a repeat that differs by one word inside a run of four or more is
+/// found; one that differs at the first or last compared word, or in a run of
+/// three, is not, because that is more likely a different word than the same
+/// word heard differently.
+#[test]
+fn a_repeat_that_differs_by_one_inner_word_is_trimmed() -> TestResult {
+    let seam = |earlier: &str, later: &str| -> Built<(Vec<String>, u32)> {
+        let first = draft(0, (0, 30 * SECOND), 22 * SECOND, 27_500_000, earlier)?;
+        let second = draft(
+            1,
+            (25 * SECOND, 55 * SECOND),
+            26 * SECOND,
+            31 * SECOND,
+            later,
+        )?;
+        Ok(texts(&[first, second]))
+    };
+    // "settings" and "setting": five words, the third different.
+    assert_eq!(
+        seam(
+            "so we open the settings page and",
+            "open the setting page and click save"
+        )?,
+        (
+            vec![
+                "so we open the settings page and".to_owned(),
+                "click save".to_owned()
+            ],
+            1
+        )
+    );
+    // Different at the last compared word: not a repeat.
+    let (kept, duplicates) = seam("so we open the file", "we open the door and press save")?;
+    assert_eq!(kept.len(), 2);
+    assert_eq!(kept[1], "we open the door and press save");
+    assert_eq!(duplicates, 0);
+    // Three words, one different: not a repeat.
+    let (kept, duplicates) = seam("press the red", "press a red button")?;
+    assert_eq!(kept[1], "press a red button");
+    assert_eq!(duplicates, 0);
+    // A whole copy with one inner word different is dropped when its time is
+    // covered (here it lies inside the earlier segment).
+    let first = draft(
+        0,
+        (0, 30 * SECOND),
+        22 * SECOND,
+        29 * SECOND,
+        "then press the blue save button",
+    )?;
+    let second = draft(
+        1,
+        (25 * SECOND, 55 * SECOND),
+        27_200_000,
+        28_900_000,
+        "press the new save button",
+    )?;
+    assert_eq!(
+        texts(&[first, second]),
+        (vec!["then press the blue save button".to_owned()], 1)
+    );
+    Ok(())
+}
+
+/// #380: every overlapping pair of kept segments of consecutive chunks is
+/// compared, not only the last of the earlier chunk and the first of the later
+/// one. Here the later chunk's first kept segment ("um") shares nothing with the
+/// earlier chunk's last, so the old rule stopped there, and its second one
+/// repeats the earlier segment's last three words.
+#[test]
+fn a_repeat_beyond_the_first_pair_of_a_seam_is_trimmed() -> TestResult {
+    let window_0 = (0, 30 * SECOND);
+    let window_1 = (25 * SECOND, 55 * SECOND);
+    let first = draft(
+        0,
+        window_0,
+        22 * SECOND,
+        29_500_000,
+        "we open the file and press save now",
+    )?;
+    let second = with(
+        draft(1, window_1, 25 * SECOND, 26 * SECOND, "um")?,
+        draft(
+            1,
+            window_1,
+            27 * SECOND,
+            31 * SECOND,
+            "press save now and wait",
+        )?,
+    );
+    let chunks = [first, second];
+    let every: BTreeSet<(usize, usize)> = [(0, 0), (1, 0), (1, 1)].into_iter().collect();
+    let merged_transcript = super::assemble(&chunks, every);
+    let words: Vec<&str> = merged_transcript
+        .segments
+        .iter()
+        .map(|kept| kept.segment.text().text())
+        .collect();
+    assert_eq!(
+        words,
+        ["we open the file and press save now", "um", "and wait"]
+    );
     Ok(())
 }
 
@@ -2056,7 +2189,7 @@ proptest! {
     ///   every segment that one kept, in the same order, and adds only
     ///   segments (it restores, it never removes; **that holds where the repeat
     ///   rule does not act**, and
-    ///   `the_guard_can_expose_a_segment_to_the_repeat_rule_that_the_old_merge_kept`
+    ///   `a_repeat_beyond_the_first_pair_of_a_seam_is_trimmed` (a trim the old rule did not make)
     ///   is a case where it does);
     /// - whatever the merge reports as unplaced is uncovered, long enough to
     ///   report, and inside the (joined) stretches the chunks gave, **and a
@@ -2149,22 +2282,18 @@ proptest! {
         );
     }
 
-    /// #359: the same layouts with a small vocabulary, so that the repeat rule
-    /// (rule 3) acts. The guard's guarantee is on time **before** that rule, and
-    /// the rule decides by words, so what holds after it is weaker, and this is
-    /// the true statement of it:
+    /// #359, #380 and #382: the same layouts with a small vocabulary, so that the
+    /// repeat rule (rule 3) acts. **Since #382 the guard's guarantee holds after
+    /// that rule too**: the rule drops a copy only where what else is kept covers
+    /// its time to within the tolerance, so
     ///
-    /// - before the rule, no stretch of the union longer than the tolerance is
-    ///   covered by no kept segment;
+    /// - no stretch of the union longer than the tolerance is covered by no kept
+    ///   segment, before the rule and after it (before #382 a stretch could be
+    ///   left after it where no word was lost: L-157);
     /// - what the rule takes away is only a segment whose words a kept segment
-    ///   repeats (they occur, in order, inside it);
-    /// - so every stretch of the union longer than the tolerance that no kept
-    ///   segment covers is covered by segments that the rule dropped as repeats,
-    ///   except for pieces of at most the tolerance: **no word is lost, but a
-    ///   stretch of time can be left, which the earlier merge did not leave where
-    ///   it kept that segment** (the register has it as L-157).
+    ///   repeats (they occur, in order, inside it, as rule 3 compares words).
     #[test]
-    fn with_repeated_words_every_hole_is_time_whose_words_a_kept_segment_repeats(
+    fn with_repeated_words_no_hole_is_left_and_only_repeats_are_dropped(
         total_ms in 31_000_u64..=130_000,
         answers in prop::collection::vec(chunk_answer(), 5),
         seeds in prop::collection::vec(0_u8..16, 40),
@@ -2184,33 +2313,33 @@ proptest! {
             prop_assert!(end - start <= SEAM_COVERAGE_TOLERANCE_MICROS);
         }
         let merged_transcript = merge_chunks(chunks);
+        let kept = kept_spans(&merged_transcript.segments);
+        for (start, end) in holes_of_the_union(chunks, &kept) {
+            prop_assert!(
+                end - start <= SEAM_COVERAGE_TOLERANCE_MICROS,
+                "after the repeat rule a hole of {} us at {} us",
+                end - start,
+                start
+            );
+        }
         let repeats = dropped_by_the_repeat_rule(chunks, &before_the_rule, &merged_transcript);
         let kept_words: Vec<Vec<String>> = merged_transcript
             .segments
             .iter()
             .map(|kept| super::normalized_words(kept.segment.text().text()))
             .collect();
-        let mut dropped_time = SpanSet::default();
         for dropped in &repeats {
             let words = super::normalized_words(dropped.text().text());
             let repeated = words.len() >= 2
-                && kept_words
-                    .iter()
-                    .any(|kept| kept.windows(words.len()).any(|window| window == words.as_slice()));
+                && kept_words.iter().any(|kept| {
+                    kept.windows(words.len())
+                        .any(|window| super::same_seam_words(window, &words))
+                });
             prop_assert!(
                 repeated,
                 "the repeat rule dropped {:?}, whose words no kept segment repeats",
                 words
             );
-            dropped_time.insert(span(dropped.range()));
-        }
-        let kept = kept_spans(&merged_transcript.segments);
-        for hole in holes_of_the_union(chunks, &kept) {
-            if hole.1 - hole.0 > SEAM_COVERAGE_TOLERANCE_MICROS {
-                for (start, end) in dropped_time.gaps_within(hole) {
-                    prop_assert!(end - start <= SEAM_COVERAGE_TOLERANCE_MICROS);
-                }
-            }
         }
     }
 }
@@ -2297,9 +2426,10 @@ fn the_generated_layouts_reach_the_guard() -> TestResult {
 }
 
 /// The repeated-vocabulary property is not vacuous either: over a fixed
-/// pseudo-random sweep of its layouts the repeat rule drops segments that the
-/// guard had kept in a real share of them, and in some of those it leaves a
-/// stretch longer than the tolerance in no kept segment (the case of L-157).
+/// pseudo-random sweep of its layouts the repeat rule trims or drops segments
+/// that the guard had kept in a real share of them, and **since #382 it never leaves a
+/// stretch longer than the tolerance in no kept segment** (before, it did in
+/// more than 50 of these layouts: the case of L-157).
 #[test]
 fn the_repeated_vocabulary_layouts_reach_the_repeat_rule() -> TestResult {
     let mut state = 0x2545_f491_4f6c_dd1d_u64;
@@ -2309,7 +2439,7 @@ fn the_repeated_vocabulary_layouts_reach_the_repeat_rule() -> TestResult {
         state ^= state << 17;
         state % bound
     };
-    let (mut dropped, mut left_a_hole) = (0_u32, 0_u32);
+    let (mut dropped, mut acted, mut left_a_hole) = (0_u32, 0_u32, 0_u32);
     for _ in 0..3_000 {
         let total_ms = 31_000 + next(99_000);
         let answers: Vec<ChunkAnswer> = (0..5)
@@ -2335,6 +2465,13 @@ fn the_repeated_vocabulary_layouts_reach_the_repeat_rule() -> TestResult {
         let repeats =
             dropped_by_the_repeat_rule(&layout.chunks, &before_the_rule, &merged_transcript);
         dropped += u32::from(!repeats.is_empty());
+        acted += u32::from(
+            merged_transcript
+                .warnings
+                .as_slice()
+                .iter()
+                .any(|warning| warning.kind() == TranscriptWarningKind::SeamDuplicatesRemoved),
+        );
         let kept = kept_spans(&merged_transcript.segments);
         left_a_hole += u32::from(
             holes_of_the_union(&layout.chunks, &kept)
@@ -2342,8 +2479,11 @@ fn the_repeated_vocabulary_layouts_reach_the_repeat_rule() -> TestResult {
                 .any(|(start, end)| end - start > SEAM_COVERAGE_TOLERANCE_MICROS),
         );
     }
-    assert!(dropped > 100, "{dropped}");
-    assert!(left_a_hole > 50, "{left_a_hole}");
+    // 13 and 86 of these layouts at the change of #380 and #382 (dropping a
+    // copy that carries time is no longer allowed, so drops are rarer).
+    assert!(dropped > 5, "{dropped}");
+    assert!(acted > 50, "{acted}");
+    assert_eq!(left_a_hole, 0);
     Ok(())
 }
 
@@ -2561,18 +2701,17 @@ fn the_guard_takes_the_most_overlapping_segment_first_and_not_the_first_to_start
     Ok(())
 }
 
-/// The guard can expose a segment to the repeat rule that the old merge kept
-/// (#359, review), and the time hole then grows where no word is lost. Chunk 0
+/// The guard no longer exposes a segment to the repeat rule (#382). Chunk 0
 /// (window 0 to 30 s) has 20.0 to 26.9 s "one two three" and 27.0 to 29.5 s
 /// "alpha beta gamma"; chunk 1 (window 25 to 55 s) has 28.0 to 33.0 s "beta
 /// gamma". The old merge keeps 20.0 to 26.9 s and 28.0 to 33.0 s and leaves 27
 /// to 28 s (1 s) in no segment. The guard restores "alpha beta gamma" (it covers
-/// that hole), and then the repeat rule finds that the later copy's words are
-/// inside it and drops 28.0 to 33.0 s: the words "beta gamma" are still there,
-/// once, but 29.5 to 33.0 s (3.5 s) is now in no segment. This pins the
-/// behaviour as it is; the register has it as L-157.
+/// that hole). Until #382 the repeat rule then dropped 28.0 to 33.0 s because its
+/// words are inside the restored segment, and 29.5 to 33.0 s (3.5 s) was in no
+/// segment; now that copy carries time no other segment covers, so it is kept,
+/// and nothing longer than the tolerance is left.
 #[test]
-fn the_guard_can_expose_a_segment_to_the_repeat_rule_that_the_old_merge_kept() -> TestResult {
+fn the_repeat_rule_no_longer_undoes_what_the_guard_restored() -> TestResult {
     let window_0 = (0, 30 * SECOND);
     let window_1 = (25 * SECOND, 55 * SECOND);
     let first = with(
@@ -2604,19 +2743,16 @@ fn the_guard_can_expose_a_segment_to_the_repeat_rule_that_the_old_merge_kept() -
     let new = merge_chunks(&chunks);
     assert_eq!(
         ranges(&new),
-        [(20 * SECOND, 26_900_000), (27 * SECOND, 29_500_000)]
+        [
+            (20 * SECOND, 26_900_000),
+            (27 * SECOND, 29_500_000),
+            (28 * SECOND, 33 * SECOND)
+        ]
     );
-    // The old merge's hole was 1 s (27 to 28 s); the new one's is 3.5 s, and the
-    // words of the segment that was dropped are in a kept one.
     let kept = kept_spans(&new.segments);
     assert_eq!(
-        kept.gaps_within((29_500_000, 33 * SECOND)),
-        [(29_500_000, 33 * SECOND)]
-    );
-    assert!(
-        new.segments
-            .iter()
-            .any(|kept| kept.segment.text().text().contains("beta gamma"))
+        kept.gaps_within((20 * SECOND, 33 * SECOND)),
+        [(26_900_000, 27 * SECOND)]
     );
     Ok(())
 }
@@ -2658,16 +2794,18 @@ fn the_tolerance_does_not_stack_into_a_longer_hole() -> TestResult {
     Ok(())
 }
 
-/// What the guard costs, stated as a test (#359, review): it judges by time and
-/// not by words, so it can restore a copy whose words the kept neighbour also
-/// wrote, and the same words then stand twice where nothing was lost. Here the
-/// two chunks disagree by 1 s on where the same last words end ("the file and
-/// save", 27.5 to 29.4 s in chunk 0 and 27.4 to 28.4 s in chunk 1): the
-/// merge before the guard kept one copy, and the guard restores the other
-/// because 28.4 to 29.4 s is covered by nothing kept, and the repeat rule does
-/// not trim it because it is not the pair of segments that rule compares.
+/// A copy the guard restored is removed by the repeat rule when what is kept
+/// covers its time (#380). The guard judges by time and not by words, so it can
+/// restore a copy whose words the kept neighbour also wrote. Here the two chunks
+/// disagree by 1 s on where the same last words end ("the file and save", 27.5
+/// to 29.4 s in chunk 0 and 27.4 to 28.4 s in chunk 1): the merge before the
+/// guard kept one copy, and the guard restores the other because 28.4 to 29.4 s
+/// is covered by nothing kept. Until #380 the repeat rule compared only the last
+/// kept segment of chunk 0 with the first of chunk 1, which are not this pair,
+/// so the words stood twice; now every overlapping pair is compared, and chunk
+/// 1's copy, whose time the other kept segments cover to within 0.1 s, goes.
 #[test]
-fn a_copy_that_the_kept_neighbour_also_wrote_can_stand_twice() -> TestResult {
+fn a_copy_the_guard_restored_is_removed_when_what_is_kept_covers_its_time() -> TestResult {
     let window_0 = (0, 30 * SECOND);
     let window_1 = (25 * SECOND, 55 * SECOND);
     let first = with(
@@ -2696,7 +2834,12 @@ fn a_copy_that_the_kept_neighbour_also_wrote_can_stand_twice() -> TestResult {
     };
     let chunks = [first, second];
     assert_eq!(copies(&previous_merge_as_transcript(&chunks)), 1);
-    assert_eq!(copies(&merge_chunks(&chunks)), 2);
+    let merged_transcript = merge_chunks(&chunks);
+    assert_eq!(copies(&merged_transcript), 1);
+    let kept = kept_spans(&merged_transcript.segments);
+    for (start, end) in holes_of_the_union(&chunks, &kept) {
+        assert!(end - start <= SEAM_COVERAGE_TOLERANCE_MICROS);
+    }
     Ok(())
 }
 
@@ -2711,25 +2854,23 @@ fn previous_merge_as_transcript(chunks: &[ChunkSegments]) -> super::MergedTransc
     }
 }
 
-/// A limit, stated as a test (#359, review): the repeat rule decides by words,
-/// and can drop a restored copy that carries new time. The later chunk's
-/// 25.00 to 32.44 s ("yes yes") is restored by the guard because 29.5 to
-/// 32.44 s is in no kept segment, and then the repeat rule drops it whole
-/// because its words occur in the earlier segment ("well yes yes okay"). The
-/// merge before the guard lost that time too. It is registered as a known limit.
+/// The repeat rule keeps a restored copy that carries new time (#382). The
+/// later chunk's 25.00 to 32.44 s ("yes yes") is restored by the guard because
+/// 29.5 to 32.44 s is in no kept segment. Its words occur in the earlier segment
+/// ("well yes yes okay"), and until #382 the repeat rule then dropped it whole,
+/// so 29.5 to 32.44 s was in no segment and a search called it transcribed
+/// (L-157); the merge before the guard lost that time too. Now it stays: "yes
+/// yes" may be the same words or said again, and either way nothing is lost.
 #[test]
-fn the_repeat_rule_can_still_drop_a_restored_copy_that_carries_new_time() -> TestResult {
+fn the_repeat_rule_keeps_a_restored_copy_that_carries_new_time() -> TestResult {
     let window_0 = (0, 30 * SECOND);
     let window_1 = (25 * SECOND, 55 * SECOND);
     let first = draft(0, window_0, 22_320_000, 29_500_000, "well yes yes okay")?;
     let second = draft(1, window_1, 25 * SECOND, 32_440_000, "yes yes")?;
     let merged_transcript = merge_chunks(&[first, second]);
-    assert_eq!(merged_transcript.segments.len(), 1);
+    assert_eq!(merged_transcript.segments.len(), 2);
     let kept = kept_spans(&merged_transcript.segments);
-    assert_eq!(
-        kept.gaps_within((29_500_000, 32_440_000)),
-        [(29_500_000, 32_440_000)]
-    );
+    assert_eq!(kept.gaps_within((22_320_000, 32_440_000)), []);
     Ok(())
 }
 
