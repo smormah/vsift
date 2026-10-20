@@ -36,6 +36,10 @@ BASE_FILES = {
         "### L-167\n\n- **Next step:** release the fix.\n"
     ),
     "docs/operations/install.md": "Install guide.\n\nUse the latest version.\n",
+    "docs/planning/p14-agent-trials/README.md": "# Trials\n\nThe latest trial was frozen on `aaaa1111`.\n",
+    "docs/planning/p14-agent-trials/batch-2-0.2.2-rc.1/freeze.json": '{\n  "freeze": "aaaa1111"\n}\n',
+    "docs/planning/p14-agent-trials/batch-2-0.2.2-rc.1/records/run-1.json": '{\n  "freeze": "aaaa1111"\n}\n',
+    "docs/operations/p14-agent-trials/reading.md": "# Reading\n\nThe reading was made on freeze `aaaa1111`.\n",
 }
 
 
@@ -520,6 +524,129 @@ class ExcusedLineTests(unittest.TestCase):
         code, output = self.repo.check(records=True)
         self.assertEqual(code, window.EXIT_MISSING, output)
 
+    # Excuse 3 for the trial records (#481, run 39237738669): the reading and README pages name the
+    # trial freeze, and a later freeze made `main` rewrite those lines while the branch kept its own.
+
+    def freeze_rewritten_on_both_sides(self, path: str, release_text: str, main_text: str, old: str) -> None:
+        self.repo.on("release/0.2.x")
+        self.repo.edit(path, old, release_text)
+        self.release("The candidate's trial records (#10)")
+        self.repo.on("main")
+        self.repo.edit(path, old, main_text)
+        self.main_commit("The new trial freeze on main (#12)")
+
+    def test_a_trial_page_naming_a_freeze_that_main_rewrote_is_satisfied(self) -> None:
+        page = "docs/planning/p14-agent-trials/README.md"
+        self.freeze_rewritten_on_both_sides(
+            page,
+            "The latest trial was frozen on `10180cd8` (0.2.2-rc.1).",
+            "The latest trial was frozen on `30293090` (0.2.3).",
+            "The latest trial was frozen on `aaaa1111`.",
+        )
+        code, output = self.repo.check(records=True)
+        self.assertEqual(code, window.EXIT_OK, output)
+        self.assertIn(f"{page}: 1 added line(s) rewritten on main", output)
+
+    def test_a_trial_page_in_a_subfolder_is_satisfied_too(self) -> None:
+        page = "docs/planning/p14-agent-trials/batch-2-reading-0.2.2-rc.1.md"
+        self.repo.on("main")
+        self.repo.write(page, "# Reading\n\nThe reading was made on freeze `aaaa1111`.\n")
+        self.repo.commit("A reading on the base (#2)", BASE_TIME)
+        self.repo.git("branch", "-f", "release/0.2.x")
+        self.freeze_rewritten_on_both_sides(
+            page,
+            "The reading was made on freeze `10180cd8`.",
+            "The reading was made on freeze `30293090`.",
+            "The reading was made on freeze `aaaa1111`.",
+        )
+        code, output = self.repo.check(records=True)
+        self.assertEqual(code, window.EXIT_OK, output)
+
+    def test_a_trial_page_line_that_main_never_took_is_still_reported(self) -> None:
+        self.repo.on("release/0.2.x")
+        self.repo.edit(
+            "docs/planning/p14-agent-trials/README.md",
+            "The latest trial was frozen on `aaaa1111`.",
+            "The latest trial was frozen on `10180cd8`.",
+        )
+        self.release("The candidate's trial records (#10)")
+        self.repo.on("main")
+        code, output = self.repo.check(records=True)
+        self.assertEqual(code, window.EXIT_MISSING, output)
+        self.assertIn("docs/planning/p14-agent-trials/README.md (record)", output)
+
+    def test_a_trial_freeze_file_is_still_compared_exactly(self) -> None:
+        freeze = "docs/planning/p14-agent-trials/batch-2-0.2.2-rc.1/freeze.json"
+        self.freeze_rewritten_on_both_sides(
+            freeze, '"freeze": "10180cd8"', '"freeze": "30293090"', '"freeze": "aaaa1111"'
+        )
+        code, output = self.repo.check(records=True)
+        self.assertEqual(code, window.EXIT_MISSING, output)
+        self.assertIn(f"{freeze} (record)", output)
+        self.assertNotIn("rewritten on main", output)
+
+    def test_a_trial_run_record_is_still_compared_exactly(self) -> None:
+        record = "docs/planning/p14-agent-trials/batch-2-0.2.2-rc.1/records/run-1.json"
+        self.freeze_rewritten_on_both_sides(
+            record, '"freeze": "10180cd8"', '"freeze": "30293090"', '"freeze": "aaaa1111"'
+        )
+        code, output = self.repo.check(records=True)
+        self.assertEqual(code, window.EXIT_MISSING, output)
+        self.assertIn(f"{record} (record)", output)
+
+    def test_a_page_of_the_same_shape_outside_the_planning_folder_is_still_reported(self) -> None:
+        page = "docs/operations/p14-agent-trials/reading.md"
+        self.freeze_rewritten_on_both_sides(
+            page,
+            "The reading was made on freeze `10180cd8`.",
+            "The reading was made on freeze `30293090`.",
+            "The reading was made on freeze `aaaa1111`.",
+        )
+        code, output = self.repo.check()
+        self.assertEqual(code, window.EXIT_MISSING, output)
+        self.assertIn(f"{page} (fix)", output)
+        self.assertNotIn("rewritten on main", output)
+
+    def test_a_trial_page_line_that_main_kept_with_words_added_is_satisfied(self) -> None:
+        page = "docs/planning/p14-agent-trials/README.md"
+        self.repo.on("release/0.2.x")
+        self.repo.edit(
+            page,
+            "The latest trial was frozen on `aaaa1111`.",
+            "The latest trial was frozen on `aaaa1111`.\n\nIt ran under the freeze committed by #435 in [`batch-2/freeze.json`](batch-2/freeze.json), which the cut kept.",
+        )
+        self.release("The candidate's trial records (#10)")
+        self.repo.on("main")
+        self.repo.edit(
+            page,
+            "The latest trial was frozen on `aaaa1111`.",
+            "The latest trial was frozen on `aaaa1111`.\n\nIt ran under the freeze committed by #435 in `batch-2/freeze.json`, kept since 2026-10-19 as [`batch-2/freeze-0.2.2-rc.1.json`](batch-2/freeze-0.2.2-rc.1.json), which the cut kept.",
+        )
+        self.main_commit("The moved freeze on main (#12)")
+        code, output = self.repo.check(records=True)
+        self.assertEqual(code, window.EXIT_OK, output)
+        self.assertIn(f"{page}: 1 added line(s) rewritten on main", output)
+
+    def test_a_trial_page_line_that_main_kept_with_a_word_missing_is_reported(self) -> None:
+        page = "docs/planning/p14-agent-trials/README.md"
+        self.repo.on("release/0.2.x")
+        self.repo.edit(
+            page,
+            "The latest trial was frozen on `aaaa1111`.",
+            "The latest trial was frozen on `aaaa1111`.\n\nIt ran under the freeze committed by #435 and the cut kept it byte for byte.",
+        )
+        self.release("The candidate's trial records (#10)")
+        self.repo.on("main")
+        self.repo.edit(
+            page,
+            "The latest trial was frozen on `aaaa1111`.",
+            "The latest trial was frozen on `aaaa1111`.\n\nIt ran under the freeze committed by #435 and the cut changed it byte for byte.",
+        )
+        self.main_commit("The reworded freeze sentence on main (#12)")
+        code, output = self.repo.check(records=True)
+        self.assertEqual(code, window.EXIT_MISSING, output)
+        self.assertIn(f"{page} (record)", output)
+
     # What stays strict.
 
     def test_a_code_line_reworded_on_main_is_still_reported(self) -> None:
@@ -601,18 +728,39 @@ class ClassificationTests(unittest.TestCase):
             'const V: &str = "0.2.2";',
         )
 
-    def test_the_rewritten_record_pages_are_the_changelog_and_the_planning_pages_only(self) -> None:
-        for path in ("CHANGELOG.md", "docs/planning/known-limits.md", "docs/planning/release-0.2.2.md"):
+    def test_the_rewritten_record_pages_are_the_changelog_the_planning_and_the_trial_pages_only(self) -> None:
+        for path in (
+            "CHANGELOG.md",
+            "docs/planning/known-limits.md",
+            "docs/planning/release-0.2.2.md",
+            "docs/planning/p14-agent-trials/README.md",
+            "docs/planning/p14-agent-trials/batch-2-reading-0.2.2-rc.1.md",
+            "docs/planning/p14-agent-trials/batch-2-0.2.2-rc.1/SUMMARY.md",
+        ):
             self.assertTrue(window.is_rewritten_record(path), path)
         for path in (
             "docs/planning/p14-evidence-ledger.json",
-            "docs/planning/p14-agent-trials/README.md",
+            "docs/planning/p14-agent-trials/batch-2-0.2.2-rc.1/freeze.json",
+            "docs/planning/p14-agent-trials/batch-2-0.2.2-rc.1/records/run-1.json",
+            "docs/planning/p14-agent-trials/batch-2-0.2.2-rc.1/records/notes.md",
+            "docs/planning/other-folder/page.md",
+            "docs/operations/p14-agent-trials/README.md",
             "docs/operations/install.md",
             "npm/vsift-cli/README.md",
             "memory/TODO.md",
             "crates/vsift/src/lib.rs",
         ):
             self.assertFalse(window.is_rewritten_record(path), path)
+
+    def test_words_ignore_link_targets_and_marks_and_a_short_line_is_no_extension(self) -> None:
+        self.assertEqual(
+            window.words("It ran under [`a/freeze.json`](a/freeze.json), which (kept) it."),
+            ["It", "ran", "under", "a/freeze.json", "which", "kept", "it"],
+        )
+        long_line = window.words("one two three four five six seven")
+        self.assertTrue(window.is_extension_of("one two three four five six", [long_line]))
+        self.assertFalse(window.is_extension_of("one two three four six five", [long_line]))
+        self.assertFalse(window.is_extension_of("one two three", [long_line]))
 
     def test_a_lead_ignores_list_and_table_markers(self) -> None:
         self.assertEqual(window.lead("- **Next step:** x"), "Next step:** x")

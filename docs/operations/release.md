@@ -1131,13 +1131,21 @@ candidate is an ancestor of the stable commit there.
     still held to `main`); (2) **`memory/TODO.md` and `memory/project_current_status.md`**, which every
     change rewrites, when `main`'s last change to the file is not older than the release commit (a
     newer rewrite; if `main` has not rewritten them since, they are compared line by line); (3) **in
-    `CHANGELOG.md` and the pages directly in `docs/planning/` (the register among them), a line the
-    release commit replaced in place when `main` no longer has the line it replaced, and a new line
-    whose first 60 characters `main` has in a line the cut did not have (the same sentence, reworded)**:
-    a date, a count, a status or a "not published" sentence that both sides rewrote is not reported, a new
-    register entry or bullet that `main` lacks is, and so is a replaced line that `main` kept as the cut had
-    it. Code, configuration, version files, the two shipped documents, the ledger and every other file are
-    compared exactly as before, and the first excuse is the only one that reaches them. None of the three
+    `CHANGELOG.md`, the pages directly in `docs/planning/` (the register among them) and the Markdown
+    pages of the trial records (`docs/planning/p14-agent-trials/` and its subfolders, outside their
+    `records/` folders), a line the release commit replaced in place when `main` no longer has the line
+    it replaced, a new line whose first 60 characters `main` has in a line the cut did not have (the
+    same sentence, reworded), and a new line whose words, in order, `main` has inside a line the cut did
+    not have (the same sentence with words added, such as a link to a file `main` moved; six words at
+    least)**:
+    a date, a count, a status or a "not published" sentence that both sides rewrote is not reported,, and so is a
+    trial reading's or README's line naming the trial freeze or the place of its `freeze.json` (#481: a
+    later freeze made `main` rewrite them, #468; the trial pages are prose work records, while the trials'
+    `freeze.json`, `state`, `summary` and `records/` files are JSON and stay compared exactly). A new
+    register entry or bullet that `main` lacks is reported, and so is a replaced line that `main` kept as
+    the cut had it. Code, configuration, JSON, version files, the two shipped documents, the ledger and every other file
+    (every other folder of `docs/planning/` included) are compared exactly as before, and the first excuse is the
+    only one that reaches them. None of the three
     can hide a missing code fix: a fix's code is in files none of them applies to (or in a commit
     whose later replacement is itself compared), and a fix's own record, its changelog bullet and its
     register entry, stay compared.
