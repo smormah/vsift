@@ -37,10 +37,20 @@
 //! peak memory at most 400 MiB) are evaluated and reported, not enforced,
 //! because they measure the host. The quantized profile is reported only. The
 //! report is written to `.vsift/e2e-runs/p07-asr-qualification-<run>/`.
+//!
+//! The noisy-speech set of issue #150 (`fixtures/corpus/noisy-speech/`) is
+//! measured for every profile too: each English and Spanish passage at the
+//! clean level and with `office-v1` noise at 20, 10 and 5 dB, its word error
+//! rate pooled per level and per language, its critical terms per level, and
+//! the words written over noise alone. For `base` each noisy level's pooled
+//! rate is gated (maintainer decision, 2026-10-20, issue #150): at most 10% at
+//! 20 and 10 dB and 15% at 5 dB (`NOISY_SET_WER_LIMITS_BP`). The clean level,
+//! the critical terms, the noise-only words and `base_q5_1` are reported only.
 
 mod asr_scoring;
 
 use std::{
+    collections::BTreeMap,
     env,
     error::Error,
     ffi::OsStr,
@@ -57,8 +67,8 @@ use std::{
 };
 
 use asr_scoring::{
-    Edits, KNOWN_BASE_MISSES, SpeechExpectation, contains_term, is_known_miss, normalise, score,
-    speech_expectations, word_edits,
+    Edits, KNOWN_BASE_MISSES, PassageExpectation, SpeechExpectation, contains_term, is_known_miss,
+    noisy_set_expectations, noisy_set_levels, normalise, score, speech_expectations, word_edits,
 };
 use serde_json::{Value, json};
 use vsift_application::{
@@ -90,7 +100,23 @@ const SAMPLE_INTERVAL: Duration = Duration::from_millis(100);
 /// D6 gates for the base profile, in basis points where they are rates.
 const CLEAN_WER_GATE_BP: usize = 1_000;
 /// Why F08's word error rate is reported but not gated.
-const NOISY_WER_NOT_GATED: &str = "known limitation: one 13-word noisy clip is too small a basis for a word error rate gate; noisy speech is gated on critical terms only until the noisy-speech fixture set of issue #150 exists (maintainer decision, 2026-09-25)";
+const NOISY_WER_NOT_GATED: &str = "known limitation: one 13-word noisy clip is too small a basis for a word error rate gate; noisy speech is gated on critical terms only (maintainer decision, 2026-09-25); the noisy-speech set of issue #150 is measured and gated per level under noisy_speech_set (maintainer decision, 2026-10-20)";
+/// The noisy-speech set of issue #150: its own truth, kept apart from the
+/// corpus manifest and `speech-provenance.json`, which the agent trials freeze.
+const NOISY_SET_MANIFEST: &str = "fixtures/corpus/noisy-speech/manifest.json";
+const NOISY_SET_GENERATED: &str = "fixtures/corpus/noisy-speech/generated";
+const NOISY_SET_PROVENANCE: &str =
+    "fixtures/corpus/noisy-speech/generated/noisy-speech-provenance.json";
+/// Word-error limits for `base` on the noisy-speech set, per noisy level, in
+/// basis points (maintainer decision, 2026-10-20, issue #150): about twice the
+/// errors measured on hosted Ubuntu and Windows (5.33%, 5.11% and 7.24%). `None`
+/// would measure and report a level without gating it.
+const NOISY_SET_WER_LIMITS_BP: [(&str, Option<usize>); 3] = [
+    ("snr20", Some(1_000)),
+    ("snr10", Some(1_000)),
+    ("snr05", Some(1_500)),
+];
+const NOISY_SET_NOT_GATED: &str = "measured and reported, not gated";
 const RTF_GATE_MILLI: u128 = 500;
 const PEAK_MEMORY_GATE_BYTES: u64 = 400 * 1024 * 1024;
 const MIB: u64 = 1024 * 1024;
@@ -113,6 +139,30 @@ fn expectations() -> Built<Vec<SpeechExpectation>> {
 
 fn words(text: &str) -> Vec<String> {
     normalise(text)
+}
+
+type Levels = Vec<(String, Option<i64>)>;
+
+fn noisy_set() -> Built<(Vec<PassageExpectation>, Levels)> {
+    let manifest = load_json(NOISY_SET_MANIFEST)?;
+    Ok((
+        noisy_set_expectations(&manifest)?,
+        noisy_set_levels(&manifest)?,
+    ))
+}
+
+/// The limit of `level` in `limits`, and whether `edits` meet it; `None` for
+/// both while no limit is set.
+fn level_gate(
+    limits: &[(&str, Option<usize>)],
+    level: &str,
+    edits: Edits,
+) -> (Option<usize>, Option<bool>) {
+    let limit = limits
+        .iter()
+        .find(|(id, _)| *id == level)
+        .and_then(|(_, limit)| *limit);
+    (limit, limit.map(|limit| edits.wer_basis_points() <= limit))
 }
 
 // ---------------------------------------------------------------------------
@@ -245,6 +295,134 @@ fn known_misses_are_reported_separately_from_unexpected_ones() -> TestResult {
     assert_eq!(scored.unexpected_misses(), [&String::from("header")]);
     assert_eq!(scored.edits.substitutions, 2);
     Ok(())
+}
+
+/// The noisy-speech set's expectations come from its own frozen manifest: two
+/// languages, several hundred words per level, every term spoken, and a limit
+/// slot for exactly each noisy level.
+#[test]
+fn noisy_set_expectations_derive_only_from_their_frozen_scripts() -> TestResult {
+    let (passages, levels) = noisy_set()?;
+    let mut words_by_language: BTreeMap<&str, usize> = BTreeMap::new();
+    for passage in &passages {
+        *words_by_language
+            .entry(passage.language.as_str())
+            .or_default() += words(&passage.speech.script).len();
+        assert!(
+            passage
+                .speech
+                .critical_terms
+                .iter()
+                .any(|term| term.chars().any(|c| c.is_ascii_digit())),
+            "{} has no identifier or number",
+            passage.speech.fixture
+        );
+        let perfect = score(&passage.speech, &passage.speech.script);
+        assert_eq!(perfect.edits.errors(), 0, "{}", passage.speech.fixture);
+        assert!(perfect.missed.is_empty(), "{}", passage.speech.fixture);
+    }
+    assert_eq!(
+        words_by_language.keys().copied().collect::<Vec<_>>(),
+        ["en-US", "es"]
+    );
+    let per_level: usize = words_by_language.values().sum();
+    // One word moves a level's pooled rate by well under one point.
+    assert!(per_level >= 400, "{per_level} words per level");
+    assert!(words_by_language.values().all(|&count| count >= 200));
+    assert_eq!(
+        levels,
+        [
+            (String::from("clean"), None),
+            (String::from("snr20"), Some(20)),
+            (String::from("snr10"), Some(10)),
+            (String::from("snr05"), Some(5)),
+        ]
+    );
+    let noisy: Vec<&str> = levels
+        .iter()
+        .filter(|(_, snr)| snr.is_some())
+        .map(|(id, _)| id.as_str())
+        .collect();
+    let slots: Vec<&str> = NOISY_SET_WER_LIMITS_BP.iter().map(|(id, _)| *id).collect();
+    assert_eq!(slots, noisy);
+    let mut broken = load_json(NOISY_SET_MANIFEST)?;
+    broken["passages"][0]["expected_terms"][0] = Value::from("never said");
+    assert!(noisy_set_expectations(&broken).is_err());
+    Ok(())
+}
+
+fn errors_of(errors: usize) -> Edits {
+    Edits {
+        substitutions: errors,
+        reference_words: 469,
+        ..Edits::default()
+    }
+}
+
+/// The decided limits (maintainer, 2026-10-20) are enforced on each noisy
+/// level's pooled rate over its 469 words; the clean level is not gated.
+#[test]
+fn the_decided_noisy_limits_are_enforced_on_each_levels_pooled_rate() {
+    assert_eq!(
+        NOISY_SET_WER_LIMITS_BP,
+        [
+            ("snr20", Some(1_000)),
+            ("snr10", Some(1_000)),
+            ("snr05", Some(1_500))
+        ]
+    );
+    for level in ["snr20", "snr10"] {
+        // 46 errors are 9.80%, 47 are 10.02%.
+        assert_eq!(
+            level_gate(&NOISY_SET_WER_LIMITS_BP, level, errors_of(46)),
+            (Some(1_000), Some(true))
+        );
+        assert_eq!(
+            level_gate(&NOISY_SET_WER_LIMITS_BP, level, errors_of(47)),
+            (Some(1_000), Some(false))
+        );
+    }
+    // 70 errors are 14.92%, 71 are 15.13%.
+    assert_eq!(
+        level_gate(&NOISY_SET_WER_LIMITS_BP, "snr05", errors_of(70)),
+        (Some(1_500), Some(true))
+    );
+    assert_eq!(
+        level_gate(&NOISY_SET_WER_LIMITS_BP, "snr05", errors_of(71)),
+        (Some(1_500), Some(false))
+    );
+    // What the hosted runs measured for `base` passes.
+    for (level, errors) in [("snr20", 25), ("snr10", 24), ("snr05", 34)] {
+        assert_eq!(
+            level_gate(&NOISY_SET_WER_LIMITS_BP, level, errors_of(errors)).1,
+            Some(true)
+        );
+    }
+    assert_eq!(
+        level_gate(&NOISY_SET_WER_LIMITS_BP, "clean", errors_of(469)),
+        (None, None)
+    );
+}
+
+/// A level without a limit is reported, not gated.
+#[test]
+fn a_level_without_a_limit_is_reported_not_gated() {
+    let edits = errors_of(50);
+    let limits = [
+        ("snr20", Some(1_000)),
+        ("snr10", Some(1_500)),
+        ("snr05", None),
+    ];
+    assert_eq!(
+        level_gate(&limits, "snr20", edits),
+        (Some(1_000), Some(false))
+    );
+    assert_eq!(
+        level_gate(&limits, "snr10", edits),
+        (Some(1_500), Some(true))
+    );
+    assert_eq!(level_gate(&limits, "snr05", edits), (None, None));
+    assert_eq!(level_gate(&limits, "clean", edits), (None, None));
 }
 
 // ---------------------------------------------------------------------------
@@ -755,6 +933,174 @@ async fn accuracy(
     Ok((fixtures, clean, noisy, unexpected))
 }
 
+fn clip_file(clips: &[Value], clip: &str) -> Built<String> {
+    clips
+        .iter()
+        .find(|entry| entry["clip"] == clip)
+        .and_then(|entry| entry["file"].as_str())
+        .map(str::to_owned)
+        .ok_or_else(|| format!("the noisy-speech record has no clip {clip}").into())
+}
+
+fn edits_json(edits: Edits) -> Value {
+    json!({
+        "reference_words": edits.reference_words,
+        "substitutions": edits.substitutions,
+        "deletions": edits.deletions,
+        "insertions": edits.insertions,
+        "errors": edits.errors(),
+        "wer_percent": percent(edits.wer_basis_points()),
+    })
+}
+
+/// The noisy-speech set for one profile: every passage at every level, pooled
+/// per level and per language, then the noise-only clips. Returns the report
+/// and, when `enforce` is set, the levels whose limit is not met.
+#[allow(
+    clippy::too_many_lines,
+    reason = "one measurement, reported level by level as it runs"
+)]
+async fn noisy_speech_set(
+    bench: &Bench,
+    recognizer: &WhisperSpeechRecognizer,
+    identity: &RecognizerIdentity,
+    enforce: bool,
+) -> Built<(Value, Vec<String>)> {
+    let (passages, levels) = noisy_set()?;
+    let provenance = load_json(NOISY_SET_PROVENANCE)?;
+    let clips = provenance["assembly"]["clips"]
+        .as_array()
+        .ok_or("the noisy-speech record has no clips")?;
+    let mut level_reports = Vec::new();
+    let mut clip_reports = Vec::new();
+    let mut failures = Vec::new();
+    for (level, snr_db) in &levels {
+        let mut pooled = Edits::default();
+        let mut by_language: BTreeMap<String, Edits> = BTreeMap::new();
+        let mut terms = 0_usize;
+        let mut missed = Vec::new();
+        for passage in &passages {
+            let clip = format!("{}-{level}", passage.speech.fixture);
+            let file = clip_file(clips, &clip)?;
+            let (text, elapsed, _) = bench
+                .transcribe(
+                    &repository(&format!("{NOISY_SET_GENERATED}/{file}")),
+                    recognizer,
+                    identity,
+                )
+                .await?;
+            let scored = score(&passage.speech, &text);
+            pooled = pooled.plus(scored.edits);
+            let language = by_language.entry(passage.language.clone()).or_default();
+            *language = language.plus(scored.edits);
+            terms += passage.speech.critical_terms.len();
+            missed.extend(
+                scored
+                    .missed
+                    .iter()
+                    .map(|term| format!("{} {term}", passage.speech.fixture)),
+            );
+            clip_reports.push(json!({
+                "clip": clip,
+                "file": file,
+                "passage": passage.speech.fixture,
+                "language": passage.language,
+                "level": level,
+                "snr_db": snr_db,
+                "edits": edits_json(scored.edits),
+                "critical_terms": passage.speech.critical_terms,
+                "found": scored.found,
+                "missed": scored.missed,
+                "hypothesis": text,
+                "elapsed_ms": elapsed.as_millis(),
+            }));
+        }
+        let (limit, met) = level_gate(&NOISY_SET_WER_LIMITS_BP, level, pooled);
+        if enforce && let (Some(limit), Some(false)) = (limit, met) {
+            failures.push(format!(
+                "base noisy-speech {level} WER {} exceeds {}",
+                percent(pooled.wer_basis_points()),
+                percent(limit)
+            ));
+        }
+        println!(
+            "  noisy-speech {level:>6}: WER {:>7} over {} words ({}), {}, critical terms {}/{terms} found, missed {missed:?}",
+            percent(pooled.wer_basis_points()),
+            pooled.reference_words,
+            by_language
+                .iter()
+                .map(|(language, edits)| format!(
+                    "{language} {}",
+                    percent(edits.wer_basis_points())
+                ))
+                .collect::<Vec<_>>()
+                .join(", "),
+            match (limit, met) {
+                (Some(limit), Some(true)) => format!("gated <= {}: met", percent(limit)),
+                (Some(limit), _) => format!("gated <= {}: NOT met", percent(limit)),
+                (None, _) => String::from("not gated"),
+            },
+            terms - missed.len(),
+        );
+        level_reports.push(json!({
+            "level": level,
+            "snr_db": snr_db,
+            "pooled": edits_json(pooled),
+            "by_language": by_language
+                .iter()
+                .map(|(language, edits)| (language.clone(), edits_json(*edits)))
+                .collect::<serde_json::Map<_, _>>(),
+            "critical_terms": {
+                "total": terms,
+                "found": terms - missed.len(),
+                "missed": missed,
+            },
+            "limit": limit.map(percent),
+            "gated": limit.is_some(),
+            "met": met,
+            "reason": if limit.is_some() { Value::Null } else { Value::from(NOISY_SET_NOT_GATED) },
+        }));
+    }
+    let mut noise_only = Vec::new();
+    for (level, snr_db) in levels.iter().filter(|(_, snr_db)| snr_db.is_some()) {
+        let clip = format!("noise-only-{level}");
+        let file = clip_file(clips, &clip)?;
+        let (text, elapsed, duration_us) = bench
+            .transcribe(
+                &repository(&format!("{NOISY_SET_GENERATED}/{file}")),
+                recognizer,
+                identity,
+            )
+            .await?;
+        let written = normalise(&text).len();
+        println!(
+            "  noise only {level:>6}: {written} words written over {:.1} s of noise {text:?}",
+            seconds(duration_us)
+        );
+        noise_only.push(json!({
+            "clip": clip,
+            "file": file,
+            "level": level,
+            "snr_db": snr_db,
+            "duration_ms": duration_us / 1_000,
+            "words_written": written,
+            "hypothesis": text,
+            "elapsed_ms": elapsed.as_millis(),
+        }));
+    }
+    Ok((
+        json!({
+            "set_id": "vsift-noisy-speech-v1",
+            "truth": NOISY_SET_MANIFEST,
+            "passages": passages.len(),
+            "levels": level_reports,
+            "noise_only": noise_only,
+            "clips": clip_reports,
+        }),
+        failures,
+    ))
+}
+
 #[tokio::test]
 #[ignore = "requires VSIFT_TEST_WHISPER_CLI, VSIFT_TEST_WHISPER_MODEL (and optionally VSIFT_TEST_WHISPER_MODEL_Q5_1) and FFmpeg/FFprobe on PATH; use --release"]
 #[allow(
@@ -794,6 +1140,14 @@ async fn local_asr_accuracy_timing_and_memory() -> TestResult {
 
         let (fixtures, clean, noisy, unexpected) =
             accuracy(&bench, &recognizer, &identity, &expectations, &variants).await?;
+        let (noisy_set_report, noisy_set_failures) = noisy_speech_set(
+            &bench,
+            &recognizer,
+            &identity,
+            profile == AsrModelProfile::Base,
+        )
+        .await?;
+        failures.extend(noisy_set_failures);
 
         let mut load_times = Vec::new();
         for _ in 0..LOAD_TIME_RUNS {
@@ -878,6 +1232,7 @@ async fn local_asr_accuracy_timing_and_memory() -> TestResult {
                 },
                 "fixtures": fixtures,
             },
+            "noisy_speech_set": noisy_set_report,
             "model_load_ms": {
                 "median": load_ms,
                 "runs": load_times,
@@ -927,7 +1282,7 @@ async fn local_asr_accuracy_timing_and_memory() -> TestResult {
         "coverage_gaps": [
             "accented speech is not in the corpus (issue #150)",
             "crosstalk (overlapping speakers) is not in the corpus (issue #150)",
-            "noisy speech is one 13-word clip (F08), so its word error rate is not gated (issue #150)",
+            "the corpus's noisy speech is one 13-word clip (F08), so its word error rate is not gated; the noisy-speech set of issue #150 is measured under noisy_speech_set, without a limit until the maintainer sets one",
             "every clip is synthetic (Kokoro) speech; no human recordings"
         ],
         "profiles": profiles,

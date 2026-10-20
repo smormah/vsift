@@ -1,0 +1,655 @@
+{
+  "verifier": "tools/verify_p07_noisy_speech.py v1",
+  "status": "passed",
+  "manifest_sha256": "9aea13472e7f1b32bb1e7506a231aa836d4bfa5449ed1f4ac8118f1ad61633d6",
+  "provenance_sha256": "aff7357afd8580a2bfa4e952401e0bdc54c3aa67f14a001b733823518f2d14b0",
+  "utterances": [
+    {
+      "passage": "EN01",
+      "language": "en-US",
+      "frames": 372000,
+      "duration_us": 15500000
+    },
+    {
+      "passage": "EN02",
+      "language": "en-US",
+      "frames": 387000,
+      "duration_us": 16125000
+    },
+    {
+      "passage": "EN03",
+      "language": "en-US",
+      "frames": 412200,
+      "duration_us": 17175000
+    },
+    {
+      "passage": "EN04",
+      "language": "en-US",
+      "frames": 375600,
+      "duration_us": 15650000
+    },
+    {
+      "passage": "EN05",
+      "language": "en-US",
+      "frames": 442800,
+      "duration_us": 18450000
+    },
+    {
+      "passage": "EN06",
+      "language": "en-US",
+      "frames": 387600,
+      "duration_us": 16150000
+    },
+    {
+      "passage": "ES01",
+      "language": "es",
+      "frames": 339000,
+      "duration_us": 14125000
+    },
+    {
+      "passage": "ES02",
+      "language": "es",
+      "frames": 363600,
+      "duration_us": 15150000
+    },
+    {
+      "passage": "ES03",
+      "language": "es",
+      "frames": 361200,
+      "duration_us": 15050000
+    },
+    {
+      "passage": "ES04",
+      "language": "es",
+      "frames": 387600,
+      "duration_us": 16150000
+    },
+    {
+      "passage": "ES05",
+      "language": "es",
+      "frames": 409200,
+      "duration_us": 17050000
+    },
+    {
+      "passage": "ES06",
+      "language": "es",
+      "frames": 394200,
+      "duration_us": 16425000
+    }
+  ],
+  "clips": [
+    {
+      "clip": "EN01-clean",
+      "file": "EN01-clean.m4a",
+      "sha256": "4209f19bb0d3c3e6965617b9094eda8f01ad3de891cafac05c7b5ae1ab0d12ca",
+      "duration_us": 18500000,
+      "level": "clean",
+      "energy": {
+        "first_active_us": 2320000,
+        "last_active_us": 17000000,
+        "active_fraction": 0.668
+      }
+    },
+    {
+      "clip": "EN01-snr20",
+      "file": "EN01-snr20.m4a",
+      "sha256": "7ea3f4d5057a440efad5afef4958fd75a72b14ca9ad8100075545df70e04b2d1",
+      "duration_us": 18500000,
+      "level": "snr20",
+      "energy": {
+        "noise_coverage": 1.0,
+        "estimated_snr_db": 20.15
+      }
+    },
+    {
+      "clip": "EN01-snr10",
+      "file": "EN01-snr10.m4a",
+      "sha256": "3685758d99896dbcc0af338b00da1063ca6a30bd6c6148ad26bc14d7f3d4b18a",
+      "duration_us": 18500000,
+      "level": "snr10",
+      "energy": {
+        "noise_coverage": 1.0,
+        "estimated_snr_db": 10.12
+      }
+    },
+    {
+      "clip": "EN01-snr05",
+      "file": "EN01-snr05.m4a",
+      "sha256": "fa79809181a647745521dff5f619ce5d0ff9147b11412f88024486fb38cb34e8",
+      "duration_us": 18500000,
+      "level": "snr05",
+      "energy": {
+        "noise_coverage": 1.0,
+        "estimated_snr_db": 5.09
+      }
+    },
+    {
+      "clip": "EN02-clean",
+      "file": "EN02-clean.m4a",
+      "sha256": "a82873a10666753b566a86c85423bde141a4c8612bffe428a92be5dc23d0af57",
+      "duration_us": 19125000,
+      "level": "clean",
+      "energy": {
+        "first_active_us": 2320000,
+        "last_active_us": 17620000,
+        "active_fraction": 0.687
+      }
+    },
+    {
+      "clip": "EN02-snr20",
+      "file": "EN02-snr20.m4a",
+      "sha256": "47443d2fda170a58f345916effd27d41175733839226ccfb37b007b9955d1b6c",
+      "duration_us": 19125000,
+      "level": "snr20",
+      "energy": {
+        "noise_coverage": 1.0,
+        "estimated_snr_db": 20.15
+      }
+    },
+    {
+      "clip": "EN02-snr10",
+      "file": "EN02-snr10.m4a",
+      "sha256": "9ae5f074b680fc75d819e5b6e789990ed6dd15503dd77b2c6dfe883b769eb331",
+      "duration_us": 19125000,
+      "level": "snr10",
+      "energy": {
+        "noise_coverage": 1.0,
+        "estimated_snr_db": 10.14
+      }
+    },
+    {
+      "clip": "EN02-snr05",
+      "file": "EN02-snr05.m4a",
+      "sha256": "92746f8f4b3177d77231f8a458681d8421aa018ce07b9f32c250b53651c73c6a",
+      "duration_us": 19125000,
+      "level": "snr05",
+      "energy": {
+        "noise_coverage": 1.0,
+        "estimated_snr_db": 5.1
+      }
+    },
+    {
+      "clip": "EN03-clean",
+      "file": "EN03-clean.m4a",
+      "sha256": "be88aae4a16e40954fe6c47e466bffcddd31bcabca3df88c25adf6a54b301ba1",
+      "duration_us": 20175000,
+      "level": "clean",
+      "energy": {
+        "first_active_us": 2320000,
+        "last_active_us": 18600000,
+        "active_fraction": 0.68
+      }
+    },
+    {
+      "clip": "EN03-snr20",
+      "file": "EN03-snr20.m4a",
+      "sha256": "67eee6a6765826f9fa35493919776d6b2637be42608fe89993062dc7dc7b9380",
+      "duration_us": 20175000,
+      "level": "snr20",
+      "energy": {
+        "noise_coverage": 1.0,
+        "estimated_snr_db": 20.37
+      }
+    },
+    {
+      "clip": "EN03-snr10",
+      "file": "EN03-snr10.m4a",
+      "sha256": "22efe93f4886593f233aaad628a142ba5684ee4e7ba6e36a336c27f82a7fe953",
+      "duration_us": 20175000,
+      "level": "snr10",
+      "energy": {
+        "noise_coverage": 1.0,
+        "estimated_snr_db": 10.37
+      }
+    },
+    {
+      "clip": "EN03-snr05",
+      "file": "EN03-snr05.m4a",
+      "sha256": "317930fc39c0f8ea02a36288451f70c7a0a04a023e1d324ae604afe86f1faaee",
+      "duration_us": 20175000,
+      "level": "snr05",
+      "energy": {
+        "noise_coverage": 1.0,
+        "estimated_snr_db": 5.36
+      }
+    },
+    {
+      "clip": "EN04-clean",
+      "file": "EN04-clean.m4a",
+      "sha256": "8a8aee4f07bee650e50c74210ef0b11cd6b4461316a37acc91765b6283a2adbb",
+      "duration_us": 18650000,
+      "level": "clean",
+      "energy": {
+        "first_active_us": 2340000,
+        "last_active_us": 17100000,
+        "active_fraction": 0.682
+      }
+    },
+    {
+      "clip": "EN04-snr20",
+      "file": "EN04-snr20.m4a",
+      "sha256": "49c3d98eb51b6d68797b584798e63fd6aaa6ede369525c1e52cb8f2d9f8d71d7",
+      "duration_us": 18650000,
+      "level": "snr20",
+      "energy": {
+        "noise_coverage": 1.0,
+        "estimated_snr_db": 20.23
+      }
+    },
+    {
+      "clip": "EN04-snr10",
+      "file": "EN04-snr10.m4a",
+      "sha256": "cd2694aee9a69b6e5e262e2c2a605bad1b0472e3223b348a053c8f7f3e49da6c",
+      "duration_us": 18650000,
+      "level": "snr10",
+      "energy": {
+        "noise_coverage": 1.0,
+        "estimated_snr_db": 10.21
+      }
+    },
+    {
+      "clip": "EN04-snr05",
+      "file": "EN04-snr05.m4a",
+      "sha256": "0d5a0713dd5b4b083c1843c54a1621c1c8dc0c1b56212a9a71022b5e401b399a",
+      "duration_us": 18650000,
+      "level": "snr05",
+      "energy": {
+        "noise_coverage": 1.0,
+        "estimated_snr_db": 5.18
+      }
+    },
+    {
+      "clip": "EN05-clean",
+      "file": "EN05-clean.m4a",
+      "sha256": "ab42f0a0ddb5baac58698e4b335f69787cd3c023431ad57d02cc96bedeb2ef92",
+      "duration_us": 21450000,
+      "level": "clean",
+      "energy": {
+        "first_active_us": 2320000,
+        "last_active_us": 19960000,
+        "active_fraction": 0.689
+      }
+    },
+    {
+      "clip": "EN05-snr20",
+      "file": "EN05-snr20.m4a",
+      "sha256": "1ded87244d05cd638fdd5d87a854a2540ce72533e56147fa033abba76a94345e",
+      "duration_us": 21450000,
+      "level": "snr20",
+      "energy": {
+        "noise_coverage": 1.0,
+        "estimated_snr_db": 20.27
+      }
+    },
+    {
+      "clip": "EN05-snr10",
+      "file": "EN05-snr10.m4a",
+      "sha256": "52e3654931ceddae0af25875c73a290345dfb86d833d4fe432d3e2203ca4575c",
+      "duration_us": 21450000,
+      "level": "snr10",
+      "energy": {
+        "noise_coverage": 1.0,
+        "estimated_snr_db": 10.28
+      }
+    },
+    {
+      "clip": "EN05-snr05",
+      "file": "EN05-snr05.m4a",
+      "sha256": "7daab88162c31ab5cd100d98a42a874580f8ddbcda1ca0e759bb385309c42945",
+      "duration_us": 21450000,
+      "level": "snr05",
+      "energy": {
+        "noise_coverage": 1.0,
+        "estimated_snr_db": 5.3
+      }
+    },
+    {
+      "clip": "EN06-clean",
+      "file": "EN06-clean.m4a",
+      "sha256": "2885f3be19685706a4b090894ba737313a3aaa58c4f8edd6aa72540954f8b25c",
+      "duration_us": 19150000,
+      "level": "clean",
+      "energy": {
+        "first_active_us": 2320000,
+        "last_active_us": 17660000,
+        "active_fraction": 0.679
+      }
+    },
+    {
+      "clip": "EN06-snr20",
+      "file": "EN06-snr20.m4a",
+      "sha256": "f74c1464481221095ccc7f6fbfa70dd31151720900fed3cae2133e8b0c7c82c8",
+      "duration_us": 19150000,
+      "level": "snr20",
+      "energy": {
+        "noise_coverage": 1.0,
+        "estimated_snr_db": 20.42
+      }
+    },
+    {
+      "clip": "EN06-snr10",
+      "file": "EN06-snr10.m4a",
+      "sha256": "e9f4764c3d8cf7c15f92175627d0301ba8f185f259629338872417738954627d",
+      "duration_us": 19150000,
+      "level": "snr10",
+      "energy": {
+        "noise_coverage": 1.0,
+        "estimated_snr_db": 10.42
+      }
+    },
+    {
+      "clip": "EN06-snr05",
+      "file": "EN06-snr05.m4a",
+      "sha256": "d076b341b6464d73866c86999895b761843fec8517554360df2fa72e4ae26798",
+      "duration_us": 19150000,
+      "level": "snr05",
+      "energy": {
+        "noise_coverage": 1.0,
+        "estimated_snr_db": 5.43
+      }
+    },
+    {
+      "clip": "ES01-clean",
+      "file": "ES01-clean.m4a",
+      "sha256": "eb7495b7426ca51b8bdb1d036a2f7dd000202091755904464766b81a4c1899f7",
+      "duration_us": 17125000,
+      "level": "clean",
+      "energy": {
+        "first_active_us": 2200000,
+        "last_active_us": 15940000,
+        "active_fraction": 0.779
+      }
+    },
+    {
+      "clip": "ES01-snr20",
+      "file": "ES01-snr20.m4a",
+      "sha256": "a9f5e5cf2944c8fabf2b5c0d267b6df9f446591d5435f531282d73da1d8093b2",
+      "duration_us": 17125000,
+      "level": "snr20",
+      "energy": {
+        "noise_coverage": 1.0,
+        "estimated_snr_db": 20.57
+      }
+    },
+    {
+      "clip": "ES01-snr10",
+      "file": "ES01-snr10.m4a",
+      "sha256": "f4c09ec5d26d6fad25eac11e523e1898a70d91a8f8c99c685faf1d336481934a",
+      "duration_us": 17125000,
+      "level": "snr10",
+      "energy": {
+        "noise_coverage": 1.0,
+        "estimated_snr_db": 10.6
+      }
+    },
+    {
+      "clip": "ES01-snr05",
+      "file": "ES01-snr05.m4a",
+      "sha256": "d778309350db2ea2463cf8f4fe4915436977279b8ea12d258cd64850322d651a",
+      "duration_us": 17125000,
+      "level": "snr05",
+      "energy": {
+        "noise_coverage": 1.0,
+        "estimated_snr_db": 5.66
+      }
+    },
+    {
+      "clip": "ES02-clean",
+      "file": "ES02-clean.m4a",
+      "sha256": "99bf34082110d3204e357a80e75a8fd68e4e14014ed03263eaeb0d764cd60f21",
+      "duration_us": 18150000,
+      "level": "clean",
+      "energy": {
+        "first_active_us": 2200000,
+        "last_active_us": 16960000,
+        "active_fraction": 0.754
+      }
+    },
+    {
+      "clip": "ES02-snr20",
+      "file": "ES02-snr20.m4a",
+      "sha256": "c4b64ae9db6f4e27f2da130c148a9b895e8473236c168ddbbfb69c18ab06ec67",
+      "duration_us": 18150000,
+      "level": "snr20",
+      "energy": {
+        "noise_coverage": 1.0,
+        "estimated_snr_db": 20.58
+      }
+    },
+    {
+      "clip": "ES02-snr10",
+      "file": "ES02-snr10.m4a",
+      "sha256": "37c581eda260b3c22952aebc2fae6e9bbf69e378a1755dbf699c4939d33b7820",
+      "duration_us": 18150000,
+      "level": "snr10",
+      "energy": {
+        "noise_coverage": 1.0,
+        "estimated_snr_db": 10.58
+      }
+    },
+    {
+      "clip": "ES02-snr05",
+      "file": "ES02-snr05.m4a",
+      "sha256": "7411837e3be5639ee5017dfeb55932791b6daee7cba229c9d05192d05cdcbe63",
+      "duration_us": 18150000,
+      "level": "snr05",
+      "energy": {
+        "noise_coverage": 1.0,
+        "estimated_snr_db": 5.64
+      }
+    },
+    {
+      "clip": "ES03-clean",
+      "file": "ES03-clean.m4a",
+      "sha256": "7d9cce50afe096b77d8e9ab93b267aa3f948e7636ffe756100387d7c1a022c30",
+      "duration_us": 18050000,
+      "level": "clean",
+      "energy": {
+        "first_active_us": 2200000,
+        "last_active_us": 16880000,
+        "active_fraction": 0.772
+      }
+    },
+    {
+      "clip": "ES03-snr20",
+      "file": "ES03-snr20.m4a",
+      "sha256": "b58efaf4224891b87c5a021c1fdec2f8bec66440ffb0e95f49e507d339e18708",
+      "duration_us": 18050000,
+      "level": "snr20",
+      "energy": {
+        "noise_coverage": 1.0,
+        "estimated_snr_db": 20.51
+      }
+    },
+    {
+      "clip": "ES03-snr10",
+      "file": "ES03-snr10.m4a",
+      "sha256": "666323fc23997a32d60262d76798e46f733d2087d80def483f2685994c4754f5",
+      "duration_us": 18050000,
+      "level": "snr10",
+      "energy": {
+        "noise_coverage": 1.0,
+        "estimated_snr_db": 10.48
+      }
+    },
+    {
+      "clip": "ES03-snr05",
+      "file": "ES03-snr05.m4a",
+      "sha256": "8e9acd536bc5a9c32247be83ab1ed96faa1fc60d115ae703658d2e1105f28117",
+      "duration_us": 18050000,
+      "level": "snr05",
+      "energy": {
+        "noise_coverage": 1.0,
+        "estimated_snr_db": 5.54
+      }
+    },
+    {
+      "clip": "ES04-clean",
+      "file": "ES04-clean.m4a",
+      "sha256": "e1a44216389ae51c18afc8579d9fa38c319b3908d6e8a3d11f92e3b28daa8401",
+      "duration_us": 19150000,
+      "level": "clean",
+      "energy": {
+        "first_active_us": 2200000,
+        "last_active_us": 17960000,
+        "active_fraction": 0.769
+      }
+    },
+    {
+      "clip": "ES04-snr20",
+      "file": "ES04-snr20.m4a",
+      "sha256": "33b932a877313ec0390ff3897d6cf1b983e9d40430240a57e477eb1b5121ce24",
+      "duration_us": 19150000,
+      "level": "snr20",
+      "energy": {
+        "noise_coverage": 1.0,
+        "estimated_snr_db": 20.54
+      }
+    },
+    {
+      "clip": "ES04-snr10",
+      "file": "ES04-snr10.m4a",
+      "sha256": "032aad1410eb2183066564a5eda8ecffb901e238d63b46331eceb21439206d31",
+      "duration_us": 19150000,
+      "level": "snr10",
+      "energy": {
+        "noise_coverage": 1.0,
+        "estimated_snr_db": 10.52
+      }
+    },
+    {
+      "clip": "ES04-snr05",
+      "file": "ES04-snr05.m4a",
+      "sha256": "b0c9b9fe581a3c57fd928cb8885259650a44468407bac43654c6e9657048a9f0",
+      "duration_us": 19150000,
+      "level": "snr05",
+      "energy": {
+        "noise_coverage": 1.0,
+        "estimated_snr_db": 5.57
+      }
+    },
+    {
+      "clip": "ES05-clean",
+      "file": "ES05-clean.m4a",
+      "sha256": "0662dd046e79c2385fb14cbc165be20055923cdcda0cc84bab45218b6e813613",
+      "duration_us": 20050000,
+      "level": "clean",
+      "energy": {
+        "first_active_us": 2200000,
+        "last_active_us": 18860000,
+        "active_fraction": 0.768
+      }
+    },
+    {
+      "clip": "ES05-snr20",
+      "file": "ES05-snr20.m4a",
+      "sha256": "93603a4a54d0d6b8a208a432138cf8f6250578cd228f33c9d7c6d3d25ffa5cd4",
+      "duration_us": 20050000,
+      "level": "snr20",
+      "energy": {
+        "noise_coverage": 1.0,
+        "estimated_snr_db": 20.46
+      }
+    },
+    {
+      "clip": "ES05-snr10",
+      "file": "ES05-snr10.m4a",
+      "sha256": "bb9a3f2414b298f8860d2c46302908ef804b28cb6605daad0bbf13436cb24c20",
+      "duration_us": 20050000,
+      "level": "snr10",
+      "energy": {
+        "noise_coverage": 1.0,
+        "estimated_snr_db": 10.44
+      }
+    },
+    {
+      "clip": "ES05-snr05",
+      "file": "ES05-snr05.m4a",
+      "sha256": "2b9d1c8c77c83af6567b463512fa4e21562ceed42dbcc615aa6119b3031b971f",
+      "duration_us": 20050000,
+      "level": "snr05",
+      "energy": {
+        "noise_coverage": 1.0,
+        "estimated_snr_db": 5.46
+      }
+    },
+    {
+      "clip": "ES06-clean",
+      "file": "ES06-clean.m4a",
+      "sha256": "5b87135d2d3346639adf6c8f30945d70b6f815ba33afd2cbd122824cf7418e36",
+      "duration_us": 19425000,
+      "level": "clean",
+      "energy": {
+        "first_active_us": 2200000,
+        "last_active_us": 18240000,
+        "active_fraction": 0.772
+      }
+    },
+    {
+      "clip": "ES06-snr20",
+      "file": "ES06-snr20.m4a",
+      "sha256": "82a7bf38dbe0a91977e678a9473c2b16f598cb42ae6f352b2eefda5a7ddd0182",
+      "duration_us": 19425000,
+      "level": "snr20",
+      "energy": {
+        "noise_coverage": 1.0,
+        "estimated_snr_db": 20.72
+      }
+    },
+    {
+      "clip": "ES06-snr10",
+      "file": "ES06-snr10.m4a",
+      "sha256": "48f6626dc867bb3e9301b7e41ee996e138f4e44178670c8fa566c40fdbd95ec5",
+      "duration_us": 19425000,
+      "level": "snr10",
+      "energy": {
+        "noise_coverage": 1.0,
+        "estimated_snr_db": 10.74
+      }
+    },
+    {
+      "clip": "ES06-snr05",
+      "file": "ES06-snr05.m4a",
+      "sha256": "98cb8d82e7f5d9b05c3e985b7862614f0dccdde43b6355d2184223f8ec4d1900",
+      "duration_us": 19425000,
+      "level": "snr05",
+      "energy": {
+        "noise_coverage": 1.0,
+        "estimated_snr_db": 5.82
+      }
+    },
+    {
+      "clip": "noise-only-snr20",
+      "file": "noise-only-snr20.m4a",
+      "sha256": "a94a97f500cee6ee2630a3e7ca9e900f6ce3f64997b1e8d75ac72d9e7bd09b28",
+      "duration_us": 28000000,
+      "level": "snr20",
+      "energy": {
+        "noise_coverage": 1.0,
+        "noise_power_relative_db": -0.35
+      }
+    },
+    {
+      "clip": "noise-only-snr10",
+      "file": "noise-only-snr10.m4a",
+      "sha256": "743cdd465075a07d9128c76f260d159b778c0e3b0ee7c3a180203224014d05a2",
+      "duration_us": 28000000,
+      "level": "snr10",
+      "energy": {
+        "noise_coverage": 1.0,
+        "noise_power_relative_db": -0.33
+      }
+    },
+    {
+      "clip": "noise-only-snr05",
+      "file": "noise-only-snr05.m4a",
+      "sha256": "75152222aea57696a2ca4e736f2d0731c392677e3fac0cc4e3eae5295ee91293",
+      "duration_us": 28000000,
+      "level": "snr05",
+      "energy": {
+        "noise_coverage": 1.0,
+        "noise_power_relative_db": -0.34
+      }
+    }
+  ]
+}

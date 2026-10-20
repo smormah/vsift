@@ -1,0 +1,166 @@
+{
+  "schema_version": "1",
+  "set_id": "vsift-noisy-speech-v1",
+  "licence": "MIT OR Apache-2.0",
+  "timeline_unit": "microseconds",
+  "purpose": "Noisy-speech word error rates per signal-to-noise level (issue #150, T-04). Every passage is spoken once and placed at every level, so the noise is the only thing that changes between levels.",
+  "noise_recipe": "office-v1",
+  "snr_definition": "RMS of the whole clean utterance over RMS of the scaled noise track, which covers the whole clip",
+  "levels": [
+    {
+      "id": "clean",
+      "snr_db": null
+    },
+    {
+      "id": "snr20",
+      "snr_db": 20
+    },
+    {
+      "id": "snr10",
+      "snr_db": 10
+    },
+    {
+      "id": "snr05",
+      "snr_db": 5
+    }
+  ],
+  "noise_only": {
+    "duration_us": 28000000,
+    "truth": "Office noise only, at the noise level of each noisy level; nothing is said, so every word a recogniser writes is inserted."
+  },
+  "passages": [
+    {
+      "id": "EN01",
+      "language": "en-US",
+      "script": "The nightly import started at 10:32 and stopped after 2.5 minutes. The log shows error E-409 on the second batch. I open the settings page, check the retry limit, and confirm that it is still set to three.",
+      "expected_terms": [
+        "10:32",
+        "2.5 minutes",
+        "E-409",
+        "retry limit",
+        "three"
+      ]
+    },
+    {
+      "id": "EN02",
+      "language": "en-US",
+      "script": "Order 1017 moves from queued to failed when the warehouse service times out. The dashboard still reports a healthy status, so the alert never fires. We need the status to change before the next delivery window opens at noon.",
+      "expected_terms": [
+        "order 1017",
+        "queued",
+        "failed",
+        "healthy"
+      ]
+    },
+    {
+      "id": "EN03",
+      "language": "en-US",
+      "script": "The orange p95 line climbs to 840 milliseconds while the blue median stays near 120. After the cache is cleared, both lines fall back below 200. Please attach the graph and the exact time of the spike to the ticket.",
+      "expected_terms": [
+        "p95",
+        "840 milliseconds",
+        "median",
+        "120",
+        "200"
+      ]
+    },
+    {
+      "id": "EN04",
+      "language": "en-US",
+      "script": "Build 2048 passed every check except the upload step. The installer stops halfway and shows code K-204 in a small grey box. Restarting the machine does not help, and the same code appears on the second laptop.",
+      "expected_terms": [
+        "build 2048",
+        "upload",
+        "K-204",
+        "installer"
+      ]
+    },
+    {
+      "id": "EN05",
+      "language": "en-US",
+      "script": "Invoice 316 was created twice because the submit button stayed enabled. The second copy has a total of 127.50 instead of 125.00. Delete the duplicate, keep the original record, and send a short note to the billing team.",
+      "expected_terms": [
+        "invoice 316",
+        "submit",
+        "127.50",
+        "125.00",
+        "duplicate"
+      ]
+    },
+    {
+      "id": "EN06",
+      "language": "en-US",
+      "script": "Yesterday the sync job copied 64 files and skipped four. Each skipped file is larger than the limit of 512 megabytes. Split the archive into smaller parts, run the job again, and check that the counter reaches 68.",
+      "expected_terms": [
+        "64 files",
+        "four",
+        "512 megabytes",
+        "68"
+      ]
+    },
+    {
+      "id": "ES01",
+      "language": "es",
+      "script": "El proceso nocturno empezó tarde y se detuvo después de pocos minutos. El registro muestra el error E-409 en el segundo lote. Abro la página de ajustes y compruebo que el límite de reintentos no ha cambiado.",
+      "expected_terms": [
+        "registro",
+        "E-409",
+        "límite de reintentos"
+      ]
+    },
+    {
+      "id": "ES02",
+      "language": "es",
+      "script": "El pedido 731 pasa de pendiente a fallido cuando el servicio del almacén no responde. El panel sigue mostrando un estado correcto, así que la alerta nunca se activa. Necesitamos que el estado cambie antes del próximo envío.",
+      "expected_terms": [
+        "pedido 731",
+        "pendiente",
+        "fallido",
+        "alerta"
+      ]
+    },
+    {
+      "id": "ES03",
+      "language": "es",
+      "script": "La línea naranja sube a 840 milisegundos mientras la mediana azul se queda cerca de 120. Después de vaciar la caché, las dos líneas bajan otra vez. Adjunta el gráfico y la hora exacta del pico a la incidencia.",
+      "expected_terms": [
+        "840 milisegundos",
+        "mediana",
+        "120",
+        "caché"
+      ]
+    },
+    {
+      "id": "ES04",
+      "language": "es",
+      "script": "La compilación 512 pasó todas las pruebas excepto la de subida. El instalador se detiene a mitad de camino y muestra el código K-204 en un recuadro gris. Reiniciar el equipo no sirve, y el mismo código aparece en el segundo portátil.",
+      "expected_terms": [
+        "compilación 512",
+        "K-204",
+        "instalador"
+      ]
+    },
+    {
+      "id": "ES05",
+      "language": "es",
+      "script": "La factura 316 se creó dos veces porque el botón de enviar seguía activo. La segunda copia tiene un total de 250 en lugar de 245. Borra el duplicado, conserva el registro original y envía una nota breve al equipo de facturación.",
+      "expected_terms": [
+        "factura 316",
+        "250",
+        "245",
+        "duplicado"
+      ]
+    },
+    {
+      "id": "ES06",
+      "language": "es",
+      "script": "Ayer la tarea de sincronización copió 64 archivos y omitió varios. Cada archivo omitido supera el límite de 512 megabytes. Divide el paquete en partes más pequeñas, vuelve a lanzar la tarea y comprueba que el contador llega a 68.",
+      "expected_terms": [
+        "64 archivos",
+        "512 megabytes",
+        "contador",
+        "68"
+      ]
+    }
+  ]
+}

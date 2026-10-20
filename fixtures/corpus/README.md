@@ -74,6 +74,34 @@ python tools/verify_p07_speech.py --ffmpeg /absolute/path/to/ffmpeg --ffprobe /a
 `python -m unittest discover -s tools -p test_p07_speech.py` tests the recipe and the
 verifier without the model (the assembly tests also need FFmpeg and FFprobe).
 
+## Noisy-speech set (P07, issue #150)
+
+`noisy-speech/` measures recognition in noise with enough words for a rate per level
+(F08 alone has 13). It has its own truth, `noisy-speech/manifest.json`, so this
+directory's `manifest.json` and `generated/speech-provenance.json`, which the agent
+trials freeze, do not change. Twelve passages written for the set (six English, six
+Spanish, with identifiers and numbers; no real people, companies or personal data), 469
+words per level, are each spoken once by Kokoro and placed at four levels: `clean` and
+`office-v1` noise at 20, 10 and 5 dB, the same noise sequence for one passage at every
+level. Each clip is shorter than one 30 s recognition window. One 28 s noise-only clip per
+noisy level holds no speech, so every word written there is inserted.
+
+| Files (under `noisy-speech/generated/`) | Content |
+| --- | --- |
+| `speech/<passage>-utterance.wav` (**not committed**) | Clean Kokoro utterance, mono 16-bit 24 kHz; an asset of the test-media release, fetched by digest with `tools/fetch_p07_noisy_utterances.py` |
+| `<passage>-<level>.m4a` | 2 s lead-in, the utterance, 1 s tail; AAC, mono 16 kHz, audio only |
+| `noise-only-<level>.m4a` | 28 s of the level's noise and nothing else |
+| `noisy-speech-provenance.json` | Engine, voices, environment, placement, noise seeds and gains, hashes and sizes |
+| `noisy-speech-verification.json` | Result of the independent `tools/verify_p07_noisy_speech.py` |
+
+The generator is `tools/generate_p07_noisy_speech.py` (dispatch **P07 speech fixtures** with
+`fixture_set: noisy-speech`); the recipe, its review and the committed run are in
+[p07-speech-fixtures.md](../../docs/planning/p07-speech-fixtures.md) (note of 2026-10-20).
+The rates are measured by `p07_asr_qualification`, which reads the committed clips only,
+and gated for `base` per level (maintainer decision, 2026-10-20), and are recorded in
+[p07-asr-qualification.md](../../docs/planning/p07-asr-qualification.md). Its truth follows
+the rule above: a script or term changes only by a reviewed truth change with a reason.
+
 ## Recorded visual samples (P08)
 
 The visual-candidate index is gated on what FFmpeg actually decodes from F01-F10 and

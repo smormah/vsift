@@ -272,6 +272,71 @@ pub fn speech_expectations(manifest: &Value) -> Result<Vec<SpeechExpectation>, S
     Ok(expectations)
 }
 
+/// One passage of the noisy-speech set (issue #150), from its own frozen
+/// manifest (`fixtures/corpus/noisy-speech/manifest.json`).
+#[derive(Clone, Debug)]
+pub struct PassageExpectation {
+    /// The passage's language as its truth names it (`en-US` or `es`).
+    pub language: String,
+    /// Its script and critical terms, scored like a corpus fixture's.
+    pub speech: SpeechExpectation,
+}
+
+/// The levels of the noisy-speech set in manifest order, with their
+/// signal-to-noise ratio in dB (`None` for the clean level).
+pub fn noisy_set_levels(manifest: &Value) -> Result<Vec<(String, Option<i64>)>, String> {
+    manifest["levels"]
+        .as_array()
+        .ok_or("noisy-speech manifest has no levels")?
+        .iter()
+        .map(|level| {
+            let id = level["id"].as_str().ok_or("level without id")?;
+            Ok((id.to_owned(), level["snr_db"].as_i64()))
+        })
+        .collect()
+}
+
+/// Expectations of every passage of the noisy-speech set. Unlike the corpus,
+/// every expected term must be spoken: a term that is not is a truth error.
+pub fn noisy_set_expectations(manifest: &Value) -> Result<Vec<PassageExpectation>, String> {
+    let passages = manifest["passages"]
+        .as_array()
+        .ok_or("noisy-speech manifest has no passages")?;
+    let mut expectations = Vec::new();
+    for passage in passages {
+        let id = passage["id"].as_str().ok_or("passage without id")?;
+        let script = passage["script"].as_str().ok_or("passage without script")?;
+        let spoken = normalise(script);
+        let mut critical_terms = Vec::new();
+        for term in passage["expected_terms"]
+            .as_array()
+            .ok_or("passage without expected_terms")?
+        {
+            let term = term.as_str().ok_or("expected term is not text")?;
+            if !contains_term(&spoken, &normalise(term)) {
+                return Err(format!(
+                    "{id} expects {term:?}, which its script does not say"
+                ));
+            }
+            critical_terms.push(term.to_owned());
+        }
+        expectations.push(PassageExpectation {
+            language: passage["language"]
+                .as_str()
+                .ok_or("passage without language")?
+                .to_owned(),
+            speech: SpeechExpectation {
+                fixture: id.to_owned(),
+                mode: String::from("noisy-speech-set"),
+                script: script.to_owned(),
+                critical_terms,
+                visual_only_terms: Vec::new(),
+            },
+        });
+    }
+    Ok(expectations)
+}
+
 /// Whether a missed critical `term` of `fixture` contains a reviewed known
 /// miss.
 pub fn is_known_miss(fixture: &str, term: &str) -> bool {

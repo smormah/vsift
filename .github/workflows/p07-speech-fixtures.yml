@@ -2,6 +2,15 @@ name: P07 speech fixtures
 
 on:
   workflow_dispatch:
+    inputs:
+      fixture_set:
+        description: "corpus: the speech variants of fixtures/corpus/manifest.json; noisy-speech: generate the set of fixtures/corpus/noisy-speech/manifest.json (#150); noisy-speech-check: fetch its utterances from the test-media release, verify the committed clips and rebuild them"
+        type: choice
+        options:
+          - corpus
+          - noisy-speech
+          - noisy-speech-check
+        default: corpus
 
 # Generates speech test-fixture candidates on a disposable runner. Nothing is committed
 # from CI: the maintainer reviews the uploaded artifact and commits it in a pull request.
@@ -26,7 +35,9 @@ jobs:
           python-version: "3.12"
 
       - name: Test the recipe and verifier without the model
-        run: python -m unittest discover -s tools -p test_p07_speech.py
+        run: |
+          python -m unittest discover -s tools -p test_p07_speech.py
+          python -m unittest discover -s tools -p test_p07_noisy_speech.py
 
       - name: Download and extract the pinned P06 FFmpeg build
         run: |
@@ -51,12 +62,16 @@ jobs:
         env:
           VSIFT_P07_FFMPEG: ${{ runner.temp }}/p07-ffmpeg/bin/ffmpeg
           VSIFT_P07_FFPROBE: ${{ runner.temp }}/p07-ffmpeg/bin/ffprobe
-        run: python -m unittest discover -s tools -p test_p07_speech.py -v
+        run: |
+          python -m unittest discover -s tools -p test_p07_speech.py -v
+          python -m unittest discover -s tools -p test_p07_noisy_speech.py -v
 
       - name: Fetch the pinned Kokoro revision, voices and spaCy English pipeline
+        if: inputs.fixture_set != 'noisy-speech-check'
         run: python tools/generate_p07_speech.py fetch --assets "$RUNNER_TEMP/p07-assets"
 
       - name: Install the pinned generation environment
+        if: inputs.fixture_set != 'noisy-speech-check'
         run: |
           python -m venv "$RUNNER_TEMP/p07-venv"
           venv_python="$RUNNER_TEMP/p07-venv/bin/python"
@@ -73,6 +88,7 @@ jobs:
           cp -- "$RUNNER_TEMP/p07-assets/fetch-record.json" "$RUNNER_TEMP/p07-environment/"
 
       - name: Synthesize the frozen scripts offline
+        if: inputs.fixture_set == 'corpus'
         env:
           HF_HUB_OFFLINE: "1"
           TRANSFORMERS_OFFLINE: "1"
@@ -84,12 +100,14 @@ jobs:
           --pip-report "$RUNNER_TEMP/p07-environment/pip-report-requirements.json"
 
       - name: Assemble the speech variants without PyTorch
+        if: inputs.fixture_set == 'corpus'
         run: >-
           python tools/generate_p07_speech.py assemble
           --output-dir "$RUNNER_TEMP/p07-speech"
           --ffmpeg "$RUNNER_TEMP/p07-ffmpeg/bin/ffmpeg"
 
       - name: Verify the speech variants independently
+        if: inputs.fixture_set == 'corpus'
         run: >-
           python tools/verify_p07_speech.py
           --ffmpeg "$RUNNER_TEMP/p07-ffmpeg/bin/ffmpeg"
@@ -97,6 +115,7 @@ jobs:
           --generated-dir "$RUNNER_TEMP/p07-speech"
 
       - name: Upload the speech fixtures for review
+        if: inputs.fixture_set == 'corpus'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: p07-speech-fixtures
@@ -104,7 +123,73 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+      - name: Synthesize the noisy-speech passages offline
+        if: inputs.fixture_set == 'noisy-speech'
+        env:
+          HF_HUB_OFFLINE: "1"
+          TRANSFORMERS_OFFLINE: "1"
+        run: >-
+          "$RUNNER_TEMP/p07-venv/bin/python" tools/generate_p07_noisy_speech.py synthesize
+          --assets "$RUNNER_TEMP/p07-assets"
+          --output-dir "$RUNNER_TEMP/p07-noisy-speech"
+          --pip-report "$RUNNER_TEMP/p07-environment/pip-report-torch.json"
+          --pip-report "$RUNNER_TEMP/p07-environment/pip-report-requirements.json"
+
+      - name: Assemble the noisy-speech clips without PyTorch
+        if: inputs.fixture_set == 'noisy-speech'
+        run: >-
+          python tools/generate_p07_noisy_speech.py assemble
+          --output-dir "$RUNNER_TEMP/p07-noisy-speech"
+          --ffmpeg "$RUNNER_TEMP/p07-ffmpeg/bin/ffmpeg"
+
+      - name: Verify the noisy-speech clips independently
+        if: inputs.fixture_set == 'noisy-speech'
+        run: >-
+          python tools/verify_p07_noisy_speech.py
+          --ffmpeg "$RUNNER_TEMP/p07-ffmpeg/bin/ffmpeg"
+          --ffprobe "$RUNNER_TEMP/p07-ffmpeg/bin/ffprobe"
+          --generated-dir "$RUNNER_TEMP/p07-noisy-speech"
+
+      # The reviewer reads durations, clipping, phonemes and sizes here, in the log
+      # and the job summary, before anyone downloads the artifact.
+      - name: Summarize the noisy-speech set for review
+        if: inputs.fixture_set == 'noisy-speech'
+        run: |
+          python tools/generate_p07_noisy_speech.py review --output-dir "$RUNNER_TEMP/p07-noisy-speech" | tee -a "$GITHUB_STEP_SUMMARY"
+          du -b -s "$RUNNER_TEMP/p07-noisy-speech" "$RUNNER_TEMP/p07-noisy-speech/speech"
+
+      - name: Upload the noisy-speech set for review
+        if: inputs.fixture_set == 'noisy-speech'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: p07-noisy-speech-fixtures
+          path: ${{ runner.temp }}/p07-noisy-speech
+          if-no-files-found: error
+          retention-days: 14
+
+      # The noisy-speech set's utterance WAVs are not committed (maintainer decision,
+      # 2026-10-20): they are fetched from the test-media release by their recorded
+      # SHA-256, then the committed clips are verified and rebuilt byte for byte.
+      - name: Fetch the noisy-speech utterances from the test-media release
+        if: inputs.fixture_set == 'noisy-speech-check'
+        run: python tools/fetch_p07_noisy_utterances.py --dest "$RUNNER_TEMP/p07-noisy-utterances"
+
+      - name: Verify the committed noisy-speech clips with the fetched utterances
+        if: inputs.fixture_set == 'noisy-speech-check'
+        run: |
+          python tools/verify_p07_noisy_speech.py             --ffmpeg "$RUNNER_TEMP/p07-ffmpeg/bin/ffmpeg"             --ffprobe "$RUNNER_TEMP/p07-ffmpeg/bin/ffprobe"             --utterances-dir "$RUNNER_TEMP/p07-noisy-utterances"             --report "$RUNNER_TEMP/p07-noisy-check-verification.json"
+          cmp -- "$RUNNER_TEMP/p07-noisy-check-verification.json"             fixtures/corpus/noisy-speech/generated/noisy-speech-verification.json
+
+      - name: Rebuild the committed noisy-speech clips and require identical bytes
+        if: inputs.fixture_set == 'noisy-speech-check'
+        run: >-
+          python tools/generate_p07_noisy_speech.py rebuild
+          --utterances-dir "$RUNNER_TEMP/p07-noisy-utterances"
+          --output-dir "$RUNNER_TEMP/p07-noisy-rebuild"
+          --ffmpeg "$RUNNER_TEMP/p07-ffmpeg/bin/ffmpeg"
+
       - name: Upload the resolved generation environment
+        if: inputs.fixture_set != 'noisy-speech-check'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: p07-speech-environment
@@ -113,6 +198,7 @@ jobs:
           retention-days: 14
 
       - name: Regenerate and require identical bytes
+        if: inputs.fixture_set == 'corpus'
         env:
           HF_HUB_OFFLINE: "1"
           TRANSFORMERS_OFFLINE: "1"
@@ -131,3 +217,13 @@ jobs:
             --generated-dir "$RUNNER_TEMP/p07-speech-repeat" \
             --provenance "$RUNNER_TEMP/p07-speech/speech-provenance.json" \
             --report "$RUNNER_TEMP/p07-repeat-verification.json"
+
+      - name: Regenerate the noisy-speech set and require identical bytes
+        if: inputs.fixture_set == 'noisy-speech'
+        env:
+          HF_HUB_OFFLINE: "1"
+          TRANSFORMERS_OFFLINE: "1"
+        run: |
+          "$RUNNER_TEMP/p07-venv/bin/python" tools/generate_p07_noisy_speech.py synthesize             --assets "$RUNNER_TEMP/p07-assets"             --output-dir "$RUNNER_TEMP/p07-noisy-speech-repeat"             --pip-report "$RUNNER_TEMP/p07-environment/pip-report-torch.json"             --pip-report "$RUNNER_TEMP/p07-environment/pip-report-requirements.json"
+          python tools/generate_p07_noisy_speech.py assemble             --output-dir "$RUNNER_TEMP/p07-noisy-speech-repeat"             --ffmpeg "$RUNNER_TEMP/p07-ffmpeg/bin/ffmpeg"
+          python tools/verify_p07_noisy_speech.py             --ffmpeg "$RUNNER_TEMP/p07-ffmpeg/bin/ffmpeg"             --ffprobe "$RUNNER_TEMP/p07-ffmpeg/bin/ffprobe"             --generated-dir "$RUNNER_TEMP/p07-noisy-speech-repeat"             --provenance "$RUNNER_TEMP/p07-noisy-speech/noisy-speech-provenance.json"             --report "$RUNNER_TEMP/p07-noisy-repeat-verification.json"

@@ -55,3 +55,19 @@ Windows 11, Xeon E5-2698 v4):
 A second reviewed profile, `base_q5_1` (its q5_1 quantization, pinned at the
 accepted revision `5359861`), is an optional alternative measured alongside; it is
 not the default.
+
+## 2026-10-20 note: the noisy-speech set exists, and noise is gated on it
+
+The set issue #150 asked for is in `fixtures/corpus/noisy-speech/` (twelve English and
+Spanish passages, 469 words per level, clean and synthetic `office-v1` noise at 20, 10 and
+5 dB) and is measured by the same qualification test
+([record](../planning/p07-asr-qualification.md), section of 2026-10-20): `base` 5.1% clean,
+5.3%, 5.1% and 7.2% at 20, 10 and 5 dB on hosted Ubuntu, within half a point of that on
+Windows. **The maintainer decided on 2026-10-20** (recorded on #150) to gate it for
+`base`: at most 10% word error rate at 20 dB, 10% at 10 dB and 15% at 5 dB, enforced by the
+test. This supersedes the 2026-09-25 deferral above for synthetic noise only: F08 stays
+gated on critical terms, and real noise is not measured. The set's utterance WAVs are
+assets of the test-media release, fetched by digest; the committed clips are what the test
+reads.
+Accent and crosstalk still need human or licensed recordings
+([L-198](../planning/known-limits.md#l-198)).
