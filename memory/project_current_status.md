@@ -1,6 +1,6 @@
 # VSift current status
 
-As of 2026-10-18 (**`0.2.2` is published from `release/0.2.x` and its records are on `main`; cycle 1 is delivered, cycle 2 (`0.2.3`) has started: the whisper.cpp re-pin to v1.9.5 is on `main`, its `setup check` follow-up is a pull request, and the LOKI overnight lane (ADR 0025, accepted; #472) waits for the maintainer to do the RQ-17 try-out and then set LOKI up**). Current-state document: rewrite it, don't append to it. Next actions and
+As of 2026-10-21 (**the maintainer replanned the releases: `0.2.3` is cut on 23 October, `0.3.0` adds OCR, speakers, links and more in late November, `1.0.0` follows; see "The road to 1.0" under "Where things stand"**); the rest below is as of 2026-10-18 (**`0.2.2` is published from `release/0.2.x` and its records are on `main`; cycle 1 is delivered, cycle 2 (`0.2.3`) has started: the whisper.cpp re-pin to v1.9.5 is on `main`, its `setup check` follow-up is a pull request, and the LOKI overnight lane (ADR 0025, accepted; #472) waits for the maintainer to do the RQ-17 try-out and then set LOKI up**). Current-state document: rewrite it, don't append to it. Next actions and
 open decisions are in `memory/TODO.md`.
 
 ## In plain English
@@ -50,6 +50,7 @@ the CLI and write a cited report. P12's named-client trials qualified it:
 
 ## Where things stand
 
+- **The road to 1.0 (the maintainer's replan of 2026-10-21; [ADR 0027](../docs/decisions/0027-the-road-to-1-0.md); calendar in `docs/planning/backlog-iterations.md`):** `0.2.3` is cut at midnight on Friday 23 October with all of cycle 2 and published about 26 to 27 October; the FFmpeg update (#351, #272, which needs the 2026-10-31 build) is the hot fix `0.2.4` from `release/0.2.x` in early November. `0.3.0`, a normal stable release (cut about 27 November, published about 30 November or 1 December), is planned to add OCR, speaker labels, online links (direct HTTPS and, through an optional yt-dlp component, public pages), clock time on results, "what changed on screen" between two times, search across kept sessions and the language of each chunk (#474); a feature not qualified at the cut moves to 1.0. The word goes out with `0.3.0` in early December. `1.0.0` (end of December or first week of January) requires #188 (adversarial containment) and #176's API stability promise. R1 follows `1.0.0`. **None of the `0.3.0` features exists yet; they are plans, and no public text may claim them.** No `0.3.0` work reaches `main` before the `0.2.3` cut. The README's roadmap text and picture still show the earlier plan.
 **P00-P14 are complete (the whole of R0's work packets, recorded 2026-10-10).** What that means, exactly:
 - **`0.2.0` is published and verified** (2026-10-09, tag `v0.2.0` at `eeb2a22a46a8`); it is no longer `latest`, not deprecated, and has #353, #359 and #391.
 - **`0.2.2` is published and verified, and is the current stable release** (2026-10-18, tag `v0.2.2` at `0dadc69df4f5` on `release/0.2.x`, Release run 39127747535, GitHub's latest release). It is `0.2.2-rc.1`'s source with another version number (5 version-string, 2 shipped-document and 81 work-record files differ). Nothing is announced.

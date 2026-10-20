@@ -63,7 +63,7 @@ real meetings, accents or noisy rooms, so every accuracy figure below says what 
   English, and another wrote a 25-second Russian segment over an English question. Where the chunks are cut decides which
   stretches are affected, and `transcript get` and `search` call them transcribed: VSift does not yet flag such a chunk. If a
   recording mixes languages, listen around each change of language (`vsift audio`) before relying on "not found", or supply a
-  transcript (`ingest --transcript`). A fix is planned for R1.
+  transcript (`ingest --transcript`). A fix is planned for 0.3.0 (late November 2026); it is a plan, not a promise, and a fix that is not ready then waits for 1.0.
 - **Where two chunks meet, a word or two can still be missing or repeated (0.2.1 and later, [L-155](../planning/known-limits.md#l-155) and [L-156](../planning/known-limits.md#l-156)).** The
   recogniser works on 30-second chunks that overlap by five seconds, and VSift joins them. Before this version it could
   drop the end of a sentence at a join, with no sign (found on two real recordings; it is in `0.2.0` and `0.2.1-rc.1`).
