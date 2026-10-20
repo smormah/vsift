@@ -1,8 +1,9 @@
 # The visual change rule on real recordings (#175, L-028)
 
 Status (2026-10-20, cycle 2, `0.2.3`): **an evaluation; no rule changed. The maintainer decided on 2026-10-19 to keep the
-thresholds (section 4). The follow-up on four screen recordings (section 6, 2026-10-20) meets the reopening rule as
-written, through RM04's fades; the decision stays with the maintainer.** Issue:
+thresholds (section 4). The follow-up on four screen recordings (section 6, 2026-10-20) met the reopening rule as
+first written, through RM04's fades; the maintainer decided on 2026-10-20 that fades do not reopen the thresholds, which
+stay, and amended the rule to leave fades out (section 4 point 5).** Issue:
 [#175](https://github.com/smormah/vsift/issues/175). Register: [L-028](known-limits.md#l-028). The real-media set and its
 campaign: [`real-media-set.md`](real-media-set.md).
 
@@ -143,7 +144,9 @@ uninformative (`labelledChanges` in `tools/p14-campaigns/lib/real-media-checks.c
 ## 4. Recommendation, and the maintainer's decision
 
 **Decided by the maintainer on 2026-10-19 (recorded on #175): keep the thresholds** of `r0-visual-v1`, as recommended
-below (points 1 and 2); points 3 to 5 stand as the evaluation's findings and next steps.
+below (points 1 and 2); points 3 to 5 stand as the evaluation's findings and next steps. **Decided again on 2026-10-20
+(recorded on #175):** RM04's fades do not reopen the thresholds, which stay; the reopening rule of point 5 is amended to
+leave fades out.
 
 1. **Keep the thresholds of `r0-visual-v1` (4 for two blocks, 6 for one).** On the one real screen recording measured,
    compression noise stays at 1 level, there is no false change, and every change candidate stands on a change a person
@@ -161,9 +164,11 @@ below (points 1 and 2); points 3 to 5 stand as the evaluation's findings and nex
    (`frame get`, `crop`), and a transcript, not the shortlist.
 5. **Measure again** when RM01 (a Wikipedia screen tutorial at 1280x1024, VP8) is in the test-media release, and on
    RM04 and RM07 (interface demonstrations): one dispatch, `gh workflow run p14-real-media.yml --ref <branch> -f
-   mode=visual -f items="RM01 RM04 RM07 RM10"`. If a second screen recording shows a noise floor above 2 levels or a
-   false change, this recommendation is reopened. **Done on 2026-10-20 (section 6):** RM04 meets that rule as written,
-   through ten fades; the decision stays with the maintainer. **Once a person has labelled `changes_us`** for RM10 and
+   mode=visual -f items="RM01 RM04 RM07 RM10"`. **The reopening rule (amended by the maintainer on 2026-10-20):** if
+   another screen recording shows a noise floor above 2 levels or a false change, **leaving out fades**, the thresholds
+   are reopened. A fade is a pair in which 1% of the frame or more moved by 16 grey levels or more (with no pixel moving
+   by the reference's 64 levels, the pair is still called still). **Done on 2026-10-20 (section 6):** RM04 met the rule
+   as first written through ten fades; under the amended rule no recording reopens the thresholds. **Once a person has labelled `changes_us`** for RM10 and
    RM01, check 7 gives the first figures against human labels.
 
 ## 5. Limits of this measurement
@@ -192,8 +197,9 @@ at most 1 level).
 | RM07 (tool demonstration, VP9 854x480, 9:39) | 210 of 1,119 | 0, 1, 1, 2 | 0 | 0.96 and 1.00 | 0.33 | 27.1; 3, 9 dropped |
 | RM10 (Census, H.264 1280x720, 3:21) | 112 of 402 | 1, 1, 1, 4 | 0 | 0.94 and 1.00 | 0.65 | 32.2; 3, 25 dropped |
 
-**RM04 meets the reopening rule as written; the decision stays with the maintainer.** The rule of section 4 point 5 was
-a noise floor above 2 levels or a false change on a second screen recording, and RM04 has both by the reference's
+**RM04 met the reopening rule as first written; the maintainer decided on 2026-10-20 that its fades do not reopen
+the thresholds, which stay, and amended the rule to leave fades out** (section 4 point 5). The rule as first written was
+a noise floor above 2 levels or a false change on a second screen recording, and RM04 had both by the reference's
 definition. What the ten pairs are:
 
 - **All ten lie between 19 and 45 s, and each is a fade.** In each pair 112,000 to 221,000 pixels (12 to 24% of the
