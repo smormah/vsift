@@ -1,7 +1,7 @@
 # Small on-screen text in real recordings (#173, L-018)
 
-Status (2026-10-19, cycle 2, `0.2.3`): **an evaluation, first measurement done, the maintainer's decisions taken (section 4);
-nothing that ships changes. A person's look at real crops is next.** Issue:
+Status (2026-10-20, cycle 2, `0.2.3`): **an evaluation; the maintainer's decisions taken (section 4); nothing that ships
+changes. Three screen recordings measured (section 6); twelve crops are kept for a person's look, which is next.** Issue:
 [#173](https://github.com/smormah/vsift/issues/173). Register: [L-018](known-limits.md#l-018). The real-media set and its
 campaign: [`real-media-set.md`](real-media-set.md).
 
@@ -92,12 +92,35 @@ pixel.
      (`mayKeepCrops` in `lib/real-media-campaign.cjs`). A private item is still measured, by numbers only.
    - **Where:** under `crops/<id>/` in the `p14-real-media` artifact (90 days); the report lists them as
      `measurements.small_text.kept_crops`. The media and the listening clips still never leave the runner.
-4. **Next:** the person's yes or no on RM10's kept crops, from one campaign dispatch of this change; then RM01 once it
-   is mirrored: `gh workflow run p14-real-media.yml --ref main -f items="RM01 RM10"`.
+4. **Next:** a person's yes or no on the twelve crops kept by run 39475942713 (section 6): four each of RM01, RM04 and
+   RM10.
 
 ## 5. Limits of this measurement
 
-- **Text size:** one real recording, three frames. The band measure is a stroke-density estimate, calibrated on one
+- **Text size:** three real recordings (section 6), three frames each. The band measure is a stroke-density estimate, calibrated on one
   font, not a glyph reader. A dark-mode screen with light text, or text on a picture, may be measured differently.
 - **Legibility:** synthetic text with one font, at two compressions, read by one model. It shows the mechanism
   (compression of a moving frame destroys digits and enlarging does not help), not a rate for real recordings.
+
+## 6. The follow-up on three screen recordings (2026-10-20)
+
+**Where:** `P14 real media` on `main` at `987b80d1`, `mode: both`, run
+[39475942713](https://github.com/smormah/vsift/actions/runs/39475942713), on RM01, RM04, RM07 and RM10. Only the
+items that cover `screen-ui-small-text` are cut into crops: RM01, RM04 and RM10. Every crop came back at native size
+and was read back, and every item passed the campaign's checks. RM10's figures are the same as on 2026-10-19.
+
+| Item | Frame | Crops | Lines of text | Band height: smallest, 10th percentile, median, largest (px) | About, in type (section 2) |
+| --- | --- | ---: | ---: | --- | --- |
+| RM01 (Wikipedia tutorial, VP8) | 1280x1024 | 81 | 60 | 4, 5, **12**, 32 | half the text 14 px or smaller, a tenth about 6 px |
+| RM04 (Portuguese tutorial, VP9) | 1280x720 | 54 | 62 | 5, 7, **8**, 57 | half 10 px or smaller, a tenth about 9 px |
+| RM10 (Census, H.264) | 1280x720 | 54 | 49 | 4, 6, **8**, 24 | half 10 px or smaller, a tenth about 7 px |
+
+**The text of the 720p screen recordings is the same small size** (a median band of 8 px). RM01, recorded at 1280x1024
+from a desktop browser, has larger body text (a median band of 12 px), but its smallest lines are as small as the
+others'.
+
+**Kept for a person:** the run's twelve crops are four each of RM01, RM04 and RM10, those with the smallest text
+(their smallest lines are 4 to 6 px). They are in the run's `p14-real-media` artifact for 90 days, with each item's
+attribution. Nobody has judged them yet. The evaluating agent was told not to open them, and they were deleted from
+this machine once the numbers were copied.
+

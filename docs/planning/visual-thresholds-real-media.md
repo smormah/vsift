@@ -1,7 +1,9 @@
 # The visual change rule on real recordings (#175, L-028)
 
-Status (2026-10-19, cycle 2, `0.2.3`): **an evaluation, first measurement done; no rule changed. The maintainer decided on
-2026-10-19 to keep the thresholds (section 4).** Issue:
+Status (2026-10-20, cycle 2, `0.2.3`): **an evaluation; no rule changed. The maintainer decided on 2026-10-19 to keep the
+thresholds (section 4). The follow-up on four screen recordings (section 6, 2026-10-20) met the reopening rule as
+first written, through RM04's fades; the maintainer decided on 2026-10-20 that fades do not reopen the thresholds, which
+stay, and amended the rule to leave fades out (section 4 point 5).** Issue:
 [#175](https://github.com/smormah/vsift/issues/175). Register: [L-028](known-limits.md#l-028). The real-media set and its
 campaign: [`real-media-set.md`](real-media-set.md).
 
@@ -142,7 +144,9 @@ uninformative (`labelledChanges` in `tools/p14-campaigns/lib/real-media-checks.c
 ## 4. Recommendation, and the maintainer's decision
 
 **Decided by the maintainer on 2026-10-19 (recorded on #175): keep the thresholds** of `r0-visual-v1`, as recommended
-below (points 1 and 2); points 3 to 5 stand as the evaluation's findings and next steps.
+below (points 1 and 2); points 3 to 5 stand as the evaluation's findings and next steps. **Decided again on 2026-10-20
+(recorded on #175):** RM04's fades do not reopen the thresholds, which stay; the reopening rule of point 5 is amended to
+leave fades out.
 
 1. **Keep the thresholds of `r0-visual-v1` (4 for two blocks, 6 for one).** On the one real screen recording measured,
    compression noise stays at 1 level, there is no false change, and every change candidate stands on a change a person
@@ -160,16 +164,64 @@ below (points 1 and 2); points 3 to 5 stand as the evaluation's findings and nex
    (`frame get`, `crop`), and a transcript, not the shortlist.
 5. **Measure again** when RM01 (a Wikipedia screen tutorial at 1280x1024, VP8) is in the test-media release, and on
    RM04 and RM07 (interface demonstrations): one dispatch, `gh workflow run p14-real-media.yml --ref <branch> -f
-   mode=visual -f items="RM01 RM04 RM07 RM10"`. If a second screen recording shows a noise floor above 2 levels or a
-   false change, this recommendation is reopened. **And once a person has labelled `changes_us`** for RM10 and RM01,
-   check 7 gives the first figures against human labels.
+   mode=visual -f items="RM01 RM04 RM07 RM10"`. **The reopening rule (amended by the maintainer on 2026-10-20):** if
+   another screen recording shows a noise floor above 2 levels or a false change, **leaving out fades**, the thresholds
+   are reopened. A fade is a pair in which 1% of the frame or more moved by 16 grey levels or more (with no pixel moving
+   by the reference's 64 levels, the pair is still called still). **Done on 2026-10-20 (section 6):** RM04 met the rule
+   as first written through ten fades; under the amended rule no recording reopens the thresholds. **Once a person has labelled `changes_us`** for RM10 and
+   RM01, check 7 gives the first figures against human labels.
 
 ## 5. Limits of this measurement
 
-- **One screen recording.** RM10 is heavily compressed (under 0.016 bits per pixel) and captioned; a lightly
-  compressed or uncaptioned recording, dark-mode screens and VP8/VP9 sources (RM01, RM04, RM07) are not measured.
+- **Four screen recordings** since 2026-10-20 (section 6): RM10 (H.264, captioned, heavily compressed), RM01 (VP8,
+  1280x1024), RM04 (VP9, 1280x720) and RM07 (VP9 at 854x480, a transcode). Dark-mode screens are not measured.
 - **The reference is pixels, not meaning.** "Changed" means native pixels moved by 64 levels: it counts a cursor as a
-  change and misses a fade or a change of low contrast (RM09's one false change). Human labels remain the truth when
+  change and misses a fade or a change of low contrast (RM09's one false change, RM04's ten in section 6). Human labels remain the truth when
   they exist.
 - **Pairs, not candidates, in the grid.** The other rules are compared on consecutive pairs only; their candidate
   counts would also depend on the anchor comparison, motion merging and the budget.
+
+## 6. The follow-up on four screen recordings (2026-10-20)
+
+**Where:** `P14 real media` on `main` at `987b80d1`, once every item was in the test-media release:
+[39475942713](https://github.com/smormah/vsift/actions/runs/39475942713) (`mode: both`) and
+[39478325795](https://github.com/smormah/vsift/actions/runs/39478325795) (`mode: visual`, whose artifact holds the
+measurement alone). Both used items RM01, RM04, RM07 and RM10, and every item passed the campaign's checks. RM10's figures
+are the same as on 2026-10-19, to the pair. Every window's native frames paired with their samples (a mean difference of
+at most 1 level).
+
+| Item | Still pairs | Largest block difference on still pairs (median, 95th, 99th, max) | False changes | Line of text or larger seen | Word seen | Candidates a minute; windows full, dropped |
+| --- | ---: | --- | ---: | --- | --- | --- |
+| RM01 (Wikipedia tutorial, VP8 1280x1024, 2:16) | 248 of 271 | 0, 1, 1, 1 | 0 | 18 of 18 | 4 of 5 | 11.5; none |
+| RM04 (Portuguese tutorial, VP9 1280x720, 5:00) | 180 of 600 | 0, 14, 38, 39 | **10 (2.0 a minute)** | 0.97 and 1.00 | 0.45 | 27.6; 3, 18 dropped |
+| RM07 (tool demonstration, VP9 854x480, 9:39) | 210 of 1,119 | 0, 1, 1, 2 | 0 | 0.96 and 1.00 | 0.33 | 27.1; 3, 9 dropped |
+| RM10 (Census, H.264 1280x720, 3:21) | 112 of 402 | 1, 1, 1, 4 | 0 | 0.94 and 1.00 | 0.65 | 32.2; 3, 25 dropped |
+
+**RM04 met the reopening rule as first written; the maintainer decided on 2026-10-20 that its fades do not reopen
+the thresholds, which stay, and amended the rule to leave fades out** (section 4 point 5). The rule as first written was
+a noise floor above 2 levels or a false change on a second screen recording, and RM04 had both by the reference's
+definition. What the ten pairs are:
+
+- **All ten lie between 19 and 45 s, and each is a fade.** In each pair 112,000 to 221,000 pixels (12 to 24% of the
+  frame) moved by 16 to 63 grey levels, and none by 64. 55 to 69 of the 144 blocks moved by 2 levels or more, the
+  largest by up to 39. The
+  difference hash moved by 0 to 3 bits: the same picture, brighter or darker. A person sees a fade; the reference,
+  which needs one pixel to move by 64 levels, calls the pair still (its known blind spot, section 5, as with RM09).
+- **Without them RM04 is as quiet as the others.** Its other 170 still pairs, those in which under 1% of the frame
+  moved by 16 levels, differ by 2 levels at the 99th percentile and 3 at most, with no false change. The same cut
+  changes nothing on RM01, RM07 and RM10, where no still pair moves 1% of the frame.
+- **No threshold of the grid removes them.** At (8, 2, 12), the strictest rule compared, RM04 still has 2.0 of them a
+  minute: they are large changes, not noise near the thresholds.
+- **Eight of RM04's change candidates** (of 132) were opened by these pairs; no other item has a change candidate on
+  a still pair.
+
+**The rest agrees with section 3.** A line of text, a caption or anything larger is seen 94 to 100% of the time on all
+four recordings. A word is seen a third to four fifths of the time (0.33 on RM07, at 854x480, where a word is a smaller
+share of a block), and a cursor or a character rarely (0.05 to 0.20; RM01 has none). A looser rule (3, 2, 6) would add one
+false change on RM04 (another of the fades: 11 against 10) and none on the others, and would see more words (RM01 1.00, RM04 0.64, RM07 0.50, RM10 0.83). The
+budget is full in three windows each of RM04, RM07 and RM10, but RM01, a calmer tutorial, stays at 11.5 candidates a
+minute.
+
+**Indexing** took 1.3 s for RM01, 1.9 s for RM04, 2.6 s for RM07 and 2.6 s for RM10 on the hosted runner. That is about 80 to
+220 seconds of video a second; RM10's 2.6 s against 4.6 s the day before is runner variation.
+
