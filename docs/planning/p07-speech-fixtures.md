@@ -318,3 +318,103 @@ included; `cpu` AMD EPYC 9V45). Review before committing:
 
 The spaCy model wheel's SHA-256 (`1932429d…0fb85`), identical in all three runs, is now
 pinned in `SPACY_MODEL_WHEEL`; later runs check the digest, not just the size.
+
+## 2026-10-20 note: the noisy-speech set (#150)
+
+Issue #150 asks for noisy speech with enough words for a word error rate per noise level
+before any noise gate is set (F08 has 13 words, so one word moves its rate by 7.7
+points). The set reuses this recipe's reviewed pieces unchanged: the pinned Kokoro
+revision, the voices `af_heart` (English) and `ef_dora` (Spanish), the pinned
+environment, the quantizer and the `office-v1` noise. Nothing new is fetched, and the
+licence review above covers the output in the same way.
+
+- **Truth of its own.** The scripts and expected terms are frozen in
+  `fixtures/corpus/noisy-speech/manifest.json`, under the corpus's "truth never moves"
+  rule: twelve passages written for the set (six English, six Spanish; neutral support
+  narration with identifiers and numbers, no real people, companies or personal data),
+  469 words per level (231 English, 238 Spanish), so one word moves a level's pooled
+  rate by about 0.2 points and a language's by about 0.4. The levels are `clean`,
+  `snr20`, `snr10` and `snr05`, and one 28 s noise-only clip per noisy level. The corpus
+  `manifest.json` and `generated/speech-provenance.json`, which the agent trials freeze
+  as `truth`, do not change; a test checks that neither names the set.
+- **Generator** `tools/generate_p07_noisy_speech.py`: each passage is spoken once,
+  sentence by sentence with the seed reset before each (so no request reaches Kokoro's
+  510-phoneme limit, past which its non-English pipeline truncates; a longer phoneme
+  string stops generation), sentences joined by 300 ms. The utterance is placed after a
+  2 s noise-only lead-in with a 1 s tail, and every clip must be shorter than 29 s, so it
+  is one 30 s R0 recognition window and no chunk seam enters the rate. Each passage keeps
+  one noise sequence (seed 150,000 plus its position) at every level, so only the gain
+  changes from level to level. SNR is defined as for F08 (RMS of the whole utterance over
+  RMS of the noise, which covers the clip); the power ratios are 100, 10 and `sqrt(10)`,
+  so only correctly rounded operations are used and a mix is bit-identical everywhere.
+  A noise-only clip carries the noise at the level it has under speech of the set's
+  pooled RMS (seed 150,999). Each track is encoded as audio-only AAC (64 kbit/s, mono,
+  16 kHz, `+bitexact`) in MP4, as the corpus's AAC tracks are.
+- **Verifier** `tools/verify_p07_noisy_speech.py` shares no code with either generator. It
+  checks every digest, size and WAV header, that each utterance's sentences join back
+  into the frozen script, that each clip is one mono 16 kHz AAC stream shorter than one
+  window, and, from the decoded audio: a clean clip is silent outside its speech span; a
+  noisy clip has noise over its whole length and an SNR estimated from its lead-in and
+  tail within 3 dB of its level, falling level by level for each passage; a noise-only
+  clip's noise power is within 3 dB of what its level implies.
+- **Workflow:** dispatch **P07 speech fixtures** with `fixture_set: noisy-speech`. It runs
+  both recipes' model-free and FFmpeg-backed tests, synthesizes, assembles, verifies,
+  prints the reviewer's summary (durations, clipping, phonemes, sizes) to the log and
+  the job summary, uploads `p07-noisy-speech-fixtures`, then regenerates and requires
+  identical bytes. The default `fixture_set: corpus` runs exactly the earlier steps.
+- **Files:** `fixtures/corpus/noisy-speech/generated/` holds `<passage>-<level>.m4a`,
+  `noise-only-<level>.m4a`, `noisy-speech-provenance.json` and
+  `noisy-speech-verification.json`. The utterances, `speech/<passage>-utterance.wav`, are
+  not committed (below; `.gitignore` keeps them out).
+
+**Committed clips (2026-10-20).** The committed set comes from
+https://github.com/smormah/vsift/actions/runs/39449813661 (green on its first dispatch,
+repeatability included; `cpu` AMD EPYC 9V45; the pinned BtbN FFmpeg `n9.0.1-11-ge47273f4d9`).
+The artifact `p07-noisy-speech-fixtures` (14,407,823 bytes, SHA-256 `b184f5ca…16946`, as
+GitHub records it) holds 12 utterances and 51 clips, 17,264,210 bytes in all: utterances
+9,264,528 bytes (193.0 s of speech, 14.1 to 18.5 s each), clips 7,829,408 bytes (114 to
+227 KB each). Review before committing:
+
+- `clipped_samples` is zero for every utterance, and no mix needed peak limiting (every
+  `mix_gain` is 1).
+- The recorded phonemes say every identifier and number: `10:32` "ten thirty-two",
+  `2.5` "two point five", `E-409` "E four oh nine" and "e cuatrocientos nueve", `1017`
+  "ten seventeen", `p95` "P ninety-five", `K-204` "K two oh four" and "ka doscientos
+  cuatro", `316` "three hundred sixteen" and "trescientos dieciséis", `731` "setecientos
+  treinta y uno", `512` "quinientos doce", `2048` "twenty forty-eight". `127.50` is read
+  "one hundred twenty-seven point five" (the trailing zero is not spoken; the scorer
+  compares decimals by value), `megabytes` in Spanish as "megabites".
+- The verifier's estimates from the decoded audio: 20.15 to 20.72 dB at `snr20`, 10.12 to
+  10.74 at `snr10`, 5.09 to 5.82 at `snr05`; the noise-only clips 0.33 to 0.35 dB under
+  their expected power.
+- `python tools/verify_p07_noisy_speech.py` on Windows 11 with the gyan.dev FFmpeg 9.0
+  build reproduced the workflow's `noisy-speech-verification.json` byte for byte.
+
+No one has listened to the clips: the phonemes, the verifier and the recogniser's
+transcripts in [`p07-asr-qualification.md`](p07-asr-qualification.md) (section of
+2026-10-20) are the review.
+
+**Where the utterances live (maintainer decision, 2026-10-20).** The clips (7.8 MB) are
+committed; the twelve utterance WAVs (9,264,528 bytes) are not. They are assets of the
+test-media release `test-media-2026-10-19`, named `noisy-speech-<passage>-utterance.wav`;
+`noisy-speech-provenance.json` keeps each one's bytes and SHA-256
+(`synthesis.utterances`) and its asset (`utterance_release`, written by the generator's
+`release-assets` stage, which also copies the files under their asset names for a person to
+upload; no tool uploads). The measurement reads only the clips. The rebuild and the
+verifier's text and level checks need the utterances:
+
+- `python tools/fetch_p07_noisy_utterances.py --dest <empty folder>` fetches them over
+  HTTPS from this repository's release URL, only through GitHub's release-asset hosts,
+  bounded to the recorded size, and keeps each one only if its SHA-256 matches;
+- `python tools/verify_p07_noisy_speech.py ... --utterances-dir <that folder>` verifies the
+  committed clips with them;
+- `python tools/generate_p07_noisy_speech.py rebuild --utterances-dir <that folder>
+  --output-dir <new folder> --ffmpeg <ffmpeg>` rebuilds every clip and requires the committed
+  bytes (with the pinned P06 FFmpeg build);
+- dispatch **P07 speech fixtures** with `fixture_set: noisy-speech-check` to do all three
+  on a runner. It fetches no model.
+
+A new generation of the set is committed the same way: run `release-assets` on its output,
+have the new WAVs uploaded under new names, and commit only the clips and the two records.
+The verifier rewrote `noisy-speech-verification.json` after `utterance_release` was added
+(only `provenance_sha256` changed).

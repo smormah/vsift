@@ -3,8 +3,11 @@
 Status: measured 2026-09-25 on one Windows machine (P07 increment 3c, branch
 `p07/asr-setup-profiles`). **Decided (maintainer, 2026-09-25): `base` is the measured
 default and passes the gates below.** Noisy speech is gated on critical terms only;
-F08's word error rate is a reported known limitation until the noisy-speech fixture
-set of [issue #150](https://github.com/smormah/vsift/issues/150) exists. The
+F08's word error rate is a reported known limitation. **The noisy-speech set of
+[issue #150](https://github.com/smormah/vsift/issues/150) exists and is measured
+(2026-10-20, [section below](#noisy-speech-set-measured-2026-10-20-150)), and **the
+maintainer decided its noise gate on 2026-10-20: for `base`, at most 10% word error rate at
+20 and 10 dB and 15% at 5 dB, enforced by the test.** The
 `base_q5_1` pin at Hugging Face revision `5359861` was accepted the same day.
 
 ## What was measured, and how
@@ -57,7 +60,8 @@ logical processors), 64 GiB RAM, NTFS; whisper.cpp v1.9.2 reviewed Windows build
 | --- | --- |
 | Pooled WER of clips without added noise <= 10% | Yes: the test fails |
 | Every spoken critical term found in every clip, noisy included, except the reviewed known misses | Yes: the test fails |
-| F08 (noisy) WER | No: reported as a known limitation, `"gated": false` with the reason in the report; a noise WER gate waits for #150 |
+| F08 (noisy) WER | No: reported as a known limitation, `"gated": false` with the reason in the report |
+| Noisy-speech set (#150), pooled WER per level: 20 dB <= 10%, 10 dB <= 10%, 5 dB <= 15% | Yes since 2026-10-20 (maintainer decision): the test fails |
 | Real-time factor <= 0.5 | No: reported, it measures the host |
 | Peak `whisper-cli` memory <= 400 MiB | No: reported, it measures the host |
 
@@ -134,6 +138,134 @@ words every reviewed host hears (ADR 0017).
 
 **The re-pin to whisper.cpp v1.9.5 (2026-10-18, #322, #399):** the last four rows compare v1.9.2 and v1.9.5 on the same runner images and CPU models. Accuracy is identical on each: `base` clean WER 3.25% on Ubuntu and 4.06% on the Intel Windows runner (F05's "invoice" heard as "in voice", as on the AVX-512 runner above), `base_q5_1` 4.06%, F08 61.53% and 46.15%, the same known misses and no unexpected one; timing and memory are within a few percent. The review of the new build is in [`p06-ubuntu-artifact-candidate.md`](p06-ubuntu-artifact-candidate.md#2026-10-18-re-pin-whispercpp-v195-build-b5454).
 
+## Noisy-speech set measured (2026-10-20, #150)
+
+**What:** the noisy-speech set of [issue #150](https://github.com/smormah/vsift/issues/150)
+([`fixtures/corpus/noisy-speech/`](../../fixtures/corpus/noisy-speech/manifest.json), recipe
+in [`p07-speech-fixtures.md`](p07-speech-fixtures.md), note of 2026-10-20): twelve passages,
+six English and six Spanish, 469 reference words per level (231 English, 238 Spanish), each
+spoken once by Kokoro and placed at four levels, `clean` and `office-v1` noise at 20, 10
+and 5 dB, the same noise sequence for one passage at every level; each clip is one 30 s
+window, so no chunk seam enters the rate. One word moves a level's pooled rate by 0.21
+points. Three 28 s noise-only clips, one per noisy level, hold no speech.
+
+**How:** the same test and chain as above (`local_asr_accuracy_timing_and_memory`, 4
+recognizer threads, decoding profile `r0-v1`, whisper.cpp v1.9.5), now also running every
+clip of the set for each profile and reporting it under `noisy_speech_set` (per level,
+pooled and per language; critical terms per level; the words written over noise alone).
+Scoring is the `asr_scoring` module's, unchanged: the expectations come from the set's own
+manifest only, and every expected term must be spoken there. The run below was made with
+no level gated; **since the maintainer's decision of 2026-10-20 (below) each noisy level is
+gated for `base`** (`NOISY_SET_WER_LIMITS_BP`; `the_decided_noisy_limits_are_enforced_on_each_levels_pooled_rate`
+pins the limits and their boundaries), and its report says `"gated": true` with `"met"`.
+
+**Run:** [39451089926](https://github.com/smormah/vsift/actions/runs/39451089926) (`P07 local
+ASR` on the branch of this change; both jobs green, the existing gates met as before):
+ubuntu-24.04 on an AMD EPYC 9V74, windows-2025 on an AMD EPYC 7763, both 4 vCPUs.
+
+Word error rate per level, pooled over 469 words (errors in brackets), and by language:
+
+| Profile, host | `clean` | `snr20` | `snr10` | `snr05` |
+| --- | ---: | ---: | ---: | ---: |
+| `base`, Ubuntu | 5.11% (24) | 5.33% (25) | 5.11% (24) | 7.24% (34) |
+| `base`, Windows | 4.90% (23) | 5.33% (25) | 4.47% (21) | 7.24% (34) |
+| `base_q5_1`, Ubuntu | 5.54% (26) | 4.90% (23) | 5.11% (24) | 7.67% (36) |
+| `base_q5_1`, Windows | 5.33% (25) | 4.90% (23) | 4.05% (19) | 7.46% (35) |
+| `base`, English (231 words), both hosts | 1.73% | 2.16% | 1.73% | 4.76% |
+| `base`, Spanish (238 words), Ubuntu / Windows | 8.40% / 7.98% | 8.40% / 8.40% | 8.40% / 7.14% | 9.66% / 9.66% |
+
+Critical terms found, of 49, per level (`clean`, `snr20`, `snr10`, `snr05`): `base` 42, 41,
+41, 40 on Ubuntu and 42, 41, 42, 40 on Windows; `base_q5_1` 42, 42, 42, 38 and 42, 42, 43,
+39. Six terms are missed at the clean level already, by both profiles on both hosts, so
+they are not the noise's: English `E-409` (heard "E4-9", "E49") and Spanish `E-409` ("de
+400 nueve"), `compilación 512` ("500 doce"), `512 megabytes` ("500 12 megavites"),
+`límite de reintentos` ("rententos") and `pendiente` ("pasa dependiente"); `base` also
+misses "queued" ("Q", the reviewed known miss of F04) and `base_q5_1` the Spanish `K-204`
+("C204"). What noise adds is one to four misses a level, at
+most: `K-204` ("K2 or 4" at 5 dB), Spanish `fallido` ("apayido"), `median` ("medium",
+`base_q5_1` at 5 dB).
+
+Words written over noise alone (28 s each; `snr20`, `snr10`, `snr05`):
+
+| Profile | Ubuntu | Windows |
+| --- | --- | --- |
+| `base` | "ndoom.com.com." (3 words), "nd" (1), "nd" (1) | the same |
+| `base_q5_1` | "I'm going to go to the next one." (9), the same (9), "Halt!" (1) | "Thank you." (2), "Halt!" (1), "1.1kg 2.1kg 2.1kg 2.1kg 2.1kg" (5, a repetition loop) |
+
+**What it says:**
+
+1. **`office-v1` noise down to 5 dB costs `base` about two points.** At 20 and 10 dB the
+   pooled rate is within half a point (two errors) of the clean level on both hosts; at
+   5 dB it rises by 2.1 to 2.3 points (10 or 11 more errors), mostly in English (4 errors at
+   clean, 11 at 5 dB). `base_q5_1` behaves the same. For `base` the two hosts differ by at
+   most 3 errors a level (`base_q5_1` by 5, at 10 dB), and at 5 dB both gave 34.
+2. **F08's 61.5% is not a noise rate.** The set's 10 dB level, the same noise at the same
+   ratio, is within half a point of its clean level. F08's errors are its identifiers'
+   formatting and its second, Spanish sentence inside one 13-word clip (L-020's per-word
+   arithmetic: one word is 7.7 points there).
+3. **Most errors are the voice and the language, not the noise.** The clean level is 5%,
+   against 3.25% for the corpus's clean pool: Spanish is about 8% at every level (numbers
+   read as words and digits mixed, "500 doce" for 512; misheard words "comproevo",
+   "rententos"; joined words "pasa dependiente"), English under 2%. They are Kokoro's
+   synthetic voices, so how much of the Spanish rate a real speaker would share is not
+   known (L-022, L-198).
+4. **Over noise alone the recogniser writes words that were never said** (L-199): `base`
+   one to three ("ndoom.com.com.", the "ndoom." that RM09's real noisy lead also produced,
+   #150's comment of 2026-10-19), `base_q5_1` up to a nine-word sentence and, on Windows at
+   5 dB, a repetition loop of the kind RM09 showed ("1908年, 1906年, …"). It is little here,
+   because 28 s of synthetic office noise are one window; RM09's five minutes of real noise
+   produced many such stretches. A word error rate per level does not measure it; the
+   noise-only figure does.
+5. **The figures say little about real noise.** `office-v1` is stationary pink noise with
+   keyboard clicks; babble, music, reverberation and a real microphone are not in it, and the
+   speech is one synthetic voice per language.
+
+The existing gates were unchanged: `base` corpus clean pool 3.25%, no unexpected critical
+miss, F08 61.53% on both hosts; `base_q5_1` F08 38.46% on the Ubuntu EPYC 9V74 (46.15% on
+Windows and in the earlier rows above: a CPU-backend difference, L-023, not this change).
+Real-time factor (`base`) 0.243 and 0.264, peak memory 316 and 336 MiB.
+
+### Gate proposal (the maintainer chose A on 2026-10-20)
+
+| Option | What is gated for `base` | Measured | Margin |
+| --- | --- | --- | --- |
+| **A (recommended): a word-error limit per level on this set** | `snr20` <= 10%, `snr10` <= 10%, `snr05` <= 15% (pooled, 469 words) | 5.33%, 5.11% (4.47%), 7.24% | 22, 23 and 36 words: about twice the measured errors, like the clean gate's 10% over 3.25% |
+| B: critical terms only, as now | F08's critical terms (the reviewed known misses excepted); the set's rates and terms reported | as above | unchanged |
+
+- **Why A:** the set is large enough for a rate (one word is 0.21 points; for `base` the hosts
+  differed by at most 0.64 points), and a limit at about twice the measured errors would catch a
+  change (a re-pin, a decoding profile, a different chunking) that doubles recognition errors
+  in noise, which today nothing would stop. 10% at 20 and 10 dB is the clean gate's bound,
+  because noise made no measurable difference there; 5 dB gets 15%. A limit is a regression
+  guard for this synthetic noise, not a claim about real noisy recordings, and the public
+  text would say so.
+- **Why B:** `office-v1` is mild for this recogniser, so a limit set on it can give false
+  comfort about real noise, where the failure that matters (words over non-speech, L-199)
+  is not what a per-level rate measures.
+- **Not proposed as gates:** the set's critical terms (seven of the misses are already at
+  the clean level, from the synthetic voice and Spanish number formatting; a gate would
+  need a known-miss list of its own), `base_q5_1` (reported only, as before), and the
+  noise-only words (reported; a bound would rest on three 28 s clips).
+- **A is set:** `NOISY_SET_WER_LIMITS_BP` in
+  `crates/vsift-infrastructure/tests/p07_asr_qualification.rs` is
+  `[("snr20", Some(1_000)), ("snr10", Some(1_000)), ("snr05", Some(1_500))]`; the test
+  fails when `base` exceeds a limit, and its report says `"gated": true` with `"met"`.
+
+### Decision (maintainer, 2026-10-20, recorded on #150)
+
+1. **Gate A.** For `base`, the noisy-speech set's pooled word error rate is gated per
+   level: at most 10% at 20 dB, 10% at 10 dB and 15% at 5 dB. It is a regression guard for
+   synthetic `office-v1` noise, not a claim about real noisy recordings. The clean level,
+   the set's critical terms, the noise-only words and `base_q5_1` stay reported only;
+   F08 stays gated on critical terms only, as decided on 2026-09-25.
+2. **The utterance WAVs (9.3 MB) are not in the repository.** They are assets of the
+   test-media release `test-media-2026-10-19`; `noisy-speech-provenance.json` keeps their
+   sizes and SHA-256 and names their assets. The rebuild and the verifier fetch them by
+   digest (`tools/fetch_p07_noisy_utterances.py`, the workflow's `noisy-speech-check`); the
+   measurement reads the committed clips only.
+3. **Words written over noise alone ([L-199](known-limits.md#l-199))** are decided in
+   cycle 3, after the real-media set has measured them.
+
 ## Seam finding and fix
 
 Running the local-ASR checkpoint with `base_q5_1` lost F07's whole sentence from the
@@ -165,11 +297,14 @@ with `base` only and measures `base_q5_1` here.
 
 All three are tracked in [issue #150](https://github.com/smormah/vsift/issues/150):
 
-- **Noisy speech:** F08 is the only noisy clip and has 13 words, so its rate moves 7.7
-  points per word; no noise word-error gate is set until a noisy fixture set exists.
-- **Accent and crosstalk are not in the corpus.** Every clip is one synthetic
-  (Kokoro) voice per sentence; there is no human recording, regional accent or
-  overlapping speech. T-04 stays open for those until fixtures exist.
+- **Noisy speech:** F08 is the corpus's only noisy clip and has 13 words, so its rate
+  moves 7.7 points per word. The noisy-speech set (2026-10-20, above) measures 469 words
+  per level at 20, 10 and 5 dB of synthetic `office-v1` noise, gated for `base` since the
+  maintainer's decision of 2026-10-20. Real noise (babble, music, rooms) is not in it.
+- **Accent and crosstalk are not in the corpus** ([L-198](known-limits.md#l-198)). Every
+  clip is one synthetic (Kokoro) voice per sentence; there is no human recording, regional
+  accent or overlapping speech. T-04 stays open for those until human or otherwise
+  licensed recordings exist.
 - Measured on one Windows machine. The opt-in `P07 local ASR` workflow
   (`.github/workflows/p07-local-asr.yml`) repeats this on hosted Ubuntu 24.04 and
   Windows Server 2025 runners with the reviewed Ubuntu and Windows builds; its reports
