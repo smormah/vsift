@@ -427,7 +427,8 @@ release or a report's text.
   timing differences, timings, candidate counts) and failure codes. **No transcript text, no names, no file names** and no
   revision ids: items appear as `P01` and `P02`. The step labels, which are also the log lines, are fixed phrases (a
   search is `search 1`, never its words), a failed check keeps only its name and the number of its findings, and the
-  report passes through a filter that drops every string other than VSift's own codes and enumerations. No listening clip
+  report passes through a filter that drops every string other than VSift's own codes and enumerations (a missing run's
+  kind is kept only as `loss`, `repetition` or `script`, since 2026-10-20). No listening clip
   of a private item's audio and no transcript file is kept; its session, which holds the copy VSift makes, is closed and then
   removed (`session clean --expired`) at the end of the run, so no copy of the recording stays in the work folder (checked
   on a synthetic stand-in run through the private path on 2026-10-19).

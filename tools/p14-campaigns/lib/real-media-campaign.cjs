@@ -647,9 +647,12 @@ Native crops of frames of ${item.id}, unscaled, for a person to judge whether sm
 /** The string members a private report may keep: VSift's own codes and enumerations, never content. */
 const PRIVATE_STRING_KEYS = new Set(['id', 'status', 'code', 'basis', 'language', 'step']);
 const PRIVATE_STRING = /^[A-Za-z0-9_ ().:-]{1,80}$/;
+/** String members kept only when they are one of a closed set: a missing run's kind (lostKind in real-media-checks.cjs). */
+const PRIVATE_ENUMS = new Map([['kind', new Set(['loss', 'repetition', 'script'])]]);
 
 function measurementsOnly(value, key) {
   if (value === null || typeof value === 'number' || typeof value === 'boolean') return value;
+  if (typeof value === 'string' && PRIVATE_ENUMS.has(key)) return PRIVATE_ENUMS.get(key).has(value) ? value : undefined;
   if (typeof value === 'string') return PRIVATE_STRING_KEYS.has(key) && PRIVATE_STRING.test(value) ? value : undefined;
   if (Array.isArray(value)) return value.map((entry) => measurementsOnly(entry, key)).filter((entry) => entry !== undefined);
   if (typeof value === 'object') {

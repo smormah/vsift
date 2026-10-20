@@ -406,3 +406,27 @@ test('a range to keep is a public item\'s, in whole seconds, and bounded (#485)'
   assert.throws(() => campaign.parseKeepSegments(['RM09:0-1', 'RM09:2-3', 'RM09:4-5', 'RM09:6-7', 'RM09:8-9']), /at most 4 ranges/);
   assert.equal(campaign.parseKeepSegments([]).size, 0);
 });
+
+test('a private report keeps the kind of each missing run, from the closed set only, and still no text', () => {
+  const kept = campaign.privateReport({
+    id: 'P01',
+    checks: { seams: { passed: false, findings: ['9 words heard mid-chunk are missing: zebrafinch'] } },
+    measurements: {
+      seams_of_whole_run: {
+        lost_runs: [
+          { from_us: 1, to_us: 2, words: 9, seam: [0, 5], kind: 'loss' },
+          { from_us: 3, to_us: 4, words: 6, seam: [0, 5], kind: 'repetition' },
+          { from_us: 5, to_us: 6, words: 4, seam: [0, 5], kind: 'script' },
+          { from_us: 7, to_us: 8, words: 3, seam: [0, 5], kind: 'Alice Hartwell' },
+        ],
+        lost_run_kinds: { loss: 1, repetition: 1, script: 1 },
+      },
+      note: { kind: 'zebrafinch Quillmorton' },
+    },
+  });
+  const runs = kept.measurements.seams_of_whole_run.lost_runs;
+  assert.deepEqual(runs.map((entry) => entry.kind), ['loss', 'repetition', 'script', undefined]);
+  assert.equal(runs[3].words, 3, 'a run whose kind is not in the set keeps its numbers');
+  assert.deepEqual(kept.measurements.note, {}, 'a kind outside the set is dropped wherever it appears');
+  assert.deepEqual(leaks(JSON.stringify(kept)), []);
+});
