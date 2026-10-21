@@ -220,6 +220,9 @@ pub struct JobResumeRequest {
     /// How the resumed run waits for admission, as
     /// [`RetranscribeRequest::admission`] does.
     pub admission: AdmissionWait,
+    /// When the resumed run publishes, as
+    /// [`RetranscribeRequest::publication`] says.
+    pub publication: crate::RetranscribePublication,
 }
 
 /// A resumed job's result and the job as it stands afterwards.
@@ -402,6 +405,7 @@ impl Engine {
                 cancellation: request.cancellation,
                 progress: request.progress,
                 admission: request.admission,
+                publication: request.publication,
             })
             .await?;
         let status = self.job_status(outcome.job().job_id())?;
@@ -424,6 +428,24 @@ impl Engine {
     pub fn job_cancel(&self, job: &JobId) -> Result<JobCancelReport, EngineError> {
         let (store, session, now) = self.job_session(job)?;
         let outcome = cancel_job(&store, &session, job, now)?;
+        // A job no process runs is cancelled here, so its open revision, if it
+        // published one, is sealed as stopped here too (ADR 0033, D1); a live
+        // owner seals its own when it sees the request. Best effort: a session
+        // busy now keeps the revision open, and cancelling again seals it.
+        if matches!(
+            outcome,
+            CancelOutcome::Cancelled | CancelOutcome::AlreadyEnded(JobState::Cancelled)
+        ) {
+            let view = job_status_query(&store, &session, job, now)?;
+            let _ = vsift_application::seal_stopped_now(
+                &store,
+                &session,
+                job,
+                view.record.epoch,
+                view.record.attempt,
+                now,
+            );
+        }
         drop(store);
         let status = self.job_status(job)?;
         Ok(JobCancelReport { outcome, status })

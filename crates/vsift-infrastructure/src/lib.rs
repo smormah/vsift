@@ -200,9 +200,13 @@ pub use source_snapshot::{
     MAX_SOURCE_BYTES, MAX_SOURCE_READ_DURATION, SourceContainer, SourceError, SourceSnapshot,
 };
 pub use speech_audio::FfmpegSpeechAudio;
-pub use system_clock::SystemClock;
+pub use system_clock::{MonotonicStopwatch, SystemClock};
 pub use transcript_record::{
     MAX_TRANSCRIPT_RECORD_BYTES, decode_transcript_record, encode_transcript_record,
+    part::{
+        MAX_TRANSCRIPT_PART_BYTES, MAX_TRANSCRIPT_PARTS, OpenRevisionRecord,
+        decode_transcript_parts, encode_transcript_part,
+    },
 };
 pub use transcript_sidecar::{
     MAX_LINE_BYTES, parse_supplied_transcript, read_supplied_transcript,

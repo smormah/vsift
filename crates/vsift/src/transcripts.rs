@@ -23,7 +23,7 @@ use crate::{
     sessions::{SessionSnapshot, SuppliedTranscriptRequest},
 };
 
-const MICROS_PER_SECOND: u64 = 1_000_000;
+pub(crate) const MICROS_PER_SECOND: u64 = 1_000_000;
 
 /// A bounded request for the transcript segments of one session in a range.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -41,6 +41,10 @@ pub struct TranscriptQuery {
     pub limit: Option<u16>,
     /// Opaque continuation token from the previous page of the same query.
     pub cursor: Option<String>,
+    /// A `since` token of an earlier answer (ADR 0033): read only what the
+    /// revision it follows published after it, in start order. The revision is
+    /// the token's, and the range is clipped to the source.
+    pub since: Option<String>,
 }
 
 /// One bounded page of a session's transcript.
@@ -52,6 +56,7 @@ pub struct TranscriptExcerpt {
     segments: Vec<TranscriptSegment>,
     next_cursor: Option<String>,
     coverage: SearchCoverage,
+    growth: crate::growth::ReadGrowth,
 }
 
 impl TranscriptExcerpt {
@@ -93,6 +98,12 @@ impl TranscriptExcerpt {
     pub const fn coverage(&self) -> &SearchCoverage {
         &self.coverage
     }
+
+    /// What the read of a growing transcript adds (ADR 0033).
+    #[must_use]
+    pub const fn growth(&self) -> &crate::growth::ReadGrowth {
+        &self.growth
+    }
 }
 
 impl Engine {
@@ -121,6 +132,9 @@ impl Engine {
             .map_err(|_| EngineError::InvalidPageLimit)?;
         let (store, now) = self.existing_store()?;
         let store = store.ok_or(EngineError::SessionRoot(SessionRootError::Missing))?;
+        if let Some(since) = &query.since {
+            return transcript_since(&store, &query, range, limit, since, now);
+        }
         let (revision, status) = match &query.revision {
             None => store
                 .read_transcript(&query.session, now)?
@@ -152,6 +166,15 @@ impl Engine {
         } = page;
         let segments = segments.into_iter().cloned().collect();
         let next_cursor = next_cursor.map(|cursor| cursor.encode());
+        let growth = crate::growth::read_growth(
+            &store,
+            &query.session,
+            &revision,
+            &coverage,
+            None,
+            expires_at,
+            now,
+        )?;
         Ok(TranscriptExcerpt {
             session: SessionSnapshot::observe(&status, now),
             revision,
@@ -159,9 +182,79 @@ impl Engine {
             segments,
             next_cursor,
             coverage,
+            growth,
         })
     }
+}
 
+/// A `transcript get --since` (ADR 0033): what the token's revision
+/// published after it, in `range` clipped to the source, at most `limit`.
+fn transcript_since(
+    store: &vsift_infrastructure::FilesystemSessionStore,
+    query: &TranscriptQuery,
+    range: TimeRange,
+    limit: PageLimit,
+    since: &str,
+    now: u64,
+) -> Result<TranscriptExcerpt, EngineError> {
+    let (revision, status, watermark) =
+        crate::growth::since_target(store, &query.session, since, now)?;
+    if query
+        .revision
+        .as_ref()
+        .is_some_and(|wanted| wanted != revision.id())
+    {
+        return Err(EngineError::TranscriptQuery(
+            vsift_application::TranscriptQueryError::Cursor(vsift_domain::CursorError::WrongQuery),
+        ));
+    }
+    let source = revision.source_segment().range();
+    let range = TimeRange::new(
+        range.start().max(source.start()),
+        range.end().min(source.end()),
+    )
+    .map_err(|_| EngineError::InvalidTimeRange)?;
+    let expires_at = status
+        .lifetime()
+        .expires_at_unix_seconds()
+        .saturating_mul(MICROS_PER_SECOND);
+    let page = vsift_application::page_since(
+        &query.session,
+        &revision,
+        watermark,
+        Some(range),
+        None,
+        limit,
+        expires_at,
+    )
+    .map_err(crate::growth::cursor_error)?;
+    let coverage = SearchCoverage::of(&revision, Some(range));
+    let segments = page
+        .segments
+        .iter()
+        .map(|(segment, _)| (*segment).clone())
+        .collect();
+    let growth = crate::growth::read_growth(
+        store,
+        &query.session,
+        &revision,
+        &coverage,
+        Some((page.next.encode(), page.more)),
+        expires_at,
+        now,
+    )?;
+    Ok(TranscriptExcerpt {
+        session: SessionSnapshot::observe(&status, now),
+        revision,
+        range,
+        segments,
+        next_cursor: None,
+        coverage,
+        growth,
+    })
+}
+
+impl Engine {
     /// Validates and reads everything a transcript import needs before the
     /// session root is touched: the offset, the sidecar and the media tools.
     pub(crate) fn prepare_transcript_import(

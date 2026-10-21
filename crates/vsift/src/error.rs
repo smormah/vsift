@@ -228,6 +228,14 @@ pub enum EngineError {
         /// The failed job.
         job: JobId,
     },
+    /// What the run would seal differs from what it published (ADR 0033): a
+    /// resume by a `VSift` with other merge rules. The revision was sealed as
+    /// stopped at what was published, which stays; the job failed, and a new
+    /// retranscription of the rest continues it.
+    RetranscriptionPublishedDiffers {
+        /// The failed job.
+        job: JobId,
+    },
     /// The job ended in a state it cannot be resumed from.
     JobNotResumable {
         /// The job.
@@ -463,6 +471,7 @@ impl EngineError {
             | Self::TranscriptAssembly(_)
             | Self::EvidenceAssembly
             | Self::JobInvariant => FailureCode::Internal,
+            Self::RetranscriptionPublishedDiffers { .. } => FailureCode::IntegrityFailure,
             Self::IsolationUnavailable(_) => FailureCode::IsolationUnavailable,
             Self::Worker(failure) => failure.failure_code(),
             Self::JobBusy { .. }
@@ -854,6 +863,9 @@ impl fmt::Display for EngineError {
             Self::RetranscriptionSuperseded { .. } => {
                 formatter.write_str("another revision replaced part of the range during the run")
             }
+            Self::RetranscriptionPublishedDiffers { .. } => formatter.write_str(
+                "the run would seal other text than it published; the published part was kept",
+            ),
             Self::JobNotResumable { state, .. } => write!(
                 formatter,
                 "the job is {} and cannot be resumed",
@@ -954,6 +966,7 @@ impl Error for EngineError {
             | Self::IdempotencyConflict { .. }
             | Self::JobCancelled { .. }
             | Self::RetranscriptionSuperseded { .. }
+            | Self::RetranscriptionPublishedDiffers { .. }
             | Self::JobNotResumable { .. }
             | Self::JobInterrupted { .. }
             | Self::JobSessionNotOpen { .. }
@@ -979,6 +992,7 @@ impl EngineError {
             | Self::IdempotencyConflict { job }
             | Self::JobCancelled { job }
             | Self::RetranscriptionSuperseded { job }
+            | Self::RetranscriptionPublishedDiffers { job }
             | Self::LocalAsrOutputUnusable { job, .. }
             | Self::JobNotResumable { job, .. }
             | Self::JobInterrupted { job, .. }
@@ -1061,6 +1075,7 @@ impl From<JobRunError> for EngineError {
             JobRunError::NotResumable { job, state } => Self::JobNotResumable { job, state },
             JobRunError::Cancelled { job } => Self::JobCancelled { job },
             JobRunError::Superseded { job } => Self::RetranscriptionSuperseded { job },
+            JobRunError::PublishedDiffers { job } => Self::RetranscriptionPublishedDiffers { job },
             JobRunError::Asr { job, failure }
                 if failure.failure.reason.cannot_succeed_on_resume() =>
             {

@@ -38,11 +38,12 @@ use sha2::{Digest, Sha256};
 use vsift_application::{
     CancelRequest, CheckpointRead, CheckpointStoreError, ChunkCheckpoints, CommitLedger, JobChange,
     JobLiveness, JobOwner, JobRecord, JobSpec, JobStore, JobStoreError, JobView, MAX_SESSION_JOBS,
-    RevisionStore, SessionHead, SessionStorageError,
+    PublishedOpenRevision, RevisionStore, SessionHead, SessionStorageError,
 };
 use vsift_domain::{
-    ChunkCheckpoint, JobId, JobState, MAX_PLANNED_CHUNKS, OperationId, SessionArtifactKind,
-    SessionId, SessionPhase, StorageGeneration, TranscriptRevision, TranscriptRevisionId,
+    ChunkCheckpoint, JobId, JobState, MAX_PLANNED_CHUNKS, MERGE_RULES_VERSION, OperationId,
+    SessionArtifactKind, SessionId, SessionPhase, StorageGeneration, TranscriptRevision,
+    TranscriptRevisionId,
 };
 
 use super::map_committed_io;
@@ -52,6 +53,7 @@ use super::{
     chain::read_committed_manifest,
     commit::sync_directory,
     create_private_child_directory,
+    evidence::ArtifactCommit,
     job_records::{
         MAX_CHECKPOINT_BYTES, StoredBinding, StoredJobIndex, checkpoint_name, checkpoint_ordinal,
         decode_checkpoint, decode_job, encode_checkpoint, encode_job,
@@ -891,6 +893,63 @@ impl RevisionStore for FilesystemSessionStore {
             .map(|(revision, _)| revision))
     }
 
+    fn open_revision(
+        &self,
+        session_id: &SessionId,
+        now: u64,
+    ) -> Result<Option<PublishedOpenRevision>, SessionStorageError> {
+        Ok(self
+            .read_open_transcript(session_id, now)?
+            .map(|open| PublishedOpenRevision {
+                revision: open.revision,
+                parts: open.parts,
+                merge_rules: open.merge_rules,
+                job_id: open.job_id,
+            }))
+    }
+
+    fn publish_part(
+        &self,
+        session_id: &SessionId,
+        operation_id: &OperationId,
+        expected: StorageGeneration,
+        open: &TranscriptRevision,
+        job: &JobId,
+        part: std::num::NonZeroU32,
+        first: usize,
+        now: u64,
+    ) -> Result<StorageGeneration, SessionStorageError> {
+        // A part continues the open revision exactly, or begins one over the
+        // newest sealed revision; anything else would leave parts that cannot
+        // be read together. The read and the commit are fenced by the
+        // generation, so nothing can come between them.
+        let follows = if let Some(published) = self.read_open_transcript(session_id, now)? {
+            published.revision.id() == open.id()
+                && published.job_id == *job
+                && published.parts.checked_add(1) == Some(part)
+                && published.revision.segments().len() == first
+                && open.segments().get(..first) == Some(published.revision.segments())
+        } else {
+            let (newest, _) = self.read_transcript_head(session_id, now)?;
+            part.get() == 1
+                && first == 0
+                && open.supersedes() == newest.as_ref().map(TranscriptRevision::id)
+                && newest.is_none_or(|newest| newest.number() < open.number())
+        };
+        if !follows {
+            return Err(SessionStorageError::StateConflict);
+        }
+        let bytes = crate::encode_transcript_part(open, job, part, first, MERGE_RULES_VERSION)?;
+        self.publish_artifact(
+            session_id,
+            operation_id,
+            expected,
+            SessionArtifactKind::TranscriptPart,
+            &bytes,
+            now,
+        )
+    }
+
     fn publish_revision(
         &self,
         session_id: &SessionId,
@@ -900,13 +959,21 @@ impl RevisionStore for FilesystemSessionStore {
         now: u64,
     ) -> Result<StorageGeneration, SessionStorageError> {
         let record = encode_transcript_record(revision)?;
-        self.publish_artifact(
+        // An open revision is sealed by the record with its identity; the
+        // store refuses any other record while one is open.
+        let commit = match self.read_open_transcript(session_id, now)? {
+            Some(open) if open.revision.id() == revision.id() => ArtifactCommit::SealTranscript,
+            Some(_) => return Err(SessionStorageError::StateConflict),
+            None => ArtifactCommit::Add,
+        };
+        self.publish_artifact_as(
             session_id,
             operation_id,
             expected,
             SessionArtifactKind::TranscriptRecord,
             &record,
             now,
+            commit,
         )
     }
 }

@@ -214,6 +214,7 @@ fn page(
         segments: &segments,
         next_cursor: next_cursor.as_deref(),
         coverage: &page.coverage,
+        growth: vsift_contract::ReadGrowth::default(),
     };
     let json = serde_json::to_value(transcript_get_response(
         &presentation,

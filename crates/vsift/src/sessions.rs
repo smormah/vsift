@@ -750,9 +750,17 @@ impl Engine {
         output: &Path,
         retention: SourceRetention,
     ) -> Result<BundleSummary, EngineError> {
-        let (store, _now) = self.existing_store()?;
+        let (store, now) = self.existing_store()?;
         let store = store.ok_or(EngineError::SessionRoot(SessionRootError::Missing))?;
         let output = absolute_selection(output)?;
+        // A bundle holds only sealed revisions (ADR 0033): while a revision is
+        // open, retaining waits for its transcription, which is named.
+        if let Ok(Some(open)) = store.read_open_transcript(session_id, now) {
+            return Err(EngineError::TranscriptionRunning {
+                session: session_id.clone(),
+                job: open.job_id,
+            });
+        }
         let bundle = store.retain_bundle(session_id, &output, retention.policy())?;
         Ok(BundleSummary::from_status(&bundle))
     }

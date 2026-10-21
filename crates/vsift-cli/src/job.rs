@@ -86,6 +86,10 @@ pub(crate) async fn resume(
             progress,
             // Interactive: contention keeps P10's two bounded retries.
             admission: vsift::AdmissionWait::Immediate,
+            // A resumed run continues what it published as it goes (ADR 0033).
+            publication: vsift::RetranscribePublication::AsItGoes {
+                interval: vsift::PUBLICATION_INTERVAL,
+            },
         })
         .await?;
     let presented = retranscription(report.outcome())?;

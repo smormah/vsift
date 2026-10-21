@@ -28,6 +28,7 @@ use vsift_domain::{
     TranscriptSegment, TranscriptWarningKind,
 };
 
+use crate::growth::{ReadGrowth, SinceData, TRANSCRIPTION_PENDING_WARNING};
 use crate::{
     CommandName, ConfidenceResponse, CoverageResponse, LifecycleResponse, OperationResponse,
     ResultView, render_hidden_characters, sanitize_untrusted_text,
@@ -57,6 +58,14 @@ pub struct TranscriptRevisionData {
     language: Option<String>,
     segment_count: usize,
     warnings: Vec<TranscriptWarningData>,
+    /// `open` or `stopped` (ADR 0033); absent for a sealed revision, so a
+    /// sealed revision is presented exactly as before 0.3.0.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    state: Option<&'static str>,
+    /// For an open revision, the time before which it is final; for a stopped
+    /// one, the time its run had published until. Absent when sealed.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    published_until_us: Option<u64>,
     #[serde(flatten)]
     local_asr: Option<LocalAsrRevisionData>,
 }
@@ -126,6 +135,13 @@ impl TranscriptRevisionData {
                     excluded_cues: warning.kind().excludes_cues(),
                 })
                 .collect(),
+            state: match revision.state() {
+                vsift_domain::RevisionState::Sealed => None,
+                state => Some(state.identifier()),
+            },
+            published_until_us: revision
+                .published_until()
+                .map(vsift_domain::MediaTime::as_micros),
             local_asr,
         }
     }
@@ -153,6 +169,14 @@ struct LocalAsrRunData {
     /// presented exactly as it was before the outcome existed (#353).
     #[serde(skip_serializing_if = "Option::is_none")]
     unusable_chunks: Option<usize>,
+    /// Chunks an open revision has not published yet (ADR 0033); present only
+    /// when not zero.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pending_chunks: Option<usize>,
+    /// Chunks a stopped run never reached (ADR 0033); present only when not
+    /// zero.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    not_reached_chunks: Option<usize>,
     /// The stretches where the recogniser wrote words that no segment holds
     /// (#359), all of them (a revision records at most 1,024, which is why the
     /// list is not cut as a search's is). Present only when there is any, so a
@@ -192,6 +216,12 @@ impl LocalAsrRunData {
                 matches!(outcome, AsrChunkOutcome::Unusable { .. })
             }))
             .filter(|unusable| *unusable > 0),
+            pending_chunks: Some(count(|outcome| matches!(outcome, AsrChunkOutcome::Pending)))
+                .filter(|pending| *pending > 0),
+            not_reached_chunks: Some(count(|outcome| {
+                matches!(outcome, AsrChunkOutcome::NotReached)
+            }))
+            .filter(|not_reached| *not_reached > 0),
             unplaced_ranges: unplaced.iter().copied().map(RangeData::new).collect(),
         }
     }
@@ -663,6 +693,10 @@ pub struct TranscriptPageData {
     items: Vec<TranscriptSegmentData>,
     next_cursor: Option<String>,
     transcript_coverage: TranscriptCoverageData,
+    /// What to read on from (ADR 0033): present over an open revision and for
+    /// a `--since` read.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    since: Option<SinceData>,
 }
 
 impl TranscriptPageData {
@@ -679,7 +713,8 @@ impl TranscriptPageData {
                 .map(|segment| TranscriptSegmentData::new(page.revision, segment))
                 .collect(),
             next_cursor: page.next_cursor.map(str::to_owned),
-            transcript_coverage: TranscriptCoverageData::new(page.coverage),
+            transcript_coverage: TranscriptCoverageData::with_growth(page.coverage, page.growth),
+            since: page.growth.since.map(SinceData::new),
         }
     }
 }
@@ -700,6 +735,8 @@ pub struct TranscriptBriefPageData {
     items: Vec<BriefTranscriptSegmentData>,
     next_cursor: Option<String>,
     transcript_coverage: TranscriptCoverageData,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    since: Option<SinceData>,
 }
 
 impl TranscriptBriefPageData {
@@ -725,6 +762,7 @@ impl From<&TranscriptPageData> for TranscriptBriefPageData {
                 .collect(),
             next_cursor: full.next_cursor.clone(),
             transcript_coverage: full.transcript_coverage.clone(),
+            since: full.since.clone(),
         }
     }
 }
@@ -759,6 +797,9 @@ pub struct TranscriptPresentation<'a> {
     /// What the revision's transcript covers of the requested range: the whole
     /// range, not the page.
     pub coverage: &'a SearchCoverage,
+    /// What a read of a growing transcript adds (ADR 0033); [`Default`] for a
+    /// sealed revision read without `--since`.
+    pub growth: ReadGrowth<'a>,
 }
 
 /// Fixed warning of a transcript read whose range is not fully transcribed
@@ -824,9 +865,22 @@ pub(crate) fn finish_transcript_read(
     if coverage.is_complete() {
         return response;
     }
-    response
-        .with_coverage(envelope_coverage(coverage.untranscribed()))
-        .with_warnings(&[UNTRANSCRIBED_READ_WARNING])
+    if coverage.pending().is_empty() {
+        return response
+            .with_coverage(envelope_coverage(coverage.untranscribed()))
+            .with_warnings(&[UNTRANSCRIBED_READ_WARNING]);
+    }
+    // An open revision (ADR 0033): the read's own warning applies to what is
+    // not pending, and the pending part has its reason and warning.
+    let pending_only = coverage.untranscribed() == coverage.pending();
+    let response = response.with_coverage(crate::search::envelope_coverage_pending(
+        coverage.untranscribed(),
+    ));
+    if pending_only {
+        response.with_warnings(&[TRANSCRIPTION_PENDING_WARNING])
+    } else {
+        response.with_warnings(&[UNTRANSCRIBED_READ_WARNING, TRANSCRIPTION_PENDING_WARNING])
+    }
 }
 
 /// Fixed prose of the warning `provider_chunks_rejected`: some audio was given

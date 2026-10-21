@@ -313,6 +313,7 @@ fn request(
         cancellation: Cancellation::new(),
         progress: ProgressObserver::none(),
         admission: vsift::AdmissionWait::Immediate,
+        publication: vsift::RetranscribePublication::AtTheSeal,
     }
 }
 
@@ -344,6 +345,7 @@ async fn unknown_jobs_are_not_found() -> TestResult {
                 cancellation: Cancellation::new(),
                 progress: ProgressObserver::none(),
                 admission: vsift::AdmissionWait::Immediate,
+                publication: vsift::RetranscribePublication::AtTheSeal,
             })
             .await
             .err(),
@@ -461,6 +463,7 @@ async fn committed_through_the_use_case(
             timer: &Instant0,
             classify: |_| FailureCode::Internal,
             progress: &vsift_application::NoProgress,
+            publication: vsift_application::Publication::AtTheSeal,
         },
         &mut Unchanged,
     )
@@ -689,6 +692,7 @@ async fn a_frame_during_a_transcription_of_its_session_is_busy_and_names_the_job
             timer: &Instant0,
             classify: |_| FailureCode::Internal,
             progress: &vsift_application::NoProgress,
+            publication: vsift_application::Publication::AtTheSeal,
         },
         &mut unchanged,
     );
@@ -797,6 +801,7 @@ async fn a_committed_operation_is_replayed_before_any_check_or_hash() -> TestRes
                 cancellation: Cancellation::new(),
                 progress: ProgressObserver::none(),
                 admission: vsift::AdmissionWait::Immediate,
+                publication: vsift::RetranscribePublication::AtTheSeal,
             })
             .await,
         Err(EngineError::JobNotResumable {
@@ -914,6 +919,7 @@ async fn a_job_is_resumed_and_cancelled_by_its_id() -> TestResult {
             cancellation: Cancellation::new(),
             progress: observer,
             admission: vsift::AdmissionWait::Immediate,
+            publication: vsift::RetranscribePublication::AtTheSeal,
         })
         .await?;
     // P11: the resumed run reports every chunk of its job, the reused one

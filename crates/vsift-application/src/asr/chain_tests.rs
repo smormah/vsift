@@ -6,23 +6,33 @@
 //! checked is what the code does along a chain, not what a hand-built revision
 //! says. The source is 70 s, which a whole-source run reads as the three chunks
 //! 0-30 s, 25-55 s and 50-70 s.
+//!
+//! **Every run of every chain is also watched as it goes (ADR 0033):** after
+//! each chunk, the open revision the run would publish is built and held to the
+//! revision the run seals ([`Watched::seal`]): its segments are the sealed
+//! revision's first ones, identities included; no later segment starts before
+//! the time it is published until; and the stopped revision a cancellation at
+//! that moment would seal keeps every one of them.
 
-use std::{collections::BTreeSet, future::Future, num::NonZeroU16, num::NonZeroU32};
+use std::{collections::BTreeSet, future::Future, num::NonZeroU16, num::NonZeroU32, sync::Mutex};
 
 use vsift_domain::{
     AsrChunkOutcome, AsrDecodingProfile, AsrModel, AsrModelProfile, AsrProvider, AsrProviderBuild,
-    ChunkPlan, ChunkTime, CueSource, CueText, CueTiming, ImportedCue, LanguageTag, MediaTime,
-    ParsedTranscript, PlannedChunk, ProviderChunkOutput, ProviderSegment, SearchCoverage,
-    SessionId, Sha256Hex, SidecarIdentity, SourceId, SourceSegment, SourceSegmentId, TimeRange,
-    TranscriptFormat, TranscriptOffset, TranscriptProvenance, TranscriptRevision,
-    TranscriptRevisionParts, TranscriptWarnings, plan_chunks,
+    ChunkPlan, ChunkTime, CueSource, CueText, CueTiming, ImportedCue, LanguageTag,
+    MAX_EARLY_AUDIO_MICROS, MediaTime, ParsedTranscript, PlannedChunk, ProviderChunkOutput,
+    ProviderSegment, RevisionState, SearchCoverage, SessionId, Sha256Hex, SidecarIdentity,
+    SourceId, SourceSegment, SourceSegmentId, TimeRange, TranscriptFormat, TranscriptOffset,
+    TranscriptProvenance, TranscriptRevision, TranscriptRevisionParts, TranscriptWarnings,
+    plan_chunks,
 };
 
 use super::{
-    AsrCancellation, AsrRevisionRequest, RecognizerIdentity, RevisionSplice, SpeechAudioError,
-    SpeechAudioSource, SpeechPcm, SpeechRecognitionError, SpeechRecognizer, TranscribeRangeRequest,
-    build_asr_revision, transcribe_range,
+    AsrCancellation, AsrRevisionRequest, AsrTranscription, RecognizerIdentity, RevisionSplice,
+    RunObserver, RunSoFar, SpeechAudioError, SpeechAudioSource, SpeechPcm, SpeechRecognitionError,
+    SpeechRecognizer, TranscribeRangeRequest, build_asr_revision, build_open_asr_revision,
+    build_stopped_asr_revision, run_chunks,
 };
+use crate::job::NoCheckpoints;
 use crate::{ImportedRevisionRequest, SuppliedTranscript, build_imported_revision};
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -213,17 +223,10 @@ impl Chain {
     /// A chain that starts with a whole-source run answering `answers`.
     async fn local(answers: &[Answer]) -> Built<Self> {
         let (session, source_id, source) = Self::parts()?;
-        let transcription = transcribe(&source, source.range(), answers)
+        let watched = transcribe(&source, source.range(), answers)
             .await?
             .ok_or("the first run failed")?;
-        let revision = build_asr_revision(AsrRevisionRequest {
-            session_id: &session,
-            source_id: &source_id,
-            source_segment: &source,
-            number: NonZeroU32::MIN,
-            transcription,
-            splice: None,
-        })?;
+        let revision = watched.seal(&session, &source_id, &source, NonZeroU32::MIN, None)?;
         let mut read = read_by_the_run_of(&revision);
         for second in unplaced_by_the_answers(&source, source.range(), answers)? {
             read.remove(&second);
@@ -241,17 +244,10 @@ impl Chain {
     /// with no earlier revision, which covers only its range.
     async fn bounded(from: u64, to: u64, answers: &[Answer]) -> Built<Self> {
         let (session, source_id, source) = Self::parts()?;
-        let transcription = transcribe(&source, range(from, to)?, answers)
+        let watched = transcribe(&source, range(from, to)?, answers)
             .await?
             .ok_or("the first run failed")?;
-        let revision = build_asr_revision(AsrRevisionRequest {
-            session_id: &session,
-            source_id: &source_id,
-            source_segment: &source,
-            number: NonZeroU32::MIN,
-            transcription,
-            splice: None,
-        })?;
+        let revision = watched.seal(&session, &source_id, &source, NonZeroU32::MIN, None)?;
         let mut read = read_by_the_run_of(&revision);
         for second in unplaced_by_the_answers(&source, range(from, to)?, answers)? {
             read.remove(&second);
@@ -382,21 +378,20 @@ impl Chain {
     async fn step(&mut self, from: u64, to: u64, answers: &[Answer]) -> Built<bool> {
         let base = self.newest()?;
         let replaced = base.snap_to_segments(range(from, to)?);
-        let Some(transcription) = transcribe(&self.source, replaced, answers).await? else {
+        let Some(watched) = transcribe(&self.source, replaced, answers).await? else {
             return Ok(false);
         };
         let number = NonZeroU32::new(base.number().saturating_add(1)).ok_or("zero")?;
-        let revision = build_asr_revision(AsrRevisionRequest {
-            session_id: &self.session,
-            source_id: &self.source_id,
-            source_segment: &self.source,
+        let revision = watched.seal(
+            &self.session,
+            &self.source_id,
+            &self.source,
             number,
-            transcription,
-            splice: Some(RevisionSplice {
+            Some(RevisionSplice {
                 base,
                 replaced_range: replaced,
             }),
-        })?;
+        )?;
         // What the count says is read now: what was read outside the replaced
         // range, what this run read, and the text it kept where it could not.
         let mut read: BTreeSet<u64> = self
@@ -498,7 +493,7 @@ async fn transcribe(
     source: &SourceSegment,
     requested: TimeRange,
     answers: &[Answer],
-) -> Built<Option<super::AsrTranscription>> {
+) -> Built<Option<Watched>> {
     transcribe_decoded_early(source, requested, answers, 0).await
 }
 
@@ -509,9 +504,10 @@ async fn transcribe_decoded_early(
     requested: TimeRange,
     answers: &[Answer],
     early_us: u64,
-) -> Built<Option<super::AsrTranscription>> {
+) -> Built<Option<Watched>> {
     let expected = identity()?;
-    Ok(transcribe_range(
+    let observer = CutRecorder(Mutex::new(Vec::new()));
+    let finished = run_chunks(
         TranscribeRangeRequest {
             source_segment: source,
             range: requested,
@@ -519,12 +515,116 @@ async fn transcribe_decoded_early(
             audio_stream: 1,
             expected: &expected,
         },
+        None::<super::CheckpointScope<'_, NoCheckpoints>>,
+        &observer,
         &Audio(answers, early_us),
         &Recogniser(answers),
         &NotCancelled,
     )
-    .await
-    .ok())
+    .await;
+    let cuts = observer.0.into_inner().map_err(|_| "poisoned")?;
+    Ok(finished.ok().map(|(transcription, _)| Watched {
+        transcription,
+        cuts: cuts.into_iter().collect::<Result<_, _>>().ok(),
+    }))
+}
+
+/// A finished run and, for every chunk after which some were still to come,
+/// what an open revision would have held then (ADR 0033); `None` when building
+/// one failed, which [`Watched::seal`] reports.
+struct Watched {
+    transcription: AsrTranscription,
+    cuts: Option<Vec<(AsrTranscription, MediaTime)>>,
+}
+
+/// Records [`RunSoFar::open`] after every chunk but the last.
+struct CutRecorder(Mutex<Vec<Result<(AsrTranscription, MediaTime), super::AsrFailure>>>);
+
+impl RunObserver for CutRecorder {
+    fn chunk_finished(&self, run: &RunSoFar<'_>) {
+        if run.next().is_some()
+            && let Ok(mut cuts) = self.0.lock()
+        {
+            cuts.push(run.open(MAX_EARLY_AUDIO_MICROS));
+        }
+    }
+}
+
+impl Watched {
+    /// Seals the run's revision, and holds every cut of the run to it: the
+    /// open revision of each cut is a prefix of the sealed one, identities
+    /// included; no later segment starts before the time it is published
+    /// until; it never covers what the sealed one does not; each cut publishes
+    /// at least what the one before did; and the stopped revision a cancellation
+    /// then would seal keeps every published segment.
+    fn seal(
+        self,
+        session: &SessionId,
+        source_id: &SourceId,
+        source: &SourceSegment,
+        number: NonZeroU32,
+        splice: Option<RevisionSplice<'_>>,
+    ) -> Built<TranscriptRevision> {
+        let request = |transcription| AsrRevisionRequest {
+            session_id: session,
+            source_id,
+            source_segment: source,
+            number,
+            transcription,
+            splice,
+        };
+        let sealed = build_asr_revision(request(self.transcription))?;
+        let sealed_covers = seconds_of(SearchCoverage::of(&sealed, None).transcribed().to_vec());
+        let base = splice.map(|splice| splice.base);
+        let base_covers = base.map_or_else(BTreeSet::new, |base| {
+            seconds_of(SearchCoverage::of(base, None).transcribed().to_vec())
+        });
+        let mut previous = (0_usize, MediaTime::from_micros(0));
+        for (cut, (transcription, settled_until)) in
+            self.cuts.ok_or("a cut failed")?.into_iter().enumerate()
+        {
+            let open = build_open_asr_revision(request(transcription), settled_until)?;
+            let count = open.segments().len();
+            let until = open.published_until().ok_or("an open revision")?;
+            assert_eq!(open.state(), RevisionState::Open);
+            assert_eq!(
+                sealed.segments().get(..count),
+                Some(open.segments()),
+                "cut {cut}: the open revision is not a prefix of the sealed one"
+            );
+            assert!(
+                sealed
+                    .segments()
+                    .get(count..)
+                    .unwrap_or_default()
+                    .iter()
+                    .all(|segment| segment.range().start() >= until),
+                "cut {cut}: a later segment starts before {}",
+                until.as_micros()
+            );
+            assert!(
+                count >= previous.0 && until >= previous.1,
+                "cut {cut} went back"
+            );
+            previous = (count, until);
+            let open_covers = seconds_of(SearchCoverage::of(&open, None).transcribed().to_vec());
+            assert!(
+                open_covers.is_subset(&sealed_covers),
+                "cut {cut}: the open revision covers {:?}, the sealed one does not",
+                open_covers.difference(&sealed_covers).collect::<Vec<_>>()
+            );
+            let stopped = build_stopped_asr_revision(&open, base)?;
+            assert_eq!(stopped.state(), RevisionState::Stopped);
+            assert_eq!(stopped.segments().get(..count), Some(open.segments()));
+            let stopped_covers =
+                seconds_of(SearchCoverage::of(&stopped, None).transcribed().to_vec());
+            assert!(
+                stopped_covers.is_subset(&union(&[open_covers, base_covers.clone()])),
+                "cut {cut}: the stopped revision covers what neither the run nor the base did"
+            );
+        }
+        Ok(sealed)
+    }
 }
 
 fn seconds(span: std::ops::Range<u64>) -> BTreeSet<u64> {
@@ -1039,7 +1139,7 @@ async fn later_runs_neither_hide_nor_keep_words_that_no_segment_holds() -> TestR
 async fn a_run_whose_audio_began_before_its_window_still_builds_its_revision() -> TestResult {
     let (session, source_id, source) = Chain::parts()?;
     for (early_us, expected_end) in [(0, 13 * SECOND), (20_000, 13 * SECOND - 20_000)] {
-        let transcription = transcribe_decoded_early(
+        let watched = transcribe_decoded_early(
             &source,
             range(10, 40)?,
             &[Answer::RunsOnFromTheStart],
@@ -1051,15 +1151,12 @@ async fn a_run_whose_audio_began_before_its_window_still_builds_its_revision() -
             MediaTime::from_micros(10 * SECOND),
             MediaTime::from_micros(expected_end),
         )?;
-        assert_eq!(transcription.unplaced, [expected], "{early_us} us early");
-        let revision = build_asr_revision(AsrRevisionRequest {
-            session_id: &session,
-            source_id: &source_id,
-            source_segment: &source,
-            number: NonZeroU32::MIN,
-            transcription,
-            splice: None,
-        })?;
+        assert_eq!(
+            watched.transcription.unplaced,
+            [expected],
+            "{early_us} us early"
+        );
+        let revision = watched.seal(&session, &source_id, &source, NonZeroU32::MIN, None)?;
         assert_eq!(revision.unplaced(), [expected], "{early_us} us early");
     }
     Ok(())

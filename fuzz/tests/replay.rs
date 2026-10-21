@@ -49,7 +49,8 @@ use vsift_infrastructure::{
     ArchiveInventoryBounds, BatchLine as FileLine, BatchLines, FrameListingWindow, MountDevice,
     OsReleaseProfile, SourceContainer, VisualSamplingWindow, WhisperOutputLimits,
     classify_mountinfo, classify_os_release, decode_chunk_checkpoint, decode_evidence_record,
-    decode_job_record, decode_request_record, decode_transcript_record, decode_visual_index_record,
+    decode_job_record, decode_request_record, decode_transcript_parts, decode_transcript_record,
+    decode_visual_index_record,
     encode_transcript_record, encode_visual_index_record, inspect_gzip_tar_inventory,
     inspect_tar_inventory, inspect_xz_tar_inventory, parse_ashowinfo_start, parse_cgroup_limit,
     parse_cpu_max, parse_ffprobe_metadata, parse_frame_listing, parse_frame_showinfo,
@@ -750,7 +751,21 @@ const SEEDS: &[Seed] = &[
         "device-in-directory.txt",
         Origin::InlineIn("crates/vsift-infrastructure/tests/contained_inputs.rs"),
     ),
+    seed(
+        Target::TranscriptPart,
+        "one-part.json",
+        Origin::Copy(TRANSCRIPT_PART_EXAMPLES),
+    ),
+    seed(
+        Target::TranscriptPart,
+        "two-parts.bin",
+        Origin::Copy(TRANSCRIPT_PART_EXAMPLES),
+    ),
 ];
+
+/// The part records the infrastructure crate's open-revision test pins to the
+/// encoder (ADR 0033).
+const TRANSCRIPT_PART_EXAMPLES: &str = "crates/vsift-infrastructure/tests/data/transcript_parts";
 
 /// The tests of the two compressed-archive readers, whose archives the
 /// archive seeds mirror (`root/tool`, three bytes).
@@ -845,6 +860,8 @@ fn well_formed_seeds_are_accepted() -> TestResult {
         ),
         (Target::TranscriptRecord, "F01-untranscribed-carried.json"),
         (Target::TranscriptRecord, "F01-words-no-segment-holds.json"),
+        (Target::TranscriptPart, "one-part.json"),
+        (Target::TranscriptPart, "two-parts.bin"),
         (Target::FfprobeMetadata, "two-streams-rotated.json"),
         (Target::FfprobeMetadata, "audio-only-unknown-codec.json"),
         (Target::TranscriptCursor, "transcript-get-next-cursor.txt"),
@@ -973,6 +990,12 @@ fn is_accepted(target: Target, data: &[u8]) -> Result<bool, Box<dyn Error>> {
         Target::TranscriptSrt | Target::TranscriptWebVtt => parse_supplied_transcript(data).is_ok(),
         Target::WhisperFullJson => parse_whisper_full_json(data, WhisperOutputLimits::R0).is_ok(),
         Target::TranscriptRecord => decode_transcript_record(data).is_ok(),
+        Target::TranscriptPart => decode_transcript_parts(
+            &data
+                .split(|byte| *byte == vsift_fuzz::TRANSCRIPT_PART_SEPARATOR)
+                .collect::<Vec<_>>(),
+        )
+        .is_ok(),
         Target::FfprobeMetadata => parse_ffprobe_metadata(data, SourceContainer::IsoMedia).is_ok(),
         Target::TranscriptCursor => CursorToken::parse(std::str::from_utf8(data)?).is_ok(),
         Target::VisualSamples => match data {

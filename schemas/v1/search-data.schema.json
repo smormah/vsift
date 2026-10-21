@@ -36,9 +36,21 @@
       "items": { "$ref": "#/$defs/hit" }
     },
     "next_cursor": { "$ref": "#/$defs/next_cursor" },
-    "transcript_coverage": { "$ref": "#/$defs/transcript_coverage" }
+    "transcript_coverage": { "$ref": "#/$defs/transcript_coverage" },
+    "since": { "$ref": "#/$defs/since" }
   },
   "$defs": {
+    "since": {
+      "description": "Since 0.3.0 (ADR 0033): present over an open revision and in every answer to --since. since_token is passed back with --since to read (or search) only what the revision publishes after this answer, in start order; it follows the one revision this answer read until it is sealed or stopped, and expires with the session. revision_state is that revision's state now; more is true when this answer stopped at its limit with more already published after it.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["since_token", "revision_state", "more"],
+      "properties": {
+        "since_token": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "revision_state": { "enum": ["open", "sealed", "stopped"] },
+        "more": { "type": "boolean" }
+      }
+    },
     "range": {
       "type": "object",
       "additionalProperties": false,
@@ -123,6 +135,21 @@
         "ranges_truncated": {
           "description": "True when a range list held more than 100 ranges and only its first 100, in start order, are listed.",
           "type": "boolean"
+        },
+        "pending_ranges": {
+          "description": "Since 0.3.0 (ADR 0033): the part of untranscribed_ranges that an open revision will still publish; absent when nothing is pending. A word said there cannot be found yet; that does not mean none was said.",
+          "allOf": [{ "$ref": "#/$defs/ranges" }],
+          "minItems": 1
+        },
+        "pending_covered_by": {
+          "description": "Since 0.3.0 (ADR 0033): the earlier, sealed revision (the one the open revision supersedes) that still holds text over part of the pending ranges, and those parts; read them with --revision. Absent when there is none.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["revision_id", "ranges"],
+          "properties": {
+            "revision_id": { "type": "string", "pattern": "^trv_[a-z0-9]{16,64}$" },
+            "ranges": { "allOf": [{ "$ref": "#/$defs/ranges" }], "minItems": 1 }
+          }
         }
       }
     }

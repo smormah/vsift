@@ -713,6 +713,7 @@ async fn retranscribe(
             timer: &NoBackoff,
             classify: job_failure,
             progress: &vsift_application::NoProgress,
+            publication: vsift_application::Publication::AtTheSeal,
         },
         &mut SourceUnchanged,
     )

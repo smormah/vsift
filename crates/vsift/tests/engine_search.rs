@@ -182,6 +182,7 @@ impl Harness {
             range: None,
             limit: None,
             cursor: None,
+            since: None,
         }
     }
 }
@@ -342,6 +343,7 @@ async fn queries_are_rejected_before_any_read() -> TestResult {
                 range: None,
                 limit: None,
                 cursor: None,
+                since: None,
             })
             .err()
             .ok_or("a rejected query was accepted")?;
@@ -512,6 +514,7 @@ async fn s11_a_20000_segment_revision_pages_completely() -> TestResult {
             to_micros: 30_000 * SECOND,
             limit: Some(100),
             cursor: None,
+            since: None,
         })?;
         reads.push(started.elapsed());
     }
@@ -583,6 +586,7 @@ async fn a_transcript_read_states_the_coverage_of_the_range_it_was_asked_for() -
         to_micros: to * SECOND,
         limit: Some(limit),
         cursor: None,
+        since: None,
     };
     let span = |from: u64, to: u64| {
         TimeRange::new(

@@ -453,6 +453,12 @@ struct Shared {
     busy_admissions: u32,
     admitted_weights: Vec<u16>,
     publishes: usize,
+    /// The open revision (ADR 0033): every part as published, in order, and
+    /// the job that publishes it.
+    parts: Vec<TranscriptRevision>,
+    open_job: Option<JobId>,
+    /// Every part ever published, sealed or not, with its part number.
+    part_history: Vec<(u32, TranscriptRevision)>,
 }
 
 impl Shared {
@@ -752,8 +758,64 @@ impl RevisionStore for MemoryStore {
         let shared = self.lock()?;
         Ok(SessionHead {
             generation: StorageGeneration::from_value(shared.generation()),
-            newest: shared.revisions.last().cloned(),
+            newest: shared.parts.last().or(shared.revisions.last()).cloned(),
         })
+    }
+
+    fn open_revision(
+        &self,
+        _session_id: &SessionId,
+        _now: u64,
+    ) -> Result<Option<crate::PublishedOpenRevision>, SessionStorageError> {
+        let shared = self.lock()?;
+        let (Some(revision), Some(job_id)) = (shared.parts.last(), shared.open_job.clone()) else {
+            return Ok(None);
+        };
+        Ok(Some(crate::PublishedOpenRevision {
+            revision: revision.clone(),
+            parts: std::num::NonZeroU32::new(u32::try_from(shared.parts.len()).unwrap_or(u32::MAX))
+                .ok_or(SessionStorageError::Io)?,
+            merge_rules: vsift_domain::MERGE_RULES_VERSION,
+            job_id,
+        }))
+    }
+
+    fn publish_part(
+        &self,
+        _session_id: &SessionId,
+        operation_id: &OperationId,
+        expected: StorageGeneration,
+        open: &TranscriptRevision,
+        job: &JobId,
+        part: std::num::NonZeroU32,
+        first: usize,
+        _now: u64,
+    ) -> Result<StorageGeneration, SessionStorageError> {
+        let mut shared = self.lock()?;
+        if shared.generation() != expected.value() {
+            return Err(SessionStorageError::StateConflict);
+        }
+        let follows = match shared.parts.last() {
+            Some(last) => {
+                shared.open_job.as_ref() == Some(job)
+                    && last.id() == open.id()
+                    && usize::try_from(part.get()).ok() == Some(shared.parts.len() + 1)
+                    && last.segments().len() == first
+                    && open.segments().get(..first) == Some(last.segments())
+            }
+            None => part.get() == 1 && first == 0,
+        };
+        if !follows {
+            return Err(SessionStorageError::IntegrityFailure);
+        }
+        let generation = shared.generation() + 1;
+        shared
+            .chain
+            .push((generation, operation_id.as_str().to_owned()));
+        shared.parts.push(open.clone());
+        shared.part_history.push((part.get(), open.clone()));
+        shared.open_job = Some(job.clone());
+        Ok(StorageGeneration::from_value(generation))
     }
 
     fn revision(
@@ -794,6 +856,17 @@ impl RevisionStore for MemoryStore {
         if shared.generation() != expected.value() {
             return Err(SessionStorageError::StateConflict);
         }
+        // An open revision is sealed by its own identity only (ADR 0033).
+        match shared.parts.last() {
+            Some(open) if open.id() != revision.id() => {
+                return Err(SessionStorageError::StateConflict);
+            }
+            Some(_) => {
+                shared.parts.clear();
+                shared.open_job = None;
+            }
+            None => {}
+        }
         let generation = shared.generation() + 1;
         shared
             .chain
@@ -818,6 +891,17 @@ struct Harness {
     source_id: SourceId,
     identity: RecognizerIdentity,
     admission: AdmissionWait,
+    /// Whether runs publish as they go (ADR 0033).
+    as_it_goes: bool,
+}
+
+/// A stopwatch that never moves: with an interval of zero, every chunk is due.
+struct StoppedClock;
+
+impl crate::Stopwatch for StoppedClock {
+    fn elapsed(&self) -> Duration {
+        Duration::ZERO
+    }
 }
 
 /// A request resolved against the session's current head.
@@ -846,6 +930,7 @@ fn classify(error: &JobRunError) -> FailureCode {
         },
         JobRunError::Storage(_) | JobRunError::Job(_) => FailureCode::StorageIo,
         JobRunError::Assembly(_) | JobRunError::Key(_) => FailureCode::Internal,
+        JobRunError::PublishedDiffers { .. } => FailureCode::IntegrityFailure,
     }
 }
 
@@ -860,12 +945,43 @@ impl Harness {
             source_id: source_id()?,
             identity: identity()?,
             admission: AdmissionWait::Immediate,
+            as_it_goes: false,
         })
+    }
+
+    /// A harness whose runs publish as they go, a part after every chunk.
+    fn publishing() -> Built<Self> {
+        Ok(Self {
+            as_it_goes: true,
+            ..Self::new()?
+        })
+    }
+
+    fn publication(&self) -> crate::Publication<'static> {
+        if self.as_it_goes {
+            crate::Publication::AsItGoes {
+                interval: Duration::ZERO,
+                stopwatch: &StoppedClock,
+            }
+        } else {
+            crate::Publication::AtTheSeal
+        }
     }
 
     fn resolve(&self, requested: Option<TimeRange>) -> Built<Resolved> {
         let session = session()?;
-        let head = self.store.head(&session, NOW)?;
+        let mut head = self.store.head(&session, NOW)?;
+        // As the engine does: an open revision is not a base, the revision it
+        // supersedes is (ADR 0033).
+        if let Some(open) = head
+            .newest
+            .take_if(|newest| newest.state() == vsift_domain::RevisionState::Open)
+        {
+            head.newest = match open.supersedes() {
+                Some(base) => self.store.revision(&session, base, NOW)?,
+                None => None,
+            };
+        }
         let replaced =
             crate::retranscription_range(head.newest.as_ref(), requested, self.source.range());
         let key = recognition_key(&RecognitionScope {
@@ -929,6 +1045,7 @@ impl Harness {
                 timer: &self.timer,
                 classify,
                 progress: &NoProgress,
+                publication: self.publication(),
             },
             &mut guard,
         )
@@ -967,6 +1084,188 @@ impl Harness {
     fn generation(&self) -> Built<u64> {
         self.store.with(|shared| shared.generation())
     }
+
+    fn part_history(&self) -> Built<Vec<(u32, TranscriptRevision)>> {
+        self.store.with(|shared| shared.part_history.clone())
+    }
+
+    fn newest(&self) -> Built<Option<TranscriptRevision>> {
+        Ok(self.store.head(&session()?, NOW)?.newest)
+    }
+}
+
+// ---------------------------------------------------------------- publication (ADR 0033)
+
+/// Every published part is a prefix of the next and of the sealed revision,
+/// and the parts are numbered 1, 2, ... with no gap.
+fn assert_parts_grow_into(
+    parts: &[(u32, TranscriptRevision)],
+    sealed: &TranscriptRevision,
+) -> TestResult {
+    let mut before: Option<&TranscriptRevision> = None;
+    for (index, (number, part)) in parts.iter().enumerate() {
+        assert_eq!(usize::try_from(*number)?, index + 1);
+        assert_eq!(part.state(), vsift_domain::RevisionState::Open);
+        assert_eq!(part.id(), sealed.id());
+        let count = part.segments().len();
+        assert_eq!(sealed.segments().get(..count), Some(part.segments()));
+        if let Some(before) = before {
+            assert_eq!(
+                part.segments().get(..before.segments().len()),
+                Some(before.segments())
+            );
+            assert!(part.published_until() >= before.published_until());
+        }
+        before = Some(part);
+    }
+    Ok(())
+}
+
+/// ADR 0033: a run that publishes as it goes commits parts while it runs, each
+/// a prefix of the next, and seals exactly the revision a run that publishes
+/// only at its seal makes: the same identity, segments and provenance.
+#[tokio::test]
+async fn a_run_published_as_it_goes_seals_the_revision_a_sealed_run_makes() -> TestResult {
+    let reference = Harness::new()?;
+    let sealed_once = reference.request(None, None).await??.revision;
+    assert_eq!(reference.part_history()?.len(), 0);
+
+    let harness = Harness::publishing()?;
+    let outcome = harness.request(None, None).await??;
+    assert_eq!(outcome.revision, sealed_once);
+    let parts = harness.part_history()?;
+    // Five chunks: a part after each of the first four at most (the last
+    // chunk is published by the seal), and at least one.
+    assert!(
+        !parts.is_empty() && parts.len() <= 4,
+        "{} parts",
+        parts.len()
+    );
+    assert_parts_grow_into(&parts, &outcome.revision)?;
+    assert!(
+        parts.iter().any(|(_, part)| !part.segments().is_empty()),
+        "no part published a segment"
+    );
+    // Sealed: the parts are retired, and the newest revision is the sealed one.
+    assert_eq!(harness.newest()?, Some(outcome.revision.clone()));
+    assert_eq!(
+        outcome.revision.state(),
+        vsift_domain::RevisionState::Sealed
+    );
+    assert_eq!(harness.store.open_revision(&session()?, NOW)?, None);
+    Ok(())
+}
+
+/// ADR 0033, D1: a job cancelled after it published parts keeps every
+/// published segment: its revision is sealed as stopped, and the job is
+/// cancelled.
+#[tokio::test]
+async fn a_cancel_after_published_parts_seals_a_stopped_revision() -> TestResult {
+    let harness = Harness::publishing()?;
+    let resolved = harness.resolve(None)?;
+    let job = resolved.spec.job_id.clone();
+    let store = harness.store.clone();
+    let requester = session()?;
+    let cancelling = {
+        let job = job.clone();
+        move || -> Result<CancelRequest, JobStoreError> {
+            store.request_cancel(&requester, &job, NOW)
+        }
+    };
+    // Chunk 3 raises the flag; the watcher then files `job cancel`.
+    harness.recognizer.fault_at(3, Fault::Raises);
+    let flag = Arc::clone(&harness.recognizer.flag);
+    let watcher = std::thread::spawn(move || {
+        while !flag.load(Ordering::SeqCst) {
+            std::thread::yield_now();
+        }
+        cancelling()
+    });
+    let never = Flag(Arc::new(AtomicBool::new(false)));
+    let mut guard = CountingGuard::default();
+    let outcome = run_retranscription(
+        RetranscriptionRun {
+            spec: &resolved.spec,
+            operation_id: None,
+            transcribe: TranscribeRangeRequest {
+                source_segment: &harness.source,
+                range: resolved.replaced,
+                plan: ChunkPlan::R0,
+                audio_stream: 1,
+                expected: &harness.identity,
+            },
+            source_id: &harness.source_id,
+            requested: None,
+            base: None,
+            observed: resolved.observed,
+            now: NOW,
+            admission: AdmissionWait::Immediate,
+        },
+        RetranscriptionPorts {
+            store: &SlowStore(&harness.store),
+            audio: &harness.audio,
+            recognizer: &harness.recognizer,
+            cancellation: &never,
+            timer: &harness.timer,
+            classify,
+            progress: &NoProgress,
+            publication: harness.publication(),
+        },
+        &mut guard,
+    )
+    .await;
+    let filed = watcher.join().map_err(|_| "watcher panicked")??;
+    assert_eq!(filed, CancelRequest::Requested);
+    assert_eq!(outcome, Err(JobRunError::Cancelled { job: job.clone() }));
+    assert_eq!(harness.record(&job)?.state, JobState::Cancelled);
+    let parts = harness.part_history()?;
+    let last = parts
+        .last()
+        .map(|(_, part)| part.clone())
+        .ok_or("no part")?;
+    let stopped = harness.newest()?.ok_or("no revision")?;
+    assert_eq!(stopped.state(), vsift_domain::RevisionState::Stopped);
+    assert_eq!(stopped.id(), last.id());
+    assert_eq!(stopped.published_until(), last.published_until());
+    assert_parts_grow_into(&parts, &stopped)?;
+    assert_eq!(harness.store.open_revision(&session()?, NOW)?, None);
+    Ok(())
+}
+
+/// ADR 0033: a run interrupted after it published parts leaves its revision
+/// open; resuming the job continues the same revision, from the next part
+/// number, and seals what an uninterrupted run seals.
+#[tokio::test]
+async fn an_interrupted_run_stays_open_and_its_resume_continues_the_revision() -> TestResult {
+    let reference = Harness::new()?;
+    let sealed_once = reference.request(None, None).await??.revision;
+
+    let harness = Harness::publishing()?;
+    harness
+        .recognizer
+        .fault_at(3, Fault::Fails(SpeechRecognitionError::Io));
+    let resolved = harness.resolve(None)?;
+    let first = harness.run(&resolved, None).await;
+    assert!(first.is_err(), "{first:?}");
+    let job = resolved.spec.job_id.clone();
+    assert_eq!(harness.record(&job)?.state, JobState::Interrupted);
+    let open = harness.newest()?.ok_or("no revision")?;
+    assert_eq!(open.state(), vsift_domain::RevisionState::Open);
+    let published = harness.part_history()?.len();
+    assert!(published > 0);
+
+    harness.recognizer.clear();
+    let resumed = harness.resolve(None)?;
+    assert_eq!(
+        resumed.spec.job_id, job,
+        "the same request names the same job"
+    );
+    let outcome = harness.run(&resumed, None).await?;
+    assert_eq!(outcome.revision, sealed_once);
+    let parts = harness.part_history()?;
+    assert!(parts.len() >= published);
+    assert_parts_grow_into(&parts, &outcome.revision)?;
+    Ok(())
 }
 
 // ---------------------------------------------------------------- checkpoints
@@ -1018,6 +1317,7 @@ async fn a_run_over_its_own_checkpoints_decodes_and_recognises_nothing() -> Test
         checkpoints: &owner,
         key: &resolved.spec.recognition_key,
         progress: &progress,
+        observer: &crate::NoObserver,
     };
     let every_chunk = [(0, Some(3)), (1, Some(3)), (2, Some(3)), (3, Some(3))];
     let never = Flag(Arc::new(AtomicBool::new(false)));
@@ -1066,6 +1366,7 @@ async fn foreign_or_invalid_checkpoints_are_discarded_and_redone() -> TestResult
         checkpoints: &owner,
         key: &resolved.spec.recognition_key,
         progress: &NoProgress,
+        observer: &crate::NoObserver,
     };
     let (control, _) =
         transcribe_range_checkpointed(request, scope, &harness.audio, &harness.recognizer, &never)
@@ -1143,6 +1444,7 @@ async fn a_checkpoint_stored_for_a_window_under_the_floor_is_not_reused_as_speec
         checkpoints: &owner,
         key: &resolved.spec.recognition_key,
         progress: &NoProgress,
+        observer: &crate::NoObserver,
     };
     let chunks = vsift_domain::plan_chunks(harness.source.id(), request.range, ChunkPlan::R0)?;
     let [chunk] = chunks.as_slice() else {
@@ -1437,6 +1739,7 @@ impl Harness {
                 timer: &self.timer,
                 classify,
                 progress,
+                publication: crate::Publication::AtTheSeal,
             },
             &mut guard,
         )
@@ -1745,6 +2048,7 @@ async fn a_range_cut_mid_speech_commits_its_overrunning_segment_cut_at_the_range
         checkpoints: &owner,
         key: &resolved.spec.recognition_key,
         progress: &NoProgress,
+        observer: &crate::NoObserver,
     };
     let never = Flag(Arc::new(AtomicBool::new(false)));
     let (fresh, _) =
@@ -2098,6 +2402,7 @@ async fn a_cancel_requested_during_the_run_wins_before_the_commit() -> TestResul
             timer: &harness.timer,
             classify,
             progress: &NoProgress,
+            publication: crate::Publication::AtTheSeal,
         },
         &mut guard,
     )
@@ -2226,6 +2531,37 @@ impl RevisionStore for SlowStore<'_> {
         now: u64,
     ) -> Result<Option<TranscriptRevision>, SessionStorageError> {
         self.0.revision(session_id, revision_id, now)
+    }
+
+    fn open_revision(
+        &self,
+        session_id: &SessionId,
+        now: u64,
+    ) -> Result<Option<crate::PublishedOpenRevision>, SessionStorageError> {
+        self.0.open_revision(session_id, now)
+    }
+
+    fn publish_part(
+        &self,
+        session_id: &SessionId,
+        operation_id: &OperationId,
+        expected: StorageGeneration,
+        open: &TranscriptRevision,
+        job: &JobId,
+        part: std::num::NonZeroU32,
+        first: usize,
+        now: u64,
+    ) -> Result<StorageGeneration, SessionStorageError> {
+        self.0.publish_part(
+            session_id,
+            operation_id,
+            expected,
+            open,
+            job,
+            part,
+            first,
+            now,
+        )
     }
 
     fn publish_revision(

@@ -45,6 +45,8 @@ const LOCAL_ASR_RECORD_VERSION: u16 = 2;
 const NEWEST_RECORD_VERSION: u16 = LOCAL_ASR_RECORD_VERSION;
 const RECORD_FORMAT: &str = "vsift.transcript_record";
 
+pub mod part;
+
 /// Encodes a revision as its bounded storage record.
 ///
 /// An imported revision is written as version 1, exactly as before local ASR
@@ -387,6 +389,12 @@ struct StoredAsrTranscript {
     /// the decoder's.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     unplaced_ranges: Vec<StoredRange>,
+    /// For a stopped revision (ADR 0033, D1), the time its run had published
+    /// until when it stopped; for an open revision's part, the time it is
+    /// published until. Written only then, so every sealed record is written
+    /// exactly as before.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    published_until_us: Option<u64>,
     language: Option<String>,
     warnings: Vec<StoredWarning>,
     segments: Vec<StoredAsrEntry>,
@@ -531,6 +539,13 @@ enum StoredChunkOutcome {
     /// reads the name as damage, so a revision stores it only when the run had
     /// such a chunk, and every other revision is written exactly as before.
     Unusable,
+    /// A chunk an open revision has not published yet (ADR 0033). Only the
+    /// parts of an open revision hold it; a sealed record never does.
+    Pending,
+    /// A chunk a stopped run never reached (ADR 0033, D1). Only a stopped
+    /// revision holds it, so every other record is written exactly as before;
+    /// a release before 0.3.0 reads the name as damage (L-221).
+    NotReached,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -557,7 +572,18 @@ enum StoredEndTrim {
 
 impl StoredAsrTranscript {
     fn from_revision(revision: &TranscriptRevision, run: &AsrRun) -> Self {
+        Self::from_revision_from(revision, run, 0)
+    }
+
+    /// The record of `revision` with only its segments from position `first`
+    /// on: what one part of an open revision stores (ADR 0033).
+    pub(crate) fn from_revision_from(
+        revision: &TranscriptRevision,
+        run: &AsrRun,
+        first: usize,
+    ) -> Self {
         Self {
+            published_until_us: revision.published_until().map(MediaTime::as_micros),
             schema_version: LOCAL_ASR_RECORD_VERSION,
             format: RECORD_FORMAT.to_owned(),
             revision_id: revision.id().as_str().to_owned(),
@@ -590,15 +616,29 @@ impl StoredAsrTranscript {
             segments: revision
                 .segments()
                 .iter()
+                .skip(first)
                 .filter_map(StoredAsrEntry::from_domain)
                 .collect(),
         }
     }
 
+    /// A sealed or stopped revision. An open one is never a record of its own:
+    /// it is read from its parts ([`part`]).
     fn into_revision(self) -> Option<TranscriptRevision> {
+        let (parts, published_until) = self.into_parts()?;
+        match published_until {
+            None => TranscriptRevision::new(parts).ok(),
+            Some(stopped_at) => TranscriptRevision::new_stopped(parts, stopped_at).ok(),
+        }
+    }
+
+    /// Every part of the revision the record holds, and the time it is
+    /// published until, if it names one.
+    pub(crate) fn into_parts(self) -> Option<(TranscriptRevisionParts, Option<MediaTime>)> {
         if self.schema_version != LOCAL_ASR_RECORD_VERSION || self.format != RECORD_FORMAT {
             return None;
         }
+        let published_until = self.published_until_us.map(MediaTime::from_micros);
         let StoredAsrOrigin::LocalAsr = self.origin;
         let source_segment = self.source_segment.into_domain()?;
         let run = self.run.into_domain(source_segment.id())?;
@@ -626,22 +666,24 @@ impl StoredAsrTranscript {
         for range in self.unplaced_ranges {
             unplaced.push(stored_range(range.start_us, range.end_us)?);
         }
-        TranscriptRevision::new(TranscriptRevisionParts {
-            id: TranscriptRevisionId::parse(self.revision_id).ok()?,
-            number: NonZeroU32::new(self.revision)?,
-            source_id: SourceId::parse(self.source_id).ok()?,
-            source_segment,
-            provenance: TranscriptProvenance::LocalAsr(run),
-            supersedes,
-            replaced_range,
-            inherited,
-            carried_untranscribed,
-            unplaced,
-            language: optional_language(self.language).ok()?,
-            segments,
-            warnings: domain_warnings(self.warnings)?,
-        })
-        .ok()
+        Some((
+            TranscriptRevisionParts {
+                id: TranscriptRevisionId::parse(self.revision_id).ok()?,
+                number: NonZeroU32::new(self.revision)?,
+                source_id: SourceId::parse(self.source_id).ok()?,
+                source_segment,
+                provenance: TranscriptProvenance::LocalAsr(run),
+                supersedes,
+                replaced_range,
+                inherited,
+                carried_untranscribed,
+                unplaced,
+                language: optional_language(self.language).ok()?,
+                segments,
+                warnings: domain_warnings(self.warnings)?,
+            },
+            published_until,
+        ))
     }
 }
 
@@ -689,6 +731,8 @@ impl StoredAsrRun {
                         AsrChunkOutcome::Unusable { audio } => {
                             (StoredChunkOutcome::Unusable, Some(audio))
                         }
+                        AsrChunkOutcome::Pending => (StoredChunkOutcome::Pending, None),
+                        AsrChunkOutcome::NotReached => (StoredChunkOutcome::NotReached, None),
                     };
                     StoredChunk {
                         index: record.chunk().index(),
@@ -716,6 +760,8 @@ impl StoredAsrRun {
                 (StoredChunkOutcome::Silent, Some(audio)) => AsrChunkOutcome::Silent { audio },
                 (StoredChunkOutcome::NoAudio, None) => AsrChunkOutcome::NoAudio,
                 (StoredChunkOutcome::Unusable, Some(audio)) => AsrChunkOutcome::Unusable { audio },
+                (StoredChunkOutcome::Pending, None) => AsrChunkOutcome::Pending,
+                (StoredChunkOutcome::NotReached, None) => AsrChunkOutcome::NotReached,
                 _ => return None,
             };
             chunks.push(AsrChunkRecord::new(

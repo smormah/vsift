@@ -102,6 +102,7 @@ mod candidates;
 mod engine;
 mod error;
 mod evidence;
+mod growth;
 mod handoff;
 mod install;
 mod isolation;
@@ -118,7 +119,10 @@ mod verification;
 mod worker;
 mod workspace;
 
-pub use asr::{JobSummary, RetranscribeOutcome, RetranscribeRange, RetranscribeRequest};
+pub use asr::{
+    JobSummary, PUBLICATION_INTERVAL, RetranscribeOutcome, RetranscribePublication,
+    RetranscribeRange, RetranscribeRequest,
+};
 pub use batch::{BatchEvent, BatchLineEnd, BatchProgress, MAX_BATCH_CONCURRENCY, WorkBatchRun};
 pub use candidates::{CandidatesRange, CandidatesRequest, CandidatesResults};
 pub use engine::{
@@ -134,6 +138,7 @@ pub use evidence::{
     DEFAULT_NEIGHBOUR_COUNT, EvidenceFile, EvidenceResults, FrameBurstRequest, FrameGetRequest,
     FrameNeighboursRequest, FrameTarget,
 };
+pub use growth::ReadGrowth;
 pub use handoff::HandoffSessionLookup;
 pub use install::{SetupInstallOutcome, SetupInstallRequest};
 pub use isolation::{IsolationGap, IsolationGaps, IsolationProfile, attest_host_isolation};
