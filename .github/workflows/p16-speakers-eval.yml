@@ -244,6 +244,51 @@ jobs:
           if-no-files-found: warn
           retention-days: 90
 
+  # The managed install's file list (ADR 0031, ADR 0032): every member of this platform's
+  # pinned sherpa-onnx archive with its size and SHA-256, the libraries the tool names
+  # (as far as the archive holds them), and a run of the tool on a short tone from one
+  # flat folder holding only those, with no library path variable, as the managed store
+  # keeps a component. Small (one archive and the two models), so it runs on pull
+  # requests that change the evaluation.
+  flat-folder:
+    name: Managed file list, flat folder on ${{ matrix.os }}
+    needs: tooling-tests
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-24.04
+          - windows-2025
+          - macos-15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: List the archive, find the tool's libraries and run it from a flat folder
+        run: >-
+          python tools/p16_speakers_eval.py flat-check --dest "$RUNNER_TEMP/p16-flat"
+          --output "$RUNNER_TEMP/p16-flat-report/inventory-${{ matrix.os }}.json"
+
+      - name: Keep the file list
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: p16-speakers-flat-${{ matrix.os }}
+          path: ${{ runner.temp }}/p16-flat-report
+          if-no-files-found: warn
+          retention-days: 90
+
   # A read item's reference (docs/planning/speaker-labels-evaluation.md section 5): the
   # recording transcribed and labelled by the recommended engine and two alternatives,
   # printed to the log with each run's turns so a person can read the reference from the

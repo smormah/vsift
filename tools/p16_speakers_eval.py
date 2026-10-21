@@ -612,6 +612,214 @@ def platform_key() -> str:
     raise EvaluationError("no engine build is pinned for this platform")
 
 
+# ---------------------------------------------------------------------------
+# The managed install's file list: what the tool needs, in one flat folder
+# ---------------------------------------------------------------------------
+
+# A library the loader finds through the system itself, never shipped with the tool.
+SYSTEM_LIBRARY = re.compile(r"^(lib(c|m|dl|rt|pthread|gcc_s|stdc\+\+)\.so(\.\d+)*|ld-linux.*|linux-vdso.*|"
+                            r"/usr/lib/.*|/System/.*|"
+                            r"(kernel32|user32|advapi32|ole32|oleaut32|shell32|shlwapi|ws2_32|bcrypt|crypt32|"
+                            r"dbghelp|setupapi|ntdll|msvcp\d+|vcruntime\d+(_\d+)?|ucrtbase|api-ms-win-.*)\.dll)$",
+                            re.IGNORECASE)
+FLAT_CHECK_TIMEOUT_S = 300
+# The attribution notice the managed install ships with the two models (ADR 0031, "The
+# managed install and its notice"), as a file: UTF-8, LF line ends, one paragraph.
+SPEAKER_MODELS_NOTICE_NAME = "speaker-models-NOTICE.txt"
+SPEAKER_MODELS_NOTICE = (
+    "Speaker diarization uses the pyannote segmentation 3.0 model (Copyright (c) 2022 CNRS, MIT licence; ONNX export "
+    "by the sherpa-onnx project) and NVIDIA's NeMo TitaNet small speaker-embedding model (Copyright NVIDIA "
+    "Corporation; distributed under the NeMo Toolkit's Apache License 2.0, and attributed here as the Creative Commons "
+    "Attribution 4.0 licence of NVIDIA's TitaNet model card requires), run by sherpa-onnx (Apache License 2.0) with "
+    "ONNX Runtime (MIT licence).\n")
+# Licence texts an archive may carry, which an install of its files must keep beside them.
+LICENCE_MEMBER = re.compile(r"(^|/)(LICEN[CS]E|COPYING|NOTICE|ThirdPartyNotices)[^/]*$", re.IGNORECASE)
+
+
+def elf_needed(readelf_output: str) -> list[str]:
+    """The NEEDED entries of ``readelf -d``."""
+    return re.findall(r"\(NEEDED\)\s+Shared library: \[([^\]]+)\]", readelf_output)
+
+
+def macho_needed(otool_output: str) -> list[str]:
+    """The libraries of ``otool -L`` (its first line names the file itself)."""
+    names = []
+    for line in otool_output.splitlines()[1:]:
+        match = re.match(r"^\s+(\S+) \(compatibility version", line)
+        if match:
+            names.append(match.group(1))
+    return names
+
+
+def pe_imports(data: bytes) -> list[str]:
+    """The DLL names of a PE32+ file's import directory (delay-loaded ones are not listed)."""
+    def u16(offset: int) -> int:
+        return int.from_bytes(data[offset:offset + 2], "little")
+
+    def u32(offset: int) -> int:
+        return int.from_bytes(data[offset:offset + 4], "little")
+
+    if data[:2] != b"MZ":
+        raise EvaluationError("not a PE file")
+    header = u32(0x3C)
+    if data[header:header + 4] != b"PE\0\0":
+        raise EvaluationError("not a PE file")
+    coff = header + 4
+    sections, optional_size = u16(coff + 2), u16(coff + 16)
+    optional = coff + 20
+    if u16(optional) != 0x20B:
+        raise EvaluationError("not a PE32+ file")
+    import_rva = u32(optional + 112 + 8)
+    table = optional + optional_size
+    spans = [(u32(table + 40 * index + 12), max(u32(table + 40 * index + 8), u32(table + 40 * index + 16)),
+              u32(table + 40 * index + 20)) for index in range(sections)]
+
+    def offset_of(rva: int) -> int:
+        for start, size, raw in spans:
+            if start <= rva < start + size:
+                return raw + rva - start
+        raise EvaluationError("a PE address lies in no section")
+
+    names = []
+    descriptor = offset_of(import_rva) if import_rva else None
+    while descriptor is not None and any(data[descriptor:descriptor + 20]):
+        name_at = offset_of(u32(descriptor + 12))
+        end = data.index(b"\0", name_at)
+        names.append(data[name_at:end].decode("ascii"))
+        descriptor += 20
+    return names
+
+
+def shipped(name: str) -> bool:
+    return SYSTEM_LIBRARY.match(name) is None
+
+
+def direct_libraries(binary: Path, key: str) -> tuple[list[str], str]:
+    """The libraries ``binary`` names, and the loader's own view of it for the record."""
+    if key == "linux-x64":
+        output = run_measured(["readelf", "-d", str(binary)]).stdout
+        return elf_needed(output), "\n".join(line for line in output.splitlines() if "NEEDED" in line or "PATH" in line)
+    if key == "macos-arm64":
+        listed = run_measured(["otool", "-L", str(binary)]).stdout
+        rpaths = run_measured(["otool", "-l", str(binary)]).stdout
+        lines = rpaths.splitlines()
+        rpath_lines = [lines[index + 2].strip() for index, line in enumerate(lines)
+                       if "LC_RPATH" in line and index + 2 < len(lines)]
+        return macho_needed(listed), listed + "\n" + "\n".join(rpath_lines)
+    imports = pe_imports(binary.read_bytes())
+    return imports, "imports: " + ", ".join(imports)
+
+
+def tone_wav(destination: Path, seconds: int = 3) -> None:
+    """A quiet 440 Hz tone at 16 kHz: enough for the engine to load both models and finish."""
+    with wave.open(str(destination), "wb") as sink:
+        sink.setnchannels(1)
+        sink.setsampwidth(2)
+        sink.setframerate(ENGINE_RATE)
+        samples = array.array("h", (int(3000 * math.sin(2 * math.pi * 440 * n / ENGINE_RATE))
+                                    for n in range(seconds * ENGINE_RATE)))
+        sink.writeframes(samples.tobytes())
+
+
+def flat_check(dest: Path, output: Path) -> dict:
+    """Stage this platform's archive and the two models, list every archive member, find
+    the libraries the tool needs, and run it from one flat folder holding only those."""
+    if not os.environ.get("GITHUB_ACTIONS"):
+        raise EvaluationError("engines and models are staged only on a hosted runner")
+    key = platform_key()
+    dest.mkdir(parents=True, exist_ok=False)
+    pin = SHERPA_ARCHIVES[key]
+    archive = dest / "archive" / pin.name
+    archive_digest = download(pin, archive)
+    members = safe_extract(archive, dest / "extracted")
+    models = {}
+    for role, model in (("segmentation", SEGMENTATION["pyannote-3.0"]), ("embedding", EMBEDDINGS["titanet-small"])):
+        models[role] = {"name": model.name, "url": model.url, "bytes": model.size,
+                        "sha256": download(model, dest / "models" / model.name), "digest_source": model.digest_source}
+    executable = "sherpa-onnx-offline-speaker-diarization" + (".exe" if key == "windows-x64" else "")
+    binary = find_one(dest / "extracted", executable)
+    # Windows names its imports without regard to case.
+    fold = str.lower if key == "windows-x64" else str
+    by_name: dict[str, Path] = {}
+    for entry in members:
+        candidate = dest / "extracted" / PurePosixPath(entry["path"])
+        if candidate.is_file():
+            by_name.setdefault(fold(candidate.name), candidate)
+    # The libraries the tool needs: what it names, then what those name, as far as the
+    # archive holds them (the system's own libraries are left to the system).
+    needed: dict[str, Path] = {}
+    loader_views = {}
+    pending = [binary]
+    while pending:
+        current = pending.pop()
+        names, view = direct_libraries(current, key)
+        loader_views[current.name] = view
+        for name in names:
+            base = PurePosixPath(name.replace("@rpath/", "")).name
+            source = by_name.get(fold(base))
+            if shipped(name) and source is not None and source.name not in needed:
+                needed[source.name] = source
+                pending.append(source)
+    flat = dest / "flat"
+    flat.mkdir()
+    shutil.copyfile(binary, flat / binary.name)
+    (flat / binary.name).chmod(0o755)
+    for base, source in needed.items():
+        shutil.copyfile(source, flat / base)
+    notice = dest / SPEAKER_MODELS_NOTICE_NAME
+    notice.write_bytes(SPEAKER_MODELS_NOTICE.encode("utf-8"))
+    wav = dest / "tone.wav"
+    tone_wav(wav)
+    argv = [str(flat / binary.name), f"--segmentation.pyannote-model={dest / 'models' / models['segmentation']['name']}",
+            f"--embedding.model={dest / 'models' / models['embedding']['name']}", "--clustering.cluster-threshold=0.9",
+            str(wav)]
+    clean = {name: value for name, value in os.environ.items()
+             if name not in {"LD_LIBRARY_PATH", "DYLD_LIBRARY_PATH", "DYLD_FALLBACK_LIBRARY_PATH"}}
+    if key == "windows-x64":
+        # Only the system folders: nothing of the staging is on PATH.
+        system_root = os.environ.get("SystemRoot", r"C:\Windows")
+        clean["PATH"] = os.pathsep.join([str(Path(system_root) / "System32"), system_root])
+    run = run_measured(argv, env=clean, cwd=dest, timeout_s=FLAT_CHECK_TIMEOUT_S)
+    # If the loader does not look beside the tool, say whether the platform's library
+    # path variable pointed at the flat folder is enough (the adapter could set it).
+    with_variable = None
+    if run.returncode != 0:
+        variable = {"linux-x64": "LD_LIBRARY_PATH", "macos-arm64": "DYLD_LIBRARY_PATH", "windows-x64": "PATH"}[key]
+        retry = dict(clean)
+        retry[variable] = str(flat) if key != "windows-x64" else os.pathsep.join([str(flat), clean["PATH"]])
+        second = run_measured(argv, env=retry, cwd=dest, timeout_s=FLAT_CHECK_TIMEOUT_S)
+        with_variable = {"variable": variable, "exit": second.returncode, "stderr_tail": second.stderr[-1500:]}
+
+    def described(path: Path) -> dict:
+        return {"bytes": path.stat().st_size, "sha256": recipe.sha256_file(path)}
+
+    member_of = {Path(dest / "extracted" / PurePosixPath(entry["path"])):
+                 entry["path"] if "bytes" in entry else f"{entry['path']} (a link to {entry['link_to']})"
+                 for entry in members}
+    report = {
+        "platform": key, "sherpa_onnx": SHERPA_VERSION,
+        "archive": {"url": pin.url, "bytes": pin.size, "sha256": archive_digest, "digest_source": pin.digest_source},
+        "members": members,
+        "tool_files": [{"installed_name": binary.name, "archive_member": member_of.get(binary), **described(binary)}]
+                      + [{"installed_name": base, "archive_member": member_of.get(source), **described(source)}
+                         for base, source in sorted(needed.items())],
+        "models": models,
+        "notice": {"name": SPEAKER_MODELS_NOTICE_NAME, **described(notice)},
+        "licence_members": [entry for entry in members if LICENCE_MEMBER.search(entry["path"])],
+        "loader": loader_views,
+        "flat_folder_run": {"exit": run.returncode, "stdout_tail": run.stdout[-1500:], "stderr_tail": run.stderr[-1500:],
+                            "library_path_variables": "removed", "files": sorted(path.name for path in flat.iterdir()),
+                            "with_library_path_variable": with_variable},
+    }
+    output.parent.mkdir(parents=True, exist_ok=True)
+    with output.open("x", encoding="utf-8") as handle:
+        json.dump(report, handle, indent=2)
+        handle.write("\n")
+    if run.returncode != 0:
+        raise EvaluationError(f"the tool did not run from the flat folder (exit {run.returncode}); see {output.name}")
+    return report
+
+
 def stage(dest: Path, everything: bool) -> dict:
     """Stage sherpa-onnx, the models and polyvoice; everything adds the alternatives."""
     if not os.environ.get("GITHUB_ACTIONS"):
@@ -1426,6 +1634,9 @@ def main(argv: Sequence[str] | None = None) -> None:
     grow.add_argument("--source", type=Path, action="append", required=True)
     grow.add_argument("--minutes", type=int, action="append", required=True)
     grow.add_argument("--output", type=Path, required=True)
+    flat = commands.add_parser("flat-check", help="the tool's files for the managed install, run from one flat folder")
+    flat.add_argument("--dest", type=Path, required=True)
+    flat.add_argument("--output", type=Path, required=True)
     network = commands.add_parser("network-check", help="trace the default engines for network calls (Linux)")
     network.add_argument("--tools", type=Path, required=True)
     network.add_argument("--wav", type=Path, required=True)
@@ -1460,6 +1671,8 @@ def main(argv: Sequence[str] | None = None) -> None:
                     print(f"{item_id}-TURNS {path.stem[len(item_id) + 1:]} {path.read_text(encoding='utf-8')}")
     elif arguments.command == "scaling":
         scaling(arguments.tools, arguments.source, arguments.minutes, arguments.output)
+    elif arguments.command == "flat-check":
+        print(json.dumps(flat_check(arguments.dest, arguments.output), indent=2))
     elif arguments.command == "network-check":
         results = network_check(arguments.tools, arguments.wav, arguments.output)
         print(json.dumps(results, indent=2))

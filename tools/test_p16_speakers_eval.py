@@ -202,6 +202,55 @@ class ScoringTests(unittest.TestCase):
             loaded = evaluation.load_inputs(Path(folder), {})
         self.assertEqual([(item.input_id, item.speakers, item.reference) for item in loaded], [("RM11", 3, None)])
 
+    def test_the_loader_views_name_the_libraries_a_tool_needs(self) -> None:
+        readelf = (" 0x0000000000000001 (NEEDED)             Shared library: [libonnxruntime.so]\n"
+                   " 0x0000000000000001 (NEEDED)             Shared library: [libc.so.6]\n"
+                   " 0x000000000000000f (RPATH)              Library rpath: [$ORIGIN:$ORIGIN/../lib]\n")
+        self.assertEqual(evaluation.elf_needed(readelf), ["libonnxruntime.so", "libc.so.6"])
+        otool = ("/x/bin/tool:\n"
+                 "\t@rpath/libonnxruntime.1.23.2.dylib (compatibility version 0.0.0, current version 1.23.2)\n"
+                 "\t/usr/lib/libc++.1.dylib (compatibility version 1.0.0, current version 1700.255.5)\n")
+        self.assertEqual(evaluation.macho_needed(otool),
+                         ["@rpath/libonnxruntime.1.23.2.dylib", "/usr/lib/libc++.1.dylib"])
+        names = ["libonnxruntime.so", "libc.so.6", "libstdc++.so.6", "/usr/lib/libc++.1.dylib",
+                 "@rpath/libonnxruntime.1.23.2.dylib", "onnxruntime.dll", "KERNEL32.dll", "VCRUNTIME140.dll",
+                 "api-ms-win-crt-runtime-l1-1-0.dll"]
+        self.assertEqual([name for name in names if evaluation.shipped(name)],
+                         ["libonnxruntime.so", "@rpath/libonnxruntime.1.23.2.dylib", "onnxruntime.dll"])
+
+    def test_a_pe_files_import_directory_names_its_dlls(self) -> None:
+        image = bytearray(0x600)
+        image[0:2] = b"MZ"
+        image[0x3C:0x40] = (64).to_bytes(4, "little")
+        image[64:68] = b"PE" + bytes(2)
+        coff = 68
+        image[coff + 2:coff + 4] = (1).to_bytes(2, "little")
+        image[coff + 16:coff + 18] = (240).to_bytes(2, "little")
+        optional = coff + 20
+        image[optional:optional + 2] = (0x20B).to_bytes(2, "little")
+        image[optional + 120:optional + 124] = (0x1000).to_bytes(4, "little")
+        section = optional + 240
+        for offset, value in ((8, 0x200), (12, 0x1000), (16, 0x200), (20, 0x400)):
+            image[section + offset:section + offset + 4] = value.to_bytes(4, "little")
+        for index, (name, at) in enumerate(((b"onnxruntime.dll", 0x100), (b"KERNEL32.dll", 0x120))):
+            descriptor = 0x400 + 20 * index
+            image[descriptor + 12:descriptor + 16] = (0x1000 + at).to_bytes(4, "little")
+            image[0x400 + at:0x400 + at + len(name) + 1] = name + bytes(1)
+        self.assertEqual(evaluation.pe_imports(bytes(image)), ["onnxruntime.dll", "KERNEL32.dll"])
+        with self.assertRaises(evaluation.EvaluationError):
+            evaluation.pe_imports(b"\x7fELF" + bytes(64))
+
+    def test_the_notice_file_says_what_adr_0031_says(self) -> None:
+        adr = Path(evaluation.__file__).parent.parent / "docs" / "decisions" / "0031-speaker-labels.md"
+        quoted = [line[2:] for line in adr.read_text(encoding="utf-8").splitlines() if line.startswith("> ")]
+        self.assertEqual(" ".join(quoted).replace("`", "") + "\n", evaluation.SPEAKER_MODELS_NOTICE)
+
+    def test_the_tone_is_sixteen_kilohertz_mono(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "tone.wav"
+            evaluation.tone_wav(path, seconds=1)
+            self.assertEqual(evaluation.wav_duration_us(path), 1_000_000)
+
     def test_extra_found_speakers_map_one_to_one(self) -> None:
         overlap = {"A": {"x": 5, "y": 9, "z": 0}, "B": {"x": 7, "y": 8, "z": 1}}
         self.assertEqual(evaluation.best_mapping(overlap, ["A", "B"], ["x", "y", "z"]), {"A": "y", "B": "x"})
