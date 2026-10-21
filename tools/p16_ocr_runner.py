@@ -680,6 +680,16 @@ def crosscheck_frames(frames_dir: Path, recognise_crop: Callable[[object], str],
                     counts["reference_pipeline_lines_paired"] += 1
                     if evaluation.normalise(best.text) == evaluation.normalise(text):
                         counts["same_as_reference_pipeline"] += 1
+    # The same recogniser on the reference's own boxes, cut upright: if it gives
+    # back the reference's text, an upright crop of the same box is not the cause.
+    counts["reference_boxes"] = 0
+    counts["reference_boxes_same_text"] = 0
+    for reading in reference.values():
+        image = read_image(frames_dir / reading.file)
+        for line in reading.lines:
+            counts["reference_boxes"] += 1
+            if evaluation.normalise(recognise_crop(crop(image, line.box))) == evaluation.normalise(line.text):
+                counts["reference_boxes_same_text"] += 1
     return counts
 
 
@@ -698,8 +708,12 @@ def command_crosscheck(arguments: argparse.Namespace) -> int:
                 section = row.rstrip(":")
             if section in {"Det", "Rec", "Global"}:
                 print("  " + row)
+    # A line crop is wider than eight times its height, so the whole-image
+    # preprocessing (vertical padding, side limits) must stay off here: on a
+    # frame it changes nothing, on a crop it would change what is recognised.
     engine = RapidOCR(params={
         "Global.use_cls": False, "Global.log_level": "warning",
+        "Global.use_preprocess_img": False, "Global.use_vertical_padding": False,
         "Det.ocr_version": OCRVersion("PP-OCRv5"), "Det.model_type": ModelType("mobile"),
         "Det.lang_type": LangDet("multi"),
         "Rec.ocr_version": OCRVersion("PP-OCRv5"), "Rec.model_type": ModelType("mobile"),

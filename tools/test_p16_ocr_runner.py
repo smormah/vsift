@@ -180,6 +180,7 @@ class CrosscheckTests(unittest.TestCase):
         self.assertEqual(counts["same_as_runner"], 0)
         self.assertEqual(counts["same_as_reference_pipeline"], 1)
         self.assertEqual(counts["kinds_against_runner"], {"near": 1})
+        self.assertEqual((counts["reference_boxes"], counts["reference_boxes_same_text"]), (1, 1))
 
 
 class EndToEndTests(unittest.TestCase):
