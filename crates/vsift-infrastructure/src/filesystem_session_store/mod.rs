@@ -29,6 +29,7 @@ mod job_records;
 mod job_tests;
 mod jobs;
 mod lifecycle;
+mod origin;
 #[cfg(test)]
 mod p10_tests;
 mod publication;
@@ -60,8 +61,8 @@ use sha2::{Digest, Sha256};
 use vsift_application::{SessionStorageError, StorageCapabilities};
 use vsift_domain::{
     DurabilityRequirement, EvidenceMediaKind, EvidenceRecord, OperationId, SessionArtifactKind,
-    SessionId, SessionLifetime, SessionLifetimePolicy, SessionPhase, SourceId, StorageGeneration,
-    WorkspacePolicy, WorkspaceRetention,
+    SessionId, SessionLifetime, SessionLifetimePolicy, SessionPhase, SourceId, SourceOrigin,
+    StorageGeneration, WorkspacePolicy, WorkspaceRetention,
 };
 
 use crate::{VerifiedSourceIdentity, file_lock::HeldFileLock};
@@ -376,6 +377,7 @@ pub struct SessionStatus {
     generation: StorageGeneration,
     artifact_count: usize,
     artifact_bytes: u64,
+    origin: Option<SourceOrigin>,
 }
 
 /// Explicit portability requested for a user-selected retained bundle.
@@ -571,6 +573,13 @@ impl SessionStatus {
     pub const fn artifact_bytes(&self) -> u64 {
         self.artifact_bytes
     }
+
+    /// Where the source was fetched from (ADR 0028); `None` for a local
+    /// file's copy.
+    #[must_use]
+    pub const fn origin(&self) -> Option<&SourceOrigin> {
+        self.origin.as_ref()
+    }
 }
 
 enum LifecycleUpdate {
@@ -583,6 +592,8 @@ enum LifecycleUpdate {
         artifacts: Vec<StoredArtifact>,
         /// The lifetime rules of the root the session opens in.
         lifetime: SessionLifetimePolicy,
+        /// Where a fetched source came from (ADR 0028).
+        origin: Option<origin::StoredOrigin>,
     },
     Renew {
         now: u64,
@@ -1193,6 +1204,11 @@ struct StoredLifecycle {
     /// session, whose record is unchanged since P05.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     workspace_retention_seconds: Option<u64>,
+    /// Where a fetched source came from (ADR 0028), written at activation
+    /// and carried unchanged; absent for a local file's copy, so such a
+    /// session is recorded exactly as before.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    origin: Option<origin::StoredOrigin>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

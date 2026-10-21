@@ -14,7 +14,7 @@ use vsift_domain::{
     TranscriptRevision,
 };
 
-use crate::TranscriptRevisionData;
+use crate::{OriginData, TranscriptRevisionData};
 
 /// Publicly reported lifecycle state of one session.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
@@ -77,6 +77,9 @@ pub struct OpenData {
     expires_at: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     transcript: Option<TranscriptRevisionData>,
+    /// Where a fetched source came from (ADR 0028); absent for a local file.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    origin: Option<OriginData>,
 }
 
 impl OpenData {
@@ -91,6 +94,7 @@ impl OpenData {
             publication: opened.publication.identifier(),
             expires_at,
             transcript: None,
+            origin: opened.origin.as_ref().and_then(OriginData::new),
         }
     }
 
@@ -126,6 +130,9 @@ pub struct StatusData {
     pub generation: u64,
     /// RFC 3339 expiry, formatted by the host.
     pub expires_at: String,
+    /// Where a fetched source came from (ADR 0028); absent for a local file.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub origin: Option<OriginData>,
 }
 
 /// One page of `session list` results.
@@ -326,6 +333,7 @@ mod tests {
             generation: StorageGeneration::from_value(1),
             publication: PublicationGuarantee::ProcessCrashConsistent,
             lifetime: SessionLifetime::open(1_000)?,
+            origin: None,
         };
 
         let value =
@@ -392,6 +400,7 @@ mod tests {
             artifact_bytes: 0,
             generation: 2,
             expires_at: String::from("2026-09-24T00:00:00Z"),
+            origin: None,
         };
 
         let indexed = serde_json::to_value(ListedSession::indexed(&session, status))?;

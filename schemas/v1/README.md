@@ -84,7 +84,12 @@ These files are the machine-readable public v1 boundary:
 - `config.schema.json` â strict explicit configuration document reserved for P06;
 - `ingest-data.schema.json` â the `data` member of a complete `ingest` result; its
   optional `transcript` member is present only when a supplied transcript was
-  imported (P07);
+  imported (P07), and its optional `origin` member only for a source fetched with
+  `ingest --url` (0.3.0, ADR 0028: a digest of the link and the hosts it reached,
+  never the link; example `ingest.url.json`). A link that cannot be fetched is the
+  code `SOURCE_FETCH_FAILED` with the optional `error.reason` of
+  `operation-response.schema.json` (example `ingest-url-address-refused.json`);
+  both examples are checked by `vsift-contract`'s `link_contract`;
 - `transcript-get-data.schema.json` â the `data` member of a complete or partial
   `transcript.get` result: one bounded page with its continuation cursor (P07). Since
   0.2.1 it also has `transcript_coverage` (what a transcript covers of the requested

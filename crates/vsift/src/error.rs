@@ -1160,6 +1160,7 @@ const fn open_session_failure_code(error: OpenSessionError) -> FailureCode {
         OpenSessionError::TranscriptRejected(rejected) => transcript_failure_code(rejected),
         OpenSessionError::TranscriptInvalid(_) => FailureCode::Internal,
         OpenSessionError::Cancelled => FailureCode::Cancelled,
+        OpenSessionError::SourceFetch(_) => FailureCode::SourceFetchFailed,
     }
 }
 

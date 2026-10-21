@@ -284,6 +284,19 @@ pub(crate) struct Opened {
     pub(crate) publication: String,
     #[serde(default)]
     pub(crate) transcript: Option<TranscriptRevision>,
+    #[serde(default)]
+    pub(crate) origin: Option<Origin>,
+}
+
+/// Where a fetched source came from (ADR 0028): hosts and a digest, never
+/// the link.
+#[derive(Debug, Deserialize)]
+pub(crate) struct Origin {
+    pub(crate) requested_host: String,
+    pub(crate) final_host: String,
+    pub(crate) redirects: u64,
+    pub(crate) address_check: String,
+    pub(crate) retrieved_at: String,
 }
 
 /// A session's committed status (`session status`, `renew`, `close`).
@@ -302,6 +315,8 @@ pub(crate) struct SessionStatus {
     pub(crate) jobs: Option<Vec<SessionJob>>,
     #[serde(default)]
     pub(crate) jobs_truncated: bool,
+    #[serde(default)]
+    pub(crate) origin: Option<Origin>,
 }
 
 /// One job of `session status`.

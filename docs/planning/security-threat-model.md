@@ -463,6 +463,23 @@ escape control and hidden characters and never echo input into a result. Since P
 delivered paths included (each whole on its own line, a hostile one inert and
 flagged), and SEC-T02 is re-run over all of it (verification section 7).
 
+## Online sources (`0.3.0`, ADR 0028)
+
+`ingest --url` is the one place VSift fetches a location a caller chose. This is the threat review of
+#407's slice (direct HTTPS links); #409's (a managed yt-dlp and its JavaScript runtime) is added with its
+pull requests.
+
+| Threat | Control (#407) | Residual |
+| --- | --- | --- |
+| Request forgery through a chosen link or a redirect (SEC-06, SEC-31): an internal service, the cloud metadata address, a loopback port | HTTPS on 443 only; every name resolved by VSift, and a name with any non-public address refused whole; the connector reaches only the addresses checked; a host written as an address checked on every hop; at most three redirects, each held to the same rules; no credentials in a link | Through a proxy the proxy resolves the name: only internal-looking names and addresses are refused, and the origin says `proxy_resolved` ([L-208](known-limits.md#l-208)) |
+| DNS rebinding: a name public for the check and private for the connection | The check is the resolution the connector uses; no second lookup | None known for direct connections |
+| Links and instructions inside evidence (#221) | Only `ingest --url` fetches, and only the link it is given; nothing found in a transcript, a frame or a page is fetched; the skill is unchanged in this slice | An agent that runs `ingest --url` on a link it read in evidence; the skill text and an injection trial come with #409, at the `0.3.0` freeze |
+| A stranger chooses the bytes FFmpeg decodes | The body must start as an admitted container and then meets the unchanged restricted media profile (ADR 0012) and the same snapshot rules as a copied file | The accepted media-parser residuals (for example [L-144](known-limits.md#l-144)) now apply to a file anyone can serve; acquired-style files are to be added to the hostile-media campaign |
+| Signed tokens leak through output, logs, errors or bundles | The link is never stored, printed or logged; the origin keeps its SHA-256 and the hosts only; errors carry a typed reason and fixed prose; tests put a token in the query, the fragment and the path and find it nowhere VSift writes | The link is on the command line unless given on standard input (`--url -`) |
+| A huge, endless or slow body | A declared length over the limit is refused before the body; bytes are counted as they arrive; a 30-second stall and a whole-transfer deadline stop it; free space is checked first | Bounded by the limits a caller chooses (at most 20 GiB and 4 hours) |
+| Identifying the user to a server | A fixed user agent naming the product only; no cookie, `Authorization` or `Referer` | The server sees the connecting address, as for any download |
+| The strict worker's isolation | `--host-isolation strict-linux` refuses `--url` before anything is fetched; a worker job request takes no link | None |
+
 ## Agent-specific controls
 
 The tool cannot make every downstream model immune to prompt injection. Evidence

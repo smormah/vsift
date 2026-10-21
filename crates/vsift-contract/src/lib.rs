@@ -118,6 +118,7 @@ mod input;
 mod install;
 mod job;
 mod lifecycle;
+mod link;
 mod local_asr;
 mod navigation;
 mod request;
@@ -205,6 +206,7 @@ pub use lifecycle::{
     SetupRollbackResponse, SuggestedCommandResponse, managed_lifecycle_remediation,
     repair_fix_command, setup_remove_failure_summary,
 };
+pub use link::{OriginData, source_fetch_remediation};
 pub use local_asr::{
     CANCELLATION_TOO_LATE_WARNING, CHECKPOINT_DISCARDED_WARNING, IDEMPOTENCY_CONFLICT_REMEDIATION,
     JOB_BUSY_REMEDIATION, LOCAL_ASR_MODEL_REMEDIATION, LOCAL_ASR_TOOLS_REMEDIATION,

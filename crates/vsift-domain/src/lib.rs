@@ -16,6 +16,7 @@ mod provisioning;
 mod retry;
 mod search;
 mod session;
+mod source_origin;
 mod spans;
 mod storage;
 mod timeline;
@@ -85,6 +86,12 @@ pub use search::{
 pub use session::{
     SessionArtifactKind, SessionLifetime, SessionLifetimePolicy, SessionPhase,
     SessionTransitionError, WorkspacePolicy, WorkspacePolicyError, WorkspaceRetention,
+};
+pub use source_origin::{
+    AddressCheck, DEFAULT_DOWNLOAD_BYTES, DEFAULT_DOWNLOAD_SECONDS, DirectLinkOrigin,
+    DownloadLimits, DownloadLimitsError, HostName, HostNameError, MAX_DOWNLOAD_BYTES,
+    MAX_DOWNLOAD_SECONDS, MAX_HOST_NAME_BYTES, MAX_SOURCE_LINK_BYTES, MAX_SOURCE_REDIRECTS,
+    SourceFetchReason, SourceLink, SourceOrigin, SourceOriginError,
 };
 pub use storage::{
     DurabilityRequirement, GenerationError, PublicationGuarantee, StorageGeneration,

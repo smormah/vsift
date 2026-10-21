@@ -108,6 +108,11 @@ impl StoredLifecycle {
             generation: StorageGeneration::from_value(generation),
             artifact_count: self.artifacts.len(),
             artifact_bytes,
+            origin: self
+                .origin
+                .as_ref()
+                .map(|stored| super::origin::decode_origin(stored, self.source_bytes))
+                .transpose()?,
         })
     }
 }

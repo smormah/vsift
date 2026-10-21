@@ -89,7 +89,7 @@ impl Error for DevelopmentNetworkRefused {}
 
 /// Whether this development build was explicitly allowed to download.
 #[cfg(debug_assertions)]
-fn development_network_allowed() -> bool {
+pub(crate) fn development_network_allowed() -> bool {
     std::env::var_os(DEVELOPMENT_NETWORK_VARIABLE)
         .is_some_and(|value| value == DEVELOPMENT_NETWORK_ALLOWED)
 }
