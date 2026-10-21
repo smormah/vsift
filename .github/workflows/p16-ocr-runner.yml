@@ -179,6 +179,12 @@ jobs:
             --frames RM01 --frames RM04 --frames RM10
           { echo '## Parity'; echo; echo '```json'; cat "$RUNNER_TEMP/report/parity.json"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Where the runner and the reference differ (counts and kinds only)
+        run: |
+          set -euo pipefail
+          python3 tools/p16_ocr_runner.py diagnose --work "$RUNNER_TEMP/work" --report "$RUNNER_TEMP/report/differences.json" \
+            --frames synthetic-h264 --frames RM01 --frames RM04 --frames RM10
+
       - name: vsift ocr and ocr search, end to end (no transcript; one video without audio, one with a silent track)
         run: |
           set -euo pipefail

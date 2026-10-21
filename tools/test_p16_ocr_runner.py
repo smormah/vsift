@@ -142,6 +142,26 @@ class ParityTests(unittest.TestCase):
         self.assertEqual(runner.agreement(linux, other), {"lines": 2, "equal": 1, "agreement": 0.5})
 
 
+class DiagnoseTests(unittest.TestCase):
+    def test_differences_are_named_by_kind_never_by_text(self) -> None:
+        self.assertEqual(runner.text_difference("Total 4407", "Total 4407"), "equal")
+        self.assertEqual(runner.text_difference("Total 4407", "total  4407"), "case_or_space")
+        self.assertEqual(runner.text_difference("Invoice total", "nvoice total"), "shorter")
+        self.assertEqual(runner.text_difference("Invoice", "Invoice:"), "longer")
+        self.assertEqual(runner.text_difference("Invoice 4407", "Invoice 4401"), "near")
+        self.assertEqual(runner.text_difference("Invoice 4407", "Settings"), "far")
+
+    def test_a_frame_tally_counts_pairs_misses_and_extras(self) -> None:
+        reference = [Recognition("f.png", [Line("Invoice 4407", (10, 10, 100, 20), 0.99),
+                                           Line("Gone", (300, 300, 50, 20), 0.6)], 0.1)]
+        own = [Recognition("f.png", [Line("Invoice 4401", (10, 10, 90, 20), 0.9),
+                                     Line("Extra", (600, 600, 40, 20), 0.9)], 0.1)]
+        tally = runner.diagnose(reference, own)
+        self.assertEqual(tally["outcomes"], {"near": 1, "unpaired_overlapping": 1, "runner_only": 1})
+        self.assertEqual(tally["width_ratio"]["differing"], {"0.8-0.95": 1})
+        self.assertEqual(tally["reference_confidence"]["unpaired_overlapping/low"], 1)
+
+
 class EndToEndTests(unittest.TestCase):
     def test_a_number_counts_as_found_only_within_a_screen_that_showed_it(self) -> None:
         truth = {"hold_us": 3_000_000, "screens": [

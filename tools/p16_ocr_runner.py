@@ -349,6 +349,97 @@ def parity(reference: list[Recognition], runner: list[Recognition]) -> dict:
             "max_box_offset_px": max(offsets) if offsets else None}
 
 
+# --- where the runner and the reference differ (counts only) -----------------------------------
+
+def text_difference(reference: str, runner: str) -> str:
+    """The kind of difference between two readings of one line, never the text itself.
+
+    `case_or_space`: equal once case and whitespace are folded; `shorter` and
+    `longer`: the runner's text is a strict part of the reference's, or holds it
+    (characters lost or gained at a box edge); `near`: within two edits;
+    `far`: anything else.
+    """
+    left = evaluation.normalise(reference)
+    right = evaluation.normalise(runner)
+    if left == right:
+        return "equal"
+    if "".join(left.casefold().split()) == "".join(right.casefold().split()):
+        return "case_or_space"
+    if right and right in left:
+        return "shorter"
+    if left and left in right:
+        return "longer"
+    if evaluation.edit_distance(left, right) <= 2:
+        return "near"
+    return "far"
+
+
+def ratio_bucket(value: float) -> str:
+    """A box size ratio, runner over reference, in a few coarse buckets."""
+    if value < 0.8:
+        return "<0.8"
+    if value < 0.95:
+        return "0.8-0.95"
+    if value <= 1.05:
+        return "0.95-1.05"
+    if value <= 1.25:
+        return "1.05-1.25"
+    return ">1.25"
+
+
+def diagnose_frame(reference: list[Line], runner: list[Line], tally: dict) -> None:
+    """Adds one frame's pairing to `tally`: what became of each reference line, and why it may differ."""
+    used: set[int] = set()
+    for line in reference:
+        best, best_iou = None, 0.0
+        for index, candidate in enumerate(runner):
+            if index in used:
+                continue
+            overlap = iou(line.box, candidate.box)
+            if overlap > best_iou:
+                best, best_iou = index, overlap
+        confidence = "low" if (line.confidence or 0.0) < 0.8 else "high"
+        if best is None or best_iou < PAIRING_IOU:
+            kind = "unpaired_overlapping" if best is not None else "unpaired_missed"
+            tally["outcomes"][kind] = tally["outcomes"].get(kind, 0) + 1
+            tally["reference_confidence"][f"{kind}/{confidence}"] = (
+                tally["reference_confidence"].get(f"{kind}/{confidence}", 0) + 1)
+            continue
+        used.add(best)
+        own = runner[best]
+        kind = text_difference(line.text, own.text)
+        tally["outcomes"][kind] = tally["outcomes"].get(kind, 0) + 1
+        tally["reference_confidence"][f"{kind}/{confidence}"] = (
+            tally["reference_confidence"].get(f"{kind}/{confidence}", 0) + 1)
+        group = "equal" if kind == "equal" else "differing"
+        width = own.box[2] / line.box[2] if line.box[2] else 0.0
+        height = own.box[3] / line.box[3] if line.box[3] else 0.0
+        tally["width_ratio"][group][ratio_bucket(width)] = tally["width_ratio"][group].get(ratio_bucket(width), 0) + 1
+        tally["height_ratio"][group][ratio_bucket(height)] = (
+            tally["height_ratio"][group].get(ratio_bucket(height), 0) + 1)
+        tall = "tall" if line.box[3] > 1.5 * max(1, line.box[2]) else "wide"
+        tally["shape"][f"{group}/{tall}"] = tally["shape"].get(f"{group}/{tall}", 0) + 1
+        size = "small" if line.box[3] < 16 else "medium" if line.box[3] < 28 else "large"
+        tally["line_height"][f"{group}/{size}"] = tally["line_height"].get(f"{group}/{size}", 0) + 1
+    tally["outcomes"]["runner_only"] = tally["outcomes"].get("runner_only", 0) + len(runner) - len(used)
+
+
+def diagnose(reference: list[Recognition], runner: list[Recognition]) -> dict:
+    """Counts of how the runner's lines relate to the reference's, over the same frames."""
+    by_file = {reading.file: reading for reading in runner}
+    tally: dict = {"frames": 0, "reference_lines": 0, "outcomes": {}, "reference_confidence": {},
+                   "width_ratio": {"equal": {}, "differing": {}}, "height_ratio": {"equal": {}, "differing": {}},
+                   "shape": {}, "line_height": {}}
+    for reading in reference:
+        own = by_file.get(reading.file)
+        if own is None:
+            raise RunnerCheckError("the runner has no reading of a reference frame")
+        tally["frames"] += 1
+        tally["reference_lines"] += len(reading.lines)
+        diagnose_frame(reading.lines, own.lines, tally)
+    return tally
+
+
 def agreement(linux: list[Recognition], other: list[Recognition]) -> dict:
     """Whether another platform's runner read the same lines as Linux's, frame by frame."""
     by_file = {reading.file: reading for reading in other}
@@ -548,6 +639,18 @@ def command_end_to_end(arguments: argparse.Namespace) -> int:
     return 0
 
 
+def command_diagnose(arguments: argparse.Namespace) -> int:
+    work = Path(arguments.work)
+    report = {}
+    for folder in arguments.frames:
+        frames_dir = work / folder
+        report[folder] = diagnose(evaluation.read_recognitions(frames_dir / f"ocr-{REFERENCE_ENGINE}.jsonl"),
+                                  evaluation.read_recognitions(frames_dir / f"ocr-{ENGINE_NAME}.jsonl"))
+    Path(arguments.report).write_text(json.dumps(report, indent=1) + "\n", encoding="utf-8")
+    print(json.dumps(report, indent=1))
+    return 0
+
+
 def command_compare(arguments: argparse.Namespace) -> int:
     linux = evaluation.read_recognitions(Path(arguments.linux))
     other = evaluation.read_recognitions(Path(arguments.other))
@@ -587,6 +690,11 @@ def main(argv: Sequence[str]) -> int:
     whole.add_argument("--real", action="append", default=[])
     whole.add_argument("--max-calls", default="20")
     whole.set_defaults(handler=command_end_to_end)
+    diagnosing = commands.add_parser("diagnose")
+    for option in ("--work", "--report"):
+        diagnosing.add_argument(option, required=True)
+    diagnosing.add_argument("--frames", action="append", required=True)
+    diagnosing.set_defaults(handler=command_diagnose)
     platform = commands.add_parser("compare")
     platform.add_argument("--linux", required=True)
     platform.add_argument("--other", required=True)
