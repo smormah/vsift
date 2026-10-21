@@ -33,6 +33,9 @@ use crate::{
 pub(crate) struct ManagedSetupFacts<'report> {
     /// Whether managed installation can supply a missing tool here.
     pub(crate) availability: ManagedPlanAvailability,
+    /// The availability for each dependency, in `RuntimeDependency::ALL`
+    /// order (ADR 0032: a catalogue may offer only some components).
+    pub(crate) by_dependency: [ManagedPlanAvailability; 3],
     /// The managed versions the check opened that the catalogue supersedes.
     pub(crate) updates: &'report [ManagedUpdate],
     /// Whether each optional component is installed, in plan order.
@@ -61,6 +64,7 @@ where
 {
     let ManagedSetupFacts {
         availability: managed_install,
+        by_dependency,
         updates: managed_updates,
         optional,
     } = managed;
@@ -71,6 +75,7 @@ where
         managed_install,
         &local_asr,
     )
+    .with_managed_install_for(|dependency| by_dependency[dependency_slot(dependency)])
     .with_managed_updates(managed_updates)
     .with_optional_components(optional, profile.into());
     let output_result = match mode {
@@ -98,6 +103,16 @@ where
 }
 
 /// Reads one bounded, strict `setup plan --json` result supplied for acceptance.
+/// The position of `dependency` in [`RuntimeDependency::ALL`], the order of
+/// [`ManagedSetupFacts::by_dependency`].
+pub(crate) const fn dependency_slot(dependency: RuntimeDependency) -> usize {
+    match dependency {
+        RuntimeDependency::Ffmpeg => 0,
+        RuntimeDependency::Ffprobe => 1,
+        RuntimeDependency::Whisper => 2,
+    }
+}
+
 pub(crate) fn read_saved_plan(path: &Path) -> Result<SavedSetupPlan, FailureCode> {
     let plan: SavedSetupPlan =
         read_json_file(path, JsonLimits::DOCUMENT).map_err(|error| error.code())?;
@@ -335,6 +350,7 @@ mod tests {
                 NOTHING_REGISTERED,
                 ManagedSetupFacts {
                     availability: ManagedPlanAvailability::Qualified,
+                    by_dependency: [ManagedPlanAvailability::Qualified; 3],
                     updates: &[],
                     optional: &[(
                         OptionalComponent::OnlineLinks,
@@ -370,6 +386,7 @@ mod tests {
             NOTHING_REGISTERED,
             ManagedSetupFacts {
                 availability: ManagedPlanAvailability::Qualified,
+                by_dependency: [ManagedPlanAvailability::Qualified; 3],
                 updates: &[],
                 optional: &[(
                     OptionalComponent::OnlineLinks,
@@ -398,6 +415,7 @@ mod tests {
             NOTHING_REGISTERED,
             ManagedSetupFacts {
                 availability: ManagedPlanAvailability::Qualified,
+                by_dependency: [ManagedPlanAvailability::Qualified; 3],
                 updates: &[],
                 optional: &[(
                     OptionalComponent::OnlineLinks,
@@ -473,6 +491,7 @@ mod tests {
                 local_asr,
                 ManagedSetupFacts {
                     availability: ManagedPlanAvailability::Qualified,
+                    by_dependency: [ManagedPlanAvailability::Qualified; 3],
                     updates: &[],
                     optional: &[(
                         OptionalComponent::OnlineLinks,

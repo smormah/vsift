@@ -25,6 +25,10 @@ use crate::{
 /// Revision `r4` (2026-10-21) adds the optional online-video components
 /// (#409); the core pins are those of `r3`.
 const CATALOGUE_REVISION: &str = "ubuntu-24.04-x86_64-2026-10-21-r4";
+/// The Windows x86-64 catalogue (ADR 0032), first revision: `FFmpeg` and the
+/// model; whisper.cpp joins with `VSift`'s own build.
+const WINDOWS_CATALOGUE_REVISION: &str = "windows-x86_64-2026-10-21-r1";
+const WINDOWS_FFMPEG_URL: &str = "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-08-31-13-27/ffmpeg-n9.0.1-11-ge47273f4d9-win64-lgpl-9.0.zip";
 const STOP_NEW_PLANS_AT: u64 = 1_848_700_800;
 const STOP_NEW_PLANS_DATE: &str = "2028-08-01T00:00:00Z";
 const FFMPEG_URL: &str = "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-08-31-13-27/ffmpeg-n9.0.1-11-ge47273f4d9-linux64-lgpl-9.0.tar.xz";
@@ -73,6 +77,17 @@ const DENO_SHA256: &str = "ce6a052beb97c2b92de67077e3f3924ba7c9661ede0d8dc2f66a1
 /// The reviewed prefix of the first line `deno --version` prints; the rest
 /// names the release channel and target.
 const EXPECTED_DENO_VERSION: &str = "deno 2.9.7 ";
+
+/// Every reviewed publisher route of every catalogue, with the origin its
+/// redirects are held to: the only URLs a managed download ever starts from.
+const REVIEWED_ROUTES: [(&str, PublisherOrigin); 6] = [
+    (FFMPEG_URL, PublisherOrigin::GitHubRelease),
+    (WHISPER_URL, PublisherOrigin::GitHubRelease),
+    (MODEL_URL, PublisherOrigin::HuggingFaceModel),
+    (DENO_URL, PublisherOrigin::GitHubRelease),
+    (YT_DLP_URL, PublisherOrigin::GitHubRelease),
+    (WINDOWS_FFMPEG_URL, PublisherOrigin::GitHubRelease),
+];
 
 /// Reviewed source data is internally inconsistent and must not produce a plan.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -157,7 +172,74 @@ fn trim_os_release_value(value: &str) -> &str {
     value.trim_matches('"')
 }
 
-/// Returns the complete accepted catalogue for the only qualified R0 target.
+/// The accepted catalogue of `target`, or `None` for a target that has none
+/// (ADR 0032: Ubuntu 24.04 x86-64 and Windows x86-64 today; macOS arm64 once
+/// its engines are published and pinned).
+///
+/// # Errors
+///
+/// Fails closed if any literal reviewed digest or publisher URL becomes invalid.
+pub fn accepted_catalogue(
+    target: ManagedTarget,
+) -> Result<Option<AcceptedManagedCatalogue>, ManagedCatalogueError> {
+    match target {
+        ManagedTarget::Ubuntu2404X86_64 => accepted_ubuntu_catalogue().map(Some),
+        ManagedTarget::WindowsX86_64 => accepted_windows_catalogue().map(Some),
+        ManagedTarget::MacOsArm64 | ManagedTarget::Unsupported => Ok(None),
+    }
+}
+
+/// The accepted catalogue of the host this runs on ([`detect_managed_target`]).
+///
+/// # Errors
+///
+/// Fails closed if any literal reviewed digest or publisher URL becomes invalid.
+pub fn accepted_host_catalogue() -> Result<Option<AcceptedManagedCatalogue>, ManagedCatalogueError>
+{
+    accepted_catalogue(detect_managed_target())
+}
+
+/// The accepted Windows x86-64 catalogue (ADR 0032): `FFmpeg` and `FFprobe`
+/// from the same `BtbN` month-end release as the Ubuntu pin, as its LGPL zip,
+/// and the same model. whisper.cpp is not offered yet: upstream's Windows build
+/// needs the Visual C++ runtime (D2), and `VSift`'s own build joins this
+/// catalogue once it is published and pinned; until then the plan leaves
+/// whisper.cpp to the user and plans the model only beside a working one.
+///
+/// # Errors
+///
+/// Fails closed if any literal reviewed digest or publisher URL becomes invalid.
+pub fn accepted_windows_catalogue() -> Result<AcceptedManagedCatalogue, ManagedCatalogueError> {
+    let artifacts = vec![windows_ffmpeg_artifact()?, model_artifact()?];
+    for artifact in &artifacts {
+        validate_layout(artifact)?;
+    }
+    Ok(AcceptedManagedCatalogue {
+        revision: String::from(WINDOWS_CATALOGUE_REVISION),
+        target: ManagedTarget::WindowsX86_64,
+        stop_new_plans_at: STOP_NEW_PLANS_AT,
+        stop_new_plans_date: String::from(STOP_NEW_PLANS_DATE),
+        artifacts,
+        optional_artifacts: Vec::new(),
+        compatibility: compatibility_policy()?,
+        superseded: Vec::new(),
+    })
+}
+
+/// Every artifact the compiled catalogues of all targets accept: the only
+/// actions that ever receive publisher authority.
+fn every_accepted_artifact() -> Result<Vec<AcceptedManagedArtifact>, ManagedCatalogueError> {
+    let ubuntu = accepted_ubuntu_catalogue()?;
+    let windows = accepted_windows_catalogue()?;
+    Ok(ubuntu
+        .artifacts
+        .into_iter()
+        .chain(ubuntu.optional_artifacts)
+        .chain(windows.artifacts)
+        .collect())
+}
+
+/// Returns the complete accepted catalogue for Ubuntu 24.04 x86-64.
 ///
 /// # Errors
 ///
@@ -353,34 +435,17 @@ impl ReviewedUbuntuAction {
     pub fn from_accepted_action(
         action: &ManagedSetupAction,
     ) -> Result<Self, ManagedCatalogueError> {
-        let (expected, url, origin) = match action.artifact.component {
-            ManagedComponent::MediaTools => (
-                ffmpeg_artifact()?,
-                FFMPEG_URL,
-                PublisherOrigin::GitHubRelease,
-            ),
-            ManagedComponent::WhisperCli => (
-                whisper_artifact()?,
-                WHISPER_URL,
-                PublisherOrigin::GitHubRelease,
-            ),
-            ManagedComponent::WhisperModel => (
-                model_artifact()?,
-                MODEL_URL,
-                PublisherOrigin::HuggingFaceModel,
-            ),
-            ManagedComponent::JsRuntimeDeno => {
-                (deno_artifact()?, DENO_URL, PublisherOrigin::GitHubRelease)
-            }
-            ManagedComponent::YtDlp => (
-                yt_dlp_artifact()?,
-                YT_DLP_URL,
-                PublisherOrigin::GitHubRelease,
-            ),
-        };
-        if action.id != format!("install-{}", expected.component.identifier())
-            || action.artifact != expected
-        {
+        // The authority is an exact compiled entry of any target's catalogue,
+        // and its URL is one of the reviewed literal routes.
+        let expected = every_accepted_artifact()?
+            .into_iter()
+            .find(|artifact| *artifact == action.artifact)
+            .ok_or(ManagedCatalogueError::UnacceptedAction)?;
+        let (url, origin) = REVIEWED_ROUTES
+            .into_iter()
+            .find(|(url, _)| *url == expected.source_url)
+            .ok_or(ManagedCatalogueError::InvalidPublisherSource)?;
+        if action.id != format!("install-{}", expected.component.identifier()) {
             return Err(ManagedCatalogueError::UnacceptedAction);
         }
         validate_layout(&expected)?;
@@ -1048,6 +1113,82 @@ fn whisper_artifact() -> Result<AcceptedManagedArtifact, ManagedCatalogueError> 
     })
 }
 
+/// `FFmpeg` and `FFprobe` for Windows x86-64: the LGPL zip of the release the
+/// Ubuntu pin comes from, the same source commit and banner. The archive's
+/// digest is GitHub's and the publisher's `checksums.sha256`; its 48 entries,
+/// expanded size and the three selected files were read on a hosted runner
+/// (`P06 Windows candidate smoke`, run 39604340709), which also shows the two
+/// programs importing only the universal C runtime and system DLLs, and the
+/// zip using only what the managed zip reader accepts.
+fn windows_ffmpeg_artifact() -> Result<AcceptedManagedArtifact, ManagedCatalogueError> {
+    let integrity = integrity(
+        147_007_942,
+        "2484854ad6988d34560f4e6ea7a6ecb9dde0af7c229d2591815d056b04ec4f56",
+    )?;
+    validate_source(
+        WINDOWS_FFMPEG_URL,
+        PublisherOrigin::GitHubRelease,
+        integrity,
+    )?;
+    let root = "ffmpeg-n9.0.1-11-ge47273f4d9-win64-lgpl-9.0";
+    let pins = [
+        (
+            "LICENSE.txt",
+            "LICENSE.txt",
+            7_651,
+            "da7eabb7bafdf7d3ae5e9f223aa5bdc1eece45ac569dc21b3b037520b4464768",
+            false,
+        ),
+        (
+            "bin/ffmpeg.exe",
+            "ffmpeg.exe",
+            114_400_768,
+            "63a0b3c76a245bc0d986853612d9ec43a2a2d1f1c7a3fa40ee459c248075b3a6",
+            true,
+        ),
+        (
+            "bin/ffprobe.exe",
+            "ffprobe.exe",
+            114_198_528,
+            "1ce64d9fdbfce857de2dd1f157c37eaa61c7501a356273dbcbe8b1674aef5879",
+            true,
+        ),
+    ];
+    Ok(AcceptedManagedArtifact {
+        component: ManagedComponent::MediaTools,
+        version: String::from("n9.0.1-11-ge47273f4d9-20260831-win64"),
+        publisher: String::from("BtbN FFmpeg Builds"),
+        source_url: String::from(WINDOWS_FFMPEG_URL),
+        integrity,
+        format: ManagedArtifactFormat::Zip,
+        archive_limits: Some(ReviewedArchiveLimits {
+            max_stream_bytes: 358_125_718,
+            entries: 48,
+            expanded_bytes: 358_125_718,
+        }),
+        selected_files: pins
+            .iter()
+            .map(|(path, name, bytes, sha256, _)| {
+                selection(&format!("{root}/{path}"), name, *bytes, sha256)
+            })
+            .collect::<Result<Vec<_>, _>>()?,
+        archive_links: Vec::new(),
+        runtime_copies: Vec::new(),
+        licence: String::from("LGPL version 3 archive notice (publisher-labelled static build)"),
+        notice_url: String::from("https://github.com/FFmpeg/FFmpeg/blob/n9.0.1/COPYING.LGPLv3"),
+        source_code_url: String::from(
+            "https://github.com/BtbN/FFmpeg-Builds/tree/8267213e26c1031621e6e1210fe3aa4867214f6a",
+        ),
+        trust_limit: String::from(
+            "Third-party static build of the same source as the Ubuntu pin: the archive's LGPLv3 notice, its inventory and imports were read on a hosted Windows runner; a complete compiled-component source and licence inventory and legal clearance are not claimed.",
+        ),
+        files: pins
+            .iter()
+            .map(|(_, name, bytes, sha256, executable)| file(name, *bytes, sha256, *executable))
+            .collect::<Result<Vec<_>, _>>()?,
+    })
+}
+
 fn whisper_archive_links() -> Vec<ReviewedArchiveLink> {
     [
         ("libwhisper.so", "libwhisper.so.1"),
@@ -1219,8 +1360,9 @@ mod tests {
     use vsift_domain::{AsrModelProfile, ManagedComponent, ManagedTarget, ReviewedAsrModel};
 
     use super::{
-        ManagedCatalogueError, ReviewedUbuntuAction, accepted_ubuntu_catalogue,
-        detect_managed_target, pinned_whisper_model, reviewed_whisper_models, validate_layout,
+        ManagedCatalogueError, REVIEWED_ROUTES, ReviewedUbuntuAction, accepted_catalogue,
+        accepted_ubuntu_catalogue, accepted_windows_catalogue, detect_managed_target,
+        every_accepted_artifact, pinned_whisper_model, reviewed_whisper_models, validate_layout,
         whisper_model_profile,
     };
 
@@ -1447,6 +1589,86 @@ mod tests {
                 Err(ManagedCatalogueError::InvalidLayout)
             );
         }
+        Ok(())
+    }
+
+    /// ADR 0032: Windows x86-64 has a catalogue of `FFmpeg` (the zip of the
+    /// Ubuntu pin's release) and the model; macOS and other hosts have none
+    /// yet.
+    #[test]
+    fn each_target_has_its_catalogue() -> Result<(), Box<dyn std::error::Error>> {
+        let windows =
+            accepted_catalogue(ManagedTarget::WindowsX86_64)?.ok_or("no Windows catalogue")?;
+        assert_eq!(windows, accepted_windows_catalogue()?);
+        assert_eq!(windows.target, ManagedTarget::WindowsX86_64);
+        let components: Vec<ManagedComponent> = windows
+            .artifacts
+            .iter()
+            .map(|artifact| artifact.component)
+            .collect();
+        assert_eq!(
+            components,
+            [ManagedComponent::MediaTools, ManagedComponent::WhisperModel]
+        );
+        let ffmpeg = &windows.artifacts[0];
+        assert_eq!(ffmpeg.format, vsift_domain::ManagedArtifactFormat::Zip);
+        assert_eq!(ffmpeg.integrity.bytes(), 147_007_942);
+        let names: Vec<&str> = ffmpeg.files.iter().map(|file| file.name.as_str()).collect();
+        assert_eq!(names, ["LICENSE.txt", "ffmpeg.exe", "ffprobe.exe"]);
+        assert!(
+            windows
+                .artifacts
+                .iter()
+                .all(|artifact| validate_layout(artifact).is_ok())
+        );
+        assert_eq!(
+            accepted_catalogue(ManagedTarget::Ubuntu2404X86_64)?,
+            Some(accepted_ubuntu_catalogue()?)
+        );
+        assert_eq!(accepted_catalogue(ManagedTarget::MacOsArm64)?, None);
+        assert_eq!(accepted_catalogue(ManagedTarget::Unsupported)?, None);
+        Ok(())
+    }
+
+    /// Every compiled artifact of every target, and only those, receives
+    /// publisher authority, through one of the reviewed routes.
+    #[test]
+    fn every_target_artifact_binds_to_its_reviewed_route() -> Result<(), Box<dyn std::error::Error>>
+    {
+        let artifacts = every_accepted_artifact()?;
+        for artifact in &artifacts {
+            assert!(
+                REVIEWED_ROUTES
+                    .iter()
+                    .any(|(url, _)| *url == artifact.source_url),
+                "{}",
+                artifact.source_url
+            );
+            let action = ManagedSetupAction {
+                id: format!("install-{}", artifact.component.identifier()),
+                artifact: artifact.clone(),
+            };
+            let reviewed = ReviewedUbuntuAction::from_accepted_action(&action)?;
+            assert_eq!(reviewed.artifact(), artifact);
+            let mut altered = action.clone();
+            altered.artifact.files[0].executable = !altered.artifact.files[0].executable;
+            assert!(matches!(
+                ReviewedUbuntuAction::from_accepted_action(&altered),
+                Err(ManagedCatalogueError::UnacceptedAction)
+            ));
+        }
+        // Each route is used, and every version key is canonical.
+        for (url, _) in REVIEWED_ROUTES {
+            assert!(
+                artifacts.iter().any(|artifact| artifact.source_url == url),
+                "{url}"
+            );
+        }
+        assert!(
+            artifacts
+                .iter()
+                .all(|artifact| vsift_domain::is_canonical_managed_key(&artifact.version))
+        );
         Ok(())
     }
 

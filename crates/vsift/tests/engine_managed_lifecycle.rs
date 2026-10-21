@@ -28,11 +28,11 @@ use vsift::{
     UserConfigurationLocation, VersionRemovalStatus,
 };
 use vsift_domain::{
-    ArtifactIntegrity, ManagedComponent, ManagedTarget, ManagedVersionKey, ManagedVersionKeyError,
+    ArtifactIntegrity, ManagedComponent, ManagedVersionKey, ManagedVersionKeyError,
 };
 use vsift_infrastructure::{
     ArchiveInventoryBounds, ManagedArtifactStore, ManagedRuntimeIdentity, ReviewedArchiveFile,
-    ReviewedPayloadArchive, ReviewedRuntimeLayout, StagedManagedCandidate, detect_managed_target,
+    ReviewedPayloadArchive, ReviewedRuntimeLayout, StagedManagedCandidate,
 };
 
 type TestResult = Result<(), Box<dyn Error>>;
@@ -182,7 +182,7 @@ fn with_nothing_installed_every_command_answers_and_nothing_is_created() -> Test
     let engine = root.engine();
     let listing = engine.list_managed()?;
     assert!(listing.inventory().is_none());
-    let expected = if detect_managed_target() == ManagedTarget::Ubuntu2404X86_64 {
+    let expected = if vsift_infrastructure::accepted_host_catalogue()?.is_some() {
         ManagedPlanAvailability::Qualified
     } else {
         ManagedPlanAvailability::TargetUnavailable

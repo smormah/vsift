@@ -160,7 +160,8 @@ pub use managed_artifact_store::{
 };
 pub use managed_catalogue::{
     ManagedCatalogueError, ReviewedActionStageError, ReviewedUbuntuAction, ReviewedWhisperModel,
-    accepted_ubuntu_catalogue, detect_managed_target, managed_executable_name,
+    accepted_catalogue, accepted_host_catalogue, accepted_ubuntu_catalogue,
+    accepted_windows_catalogue, detect_managed_target, managed_executable_name,
     pinned_whisper_model, reviewed_compatibility_policy, reviewed_whisper_models,
     whisper_model_profile,
 };

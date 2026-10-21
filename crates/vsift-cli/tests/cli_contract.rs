@@ -371,6 +371,7 @@ fn invalid_explicit_selection_does_not_fall_back_to_path() -> Result<(), Box<dyn
         "unhealthy"
     );
     // Whether managed installation could supply the tool on this host.
+    // Whisper.cpp is offered by Ubuntu's catalogue only (ADR 0032).
     let expected = if vsift_infrastructure::detect_managed_target()
         == vsift_domain::ManagedTarget::Ubuntu2404X86_64
     {
@@ -569,7 +570,7 @@ fn reviewed_setup_plan_checks_first_and_never_installs() -> Result<(), Box<dyn s
     assert_eq!(value["command"], "setup.plan");
     assert_eq!(value["status"], "complete");
     assert_eq!(value["data"]["readiness"], "blocked");
-    assert_planning_target(&value["data"], 3);
+    assert_planning_target(&value["data"], 3, 1);
     assert_eq!(
         value["data"]["dependencies"][0]["required_authority"],
         "user"
@@ -620,7 +621,7 @@ fn setup_plan_uses_configured_off_path_tool_but_does_not_call_it_qualified()
         value["data"]["dependencies"][2]["disposition"],
         "existing_executable_probe_only"
     );
-    assert_planning_target(&value["data"], 2);
+    assert_planning_target(&value["data"], 2, 2);
     Ok(())
 }
 
@@ -640,16 +641,28 @@ fn headless_plan_jsonl_has_one_terminal_and_no_install_authority()
     let event: Value = serde_json::from_str(lines[0])?;
     assert_eq!(event["event"], "terminal");
     assert_eq!(event["command"], "setup.plan");
-    assert_planning_target(&event["result"]["data"], 3);
+    assert_planning_target(&event["result"]["data"], 3, 1);
     Ok(())
 }
 
-fn assert_planning_target(data: &Value, expected_ubuntu_actions: usize) {
-    if data["target"] == "ubuntu_24_04_x86_64" {
+/// The plan's managed part on this host: Ubuntu's catalogue offers all three
+/// core components; Windows's (ADR 0032) offers `FFmpeg` and the model, and the
+/// model only beside a working whisper.cpp, which it does not offer yet.
+fn assert_planning_target(
+    data: &Value,
+    expected_ubuntu_actions: usize,
+    expected_windows_actions: usize,
+) {
+    let expected_actions = match data["target"].as_str() {
+        Some("ubuntu_24_04_x86_64") => Some(expected_ubuntu_actions),
+        Some("windows_x86_64") => Some(expected_windows_actions),
+        _ => None,
+    };
+    if let Some(expected_actions) = expected_actions {
         assert_eq!(data["managed_install"], "catalogue_accepted");
         assert_eq!(
             data["actions"].as_array().map(Vec::len),
-            Some(expected_ubuntu_actions)
+            Some(expected_actions)
         );
         assert_eq!(data["plan_digest"].as_str().map(str::len), Some(64));
         assert_eq!(data["dependencies"][0]["disposition"], "managed_install");
@@ -846,7 +859,10 @@ fn saved_plan_acceptance_is_revalidated_without_mutation() -> Result<(), Box<dyn
     // digest does not accept the plan. Neither mutates state.
     let unchanged = install(&digest)?;
     assert_eq!(unchanged["error"]["code"], "INVALID_ARGUMENT");
-    assert!(!config_root(base).exists());
+    // On Windows and macOS the managed root (taken for its install guard on
+    // a host with a catalogue, ADR 0032) shares the configuration's folder,
+    // so what must not exist is the configuration record.
+    assert!(!config_root(base).join("dependencies-v1.json").exists());
 
     let binary = Command::cargo_bin("vsift")?.get_program().to_os_string();
     let configured = with_config_base(&mut Command::cargo_bin("vsift")?, base)

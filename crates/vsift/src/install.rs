@@ -22,7 +22,7 @@ use vsift_domain::{FailureCode, ProgressUpdate, RuntimeDependency};
 use vsift_infrastructure::{
     ActionAuthority, ExecutableResolver, ManagedArtifactError, ManagedArtifactSource,
     ManagedInstallerConfig, MediaProviderConformance, ReviewedFixtureVerifiers,
-    ReviewedManagedInstaller, SmokeCompanionSource, SmokeCompanions, accepted_ubuntu_catalogue,
+    ReviewedManagedInstaller, SmokeCompanionSource, SmokeCompanions, accepted_host_catalogue,
 };
 
 use crate::{
@@ -153,8 +153,10 @@ impl Engine {
             .await?;
         current.validate_acceptance(&request.saved_plan, &request.accepted_digest)?;
         let plan = current.authority();
-        let catalogue =
-            accepted_ubuntu_catalogue().map_err(|_| EngineError::ReviewedPolicyInvalid)?;
+        // The plan was accepted for this host, so its target has a catalogue.
+        let catalogue = accepted_host_catalogue()
+            .map_err(|_| EngineError::ReviewedPolicyInvalid)?
+            .ok_or(EngineError::ReviewedPolicyInvalid)?;
         // No stage can be live while the guard is held, and nothing is staged
         // yet: every stage found now was abandoned by an earlier run.
         let stages = sweep_before_install(&store, &guard);

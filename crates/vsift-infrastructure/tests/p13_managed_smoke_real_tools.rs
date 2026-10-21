@@ -1,15 +1,17 @@
-//! Opt-in: the production compatibility smoke on the real pinned Ubuntu tools.
+//! Opt-in: the production compatibility smoke on the real pinned tools of the
+//! host's catalogue (ADR 0032: Ubuntu 24.04 x86-64 and Windows x86-64).
 //!
-//! Only a disposable Ubuntu 24.04 x86-64 host runs this, through the manual
-//! `P13 managed smoke` workflow or by hand:
+//! Only a disposable host runs this, through the manual `P13 managed smoke`
+//! workflow or by hand:
 //!
 //! ```console
 //! VSIFT_P13_REAL_TOOL_SMOKE=1 cargo test --release --locked -p vsift-infrastructure \
 //!   --test p13_managed_smoke_real_tools -- --ignored --exact --nocapture
 //! ```
 //!
-//! It downloads the three artifacts of the accepted catalogue (the pinned
-//! `FFmpeg` build, whisper.cpp v1.9.2 and the base model) over HTTPS through the
+//! It downloads the artifacts of the host's accepted catalogue (on Ubuntu the
+//! pinned `FFmpeg` build, whisper.cpp and the base model; on Windows `FFmpeg`,
+//! the model being left out while no whisper.cpp can smoke it) over HTTPS through the
 //! production publisher transfer, which verifies each one's size and SHA-256
 //! and sends only the neutral `VSift/0.1 managed setup` user agent. Each is
 //! staged into a private temporary managed root through the reviewed payload
@@ -31,11 +33,11 @@ use vsift_application::{
     CompatibilitySmokeCheck, CompatibilitySmokeFailureReason, ManagedSetupAction, NoProgress,
     SmokeStageOutcome, StageDisposal, smoke_before_activation,
 };
-use vsift_domain::ManagedTarget;
+use vsift_domain::ManagedComponent;
 use vsift_infrastructure::{
     HostIsolation, ManagedArtifactStore, ProcessCancellation, ReviewedFixtureVerifiers,
-    ReviewedUbuntuAction, SmokeCompanions, StagedCompatibilitySmoke, accepted_ubuntu_catalogue,
-    detect_managed_target, download_reviewed_publisher_artifact,
+    ReviewedUbuntuAction, SmokeCompanions, StagedCompatibilitySmoke, accepted_host_catalogue,
+    download_reviewed_publisher_artifact,
 };
 
 type TestResult = Result<(), Box<dyn Error>>;
@@ -45,6 +47,24 @@ static SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 struct TestRoot(PathBuf);
 
+/// The host catalogue's artifacts the smoke can run: the model is smoked
+/// with a whisper.cpp, so a catalogue that offers none (Windows until
+/// `VSift`'s own build is pinned) smokes its other tools.
+fn smokable(
+    catalogue: &vsift_application::AcceptedManagedCatalogue,
+) -> Vec<vsift_application::AcceptedManagedArtifact> {
+    let offers_whisper = catalogue
+        .artifacts
+        .iter()
+        .any(|artifact| artifact.component == ManagedComponent::WhisperCli);
+    catalogue
+        .artifacts
+        .iter()
+        .filter(|artifact| offers_whisper || artifact.component != ManagedComponent::WhisperModel)
+        .cloned()
+        .collect()
+}
+
 impl Drop for TestRoot {
     fn drop(&mut self) {
         let _ = fs::remove_dir_all(&self.0);
@@ -52,15 +72,15 @@ impl Drop for TestRoot {
 }
 
 #[tokio::test]
-#[ignore = "downloads the pinned publisher artifacts; run only on a disposable Ubuntu 24.04 x86-64 host with VSIFT_P13_REAL_TOOL_SMOKE=1 and --release (a development build reaches no publisher)"]
-async fn pinned_ubuntu_tools_pass_the_smoke_before_activation() -> TestResult {
+#[ignore = "downloads the pinned publisher artifacts; run only on a disposable host with a catalogue, with VSIFT_P13_REAL_TOOL_SMOKE=1 and --release (a development build reaches no publisher)"]
+async fn pinned_host_tools_pass_the_smoke_before_activation() -> TestResult {
     if env::var(OPT_IN).as_deref() != Ok("1") {
         println!("skipped: set {OPT_IN}=1 to download and smoke the pinned tools");
         return Ok(());
     }
-    if detect_managed_target() != ManagedTarget::Ubuntu2404X86_64 {
-        return Err("the real-tool smoke runs only on Ubuntu 24.04 x86-64".into());
-    }
+    let Some(catalogue) = accepted_host_catalogue()? else {
+        return Err("the real-tool smoke runs only on a host with a managed catalogue".into());
+    };
     let stamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
     let parent = TestRoot(env::temp_dir().join(format!(
         "vsift-p13-real-smoke-{}-{stamp}-{}",
@@ -70,11 +90,9 @@ async fn pinned_ubuntu_tools_pass_the_smoke_before_activation() -> TestResult {
     fs::create_dir(&parent.0)?;
     let root = parent.0.join("managed");
     let store = ManagedArtifactStore::at(root.clone())?;
-    let catalogue = accepted_ubuntu_catalogue()?;
     println!("catalogue revision {}", catalogue.revision);
-
     let mut candidates = Vec::new();
-    for artifact in catalogue.artifacts.clone() {
+    for artifact in smokable(&catalogue) {
         let action = ManagedSetupAction {
             id: format!("install-{}", artifact.component.identifier()),
             artifact,

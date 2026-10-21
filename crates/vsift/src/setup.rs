@@ -15,7 +15,7 @@ use vsift_application::{
 use vsift_contract::{DependencyLookup, SavedSetupPlan, SetupPlanResponse};
 use vsift_domain::{ManagedComponent, RuntimeDependency};
 use vsift_infrastructure::{
-    ExplicitProbePaths, ProcessDependencyProbe, accepted_ubuntu_catalogue, detect_managed_target,
+    ExplicitProbePaths, ProcessDependencyProbe, accepted_host_catalogue, detect_managed_target,
 };
 
 use crate::{engine::Engine, error::EngineError};
@@ -110,6 +110,7 @@ pub struct SetupCheckReport {
     managed: [bool; 3],
     local_asr: LocalAsrSetupStatus,
     managed_install: ManagedPlanAvailability,
+    managed_install_by_dependency: [ManagedPlanAvailability; 3],
     managed_updates: Vec<ManagedUpdate>,
     optional: Vec<(OptionalComponent, OptionalCapability)>,
 }
@@ -166,6 +167,17 @@ impl SetupCheckReport {
     #[must_use]
     pub const fn managed_install(&self) -> ManagedPlanAvailability {
         self.managed_install
+    }
+
+    /// Whether managed installation can supply `dependency` on this host:
+    /// [`Self::managed_install`], or `unavailable_target` when this target's
+    /// catalogue does not offer the component that supplies it (ADR 0032).
+    #[must_use]
+    pub const fn managed_install_for(
+        &self,
+        dependency: RuntimeDependency,
+    ) -> ManagedPlanAvailability {
+        self.managed_install_by_dependency[dependency_index(dependency)]
     }
 }
 
@@ -323,15 +335,51 @@ impl Engine {
             .await?;
         let managed_install = self.managed_install_availability()?;
         let catalogue =
-            accepted_ubuntu_catalogue().map_err(|_| EngineError::ReviewedPolicyInvalid)?;
-        let optional = optional_capabilities(managed_install, &catalogue, &mut lookup);
+            accepted_host_catalogue().map_err(|_| EngineError::ReviewedPolicyInvalid)?;
+        let ubuntu_catalogue = Some(
+            vsift_infrastructure::accepted_ubuntu_catalogue()
+                .map_err(|_| EngineError::ReviewedPolicyInvalid)?,
+        );
+        let optional = optional_capabilities(managed_install, catalogue.as_ref(), &mut lookup);
+        let managed_install_by_dependency = RuntimeDependency::ALL.map(|dependency| {
+            let supplier = match dependency {
+                RuntimeDependency::Ffmpeg | RuntimeDependency::Ffprobe => {
+                    ManagedComponent::MediaTools
+                }
+                RuntimeDependency::Whisper => ManagedComponent::WhisperCli,
+            };
+            let offered = catalogue.as_ref().is_some_and(|catalogue| {
+                catalogue
+                    .artifacts
+                    .iter()
+                    .any(|artifact| artifact.component == supplier)
+            });
+            if managed_install == ManagedPlanAvailability::Qualified && !offered {
+                ManagedPlanAvailability::TargetUnavailable
+            } else {
+                managed_install
+            }
+        });
         // Only versions the check already opened (and verified) are compared,
         // so this adds no hashing. A version is reported only when the
         // catalogue lists it as superseded (`update_for`).
         let managed_updates = lookup
             .opened_versions()
             .into_iter()
-            .filter_map(|(component, version)| catalogue.update_for(component, &version))
+            .filter_map(|(component, version)| {
+                // The host's catalogue first; then the Ubuntu catalogue's
+                // supersession list, as before ADR 0032, so a store that
+                // holds an Ubuntu version is told about it on every host
+                // (its keys name the build, so no other host's store has one).
+                catalogue
+                    .as_ref()
+                    .and_then(|catalogue| catalogue.update_for(component, &version))
+                    .or_else(|| {
+                        ubuntu_catalogue
+                            .as_ref()
+                            .and_then(|ubuntu| ubuntu.update_for(component, &version))
+                    })
+            })
             .collect();
         drop((held, managed_model));
         Ok(SetupCheckReport {
@@ -341,6 +389,7 @@ impl Engine {
             managed,
             local_asr,
             managed_install,
+            managed_install_by_dependency,
             managed_updates,
             optional,
         })
@@ -439,7 +488,7 @@ impl Engine {
         let configured_model = store.read_model()?;
         let now_unix_seconds = self.now_unix_seconds()?;
         let catalogue =
-            accepted_ubuntu_catalogue().map_err(|_| EngineError::ReviewedPolicyInvalid)?;
+            accepted_host_catalogue().map_err(|_| EngineError::ReviewedPolicyInvalid)?;
         let selections = SetupSelectionState {
             ffmpeg: configured
                 .ffmpeg
@@ -466,7 +515,7 @@ impl Engine {
             selections,
             request.include,
             now_unix_seconds,
-            Some(catalogue),
+            catalogue,
         );
         Ok((plan, configured))
     }
@@ -478,11 +527,12 @@ impl Engine {
         &self,
     ) -> Result<ManagedPlanAvailability, EngineError> {
         let catalogue =
-            accepted_ubuntu_catalogue().map_err(|_| EngineError::ReviewedPolicyInvalid)?;
+            accepted_host_catalogue().map_err(|_| EngineError::ReviewedPolicyInvalid)?;
         let target = detect_managed_target();
-        Ok(if catalogue.target != target {
-            ManagedPlanAvailability::TargetUnavailable
-        } else if self.now_unix_seconds()? >= catalogue.stop_new_plans_at {
+        let Some(catalogue) = catalogue.filter(|catalogue| catalogue.target == target) else {
+            return Ok(ManagedPlanAvailability::TargetUnavailable);
+        };
+        Ok(if self.now_unix_seconds()? >= catalogue.stop_new_plans_at {
             ManagedPlanAvailability::CatalogueExpired
         } else {
             ManagedPlanAvailability::Qualified
@@ -524,18 +574,20 @@ impl Engine {
 /// is unavailable.
 fn optional_capabilities(
     managed_install: ManagedPlanAvailability,
-    catalogue: &vsift_application::AcceptedManagedCatalogue,
+    catalogue: Option<&vsift_application::AcceptedManagedCatalogue>,
     lookup: &mut crate::managed::ManagedLookup<'_>,
 ) -> Vec<(OptionalComponent, OptionalCapability)> {
     OptionalComponent::ALL
         .into_iter()
         .map(|group| {
             let offered = managed_install == ManagedPlanAvailability::Qualified
-                && group.components().iter().all(|component| {
-                    catalogue
-                        .optional_artifacts
-                        .iter()
-                        .any(|artifact| artifact.component == *component)
+                && catalogue.is_some_and(|catalogue| {
+                    group.components().iter().all(|component| {
+                        catalogue
+                            .optional_artifacts
+                            .iter()
+                            .any(|artifact| artifact.component == *component)
+                    })
                 });
             if !offered {
                 return (group, OptionalCapability::Unavailable);
