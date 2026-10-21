@@ -27,7 +27,8 @@ two-person call, and the maintainer chose on 2026-10-21:
 2. **Managed installs on Windows, macOS and Linux.** Another story extends the managed-install
    system to all three; this one adds sherpa-onnx and the two models as components on top of it.
    The engine archives have only GitHub's release-asset digest: they are pinned by that SHA-256,
-   and the register states the provenance gap.
+   and the register states the provenance gap ([L-217](../planning/known-limits.md#l-217), recorded by the
+   managed-install story).
 3. **The count:** automatic at the distance threshold 0.9 when the user gives none; a given count
    is passed through.
 4. **Labels are provisional** ("S2, by voice"). The user's verified names are the only identity.
@@ -61,7 +62,7 @@ two-person call, and the maintainer chose on 2026-10-21:
 Each managed system gets three components: the sherpa-onnx tool (with its ONNX Runtime library beside it) and the two
 model files, pinned by URL, size and SHA-256 (the models by the publishers' published digests: Hugging Face's LFS
 SHA-256 for the segmentation model at revision `9403a690`, sherpa-onnx's `checksum.txt` for `TitaNet` small; the engine
-archives by GitHub's release-asset digest, the only one published, a provenance gap the register states). The install
+archives by GitHub's release-asset digest, the only one published, a provenance gap the register states as L-217). The install
 ships this attribution notice with the models, which covers both of `TitaNet`'s licence statements:
 
 > Speaker diarization uses the pyannote segmentation 3.0 model (Copyright (c) 2022 CNRS, MIT licence; ONNX export by

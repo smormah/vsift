@@ -1,8 +1,9 @@
 """Tests of the speaker-label evaluation that need no engine, model or network.
 
 The fake synthesizer of `test_p07_speech.py` stands in for Kokoro. The assembly test that
-resamples with FFmpeg runs when FFmpeg is found through `VSIFT_P07_FFMPEG` or on `PATH`,
-and is skipped otherwise; the evaluation workflow runs it against its pinned build.
+resamples with FFmpeg runs only against a build named by absolute path in
+`VSIFT_P07_FFMPEG` (never one found on `PATH`), and is skipped otherwise; the evaluation
+workflow names its pinned build.
 """
 
 from __future__ import annotations
@@ -20,7 +21,11 @@ import wave
 
 import generate_p07_speech as recipe
 import p16_speakers_eval as evaluation
-from test_p07_speech import FFMPEG, FakeSynthesizer
+from test_p07_speech import FakeSynthesizer
+
+# Only a pinned build named by absolute path, never the machine's own FFmpeg on PATH.
+PINNED_FFMPEG = os.environ.get("VSIFT_P07_FFMPEG", "")
+FFMPEG = PINNED_FFMPEG if PINNED_FFMPEG and Path(PINNED_FFMPEG).is_absolute() else None
 
 
 def turn(speaker: str, start_s: float, end_s: float) -> dict:
@@ -96,7 +101,7 @@ class ConversationTests(unittest.TestCase):
         with self.assertRaises(evaluation.EvaluationError):
             evaluation.active_span([0, 1, -2, 0])
 
-    @unittest.skipUnless(FFMPEG, "FFmpeg is required for the assembly test")
+    @unittest.skipUnless(FFMPEG, "the pinned FFmpeg (VSIFT_P07_FFMPEG, an absolute path) is required")
     def test_assembly_writes_sixteen_kilohertz_audio_and_its_truth(self) -> None:
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
@@ -164,6 +169,28 @@ class ScoringTests(unittest.TestCase):
                                         "turns": [{"speaker": "B", "start_s": 1, "end_s": 2}]}), encoding="utf-8")
             with self.assertRaises(evaluation.EvaluationError):
                 evaluation.read_reference(path)
+
+    def test_references_name_each_read_item_once(self) -> None:
+        self.assertEqual(evaluation.parse_references(["RM06=a.json", "RM11=b.json"]),
+                         {"RM06": Path("a.json"), "RM11": Path("b.json")})
+        for entries in (["RM09=a.json"], ["RM06"], ["RM06="], ["RM06=a.json", "RM06=b.json"]):
+            with self.subTest(entries=entries), self.assertRaises(evaluation.EvaluationError):
+                evaluation.parse_references(entries)
+
+    def test_a_named_candidate_must_be_in_the_matrix(self) -> None:
+        chosen = evaluation.selected_candidates(False, ["sherpa/titanet-small/auto-0.9"])
+        self.assertEqual([candidate.candidate_id for candidate in chosen], ["sherpa/titanet-small/auto-0.9"])
+        self.assertEqual(len(evaluation.selected_candidates(False, [])), len(evaluation.candidates(False)))
+        with self.assertRaises(evaluation.EvaluationError):
+            evaluation.selected_candidates(False, ["sherpa/unknown/known"])
+
+    def test_the_read_items_load_without_the_synthetic_conversations(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            media = Path(folder) / "media"
+            media.mkdir()
+            (media / "RM11.wav").write_bytes(b"")
+            loaded = evaluation.load_inputs(Path(folder), {})
+        self.assertEqual([(item.input_id, item.speakers, item.reference) for item in loaded], [("RM11", 3, None)])
 
     def test_extra_found_speakers_map_one_to_one(self) -> None:
         overlap = {"A": {"x": 5, "y": 9, "z": 0}, "B": {"x": 7, "y": 8, "z": 1}}

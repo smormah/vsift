@@ -31,7 +31,7 @@ The stages:
 
 No shell is invoked: every external program is started with an explicit argument list.
 The real recordings are public-domain NASA items of the project's own test-media release;
-only numbers and, for RM06 (public domain), its labelled transcript are kept.
+only numbers and, for RM06 and RM11 (public domain), their labelled transcripts are kept.
 """
 
 from __future__ import annotations
@@ -82,7 +82,7 @@ NOISY_SNR_DB = 10
 # scored, overlapping speech is scored, frames are 10 ms.
 COLLAR_US = 250_000
 FRAME_US = 10_000
-# RM06's reference is labelled by reading the transcript, at segment precision, so its
+# A read reference (RM06's, RM11's) is labelled by reading the transcript, at segment precision, so its
 # collar is wider.
 REFERENCE_COLLAR_US = 500_000
 # VSift's proposed labelling rule for one transcript segment: some speaker's speech
@@ -1217,20 +1217,56 @@ def read_reference(path: Path) -> tuple[list[dict], int, tuple[dict, ...]]:
     return turns, count, unscored
 
 
-def load_inputs(inputs_dir: Path, rm06_reference: Path | None) -> list[EvaluationInput]:
+@dataclass(frozen=True)
+class ReadItem:
+    """A real recording whose reference is read from its labelled transcript.
+
+    ``speakers`` is the count a user would give before a reference exists; the
+    reference's own ``count_given`` replaces it.
+    """
+
+    item_id: str
+    publisher: str
+    speakers: int
+
+
+# The public-domain recordings whose labelled transcript and turns are kept and logged,
+# so a person can read a reference from them (docs/planning/speaker-labels-evaluation.md).
+READ_ITEMS = (ReadItem("RM06", "NASA Johnson Space Center", 2),
+              ReadItem("RM11", "NASA", 3))
+
+
+def parse_references(entries: Sequence[str]) -> dict[str, Path]:
+    """``RMnn=<file>`` pairs, each naming a read item at most once."""
+    known = {item.item_id for item in READ_ITEMS}
+    references: dict[str, Path] = {}
+    for entry in entries:
+        item_id, separator, file_name = entry.partition("=")
+        if not separator or item_id not in known or item_id in references or not file_name:
+            raise EvaluationError(f"--reference takes RMnn=<file> once per read item ({sorted(known)})")
+        references[item_id] = Path(file_name)
+    return references
+
+
+def load_inputs(inputs_dir: Path, references: dict[str, Path]) -> list[EvaluationInput]:
+    """The synthetic conversations (when fetched), the read items and RM09, as present."""
     loaded = []
-    for item in CONVERSATIONS:
-        truth = recipe.load_json(inputs_dir / FIXTURES / f"{item.fixture_id}.truth.json")
-        loaded.append(EvaluationInput(item.fixture_id, inputs_dir / FIXTURES / f"{item.fixture_id}.wav",
-                                      truth["turns"], len(item.voices), COLLAR_US, True, True))
-    rm06 = inputs_dir / "media" / "RM06.wav"
-    if rm06.is_file():
+    if (inputs_dir / FIXTURES).is_dir():
+        for item in CONVERSATIONS:
+            truth = recipe.load_json(inputs_dir / FIXTURES / f"{item.fixture_id}.truth.json")
+            loaded.append(EvaluationInput(item.fixture_id, inputs_dir / FIXTURES / f"{item.fixture_id}.wav",
+                                          truth["turns"], len(item.voices), COLLAR_US, True, True))
+    for read_item in READ_ITEMS:
+        wav = inputs_dir / "media" / f"{read_item.item_id}.wav"
+        if not wav.is_file():
+            continue
         reference = None
-        speakers = 2
+        speakers = read_item.speakers
         unscored: tuple[dict, ...] = ()
-        if rm06_reference is not None and rm06_reference.is_file():
-            reference, speakers, unscored = read_reference(rm06_reference)
-        loaded.append(EvaluationInput("RM06", rm06, reference, speakers, REFERENCE_COLLAR_US, False, True,
+        reference_file = references.get(read_item.item_id)
+        if reference_file is not None:
+            reference, speakers, unscored = read_reference(reference_file)
+        loaded.append(EvaluationInput(read_item.item_id, wav, reference, speakers, REFERENCE_COLLAR_US, False, True,
                                       unscored))
     rm09 = inputs_dir / "media" / "RM09.wav"
     if rm09.is_file():
@@ -1238,20 +1274,37 @@ def load_inputs(inputs_dir: Path, rm06_reference: Path | None) -> list[Evaluatio
     return loaded
 
 
+def selected_candidates(everything: bool, only: Sequence[str]) -> list[Candidate]:
+    """The candidate matrix, or the named part of it (every name must be in it)."""
+    listed = candidates(everything)
+    if not only:
+        return listed
+    names = {candidate.candidate_id for candidate in listed}
+    unknown = sorted(set(only) - names)
+    if unknown:
+        raise EvaluationError(f"unknown candidates: {', '.join(unknown)}")
+    return [candidate for candidate in listed if candidate.candidate_id in set(only)]
+
+
 def evaluate(tools: Path, inputs_dir: Path, whisper_cli: Path | None, whisper_model: Path | None,
-             output_dir: Path, everything: bool, rm06_reference: Path | None) -> dict:
-    """Run every candidate on every input and score it; without whisper.cpp (the
-    Windows and macOS smoke) the segment labelling is not measured."""
+             output_dir: Path, everything: bool, references: dict[str, Path],
+             only: Sequence[str] = ()) -> dict:
+    """Run every candidate (or the named ones) on every input and score it; without
+    whisper.cpp (the Windows and macOS smoke) the segment labelling is not measured."""
+    chosen = selected_candidates(everything, only)
     inventory = recipe.load_json(tools / "inventory.json")
     output_dir.mkdir(parents=True, exist_ok=False)
     work = output_dir / "hypotheses"
     work.mkdir()
-    inputs = load_inputs(inputs_dir, rm06_reference)
+    inputs = load_inputs(inputs_dir, references)
+    if not inputs:
+        raise EvaluationError("no input to evaluate")
     report: dict = {"generator": GENERATOR_ID, "platform": inventory["platform"], "threads": THREADS,
                     "inventory": inventory, "rule": {"min_speech_share": LABEL_MIN_SPEECH_SHARE,
                                                      "min_dominant_share": LABEL_MIN_DOMINANT_SHARE},
                     "inputs": {}, "runs": []}
-    report["polyvoice_models"] = prepare_polyvoice(tools, inventory, inputs[0].wav)
+    report["polyvoice_models"] = (prepare_polyvoice(tools, inventory, inputs[0].wav)
+                                  if any(candidate.engine == "polyvoice" for candidate in chosen) else None)
     segments_by_input: dict[str, list[dict]] = {}
     for item in inputs:
         duration = wav_duration_us(item.wav)
@@ -1260,7 +1313,7 @@ def evaluate(tools: Path, inputs_dir: Path, whisper_cli: Path | None, whisper_mo
                                            ("read from the transcript" if item.reference else "none")}
         if item.transcribe and whisper_cli is not None and whisper_model is not None:
             segments_by_input[item.input_id] = transcribe(whisper_cli, whisper_model, item.wav, work)
-    for candidate in candidates(everything):
+    for candidate in chosen:
         for item in inputs:
             turns, facts = run_candidate(candidate, tools, inventory, item.wav, item.speakers, whisper_cli, work)
             duration = wav_duration_us(item.wav)
@@ -1279,8 +1332,10 @@ def evaluate(tools: Path, inputs_dir: Path, whisper_cli: Path | None, whisper_mo
             report["runs"].append(row)
             print(f"{candidate.candidate_id} on {item.input_id}: exit {facts.get('exit')}, "
                   f"{row.get('found_speakers')} speakers, DER {row.get('score', {}).get('der')}", flush=True)
-    if "RM06" in segments_by_input:
-        write_labelled_transcript(output_dir / "rm06-labelled-transcript.md", segments_by_input["RM06"], report, work)
+    for read_item in READ_ITEMS:
+        if read_item.item_id in segments_by_input:
+            write_labelled_transcript(output_dir / f"{read_item.item_id.lower()}-labelled-transcript.md", read_item,
+                                      segments_by_input[read_item.item_id], report, work)
     with (output_dir / "report.json").open("x", encoding="utf-8") as handle:
         json.dump(report, handle, indent=2)
         handle.write("\n")
@@ -1288,12 +1343,14 @@ def evaluate(tools: Path, inputs_dir: Path, whisper_cli: Path | None, whisper_mo
     return report
 
 
-def write_labelled_transcript(path: Path, segments: Sequence[dict], report: dict, work: Path) -> None:
-    """RM06 (public domain): each segment with each candidate's label, for a person to judge."""
-    columns = [row["candidate"] for row in report["runs"] if row["input"] == "RM06" and row.get("found_speakers")]
-    hypotheses = {name: json.loads((work / f"RM06.{name.replace('/', '_')}.json").read_text(encoding="utf-8"))
+def write_labelled_transcript(path: Path, read_item: ReadItem, segments: Sequence[dict], report: dict,
+                              work: Path) -> None:
+    """A read item (public domain): each segment with each candidate's label, for a person to judge."""
+    item_id = read_item.item_id
+    columns = [row["candidate"] for row in report["runs"] if row["input"] == item_id and row.get("found_speakers")]
+    hypotheses = {name: json.loads((work / f"{item_id}.{name.replace('/', '_')}.json").read_text(encoding="utf-8"))
                   for name in columns}
-    lines = ["# RM06 labelled transcript (public domain, NASA Johnson Space Center)", "",
+    lines = [f"# {item_id} labelled transcript (public domain, {read_item.publisher})", "",
              "Each whisper.cpp `base` segment with the label each candidate's turns give it under the proposed "
              "rule (`-` is no confident speaker). Labels are each run's own; they are not mapped to people.", "",
              "| Start | End | " + " | ".join(columns) + " | Text |",
@@ -1314,7 +1371,7 @@ def summary(report: dict) -> str:
     """The job summary: one table of accuracy, one of cost."""
     lines = [f"## Speaker-label engines on {report['platform']} ({report['threads']} threads per engine)", "",
              "DER: diarization error rate (miss + false alarm + confusion over true speech; 0.25 s collar, "
-             "0.5 s on RM06's read reference). Labelled: the share of transcript segments given a speaker by the "
+             "0.5 s on a read reference). Labelled: the share of transcript segments given a speaker by the "
              "proposed rule; wrong: segments given the wrong speaker, over all segments.", "",
              "| Candidate | Input | Speakers found / true | DER | Confusion | Labelled | Wrong | RTF | CPU s | Peak MiB |",
              "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |"]
@@ -1361,7 +1418,9 @@ def main(argv: Sequence[str] | None = None) -> None:
     run.add_argument("--whisper-model", type=Path)
     run.add_argument("--output-dir", type=Path, required=True)
     run.add_argument("--everything", action="store_true")
-    run.add_argument("--rm06-reference", type=Path)
+    run.add_argument("--reference", action="append", default=[], metavar="RMnn=FILE",
+                     help="a read item's reference (repeatable)")
+    run.add_argument("--candidate", action="append", default=[], help="run only this candidate (repeatable)")
     grow = commands.add_parser("scaling", help="time and peak memory of the recommended engine as length grows")
     grow.add_argument("--tools", type=Path, required=True)
     grow.add_argument("--source", type=Path, action="append", required=True)
@@ -1385,16 +1444,20 @@ def main(argv: Sequence[str] | None = None) -> None:
         print(json.dumps(stage(arguments.dest, arguments.everything), indent=2))
     elif arguments.command == "evaluate":
         report = evaluate(arguments.tools, arguments.inputs, arguments.whisper_cli, arguments.whisper_model,
-                          arguments.output_dir, arguments.everything, arguments.rm06_reference)
+                          arguments.output_dir, arguments.everything, parse_references(arguments.reference),
+                          arguments.candidate)
         print(summary(report))
         print(json.dumps({"polyvoice_models": report["polyvoice_models"]}, indent=2))
-        labelled = arguments.output_dir / "rm06-labelled-transcript.md"
-        if labelled.is_file():
-            # RM06 is public domain; its labelled transcript and each candidate's turns go
-            # to the log so a person can read and score them without the artifact.
-            print(labelled.read_text(encoding="utf-8"))
-            for path in sorted((arguments.output_dir / "hypotheses").glob("RM06.*.json")):
-                print(f"RM06-TURNS {path.stem[len('RM06.'):]} {path.read_text(encoding='utf-8')}")
+        for read_item in READ_ITEMS:
+            item_id = read_item.item_id
+            labelled = arguments.output_dir / f"{item_id.lower()}-labelled-transcript.md"
+            if labelled.is_file():
+                # The read items are public domain; their labelled transcripts and each
+                # candidate's turns go to the log so a person can read and score them
+                # without the artifact.
+                print(labelled.read_text(encoding="utf-8"))
+                for path in sorted((arguments.output_dir / "hypotheses").glob(f"{item_id}.*.json")):
+                    print(f"{item_id}-TURNS {path.stem[len(item_id) + 1:]} {path.read_text(encoding='utf-8')}")
     elif arguments.command == "scaling":
         scaling(arguments.tools, arguments.source, arguments.minutes, arguments.output)
     elif arguments.command == "network-check":

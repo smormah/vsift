@@ -73,6 +73,7 @@ const COVERS = Object.freeze([
   'non-english-or-accented',
   'leading-silence',
   'lecture-or-meeting',
+  'two-or-three-speakers',
   'vertical-variable-frame-rate',
 ]);
 /** The shapes the set must hold before it is used as evidence; the vertical phone video is wanted but optional. */

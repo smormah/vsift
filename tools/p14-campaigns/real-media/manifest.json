@@ -250,13 +250,15 @@
       },
       "covers": [
         "conversational-pauses",
-        "long-speech-seams"
+        "long-speech-seams",
+        "two-or-three-speakers"
       ],
       "tests": [
         "#353",
         "#359",
         "#381",
-        "#383"
+        "#383",
+        "#108"
       ],
       "notes": "The same recording as the Commons copy approved on 2026-10-18 (Commons refuses the tool): NASA Johnson's own public-affairs upload to the Internet Archive, whose caption file is identical to the NASA library's. A conversation between an astronaut on the station and a former record holder in Mission Control (NASA employees in their role), with the pauses of a space-to-ground link (the longest caption gaps 1.3 to 1.8 s), about 25 chunks. The item's creator field names a staff address, which is not repeated here."
     },
@@ -423,6 +425,45 @@
         "L-028"
       ],
       "notes": "Chosen on 2026-10-19 under the maintainer's go. A narrated screen recording of the Census Bureau's data site: a table of county figures is opened, filtered and mapped, with small interface text and numbers. A US government work; the Internet Archive copy is a mirror of the Bureau's own channel made by an archive user, which the go allows for government works. The licence rests on 17 U.S.C. 105: no Census page states it for this file. Looked at on 2026-10-19 (nine frames): the presenter (Census Bureau staff, named on screen in her role), then the site; the video carries burned-in captions, on-screen text that matches the speech. No private person's data is shown."
+    },
+    {
+      "id": "RM11",
+      "status": "approved",
+      "approval": {
+        "date": "2026-10-21",
+        "by": "maintainer"
+      },
+      "title": "Expedition 70 Astronaut Loral O\u2019Hara Talks with KAKE-TV, Wichita, Kansas (2 January 2024)",
+      "source_page": "https://images.nasa.gov/details/iss070m260021459_Expedition_70_Astronaut_Loral_O%E2%80%99Hara_Talks_with_KAKE-TV_Wichita_Kansas_240102",
+      "url": "https://images-assets.nasa.gov/video/iss070m260021459_Expedition_70_Astronaut_Loral_O%E2%80%99Hara_Talks_with_KAKE-TV_Wichita_Kansas_240102/iss070m260021459_Expedition_70_Astronaut_Loral_O%E2%80%99Hara_Talks_with_KAKE-TV_Wichita_Kansas_240102~mobile.mp4",
+      "mirror_url": "https://github.com/smormah/vsift/releases/download/test-media-2026-10-19/RM11-nasa-exp70-kake-interview.mp4",
+      "file_name": "RM11-nasa-exp70-kake-interview.mp4",
+      "bytes": 48513285,
+      "sha256": "e765f9c7a55fd4eeeaae4e947a5731b17ddb89b4379c069d267da52f34e5cc71",
+      "source_checksum": null,
+      "licence": {
+        "id": "public-domain-us-government",
+        "url": "https://www.copyright.gov/title17/92chap1.html#105",
+        "statement": "https://www.nasa.gov/nasa-brand-center/images-and-media/"
+      },
+      "author": "NASA (Johnson Space Center)",
+      "attribution": "\"Expedition 70 Astronaut Loral O\u2019Hara Talks with KAKE-TV, Wichita, Kansas\" by NASA, public domain, via the NASA Image and Video Library",
+      "media": {
+        "duration_s": 1116.0,
+        "container": "mp4",
+        "video": "H.264 (the library's ~mobile rendition)",
+        "audio": "AAC"
+      },
+      "covers": [
+        "two-or-three-speakers",
+        "conversational-pauses"
+      ],
+      "tests": [
+        "#108",
+        "L-206",
+        "L-207"
+      ],
+      "notes": "Chosen on 2026-10-21 under the maintainer's decision of that day (one public-domain recording of two or three speakers for speaker labels, #108). An in-flight interview from the space station: a television station's interviewer on the ground and the crew on board (public figures in their role), with the delays of a space-to-ground link, 18:36. NASA publishes no checksum: the pin is trust on first use over HTTPS, cross-checked by a second, hosted fetch. NASA media carries no endorsement. Its speaker reference is read from a hosted labelled transcript and confirmed by the maintainer listening (docs/planning/speaker-labels-evaluation.md)."
     }
   ]
 }

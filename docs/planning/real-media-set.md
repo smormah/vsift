@@ -39,6 +39,7 @@ Five to eight items, a few hundred MB in all, each short where it can be. One it
 | `non-english-or-accented` | A non-English speaker, or a strong accent | L-022 |
 | `leading-silence` | Silence or a title card before the first word | #174 (L-024, a segment that starts at the audio's start) |
 | `lecture-or-meeting` | A lecture or meeting of 15 to 30 minutes | L-022 (long recordings), #380 to #384 at scale, timings |
+| `two-or-three-speakers` | A conversation of two or three people taking turns | #108 (speaker labels, ADR 0031), L-206 (evidence on real recordings), L-207 (similar voices) |
 | `vertical-variable-frame-rate` (optional) | A phone video: vertical, variable frame rate | #363's list; rotation and VFR paths on real files |
 
 The set does not replace the synthetic corpus: the corpus has exact, frozen truth; the real set has realistic signal and
@@ -458,6 +459,7 @@ three quarters of the set's budget, so it is not used.
 | RM07 | Introduction to Wikidata Lexeme Forms, Lexicodays 2024 (480p transcode) | CC BY-SA 4.0 | Commons, by hand (ETag compared as MD5) | 21,315,686 | `afd19162...` |
 | RM09 | NASA's SpaceX Crew-8 Crew Arrival at Kennedy Space Center | Public domain | [NASA Image and Video Library](https://images.nasa.gov/details/KSC-20240225-MH-JBS01-0001-CCP_SpaceX_Crew_8_Arrival_KSC-M4585) (no checksum published: trust on first use, cross-checked hosted) | 72,873,726 | `ee5501f1...` |
 | RM10 | How to Create a Map from a Table Using data.census.gov (U.S. Census Bureau) | Public domain | [Internet Archive](https://archive.org/details/yt_wJJiJfJpK0o) mirror of the Bureau's channel; SHA-1 checked | 10,796,931 | `a035daeb...` |
+| RM11 | Expedition 70 Astronaut Loral O’Hara Talks with KAKE-TV, Wichita, Kansas (NASA, 2 January 2024) | Public domain | [NASA Image and Video Library](https://images.nasa.gov/details/iss070m260021459_Expedition_70_Astronaut_Loral_O%E2%80%99Hara_Talks_with_KAKE-TV_Wichita_Kansas_240102) (no checksum published: trust on first use, cross-checked hosted) | 48,513,285 | `e765f9c7...` |
 
 RM09 adds about five minutes of arrival with no speech before the first word (leading silence; the noise is to be heard),
 outdoor remarks (noisy speech) and 28 minutes of length; RM10 is a real screen recording of a data site with small text and

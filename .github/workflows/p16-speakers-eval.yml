@@ -4,18 +4,21 @@ name: P16 speakers evaluation
 # results are docs/planning/speaker-labels-evaluation.md). It compares pinned external
 # diarization engines (sherpa-onnx with several embedding models, polyvoice and
 # whisper.cpp's tinydiarize) on synthetic conversations with exact truth, generated
-# here with the P07 Kokoro recipe, and on RM06 (NASA, two people, public domain) and
-# RM09 (NASA, 28 minutes, for cost) from the project's test-media release. Nothing it
-# stages reaches a VSift build or the maintainer's machine; the job keeps numbers, the
-# synthetic fixtures and RM06's labelled transcript (public domain) only.
+# here with the P07 Kokoro recipe, and on RM06 (NASA, two people and a third briefly),
+# RM11 (NASA, an interviewer and the crew) and RM09 (NASA, 28 minutes, for cost) from the
+# project's test-media release, all public domain. Nothing it stages reaches a VSift
+# build or the maintainer's machine; the jobs keep numbers, the synthetic fixtures and
+# the labelled transcripts of RM06 and RM11 only.
 #
 # Triggers: a pull request that changes the evaluation runs its tooling tests (a
 # pull request's path filter sees the whole pull request, so every later push would
 # run the 90-minute evaluation again); the evaluation itself runs on a manual
 # dispatch (`gh workflow run p16-speakers-eval.yml --ref <branch>`). The recorded
 # runs (39518020351, 39527538316, 39567789710) ran on pull-request events before
-# this rule. Advisory evidence: no release gate reads it. It cannot publish
-# anything: no write scope, no secret.
+# this rule. The read-reference job runs on pull requests too while a recording's
+# reference is being read (RM11's, 2026-10-21), and goes to dispatch once it is
+# recorded. Advisory evidence: no release gate reads it. It cannot publish anything:
+# no write scope, no secret.
 on:
   pull_request:
     branches:
@@ -25,6 +28,8 @@ on:
       - tools/p16_speakers_eval.py
       - tools/test_p16_speakers_eval.py
       - tools/p16_speakers_rm06_reference.json
+      - tools/p16_speakers_rm11_reference.json
+      - tools/p14-campaigns/real-media/manifest.json
   workflow_dispatch:
 
 permissions: {}
@@ -180,13 +185,15 @@ jobs:
       - name: Stage pinned FFmpeg, whisper.cpp v1.9.5 and both pinned models
         run: python tools/p07_local_asr_tools.py "${{ runner.temp }}/vsift-tools"
 
-      - name: Fetch RM06 and RM09 from the test-media release, held to their pins
+      - name: Fetch RM06, RM09 and RM11 from the test-media release, held to their pins
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/real-media"
-          node tools/p14-campaigns/real-media.cjs cross-check "$RUNNER_TEMP/real-media" --item RM06 --item RM09
+          node tools/p14-campaigns/real-media.cjs cross-check "$RUNNER_TEMP/real-media" \
+            --item RM06 --item RM09 --item RM11
           python tools/p16_speakers_eval.py media --media "$RUNNER_TEMP/real-media" \
-            --ffmpeg "$(command -v ffmpeg)" --output-dir "$RUNNER_TEMP/p16-inputs/media" --item RM06 --item RM09
+            --ffmpeg "$(command -v ffmpeg)" --output-dir "$RUNNER_TEMP/p16-inputs/media" \
+            --item RM06 --item RM09 --item RM11
 
       - name: Stage the pinned engines and models
         run: python tools/p16_speakers_eval.py stage --dest "$RUNNER_TEMP/p16-tools"
@@ -205,9 +212,12 @@ jobs:
         run: |
           set -euo pipefail
           reference=()
-          if [ -f tools/p16_speakers_rm06_reference.json ]; then
-            reference=(--rm06-reference tools/p16_speakers_rm06_reference.json)
-          fi
+          for item in RM06 RM11; do
+            file="tools/p16_speakers_${item,,}_reference.json"
+            if [ -f "$file" ]; then
+              reference+=(--reference "$item=$file")
+            fi
+          done
           python tools/p16_speakers_eval.py evaluate --tools "$RUNNER_TEMP/p16-tools" \
             --inputs "$RUNNER_TEMP/p16-inputs" --whisper-cli "$VSIFT_TEST_WHISPER_CLI" \
             --whisper-model "$VSIFT_TEST_WHISPER_MODEL" --output-dir "$RUNNER_TEMP/p16-report" \
@@ -223,7 +233,7 @@ jobs:
           python tools/p16_speakers_eval.py network-check --tools "$RUNNER_TEMP/p16-tools" \
             --wav "$RUNNER_TEMP/p16-inputs/fixtures/SPK2-MF.wav" --output "$RUNNER_TEMP/p16-report/network.json"
 
-      - name: Keep the report (numbers, hypotheses and RM06's labelled transcript)
+      - name: Keep the report (numbers, hypotheses and the read items' labelled transcripts)
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -231,6 +241,75 @@ jobs:
           path: |
             ${{ runner.temp }}/p16-report
             ${{ runner.temp }}/p16-tools/inventory.json
+          if-no-files-found: warn
+          retention-days: 90
+
+  # A read item's reference (docs/planning/speaker-labels-evaluation.md section 5): the
+  # recording transcribed and labelled by the recommended engine and two alternatives,
+  # printed to the log with each run's turns so a person can read the reference from the
+  # text and the maintainer confirm it by listening. RM11 is public domain (NASA).
+  read-reference:
+    name: RM11 labelled transcript for its reference (ubuntu-24.04)
+    needs: tooling-tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Set up the pinned Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          package-manager-cache: false
+
+      - name: Stage pinned FFmpeg, whisper.cpp v1.9.5 and both pinned models
+        run: python tools/p07_local_asr_tools.py "${{ runner.temp }}/vsift-tools"
+
+      # RM11 is trust on first use (NASA publishes no checksum): this second fetch, from
+      # the test-media release on a hosted runner, is held to the pin and printed.
+      - name: Fetch RM11 from the test-media release, held to its pin, and probe it
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/real-media"
+          node tools/p14-campaigns/real-media.cjs cross-check "$RUNNER_TEMP/real-media" --item RM11
+          ffprobe -v error -show_entries format=duration,format_name:stream=codec_type,codec_name,width,height,avg_frame_rate,sample_rate,channels \
+            -of json "$RUNNER_TEMP/real-media/RM11/RM11-nasa-exp70-kake-interview.mp4"
+          python tools/p16_speakers_eval.py media --media "$RUNNER_TEMP/real-media" \
+            --ffmpeg "$(command -v ffmpeg)" --output-dir "$RUNNER_TEMP/p16-inputs/media" --item RM11
+
+      - name: Stage the pinned engines and models
+        run: python tools/p16_speakers_eval.py stage --dest "$RUNNER_TEMP/p16-tools"
+
+      - name: Transcribe, label and print RM11 with its turns
+        run: |
+          set -euo pipefail
+          reference=()
+          if [ -f tools/p16_speakers_rm11_reference.json ]; then
+            reference=(--reference RM11=tools/p16_speakers_rm11_reference.json)
+          fi
+          python tools/p16_speakers_eval.py evaluate --tools "$RUNNER_TEMP/p16-tools" \
+            --inputs "$RUNNER_TEMP/p16-inputs" --whisper-cli "$VSIFT_TEST_WHISPER_CLI" \
+            --whisper-model "$VSIFT_TEST_WHISPER_MODEL" --output-dir "$RUNNER_TEMP/p16-report" \
+            --candidate sherpa/titanet-small/auto-0.9 --candidate sherpa/titanet-small/known \
+            --candidate sherpa/wespeaker-r34/known --candidate polyvoice/auto "${reference[@]}"
+          cat "$RUNNER_TEMP/p16-report/summary.md" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Keep the report (numbers, hypotheses and RM11's labelled transcript)
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: p16-speakers-rm11-reference
+          path: ${{ runner.temp }}/p16-report
           if-no-files-found: warn
           retention-days: 90
 

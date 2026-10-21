@@ -234,7 +234,8 @@ that is set rather than capped, and bounded memory. tinydiarize, CAM++, ERes2Net
 **Decided by the maintainer on 2026-10-21** (relayed by the supervisor): (1) sherpa-onnx `v1.13.8` with pyannote
 segmentation 3.0 and NeMo `TitaNet` small, (2) shipped with an attribution notice that covers both of `TitaNet`'s
 licence statements, (3) managed installs on Windows, macOS and Linux, built on another story's extension of the
-managed-install system, with the engine archives pinned by GitHub's digest and the provenance gap in the register,
+managed-install system, with the engine archives pinned by GitHub's digest and the provenance gap in the register (L-217, recorded by the
+managed-install story),
 (4) the automatic count at 0.9 when the user gives none and a given count passed through, (5) a duration cap with a
 typed refusal and a remediation, about two hours if an 8 GB machine allows (section 6.4: it does), (6) labels
 provisional ("S2, by voice"), the user's verified names the only identity, and the accuracy statement naming the
