@@ -469,6 +469,38 @@ The fourth pull request implements section 4 (`--first`, D5) and the visual stre
 - **Planned for a sixth pull request:** the crash campaign's workload with open revisions (its verifier must
   accept an open revision and a part-by-part publication) and the visual stream's kill points.
 
+## Implementation notes: the fifth pull request (2026-10-21)
+
+The fifth pull request implements the queued mode of section 6.
+
+- **The mode.** `JobMode::Queued` (`--mode queued`), never chosen by length. Its runner starts like a watched
+  one; its transcripts run with `AdmissionWait::Queued`, at the whole capacity, publishing at the seal.
+- **The queue.** `job-queue/` of the root: one entry a job, named by when it was entered and its id, so a
+  listing in name order is first in, first out across sessions and survives a restart; `job start` enters
+  a queued job (one already in keeps its place), and the job leaves the queue when it ends (and `job
+  cancel` of one no process runs takes it out). One queued job of a root runs at a time: its runner holds
+  `coordination/queue-turn.lock` for the whole job. A waiting job is still `queued` (a wait is no attempt):
+  `run_prepare` asks `PrepareStreams::before_start` before it starts, and a cancellation meanwhile cancels
+  it. `job status` reports `queue_position`, counting only entries whose job has not ended (an ended one's
+  entry is removed as it is found).
+- **Fairness.** Queued work holds its permit marked by an exclusive lock on
+  `coordination/admission-queued.lock`. An ordinary caller (an interactive command, a watched job) that
+  finds the slots taken while that marker is held holds a shared lock on
+  `coordination/admission-demand.lock` and waits up to `QUEUED_YIELD_WAIT` (120 s) for the slots, instead
+  of being refused. Before every chunk but the first, the queued run's `ChunkGate` looks at the demand lock:
+  while someone demands capacity it gives its permit back, polls every `QUEUED_ADMISSION_POLL`, and takes
+  the capacity back once nobody does. A queued run never takes capacity someone waits for. Every lock is an
+  operating-system lock, so a process that dies releases what it held. The visual windows of a queued job
+  take their capacity window by window, as `candidates` does, so they free it between windows anyway.
+- **Not in 0.3.0:** priorities between queued jobs, and a host that runs the queue without a runner a job
+  (1.0). After a restart a waiting job needs `job start` or `job resume` to run again (L-220).
+- **Tests.** The queue's order across sessions, a job entered again keeping its place, a restart, one turn
+  at a time, and an ordinary caller waiting for queued work and admitted when it yields (storage); a queued
+  run yielding at a chunk boundary and committing what an ordinary run commits, and a waiting job staying
+  queued, cancelled by a cancellation (application); a queued `job start` through the binary; opt-in with
+  `FFmpeg`, a queued job holding the whole root and a `frame get` waiting for it and admitted at its next
+  chunk (`engine_growth`).
+
 ## Decisions for the maintainer
 
 All are taken (2026-10-21):

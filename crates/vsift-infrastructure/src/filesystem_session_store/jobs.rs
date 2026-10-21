@@ -944,6 +944,17 @@ impl RevisionStore for FilesystemSessionStore {
         self.try_admit(weight.get())
     }
 
+    fn admit_queued(
+        &self,
+        weight: std::num::NonZeroU16,
+    ) -> Result<Self::Permit, SessionStorageError> {
+        self.try_admit_queued(weight.get())
+    }
+
+    fn others_waiting(&self) -> bool {
+        self.capacity_demanded()
+    }
+
     fn head(&self, session_id: &SessionId, now: u64) -> Result<SessionHead, SessionStorageError> {
         // One manifest: a revision committed between two reads would pair a
         // head without it with a generation that holds it.
@@ -1279,7 +1290,7 @@ fn job_bucket(job_id: &JobId) -> String {
     format!("{:02x}", digest[0])
 }
 
-fn create_directory(parent: &Dir, name: &str) -> Result<(), SessionStorageError> {
+pub(super) fn create_directory(parent: &Dir, name: &str) -> Result<(), SessionStorageError> {
     match create_private_child_directory(parent, Path::new(name)) {
         Ok(()) => Ok(()),
         Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => Ok(()),

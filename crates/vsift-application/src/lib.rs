@@ -25,7 +25,7 @@ mod visual;
 
 pub use asr::{
     AsrCancellation, AsrFailure, AsrFailureReason, AsrRevisionRequest, AsrRunFailure, AsrStage,
-    AsrTranscription, CheckpointScope, CheckpointUse, ChunkSeed, NoObserver, NoProgress,
+    AsrTranscription, CheckpointScope, CheckpointUse, ChunkGate, ChunkSeed, NoObserver, NoProgress,
     ProgressSink, RecognizerIdentity, RevisionSplice, RunObserver, RunSoFar, SeedPort,
     SpeechAudioError, SpeechAudioSource, SpeechPcm, SpeechRecognitionError, SpeechRecognizer,
     TranscribeRangeRequest, UnusableChunk, UnusableChunks, build_asr_revision,

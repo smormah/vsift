@@ -1911,11 +1911,12 @@ Options:
           Emit one versioned JSON terminal result
 
       --mode <MODE>
-          quick runs in the foreground and answers when done; watched runs in the background and answers at once. Defaults by the recording's length: quick under ten minutes, watched from ten minutes on
+          quick runs in the foreground and answers when done; watched runs in the background and answers at once; queued waits its turn in the root's queue in the background. Defaults by the recording's length: quick under ten minutes, watched from ten minutes on
 
           Possible values:
           - quick:   In the foreground: the command answers when the job is done
           - watched: In the background: the command answers once a runner holds the job
+          - queued:  In the root's queue, after the jobs queued before it, one at a time at the whole capacity, giving way at every chunk to anyone who waits: for several recordings, or when there is no rush
 
       --events <EVENTS>
           Emit versioned evidence, progress and terminal records as JSON Lines

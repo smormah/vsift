@@ -1341,3 +1341,40 @@ fn a_first_window_is_checked_and_recorded() -> TestResult {
     );
     Ok(())
 }
+
+/// ADR 0033 section 6: `--mode queued` hands the job to a background runner
+/// that waits its turn in the root's queue; alone in it, it runs at once and,
+/// without media tools, ends failed and leaves the queue.
+#[test]
+fn a_queued_job_start_takes_its_turn_in_the_background() -> TestResult {
+    let root = OwnedRoot::new()?;
+    let session = seed_session(&root)?;
+    let started = start_result(&vsift(
+        &root,
+        &[
+            "job",
+            "start",
+            session.as_str(),
+            "--mode",
+            "queued",
+            "--json",
+        ],
+    )?)?;
+    assert_eq!(started["data"]["start"]["mode"], "queued");
+    assert_eq!(started["data"]["start"]["mode_basis"], "requested");
+    assert_eq!(started["data"]["start"]["runner"], "background");
+    assert_eq!(started["data"]["job"]["request"]["mode"], "queued");
+    let job = started["data"]["job"]["job_id"]
+        .as_str()
+        .ok_or("no job")?
+        .to_owned();
+    let status = settled_status(&root, &job)?;
+    assert_eq!(status["data"]["state"], "failed", "{status}");
+    // An ended job has no place in the queue.
+    assert_eq!(status["data"].get("queue_position"), None);
+    assert!(
+        !root.sessions().join("job-queue").exists()
+            || fs::read_dir(root.sessions().join("job-queue"))?.count() == 0
+    );
+    Ok(())
+}

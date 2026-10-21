@@ -204,6 +204,7 @@ async fn run(
             observer: &cuts,
             stopwatch: &vsift_application::StoppedStopwatch,
             seed: None,
+            gate: None,
         },
         &Audio,
         &Recogniser { again },

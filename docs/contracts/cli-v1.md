@@ -1212,6 +1212,16 @@ vsift job status job_0123456789abcdef0123456789abcdef --json
   root's admission capacity free, so `frame get`, crops and audio clips are admitted while
   it runs. The call answers once the runner holds the job, or has ended it already, within
   10 s; a job that was interrupted before is not taken until a runner holds it.
+- **queued** (only with `--mode queued`: several recordings, or no rush): a runner in the
+  background that waits its turn in the root's queue (first in, first out, one queued job a
+  root at a time, across sessions), then runs at the root's whole capacity and publishes at
+  its seal. While it waits, `job status` shows it `queued`, held by a live runner, with
+  `queue_position` (0 for the next to run). **It never blocks someone waiting:** an
+  interactive command or a watched job that finds the capacity taken by queued work is not
+  refused, but waits (up to 120 s) while the queued run gives the capacity back at its next
+  chunk boundary, and takes it back once nobody waits. The queue is kept on disk
+  (`job-queue/` of the root) and survives a restart: its jobs keep their order, and `job start`
+  (or `job resume`) of a waiting one starts a runner that takes its turn again.
 
 `--mode quick|watched` overrides the choice.
 

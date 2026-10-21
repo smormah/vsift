@@ -358,6 +358,19 @@ impl FilesystemSessionStore {
         acquire_admission(&self.root, self.admission_capacity, weight)
     }
 
+    /// Takes `weight` units without waiting even for queued work to yield
+    /// them: queued work's own admission.
+    pub(super) fn try_admit_without_waiting(
+        &self,
+        weight: u16,
+    ) -> Result<FilesystemAdmissionPermit, SessionStorageError> {
+        if weight == 0 || weight > self.admission_capacity {
+            return Err(SessionStorageError::CapacityExhausted);
+        }
+        self.revalidate_root()?;
+        acquire_slots(&self.root, self.admission_capacity, weight)
+    }
+
     /// Acquires a shared lifetime hold and returns one verified committed snapshot.
     ///
     /// # Errors
@@ -935,7 +948,59 @@ pub(super) fn validate_platform_root_permissions(
     Ok(())
 }
 
+/// Takes `weight` of the root's `capacity` units. When they are taken and
+/// queued work holds them (ADR 0033 section 6), the caller demands them and
+/// waits up to [`vsift_domain::QUEUED_YIELD_WAIT`] for the queued work to give
+/// them back at its next chunk boundary; otherwise it is refused at once, as
+/// before.
 pub(super) fn acquire_admission(
+    root: &Dir,
+    capacity: u16,
+    weight: u16,
+) -> Result<FilesystemAdmissionPermit, SessionStorageError> {
+    match acquire_slots(root, capacity, weight) {
+        Err(SessionStorageError::Busy) => wait_for_queued_work(root, capacity, weight),
+        other => other,
+    }
+}
+
+/// How often a caller that waits for queued work looks at the slots.
+const QUEUED_YIELD_POLL: std::time::Duration = std::time::Duration::from_millis(50);
+
+/// Waits, demanding capacity, for queued work to give back the slots it holds.
+/// The wait blocks the calling thread: it happens only while queued work holds
+/// the root's capacity, and is bounded.
+fn wait_for_queued_work(
+    root: &Dir,
+    capacity: u16,
+    weight: u16,
+) -> Result<FilesystemAdmissionPermit, SessionStorageError> {
+    let coordination = root
+        .open_dir_nofollow(COORDINATION_DIRECTORY)
+        .map_err(map_storage_io)?;
+    if !super::queue::queued_work_holds(&coordination) {
+        return Err(SessionStorageError::Busy);
+    }
+    let _demand = super::queue::demand_capacity(&coordination);
+    let started = std::time::Instant::now();
+    loop {
+        std::thread::sleep(QUEUED_YIELD_POLL);
+        match acquire_slots(root, capacity, weight) {
+            Err(SessionStorageError::Busy) => {}
+            other => return other,
+        }
+        // Queued work gave its slots back and someone else took them, or the
+        // wait is over: the caller is refused, as for any contention.
+        if !super::queue::queued_work_holds(&coordination)
+            || started.elapsed() >= vsift_domain::QUEUED_YIELD_WAIT
+        {
+            return Err(SessionStorageError::Busy);
+        }
+    }
+}
+
+/// Takes `weight` free slots of the root's `capacity`, or none.
+fn acquire_slots(
     root: &Dir,
     capacity: u16,
     weight: u16,
@@ -954,7 +1019,10 @@ pub(super) fn acquire_admission(
             Err(fs::TryLockError::Error(error)) => return Err(map_storage_io(error)),
         }
         if slots.len() == usize::from(weight) {
-            return Ok(FilesystemAdmissionPermit { _slots: slots });
+            return Ok(FilesystemAdmissionPermit {
+                _slots: slots,
+                _queued: None,
+            });
         }
     }
     Err(SessionStorageError::Busy)

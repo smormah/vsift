@@ -211,6 +211,9 @@ pub struct JobPresentation<'a> {
     pub mode: Option<JobMode>,
     /// The window a `prepare` job transcribes first, when one was named.
     pub first: Option<TimeRange>,
+    /// Where a queued `prepare` job that has not started stands in the root's
+    /// queue (0 for the next to run).
+    pub queue_position: Option<usize>,
     /// Where a `prepare` job's started streams are; empty otherwise.
     pub streams: &'a [StreamPresentation<'a>],
 }
@@ -264,6 +267,8 @@ pub struct JobData {
     failure: Option<JobFailureData>,
     #[serde(skip_serializing_if = "Option::is_none")]
     streams: Option<Vec<StreamData>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    queue_position: Option<usize>,
 }
 
 impl JobData {
@@ -301,6 +306,7 @@ impl JobData {
             // runner starts the first (ADR 0033).
             streams: (job.kind == JobKind::Prepare)
                 .then(|| job.streams.iter().map(StreamData::new).collect()),
+            queue_position: job.queue_position,
         }
     }
 }

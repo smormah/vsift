@@ -221,10 +221,10 @@ impl Engine {
             .map(|revision| revision.source_segment().range().end().as_micros());
         let (mode, basis) = match (request.mode, length) {
             (Some(mode), _) => (mode, ModeBasis::Requested),
-            (None, Some(length)) => match JobMode::for_duration(Some(length)) {
-                JobMode::Quick => (JobMode::Quick, ModeBasis::ShortRecording),
-                JobMode::Watched => (JobMode::Watched, ModeBasis::LongRecording),
-            },
+            (None, Some(length)) if JobMode::for_duration(Some(length)) == JobMode::Quick => {
+                (JobMode::Quick, ModeBasis::ShortRecording)
+            }
+            (None, Some(_)) => (JobMode::Watched, ModeBasis::LongRecording),
             (None, None) => (JobMode::for_duration(None), ModeBasis::LengthUnknown),
         };
         // The newest revision is the commit of a `prepare` job that succeeded:
@@ -298,6 +298,11 @@ impl Engine {
             )) => JobStartState::Running,
             Err(error) => return Err(error.into()),
         };
+        // A queued job takes its place at the end of the root's queue (ADR
+        // 0033 section 6); one already in it keeps its place.
+        if mode == JobMode::Queued && start.needs_runner() {
+            store.enqueue_job(session, &spec.job_id, now)?;
+        }
         drop(store);
         Ok(JobStartPlan {
             status: self.job_status(&spec.job_id)?,
@@ -327,10 +332,20 @@ impl Engine {
             admission: request.admission,
             recorded: Arc::new(Mutex::new(Vec::new())),
             seed: RecognitionSeed::new(),
+            turn: Mutex::new(None),
             outcome: Mutex::new(None),
             error: Mutex::new(None),
         };
         let ran = Box::pin(run_prepare(&store, &session, &job, self.clock(), &streams)).await;
+        // A queued job that ended leaves the queue, and gives the turn to the
+        // next one; an interrupted or waiting one keeps its place.
+        drop(streams.turn.lock().map(|mut turn| turn.take()));
+        if mode == JobMode::Queued
+            && let Ok(Some(view)) = store.job(&session, &job)
+            && view.record.state.is_terminal()
+        {
+            store.dequeue_job(&job);
+        }
         match ran {
             Ok(PrepareOutcome::Succeeded(_)) => {
                 let outcome = streams
@@ -377,6 +392,8 @@ struct EngineStreams<'e> {
     recorded: Arc<Mutex<Vec<StreamProgress>>>,
     /// The first window's chunk answers, for the whole transcript (D5).
     seed: RecognitionSeed,
+    /// The root's queue turn, held while a queued job runs.
+    turn: Mutex<Option<vsift_infrastructure::QueueTurn>>,
     /// The whole transcript's retranscription, once it committed.
     outcome: Mutex<Option<RetranscribeOutcome>>,
     /// The error that stopped a stream, answered for the whole job.
@@ -485,7 +502,13 @@ impl EngineStreams<'_> {
             operation_id: None,
             cancellation: self.cancellation.clone(),
             progress,
-            admission: self.admission,
+            // Queued work waits for capacity as long as it takes, and yields
+            // it at every chunk boundary to anyone who waits (section 6).
+            admission: if self.mode == JobMode::Queued {
+                AdmissionWait::Queued
+            } else {
+                self.admission
+            },
             publication,
             share: if self.mode == JobMode::Watched {
                 RecognitionShare::LeavingOneFree
@@ -726,7 +749,75 @@ impl PrepareStreams for EngineStreams<'_> {
         ended
     }
 
+    async fn before_start(&self, mode: JobMode) -> Result<(), StreamStop> {
+        if mode != JobMode::Queued {
+            return Ok(());
+        }
+        loop {
+            if matches!(
+                self.store.recorded_job_state(&self.session, &self.prepare),
+                Ok(Some(JobState::Cancelling))
+            ) {
+                return Err(StreamStop::Cancelled);
+            }
+            if self.cancellation.is_cancelled() {
+                return Err(StreamStop::Interrupted {
+                    job: None,
+                    failure: None,
+                });
+            }
+            let position = queue_position(self.store, &self.prepare);
+            if position == Some(0)
+                && let Ok(Some(turn)) = self.store.try_take_queue_turn()
+            {
+                if let Ok(mut held) = self.turn.lock() {
+                    *held = Some(turn);
+                }
+                return Ok(());
+            }
+            if position.is_none() {
+                // Not in the queue (it was removed, or the queue is full when
+                // it was started): it takes its place now.
+                let now = self.engine.now_unix_seconds().unwrap_or_default();
+                if self
+                    .store
+                    .enqueue_job(&self.session, &self.prepare, now)
+                    .is_err()
+                {
+                    return Err(StreamStop::Failed { failure: None });
+                }
+            }
+            tokio::time::sleep(QUEUE_TURN_POLL).await;
+        }
+    }
+
     async fn cancel(&self, job: &JobId) {
         let _ = self.engine.job_cancel(job);
     }
+}
+
+/// How often a queued job waiting its turn looks at the queue.
+const QUEUE_TURN_POLL: Duration = Duration::from_secs(2);
+
+/// Where `job` stands in the root's queue (0 for the next to run), among the
+/// entries whose job has not ended; an ended job's entry is removed as it is
+/// found. `None` when the job is not in the queue or the queue cannot be read.
+pub(crate) fn queue_position(store: &FilesystemSessionStore, job: &JobId) -> Option<usize> {
+    let entries = store.job_queue().ok()?;
+    let mut position = 0;
+    for entry in entries {
+        let view = store.job(&entry.session_id, &entry.job_id).ok().flatten();
+        let ended = view
+            .as_ref()
+            .is_none_or(|view| view.record.state.is_terminal());
+        if ended {
+            store.dequeue_job(&entry.job_id);
+            continue;
+        }
+        if entry.job_id == *job {
+            return Some(position);
+        }
+        position += 1;
+    }
+    None
 }

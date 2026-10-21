@@ -1509,6 +1509,7 @@ fn f01_job(
         mode: None,
         streams: &[],
         first: None,
+        queue_position: None,
     }))
 }
 

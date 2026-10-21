@@ -165,6 +165,10 @@ vsift transcript get <session> --since "<since-token>" --view brief --limit <n> 
   what is still pending, and the resume card with the `job_id` and `vsift job status <job> --json` as its
   `next_command`.
 - Stopping it needs the user's word (`job cancel` is `explicit`); what it transcribed stays.
+- When the user hands over several recordings, or says there is no rush, start each with `--mode queued`:
+  they wait their turn and run one after another in the background, giving way to your other commands.
+  `job status` shows a waiting job `queued` with its `queue_position` (0 runs next); report that, and come
+  back to each recording once its job has `succeeded`.
 
 ## A transcription that is still running
 
