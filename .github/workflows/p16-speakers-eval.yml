@@ -248,11 +248,12 @@ jobs:
   # pinned sherpa-onnx archive with its size and SHA-256, the libraries the tool names
   # (as far as the archive holds them), and a run of the tool on a short tone from one
   # flat folder holding only those, with no library path variable, as the managed store
-  # keeps a component. Small (one archive and the two models), so it runs on pull
-  # requests that change the evaluation.
+  # keeps a component. Recorded from run 39621390749 (2026-10-21,
+  # speaker-labels-evaluation.md section 10.1); it runs on dispatch since.
   flat-folder:
     name: Managed file list, flat folder on ${{ matrix.os }}
     needs: tooling-tests
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     permissions:
