@@ -94,10 +94,10 @@ pub use storage::{
     StorageCapabilities,
 };
 pub use transcript::{
-    ImportedRevisionRequest, SourceDurationProbe, SourceProbeError, SuppliedTranscript,
-    SuppliedTranscriptError, TranscriptBuildError, TranscriptImportRequest, TranscriptPage,
-    TranscriptPageRequest, TranscriptQueryError, build_imported_revision, page_transcript,
-    transcript_query_digest, transcript_segment_id, whole_file_source_segment,
+    ImportedRevisionRequest, NoSourceProbe, ProbedSource, SourceProbe, SourceProbeError,
+    SuppliedTranscript, SuppliedTranscriptError, TranscriptBuildError, TranscriptImportRequest,
+    TranscriptPage, TranscriptPageRequest, TranscriptQueryError, build_imported_revision,
+    page_transcript, transcript_query_digest, transcript_segment_id, whole_file_source_segment,
 };
 pub use verification::{
     CachedMediaToolVerification, LocalAsrVerification, LocalAsrVerificationFailure,

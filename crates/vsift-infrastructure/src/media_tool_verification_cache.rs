@@ -314,6 +314,22 @@ impl FilesystemMediaToolVerificationCache {
         }
     }
 
+    /// Opens the state directory only if it already exists and is private,
+    /// creating nothing: for a reader that only asks whether a pass is
+    /// recorded (a plain ingest, ADR 0029), and must leave no trace when
+    /// none is.
+    pub(crate) fn open_existing(root: &Dir, root_path: &Path) -> Option<Self> {
+        let state_path = root_path.join(STATE_DIRECTORY);
+        let state = root.open_dir_nofollow(STATE_DIRECTORY).ok()?;
+        let path_metadata = fs::symlink_metadata(&state_path).ok()?;
+        validate_same_directory_object(&path_metadata, &state).ok()?;
+        validate_private_root(&state_path, &state).ok()?;
+        Some(Self {
+            state: Some(state),
+            workspace_parent: state_path,
+        })
+    }
+
     /// The private directory in which a verification creates, uses and removes
     /// its own uniquely named workspace.
     #[must_use]

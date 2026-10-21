@@ -9,10 +9,11 @@ use std::{
 
 use serde::Deserialize;
 use vsift_domain::{
-    DisplayRotation, FrameDimensions, FrameTiming, MAX_WINDOW_SAMPLES, MediaDecodeSupport,
-    MediaDescription, MediaSelection, MediaStream, MediaStreamKind, MediaTime, SINGLE_STAGE_WEIGHT,
-    StreamTime, TimeRange, VISUAL_FRAME_BYTES, VISUAL_FRAME_HEIGHT, VISUAL_FRAME_WIDTH,
-    VISUAL_SAMPLE_INTERVAL_MICROS, VISUAL_WINDOW_WEIGHT, VisualWindow, rounds_to_no_pcm_sample,
+    AnchorSource, ClockReading, DisplayRotation, FrameDimensions, FrameTiming, MAX_WINDOW_SAMPLES,
+    MediaDecodeSupport, MediaDescription, MediaSelection, MediaStream, MediaStreamKind, MediaTime,
+    SINGLE_STAGE_WEIGHT, StreamTime, TimeAnchor, TimeRange, VISUAL_FRAME_BYTES,
+    VISUAL_FRAME_HEIGHT, VISUAL_FRAME_WIDTH, VISUAL_SAMPLE_INTERVAL_MICROS, VISUAL_WINDOW_WEIGHT,
+    VisualWindow, rounds_to_no_pcm_sample,
 };
 
 mod evidence;
@@ -216,7 +217,7 @@ impl<'a> FfmpegMedia<'a> {
             ]);
         let request = restrict_mov_references(request, source)
             .with_arguments(["-f", source.container().demuxer(), "-show_entries",
-                "format=duration,start_time:stream=index,codec_type,codec_name,time_base,start_pts,width,height:stream_tags=language,rotate:stream_side_data=rotation",
+                "format=duration,start_time:format_tags=creation_time,com.apple.quicktime.creationdate:stream=index,codec_type,codec_name,time_base,start_pts,width,height:stream_tags=language,rotate:stream_side_data=rotation",
                 "-of", "json", "-i"])
             .with_argument(source.provider_path().as_os_str());
         let output = self
@@ -937,6 +938,42 @@ struct RawProbe {
 struct RawFormat {
     duration: Option<String>,
     start_time: Option<String>,
+    tags: Option<RawFormatTags>,
+}
+
+/// The two recording-time tags the probe names (time anchoring, ADR 0029).
+/// Only these are requested: asking for every format tag would let a
+/// hostile file's megabytes of metadata fill the probe's output bound.
+#[derive(Deserialize)]
+struct RawFormatTags {
+    creation_time: Option<String>,
+    #[serde(rename = "com.apple.quicktime.creationdate")]
+    quicktime_creationdate: Option<String>,
+}
+
+/// The container's recording-time tags as anchors at the start of the
+/// timeline, recorder tag first. A tag that does not parse as a clock time
+/// is left out, never an error: a file with an odd tag is still a video.
+fn clock_tags(tags: Option<&RawFormatTags>) -> Vec<TimeAnchor> {
+    let Some(tags) = tags else {
+        return Vec::new();
+    };
+    [
+        (
+            AnchorSource::QuicktimeCreationDate,
+            tags.quicktime_creationdate.as_deref(),
+        ),
+        (
+            AnchorSource::ContainerCreationTime,
+            tags.creation_time.as_deref(),
+        ),
+    ]
+    .into_iter()
+    .filter_map(|(source, text)| {
+        let reading = ClockReading::parse(text?).ok()?;
+        Some(TimeAnchor::new(source, MediaTime::from_micros(0), reading))
+    })
+    .collect()
 }
 
 #[derive(Deserialize)]
@@ -976,7 +1013,9 @@ struct RawSideData {
 /// at most four hours (Matroska's reported end is normalized by the earliest
 /// stream start), a positive time base for every stream, dimensions of at most
 /// 16 megapixels for every video stream, a quarter-turn display rotation, and
-/// short ASCII codec and language names.
+/// short ASCII codec and language names. The two recording-time tags become
+/// [`MediaDescription::clock_tags`] when they parse; one that does not is
+/// left out and never fails the probe.
 ///
 /// # Errors
 ///
@@ -1126,6 +1165,7 @@ pub fn parse_ffprobe_metadata(
         duration: MediaTime::from_micros(duration),
         origin_micros,
         streams,
+        clock_tags: clock_tags(raw_format.tags.as_ref()),
     })
 }
 
@@ -1409,8 +1449,8 @@ mod tests {
     };
     use crate::SourceContainer;
     use vsift_domain::{
-        DisplayRotation, MediaDecodeSupport, MediaSelection, MediaStreamKind, MediaTime,
-        VISUAL_FRAME_BYTES,
+        AnchorSource, DisplayRotation, MediaDecodeSupport, MediaSelection, MediaStreamKind,
+        MediaTime, TimeAnchor, VISUAL_FRAME_BYTES,
     };
 
     /// #332, the decode boundary: for every kind of PCM decode, a range whose
@@ -1546,6 +1586,57 @@ mod tests {
                 })
                 .is_err()
         );
+        Ok(())
+    }
+
+    /// What `FFprobe` prints, for the probe's `-show_entries`, of a MOV that
+    /// carries both recording-time tags (the recorder's local-time key and
+    /// the movie header's UTC creation time). The fuzz seed
+    /// `ffprobe_metadata/recorder-tags.json` is this document.
+    const TAGGED: &str = r#"{"format":{"duration":"2.000000","start_time":"0.000000","tags":{"creation_time":"2026-10-21T13:03:13.000000Z","com.apple.quicktime.creationdate":"2026-10-21T14:03:12+0100"}},"streams":[{"index":0,"codec_type":"video","codec_name":"h264","time_base":"1/600","start_pts":0,"width":1920,"height":1080},{"index":1,"codec_type":"audio","codec_name":"aac","time_base":"1/44100","start_pts":0,"tags":{"language":"und"}}]}"#;
+
+    #[test]
+    fn reads_the_two_recording_time_tags_recorder_tag_first()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let parsed = parse_ffprobe_metadata(TAGGED.as_bytes(), SourceContainer::IsoMedia)?;
+        let sources: Vec<AnchorSource> = parsed.clock_tags.iter().map(TimeAnchor::source).collect();
+        assert_eq!(
+            sources,
+            [
+                AnchorSource::QuicktimeCreationDate,
+                AnchorSource::ContainerCreationTime
+            ]
+        );
+        assert_eq!(
+            parsed.clock_tags[0].reading().utc_unix_micros(),
+            Some(1_792_587_792_000_000)
+        );
+        assert_eq!(
+            parsed.clock_tags[1].reading().utc_unix_micros(),
+            Some(1_792_587_793_000_000)
+        );
+        let untagged = parse_ffprobe_metadata(VALID.as_bytes(), SourceContainer::IsoMedia)?;
+        assert_eq!(untagged.clock_tags, [] as [TimeAnchor; 0]);
+        Ok(())
+    }
+
+    /// A tag that is not a clock time (too long, a word, a date with no time)
+    /// is left out; the probe still succeeds and the other tag is kept.
+    #[test]
+    fn an_unreadable_recording_time_tag_is_left_out() -> Result<(), Box<dyn std::error::Error>> {
+        let long = "9".repeat(200);
+        for bad in ["yesterday", "2026-10-21", long.as_str()] {
+            let tagged = VALID.replace(
+                r#""start_time":"1.250000"}"#,
+                &format!(
+                    r#""start_time":"1.250000","tags":{{"creation_time":"2026-10-21T13:03:13Z","com.apple.quicktime.creationdate":"{bad}"}}}}"#
+                ),
+            );
+            let parsed = parse_ffprobe_metadata(tagged.as_bytes(), SourceContainer::IsoMedia)?;
+            let sources: Vec<AnchorSource> =
+                parsed.clock_tags.iter().map(TimeAnchor::source).collect();
+            assert_eq!(sources, [AnchorSource::ContainerCreationTime], "{bad}");
+        }
         Ok(())
     }
 

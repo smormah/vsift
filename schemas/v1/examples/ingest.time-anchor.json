@@ -1,0 +1,79 @@
+{
+  "command": "ingest",
+  "coverage": null,
+  "data": {
+    "expires_at": "2026-09-25T00:00:00Z",
+    "generation": 1,
+    "publication": "process_crash_consistent",
+    "session_id": "ses_0123456789abcdef0123456789abcdef",
+    "source_bytes": 41473,
+    "source_id": "src_sha256_d7ccece71288c5ff35d7b16c871a93a8ed48bbb7380617899575069b4d6545f4",
+    "time_anchor": {
+      "anchors": [
+        {
+          "confidence": "exact",
+          "media_time_us": 0,
+          "source": "operator",
+          "time": {
+            "local": "2026-09-18T09:15:00.000000",
+            "utc": "2026-09-18T08:15:00.000000Z",
+            "utc_offset": "+01:00"
+          }
+        },
+        {
+          "confidence": "medium",
+          "media_time_us": 0,
+          "source": "container_creation_time",
+          "time": {
+            "local": null,
+            "utc": "2026-09-18T09:45:12.000000Z",
+            "utc_offset": null
+          }
+        }
+      ],
+      "confidence": "exact",
+      "consistency": "conflicting",
+      "recording_start": {
+        "local": "2026-09-18T09:15:00.000000",
+        "utc": "2026-09-18T08:15:00.000000Z",
+        "utc_offset": "+01:00"
+      },
+      "source": "operator"
+    },
+    "transcript": {
+      "alignment": {
+        "offset_us": 500000,
+        "origin": "imported_srt"
+      },
+      "language": null,
+      "revision": 1,
+      "revision_id": "trv_663ae41bbedc740b651fe61999d395b0",
+      "segment_count": 3,
+      "sidecar": {
+        "bytes": 245,
+        "format": "srt",
+        "sha256": "2a4ee37d826754eac43da03e7cc63f718b16aed4d3ce163c380ebd8ab9630847"
+      },
+      "source_id": "src_sha256_d7ccece71288c5ff35d7b16c871a93a8ed48bbb7380617899575069b4d6545f4",
+      "source_segments": [
+        {
+          "end_us": 12000000,
+          "index": 0,
+          "source_segment_id": "sgm_813c2dbd740e3afc0f67a52278553bf6",
+          "start_us": 0,
+          "state": "closed"
+        }
+      ],
+      "warnings": []
+    }
+  },
+  "error": null,
+  "lifecycle": {
+    "expires_at": "2026-09-25T00:00:00Z",
+    "mode": "ephemeral"
+  },
+  "operation_id": null,
+  "schema_version": "1",
+  "status": "complete",
+  "warnings": []
+}

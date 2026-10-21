@@ -7,17 +7,18 @@ use std::{
 };
 
 use vsift_application::{
-    ForegroundSessionPort, OpenSession, OpenSessionError, OpenSessionOutcome, OpenSessionRequest,
-    SessionStorageError, TranscriptImportRequest,
+    ForegroundSessionPort, NoSourceProbe, OpenSession, OpenSessionError, OpenSessionOutcome,
+    OpenSessionRequest, SessionStorageError, TranscriptImportRequest,
 };
 use vsift_domain::{
-    DurabilityRequirement, OperationId, SessionId, SessionLifetime, SessionPhase, SourceId,
-    StorageGeneration, TranscriptRevision, WorkspacePolicy,
+    ClockReading, DurabilityRequirement, OperationId, SessionId, SessionLifetime, SessionPhase,
+    SourceId, StorageGeneration, TimeAnchors, TranscriptRevision, WorkspacePolicy,
 };
 use vsift_infrastructure::{
     BundleSourcePolicy, BundleStatus, CleanOutcome, ContainedFile, ContainedSourceStore,
     FfprobeSourceDuration, FilesystemAdmissionPermit, FilesystemSessionStore, FreeSpaceCheck,
-    MAX_SOURCE_BYTES, SessionRootProvisioning, SessionStatus, SourceSnapshot,
+    MAX_SOURCE_BYTES, MediaProviderConformance, SessionRootProvisioning, SessionStatus,
+    SourceSnapshot,
 };
 
 use crate::{
@@ -95,6 +96,7 @@ pub(crate) struct PreparedIngest {
     pub(crate) cancellation: Cancellation,
     pub(crate) durability: DurabilityRequirement,
     pub(crate) session_id: Option<SessionId>,
+    pub(crate) recorded_at: Option<ClockReading>,
 }
 
 /// A supplied transcript file and the explicit offset that aligns it.
@@ -144,6 +146,7 @@ pub struct SessionSnapshot {
     artifact_count: usize,
     artifact_bytes: u64,
     observed_at_unix_seconds: u64,
+    time_anchors: TimeAnchors,
 }
 
 impl SessionSnapshot {
@@ -158,7 +161,16 @@ impl SessionSnapshot {
             artifact_count: status.artifact_count(),
             artifact_bytes: status.artifact_bytes(),
             observed_at_unix_seconds,
+            time_anchors: status.time_anchors().clone(),
         }
+    }
+
+    /// The clock-time anchors the session was opened with (ADR 0029), in
+    /// ladder order; empty when no clock time is known. Every timestamped
+    /// result of the session derives its clock times from these.
+    #[must_use]
+    pub const fn time_anchors(&self) -> &TimeAnchors {
+        &self.time_anchors
     }
 
     /// Session identity.
@@ -468,8 +480,12 @@ impl Engine {
     /// Copies and hashes one local source into a new disposable session,
     /// optionally importing a supplied transcript with it.
     ///
-    /// The session root is provisioned on first use. Without a transcript no
-    /// provider runs. With one, everything that can fail without touching the
+    /// The session root is provisioned on first use. Without a transcript the
+    /// only provider run is one `FFprobe` call that reads the container's
+    /// recording-time tags, and only with media tools a recorded verification
+    /// pass already covers (time anchoring, ADR 0029; see
+    /// [`Self::ingest_recorded_at`]); it never fails the ingest. With one,
+    /// everything that can fail without touching the
     /// session root runs first (offset bounds, reading and parsing the sidecar,
     /// locating `FFmpeg` and `FFprobe`, and the automatic media-tool preflight,
     /// which verifies them once per tool identity); then the source is staged,
@@ -484,6 +500,29 @@ impl Engine {
     /// transcript or a failed verification never leaves an open session, and a
     /// failed verification happens before the session root is touched.
     pub async fn ingest(&self, request: IngestRequest) -> Result<IngestOutcome, EngineError> {
+        self.ingest_recorded_at(request, None).await
+    }
+
+    /// [`Self::ingest`] with the recording's start as the caller states it
+    /// (`ingest --recorded-at`): the first rung of the time-anchor ladder
+    /// (ADR 0029), above the container's recording-time tags.
+    ///
+    /// Whatever `recorded_at` is, a plain ingest also reads the container's
+    /// two recording-time tags with one `FFprobe` run when the media tools
+    /// are set up and a recorded verification pass covers them; it never
+    /// starts a verification and never fails for want of tools. The anchors
+    /// are stored with the session and reported by
+    /// [`OpenSessionOutcome::time_anchors`] and
+    /// [`SessionSnapshot::time_anchors`].
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::ingest`].
+    pub async fn ingest_recorded_at(
+        &self,
+        request: IngestRequest,
+        recorded_at: Option<ClockReading>,
+    ) -> Result<IngestOutcome, EngineError> {
         let source = absolute_selection(&request.source)?;
         self.ingest_prepared(PreparedIngest {
             source: IngestSource::Path(source),
@@ -491,6 +530,7 @@ impl Engine {
             cancellation: request.cancellation,
             durability: request.durability,
             session_id: None,
+            recorded_at,
         })
         .await
     }
@@ -511,11 +551,7 @@ impl Engine {
             }) => Some(self.prepare_contained_transcript_import(file, offset_micros)?),
             None => None,
         };
-        // Only the transcript path runs FFprobe on the source, so only it
-        // needs verified tools; a plain ingest runs no provider.
-        if let Some((_, tools)) = &import {
-            self.ensure_media_tools_verified(tools).await?;
-        }
+        let clock_tools = self.ingest_tools(import.as_ref()).await?;
         let root = self.session_root_path()?;
         let store = self
             .open_session_store(&root, SessionRootProvisioning::CreateIfMissing)?
@@ -549,33 +585,39 @@ impl Engine {
             activate_operation_id: self.new_operation_id()?,
             durability,
             now_unix_seconds: now,
+            recorded_at: request.recorded_at,
         };
         let import = match import {
-            Some((import, tools)) => {
-                let probe_store = self
-                    .open_session_store(&root, SessionRootProvisioning::ExistingOnly)?
-                    .ok_or(EngineError::SessionRoot(SessionRootError::Missing))?;
-                let probe = FfprobeSourceDuration::new(
-                    tools,
-                    self.config().host_isolation.into_infrastructure(),
-                    probe_store,
-                    request.cancellation.0.clone(),
-                );
-                Some((import, probe))
-            }
+            Some((import, tools)) => Some((
+                import,
+                self.source_probe(&root, tools, &request.cancellation)?,
+            )),
             None => None,
         };
+        let clock_probe = clock_tools
+            .map(|tools| self.source_probe(&root, tools, &request.cancellation))
+            .transpose()?;
         let registered = (
             open.session_id.clone(),
             open.initialize_operation_id.clone(),
         );
         let opened = match contained {
-            None => open_session(store, open, import.as_ref(), &request.cancellation).await,
+            None => {
+                open_session(
+                    store,
+                    open,
+                    import.as_ref(),
+                    clock_probe.as_ref(),
+                    &request.cancellation,
+                )
+                .await
+            }
             Some((file, admission)) => {
                 open_session(
                     ContainedSourceStore::new(store, file, admission),
                     open,
                     import.as_ref(),
+                    clock_probe.as_ref(),
                     &request.cancellation,
                 )
                 .await
@@ -596,6 +638,46 @@ impl Engine {
             transcript,
             free_space,
         })
+    }
+
+    /// Verifies the tools an ingest with a transcript needs, and returns the
+    /// tools a plain ingest probes for the recording-time tags.
+    ///
+    /// The transcript path needs the probe, so it verifies the tools and
+    /// fails without them; it returns `None` because that probe also reads
+    /// the tags. A plain ingest probes only to read the recording-time tags
+    /// (ADR 0029), only with tools a recorded pass already verified, and
+    /// never fails for want of them.
+    async fn ingest_tools(
+        &self,
+        import: Option<&(TranscriptImportRequest, MediaProviderConformance)>,
+    ) -> Result<Option<MediaProviderConformance>, EngineError> {
+        match import {
+            Some((_, tools)) => {
+                self.ensure_media_tools_verified(tools).await?;
+                Ok(None)
+            }
+            None => Ok(self.media_tools_already_verified()),
+        }
+    }
+
+    /// The restricted `FFprobe` adapter over the session root at `root`, for
+    /// the ingest's one probe of its staged source.
+    fn source_probe(
+        &self,
+        root: &Path,
+        tools: MediaProviderConformance,
+        cancellation: &Cancellation,
+    ) -> Result<FfprobeSourceDuration, EngineError> {
+        let probe_store = self
+            .open_session_store(root, SessionRootProvisioning::ExistingOnly)?
+            .ok_or(EngineError::SessionRoot(SessionRootError::Missing))?;
+        Ok(FfprobeSourceDuration::new(
+            tools,
+            self.config().host_isolation.into_infrastructure(),
+            probe_store,
+            cancellation.0.clone(),
+        ))
     }
 
     /// Removes the registration, and the session folder it began, that one open
@@ -914,24 +996,31 @@ const fn is_transient(error: SessionStorageError) -> bool {
 }
 
 /// Registers, stages and activates one session through `port`, importing
-/// the supplied transcript in the same generation when there is one.
+/// the supplied transcript in the same generation when there is one. A plain
+/// open reads the recording-time tags with `clock_probe` when there is one.
 async fn open_session<Port>(
     port: Port,
     open: OpenSessionRequest,
     import: Option<&(TranscriptImportRequest, FfprobeSourceDuration)>,
+    clock_probe: Option<&FfprobeSourceDuration>,
     cancellation: &Cancellation,
 ) -> Result<(OpenSessionOutcome, Option<TranscriptRevision>), EngineError>
 where
     Port: ForegroundSessionPort<Snapshot = SourceSnapshot>,
 {
     let use_case = OpenSession::new(port);
-    match import {
-        None => use_case
-            .execute(open, &cancellation.0)
+    match (import, clock_probe) {
+        (None, Some(probe)) => use_case
+            .execute(open, probe, &cancellation.0)
             .await
             .map(|session| (session, None))
             .map_err(EngineError::OpenSession),
-        Some((import, probe)) => use_case
+        (None, None) => use_case
+            .execute(open, &NoSourceProbe, &cancellation.0)
+            .await
+            .map(|session| (session, None))
+            .map_err(EngineError::OpenSession),
+        (Some((import, probe)), _) => use_case
             .execute_with_transcript(open, import, probe, &cancellation.0)
             .await
             .map(|(session, revision)| (session, Some(revision)))

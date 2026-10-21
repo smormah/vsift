@@ -24,6 +24,12 @@ real meetings, accents or noisy rooms, so every accuracy figure below says what 
   a session keeps at most 512 stored items; one result is at most 1 MiB. Bigger asks fail with
   `RESOURCE_LIMIT`: ask for less.
 - **A supplied transcript.** SRT or WebVTT in UTF-8, at most 20,000 cues, 4,096 bytes per cue and 8 MiB.
+- **Clock times (from 0.3.0).** A result's real-world time is only as good as its source: the time you gave
+  with `--recorded-at`, the recorder's own note, or the file's creation time, which is often the time it was
+  converted. A recording that was paused or cut in the middle has clock times that are wrong after the cut. The
+  file's own tags are read only after `vsift setup check` (or any command that looks at the picture or sound)
+  has checked the media tools once, and a kept bundle does not keep the clock times
+  ([how it works](evidence-and-citations.md#when-it-happened-by-the-clock)).
 
 ## The words: speech recognition
 

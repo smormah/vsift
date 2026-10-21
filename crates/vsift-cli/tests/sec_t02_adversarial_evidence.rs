@@ -208,6 +208,7 @@ async fn seed_session(root: &OwnedRoot, sidecar: &str) -> Result<String, Box<dyn
         &OperationId::parse("op_5ec7020000000003")?,
         StorageGeneration::INITIAL,
         now,
+        &vsift_domain::TimeAnchors::none(),
         &revision,
     )?;
     Ok(session_id.as_str().to_owned())

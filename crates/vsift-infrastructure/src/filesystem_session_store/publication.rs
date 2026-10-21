@@ -215,11 +215,13 @@ pub(super) fn update_lifecycle(
             now,
             artifacts,
             lifetime,
+            time_anchors,
         } => {
             if current.is_some() || source_bytes == 0 || source_bytes > crate::MAX_SOURCE_BYTES {
                 return Err(SessionStorageError::StateConflict);
             }
             validate_source_record(&source_id, &source_name, source_bytes)?;
+            super::time_anchors::decode_time_anchors(&time_anchors)?;
             if artifacts.len() > MAX_SESSION_ARTIFACTS {
                 return Err(SessionStorageError::CapacityExhausted);
             }
@@ -244,6 +246,7 @@ pub(super) fn update_lifecycle(
                 source_bytes,
                 artifacts,
                 verified_source_identity: None,
+                time_anchors,
             }))
         }
         LifecycleUpdate::Renew { now } => {

@@ -218,6 +218,7 @@ async fn seed_session(
         &OperationId::parse("op_2222222222222222")?,
         StorageGeneration::INITIAL,
         now,
+        &vsift_domain::TimeAnchors::none(),
         &revision,
     )?;
     Ok(session_id.as_str().to_owned())

@@ -2,7 +2,7 @@
 
 use cap_fs_ext::DirExt;
 use vsift_application::{PublishSessionGenerationRequest, SessionStorageError};
-use vsift_domain::{OperationId, SessionArtifactKind, SessionId, StorageGeneration};
+use vsift_domain::{OperationId, SessionArtifactKind, SessionId, StorageGeneration, TimeAnchors};
 
 use super::map_committed_io;
 use super::{
@@ -33,6 +33,29 @@ impl FilesystemSessionStore {
         expected_generation: StorageGeneration,
         now_unix_seconds: u64,
     ) -> Result<StorageGeneration, SessionStorageError> {
+        self.activate_anchored_source(
+            snapshot,
+            operation_id,
+            expected_generation,
+            now_unix_seconds,
+            &TimeAnchors::none(),
+        )
+    }
+
+    /// [`Self::activate_source`] that also stores the source's clock-time
+    /// anchors (ADR 0029) in the opening generation.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed source, conflict, capacity, or storage failure.
+    pub fn activate_anchored_source(
+        &self,
+        snapshot: &SourceSnapshot,
+        operation_id: &OperationId,
+        expected_generation: StorageGeneration,
+        now_unix_seconds: u64,
+        time_anchors: &TimeAnchors,
+    ) -> Result<StorageGeneration, SessionStorageError> {
         snapshot
             .verify()
             .map_err(|_| SessionStorageError::IntegrityFailure)?;
@@ -54,6 +77,7 @@ impl FilesystemSessionStore {
                 now: now_unix_seconds,
                 artifacts: Vec::new(),
                 lifetime: self.lifetime_policy(),
+                time_anchors: super::time_anchors::encode_time_anchors(time_anchors),
             },
             LifetimeHold::Shared,
             &CommitHooks::new(),
@@ -61,8 +85,8 @@ impl FilesystemSessionStore {
         )
     }
 
-    /// Binds a verified source and publishes one evidence artifact in the same
-    /// generation.
+    /// Binds a verified source, stores its clock-time anchors and publishes
+    /// one evidence artifact in the same generation.
     ///
     /// The artifact is installed by digest in the session's artifact directory
     /// first, under the snapshot's shared lifetime hold; the generation that
@@ -73,12 +97,17 @@ impl FilesystemSessionStore {
     /// # Errors
     ///
     /// Returns a typed source, conflict, capacity, or storage failure.
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "the opening generation's every input is one explicit argument, as in activate_anchored_source"
+    )]
     pub fn activate_source_with_artifact(
         &self,
         snapshot: &SourceSnapshot,
         operation_id: &OperationId,
         expected_generation: StorageGeneration,
         now_unix_seconds: u64,
+        time_anchors: &TimeAnchors,
         kind: SessionArtifactKind,
         bytes: &[u8],
     ) -> Result<StorageGeneration, SessionStorageError> {
@@ -136,6 +165,7 @@ impl FilesystemSessionStore {
                         .map_err(|_| SessionStorageError::CapacityExhausted)?,
                 }],
                 lifetime: self.lifetime_policy(),
+                time_anchors: super::time_anchors::encode_time_anchors(time_anchors),
             },
             LifetimeHold::Shared,
             &hooks,

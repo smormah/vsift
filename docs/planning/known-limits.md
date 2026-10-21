@@ -216,8 +216,9 @@ Each entry has these fields:
 | [L-199](#l-199) | Words the recogniser writes over noise alone are reported as speech, so a search can find text nobody said | accuracy/ASR | medium | cycle 3 | [#150](https://github.com/smormah/vsift/issues/150) | deferred |
 | [L-200](#l-200) | The same VSift, whisper.cpp, model and audio can give a slightly different transcript on another CPU, so two hosted runs, and two machines, are comparable only on the same CPU model | process/CI | low | unscheduled | [#486](https://github.com/smormah/vsift/issues/486) | monitoring |
 | [L-201](#l-201) | A recogniser repetition inside one chunk could hide what the next chunk heard at a seam; since `0.2.3` an exact repeat of the segment before claims no time, and other loops are left | accuracy/ASR | low | unscheduled | [#485](https://github.com/smormah/vsift/issues/485) | monitoring |
+| [L-210](#l-210) | A clock time is only as true as its anchor: a container's creation time is often the encode or remux time, a recording made by a clock that was wrong is wrong, no file modification time is used, a session's anchors are fixed when it opens and a retained bundle does not carry them | contract/UX | low | unscheduled | none | open |
 
-Counts: 1 high, 50 medium, 111 low (162 entries).
+Counts: 1 high, 50 medium, 112 low (163 entries).
 
 ## Security
 
@@ -5084,6 +5085,25 @@ that week.**
 - **Mitigation:** every segment cites its time, so an agent can take the WAV clip of it or a frame and check; confidence stays `provider_uncalibrated`.
 - **Decision (the maintainer, 2026-10-20):** decided in cycle 3, after the real-media set (#363) has measured it on real recordings; the choice then is whether to filter segments over non-speech (a voice-activity check or whisper.cpp's no-speech probability) or to mark them. Until then the noise-only figure is reported on every `P07 local ASR` run, not gated.
 - **Owner:** cycle 3. **Issue:** [#150](https://github.com/smormah/vsift/issues/150). **Status:** deferred. **Review:** rescheduled to cycle 3 (2026-10-20, by the maintainer: after the real-media set has measured it).
+
+### L-210
+
+**A clock time (time anchoring, `0.3.0`, ADR 0029) is only as true as the anchor it comes from, and stage 1 has three sources, all at the start of the timeline.**
+
+- **What:** `clock_time` and `time_anchor` come from the operator's `--recorded-at`, the recording app's local-time tag or the container's UTC creation time, in that order. Each is a claim, not a measurement:
+  - the container's `creation_time` (confidence `medium`) is often the time a tool encoded or remuxed the file, and some devices write the end of the recording, so it can be minutes or hours from the start; when it disagrees with another anchor by more than two seconds the session says `conflicting`, but alone it says `single`;
+  - a recorder's tag is the recorder's own clock: a phone or camera whose clock was wrong gives a wrong time with confidence `high`;
+  - a local time with no zone names no instant, and a UTC time with no zone gives no local time; VSift never guesses the zone;
+  - a recording cut or paused in the middle has one anchor at its start, so clock times after the cut are wrong by the length of the gap (stage 2 detects cuts from on-screen clocks);
+  - the tags are read only when the media tools are set up and already verified: the first ingest after setting them up, before `setup check` or any media command has run, reads none;
+  - no file modification time is used (the time of a copy or download for most files a person is sent), and an online provider's upload date is not a recording time;
+  - the anchors are fixed when the session opens (no command adds one later), worker job requests carry no `recorded_at`, and a retained bundle does not carry the anchors, so a session rebuilt from a bundle has none;
+  - a release before `0.3.0` reads a session that stores anchors as damaged (the trade-off of [L-044](#l-044)).
+- **Evidence:** ADR 0029; `crates/vsift-domain/src/time_anchor.rs` (the plausibility window and the comparison rule); `time_anchor_cli_contract`; the opt-in `time_anchor_real_tags`.
+- **Impact: low by the rubric** (a disclosed estimate): every clock time names its source and confidence, and the summary says when the sources disagree.
+- **Mitigation:** an operator who knows the start states it with `--recorded-at`, which wins over the file's tags; `session status --json` lists every anchor so a reader can judge.
+- **Next step:** stage 2 (clocks visible on screen, built on OCR): anchors at other positions, cross-checks and cut detection; the maintainer decides whether bundles and worker requests carry anchors.
+- **Owner:** unscheduled. **Issue:** none. **Status:** open. **Review:** pending.
 
 ## Review workflow
 

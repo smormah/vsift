@@ -174,6 +174,16 @@ fn frozen_examples_render_as_readable_text() -> TestResult {
     for (command, file, snapshot) in [
         (CommandName::Ingest, "ingest.transcript.json", "ingest"),
         (
+            CommandName::Ingest,
+            "ingest.time-anchor.json",
+            "ingest-time-anchor",
+        ),
+        (
+            CommandName::TranscriptGet,
+            "transcript-get.clock-time.json",
+            "transcript-get-clock-time",
+        ),
+        (
             CommandName::TranscriptGet,
             "transcript-get.json",
             "transcript-get",

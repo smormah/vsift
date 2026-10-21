@@ -214,6 +214,22 @@ impl UserDependencyConfigStore {
         ))
     }
 
+    /// The verification state, only if the private root and its state
+    /// directory already exist: nothing is created. `None` means no pass can
+    /// be recorded there yet.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::media_tool_verification_state`], for a root that exists but
+    /// cannot be opened safely.
+    pub fn existing_media_tool_verification_state(
+        &self,
+    ) -> Result<Option<FilesystemMediaToolVerificationCache>, UserDependencyConfigError> {
+        Ok(self.open_root(false)?.and_then(|root| {
+            FilesystemMediaToolVerificationCache::open_existing(&root, &self.root_path)
+        }))
+    }
+
     fn update_record(
         &self,
         change: impl FnOnce(&mut StoredSelections),

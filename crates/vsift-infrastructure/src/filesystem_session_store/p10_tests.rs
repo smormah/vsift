@@ -95,6 +95,7 @@ pub(super) fn activate(
             now: now()?,
             artifacts: Vec::new(),
             lifetime: vsift_domain::SessionLifetimePolicy::Desktop,
+            time_anchors: Vec::new(),
         },
         LifetimeHold::Shared,
         hooks,
@@ -896,6 +897,7 @@ fn a_session_holds_at_most_512_artifacts_in_a_bounded_manifest() -> TestResult {
         artifacts: (0..count).map(record_artifact).collect(),
         verified_source_identity: None,
         workspace_retention_seconds: None,
+        time_anchors: Vec::new(),
     };
     let add = |count: usize| {
         super::publication::update_lifecycle(

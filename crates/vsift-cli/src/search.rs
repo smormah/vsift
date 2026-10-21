@@ -42,6 +42,7 @@ fn presentation(results: &SearchResults) -> SearchPresentation<'_> {
             .collect(),
         next_cursor: results.next_cursor(),
         coverage: results.coverage(),
+        time_anchors: results.session().time_anchors(),
     }
 }
 

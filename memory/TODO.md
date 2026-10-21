@@ -38,6 +38,11 @@ Current-state handoff, rewritten in every change; history: git, `CHANGELOG.md`, 
 - **Cycle 3 (launch readiness; moved to November alongside `0.3.0` on 2026-10-21) holds the leftovers of cycle 1:** #454 (help that leads a cold agent to cite ids, L-178), #316, #258, #263, #397, #336; with the README, the documentation sweep and the LOKI try-out (RQ-17).
 - **Observations for the supervisor (no decision taken):** a session a kill left `initializing` answers `session status` with `INTEGRITY_FAILURE`; the toolchain re-pin should skip Rust 1.99.0.
 
+## `0.3.0` (planned cut about 2026-11-27; drafts until `main` opens after the `0.2.3` cut)
+
+- **Time anchoring, stage 1 (draft pull request, branch `v030/time-anchoring`; ADR 0029 proposed; L-210):** built and tested locally; **left:** the hosted run of `P07 local ASR` with the new real-tag step (`time_anchor_real_tags`), review, and the maintainer's calls on whether the skill and handoff carry clock times (a trial-freeze change at the cut) and whether bundles and worker requests carry anchors. Stage 2 (on-screen clocks) is a later story on OCR.
+- **Online links (#407, #409; ADR 0028):** decided on 2026-10-21 (the command `ingest --url`, port 443, the proxy rule of L-208, the caps, `SOURCE_FETCH_FAILED`, a managed yt-dlp 2026.08.19 and Deno 2.9.7 on Linux x64, stream-copy joining of separate audio and video); three draft pull requests in order: #407, #409's setup half, #409's acquisition half.
+
 ## What `0.2.2` holds (cycle 1, released 2026-10-18)
 
 - **Program:** #404 (`28cf6f8`), #362 (`14c02a5f`; `0.2.1` reads such a record as damaged), #361, #334, #394 (L-176 is the maintainer's float-parsing choice), #266 on Windows (`fs4` 1.1.0), #325 step 1, #264, #232, #370 (the refusal stays, R1), #371, #366 (128 KiB), #367 (`candidates --omit periodic`), #396 and #395, #419 (the cost itself is R1, L-170), #433, #436 (L-177).

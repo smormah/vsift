@@ -16,8 +16,8 @@
 
 use serde::Serialize;
 use vsift_domain::{
-    SearchCoverage, SearchMatch, SearchQuery, SearchQueryRejection, SessionId, TimeRange,
-    TranscriptRevision, TranscriptSegment,
+    SearchCoverage, SearchMatch, SearchQuery, SearchQueryRejection, SessionId, TimeAnchors,
+    TimeRange, TranscriptRevision, TranscriptSegment,
 };
 
 use crate::{
@@ -107,6 +107,9 @@ pub struct SearchPresentation<'a> {
     pub next_cursor: Option<&'a str>,
     /// Coverage of the searched range.
     pub coverage: &'a SearchCoverage,
+    /// The session's clock-time anchors, from which every item's
+    /// `clock_time` is derived (ADR 0029).
+    pub time_anchors: &'a TimeAnchors,
 }
 
 /// How the query was read: its normalised words, in query order.
@@ -200,7 +203,10 @@ impl SearchData {
             items: page
                 .hits
                 .iter()
-                .map(|(segment, _)| TranscriptSegmentData::new(page.revision, segment))
+                .map(|(segment, _)| {
+                    TranscriptSegmentData::new(page.revision, segment)
+                        .with_clock_time(page.time_anchors)
+                })
                 .collect(),
             hits: hit_data(page),
             next_cursor: page.next_cursor.map(str::to_owned),
@@ -394,7 +400,13 @@ impl SearchEvidenceStream {
         let records: Vec<_> = (0_u64..)
             .zip(&page.hits)
             .map(|(sequence, (segment, _))| {
-                EvidenceEventResponse::transcript_segment(sequence, command, page.revision, segment)
+                EvidenceEventResponse::transcript_segment(
+                    sequence,
+                    command,
+                    page.revision,
+                    segment,
+                    page.time_anchors,
+                )
             })
             .collect();
         let data = SearchStreamData {
