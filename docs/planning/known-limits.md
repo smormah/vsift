@@ -216,9 +216,9 @@ Each entry has these fields:
 | [L-199](#l-199) | Words the recogniser writes over noise alone are reported as speech, so a search can find text nobody said | accuracy/ASR | medium | cycle 3 | [#150](https://github.com/smormah/vsift/issues/150) | deferred |
 | [L-200](#l-200) | The same VSift, whisper.cpp, model and audio can give a slightly different transcript on another CPU, so two hosted runs, and two machines, are comparable only on the same CPU model | process/CI | low | unscheduled | [#486](https://github.com/smormah/vsift/issues/486) | monitoring |
 | [L-201](#l-201) | A recogniser repetition inside one chunk could hide what the next chunk heard at a seam; since `0.2.3` an exact repeat of the segment before claims no time, and other loops are left | accuracy/ASR | low | unscheduled | [#485](https://github.com/smormah/vsift/issues/485) | monitoring |
-| [L-205](#l-205) | Diarization holds the whole recording in memory: every engine evaluated for speaker labels peaks higher the longer the recording (sherpa-onnx with TitaNet 0.38 GiB at 10 minutes, 0.59 GiB at 28; polyvoice 1.2 and 2.2 GiB) | performance | medium | `0.3.0` (speaker labels, step 2) | [#108](https://github.com/smormah/vsift/issues/108) | open |
+| [L-205](#l-205) | One diarization hears at most two hours (it holds the whole stretch in memory, about 1 GiB an hour); a longer recording is labelled a part at a time, and labels of two parts are not linked | performance | medium | `0.3.0` (speaker labels) | [#108](https://github.com/smormah/vsift/issues/108) | open |
 | [L-206](#l-206) | Speaker-label accuracy rests on synthetic voices and one real two-person call whose reference was read from its transcript, not heard | accuracy/ASR | medium | `0.3.0` (speaker labels) | [#108](https://github.com/smormah/vsift/issues/108) | open |
-| [L-207](#l-207) | Two similar voices are heard as one speaker, and the labels then name that one speaker with confidence for both | accuracy/ASR | medium | `0.3.0` (speaker labels, step 2) | [#108](https://github.com/smormah/vsift/issues/108) | open |
+| [L-207](#l-207) | Two similar voices are heard as one speaker, and the labels then name that one speaker with confidence for both | accuracy/ASR | medium | `0.3.0` (speaker labels) | [#108](https://github.com/smormah/vsift/issues/108) | open |
 
 Counts: 1 high, 50 medium, 111 low (162 entries).
 
@@ -5077,39 +5077,39 @@ that week.**
 
 ### L-205
 
-**Diarization holds the whole recording in memory, and its peak grows with length: every engine evaluated for speaker labels needs more memory the longer the recording (`0.3.0`, speaker labels, 2026-10-21).**
+**One diarization hears at most two hours, because the engine holds the whole stretch in memory; a longer recording is labelled a part at a time, and the labels of two parts are not linked (`0.3.0`, speaker labels, 2026-10-21).**
 
-- **What:** the engines diarize a whole file at once: they keep its audio and every speaker embedding in memory until they cluster. Measured on the hosted Ubuntu runner (4 vCPU): sherpa-onnx with TitaNet small peaked at 377 MiB on RM06 (10:24) and 588 MiB on RM09 (28:02) at the threshold 0.9 (up to 969 MiB at 0.5); polyvoice at 1.2 GiB and 2.2 GiB. A recording of an hour or more would need several times that.
-- **Evidence:** [`speaker-labels-evaluation.md`](speaker-labels-evaluation.md) sections 6.2 and 7; runs 39518020351 and 39527538316 (`P16 speakers evaluation`).
-- **Impact: medium by the rubric:** nothing ships yet; once speaker labels ship, a long recording on a small machine could fail or crowd out other work, which is a normal use (a long meeting).
-- **Why:** clustering compares every embedding of the recording with every other, so the engines are built to see the whole file.
-- **Mitigation:** none needed until step 2 ships; the feature is opt-in.
-- **Next step:** the maintainer's decision 5 in the evaluation: a duration cap with a typed refusal for `0.3.0`, or windowed diarization with labels linked across windows; then a measured bound in the adapter's tests and a memory row in the resource profiles.
-- **Owner:** `0.3.0` (speaker labels, step 2). **Issue:** [#108](https://github.com/smormah/vsift/issues/108). **Status:** open. **Review:** pending.
+- **What:** the engine diarizes the stretch it is given at once: it keeps its audio and every speaker embedding in memory until it clusters. Measured on a hosted Ubuntu runner (16 GB, two threads per model) on real speech repeated to length (run 39567789710): with the automatic count 620 MiB at 30 minutes, 1.0 GiB at one hour, 2.0 GiB at two and 3.1 GiB at three; with a given count about half. Time grows linearly, at about a twelfth of real time. The maintainer decided on 2026-10-21 on a duration cap with a typed refusal, about two hours if an 8 GB machine allows; it is two hours (`MAX_DIARIZATION_MICROS`). A longer range is refused with `RESOURCE_LIMIT` and a remediation naming `--from` and `--to`; segments outside the range heard are reported as `not_diarized`. `S1` of one part need not be `S1` of another.
+- **Evidence:** [`speaker-labels-evaluation.md`](speaker-labels-evaluation.md) section 6.4; `a_range_longer_than_the_cap_is_refused_with_the_cap` and `segments_outside_the_diarized_audio_are_not_diarized` (the application's and the domain's `speakers` tests).
+- **Impact: medium by the rubric:** a meeting longer than two hours is common enough, and its two halves get unlinked labels.
+- **Why:** clustering compares every embedding of the stretch with every other, so the engine is built to see the whole stretch; linking labels across windows needs embeddings VSift does not keep (no voiceprints, ADR 0031).
+- **Mitigation:** label the part that matters; name the labels of each part with `transcript name-speaker`.
+- **Next step:** measure on a machine with 8 GB of memory (LOKI or a hosted runner with a memory limit) that two hours fit beside a desktop's own use; windowed diarization with linked labels is a later design question.
+- **Owner:** `0.3.0` (speaker labels). **Issue:** [#108](https://github.com/smormah/vsift/issues/108). **Status:** open. **Review:** pending.
 
 ### L-206
 
 **Speaker-label accuracy rests on synthetic voices and one real two-person call whose reference was read from its transcript, not heard (`0.3.0`, speaker labels, 2026-10-21).**
 
 - **What:** the evaluation's exact truth comes from five Kokoro conversations (one to three synthetic voices, 45 to 75 s); the only real recording with a reference is RM06 (two men on a space-to-ground link, and a controller's closing nine seconds), labelled by reading who asks and who answers, at segment precision, with two stretches left unscored. No accented, crosstalk-heavy, many-speaker or mixed-gender real recording has a reference, and RM09's speaker count is unknown.
-- **Evidence:** [`speaker-labels-evaluation.md`](speaker-labels-evaluation.md) section 5; `tools/p16_speakers_rm06_reference.json`.
-- **Impact: medium by the rubric:** an accuracy statement for speaker labels would lean on this evidence, and real meetings are more varied than it.
+- **Evidence:** [`speaker-labels-evaluation.md`](speaker-labels-evaluation.md) section 5; `tools/p16_speakers_rm06_reference.json`; the hosted end-to-end test `p16_speakers_e2e` on the synthetic two-voice call.
+- **Impact: medium by the rubric:** the accuracy statement leans on this evidence, and real meetings are more varied than it.
 - **Why:** the real-media set was chosen for transcription and screens; only RM06 is a conversation of a few people.
-- **Mitigation:** the labelling marks a segment "no confident speaker" when no one voice holds it, and labels are presented as provisional.
-- **Next step:** a person listens to RM06 to confirm the reference (or corrects it), and one more real conversation of two or three people with different voices joins the test-media release before the `0.3.0` cut (decision 7 in the evaluation).
+- **Mitigation:** the labelling marks a segment "no confident speaker" when no one voice holds it, and every label is provisional.
+- **Next step (the maintainer's decision of 2026-10-21):** the maintainer listens to RM06 to confirm its reference, and a second public-domain recording of two or three people with different voices joins the test-media release (proposed: NASA's in-flight interview of Expedition 70 with KAKE-TV, two astronauts, a woman and a man, and the station's interviewer); a reference for it, then a hosted run.
 - **Owner:** `0.3.0` (speaker labels). **Issue:** [#108](https://github.com/smormah/vsift/issues/108). **Status:** open. **Review:** pending.
 
 ### L-207
 
 **Two similar voices are heard as one speaker, and the labels then name that one speaker with confidence for both (`0.3.0`, speaker labels, 2026-10-21).**
 
-- **What:** on the synthetic call `SPK2-FF` (two similar American female voices) every engine evaluated found one speaker (or two that do not follow the voices), and the proposed labelling rule then gave 100% of segments a speaker with 28.6% of them wrong: a merge is invisible to a rule that only checks that one label holds each segment. On RM06 the automatic settings also added short extra labels (four or five found for three voices).
-- **Evidence:** [`speaker-labels-evaluation.md`](speaker-labels-evaluation.md) sections 6.1 and 6.2; runs 39518020351 and 39527538316.
-- **Impact: medium by the rubric:** once speaker labels ship, an agent could attribute one person's words to another in a normal recording (two colleagues with similar voices), with nothing in the output to say so.
+- **What:** on the synthetic call `SPK2-FF` (two similar American female voices) every engine evaluated found one speaker (or two that do not follow the voices), and the labelling rule then gave 100% of segments a speaker with 28.6% of them wrong: a merge is invisible to a rule that only checks that one label holds each segment. On RM06 the automatic count also added short extra labels (five found for three voices).
+- **Evidence:** [`speaker-labels-evaluation.md`](speaker-labels-evaluation.md) sections 6.1 and 6.2; runs 39518020351, 39527538316 and 39567789710.
+- **Impact: medium by the rubric:** an agent could attribute one person's words to another in a normal recording (two colleagues with similar voices).
 - **Why:** the embeddings of two similar voices are close enough to cluster together; no engine's confidence separates that case.
-- **Mitigation:** none needed until step 2 ships; then labels are provisional ("S2, by voice"), the verified names are the only identity, and a user who knows the count can give it (it does not cure this case).
-- **Next step:** the maintainer's decision 6 in the evaluation (what the labelling promises), and the accuracy statement in `cli-v1.md` and the guide naming this case.
-- **Owner:** `0.3.0` (speaker labels, step 2). **Issue:** [#108](https://github.com/smormah/vsift/issues/108). **Status:** open. **Review:** pending.
+- **Mitigation (the maintainer's decision of 2026-10-21):** every label is presented as provisional ("S2, by voice"); the user's verified names are the only identity; the fixed statement every answer with labels carries (`speakers.statement`, `cli-v1.md`, the guide's speaker-labels page) says that two similar voices can share one label. A user who knows the count can give it (it does not cure this case).
+- **Next step:** watch the real recordings of L-206 for merges; a per-label confidence an answer could show is a later design question.
+- **Owner:** `0.3.0` (speaker labels). **Issue:** [#108](https://github.com/smormah/vsift/issues/108). **Status:** open. **Review:** pending.
 
 ## Review workflow
 
