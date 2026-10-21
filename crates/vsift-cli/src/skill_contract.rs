@@ -104,13 +104,15 @@ const NEVER: [&str; 6] = [
 ];
 
 /// Commands the skill runs only on the user's explicit instruction.
-const EXPLICIT: [&str; 6] = [
+const EXPLICIT: [&str; 7] = [
     "setup.configure",
     "setup.configure-model",
     "session.renew",
     "session.retain",
     "session.clean",
     "job.cancel",
+    // A verified name is the user's own statement (ADR 0031).
+    "transcript.name-speaker",
 ];
 
 /// Read-only forms of `explicit` commands that the skill may run freely: the

@@ -29,6 +29,8 @@
 - [vsift transcript](#vsift-transcript): Read or revise timestamped transcript evidence
 - [vsift transcript get](#vsift-transcript-get): Read timestamped text from a bounded range
 - [vsift transcript retranscribe](#vsift-transcript-retranscribe): Transcribe the session's speech locally with whisper.cpp into a new revision: the whole video, or one range of it
+- [vsift transcript speakers](#vsift-transcript-speakers): Label a transcript revision's segments by voice (S1, S2, ...) with the speaker-diarization engine
+- [vsift transcript name-speaker](#vsift-transcript-name-speaker): Record, or clear, the user's verified name for a speaker label
 - [vsift search](#vsift-search): Search timestamped transcript evidence
 - [vsift candidates](#vsift-candidates): Page through visual evidence candidates
 - [vsift frame](#vsift-frame): Extract or navigate source-grounded frames
@@ -974,6 +976,8 @@ Usage: vsift transcript [OPTIONS] <COMMAND>
 Commands:
   get           Read timestamped text from a bounded range
   retranscribe  Transcribe the session's speech locally with whisper.cpp into a new revision: the whole video, or one range of it
+  speakers      Label a transcript revision's segments by voice (S1, S2, ...) with the speaker-diarization engine
+  name-speaker  Record, or clear, the user's verified name for a speaker label
 
 Options:
       --json
@@ -1114,6 +1118,121 @@ Options:
           Print help (see a summary with '-h')
 ```
 
+## vsift transcript speakers
+
+Label a transcript revision's segments by voice (S1, S2, ...) with the speaker-diarization engine.
+
+```text
+Label a transcript revision's segments by voice (S1, S2, ...) with the speaker-diarization engine.
+
+Labels are provisional: a label groups segments heard in one voice; it is not who the person is, and two similar voices can share one. A segment in which two people speak is not split. Segments no voice clearly holds have no confident speaker. transcript get and search then show the labels.
+
+Usage: vsift transcript speakers [OPTIONS] <SESSION>
+
+Arguments:
+  <SESSION>
+          Session whose transcript is labelled
+
+Options:
+      --json
+          Emit one versioned JSON terminal result
+
+      --revision <REVISION>
+          Revision to label (a `trv_` identity); defaults to the newest
+
+      --events <EVENTS>
+          Emit versioned evidence, progress and terminal records as JSON Lines
+
+          Possible values:
+          - jsonl: One bounded JSON object per line
+
+      --from <FROM>
+          Inclusive source-timeline start in microseconds; requires --to. Omit both to hear the whole video, at most two hours
+
+      --session-root <SESSION_ROOT>
+          For operators who run a worker host; an agent leaves it out. Explicit private disposable-session root; defaults to the per-user cache
+
+      --to <TO>
+          Exclusive source-timeline end in microseconds; requires --from
+
+      --host-isolation <HOST_ISOLATION>
+          For operators who run a worker host; an agent leaves it out. Isolation to run under; strict-linux is attested before any work
+
+          Possible values:
+          - process-only: Per-process containment only; no strict boundary is claimed
+          - strict-linux: The strict Linux worker boundary: accepted only when the kernel attests a cgroup v2 with CPU, memory and process limits, a read-only root and no network but loopback; otherwise `ISOLATION_UNAVAILABLE` before any work
+
+          [default: process-only]
+
+      --speakers <SPEAKERS>
+          How many people speak, if the user knows it (1 to 16); passed to the engine as given. Omit it to let the engine decide
+
+      --diarizer <PATH>
+          The speaker-diarization tool (sherpa-onnx-offline-speaker-diarization); defaults to the managed install, then the filtered PATH
+
+      --segmentation-model <PATH>
+          The pyannote segmentation 3.0 model file; defaults to the managed install
+
+      --embedding-model <PATH>
+          The `NeMo` `TitaNet` small embedding model file; defaults to the managed install
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
+## vsift transcript name-speaker
+
+Record, or clear, the user's verified name for a speaker label.
+
+```text
+Record, or clear, the user's verified name for a speaker label.
+
+The name is the user's own statement, shown beside the label; `VSift` never infers a name from a voice or the screen. It writes a new speaker record of the same labels, so earlier answers stay as they were.
+
+Usage: vsift transcript name-speaker [OPTIONS] --label <LABEL> <SESSION>
+
+Arguments:
+  <SESSION>
+          Session whose speaker labels are named
+
+Options:
+      --json
+          Emit one versioned JSON terminal result
+
+      --label <LABEL>
+          The label to name, such as S2
+
+      --events <EVENTS>
+          Emit versioned evidence, progress and terminal records as JSON Lines
+
+          Possible values:
+          - jsonl: One bounded JSON object per line
+
+      --name <NAME>
+          The name the user verified (1 to 128 bytes), kept exactly as given
+
+      --clear
+          Remove the label's name instead
+
+      --session-root <SESSION_ROOT>
+          For operators who run a worker host; an agent leaves it out. Explicit private disposable-session root; defaults to the per-user cache
+
+      --host-isolation <HOST_ISOLATION>
+          For operators who run a worker host; an agent leaves it out. Isolation to run under; strict-linux is attested before any work
+
+          Possible values:
+          - process-only: Per-process containment only; no strict boundary is claimed
+          - strict-linux: The strict Linux worker boundary: accepted only when the kernel attests a cgroup v2 with CPU, memory and process limits, a read-only root and no network but loopback; otherwise `ISOLATION_UNAVAILABLE` before any work
+
+          [default: process-only]
+
+      --revision <REVISION>
+          Revision whose newest speaker record is named; defaults to the newest
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
 ## vsift search
 
 Search timestamped transcript evidence.
@@ -1168,6 +1287,9 @@ Options:
 
       --revision <REVISION>
           Revision to search (a `trv_` identity); defaults to the newest
+
+      --speaker <SPEAKER>
+          Search only the segments of one speaker: a label such as S2, or a name the user recorded for one. Needs the revision's speaker labels (transcript speakers); segments with no confident speaker are not searched
 
       --view <VIEW>
           Which answer to give. `brief` keeps each found segment's ids, times and `display_text` (and `carried_from` on a carried segment) and leaves out what the segments of a revision repeat; those members stay once in the revision block, which is the same in both views, so each segment is smaller. Read the full view for everything else
