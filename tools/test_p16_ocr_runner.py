@@ -157,9 +157,9 @@ class DiagnoseTests(unittest.TestCase):
         own = [Recognition("f.png", [Line("Invoice 4401", (10, 10, 90, 20), 0.9),
                                      Line("Extra", (600, 600, 40, 20), 0.9)], 0.1)]
         tally = runner.diagnose(reference, own)
-        self.assertEqual(tally["outcomes"], {"near": 1, "unpaired_overlapping": 1, "runner_only": 1})
+        self.assertEqual(tally["outcomes"], {"near": 1, "unpaired_missed": 1, "runner_only": 1})
         self.assertEqual(tally["width_ratio"]["differing"], {"0.8-0.95": 1})
-        self.assertEqual(tally["reference_confidence"]["unpaired_overlapping/low"], 1)
+        self.assertEqual(tally["reference_confidence"]["unpaired_missed/low"], 1)
 
 
 class EndToEndTests(unittest.TestCase):
