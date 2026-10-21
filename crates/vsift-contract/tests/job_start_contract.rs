@@ -249,3 +249,22 @@ fn a_recognition_progress_event_carries_media_time() -> TestResult {
     assert!(without.get("media").is_none());
     Ok(())
 }
+
+/// The progress event holds its own copy of the media-progress definition, so
+/// that it validates without retrieving another schema; the copy is the job
+/// data's, member for member.
+#[test]
+fn the_progress_event_and_the_job_data_define_media_progress_alike() -> TestResult {
+    let job = load("job-data.schema.json")?;
+    let event = load("progress-event.schema.json")?;
+    assert_eq!(
+        job["$defs"]["media_progress"],
+        event["$defs"]["media_progress"]
+    );
+    assert_eq!(
+        event["properties"]["media"]["$ref"],
+        "#/$defs/media_progress"
+    );
+    Ok(())
+}
+
