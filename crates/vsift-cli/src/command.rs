@@ -1417,7 +1417,7 @@ mod unix_tests {
         match parsed.command {
             Some(Command::Ingest(arguments)) => {
                 assert_eq!(
-                    arguments.source.as_deref().map(|path| path.as_os_str()),
+                    arguments.source.as_deref().map(std::path::Path::as_os_str),
                     Some(source.as_os_str())
                 );
             }
