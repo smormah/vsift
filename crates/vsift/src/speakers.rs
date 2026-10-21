@@ -205,8 +205,12 @@ impl Engine {
             .map_err(EngineError::Storage)?;
         let existing = store.read_speaker_record(&request.session, None, now)?;
         let number = next_number(existing.records)?;
+        // The run holds the engine's threads of the root's capacity; that reservation
+        // also covers the audio decoding before it, so the decodes take none of their
+        // own (as a transcription's do).
+        let speech_media = media.within_caller_admission();
         let adapter = FfmpegSherpaDiarizer::new(
-            &media,
+            &speech_media,
             &bound,
             &description,
             MediaSelection {

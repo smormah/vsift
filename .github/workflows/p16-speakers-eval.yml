@@ -9,10 +9,13 @@ name: P16 speakers evaluation
 # stages reaches a VSift build or the maintainer's machine; the job keeps numbers, the
 # synthetic fixtures and RM06's labelled transcript (public domain) only.
 #
-# Triggers: a pull request that changes the evaluation runs it (its own files only);
-# a manual dispatch runs it on any branch once the workflow is on `main`
-# (`gh workflow run p16-speakers-eval.yml --ref <branch>`). Advisory evidence: no
-# release gate reads it. It cannot publish anything: no write scope, no secret.
+# Triggers: a pull request that changes the evaluation runs its tooling tests (a
+# pull request's path filter sees the whole pull request, so every later push would
+# run the 90-minute evaluation again); the evaluation itself runs on a manual
+# dispatch (`gh workflow run p16-speakers-eval.yml --ref <branch>`). The recorded
+# runs (39518020351, 39527538316, 39567789710) ran on pull-request events before
+# this rule. Advisory evidence: no release gate reads it. It cannot publish
+# anything: no write scope, no secret.
 on:
   pull_request:
     branches:
@@ -61,6 +64,7 @@ jobs:
   fixtures:
     name: Synthetic conversations (Kokoro)
     needs: tooling-tests
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     permissions:
@@ -236,6 +240,7 @@ jobs:
   scaling:
     name: Time and memory against length (ubuntu-24.04)
     needs: tooling-tests
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
     timeout-minutes: 330
     permissions:
