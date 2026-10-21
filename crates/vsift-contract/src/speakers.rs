@@ -272,9 +272,12 @@ pub fn speakers_response(
         speakers: SpeakersData::new(page.record),
         records_in_session: page.records,
     };
-    let response =
-        OperationResponse::complete(command.identifier(), &data)?.with_lifecycle(lifecycle);
-    Ok(with_unlabelled_warning(response, Some(page.record)))
+    let response = if page.record.coverage().is_complete() {
+        OperationResponse::complete(command.identifier(), &data)?
+    } else {
+        OperationResponse::partial(command.identifier(), &data, UNLABELLED_SEGMENTS_WARNING)?
+    };
+    Ok(response.with_lifecycle(lifecycle))
 }
 
 /// Adds [`UNLABELLED_SEGMENTS_WARNING`] when `record` leaves a segment unlabelled.

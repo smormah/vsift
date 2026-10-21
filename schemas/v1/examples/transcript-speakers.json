@@ -1,0 +1,79 @@
+{
+  "command": "transcript.speakers",
+  "coverage": null,
+  "data": {
+    "records_in_session": 1,
+    "session_id": "ses_0123456789abcdef0123456789abcdef",
+    "speakers": {
+      "coverage": {
+        "labelled_ranges": [
+          {
+            "from_us": 1000000,
+            "to_us": 4000000
+          },
+          {
+            "from_us": 5000000,
+            "to_us": 9000000
+          }
+        ],
+        "labelled_segments": 2,
+        "no_confident_speaker_ranges": [
+          {
+            "from_us": 9500000,
+            "to_us": 11500000
+          }
+        ],
+        "no_confident_speaker_segments": 1,
+        "not_diarized_ranges": [],
+        "not_diarized_segments": 0,
+        "ranges_truncated": false
+      },
+      "diarized_range": {
+        "from_us": 0,
+        "to_us": 12000000
+      },
+      "engine": {
+        "embedding_model_sha256": "ad4a1802485d8b34c722d2a9d04249662f2ece5d28a7a039063ca22f515a789e",
+        "executable_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+        "name": "sherpa-onnx",
+        "segmentation_model_sha256": "220ad67ca923bef2fa91f2390c786097bf305bceb5e261d4af67b38e938e1079"
+      },
+      "given_speaker_count": 2,
+      "labelling": "speaker-labels-v1",
+      "labels": [
+        {
+          "display": "S1, by voice",
+          "first_heard_us": 400000,
+          "label": "S1",
+          "labelled_segments": 1,
+          "speech_us": 4200000,
+          "verified_name": null
+        },
+        {
+          "display": "S2, by voice",
+          "first_heard_us": 4500000,
+          "label": "S2",
+          "labelled_segments": 1,
+          "speech_us": 4900000,
+          "verified_name": null
+        }
+      ],
+      "precision": "segment",
+      "record_id": "spk_ecd96c4d70048ebe195bf1bc1aa68f99",
+      "record_number": 1,
+      "revision_id": "trv_663ae41bbedc740b651fe61999d395b0",
+      "statement": "Speaker labels are provisional: S1, S2 and so on group transcript segments the diarization engine heard in one voice, numbered by when each voice is first heard. A label is not who the person is, two similar voices can share one label, and a segment in which two people speak is not split: the labels have segment precision. A verified name is the user's own statement, never inferred from a voice or the screen."
+    }
+  },
+  "error": null,
+  "lifecycle": {
+    "expires_at": "2026-09-25T00:00:00Z",
+    "mode": "ephemeral"
+  },
+  "operation_id": null,
+  "schema_version": "1",
+  "status": "partial",
+  "warnings": [
+    "Some segments have no confident speaker (the engine heard little speech there, or more than one voice), and some may lie outside the audio the engine heard; speakers.coverage lists them. A search filtered by speaker does not find those segments."
+  ]
+}

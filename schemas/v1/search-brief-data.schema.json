@@ -38,6 +38,10 @@
       "items": { "$ref": "search-data.schema.json#/$defs/hit" }
     },
     "next_cursor": { "$ref": "search-data.schema.json#/$defs/next_cursor" },
-    "transcript_coverage": { "$ref": "search-data.schema.json#/$defs/transcript_coverage" }
+    "transcript_coverage": { "$ref": "search-data.schema.json#/$defs/transcript_coverage" },
+    "speakers": {
+      "description": "The revision's newest speaker record (0.3.0, ADR 0031), present only when the revision has one: see speakers.schema.json. Each item then carries its speaker_label.",
+      "$ref": "speakers.schema.json#/$defs/speakers"
+    }
   }
 }
