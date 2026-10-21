@@ -34,6 +34,10 @@ use crate::{
     spans::{Span, SpanSet, join_nearest, merged, overlaps_any, span, subtract, to_ranges},
 };
 
+mod settled;
+
+pub use settled::{MAX_EARLY_AUDIO_MICROS, SettledTranscript, settled_merge};
+
 /// Sample rate of the speech PCM contract: mono signed 16-bit at 16 kHz.
 pub const SPEECH_SAMPLE_RATE: u32 = 16_000;
 /// Longest chunk window a plan may request; the PCM source bounds one chunk to it.
