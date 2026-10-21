@@ -220,6 +220,9 @@ fn policy_fields(hasher: &mut Sha256, policy: &ReviewedCompatibilityPolicy) {
         inference_deadline_seconds,
         audio_sample_rate_hz,
         audio_channels,
+        // The optional components' banners say nothing about the media
+        // tools' verification.
+        optional_banners: _,
     } = policy;
     number(hasher, fixture.bytes());
     field(hasher, &fixture.sha256());

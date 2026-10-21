@@ -23,8 +23,9 @@ use vsift_domain::MAX_MANAGED_KEY_BYTES;
 use vsift_domain::{ArtifactIntegrity, ManagedComponent, is_canonical_managed_key};
 
 use crate::{
-    ArchiveInventoryBounds, ArtifactTransferError, GzipTarInventoryError, ReviewedArchiveAlias,
-    ReviewedArchiveFile, TarInventoryError, XzTarInventoryError,
+    ArchiveInventoryBounds, ArtifactTransferError, Bzip2TarInventoryError, GzipTarInventoryError,
+    ReviewedArchiveAlias, ReviewedArchiveFile, TarInventoryError, XzTarInventoryError,
+    ZipInventoryError,
     archive_inventory::safe_archive_path,
     bounded_tar_inventory::safe_staging_name,
     fault_point::{
@@ -35,8 +36,8 @@ use crate::{
         PrivateRootError, open_private_root_with_creation, validate_private_root,
         validate_same_held_directory,
     },
-    stage_gzip_tar_selected_files, stage_tar_selected_files, stage_xz_tar_selected_files,
-    transfer_verified,
+    stage_bzip2_tar_selected_files, stage_gzip_tar_selected_files, stage_tar_selected_files,
+    stage_xz_tar_selected_files, stage_zip_selected_files, transfer_verified,
     transient_rename::{
         TRANSIENT_RENAME_WAIT, is_transient_rename_refusal, rename_retrying_transient_refusals,
     },
@@ -104,6 +105,19 @@ pub enum ReviewedPayloadArchive {
         /// Highest reviewed uncompressed tar-stream byte count.
         max_tar_bytes: u64,
     },
+    /// bzip2/tar with independent compressed and expanded limits (ADR 0032).
+    Bzip2Tar {
+        /// Highest reviewed bzip2 input byte count.
+        max_compressed_bytes: u64,
+        /// Highest reviewed uncompressed tar-stream byte count.
+        max_tar_bytes: u64,
+    },
+    /// A zip of the exact reviewed size, read by the bounded zip reader
+    /// (ADR 0032); its expanded bytes are bounded by the inventory bounds.
+    Zip {
+        /// The archive's exact reviewed size.
+        archive_bytes: u64,
+    },
 }
 
 /// Typed reason reviewed archive bytes cannot become an unactivated payload.
@@ -121,6 +135,10 @@ pub enum ManagedPayloadError {
     GzipTar(GzipTarInventoryError),
     /// XZ/tar inventory, selection or staging failed.
     XzTar(XzTarInventoryError),
+    /// bzip2/tar inventory, selection or staging failed.
+    Bzip2Tar(Bzip2TarInventoryError),
+    /// Zip inventory, selection or staging failed.
+    Zip(ZipInventoryError),
 }
 
 /// One reviewed regular-file alias, flattened to a selected file's exact bytes.
@@ -259,6 +277,8 @@ impl fmt::Display for ManagedPayloadError {
             Self::Tar(_) => "reviewed tar payload could not be staged",
             Self::GzipTar(_) => "reviewed gzip/tar payload could not be staged",
             Self::XzTar(_) => "reviewed XZ/tar payload could not be staged",
+            Self::Bzip2Tar(_) => "reviewed bzip2/tar payload could not be staged",
+            Self::Zip(_) => "reviewed zip payload could not be staged",
         })
     }
 }
@@ -1089,6 +1109,26 @@ impl StagedManagedArtifact {
                 &payload,
             )
             .map_err(ManagedPayloadError::XzTar),
+            ReviewedPayloadArchive::Bzip2Tar {
+                max_compressed_bytes,
+                max_tar_bytes,
+            } => stage_bzip2_tar_selected_files(
+                artifact,
+                max_compressed_bytes,
+                max_tar_bytes,
+                bounds,
+                reviewed_aliases,
+                selected_files,
+                &payload,
+            )
+            .map_err(ManagedPayloadError::Bzip2Tar),
+            ReviewedPayloadArchive::Zip { archive_bytes } if reviewed_aliases.is_empty() => {
+                stage_zip_selected_files(artifact, archive_bytes, bounds, selected_files, &payload)
+                    .map_err(ManagedPayloadError::Zip)
+            }
+            // A zip is never reviewed with link headers: the reader refuses
+            // every link it meets.
+            ReviewedPayloadArchive::Zip { .. } => Err(ManagedPayloadError::InvalidReview),
         };
         if let Err(error) = result {
             self.remove_empty_payload(payload)
@@ -1943,6 +1983,10 @@ pub enum ManagedRuntimeRole {
     WhisperCli,
     /// The speech-recognition model file.
     SpeechModel,
+    /// The managed Deno executable, the optional yt-dlp's JavaScript runtime.
+    Deno,
+    /// The optional yt-dlp executable.
+    YtDlp,
 }
 
 /// Why a staged artifact could not become an owned smoke candidate.

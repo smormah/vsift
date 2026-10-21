@@ -1164,11 +1164,21 @@ The data member of the complete or partial terminal result that ends a search --
 | `local_asr.verification.check` | null \| "preparation" \| "fixture_probe" \| "planning" \| "recognizer_identity" \| "audio_extraction" \| "recognition" \| "output_validation" \| "assembly" \| "transcript" \| "budget" | yes |  |
 | `local_asr.verification.reason` | null \| "fixture_integrity" \| "workspace" \| "fixture_media" \| "unexpected_transcript" \| "budget_exceeded" \| "invalid_range" \| "too_many_chunks" \| "model_changed" \| "model_unavailable" \| "unpinned_model" \| "cancelled" \| "deadline" \| "busy" \| "resource_limit" \| "audio_unavailable" \| "provider_failed" \| "unparseable_output" \| "malformed_output" \| "abnormal_termination" \| "io" \| "invalid_run" | yes |  |
 | `managed_updates` | array of object | no | Added in 0.2.3, absent from earlier builds: each managed version this check opened (the managed tier of a tool no per-call or configured path selects, or the managed model when none is configured) that the current catalogue lists as superseded, in component order; empty when none. selected_version is what the managed store selects now, reviewed_version the version this release pins; reason security_fixes means the pin carries fixes for security defects of the selected version, maintenance any other reason. next_step says what to do: review setup plan and accept it with setup install, which installs and selects the pin. A version the catalogue does not list (a later release's, say) is never reported. |
-| `managed_updates[].component` | "ffmpeg_ffprobe" \| "whisper_cli" \| "whisper_model" | yes |  |
+| `managed_updates[].component` | "ffmpeg_ffprobe" \| "whisper_cli" \| "whisper_model" \| "js_runtime_deno" \| "yt_dlp" | yes |  |
 | `managed_updates[].selected_version` | string | yes | 1 to 64 characters |
 | `managed_updates[].reviewed_version` | string | yes | 1 to 64 characters |
 | `managed_updates[].reason` | "security_fixes" \| "maintenance" | yes |  |
 | `managed_updates[].next_step` | string | yes | at most 240 characters |
+| `optional_components` | array of object | no | Added in 0.3.0 (ADR 0032), absent from earlier builds: every optional component of this release, in plan order, apart from the local-video status above, which they never change. installed when every managed component of it is installed, selected and verified (components gives their versions); not_installed when it is offered on this host and not every part of it is installed (add_command is the vsift command that plans it, on the desktop profile; ask the operator first); unavailable when no managed version of it is offered on this host.; at most 8 items |
+| `optional_components[].name` | "online_links" | yes | This list may gain values in a later release (ADR 0032, cli-v1.md): treat it as open, and skip a value you do not know. |
+| `optional_components[].status` | "installed" \| "not_installed" \| "unavailable" | yes |  |
+| `optional_components[].components` | array of object | yes | at most 8 items |
+| `optional_components[].components[].component` | "js_runtime_deno" \| "yt_dlp" | yes | This list may gain values in a later release (ADR 0032, cli-v1.md): treat it as open, and skip a value you do not know. |
+| `optional_components[].components[].version` | string | yes | 1 to 64 characters |
+| `optional_components[].next_step` | string | yes | 1 to 512 characters |
+| `optional_components[].add_command` | object or null | yes |  |
+| `optional_components[].add_command.executable` | constant "vsift" | yes |  |
+| `optional_components[].add_command.arguments` | array of string | yes | 1 to 16 items; each: 1 to 64 characters |
 | `dependencies` | array of object | yes | exactly 3 items |
 | `dependencies[].dependency` | "ffmpeg" \| "ffprobe" \| "whisper" | yes |  |
 | `dependencies[].capability` | "media_processing" \| "transcription" | yes |  |
@@ -1194,7 +1204,7 @@ The data of a setup.install result (P13, ADR 0023): every component of the accep
 | `catalogue_revision` | string or null | yes | pattern `^[a-z0-9][a-z0-9._-]{0,127}$` |
 | `source` | "publisher" \| "artifact_directory" | yes |  |
 | `components` | array of object | yes | at most 3 items |
-| `components[].component` | "ffmpeg_ffprobe" \| "whisper_cli" \| "whisper_model" | yes |  |
+| `components[].component` | "ffmpeg_ffprobe" \| "whisper_cli" \| "whisper_model" \| "js_runtime_deno" \| "yt_dlp" | yes |  |
 | `components[].version` | string | yes | pattern `^[a-z0-9][a-z0-9._-]{0,63}$` |
 | `components[].status` | "activated" \| "already_current" \| "failed" | yes |  |
 | `components[].step` | "download" \| "import" \| "stage" \| "smoke" \| "activate" or null | yes |  |
@@ -1208,10 +1218,29 @@ The data of a setup.install result (P13, ADR 0023): every component of the accep
 | `cleanup.stale_stages_removed` | integer | yes | at least 0 |
 | `cleanup.stale_stages_retained` | integer | yes | at least 0 |
 | `cleanup.versions` | array of object | yes | at most 1024 items |
-| `cleanup.versions[].component` | "ffmpeg_ffprobe" \| "whisper_cli" \| "whisper_model" | yes |  |
+| `cleanup.versions[].component` | "ffmpeg_ffprobe" \| "whisper_cli" \| "whisper_model" \| "js_runtime_deno" \| "yt_dlp" | yes |  |
 | `cleanup.versions[].version` | string | yes | pattern `^[a-z0-9]([a-z0-9._-]{0,62}[a-z0-9])?$` |
 | `cleanup.versions[].status` | "removed" \| "already_absent" \| "in_use" \| "selected" \| "unexpected_content" \| "storage_failure" | yes |  |
 | `next_step` | string | yes | 1 to 512 characters |
+| `core` | "ready" \| "failed" | no | Added in 0.3.0 (ADR 0032), present only when the plan includes an optional component: ready when every core component is installed and selected, failed otherwise. A result whose core is ready is a success whatever happened to its optional components: complete when they are all installed, partial (exit 0, with the warning optional_component_not_installed) when one is not. |
+| `optional_components` | array of object | no | Added in 0.3.0 (ADR 0032), present only when the plan includes an optional component: the managed components of every included optional component, in install order, installed after the core and each optional component as a part of its own. A core failure leaves them blocked; their own failure never fails the core or another optional component.; 1 to 16 items |
+| `optional_components[].component` | "ffmpeg_ffprobe" \| "whisper_cli" \| "whisper_model" \| "js_runtime_deno" \| "yt_dlp" | yes |  |
+| `optional_components[].version` | string | yes | pattern `^[a-z0-9][a-z0-9._-]{0,63}$` |
+| `optional_components[].status` | "activated" \| "already_current" \| "failed" | yes |  |
+| `optional_components[].step` | "download" \| "import" \| "stage" \| "smoke" \| "activate" or null | yes |  |
+| `optional_components[].reason` | "tls" \| "redirect_policy" \| "http_status" \| "proxy_auth" \| "offline" \| "size" \| "artifact_missing" \| "artifact_not_regular_file" \| "digest_mismatch" \| "size_mismatch" \| "review_mismatch" \| "storage" \| "missing_executable" \| "wrong_architecture" \| "not_executable" \| "banner_mismatch" \| "output_over_bound" \| "deadline_exceeded" \| "unexpected_extra_file" \| "changed_content" \| "provider_failed" \| "fixture_mismatch" \| "preparation" \| "invalid_request" \| "cancelled" \| "blocked" or null | yes |  |
+| `optional_components[].failure_code` | "DOWNLOAD_FAILED" \| "INVALID_ARGUMENT" \| "INTEGRITY_FAILURE" \| "STORAGE_IO" \| "MISSING_CAPABILITY" \| "CANCELLED" or null | yes |  |
+| `optional_components[].smoke_check` | "layout" \| "banner" \| "media_fixture" \| "speech_fixture" \| "recheck" or null | yes |  |
+| `optional_components[].missing_shared_library` | string | no | Present only when a reviewed program could not start because the loader could not find a shared library: its plain file name (for example libgomp.so.1), read from the program's own error output and validated; the reason is still provider_failed. Absent otherwise, and in every earlier release.; at most 64 characters; pattern `^lib[A-Za-z0-9_+-]{1,58}\.so(\.[0-9]{1,6}){0,3}$` |
+| `optional_components[].stage` | "discarded" \| "retained" or null | yes |  |
+| `optional_components[].retention_reason` | "ownership_unproved" \| "unexpected_content" \| "storage_failure" or null | yes |  |
+| `optional_groups` | array of object | no | Added in 0.3.0 (ADR 0032), present only when the plan includes an optional component: one summary per included optional component, in plan order. installed when every managed component of it is installed and selected; not_installed with the managed component that failed, its typed reason and failure code (reason blocked and the others null when a core failure stopped the installation first), and fixed advice that says local investigation is not affected.; 1 to 8 items |
+| `optional_groups[].name` | "online_links" | yes | This list may gain values in a later release (ADR 0032, cli-v1.md): treat it as open, and skip a value you do not know. |
+| `optional_groups[].status` | "installed" \| "not_installed" | yes |  |
+| `optional_groups[].component` | "ffmpeg_ffprobe" \| "whisper_cli" \| "whisper_model" \| "js_runtime_deno" \| "yt_dlp" or null | yes |  |
+| `optional_groups[].reason` | "tls" \| "redirect_policy" \| "http_status" \| "proxy_auth" \| "offline" \| "size" \| "artifact_missing" \| "artifact_not_regular_file" \| "digest_mismatch" \| "size_mismatch" \| "review_mismatch" \| "storage" \| "missing_executable" \| "wrong_architecture" \| "not_executable" \| "banner_mismatch" \| "output_over_bound" \| "deadline_exceeded" \| "unexpected_extra_file" \| "changed_content" \| "provider_failed" \| "fixture_mismatch" \| "preparation" \| "invalid_request" \| "cancelled" \| "blocked" or null | yes |  |
+| `optional_groups[].failure_code` | "DOWNLOAD_FAILED" \| "INVALID_ARGUMENT" \| "INTEGRITY_FAILURE" \| "STORAGE_IO" \| "MISSING_CAPABILITY" \| "CANCELLED" or null | yes |  |
+| `optional_groups[].next_step` | string | yes | 1 to 640 characters |
 
 This schema also holds 5 conditional rules (a member that is required, or fixed, when another has a given value); read [the schema](../../../schemas/v1/setup-install.schema.json) for them.
 
@@ -1219,14 +1248,14 @@ This schema also holds 5 conditional rules (a member that is required, or fixed,
 
 **VSift setup list data v1** ([the schema](../../../schemas/v1/setup-list.schema.json))
 
-The data of a setup.list result (P13 PR 6, ADR 0023): every managed component, always in the order ffmpeg_ffprobe, whisper_cli, whisper_model, with its selection, its selected and previous versions and every published version with whether it verifies. Read-only: listing creates and changes nothing. managed_install says whether managed installation can install on this host (catalogue_accepted only on Ubuntu 24.04 x86-64); managed_folder is absent when this user has no managed folder, and every component then has no versions. selection is verified when commands use the selected version (it verifies and its manifest is the one the selection names), unverified when they do not (the version is missing, does not verify or is being removed), unreadable when the selection cannot be read, and none when nothing is selected. A version's state is verified, removal_interrupted (a removal stopped; setup remove finishes it) or unverified with a fault. stale_stages and retained_stages count stages abandoned by earlier installations that setup remove --stale-stages would remove or would keep for the user. Every string is a closed identifier, a managed version key or fixed prose; no path.
+The data of a setup.list result (P13 PR 6, ADR 0023): every core managed component, always in the order ffmpeg_ffprobe, whisper_cli, whisper_model, then (since 0.3.0, #409) each optional component the store holds a version or a selection of, js_runtime_deno then yt_dlp, with its selection, its selected and previous versions and every published version with whether it verifies. Read-only: listing creates and changes nothing. managed_install says whether managed installation can install on this host (catalogue_accepted only on Ubuntu 24.04 x86-64); managed_folder is absent when this user has no managed folder, and every component then has no versions. selection is verified when commands use the selected version (it verifies and its manifest is the one the selection names), unverified when they do not (the version is missing, does not verify or is being removed), unreadable when the selection cannot be read, and none when nothing is selected. A version's state is verified, removal_interrupted (a removal stopped; setup remove finishes it) or unverified with a fault. stale_stages and retained_stages count stages abandoned by earlier installations that setup remove --stale-stages would remove or would keep for the user. Every string is a closed identifier, a managed version key or fixed prose; no path.
 
 | Member | Type | Required | Notes |
 | --- | --- | --- | --- |
 | `managed_install` | "catalogue_accepted" \| "unavailable_target" \| "unavailable_catalogue_expired" \| "unavailable_catalogue_invalid" | yes |  |
 | `managed_folder` | "present" \| "absent" | yes |  |
-| `components` | array of object | yes | exactly 3 items |
-| `components[].component` | "ffmpeg_ffprobe" \| "whisper_cli" \| "whisper_model" | yes |  |
+| `components` | array of object | yes | 3 to 5 items |
+| `components[].component` | "ffmpeg_ffprobe" \| "whisper_cli" \| "whisper_model" \| "js_runtime_deno" \| "yt_dlp" | yes |  |
 | `components[].selection` | "none" \| "verified" \| "unverified" \| "unreadable" | yes |  |
 | `components[].selected_version` | string or null | yes | pattern `^[a-z0-9]([a-z0-9._-]{0,62}[a-z0-9])?$` |
 | `components[].previous_version` | string or null | yes | pattern `^[a-z0-9]([a-z0-9._-]{0,62}[a-z0-9])?$` |
@@ -1301,15 +1330,15 @@ A read-only setup plan. Its intent (profile, target, managed_install, catalogue,
 | `data.plan_digest` | string or null | yes | pattern `^[0-9a-f]{64}$` |
 | `data.install_needed` | boolean | yes |  |
 | `data.actions` | array of object | yes | at most 3 items |
-| `data.actions[].id` | "install-ffmpeg_ffprobe" \| "install-whisper_cli" \| "install-whisper_model" | yes |  |
+| `data.actions[].id` | "install-ffmpeg_ffprobe" \| "install-whisper_cli" \| "install-whisper_model" \| "install-js_runtime_deno" \| "install-yt_dlp" | yes | This list may gain values in a later release (ADR 0032, cli-v1.md): treat it as open, and skip a value you do not know. |
 | `data.actions[].state` | "pending" \| "current" | yes |  |
-| `data.actions[].component` | "ffmpeg_ffprobe" \| "whisper_cli" \| "whisper_model" | yes |  |
+| `data.actions[].component` | "ffmpeg_ffprobe" \| "whisper_cli" \| "whisper_model" \| "js_runtime_deno" \| "yt_dlp" | yes | This list may gain values in a later release (ADR 0032, cli-v1.md): treat it as open, and skip a value you do not know. |
 | `data.actions[].version` | string | yes | 1 to 128 characters |
 | `data.actions[].publisher` | string | yes | 1 to 128 characters |
 | `data.actions[].source_url` | string | yes | at most 512 characters; pattern `^https://` |
 | `data.actions[].bytes` | integer | yes | 1 to 1073741824 |
 | `data.actions[].sha256` | string | yes | pattern `^[0-9a-f]{64}$` |
-| `data.actions[].format` | "tar_xz" \| "tar_gz" \| "raw_file" | yes |  |
+| `data.actions[].format` | "tar_xz" \| "tar_gz" \| "raw_file" \| "zip" \| "tar_bz2" | yes | This list may gain values in a later release (ADR 0032, cli-v1.md): treat it as open, and skip a value you do not know. |
 | `data.actions[].archive_limits` | object or null | yes |  |
 | `data.actions[].archive_limits.max_stream_bytes` | integer | yes | 1 to 1073741824 |
 | `data.actions[].archive_limits.entries` | integer | yes | 1 to 4096 |
@@ -1339,6 +1368,61 @@ A read-only setup plan. Its intent (profile, target, managed_install, catalogue,
 | `data.actions[].files[].bytes` | integer | yes | 1 to 1073741824 |
 | `data.actions[].files[].sha256` | string | yes | pattern `^[0-9a-f]{64}$` |
 | `data.actions[].files[].mode` | "owner_executable" \| "owner_read_write" | yes |  |
+| `data.optional_components` | array of object | no | Added in 0.3.0 (ADR 0032), absent from earlier plans: each optional component the plan includes, offers or cannot offer here, named as setup plan --include takes it. A desktop plan lists every optional component; a worker plan only an included one. status included: its actions are part of this plan and its digest and are installed after the core, as a part of their own; a failure of theirs never fails the core or another optional component. not_included: offered and left out; add_command is the vsift command that makes the plan with it. unavailable: no managed version on this host. summary is one plain sentence to relay to the operator; download_bytes is null when unavailable; terms_notice is null when none applies.; at most 8 items |
+| `data.optional_components[].name` | "online_links" | yes | This list may gain values in a later release (ADR 0032, cli-v1.md): treat it as open, and skip a value you do not know. |
+| `data.optional_components[].status` | "included" \| "not_included" \| "unavailable" | yes |  |
+| `data.optional_components[].installs` | array of "ffmpeg_ffprobe" \| "whisper_cli" \| "whisper_model" \| "js_runtime_deno" \| "yt_dlp" | yes | 1 to 8 items |
+| `data.optional_components[].summary` | string | yes | 1 to 512 characters |
+| `data.optional_components[].purpose` | string | yes | 1 to 512 characters |
+| `data.optional_components[].download_bytes` | integer or null | yes | at least 1 |
+| `data.optional_components[].licences` | array of object | yes | at most 8 items |
+| `data.optional_components[].licences[].component` | "ffmpeg_ffprobe" \| "whisper_cli" \| "whisper_model" \| "js_runtime_deno" \| "yt_dlp" | yes | This list may gain values in a later release (ADR 0032, cli-v1.md): treat it as open, and skip a value you do not know. |
+| `data.optional_components[].licences[].licence` | string | yes | 1 to 256 characters |
+| `data.optional_components[].terms_notice` | string or null | yes | 1 to 512 characters |
+| `data.optional_components[].add_command` | object or null | yes |  |
+| `data.optional_components[].add_command.executable` | constant "vsift" | yes |  |
+| `data.optional_components[].add_command.arguments` | array of string | yes | 1 to 16 items; each: 1 to 64 characters |
+| `data.optional_components[].actions` | array of object | yes | at most 8 items |
+| `data.optional_components[].actions[].id` | "install-ffmpeg_ffprobe" \| "install-whisper_cli" \| "install-whisper_model" \| "install-js_runtime_deno" \| "install-yt_dlp" | yes | This list may gain values in a later release (ADR 0032, cli-v1.md): treat it as open, and skip a value you do not know. |
+| `data.optional_components[].actions[].state` | "pending" \| "current" | yes |  |
+| `data.optional_components[].actions[].component` | "ffmpeg_ffprobe" \| "whisper_cli" \| "whisper_model" \| "js_runtime_deno" \| "yt_dlp" | yes | This list may gain values in a later release (ADR 0032, cli-v1.md): treat it as open, and skip a value you do not know. |
+| `data.optional_components[].actions[].version` | string | yes | 1 to 128 characters |
+| `data.optional_components[].actions[].publisher` | string | yes | 1 to 128 characters |
+| `data.optional_components[].actions[].source_url` | string | yes | at most 512 characters; pattern `^https://` |
+| `data.optional_components[].actions[].bytes` | integer | yes | 1 to 1073741824 |
+| `data.optional_components[].actions[].sha256` | string | yes | pattern `^[0-9a-f]{64}$` |
+| `data.optional_components[].actions[].format` | "tar_xz" \| "tar_gz" \| "raw_file" \| "zip" \| "tar_bz2" | yes | This list may gain values in a later release (ADR 0032, cli-v1.md): treat it as open, and skip a value you do not know. |
+| `data.optional_components[].actions[].archive_limits` | object or null | yes |  |
+| `data.optional_components[].actions[].archive_limits.max_stream_bytes` | integer | yes | 1 to 1073741824 |
+| `data.optional_components[].actions[].archive_limits.entries` | integer | yes | 1 to 4096 |
+| `data.optional_components[].actions[].archive_limits.expanded_bytes` | integer | yes | 1 to 1073741824 |
+| `data.optional_components[].actions[].selected_files` | array of object | yes | at most 32 items |
+| `data.optional_components[].actions[].selected_files[].archive_path` | string | yes | 1 to 256 characters |
+| `data.optional_components[].actions[].selected_files[].runtime_name` | string | yes | 1 to 128 characters |
+| `data.optional_components[].actions[].selected_files[].bytes` | integer | yes | 1 to 1073741824 |
+| `data.optional_components[].actions[].selected_files[].sha256` | string | yes | pattern `^[0-9a-f]{64}$` |
+| `data.optional_components[].actions[].archive_links` | array of object | yes | at most 32 items |
+| `data.optional_components[].actions[].archive_links[].archive_path` | string | yes | 1 to 256 characters |
+| `data.optional_components[].actions[].archive_links[].target` | string | yes | 1 to 128 characters |
+| `data.optional_components[].actions[].runtime_copies` | array of object | yes | at most 32 items |
+| `data.optional_components[].actions[].runtime_copies[].name` | string | yes | 1 to 128 characters |
+| `data.optional_components[].actions[].runtime_copies[].source_selected` | string | yes | 1 to 128 characters |
+| `data.optional_components[].actions[].licence` | string | yes | 1 to 256 characters |
+| `data.optional_components[].actions[].notice_url` | string | yes | at most 512 characters; pattern `^https://` |
+| `data.optional_components[].actions[].source_code_url` | string | yes | at most 512 characters; pattern `^https://` |
+| `data.optional_components[].actions[].trust_limit` | string | yes | 1 to 512 characters |
+| `data.optional_components[].actions[].licence_scope` | constant "disclosure_not_legal_clearance" | yes |  |
+| `data.optional_components[].actions[].destination` | constant "private_per_user_managed_runtime" | yes |  |
+| `data.optional_components[].actions[].permissions` | constant "private_user_only" | yes |  |
+| `data.optional_components[].actions[].change` | constant "planned_download_verify_extract_smoke_activate" | yes |  |
+| `data.optional_components[].actions[].required_authority` | constant "user" | yes |  |
+| `data.optional_components[].actions[].files` | array of object | yes | 1 to 32 items |
+| `data.optional_components[].actions[].files[].name` | string | yes | 1 to 128 characters |
+| `data.optional_components[].actions[].files[].bytes` | integer | yes | 1 to 1073741824 |
+| `data.optional_components[].actions[].files[].sha256` | string | yes | pattern `^[0-9a-f]{64}$` |
+| `data.optional_components[].actions[].files[].mode` | "owner_executable" \| "owner_read_write" | yes |  |
+| `data.optional_components[].next_step` | string | yes | 1 to 512 characters |
+| `data.operator_decision_required` | string or null | no | Added in 0.3.0 (ADR 0032): when the plan offers or includes an optional component, the instruction to whoever runs setup to tell the operator about it and ask before accepting the plan; null otherwise.; 1 to 1024 characters |
 | `data.dependencies` | array of object | yes | exactly 3 items |
 | `data.dependencies[].dependency` | "ffmpeg" \| "ffprobe" \| "whisper" | yes |  |
 | `data.dependencies[].status` | "available" \| "missing" \| "unhealthy" \| "timed_out" | yes |  |
@@ -1361,10 +1445,10 @@ The data of a setup.remove result (P13 PR 6, ADR 0023), successful or failed. ta
 | Member | Type | Required | Notes |
 | --- | --- | --- | --- |
 | `target` | "version" \| "component" \| "stale_stages" | yes |  |
-| `component` | "ffmpeg_ffprobe" \| "whisper_cli" \| "whisper_model" or null | yes |  |
+| `component` | "ffmpeg_ffprobe" \| "whisper_cli" \| "whisper_model" \| "js_runtime_deno" \| "yt_dlp" or null | yes |  |
 | `deselected` | boolean | yes |  |
 | `versions` | array of object | yes | at most 1024 items |
-| `versions[].component` | "ffmpeg_ffprobe" \| "whisper_cli" \| "whisper_model" | yes |  |
+| `versions[].component` | "ffmpeg_ffprobe" \| "whisper_cli" \| "whisper_model" \| "js_runtime_deno" \| "yt_dlp" | yes |  |
 | `versions[].version` | string | yes | pattern `^[a-z0-9]([a-z0-9._-]{0,62}[a-z0-9])?$` |
 | `versions[].status` | "removed" \| "already_absent" \| "in_use" \| "selected" \| "unexpected_content" \| "storage_failure" | yes |  |
 | `stages` | object or null | yes |  |
@@ -1388,7 +1472,7 @@ The data of a complete setup.repair result (P13 PR 6; ADR 0007 and ADR 0023: rep
 | `status` | "nothing_installed" \| "healthy" \| "needs_repair" | yes |  |
 | `findings` | array of object | yes | at most 4096 items |
 | `findings[].kind` | "selection_unreadable" \| "selected_version_unverified" \| "version_unverified" \| "removal_interrupted" \| "stale_stages" \| "stages_need_manual_removal" \| "interrupted_selection" \| "unexpected_entries" | yes |  |
-| `findings[].component` | "ffmpeg_ffprobe" \| "whisper_cli" \| "whisper_model" or null | yes |  |
+| `findings[].component` | "ffmpeg_ffprobe" \| "whisper_cli" \| "whisper_model" \| "js_runtime_deno" \| "yt_dlp" or null | yes |  |
 | `findings[].version` | string or null | yes | pattern `^[a-z0-9]([a-z0-9._-]{0,62}[a-z0-9])?$` |
 | `findings[].count` | integer or null | yes | at least 1 |
 | `findings[].fault` | "missing_manifest" \| "invalid_manifest" \| "changed_content" \| "unexpected_entry" \| "unreadable" or null | yes |  |
@@ -1409,7 +1493,7 @@ The data of a complete setup.rollback result (P13 PR 6, ADR 0023). Without --ver
 
 | Member | Type | Required | Notes |
 | --- | --- | --- | --- |
-| `component` | "ffmpeg_ffprobe" \| "whisper_cli" \| "whisper_model" | yes |  |
+| `component` | "ffmpeg_ffprobe" \| "whisper_cli" \| "whisper_model" \| "js_runtime_deno" \| "yt_dlp" | yes |  |
 | `status` | "rolled_back" \| "already_selected" | yes |  |
 | `selected_version` | string | yes | pattern `^[a-z0-9]([a-z0-9._-]{0,62}[a-z0-9])?$` |
 | `replaced_version` | string or null | yes | pattern `^[a-z0-9]([a-z0-9._-]{0,62}[a-z0-9])?$` |

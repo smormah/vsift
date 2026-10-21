@@ -14,8 +14,8 @@
 use std::{path::PathBuf, time::Duration};
 
 use vsift_application::{
-    ManagedInstallReport, ManagedPlanAvailability, PlanAcceptanceError, ProgressSink,
-    install_managed_components,
+    ManagedInstallReport, ManagedPlanAvailability, ManagedSetupAction, PlanAcceptanceError,
+    ProgressSink, install_managed_plan,
 };
 use vsift_contract::{InstallSource, SavedSetupPlan};
 use vsift_domain::{FailureCode, ProgressUpdate, RuntimeDependency};
@@ -117,6 +117,10 @@ impl Engine {
             .saved_plan
             .profile()
             .map_err(EngineError::SavedPlanRejected)?;
+        let include = request
+            .saved_plan
+            .included_optional()
+            .map_err(EngineError::SavedPlanRejected)?;
         let source = match &request.artifact_directory {
             Some(directory) if directory.is_absolute() => {
                 ManagedArtifactSource::Directory(directory.clone())
@@ -143,6 +147,7 @@ impl Engine {
         let current = self
             .plan_setup_intent(SetupPlanRequest {
                 profile,
+                include,
                 probe_timeout: request.probe_timeout,
             })
             .await?;
@@ -172,7 +177,8 @@ impl Engine {
             &guard,
             &sink,
         );
-        let report = install_managed_components(&installer, &plan.actions, &sink).await;
+        let optional: Vec<ManagedSetupAction> = plan.optional_actions().cloned().collect();
+        let report = install_managed_plan(&installer, &plan.actions, &optional, &sink).await;
         drop(installer);
         let versions = clean_up_after_install(&store, &guard);
         drop(guard);

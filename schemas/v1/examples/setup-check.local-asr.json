@@ -14,5 +14,6 @@
     "model": { "status": "known_pinned", "profile": "base" },
     "verification": { "status": "verified", "source": "ran_now", "not_run_reason": null, "check": null, "reason": null }
   },
-  "managed_updates": []
+  "managed_updates": [],
+  "optional_components": []
 }

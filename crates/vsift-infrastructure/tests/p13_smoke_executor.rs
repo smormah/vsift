@@ -33,8 +33,8 @@ use vsift_application::{
     CompatibilitySmokeCheck as Check, CompatibilitySmokeFailure,
     CompatibilitySmokeFailureReason as Reason, LocalAsrVerification, LocalAsrVerificationFailure,
     LocalAsrVerifier, MediaToolCheck, MediaToolFailure, MediaToolVerification, MediaToolVerifier,
-    ReviewedCompatibilityPolicy, SmokeStageOutcome, StageDisposal, StageRetentionReason,
-    smoke_before_activation,
+    ReviewedBanner, ReviewedCompatibilityPolicy, SmokeStageOutcome, StageDisposal,
+    StageRetentionReason, smoke_before_activation,
 };
 use vsift_domain::{ArtifactIntegrity, ManagedComponent, SharedLibraryName};
 use vsift_infrastructure::{
@@ -104,7 +104,7 @@ impl TestRoot {
         assert!(!root.join("versions-v1").exists());
         assert!(!root.join("current-v1").exists());
         let store = self.store()?;
-        for component in ["ffmpeg_ffprobe", "whisper_cli", "whisper_model"] {
+        for component in ManagedComponent::ALL.map(ManagedComponent::identifier) {
             assert!(store.open_selected_runtime(component)?.is_none());
         }
         Ok(())
@@ -1125,6 +1125,184 @@ fn a_candidate_that_cannot_be_prepared_is_discarded() -> TestResult {
         assert_eq!(error.stage, StageDisposal::Discarded);
         root.assert_only_marker_remains()?;
     }
+    root.assert_nothing_activated()?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// The optional online-video components (#409, ADR 0028 section 4).
+
+/// The policy with the fixture tool's banners for the optional components.
+fn optional_policy(media_deadline_seconds: u64) -> TestResult<ReviewedCompatibilityPolicy> {
+    Ok(ReviewedCompatibilityPolicy {
+        optional_banners: vec![
+            ReviewedBanner {
+                component: ManagedComponent::JsRuntimeDeno,
+                first_line_prefix: format!("deno version {FIXTURE_BUILD}"),
+            },
+            ReviewedBanner {
+                component: ManagedComponent::YtDlp,
+                first_line_prefix: format!("yt-dlp version {FIXTURE_BUILD}"),
+            },
+        ],
+        ..policy(media_deadline_seconds)?
+    })
+}
+
+/// The runtime staged as `deno-<behaviour>` and yt-dlp as
+/// `yt-dlp-<behaviour>`.
+fn stage_optional(
+    store: &ManagedArtifactStore,
+    deno: &str,
+    yt_dlp: &str,
+) -> TestResult<Vec<StagedManagedCandidate>> {
+    let deno_stem = format!("deno-{deno}");
+    let yt_dlp_stem = format!("yt-dlp-{yt_dlp}");
+    let deno_name = tool(&deno_stem);
+    let yt_dlp_name = tool(&yt_dlp_stem);
+    Ok(vec![
+        stage(
+            store,
+            ManagedComponent::JsRuntimeDeno,
+            &[executable(&deno_stem)?],
+            &[(ManagedRuntimeRole::Deno, &deno_name)],
+        )?,
+        stage(
+            store,
+            ManagedComponent::YtDlp,
+            &[executable(&yt_dlp_stem)?],
+            &[(ManagedRuntimeRole::YtDlp, &yt_dlp_name)],
+        )?,
+    ])
+}
+
+/// Both optional executables print their reviewed banner in the smoke's
+/// environment (a private temporary folder and their fixed variables; the
+/// fixture refuses to answer without them) and run no media or speech
+/// fixture; the smoke directory is gone afterwards.
+#[tokio::test]
+async fn the_optional_components_pass_their_banners_in_the_reviewed_environment() -> TestResult {
+    let root = TestRoot::new()?;
+    let store = root.store()?;
+    let candidates = stage_optional(&store, "good", "good")?;
+    let verifiers = FixedVerifiers::passing();
+    let outcome =
+        smoke_before_activation(&smoke(optional_policy(30)?, verifiers.clone()), candidates).await;
+    let SmokeStageOutcome::Passed(candidates) = outcome else {
+        return Err("good optional fixtures did not pass".into());
+    };
+    {
+        let requests = verifiers.requests();
+        assert!(requests.media.is_empty() && requests.speech.is_empty());
+    }
+    for stage in root.stages()? {
+        let leftovers: Vec<String> = fs::read_dir(&stage)?
+            .map(|entry| entry.map(|entry| entry.file_name().to_string_lossy().into_owned()))
+            .collect::<Result<_, _>>()?;
+        assert!(
+            leftovers.iter().all(|name| !name.contains("smoke")),
+            "{leftovers:?}"
+        );
+    }
+    for candidate in candidates {
+        assert_eq!(candidate.discard(), StageDisposal::Discarded);
+    }
+    root.assert_nothing_activated()?;
+    root.assert_only_marker_remains()?;
+    Ok(())
+}
+
+/// A wrong banner, a failing or hanging executable, and a policy with no
+/// reviewed banner each fail with their typed reason; both candidates are
+/// discarded and nothing is activated.
+#[tokio::test]
+async fn optional_banner_failures_are_typed() -> TestResult {
+    for (deno, yt_dlp, deadline, check, reason) in [
+        (
+            "good",
+            "badbanner",
+            30,
+            Check::Banner,
+            Reason::BannerMismatch,
+        ),
+        (
+            "badbanner",
+            "good",
+            30,
+            Check::Banner,
+            Reason::BannerMismatch,
+        ),
+        ("good", "fail", 30, Check::Banner, Reason::ProviderFailed),
+        ("good", "hang", 2, Check::Banner, Reason::DeadlineExceeded),
+    ] {
+        let root = TestRoot::new()?;
+        let store = root.store()?;
+        let candidates = stage_optional(&store, deno, yt_dlp)?;
+        let (failure, stages) = failed(
+            smoke_before_activation(
+                &smoke(optional_policy(deadline)?, FixedVerifiers::passing()),
+                candidates,
+            )
+            .await,
+        )?;
+        assert_eq!(
+            failure,
+            CompatibilitySmokeFailure { check, reason },
+            "{deno} {yt_dlp}"
+        );
+        assert_eq!(
+            stages,
+            [
+                (ManagedComponent::JsRuntimeDeno, StageDisposal::Discarded),
+                (ManagedComponent::YtDlp, StageDisposal::Discarded),
+            ]
+        );
+        root.assert_nothing_activated()?;
+        root.assert_only_marker_remains()?;
+    }
+
+    // A policy with no banner for yt-dlp: the review is at fault, not the
+    // candidate, and nothing runs.
+    let root = TestRoot::new()?;
+    let store = root.store()?;
+    let candidates = stage_optional(&store, "good", "good")?;
+    let mut policy = optional_policy(30)?;
+    policy.optional_banners.pop();
+    let (failure, _) = failed(
+        smoke_before_activation(&smoke(policy, FixedVerifiers::passing()), candidates).await,
+    )?;
+    assert_eq!(
+        failure,
+        CompatibilitySmokeFailure {
+            check: Check::Layout,
+            reason: Reason::Preparation,
+        }
+    );
+    Ok(())
+}
+
+/// A one-file build that leaves what it unpacked in its temporary folder
+/// fails the recheck: the folder is the smoke directory, which must be
+/// empty afterwards. The leftover is kept and reported, not deleted blind.
+#[tokio::test]
+async fn an_optional_tool_that_leaves_its_temporary_files_fails_the_recheck() -> TestResult {
+    let root = TestRoot::new()?;
+    let store = root.store()?;
+    let candidates = stage_optional(&store, "good", "templeft")?;
+    let (failure, _) = failed(
+        smoke_before_activation(
+            &smoke(optional_policy(30)?, FixedVerifiers::passing()),
+            candidates,
+        )
+        .await,
+    )?;
+    assert_eq!(
+        failure,
+        CompatibilitySmokeFailure {
+            check: Check::Recheck,
+            reason: Reason::UnexpectedExtraFile,
+        }
+    );
     root.assert_nothing_activated()?;
     Ok(())
 }

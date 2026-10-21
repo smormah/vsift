@@ -1408,3 +1408,12 @@ the additive `managed_updates` array and in its text, with the step (`setup plan
 not name is never called older. The list holds whisper.cpp v1.9.2 (`security_fixes`); FFmpeg gains its entry with its re-pin.
 What the report does not cover is [L-183](../planning/known-limits.md#l-183). A hosted run upgrades a real `0.2.2` managed install
 (`p13_managed_upgrade_real`, run [39178431571](https://github.com/smormah/vsift/actions/runs/39178431571)).
+
+
+## Note, 2026-10-21 (ADR 0032: managed installation on every platform)
+
+Status: **this ADR stays Accepted; decision E is superseded.** [ADR 0032](0032-managed-installs-on-every-platform-and-the-engine-release-workflow.md)
+extends managed installation to Windows x86-64 and macOS arm64 beside Ubuntu 24.04 x86-64, adds optional components
+(`setup plan --include <name>`, installed after the core as parts of their own, a failure of one leaving the result
+`partial`), and readers for zip and bzip2/tar archives. Section 3's transaction, guard, smoke and lookup are
+unchanged for the core components; the refresh rule of the note of 2026-10-04 applies to every new pin.

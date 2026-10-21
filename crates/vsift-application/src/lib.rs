@@ -43,7 +43,8 @@ pub use identifiers::{IdentifierGenerationError, IdentifierSource};
 pub use install::{
     ActivationFailure, ComponentInstallFailure, ComponentInstallOutcome, ComponentInstallReport,
     DownloadFailureReason, InstallFailureReason, InstallStep, ManagedComponentInstaller,
-    ManagedInstallReport, StageFailure, install_managed_components,
+    ManagedInstallReport, OptionalGroupOutcome, StageFailure, install_managed_components,
+    install_managed_plan,
 };
 pub use job::{
     CancelOutcome, CancelRequest, CheckpointRead, CheckpointStoreError, ChunkCheckpoints,
@@ -80,11 +81,13 @@ pub use provisioning::{
     AcceptedManagedArtifact, AcceptedManagedCatalogue, CompatibilitySmoke, CompatibilitySmokeCheck,
     CompatibilitySmokeFailure, CompatibilitySmokeFailureReason, CompatibilitySmokeVerdict,
     ManagedPlanAvailability, ManagedPlanObservation, ManagedSetupAction, ManagedSetupPlan,
-    ManagedUpdate, ObservedModel, PlanAcceptanceError, PlannedSupply, ReviewedArchiveLimits,
-    ReviewedArchiveLink, ReviewedArchiveSelection, ReviewedCompatibilityPolicy,
-    ReviewedManagedFile, ReviewedRuntimeCopy, SetupDependencyDisposition, SetupModelDisposition,
-    SetupProfile, SetupSelectionState, SmokeStageOutcome, StageDisposal, StageRetentionReason,
-    StagedManagedComponent, SupersededManagedVersion, SupersessionReason, plan_managed_setup,
+    ManagedUpdate, ObservedModel, OptionalCapability, OptionalComponent,
+    OptionalComponentDisposition, OptionalComponentPlan, OptionalComponentSet, PlanAcceptanceError,
+    PlannedSupply, ReviewedArchiveLimits, ReviewedArchiveLink, ReviewedArchiveSelection,
+    ReviewedBanner, ReviewedCompatibilityPolicy, ReviewedManagedFile, ReviewedRuntimeCopy,
+    SetupDependencyDisposition, SetupModelDisposition, SetupProfile, SetupSelectionState,
+    SmokeStageOutcome, StageDisposal, StageRetentionReason, StagedManagedComponent,
+    SupersededManagedVersion, SupersessionReason, plan_managed_setup, plan_managed_setup_including,
     smoke_before_activation,
 };
 pub use storage::{
