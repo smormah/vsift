@@ -120,7 +120,7 @@ These files are the machine-readable public v1 boundary:
   (ADR 0033) a `prepare` job (`kind`) adds `request.mode` and `streams`, each stream
   with its own job, state, chunks, `published_until_us` and `media` (`$defs.media_progress`:
   `done_us`, `total_us`, `elapsed_ms`, `speed`, `percent` and an `estimate` with its
-  `basis`), which `progress-event.schema.json` reuses for its `media` member;
+  `basis`), which `progress-event.schema.json` holds an equal copy of for its `media` member;
 - `job-resume-data.schema.json` â the `data` member of a complete `job.resume` result
   (P10 PR 3): `job` (job data after the run) and `outcome` (exactly the
   `transcript.retranscribe` data);
