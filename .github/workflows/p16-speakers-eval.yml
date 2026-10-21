@@ -230,6 +230,67 @@ jobs:
           if-no-files-found: warn
           retention-days: 90
 
+  # The duration cap of one diarization (the maintainer's decision of 2026-10-21: about
+  # two hours if an 8 GB machine allows): the recommended engine's time and peak memory
+  # on RM09 and RM06 repeated to 30, 60, 120 and 180 minutes.
+  scaling:
+    name: Time and memory against length (ubuntu-24.04)
+    needs: tooling-tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 330
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Set up the pinned Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          package-manager-cache: false
+
+      - name: Stage pinned FFmpeg, whisper.cpp v1.9.5 and both pinned models
+        run: python tools/p07_local_asr_tools.py "${{ runner.temp }}/vsift-tools"
+
+      - name: Fetch RM06 and RM09 from the test-media release, held to their pins
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/real-media"
+          node tools/p14-campaigns/real-media.cjs cross-check "$RUNNER_TEMP/real-media" --item RM06 --item RM09
+          python tools/p16_speakers_eval.py media --media "$RUNNER_TEMP/real-media" \
+            --ffmpeg "$(command -v ffmpeg)" --output-dir "$RUNNER_TEMP/p16-media" --item RM06 --item RM09
+
+      - name: Stage the pinned engines and models
+        run: python tools/p16_speakers_eval.py stage --dest "$RUNNER_TEMP/p16-tools"
+
+      - name: Measure time and peak memory against length
+        run: |
+          set -euo pipefail
+          grep -m1 "model name" /proc/cpuinfo
+          free -m
+          mkdir -p "$RUNNER_TEMP/p16-scaling"
+          python tools/p16_speakers_eval.py scaling --tools "$RUNNER_TEMP/p16-tools" \
+            --source "$RUNNER_TEMP/p16-media/RM09.wav" --source "$RUNNER_TEMP/p16-media/RM06.wav" \
+            --minutes 30 --minutes 60 --minutes 120 --minutes 180 \
+            --output "$RUNNER_TEMP/p16-scaling/scaling.json"
+
+      - name: Keep the measurement
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: p16-speakers-scaling
+          path: ${{ runner.temp }}/p16-scaling
+          if-no-files-found: warn
+          retention-days: 90
+
   platforms:
     name: Official builds on ${{ matrix.os }}
     needs: fixtures

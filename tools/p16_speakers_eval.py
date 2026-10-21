@@ -1078,6 +1078,66 @@ def transcribe(whisper_cli: Path, model: Path, wav: Path, work: Path) -> list[di
 NETWORK_CALL = re.compile(r"\b(?:socket|connect)\([^)]*?\b(AF_[A-Z0-9]+)")
 
 
+SCALING_TIMEOUT_S = 5_400
+
+
+def long_wav(sources: Sequence[Path], minutes: int, destination: Path) -> int:
+    """Repeat the sources' 16 kHz PCM end to end until the WAV is ``minutes`` long."""
+    target = minutes * 60 * ENGINE_RATE
+    with wave.open(str(destination), "wb") as sink:
+        sink.setnchannels(1)
+        sink.setsampwidth(2)
+        sink.setframerate(ENGINE_RATE)
+        written = 0
+        while written < target:
+            for source in sources:
+                with wave.open(str(source), "rb") as reader:
+                    if (reader.getnchannels(), reader.getframerate(), reader.getsampwidth()) != (1, ENGINE_RATE, 2):
+                        raise EvaluationError(f"{source.name} is not 16 kHz mono 16-bit PCM")
+                    while written < target:
+                        block = reader.readframes(min(ENGINE_RATE * 60, target - written))
+                        if not block:
+                            break
+                        sink.writeframes(block)
+                        written += len(block) // 2
+                if written >= target:
+                    break
+    return written
+
+
+def scaling(tools: Path, sources: Sequence[Path], minutes: Sequence[int], output: Path) -> list[dict]:
+    """The recommended configuration's time and peak memory as the recording grows.
+
+    Sets the duration cap of one diarization (the maintainer's decision of 2026-10-21:
+    about two hours if an 8 GB machine allows). Real speech, repeated: the clustering
+    sees as many embeddings as a real recording of that length would give it.
+    """
+    inventory = recipe.load_json(tools / "inventory.json")
+    binary = tools / inventory["engines"]["sherpa-onnx"]["binary"]
+    rows = []
+    for length in minutes:
+        wav = output.parent / f"scaling-{length}.wav"
+        frames = long_wav(sources, length, wav)
+        for name, clustering in (("auto-0.9", "--clustering.cluster-threshold=0.9"),
+                                 ("known-2", "--clustering.num-clusters=2")):
+            argv = [str(binary),
+                    f"--segmentation.pyannote-model={tools / 'models' / SEGMENTATION['pyannote-3.0'].name}",
+                    f"--embedding.model={tools / 'models' / EMBEDDINGS['titanet-small'].name}",
+                    f"--segmentation.num-threads={THREADS}", f"--embedding.num-threads={THREADS}", clustering, str(wav)]
+            measured = run_measured(argv, env=engine_environment(tools, binary), timeout_s=SCALING_TIMEOUT_S)
+            turns = parse_sherpa(measured.stdout) if measured.returncode == 0 else []
+            row = {"minutes": length, "config": name, "exit": measured.returncode,
+                   "wall_s": round(measured.wall_s, 1), "rtf": round(measured.wall_s / (frames / ENGINE_RATE), 4),
+                   "cpu_s": None if measured.cpu_s is None else round(measured.cpu_s, 1),
+                   "peak_rss_mib": None if measured.peak_rss_mib is None else round(measured.peak_rss_mib, 1),
+                   "found_speakers": len({turn["speaker"] for turn in turns}), "turns": len(turns)}
+            rows.append(row)
+            print(json.dumps(row), flush=True)
+        wav.unlink()
+    output.write_text(json.dumps(rows, indent=2) + "\n", encoding="utf-8")
+    return rows
+
+
 def network_check(tools: Path, wav: Path, output: Path) -> dict:
     """Trace the default sherpa-onnx and polyvoice runs for socket and connect calls (Linux).
 
@@ -1302,6 +1362,11 @@ def main(argv: Sequence[str] | None = None) -> None:
     run.add_argument("--output-dir", type=Path, required=True)
     run.add_argument("--everything", action="store_true")
     run.add_argument("--rm06-reference", type=Path)
+    grow = commands.add_parser("scaling", help="time and peak memory of the recommended engine as length grows")
+    grow.add_argument("--tools", type=Path, required=True)
+    grow.add_argument("--source", type=Path, action="append", required=True)
+    grow.add_argument("--minutes", type=int, action="append", required=True)
+    grow.add_argument("--output", type=Path, required=True)
     network = commands.add_parser("network-check", help="trace the default engines for network calls (Linux)")
     network.add_argument("--tools", type=Path, required=True)
     network.add_argument("--wav", type=Path, required=True)
@@ -1330,6 +1395,8 @@ def main(argv: Sequence[str] | None = None) -> None:
             print(labelled.read_text(encoding="utf-8"))
             for path in sorted((arguments.output_dir / "hypotheses").glob("RM06.*.json")):
                 print(f"RM06-TURNS {path.stem[len('RM06.'):]} {path.read_text(encoding='utf-8')}")
+    elif arguments.command == "scaling":
+        scaling(arguments.tools, arguments.source, arguments.minutes, arguments.output)
     elif arguments.command == "network-check":
         results = network_check(arguments.tools, arguments.wav, arguments.output)
         print(json.dumps(results, indent=2))

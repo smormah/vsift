@@ -293,6 +293,26 @@ class RunnerTests(unittest.TestCase):
         if hasattr(os, "wait4"):
             self.assertIsNotNone(measured.peak_rss_mib)
 
+    def test_a_long_wav_repeats_its_sources_to_the_exact_length(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            sources = []
+            for index, seconds in enumerate((7, 11)):
+                path = Path(folder) / f"source{index}.wav"
+                with wave.open(str(path), "wb") as sink:
+                    sink.setnchannels(1)
+                    sink.setsampwidth(2)
+                    sink.setframerate(16_000)
+                    sink.writeframes(bytes([index + 1, 0]) * (seconds * 16_000))
+                sources.append(path)
+            destination = Path(folder) / "long.wav"
+            self.assertEqual(evaluation.long_wav(sources, 1, destination), 60 * 16_000)
+            with wave.open(str(destination), "rb") as reader:
+                self.assertEqual(reader.getnframes(), 60 * 16_000)
+                data = reader.readframes(reader.getnframes())
+            self.assertEqual(data[0], 1)
+            self.assertEqual(data[2 * 7 * 16_000], 2)
+            self.assertEqual(data[2 * 18 * 16_000], 1)
+
     def test_engines_are_staged_only_on_a_hosted_runner(self) -> None:
         with mock.patch.dict(os.environ, {"GITHUB_ACTIONS": ""}):
             with tempfile.TemporaryDirectory() as folder, self.assertRaises(evaluation.EvaluationError):
