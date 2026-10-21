@@ -210,11 +210,16 @@ def stage(out: Path, runner: Path, platform: str, get: Callable[[str, int], byte
 
 
 def run_runner(executable: Path, arguments: list[str], timeout: int = RUN_TIMEOUT_S) -> tuple[int, str, float]:
-    """The runner with an explicit argument list, an empty environment, and no shell."""
+    """The runner with an explicit argument list, an empty environment, and no shell.
+
+    Its standard error (fixed diagnostics, never recognised text) goes to the log.
+    """
     started = time.monotonic()
     environment = {"SystemRoot": os.environ["SystemRoot"]} if "SystemRoot" in os.environ else {}
     completed = subprocess.run([str(executable), *arguments], capture_output=True, text=True, timeout=timeout,
                                check=False, env=environment, encoding="utf-8")
+    if completed.stderr.strip():
+        print(completed.stderr.strip()[-2000:], file=sys.stderr)
     return completed.returncode, completed.stdout, time.monotonic() - started
 
 

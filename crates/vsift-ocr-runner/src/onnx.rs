@@ -57,7 +57,14 @@ impl Backend for OnnxRuntime {
 
     fn runtime_version(&self, layout: &Layout) -> Result<String, RunnerFailure> {
         load(layout)?;
-        version_from_build_info(ort::info()).ok_or(RunnerFailure::RuntimeUnavailable)
+        let info = ort::info();
+        version_from_build_info(info).ok_or_else(|| {
+            diagnose(&format!(
+                "the runtime's build information names no release: {}",
+                info.chars().take(240).collect::<String>()
+            ));
+            RunnerFailure::RuntimeUnavailable
+        })
     }
 
     fn open(
@@ -85,6 +92,12 @@ impl Backend for OnnxRuntime {
     }
 }
 
+/// One line on standard error for whoever runs the runner by hand or reads a
+/// hosted log; `VSift` keeps standard error bounded and never shows it as data.
+fn diagnose(message: &str) {
+    eprintln!("vsift-ocr-runner: {message}");
+}
+
 /// Loads the library once; later calls find it loaded.
 fn load(layout: &Layout) -> Result<(), RunnerFailure> {
     let library = layout.runtime.join(RUNTIME_LIBRARY);
@@ -92,7 +105,10 @@ fn load(layout: &Layout) -> Result<(), RunnerFailure> {
         return Err(RunnerFailure::RuntimeUnavailable);
     }
     let _applied = ort::init_from(&library)
-        .map_err(|_| RunnerFailure::RuntimeUnavailable)?
+        .map_err(|error| {
+            diagnose(&format!("ONNX Runtime could not be loaded: {error}"));
+            RunnerFailure::RuntimeUnavailable
+        })?
         .with_name("vsift-ocr-runner")
         .commit();
     Ok(())
@@ -120,7 +136,10 @@ fn session(path: &Path, threads: NonZeroU16) -> Result<Session, RunnerFailure> {
         })
         .and_then(|builder| builder.with_inter_threads(1).map_err(Into::into))
         .and_then(|mut builder| builder.commit_from_file(path))
-        .map_err(|_| RunnerFailure::ModelUnavailable)
+        .map_err(|error| {
+            diagnose(&format!("a model could not be loaded: {error}"));
+            RunnerFailure::ModelUnavailable
+        })
 }
 
 impl Inference for OnnxSession {
