@@ -158,11 +158,11 @@ fn turn(start: u64, end: u64, speaker: u16) -> Built<DiarizedTurn> {
 }
 
 /// S1 holds the first segment, S2 the second; the third is half each.
-fn record(revision: &TranscriptRevision, named: bool, number: u32) -> Built<SpeakerRecord> {
+fn record(revision: &TranscriptRevision, with_name: bool, number: u32) -> Built<SpeakerRecord> {
     let session = SessionId::parse(SESSION)?;
     let number = NonZeroU32::new(number).ok_or("zero number")?;
     let mut names = BTreeMap::new();
-    if named {
+    if with_name {
         names.insert(
             SpeakerTag::parse("S2")?,
             VerifiedName::parse("Alice Example")?,
