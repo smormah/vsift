@@ -329,6 +329,30 @@ until then the tool is given with `--diarizer` or found on the filtered `PATH`, 
   the 30 s seams; they attach to the merged segments by time. A seam's kept duplicate copies and trimmed segments keep
   their own times, so each gets its own label by the same rule.
 
+### 10.1 The managed install's files, per platform (run 39621390749)
+
+The `flat-folder` job of `P16 speakers evaluation` stages each platform's pinned archive and the two models, lists every
+archive member with its size and SHA-256, follows the libraries the tool names as far as the archive holds them, and runs
+the tool on a three-second tone from one flat folder holding only those files, with no library path variable: the
+managed store keeps a component's files in one flat folder. It ran on all three (exit 0; the engine loaded both models
+and finished; a tone holds no speech, so the real-speech run stays `P16 speakers end to end`). The full digests and
+every member are in the run's `inventory-<platform>.json` artifacts.
+
+| File (installed name) | Ubuntu 24.04 x64 | Windows x64 | macOS 15 arm64 |
+| --- | --- | --- | --- |
+| the archive | `sherpa-onnx-v1.13.8-linux-x64-shared.tar.bz2`, 28,156,791 bytes, `c0bdb790...15c4` | `sherpa-onnx-v1.13.8-win-x64-shared-MT-Release.tar.bz2`, 24,805,859 bytes, `6dffdc71...e8df` | `sherpa-onnx-v1.13.8-osx-arm64-shared.tar.bz2`, 20,314,448 bytes, `b10e5c7e...1d56` |
+| the tool, `sherpa-onnx-offline-speaker-diarization` (`.exe`) | `bin/`, 497,136 bytes, `fbb2a4d5...ede1` | `bin/`, 651,264 bytes, `053eb31b...a72e` | `bin/`, 405,440 bytes, `e1170a93...f66f` |
+| ONNX Runtime | `lib/libonnxruntime.so`, 27,026,609 bytes, `4b3607ae...566e` | `bin/onnxruntime.dll`, 17,799,168 bytes, `7f66f939...8a25` | `lib/libonnxruntime.dylib`, 28,775,120 bytes, `3567d114...7f0b` |
+| `pyannote-segmentation-3.0.onnx` | 5,992,913 bytes, `220ad67c...1079` | same | same |
+| `nemo_en_titanet_small.onnx` | 40,257,283 bytes, `ad4a1802...789e` | same | same |
+| `speaker-models-NOTICE.txt` (the notice of ADR 0031, UTF-8, one line) | 467 bytes, `42fbaed9...7bfc` | same | same |
+
+Nothing else is needed: the tool names only ONNX Runtime among the archive's libraries (the sherpa-onnx C and C++ API
+libraries and Windows' `onnxruntime_providers_shared.dll` are not loaded on the CPU path), and the loader finds it beside
+the tool (Linux `RPATH` `$ORIGIN` first, macOS `LC_RPATH` `@loader_path` first, Windows the executable's folder). **The
+archives carry no licence file:** neither sherpa-onnx's Apache-2.0 text nor ONNX Runtime's MIT licence and third-party
+notices are in them, so the install has to ship those from a pinned source of its own.
+
 ## 11. Reproduce
 
 `gh workflow run p16-speakers-eval.yml --ref <branch>` once the workflow is on `main` (on a pull request it runs when
