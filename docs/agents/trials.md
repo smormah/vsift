@@ -950,6 +950,10 @@ The skill adds `--first <from-us>:<to-us>` when the user named a moment and says
 indexed: `freeze write` at `09a06463597f` gave the `skill` digest `f09eea124480b74d0147cd894c018647c95cdd3a35fbebc5a53b0f0198011280` (it was `3291a3ba...`) and the whole-freeze
 digest `8cd377873b4551a7ca2d67de36310352d8c089d83db94e897c8462f0fbfd6823` (it was `3f9f44fb...`); the other six components are unchanged, and the pin in `committed_freeze` moved with it.
 No batch has run under it.
+**Once more on 2026-10-21 (the fifth pull request, the queued mode; rewritten at the merge rebase too):** `references/resume.md` starts several
+recordings, or one with no rush, with `--mode queued`: `freeze write` at `2f8ab8d4e32c` gave the `skill` digest `d903e2ec8ea9f8076fe822517d3b3d0f8267669305257ccf91f02f405121814f` (it was
+`f09eea12...`) and the whole-freeze digest `54dfa5cfd6a9fd7bf98a46234550f348209c8dc41683aa80c977fedc6c7d365b` (it was `8cd37787...`); the other six components are unchanged, and the pin in
+`committed_freeze` moved with it. No batch has run under it.
 
 ## Usage capture (P14)
 
