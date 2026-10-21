@@ -168,12 +168,19 @@ impl Inference for OnnxSession {
 /// names the library by its bytes: a pinned library is its version; any other is
 /// `sha256-` and the first 16 hexadecimal digits of its digest, so a different
 /// library is always a different engine build and never claims a version.
-pub const KNOWN_RUNTIMES: &[(&str, &str)] = &[(
+pub const KNOWN_RUNTIMES: &[(&str, &str)] = &[
     // onnxruntime-linux-x64-1.31.0.tgz, lib/libonnxruntime.so.1.31.0 (hosted
     // staging of `P16 OCR runner`, run 39597504891).
-    "469849977cb60744ea160927e1a3a0643fd4c55c0aff743251c6d293402e334e",
-    "1.31.0",
-)];
+    (
+        "469849977cb60744ea160927e1a3a0643fd4c55c0aff743251c6d293402e334e",
+        "1.31.0",
+    ),
+    // onnxruntime-win-x64-1.31.0.zip, lib/onnxruntime.dll (run 39598128889).
+    (
+        "0c42dc4e278f0968fdf9ebf1b1e54a74c657a9942e70803e453c91993451cf4c",
+        "1.31.0",
+    ),
+];
 
 /// Largest runtime library the runner hashes.
 pub const MAX_RUNTIME_LIBRARY_BYTES: u64 = 256 * 1024 * 1024;

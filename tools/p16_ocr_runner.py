@@ -151,10 +151,12 @@ def archive_member(content: bytes, asset: str, name: str, limit: int = MAX_MEMBE
                 data = handle.read(limit + 1)
     else:
         with tarfile.open(fileobj=io.BytesIO(content), mode="r:gz") as archive:
-            try:
-                member = archive.getmember(name)
-            except KeyError as error:
-                raise RunnerCheckError(f"{asset} has no {name}") from error
+            # macOS's archive names its members `./<root>/...`, Linux's `<root>/...`.
+            names = set(archive.getnames())
+            found = next((candidate for candidate in (name, f"./{name}") if candidate in names), None)
+            if found is None:
+                raise RunnerCheckError(f"{asset} has no {name}")
+            member = archive.getmember(found)
             if not member.isfile() or member.size > limit:
                 raise RunnerCheckError(f"{asset}'s {name} is not a bounded regular file")
             handle = archive.extractfile(member)
@@ -418,8 +420,17 @@ def synthetic_found(truth: dict, hits_by_number: dict[str, list[dict]]) -> dict:
     return {"numbers": numbers, "found": found, "found_share": round(found / numbers, 4) if numbers else None}
 
 
-def ingest(vsift: evaluation.Vsift, video: Path) -> str:
-    return vsift("ingest", ["ingest", str(video)])["data"]["session_id"]
+# `search` needs a transcript revision (on-screen hits ride on its first page), and the
+# synthetic videos have no audio and the hosted job no recogniser, so each session is
+# opened with a supplied one-cue transcript that names none of the searched words.
+PLACEHOLDER_TRANSCRIPT = "1\n00:00:00,000 --> 00:00:01,000\nend-to-end check\n"
+
+
+def ingest(vsift: evaluation.Vsift, video: Path, scratch: Path) -> str:
+    scratch.mkdir(parents=True, exist_ok=True)
+    transcript = scratch / f"{video.stem}.placeholder.srt"
+    transcript.write_text(PLACEHOLDER_TRANSCRIPT, encoding="utf-8")
+    return vsift("ingest", ["ingest", str(video), "--transcript", str(transcript)])["data"]["session_id"]
 
 
 def summarise_run(run: OcrRun) -> dict:
@@ -429,7 +440,7 @@ def summarise_run(run: OcrRun) -> dict:
 
 
 def end_to_end_synthetic(vsift: evaluation.Vsift, video: Path, truth: dict, runner: Path, max_calls: int) -> dict:
-    session = ingest(vsift, video)
+    session = ingest(vsift, video, vsift.root.parent / "transcripts")
     run = ocr_until_complete(vsift, session, runner, max_calls)
     numbers = sorted({token for screen in truth["screens"] for line in screen["lines"]
                       for token in evaluation.tokens(line["text"]) if evaluation.is_number(token)})
@@ -439,7 +450,7 @@ def end_to_end_synthetic(vsift: evaluation.Vsift, video: Path, truth: dict, runn
 
 
 def end_to_end_real(vsift: evaluation.Vsift, item: str, video: Path, runner: Path, max_calls: int) -> dict:
-    session = ingest(vsift, video)
+    session = ingest(vsift, video, vsift.root.parent / "transcripts")
     run = ocr_until_complete(vsift, session, runner, max_calls)
     labels = []
     for spellings in evaluation.LEXICON.get(item, []):
@@ -500,6 +511,7 @@ def command_parity(arguments: argparse.Namespace) -> int:
             entry["labels_total"] = real["labels"]
         report["videos"][folder] = entry
     Path(arguments.report).write_text(json.dumps(report, indent=1) + "\n", encoding="utf-8")
+    print(json.dumps(report, indent=1))
     if failures:
         print("parity below its threshold: " + "; ".join(failures), file=sys.stderr)
         return 1
@@ -525,6 +537,8 @@ def command_end_to_end(arguments: argparse.Namespace) -> int:
         item, _, video = pair.partition("=")
         report["real"].append(end_to_end_real(vsift, item, Path(video), runner, int(arguments.max_calls)))
     Path(arguments.report).write_text(json.dumps(report, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
+    print(json.dumps({key: value for key, value in report.items() if key != "steps"}, indent=1,
+                     ensure_ascii=False))
     incomplete = [entry.get("video") or entry.get("item") for entry in report["synthetic"] + report["real"]
                   if not entry["complete"]]
     if incomplete:

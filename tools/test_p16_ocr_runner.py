@@ -57,6 +57,10 @@ class ArchiveTests(unittest.TestCase):
                          [(f"{root}/lib/libonnxruntime.so", 0, "link"),
                           (f"{root}/lib/libonnxruntime.so.1.31.0", 7, "file")])
 
+    def test_a_member_named_with_a_leading_dot_folder_is_found_as_macos_names_it(self) -> None:
+        archive = tar_gz({"./r/lib/libonnxruntime.1.31.0.dylib": b"dylib"})
+        self.assertEqual(runner.archive_member(archive, "r.tgz", "r/lib/libonnxruntime.1.31.0.dylib"), b"dylib")
+
     def test_a_zip_member_is_read_and_a_folder_is_refused(self) -> None:
         archive = zipped({"r/lib/onnxruntime.dll": b"dll", "r/lib/": b""})
         self.assertEqual(runner.archive_member(archive, "r.zip", "r/lib/onnxruntime.dll"), b"dll")
