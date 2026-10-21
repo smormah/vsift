@@ -101,8 +101,28 @@ The runtime's version in `describe` is named by the library's SHA-256 (`KNOWN_RU
 `crates/vsift-ocr-runner/src/onnx.rs`): ONNX Runtime 1.31.0's build information says
 `git-branch=HEAD`, and its version string is reachable only through raw C calls. A pinned library is
 `1.31.0`; any other library is `sha256-<16 hex digits>`, a different engine build. Linux x64's
-library is `469849977cb60744ea160927e1a3a0643fd4c55c0aff743251c6d293402e334e` (29,345,384 bytes);
-the Windows and macOS digests come from the same workflow's staging.
+library is `469849977cb60744ea160927e1a3a0643fd4c55c0aff743251c6d293402e334e` (29,345,384 bytes),
+Windows x64's `0c42dc4e278f0968fdf9ebf1b1e54a74c657a9942e70803e453c91993451cf4c` (17,253,176 bytes)
+and macOS arm64's `2a50a63e7f41f8d4d551d3ee47248df3864f6540109fce8ad520ca3b51af4b70`
+(44,830,288 bytes).
+
+## 7. The staged folder, per platform (run 39604405934)
+
+Every file but the runner itself is the same bytes on every release of runner 0.1.0; the runner's
+digest is that run's build and changes with the release build. The release workflow writes its own
+inventory the same way (`tools/p16_ocr_runner.py stage`).
+
+| File | Ubuntu 24.04 x64 | Windows x64 | macOS 15 arm64 |
+| --- | --- | --- | --- |
+| `models/ch_PP-OCRv5_det_mobile.onnx` | 4,819,576 bytes, `4d97c44a...78ae` | same | same |
+| `models/latin_PP-OCRv5_rec_mobile.onnx` | 7,904,513 bytes, `b20bd37c...5f5a` | same | same |
+| `onnxruntime/<library>` | `libonnxruntime.so.1.31.0`, 29,345,384 bytes, `46984997...334e` | `onnxruntime.dll`, 17,253,176 bytes, `0c42dc4e...cf4c` | `libonnxruntime.1.31.0.dylib`, 44,830,288 bytes, `2a50a63e...4b70` |
+| `LICENSES/onnxruntime-LICENSE` | 1,073 bytes, `2f07c727...922c` | 1,094 bytes, `c250d627...b674` | as Ubuntu |
+| `LICENSES/onnxruntime-ThirdPartyNotices.txt` | 338,088 bytes, `143764b9...3de3` | 344,457 bytes, `c53a7650...6622` | as Ubuntu |
+| `LICENSES/models-NOTICE.txt` | 489 bytes, `8d8a53d6...1745` | same | same |
+| the runner | 633,768 bytes (this build) | 491,520 bytes (this build) | 613,136 bytes (this build) |
+
+The full digests are in the run's log and its `inventory-<platform>.json` artifacts.
 
 Whatever installed the runner, `vsift ocr` runs `describe` first and records the runner's own
 SHA-256 and version, the runtime version and the two model digests as the engine build of the
