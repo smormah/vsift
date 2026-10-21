@@ -123,6 +123,7 @@ async fn pinned_host_tools_pass_the_smoke_before_activation() -> TestResult {
         ProcessCancellation::new(),
     );
     let started = Instant::now();
+    let candidate_count = candidates.len();
     let candidates = match smoke_before_activation(&smoke, candidates).await {
         SmokeStageOutcome::Passed(candidates) => candidates,
         SmokeStageOutcome::Failed { failure, stages } => {
@@ -159,7 +160,7 @@ async fn pinned_host_tools_pass_the_smoke_before_activation() -> TestResult {
         failure.reason,
         CompatibilitySmokeFailureReason::BannerMismatch
     );
-    assert_eq!(stages.len(), 3);
+    assert_eq!(stages.len(), candidate_count);
     assert!(
         stages
             .iter()
@@ -170,6 +171,8 @@ async fn pinned_host_tools_pass_the_smoke_before_activation() -> TestResult {
         .map(|entry| entry.map(|entry| entry.file_name().to_string_lossy().into_owned()))
         .collect::<Result<_, _>>()?;
     assert_eq!(remaining, ["owner-v1"]);
-    println!("negative control: banner mismatch, all three stages discarded, nothing activated");
+    println!(
+        "negative control: banner mismatch, all {candidate_count} stages discarded, nothing activated"
+    );
     Ok(())
 }
