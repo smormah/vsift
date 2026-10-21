@@ -740,10 +740,12 @@ impl TimeAnchors {
 
     /// Whether the anchors agree; `None` without anchors.
     ///
-    /// Two anchors are compared at the start of the timeline: by their
-    /// instants when both name one, else by their local times when both know
-    /// one. An instant with no zone and a local time with no zone cannot be
-    /// compared.
+    /// Two anchors are compared at the start of the timeline, by their
+    /// instants, and only when both name one. A local time whose zone is
+    /// unknown is never compared, not even with another one or with a zoned
+    /// reading's local time: a clock face is not an instant (maintainer,
+    /// 2026-10-21; ADR 0029 section 7). So `single` means that no two
+    /// absolute anchors exist to compare.
     #[must_use]
     pub fn consistency(&self) -> Option<AnchorConsistency> {
         self.selected()?;
@@ -785,18 +787,10 @@ impl TimeAnchors {
     }
 }
 
-/// How far apart two readings are, when they can be compared.
+/// How far apart two readings are, when both are absolute instants.
 fn apart_micros(first: ClockReading, second: ClockReading) -> Option<i64> {
-    if let (Some(a), Some(b)) = (first.utc_unix_micros(), second.utc_unix_micros()) {
-        return a.checked_sub(b).map(i64::abs);
-    }
-    if let (Some(a), Some(b)) = (first.local(), second.local()) {
-        return a
-            .as_unix_micros_if_utc()
-            .checked_sub(b.as_unix_micros_if_utc())
-            .map(i64::abs);
-    }
-    None
+    let (a, b) = (first.utc_unix_micros()?, second.utc_unix_micros()?);
+    a.checked_sub(b).map(i64::abs)
 }
 
 fn digits(bytes: &[u8]) -> Result<u32, TimeAnchorError> {
@@ -1090,6 +1084,50 @@ mod tests {
         );
         assert_eq!(anchors.consistency(), Some(AnchorConsistency::Single));
         assert_eq!(TimeAnchors::none().consistency(), None);
+        Ok(())
+    }
+
+    /// "A clock face is not an instant" (maintainer, 2026-10-21; ADR 0029
+    /// section 7): consistency compares absolute anchors only. A zoned
+    /// reading and a local time with no zone are never compared by their
+    /// local times, however far apart they look (the presenter's zone is not
+    /// the recorder's), and neither are two local times with no zone.
+    #[test]
+    fn consistency_never_compares_a_local_time_whose_zone_is_unknown() -> TestResult {
+        let now = 1_792_587_792;
+        let zoneless = ClockReading::parse("2026-10-21T14:00:00")?;
+        let zoned = ClockReading::parse("2026-10-21T09:00:00+01:00")?;
+        let other_zoneless = ClockReading::parse("2026-10-21T19:00:00")?;
+        for (stated, recorder) in [(zoneless, zoned), (zoneless, other_zoneless)] {
+            let anchors = TimeAnchors::from_ingest(
+                Some(stated),
+                &[tag(AnchorSource::QuicktimeCreationDate, recorder)],
+                now,
+            );
+            assert_eq!(anchors.anchors().len(), 2);
+            assert_eq!(
+                anchors.consistency(),
+                Some(AnchorConsistency::Single),
+                "{recorder:?}"
+            );
+        }
+        // Two absolute anchors are still compared, whatever their zones.
+        // 09:00+01:00 is 08:00Z; 05:00-05:00 is 10:00Z.
+        let elsewhere = ClockReading::parse("2026-10-21T05:00:00-05:00")?;
+        let anchors = TimeAnchors::from_ingest(
+            Some(zoned),
+            &[tag(AnchorSource::QuicktimeCreationDate, elsewhere)],
+            now,
+        );
+        assert_eq!(anchors.consistency(), Some(AnchorConsistency::Conflicting));
+        let same_instant = ClockReading::parse("2026-10-21T03:00:00-05:00")?;
+        let utc = ClockReading::parse("2026-10-21T08:00:00Z")?;
+        let anchors = TimeAnchors::from_ingest(
+            Some(same_instant),
+            &[tag(AnchorSource::ContainerCreationTime, utc)],
+            now,
+        );
+        assert_eq!(anchors.consistency(), Some(AnchorConsistency::Consistent));
         Ok(())
     }
 

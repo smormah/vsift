@@ -47,7 +47,8 @@ VSift read it from the file, where phone and screen recorders often write it. Ea
 
 If the sources disagree, `time_anchor` says `conflicting`: say so in your report. A clock time with
 `utc: null` is a local time whose zone is not known; it cannot be matched with logs in UTC until you know the
-zone. VSift never uses the date a file was saved or downloaded, and a time is never guessed.
+zone, and VSift never compares it with the other sources (a clock in a screen share may show another
+country's time). VSift never uses the date a file was saved or downloaded, and a time is never guessed.
 
 ## Rules for good evidence
 

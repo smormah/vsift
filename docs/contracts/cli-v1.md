@@ -134,8 +134,9 @@ in the file says which. The anchors are stored with the session when it opens (a
 release reads such a session as damaged, as for every additive lifecycle member, known
 limit L-044) and are reported, only when there is one, as `time_anchor` in the data of
 `ingest` and `session status` (`renew`, `close` and `session list` items too):
-`consistency` (`single`; `consistent`, every two anchors that can be compared agree within
-two seconds; `conflicting`, two disagree and clock times still come from the first),
+`consistency` (`single`; `consistent`, every two anchors that name an instant agree within
+two seconds; `conflicting`, two disagree and clock times still come from the first; a local
+time whose zone is unknown is never compared, ADR 0029 decision 9),
 `source` and `confidence` of the anchor clock times come from, `recording_start`, and
 every anchor with its `media_time_us` and reading
 ([`time-anchor.schema.json`](../../schemas/v1/time-anchor.schema.json), example
