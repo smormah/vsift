@@ -50,12 +50,11 @@ use vsift_infrastructure::{
     OsReleaseProfile, SourceContainer, VisualSamplingWindow, WhisperOutputLimits,
     classify_mountinfo, classify_os_release, decode_chunk_checkpoint, decode_evidence_record,
     decode_job_record, decode_request_record, decode_transcript_parts, decode_transcript_record,
-    decode_visual_index_record,
-    encode_transcript_record, encode_visual_index_record, inspect_gzip_tar_inventory,
-    inspect_tar_inventory, inspect_xz_tar_inventory, parse_ashowinfo_start, parse_cgroup_limit,
-    parse_cpu_max, parse_ffprobe_metadata, parse_frame_listing, parse_frame_showinfo,
-    parse_net_dev, parse_png_sequence, parse_proc_cgroup, parse_supplied_transcript,
-    parse_visual_samples, parse_whisper_full_json,
+    decode_visual_index_record, encode_transcript_record, encode_visual_index_record,
+    inspect_gzip_tar_inventory, inspect_tar_inventory, inspect_xz_tar_inventory,
+    parse_ashowinfo_start, parse_cgroup_limit, parse_cpu_max, parse_ffprobe_metadata,
+    parse_frame_listing, parse_frame_showinfo, parse_net_dev, parse_png_sequence,
+    parse_proc_cgroup, parse_supplied_transcript, parse_visual_samples, parse_whisper_full_json,
 };
 
 type TestResult = Result<(), Box<dyn Error>>;
