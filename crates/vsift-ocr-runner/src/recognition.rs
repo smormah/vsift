@@ -19,8 +19,12 @@ use crate::{
 pub const LINE_HEIGHT: usize = 48;
 /// The narrowest input width; a batch is as wide as its widest line needs.
 pub const MIN_LINE_WIDTH: usize = 320;
-/// Lines read in one inference call.
-pub const BATCH_SIZE: usize = 6;
+/// Lines read in one inference call: one, so a line's reading never depends on
+/// the other lines of its frame. In a batch every line is padded to the widest
+/// one's width, and that padding changes what the recogniser writes; the hosted
+/// cross-check showed the reference pipeline's own readings change with it
+/// (`P16 OCR runner`, run 39616094342; L-204).
+pub const BATCH_SIZE: usize = 1;
 /// The widest line image accepted, in pixels after scaling to [`LINE_HEIGHT`].
 pub const MAX_LINE_WIDTH: usize = 48 * 128;
 
@@ -354,8 +358,8 @@ mod tests {
             .map(|width| RgbImage::new(*width, 10, vec![0; width * 10 * 3]))
             .collect::<Result<_, _>>()?;
         let grouped = batches(&lines);
-        assert_eq!(grouped.len(), 2);
-        assert_eq!(grouped.first().map(Vec::len), Some(BATCH_SIZE));
+        assert_eq!(grouped.len(), lines.len().div_ceil(BATCH_SIZE));
+        assert!(grouped.iter().all(|batch| batch.len() <= BATCH_SIZE));
         assert_eq!(
             grouped.first().and_then(|batch| batch.first()).copied(),
             Some(1)
@@ -364,6 +368,8 @@ mod tests {
             grouped.last().and_then(|batch| batch.last()).copied(),
             Some(6)
         );
+        let order: Vec<usize> = grouped.into_iter().flatten().collect();
+        assert_eq!(order, vec![1, 7, 3, 2, 5, 0, 4, 6]);
         Ok(())
     }
 
