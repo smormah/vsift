@@ -936,6 +936,15 @@ and the whole-freeze digest `302930904439c2eb49e43396f30d2088481d1a6fb7f47467dd2
 moved with it. **The seventh candidate's batches ran under `10180cd8...`, and that file is kept beside their records as `freeze-0.2.2-rc.1.json` in both folders.**
 No batch has run under the new freeze. Batch 3 checks its cold components against batch 1's freeze, so it needs `-AllowGraderChange` (as since 2026-10-04); cycle 3's batch-3
 rerun uses it, by the same decision.
+**On 2026-10-21 the freeze is new again: a draft freeze, rewritten at the merge rebase (0.3.0 development freeze; the final freeze is
+recorded at the 0.3.0 cut).** The progress story's third pull request ([ADR 0033](../decisions/0033-progress-during-long-transcriptions.md))
+changed the skill: PREPARE starts the transcription with `job start`, and `references/resume.md` follows a transcription in the background
+([`skill.md`](skill.md), "The change for 0.3.0"). The supervisor allowed draft pull requests to rewrite the freeze provisionally on
+2026-10-21, so that CI runs every test rather than stopping at `committed_freeze`: `freeze write` at `5a4eab0f1cae`, the commit of that
+pull request's branch at which the skill changed, gave the `skill` digest `3291a3ba12bd4ed7b5c5dd82c0143ed5a1a79bd7c68222790973675fb3384e22`
+(it was `bd205d6c...`) and the whole-freeze digest `3f9f44fb93fe7b8064c52633293a149f04fe2b70f0547325a056d7d9a7bcf790` (it was `30293090...`);
+the other six components are unchanged, and the pin in `committed_freeze` moved with it. It is written again on the new `main` when the pull
+request is rebased to merge. No batch has run under it, and none is run for this change.
 
 ## Usage capture (P14)
 

@@ -345,8 +345,9 @@ unknown, which the skill says. **Agents ran this text once, in batch 2 on `0.2.2
   background job is in resume.md, as above. Four paragraphs were rewrapped to the widest line the file
   already had (116 characters) with no word changed (`git diff --word-diff` shows it). The fuzz seed copy is the
   same bytes.
-- **Untried:** no trial has run the background path; the trial freeze is left alone while the pull request is
-  a draft, and is rewritten for batches 2 and 3 when it is rebased to merge (the 0.3.0 rule).
+- **Untried:** no trial has run the background path. The trial freeze of batches 2 and 3 is a draft freeze
+  (`docs/agents/trials.md`, 2026-10-21), so that CI runs every test, and is rewritten on the new `main` when the
+  pull request is rebased to merge (the 0.3.0 rule).
 
 ## Keeping it in step with the CLI
 

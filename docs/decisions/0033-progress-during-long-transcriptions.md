@@ -179,7 +179,8 @@ tells agents: when the user names a moment, start with that window.
 - **No orphans, with bounds.** A watcher reads the job's cancel request every 0.25 s and cancels the run,
   and the process supervisor kills a running provider on cancellation, so `job cancel` stops the runner in
   about a second, not at the next chunk. `session close` asks every live job of the session to cancel,
-  waits up to 10 s, then closes; a runner that missed it fails its next publication, sees the session
+  waits up to 10 s, then closes (**the maintainer's decision of 2026-10-21**, a changed behaviour: until 0.2.x a
+  close while a transcription ran answered `BUSY`); a runner that missed it fails its next publication, sees the session
   closed and exits. The runner stops itself at the session's expiry. Killed outright, the job is
   interrupted and resumable; on Windows its providers end with its job object, on Unix a provider can
   outlive it until its chunk ends (L-220).
@@ -437,6 +438,11 @@ All are taken (2026-10-21):
   the storage bounds.*
 - **D8** The estimate from the cumulative measured speed. *A steady estimate, labelled as one.*
 - **The three modes** (section 6). *Chosen by who is waiting.* (The maintainer.)
+- **`session close` stops the session's running jobs** (section 5): it cancels them, waits up to 10 s, then closes.
+  *Closing a session ends its work.* (The maintainer, 2026-10-21.)
+- **The ten-minute threshold** (section 6) stands for now; the hosted `P14 real media` check on RM03 and RM09
+  measures it and the estimate's error once the stack is on `main`, and a follow-up adjusts it if the data says
+  so. (The maintainer, 2026-10-21.)
 
 ## Consequences
 
