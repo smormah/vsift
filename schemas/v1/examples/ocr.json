@@ -1,0 +1,51 @@
+{
+  "command": "ocr",
+  "coverage": {
+    "gaps": [],
+    "reasons": [],
+    "truncated": false
+  },
+  "data": {
+    "candidate_gaps": [],
+    "coverage": {
+      "candidates_complete": true,
+      "failed": 0,
+      "pending": 0,
+      "period_us": 5000000,
+      "planned": 4,
+      "read": 4,
+      "scope": "screen_text",
+      "unresolved": 0
+    },
+    "index": {
+      "engine": {
+        "detector_sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+        "profile": "ppocrv5-latin-v1",
+        "recognizer_sha256": "3333333333333333333333333333333333333333333333333333333333333333",
+        "runner_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+        "runner_version": "0.1.0",
+        "runtime_version": "1.31.0"
+      },
+      "frames": 4,
+      "index_id": "sti_6acf6ced07743f5711fb499cdd6d43b7",
+      "lines": 4,
+      "revision": 1
+    },
+    "range": {
+      "from_us": 0,
+      "to_us": 15000000
+    },
+    "read_now": 2,
+    "session_id": "ses_0123456789abcdef0123456789abcdef",
+    "stopped": null
+  },
+  "error": null,
+  "lifecycle": {
+    "expires_at": "2026-09-25T00:00:00Z",
+    "mode": "ephemeral"
+  },
+  "operation_id": null,
+  "schema_version": "1",
+  "status": "complete",
+  "warnings": []
+}

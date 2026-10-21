@@ -18,7 +18,7 @@ use super::{
     transcript::{count, push_next_page},
     view::{
         AudioData, AudioEvidence, CandidatesPage, DeliveredFile, Envelope, FrameData,
-        FrameEvidence, Range, Selection, VisualCandidate,
+        FrameEvidence, Range, ScreenTextResult, Selection, VisualCandidate,
     },
 };
 
@@ -48,6 +48,84 @@ const FILES_HEADING: &str =
 
 /// The prefix of Windows' extended-length path form.
 const EXTENDED_LENGTH_PREFIX: &str = r"\\?\";
+
+/// `ocr`: what one call read and how much of the range's plan is read.
+pub(super) fn screen_text(envelope: &Envelope<ScreenTextResult>) -> Result<RenderedText, TooLarge> {
+    let call = &envelope.data;
+    let mut text = TerminalText::result();
+    text.push_fixed("On-screen text of session ")
+        .push_value(&call.session_id)
+        .end_line();
+    text.push_fixed("Range: ");
+    push_range(&mut text, call.range);
+    text.end_line();
+    match &call.index {
+        Some(index) => {
+            text.push_fixed("Index: ")
+                .push_value(&index.index_id)
+                .push_fixed(" (revision ")
+                .push_unsigned(index.revision)
+                .push_fixed(", ")
+                .push_value(&index.engine.profile)
+                .push_fixed(", runner ")
+                .push_value(&index.engine.runner_version)
+                .push_fixed(", ONNX Runtime ")
+                .push_value(&index.engine.runtime_version)
+                .push_fixed("): ")
+                .push_unsigned(index.frames)
+                .push_fixed(" frames, ")
+                .push_unsigned(index.lines)
+                .push_fixed(" lines")
+                .end_line();
+        }
+        None => {
+            text.push_fixed("Index: none yet").end_line();
+        }
+    }
+    text.push_fixed("Read by this call: ")
+        .push_unsigned(call.read_now)
+        .push_fixed(" frames");
+    if let Some(stopped) = &call.stopped {
+        text.push_fixed(", stopped: ").push_value(stopped);
+    }
+    text.end_line();
+    let coverage = &call.coverage;
+    text.push_fixed("Plan: ")
+        .push_unsigned(coverage.planned)
+        .push_fixed(" frames (the candidates and one every ");
+    push_clock(&mut text, coverage.period_us.unwrap_or(0));
+    text.push_fixed("): ")
+        .push_unsigned(coverage.read)
+        .push_fixed(" read, ")
+        .push_unsigned(coverage.failed)
+        .push_fixed(" failed, ")
+        .push_unsigned(coverage.unresolved)
+        .push_fixed(" with no frame, ")
+        .push_unsigned(coverage.pending)
+        .push_fixed(" pending")
+        .end_line();
+    if !coverage.candidates_complete {
+        text.push_fixed("The range's candidates are not all known yet:")
+            .end_line();
+        for gap in &call.candidate_gaps {
+            text.push_fixed("  ");
+            push_range(
+                &mut text,
+                Range {
+                    from_us: gap.from_us,
+                    to_us: gap.to_us,
+                },
+            );
+            text.push_fixed(": ").push_value(&gap.reason).end_line();
+        }
+    }
+    if coverage.pending > 0 {
+        text.push_fixed("Run vsift ocr again for the same range to continue.")
+            .end_line();
+    }
+    push_outcome(&mut text, envelope);
+    text.finish()
+}
 
 /// `candidates`: one page of visual candidates and what the index covers.
 pub(super) fn candidates(envelope: &Envelope<CandidatesPage>) -> Result<RenderedText, TooLarge> {

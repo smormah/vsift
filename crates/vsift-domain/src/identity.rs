@@ -117,6 +117,16 @@ opaque_identifier!(
     "vcd_",
     "Opaque identity for one visual candidate: a sampled screen state at a source time (P08)."
 );
+opaque_identifier!(
+    ScreenTextIndexId,
+    "sti_",
+    "Opaque identity for one immutable revision of a session's on-screen text index (OCR, ADR 0030)."
+);
+opaque_identifier!(
+    ScreenTextLineId,
+    "stl_",
+    "Opaque identity for one line of text read off one frame (OCR, ADR 0030)."
+);
 
 /// Cryptographic identity of immutable source bytes.
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]

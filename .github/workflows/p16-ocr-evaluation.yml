@@ -1,0 +1,284 @@
+name: P16 OCR evaluation
+
+# The OCR engine evaluation for 0.3.0 (docs/planning/ocr-engine-evaluation.md;
+# P16 enrichment, R-15). It compares candidate OCR engines on frames that the
+# checked-out commit's own vsift extracts, so that the maintainer can choose the
+# engine a later change installs as an optional managed adapter. Nothing here
+# ships, and the engines are built or installed on the runner only.
+#
+# - `evaluate` (Ubuntu): synthetic screens with known text (8 to 22 px, light and
+#   dark), encoded like the real screen recordings (H.264 at RM10's rate, VP9 at
+#   RM04's), plus RM01, RM04 and RM10 fetched from the project's test-media
+#   release and held to their pins (tools/p14-campaigns/real-media.cjs). Each
+#   engine reads every frame vsift's visual candidates give; the score is kept,
+#   with the synthetic text (ours). The real recordings' frames and recognised
+#   text stay on the runner: only numbers and the interface labels found (our
+#   own list) leave it.
+# - `build` (Ubuntu, Windows, macOS): whether each engine builds from its pinned
+#   source on each platform, and how large it is. Nothing is recognised there.
+#
+# Engines: Tesseract 5.5.3 (built here from its tag, with Leptonica 1.87.0 and no
+# image library at all) with tessdata_fast and tessdata_best; PP-OCRv5 mobile
+# (Latin) and PP-OCRv6 small, measured through RapidOCR's reference pipeline on
+# ONNX Runtime (Python on the runner only: the shipped form would be a
+# standalone runner, see the evaluation document); ocrs 0.13.1 (pure Rust).
+#
+# Advisory: a pull request that changes the evaluation (this file or its tool)
+# runs `evaluate`, so that the pull request carries its own evidence (a new
+# workflow cannot be dispatched before it is on `main`). The three-platform
+# `build` runs on a manual dispatch only, `gh workflow run p16-ocr-evaluation.yml
+# --ref <branch>` (`-f build=false` skips it); its first evidence is run
+# 39518099402 (on this pull request, before it became manual). No other pull
+# request runs anything here. It cannot publish anything: `contents: read`
+# only, no secret.
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/p16-ocr-evaluation.yml
+      - tools/p16_ocr_evaluation.py
+      - tools/test_p16_ocr_evaluation.py
+  workflow_dispatch:
+    inputs:
+      build:
+        description: Also build the engines on Windows and macOS (the platform evidence)
+        type: boolean
+        default: true
+
+permissions: {}
+
+concurrency:
+  group: p16-ocr-evaluation-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  NODE_VERSION: "22.23.3"
+  OCRS_VERSION: "0.13.1"
+  RAPIDOCR_VERSION: "3.10.0"
+  ONNXRUNTIME_VERSION: "1.31.0"
+
+jobs:
+  tooling-tests:
+    name: Tooling tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Test the evaluation tool
+        run: python3 -m unittest discover -s tools -p test_p16_ocr_evaluation.py
+
+  evaluate:
+    name: Evaluate (ubuntu-24.04)
+    needs: tooling-tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up the pinned Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          package-manager-cache: false
+
+      - name: Install the synthesis tools and the build tools (Ubuntu's FFmpeg draws the synthetic text; vsift uses the pinned one)
+        run: |
+          set -euo pipefail
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends ffmpeg fonts-dejavu-core fonts-liberation2 cmake ninja-build
+          echo "CPU: $(nproc) logical CPUs, $(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2-)"
+
+      - name: Fetch RM01, RM04 and RM10 and cross-check their pins
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/real-media"
+          node tools/p14-campaigns/real-media.cjs cross-check "$RUNNER_TEMP/real-media" --item RM01 --item RM04 --item RM10 | tee "$RUNNER_TEMP/cross-check.txt"
+
+      - name: Stage the pinned FFmpeg and FFprobe for vsift
+        run: python3 tools/p16_ocr_evaluation.py stage-ffmpeg --out "$RUNNER_TEMP/vsift-tools"
+
+      - name: Build the commit's vsift
+        run: cargo build --release --locked -p vsift-cli
+
+      - name: Build Tesseract 5.5.3 with Leptonica 1.87.0 (no image library, no network, no OpenMP)
+        run: |
+          set -euo pipefail
+          python3 tools/p16_ocr_evaluation.py build-tesseract --work "$RUNNER_TEMP/tesseract-build" --prefix "$RUNNER_TEMP/tesseract"
+          "$RUNNER_TEMP/tesseract/bin/tesseract" --version | tee "$RUNNER_TEMP/tesseract-version.txt"
+          ldd "$RUNNER_TEMP/tesseract/bin/tesseract" | tee -a "$RUNNER_TEMP/tesseract-version.txt"
+
+      - name: Fetch the pinned trained models (tessdata_fast and tessdata_best, eng and por)
+        run: python3 tools/p16_ocr_evaluation.py fetch-tessdata --out "$RUNNER_TEMP/tessdata" --variant fast --variant best | tee "$RUNNER_TEMP/tessdata.txt"
+
+      - name: Install ocrs-cli (crates.io, its own lock file)
+        run: cargo install ocrs-cli --version "$OCRS_VERSION" --locked --root "$RUNNER_TEMP/ocrs"
+
+      - name: Install RapidOCR and ONNX Runtime into a virtual environment (the evaluation's reference pipeline only)
+        run: |
+          set -euo pipefail
+          python3 -m venv "$RUNNER_TEMP/venv"
+          "$RUNNER_TEMP/venv/bin/pip" install --quiet "rapidocr==$RAPIDOCR_VERSION" "onnxruntime==$ONNXRUNTIME_VERSION"
+          "$RUNNER_TEMP/venv/bin/pip" freeze > "$RUNNER_TEMP/pip-freeze.txt"
+
+      - name: Render the synthetic screens and encode them
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/work"
+          python3 tools/p16_ocr_evaluation.py synthesize --out "$RUNNER_TEMP/synthetic" \
+            --control "$RUNNER_TEMP/work/synthetic-source" \
+            --ffmpeg /usr/bin/ffmpeg \
+            --font /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf \
+            --font /usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf
+
+      - name: Extract the frames with vsift (ingest, candidates, frame get)
+        run: |
+          set -euo pipefail
+          extract() {
+            python3 tools/p16_ocr_evaluation.py extract --vsift "$GITHUB_WORKSPACE/target/release/vsift" \
+              --ffmpeg "$VSIFT_EVAL_FFMPEG" --ffprobe "$VSIFT_EVAL_FFPROBE" --work "$RUNNER_TEMP/vsift-work" \
+              --video "$1" --duration-us "$2" --out "$RUNNER_TEMP/work/$3" "${@:4}"
+          }
+          # The synthetic videos: the frame in the middle of each of the 16 screens
+          # (the candidates' times are recorded beside, to say which screens they reach).
+          middles=()
+          for screen in $(seq 0 15); do middles+=(--at-us "$((screen * 3000000 + 1500000))"); done
+          extract "$RUNNER_TEMP/synthetic/synthetic-h264.mp4" 48000000 synthetic-h264 "${middles[@]}"
+          extract "$RUNNER_TEMP/synthetic/synthetic-vp9.webm" 48000000 synthetic-vp9 "${middles[@]}"
+          extract "$RUNNER_TEMP/synthetic/synthetic-h264-jitter.mp4" 48000000 synthetic-h264-jitter "${middles[@]}"
+          for item in RM01 RM04 RM10; do
+            file="$(node -e "const m=require('./tools/p14-campaigns/real-media/manifest.json');const i=m.items.find((x)=>x.id===process.argv[1]);process.stdout.write(i.file_name)" "$item")"
+            duration="$(node -e "const m=require('./tools/p14-campaigns/real-media/manifest.json');const i=m.items.find((x)=>x.id===process.argv[1]);process.stdout.write(String(Math.ceil(i.media.duration_s*1e6)))" "$item")"
+            extract "$RUNNER_TEMP/real-media/$item/$file" "$duration" "$item"
+          done
+
+      - name: Recognise every frame with every engine
+        run: |
+          set -euo pipefail
+          frames=()
+          for folder in synthetic-source synthetic-h264 synthetic-h264-jitter synthetic-vp9 RM01 RM04 RM10; do
+            frames+=(--frames "$RUNNER_TEMP/work/$folder")
+          done
+          # tools/ is put on the path explicitly: the virtual environment's
+          # interpreter runs the evaluation, which imports its neighbours.
+          # The synthetic screens mix English and Portuguese labels, as RM04 does.
+          PYTHONPATH="$GITHUB_WORKSPACE/tools" "$RUNNER_TEMP/venv/bin/python" tools/p16_ocr_evaluation.py recognise \
+            --engine tesseract-fast --engine tesseract-best --engine tesseract-fast-x2 --engine tesseract-best-x2 \
+            --engine tesseract-fast-x2-sparse --engine tesseract-best-x2-sparse \
+            --engine ppocr-v5-mobile-latin --engine ppocr-v5-mobile-latin-1t --engine ppocr-v6-small --engine ocrs \
+            "${frames[@]}" --language RM04=por --language synthetic-source=por --language synthetic-h264=por \
+            --language synthetic-h264-jitter=por --language synthetic-vp9=por \
+            --tesseract "$RUNNER_TEMP/tesseract/bin/tesseract" --tessdata "$RUNNER_TEMP/tessdata" \
+            --ocrs "$RUNNER_TEMP/ocrs/bin/ocrs" --ffmpeg "$VSIFT_EVAL_FFMPEG" \
+            --scratch "$RUNNER_TEMP/ocr-scratch" --describe "$RUNNER_TEMP/engines.json"
+
+      - name: Score the engines
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/report"
+          python3 tools/p16_ocr_evaluation.py score --work "$RUNNER_TEMP/work" --synthetic "$RUNNER_TEMP/synthetic" \
+            --describe "$RUNNER_TEMP/engines.json" --report "$RUNNER_TEMP/report/report.json" --summary "$RUNNER_TEMP/report/summary.md"
+          cat "$RUNNER_TEMP/report/summary.md" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Record the engines' provenance and sizes
+        if: always()
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/report"
+          out="$RUNNER_TEMP/report/provenance.txt"
+          {
+            echo "## Tesseract"; cat "$RUNNER_TEMP/tesseract-version.txt" 2>/dev/null || true
+            for binary in "$RUNNER_TEMP/tesseract/bin/tesseract" "$RUNNER_TEMP/ocrs/bin/ocrs"; do
+              if [ -f "$binary" ]; then
+                cp "$binary" "$RUNNER_TEMP/stripped" && strip "$RUNNER_TEMP/stripped"
+                echo "$(basename "$binary"): $(stat -c %s "$binary") bytes, stripped $(stat -c %s "$RUNNER_TEMP/stripped"), sha256 $(sha256sum "$binary" | cut -d' ' -f1)"
+              fi
+            done
+            echo "## Trained models"; cat "$RUNNER_TEMP/tessdata.txt" 2>/dev/null || true
+            echo "## ocrs models (fetched by ocrs-cli from its default URLs)"
+            find "$HOME/.cache/ocrs" -type f -exec sha256sum {} \; -exec stat -c '%n %s bytes' {} \; 2>/dev/null || true
+            echo "## RapidOCR models (fetched by RapidOCR from ModelScope, checked against its own SHA-256 list)"
+            find "$RUNNER_TEMP/venv" -path '*rapidocr/models/*' -type f -exec sha256sum {} \; -exec stat -c '%n %s bytes' {} \; 2>/dev/null || true
+            echo "## ONNX Runtime"
+            find "$RUNNER_TEMP/venv" -name 'libonnxruntime*.so*' -exec stat -c '%n %s bytes' {} \; 2>/dev/null || true
+            echo "## Python packages"; cat "$RUNNER_TEMP/pip-freeze.txt" 2>/dev/null || true
+            echo "## Pins of the real media"; cat "$RUNNER_TEMP/cross-check.txt" 2>/dev/null || true
+          } > "$out"
+          sed -e "s|$RUNNER_TEMP|<runner temp>|g" -e "s|$HOME|<home>|g" -i "$out"
+          { echo '## Provenance'; echo; echo '```'; cat "$out"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          # Our own synthetic text and each engine's reading of it, never a real recording's.
+          if [ -d "$RUNNER_TEMP/synthetic" ]; then
+            mkdir -p "$RUNNER_TEMP/report/synthetic"
+            cp "$RUNNER_TEMP/synthetic/truth.json" "$RUNNER_TEMP/report/synthetic/" 2>/dev/null || true
+            for folder in synthetic-source synthetic-h264 synthetic-h264-jitter synthetic-vp9; do
+              mkdir -p "$RUNNER_TEMP/report/synthetic/$folder"
+              cp "$RUNNER_TEMP/work/$folder"/frames.json "$RUNNER_TEMP/work/$folder"/ocr-*.jsonl "$RUNNER_TEMP/report/synthetic/$folder/" 2>/dev/null || true
+            done
+          fi
+          cp "$RUNNER_TEMP/engines.json" "$RUNNER_TEMP/report/" 2>/dev/null || true
+
+      - name: Keep the report (never the real frames or their text)
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: p16-ocr-evaluation
+          path: ${{ runner.temp }}/report
+          if-no-files-found: warn
+          retention-days: 90
+
+  build:
+    name: Build (${{ matrix.os }})
+    if: github.event_name == 'workflow_dispatch' && inputs.build
+    needs: tooling-tests
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2025, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build Tesseract 5.5.3 with Leptonica 1.87.0
+        run: |
+          set -euo pipefail
+          python tools/p16_ocr_evaluation.py build-tesseract --work "$RUNNER_TEMP/tesseract-build" --prefix "$RUNNER_TEMP/tesseract"
+
+      - name: Load the pinned English model and print the build
+        run: |
+          set -euo pipefail
+          python tools/p16_ocr_evaluation.py fetch-tessdata --out "$RUNNER_TEMP/tessdata" --variant fast
+          binary="$RUNNER_TEMP/tesseract/bin/tesseract"
+          if [ -f "$binary.exe" ]; then binary="$binary.exe"; fi
+          "$binary" --version
+          "$binary" --list-langs --tessdata-dir "$RUNNER_TEMP/tessdata/fast"
+          echo "tesseract on ${{ matrix.os }}: $(wc -c < "$binary") bytes" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Build ocrs-cli
+        run: |
+          set -euo pipefail
+          cargo install ocrs-cli --version "$OCRS_VERSION" --locked --root "$RUNNER_TEMP/ocrs"
+          binary="$RUNNER_TEMP/ocrs/bin/ocrs"
+          if [ -f "$binary.exe" ]; then binary="$binary.exe"; fi
+          "$binary" --version
+          echo "ocrs on ${{ matrix.os }}: $(wc -c < "$binary") bytes" | tee -a "$GITHUB_STEP_SUMMARY"

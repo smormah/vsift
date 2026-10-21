@@ -13,6 +13,7 @@ mod handoff;
 mod human;
 mod job;
 mod json_input;
+mod ocr;
 mod output;
 mod parse_failure;
 mod progress;
@@ -38,9 +39,10 @@ use output::{JsonLines, OutputError, OutputMode, OutputWriter, ProcessExit};
 use vsift::{
     ADMISSION_RETRY_AFTER, Cancellation, DEFAULT_LOCAL_ASR_CHECK_BUDGET, Engine, EngineConfig,
     EngineError, EnginePorts, EvaluatedSetupPlan, ExecutableSelections, FailureCode, HostIsolation,
-    IsolationProfile, ManagedRootLocation, OpenSessionError, PlanAcceptanceError, ProgressObserver,
-    SessionRootError, SessionRootLocation, SetupCheckRequest, SetupPlanRequest, SourcePathFault,
-    TranscriptSourceError, UserConfigurationLocation, attest_host_isolation,
+    IsolationProfile, ManagedRootLocation, OcrError, OpenSessionError, PlanAcceptanceError,
+    ProgressObserver, ScreenTextStop, SessionRootError, SessionRootLocation, SetupCheckRequest,
+    SetupPlanRequest, SourcePathFault, TranscriptSourceError, UserConfigurationLocation,
+    attest_host_isolation,
 };
 use vsift_contract::{
     ADMISSION_BUSY_REMEDIATION, ADMISSION_CAPACITY_REMEDIATION, ARTIFACT_DIRECTORY_REMEDIATION,
@@ -51,15 +53,15 @@ use vsift_contract::{
     JOB_SESSION_NOT_OPEN_REMEDIATION, LOCAL_ASR_MODEL_REMEDIATION, LOCAL_ASR_TOOLS_REMEDIATION,
     MANAGED_INSTALL_BUSY_REMEDIATION, MANAGED_STORAGE_REMEDIATION, MANAGED_UNAVAILABLE_REMEDIATION,
     MEDIA_TOOLS_FOR_TRANSCRIPT_REMEDIATION, NO_AUDIO_STREAM_REMEDIATION, NO_TRANSCRIPT_REMEDIATION,
-    NO_VIDEO_STREAM_REMEDIATION, OperationResponse, SESSION_NOT_PUBLISHED_REMEDIATION,
-    SESSION_ROOT_NAME_REMEDIATION, SESSION_ROOT_OWN_ACCESS_REMEDIATION,
-    SOURCE_ACCESS_DENIED_REMEDIATION, SOURCE_COPY_TOO_SLOW_REMEDIATION,
-    SOURCE_COPY_WOULD_BE_TOO_SLOW_REMEDIATION, SOURCE_IS_FOLDER_REMEDIATION,
-    SOURCE_IS_LINK_REMEDIATION, SOURCE_NO_ROOM_REMEDIATION, SOURCE_NOT_FOUND_REMEDIATION,
-    SOURCE_SPECIAL_FILE_REMEDIATION, STALE_PLAN_REMEDIATION, SUPERSEDED_REMEDIATION,
-    TRANSCRIPTION_RUNNING_REMEDIATION, TerminalEventResponse, UNKNOWN_JOB_REMEDIATION,
-    UNKNOWN_REVISION_REMEDIATION, UNOWNED_SESSION_ROOT_REMEDIATION, UNPINNED_MODEL_REMEDIATION,
-    VISUAL_TOOLS_REMEDIATION, WORKSPACE_NOT_DURABLE_REMEDIATION,
+    NO_VIDEO_STREAM_REMEDIATION, OCR_FAILED_REMEDIATION, OCR_RUNNER_REMEDIATION, OperationResponse,
+    SESSION_NOT_PUBLISHED_REMEDIATION, SESSION_ROOT_NAME_REMEDIATION,
+    SESSION_ROOT_OWN_ACCESS_REMEDIATION, SOURCE_ACCESS_DENIED_REMEDIATION,
+    SOURCE_COPY_TOO_SLOW_REMEDIATION, SOURCE_COPY_WOULD_BE_TOO_SLOW_REMEDIATION,
+    SOURCE_IS_FOLDER_REMEDIATION, SOURCE_IS_LINK_REMEDIATION, SOURCE_NO_ROOM_REMEDIATION,
+    SOURCE_NOT_FOUND_REMEDIATION, SOURCE_SPECIAL_FILE_REMEDIATION, STALE_PLAN_REMEDIATION,
+    SUPERSEDED_REMEDIATION, TRANSCRIPTION_RUNNING_REMEDIATION, TerminalEventResponse,
+    UNKNOWN_JOB_REMEDIATION, UNKNOWN_REVISION_REMEDIATION, UNOWNED_SESSION_ROOT_REMEDIATION,
+    UNPINNED_MODEL_REMEDIATION, VISUAL_TOOLS_REMEDIATION, WORKSPACE_NOT_DURABLE_REMEDIATION,
     WORKSPACE_POLICY_MISMATCH_REMEDIATION, WORKSPACE_ROOT_REMEDIATION, local_asr_failure_summary,
     local_asr_verification_summary, managed_lifecycle_remediation, media_tool_verification_summary,
     non_private_folder_summary, search_query_rejection_summary, transcript_rejection_summary,
@@ -100,6 +102,7 @@ const fn is_long_running(command: &Command) -> bool {
     match command {
         Command::Ingest(_)
         | Command::Candidates(_)
+        | Command::Ocr(_)
         | Command::Frame(_)
         | Command::Crop(_)
         | Command::Audio(_) => true,
@@ -160,6 +163,7 @@ const fn operation_name(command: &Command) -> Option<CommandName> {
         Command::Transcript(arguments) => arguments.command.operation_name(),
         Command::Search(_) => CommandName::Search,
         Command::Candidates(_) => CommandName::Candidates,
+        Command::Ocr(_) => CommandName::Ocr,
         Command::Frame(arguments) => arguments.command.operation_name(),
         Command::Audio(_) => CommandName::Audio,
         Command::Crop(_) => CommandName::Crop,
@@ -331,17 +335,18 @@ where
                 )
             }
             Some(SetupCommand::Configure(arguments)) => {
-                let dependency = arguments.dependency.into();
-                let result = engine
-                    .configure_executable(dependency, &arguments.executable)
-                    .map_err(CommandFailure::from)
-                    .and_then(|()| {
-                        complete(
-                            CommandName::SetupConfigure,
-                            &ConfiguredSelectionResponse::new(dependency),
-                        )
-                        .map_err(CommandFailure::from)
-                    });
+                let result = match arguments.dependency.runtime_dependency() {
+                    Some(dependency) => engine
+                        .configure_executable(dependency, &arguments.executable)
+                        .map(|()| ConfiguredSelectionResponse::new(dependency)),
+                    None => engine
+                        .configure_ocr_runner(&arguments.executable)
+                        .map(|()| ConfiguredSelectionResponse::ocr_runner()),
+                }
+                .map_err(CommandFailure::from)
+                .and_then(|response| {
+                    complete(CommandName::SetupConfigure, &response).map_err(CommandFailure::from)
+                });
                 write_session_result(&mut writer, mode, CommandName::SetupConfigure, result)
             }
             Some(SetupCommand::ConfigureModel(arguments)) => {
@@ -461,6 +466,10 @@ where
             let view = read_view::presented_view(mode, arguments.view);
             let result = candidates::candidates(&engine, arguments, view, &cancellation).await;
             write_session_result(&mut writer, mode, CommandName::Candidates, result)
+        }
+        Command::Ocr(arguments) => {
+            let result = ocr::ocr(&engine, arguments, &cancellation).await;
+            write_session_result(&mut writer, mode, CommandName::Ocr, result)
         }
         Command::Frame(arguments) if mode == OutputMode::JsonLines => {
             let operation = arguments.command.operation_name();
@@ -743,6 +752,10 @@ fn local_asr_remediation(error: &EngineError) -> Option<String> {
         EngineError::TranscriptRevisionNotFound => Some(UNKNOWN_REVISION_REMEDIATION.to_owned()),
         EngineError::VisualToolUnavailable(_) => Some(VISUAL_TOOLS_REMEDIATION.to_owned()),
         EngineError::NoVideoStream => Some(NO_VIDEO_STREAM_REMEDIATION.to_owned()),
+        EngineError::Ocr(OcrError::RunnerUnavailable) => Some(OCR_RUNNER_REMEDIATION.to_owned()),
+        EngineError::Ocr(OcrError::Failed(_) | OcrError::Stopped(ScreenTextStop::Engine(_))) => {
+            Some(OCR_FAILED_REMEDIATION.to_owned())
+        }
         EngineError::CandidateCursorWithoutIndex => Some(CANDIDATE_CURSOR_REMEDIATION.to_owned()),
         EngineError::JobBusy { .. } => Some(JOB_BUSY_REMEDIATION.to_owned()),
         EngineError::TranscriptionRunning { .. } => {

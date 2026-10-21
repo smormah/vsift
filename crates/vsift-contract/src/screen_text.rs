@@ -1,0 +1,386 @@
+//! The data of `ocr`, the on-screen text part of `search`, and the fixed prose
+//! of their failures (ADR 0030).
+//!
+//! On-screen text is derived, untrusted evidence: every line is published with
+//! the exact frame it was read from (stream, timestamp, time base, time), its
+//! region in that frame's displayed pixels, the engine's own uncalibrated
+//! confidence, and the engine build that read it. Text is presented twice, as
+//! read (`text`) and with hidden characters made visible (`display_text`).
+//!
+//! **Coverage is never hidden.** An `ocr` result counts the range's planned
+//! read targets (its candidates and one frame a period) read, failed,
+//! unresolved and still pending, and is `partial` while any is pending or
+//! failed, or while the range's candidates are not all known. A `search` first
+//! page carries the same counts in its `screen_text` member, whose `state` is
+//! `not_run` until `ocr` has read the session.
+
+use serde::Serialize;
+use vsift_application::ScreenTextStop;
+use vsift_domain::{
+    FrameRef, MediaTime, ScreenTextCoverage, ScreenTextIndex, ScreenTextLine, SearchMatch,
+    SessionId, TimeRange, VisualCandidateId, VisualCoverageGap,
+};
+
+use crate::{
+    CommandName, ConfidenceResponse, CoverageResponse, LifecycleResponse, OperationResponse,
+    text::render_hidden_characters, transcript::RangeData,
+};
+
+/// Most candidate identities one hit lists: a frame is rarely the
+/// representative of more than one or two candidates, and the list is a cross
+/// reference, not coverage.
+const MAX_HIT_CANDIDATES: usize = 32;
+
+/// The `scope` of every screen-text coverage block.
+pub const SCREEN_TEXT_SCOPE: &str = "screen_text";
+
+/// Envelope coverage reason: planned frames of the range are not read yet.
+pub const FRAMES_PENDING_REASON: &str = "frames_pending";
+
+/// Envelope coverage reason: planned frames of the range could not be read.
+pub const FRAMES_FAILED_REASON: &str = "frames_failed";
+
+/// Fixed warning of an `ocr` result whose range is not wholly read.
+pub const SCREEN_TEXT_PARTIAL_WARNING: &str = "Not every planned frame of the range has been read: coverage counts the frames read, failed and still pending, and says whether the range's candidates are all known. Run ocr again for the same range to continue; it reads only what is pending.";
+
+/// Remediation when no OCR runner is given, configured or found.
+pub const OCR_RUNNER_REMEDIATION: &str = "On-screen text is read by the OCR runner, vsift-ocr-runner, with its ONNX Runtime library and models beside it; it is optional and nothing else needs it. Nothing was changed. Install it, or register a working one with setup configure ocr-runner --executable <path>, then run ocr again. No need to search folders: ask the user where it is.";
+
+/// Remediation when the OCR runner could not run, load its models or answer.
+pub const OCR_FAILED_REMEDIATION: &str = "The OCR runner could not read the frames: it did not start, could not load its runtime or models, or did not answer in its protocol. Nothing was committed. Check that its onnxruntime folder and models sit beside it, or register another build with setup configure ocr-runner --executable <path>.";
+
+/// Everything a host presents about one `ocr` call.
+#[derive(Clone, Debug)]
+pub struct ScreenTextPresentation<'a> {
+    /// The session.
+    pub session_id: &'a SessionId,
+    /// The newest index after the call, if any frame has been read.
+    pub index: Option<&'a ScreenTextIndex>,
+    /// The range read, clipped to the video.
+    pub range: TimeRange,
+    /// The period of the frames read between candidates.
+    pub period_micros: u64,
+    /// How much of the range's plan the index has read.
+    pub coverage: ScreenTextCoverage,
+    /// Whether every visual window of the range is analysed.
+    pub candidates_complete: bool,
+    /// Frames this call read or found unreadable.
+    pub read_now: usize,
+    /// Why the call stopped early, if it did.
+    pub stop: Option<ScreenTextStop>,
+    /// The visual index's gaps in the range.
+    pub visual_gaps: &'a [VisualCoverageGap],
+}
+
+/// The engine build that read an index, as published.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+struct EngineData {
+    profile: &'static str,
+    runner_version: String,
+    runner_sha256: String,
+    runtime_version: String,
+    detector_sha256: String,
+    recognizer_sha256: String,
+}
+
+/// One revision of a session's screen-text index, as published.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+struct IndexData {
+    index_id: String,
+    revision: u32,
+    engine: EngineData,
+    frames: usize,
+    lines: usize,
+}
+
+impl IndexData {
+    fn new(index: &ScreenTextIndex) -> Self {
+        let scope = index.scope();
+        Self {
+            index_id: index.id().as_str().to_owned(),
+            revision: index.revision().get(),
+            engine: EngineData {
+                profile: scope.profile.identifier(),
+                runner_version: scope.provider.runner_version.as_str().to_owned(),
+                runner_sha256: scope.provider.runner_sha256.as_str().to_owned(),
+                runtime_version: scope.provider.runtime_version.as_str().to_owned(),
+                detector_sha256: scope.provider.detector_sha256.as_str().to_owned(),
+                recognizer_sha256: scope.provider.recognizer_sha256.as_str().to_owned(),
+            },
+            frames: index.frames().len(),
+            lines: index.frames().iter().map(|frame| frame.lines().len()).sum(),
+        }
+    }
+}
+
+/// How much of a range's plan an index has read.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+struct CoverageData {
+    scope: &'static str,
+    period_us: Option<u64>,
+    planned: usize,
+    read: usize,
+    failed: usize,
+    unresolved: usize,
+    pending: usize,
+    candidates_complete: bool,
+}
+
+impl CoverageData {
+    const fn new(
+        coverage: ScreenTextCoverage,
+        period_micros: Option<u64>,
+        candidates_complete: bool,
+    ) -> Self {
+        Self {
+            scope: SCREEN_TEXT_SCOPE,
+            period_us: period_micros,
+            planned: coverage.planned,
+            read: coverage.read,
+            failed: coverage.failed,
+            unresolved: coverage.unresolved,
+            pending: coverage.pending,
+            candidates_complete,
+        }
+    }
+
+    const fn is_complete(self) -> bool {
+        self.pending == 0 && self.failed == 0 && self.candidates_complete
+    }
+}
+
+/// A visual-index gap of the range, as `candidates` reports it.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+struct GapData {
+    from_us: u64,
+    to_us: u64,
+    reason: &'static str,
+}
+
+/// Data of a complete or partial `ocr` result.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct ScreenTextData {
+    session_id: String,
+    range: RangeData,
+    index: Option<IndexData>,
+    read_now: usize,
+    stopped: Option<&'static str>,
+    coverage: CoverageData,
+    candidate_gaps: Vec<GapData>,
+}
+
+impl ScreenTextData {
+    /// Presents one `ocr` call.
+    #[must_use]
+    pub fn new(call: &ScreenTextPresentation<'_>) -> Self {
+        Self {
+            session_id: call.session_id.as_str().to_owned(),
+            range: RangeData::new(call.range),
+            index: call.index.map(IndexData::new),
+            read_now: call.read_now,
+            stopped: call.stop.map(ScreenTextStop::identifier),
+            coverage: CoverageData::new(
+                call.coverage,
+                Some(call.period_micros),
+                call.candidates_complete,
+            ),
+            candidate_gaps: call
+                .visual_gaps
+                .iter()
+                .take(crate::MAX_COVERAGE_RANGES)
+                .map(|gap| GapData {
+                    from_us: gap.range.start().as_micros(),
+                    to_us: gap.range.end().as_micros(),
+                    reason: gap.reason.identifier(),
+                })
+                .collect(),
+        }
+    }
+}
+
+/// The complete `ocr` result: `partial`, with a warning, while the range is
+/// not wholly read.
+///
+/// # Errors
+///
+/// Returns the serialization error when the data cannot be represented as JSON.
+pub fn screen_text_response(
+    call: &ScreenTextPresentation<'_>,
+    lifecycle: LifecycleResponse,
+) -> Result<OperationResponse<serde_json::Value>, serde_json::Error> {
+    let data = ScreenTextData::new(call);
+    let complete = data.coverage.is_complete();
+    let response = OperationResponse::complete(CommandName::Ocr.identifier(), &data)?
+        .with_lifecycle(lifecycle)
+        .with_coverage(envelope_coverage(&data));
+    Ok(if complete {
+        response
+    } else {
+        response.with_warnings(&[SCREEN_TEXT_PARTIAL_WARNING])
+    })
+}
+
+/// The envelope coverage of an `ocr` result: truncated while the range is not
+/// wholly read; its gaps are the visual index's gaps (where candidates are not
+/// known), and its reasons name what is missing: `frames_pending`,
+/// `frames_failed`, then each visual gap reason once.
+fn envelope_coverage(data: &ScreenTextData) -> CoverageResponse {
+    let mut reasons = Vec::new();
+    if data.coverage.pending > 0 {
+        reasons.push(FRAMES_PENDING_REASON.to_owned());
+    }
+    if data.coverage.failed > 0 {
+        reasons.push(FRAMES_FAILED_REASON.to_owned());
+    }
+    for gap in &data.candidate_gaps {
+        if !reasons.iter().any(|reason| reason == gap.reason) {
+            reasons.push(gap.reason.to_owned());
+        }
+    }
+    CoverageResponse::new(
+        !data.coverage.is_complete(),
+        data.candidate_gaps
+            .iter()
+            .map(|gap| format!("{}-{}", gap.from_us, gap.to_us))
+            .collect(),
+        reasons,
+    )
+}
+
+/// One screen-text hit as a host presents it, borrowed from the engine's result.
+#[derive(Clone, Debug)]
+pub struct ScreenTextHitPresentation<'a> {
+    /// The line as read on the first frame.
+    pub line: &'a ScreenTextLine,
+    /// The first frame.
+    pub frame: &'a FrameRef,
+    /// The candidates whose representative frame that is.
+    pub candidates: &'a [VisualCandidateId],
+    /// The last consecutive read frame's time that held the same text there.
+    pub last_time: MediaTime,
+    /// How many consecutive read frames held it.
+    pub frames: u32,
+    /// How it matched.
+    pub tier: SearchMatch,
+}
+
+/// The on-screen text part of a `search` first page, as a host presents it.
+#[derive(Clone, Debug)]
+pub struct ScreenTextSearchPresentation<'a> {
+    /// The index searched, if `ocr` has read the session.
+    pub index: Option<&'a ScreenTextIndex>,
+    /// Hits in rank order, at most the page size.
+    pub hits: Vec<ScreenTextHitPresentation<'a>>,
+    /// How many hits there are in all.
+    pub total_hits: usize,
+    /// How much of the searched range's plan the index has read.
+    pub coverage: ScreenTextCoverage,
+    /// Whether every visual window of the range is analysed.
+    pub candidates_complete: bool,
+    /// The period of the index's latest plan.
+    pub period_micros: Option<u64>,
+}
+
+/// A region of a frame's displayed pixels.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+struct RegionData {
+    x: u32,
+    y: u32,
+    width: u32,
+    height: u32,
+}
+
+/// The exact frame a line was read from, in `frame_evidence`'s terms.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+struct FrameData {
+    stream_index: u32,
+    time_base_numerator: u32,
+    time_base_denominator: u32,
+    pts: i64,
+    time_us: u64,
+    width: u32,
+    height: u32,
+}
+
+/// One occurrence of the query in on-screen text.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+struct HitData {
+    line_id: String,
+    #[serde(rename = "match")]
+    tier: &'static str,
+    text: String,
+    display_text: String,
+    confidence: ConfidenceResponse,
+    frame: FrameData,
+    region: RegionData,
+    last_time_us: u64,
+    frames: u32,
+    candidate_ids: Vec<String>,
+}
+
+impl HitData {
+    fn new(hit: &ScreenTextHitPresentation<'_>) -> Self {
+        let text = hit.line.text.as_str().to_owned();
+        Self {
+            line_id: hit.line.id.as_str().to_owned(),
+            tier: hit.tier.identifier(),
+            display_text: render_hidden_characters(&text),
+            text,
+            confidence: ConfidenceResponse::from(hit.line.confidence),
+            frame: FrameData {
+                stream_index: hit.frame.stream_index,
+                time_base_numerator: hit.frame.time_base.numerator(),
+                time_base_denominator: hit.frame.time_base.denominator(),
+                pts: hit.frame.pts,
+                time_us: hit.frame.time.as_micros(),
+                width: hit.frame.dimensions.width(),
+                height: hit.frame.dimensions.height(),
+            },
+            region: RegionData {
+                x: hit.line.region.x(),
+                y: hit.line.region.y(),
+                width: hit.line.region.width(),
+                height: hit.line.region.height(),
+            },
+            last_time_us: hit.last_time.as_micros(),
+            frames: hit.frames,
+            candidate_ids: hit
+                .candidates
+                .iter()
+                .take(MAX_HIT_CANDIDATES)
+                .map(|id| id.as_str().to_owned())
+                .collect(),
+        }
+    }
+}
+
+/// The `screen_text` member of a `search` first page.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct ScreenTextSearchData {
+    state: &'static str,
+    index: Option<IndexData>,
+    hits: Vec<HitData>,
+    total_hits: usize,
+    coverage: CoverageData,
+}
+
+impl ScreenTextSearchData {
+    /// Presents the on-screen text part of a first page.
+    #[must_use]
+    pub fn new(part: &ScreenTextSearchPresentation<'_>) -> Self {
+        let coverage =
+            CoverageData::new(part.coverage, part.period_micros, part.candidates_complete);
+        let state = match part.index {
+            None => "not_run",
+            Some(_) if coverage.is_complete() => "complete",
+            Some(_) => "partial",
+        };
+        Self {
+            state,
+            index: part.index.map(IndexData::new),
+            hits: part.hits.iter().map(HitData::new).collect(),
+            total_hits: part.total_hits,
+            coverage,
+        }
+    }
+}

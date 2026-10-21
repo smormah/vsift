@@ -31,6 +31,7 @@
 - [vsift transcript retranscribe](#vsift-transcript-retranscribe): Transcribe the session's speech locally with whisper.cpp into a new revision: the whole video, or one range of it
 - [vsift search](#vsift-search): Search timestamped transcript evidence
 - [vsift candidates](#vsift-candidates): Page through visual evidence candidates
+- [vsift ocr](#vsift-ocr): Read on-screen text off a session's frames with the optional OCR runner
 - [vsift frame](#vsift-frame): Extract or navigate source-grounded frames
 - [vsift frame get](#vsift-frame-get): Extract the frame a time or a visual candidate names
 - [vsift frame neighbours](#vsift-frame-neighbours): Extract consecutive frames on each side of an earlier frame
@@ -64,6 +65,7 @@ Commands:
   transcript  Read or revise timestamped transcript evidence
   search      Search timestamped transcript evidence
   candidates  Page through visual evidence candidates
+  ocr         Read on-screen text off a session's frames with the optional OCR runner
   frame       Extract or navigate source-grounded frames
   audio       Extract a bounded audio clip for a person or a speech tool to play; a coding agent cannot listen to it and reads speech with transcript get
   crop        Crop an orientation-correct evidence image
@@ -512,7 +514,7 @@ Arguments:
   <DEPENDENCY>
           Stable dependency identifier
 
-          [possible values: ffmpeg, ffprobe, whisper]
+          [possible values: ffmpeg, ffprobe, whisper, ocr-runner]
 
 Options:
       --executable <EXECUTABLE>
@@ -1246,6 +1248,65 @@ Options:
           - periodic: Candidates whose only reason is `periodic_coverage`
 
           [default: none]
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
+## vsift ocr
+
+Read on-screen text off a session's frames with the optional OCR runner.
+
+```text
+Read on-screen text off a session's frames with the optional OCR runner.
+
+Opt-in and bounded: each call reads at most --max-frames frames of the range's plan (every visual candidate's frame and one frame every --period-us), then stops; run it again to continue. The answer counts the frames read, failed and pending, and is partial until the plan is read. search then finds the text, each hit citing its frame, time and region.
+
+Usage: vsift ocr [OPTIONS] <SESSION>
+
+Arguments:
+  <SESSION>
+          Session whose video is read
+
+Options:
+      --from <FROM>
+          Inclusive source-timeline start in microseconds; requires --to. Omit both to read the whole video
+
+      --json
+          Emit one versioned JSON terminal result
+
+      --events <EVENTS>
+          Emit versioned evidence, progress and terminal records as JSON Lines
+
+          Possible values:
+          - jsonl: One bounded JSON object per line
+
+      --to <TO>
+          Exclusive source-timeline end in microseconds; requires --from. A range past the end of the video is clipped to it
+
+      --period-us <PERIOD_US>
+          The period of the frames read between candidates, in microseconds, from 1000000 (one a second) to 600000000; defaults to 10000000 (ten seconds)
+
+      --session-root <SESSION_ROOT>
+          For operators who run a worker host; an agent leaves it out. Explicit private disposable-session root; defaults to the per-user cache
+
+      --host-isolation <HOST_ISOLATION>
+          For operators who run a worker host; an agent leaves it out. Isolation to run under; strict-linux is attested before any work
+
+          Possible values:
+          - process-only: Per-process containment only; no strict boundary is claimed
+          - strict-linux: The strict Linux worker boundary: accepted only when the kernel attests a cgroup v2 with CPU, memory and process limits, a read-only root and no network but loopback; otherwise `ISOLATION_UNAVAILABLE` before any work
+
+          [default: process-only]
+
+      --max-frames <MAX_FRAMES>
+          Most frames this call reads, 1 through 200; defaults to 40
+
+      --runner <RUNNER>
+          The OCR runner for this call only; otherwise the one setup configure ocr-runner recorded, else vsift-ocr-runner on PATH
+
+      --threads <THREADS>
+          Inference threads, 1 through 8; defaults to 2
 
   -h, --help
           Print help (see a summary with '-h')

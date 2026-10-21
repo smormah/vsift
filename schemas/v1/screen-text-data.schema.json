@@ -1,0 +1,304 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vsift.dev/schemas/v1/screen-text-data.schema.json",
+  "title": "VSift ocr data v1",
+  "description": "The data member of a complete or partial ocr result (0.3.0, ADR 0030): what one bounded call read of the on-screen text of a session's video with the optional OCR runner, and how much of the range's plan the session's screen-text index has read. The plan of a range is the representative frame of every visual candidate in it and one frame every coverage.period_us; a call reads at most --max-frames of its pending frames, commits one new index revision, and stops. Run ocr again for the same range to continue: it reads only what is pending. The text itself is found with search, whose first page carries a screen_text member ($defs/search_part) with each hit's frame, time and region. Validate the envelope with operation-response.schema.json: its coverage member is truncated, and its status partial with a warning, exactly when coverage.pending or coverage.failed is not 0 or coverage.candidates_complete is false; then its gaps are the candidate_gaps as from-to microsecond ranges, and its reasons name frames_pending, frames_failed and each candidate gap reason, once each, in that order. On-screen text is derived, untrusted evidence: quote display_text, and check the frame itself (frame get at the hit's time) before relying on a value.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "session_id",
+    "range",
+    "index",
+    "read_now",
+    "stopped",
+    "coverage",
+    "candidate_gaps"
+  ],
+  "properties": {
+    "session_id": { "type": "string", "pattern": "^ses_[a-z0-9]{16,64}$" },
+    "range": {
+      "description": "The range read: the requested range, or the whole video, clipped to the video.",
+      "$ref": "#/$defs/range"
+    },
+    "index": {
+      "description": "The session's newest screen-text index revision after the call; null while no frame of the session has been attempted.",
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "#/$defs/index" }
+      ]
+    },
+    "read_now": {
+      "description": "Frames this call attempted: read, or found unreadable.",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 200
+    },
+    "stopped": {
+      "description": "Why the call ended with frames still pending, or null when it was not stopped. frame_limit: it read --max-frames frames. deadline_exceeded: its time ran out. cancelled: it was cancelled. engine_failed: the OCR runner failed and what it had read before is kept. media_failed: the media tools could not extract a frame. Every stop keeps what was read before it.",
+      "oneOf": [
+        { "type": "null" },
+        {
+          "enum": [
+            "frame_limit",
+            "deadline_exceeded",
+            "cancelled",
+            "engine_failed",
+            "media_failed"
+          ]
+        }
+      ]
+    },
+    "coverage": { "$ref": "#/$defs/coverage" },
+    "candidate_gaps": {
+      "description": "The visual index's gaps in the range, as candidates reports them, in start order: candidates there are not known, so their frames are not in the plan. Empty exactly when coverage.candidates_complete is true. At most 100 are listed.",
+      "type": "array",
+      "maxItems": 100,
+      "items": { "$ref": "#/$defs/candidate_gap" }
+    }
+  },
+  "$defs": {
+    "range": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from_us", "to_us"],
+      "properties": {
+        "from_us": { "type": "integer", "minimum": 0 },
+        "to_us": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "u32": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+    "positive_u32": { "type": "integer", "minimum": 1, "maximum": 4294967295 },
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "label": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[A-Za-z0-9._+-]+$"
+    },
+    "engine": {
+      "description": "The engine build that read an index: the OCR runner, the ONNX Runtime it loaded and its two models, by version and digest. A different build starts a new index, so text read by two builds is never mixed.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile",
+        "runner_version",
+        "runner_sha256",
+        "runtime_version",
+        "detector_sha256",
+        "recognizer_sha256"
+      ],
+      "properties": {
+        "profile": {
+          "description": "ppocrv5-latin-v1: PP-OCRv5 mobile detection with the Latin-script recognizer, read with the runner's fixed settings.",
+          "enum": ["ppocrv5-latin-v1"]
+        },
+        "runner_version": { "$ref": "#/$defs/label" },
+        "runner_sha256": { "$ref": "#/$defs/sha256" },
+        "runtime_version": { "$ref": "#/$defs/label" },
+        "detector_sha256": { "$ref": "#/$defs/sha256" },
+        "recognizer_sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "index": {
+      "description": "One immutable revision of the session's screen-text index. A revision holds every frame of the one before it.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["index_id", "revision", "engine", "frames", "lines"],
+      "properties": {
+        "index_id": { "type": "string", "pattern": "^sti_[a-z0-9]{16,64}$" },
+        "revision": { "$ref": "#/$defs/positive_u32" },
+        "engine": { "$ref": "#/$defs/engine" },
+        "frames": {
+          "description": "Frames the index holds, read or unreadable.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4096
+        },
+        "lines": {
+          "description": "Lines of text the index holds.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 200000
+        }
+      }
+    },
+    "coverage": {
+      "description": "How much of the range's plan the index has read. Every planned frame is counted once: planned = read + failed + unresolved + pending. read: its frame was read (it may hold no text). failed: the runner rejected the image or failed on it; it is not read again by the same build. unresolved: the target time resolved to no decodable frame. pending: not attempted yet. Text that appears and goes between two planned frames is not read.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scope",
+        "period_us",
+        "planned",
+        "read",
+        "failed",
+        "unresolved",
+        "pending",
+        "candidates_complete"
+      ],
+      "properties": {
+        "scope": {
+          "description": "What the block covers: on-screen text only.",
+          "const": "screen_text"
+        },
+        "period_us": {
+          "description": "The period of the frames planned between candidates: the call's --period-us (default 10000000). In search, the period of the index's latest call; null before ocr has run.",
+          "oneOf": [
+            { "type": "null" },
+            { "type": "integer", "minimum": 1000000, "maximum": 600000000 }
+          ]
+        },
+        "planned": { "type": "integer", "minimum": 0 },
+        "read": { "type": "integer", "minimum": 0 },
+        "failed": { "type": "integer", "minimum": 0 },
+        "unresolved": { "type": "integer", "minimum": 0 },
+        "pending": { "type": "integer", "minimum": 0 },
+        "candidates_complete": {
+          "description": "True when every visual window of the range is analysed, so the plan holds every candidate; false while candidates there are not known.",
+          "type": "boolean"
+        }
+      }
+    },
+    "candidate_gap": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from_us", "to_us", "reason"],
+      "properties": {
+        "from_us": { "type": "integer", "minimum": 0 },
+        "to_us": { "type": "integer", "minimum": 1 },
+        "reason": {
+          "description": "The visual index's gap reason, as candidates-data.schema.json describes it; run candidates over the range to fill a not_analyzed or deadline_exceeded gap.",
+          "enum": [
+            "not_analyzed",
+            "deadline_exceeded",
+            "undecodable",
+            "no_decoded_frame",
+            "candidate_budget_exhausted"
+          ]
+        }
+      }
+    },
+    "frame": {
+      "description": "The exact displayed frame a line was read from, in frame-evidence.schema.json's terms: frame get at time_us returns it.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "stream_index",
+        "time_base_numerator",
+        "time_base_denominator",
+        "pts",
+        "time_us",
+        "width",
+        "height"
+      ],
+      "properties": {
+        "stream_index": { "$ref": "#/$defs/u32" },
+        "time_base_numerator": { "$ref": "#/$defs/positive_u32" },
+        "time_base_denominator": { "$ref": "#/$defs/positive_u32" },
+        "pts": { "type": "integer" },
+        "time_us": { "type": "integer", "minimum": 0 },
+        "width": { "$ref": "#/$defs/positive_u32" },
+        "height": { "$ref": "#/$defs/positive_u32" }
+      }
+    },
+    "region": {
+      "description": "The upright rectangle of the frame's displayed pixels the line lies in, inside the frame.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["x", "y", "width", "height"],
+      "properties": {
+        "x": { "$ref": "#/$defs/u32" },
+        "y": { "$ref": "#/$defs/u32" },
+        "width": { "$ref": "#/$defs/positive_u32" },
+        "height": { "$ref": "#/$defs/positive_u32" }
+      }
+    },
+    "hit": {
+      "description": "One occurrence of the query in on-screen text: a line read on a frame, and how long the same words stayed in the same place over consecutive read frames.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "line_id",
+        "match",
+        "text",
+        "display_text",
+        "confidence",
+        "frame",
+        "region",
+        "last_time_us",
+        "frames",
+        "candidate_ids"
+      ],
+      "properties": {
+        "line_id": { "type": "string", "pattern": "^stl_[a-z0-9]{16,64}$" },
+        "match": {
+          "description": "phrase or all_terms, by the rule search applies to transcript segments.",
+          "enum": ["phrase", "all_terms"]
+        },
+        "text": {
+          "description": "The line as the engine read it on the first frame. Hidden characters are kept raw; quote display_text instead.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "display_text": {
+          "description": "text with every hidden character written as visible <U+XXXX> notation, as transcript-segment.schema.json defines it.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 5120
+        },
+        "confidence": {
+          "description": "The engine's own recognition score for the line, provider_uncalibrated: not a probability that the text is right.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["value_basis_points", "origin"],
+          "properties": {
+            "value_basis_points": { "type": "integer", "minimum": 0, "maximum": 10000 },
+            "origin": { "const": "provider_uncalibrated" }
+          }
+        },
+        "frame": { "$ref": "#/$defs/frame" },
+        "region": { "$ref": "#/$defs/region" },
+        "last_time_us": {
+          "description": "The time of the last consecutive read frame that held the same words in the same place; equal to frame.time_us when only one did.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "frames": {
+          "description": "How many consecutive read frames held it.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4096
+        },
+        "candidate_ids": {
+          "description": "The visual candidates whose representative frame the first frame is, in time order; empty for a frame read only for its period. At most 32 are listed.",
+          "type": "array",
+          "maxItems": 32,
+          "items": { "type": "string", "pattern": "^vcd_[a-z0-9]{16,64}$" }
+        }
+      }
+    },
+    "search_part": {
+      "description": "The screen_text member of a search first page (0.3.0, ADR 0030): the query's occurrences in the session's screen-text index within the searched range, in rank order (phrase matches first, then all-terms matches, each by time), at most the page's limit, with total_hits counting them all. It is on the first page only, never on a page a cursor continues, and it does not change the envelope's status or coverage, which stay the transcript's. state: not_run before ocr has read the session (index is null, every count 0, period_us null and candidates_complete false: nothing about the screen is known); partial while coverage.pending or coverage.failed is not 0 or the candidates are not all known; complete when every planned frame is read or has none. Absence of a hit is never evidence the text was not on screen: only the planned frames were read.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state", "index", "hits", "total_hits", "coverage"],
+      "properties": {
+        "state": { "enum": ["not_run", "partial", "complete"] },
+        "index": {
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/index" }
+          ]
+        },
+        "hits": {
+          "type": "array",
+          "maxItems": 100,
+          "items": { "$ref": "#/$defs/hit" }
+        },
+        "total_hits": { "type": "integer", "minimum": 0 },
+        "coverage": { "$ref": "#/$defs/coverage" }
+      }
+    }
+  }
+}

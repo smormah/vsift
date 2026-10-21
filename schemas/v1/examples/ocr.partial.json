@@ -1,0 +1,64 @@
+{
+  "command": "ocr",
+  "coverage": {
+    "gaps": [
+      "12000000-15000000"
+    ],
+    "reasons": [
+      "frames_pending",
+      "deadline_exceeded"
+    ],
+    "truncated": true
+  },
+  "data": {
+    "candidate_gaps": [
+      {
+        "from_us": 12000000,
+        "reason": "deadline_exceeded",
+        "to_us": 15000000
+      }
+    ],
+    "coverage": {
+      "candidates_complete": false,
+      "failed": 0,
+      "pending": 2,
+      "period_us": 5000000,
+      "planned": 4,
+      "read": 2,
+      "scope": "screen_text",
+      "unresolved": 0
+    },
+    "index": {
+      "engine": {
+        "detector_sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+        "profile": "ppocrv5-latin-v1",
+        "recognizer_sha256": "3333333333333333333333333333333333333333333333333333333333333333",
+        "runner_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+        "runner_version": "0.1.0",
+        "runtime_version": "1.31.0"
+      },
+      "frames": 2,
+      "index_id": "sti_6acf6ced07743f5711fb499cdd6d43b7",
+      "lines": 1,
+      "revision": 1
+    },
+    "range": {
+      "from_us": 0,
+      "to_us": 15000000
+    },
+    "read_now": 2,
+    "session_id": "ses_0123456789abcdef0123456789abcdef",
+    "stopped": "frame_limit"
+  },
+  "error": null,
+  "lifecycle": {
+    "expires_at": "2026-09-25T00:00:00Z",
+    "mode": "ephemeral"
+  },
+  "operation_id": null,
+  "schema_version": "1",
+  "status": "partial",
+  "warnings": [
+    "Not every planned frame of the range has been read: coverage counts the frames read, failed and still pending, and says whether the range's candidates are all known. Run ocr again for the same range to continue; it reads only what is pending."
+  ]
+}

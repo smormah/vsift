@@ -121,6 +121,7 @@ mod lifecycle;
 mod local_asr;
 mod navigation;
 mod request;
+mod screen_text;
 mod search;
 mod session;
 mod setup;
@@ -222,6 +223,12 @@ pub use navigation::{
     NO_FRAMES_REMEDIATION, TRANSCRIPTION_RUNNING_REMEDIATION, UNDECODABLE_EVIDENCE_REMEDIATION,
     UNKNOWN_CANDIDATE_REMEDIATION, UNKNOWN_EVIDENCE_REMEDIATION, audio_response, frame_response,
     frame_selection_summary, partial_evidence_warning,
+};
+pub use screen_text::{
+    FRAMES_FAILED_REASON, FRAMES_PENDING_REASON, OCR_FAILED_REMEDIATION, OCR_RUNNER_REMEDIATION,
+    SCREEN_TEXT_PARTIAL_WARNING, SCREEN_TEXT_SCOPE, ScreenTextData, ScreenTextHitPresentation,
+    ScreenTextPresentation, ScreenTextSearchData, ScreenTextSearchPresentation,
+    screen_text_response,
 };
 pub use search::{
     MAX_COVERAGE_RANGES, SearchBriefData, SearchData, SearchEvidenceStream, SearchPresentation,

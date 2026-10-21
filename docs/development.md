@@ -271,7 +271,10 @@ names, through `FilesystemSessionStore::validate_bundle` in a private folder; Un
 skips it), `tar_inventory`, `gzip_tar_inventory` and `xz_tar_inventory` (the managed archives'
 inventories under a small and a production bound, checked against an independent statement of the archive
 rules), `identifiers` (the id, key and label constructors against a grammar model) and `input_path` (the
-relative-path and bundle-name grammar of a worker request against a model). A seed is a copy of a reviewed
+relative-path and bundle-name grammar of a worker request against a model). 0.3.0's on-screen text (ADR
+0030) added two: `ocr_runner_output` (the OCR runner's standard output through `parse_runner_output` for
+four 1280x720 images, and the same bytes through `parse_runner_description`) and `screen_text_index_record`
+(the stored screen-text record through a decode, encode and decode round trip). A seed is a copy of a reviewed
 fixture, an inline example, or derived from code and rebuilt by `VSIFT_REGENERATE_FUZZ_SEEDS=1` (the
 replay tests refuse a seed whose origin is not listed in `fuzz/tests/replay.rs`).
 
@@ -603,6 +606,11 @@ P13 PR 8 added `yaml-rust2` 0.13 (MIT OR Apache-2.0, pure Rust, with `arraydeque
 and `hashlink`) to the governance checker only, which parses `.github/workflows/*.yml`
 for the workflow lint; no shipped crate depends on it. The review is in the ADR 0023
 note of 2026-09-30 ("P13 PR 8").
+
+0.3.0's OCR runner (`crates/vsift-ocr-runner`, ADR 0030) depends on `ort` and `ort-sys`
+2.0.0-rc.13 (MIT OR Apache-2.0) with `load-dynamic` only, and so on `libloading` 0.9.0 (ISC); no
+other crate depends on them, and the ONNX Runtime library is loaded at run time, never linked or
+downloaded by the build. The review is in the ADR 0030 note of 2026-10-21.
 
 ## Release archives
 

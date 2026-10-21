@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://vsift.dev/schemas/v1/search-data.schema.json",
   "title": "VSift search data v1",
-  "description": "The data member of a complete or partial search result: one bounded page of the transcript segments that match a literal query, in rank order (phrase matches first, then all-terms matches, each by segment start). items are the matching segments as published transcript evidence records (transcript-segment.schema.json), exactly as transcript.get returns them; hits names each item's segment_id and how it matched, in the same order. query.terms is how the query was normalised. range is the requested range, or null when the whole transcript was searched. transcript_coverage says which parts of the searched range a transcript covers: a word said in an untranscribed range cannot be found, and on-screen text is never searched. Validate the envelope with operation-response.schema.json: its coverage member is truncated, and its status partial, exactly when untranscribed_ranges is not empty. Pass next_cursor back with the same session, query, range and revision to continue; it is rejected for any other search, session or revision, or after the session expires.",
+  "description": "The data member of a complete or partial search result: one bounded page of the transcript segments that match a literal query, in rank order (phrase matches first, then all-terms matches, each by segment start). items are the matching segments as published transcript evidence records (transcript-segment.schema.json), exactly as transcript.get returns them; hits names each item's segment_id and how it matched, in the same order. query.terms is how the query was normalised. range is the requested range, or null when the whole transcript was searched. transcript_coverage says which parts of the searched range a transcript covers: a word said in an untranscribed range cannot be found. Since 0.3.0 a first page also carries screen_text: the query's occurrences in on-screen text that ocr has read, with its own coverage; on-screen text is never part of items, hits, the cursor or transcript_coverage. Validate the envelope with operation-response.schema.json: its coverage member is truncated, and its status partial, exactly when untranscribed_ranges is not empty. Pass next_cursor back with the same session, query, range and revision to continue; it is rejected for any other search, session or revision, or after the session expires.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -36,7 +36,11 @@
       "items": { "$ref": "#/$defs/hit" }
     },
     "next_cursor": { "$ref": "#/$defs/next_cursor" },
-    "transcript_coverage": { "$ref": "#/$defs/transcript_coverage" }
+    "transcript_coverage": { "$ref": "#/$defs/transcript_coverage" },
+    "screen_text": {
+      "description": "Since 0.3.0 (ADR 0030), on a first page only: the query's occurrences in on-screen text read by ocr, with each hit's frame, time and region, and how much of the searched range's plan is read. Absent on a page a cursor continues and from releases before 0.3.0. It never changes the envelope's status or coverage.",
+      "$ref": "screen-text-data.schema.json#/$defs/search_part"
+    }
   },
   "$defs": {
     "range": {
@@ -104,7 +108,7 @@
           "enum": ["supplied_transcript", "local_asr", "mixed"]
         },
         "scope": {
-          "description": "What the command looks at: transcript text only. On-screen text is neither searched nor read.",
+          "description": "What this block covers: transcript text only. On-screen text is not counted here; since 0.3.0 a search first page states its coverage in screen_text.coverage.",
           "const": "transcript_text"
         },
         "searched_range": {

@@ -1,0 +1,8 @@
+{"record":"runner","protocol":1,"runner_version":"0.1.0"}
+{"record":"line","image":0,"x":4,"y":5,"width":60,"height":12,"text":"Total","text_cut":false,"confidence":0.9877}
+{"record":"line","image":0,"x":70,"y":5,"width":96,"height":12,"text":"4,731,145","text_cut":false,"confidence":0.9311}
+{"record":"image","image":0,"width":1280,"height":720,"lines":2,"truncated":false}
+{"record":"error","image":1,"code":"image_invalid"}
+{"record":"line","image":2,"x":0,"y":700,"width":1280,"height":20,"text":"Página principal","text_cut":true,"confidence":0.5}
+{"record":"image","image":2,"width":1280,"height":720,"lines":1,"truncated":false}
+{"record":"error","image":3,"code":"inference_failed"}

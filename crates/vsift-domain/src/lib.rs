@@ -14,6 +14,7 @@ mod pagination;
 mod progress;
 mod provisioning;
 mod retry;
+mod screen_text;
 mod search;
 mod session;
 mod spans;
@@ -58,8 +59,9 @@ pub use evidence::{
 };
 pub use failure::{FailureClass, FailureCode, OperationStatus};
 pub use identity::{
-    ArtifactId, EvidenceId, IdentifierError, JobId, OperationId, OperationKey, SessionId, SourceId,
-    SourceSegmentId, TranscriptRevisionId, TranscriptSegmentId, VisualCandidateId, VisualIndexId,
+    ArtifactId, EvidenceId, IdentifierError, JobId, OperationId, OperationKey, ScreenTextIndexId,
+    ScreenTextLineId, SessionId, SourceId, SourceSegmentId, TranscriptRevisionId,
+    TranscriptSegmentId, VisualCandidateId, VisualIndexId,
 };
 pub use job::{JobKind, JobState, JobTransitionError};
 pub use media::{
@@ -77,10 +79,19 @@ pub use retry::{
     AttemptFailure, Jitter, MAX_AUTOMATIC_RETRIES, MAX_JOB_ATTEMPTS, POISON_THRESHOLD,
     RETRY_BASE_DELAY, RETRY_MAX_DELAY, RetryClass, RetryDecision, RetryPolicy, poisoned_chunk,
 };
+pub use screen_text::{
+    DEFAULT_READ_PERIOD_MICROS, MAX_PROVIDER_LABEL_BYTES, MAX_READ_PERIOD_MICROS,
+    MAX_SCREEN_TEXT_CHARS, MAX_SCREEN_TEXT_FRAMES, MAX_SCREEN_TEXT_LINES,
+    MAX_SCREEN_TEXT_LINES_PER_FRAME, MAX_UNRESOLVED_TARGETS, MIN_READ_PERIOD_MICROS, ProviderLabel,
+    ReadTarget, ScreenText, ScreenTextCoverage, ScreenTextError, ScreenTextFailure,
+    ScreenTextFrame, ScreenTextIndex, ScreenTextIndexParts, ScreenTextLine, ScreenTextOutcome,
+    ScreenTextProfile, ScreenTextProvider, ScreenTextScope, TextRegion, plan_reads,
+};
 pub use search::{
-    CoverageBasis, MAX_SEARCH_QUERY_BYTES, MAX_SEARCH_TERMS, SearchCoverage, SearchHit,
-    SearchMatch, SearchPosition, SearchQuery, SearchQueryRejection, SearchSlice,
-    normalise_search_text, search_revision,
+    CoverageBasis, MAX_SEARCH_QUERY_BYTES, MAX_SEARCH_TERMS, ScreenTextOccurrence, ScreenTextSlice,
+    SearchCoverage, SearchHit, SearchMatch, SearchPosition, SearchQuery, SearchQueryRejection,
+    SearchSlice, normalise_search_text, screen_text_occurrences, search_revision,
+    search_screen_text,
 };
 pub use session::{
     SessionArtifactKind, SessionLifetime, SessionLifetimePolicy, SessionPhase,

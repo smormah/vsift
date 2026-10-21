@@ -134,6 +134,19 @@ These files are the machine-readable public v1 boundary:
 - `search-stream-data.schema.json` â the `data` member of the terminal event that ends
   a `search --events jsonl` stream: the page without its items, with `hits`,
   `record_count` and the cursor (P08);
+- `screen-text-data.schema.json` - the `data` member of a complete or partial `ocr`
+  result (0.3.0, ADR 0030): the range read, the session's newest screen-text `index`
+  revision and the engine build that read it, the frames this call read (`read_now`),
+  why it `stopped`, and `coverage` of the range's plan (scope `screen_text`: `planned`,
+  `read`, `failed`, `unresolved`, `pending`, `period_us`, `candidates_complete`) with the
+  visual index's `candidate_gaps`. Its envelope `coverage` is `truncated`, and its status
+  `partial`, exactly while a planned frame is pending or failed or the candidates are not
+  all known. Its `$defs/search_part` is the `screen_text` member that a `search` first
+  page carries since 0.3.0 (full, brief and stream views alike): the query's on-screen
+  hits, each with its line, `match`, text, uncalibrated confidence, exact `frame`, `region`,
+  `last_time_us`, `frames` and `candidate_ids`, then `total_hits`, the `state`
+  (`not_run`, `partial`, `complete`) and the same coverage. The member is absent on a page a
+  cursor continues and never changes a search's status;
 - `candidates-data.schema.json` â the `data` member of a complete or partial
   `candidates` result (P08 PR 4): the requested `range`, the `index` revision and its
   fixed sampling grid, `coverage` (the searched range, the `analyzed` ranges and every
@@ -189,6 +202,12 @@ These files are the machine-readable public v1 boundary:
   bundle's `visual_index_record` artifact: one revision of the visual index with every
   recorded window and candidate, as stored (P08). A storage record, not a response:
   its `schema_version` is the integer record version `1`;
+- `bundle-screen-text-index-record.schema.json` - the content of a session or retained
+  bundle's `screen_text_index_record` artifact (0.3.0, ADR 0030): one revision of the
+  screen-text index, with the engine build, the period, every attempted frame (its exact
+  timestamp, targets, outcome and lines with region, text and score) and the targets that
+  resolved to no frame. A storage record, not a response: its `schema_version` is the
+  integer record version `1`; it never holds pixels;
 - `bundle-evidence-record.schema.json` â the content of a session or retained bundle's
   `evidence_record` artifact: the lineage of one evidence call (request key and
   parameters, selections with requested and actual time, items with their media
@@ -344,6 +363,15 @@ yet, so it is `partial` with both gaps. All three are checked by `vsift-contract
 `candidates_contract`, the stream byte for byte. `bundle-visual-index-record.json` is
 F02's stored index record, checked by `vsift-infrastructure`'s `visual_index_store`
 tests, which also validate the records of a real retained bundle.
+`ocr.json`, `ocr.partial.json` and `search.screen-text.json` (0.3.0, ADR 0030) read a
+synthetic 15 s video every 5 s plus one visual candidate at 6 s, built by `vsift-contract`'s
+`screen_text_contract`: the complete read of all four planned frames, a call stopped by its
+frame limit after two with the candidates of 12-15 s not yet known (`partial`, coverage
+`frames_pending` and `deadline_exceeded`), and a search for `R-17` whose first page finds the
+transcript cue and two on-screen hits, one held over two frames in the same place.
+`bundle-screen-text-index-record.json` is a two-frame index record (one read, one rejected
+image, one target with no frame), checked by `vsift-infrastructure`'s
+`screen_text_index_store` tests, which also validate the records of a real retained bundle.
 `bundle-evidence-record.json` is the record of a `frame get` at 1.025 s over a fake
 20 fps stream, checked by `vsift-infrastructure`'s `evidence_store` tests, which also
 validate every operation's record and the evidence of retained bundles.

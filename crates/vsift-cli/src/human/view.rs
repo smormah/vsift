@@ -247,6 +247,96 @@ pub(crate) struct Search {
     pub(crate) hits: Vec<SearchHit>,
     pub(crate) next_cursor: Option<String>,
     pub(crate) transcript_coverage: TranscriptCoverage,
+    /// The on-screen text part of a first page (ADR 0030).
+    #[serde(default)]
+    pub(crate) screen_text: Option<SearchScreenText>,
+}
+
+/// The on-screen text part of a `search` first page.
+#[derive(Debug, Deserialize)]
+pub(crate) struct SearchScreenText {
+    pub(crate) state: String,
+    pub(crate) hits: Vec<ScreenTextHit>,
+    pub(crate) total_hits: u64,
+    pub(crate) coverage: ScreenTextCoverage,
+}
+
+/// One occurrence of the query in on-screen text.
+#[derive(Debug, Deserialize)]
+pub(crate) struct ScreenTextHit {
+    pub(crate) line_id: String,
+    #[serde(rename = "match")]
+    pub(crate) tier: String,
+    pub(crate) display_text: DisplayText,
+    pub(crate) frame: ScreenTextFrame,
+    pub(crate) region: ScreenTextRegion,
+    pub(crate) last_time_us: u64,
+    pub(crate) frames: u64,
+}
+
+/// The frame a line was read from.
+#[derive(Debug, Deserialize)]
+pub(crate) struct ScreenTextFrame {
+    pub(crate) time_us: u64,
+}
+
+/// Where on the frame a line lies.
+#[derive(Debug, Deserialize)]
+pub(crate) struct ScreenTextRegion {
+    pub(crate) x: u64,
+    pub(crate) y: u64,
+    pub(crate) width: u64,
+    pub(crate) height: u64,
+}
+
+/// How much of a range's plan the screen-text index has read.
+#[derive(Debug, Deserialize)]
+pub(crate) struct ScreenTextCoverage {
+    pub(crate) period_us: Option<u64>,
+    pub(crate) planned: u64,
+    pub(crate) read: u64,
+    pub(crate) failed: u64,
+    pub(crate) unresolved: u64,
+    pub(crate) pending: u64,
+    pub(crate) candidates_complete: bool,
+}
+
+/// `ocr` data (`screen-text-data.schema.json`).
+#[derive(Debug, Deserialize)]
+pub(crate) struct ScreenTextResult {
+    pub(crate) session_id: String,
+    pub(crate) range: Range,
+    pub(crate) index: Option<ScreenTextIndex>,
+    pub(crate) read_now: u64,
+    pub(crate) stopped: Option<String>,
+    pub(crate) coverage: ScreenTextCoverage,
+    pub(crate) candidate_gaps: Vec<ScreenTextGap>,
+}
+
+/// A screen-text index revision.
+#[derive(Debug, Deserialize)]
+pub(crate) struct ScreenTextIndex {
+    pub(crate) index_id: String,
+    pub(crate) revision: u64,
+    pub(crate) engine: ScreenTextEngine,
+    pub(crate) frames: u64,
+    pub(crate) lines: u64,
+}
+
+/// The engine build that read an index.
+#[derive(Debug, Deserialize)]
+pub(crate) struct ScreenTextEngine {
+    pub(crate) profile: String,
+    pub(crate) runner_version: String,
+    pub(crate) runtime_version: String,
+}
+
+/// A visual-index gap of an `ocr` range.
+#[derive(Debug, Deserialize)]
+pub(crate) struct ScreenTextGap {
+    pub(crate) from_us: u64,
+    pub(crate) to_us: u64,
+    pub(crate) reason: String,
 }
 
 /// The normalised query; only how many terms it has is shown, because the

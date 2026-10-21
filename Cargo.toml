@@ -6,6 +6,7 @@ members = [
   "crates/vsift-contract",
   "crates/vsift-domain",
   "crates/vsift-infrastructure",
+  "crates/vsift-ocr-runner",
   "crates/vsift-windows-security",
   "tools/p10-crash-campaign",
   "tools/vsift-agent-trials",
@@ -50,6 +51,12 @@ predicates = "3.1"
 process-wrap = { version = "10.0", default-features = false, features = ["creation-flags", "job-object", "kill-on-drop", "process-group", "tokio1"] }
 reqwest = { version = "=0.13.5", default-features = false, features = ["native-tls"] }
 proptest = { version = "1.11", default-features = false, features = ["std"] }
+# The OCR runner only (ADR 0030 decision 1): ONNX Runtime's C API through its
+# safe wrapper, loaded at run time from the runner's own folder (`load-dynamic`,
+# which brings `libloading`), never linked at build time and never downloaded by
+# the build (no default features: no `download-binaries`, no TLS, no `ndarray`).
+# rc.13 rather than the newest: the newest was under two weeks old at review.
+ort = { version = "=2.0.0-rc.13", default-features = false, features = ["load-dynamic"] }
 # The 17 patterns of the skill-owned handoff schema (P13 PR 5, ADR 0023 note of
 # 2026-09-30). Without the Unicode tables: the patterns use explicit ranges only.
 regex = { version = "1.13", default-features = false, features = ["std"] }

@@ -1,10 +1,13 @@
 //! Bounded literal search of a session's transcript.
 
-use vsift_application::{SearchPageRequest, page_search};
+use vsift_application::{SearchPageRequest, clip_to_source, missing_windows, page_search};
 use vsift_domain::{
-    MediaTime, PageLimit, SearchCoverage, SearchMatch, SearchQuery, SessionId, TimeRange,
-    TranscriptRevision, TranscriptRevisionId, TranscriptSegment,
+    FrameRef, MediaTime, PageLimit, ReadTarget, ScreenTextCoverage, ScreenTextIndex,
+    ScreenTextLine, SearchCoverage, SearchMatch, SearchQuery, SessionId, TimeRange,
+    TranscriptRevision, TranscriptRevisionId, TranscriptSegment, VisualCandidateId, plan_reads,
+    screen_text_occurrences,
 };
+use vsift_infrastructure::FilesystemSessionStore;
 
 use crate::{
     engine::Engine,
@@ -63,6 +66,107 @@ impl SearchResultHit {
     }
 }
 
+/// One occurrence of the query in on-screen text (ADR 0030): a line read on one
+/// or more consecutive read frames, cited by its first frame.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ScreenTextResultHit {
+    line: ScreenTextLine,
+    frame: FrameRef,
+    candidates: Vec<VisualCandidateId>,
+    last_time: MediaTime,
+    frames: u32,
+    tier: SearchMatch,
+}
+
+impl ScreenTextResultHit {
+    /// The line as read on the first frame.
+    #[must_use]
+    pub const fn line(&self) -> &ScreenTextLine {
+        &self.line
+    }
+
+    /// The first frame the text was read on.
+    #[must_use]
+    pub const fn frame(&self) -> &FrameRef {
+        &self.frame
+    }
+
+    /// The visual candidates whose representative frame that is.
+    #[must_use]
+    pub fn candidates(&self) -> &[VisualCandidateId] {
+        &self.candidates
+    }
+
+    /// The last consecutive read frame's time that held the same text there.
+    #[must_use]
+    pub const fn last_time(&self) -> MediaTime {
+        self.last_time
+    }
+
+    /// How many consecutive read frames held it.
+    #[must_use]
+    pub const fn frames(&self) -> u32 {
+        self.frames
+    }
+
+    /// Whether it matched as a phrase or by all terms.
+    #[must_use]
+    pub const fn tier(&self) -> SearchMatch {
+        self.tier
+    }
+}
+
+/// The on-screen text part of a search: hits and how much of the range was read.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ScreenTextSearch {
+    index: Option<ScreenTextIndex>,
+    hits: Vec<ScreenTextResultHit>,
+    total_hits: usize,
+    coverage: ScreenTextCoverage,
+    candidates_complete: bool,
+    period_micros: Option<u64>,
+}
+
+impl ScreenTextSearch {
+    /// The index searched; `None` when `ocr` has not read this session.
+    #[must_use]
+    pub const fn index(&self) -> Option<&ScreenTextIndex> {
+        self.index.as_ref()
+    }
+
+    /// Hits in rank order, at most the page size.
+    #[must_use]
+    pub fn hits(&self) -> &[ScreenTextResultHit] {
+        &self.hits
+    }
+
+    /// How many hits there are in all; more than [`Self::hits`] when the page cut them.
+    #[must_use]
+    pub const fn total_hits(&self) -> usize {
+        self.total_hits
+    }
+
+    /// How much of the searched range's plan (its candidates and one frame a
+    /// period) the index has read.
+    #[must_use]
+    pub const fn coverage(&self) -> ScreenTextCoverage {
+        self.coverage
+    }
+
+    /// Whether every visual window of the range is analysed, so the plan holds
+    /// all of its candidates.
+    #[must_use]
+    pub const fn candidates_complete(&self) -> bool {
+        self.candidates_complete
+    }
+
+    /// The period of the index's latest plan.
+    #[must_use]
+    pub const fn period_micros(&self) -> Option<u64> {
+        self.period_micros
+    }
+}
+
 /// One bounded page of search results.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SearchResults {
@@ -73,9 +177,17 @@ pub struct SearchResults {
     hits: Vec<SearchResultHit>,
     next_cursor: Option<String>,
     coverage: SearchCoverage,
+    screen_text: Option<ScreenTextSearch>,
 }
 
 impl SearchResults {
+    /// The on-screen text part (ADR 0030) of a first page; `None` on a page a
+    /// transcript cursor continues, whose first page already held it.
+    #[must_use]
+    pub const fn screen_text(&self) -> Option<&ScreenTextSearch> {
+        self.screen_text.as_ref()
+    }
+
     /// Session state observed when the search ran.
     #[must_use]
     pub const fn session(&self) -> &SessionSnapshot {
@@ -154,6 +266,7 @@ impl Engine {
             .map_err(|_| EngineError::InvalidPageLimit)?;
         let (store, now) = self.existing_store()?;
         let store = store.ok_or(EngineError::SessionRoot(SessionRootError::Missing))?;
+        let first_page = request.cursor.is_none();
         let (revision, status) = match &request.revision {
             None => store
                 .read_transcript(&request.session, now)?
@@ -189,6 +302,18 @@ impl Engine {
             .collect();
         let next_cursor = page.next_cursor.map(|cursor| cursor.encode());
         let coverage = page.coverage;
+        let screen_text = if first_page {
+            Some(search_screen_text_part(
+                &store,
+                &request.session,
+                &query,
+                range,
+                limit,
+                now,
+            )?)
+        } else {
+            None
+        };
         Ok(SearchResults {
             session: SessionSnapshot::observe(&status, now),
             revision,
@@ -197,6 +322,85 @@ impl Engine {
             hits,
             next_cursor,
             coverage,
+            screen_text,
         })
     }
+}
+
+/// The on-screen text part of a first page: hits of the session's newest
+/// screen-text index, and the coverage of the range's plan, from the indexes as
+/// they are (no tool runs and nothing is written).
+fn search_screen_text_part(
+    store: &FilesystemSessionStore,
+    session: &SessionId,
+    query: &SearchQuery,
+    range: Option<TimeRange>,
+    limit: PageLimit,
+    now: u64,
+) -> Result<ScreenTextSearch, EngineError> {
+    let (index, _) = store.read_screen_text_index(session, now)?;
+    let visual = store
+        .read_visual_index(session, now)?
+        .map(|(index, _)| index);
+    let Some(index) = index else {
+        return Ok(ScreenTextSearch {
+            index: None,
+            hits: Vec::new(),
+            total_hits: 0,
+            coverage: ScreenTextCoverage::default(),
+            candidates_complete: false,
+            period_micros: None,
+        });
+    };
+    let occurrences = screen_text_occurrences(&index, query, range);
+    let total_hits = occurrences.len();
+    let hits = occurrences
+        .into_iter()
+        .take(usize::from(limit.get()))
+        .map(|hit| ScreenTextResultHit {
+            line: hit.line.clone(),
+            frame: hit.first.frame,
+            candidates: hit
+                .first
+                .targets
+                .iter()
+                .filter_map(|target| target.candidate.clone())
+                .collect(),
+            last_time: hit.last_time,
+            frames: hit.frames,
+            tier: hit.tier,
+        })
+        .collect();
+    let (plan, candidates_complete) = match &visual {
+        Some(visual) => {
+            let whole = TimeRange::new(MediaTime::from_micros(0), visual.duration())
+                .map_err(|_| EngineError::InvalidTimeRange)?;
+            let searched =
+                range.map_or(Ok(whole), |range| clip_to_source(range, visual.duration()));
+            match searched {
+                Ok(searched) => {
+                    let candidates: Vec<(VisualCandidateId, MediaTime)> = visual
+                        .candidates_in(searched)
+                        .map(|candidate| (candidate.id().clone(), candidate.representative()))
+                        .collect();
+                    let plan = plan_reads(searched, &candidates, index.period_micros())
+                        .unwrap_or_default();
+                    let complete =
+                        missing_windows(Some(visual), visual.duration(), searched).is_empty();
+                    (plan, complete)
+                }
+                Err(_) => (Vec::<ReadTarget>::new(), true),
+            }
+        }
+        None => (Vec::new(), false),
+    };
+    let coverage = ScreenTextCoverage::of(&plan, Some(&index));
+    Ok(ScreenTextSearch {
+        period_micros: Some(index.period_micros()),
+        index: Some(index),
+        hits,
+        total_hits,
+        coverage,
+        candidates_complete,
+    })
 }
