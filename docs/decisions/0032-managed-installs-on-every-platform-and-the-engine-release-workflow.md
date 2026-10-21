@@ -186,5 +186,12 @@ group-generic `optional_groups` and `optional_components`).
 - **Rule 10 of the workflow lint** (`workflows/engines.rs`) holds it to the release workflow's standard, with 28
   broken copies of the real file each refused; rules 4 and 9 now name the engine workflow too (its `attest` job is
   the only other one with `id-token`, and it has no LOKI job).
+- **The OCR runner** (the coordinator's request of 2026-10-21) is a fourth engine with three targets: VSift's own
+  crate built as VSift is, its folder assembled by the OCR story's stage tool (the runtime library and the models
+  by pinned size and SHA-256, republished unchanged), and `describe` checked. Open: the managed store keeps a
+  component's files flat, and the runner looks in `onnxruntime/` and `models/`; the recommendation is that the
+  runner also accepts them beside itself.
+- **Dry runs:** `Engines` run 39610758455 built every upstream engine twice, byte for byte the same (the first run,
+  39607212953, found the macOS FFprobe builds different until `ZERO_AR_DATE=1`).
 - **Nothing is published by this slice.** The first publishes need the maintainer's tag ruleset for the engine tags,
   the engine tag patterns in the `release` environment's allowed refs, a tag and an approval each.

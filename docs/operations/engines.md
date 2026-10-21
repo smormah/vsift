@@ -12,8 +12,10 @@ SHA-256 like any publisher's file. An engine release is not a VSift release: VSi
 | `whisper-cli-macos` | whisper.cpp publishes no macOS command-line build | ggml-org/whisper.cpp v1.9.5 (`d1be6fde11ac`) | MIT | `macos-15` |
 | `whisper-cli-windows` | upstream's Windows build needs the Microsoft C runtime and OpenMP (hosted inventory, run 39604340709) | the same commit | MIT | `windows-2025` |
 | `ffmpeg-macos` | no publisher offers an LGPL static macOS build of the pinned version (the maintainer's decision D1) | FFmpeg `e47273f4d922` (`n9.0.1-11-ge47273f4d9`) | LGPL 2.1 or later | `macos-15` |
+| `ocr-runner` | VSift's own runner (ADR 0030), with ONNX Runtime 1.31.0's library and the two PP-OCRv5 models beside it, which ModelScope alone publishes | this repository's `crates/vsift-ocr-runner` at the tagged commit; Microsoft's v1.31.0 archives and RapidOCR's ModelScope list v3.10.0, each by pinned size and SHA-256 (`tools/p16_ocr_runner.py stage`) | MIT or Apache-2.0 (runner), MIT (runtime), Apache-2.0 (models) | `ubuntu-22.04`, `windows-2025`, `macos-15` |
 
-The OCR runner is added by its story in the same way.
+An engine with several targets (the OCR runner) builds one leg per target; the plan merges the legs into one
+release.
 
 ## What a build does
 
