@@ -945,6 +945,11 @@ pull request's branch at which the skill changed, gave the `skill` digest `3291a
 (it was `bd205d6c...`) and the whole-freeze digest `3f9f44fb93fe7b8064c52633293a149f04fe2b70f0547325a056d7d9a7bcf790` (it was `30293090...`);
 the other six components are unchanged, and the pin in `committed_freeze` moved with it. It is written again on the new `main` when the pull
 request is rebased to merge. No batch has run under it, and none is run for this change.
+**Later on 2026-10-21 the draft freeze is written again (the progress story's fourth pull request, rewritten at the merge rebase too).**
+The skill adds `--first <from-us>:<to-us>` when the user named a moment and says that `candidates` answers without analysing once the video is
+indexed: `freeze write` at `09a06463597f` gave the `skill` digest `f09eea124480b74d0147cd894c018647c95cdd3a35fbebc5a53b0f0198011280` (it was `3291a3ba...`) and the whole-freeze
+digest `8cd377873b4551a7ca2d67de36310352d8c089d83db94e897c8462f0fbfd6823` (it was `3f9f44fb...`); the other six components are unchanged, and the pin in `committed_freeze` moved with it.
+No batch has run under it.
 
 ## Usage capture (P14)
 
