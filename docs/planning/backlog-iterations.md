@@ -21,8 +21,8 @@ earlier plan: where they disagree with this section, this section wins, and each
 | The announcement | **The word goes out with `0.3.0`.** The README (D4) and the launch checklist, which were cycle 3's items, are done in November. | | Early December |
 | `1.0.0` | The first release with a stability promise. [#188](https://github.com/smormah/vsift/issues/188) (RQ-14, adversarial containment) is required, produced as denied-action probes that the maintainer reviews before they run, and so is [#176](https://github.com/smormah/vsift/issues/176)'s API stability promise. Any `0.3.0` feature that was not qualified at its cut is decided here. The probes' stand-in provider and harness are written by the maintainer by hand; their techniques are not described in public documents. | End of December or the first week of January | |
 
-**The `0.3.0` scope.** The reference is an existing tool for coding agents that investigates videos, talkthrough-mcp
-(MIT, Python). VSift matches it where its users would look, then goes further. Nothing of its code, text or tests is
+**The `0.3.0` scope.** The reference is an existing tool for coding agents that investigates videos (public documents
+name no other tools). VSift matches it where its users would look, then goes further. Nothing of its code, text or tests is
 used: its README is read for behaviour only, and VSift's designs come from VSift's own architecture. No comparison
 table goes into public documents.
 
