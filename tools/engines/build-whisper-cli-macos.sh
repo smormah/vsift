@@ -11,6 +11,8 @@
 # aarch64-apple-darwin, which VSift itself is built for. Paths of the build are
 # mapped away, so the bytes do not name the runner's folders.
 set -euo pipefail
+# Archive members without their time stamps (see build-ffmpeg-macos.sh).
+export ZERO_AR_DATE=1
 
 source_dir="$1"
 build_dir="$2"

@@ -15,6 +15,9 @@
 # archive is the upstream commit, untouched). Paths of the build are mapped
 # away, so the bytes do not name the runner's folders.
 set -euo pipefail
+# Archive members without their time stamps, so the static libraries, and
+# what the linker makes from them, are the same bytes on a second build.
+export ZERO_AR_DATE=1
 
 source_dir="$1"
 build_dir="$2"
