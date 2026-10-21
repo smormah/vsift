@@ -636,7 +636,8 @@ def stage(dest: Path, everything: bool) -> dict:
         "needed_by_binary": runtime_files(binary, files)}
     archive.unlink()
     segmentation = SEGMENTATION if everything else {"pyannote-3.0": SEGMENTATION["pyannote-3.0"]}
-    embeddings = EMBEDDINGS if everything else {"campplus-en": EMBEDDINGS["campplus-en"]}
+    shortlist = ("campplus-en",) + SHORTLIST_EMBEDDINGS
+    embeddings = EMBEDDINGS if everything else {key: EMBEDDINGS[key] for key in shortlist}
     for pin in segmentation.values():
         fetch(pin, "models")
     for pin in embeddings.values():
@@ -920,17 +921,29 @@ class Candidate:
     known_count: bool = True
 
 
+# The shortlist after the first full run (39518020351): the two engines' best settings,
+# with the threshold sweep that the automatic count needs, and CAM++ (the model the
+# sherpa-onnx documentation names) as the reference point. ``everything`` adds what that
+# run ruled out: ERes2Net (TitaNet's accuracy at twice its cost), CAM++'s sweep, the
+# int8 segmentation model and tinydiarize.
+SHORTLIST_EMBEDDINGS = ("titanet-small", "wespeaker-r34")
+THRESHOLDS = (0.5, 0.7, 0.9)
+
+
 def candidates(everything: bool) -> list[Candidate]:
-    listed = [Candidate("sherpa/campplus-en/known", "sherpa", "pyannote-3.0", "campplus-en"),
-              Candidate("sherpa/campplus-en/auto-0.5", "sherpa", "pyannote-3.0", "campplus-en", 0.5, False),
-              Candidate("polyvoice/known", "polyvoice"),
-              Candidate("polyvoice/auto", "polyvoice", known_count=False)]
+    listed = [Candidate("polyvoice/known", "polyvoice"),
+              Candidate("polyvoice/auto", "polyvoice", known_count=False),
+              Candidate("sherpa/campplus-en/known", "sherpa", "pyannote-3.0", "campplus-en")]
+    for embedding in SHORTLIST_EMBEDDINGS:
+        listed.append(Candidate(f"sherpa/{embedding}/known", "sherpa", "pyannote-3.0", embedding))
+        for threshold in THRESHOLDS:
+            listed.append(Candidate(f"sherpa/{embedding}/auto-{threshold}", "sherpa", "pyannote-3.0", embedding,
+                                    threshold, False))
     if not everything:
         return listed
-    for embedding in ("eres2net-en", "titanet-small", "wespeaker-r34"):
-        listed.append(Candidate(f"sherpa/{embedding}/known", "sherpa", "pyannote-3.0", embedding))
-        listed.append(Candidate(f"sherpa/{embedding}/auto-0.5", "sherpa", "pyannote-3.0", embedding, 0.5, False))
-    for threshold in (0.7, 0.9):
+    listed.append(Candidate("sherpa/eres2net-en/known", "sherpa", "pyannote-3.0", "eres2net-en"))
+    listed.append(Candidate("sherpa/eres2net-en/auto-0.5", "sherpa", "pyannote-3.0", "eres2net-en", 0.5, False))
+    for threshold in THRESHOLDS:
         listed.append(Candidate(f"sherpa/campplus-en/auto-{threshold}", "sherpa", "pyannote-3.0", "campplus-en",
                                 threshold, False))
     listed.append(Candidate("sherpa-int8seg/campplus-en/known", "sherpa", "pyannote-3.0-int8", "campplus-en"))
@@ -1274,6 +1287,14 @@ def main(argv: Sequence[str] | None = None) -> None:
         report = evaluate(arguments.tools, arguments.inputs, arguments.whisper_cli, arguments.whisper_model,
                           arguments.output_dir, arguments.everything, arguments.rm06_reference)
         print(summary(report))
+        print(json.dumps({"polyvoice_models": report["polyvoice_models"]}, indent=2))
+        labelled = arguments.output_dir / "rm06-labelled-transcript.md"
+        if labelled.is_file():
+            # RM06 is public domain; its labelled transcript and each candidate's turns go
+            # to the log so a person can read and score them without the artifact.
+            print(labelled.read_text(encoding="utf-8"))
+            for path in sorted((arguments.output_dir / "hypotheses").glob("RM06.*.json")):
+                print(f"RM06-TURNS {path.stem[len('RM06.'):]} {path.read_text(encoding='utf-8')}")
     elif arguments.command == "network-check":
         results = network_check(arguments.tools, arguments.wav, arguments.output)
         print(json.dumps(results, indent=2))

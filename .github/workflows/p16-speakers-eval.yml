@@ -181,7 +181,7 @@ jobs:
             --ffmpeg "$(command -v ffmpeg)" --output-dir "$RUNNER_TEMP/p16-inputs/media" --item RM06 --item RM09
 
       - name: Stage the pinned engines and models
-        run: python tools/p16_speakers_eval.py stage --dest "$RUNNER_TEMP/p16-tools" --everything
+        run: python tools/p16_speakers_eval.py stage --dest "$RUNNER_TEMP/p16-tools"
 
       - name: Show the engines' shared libraries and the host
         run: |
@@ -203,7 +203,7 @@ jobs:
           python tools/p16_speakers_eval.py evaluate --tools "$RUNNER_TEMP/p16-tools" \
             --inputs "$RUNNER_TEMP/p16-inputs" --whisper-cli "$VSIFT_TEST_WHISPER_CLI" \
             --whisper-model "$VSIFT_TEST_WHISPER_MODEL" --output-dir "$RUNNER_TEMP/p16-report" \
-            --everything "${reference[@]}"
+            "${reference[@]}"
           cat "$RUNNER_TEMP/p16-report/summary.md" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Trace the default engines for network calls
