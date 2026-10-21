@@ -40,7 +40,7 @@ Current-state handoff, rewritten in every change; history: git, `CHANGELOG.md`, 
 
 ## `0.3.0` (drafts until `main` opens after the `0.2.3` cut)
 
-- **Online links, #407 (draft pull request, branch `v030/407-direct-links`; ADR 0028 proposed; L-208):** built and tested without the network. **Left:** a manual hosted live check against NASA public-domain files (RM09 direct, RM06 through its redirects), review, and the skill's wording at the `0.3.0` freeze. **Then #409** in two pull requests (the optional components and the plan; the invocation, refusals, joining and the page origin).
+- **Online links, #407 (draft pull request #502, branch `v030/407-direct-links`; ADR 0028 proposed; L-208):** built, tested without the network, and the manual hosted live check against NASA public-domain files passed (run 39532853749). **Left:** review, the trial freeze rewrite at the rebase, and the skill's wording at the `0.3.0` freeze. **#409's whole design is in ADR 0028 section 4.** Its setup half (sections 4.1 to 4.5: the optional components, the zip reader, the plan's offer and `operator_decision_required`, the core and optional transaction) belongs to the cross-platform managed-install work since 2026-10-21; draft #503 is a stopped first build kept for reference. Its acquisition half (sections 4.6 to 4.9: the invocation, the refusals and phrase set, joining, the page origin, the fake yt-dlp) is briefed to a fresh agent when `main` opens. yt-dlp stays managed on Linux only.
 
 ## What `0.2.2` holds (cycle 1, released 2026-10-18)
 

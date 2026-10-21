@@ -940,9 +940,11 @@ async fn links_with_credentials_another_port_or_an_internal_address_are_refused_
             route(&server, &answers)?,
         )
         .await;
+        // The case is named by its expected reason, never by the link: one
+        // link carries a credential, and a test log is a log too.
         assert!(
             matches!(result, Err(SourceError::Fetch(found)) if found == reason),
-            "{link}"
+            "expected {reason:?}"
         );
     }
     assert_eq!(
