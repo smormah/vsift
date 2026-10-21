@@ -1804,14 +1804,14 @@ call attempted), `stopped` (why it ended with reads pending: `frame_limit`, `dea
 `cancelled`, `engine_failed`, `media_failed`; null otherwise), `coverage` and `candidate_gaps`.
 `coverage` (scope `screen_text`) counts the range's planned reads once each: `planned` = `read` +
 `failed` (the runner rejected the image or failed on it; not retried by the same build) +
-`unresolved` + `pending`, with `period_us` and `candidates_complete` (false while a visual window
+`unresolved` + `pending`, with `awaiting_analysis` (reads not planned yet because their visual window is not analysed: always 0 for `vsift ocr`, which analyses missing windows itself; counted by the engine's analysed-windows-only calls for ADR 0033's background `prepare` job), `period_us` and `candidates_complete` (false while a visual window
 of the range can still be analysed, `not_analyzed` or `deadline_exceeded`, so its candidates are not
 yet in the plan; `candidate_gaps` lists every visual gap as `candidates` reports them, the final ones,
 `undecodable`, `no_decoded_frame` and `candidate_budget_exhausted`, included). **Coverage is never hidden:** the envelope `coverage` is
 `truncated`, and the status `partial` with the fixed warning `Not every planned frame of the range
 has been read: ...`, exactly while a read is pending or failed or the candidates are not all known;
 its `gaps` are the candidate gaps that can still be filled, as `"<from_us>-<to_us>"`, and its
-`reasons` name `frames_pending`, `frames_failed` and each of those gaps' reasons. A partial result exits 0.
+`reasons` name `frames_pending`, `frames_failed`, `frames_awaiting_analysis` and each of those gaps' reasons. A partial result exits 0.
 
 **Search.** Since `0.3.0` a `search` first page has a `screen_text` member
 ([`search.screen-text.json`](../../schemas/v1/examples/search.screen-text.json); the definition is
@@ -1842,7 +1842,7 @@ hit). `data` ([`ocr-search-data.schema.json`](../../schemas/v1/ocr-search-data.s
 `query.terms`, `range`, `state` (`not_run`, `partial`, `complete`), `index`, `hits` (20 by default),
 `total_hits` (the whole search, on every page), `next_cursor` and the screen-text `coverage` of the
 searched range. While the state is not `complete` the envelope `coverage` is `truncated` with reasons
-`not_run`, or `frames_pending`, `frames_failed` and `candidates_incomplete`, and the status `partial`
+`not_run`, or `frames_pending`, `frames_failed`, `frames_awaiting_analysis` and `candidates_incomplete`, and the status `partial`
 with the fixed warning `Not every planned frame of the searched range has been read, ...`; it exits 0.
 The cursor is bound to the session, the index revision, the range and the normalised query, and the
 session's expiry; once `ocr` commits a new revision, or for any other search, it is `INVALID_ARGUMENT`

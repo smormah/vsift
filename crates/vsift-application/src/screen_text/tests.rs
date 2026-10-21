@@ -312,7 +312,8 @@ async fn a_plan_is_read_in_bounded_calls_until_complete() -> TestResult {
             read: 8,
             failed: 0,
             unresolved: 1,
-            pending: 0
+            pending: 0,
+            awaiting_analysis: 0,
         }
     );
     assert!(coverage.is_complete());
@@ -474,5 +475,93 @@ async fn a_cancelled_call_reads_nothing() -> TestResult {
         merge_screen_text(None, &extension, DEFAULT_READ_PERIOD_MICROS)?,
         None
     );
+    Ok(())
+}
+
+/// A still screen, the same every half second.
+struct StillScreen;
+
+impl crate::VisualSampler for StillScreen {
+    fn window_samples(
+        &self,
+        window: vsift_domain::VisualWindow,
+    ) -> impl Future<Output = Result<Vec<vsift_domain::VisualSample>, crate::VisualSamplingError>> + Send
+    {
+        let mut samples = Vec::new();
+        let mut time = window.lead_in_start().as_micros();
+        while time < window.range().end().as_micros() {
+            samples.push(vsift_domain::VisualSample::from_parts(
+                MediaTime::from_micros(time),
+                [40; vsift_domain::VISUAL_BLOCKS],
+                vsift_domain::VisualHash::from_bits(40),
+            ));
+            time += SECOND / 2;
+        }
+        ready(Ok(samples))
+    }
+}
+
+/// ADR 0033's background job: a 150 s video whose first 60 s window alone is
+/// analysed is planned only there; the rest waits for analysis, and nothing is
+/// analysed by planning.
+#[tokio::test]
+async fn a_plan_of_analysed_windows_waits_for_the_others() -> TestResult {
+    let session = SessionId::parse("ses_0123456789abcdef")?;
+    let source = SourceId::parse(format!("src_sha256_{}", "b".repeat(64)))?;
+    let scope = crate::VisualIndexScope {
+        session_id: &session,
+        source_id: &source,
+        stream_index: 0,
+        displayed_dimensions: FrameDimensions::new(1280, 720)?,
+        duration: MediaTime::from_micros(150 * SECOND),
+        profile: vsift_domain::VisualIndexProfile::R0,
+    };
+    let first_window = TimeRange::new(
+        MediaTime::from_micros(0),
+        MediaTime::from_micros(60 * SECOND),
+    )?;
+    let visual = crate::extend_visual_index(
+        crate::ExtendVisualIndexRequest {
+            scope,
+            previous: None,
+            range: first_window,
+        },
+        &StillScreen,
+    )
+    .await?
+    .revision
+    .ok_or("no revision")?;
+    let whole = TimeRange::new(
+        MediaTime::from_micros(0),
+        MediaTime::from_micros(400 * SECOND),
+    )?;
+    let planned = super::plan_analysed_windows(&visual, whole, DEFAULT_READ_PERIOD_MICROS)?;
+    assert_eq!(
+        planned.range.end().as_micros(),
+        150 * SECOND,
+        "clipped to the video"
+    );
+    assert!(
+        planned
+            .plan
+            .iter()
+            .all(|target| target.time.as_micros() < 60 * SECOND)
+    );
+    assert!(planned.plan.iter().any(|target| target.candidate.is_some()));
+    // The periodic reads at 60, 70, ..., 140 s wait for their two windows.
+    assert_eq!(planned.awaiting_analysis, 9);
+    assert!(
+        planned
+            .gaps
+            .iter()
+            .any(|gap| gap.reason == vsift_domain::CoverageGapReason::NotAnalyzed)
+    );
+    let coverage = ScreenTextCoverage {
+        awaiting_analysis: planned.awaiting_analysis,
+        ..ScreenTextCoverage::of(&planned.plan, None)
+    };
+    assert!(!coverage.is_complete());
+    assert_eq!(coverage.pending, planned.plan.len());
+    assert_eq!(visual.windows().len(), 1, "planning analysed nothing");
     Ok(())
 }

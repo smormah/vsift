@@ -7,7 +7,7 @@ use std::num::NonZeroU16;
 
 use vsift::{
     Cancellation, Engine, FailureCode, ScreenTextRange, ScreenTextRequest, ScreenTextResults,
-    ScreenTextSearchRequest, ScreenTextSearchResults, SearchRange,
+    ScreenTextSearchRequest, ScreenTextSearchResults, ScreenTextWindows, SearchRange,
 };
 use vsift_contract::{
     LifecycleResponse, OperationResponse, ScreenTextPresentation, ScreenTextSearchPagePresentation,
@@ -64,6 +64,7 @@ pub(crate) async fn ocr(
             max_frames: arguments.max_frames,
             runner: arguments.runner,
             threads: arguments.threads.and_then(NonZeroU16::new),
+            windows: ScreenTextWindows::AnalyseMissing,
             cancellation: cancellation.clone(),
         })
         .await

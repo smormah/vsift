@@ -2,7 +2,7 @@
 //! (ADR 0030 decision 1).
 //!
 //! The runtime library is loaded at run time from the runner's own
-//! `onnxruntime` folder ([`Layout::runtime`]), never linked at build time and
+//! `onnxruntime` folder or beside it ([`Layout::runtime_library`]), never linked at build time and
 //! never looked for anywhere else, so the runner uses exactly the library it
 //! was installed with. Nothing here needs `unsafe`: `ort` holds the C API's
 //! raw calls, and this crate forbids `unsafe` code.

@@ -1011,7 +1011,7 @@ This schema also holds 3 conditional rules (a member that is required, or fixed,
 
 **VSift ocr.search data v1** ([the schema](../../../schemas/v1/ocr-search-data.schema.json))
 
-The data member of a complete or partial ocr.search result (0.3.0, ADR 0030 decision 13): one bounded page of the query's occurrences in the session's screen-text index, with or without a transcript. Occurrences are matched as search matches transcript segments (phrase, then all_terms) and ranked by tier, then by first appearance; a line read on consecutive read frames with the same words in the same place is one occurrence. Each hit cites its first frame, its region, its text and display_text, the runner's uncalibrated confidence, how long it stayed and the candidates of its frame (screen-text-data.schema.json#/$defs/hit). total_hits counts the whole search on every page. state is not_run before ocr has read the session, partial while its coverage of the searched range is not complete and complete otherwise; coverage is the screen-text coverage block. Validate the envelope with operation-response.schema.json: its coverage member is truncated, and its status partial with a fixed warning, exactly when state is not complete; its reasons name not_run, or frames_pending, frames_failed and candidates_incomplete. Pass next_cursor back with the same session, query and range; it is rejected for any other search or session, after the session expires, or once ocr has committed a new index revision. Absence of a hit is never evidence the text was not on screen: only planned frames are read.
+The data member of a complete or partial ocr.search result (0.3.0, ADR 0030 decision 13): one bounded page of the query's occurrences in the session's screen-text index, with or without a transcript. Occurrences are matched as search matches transcript segments (phrase, then all_terms) and ranked by tier, then by first appearance; a line read on consecutive read frames with the same words in the same place is one occurrence. Each hit cites its first frame, its region, its text and display_text, the runner's uncalibrated confidence, how long it stayed and the candidates of its frame (screen-text-data.schema.json#/$defs/hit). total_hits counts the whole search on every page. state is not_run before ocr has read the session, partial while its coverage of the searched range is not complete and complete otherwise; coverage is the screen-text coverage block. Validate the envelope with operation-response.schema.json: its coverage member is truncated, and its status partial with a fixed warning, exactly when state is not complete; its reasons name not_run, or frames_pending, frames_failed, frames_awaiting_analysis and candidates_incomplete. Pass next_cursor back with the same session, query and range; it is rejected for any other search or session, after the session expires, or once ocr has committed a new index revision. Absence of a hit is never evidence the text was not on screen: only planned frames are read.
 
 | Member | Type | Required | Notes |
 | --- | --- | --- | --- |
@@ -1060,7 +1060,7 @@ The data member of a complete or partial ocr.search result (0.3.0, ADR 0030 deci
 | `hits[].candidate_ids` | array of string | yes | The visual candidates whose representative frame the first frame is, in time order; empty for a frame read only for its period. At most 32 are listed.; at most 32 items; each: pattern `^vcd_[a-z0-9]{16,64}$` |
 | `total_hits` | integer | yes | at least 0 |
 | `next_cursor` | string or null | yes | 1 to 512 characters |
-| `coverage` | object | yes | How much of the range's plan the index has read. Every planned frame is counted once: planned = read + failed + unresolved + pending. read: its frame was read (it may hold no text). failed: the runner rejected the image or failed on it; it is not read again by the same build. unresolved: the target time resolved to no decodable frame. pending: not attempted yet. Text that appears and goes between two planned frames is not read. |
+| `coverage` | object | yes | How much of the range's plan the index has read. Every planned frame is counted once: planned = read + failed + unresolved + pending; awaiting_analysis counts reads not yet planned. read: its frame was read (it may hold no text). failed: the runner rejected the image or failed on it; it is not read again by the same build. unresolved: the target time resolved to no decodable frame. pending: not attempted yet. Text that appears and goes between two planned frames is not read. |
 | `coverage.scope` | constant "screen_text" | yes | What the block covers: on-screen text only. |
 | `coverage.period_us` | integer or null | yes | The period of the frames planned between candidates: the call's --period-us (default 10000000). In search, the period of the index's latest call; null before ocr has run.; 1000000 to 600000000 |
 | `coverage.planned` | integer | yes | at least 0 |
@@ -1068,6 +1068,7 @@ The data member of a complete or partial ocr.search result (0.3.0, ADR 0030 deci
 | `coverage.failed` | integer | yes | at least 0 |
 | `coverage.unresolved` | integer | yes | at least 0 |
 | `coverage.pending` | integer | yes | at least 0 |
+| `coverage.awaiting_analysis` | integer | yes | Periodic reads of the range left out of the plan, not counted in planned, because their visual window is not analysed yet: always 0 when the call analyses missing windows itself, as vsift ocr does; counted by the engine's analysed-windows-only calls (ADR 0033's background prepare job). Coverage is not complete while it is above 0, and the envelope reason is frames_awaiting_analysis.; at least 0 |
 | `coverage.candidates_complete` | boolean | yes | True when no visual window of the range is still to be analysed or tried again (not_analyzed, deadline_exceeded), so the plan holds every candidate the range will have. |
 
 ### operation-response.schema.json
@@ -1169,7 +1170,7 @@ The data member of a complete or partial ocr result (0.3.0, ADR 0030): what one 
 | `index.lines` | integer | yes | Lines of text the index holds.; 0 to 200000 |
 | `read_now` | integer | yes | Frames this call attempted: read, or found unreadable.; 0 to 200 |
 | `stopped` | "frame_limit" \| "deadline_exceeded" \| "cancelled" \| "engine_failed" \| "media_failed" or null | yes | Why the call ended with frames still pending, or null when it was not stopped. frame_limit: it read --max-frames frames. deadline_exceeded: its time ran out. cancelled: it was cancelled. engine_failed: the OCR runner failed and what it had read before is kept. media_failed: the media tools could not extract a frame. Every stop keeps what was read before it. |
-| `coverage` | object | yes | How much of the range's plan the index has read. Every planned frame is counted once: planned = read + failed + unresolved + pending. read: its frame was read (it may hold no text). failed: the runner rejected the image or failed on it; it is not read again by the same build. unresolved: the target time resolved to no decodable frame. pending: not attempted yet. Text that appears and goes between two planned frames is not read. |
+| `coverage` | object | yes | How much of the range's plan the index has read. Every planned frame is counted once: planned = read + failed + unresolved + pending; awaiting_analysis counts reads not yet planned. read: its frame was read (it may hold no text). failed: the runner rejected the image or failed on it; it is not read again by the same build. unresolved: the target time resolved to no decodable frame. pending: not attempted yet. Text that appears and goes between two planned frames is not read. |
 | `coverage.scope` | constant "screen_text" | yes | What the block covers: on-screen text only. |
 | `coverage.period_us` | integer or null | yes | The period of the frames planned between candidates: the call's --period-us (default 10000000). In search, the period of the index's latest call; null before ocr has run.; 1000000 to 600000000 |
 | `coverage.planned` | integer | yes | at least 0 |
@@ -1177,6 +1178,7 @@ The data member of a complete or partial ocr result (0.3.0, ADR 0030): what one 
 | `coverage.failed` | integer | yes | at least 0 |
 | `coverage.unresolved` | integer | yes | at least 0 |
 | `coverage.pending` | integer | yes | at least 0 |
+| `coverage.awaiting_analysis` | integer | yes | Periodic reads of the range left out of the plan, not counted in planned, because their visual window is not analysed yet: always 0 when the call analyses missing windows itself, as vsift ocr does; counted by the engine's analysed-windows-only calls (ADR 0033's background prepare job). Coverage is not complete while it is above 0, and the envelope reason is frames_awaiting_analysis.; at least 0 |
 | `coverage.candidates_complete` | boolean | yes | True when no visual window of the range is still to be analysed or tried again (not_analyzed, deadline_exceeded), so the plan holds every candidate the range will have. |
 | `candidate_gaps` | array of object | yes | The visual index's gaps in the range, as candidates reports them, in start order. coverage.candidates_complete is false exactly while one of them can still be filled by candidates (not_analyzed, deadline_exceeded); the other reasons are final (their periodic reads are planned as anywhere else). At most 100 are listed.; at most 100 items |
 | `candidate_gaps[].from_us` | integer | yes | at least 0 |
@@ -1259,7 +1261,7 @@ The data member of a complete or partial search result asked for with --view bri
 | `screen_text.hits[].frames` | integer | yes | How many consecutive read frames held it.; 1 to 4096 |
 | `screen_text.hits[].candidate_ids` | array of string | yes | The visual candidates whose representative frame the first frame is, in time order; empty for a frame read only for its period. At most 32 are listed.; at most 32 items; each: pattern `^vcd_[a-z0-9]{16,64}$` |
 | `screen_text.total_hits` | integer | yes | at least 0 |
-| `screen_text.coverage` | object | yes | How much of the range's plan the index has read. Every planned frame is counted once: planned = read + failed + unresolved + pending. read: its frame was read (it may hold no text). failed: the runner rejected the image or failed on it; it is not read again by the same build. unresolved: the target time resolved to no decodable frame. pending: not attempted yet. Text that appears and goes between two planned frames is not read. |
+| `screen_text.coverage` | object | yes | How much of the range's plan the index has read. Every planned frame is counted once: planned = read + failed + unresolved + pending; awaiting_analysis counts reads not yet planned. read: its frame was read (it may hold no text). failed: the runner rejected the image or failed on it; it is not read again by the same build. unresolved: the target time resolved to no decodable frame. pending: not attempted yet. Text that appears and goes between two planned frames is not read. |
 | `screen_text.coverage.scope` | constant "screen_text" | yes | What the block covers: on-screen text only. |
 | `screen_text.coverage.period_us` | integer or null | yes | The period of the frames planned between candidates: the call's --period-us (default 10000000). In search, the period of the index's latest call; null before ocr has run.; 1000000 to 600000000 |
 | `screen_text.coverage.planned` | integer | yes | at least 0 |
@@ -1267,6 +1269,7 @@ The data member of a complete or partial search result asked for with --view bri
 | `screen_text.coverage.failed` | integer | yes | at least 0 |
 | `screen_text.coverage.unresolved` | integer | yes | at least 0 |
 | `screen_text.coverage.pending` | integer | yes | at least 0 |
+| `screen_text.coverage.awaiting_analysis` | integer | yes | Periodic reads of the range left out of the plan, not counted in planned, because their visual window is not analysed yet: always 0 when the call analyses missing windows itself, as vsift ocr does; counted by the engine's analysed-windows-only calls (ADR 0033's background prepare job). Coverage is not complete while it is above 0, and the envelope reason is frames_awaiting_analysis.; at least 0 |
 | `screen_text.coverage.candidates_complete` | boolean | yes | True when no visual window of the range is still to be analysed or tried again (not_analyzed, deadline_exceeded), so the plan holds every candidate the range will have. |
 
 ### search-data.schema.json
@@ -1344,7 +1347,7 @@ The data member of a complete or partial search result: one bounded page of the 
 | `screen_text.hits[].frames` | integer | yes | How many consecutive read frames held it.; 1 to 4096 |
 | `screen_text.hits[].candidate_ids` | array of string | yes | The visual candidates whose representative frame the first frame is, in time order; empty for a frame read only for its period. At most 32 are listed.; at most 32 items; each: pattern `^vcd_[a-z0-9]{16,64}$` |
 | `screen_text.total_hits` | integer | yes | at least 0 |
-| `screen_text.coverage` | object | yes | How much of the range's plan the index has read. Every planned frame is counted once: planned = read + failed + unresolved + pending. read: its frame was read (it may hold no text). failed: the runner rejected the image or failed on it; it is not read again by the same build. unresolved: the target time resolved to no decodable frame. pending: not attempted yet. Text that appears and goes between two planned frames is not read. |
+| `screen_text.coverage` | object | yes | How much of the range's plan the index has read. Every planned frame is counted once: planned = read + failed + unresolved + pending; awaiting_analysis counts reads not yet planned. read: its frame was read (it may hold no text). failed: the runner rejected the image or failed on it; it is not read again by the same build. unresolved: the target time resolved to no decodable frame. pending: not attempted yet. Text that appears and goes between two planned frames is not read. |
 | `screen_text.coverage.scope` | constant "screen_text" | yes | What the block covers: on-screen text only. |
 | `screen_text.coverage.period_us` | integer or null | yes | The period of the frames planned between candidates: the call's --period-us (default 10000000). In search, the period of the index's latest call; null before ocr has run.; 1000000 to 600000000 |
 | `screen_text.coverage.planned` | integer | yes | at least 0 |
@@ -1352,6 +1355,7 @@ The data member of a complete or partial search result: one bounded page of the 
 | `screen_text.coverage.failed` | integer | yes | at least 0 |
 | `screen_text.coverage.unresolved` | integer | yes | at least 0 |
 | `screen_text.coverage.pending` | integer | yes | at least 0 |
+| `screen_text.coverage.awaiting_analysis` | integer | yes | Periodic reads of the range left out of the plan, not counted in planned, because their visual window is not analysed yet: always 0 when the call analyses missing windows itself, as vsift ocr does; counted by the engine's analysed-windows-only calls (ADR 0033's background prepare job). Coverage is not complete while it is above 0, and the envelope reason is frames_awaiting_analysis.; at least 0 |
 | `screen_text.coverage.candidates_complete` | boolean | yes | True when no visual window of the range is still to be analysed or tried again (not_analyzed, deadline_exceeded), so the plan holds every candidate the range will have. |
 
 ### search-stream-data.schema.json
@@ -1429,7 +1433,7 @@ The data member of the complete or partial terminal result that ends a search --
 | `screen_text.hits[].frames` | integer | yes | How many consecutive read frames held it.; 1 to 4096 |
 | `screen_text.hits[].candidate_ids` | array of string | yes | The visual candidates whose representative frame the first frame is, in time order; empty for a frame read only for its period. At most 32 are listed.; at most 32 items; each: pattern `^vcd_[a-z0-9]{16,64}$` |
 | `screen_text.total_hits` | integer | yes | at least 0 |
-| `screen_text.coverage` | object | yes | How much of the range's plan the index has read. Every planned frame is counted once: planned = read + failed + unresolved + pending. read: its frame was read (it may hold no text). failed: the runner rejected the image or failed on it; it is not read again by the same build. unresolved: the target time resolved to no decodable frame. pending: not attempted yet. Text that appears and goes between two planned frames is not read. |
+| `screen_text.coverage` | object | yes | How much of the range's plan the index has read. Every planned frame is counted once: planned = read + failed + unresolved + pending; awaiting_analysis counts reads not yet planned. read: its frame was read (it may hold no text). failed: the runner rejected the image or failed on it; it is not read again by the same build. unresolved: the target time resolved to no decodable frame. pending: not attempted yet. Text that appears and goes between two planned frames is not read. |
 | `screen_text.coverage.scope` | constant "screen_text" | yes | What the block covers: on-screen text only. |
 | `screen_text.coverage.period_us` | integer or null | yes | The period of the frames planned between candidates: the call's --period-us (default 10000000). In search, the period of the index's latest call; null before ocr has run.; 1000000 to 600000000 |
 | `screen_text.coverage.planned` | integer | yes | at least 0 |
@@ -1437,6 +1441,7 @@ The data member of the complete or partial terminal result that ends a search --
 | `screen_text.coverage.failed` | integer | yes | at least 0 |
 | `screen_text.coverage.unresolved` | integer | yes | at least 0 |
 | `screen_text.coverage.pending` | integer | yes | at least 0 |
+| `screen_text.coverage.awaiting_analysis` | integer | yes | Periodic reads of the range left out of the plan, not counted in planned, because their visual window is not analysed yet: always 0 when the call analyses missing windows itself, as vsift ocr does; counted by the engine's analysed-windows-only calls (ADR 0033's background prepare job). Coverage is not complete while it is above 0, and the envelope reason is frames_awaiting_analysis.; at least 0 |
 | `screen_text.coverage.candidates_complete` | boolean | yes | True when no visual window of the range is still to be analysed or tried again (not_analyzed, deadline_exceeded), so the plan holds every candidate the range will have. |
 
 ### setup-check-response.schema.json

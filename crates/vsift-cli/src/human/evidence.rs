@@ -104,6 +104,12 @@ pub(super) fn screen_text(envelope: &Envelope<ScreenTextResult>) -> Result<Rende
         .push_unsigned(coverage.pending)
         .push_fixed(" pending")
         .end_line();
+    if coverage.awaiting_analysis > 0 {
+        text.push_fixed("Not planned yet, their visual windows not analysed: ")
+            .push_unsigned(coverage.awaiting_analysis)
+            .push_fixed(" frames")
+            .end_line();
+    }
     if !coverage.candidates_complete {
         text.push_fixed("The range's candidates are not all known yet:")
             .end_line();

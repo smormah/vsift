@@ -740,3 +740,37 @@ fn a_partly_read_ocr_search_names_what_is_missing() -> TestResult {
     );
     Ok(())
 }
+
+/// ADR 0033's analysed-windows-only call: reads waiting for their windows
+/// keep the result partial, under their own reason and count.
+#[test]
+fn reads_awaiting_analysis_are_counted_apart_and_keep_the_result_partial() -> TestResult {
+    let index = index(10)?;
+    let session = SessionId::parse(SESSION)?;
+    let response = serde_json::to_value(screen_text_response(
+        &ScreenTextPresentation {
+            session_id: &session,
+            index: Some(&index),
+            range: range(0, 15 * SECOND)?,
+            period_micros: PERIOD,
+            coverage: ScreenTextCoverage {
+                awaiting_analysis: 3,
+                ..ScreenTextCoverage::of(&plan()?, Some(&index))
+            },
+            candidates_complete: true,
+            read_now: 0,
+            stop: None,
+            visual_gaps: &[],
+        },
+        lifecycle(),
+    )?)?;
+    validate("screen-text-data.schema.json", &response["data"])?;
+    assert_eq!(response["status"], "partial");
+    assert_eq!(response["data"]["coverage"]["awaiting_analysis"], 3);
+    assert_eq!(response["data"]["coverage"]["pending"], 0);
+    assert_eq!(
+        response["coverage"]["reasons"],
+        serde_json::json!([vsift_contract::FRAMES_AWAITING_ANALYSIS_REASON])
+    );
+    Ok(())
+}

@@ -168,6 +168,18 @@ first-page member stay as they are. The use case (`page_screen_text` in `vsift-a
 session's index and nothing else, so the search across kept sessions planned for 0.3.0's second wave
 calls it once per session.
 
+## Note of 2026-10-21: a call bounded to analysed windows (for ADR 0033)
+
+ADR 0033's background `prepare` job runs OCR as one of its streams after its visual stream has
+analysed the windows, and must never start visual analysis from OCR. The engine's `ocr` operation
+takes `ScreenTextWindows`: `AnalyseMissing` (what `vsift ocr` does, the default) or `AnalysedOnly`,
+which plans only the candidates and periodic reads inside windows the visual index has recorded
+(`plan_analysed_windows` in `vsift-application`, per session) and fails with `WindowsNotAnalysed`
+(`INVALID_ARGUMENT`) while no window is. The periodic reads of the other windows are counted apart
+in the coverage block's `awaiting_analysis`, which keeps coverage incomplete (envelope reason
+`frames_awaiting_analysis`); they join the plan once their windows are analysed. Calls stay bounded
+(40 frames by default) and resumable.
+
 ## Note of 2026-10-21: one line at a time, and the parity measured (decision 1)
 
 The reference pipeline reads lines in batches of six, each padded to the widest; the hosted

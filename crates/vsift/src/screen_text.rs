@@ -81,6 +81,21 @@ pub struct ScreenTextRange {
     pub to_micros: u64,
 }
 
+/// Which visual windows a call plans from.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum ScreenTextWindows {
+    /// Analyse the range's missing windows first, as `candidates` does, then
+    /// plan the whole range: what `vsift ocr` does.
+    #[default]
+    AnalyseMissing,
+    /// Never analyse: plan only the frames inside windows the visual index has
+    /// already recorded, and count the periodic reads of the other windows as
+    /// awaiting analysis (ADR 0033's background `prepare` job, which reads text
+    /// after its visual stream has analysed the windows). Fails with
+    /// [`OcrError::WindowsNotAnalysed`] while no window is analysed.
+    AnalysedOnly,
+}
+
 /// A bounded request to read on-screen text off a session's frames.
 #[derive(Clone, Debug)]
 pub struct ScreenTextRequest {
@@ -97,6 +112,8 @@ pub struct ScreenTextRequest {
     pub runner: Option<PathBuf>,
     /// Inference threads, 1 to the root's admission capacity; `None` for two.
     pub threads: Option<NonZeroU16>,
+    /// Whether the call may analyse visual windows itself.
+    pub windows: ScreenTextWindows,
     /// Stops the call at its next step; what was read before is committed.
     pub cancellation: Cancellation,
 }
@@ -199,6 +216,8 @@ pub enum OcrError {
     InvalidPeriod,
     /// The frame budget is outside 1 to 200.
     InvalidBudget,
+    /// A call that may not analyse windows found none analysed in the session.
+    WindowsNotAnalysed,
     /// An `ocr search` cursor is malformed, expired, or of another search,
     /// session or index revision.
     Cursor(CursorError),
@@ -217,9 +236,10 @@ impl OcrError {
                 FailureCode::ResourceLimit
             }
             Self::Index(_) => FailureCode::Internal,
-            Self::InvalidPeriod | Self::InvalidBudget | Self::Cursor(_) => {
-                FailureCode::InvalidArgument
-            }
+            Self::InvalidPeriod
+            | Self::InvalidBudget
+            | Self::Cursor(_)
+            | Self::WindowsNotAnalysed => FailureCode::InvalidArgument,
         }
     }
 }
@@ -287,6 +307,9 @@ impl fmt::Display for OcrError {
                 formatter.write_str("the read period is outside one second to ten minutes")
             }
             Self::InvalidBudget => formatter.write_str("the frame budget is outside 1 to 200"),
+            Self::WindowsNotAnalysed => {
+                formatter.write_str("no visual window of the session is analysed yet")
+            }
             Self::Cursor(error) => error.fmt(formatter),
         }
     }
@@ -302,7 +325,8 @@ impl std::error::Error for OcrError {
             | Self::Stopped(_)
             | Self::BudgetExhausted
             | Self::InvalidPeriod
-            | Self::InvalidBudget => None,
+            | Self::InvalidBudget
+            | Self::WindowsNotAnalysed => None,
         }
     }
 }
@@ -391,9 +415,18 @@ impl Engine {
                 self.config().host_isolation.into_infrastructure(),
             )),
         };
-        let (candidates, searched, visual_gaps) = self.all_candidates(&request, requested).await?;
-        let plan = plan_reads(searched, &candidates, period)
-            .map_err(|_| EngineError::Ocr(OcrError::InvalidPeriod))?;
+        let (plan, searched, visual_gaps, awaiting_analysis) = match request.windows {
+            ScreenTextWindows::AnalyseMissing => {
+                let (candidates, searched, visual_gaps) =
+                    self.all_candidates(&request, requested).await?;
+                let plan = plan_reads(searched, &candidates, period)
+                    .map_err(|_| EngineError::Ocr(OcrError::InvalidPeriod))?;
+                (plan, searched, visual_gaps, 0)
+            }
+            ScreenTextWindows::AnalysedOnly => {
+                analysed_plan(&store, &request.session, requested, period, now)?
+            }
+        };
         let (previous, status) =
             store.read_screen_text_index(&request.session, self.now_unix_seconds()?)?;
         let cancellation = request.cancellation.0.clone();
@@ -495,12 +528,15 @@ impl Engine {
         drop(snapshot);
         let now = self.now_unix_seconds()?;
         let status = crate::sessions::published_status(&store, &request.session)?;
-        let coverage = ScreenTextCoverage::of(
-            &plan,
-            index
-                .as_ref()
-                .filter(|index| index.scope().provider == extension.scope.provider),
-        );
+        let coverage = ScreenTextCoverage {
+            awaiting_analysis,
+            ..ScreenTextCoverage::of(
+                &plan,
+                index
+                    .as_ref()
+                    .filter(|index| index.scope().provider == extension.scope.provider),
+            )
+        };
         Ok(ScreenTextResults {
             session: SessionSnapshot::observe(&status, now),
             index,
@@ -699,4 +735,37 @@ impl ScreenTextReader for HostScreenTextRef<'_> {
     ) -> Result<Vec<EngineReading>, ScreenTextReadError> {
         self.0.read_boxed(images).await
     }
+}
+
+/// The plan of `requested` from the windows the session's visual index already
+/// holds ([`ScreenTextWindows::AnalysedOnly`]): the range clipped to the video,
+/// the visual gaps, and the periodic reads left out until their windows are
+/// analysed. Reads the index; analyses nothing.
+fn analysed_plan(
+    store: &FilesystemSessionStore,
+    session: &SessionId,
+    requested: TimeRange,
+    period: u64,
+    now: u64,
+) -> Result<(Vec<ReadTarget>, TimeRange, Vec<VisualCoverageGap>, usize), EngineError> {
+    let (visual, _) = store
+        .read_visual_index(session, now)?
+        .ok_or(EngineError::Ocr(OcrError::WindowsNotAnalysed))?;
+    let planned =
+        vsift_application::plan_analysed_windows(&visual, requested, period).map_err(|error| {
+            match error {
+                vsift_application::AnalysedPlanError::RangeOutsideSource => {
+                    EngineError::RangeOutsideSource
+                }
+                vsift_application::AnalysedPlanError::Period => {
+                    EngineError::Ocr(OcrError::InvalidPeriod)
+                }
+            }
+        })?;
+    Ok((
+        planned.plan,
+        planned.range,
+        planned.gaps,
+        planned.awaiting_analysis,
+    ))
 }

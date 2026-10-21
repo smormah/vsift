@@ -37,6 +37,10 @@ pub const SCREEN_TEXT_SCOPE: &str = "screen_text";
 /// Envelope coverage reason: planned frames of the range are not read yet.
 pub const FRAMES_PENDING_REASON: &str = "frames_pending";
 
+/// Envelope coverage reason: reads of the range wait for their visual window to
+/// be analysed (a call that may not analyse windows, ADR 0033).
+pub const FRAMES_AWAITING_ANALYSIS_REASON: &str = "frames_awaiting_analysis";
+
 /// Envelope coverage reason: planned frames of the range could not be read.
 pub const FRAMES_FAILED_REASON: &str = "frames_failed";
 
@@ -123,6 +127,7 @@ struct CoverageData {
     failed: usize,
     unresolved: usize,
     pending: usize,
+    awaiting_analysis: usize,
     candidates_complete: bool,
 }
 
@@ -140,12 +145,16 @@ impl CoverageData {
             failed: coverage.failed,
             unresolved: coverage.unresolved,
             pending: coverage.pending,
+            awaiting_analysis: coverage.awaiting_analysis,
             candidates_complete,
         }
     }
 
     const fn is_complete(self) -> bool {
-        self.pending == 0 && self.failed == 0 && self.candidates_complete
+        self.pending == 0
+            && self.failed == 0
+            && self.awaiting_analysis == 0
+            && self.candidates_complete
     }
 }
 
@@ -238,6 +247,9 @@ fn envelope_coverage(data: &ScreenTextData) -> CoverageResponse {
     }
     if data.coverage.failed > 0 {
         reasons.push(FRAMES_FAILED_REASON.to_owned());
+    }
+    if data.coverage.awaiting_analysis > 0 {
+        reasons.push(FRAMES_AWAITING_ANALYSIS_REASON.to_owned());
     }
     let open: Vec<&GapData> = data
         .candidate_gaps
@@ -477,6 +489,9 @@ pub fn screen_text_search_response(
         }
         if data.coverage.failed > 0 {
             reasons.push(FRAMES_FAILED_REASON.to_owned());
+        }
+        if data.coverage.awaiting_analysis > 0 {
+            reasons.push(FRAMES_AWAITING_ANALYSIS_REASON.to_owned());
         }
         if !data.coverage.candidates_complete {
             reasons.push(CANDIDATES_INCOMPLETE_REASON.to_owned());

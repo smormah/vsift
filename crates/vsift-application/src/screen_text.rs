@@ -18,7 +18,8 @@ use vsift_domain::{
     ListedFrame, MAX_SCREEN_TEXT_LINES_PER_FRAME, MediaTime, ReadTarget, ScreenText,
     ScreenTextError, ScreenTextFailure, ScreenTextFrame, ScreenTextIndex, ScreenTextIndexId,
     ScreenTextIndexParts, ScreenTextLine, ScreenTextLineId, ScreenTextOutcome, ScreenTextProvider,
-    ScreenTextScope, TextRegion, TimeRange, select_frame,
+    ScreenTextScope, TextRegion, TimeRange, VISUAL_WINDOW_MICROS, VisualCandidateId,
+    VisualCoverageGap, VisualIndex, plan_reads_in_analysed_windows, select_frame,
 };
 
 use crate::{
@@ -604,6 +605,76 @@ fn checked_outcome(
         truncated,
     })
 }
+
+/// The plan of a range taken from the windows a visual index already holds.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AnalysedWindowsPlan {
+    /// The range clipped to the video.
+    pub range: TimeRange,
+    /// Every candidate of the range and the periodic reads in recorded windows.
+    pub plan: Vec<ReadTarget>,
+    /// Periodic reads left out until their windows are analysed.
+    pub awaiting_analysis: usize,
+    /// The visual index's gaps in the range.
+    pub gaps: Vec<VisualCoverageGap>,
+}
+
+/// Plans `requested` from `visual` without analysing anything: candidates and
+/// periodic reads only inside windows the index has recorded (analysed or
+/// undecodable), the periodic reads of the other windows counted as awaiting
+/// analysis (ADR 0033's background `prepare` job reads text after its visual
+/// stream has analysed the windows, and must never start that analysis
+/// itself). The engine calls it once per session.
+///
+/// # Errors
+///
+/// [`AnalysedPlanError::RangeOutsideSource`] when nothing of the range lies in
+/// the video, and [`AnalysedPlanError::Period`] for a period outside its bounds.
+pub fn plan_analysed_windows(
+    visual: &VisualIndex,
+    requested: TimeRange,
+    period_micros: u64,
+) -> Result<AnalysedWindowsPlan, AnalysedPlanError> {
+    let range = crate::clip_to_source(requested, visual.duration())
+        .map_err(|_| AnalysedPlanError::RangeOutsideSource)?;
+    let candidates: Vec<(VisualCandidateId, MediaTime)> = visual
+        .candidates_in(range)
+        .map(|candidate| (candidate.id().clone(), candidate.representative()))
+        .collect();
+    let recorded = |time: MediaTime| {
+        u32::try_from(time.as_micros() / VISUAL_WINDOW_MICROS)
+            .is_ok_and(|ordinal| visual.window(ordinal).is_some())
+    };
+    let (plan, awaiting_analysis) =
+        plan_reads_in_analysed_windows(range, &candidates, period_micros, recorded)
+            .map_err(|_| AnalysedPlanError::Period)?;
+    Ok(AnalysedWindowsPlan {
+        range,
+        plan,
+        awaiting_analysis,
+        gaps: visual.coverage_gaps(range),
+    })
+}
+
+/// Why a range could not be planned from the analysed windows.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AnalysedPlanError {
+    /// Nothing of the range lies inside the video.
+    RangeOutsideSource,
+    /// The period is outside one second to ten minutes.
+    Period,
+}
+
+impl fmt::Display for AnalysedPlanError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self {
+            Self::RangeOutsideSource => "the range lies outside the video",
+            Self::Period => "the read period is outside one second to ten minutes",
+        })
+    }
+}
+
+impl Error for AnalysedPlanError {}
 
 /// The next revision: the continued index's frames with this call's frames,
 /// joined targets and unresolved targets added, or `None` when nothing changed.

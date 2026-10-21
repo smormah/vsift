@@ -147,7 +147,7 @@ pub use local_asr_check::DEFAULT_LOCAL_ASR_CHECK_BUDGET;
 pub use progress::{AdmissionWaiting, JobProgress, ProgressObserver};
 pub use screen_text::{
     DEFAULT_OCR_THREADS, OCR_RUNNER_NAME, OcrError, ScreenTextRange, ScreenTextRequest,
-    ScreenTextResults,
+    ScreenTextResults, ScreenTextWindows,
 };
 pub use search::{
     ScreenTextResultHit, ScreenTextSearch, ScreenTextSearchRequest, ScreenTextSearchResults,

@@ -19,6 +19,7 @@
       }
     ],
     "coverage": {
+      "awaiting_analysis": 0,
       "candidates_complete": false,
       "failed": 0,
       "pending": 2,

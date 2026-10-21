@@ -8,6 +8,7 @@
   "data": {
     "candidate_gaps": [],
     "coverage": {
+      "awaiting_analysis": 0,
       "candidates_complete": true,
       "failed": 0,
       "pending": 0,

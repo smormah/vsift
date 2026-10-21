@@ -248,7 +248,8 @@ fn coverage_counts_read_failed_unresolved_and_pending_targets() -> TestResult {
             read: 1,
             failed: 1,
             unresolved: 1,
-            pending: 1
+            pending: 1,
+            awaiting_analysis: 0,
         }
     );
     assert!(!coverage.is_complete());
@@ -431,4 +432,52 @@ mod search {
         );
         Ok(())
     }
+}
+
+#[test]
+fn a_plan_in_analysed_windows_leaves_out_and_counts_the_reads_awaiting_analysis() -> TestResult {
+    let range = TimeRange::new(
+        MediaTime::from_micros(0),
+        MediaTime::from_micros(120 * SECOND),
+    )?;
+    let candidates = [(candidate('a')?, MediaTime::from_micros(5 * SECOND))];
+    // Only the first 60 s window is analysed.
+    let (plan, awaiting) = super::plan_reads_in_analysed_windows(
+        range,
+        &candidates,
+        DEFAULT_READ_PERIOD_MICROS,
+        |time| time.as_micros() < 60 * SECOND,
+    )?;
+    assert_eq!(plan.len(), 7, "six periodic reads and the candidate");
+    assert_eq!(awaiting, 6);
+    assert!(
+        plan.iter()
+            .all(|target| target.time.as_micros() < 60 * SECOND)
+    );
+    let coverage = ScreenTextCoverage {
+        awaiting_analysis: awaiting,
+        ..ScreenTextCoverage::of(&plan, None)
+    };
+    assert_eq!(
+        (
+            coverage.planned,
+            coverage.pending,
+            coverage.awaiting_analysis
+        ),
+        (7, 7, 6)
+    );
+    assert!(!coverage.is_complete());
+    // Everything analysed: the same plan as the whole range's, nothing awaiting.
+    let (whole, none) = super::plan_reads_in_analysed_windows(
+        range,
+        &candidates,
+        DEFAULT_READ_PERIOD_MICROS,
+        |_| true,
+    )?;
+    assert_eq!(
+        whole,
+        plan_reads(range, &candidates, DEFAULT_READ_PERIOD_MICROS)?
+    );
+    assert_eq!(none, 0);
+    Ok(())
 }

@@ -309,6 +309,10 @@ pub(crate) struct ScreenTextCoverage {
     pub(crate) failed: u64,
     pub(crate) unresolved: u64,
     pub(crate) pending: u64,
+    /// Reads waiting for their visual window to be analysed (0 before 0.3.0's
+    /// analysed-windows-only calls; absent from older answers).
+    #[serde(default)]
+    pub(crate) awaiting_analysis: u64,
     pub(crate) candidates_complete: bool,
 }
 

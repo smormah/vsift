@@ -539,6 +539,33 @@ pub fn plan_reads(
     Ok(targets)
 }
 
+/// The plan of `range` restricted to analysed windows: the candidates there and
+/// the periodic reads that fall in a window the visual index has recorded
+/// (analysed or undecodable), and how many periodic reads were left out because
+/// their window is not analysed yet. A caller that must never start visual
+/// analysis itself (a background job that reads text after the windows are
+/// analysed) plans with this; the reads left out join the plan once their
+/// windows are analysed.
+///
+/// # Errors
+///
+/// [`ScreenTextError::InvalidPeriod`] for a period outside its bounds.
+pub fn plan_reads_in_analysed_windows(
+    range: TimeRange,
+    candidates: &[(VisualCandidateId, MediaTime)],
+    period_micros: u64,
+    analysed: impl Fn(MediaTime) -> bool,
+) -> Result<(Vec<ReadTarget>, usize), ScreenTextError> {
+    let whole = plan_reads(range, candidates, period_micros)?;
+    let planned = whole.len();
+    let kept: Vec<ReadTarget> = whole
+        .into_iter()
+        .filter(|target| target.candidate.is_some() || analysed(target.time))
+        .collect();
+    let awaiting = planned - kept.len();
+    Ok((kept, awaiting))
+}
+
 /// How much of a plan an index has read.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct ScreenTextCoverage {
@@ -552,6 +579,10 @@ pub struct ScreenTextCoverage {
     pub unresolved: usize,
     /// Targets not yet attempted.
     pub pending: usize,
+    /// Periodic reads of the range left out of the plan because their visual
+    /// window is not analysed yet ([`plan_reads_in_analysed_windows`]); always 0
+    /// for a plan of the whole range. Not part of `planned`.
+    pub awaiting_analysis: usize,
 }
 
 impl ScreenTextCoverage {
@@ -585,10 +616,11 @@ impl ScreenTextCoverage {
         coverage
     }
 
-    /// Every planned target was attempted and read or found to have no frame.
+    /// Every planned target was attempted and read or found to have no frame,
+    /// and no read waits for its window to be analysed.
     #[must_use]
     pub const fn is_complete(self) -> bool {
-        self.pending == 0 && self.failed == 0
+        self.pending == 0 && self.failed == 0 && self.awaiting_analysis == 0
     }
 }
 

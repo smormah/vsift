@@ -86,6 +86,7 @@ pub use screen_text::{
     ReadTarget, ScreenText, ScreenTextCoverage, ScreenTextError, ScreenTextFailure,
     ScreenTextFrame, ScreenTextIndex, ScreenTextIndexParts, ScreenTextLine, ScreenTextOutcome,
     ScreenTextProfile, ScreenTextProvider, ScreenTextScope, TextRegion, plan_reads,
+    plan_reads_in_analysed_windows,
 };
 pub use search::{
     CoverageBasis, MAX_SEARCH_QUERY_BYTES, MAX_SEARCH_TERMS, ScreenTextOccurrence, ScreenTextSlice,

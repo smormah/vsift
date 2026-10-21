@@ -123,7 +123,7 @@
       }
     },
     "coverage": {
-      "description": "How much of the range's plan the index has read. Every planned frame is counted once: planned = read + failed + unresolved + pending. read: its frame was read (it may hold no text). failed: the runner rejected the image or failed on it; it is not read again by the same build. unresolved: the target time resolved to no decodable frame. pending: not attempted yet. Text that appears and goes between two planned frames is not read.",
+      "description": "How much of the range's plan the index has read. Every planned frame is counted once: planned = read + failed + unresolved + pending; awaiting_analysis counts reads not yet planned. read: its frame was read (it may hold no text). failed: the runner rejected the image or failed on it; it is not read again by the same build. unresolved: the target time resolved to no decodable frame. pending: not attempted yet. Text that appears and goes between two planned frames is not read.",
       "type": "object",
       "additionalProperties": false,
       "required": [
@@ -134,6 +134,7 @@
         "failed",
         "unresolved",
         "pending",
+        "awaiting_analysis",
         "candidates_complete"
       ],
       "properties": {
@@ -153,6 +154,11 @@
         "failed": { "type": "integer", "minimum": 0 },
         "unresolved": { "type": "integer", "minimum": 0 },
         "pending": { "type": "integer", "minimum": 0 },
+        "awaiting_analysis": {
+          "description": "Periodic reads of the range left out of the plan, not counted in planned, because their visual window is not analysed yet: always 0 when the call analyses missing windows itself, as vsift ocr does; counted by the engine's analysed-windows-only calls (ADR 0033's background prepare job). Coverage is not complete while it is above 0, and the envelope reason is frames_awaiting_analysis.",
+          "type": "integer",
+          "minimum": 0
+        },
         "candidates_complete": {
           "description": "True when no visual window of the range is still to be analysed or tried again (not_analyzed, deadline_exceeded), so the plan holds every candidate the range will have.",
           "type": "boolean"

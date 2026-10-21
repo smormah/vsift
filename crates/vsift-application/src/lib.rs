@@ -59,12 +59,12 @@ pub use job::{
     retranscribe_request_digest, run_retranscription, worker_step_operation_id,
 };
 pub use screen_text::{
-    DEFAULT_SCREEN_TEXT_FRAMES_PER_CALL, EngineLine, EngineReading,
-    MAX_SCREEN_TEXT_FRAMES_PER_CALL, MAX_SHARED_LISTING_MICROS, ReadScreenTextRequest,
-    ScreenTextBuildError, ScreenTextExtension, ScreenTextImage, ScreenTextReadError,
-    ScreenTextReader, ScreenTextStop, continued_index, merge_screen_text, pending_targets,
-    read_screen_text_within, screen_text_index_id, screen_text_line_id,
-    verify_screen_text_identities,
+    AnalysedPlanError, AnalysedWindowsPlan, DEFAULT_SCREEN_TEXT_FRAMES_PER_CALL, EngineLine,
+    EngineReading, MAX_SCREEN_TEXT_FRAMES_PER_CALL, MAX_SHARED_LISTING_MICROS,
+    ReadScreenTextRequest, ScreenTextBuildError, ScreenTextExtension, ScreenTextImage,
+    ScreenTextReadError, ScreenTextReader, ScreenTextStop, continued_index, merge_screen_text,
+    pending_targets, plan_analysed_windows, read_screen_text_within, screen_text_index_id,
+    screen_text_line_id, verify_screen_text_identities,
 };
 pub use screen_text_search::{
     ScreenTextPage, ScreenTextPageRequest, page_screen_text, screen_text_query_digest,
