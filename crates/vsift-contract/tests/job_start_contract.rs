@@ -267,4 +267,3 @@ fn the_progress_event_and_the_job_data_define_media_progress_alike() -> TestResu
     );
     Ok(())
 }
-
