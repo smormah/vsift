@@ -94,7 +94,7 @@ was downloaded or run on a development machine.
 
 Runs: the full matrix **39518020351** (Ubuntu, AMD EPYC 9V74) and the shortlist **39527538316** (Ubuntu, Windows,
 macOS; it printed RM06's labelled transcript and every candidate's RM06 turns, from which the reference of section 5 was
-read and RM06 scored). In the tables, "known" means the speaker count was given; "auto-t" means sherpa-onnx's distance threshold t.
+read and RM06 scored offline with the tool's own scorer; the workflow scores RM06 itself from the committed reference in its next run). In the tables, "known" means the speaker count was given; "auto-t" means sherpa-onnx's distance threshold t.
 
 ### 6.1 Synthetic conversations (Ubuntu, run 39518020351)
 
