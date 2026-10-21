@@ -32,6 +32,12 @@ vsift-contract.workspace = true
 vsift-domain.workspace = true
 vsift-infrastructure.workspace = true
 
+[dev-dependencies]
+# The kill tests stop a child process at a named commit boundary
+# (`VSIFT_FAULT_POINT`): a development dependency only, as the governance
+# check requires.
+vsift-infrastructure = { workspace = true, features = ["fault-injection"] }
+
 [target.'cfg(target_os = "linux")'.dependencies]
 # `tcdrain` on the serial port that carries acknowledgements out of a guest,
 # so an acknowledgement has reached the host before the next operation

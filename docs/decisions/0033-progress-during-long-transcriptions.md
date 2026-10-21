@@ -466,8 +466,8 @@ The fourth pull request implements section 4 (`--first`, D5) and the visual stre
   first, whose video is indexed before the transcript (a warm `candidates` read), and whose whole run
   recognises the window's chunk not again, and a source without video skipping the visual stream
   (`engine_growth`).
-- **Planned for a sixth pull request:** the crash campaign's workload with open revisions (its verifier must
-  accept an open revision and a part-by-part publication) and the visual stream's kill points.
+- **The sixth pull request** adds the crash campaign's workload with open revisions (its notes follow the
+  fifth's). The visual stream's kill points are not covered yet.
 
 ## Implementation notes: the fifth pull request (2026-10-21)
 
@@ -569,3 +569,29 @@ All are taken (2026-10-21):
   files.
 - **A long-running daemon now.** Deferred to the live-source work (section 8): a detached runner per job
   answers the recorded-file case with less to operate.
+
+## Implementation notes: the sixth pull request, the crash campaign with open revisions (2026-10-22)
+
+- **Workload.** `tools/p10-crash-campaign/src/grow.rs`. The stand-in speech is four chunks (105 s). Two new
+  operations: `grow` (a whole-source retranscription with `Publication::AsItGoes` and no interval: three
+  parts, then the seal) and `stop` (the same, with its job cancelled once its first part is acknowledged,
+  as `job cancel` would; the run seals a stopped revision). Every part is acknowledged the moment its
+  generation is committed: a `START` and an `ACK` of kind `part` with a sequence number of its own, the open
+  revision's identity and no artifacts (the seal retires the part's file). A job operation on a session that
+  a crash left with an open revision continues it: it resumes the job to its seal or stops it as `job
+  cancel` of a job no process runs does (`cancel_job`, then `seal_stopped_now`), at random; a job that has
+  ended, or has nearly spent its attempts, is stopped.
+- **Verifier.** Besides the existing checks, a part's acknowledgement is held (its generation's manifest
+  unchanged; its revision still the newest, or found by identity), and every session's newest revision is
+  held to a seal-only run of the stand-ins rebuilt in memory: a sealed revision equals it byte for byte; an
+  open one, rebuilt from its parts after the crash, is a prefix of it with nothing left to come before the
+  time it is published until; a stopped one keeps that prefix. Parts are listed only while a revision is
+  open, and at most 64.
+- **Kill points (unit level, child processes, stand-in recogniser, an ordinary root):** each of
+  `artifact-install`, `manifest-rename`, `pointer-rename`, `pointer-directory-sync` and `job-committing`, at
+  every part's commit and at the seal (alternating with `chunk-recognised:1` to move the run on), and at the
+  first part, the run's own stopped seal and the stopped seal of a later `job cancel`. After every kill the
+  verifier finds nothing lost or damaged and what is published never goes back; the resumed run seals
+  exactly what a seal-only run makes, and a stopped run keeps what it published.
+- **Not yet run:** the hosted `P10 durability campaign` (layers A, B and C) with this workload. Its
+  workflow is unchanged, but it can only be dispatched from `main`.

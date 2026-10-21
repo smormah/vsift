@@ -13,7 +13,11 @@
 //! `<artifacts>` is a comma-separated list of the SHA-256 digests the
 //! operation committed (the source copy, a frame and its evidence record),
 //! or `-`; `<revision>` is the transcript revision a retranscription
-//! committed, or `-`; `<request>`, only on a worker request's
+//! committed, or `-`. A retranscription that publishes as it goes (ADR 0033)
+//! acknowledges each part it commits as an `ACK` of kind `part`, with a
+//! sequence number of its own, the open revision as `<revision>` and `-` as
+//! `<artifacts>` (the seal retires the part's file from the manifest), and
+//! then its seal as `grow` or, stopped, `stop`; `<request>`, only on a worker request's
 //! acknowledgement (P11 PR 3), is `<operation_id>:<result_sha256>`, the
 //! request's key and the digest of the result its record holds. An `ACK`
 //! is written only after the operation returned
@@ -38,16 +42,30 @@ pub enum OperationKind {
     /// A worker request (P11 PR 3): an ingest through
     /// `Engine::run_work_request`, acknowledged once its result is recorded.
     Request,
+    /// A whole-source retranscription published part by part (ADR 0033),
+    /// acknowledged once sealed; or the continuation of an open revision a
+    /// crash left, to its seal.
+    Grow,
+    /// One part of a revision published as it goes, acknowledged once
+    /// committed (ADR 0033).
+    Part,
+    /// A retranscription published as it goes and stopped after its first
+    /// part (`job cancel`), acknowledged once sealed as stopped (ADR 0033,
+    /// D1); or the stop of an open revision a crash left.
+    Stop,
 }
 
 impl OperationKind {
     /// Every kind, in a fixed order.
-    pub const ALL: [Self; 5] = [
+    pub const ALL: [Self; 8] = [
         Self::Ingest,
         Self::Evidence,
         Self::Retranscribe,
         Self::Renew,
         Self::Request,
+        Self::Grow,
+        Self::Part,
+        Self::Stop,
     ];
 
     /// The kind's name on the wire.
@@ -59,6 +77,9 @@ impl OperationKind {
             Self::Retranscribe => "retranscribe",
             Self::Renew => "renew",
             Self::Request => "request",
+            Self::Grow => "grow",
+            Self::Part => "part",
+            Self::Stop => "stop",
         }
     }
 
@@ -91,7 +112,8 @@ pub struct Ack {
     pub manifest_sha256: String,
     /// SHA-256 digests of the artifacts it committed.
     pub artifacts: Vec<String>,
-    /// The transcript revision it committed, for a retranscription.
+    /// The transcript revision it committed, for a retranscription (the open
+    /// revision, for a part).
     pub revision: Option<TranscriptRevisionId>,
     /// The worker request's key and recorded result, for a request.
     pub request: Option<RequestAck>,

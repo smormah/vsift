@@ -10,7 +10,15 @@
 //!   artifact the head lists is whole, and the session is durable;
 //! - **through the store**, as a user would: the session opens, its
 //!   evidence records decode, its acknowledged revisions are found and every
-//!   job reads (and is reconciled if its owner died).
+//!   job reads (and is reconciled if its owner died);
+//! - **against a seal-only run** (ADR 0033): the session's newest revision is
+//!   rebuilt in memory from the stand-ins, as a run that publishes only at its
+//!   seal makes it. A sealed revision must equal it byte for byte; an open one
+//!   (rebuilt from its parts after the crash) must be a prefix of it, with the
+//!   same identities, times and text, and nothing of it left to come before
+//!   the time it is published until; a stopped one must keep that prefix.
+//!   Parts are listed only while a revision is open, and at most
+//!   [`MAX_TRANSCRIPT_PARTS`] of them.
 //!
 //! An acknowledgement is lost when its session is missing or unreadable,
 //! the head is below the acknowledged generation, the acknowledged
@@ -23,17 +31,30 @@ use std::{
     fmt,
     fs::File,
     io::Read as _,
+    num::NonZeroU32,
     path::Path,
+    time::Duration,
 };
 
 use serde_json::Value;
 use sha2::{Digest as _, Sha256};
 use vsift::EngineError;
-use vsift_application::{JobStore, job_status};
-use vsift_domain::{FailureCode, JobId, OperationId, SessionId};
-use vsift_infrastructure::FilesystemSessionStore;
+use vsift_application::{
+    AsrRevisionRequest, JobStore, RevisionSplice, TranscribeRangeRequest, build_asr_revision,
+    job_status, transcribe_range, whole_file_source_segment,
+};
+use vsift_domain::{
+    ChunkPlan, FailureCode, JobId, MediaTime, OperationId, PublicationGuarantee, RevisionState,
+    SessionId, TranscriptProvenance, TranscriptRevision,
+};
+use vsift_infrastructure::{
+    FilesystemSessionStore, MAX_TRANSCRIPT_PARTS, encode_transcript_record,
+};
 
-use crate::protocol::{Ack, OperationKind};
+use crate::{
+    protocol::{Ack, OperationKind},
+    standins::{NeverStop, SPEECH_MICROS, StandInAudio, StandInRecognizer, recognizer_identity},
+};
 
 /// Largest manifest the verifier reads (the store's own bound is 128 KiB).
 const MAX_MANIFEST_BYTES: u64 = 128 * 1024;
@@ -117,6 +138,14 @@ pub enum Damage {
         /// The public code.
         code: FailureCode,
     },
+    /// A session's newest revision is not what a seal-only run makes, or not
+    /// a prefix of it (ADR 0033).
+    Revision {
+        /// The session.
+        session: String,
+        /// What is wrong.
+        what: &'static str,
+    },
 }
 
 impl fmt::Display for Damage {
@@ -156,6 +185,9 @@ impl fmt::Display for Damage {
                 "request operation={operation} code={}",
                 code.identifier()
             ),
+            Self::Revision { session, what } => {
+                write!(formatter, "revision session={session} {what}")
+            }
         }
     }
 }
@@ -275,9 +307,12 @@ struct SessionOnDisk {
     durable: bool,
 }
 
-/// Verifies `root` against `acks` at time `now`.
+/// Verifies `root` against `acks` at time `now`, whose sessions must give
+/// `guarantee`: [`PublicationGuarantee::OsCrashDurable`] for the campaign
+/// itself; the process-kill tests run on an ordinary root, whose sessions are
+/// crash-consistent only.
 #[must_use]
-pub fn verify(root: &Path, acks: &[Ack], now: u64) -> Findings {
+pub fn verify(root: &Path, acks: &[Ack], now: u64, guarantee: PublicationGuarantee) -> Findings {
     let mut findings = Findings {
         acks: acks.len(),
         ..Findings::default()
@@ -306,7 +341,13 @@ pub fn verify(root: &Path, acks: &[Ack], now: u64) -> Findings {
         findings.damage.push(Damage::RootUnopenable);
     }
     for ack in acks {
-        if let Some(loss) = check_ack(ack, on_disk.get(ack.session.as_str()), store.as_ref(), now) {
+        if let Some(loss) = check_ack(
+            ack,
+            on_disk.get(ack.session.as_str()),
+            store.as_ref(),
+            now,
+            guarantee,
+        ) {
             findings.lost.push((ack.seq, loss));
         }
     }
@@ -351,6 +392,12 @@ fn check_through_store(
                 findings.damage.push(Damage::Session {
                     session: session.as_str().to_owned(),
                     code: code(error),
+                });
+            }
+            if let Err(what) = check_newest_revision(store, session, now) {
+                findings.damage.push(Damage::Revision {
+                    session: session.as_str().to_owned(),
+                    what,
                 });
             }
         }
@@ -406,6 +453,7 @@ fn check_ack(
     on_disk: Option<&Result<SessionOnDisk, ()>>,
     store: Option<&FilesystemSessionStore>,
     now: u64,
+    guarantee: PublicationGuarantee,
 ) -> Option<Loss> {
     let Some(walked) = on_disk else {
         return Some(Loss::SessionMissing);
@@ -413,7 +461,7 @@ fn check_ack(
     let Ok(walked) = walked else {
         return Some(Loss::StoreRefused(FailureCode::IntegrityFailure));
     };
-    if !walked.durable {
+    if guarantee == PublicationGuarantee::OsCrashDurable && !walked.durable {
         return Some(Loss::NotDurable);
     }
     if walked.head < ack.generation {
@@ -436,12 +484,32 @@ fn check_ack(
     if let Err(error) = store.session_status(&ack.session) {
         return Some(Loss::StoreRefused(code(error)));
     }
-    if ack.kind == OperationKind::Retranscribe {
+    if matches!(
+        ack.kind,
+        OperationKind::Retranscribe | OperationKind::Grow | OperationKind::Stop
+    ) {
         let revision = ack.revision.as_ref()?;
         match store.read_transcript_revision(&ack.session, revision, now) {
             Ok(Some(_)) => {}
             Ok(None) => return Some(Loss::RevisionMissing),
             Err(error) => return Some(Loss::StoreRefused(code(error))),
+        }
+    }
+    if ack.kind == OperationKind::Part {
+        // The part's open revision is still the newest (open, or sealed or
+        // stopped with the same identity), or a later revision superseded the
+        // sealed or stopped one.
+        let revision = ack.revision.as_ref()?;
+        let newest = match store.read_transcript_head(&ack.session, now) {
+            Ok((newest, _)) => newest,
+            Err(error) => return Some(Loss::StoreRefused(code(error))),
+        };
+        if newest.as_ref().map(TranscriptRevision::id) != Some(revision) {
+            match store.read_transcript_revision(&ack.session, revision, now) {
+                Ok(Some(_)) => {}
+                Ok(None) => return Some(Loss::RevisionMissing),
+                Err(error) => return Some(Loss::StoreRefused(code(error))),
+            }
         }
     }
     if let Some(request) = &ack.request {
@@ -456,6 +524,163 @@ fn check_ack(
         }
     }
     None
+}
+
+/// Holds a session's newest revision to the seal-only run of the stand-ins
+/// (ADR 0033): see the module.
+///
+/// # Errors
+///
+/// What is wrong, as a short fixed name.
+pub fn check_newest_revision(
+    store: &FilesystemSessionStore,
+    session: &SessionId,
+    now: u64,
+) -> Result<(), &'static str> {
+    let open = store
+        .read_open_transcript(session, now)
+        .map_err(|_| "open-unreadable")?;
+    let (newest, _) = store
+        .read_transcript_head(session, now)
+        .map_err(|_| "head-unreadable")?;
+    let Some(newest) = newest else {
+        return if open.is_some() {
+            Err("parts-without-a-revision")
+        } else {
+            Ok(())
+        };
+    };
+    match (newest.state(), &open) {
+        (RevisionState::Open, Some(open)) if open.revision == newest => {
+            if usize::try_from(open.parts.get()).map_or(true, |parts| parts > MAX_TRANSCRIPT_PARTS)
+            {
+                return Err("too-many-parts");
+            }
+        }
+        (RevisionState::Open, _) => return Err("open-not-rebuilt-from-its-parts"),
+        (RevisionState::Sealed | RevisionState::Stopped, Some(_)) => {
+            return Err("parts-listed-after-the-seal");
+        }
+        (RevisionState::Sealed | RevisionState::Stopped, None) => {}
+    }
+    let reference = seal_only(store, session, &newest, now)?;
+    if newest.id() != reference.id() {
+        return Err("identity-differs");
+    }
+    match newest.state() {
+        RevisionState::Sealed => {
+            let stored = encode_transcript_record(&newest).map_err(|_| "unencodable")?;
+            let expected = encode_transcript_record(&reference).map_err(|_| "unencodable")?;
+            if stored != expected {
+                return Err("sealed-differs-from-a-seal-only-run");
+            }
+        }
+        RevisionState::Open => {
+            let until = newest.published_until().ok_or("open-without-until")?;
+            let count = newest.segments().len();
+            if reference.segments().get(..count) != Some(newest.segments()) {
+                return Err("open-not-a-prefix");
+            }
+            if reference
+                .segments()
+                .get(count..)
+                .unwrap_or_default()
+                .iter()
+                .any(|segment| segment.range().start() < until)
+            {
+                return Err("open-published-too-far");
+            }
+        }
+        RevisionState::Stopped => {
+            let until = newest.published_until().ok_or("stopped-without-until")?;
+            let published = newest
+                .segments()
+                .iter()
+                .take_while(|segment| segment.range().start() < until)
+                .count();
+            if reference.segments().get(..published) != newest.segments().get(..published) {
+                return Err("stopped-lost-what-it-published");
+            }
+        }
+    }
+    Ok(())
+}
+
+/// The revision `revision` would be had its run published only at its seal:
+/// the stand-ins' recognition of the range it replaced, assembled over the
+/// revision it supersedes.
+fn seal_only(
+    store: &FilesystemSessionStore,
+    session: &SessionId,
+    revision: &TranscriptRevision,
+    now: u64,
+) -> Result<TranscriptRevision, &'static str> {
+    let TranscriptProvenance::LocalAsr(run) = revision.provenance() else {
+        return Err("not-recognised");
+    };
+    let status = store
+        .session_status(session)
+        .map_err(|_| "status-unreadable")?;
+    let segment =
+        whole_file_source_segment(status.source_id(), MediaTime::from_micros(SPEECH_MICROS))
+            .map_err(|_| "segment")?;
+    let base = match revision.supersedes() {
+        Some(id) => Some(
+            store
+                .read_transcript_revision(session, id, now)
+                .map_err(|_| "base-unreadable")?
+                .map(|(base, _)| base)
+                .ok_or("base-missing")?,
+        ),
+        None => None,
+    };
+    let replaced = revision
+        .replaced_range()
+        .or_else(|| run.covered_range())
+        .ok_or("no-range")?;
+    let identity = recognizer_identity().map_err(|_| "identity")?;
+    // The stand-in recognizer waits on a Tokio timer, and the verifier may be
+    // called from inside a runtime or outside one: the recognition runs on a
+    // thread and a runtime of its own.
+    let transcription = std::thread::scope(|scope| {
+        scope
+            .spawn(|| {
+                let runtime = tokio::runtime::Builder::new_current_thread()
+                    .enable_time()
+                    .build()
+                    .map_err(|_| "runtime")?;
+                runtime
+                    .block_on(transcribe_range(
+                        TranscribeRangeRequest {
+                            source_segment: &segment,
+                            range: replaced,
+                            plan: ChunkPlan::R0,
+                            audio_stream: 1,
+                            expected: &identity,
+                        },
+                        &StandInAudio,
+                        &StandInRecognizer {
+                            delay: Duration::ZERO,
+                        },
+                        &NeverStop,
+                    ))
+                    .map_err(|_| "recognition")
+            })
+            .join()
+            .map_err(|_| "recognition")?
+    })?;
+    build_asr_revision(AsrRevisionRequest {
+        session_id: session,
+        source_id: status.source_id(),
+        source_segment: &segment,
+        number: NonZeroU32::new(revision.number()).ok_or("number")?,
+        transcription,
+        splice: base.as_ref().map(|base| RevisionSplice {
+            base,
+            replaced_range: replaced,
+        }),
+    })
+    .map_err(|_| "unbuildable")
 }
 
 /// Reads every worker request record on disk through the store (P11 PR 3):
