@@ -226,6 +226,7 @@ Each entry has these fields:
 | [L-232](#l-232) | The pinned Node.js in CI and the publish job lagged its security releases of 2026-10-20 (CVEs up to High); VSift ships no Node.js, but the `0.2.3` publish ran on the old pin; fixed on `main`, open for `release/0.2.x` until `0.2.4` | process/CI | low | `0.2.4` | [#526](https://github.com/smormah/vsift/issues/526) | monitoring |
 | [L-219](#l-219) | A transcription published as it goes trails the recognised audio, and an open revision's summary is interim | search/transcripts | low | unscheduled | none | accepted residual |
 | [L-220](#l-220) | A background runner can be ended with its caller when the caller's job object forbids leaving it, and on Unix a provider can outlive a runner that was killed | platform/distribution | low | unscheduled | none | accepted residual |
+| [L-223](#l-223) | A session write, an evidence capture, a visual window or a watched job's runner waits for queued work without saying so | contract/UX | low | unscheduled | none | accepted residual |
 | [L-222](#l-222) | After a restart, a queued job keeps its place in the root's queue but waits until `job start` or `job resume` runs it again | platform/distribution | low | unscheduled | none | accepted residual |
 | [L-221](#l-221) | Releases before `0.3.0` refuse a session or bundle that holds an open or stopped revision, and a sealed revision's parts stay on disk until the session is removed | integrity/compatibility | low | unscheduled | none | accepted residual |
 | [L-229](#l-229) | On Windows, `job start` holds up a caller that captures its output until the background transcription ends, because the runner inherits the caller's output pipe | platform/distribution | medium | `0.3.0` | none | open |
@@ -1792,6 +1793,18 @@ Counts: 1 high, 54 medium, 119 low (174 entries).
 - **Why:** a process cannot leave a job object that forbids it, and on Unix nothing ends a child's process group when its parent is killed without a reaper of its own (a long-lived host would be one: ADR 0033 section 8).
 - **Mitigation:** `job status` reports the job interrupted at once (the owner lock is the authority); `job resume` or `job start` takes it up again; `job cancel` and `session close` stop a runner that is alive within about a second.
 - **Next step:** a long-lived host for live sources (ADR 0033 section 8) would own and reap its providers.
+- **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual.
+  **Review:** pending.
+
+### L-223
+
+**A session write, an evidence capture, a visual window or a watched job's background runner that finds the capacity held by queued work waits for it, up to 120 s, without saying so (0.3.0, the progress story).**
+
+- **What:** a transcription that waits for queued work to give back the root's capacity says so ([ADR 0033](../decisions/0033-progress-during-long-transcriptions.md) section 6: a `lifecycle` `admission_waiting` event with `reason` `queued_work` and a live line). Every other caller that needs a unit of the capacity while queued work holds all of it waits inside the store, demanding it, for at most 120 s (in practice until the queued run's next chunk boundary), with nothing shown: a session's own write (`ingest`, `session close`, `renew` or `retain`, an artifact), a `frame`, `crop` or `audio` capture, a `candidates` window, and the background runner of a watched job, whose `job status` shows it running.
+- **Impact: low by the rubric** (a delay with no answer, bounded, then the usual `BUSY`): nothing is lost, and only a root with a queued job running is affected.
+- **Why:** those waits happen inside synchronous storage calls with no progress port, and most of those commands have no event stream; the transcription is the long wait a person or agent watches.
+- **Mitigation:** the queued run gives the capacity back at its next chunk boundary (a chunk is well under 120 s); `job status` shows a queued job running; a caller that is refused gets `BUSY` with its remediation.
+- **Next step:** a typed wait notice from the store to the engine for every caller, and a waiting phase in `job status` streams, if trials show these waits are noticed.
 - **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual.
   **Review:** pending.
 

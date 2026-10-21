@@ -203,6 +203,10 @@ pub const QUEUED_ADMISSION_POLL: Duration = Duration::from_millis(500);
 /// supports. Past it, the caller is answered `BUSY` as before.
 pub const QUEUED_YIELD_WAIT: Duration = Duration::from_secs(120);
 
+/// How often an ordinary caller that waits for queued work to give back the
+/// capacity looks at it again.
+pub const QUEUED_YIELD_POLL: Duration = Duration::from_millis(50);
+
 /// What follows one busy admission attempt.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AdmissionDecision {

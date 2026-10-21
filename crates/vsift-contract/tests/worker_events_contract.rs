@@ -422,10 +422,25 @@ fn every_lifecycle_kind_and_reason_is_schema_valid() -> TestResult {
                 operation_id: Some(&operation),
             },
         ),
+        // ADR 0033 section 6: a request, or an interactive command with no
+        // request, waits for queued work.
+        LifecycleEventResponse::queued_work_waiting(9, command, &request),
+        LifecycleEventResponse::queued_work_waiting(
+            10,
+            CommandName::TranscriptRetranscribe,
+            &RequestRef {
+                line: None,
+                operation_id: None,
+            },
+        ),
     ];
     for event in &events {
         validate_line(&serde_json::to_value(event)?)?;
     }
+    let waiting = serde_json::to_value(&events[10])?;
+    assert_eq!(waiting["kind"], "admission_waiting");
+    assert_eq!(waiting["reason"], "queued_work");
+    assert!(waiting["line"].is_null() && waiting["request_operation_id"].is_null());
     // A readiness on any kind but `started`, or a status on any kind but
     // `request_finished`, is refused.
     let mut forged = serde_json::to_value(&events[0])?;

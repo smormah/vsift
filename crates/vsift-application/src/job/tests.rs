@@ -460,6 +460,12 @@ struct Shared {
     others_waiting: VecDeque<bool>,
     /// How often `others_waiting` was asked.
     waiting_asked: usize,
+    /// What each `demand_capacity` and `queued_work_holds` call finds, in
+    /// order: whether queued work holds the capacity (it does not once they
+    /// run out).
+    queued_holds: VecDeque<bool>,
+    /// Demands taken.
+    demands: usize,
     publishes: usize,
     /// The open revision (ADR 0033): every part as published, in order, and
     /// the job that publishes it.
@@ -751,6 +757,7 @@ impl CommitLedger for MemoryStore {
 
 impl RevisionStore for MemoryStore {
     type Permit = ();
+    type Demand = ();
 
     fn admit(&self, weight: NonZeroU16) -> Result<Self::Permit, SessionStorageError> {
         let mut shared = self.lock()?;
@@ -774,6 +781,21 @@ impl RevisionStore for MemoryStore {
             shared.waiting_asked += 1;
             shared.others_waiting.pop_front().unwrap_or(false)
         })
+    }
+
+    fn demand_capacity(&self) -> Option<Self::Demand> {
+        let mut shared = self.lock().ok()?;
+        if shared.queued_holds.pop_front().unwrap_or(false) {
+            shared.demands += 1;
+            Some(())
+        } else {
+            None
+        }
+    }
+
+    fn queued_work_holds(&self) -> bool {
+        self.lock()
+            .is_ok_and(|mut shared| shared.queued_holds.pop_front().unwrap_or(false))
     }
 
     fn head(&self, _session_id: &SessionId, _now: u64) -> Result<SessionHead, SessionStorageError> {
@@ -2095,6 +2117,114 @@ async fn a_queued_run_yields_its_capacity_at_a_chunk_boundary() -> TestResult {
     Ok(())
 }
 
+/// Counts the waits for queued work a run announces, apart from the others.
+#[derive(Default)]
+struct QueuedWaitRecorder {
+    queued: AtomicUsize,
+    capacity: AtomicUsize,
+}
+
+impl ProgressSink for QueuedWaitRecorder {
+    fn report(&self, _update: ProgressUpdate) {}
+
+    fn admission_waiting(&self, _weight: NonZeroU16) {
+        self.capacity.fetch_add(1, Ordering::SeqCst);
+    }
+
+    fn queued_work_waiting(&self, weight: NonZeroU16) {
+        assert_eq!(weight.get(), 4, "the recognizer's threads");
+        self.queued.fetch_add(1, Ordering::SeqCst);
+    }
+}
+
+/// ADR 0033 section 6: an ordinary run that finds the capacity held by queued
+/// work demands it, says once that it waits for queued work, polls on its own
+/// timer until the capacity is given back, counts the wait and commits.
+#[tokio::test]
+async fn an_ordinary_run_says_it_waits_for_queued_work() -> TestResult {
+    let harness = Harness::new()?;
+    harness.store.with(|shared| {
+        // Busy at first and for two polls; queued work holds it throughout.
+        shared.busy_admissions = 3;
+        shared.queued_holds = [true, true, true].into();
+    })?;
+    let waits = QueuedWaitRecorder::default();
+    let committed = harness
+        .run_admitted(AdmissionWait::Immediate, &waits)
+        .await??;
+    assert_eq!(committed.revision.number(), 1);
+    assert_eq!(
+        harness.timer.sleeps(),
+        vec![vsift_domain::QUEUED_YIELD_POLL; 3]
+    );
+    assert_eq!(
+        committed.report.admission_wait,
+        vsift_domain::QUEUED_YIELD_POLL * 3
+    );
+    assert_eq!(waits.queued.load(Ordering::SeqCst), 1);
+    assert_eq!(waits.capacity.load(Ordering::SeqCst), 0);
+    assert_eq!(harness.store.with(|shared| shared.demands)?, 1);
+    Ok(())
+}
+
+/// ADR 0033 section 6: the wait for queued work lasts at most
+/// `QUEUED_YIELD_WAIT` over the whole run, its retries included, and is
+/// announced once; then the run is refused as for any contention.
+#[tokio::test]
+async fn a_wait_for_queued_work_is_bounded_over_the_whole_run() -> TestResult {
+    let harness = Harness::new()?;
+    let polls =
+        vsift_domain::QUEUED_YIELD_WAIT.as_millis() / vsift_domain::QUEUED_YIELD_POLL.as_millis();
+    let polls = usize::try_from(polls)?;
+    harness.store.with(|shared| {
+        shared.busy_admissions = u32::MAX;
+        shared.queued_holds = std::iter::repeat_n(true, polls * 2).collect();
+    })?;
+    let waits = QueuedWaitRecorder::default();
+    let outcome = harness
+        .run_admitted(AdmissionWait::Immediate, &waits)
+        .await?;
+    assert_eq!(
+        outcome,
+        Err(JobRunError::Storage(SessionStorageError::Busy))
+    );
+    let sleeps = harness.timer.sleeps();
+    let queued_polls = sleeps
+        .iter()
+        .filter(|sleep| **sleep == vsift_domain::QUEUED_YIELD_POLL)
+        .count();
+    assert_eq!(queued_polls, polls);
+    // Then P10's two retries, which wait no more for queued work.
+    assert_eq!(
+        sleeps[polls..],
+        [Duration::from_millis(100), Duration::from_millis(200)]
+    );
+    assert_eq!(waits.queued.load(Ordering::SeqCst), 1);
+    assert_eq!(harness.store.with(|shared| shared.demands)?, 1);
+    Ok(())
+}
+
+/// ADR 0033 section 6: capacity that is busy while no queued work holds it is
+/// refused at once, as before, without a demand or a wait.
+#[tokio::test]
+async fn busy_capacity_without_queued_work_is_not_waited_for() -> TestResult {
+    let harness = Harness::new()?;
+    harness
+        .store
+        .with(|shared| shared.busy_admissions = u32::MAX)?;
+    let waits = QueuedWaitRecorder::default();
+    let outcome = harness
+        .run_admitted(AdmissionWait::Immediate, &waits)
+        .await?;
+    assert_eq!(
+        outcome,
+        Err(JobRunError::Storage(SessionStorageError::Busy))
+    );
+    assert_eq!(waits.queued.load(Ordering::SeqCst), 0);
+    assert_eq!(harness.store.with(|shared| shared.demands)?, 0);
+    Ok(())
+}
+
 /// X-07: a bounded wait never waits longer than its budget; then it
 /// answers busy with a retry hint, leaves the job resumable and is not
 /// retried automatically (the budget is spent).
@@ -2837,6 +2967,7 @@ impl CommitLedger for SlowStore<'_> {
 
 impl RevisionStore for SlowStore<'_> {
     type Permit = ();
+    type Demand = ();
 
     fn admit(&self, weight: NonZeroU16) -> Result<Self::Permit, SessionStorageError> {
         self.0.admit(weight)
@@ -2848,6 +2979,14 @@ impl RevisionStore for SlowStore<'_> {
 
     fn others_waiting(&self) -> bool {
         self.0.others_waiting()
+    }
+
+    fn demand_capacity(&self) -> Option<Self::Demand> {
+        self.0.demand_capacity()
+    }
+
+    fn queued_work_holds(&self) -> bool {
+        self.0.queued_work_holds()
     }
 
     fn head(&self, session_id: &SessionId, now: u64) -> Result<SessionHead, SessionStorageError> {

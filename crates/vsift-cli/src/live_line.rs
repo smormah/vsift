@@ -11,6 +11,13 @@
 //! Transcribing 34:10 of 1:30:00 (38%), 2.1x real time, about 26 min left (estimate)
 //! ```
 //!
+//! While the command waits for queued work to give back the root's capacity
+//! (ADR 0033 section 6), the line says so until the recognition reports:
+//!
+//! ```text
+//! Waiting for queued work to make room (at most 2 min)
+//! ```
+//!
 //! It never appears in JSON or JSON Lines output, and never when standard
 //! error is a file or a pipe. The engine calls the observer on the command's
 //! own task, so the observer only keeps the newest observation; the line is
@@ -25,7 +32,7 @@ use std::{
     time::Duration,
 };
 
-use vsift::{JobProgress, MediaProgress, ProgressObserver, ProgressStage};
+use vsift::{AdmissionWaitCause, JobProgress, MediaProgress, ProgressObserver, ProgressStage};
 
 use crate::output::OutputWriter;
 
@@ -57,11 +64,17 @@ where
     if line == LiveLine::Hidden {
         return run(ProgressObserver::none()).await;
     }
-    let newest: Arc<Mutex<Option<JobProgress>>> = Arc::default();
+    let newest: Arc<Mutex<Option<Observed>>> = Arc::default();
     let kept = Arc::clone(&newest);
+    let waits = Arc::clone(&newest);
     let observer = ProgressObserver::new(move |progress| {
         if let Ok(mut newest) = kept.lock() {
-            *newest = Some(progress.clone());
+            *newest = Some(Observed::Progress(progress.clone()));
+        }
+    })
+    .with_admission_waiting(move |waiting| {
+        if let Ok(mut newest) = waits.lock() {
+            *newest = Some(Observed::Waiting(waiting.cause));
         }
     });
     let mut work = pin!(run(observer));
@@ -74,7 +87,7 @@ where
             result = &mut work => break result,
             _ = tick.tick() => {
                 let taken = newest.lock().ok().and_then(|mut newest| newest.take());
-                if let Some(sentence) = taken.as_ref().and_then(line_for) {
+                if let Some(sentence) = taken.as_ref().and_then(line_for_observed) {
                     writer.write_live_line(&sentence);
                     written = true;
                 }
@@ -85,6 +98,34 @@ where
         writer.clear_live_line();
     }
     result
+}
+
+/// The newest observation the line shows.
+#[derive(Clone, Debug)]
+enum Observed {
+    /// How far the work has come.
+    Progress(JobProgress),
+    /// The work waits for admission capacity.
+    Waiting(AdmissionWaitCause),
+}
+
+/// The line for the newest observation, or `None` for one it does not show.
+fn line_for_observed(observed: &Observed) -> Option<String> {
+    match observed {
+        Observed::Progress(progress) => line_for(progress),
+        Observed::Waiting(cause) => Some(waiting_line(*cause)),
+    }
+}
+
+/// The line while the work waits for capacity.
+fn waiting_line(cause: AdmissionWaitCause) -> String {
+    match cause {
+        AdmissionWaitCause::QueuedWork => format!(
+            "Waiting for queued work to make room (at most {} min)",
+            vsift::QUEUED_YIELD_WAIT.as_secs().div_ceil(60)
+        ),
+        AdmissionWaitCause::CapacityInUse => "Waiting for capacity".to_owned(),
+    }
 }
 
 /// The line for one observation, or `None` for a stage it does not show.
@@ -150,9 +191,47 @@ fn time_left(micros: u64) -> String {
 
 #[cfg(test)]
 mod tests {
-    use vsift::{JobProgress, MediaProgress, ProgressStage, ProgressUpdate};
+    use vsift::{
+        AdmissionWaitCause, AdmissionWaiting, JobProgress, MediaProgress, ProgressObserver,
+        ProgressStage, ProgressUpdate,
+    };
 
-    use super::{line_for, media_sentence};
+    use super::{LiveLine, line_for, media_sentence, waiting_line, with_live_line};
+    use crate::output::OutputWriter;
+
+    /// ADR 0033 section 6: a command that waits for queued work shows that it
+    /// waits, and how long it may, until the recognition reports; the line is
+    /// cleared before the result.
+    #[tokio::test]
+    async fn a_wait_for_queued_work_shows_on_the_line() {
+        let mut standard_error = Vec::new();
+        let mut output = OutputWriter::new(Vec::<u8>::new(), &mut standard_error);
+        with_live_line(
+            &mut output,
+            LiveLine::Shown,
+            |observer: ProgressObserver| async move {
+                observer.admission_waiting(&AdmissionWaiting {
+                    job: None,
+                    weight: std::num::NonZeroU16::MIN,
+                    cause: AdmissionWaitCause::QueuedWork,
+                });
+                // The line's first tick comes on the timer's next turn, well
+                // before this wait ends.
+                tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+            },
+        )
+        .await;
+        drop(output);
+        let written = String::from_utf8_lossy(&standard_error);
+        assert_eq!(
+            written,
+            "\rWaiting for queued work to make room (at most 2 min)\x1b[K\r\x1b[K"
+        );
+        assert_eq!(
+            waiting_line(AdmissionWaitCause::CapacityInUse),
+            "Waiting for capacity"
+        );
+    }
 
     fn media(done_s: u64, total_s: Option<u64>, fresh_s: u64, wall_s: u64) -> MediaProgress {
         MediaProgress {
