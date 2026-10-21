@@ -17,6 +17,7 @@ mod retry;
 mod search;
 mod session;
 mod spans;
+mod speakers;
 mod storage;
 mod timeline;
 mod transcript;
@@ -59,7 +60,8 @@ pub use evidence::{
 pub use failure::{FailureClass, FailureCode, OperationStatus};
 pub use identity::{
     ArtifactId, EvidenceId, IdentifierError, JobId, OperationId, OperationKey, SessionId, SourceId,
-    SourceSegmentId, TranscriptRevisionId, TranscriptSegmentId, VisualCandidateId, VisualIndexId,
+    SourceSegmentId, SpeakerRecordId, TranscriptRevisionId, TranscriptSegmentId, VisualCandidateId,
+    VisualIndexId,
 };
 pub use job::{JobKind, JobState, JobTransitionError};
 pub use media::{
@@ -85,6 +87,14 @@ pub use search::{
 pub use session::{
     SessionArtifactKind, SessionLifetime, SessionLifetimePolicy, SessionPhase,
     SessionTransitionError, WorkspacePolicy, WorkspacePolicyError, WorkspaceRetention,
+};
+pub use speakers::{
+    DiarizationEngine, DiarizationError, DiarizationProvenance, DiarizedTurn, EngineSpeaker,
+    LabelledTurn, MAX_DIARIZED_SPEAKERS, MAX_DIARIZED_TURNS, MAX_GIVEN_SPEAKERS,
+    MAX_VERIFIED_NAME_BYTES, MAX_VERIFIED_NAMES, NoConfidentSpeaker, SegmentAttribution,
+    SegmentSpeaker, SpeakerCount, SpeakerCountError, SpeakerCoverage, SpeakerLabellingProfile,
+    SpeakerRecord, SpeakerRecordParts, SpeakerSummary, SpeakerTag, SpeakerTagError, VerifiedName,
+    VerifiedNameError, label_turns, segment_speaker,
 };
 pub use storage::{
     DurabilityRequirement, GenerationError, PublicationGuarantee, StorageGeneration,

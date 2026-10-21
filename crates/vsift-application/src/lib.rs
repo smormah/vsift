@@ -17,6 +17,7 @@ mod managed_lifecycle;
 mod provisioning;
 mod search;
 mod session;
+mod speakers;
 mod storage;
 mod transcript;
 mod verification;
@@ -86,6 +87,11 @@ pub use provisioning::{
     SetupProfile, SetupSelectionState, SmokeStageOutcome, StageDisposal, StageRetentionReason,
     StagedManagedComponent, SupersededManagedVersion, SupersessionReason, plan_managed_setup,
     smoke_before_activation,
+};
+pub use speakers::{
+    DiarizationRequest, DiarizationRunError, LabelSpeakersRequest, MAX_DIARIZATION_MICROS,
+    MIN_DIARIZATION_MICROS, SpeakerDiarizer, SpeakerLabelError, diarization_range, label_speakers,
+    name_speaker, speaker_record_id,
 };
 pub use storage::{
     AuthorizedSessionGenerationPublication, AuthorizedSessionStorageInitialization,
