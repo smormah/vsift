@@ -226,6 +226,7 @@ Each entry has these fields:
 | [L-232](#l-232) | The pinned Node.js in CI and the publish job lagged its security releases of 2026-10-20 (CVEs up to High); VSift ships no Node.js, but the `0.2.3` publish ran on the old pin; fixed on `main`, open for `release/0.2.x` until `0.2.4` | process/CI | low | `0.2.4` | [#526](https://github.com/smormah/vsift/issues/526) | monitoring |
 | [L-219](#l-219) | A transcription published as it goes trails the recognised audio, and an open revision's summary is interim | search/transcripts | low | unscheduled | none | accepted residual |
 | [L-220](#l-220) | A background runner can be ended with its caller when the caller's job object forbids leaving it, and on Unix a provider can outlive a runner that was killed | platform/distribution | low | unscheduled | none | accepted residual |
+| [L-222](#l-222) | After a restart, a queued job keeps its place in the root's queue but waits until `job start` or `job resume` runs it again | platform/distribution | low | unscheduled | none | accepted residual |
 | [L-221](#l-221) | Releases before `0.3.0` refuse a session or bundle that holds an open or stopped revision, and a sealed revision's parts stay on disk until the session is removed | integrity/compatibility | low | unscheduled | none | accepted residual |
 | [L-229](#l-229) | On Windows, `job start` holds up a caller that captures its output until the background transcription ends, because the runner inherits the caller's output pipe | platform/distribution | medium | `0.3.0` | none | open |
 
@@ -1786,11 +1787,23 @@ Counts: 1 high, 54 medium, 119 low (174 entries).
 
 **A background runner (`job start`, watched) can be ended with its caller, and on Unix a provider can outlive a runner that was killed (0.3.0, the progress story).**
 
-- **What:** the runner of a watched `prepare` job ([ADR 0033](../decisions/0033-progress-during-long-transcriptions.md) section 5) leads a process group of its own on Unix and, on Windows, has a console and process group of its own and leaves the caller's job object. When that job object forbids leaving it (some IDE terminals and service hosts), the runner starts inside it (`detachment` `in_callers_job`) and whatever ends that job ends the runner. A runner killed outright leaves its job interrupted and resumable: on Windows its providers end with it (their job object closes); on Unix a provider started in its own process group runs on until its chunk ends (at most one chunk's work) and is then gone. A runner whose session expires is not stopped at once: the expired session refuses its parts and its seal, and it ends when its run does. A queued job (`--mode queued`) keeps its place in the root's queue across a restart, but waits until `job start` or `job resume` starts a runner for it again: nothing runs the queue on its own.
+- **What:** the runner of a watched `prepare` job ([ADR 0033](../decisions/0033-progress-during-long-transcriptions.md) section 5) leads a process group of its own on Unix and, on Windows, has a console and process group of its own and leaves the caller's job object. When that job object forbids leaving it (some IDE terminals and service hosts), the runner starts inside it (`detachment` `in_callers_job`) and whatever ends that job ends the runner. A runner killed outright leaves its job interrupted and resumable: on Windows its providers end with it (their job object closes); on Unix a provider started in its own process group runs on until its chunk ends (at most one chunk's work) and is then gone. A runner whose session expires is not stopped at once: the expired session refuses its parts and its seal, and it ends when its run does.
 - **Impact: low by the rubric** (bounded work left running, never wrong data): nothing is published from a killed or expired run, and `job resume` continues an interrupted job from its checkpoints.
 - **Why:** a process cannot leave a job object that forbids it, and on Unix nothing ends a child's process group when its parent is killed without a reaper of its own (a long-lived host would be one: ADR 0033 section 8).
 - **Mitigation:** `job status` reports the job interrupted at once (the owner lock is the authority); `job resume` or `job start` takes it up again; `job cancel` and `session close` stop a runner that is alive within about a second.
 - **Next step:** a long-lived host for live sources (ADR 0033 section 8) would own and reap its providers.
+- **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual.
+  **Review:** pending.
+
+### L-222
+
+**After a restart, a queued job keeps its place in the root's queue but waits until `job start` or `job resume` runs it again: nothing runs the queue on its own (0.3.0, the progress story).**
+
+- **What:** `job start --mode queued` ([ADR 0033](../decisions/0033-progress-during-long-transcriptions.md) section 6) enters the job in the root's queue on disk (`job-queue/`) and starts a background runner that waits its turn. The queue's order survives a restart, a reboot or a killed runner, but no process runs it then: a waiting job stays `queued` (resumable, `not_started`) until someone runs `job start` or `job resume` for it, whose runner takes its turn again in order.
+- **Impact: low by the rubric** (a missing convenience): nothing is lost or reordered, and `job status` and `session status` show the job waiting and resumable.
+- **Why:** 0.3.0 has no long-lived host process; each queued job has a runner of its own, which ends with its machine session.
+- **Mitigation:** the skill and the documentation say to check `job status` and run `job resume` for a job that waits with no live owner.
+- **Next step:** a host that runs the root's queue on its own, with priorities between queued jobs (1.0, ADR 0033 section 6).
 - **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual.
   **Review:** pending.
 

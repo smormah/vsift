@@ -501,7 +501,7 @@ The fifth pull request implements the queued mode of section 6.
   operating-system lock, so a process that dies releases what it held. The visual windows of a queued job
   take their capacity window by window, as `candidates` does, so they free it between windows anyway.
 - **Not in 0.3.0:** priorities between queued jobs, and a host that runs the queue without a runner a job
-  (1.0). After a restart a waiting job needs `job start` or `job resume` to run again (L-220).
+  (1.0). After a restart a waiting job needs `job start` or `job resume` to run again (L-222).
 - **Tests.** The queue's order across sessions, a job entered again keeping its place, a restart, one turn
   at a time, and an ordinary caller waiting for queued work and admitted when it yields (storage); a queued
   run yielding at a chunk boundary and committing what an ordinary run commits, and a waiting job staying

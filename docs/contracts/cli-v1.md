@@ -1222,7 +1222,8 @@ vsift job status job_0123456789abcdef0123456789abcdef --json
   refused, but waits (up to 120 s) while the queued run gives the capacity back at its next
   chunk boundary, and takes it back once nobody waits. The queue is kept on disk
   (`job-queue/` of the root) and survives a restart: its jobs keep their order, and `job start`
-  (or `job resume`) of a waiting one starts a runner that takes its turn again.
+  (or `job resume`) of a waiting one starts a runner that takes its turn again; nothing runs the
+  queue on its own (L-222).
 
 `--mode quick|watched` overrides the choice.
 
