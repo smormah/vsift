@@ -435,3 +435,43 @@ fn the_merge_rules_version_names_what_the_merge_makes() -> TestResult {
     );
     Ok(())
 }
+
+/// D5: a first window on the whole run's chunk grid is planned in chunks with
+/// exactly the whole run's windows, wherever the window falls, so the whole run
+/// can take every one of their answers.
+#[test]
+fn a_window_aligned_to_the_chunk_grid_plans_the_whole_runs_own_chunks() -> TestResult {
+    let segment = crate::SourceSegmentId::parse("sgm_0123456789abcdef")?;
+    let at = |seconds: u64| MediaTime::from_micros(seconds * SECOND);
+    for source_s in [61_u64, 75, 140, 600, 3_601] {
+        let source_end = at(source_s);
+        let whole = crate::asr::plan_chunks(
+            &segment,
+            crate::TimeRange::new(at(0), source_end)?,
+            ChunkPlan::R0,
+        )?;
+        for from_s in (0..source_s).step_by(7) {
+            for length_s in [1_u64, 4, 25, 31, 90] {
+                let window =
+                    crate::TimeRange::new(at(from_s), at((from_s + length_s).min(source_s)))?;
+                let aligned = crate::asr::align_to_chunk_grid(window, ChunkPlan::R0, source_end)
+                    .ok_or("a window inside the source has a grid range")?;
+                assert!(aligned.start() <= window.start() && aligned.end() >= window.end());
+                for chunk in crate::asr::plan_chunks(&segment, aligned, ChunkPlan::R0)? {
+                    assert!(
+                        whole.iter().any(|own| own.window() == chunk.window()),
+                        "{source_s} s source, window {from_s}+{length_s} s: {:?} is not a chunk                          of the whole run",
+                        chunk.window()
+                    );
+                }
+            }
+        }
+    }
+    // A window at or after the end of the source has none.
+    let past = crate::TimeRange::new(at(61), at(62))?;
+    assert_eq!(
+        crate::asr::align_to_chunk_grid(past, ChunkPlan::R0, at(60)),
+        None
+    );
+    Ok(())
+}

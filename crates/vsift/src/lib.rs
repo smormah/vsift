@@ -121,8 +121,8 @@ mod worker;
 mod workspace;
 
 pub use asr::{
-    JobSummary, PUBLICATION_INTERVAL, RetranscribeOutcome, RetranscribePublication,
-    RetranscribeRange, RetranscribeRequest,
+    JobSummary, PUBLICATION_INTERVAL, RecognitionSeed, RetranscribeOutcome,
+    RetranscribePublication, RetranscribeRange, RetranscribeRequest,
 };
 pub use batch::{BatchEvent, BatchLineEnd, BatchProgress, MAX_BATCH_CONCURRENCY, WorkBatchRun};
 pub use candidates::{CandidatesRange, CandidatesRequest, CandidatesResults};
@@ -151,7 +151,7 @@ pub use lifecycle::{InstallCleanup, ManagedListing, ManagedRepairDiagnosis};
 pub use local_asr_check::DEFAULT_LOCAL_ASR_CHECK_BUDGET;
 pub use prepare::{
     JobStartPlan, JobStartRequest, JobStartState, ModeBasis, PROGRESS_RECORD_INTERVAL,
-    RecognitionShare,
+    RecognitionShare, VISUAL_BATCH_WINDOWS,
 };
 pub use progress::{AdmissionWaiting, JobProgress, ProgressObserver};
 pub use search::{SearchRange, SearchRequest, SearchResultHit, SearchResults};
@@ -168,6 +168,8 @@ pub use transcripts::{TranscriptExcerpt, TranscriptQuery};
 pub use verification::{
     Cancellation, MediaToolSelection, MediaToolVerificationRequest, ModelSelection,
 };
+/// Where a stream of a `prepare` job is (`job status`, ADR 0033).
+pub use vsift_application::StreamPhase;
 /// Starting the background runner of `job start` (ADR 0033): the host gives
 /// the executable and its arguments, and the runner outlives it.
 pub use vsift_infrastructure::{DetachedRunner, Detachment, launch_detached};
@@ -216,8 +218,8 @@ pub use vsift_domain::{
     ADMISSION_RETRY_AFTER, AdmissionBudget, AdmissionBudgetError, AdmissionWait, AttemptFailure,
     DependencyState, DependencyStatus, DurabilityRequirement, EvidenceId, FailureClass,
     FailureCode, IdentifierError, JobId, JobKind, JobMode, JobState, MAX_ADMISSION_WAIT,
-    MAX_RECOGNIZER_THREADS, MediaProgress, OperationId, OperationStatus, PrepareStream,
-    ProbeTimeout, ProbeTimeoutKind, ProgressStage, ProgressUnit, ProgressUpdate,
+    MAX_FIRST_WINDOW_MICROS, MAX_RECOGNIZER_THREADS, MediaProgress, OperationId, OperationStatus,
+    PrepareStream, ProbeTimeout, ProbeTimeoutKind, ProgressStage, ProgressUnit, ProgressUpdate,
     PublicationGuarantee, RuntimeCapability, RuntimeDependency, RuntimeReadiness, SessionId,
     SessionLifetime, SessionLifetimePolicy, SessionPhase, SourceId, StorageGeneration,
     WorkspacePolicy, WorkspacePolicyError, WorkspaceRetention,

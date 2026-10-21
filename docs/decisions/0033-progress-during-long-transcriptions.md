@@ -428,6 +428,47 @@ quick and watched modes, D4 and the skill.
   an open revision and is a follow-up. A runner whose session expires is not stopped at once: the expired
   session refuses its parts and its seal, and it ends when its run does (L-220).
 
+## Implementation notes: the fourth pull request (2026-10-21)
+
+The fourth pull request implements section 4 (`--first`, D5) and the visual stream of section 5 (D6). A
+`prepare` job now runs three streams, in the order of `PrepareStream::ALL`: `first` (only with a window),
+`visual`, `transcript`.
+
+- **The first window.** `job start --first <from_us>:<to_us>` (at most `MAX_FIRST_WINDOW_MICROS`, 30
+  minutes, which also bounds what is held for reuse); the window is part of the `prepare` job's identity and
+  record (`request.first`). The runner probes the source's end, widens the window to the whole run's chunk
+  grid (`align_to_chunk_grid`: every chunk of the widened range has the window of the whole run's chunk at
+  that time) and retranscribes it as a range, sealed at once.
+- **One recognition for the window (D5).** A run keeps the raw answer of every chunk it finishes in a
+  `ChunkSeed`, under a seed key that is the recognition key without the replaced range (`seed_key`), and a
+  later run takes the answer kept for a chunk of the same window instead of recognising it, stores it as
+  its own checkpoint and treats it as reused. The engine's seed (`RecognitionSeed`) lives in the runner's
+  memory, bounded to 96 answers; a runner that dies loses it, and the whole run then recognises the window
+  again. The sealed revision is the one a run without the seed makes, because a recognizer hears only the
+  chunk's audio (the property `a_whole_run_takes_the_first_windows_answers_and_makes_the_same_transcript`
+  holds with a recognizer whose answer depends only on the window; L-200 bounds sameness to one machine,
+  which a seed never leaves).
+- **The visual stream (D6).** Batches of `VISUAL_BATCH_WINDOWS` (10) windows through the same analysis and
+  commit as `candidates` (`analyse_visual_batch`), each an index revision, until every window is indexed;
+  a busy root is asked again for about a minute; a source without video skips the stream. It has no job of
+  its own: the progress record now holds each stream's phase (`running`, `done`, `skipped`), from which
+  `job status` reports its state. Its `media` counts windows of video.
+- **Status and contract.** The stream identifiers `first`, `visual` and `transcript`; the stream state
+  `skipped`; `request.first` in `job-data`. A visual stop that a retry can get past leaves the `prepare` job
+  interrupted (the windows it committed stay); one it cannot, such as missing media tools, fails it.
+- **Skill.** PREPARE says to add `--first` when the user named a moment, and `resume.md` that `candidates`
+  answers without analysing once the `visual` stream has succeeded.
+- **Tests.** The grid alignment over sources, windows and lengths (domain); the seed taken by a whole run,
+  which recognises only the chunks outside the window and makes the same transcript, and the `prepare`
+  job's order of streams and recorded commit (application); the `prepare` record with its first window and
+  the progress record's phase (storage); `--first` checked before anything runs and recorded
+  (`job_cli_contract`); opt-in with `FFmpeg`, a watched job with a first window whose window is sealed
+  first, whose video is indexed before the transcript (a warm `candidates` read), and whose whole run
+  recognises the window's chunk not again, and a source without video skipping the visual stream
+  (`engine_growth`).
+- **Planned for a sixth pull request:** the crash campaign's workload with open revisions (its verifier must
+  accept an open revision and a part-by-part publication) and the visual stream's kill points.
+
 ## Decisions for the maintainer
 
 All are taken (2026-10-21):

@@ -138,7 +138,9 @@ vsift job resume <job> --events jsonl | tail -n 1
 `vsift job start` transcribes a recording of 10 minutes or more in the background (`data.start.runner`
 `background`); `data.job.job_id` is its job. It runs on its own while you work, and leaves room for frames:
 
-- Go on with FIND_SPOKEN_SPANS and the states after it at once. `search` and `transcript get` answer over the
+- Go on with FIND_SPOKEN_SPANS and the states after it at once. The video is indexed first (the `visual` entry
+  of `data.streams[]`), so `candidates` answers without analysing once that entry has `succeeded`; a `--first`
+  range is transcribed before both (the `first` entry). `search` and `transcript get` answer over the
   part already transcribed: the answer is `partial`, with the reason `transcription_pending`, and
   `transcript_coverage.pending_ranges` lists what is not transcribed yet. That is a gap still being filled, not
   silence.
@@ -148,7 +150,7 @@ vsift job resume <job> --events jsonl | tail -n 1
 vsift job status <job> --json
 ```
 
-  `data.streams[]` holds the transcript's `state` and, in `media`, `done_us` of `total_us` (microseconds of the
+  The `transcript` entry of `data.streams[]` holds its `state` and, in `media`, `done_us` of `total_us` (microseconds of the
   recording), `percent`, `speed` (times real time) and `estimate.remaining_ms`: an estimate from the speed so far,
   not a promise.
 - To read only what was transcribed after an earlier answer, pass that answer's `data.since.since_token`:

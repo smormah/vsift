@@ -734,6 +734,7 @@ impl Engine {
                             // supervisor's request result is what it was.
                             publication: crate::RetranscribePublication::AtTheSeal,
                             share: crate::RecognitionShare::Whole,
+                            seed: None,
                         })
                         .await
                         .map_err(|error| StepError {

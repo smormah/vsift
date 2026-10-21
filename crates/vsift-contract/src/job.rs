@@ -25,6 +25,9 @@ pub const ESTIMATE_BASIS: &str = "cumulative_measured_speed";
 /// The state of a stream whose job has not been created yet.
 pub const STREAM_NOT_STARTED: &str = "not_started";
 
+/// The state of a stream that had nothing to do (a source without video).
+pub const STREAM_SKIPPED: &str = "skipped";
+
 /// A speed in media seconds a wall second, held in thousandths so that the
 /// data keeps exact equality, and written as a JSON number.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -111,6 +114,8 @@ pub struct StreamPresentation<'a> {
     pub media: Option<MediaProgress>,
     /// Whether a process runs it now, so that an estimate means something.
     pub live: bool,
+    /// Where its runner recorded it to be.
+    pub phase: vsift_application::StreamPhase,
 }
 
 /// One stream in a `prepare` job's data (ADR 0033 section 5).
@@ -131,9 +136,13 @@ impl StreamData {
         Self {
             stream: stream.stream.identifier(),
             job_id: stream.job_id.map(|id| id.as_str().to_owned()),
-            state: stream
-                .state
-                .map_or(STREAM_NOT_STARTED, JobState::identifier),
+            state: if stream.phase == vsift_application::StreamPhase::Skipped {
+                STREAM_SKIPPED
+            } else {
+                stream
+                    .state
+                    .map_or(STREAM_NOT_STARTED, JobState::identifier)
+            },
             stage: stream.stage.map(ProgressStage::identifier),
             chunks_done: stream.chunks_done,
             chunks_total: stream.chunks_total,
@@ -200,6 +209,8 @@ pub struct JobPresentation<'a> {
     pub failure: Option<AttemptFailure>,
     /// How a `prepare` job runs; `None` for every other kind.
     pub mode: Option<JobMode>,
+    /// The window a `prepare` job transcribes first, when one was named.
+    pub first: Option<TimeRange>,
     /// Where a `prepare` job's started streams are; empty otherwise.
     pub streams: &'a [StreamPresentation<'a>],
 }
@@ -209,6 +220,8 @@ struct JobRequestData {
     range: Option<RangeData>,
     #[serde(skip_serializing_if = "Option::is_none")]
     mode: Option<&'static str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    first: Option<RangeData>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
@@ -269,6 +282,7 @@ impl JobData {
             request: JobRequestData {
                 range: job.requested.map(RangeData::new),
                 mode: job.mode.map(JobMode::identifier),
+                first: job.first.map(RangeData::new),
             },
             progress: JobProgressData {
                 chunks_total: job.planned_chunks,

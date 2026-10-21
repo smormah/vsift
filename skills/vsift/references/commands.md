@@ -58,7 +58,7 @@ whole; do not pipe it into `grep`, `head` or anything else.
 | `vsift session clean` | explicit | Removes every expired session of the root, not only yours. `--expired --dry-run` is read-only and may run freely to show what would be removed. |
 | `vsift session init-workspace` | never | Worker-host setup, not an investigation step. |
 | `vsift transcript get` | free | Bounded pages around `search` hits (or a resume card's windows); run `search` first to find what was said. |
-| `vsift job start` | free | Once per investigation, for the whole-video transcription of your own session; it answers at once for a recording of 10 minutes or more, which it transcribes in the background (resume.md). |
+| `vsift job start` | free | Once per investigation, for the whole-video transcription of your own session; it answers at once for a recording of 10 minutes or more, which it transcribes in the background (resume.md), and indexes the video for `candidates` first. With `--first`, the range the user named (at most 30 minutes) is transcribed before everything else. |
 | `vsift transcript retranscribe` | free | Only when the session has no usable transcript or a range needs checking (for a stretch a `partial` read lists: once, and only if the question needs it, see handoff.md); always with `--operation-id`. |
 | `vsift search` | free | Literal words, never a pattern. |
 | `vsift candidates` | free | Shortlist only. |
@@ -111,6 +111,7 @@ vsift session status <session> --json
 vsift session list --json
 vsift session list --cursor <n> --json
 vsift job start <session> --json
+vsift job start <session> --first <from-us>:<to-us> --json
 vsift transcript retranscribe <session> --operation-id <operation-id> --events jsonl | tail -n 1
 vsift transcript retranscribe <session> --from <from-us> --to <to-us> --operation-id <operation-id> --json
 vsift transcript get <session> --from <from-us> --to <to-us> --view brief --limit <n> --json

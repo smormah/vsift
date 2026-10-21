@@ -530,6 +530,50 @@ pub struct CheckpointScope<'a, K> {
     /// The clock the run's speed is read on (ADR 0033): the progress it
     /// reports carries its media figures.
     pub stopwatch: &'a dyn crate::Stopwatch,
+    /// Answers another run of the same recognition kept, for chunks with the
+    /// same window (ADR 0033 section 4, D5), and where this run keeps its
+    /// own; `None` when the run shares nothing.
+    pub seed: Option<SeedPort<'a>>,
+}
+
+/// Raw chunk answers one run hands to a later run of the same recognition
+/// (ADR 0033 section 4, D5): the window a `prepare` job transcribes first is
+/// recognised once, and the whole run that follows takes those chunks' answers
+/// instead of recognising them again.
+///
+/// An answer is kept and found under a seed key ([`crate::seed_key`]): every
+/// part of the recognition key but the replaced range, so only a run of the
+/// same session, source, audio stream, plan, recognizer and setup can take it,
+/// and only for a chunk whose window is the same. A run that takes an answer
+/// stores it as its own checkpoint and treats it exactly as a reused one, so
+/// the revision it seals is the one it would seal had it recognised the chunk
+/// itself (the recognizer answers the same audio the same way: L-200 bounds
+/// that to one machine, which a seed never leaves).
+pub trait ChunkSeed: Send + Sync {
+    /// Keeps the answer `outcome` of the chunk whose window is `window`,
+    /// best effort (a full seed keeps nothing more).
+    fn keep(&self, key: &RecognitionKey, window: TimeRange, outcome: &CheckpointOutcome);
+
+    /// The answer kept for `window` under `key`, if any.
+    fn find(&self, key: &RecognitionKey, window: TimeRange) -> Option<CheckpointOutcome>;
+}
+
+/// A seed and the key a run keeps and finds answers under.
+#[derive(Clone, Copy)]
+pub struct SeedPort<'a> {
+    /// The seed.
+    pub seed: &'a dyn ChunkSeed,
+    /// The run's seed key.
+    pub key: &'a RecognitionKey,
+}
+
+impl std::fmt::Debug for SeedPort<'_> {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("SeedPort")
+            .field("key", self.key)
+            .finish_non_exhaustive()
+    }
 }
 
 /// Told after every finished chunk of a run what the run has so far (ADR
@@ -840,7 +884,8 @@ where
             .as_ref()
             .and_then(|scope| reuse_checkpoint(scope, &chunk, bounds, &mut usage));
         let fresh = reused.is_none();
-        let result = if let Some(result) = reused {
+        let result = if let Some((result, outcome)) = reused {
+            keep_answer(scope.as_ref(), &chunk, &outcome);
             result
         } else {
             let (result, checkpoint) = fresh_chunk(&chunk, bounds, audio, recognizer, cancellation)
@@ -857,6 +902,7 @@ where
             if answered_by_the_recognizer(&checkpoint) {
                 ensure_identity(recognizer, request.expected).await?;
             }
+            keep_answer(scope.as_ref(), &chunk, &checkpoint);
             if let Some(scope) = &scope {
                 // Best effort by design: see the port's documentation. A
                 // checkpoint that could not be stored stops the run publishing.
@@ -1002,9 +1048,9 @@ fn reuse_checkpoint<K: ChunkCheckpoints>(
     chunk: &PlannedChunk,
     bounds: TimeRange,
     usage: &mut CheckpointUse,
-) -> Option<ChunkResult> {
+) -> Option<(ChunkResult, CheckpointOutcome)> {
     let checkpoint = match scope.checkpoints.load(chunk.index()) {
-        CheckpointRead::Absent => return None,
+        CheckpointRead::Absent => return seeded_answer(scope, chunk, bounds, usage),
         CheckpointRead::Unusable => {
             usage.discarded = usage.discarded.saturating_add(1);
             return None;
@@ -1012,31 +1058,8 @@ fn reuse_checkpoint<K: ChunkCheckpoints>(
         CheckpointRead::Found(checkpoint) => checkpoint,
     };
     let result = if checkpoint.belongs_to(scope.key, chunk) {
-        match checkpoint.into_outcome() {
-            CheckpointOutcome::NoAudio => Some(ChunkResult::Gap(AsrChunkOutcome::NoAudio)),
-            CheckpointOutcome::Silent { .. }
-            | CheckpointOutcome::Recognised { .. }
-            | CheckpointOutcome::Unusable { .. }
-                if chunk.is_below_recognition_floor() =>
-            {
-                None
-            }
-            CheckpointOutcome::Silent { audio } => {
-                Some(ChunkResult::Gap(AsrChunkOutcome::Silent { audio }))
-            }
-            // Stored output passed the rules when it was stored, so one they
-            // now reject is damaged or forged: it is removed and recognised
-            // again, never taken for the chunk's verdict. The verdict of an
-            // answer that was refused has a kind of its own, below (#353).
-            CheckpointOutcome::Recognised { audio, output } => {
-                validate_chunk_output(chunk, audio, bounds, output)
-                    .ok()
-                    .map(|validated| ChunkResult::Transcribed { audio, validated })
-            }
-            CheckpointOutcome::Unusable { audio, error } => {
-                Some(ChunkResult::Unusable { audio, error })
-            }
-        }
+        let outcome = checkpoint.into_outcome();
+        stored_result(chunk, bounds, outcome.clone()).map(|result| (result, outcome))
     } else {
         None
     };
@@ -1047,6 +1070,73 @@ fn reuse_checkpoint<K: ChunkCheckpoints>(
         usage.discarded = usage.discarded.saturating_add(1);
     }
     result
+}
+
+/// Keeps a finished chunk's answer in the run's seed, if it has one (D5).
+fn keep_answer<K>(
+    scope: Option<&CheckpointScope<'_, K>>,
+    chunk: &PlannedChunk,
+    outcome: &CheckpointOutcome,
+) {
+    if let Some(port) = scope.and_then(|scope| scope.seed) {
+        port.seed.keep(port.key, chunk.window(), outcome);
+    }
+}
+
+/// The answer another run of the same recognition kept for this chunk's
+/// window (ADR 0033, D5), stored as this run's own checkpoint and counted as
+/// reused. One the domain rules refuse is not taken: the chunk is recognised.
+fn seeded_answer<K: ChunkCheckpoints>(
+    scope: &CheckpointScope<'_, K>,
+    chunk: &PlannedChunk,
+    bounds: TimeRange,
+    usage: &mut CheckpointUse,
+) -> Option<(ChunkResult, CheckpointOutcome)> {
+    let port = scope.seed?;
+    let outcome = port.seed.find(port.key, chunk.window())?;
+    let result = stored_result(chunk, bounds, outcome.clone())?;
+    // Best effort, as every checkpoint: a resume recognises it again if not.
+    let _ = scope.checkpoints.store(&ChunkCheckpoint::new(
+        scope.key.clone(),
+        chunk,
+        outcome.clone(),
+    ));
+    usage.reused = usage.reused.saturating_add(1);
+    Some((result, outcome))
+}
+
+/// What a stored answer of `chunk` becomes, or `None` for one this run must
+/// not use (see [`reuse_checkpoint`]).
+fn stored_result(
+    chunk: &PlannedChunk,
+    bounds: TimeRange,
+    outcome: CheckpointOutcome,
+) -> Option<ChunkResult> {
+    match outcome {
+        CheckpointOutcome::NoAudio => Some(ChunkResult::Gap(AsrChunkOutcome::NoAudio)),
+        CheckpointOutcome::Silent { .. }
+        | CheckpointOutcome::Recognised { .. }
+        | CheckpointOutcome::Unusable { .. }
+            if chunk.is_below_recognition_floor() =>
+        {
+            None
+        }
+        CheckpointOutcome::Silent { audio } => {
+            Some(ChunkResult::Gap(AsrChunkOutcome::Silent { audio }))
+        }
+        // Stored output passed the rules when it was stored, so one they
+        // now reject is damaged or forged: it is removed and recognised
+        // again, never taken for the chunk's verdict. The verdict of an
+        // answer that was refused has a kind of its own, below (#353).
+        CheckpointOutcome::Recognised { audio, output } => {
+            validate_chunk_output(chunk, audio, bounds, output)
+                .ok()
+                .map(|validated| ChunkResult::Transcribed { audio, validated })
+        }
+        CheckpointOutcome::Unusable { audio, error } => {
+            Some(ChunkResult::Unusable { audio, error })
+        }
+    }
 }
 
 /// Decodes and, unless it has nothing to recognise (no audio, less than

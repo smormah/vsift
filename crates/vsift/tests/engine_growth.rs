@@ -2,7 +2,9 @@
 //! while it runs, followed with a since token, and sealed with every segment it
 //! published; cancelled while it runs, it keeps them as a stopped revision. A
 //! watched `prepare` job reports its progress in media time while it runs, and
-//! `session close` stops it.
+//! `session close` stops it; with a first window it transcribes that window
+//! first, indexes the video, and transcribes the rest without hearing the
+//! window again.
 //!
 //! The recogniser is a deterministic stand-in that holds at one chunk until the
 //! test lets it go; the audio is decoded by real `FFmpeg` from a looped speech
@@ -38,7 +40,10 @@ use vsift::{
     RetranscribeRequest, SearchRequest, SessionId, SessionRootLocation, Sha256Hex, SpeechPcm,
     SpeechRecognitionError, SpeechRecognizer, TranscriptQuery, UserConfigurationLocation,
 };
-use vsift::{JobMode, JobResumeRequest, JobStartRequest, JobStartState, JobState, SessionPhase};
+use vsift::{
+    JobMode, JobResumeRequest, JobStartRequest, JobStartState, JobState, PrepareStream,
+    SessionPhase,
+};
 use vsift_domain::RevisionState;
 
 type TestResult = Result<(), Box<dyn Error>>;
@@ -146,6 +151,8 @@ fn words(chunk: &PlannedChunk) -> Result<ProviderChunkOutput, SpeechRecognitionE
 struct HeldRecogniser {
     reached: Arc<AtomicBool>,
     released: Arc<AtomicBool>,
+    /// Chunks it was asked to recognise.
+    calls: Arc<AtomicU64>,
 }
 
 impl SpeechRecognizer for HeldRecogniser {
@@ -160,6 +167,7 @@ impl SpeechRecognizer for HeldRecogniser {
         chunk: &PlannedChunk,
         _pcm: &SpeechPcm,
     ) -> impl Future<Output = Result<ProviderChunkOutput, SpeechRecognitionError>> + Send {
+        self.calls.fetch_add(1, Ordering::SeqCst);
         let held = chunk.index() == HELD_AT;
         let reached = Arc::clone(&self.reached);
         let released = Arc::clone(&self.released);
@@ -256,6 +264,7 @@ fn published_as_it_goes(session: &SessionId) -> RetranscribeRequest {
             interval: Duration::ZERO,
         },
         share: vsift::RecognitionShare::Whole,
+        seed: None,
     }
 }
 
@@ -422,6 +431,7 @@ async fn a_watched_job_reports_its_progress_while_it_publishes() -> TestResult {
     let request = JobStartRequest {
         session: session_id.clone(),
         mode: Some(JobMode::Watched),
+        first: None,
     };
     let plan = runner.job_start(&request)?;
     assert_eq!(plan.start(), JobStartState::Created);
@@ -440,9 +450,13 @@ async fn a_watched_job_reports_its_progress_while_it_publishes() -> TestResult {
     let status = other.job_status(&job)?;
     assert!(status.live());
     assert_eq!(status.mode(), Some(JobMode::Watched));
-    let [stream] = status.streams() else {
-        return Err("not one stream".into());
+    // The video was indexed first (D6); the transcript runs.
+    let [visual, stream] = status.streams() else {
+        return Err("not two streams".into());
     };
+    assert_eq!(visual.stream(), PrepareStream::Visual);
+    assert_eq!(visual.state(), Some(JobState::Succeeded));
+    assert_eq!(stream.stream(), PrepareStream::Transcript);
     assert!(stream.live());
     assert_eq!(stream.state(), Some(JobState::Running));
     let media = stream.media().ok_or("no media progress")?;
@@ -460,10 +474,7 @@ async fn a_watched_job_reports_its_progress_while_it_publishes() -> TestResult {
     assert_eq!(report.outcome().revision().state(), RevisionState::Sealed);
     let status = other.job_status(&job)?;
     assert_eq!(
-        status
-            .streams()
-            .first()
-            .and_then(vsift::StreamStatus::state),
+        status.streams().last().and_then(vsift::StreamStatus::state),
         Some(JobState::Succeeded)
     );
     let again = other.job_start(&request)?;
@@ -486,6 +497,7 @@ async fn session_close_stops_a_running_prepare_job() -> TestResult {
     let plan = runner.job_start(&JobStartRequest {
         session: session_id.clone(),
         mode: Some(JobMode::Watched),
+        first: None,
     })?;
     let job = plan.job_id().clone();
     let running = {
@@ -526,6 +538,131 @@ async fn session_close_stops_a_running_prepare_job() -> TestResult {
             .entries()
             .iter()
             .all(|entry| !entry.live())
+    );
+    Ok(())
+}
+
+/// ADR 0033 D5 and D6: a watched job with a first window seals that window as
+/// a revision of its own before anything else, then indexes the video (so
+/// `candidates` is a warm read), then transcribes the whole source, taking the
+/// window's chunk from the first run instead of recognising it again; a read of
+/// the window while the whole run holds names the window's revision for what
+/// is still pending.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "requires FFmpeg and FFprobe on PATH"]
+async fn a_first_window_is_transcribed_first_and_heard_once() -> TestResult {
+    let root = OwnedRoot::new()?;
+    let recogniser = HeldRecogniser::default();
+    let runner = Arc::new(engine(&root, &recogniser));
+    let clip = looped_clip(&root)?;
+    let session_id = session(&runner, &clip).await?;
+    let plan = runner.job_start(&JobStartRequest {
+        session: session_id.clone(),
+        mode: Some(JobMode::Watched),
+        first: Some(vsift::RetranscribeRange {
+            from_micros: 60_000_000,
+            to_micros: 70_000_000,
+        }),
+    })?;
+    let job = plan.job_id().clone();
+    let running = {
+        let runner = Arc::clone(&runner);
+        let request = resumed(&job);
+        tokio::spawn(async move { runner.job_resume(request).await })
+    };
+    until_held(&recogniser).await?;
+    tokio::time::sleep(vsift::PROGRESS_RECORD_INTERVAL * 2).await;
+
+    let other = engine(&root, &recogniser);
+    let status = other.job_status(&job)?;
+    let reported: Vec<(PrepareStream, Option<JobState>)> = status
+        .streams()
+        .iter()
+        .map(|stream| (stream.stream(), stream.state()))
+        .collect();
+    assert_eq!(
+        reported,
+        [
+            (PrepareStream::FirstWindow, Some(JobState::Succeeded)),
+            (PrepareStream::Visual, Some(JobState::Succeeded)),
+            (PrepareStream::Transcript, Some(JobState::Running)),
+        ]
+    );
+    // The whole index is there: candidates analyse nothing.
+    let warm = other
+        .candidates(vsift::CandidatesRequest {
+            session: session_id.clone(),
+            range: vsift::CandidatesRange {
+                from_micros: 0,
+                to_micros: 140_000_000,
+            },
+            limit: Some(5),
+            cursor: None,
+            omission: vsift::CandidateOmission::Nothing,
+            cancellation: Cancellation::new(),
+        })
+        .await?;
+    assert_eq!(warm.analysed_now(), 0);
+    // The window is read from the open whole run, and what it has not
+    // published yet is covered by the window's own sealed revision.
+    let window = other.transcript(TranscriptQuery {
+        from_micros: 55_000_000,
+        to_micros: 75_000_000,
+        ..whole(&session_id, None)
+    })?;
+    assert_eq!(window.revision().state(), RevisionState::Open);
+
+    recogniser.released.store(true, Ordering::SeqCst);
+    let report = running.await??;
+    assert_eq!(report.status().state(), JobState::Succeeded);
+    // The window, [50, 80) s on the chunk grid, was recognised once: one
+    // chunk for the first window and five of the whole run's six.
+    assert_eq!(recogniser.calls.load(Ordering::SeqCst), 6);
+    assert!(report.outcome().job().chunks_reused() >= 1);
+    Ok(())
+}
+
+/// D6: a source with no video skips the visual stream, and the job goes on to
+/// its transcript; the stream is reported as skipped.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "requires FFmpeg and FFprobe on PATH"]
+async fn a_source_without_video_skips_the_visual_stream() -> TestResult {
+    let root = OwnedRoot::new()?;
+    let recogniser = HeldRecogniser::default();
+    recogniser.released.store(true, Ordering::SeqCst);
+    let runner = engine(&root, &recogniser);
+    let looped = looped_clip(&root)?;
+    let audio_only = root.path("audio-only.mp4");
+    let status = Command::new("ffmpeg")
+        .args(["-v", "error", "-n", "-i"])
+        .arg(&looped)
+        .args(["-vn", "-c", "copy"])
+        .arg(&audio_only)
+        .stdin(Stdio::null())
+        .status()?;
+    if !status.success() {
+        return Err("ffmpeg could not drop the video".into());
+    }
+    let session_id = session(&runner, &audio_only).await?;
+    let plan = runner.job_start(&JobStartRequest {
+        session: session_id,
+        mode: Some(JobMode::Quick),
+        first: None,
+    })?;
+    let report = runner.job_resume(resumed(plan.job_id())).await?;
+    assert_eq!(report.status().state(), JobState::Succeeded);
+    let phases: Vec<(PrepareStream, vsift::StreamPhase)> = report
+        .status()
+        .streams()
+        .iter()
+        .map(|stream| (stream.stream(), stream.phase()))
+        .collect();
+    assert_eq!(
+        phases,
+        [
+            (PrepareStream::Visual, vsift::StreamPhase::Skipped),
+            (PrepareStream::Transcript, vsift::StreamPhase::Done),
+        ]
     );
     Ok(())
 }

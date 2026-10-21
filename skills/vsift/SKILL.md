@@ -90,19 +90,19 @@ vsift ingest <video> --transcript <transcript> --transcript-offset <offset-us> -
 
   Without one: `vsift ingest <video> --json`. Record `session_id` and, with a
   transcript, `revision_id`: your later commands and a resume card use them.
-- No transcript and `local_asr.verification.status` is `verified`: transcribe once. A recording of 10 minutes or
-  more runs in the background (`data.start.runner` `background`): go on, and follow it as resume.md says.
+- No transcript and `local_asr.verification.status` is `verified`: transcribe once (when the user named a moment,
+  add `--first <from-us>:<to-us>`, at most 30 minutes: that part comes first). A recording of 10 minutes or more
+  runs in the background (`data.start.runner` `background`): go on, and follow it as resume.md says.
 
 ```console
 vsift job start <session> --json
 ```
 
   If a tool call times out or is interrupted, follow resume.md and never start a second transcription; a `BUSY`
-  `frame get`, `frame burst` or `candidates` after that timeout is not retried. A `partial` answer is usable: its
+  `frame get`, `frame burst` or `candidates` after it is not retried. A `partial` answer is usable: its
   `untranscribed_ranges` are gaps, never silence (handoff.md). A VSift before 0.3.0 refuses `job start` (`command`
-  `parse`): run this with an operation id you save, **`op_` and 16 to 64 lowercase letters or digits, nothing
-  else**, as resume.md builds it (`op_retx0123456789abcdef0123456701` for `ses_0123456789abcdef0123456789abcdef`),
-  and read the one line, the terminal event; its `result` is the answer:
+  `parse`): run this with an operation id you save, **`op_` and 16 to 64 lowercase letters or digits**, as resume.md
+  builds it (`op_retx0123456789abcdef0123456701` for `ses_0123456789abcdef0123456789abcdef`); read its last line:
 
 ```console
 vsift transcript retranscribe <session> --operation-id <operation-id> --events jsonl | tail -n 1
