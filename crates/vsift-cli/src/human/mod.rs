@@ -137,6 +137,9 @@ fn render_value(
         CommandName::TranscriptGet => transcript::page(&envelope(value)?),
         CommandName::TranscriptRetranscribe => transcript::retranscription(&envelope(value)?),
         CommandName::Search => transcript::search(&envelope(value)?),
+        CommandName::TranscriptSpeakers | CommandName::TranscriptNameSpeaker => {
+            transcript::speakers(&envelope(value)?)
+        }
         CommandName::Candidates => evidence::candidates(&envelope(value)?),
         CommandName::FrameGet
         | CommandName::FrameNeighbours

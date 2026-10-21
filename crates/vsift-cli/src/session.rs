@@ -10,18 +10,20 @@ use serde::Serialize;
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 use vsift::{
     BundleSummary, Cancellation, CleanDecision, CleanEntry, CleanMode, CleanPage, CleanRequest,
-    CleanScope, DurabilityRequirement, Engine, FailureCode, IngestRequest, ProgressObserver,
-    RetranscribeOutcome, RetranscribeRange, RetranscribeRequest, SessionJobs, SessionLifetime,
-    SessionLifetimePolicy, SessionListEntry, SessionPage, SessionSnapshot, SourceRetention,
+    CleanScope, DiarizerSelection, DurabilityRequirement, Engine, FailureCode, IngestRequest,
+    NameSpeakerRequest, ProgressObserver, RetranscribeOutcome, RetranscribeRange,
+    RetranscribeRequest, SessionJobs, SessionLifetime, SessionLifetimePolicy, SessionListEntry,
+    SessionPage, SessionSnapshot, SourceRetention, SpeakersRange, SpeakersRequest, SpeakersView,
     SuppliedTranscriptRequest, TranscriptExcerpt, TranscriptQuery, WorkspaceInitRequest,
     WorkspacePolicy, WorkspaceRetention,
 };
 use vsift_contract::{
     BundleData, BundleSourceInclusion, CleanData, CleanItem, CleanItemOutcome, CommandName,
     LifecycleResponse, ListedSession, OpenData, OperationResponse, PageData, RequestDurability,
-    ResultView, RetranscribeJob, SessionJobData, SessionState, SessionStatusData, StatusData,
-    TranscriptEvidenceStream, TranscriptPresentation, TranscriptRetranscribeData, WorkspaceData,
-    WorkspaceInitOutcome, finish_retranscription, job_warning_messages, transcript_get_response,
+    ResultView, RetranscribeJob, SessionJobData, SessionState, SessionStatusData,
+    SpeakersPresentation, StatusData, TranscriptEvidenceStream, TranscriptPresentation,
+    TranscriptRetranscribeData, WorkspaceData, WorkspaceInitOutcome, finish_retranscription,
+    job_warning_messages, speakers_response, transcript_get_response_with_speakers,
     transcript_warning_messages,
 };
 
@@ -29,7 +31,8 @@ use crate::{
     CommandFailure,
     command::{
         IngestArguments, SessionCommand, SessionInitWorkspaceArguments, TranscriptGetArguments,
-        TranscriptRetranscribeArguments,
+        TranscriptNameSpeakerArguments, TranscriptRetranscribeArguments,
+        TranscriptSpeakersArguments,
     },
 };
 
@@ -366,8 +369,80 @@ pub(crate) fn transcript_get(
 ) -> Result<Response, CommandFailure> {
     let excerpt = read_transcript(engine, arguments)?;
     let lifecycle = session_lifecycle(excerpt.session().lifetime())?;
-    transcript_get_response(&presentation(&excerpt), lifecycle, view)
-        .map_err(|_| CommandFailure::from(FailureCode::Internal))
+    transcript_get_response_with_speakers(
+        &presentation(&excerpt),
+        excerpt.speakers(),
+        lifecycle,
+        view,
+    )
+    .map_err(|_| CommandFailure::from(FailureCode::Internal))
+}
+
+/// Labels a transcript revision's segments by voice (ADR 0031) and commits the new
+/// speaker record. A first Ctrl-C or `SIGTERM` stops it before its commit.
+///
+/// The result is `partial` when some segment has no confident speaker, a success
+/// that exits 0: the speakers block lists those segments.
+pub(crate) async fn transcript_speakers(
+    engine: &Engine,
+    arguments: TranscriptSpeakersArguments,
+    cancellation: &Cancellation,
+) -> Result<Response, CommandFailure> {
+    let range = arguments
+        .from
+        .zip(arguments.to)
+        .map(|(from_micros, to_micros)| SpeakersRange {
+            from_micros,
+            to_micros,
+        });
+    let view = engine
+        .label_speakers(SpeakersRequest {
+            session: arguments.session,
+            revision: arguments.revision,
+            range,
+            speakers: arguments.speakers,
+            diarizer: DiarizerSelection {
+                executable: arguments.diarizer,
+                segmentation_model: arguments.segmentation_model,
+                embedding_model: arguments.embedding_model,
+            },
+            cancellation: cancellation.clone(),
+        })
+        .await?;
+    speakers_result(CommandName::TranscriptSpeakers, &view)
+}
+
+/// Records or clears the user's verified name for a speaker label (ADR 0031).
+pub(crate) fn transcript_name_speaker(
+    engine: &Engine,
+    arguments: TranscriptNameSpeakerArguments,
+) -> Result<Response, CommandFailure> {
+    let view = engine.name_speaker(NameSpeakerRequest {
+        session: arguments.session,
+        revision: arguments.revision,
+        label: arguments.label,
+        name: if arguments.clear {
+            None
+        } else {
+            arguments.name
+        },
+    })?;
+    speakers_result(CommandName::TranscriptNameSpeaker, &view)
+}
+
+fn speakers_result(command: CommandName, view: &SpeakersView) -> Result<Response, CommandFailure> {
+    let lifecycle = session_lifecycle(view.session().lifetime())?;
+    speakers_response(
+        command,
+        &SpeakersPresentation {
+            session_id: view.session().session_id(),
+            revision: view.revision(),
+            record: view.record(),
+            records: view.records(),
+        },
+        lifecycle,
+    )
+    .map_err(|_| CommandFailure::from(FailureCode::Internal))
 }
 
 /// Reads one bounded page of a session's transcript as an evidence stream:

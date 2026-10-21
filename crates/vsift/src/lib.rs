@@ -155,6 +155,9 @@ pub use setup::{
     DEFAULT_PROBE_TIMEOUT, EvaluatedSetupPlan, ExecutableSelections, SetupCheckReport,
     SetupCheckRequest, SetupPlanRequest,
 };
+pub use vsift_application::{
+    DiarizationRunError, MAX_DIARIZATION_MICROS, SpeakerLabelError,
+};
 pub use speakers::{
     DIARIZER_EXECUTABLE, DiarizerSelection, NameSpeakerRequest, SpeakersRange, SpeakersRequest,
     SpeakersView,

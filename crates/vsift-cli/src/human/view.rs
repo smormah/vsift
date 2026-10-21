@@ -163,6 +163,55 @@ pub(crate) struct TranscriptSegment {
     pub(crate) cue: Option<Cue>,
     #[serde(default)]
     pub(crate) carried_from: Option<CarriedFrom>,
+    /// The segment's label under the revision's speaker record (ADR 0031).
+    #[serde(default)]
+    pub(crate) speaker_label: Option<SegmentSpeakerLabel>,
+}
+
+/// A segment's speaker label: how it reads. A verified name in it is the user's
+/// text, so it is printed as untrusted text.
+#[derive(Debug, Deserialize)]
+pub(crate) struct SegmentSpeakerLabel {
+    pub(crate) display: DisplayText,
+}
+
+/// The `speakers` block (ADR 0031).
+#[derive(Debug, Deserialize)]
+pub(crate) struct Speakers {
+    pub(crate) record_id: String,
+    pub(crate) precision: String,
+    pub(crate) given_speaker_count: Option<u8>,
+    pub(crate) diarized_range: Range,
+    pub(crate) labels: Vec<SpeakerLabelSummary>,
+    pub(crate) coverage: SpeakerCoverage,
+    pub(crate) statement: String,
+}
+
+/// One label of a speaker record.
+#[derive(Debug, Deserialize)]
+pub(crate) struct SpeakerLabelSummary {
+    pub(crate) display: DisplayText,
+    pub(crate) labelled_segments: u64,
+    pub(crate) speech_us: u64,
+}
+
+/// What a speaker record covers: segment counts, named as the JSON names them.
+#[derive(Debug, Deserialize)]
+#[allow(
+    clippy::struct_field_names,
+    reason = "The fields mirror the published JSON members"
+)]
+pub(crate) struct SpeakerCoverage {
+    pub(crate) labelled_segments: u64,
+    pub(crate) no_confident_speaker_segments: u64,
+    pub(crate) not_diarized_segments: u64,
+}
+
+/// `transcript.speakers` and `transcript.name-speaker` data.
+#[derive(Debug, Deserialize)]
+pub(crate) struct SpeakersResult {
+    pub(crate) session_id: String,
+    pub(crate) speakers: Speakers,
 }
 
 /// Whether markup was removed from a segment's text.
@@ -211,6 +260,9 @@ pub(crate) struct TranscriptPage {
     /// result written before it, which no command now writes.
     #[serde(default)]
     pub(crate) transcript_coverage: Option<TranscriptCoverage>,
+    /// The revision's speaker labels (ADR 0031), when it has them.
+    #[serde(default)]
+    pub(crate) speakers: Option<Speakers>,
 }
 
 /// `transcript.retranscribe` data.
@@ -247,6 +299,9 @@ pub(crate) struct Search {
     pub(crate) hits: Vec<SearchHit>,
     pub(crate) next_cursor: Option<String>,
     pub(crate) transcript_coverage: TranscriptCoverage,
+    /// The revision's speaker labels (ADR 0031), when it has them.
+    #[serde(default)]
+    pub(crate) speakers: Option<Speakers>,
 }
 
 /// The normalised query; only how many terms it has is shown, because the
