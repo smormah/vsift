@@ -60,8 +60,8 @@ use sha2::{Digest, Sha256};
 use vsift_application::{SessionStorageError, StorageCapabilities};
 use vsift_domain::{
     DurabilityRequirement, EvidenceMediaKind, EvidenceRecord, OperationId, SessionArtifactKind,
-    SessionId, SessionLifetime, SessionLifetimePolicy, SessionPhase, SourceId, StorageGeneration,
-    WorkspacePolicy, WorkspaceRetention,
+    SessionId, SessionLifetime, SessionLifetimePolicy, SessionPhase, SourceId, SpeakerRecordParts,
+    StorageGeneration, WorkspacePolicy, WorkspaceRetention,
 };
 
 use crate::{VerifiedSourceIdentity, file_lock::HeldFileLock};
@@ -319,6 +319,18 @@ pub struct EvidenceMediaFile<'a> {
     pub kind: EvidenceMediaKind,
     /// The file's bytes.
     pub bytes: &'a [u8],
+}
+
+/// The newest speaker record of a revision, as read (ADR 0031).
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SpeakerRecordRead {
+    /// The record's stored fields, decoded strictly; `None` when the session holds no
+    /// record of the revision asked for.
+    pub record: Option<SpeakerRecordParts>,
+    /// How many speaker records the session holds, of any revision.
+    pub records: usize,
+    /// The committed session state the record was read from.
+    pub status: SessionStatus,
 }
 
 /// A session's committed evidence and what it may still take (ADR 0019 D4).
@@ -1213,6 +1225,7 @@ enum StoredArtifactKind {
     VisualIndexRecord,
     AudioWav,
     EvidenceRecord,
+    SpeakerRecord,
 }
 
 impl StoredArtifactKind {
@@ -1224,6 +1237,7 @@ impl StoredArtifactKind {
             SessionArtifactKind::VisualIndexRecord => Self::VisualIndexRecord,
             SessionArtifactKind::AudioWav => Self::AudioWav,
             SessionArtifactKind::EvidenceRecord => Self::EvidenceRecord,
+            SessionArtifactKind::SpeakerRecord => Self::SpeakerRecord,
         }
     }
 
@@ -1239,7 +1253,10 @@ impl StoredArtifactKind {
             Self::FramePng => "png",
             Self::AudioPcm => "pcm",
             Self::AudioWav => "wav",
-            Self::TranscriptRecord | Self::VisualIndexRecord | Self::EvidenceRecord => "json",
+            Self::TranscriptRecord
+            | Self::VisualIndexRecord
+            | Self::EvidenceRecord
+            | Self::SpeakerRecord => "json",
         }
     }
 
@@ -1248,7 +1265,7 @@ impl StoredArtifactKind {
     const fn is_evidence(self) -> bool {
         match self {
             Self::FramePng | Self::AudioPcm | Self::AudioWav | Self::EvidenceRecord => true,
-            Self::TranscriptRecord | Self::VisualIndexRecord => false,
+            Self::TranscriptRecord | Self::VisualIndexRecord | Self::SpeakerRecord => false,
         }
     }
 
@@ -1261,6 +1278,7 @@ impl StoredArtifactKind {
             Self::VisualIndexRecord => crate::MAX_VISUAL_INDEX_RECORD_BYTES,
             Self::AudioWav => crate::MAX_AUDIO_WAV_BYTES,
             Self::EvidenceRecord => crate::MAX_EVIDENCE_RECORD_BYTES,
+            Self::SpeakerRecord => crate::MAX_SPEAKER_RECORD_BYTES,
         }
     }
 }

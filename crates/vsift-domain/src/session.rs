@@ -12,7 +12,8 @@ pub enum SessionPhase {
 }
 
 /// Artifact kinds a session publishes: P04 media evidence, P07 transcript
-/// records, P08 visual-index records and P09 evidence clips and records.
+/// records, P08 visual-index records, P09 evidence clips and records, and
+/// speaker records (ADR 0031).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SessionArtifactKind {
     /// A source-grounded extracted frame encoded as PNG.
@@ -30,6 +31,9 @@ pub enum SessionArtifactKind {
     /// The lineage of one evidence call: its request, the frames or clip it
     /// selected and the items it extracted, stored as versioned JSON (P09).
     EvidenceRecord,
+    /// One immutable speaker record: the speaker labels of one transcript revision,
+    /// stored as versioned JSON (ADR 0031). It holds turns and names, never audio.
+    SpeakerRecord,
 }
 
 impl SessionArtifactKind {
@@ -43,6 +47,7 @@ impl SessionArtifactKind {
             Self::VisualIndexRecord => "visual_index_record",
             Self::AudioWav => "audio_wav",
             Self::EvidenceRecord => "evidence_record",
+            Self::SpeakerRecord => "speaker_record",
         }
     }
 
@@ -53,7 +58,10 @@ impl SessionArtifactKind {
             Self::FramePng => "png",
             Self::AudioPcm => "pcm",
             Self::AudioWav => "wav",
-            Self::TranscriptRecord | Self::VisualIndexRecord | Self::EvidenceRecord => "json",
+            Self::TranscriptRecord
+            | Self::VisualIndexRecord
+            | Self::EvidenceRecord
+            | Self::SpeakerRecord => "json",
         }
     }
 }

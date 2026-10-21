@@ -336,7 +336,8 @@ impl FilesystemSessionStore {
                 }
                 StoredArtifactKind::AudioPcm
                 | StoredArtifactKind::TranscriptRecord
-                | StoredArtifactKind::VisualIndexRecord => {}
+                | StoredArtifactKind::VisualIndexRecord
+                | StoredArtifactKind::SpeakerRecord => {}
             }
         }
         Ok(EvidenceInventory {

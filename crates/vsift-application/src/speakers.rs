@@ -11,9 +11,9 @@
 use std::{error::Error, fmt, future::Future, num::NonZeroU32};
 
 use vsift_domain::{
-    DiarizationError, DiarizationProvenance, DiarizedTurn, MediaTime, SessionId, SpeakerCount,
-    SpeakerLabellingProfile, SpeakerRecord, SpeakerRecordId, SpeakerRecordParts, SpeakerTag,
-    TimeRange, TranscriptRevision, VerifiedName,
+    DiarizationError, DiarizationProvenance, DiarizedTurn, MediaTime, SessionId, SourceId,
+    SpeakerCount, SpeakerLabellingProfile, SpeakerRecord, SpeakerRecordId, SpeakerRecordParts,
+    SpeakerTag, TimeRange, TranscriptRevision, TranscriptRevisionId, VerifiedName,
 };
 
 use crate::transcript::derived_identity;
@@ -170,14 +170,15 @@ pub struct LabelSpeakersRequest<'a> {
     pub number: NonZeroU32,
 }
 
-/// The identity of the session's `number`th speaker record, for `revision`.
+/// The identity of the session's `number`th speaker record, for `revision_id` of `source_id`.
 ///
 /// # Errors
 ///
 /// Returns [`SpeakerLabelError::Identity`] when the derived identity does not parse.
 pub fn speaker_record_id(
     session_id: &SessionId,
-    revision: &TranscriptRevision,
+    source_id: &SourceId,
+    revision_id: &TranscriptRevisionId,
     number: NonZeroU32,
 ) -> Result<SpeakerRecordId, SpeakerLabelError> {
     SpeakerRecordId::parse(derived_identity(
@@ -185,8 +186,8 @@ pub fn speaker_record_id(
         "vsift.speaker-record.v1",
         &[
             session_id.as_str(),
-            revision.source_id().as_str(),
-            revision.id().as_str(),
+            source_id.as_str(),
+            revision_id.as_str(),
             &number.get().to_string(),
         ],
     ))
@@ -239,7 +240,12 @@ pub async fn label_speakers(
     diarizer: &impl SpeakerDiarizer,
 ) -> Result<SpeakerRecord, SpeakerLabelError> {
     let range = diarization_range(request.range, request.source_duration)?;
-    let id = speaker_record_id(request.session_id, request.revision, request.number)?;
+    let id = speaker_record_id(
+        request.session_id,
+        request.revision.source_id(),
+        request.revision.id(),
+        request.number,
+    )?;
     let before = diarizer
         .identity()
         .await
@@ -317,7 +323,7 @@ pub fn name_speaker(
     let mut parts = record
         .with_name(tag, name)
         .map_err(SpeakerLabelError::Record)?;
-    parts.id = speaker_record_id(session_id, revision, number)?;
+    parts.id = speaker_record_id(session_id, revision.source_id(), revision.id(), number)?;
     parts.number = number;
     SpeakerRecord::derive(parts, revision).map_err(SpeakerLabelError::Record)
 }

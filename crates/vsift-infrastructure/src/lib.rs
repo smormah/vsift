@@ -57,9 +57,11 @@ mod random_identifiers;
 mod request_timing;
 mod retry_timer;
 mod session_root;
+mod sherpa_diarizer;
 mod source_binding;
 mod source_duration_probe;
 mod source_snapshot;
+mod speaker_record;
 mod speech_audio;
 mod system_clock;
 #[cfg(test)]
@@ -119,9 +121,9 @@ pub use filesystem_session_store::{
     JOB_CANCEL_POLL, MAX_RECORDED_DOCUMENT_BYTES, MAX_RECORDED_STEPS, MAX_REQUEST_RECORD_BYTES,
     MAX_REQUEST_RECORDS, RecordedRequestResult, RequestRecordWrite, SessionIndexPage,
     SessionReadHold, SessionRegistration, SessionStatus, SessionStoreOpenError,
-    SessionWorkDirectory, WorkerRequestClaim, WorkerRequestOwner, WorkerRequestRecord,
-    decode_chunk_checkpoint, decode_job_record, decode_request_record, encode_chunk_checkpoint,
-    encode_job_record, encode_request_record,
+    SessionWorkDirectory, SpeakerRecordRead, WorkerRequestClaim, WorkerRequestOwner,
+    WorkerRequestRecord, decode_chunk_checkpoint, decode_job_record, decode_request_record,
+    encode_chunk_checkpoint, encode_job_record, encode_request_record,
 };
 pub use gzip_tar_inventory::{
     GzipTarInventoryError, MAX_GZIP_ARCHIVE_BYTES, inspect_gzip_tar_inventory,
@@ -194,10 +196,18 @@ pub use session_root::{
     PROVISIONING_WAIT, SessionRootError, SessionRootProvisioning, open_session_root,
     open_session_root_within, platform_session_root,
 };
+pub use sherpa_diarizer::{
+    AUTOMATIC_CLUSTER_THRESHOLD, DIARIZER_STDERR_LIMIT, DIARIZER_STDOUT_LIMIT, DiarizationWav,
+    DiarizerError, DiarizerOutputError, FfmpegSherpaDiarizer, MAX_DIARIZER_FILE_BYTES,
+    MIN_DIARIZATION_DEADLINE, SherpaOnnxDiarizer, diarization_deadline, parse_diarizer_output,
+};
 pub use source_binding::{BoundSource, EvidenceSourceCheck, SourceBinding, VerifiedSourceIdentity};
 pub use source_duration_probe::FfprobeSourceDuration;
 pub use source_snapshot::{
     MAX_SOURCE_BYTES, MAX_SOURCE_READ_DURATION, SourceContainer, SourceError, SourceSnapshot,
+};
+pub use speaker_record::{
+    MAX_SPEAKER_RECORD_BYTES, MAX_SPEAKER_RECORDS, decode_speaker_record, encode_speaker_record,
 };
 pub use speech_audio::FfmpegSpeechAudio;
 pub use system_clock::SystemClock;
