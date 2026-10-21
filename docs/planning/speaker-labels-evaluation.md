@@ -1,10 +1,11 @@
 # Speaker labels: the engine evaluation (0.3.0)
 
-Status (2026-10-21, `0.3.0`, step 1 of the story): **an evaluation; nothing is built into VSift yet. The engine choice
-is the maintainer's** (section 9). Issue: [#108](https://github.com/smormah/vsift/issues/108) (speakers for live
-meetings; this is the recorded-file version). Register: [L-205](known-limits.md#l-205),
-[L-206](known-limits.md#l-206), [L-207](known-limits.md#l-207); the scope exclusion
-[L-046](known-limits.md#l-046) stands until step 2 ships. ADR number reserved for the design: 0031.
+Status (2026-10-21, `0.3.0`): **step 1, the evaluation, is done, and the maintainer decided on 2026-10-21 (section 9).
+Step 2 is built on the same branch (section 10, [ADR 0031](../decisions/0031-speaker-labels.md)), except the managed
+install, which waits for the managed-install system's extension to three systems (another story).** Issue:
+[#108](https://github.com/smormah/vsift/issues/108) (speakers for live meetings; this is the recorded-file version).
+Register: [L-205](known-limits.md#l-205), [L-206](known-limits.md#l-206), [L-207](known-limits.md#l-207); the scope
+exclusion [L-046](known-limits.md#l-046) ends for speakers when this ships.
 
 ## 1. The question
 
@@ -94,7 +95,8 @@ was downloaded or run on a development machine.
 
 Runs: the full matrix **39518020351** (Ubuntu, AMD EPYC 9V74) and the shortlist **39527538316** (Ubuntu, Windows,
 macOS; it printed RM06's labelled transcript and every candidate's RM06 turns, from which the reference of section 5 was
-read and RM06 scored offline with the tool's own scorer; the workflow scores RM06 itself from the committed reference in its next run). In the tables, "known" means the speaker count was given; "auto-t" means sherpa-onnx's distance threshold t.
+read and RM06 scored offline with the tool's own scorer), and **39567789710** (the shortlist again, scoring RM06 from the
+committed reference with the same numbers, and the time and memory against length of section 6.4). In the tables, "known" means the speaker count was given; "auto-t" means sherpa-onnx's distance threshold t.
 
 ### 6.1 Synthetic conversations (Ubuntu, run 39518020351)
 
@@ -131,7 +133,7 @@ every segment with confidence, 28.6% of them wrongly ([L-207](known-limits.md#l-
 | tinydiarize | 0.83; 928 | 0.71; 1,025 |
 
 **RM06's accuracy against its read reference** (106 scored segments; the two unscored ranges and a 0.5 s collar left out;
-scored offline from run 39527538316's logged turns with the tool's own scorer; the 5.7% missed speech in every row is
+scored offline from run 39527538316's logged turns with the tool's own scorer, and again by run 39567789710 from the committed reference, with the same numbers; the 5.7% missed speech in every row is
 the pauses inside the reference's segment-long turns, so confusion and the segment columns are the measure):
 
 | Candidate | Speakers found | Confusion | Segments labelled | Of those, right | Wrong, of all segments |
@@ -161,6 +163,24 @@ the same in every run. The conversations are synthesized afresh in each run, and
 from one runner CPU to another ([L-200](known-limits.md#l-200)'s kind); a small change in the audio moved CAM++'s
 clustering a long way. The workflow now prints each conversation's digest and the CPU, so runs are compared only on equal
 audio.
+
+### 6.4 Time and memory against length: the duration cap (run 39567789710)
+
+sherpa-onnx + `TitaNet` small on RM09 and RM06 repeated end to end (real speech, so the clustering sees as many
+embeddings as a real recording of that length would give it), two threads per model, on a hosted Ubuntu runner
+(Intel Xeon Platinum 8573C, 16 GB):
+
+| Length | Automatic count (0.9): wall time, RTF, peak | Told 2: wall time, RTF, peak |
+| --- | --- | --- |
+| 30 minutes | 2.3 min, 0.076, 620 MiB | 2.2 min, 0.074, 448 MiB |
+| 1 hour | 4.7 min, 0.078, 1,021 MiB | 4.6 min, 0.076, 621 MiB |
+| **2 hours** | **9.2 min, 0.076, 2,002 MiB** | **9.2 min, 0.077, 1,051 MiB** |
+| 3 hours | 14.4 min, 0.080, 3,142 MiB | 13.9 min, 0.077, 1,584 MiB |
+
+Time grows linearly (a twelfth of real time); memory grows by about 1 GiB an hour with the automatic count and half
+that with a given count. **The cap is two hours** (the maintainer's aim, decision 5): 2.0 GiB at most leaves room on
+an 8 GB machine. A longer recording is labelled a part at a time with `--from` and `--to`; labels of different parts
+are not linked ([L-205](known-limits.md#l-205)).
 
 ## 7. Security
 
@@ -211,6 +231,16 @@ that is set rather than capped, and bounded memory. tinydiarize, CAM++, ERes2Net
 
 ## 9. Decisions for the maintainer
 
+**Decided by the maintainer on 2026-10-21** (relayed by the supervisor): (1) sherpa-onnx `v1.13.8` with pyannote
+segmentation 3.0 and NeMo `TitaNet` small, (2) shipped with an attribution notice that covers both of `TitaNet`'s
+licence statements, (3) managed installs on Windows, macOS and Linux, built on another story's extension of the
+managed-install system, with the engine archives pinned by GitHub's digest and the provenance gap in the register,
+(4) the automatic count at 0.9 when the user gives none and a given count passed through, (5) a duration cap with a
+typed refusal and a remediation, about two hours if an 8 GB machine allows (section 6.4: it does), (6) labels
+provisional ("S2, by voice"), the user's verified names the only identity, and the accuracy statement naming the
+similar-voice case, (7) one more public-domain recording of two or three people for the test-media release, and the
+maintainer listens to confirm RM06's reference and the new one. The options as they were put:
+
 1. **The engine.** sherpa-onnx + TitaNet small (recommended), polyvoice, or neither for `0.3.0` (speaker labels move
    to `1.0`).
 2. **The embedding model's licence reading.** TitaNet small's NGC page puts it under the NeMo Toolkit's Apache-2.0,
@@ -232,7 +262,17 @@ that is set rather than capped, and bounded memory. tinydiarize, CAM++, ERes2Net
    read from the transcript. Proposed: a person listens to RM06 to confirm the reference, and one more real two- or
    three-person item with different voices (a woman and a man, or accents) joins the test-media release.
 
-## 10. Step 2, once an engine is chosen (the design to put in ADR 0031)
+## 10. Step 2, as built ([ADR 0031](../decisions/0031-speaker-labels.md))
+
+What is built on the branch (the commands, JSON and failures are in `docs/contracts/cli-v1.md`, "Speaker labels"):
+the domain's speaker record (labels derived from the turns on every read), the diarization port and use cases, the
+strict stored record and its session sub-budget (128 records), the sherpa-onnx adapter, `transcript speakers`,
+`transcript name-speaker`, `search --speaker`, the labels in `transcript get` and `search` (full and brief views),
+the schemas and examples, the skill's command table, and an opt-in end-to-end test with the real engine (`P16
+speakers end to end`). **Not built yet:** the managed install (it waits for the managed-install system's extension;
+until then the tool is given with `--diarizer` or found on the filtered `PATH`, and the models with
+`--segmentation-model` and `--embedding-model`), a `setup check` row for the tool, and labels in the JSON Lines
+streams of `transcript get` and `search`. The design as proposed:
 
 - **Managed install and adapter.** A new runtime dependency and managed component for the chosen engine and its
   models, pinned by size and SHA-256 in the managed catalogue (Ubuntu x64 managed, like whisper.cpp; on Windows and

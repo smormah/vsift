@@ -25,8 +25,11 @@ mod tests;
 ///
 /// The engine holds the whole stretch, and the embeddings it computes from it, in
 /// memory until it clusters (L-205). The maintainer's decision of 2026-10-21 aims at
-/// about two hours if an 8 GB machine allows; the evaluation's hosted measurement sets
-/// the figure (`docs/planning/speaker-labels-evaluation.md`, section 6.4).
+/// about two hours if an 8 GB machine allows, and the hosted measurement allows it:
+/// sherpa-onnx with `TitaNet` small peaked at 2.0 GiB over two hours of real speech
+/// with the automatic count (1.1 GiB with a given count), growing by about 1 GiB an
+/// hour, at a twelfth of real time on two threads (run 39567789710,
+/// `docs/planning/speaker-labels-evaluation.md` section 6.4).
 pub const MAX_DIARIZATION_MICROS: u64 = 2 * 60 * 60 * 1_000_000;
 
 /// The shortest stretch worth diarizing: one segmentation window of the engine.
