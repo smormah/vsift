@@ -41,6 +41,7 @@ on:
           - whisper-cli-macos
           - whisper-cli-windows
           - ffmpeg-macos
+          - ocr-runner
       dry_run:
         description: Dry run (build, check and show the plan; publish nothing). Choose the engine's tag <engine>-v<version> in "Use workflow from" and clear it only there to publish, after the release environment's approval.
         type: boolean
@@ -152,7 +153,7 @@ jobs:
             exit 0
           fi
           case "${ENGINE_INPUT}" in
-            whisper-cli-macos | whisper-cli-windows | ffmpeg-macos) ;;
+            whisper-cli-macos | whisper-cli-windows | ffmpeg-macos | ocr-runner) ;;
             *) refuse "the engine '${ENGINE_INPUT}' has no recipe" ;;
           esac
           recipe="tools/engines/recipes/${ENGINE_INPUT}.env"
@@ -183,24 +184,38 @@ jobs:
           note "The publish of ${ENGINE_INPUT} ${version} (tag ${tag}) goes on to the build."
 
   build:
-    name: Build ${{ matrix.engine }} twice and compare
+    name: Build ${{ matrix.engine }} for ${{ matrix.target }} twice and compare
     needs: guard
     strategy:
       fail-fast: false
       matrix:
         include:
           - engine: whisper-cli-macos
+            target: macos-arm64
             os: macos-15
           - engine: whisper-cli-windows
+            target: windows-x64
             os: windows-2025
           - engine: ffmpeg-macos
+            target: macos-arm64
+            os: macos-15
+          # The OCR runner is VSift's own crate (ADR 0030); Linux is built on
+          # Ubuntu 22.04, as VSift itself is, so it runs on newer glibc.
+          - engine: ocr-runner
+            target: linux-x64
+            os: ubuntu-22.04
+          - engine: ocr-runner
+            target: windows-x64
+            os: windows-2025
+          - engine: ocr-runner
+            target: macos-arm64
             os: macos-15
     runs-on: ${{ matrix.os }}
     timeout-minutes: 150
     permissions:
       contents: read
     steps:
-      - name: Check out the recipes and build scripts
+      - name: Check out the recipes, build scripts and this repository's source
         if: needs.guard.outputs.engine == 'all' || needs.guard.outputs.engine == matrix.engine
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -212,17 +227,31 @@ jobs:
           if command -v python3 >/dev/null && python3 --version >/dev/null 2>&1; then python=python3; else python=python; fi
           "${python}" -m unittest discover -s tools/engines -p 'test_*.py'
 
-      - name: Build twice from the pinned upstream commit, compare and package
+      - name: Build twice from the pinned source, compare and package
+        id: build
         if: needs.guard.outputs.engine == 'all' || needs.guard.outputs.engine == matrix.engine
         env:
           ENGINE_NAME: ${{ matrix.engine }}
-        run: bash tools/engines/build-engine.sh "${ENGINE_NAME}"
+          ENGINE_TARGET: ${{ matrix.target }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          # A pull request before the OCR runner's crate is on main builds the
+          # other engines; a dispatch of an engine whose source is missing fails.
+          crate="$(awk -F= '$1 == "CRATE" { print $2; exit }' "tools/engines/recipes/${ENGINE_NAME}.env")"
+          if [ -n "${crate}" ] && [ ! -f "crates/${crate}/Cargo.toml" ] && [ "${EVENT_NAME}" = pull_request ]; then
+            echo "built=false" >> "${GITHUB_OUTPUT}"
+            printf '%s is not in this tree yet; its leg builds nothing on this pull request.\n' "${crate}" >> "${GITHUB_STEP_SUMMARY}"
+            exit 0
+          fi
+          bash tools/engines/build-engine.sh "${ENGINE_NAME}" "${ENGINE_TARGET}"
+          echo "built=true" >> "${GITHUB_OUTPUT}"
 
       - name: Keep the packaged engine for the plan
-        if: needs.guard.outputs.engine == 'all' || needs.guard.outputs.engine == matrix.engine
+        if: steps.build.outputs.built == 'true'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: engine-${{ matrix.engine }}
+          name: engine-${{ matrix.engine }}-${{ matrix.target }}
           path: dist/
           if-no-files-found: error
 
@@ -238,14 +267,15 @@ jobs:
       mode: ${{ steps.plan.outputs.mode }}
       sums: ${{ steps.plan.outputs.sums }}
     steps:
-      - name: Fetch the chosen engine
+      - name: Fetch every target of the chosen engine
         if: needs.guard.outputs.engine != 'all'
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: engine-${{ needs.guard.outputs.engine }}
+          pattern: engine-${{ needs.guard.outputs.engine }}-*
+          merge-multiple: true
           path: dist
 
-      - name: Check the files against the build's sums and write the plan
+      - name: Check every target's files against its sums and write the plan
         id: plan
         env:
           ENGINE_NAME: ${{ needs.guard.outputs.engine }}
@@ -259,9 +289,25 @@ jobs:
             printf '## Engines: dry run of every engine\n\nEach build leg built its engine twice, compared and packaged it.\n' >> "${GITHUB_STEP_SUMMARY}"
             exit 0
           fi
-          (cd dist && sha256sum --check --strict SHA256SUMS)
-          # Exactly the files the sums list, and the sums themselves.
-          test "$(ls -A dist | wc -l)" -eq "$(( $(wc -l < dist/SHA256SUMS) + 1 ))"
+          version="$(printf '%s\n' "${ENGINE_TAG}" | sed "s/^${ENGINE_NAME}-v//")"
+          # Every target of the recipe built, each leg's files exactly its sums.
+          : > "${RUNNER_TEMP}/sums"
+          count=0
+          for sums in dist/*.sha256; do
+            (cd dist && sha256sum --check --strict "$(basename "${sums}")")
+            cat "${sums}" >> "${RUNNER_TEMP}/sums"
+            count=$((count + 1))
+          done
+          rm dist/*.sha256
+          test "$(ls -A dist | wc -l)" -eq "$(wc -l < "${RUNNER_TEMP}/sums")"
+          for name in $(ls dist); do
+            case "${name}" in
+              "${ENGINE_NAME}-${version}-"*) ;;
+              *) echo "dist holds ${name}, not a file of ${ENGINE_NAME} ${version}" >&2; exit 1 ;;
+            esac
+          done
+          LC_ALL=C sort -k2 "${RUNNER_TEMP}/sums" > dist/SHA256SUMS
+          [ "${count}" -ge 1 ]
           {
             echo "mode=${GUARD_MODE}"
             echo "sums<<SUMS"
@@ -274,6 +320,14 @@ jobs:
             cat dist/SHA256SUMS
             printf '```\n'
           } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Keep the planned files for the attestation and the publish
+        if: needs.guard.outputs.engine != 'all'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: planned-${{ needs.guard.outputs.engine }}
+          path: dist/
+          if-no-files-found: error
 
   # Only when publishing: a manual dispatch with dry_run cleared, on an engine
   # tag of smormah/vsift, which the guard and the plan accepted.
@@ -298,7 +352,7 @@ jobs:
       - name: Fetch the planned engine
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: engine-${{ needs.guard.outputs.engine }}
+          name: planned-${{ needs.guard.outputs.engine }}
           path: dist
 
       - name: Require exactly the planned files
@@ -343,7 +397,7 @@ jobs:
       - name: Fetch the planned engine
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: engine-${{ needs.guard.outputs.engine }}
+          name: planned-${{ needs.guard.outputs.engine }}
           path: dist
 
       - name: Require exactly the planned files, and the tag still on this commit

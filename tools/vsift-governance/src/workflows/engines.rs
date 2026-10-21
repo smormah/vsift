@@ -31,7 +31,8 @@
 //!    `gh api` never writes (no method, field or input).
 //! 7. **What is published is what was planned.** `attest` and `publish` use
 //!    only their reviewed actions, download only this run's
-//!    `engine-${{ needs.guard.outputs.engine }}` artifact, build nothing and
+//!    `planned-${{ needs.guard.outputs.engine }}` artifact (the plan job's, made
+//!    from every target's build), build nothing and
 //!    check the files against the plan's `sums` output.
 //! 8. **No secret.** The workflow names no `secrets.*`; its only credential is
 //!    the job token.
@@ -79,7 +80,7 @@ const RELEASE_ENVIRONMENT: &str = "release";
 const RUN_CANCELLATION: &str = "${{ github.event_name != 'workflow_dispatch' }}";
 
 /// The artifact the privileged jobs download: this run's chosen engine.
-const ENGINE_ARTIFACT: &str = "engine-${{ needs.guard.outputs.engine }}";
+const ENGINE_ARTIFACT: &str = "planned-${{ needs.guard.outputs.engine }}";
 
 /// The plan's output the privileged jobs check the files against.
 const PLAN_SUMS: &str = "${{ needs.plan.outputs.sums }}";

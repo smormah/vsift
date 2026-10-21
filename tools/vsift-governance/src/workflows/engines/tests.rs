@@ -244,8 +244,8 @@ fn job_rule_copies(text: &str) -> Result<Vec<BrokenCopy>, Box<dyn Error>> {
             "a publish that downloads another artifact",
             mutate(
                 text,
-                "name: engine-${{ needs.guard.outputs.engine }}\n          path: dist",
-                "name: engine-whisper-cli-macos\n          path: dist",
+                "name: planned-${{ needs.guard.outputs.engine }}\n          path: dist",
+                "name: engine-whisper-cli-macos-macos-arm64\n          path: dist",
                 3,
             )?,
             "artifact",
