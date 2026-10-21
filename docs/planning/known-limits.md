@@ -217,7 +217,7 @@ Each entry has these fields:
 | [L-200](#l-200) | The same VSift, whisper.cpp, model and audio can give a slightly different transcript on another CPU, so two hosted runs, and two machines, are comparable only on the same CPU model | process/CI | low | unscheduled | [#486](https://github.com/smormah/vsift/issues/486) | monitoring |
 | [L-201](#l-201) | A recogniser repetition inside one chunk could hide what the next chunk heard at a seam; since `0.2.3` an exact repeat of the segment before claims no time, and other loops are left | accuracy/ASR | low | unscheduled | [#485](https://github.com/smormah/vsift/issues/485) | monitoring |
 | [L-205](#l-205) | One diarization hears at most two hours (it holds the whole stretch in memory, about 1 GiB an hour); a longer recording is labelled a part at a time, and labels of two parts are not linked | performance | medium | `0.3.0` (speaker labels) | [#108](https://github.com/smormah/vsift/issues/108) | open |
-| [L-206](#l-206) | Speaker-label accuracy rests on synthetic voices and one real two-person call whose reference was read from its transcript, not heard | accuracy/ASR | medium | `0.3.0` (speaker labels) | [#108](https://github.com/smormah/vsift/issues/108) | open |
+| [L-206](#l-206) | Speaker-label accuracy rests on synthetic voices and two real recordings whose references were read from their transcripts, not heard | accuracy/ASR | medium | `0.3.0` (speaker labels) | [#108](https://github.com/smormah/vsift/issues/108) | open |
 | [L-207](#l-207) | Two similar voices are heard as one speaker, and the labels then name that one speaker with confidence for both | accuracy/ASR | medium | `0.3.0` (speaker labels) | [#108](https://github.com/smormah/vsift/issues/108) | open |
 | [L-218](#l-218) | A session or bundle that holds a speaker record is read as damaged by releases before `0.3.0`: the whole session is refused, not only its labels | integrity/durability | low | unscheduled | none | accepted residual |
 
@@ -5090,14 +5090,14 @@ that week.**
 
 ### L-206
 
-**Speaker-label accuracy rests on synthetic voices and one real two-person call whose reference was read from its transcript, not heard (`0.3.0`, speaker labels, 2026-10-21).**
+**Speaker-label accuracy rests on synthetic voices and two real recordings whose references were read from their transcripts, not heard (`0.3.0`, speaker labels, 2026-10-21).**
 
 - **What:** the evaluation's exact truth comes from five Kokoro conversations (one to three synthetic voices, 45 to 75 s); the only real recording with a reference is RM06 (two men on a space-to-ground link, and a controller's closing nine seconds), labelled by reading who asks and who answers, at segment precision, with two stretches left unscored. No accented, crosstalk-heavy, many-speaker or mixed-gender real recording has a reference, and RM09's speaker count is unknown.
-- **Evidence:** [`speaker-labels-evaluation.md`](speaker-labels-evaluation.md) section 5; `tools/p16_speakers_rm06_reference.json`; the hosted end-to-end test `p16_speakers_e2e` on the synthetic two-voice call.
+- **Evidence:** [`speaker-labels-evaluation.md`](speaker-labels-evaluation.md) sections 5 and 6.2; `tools/p16_speakers_rm06_reference.json` and `tools/p16_speakers_rm11_reference.json`; the hosted end-to-end test `p16_speakers_e2e` on the synthetic two-voice call. RM11 (NASA, 2026-10-21: a controller, an interviewer and an astronaut, 18:36, read from run 39595991957): with the recommended engine and the automatic count, 2.1% of 145 scored segments got the wrong label.
 - **Impact: medium by the rubric:** the accuracy statement leans on this evidence, and real meetings are more varied than it.
-- **Why:** the real-media set was chosen for transcription and screens; only RM06 is a conversation of a few people.
+- **Why:** the real-media set was chosen for transcription and screens; RM06 and RM11 are its only conversations of a few people, both NASA space-to-ground links.
 - **Mitigation:** the labelling marks a segment "no confident speaker" when no one voice holds it, and every label is provisional.
-- **Next step (the maintainer's decision of 2026-10-21):** the maintainer listens to RM06 to confirm its reference, and a second public-domain recording of two or three people with different voices joins the test-media release (proposed: NASA's in-flight interview of Expedition 70 with KAKE-TV, two astronauts, a woman and a man, and the station's interviewer); a reference for it, then a hosted run.
+- **Next step (the maintainer's decision of 2026-10-21):** the maintainer listens to RM06 and RM11 to confirm their references (RM11 joined the test-media release on 2026-10-21 and was scored the same day); a recording that is not a space-to-ground link (a meeting in one room, crosstalk) is still missing.
 - **Owner:** `0.3.0` (speaker labels). **Issue:** [#108](https://github.com/smormah/vsift/issues/108). **Status:** open. **Review:** pending.
 
 ### L-207
@@ -5105,7 +5105,7 @@ that week.**
 **Two similar voices are heard as one speaker, and the labels then name that one speaker with confidence for both (`0.3.0`, speaker labels, 2026-10-21).**
 
 - **What:** on the synthetic call `SPK2-FF` (two similar American female voices) every engine evaluated found one speaker (or two that do not follow the voices), and the labelling rule then gave 100% of segments a speaker with 28.6% of them wrong: a merge is invisible to a rule that only checks that one label holds each segment. On RM06 the automatic count also added short extra labels (five found for three voices).
-- **Evidence:** [`speaker-labels-evaluation.md`](speaker-labels-evaluation.md) sections 6.1 and 6.2; runs 39518020351, 39527538316 and 39567789710.
+- **Evidence:** [`speaker-labels-evaluation.md`](speaker-labels-evaluation.md) sections 6.1 and 6.2; runs 39518020351, 39527538316 and 39567789710. On RM11 (run 39595991957), told three speakers, TitaNet found two and put the controller's words under the interviewer's label (6.9% of segments wrong): two voices on the ground side of one link merged, and the given count did not prevent it; the automatic count kept them apart (2.1% wrong).
 - **Impact: medium by the rubric:** an agent could attribute one person's words to another in a normal recording (two colleagues with similar voices).
 - **Why:** the embeddings of two similar voices are close enough to cluster together; no engine's confidence separates that case.
 - **Mitigation (the maintainer's decision of 2026-10-21):** every label is presented as provisional ("S2, by voice"); the user's verified names are the only identity; the fixed statement every answer with labels carries (`speakers.statement`, `cli-v1.md`, the guide's speaker-labels page) says that two similar voices can share one label. A user who knows the count can give it (it does not cure this case).

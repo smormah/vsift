@@ -53,7 +53,8 @@ using the VSift skill records a name only when you give it.
 - **The precision is a segment.** Each segment gets one label, or none. A segment in which two people speak has
   **no confident speaker**; so does one where the tool heard little speech. The answer lists those segments.
 - **The evidence is thin so far** ([L-206](../planning/known-limits.md#l-206)): synthetic conversations and a few
-  real recordings. On a two-person NASA call, about 2 segments in 100 got the wrong label.
+  real recordings. On two NASA recordings, a two-person call and a three-person interview, about 2 segments in 100
+  got the wrong label.
 - **Nothing about a voice is kept.** The tool works out what each voice sounds like in its own memory and forgets
   it when it ends. VSift keeps only the labels, their times and the names you recorded, in the session, which is
   removed when it expires unless you keep it.

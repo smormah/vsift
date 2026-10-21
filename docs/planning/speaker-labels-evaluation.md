@@ -4,7 +4,9 @@ Status (2026-10-21, `0.3.0`): **step 1, the evaluation, is done, and the maintai
 Step 2 is built on the same branch (section 10, [ADR 0031](../decisions/0031-speaker-labels.md)), except the managed
 install, which waits for the managed-install system's extension to three systems (another story).** Issue:
 [#108](https://github.com/smormah/vsift/issues/108) (speakers for live meetings; this is the recorded-file version).
-Register: [L-205](known-limits.md#l-205), [L-206](known-limits.md#l-206), [L-207](known-limits.md#l-207); the scope
+Register: [L-205](known-limits.md#l-205), [L-206](known-limits.md#l-206), [L-207](known-limits.md#l-207),
+[L-217](known-limits.md#l-217) (the engine archives' provenance, recorded by the managed-install story),
+[L-218](known-limits.md#l-218) (older releases and the stored record); the scope
 exclusion [L-046](known-limits.md#l-046) ends for speakers when this ships.
 
 ## 1. The question
@@ -81,9 +83,13 @@ was downloaded or run on a development machine.
 - **RM06** (NASA, a two-person space-to-ground call, 10:24, public domain) from the test-media release, held to its
   pin. Its reference is labelled by a person reading the transcript (who asks, who answers), at segment precision
   ([L-206](known-limits.md#l-206)).
+- **RM11** (NASA, an in-flight interview from the space station, 18:36, public domain; added to the test-media release
+  on 2026-10-21 for this evaluation): Mission Control Houston opens and closes the event, a television station's
+  interviewer on the ground asks and the astronaut answers; the first 9:26 are music. Its reference is read the same
+  way as RM06's (`tools/p16_speakers_rm11_reference.json`), and a user would give three speakers.
 - **RM09** (NASA, 28:02, outdoor remarks, several speakers, English and Russian) for cost only: there is no reference.
 - **Scores.** The diarization error rate (DER: missed speech, false alarm and confusion over true speech; 0.25 s collar,
-  0.5 s on RM06; overlap scored), the number of speakers found, and **the labelling VSift would show** (section 10):
+  0.5 s on RM06 and RM11; overlap scored), the number of speakers found, and **the labelling VSift would show** (section 10):
   each whisper.cpp `base` segment gets the speaker who holds at least 70% of the speech in it, when speech covers at
   least half of it, and otherwise "no confident speaker". "Labelled" is the share of segments given a speaker; "wrong"
   is the share of all segments given the wrong one.
@@ -96,7 +102,9 @@ was downloaded or run on a development machine.
 Runs: the full matrix **39518020351** (Ubuntu, AMD EPYC 9V74) and the shortlist **39527538316** (Ubuntu, Windows,
 macOS; it printed RM06's labelled transcript and every candidate's RM06 turns, from which the reference of section 5 was
 read and RM06 scored offline with the tool's own scorer), and **39567789710** (the shortlist again, scoring RM06 from the
-committed reference with the same numbers, and the time and memory against length of section 6.4). In the tables, "known" means the speaker count was given; "auto-t" means sherpa-onnx's distance threshold t.
+committed reference with the same numbers, and the time and memory against length of section 6.4), and
+**39595991957** (2026-10-21: RM11 only, with the recommended engine, two alternatives and polyvoice; it printed RM11's
+labelled transcript and turns, from which its reference was read and RM11 scored offline with the tool's own scorer). In the tables, "known" means the speaker count was given; "auto-t" means sherpa-onnx's distance threshold t.
 
 ### 6.1 Synthetic conversations (Ubuntu, run 39518020351)
 
@@ -149,6 +157,24 @@ the pauses inside the reference's segment-long turns, so confusion and the segme
 On this call the caller and the astronaut are two men on a space-to-ground link; told two speakers, polyvoice and
 WeSpeaker merge them for long stretches, while TitaNet does not. The automatic settings that found 4 or 5 speakers added
 short extra labels (the closing controller is a real third voice).
+
+**RM11's accuracy against its read reference** (run 39595991957; 145 scored segments; four unscored stretches (two short
+interjections, a sentence the interviewer cut off, laughter) and a 0.5 s collar left out; scored offline from the logged
+turns with the tool's own scorer):
+
+| Candidate | Speakers found / given | DER | Confusion | Segments labelled | Of those, right | Wrong, of all segments | RTF; peak MiB |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| polyvoice, automatic | 3 | 2.2% | 0.0% | 100% | 100% | 0.0% | 0.032; 1,688 |
+| **sherpa-onnx + TitaNet small, auto-0.9** (the default) | 9 | **3.4%** | **1.3%** | 100% | **97.9%** | **2.1%** | 0.055; 427 |
+| sherpa-onnx + TitaNet small, told 3 | 2 / 3 | 7.7% | 5.6% | 99.3% | 93.1% | 6.9% | 0.055; 394 |
+| sherpa-onnx + WeSpeaker ResNet34, told 3 | 3 / 3 | 35.0% | 32.9% | 100% | 61.4% | 38.6% | 0.103; 242 |
+
+With the automatic count, each person kept one main label (the controller, the interviewer, the astronaut); the six
+extra labels hold 9.0 s of speech in all, and three segments went to them (the astronaut's first reply, one interjection
+of the interviewer's, one of the controller's closing lines). **Told three, TitaNet found two**: it put the controller's
+words under the interviewer's label, two voices on the ground side of one link, so a given count is not a guarantee
+that the engine keeps that many voices apart ([L-207](known-limits.md#l-207)). The astronaut is the only voice on the
+station side; NASA's description names a second crew member, who is not heard.
 
 ### 6.3 The same builds on three systems
 
@@ -210,7 +236,7 @@ are not linked ([L-205](known-limits.md#l-205)).
 user gives one (`--clustering.num-clusters`) and otherwise with the distance threshold 0.9.
 
 - **Accuracy.** It is the only sherpa-onnx configuration that is right on both kinds of evidence: on RM06, 1.9% of
-  segments wrong, told two speakers or not; on the synthetic set no wrong segment except the similar-voice case that
+  segments wrong, told two speakers or not (and on RM11, read after the decision, 2.1% with the automatic count); on the synthetic set no wrong segment except the similar-voice case that
   defeats every candidate. polyvoice is a little better (RM06 0.9% wrong automatically; `SPK3-MFM` 0.2% against 9.1%),
   but only automatically: **told the speaker count, polyvoice merged the two men of RM06 (28% wrong)**, because its
   `--speakers` caps the clustering instead of setting it, and "I know there are two of us" is the user's most natural
@@ -240,7 +266,8 @@ managed-install story),
 typed refusal and a remediation, about two hours if an 8 GB machine allows (section 6.4: it does), (6) labels
 provisional ("S2, by voice"), the user's verified names the only identity, and the accuracy statement naming the
 similar-voice case, (7) one more public-domain recording of two or three people for the test-media release, and the
-maintainer listens to confirm RM06's reference and the new one. The options as they were put:
+maintainer listens to confirm RM06's reference and the new one (RM11, added and scored on 2026-10-21, section 6.2).
+The options as they were put:
 
 1. **The engine.** sherpa-onnx + TitaNet small (recommended), polyvoice, or neither for `0.3.0` (speaker labels move
    to `1.0`).
@@ -302,6 +329,7 @@ until then the tool is given with `--diarizer` or found on the filtered `PATH`, 
 ## 11. Reproduce
 
 `gh workflow run p16-speakers-eval.yml --ref <branch>` once the workflow is on `main` (on a pull request it runs when
-its own files change). `python tools/p16_speakers_eval.py evaluate ... --everything` runs the full matrix of run
+its own files change). `--reference RM06=tools/p16_speakers_rm06_reference.json` (and `RM11=...`) scores a read item;
+`--candidate <name>` runs part of the matrix, as the RM11 job does. `python tools/p16_speakers_eval.py evaluate ... --everything` runs the full matrix of run
 39518020351; without it, the shortlist. The tool's tests (`tools/test_p16_speakers_eval.py`) need no engine, model or
 network.

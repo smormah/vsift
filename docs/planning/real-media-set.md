@@ -9,7 +9,7 @@ library) and are fetched and pinned; five are Wikimedia files with no copy elsew
 and the tool pins against the Commons SHA-1 (`pin --from-file`). Every hosted run fetches from the project's own test-media
 release, never from Wikimedia; the release is prepared for the maintainer's review, not created by a tool. A private local set
 of the maintainer's own recordings is supported for local runs only, reported by measurements alone (section 13).
-**2026-10-21:** RM11 (NASA, an in-flight interview: an interviewer and the crew) joins for speaker labels, so the set is
+**2026-10-21:** RM11 (NASA, an in-flight interview: a controller, an interviewer and an astronaut) joins for speaker labels, so the set is
 **nine approved items (489,354,989 bytes)**; the item limit is nine, following the maintainer's approval of that day to add
 a recording of two or three speakers (section 10, decision 11).
 Issue: [#363](https://github.com/smormah/vsift/issues/363). Register: [L-180](known-limits.md#l-180).
@@ -472,7 +472,8 @@ RM09 adds about five minutes of arrival with no speech before the first word (le
 outdoor remarks (noisy speech) and 28 minutes of length; RM10 is a real screen recording of a data site with small text and
 burned-in captions. Both were looked at frame by frame for private persons' data before use (none). RM02 (held) and RM08
 (withdrawn) are not in the set. RM11 (2026-10-21) is an in-flight interview from the space station, 18:36: a television
-station's interviewer on the ground and the crew on board, in their public roles, for speaker labels; the coordinator
+station's interviewer on the ground and the astronaut on board, with Mission Control opening and closing it, in their
+public roles, for speaker labels (the first 9:26 are music); the coordinator
 fetched it from NASA's library over HTTPS with the neutral user agent and added it to the release.
 
 **Hand downloads for the maintainer** (Commons serves a browser; the tool never contacts it). Save each file under any name,

@@ -162,6 +162,16 @@ class ScoringTests(unittest.TestCase):
             self.assertLessEqual(end, start)
         self.assertLessEqual(spans[-1][1], 623_851_000)
 
+    def test_the_rm11_reference_is_well_formed(self) -> None:
+        path = Path(evaluation.__file__).with_name("p16_speakers_rm11_reference.json")
+        turns, count, unscored = evaluation.read_reference(path)
+        self.assertEqual(count, 3)
+        self.assertEqual({turn["speaker"] for turn in turns}, {"A", "B", "C"})
+        spans = sorted([(t["start_us"], t["end_us"]) for t in turns] + [(u["start_us"], u["end_us"]) for u in unscored])
+        for (_, end), (start, _) in zip(spans, spans[1:]):
+            self.assertLessEqual(end, start)
+        self.assertLessEqual(spans[-1][1], 1_116_133_000)
+
     def test_a_reference_with_an_undeclared_speaker_is_refused(self) -> None:
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "reference.json"

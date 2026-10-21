@@ -5,7 +5,7 @@ name: P16 speakers evaluation
 # diarization engines (sherpa-onnx with several embedding models, polyvoice and
 # whisper.cpp's tinydiarize) on synthetic conversations with exact truth, generated
 # here with the P07 Kokoro recipe, and on RM06 (NASA, two people and a third briefly),
-# RM11 (NASA, an interviewer and the crew) and RM09 (NASA, 28 minutes, for cost) from the
+# RM11 (NASA, a controller, an interviewer and an astronaut) and RM09 (NASA, 28 minutes, for cost) from the
 # project's test-media release, all public domain. Nothing it stages reaches a VSift
 # build or the maintainer's machine; the jobs keep numbers, the synthetic fixtures and
 # the labelled transcripts of RM06 and RM11 only.

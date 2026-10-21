@@ -449,10 +449,10 @@
       "author": "NASA (Johnson Space Center)",
       "attribution": "\"Expedition 70 Astronaut Loral O\u2019Hara Talks with KAKE-TV, Wichita, Kansas\" by NASA, public domain, via the NASA Image and Video Library",
       "media": {
-        "duration_s": 1116.0,
+        "duration_s": 1116.133,
         "container": "mp4",
-        "video": "H.264 (the library's ~mobile rendition)",
-        "audio": "AAC"
+        "video": "H.264 320x180 15 fps (the library's ~mobile rendition)",
+        "audio": "AAC 22.05 kHz, two channels"
       },
       "covers": [
         "two-or-three-speakers",
@@ -463,7 +463,7 @@
         "L-206",
         "L-207"
       ],
-      "notes": "Chosen on 2026-10-21 under the maintainer's decision of that day (one public-domain recording of two or three speakers for speaker labels, #108). An in-flight interview from the space station: a television station's interviewer on the ground and the crew on board (public figures in their role), with the delays of a space-to-ground link, 18:36. NASA publishes no checksum: the pin is trust on first use over HTTPS, cross-checked by a second, hosted fetch. NASA media carries no endorsement. Its speaker reference is read from a hosted labelled transcript and confirmed by the maintainer listening (docs/planning/speaker-labels-evaluation.md)."
+      "notes": "Chosen on 2026-10-21 under the maintainer's decision of that day (one public-domain recording of two or three speakers for speaker labels, #108). An in-flight interview from the space station, 18:36: Mission Control Houston opens and closes the event, a television station's interviewer on the ground asks and the astronaut on board answers (public figures and NASA staff in their roles), with the delays of a space-to-ground link. The first 9:26 are music with no speech. NASA publishes no checksum: the pin is trust on first use over HTTPS, cross-checked by a second, hosted fetch (run 39595991957, matching). NASA media carries no endorsement. Its speaker reference, tools/p16_speakers_rm11_reference.json, is read from a hosted labelled transcript and is to be confirmed by the maintainer listening (docs/planning/speaker-labels-evaluation.md)."
     }
   ]
 }
