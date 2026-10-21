@@ -503,6 +503,13 @@ pub trait ProgressSink: Send + Sync {
     /// so a worker host can emit its `admission_waiting` lifecycle event.
     /// Most sinks ignore it.
     fn admission_waiting(&self, _weight: std::num::NonZeroU16) {}
+
+    /// Told once when the run starts waiting, for up to
+    /// [`vsift_domain::QUEUED_YIELD_WAIT`], for queued work to give back the
+    /// `weight` units it holds (ADR 0033 section 6), whatever the run's
+    /// [`vsift_domain::AdmissionWait`]: a host shows the person or agent
+    /// waiting that it waits, and why. Most sinks ignore it.
+    fn queued_work_waiting(&self, _weight: std::num::NonZeroU16) {}
 }
 
 /// A sink that reports nowhere, for runs nobody watches.

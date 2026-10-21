@@ -490,7 +490,18 @@ The fifth pull request implements the queued mode of section 6.
   of being refused. Before every chunk but the first, the queued run's `ChunkGate` looks at the demand lock:
   while someone demands capacity it gives its permit back, polls every `QUEUED_ADMISSION_POLL`, and takes
   the capacity back once nobody does. A queued run never takes capacity someone waits for. Every lock is an
-  operating-system lock, so a process that dies releases what it held. The visual windows of a queued job
+  operating-system lock, so a process that dies releases what it held.
+- **The wait is shown** (the supervisor's condition of 2026-10-21 for accepting the 120 s). A recognition's
+  own admission no longer waits inside the store: `RevisionStore::admit` takes the slots or answers `Busy` at
+  once, and the run's `admit_waiting` waits for queued work itself, on its own timer (so no thread blocks),
+  demanding the capacity through `RevisionStore::demand_capacity` and polling every `QUEUED_YIELD_POLL`
+  (50 ms) until it is given back, it goes to someone else or `QUEUED_YIELD_WAIT` is spent, counted over the
+  whole run, its retries included. When the wait starts, the progress port hears it once
+  (`ProgressSink::queued_work_waiting`), and the engine's `AdmissionWaiting` carries the cause `QueuedWork`.
+  The CLI writes a `lifecycle` `admission_waiting` event with `reason` `queued_work` under `--events jsonl`
+  (`transcript retranscribe`, `job resume`, `job start`, and a worker's request) and shows `Waiting for
+  queued work to make room (at most 2 min)` on the live line. A session write, an evidence capture, a visual
+  window and a watched job's background runner still wait inside the store without saying so (L-223). The visual windows of a queued job
   take their capacity window by window, as `candidates` does, so they free it between windows anyway.
 - **Not in 0.3.0:** priorities between queued jobs, and a host that runs the queue without a runner a job
   (1.0). After a restart a waiting job needs `job start` or `job resume` to run again (L-222).

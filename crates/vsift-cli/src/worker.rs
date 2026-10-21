@@ -283,7 +283,7 @@ pub(crate) const fn worker_failure_remediation(failure: WorkerFailure) -> &'stat
 /// What the observer queues for the stream writer.
 enum Observed {
     Progress(JobProgress, u64),
-    AdmissionWaiting,
+    AdmissionWaiting(vsift::AdmissionWaitCause),
 }
 
 /// Runs the request in `--events jsonl` mode (see the module
@@ -453,8 +453,8 @@ fn gated_observer(
             gate.queue_full();
         }
     })
-    .with_admission_waiting(move |_| {
-        let _ = waiting.send(Observed::AdmissionWaiting);
+    .with_admission_waiting(move |waits| {
+        let _ = waiting.send(Observed::AdmissionWaiting(waits.cause));
     })
 }
 
@@ -521,14 +521,15 @@ fn observe<StandardOutput, StandardError>(
                 },
             ))
         }),
-        Observed::AdmissionWaiting => write(stream, failure, |sequence| {
-            Event::Lifecycle(LifecycleEventResponse::admission_waiting(
+        Observed::AdmissionWaiting(cause) => write(stream, failure, |sequence| {
+            Event::Lifecycle(crate::progress::admission_waiting_event(
                 sequence,
                 command,
                 &RequestRef {
                     line: None,
                     operation_id: Some(request),
                 },
+                cause,
             ))
         }),
     }

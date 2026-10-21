@@ -228,6 +228,26 @@ impl FilesystemSessionStore {
         }
     }
 
+    /// When queued work holds the root's capacity, demands it until the
+    /// returned demand is dropped; `None` otherwise, or when the demand
+    /// cannot be recorded.
+    #[must_use]
+    pub fn demand_queued_capacity(&self) -> Option<CapacityDemand> {
+        let coordination = self.coordination().ok()?;
+        if !queued_work_holds(&coordination) {
+            return None;
+        }
+        demand_capacity(&coordination).map(|lock| CapacityDemand { _lock: lock })
+    }
+
+    /// Whether queued work holds the root's capacity. A read failure counts as
+    /// it does not.
+    #[must_use]
+    pub fn queued_capacity_held(&self) -> bool {
+        self.coordination()
+            .is_ok_and(|coordination| queued_work_holds(&coordination))
+    }
+
     fn coordination(&self) -> Result<Dir, SessionStorageError> {
         self.revalidate_root()?;
         self.root
@@ -250,6 +270,14 @@ pub(super) fn queued_work_holds(coordination: &Dir) -> bool {
         Err(fs::TryLockError::WouldBlock) => true,
         Err(fs::TryLockError::Error(_)) => false,
     }
+}
+
+/// An ordinary caller's demand for the capacity queued work holds: queued
+/// work gives it back at its next chunk boundary while any demand is held.
+/// Released when dropped.
+#[derive(Debug)]
+pub struct CapacityDemand {
+    _lock: HeldFileLock,
 }
 
 /// Holds the demand for capacity while an ordinary caller waits for queued
@@ -386,6 +414,40 @@ mod tests {
         assert_eq!(admitted, Ok(()));
         waiter.join().map_err(|_| "waiter panicked")?;
         assert!(!store.capacity_demanded());
+        Ok(())
+    }
+
+    /// ADR 0033 section 6: a recognition's own admission never waits inside
+    /// the store, so its run can wait where it says so; it demands the
+    /// capacity only while queued work holds it, and the demand ends when it
+    /// is dropped.
+    #[test]
+    fn a_recognition_demands_queued_capacity_without_waiting_in_the_store() -> TestResult {
+        use std::num::NonZeroU16;
+
+        use vsift_application::RevisionStore;
+
+        let fixture = Fixture::new()?;
+        let store = FilesystemSessionStore::open_existing(&fixture.path)?;
+        let one = NonZeroU16::MIN;
+        assert!(RevisionStore::demand_capacity(&store).is_none());
+        assert!(!RevisionStore::queued_work_holds(&store));
+
+        let queued = store.try_admit_queued(4)?;
+        assert!(RevisionStore::queued_work_holds(&store));
+        let started = Instant::now();
+        assert!(RevisionStore::admit(&store, one).is_err());
+        assert!(
+            started.elapsed() < Duration::from_secs(5),
+            "the admission waited in the store"
+        );
+        let demand = RevisionStore::demand_capacity(&store).ok_or("no demand")?;
+        assert!(RevisionStore::others_waiting(&store));
+        drop(demand);
+        assert!(!RevisionStore::others_waiting(&store));
+        drop(queued);
+        assert!(!RevisionStore::queued_work_holds(&store));
+        assert!(RevisionStore::admit(&store, one).is_ok());
         Ok(())
     }
 }

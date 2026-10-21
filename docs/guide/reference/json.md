@@ -975,7 +975,7 @@ This schema also holds 2 conditional rules (a member that is required, or fixed,
 
 **VSift JSONL lifecycle event v1** ([the schema](../../../schemas/v1/lifecycle-event.schema.json))
 
-A worker host's own state in a job.run or job.batch --events jsonl stream (P11, ADR 0021; O-03): started (with its readiness: the sessions' publication guarantee, isolation, admission capacity and request concurrency), request_admitted, admission_waiting (reason admission_capacity), request_finished (the request's status, failure code, rejection and dropped progress), draining (reason shutdown or drain_timeout) and stopped (reason end_of_input, shutdown, line_limit or input_error). Members that do not apply to a kind are null. Never dropped; at most 64 KiB per line.
+A worker host's own state in a job.run or job.batch --events jsonl stream (P11, ADR 0021; O-03): started (with its readiness: the sessions' publication guarantee, isolation, admission capacity and request concurrency), request_admitted, admission_waiting (reason admission_capacity, or since 0.3.0 queued_work: queued work holds the capacity and gives it back at its next chunk boundary, waited for up to 120 s; transcript.retranscribe, job.resume and job.start write this kind too, with line and request_operation_id null), request_finished (the request's status, failure code, rejection and dropped progress), draining (reason shutdown or drain_timeout) and stopped (reason end_of_input, shutdown, line_limit or input_error). Members that do not apply to a kind are null. Never dropped; at most 64 KiB per line.
 
 | Member | Type | Required | Notes |
 | --- | --- | --- | --- |
@@ -996,7 +996,7 @@ A worker host's own state in a job.run or job.batch --events jsonl stream (P11, 
 | `readiness.isolation` | "process_only" \| "strict_linux" | yes |  |
 | `readiness.admission_capacity` | integer | yes | 1 to 65535 |
 | `readiness.concurrency` | integer | yes | 1 to 65535 |
-| `reason` | "end_of_input" \| "shutdown" \| "drain_timeout" \| "line_limit" \| "input_error" \| "admission_capacity" or null | yes |  |
+| `reason` | "end_of_input" \| "shutdown" \| "drain_timeout" \| "line_limit" \| "input_error" \| "admission_capacity" \| "queued_work" or null | yes |  |
 
 This schema also holds 3 conditional rules (a member that is required, or fixed, when another has a given value); read [the schema](../../../schemas/v1/lifecycle-event.schema.json) for them.
 

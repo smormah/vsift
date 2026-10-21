@@ -681,6 +681,7 @@ impl Engine {
                         run.progress.admission_waiting(&AdmissionWaiting {
                             job: failed.job.clone(),
                             weight: NonZeroU16::MIN,
+                            cause: crate::progress::AdmissionWaitCause::CapacityInUse,
                         });
                     }
                     if !sleep_unless_cancelled(delay, &context.work.0).await {

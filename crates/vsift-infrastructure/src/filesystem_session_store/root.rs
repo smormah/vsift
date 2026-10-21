@@ -964,12 +964,12 @@ pub(super) fn acquire_admission(
     }
 }
 
-/// How often a caller that waits for queued work looks at the slots.
-const QUEUED_YIELD_POLL: std::time::Duration = std::time::Duration::from_millis(50);
-
 /// Waits, demanding capacity, for queued work to give back the slots it holds.
 /// The wait blocks the calling thread: it happens only while queued work holds
-/// the root's capacity, and is bounded.
+/// the root's capacity, and is bounded. It serves the session's own writes
+/// (a generation, an artifact) and the media adapter's admission; a
+/// recognition waits in the application instead, where it is announced
+/// (`RevisionStore::demand_capacity`).
 fn wait_for_queued_work(
     root: &Dir,
     capacity: u16,
@@ -984,7 +984,7 @@ fn wait_for_queued_work(
     let _demand = super::queue::demand_capacity(&coordination);
     let started = std::time::Instant::now();
     loop {
-        std::thread::sleep(QUEUED_YIELD_POLL);
+        std::thread::sleep(vsift_domain::QUEUED_YIELD_POLL);
         match acquire_slots(root, capacity, weight) {
             Err(SessionStorageError::Busy) => {}
             other => return other,

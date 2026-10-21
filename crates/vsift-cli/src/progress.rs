@@ -10,6 +10,12 @@
 //! event's `progress_dropped`. The command's future and the queue are served
 //! on one task, so the output writer (which may hold a locked, non-`Send`
 //! stdout) never crosses threads. The terminal event is never dropped.
+//!
+//! A command that waits for queued work to give back the root's capacity
+//! (ADR 0033 section 6) writes a `lifecycle` `admission_waiting` event with
+//! `reason` `queued_work` when the wait starts. Like every lifecycle event it
+//! is never dropped; a run announces each wait once, and waits at most
+//! [`vsift::QUEUED_YIELD_WAIT`] in all.
 
 use std::{
     io::Write,
@@ -19,10 +25,10 @@ use std::{
 };
 
 use tokio::sync::mpsc;
-use vsift::{JobProgress, ProgressObserver};
+use vsift::{AdmissionWaitCause, JobProgress, ProgressObserver};
 use vsift_contract::{
-    CommandName, MAX_PROGRESS_EVENTS, OperationResponse, PROGRESS_INTERVAL_MS,
-    ProgressEventResponse, ProgressReport,
+    CommandName, LifecycleEventResponse, MAX_PROGRESS_EVENTS, OperationResponse,
+    PROGRESS_INTERVAL_MS, ProgressEventResponse, ProgressReport, RequestRef,
 };
 
 use crate::{
@@ -103,8 +109,25 @@ impl ProgressGate {
     }
 }
 
-/// Runs one long command in `--events jsonl` mode: its progress events as
-/// they come, then its one terminal event.
+/// The lifecycle event of an admission wait, as its cause says.
+pub(crate) fn admission_waiting_event(
+    sequence: u64,
+    command: CommandName,
+    request: &RequestRef<'_>,
+    cause: AdmissionWaitCause,
+) -> LifecycleEventResponse {
+    match cause {
+        AdmissionWaitCause::CapacityInUse => {
+            LifecycleEventResponse::admission_waiting(sequence, command, request)
+        }
+        AdmissionWaitCause::QueuedWork => {
+            LifecycleEventResponse::queued_work_waiting(sequence, command, request)
+        }
+    }
+}
+
+/// Runs one long command in `--events jsonl` mode: its progress events and
+/// admission waits as they come, then its one terminal event.
 pub(crate) async fn stream_with_progress<StandardOutput, StandardError, Run, Work>(
     writer: &mut OutputWriter<StandardOutput, StandardError>,
     command: CommandName,
@@ -117,6 +140,9 @@ where
     Work: Future<Output = Result<OperationResponse<serde_json::Value>, CommandFailure>>,
 {
     let (sender, mut receiver) = mpsc::channel::<Admitted>(PROGRESS_QUEUE);
+    // Lifecycle events are never dropped; a run announces each of its few
+    // waits once.
+    let (waiting_sender, mut waiting) = mpsc::unbounded_channel::<AdmissionWaitCause>();
     let gate = Arc::new(Mutex::new(ProgressGate::new()));
     let observer_gate = Arc::clone(&gate);
     let observer = ProgressObserver::new(move |progress| {
@@ -129,6 +155,9 @@ where
         {
             gate.queue_full();
         }
+    })
+    .with_admission_waiting(move |waits| {
+        let _ = waiting_sender.send(waits.cause);
     });
 
     let mut stream = JsonLinesWriter::new(writer);
@@ -138,11 +167,17 @@ where
         tokio::select! {
             biased;
             result = &mut work => break result,
+            Some(cause) = waiting.recv() => {
+                write_waiting(&mut stream, command, cause, &mut output_failure);
+            }
             Some(admitted) = receiver.recv() => {
                 write_progress(&mut stream, command, &admitted, &mut output_failure);
             }
         }
     };
+    while let Ok(cause) = waiting.try_recv() {
+        write_waiting(&mut stream, command, cause, &mut output_failure);
+    }
     while let Ok(admitted) = receiver.try_recv() {
         write_progress(&mut stream, command, &admitted, &mut output_failure);
     }
@@ -167,6 +202,31 @@ where
             writer.write_safe_diagnostic(&error.to_string());
             ProcessExit::StorageOrIo
         }
+    }
+}
+
+/// Writes one admission wait's lifecycle event unless an earlier write
+/// failed, as [`write_progress`] does.
+fn write_waiting<StandardOutput, StandardError>(
+    stream: &mut JsonLinesWriter<'_, StandardOutput, StandardError>,
+    command: CommandName,
+    cause: AdmissionWaitCause,
+    output_failure: &mut Option<OutputError>,
+) where
+    StandardOutput: Write,
+    StandardError: Write,
+{
+    if output_failure.is_some() {
+        return;
+    }
+    let none = RequestRef {
+        line: None,
+        operation_id: None,
+    };
+    if let Err(error) =
+        stream.write_event(|sequence| admission_waiting_event(sequence, command, &none, cause))
+    {
+        *output_failure = Some(error);
     }
 }
 
@@ -346,6 +406,48 @@ mod tests {
         assert_eq!(lines[1]["event"], "terminal");
         assert_eq!(lines[1]["sequence"], 1);
         assert_eq!(lines[1]["result"]["error"]["code"], "CANCELLED");
+        Ok(())
+    }
+
+    /// ADR 0033 section 6: a command that waits for queued work to give back
+    /// the capacity says so at once, as a lifecycle `admission_waiting` event
+    /// with reason `queued_work` and no request, in sequence before its
+    /// progress and its terminal event; the schema accepts it.
+    #[tokio::test]
+    async fn a_wait_for_queued_work_is_announced_in_the_stream() -> TestResult {
+        let mut stdout = Vec::new();
+        let mut output = OutputWriter::new(&mut stdout, Vec::<u8>::new());
+        let exit = stream_with_progress(
+            &mut output,
+            CommandName::TranscriptRetranscribe,
+            |observer: ProgressObserver| async move {
+                let job = JobId::parse("job_0123456789abcdef0123456789abcdef")
+                    .map_err(|_| FailureCode::Internal)?;
+                observer.admission_waiting(&vsift::AdmissionWaiting {
+                    job: Some(job),
+                    weight: std::num::NonZeroU16::MIN,
+                    cause: vsift::AdmissionWaitCause::QueuedWork,
+                });
+                tokio::task::yield_now().await;
+                let progress = chunk(0).map_err(|_| FailureCode::Internal)?;
+                observer_report(&observer, &progress);
+                OperationResponse::complete("transcript.retranscribe", &serde_json::json!({}))
+                    .map_err(|_| CommandFailure::from(FailureCode::Internal))
+            },
+        )
+        .await;
+        assert_eq!(exit, ProcessExit::Success);
+        let lines = lines(&stdout)?;
+        let events: Vec<(&str, u64)> = lines
+            .iter()
+            .filter_map(|line| Some((line["event"].as_str()?, line["sequence"].as_u64()?)))
+            .collect();
+        assert_eq!(events, [("lifecycle", 0), ("progress", 1), ("terminal", 2)]);
+        assert_eq!(lines[0]["kind"], "admission_waiting");
+        assert_eq!(lines[0]["reason"], "queued_work");
+        assert_eq!(lines[0]["command"], "transcript.retranscribe");
+        assert!(lines[0]["line"].is_null());
+        assert!(lines[0]["request_operation_id"].is_null());
         Ok(())
     }
 

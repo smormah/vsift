@@ -483,19 +483,7 @@ impl EngineStreams<'_> {
         range: Option<RetranscribeRange>,
         publication: RetranscribePublication,
     ) -> Result<RetranscribeOutcome, EngineError> {
-        let recorded = Arc::clone(&self.recorded);
-        let host = self.progress.clone();
-        // The callback only keeps the latest update (it must not block); the
-        // loop of `watched` writes it out.
-        let progress = ProgressObserver::new(move |seen: &JobProgress| {
-            host.report(seen);
-            if let Ok(mut streams) = recorded.lock()
-                && let Some(entry) = streams.iter_mut().find(|entry| entry.stream == stream)
-            {
-                entry.job.clone_from(&seen.job);
-                entry.update = Some(seen.update);
-            }
-        });
+        let progress = stream_observer(&self.progress, &self.recorded, stream);
         let run = Box::pin(self.engine.retranscribe(RetranscribeRequest {
             session: self.session.clone(),
             range,
@@ -820,4 +808,88 @@ pub(crate) fn queue_position(store: &FilesystemSessionStore, job: &JobId) -> Opt
         position += 1;
     }
     None
+}
+
+/// The observer of one transcript stream: every observation reaches the host
+/// and is kept as the stream's latest (the callback must not block; the loop
+/// of `watched` writes it out), and a wait for capacity reaches the host as it
+/// is (ADR 0033 section 6).
+fn stream_observer(
+    host: &ProgressObserver,
+    recorded: &Arc<Mutex<Vec<StreamProgress>>>,
+    stream: PrepareStream,
+) -> ProgressObserver {
+    let recorded = Arc::clone(recorded);
+    let reporting = host.clone();
+    let waiting = host.clone();
+    ProgressObserver::new(move |seen: &JobProgress| {
+        reporting.report(seen);
+        if let Ok(mut streams) = recorded.lock()
+            && let Some(entry) = streams.iter_mut().find(|entry| entry.stream == stream)
+        {
+            entry.job.clone_from(&seen.job);
+            entry.update = Some(seen.update);
+        }
+    })
+    .with_admission_waiting(move |seen| waiting.admission_waiting(seen))
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::{Arc, Mutex};
+
+    use vsift_application::{StreamPhase, StreamProgress};
+    use vsift_domain::{PrepareStream, ProgressStage, ProgressUpdate};
+
+    use super::stream_observer;
+    use crate::{AdmissionWaitCause, AdmissionWaiting, JobProgress, ProgressObserver};
+
+    /// ADR 0033 section 6: a transcript stream of a `prepare` job passes a
+    /// wait for queued work on to the host as it is, so `job start` and `job
+    /// resume` show it, and keeps passing on and recording its progress.
+    #[test]
+    fn a_stream_passes_its_waits_and_progress_to_the_host() -> Result<(), Box<dyn std::error::Error>>
+    {
+        let waits: Arc<Mutex<Vec<AdmissionWaiting>>> = Arc::default();
+        let reports: Arc<Mutex<Vec<JobProgress>>> = Arc::default();
+        let (seen_waits, seen_reports) = (Arc::clone(&waits), Arc::clone(&reports));
+        let host = ProgressObserver::new(move |progress| {
+            if let Ok(mut seen) = seen_reports.lock() {
+                seen.push(progress.clone());
+            }
+        })
+        .with_admission_waiting(move |waiting| {
+            if let Ok(mut seen) = seen_waits.lock() {
+                seen.push(waiting.clone());
+            }
+        });
+        let recorded = Arc::new(Mutex::new(vec![StreamProgress {
+            stream: PrepareStream::Transcript,
+            job: None,
+            phase: StreamPhase::Running,
+            update: None,
+        }]));
+        let observer = stream_observer(&host, &recorded, PrepareStream::Transcript);
+        let waiting = AdmissionWaiting {
+            job: None,
+            weight: std::num::NonZeroU16::MIN,
+            cause: AdmissionWaitCause::QueuedWork,
+        };
+        observer.admission_waiting(&waiting);
+        let update = ProgressUpdate {
+            stage: ProgressStage::RecognisingSpeech,
+            completed: 1,
+            total: Some(3),
+            media: None,
+        };
+        observer.report(&JobProgress { job: None, update });
+        assert_eq!(*waits.lock().map_err(|_| "poisoned")?, [waiting]);
+        assert_eq!(reports.lock().map_err(|_| "poisoned")?.len(), 1);
+        let recorded = recorded.lock().map_err(|_| "poisoned")?;
+        assert_eq!(
+            recorded.first().and_then(|entry| entry.update),
+            Some(update)
+        );
+        Ok(())
+    }
 }

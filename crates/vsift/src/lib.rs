@@ -153,7 +153,7 @@ pub use prepare::{
     JobStartPlan, JobStartRequest, JobStartState, ModeBasis, PROGRESS_RECORD_INTERVAL,
     RecognitionShare, VISUAL_BATCH_WINDOWS,
 };
-pub use progress::{AdmissionWaiting, JobProgress, ProgressObserver};
+pub use progress::{AdmissionWaitCause, AdmissionWaiting, JobProgress, ProgressObserver};
 pub use search::{SearchRange, SearchRequest, SearchResultHit, SearchResults};
 pub use sessions::{
     BundleSummary, CleanDecision, CleanEntry, CleanMode, CleanPage, CleanRequest, CleanScope,
@@ -220,9 +220,9 @@ pub use vsift_domain::{
     FailureCode, IdentifierError, JobId, JobKind, JobMode, JobState, MAX_ADMISSION_WAIT,
     MAX_FIRST_WINDOW_MICROS, MAX_RECOGNIZER_THREADS, MediaProgress, OperationId, OperationStatus,
     PrepareStream, ProbeTimeout, ProbeTimeoutKind, ProgressStage, ProgressUnit, ProgressUpdate,
-    PublicationGuarantee, RuntimeCapability, RuntimeDependency, RuntimeReadiness, SessionId,
-    SessionLifetime, SessionLifetimePolicy, SessionPhase, SourceId, StorageGeneration,
-    WorkspacePolicy, WorkspacePolicyError, WorkspaceRetention,
+    PublicationGuarantee, QUEUED_YIELD_WAIT, RuntimeCapability, RuntimeDependency,
+    RuntimeReadiness, SessionId, SessionLifetime, SessionLifetimePolicy, SessionPhase, SourceId,
+    StorageGeneration, WorkspacePolicy, WorkspacePolicyError, WorkspaceRetention,
 };
 /// Transcript evidence values that appear in this API.
 pub use vsift_domain::{
