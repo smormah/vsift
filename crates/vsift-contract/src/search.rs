@@ -300,6 +300,9 @@ pub struct SearchStreamData {
     record_count: usize,
     next_cursor: Option<String>,
     transcript_coverage: TranscriptCoverageData,
+    /// The revision's newest speaker record (ADR 0031); absent when it has none.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    speakers: Option<SpeakersData>,
 }
 
 fn hit_data(page: &SearchPresentation<'_>) -> Vec<SearchHitData> {
@@ -441,28 +444,57 @@ impl SearchEvidenceStream {
         page: &SearchPresentation<'_>,
         lifecycle: LifecycleResponse,
     ) -> Result<Self, serde_json::Error> {
+        Self::with_speakers(page, None, None, lifecycle)
+    }
+
+    /// [`Self::new`] with the revision's speaker labels (ADR 0031): each record's
+    /// `speaker_label`, the terminal data's `speakers` and, for a search filtered by
+    /// `filter`, the label in `query.speaker`.
+    ///
+    /// # Errors
+    ///
+    /// Returns the serialization error when the terminal data cannot be
+    /// represented as JSON.
+    pub fn with_speakers(
+        page: &SearchPresentation<'_>,
+        speakers: Option<&SpeakerRecord>,
+        filter: Option<SpeakerTag>,
+        lifecycle: LifecycleResponse,
+    ) -> Result<Self, serde_json::Error> {
         let command = CommandName::Search;
         let records: Vec<_> = (0_u64..)
             .zip(&page.hits)
             .map(|(sequence, (segment, _))| {
-                EvidenceEventResponse::transcript_segment(sequence, command, page.revision, segment)
+                EvidenceEventResponse::labelled_transcript_segment(
+                    sequence,
+                    command,
+                    page.revision,
+                    segment,
+                    speakers,
+                )
             })
             .collect();
+        let mut query = SearchQueryData::new(page.query);
+        query.speaker = filter.map(|tag| tag.to_string());
         let data = SearchStreamData {
             session_id: page.session_id.as_str().to_owned(),
             revision: TranscriptRevisionData::new(page.revision),
-            query: SearchQueryData::new(page.query),
+            query,
             range: page.range.map(RangeData::new),
             hits: hit_data(page),
             record_count: records.len(),
             next_cursor: page.next_cursor.map(str::to_owned),
             transcript_coverage: TranscriptCoverageData::new(page.coverage),
+            speakers: speakers.map(SpeakersData::new),
         };
-        let result = finish(
-            OperationResponse::complete(command.identifier(), &data)?,
-            page.revision,
-            page.coverage,
-            lifecycle,
+        let result = with_unlabelled_warning(
+            finish(
+                OperationResponse::complete(command.identifier(), &data)?,
+                page.revision,
+                page.coverage,
+                lifecycle,
+            ),
+            speakers,
         );
         let terminal_sequence = u64::try_from(records.len()).unwrap_or(u64::MAX);
         Ok(Self {

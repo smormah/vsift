@@ -271,8 +271,7 @@ strict stored record and its session sub-budget (128 records), the sherpa-onnx a
 the schemas and examples, the skill's command table, and an opt-in end-to-end test with the real engine (`P16
 speakers end to end`). **Not built yet:** the managed install (it waits for the managed-install system's extension;
 until then the tool is given with `--diarizer` or found on the filtered `PATH`, and the models with
-`--segmentation-model` and `--embedding-model`), a `setup check` row for the tool, and labels in the JSON Lines
-streams of `transcript get` and `search`. The design as proposed:
+`--segmentation-model` and `--embedding-model`) and a `setup check` row for the tool. The design as proposed:
 
 - **Managed install and adapter.** A new runtime dependency and managed component for the chosen engine and its
   models, pinned by size and SHA-256 in the managed catalogue (Ubuntu x64 managed, like whisper.cpp; on Windows and

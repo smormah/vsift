@@ -457,7 +457,7 @@ pub(crate) fn transcript_stream(
     crate::read_view::refuse_brief_stream(arguments.view)?;
     let excerpt = read_transcript(engine, arguments)?;
     let lifecycle = session_lifecycle(excerpt.session().lifetime())?;
-    TranscriptEvidenceStream::new(&presentation(&excerpt), lifecycle)
+    TranscriptEvidenceStream::with_speakers(&presentation(&excerpt), excerpt.speakers(), lifecycle)
         .map_err(|_| CommandFailure::from(FailureCode::Internal))
 }
 

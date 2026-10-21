@@ -427,3 +427,44 @@ fn a_search_filtered_by_speaker_finds_only_that_speakers_segments() -> TestResul
     assert!(before["data"]["query"].get("speaker").is_none());
     Ok(())
 }
+
+#[test]
+fn the_evidence_stream_carries_the_labels_too() -> TestResult {
+    let revision = f10_revision()?;
+    let session = SessionId::parse(SESSION)?;
+    let (segments, coverage) = page(&revision)?;
+    let presentation = TranscriptPresentation {
+        session_id: &session,
+        revision: &revision,
+        range: TimeRange::new(
+            MediaTime::from_micros(0),
+            MediaTime::from_micros(12_000_000),
+        )?,
+        segments: &segments,
+        next_cursor: None,
+        coverage: &coverage,
+    };
+    let record = record(&revision, false, 1)?;
+    let stream = vsift_contract::TranscriptEvidenceStream::with_speakers(
+        &presentation,
+        Some(&record),
+        lifecycle(),
+    )?;
+    for event in stream.records() {
+        let event = serde_json::to_value(event)?;
+        validate("evidence-event.schema.json", &event)?;
+        validate("transcript-segment.schema.json", &event["record"])?;
+        assert!(event["record"].get("speaker_label").is_some());
+    }
+    let terminal = serde_json::to_value(stream.terminal())?;
+    validate("terminal-event.schema.json", &terminal)?;
+    validate(
+        "transcript-get-stream-data.schema.json",
+        &terminal["result"]["data"],
+    )?;
+    assert_eq!(
+        terminal["result"]["data"]["speakers"]["record_id"],
+        record.id().as_str()
+    );
+    Ok(())
+}

@@ -79,6 +79,11 @@ pub(crate) fn search_stream(
 ) -> Result<SearchEvidenceStream, CommandFailure> {
     crate::read_view::refuse_brief_stream(arguments.view)?;
     let results = run(engine, arguments)?;
-    SearchEvidenceStream::new(&presentation(&results), lifecycle(&results)?)
-        .map_err(|_| CommandFailure::from(FailureCode::Internal))
+    SearchEvidenceStream::with_speakers(
+        &presentation(&results),
+        results.speakers(),
+        results.speaker_filter(),
+        lifecycle(&results)?,
+    )
+    .map_err(|_| CommandFailure::from(FailureCode::Internal))
 }

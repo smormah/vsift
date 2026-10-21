@@ -1669,8 +1669,8 @@ digests, the count asked for, the diarized range and the coverage) and a `speake
 has none, so an answer without speaker labels is exactly what it was. They are distinct from a segment's
 `speaker`, which is a voice tag of a supplied WebVTT file. `search --speaker <label or verified name>`
 searches only the segments with that label; its cursor names the record and the label, and a segment
-with no confident speaker is never found by it (`query.speaker` echoes the filter). The JSON Lines
-streams of `transcript get` and `search` do not carry labels yet.
+with no confident speaker is never found by it (`query.speaker` echoes the filter). With `--events jsonl`
+each evidence record carries its `speaker_label` and the terminal data the `speakers` block.
 
 **Coverage.** The block's `coverage` counts and lists the segments with a label, with no confident
 speaker, and outside the diarized range. When any segment has no label, `transcript speakers` and
