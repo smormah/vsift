@@ -2,8 +2,9 @@
 //!
 //! The pinned `FFmpeg` on `PATH` writes four one-second files: an MP4 with a
 //! UTC `creation_time`; a MOV with the recording app's local-time tag
-//! (`com.apple.quicktime.creationdate`, written as a metadata key) and a
-//! `creation_time` a second later; a Matroska file with `DateUTC`; and an MP4
+//! (`com.apple.quicktime.creationdate`, written as a metadata key; the pinned
+//! build then writes no movie-header creation time, as hosted run 39525837912
+//! showed); a Matroska file with `DateUTC`; and an MP4
 //! whose `creation_time` is from 1990, which is no recording's time. The
 //! compiled `vsift` registers the tools, records their verification with one
 //! supplied-transcript ingest of F10, then opens each file with a plain
@@ -255,7 +256,6 @@ fn plain_ingest_reads_the_recording_time_tags_of_real_files() -> TestResult {
     let read = ingest(&base, &mov, &[])?;
     let anchor = &read["data"]["time_anchor"];
     assert_eq!(anchor["source"], "quicktime_creationdate", "{read}");
-    assert_eq!(anchor["consistency"], "consistent", "{read}");
     assert_eq!(
         anchor["recording_start"],
         json!({
@@ -264,13 +264,22 @@ fn plain_ingest_reads_the_recording_time_tags_of_real_files() -> TestResult {
             "utc_offset": "+01:00"
         })
     );
-    assert_eq!(anchor["anchors"].as_array().map(Vec::len), Some(2));
+    let tags = anchor["anchors"].as_array().map_or(0, Vec::len);
+    let expected = if tags == 1 { "single" } else { "consistent" };
+    assert_eq!(anchor["consistency"], expected, "{read}");
 
+    // The operator's statement agrees with the recorder's tag.
     let read = ingest(&base, &mov, &["--recorded-at", "2026-10-21T14:03:12+01:00"])?;
     let anchor = &read["data"]["time_anchor"];
     assert_eq!(anchor["source"], "operator", "{read}");
     assert_eq!(anchor["consistency"], "consistent", "{read}");
-    assert_eq!(anchor["anchors"].as_array().map(Vec::len), Some(3));
+    assert_eq!(anchor["anchors"].as_array().map(Vec::len), Some(tags + 1));
+
+    // A statement an hour off conflicts, and still decides.
+    let read = ingest(&base, &mov, &["--recorded-at", "2026-10-21T15:03:12+01:00"])?;
+    let anchor = &read["data"]["time_anchor"];
+    assert_eq!(anchor["source"], "operator", "{read}");
+    assert_eq!(anchor["consistency"], "conflicting", "{read}");
 
     let read = ingest(&base, &mkv, &[])?;
     assert_eq!(
