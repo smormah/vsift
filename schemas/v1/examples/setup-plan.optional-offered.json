@@ -1,0 +1,90 @@
+{
+  "command": "setup.plan",
+  "coverage": null,
+  "data": {
+    "actions": [],
+    "catalogue_revision": "ubuntu-24.04-x86_64-2026-10-21-r4",
+    "dependencies": [
+      {
+        "dependency": "ffmpeg",
+        "disposition": "existing_executable_probe_only",
+        "next_step": "Keep this executable selected and verify provider compatibility before use.",
+        "required_authority": null,
+        "status": "available"
+      },
+      {
+        "dependency": "ffprobe",
+        "disposition": "existing_executable_probe_only",
+        "next_step": "Keep this executable selected and verify provider compatibility before use.",
+        "required_authority": null,
+        "status": "available"
+      },
+      {
+        "dependency": "whisper",
+        "disposition": "existing_executable_probe_only",
+        "next_step": "Keep this executable selected and verify provider compatibility before use.",
+        "required_authority": null,
+        "status": "available"
+      }
+    ],
+    "install_needed": false,
+    "local_asr_model": {
+      "disposition": "configured_model_probe_only",
+      "next_step": "Keep the configured model selected and validate it with provider preflight before use.",
+      "required_authority": null,
+      "status": "configured_present_unverified"
+    },
+    "managed_install": "not_required",
+    "operator_decision_required": "Before accepting this plan, tell the operator about each optional component in optional_components in one or two plain sentences (what it does, its licence, its download size, and that each site's terms apply) and ask whether to include it. Include it only after a yes: run its add_command, review that plan and accept it instead. Never accept a plan that includes it without a yes, and never leave it unmentioned. Local investigation does not need it.",
+    "optional_components": [
+      {
+        "actions": [],
+        "add_command": {
+          "arguments": [
+            "setup",
+            "plan",
+            "--profile",
+            "desktop",
+            "--include",
+            "yt_dlp",
+            "--json"
+          ],
+          "executable": "vsift"
+        },
+        "component": "yt_dlp",
+        "download_bytes": 82043018,
+        "installs": [
+          "js_runtime_deno",
+          "yt_dlp"
+        ],
+        "licences": [
+          {
+            "component": "js_runtime_deno",
+            "licence": "MIT"
+          },
+          {
+            "component": "yt_dlp",
+            "licence": "GPL-3.0-or-later (the PyInstaller executable is a combined work; yt-dlp's own source is under the Unlicense)"
+          }
+        ],
+        "next_step": "Not included. Ask the operator first; to add it, run vsift setup plan --profile desktop --include yt_dlp --json and review that plan instead.",
+        "purpose": "Fetches a video from a public web page (YouTube and other sites) when you give VSift a link with ingest --url, using yt-dlp and the JavaScript runtime it needs. Direct HTTPS video links work without it.",
+        "status": "not_included",
+        "summary": "Not included: yt-dlp (optional, about 83 MB to download; GPL-3.0-or-later, with the MIT-licensed Deno runtime) fetches videos from YouTube and other sites when you give VSift a link. Downloading is subject to each site's terms.",
+        "terms_notice": "Downloading from a site is subject to that site's terms, which are yours to follow. VSift does not get round sign-in, DRM, age, region or bot checks."
+      }
+    ],
+    "plan_digest": "a05d2b02e5242fc486d49377776c45faa807a6449fe9b5446c586c135e034936",
+    "profile": "desktop",
+    "readiness": "ready",
+    "stop_new_plans_at": "2033-05-18T03:33:20Z",
+    "target": "ubuntu_24_04_x86_64",
+    "verification_scope": "executable_probe_and_reviewed_catalogue"
+  },
+  "error": null,
+  "lifecycle": null,
+  "operation_id": null,
+  "schema_version": "1",
+  "status": "complete",
+  "warnings": []
+}

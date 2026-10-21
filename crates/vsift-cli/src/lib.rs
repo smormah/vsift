@@ -30,7 +30,7 @@ use std::{ffi::OsString, io, io::Write, path::PathBuf, process::ExitCode, time::
 use clap::{CommandFactory, Parser, error::ErrorKind};
 use command::{
     BundleCommand, Cli, Command, EventFormat, ExecutionProfile, HandoffCommand, JobArguments,
-    JobCommand, SetupCommand, TranscriptCommand,
+    JobCommand, OptionalComponentArgument, SetupCommand, TranscriptCommand,
 };
 use config::{ConfigLayer, EffectiveConfig, HostPolicy};
 use human::HumanDetail;
@@ -38,9 +38,10 @@ use output::{JsonLines, OutputError, OutputMode, OutputWriter, ProcessExit};
 use vsift::{
     ADMISSION_RETRY_AFTER, Cancellation, DEFAULT_LOCAL_ASR_CHECK_BUDGET, Engine, EngineConfig,
     EngineError, EnginePorts, EvaluatedSetupPlan, ExecutableSelections, FailureCode, HostIsolation,
-    IsolationProfile, ManagedRootLocation, OpenSessionError, PlanAcceptanceError, ProgressObserver,
-    SessionRootError, SessionRootLocation, SetupCheckRequest, SetupPlanRequest, SourcePathFault,
-    TranscriptSourceError, UserConfigurationLocation, attest_host_isolation,
+    IsolationProfile, ManagedRootLocation, OpenSessionError, OptionalComponentSet,
+    PlanAcceptanceError, ProgressObserver, SessionRootError, SessionRootLocation,
+    SetupCheckRequest, SetupPlanRequest, SourcePathFault, TranscriptSourceError,
+    UserConfigurationLocation, attest_host_isolation,
 };
 use vsift_contract::{
     ADMISSION_BUSY_REMEDIATION, ADMISSION_CAPACITY_REMEDIATION, ARTIFACT_DIRECTORY_REMEDIATION,
@@ -323,6 +324,7 @@ where
                     setup::ManagedSetupFacts {
                         availability: report.managed_install(),
                         updates: report.managed_updates(),
+                        online_video: report.online_video(),
                     },
                     config.profile,
                     mode,
@@ -358,12 +360,16 @@ where
                 write_session_result(&mut writer, mode, CommandName::SetupConfigureModel, result)
             }
             Some(SetupCommand::Plan(arguments)) => {
-                let result = current_setup_plan(&engine, arguments.profile)
-                    .await
-                    .and_then(|plan| {
-                        complete(CommandName::SetupPlan, plan.presentation())
-                            .map_err(CommandFailure::from)
-                    });
+                let result = current_setup_plan(
+                    &engine,
+                    arguments.profile,
+                    OptionalComponentArgument::set(&arguments.include),
+                )
+                .await
+                .and_then(|plan| {
+                    complete(CommandName::SetupPlan, plan.presentation())
+                        .map_err(CommandFailure::from)
+                });
                 write_session_result(&mut writer, mode, CommandName::SetupPlan, result)
             }
             Some(SetupCommand::Install(arguments)) if mode == OutputMode::JsonLines => {
@@ -534,6 +540,7 @@ where
 async fn current_setup_plan(
     engine: &Engine,
     profile: ExecutionProfile,
+    include: OptionalComponentSet,
 ) -> Result<EvaluatedSetupPlan, CommandFailure> {
     let config = EffectiveConfig::resolve(
         ConfigLayer {
@@ -548,6 +555,7 @@ async fn current_setup_plan(
     Ok(engine
         .plan_setup(SetupPlanRequest {
             profile: config.profile.into(),
+            include,
             probe_timeout: config.probe_timeout,
         })
         .await?)

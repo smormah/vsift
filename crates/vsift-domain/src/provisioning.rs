@@ -40,9 +40,26 @@ pub enum ManagedComponent {
     WhisperCli,
     /// Multilingual Whisper model weights selected for local ASR.
     WhisperModel,
+    /// The JavaScript runtime the optional yt-dlp runs a page's player code
+    /// with (Deno, ADR 0028 section 4). Optional: installed only with
+    /// [`Self::YtDlp`], when the user includes it.
+    JsRuntimeDeno,
+    /// The optional yt-dlp that fetches a video from a public platform page
+    /// (ADR 0028 section 4). Never in a plan unless the user includes it.
+    YtDlp,
 }
 
 impl ManagedComponent {
+    /// Every component, the core three first and then the optional ones, in
+    /// the order a plan installs them.
+    pub const ALL: [Self; 5] = [
+        Self::MediaTools,
+        Self::WhisperCli,
+        Self::WhisperModel,
+        Self::JsRuntimeDeno,
+        Self::YtDlp,
+    ];
+
     /// Stable identifier used by the catalogue and public plans.
     #[must_use]
     pub const fn identifier(self) -> &'static str {
@@ -50,6 +67,27 @@ impl ManagedComponent {
             Self::MediaTools => "ffmpeg_ffprobe",
             Self::WhisperCli => "whisper_cli",
             Self::WhisperModel => "whisper_model",
+            Self::JsRuntimeDeno => "js_runtime_deno",
+            Self::YtDlp => "yt_dlp",
+        }
+    }
+
+    /// The component an identifier names, for a value a user typed.
+    #[must_use]
+    pub fn from_identifier(identifier: &str) -> Option<Self> {
+        Self::ALL
+            .into_iter()
+            .find(|component| component.identifier() == identifier)
+    }
+
+    /// Whether the component is optional: never in a plan unless the user
+    /// includes it, and its failure never fails the core installation
+    /// (#409). Local investigation never needs an optional component.
+    #[must_use]
+    pub const fn is_optional(self) -> bool {
+        match self {
+            Self::MediaTools | Self::WhisperCli | Self::WhisperModel => false,
+            Self::JsRuntimeDeno | Self::YtDlp => true,
         }
     }
 }
@@ -131,6 +169,9 @@ pub enum ManagedArtifactFormat {
     TarGz,
     /// One unarchived regular file.
     RawFile,
+    /// A zip archive of exactly one regular file, stored or deflated, read by
+    /// VSift's bounded one-entry reader.
+    Zip,
 }
 
 impl ManagedArtifactFormat {
@@ -141,6 +182,7 @@ impl ManagedArtifactFormat {
             Self::TarXz => "tar_xz",
             Self::TarGz => "tar_gz",
             Self::RawFile => "raw_file",
+            Self::Zip => "zip",
         }
     }
 }
@@ -381,6 +423,35 @@ mod tests {
         assert_eq!(at_bound.len(), MAX_SHARED_LIBRARY_NAME_BYTES);
         assert!(SharedLibraryName::parse(&at_bound).is_some());
         assert!(SharedLibraryName::parse(&format!("a{at_bound}")).is_none());
+    }
+
+    #[test]
+    fn optional_components_are_named_and_only_the_online_video_ones_are_optional() {
+        use super::ManagedComponent;
+        let identifiers = ManagedComponent::ALL.map(ManagedComponent::identifier);
+        assert_eq!(
+            identifiers,
+            [
+                "ffmpeg_ffprobe",
+                "whisper_cli",
+                "whisper_model",
+                "js_runtime_deno",
+                "yt_dlp"
+            ]
+        );
+        for component in ManagedComponent::ALL {
+            assert_eq!(
+                ManagedComponent::from_identifier(component.identifier()),
+                Some(component)
+            );
+            assert!(super::is_canonical_managed_key(component.identifier()));
+        }
+        assert_eq!(
+            ManagedComponent::ALL.map(ManagedComponent::is_optional),
+            [false, false, false, true, true]
+        );
+        assert_eq!(ManagedComponent::from_identifier("YT_DLP"), None);
+        assert_eq!(ManagedComponent::from_identifier("yt-dlp"), None);
     }
 
     #[test]

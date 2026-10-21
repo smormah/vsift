@@ -1,0 +1,66 @@
+{
+  "command": "setup.check",
+  "dependencies": [
+    {
+      "capability": "media_processing",
+      "dependency": "ffmpeg",
+      "detail": "fixture 1",
+      "lookup": "managed_version",
+      "remediation": null,
+      "status": "available",
+      "validation": "executable_probe_only"
+    },
+    {
+      "capability": "media_processing",
+      "dependency": "ffprobe",
+      "detail": "fixture 1",
+      "lookup": "managed_version",
+      "remediation": null,
+      "status": "available",
+      "validation": "executable_probe_only"
+    },
+    {
+      "capability": "transcription",
+      "dependency": "whisper",
+      "detail": "fixture 1",
+      "lookup": "managed_version",
+      "remediation": null,
+      "status": "available",
+      "validation": "executable_probe_only"
+    }
+  ],
+  "local_asr": {
+    "model": {
+      "profile": null,
+      "status": "not_selected"
+    },
+    "verification": {
+      "check": null,
+      "not_run_reason": "model_not_selected",
+      "reason": null,
+      "source": null,
+      "status": "not_run"
+    }
+  },
+  "local_asr_model": "not_checked",
+  "managed_updates": [],
+  "online_video": {
+    "add_command": null,
+    "components": [
+      {
+        "component": "js_runtime_deno",
+        "version": "deno-2.9.7-x86_64-linux-gnu"
+      },
+      {
+        "component": "yt_dlp",
+        "version": "yt-dlp-2026.08.19-linux-x86_64"
+      }
+    ],
+    "next_step": "Online videos can be fetched with ingest --url: yt-dlp and its JavaScript runtime are installed. Sites change and can break extraction; a newer reviewed yt-dlp comes with a VSift release, and managed_updates names it when one is known.",
+    "status": "installed"
+  },
+  "profile": "desktop",
+  "schema_version": "1",
+  "status": "ready",
+  "verification_scope": "executable_probe_only"
+}

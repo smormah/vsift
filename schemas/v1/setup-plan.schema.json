@@ -37,6 +37,15 @@
         "plan_digest": { "oneOf": [{ "type": "null" }, { "type": "string", "pattern": "^[0-9a-f]{64}$" }] },
         "install_needed": { "type": "boolean" },
         "actions": { "type": "array", "maxItems": 3, "items": { "$ref": "#/$defs/action" } },
+        "optional_components": {
+          "description": "Added in 0.3.0 (#409), absent from earlier plans: each optional component the plan includes, offers or cannot offer here. A desktop plan lists every optional component; a worker plan only an included one. status included: its actions (the JavaScript runtime, then yt-dlp) are part of this plan and its digest and are installed after the core; a failure of theirs never fails the core. not_included: offered and left out; add_command is the vsift command that makes the plan with it. unavailable: no managed version on this host. summary is one plain sentence to relay to the operator; download_bytes is null when unavailable.",
+          "type": "array", "maxItems": 4,
+          "items": { "$ref": "#/$defs/optional" }
+        },
+        "operator_decision_required": {
+          "description": "Added in 0.3.0 (#409): when the plan offers or includes an optional component, the instruction to whoever runs setup to tell the operator about it and ask before accepting the plan; null otherwise.",
+          "oneOf": [{ "type": "null" }, { "type": "string", "minLength": 1, "maxLength": 1024 }]
+        },
         "dependencies": {
           "type": "array", "minItems": 3, "maxItems": 3,
           "items": {
@@ -63,20 +72,45 @@
     "lifecycle": { "type": "null" }
   },
   "$defs": {
+    "optional": {
+      "type": "object", "additionalProperties": false,
+      "required": ["component", "status", "installs", "summary", "purpose", "download_bytes", "licences", "terms_notice", "add_command", "actions", "next_step"],
+      "properties": {
+        "component": { "enum": ["yt_dlp"] },
+        "status": { "enum": ["included", "not_included", "unavailable"] },
+        "installs": { "type": "array", "minItems": 1, "maxItems": 4, "items": { "enum": ["js_runtime_deno", "yt_dlp"] } },
+        "summary": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "purpose": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "download_bytes": { "oneOf": [{ "type": "null" }, { "type": "integer", "minimum": 1 }] },
+        "licences": { "type": "array", "maxItems": 4, "items": {
+          "type": "object", "additionalProperties": false, "required": ["component", "licence"], "properties": {
+            "component": { "enum": ["js_runtime_deno", "yt_dlp"] },
+            "licence": { "type": "string", "minLength": 1, "maxLength": 256 }
+          } } },
+        "terms_notice": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "add_command": { "oneOf": [{ "type": "null" }, {
+          "type": "object", "additionalProperties": false, "required": ["executable", "arguments"], "properties": {
+            "executable": { "const": "vsift" },
+            "arguments": { "type": "array", "minItems": 1, "maxItems": 16, "items": { "type": "string", "minLength": 1, "maxLength": 64 } }
+          } }] },
+        "actions": { "type": "array", "maxItems": 4, "items": { "$ref": "#/$defs/action" } },
+        "next_step": { "$ref": "#/$defs/step" }
+      }
+    },
     "step": { "type": "string", "minLength": 1, "maxLength": 512 },
     "action": {
       "type": "object", "additionalProperties": false,
       "required": ["id", "state", "component", "version", "publisher", "source_url", "bytes", "sha256", "format", "archive_limits", "selected_files", "archive_links", "runtime_copies", "licence", "notice_url", "source_code_url", "trust_limit", "licence_scope", "destination", "permissions", "change", "required_authority", "files"],
       "properties": {
-        "id": { "enum": ["install-ffmpeg_ffprobe", "install-whisper_cli", "install-whisper_model"] },
+        "id": { "enum": ["install-ffmpeg_ffprobe", "install-whisper_cli", "install-whisper_model", "install-js_runtime_deno", "install-yt_dlp"] },
         "state": { "enum": ["pending", "current"] },
-        "component": { "enum": ["ffmpeg_ffprobe", "whisper_cli", "whisper_model"] },
+        "component": { "enum": ["ffmpeg_ffprobe", "whisper_cli", "whisper_model", "js_runtime_deno", "yt_dlp"] },
         "version": { "type": "string", "minLength": 1, "maxLength": 128 },
         "publisher": { "type": "string", "minLength": 1, "maxLength": 128 },
         "source_url": { "type": "string", "pattern": "^https://", "maxLength": 512 },
         "bytes": { "type": "integer", "minimum": 1, "maximum": 1073741824 },
         "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
-        "format": { "enum": ["tar_xz", "tar_gz", "raw_file"] },
+        "format": { "enum": ["tar_xz", "tar_gz", "raw_file", "zip"] },
         "archive_limits": {
           "oneOf": [
             { "type": "null" },

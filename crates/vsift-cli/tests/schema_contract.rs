@@ -186,6 +186,16 @@ fn emitted_json_matches_frozen_examples() -> Result<(), Box<dyn std::error::Erro
         {
             dependency["remediation"]["managed_install"] = Value::from("unavailable_target");
         }
+        // Nor is the optional online-video component offered there (#409).
+        blocked["online_video"] = serde_json::json!({
+            "status": "unavailable",
+            "components": [],
+            "next_step": vsift_contract::online_video_check_step(
+                &vsift_application::OnlineVideoCapability::Unavailable,
+                vsift_application::SetupProfile::Desktop,
+            ),
+            "add_command": null,
+        });
     }
     assert_eq!(serde_json::from_slice::<Value>(&setup.stdout)?, blocked);
 

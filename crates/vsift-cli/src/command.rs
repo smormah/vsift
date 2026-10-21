@@ -5,8 +5,9 @@ use std::path::PathBuf;
 use clap::{ArgGroup, Args, Parser, Subcommand, ValueEnum};
 use vsift::{
     CropRectangle, DurabilityRequirement, EvidenceId, FrameSelection, IsolationProfile, JobId,
-    ManagedComponent, ManagedVersionKey, ManagedVersionKeyError, OperationId, RuntimeDependency,
-    SessionId, SetupProfile, TranscriptRevisionId, VisualCandidateId,
+    ManagedComponent, ManagedVersionKey, ManagedVersionKeyError, OperationId, OptionalComponent,
+    OptionalComponentSet, RuntimeDependency, SessionId, SetupProfile, TranscriptRevisionId,
+    VisualCandidateId,
 };
 use vsift_contract::{CommandName, ResultView};
 
@@ -227,6 +228,32 @@ pub(crate) struct SetupPlanArguments {
     /// Capability profile whose dependencies should be planned.
     #[arg(long, value_enum)]
     pub profile: ExecutionProfile,
+    /// Include an optional component (repeatable). `yt_dlp` fetches videos
+    /// from YouTube and other sites, with the JavaScript runtime it needs;
+    /// ask the operator first. The plan lists what it leaves out.
+    #[arg(long = "include", value_enum, value_name = "COMPONENT")]
+    pub include: Vec<OptionalComponentArgument>,
+}
+
+/// An optional component `setup plan --include` adds, named as the JSON
+/// results name it.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
+pub(crate) enum OptionalComponentArgument {
+    /// yt-dlp and the JavaScript runtime it needs.
+    #[value(name = "yt_dlp")]
+    YtDlp,
+}
+
+impl OptionalComponentArgument {
+    /// The set of optional components `arguments` include.
+    pub(crate) fn set(arguments: &[Self]) -> OptionalComponentSet {
+        arguments.iter().fold(
+            OptionalComponentSet::EMPTY,
+            |set, argument| match argument {
+                Self::YtDlp => set.with(OptionalComponent::YtDlp),
+            },
+        )
+    }
 }
 
 /// Explicit installation-plan acceptance.
@@ -291,6 +318,12 @@ pub(crate) enum ManagedComponentArgument {
     /// The speech-recognition model.
     #[value(name = "whisper_model")]
     WhisperModel,
+    /// The optional yt-dlp's JavaScript runtime.
+    #[value(name = "js_runtime_deno")]
+    JsRuntimeDeno,
+    /// The optional yt-dlp.
+    #[value(name = "yt_dlp")]
+    YtDlp,
 }
 
 impl From<ManagedComponentArgument> for ManagedComponent {
@@ -299,6 +332,8 @@ impl From<ManagedComponentArgument> for ManagedComponent {
             ManagedComponentArgument::MediaTools => Self::MediaTools,
             ManagedComponentArgument::WhisperCli => Self::WhisperCli,
             ManagedComponentArgument::WhisperModel => Self::WhisperModel,
+            ManagedComponentArgument::JsRuntimeDeno => Self::JsRuntimeDeno,
+            ManagedComponentArgument::YtDlp => Self::YtDlp,
         }
     }
 }

@@ -23,8 +23,9 @@ use vsift_domain::MAX_MANAGED_KEY_BYTES;
 use vsift_domain::{ArtifactIntegrity, ManagedComponent, is_canonical_managed_key};
 
 use crate::{
-    ArchiveInventoryBounds, ArtifactTransferError, GzipTarInventoryError, ReviewedArchiveAlias,
-    ReviewedArchiveFile, TarInventoryError, XzTarInventoryError,
+    ArchiveInventoryBounds, ArtifactTransferError, GzipTarInventoryError, OneEntryZipError,
+    ReviewedArchiveAlias, ReviewedArchiveFile, ReviewedZipEntry, TarInventoryError,
+    XzTarInventoryError,
     archive_inventory::safe_archive_path,
     bounded_tar_inventory::safe_staging_name,
     fault_point::{
@@ -104,6 +105,14 @@ pub enum ReviewedPayloadArchive {
         /// Highest reviewed uncompressed tar-stream byte count.
         max_tar_bytes: u64,
     },
+    /// A zip of exactly one regular file, read by the bounded one-entry
+    /// reader (ADR 0028 section 4).
+    Zip {
+        /// The archive's exact reviewed size.
+        archive_bytes: u64,
+        /// Highest reviewed expanded entry byte count.
+        max_expanded_bytes: u64,
+    },
 }
 
 /// Typed reason reviewed archive bytes cannot become an unactivated payload.
@@ -121,6 +130,8 @@ pub enum ManagedPayloadError {
     GzipTar(GzipTarInventoryError),
     /// XZ/tar inventory, selection or staging failed.
     XzTar(XzTarInventoryError),
+    /// The one-entry zip reader refused the archive or could not stage it.
+    Zip(OneEntryZipError),
 }
 
 /// One reviewed regular-file alias, flattened to a selected file's exact bytes.
@@ -259,6 +270,7 @@ impl fmt::Display for ManagedPayloadError {
             Self::Tar(_) => "reviewed tar payload could not be staged",
             Self::GzipTar(_) => "reviewed gzip/tar payload could not be staged",
             Self::XzTar(_) => "reviewed XZ/tar payload could not be staged",
+            Self::Zip(_) => "reviewed zip payload could not be staged",
         })
     }
 }
@@ -1089,6 +1101,18 @@ impl StagedManagedArtifact {
                 &payload,
             )
             .map_err(ManagedPayloadError::XzTar),
+            ReviewedPayloadArchive::Zip {
+                archive_bytes,
+                max_expanded_bytes,
+            } => stage_zip_selected_file(
+                artifact,
+                archive_bytes,
+                max_expanded_bytes,
+                reviewed_aliases,
+                selected_files,
+                &payload,
+            )
+            .map(|()| Vec::new()),
         };
         if let Err(error) = result {
             self.remove_empty_payload(payload)
@@ -1300,6 +1324,43 @@ struct PlannedRuntimeFile {
     source_selected: String,
     integrity: ArtifactIntegrity,
     mode: RuntimeFileMode,
+}
+
+/// Stages the one reviewed file of a zip artifact under its flat name.
+///
+/// A zip is reviewed as exactly one regular file with no link headers, so a
+/// selection of anything else, or any alias, is an invalid review.
+fn stage_zip_selected_file(
+    artifact: fs::File,
+    archive_bytes: u64,
+    max_expanded_bytes: u64,
+    reviewed_aliases: &[ReviewedArchiveAlias<'_>],
+    selected_files: &[ReviewedArchiveFile<'_>],
+    payload: &Dir,
+) -> Result<(), ManagedPayloadError> {
+    let ([selected], []) = (selected_files, reviewed_aliases) else {
+        return Err(ManagedPayloadError::InvalidReview);
+    };
+    let Some(name) = selected
+        .path
+        .rsplit('/')
+        .next()
+        .filter(|name| portable_runtime_name(name))
+    else {
+        return Err(ManagedPayloadError::InvalidReview);
+    };
+    crate::stage_one_entry_zip(
+        artifact,
+        archive_bytes,
+        max_expanded_bytes,
+        ReviewedZipEntry {
+            path: selected.path,
+            integrity: selected.integrity,
+        },
+        payload,
+        name,
+    )
+    .map_err(ManagedPayloadError::Zip)
 }
 
 fn portable_runtime_name(name: &str) -> bool {
@@ -1943,6 +2004,10 @@ pub enum ManagedRuntimeRole {
     WhisperCli,
     /// The speech-recognition model file.
     SpeechModel,
+    /// The managed Deno executable, the optional yt-dlp's JavaScript runtime.
+    Deno,
+    /// The optional yt-dlp executable.
+    YtDlp,
 }
 
 /// Why a staged artifact could not become an owned smoke candidate.

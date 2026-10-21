@@ -49,6 +49,7 @@ mod managed_store_lifecycle;
 mod media_tool_verification;
 mod media_tool_verification_cache;
 mod offline_artifact_import;
+mod one_entry_zip;
 mod private_user_root;
 mod process_dependency_probe;
 mod process_supervisor;
@@ -174,6 +175,10 @@ pub use media_tool_verification_cache::{
     media_tool_fingerprint,
 };
 pub use offline_artifact_import::{ArtifactImportError, import_reviewed_artifact};
+pub use one_entry_zip::{
+    MAX_ZIP_ARCHIVE_BYTES, MAX_ZIP_ENTRY_BYTES, OneEntryZipError, ReviewedZipEntry,
+    read_one_entry_zip, stage_one_entry_zip,
+};
 pub use process_dependency_probe::{
     DEFAULT_PROBE_TIMEOUT, ExplicitProbePaths, ProcessDependencyProbe,
 };

@@ -8,11 +8,12 @@ use std::{
 
 use vsift_application::{
     DiagnoseRuntime, LocalAsrSetupStatus, ManagedPlanAvailability, ManagedPlanObservation,
-    ManagedSetupPlan, ManagedUpdate, ObservedModel, RuntimeDiagnosis, SetupProfile,
-    SetupSelectionState, plan_managed_setup,
+    ManagedSetupPlan, ManagedUpdate, ObservedModel, OnlineVideoCapability, OptionalComponent,
+    OptionalComponentSet, RuntimeDiagnosis, SetupProfile, SetupSelectionState,
+    plan_managed_setup_including,
 };
 use vsift_contract::{DependencyLookup, SavedSetupPlan, SetupPlanResponse};
-use vsift_domain::RuntimeDependency;
+use vsift_domain::{ManagedComponent, RuntimeDependency};
 use vsift_infrastructure::{
     ExplicitProbePaths, ProcessDependencyProbe, accepted_ubuntu_catalogue, detect_managed_target,
 };
@@ -110,9 +111,17 @@ pub struct SetupCheckReport {
     local_asr: LocalAsrSetupStatus,
     managed_install: ManagedPlanAvailability,
     managed_updates: Vec<ManagedUpdate>,
+    online_video: OnlineVideoCapability,
 }
 
 impl SetupCheckReport {
+    /// Whether the optional online-video components are installed (#409);
+    /// it never changes the local-video readiness.
+    #[must_use]
+    pub const fn online_video(&self) -> &OnlineVideoCapability {
+        &self.online_video
+    }
+
     /// The managed versions this check used that the current catalogue
     /// supersedes, in component order: each names the pin that replaces it
     /// and why, so the user can plan and install it.
@@ -177,6 +186,9 @@ fn presence(selections: &ExecutableSelections) -> [bool; 3] {
 pub struct SetupPlanRequest {
     /// Profile whose dependencies are planned.
     pub profile: SetupProfile,
+    /// The optional components to include (`setup plan --include`, #409);
+    /// [`OptionalComponentSet::EMPTY`] for the default plan.
+    pub include: OptionalComponentSet,
     /// Total deadline shared by the dependency probes of one look at the
     /// tools; hosts normally pass [`DEFAULT_PROBE_TIMEOUT`]. A probe that
     /// times out causes no managed action, and the plan says so.
@@ -309,6 +321,8 @@ impl Engine {
                 request.local_asr_budget,
             )
             .await?;
+        let managed_install = self.managed_install_availability()?;
+        let online_video = online_video_capability(managed_install, &mut lookup);
         // Only versions the check already opened (and verified) are compared,
         // so this adds no hashing. A version is reported only when the
         // catalogue lists it as superseded (`update_for`).
@@ -326,8 +340,9 @@ impl Engine {
             selected,
             managed,
             local_asr,
-            managed_install: self.managed_install_availability()?,
+            managed_install,
             managed_updates,
+            online_video,
         })
     }
 
@@ -400,6 +415,7 @@ impl Engine {
         observation.current = plan
             .actions
             .iter()
+            .chain(plan.optional_actions())
             .filter(|action| {
                 lookup
                     .selected_version(action.artifact.component)
@@ -443,11 +459,12 @@ impl Engine {
         };
         let probe =
             ProcessDependencyProbe::with_explicit_paths(request.probe_timeout, configured.clone());
-        let plan = plan_managed_setup(
+        let plan = plan_managed_setup_including(
             request.profile,
             DiagnoseRuntime::new(probe).execute().await,
             detect_managed_target(),
             selections,
+            request.include,
             now_unix_seconds,
             Some(catalogue),
         );
@@ -501,6 +518,32 @@ impl Engine {
     }
 }
 
+/// Whether the optional online-video components are installed: both the
+/// runtime and yt-dlp selected and verified (opening them hashes their
+/// files, as every managed lookup does).
+fn online_video_capability(
+    managed_install: ManagedPlanAvailability,
+    lookup: &mut crate::managed::ManagedLookup<'_>,
+) -> OnlineVideoCapability {
+    if managed_install != ManagedPlanAvailability::Qualified {
+        return OnlineVideoCapability::Unavailable;
+    }
+    let installed: Vec<(ManagedComponent, String)> = OptionalComponent::YtDlp
+        .components()
+        .iter()
+        .filter_map(|component| {
+            lookup
+                .selected_version(*component)
+                .map(|version| (*component, version))
+        })
+        .collect();
+    if installed.len() == OptionalComponent::YtDlp.components().len() {
+        OnlineVideoCapability::Installed(installed)
+    } else {
+        OnlineVideoCapability::NotInstalled
+    }
+}
+
 /// Diagnoses current dependencies and builds plan authority plus its
 /// presentation on a machine with no managed tier (the unit tests' plans).
 #[cfg(test)]
@@ -512,7 +555,7 @@ async fn evaluate_plan<P: vsift_application::DependencyProbe>(
     now_unix_seconds: u64,
     catalogue: Option<vsift_application::AcceptedManagedCatalogue>,
 ) -> EvaluatedSetupPlan {
-    let plan = plan_managed_setup(
+    let plan = vsift_application::plan_managed_setup(
         profile,
         DiagnoseRuntime::new(probe).execute().await,
         target,

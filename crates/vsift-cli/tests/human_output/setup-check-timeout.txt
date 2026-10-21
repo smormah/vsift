@@ -10,4 +10,6 @@ Status: blocked
 Media executable probes are blocked until FFmpeg and FFprobe respond.
 Local ASR model: not registered (setup configure-model --file <path>)
 Local ASR check: not run: no model is registered
+Online videos (optional): unavailable
+  A managed yt-dlp is offered on Ubuntu 24.04 x86-64 only. Direct HTTPS video links (ingest --url) work without it, as does every local file.
 Executable probes only show that each tool responds. The local ASR check transcribes a short speech clip built into VSift with the selected tools and model. A supplied transcript can avoid local ASR.

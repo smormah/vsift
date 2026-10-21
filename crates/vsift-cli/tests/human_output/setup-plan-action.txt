@@ -7,6 +7,10 @@ Managed installation: catalogue_accepted
 Catalogue: 2026-09-20.1 (no new plans after 2026-12-31T00:00:00Z)
 Plan digest: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 
+Optional components:
+  Not available here: yt-dlp (optional; GPL-3.0-or-later, with the MIT-licensed Deno runtime) fetches videos from YouTube and other sites when you give VSift a link. Downloading is subject to each site's terms.
+  Next: A managed yt-dlp is offered on Ubuntu 24.04 x86-64 only, so this plan cannot include it. Direct HTTPS video links (ingest --url) work without it, as does every local file.
+
 ffmpeg: missing, manual_selection_required (needs user authority)
   Next: Install a trusted FFmpeg or register a working one with setup configure ffmpeg --executable <absolute-path>, then run setup check. No need to search folders: ask the user where it is.
 ffprobe: missing, manual_selection_required (needs user authority)

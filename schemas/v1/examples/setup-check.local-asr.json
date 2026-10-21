@@ -14,5 +14,22 @@
     "model": { "status": "known_pinned", "profile": "base" },
     "verification": { "status": "verified", "source": "ran_now", "not_run_reason": null, "check": null, "reason": null }
   },
-  "managed_updates": []
+  "managed_updates": [],
+  "online_video": {
+    "add_command": {
+      "arguments": [
+        "setup",
+        "plan",
+        "--profile",
+        "desktop",
+        "--include",
+        "yt_dlp",
+        "--json"
+      ],
+      "executable": "vsift"
+    },
+    "components": [],
+    "next_step": "Online videos from YouTube and other sites need the optional yt-dlp component, which is not installed; local investigation does not need it. Ask the operator first; to add it, run vsift setup plan --profile desktop --include yt_dlp --json and accept that plan.",
+    "status": "not_installed"
+  }
 }

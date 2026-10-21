@@ -8,8 +8,8 @@ use std::{io::Write, path::Path};
 
 use vsift::{
     Cancellation, Engine, FailureCode, LocalAsrSetupStatus, MANAGED_INSTALL_RETRY_AFTER_MS,
-    ManagedPlanAvailability, ManagedRemovalTarget, ManagedUpdate, ProgressObserver,
-    RuntimeDependency, RuntimeDiagnosis, SetupInstallRequest,
+    ManagedPlanAvailability, ManagedRemovalTarget, ManagedUpdate, OnlineVideoCapability,
+    ProgressObserver, RuntimeDependency, RuntimeDiagnosis, SetupInstallRequest,
 };
 use vsift_contract::{
     CommandName, DependencyLookup, JsonLimits, OperationResponse, STALE_PLAN_REMEDIATION,
@@ -35,6 +35,8 @@ pub(crate) struct ManagedSetupFacts<'report> {
     pub(crate) availability: ManagedPlanAvailability,
     /// The managed versions the check opened that the catalogue supersedes.
     pub(crate) updates: &'report [ManagedUpdate],
+    /// Whether the optional online-video components are installed.
+    pub(crate) online_video: &'report OnlineVideoCapability,
 }
 
 /// Writes one completed setup check and returns its compatible exit status.
@@ -60,6 +62,7 @@ where
     let ManagedSetupFacts {
         availability: managed_install,
         updates: managed_updates,
+        online_video,
     } = managed;
     let response = SetupCheckResponse::new(
         diagnosis,
@@ -68,17 +71,11 @@ where
         managed_install,
         &local_asr,
     )
-    .with_managed_updates(managed_updates);
+    .with_managed_updates(managed_updates)
+    .with_online_video(online_video, profile.into());
     let output_result = match mode {
         OutputMode::Human => {
-            match crate::human::setup_check(
-                diagnosis,
-                local_asr,
-                managed_install,
-                managed_updates,
-                profile,
-                &lookup,
-            ) {
+            match crate::human::setup_check(diagnosis, local_asr, managed, profile, &lookup) {
                 Ok(text) => writer.write_rendered_stdout(&text),
                 Err(_) => Err(crate::output::OutputError::TooLarge),
             }
@@ -157,7 +154,13 @@ pub(crate) async fn install(
     )
     .with_cleanup(&outcome.cleanup().stages, &outcome.cleanup().versions);
     match outcome.report().first_failure() {
+        // The core is installed. When the optional part was not, the
+        // result is still a success (#409), with a warning so it is seen.
         None => OperationResponse::complete(CommandName::SetupInstall.identifier(), &data)
+            .map(|response| match data.optional_warning() {
+                Some(warning) => response.with_warnings(&[warning]),
+                None => response,
+            })
             .map_err(|_| CommandFailure::from(FailureCode::Internal)),
         Some((component, failure)) => {
             let code = failure
@@ -264,8 +267,8 @@ mod tests {
         AsrFailure, AsrFailureReason, AsrStage, DependencyState, DependencyStatus,
         LocalAsrCheckFailure, LocalAsrCheckOutcome, LocalAsrModelStatus, LocalAsrNotRunReason,
         LocalAsrSetupStatus, LocalAsrVerificationFailure, LocalAsrVerificationSource,
-        ManagedPlanAvailability, ReviewedAsrModel, RuntimeDependency, RuntimeDiagnosis,
-        RuntimeReadiness,
+        ManagedPlanAvailability, OnlineVideoCapability, ReviewedAsrModel, RuntimeDependency,
+        RuntimeDiagnosis, RuntimeReadiness,
     };
     use vsift_contract::DependencyLookup;
 
@@ -331,6 +334,7 @@ mod tests {
                 ManagedSetupFacts {
                     availability: ManagedPlanAvailability::Qualified,
                     updates: &[],
+                    online_video: &OnlineVideoCapability::NotInstalled,
                 },
                 ExecutionProfile::Desktop,
                 OutputMode::Json,
@@ -362,6 +366,7 @@ mod tests {
             ManagedSetupFacts {
                 availability: ManagedPlanAvailability::Qualified,
                 updates: &[],
+                online_video: &OnlineVideoCapability::NotInstalled,
             },
             ExecutionProfile::Desktop,
             OutputMode::Human,
@@ -386,6 +391,7 @@ mod tests {
             ManagedSetupFacts {
                 availability: ManagedPlanAvailability::Qualified,
                 updates: &[],
+                online_video: &OnlineVideoCapability::NotInstalled,
             },
             ExecutionProfile::Worker,
             OutputMode::Human,
@@ -457,6 +463,7 @@ mod tests {
                 ManagedSetupFacts {
                     availability: ManagedPlanAvailability::Qualified,
                     updates: &[],
+                    online_video: &OnlineVideoCapability::NotInstalled,
                 },
                 ExecutionProfile::Desktop,
                 OutputMode::Human,

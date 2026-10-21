@@ -16,5 +16,22 @@
   },
   "managed_updates": [
     { "component": "whisper_cli", "selected_version": "whisper.cpp-v1.9.2-ubuntu-x64", "reviewed_version": "whisper.cpp-v1.9.5-ubuntu-x64", "reason": "security_fixes", "next_step": "The reviewed build is now whisper.cpp-v1.9.5-ubuntu-x64, which carries security fixes the selected one lacks: review setup plan, then accept it with setup install, which installs and selects it." }
-  ]
+  ],
+  "online_video": {
+    "add_command": {
+      "arguments": [
+        "setup",
+        "plan",
+        "--profile",
+        "desktop",
+        "--include",
+        "yt_dlp",
+        "--json"
+      ],
+      "executable": "vsift"
+    },
+    "components": [],
+    "next_step": "Online videos from YouTube and other sites need the optional yt-dlp component, which is not installed; local investigation does not need it. Ask the operator first; to add it, run vsift setup plan --profile desktop --include yt_dlp --json and accept that plan.",
+    "status": "not_installed"
+  }
 }

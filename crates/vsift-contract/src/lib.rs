@@ -192,8 +192,9 @@ pub use handoff::{
 };
 pub use install::{
     ARTIFACT_DIRECTORY_REMEDIATION, InstallSource, MANAGED_INSTALL_BUSY_REMEDIATION,
-    MANAGED_STORAGE_REMEDIATION, MANAGED_UNAVAILABLE_REMEDIATION, STALE_PLAN_REMEDIATION,
-    SetupInstallResponse, setup_install_failure_summary,
+    MANAGED_STORAGE_REMEDIATION, MANAGED_UNAVAILABLE_REMEDIATION,
+    ONLINE_VIDEO_NOT_INSTALLED_WARNING, STALE_PLAN_REMEDIATION, SetupInstallResponse,
+    optional_install_failure_summary, setup_install_failure_summary,
 };
 pub use job::{
     JOB_CANCELLED_REMEDIATION, JOB_INTERRUPTED_REMEDIATION, JOB_NOT_RESUMABLE_REMEDIATION,
@@ -234,8 +235,9 @@ pub use session::{
 };
 pub use setup::{
     ConfiguredModelResponse, ConfiguredSelectionResponse, DependencyLookup, MAX_PROBE_TIMEOUT,
-    NO_FOLDER_SEARCH_ADVICE, ProbeTimeHeadroom, SavedSetupPlan, SetupCheckResponse,
-    SetupPlanResponse, explicit_path_option, managed_update_next_step, probe_deadline_text,
+    NO_FOLDER_SEARCH_ADVICE, OPERATOR_DECISION_INSTRUCTION, OptionalComponentView,
+    ProbeTimeHeadroom, SITE_TERMS_NOTICE, SavedSetupPlan, SetupCheckResponse, SetupPlanResponse,
+    explicit_path_option, managed_update_next_step, online_video_check_step, probe_deadline_text,
 };
 pub use storage::{
     PrivateFolder, SESSION_NOT_PUBLISHED_REMEDIATION, SESSION_ROOT_NAME_REMEDIATION,

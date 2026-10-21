@@ -22,9 +22,12 @@ use vsift_application::{
     CompatibilitySmokeCheck, CompatibilitySmokeFailure, CompatibilitySmokeFailureReason,
     CompatibilitySmokeVerdict, ComponentInstallFailure, ComponentInstallOutcome,
     DownloadFailureReason, InstallFailureReason, InstallStep, ManagedComponentInstaller,
-    ManagedSetupAction, ProgressSink, ReviewedCompatibilityPolicy, ReviewedManagedFile,
-    RuntimeDiagnosis, SetupProfile, SetupSelectionState, StageDisposal, StageFailure,
-    StageRetentionReason, StagedManagedComponent, install_managed_components, plan_managed_setup,
+    ManagedPlanAvailability, ManagedSetupAction, ManagedSetupPlan, OptionalComponent,
+    OptionalComponentDisposition, OptionalComponentSet, ProgressSink, ReviewedBanner,
+    ReviewedCompatibilityPolicy, ReviewedManagedFile, RuntimeDiagnosis, SetupProfile,
+    SetupSelectionState, StageDisposal, StageFailure, StageRetentionReason, StagedManagedComponent,
+    install_managed_components, install_managed_plan, plan_managed_setup,
+    plan_managed_setup_including,
 };
 use vsift_domain::{
     ArtifactIntegrity, DependencyState, DependencyStatus, FailureCode, ManagedArtifactFormat,
@@ -118,6 +121,8 @@ const fn key(component: ManagedComponent) -> u8 {
         ManagedComponent::MediaTools => 0,
         ManagedComponent::WhisperCli => 1,
         ManagedComponent::WhisperModel => 2,
+        ManagedComponent::JsRuntimeDeno => 3,
+        ManagedComponent::YtDlp => 4,
     }
 }
 
@@ -255,7 +260,9 @@ fn test_catalogue() -> Result<AcceptedManagedCatalogue, Box<dyn std::error::Erro
             inference_deadline_seconds: 180,
             audio_sample_rate_hz: 16_000,
             audio_channels: 1,
+            optional_banners: Vec::new(),
         },
+        optional_artifacts: Vec::new(),
         superseded: Vec::new(),
     })
 }
@@ -677,4 +684,451 @@ fn every_failure_reason_has_one_code_and_identifier() {
     identifiers.sort_unstable();
     identifiers.dedup();
     assert_eq!(identifiers.len(), count);
+}
+
+const DENO: ManagedComponent = ManagedComponent::JsRuntimeDeno;
+const YT_DLP: ManagedComponent = ManagedComponent::YtDlp;
+
+/// The test catalogue with the two optional components (#409).
+fn optional_catalogue() -> Result<AcceptedManagedCatalogue, Box<dyn std::error::Error>> {
+    let mut catalogue = test_catalogue()?;
+    for (component, fill) in [(DENO, 'd'), (YT_DLP, 'e')] {
+        catalogue.optional_artifacts.push(AcceptedManagedArtifact {
+            component,
+            version: format!("{}-fixture", component.identifier()),
+            publisher: String::from("fixture publisher"),
+            source_url: format!("https://publisher.invalid/{}", component.identifier()),
+            integrity: integrity(fill)?,
+            format: ManagedArtifactFormat::RawFile,
+            archive_limits: None,
+            selected_files: Vec::new(),
+            archive_links: Vec::new(),
+            runtime_copies: Vec::new(),
+            licence: String::from("GPL-3.0-or-later"),
+            notice_url: String::from("https://publisher.invalid/notice"),
+            source_code_url: String::from("https://publisher.invalid/source"),
+            trust_limit: String::from("fixture evidence only"),
+            files: vec![ReviewedManagedFile {
+                name: format!("{}-file", component.identifier()),
+                integrity: integrity(fill)?,
+                executable: true,
+            }],
+        });
+        catalogue
+            .compatibility
+            .optional_banners
+            .push(ReviewedBanner {
+                component,
+                first_line_prefix: format!("{} fixture", component.identifier()),
+            });
+    }
+    Ok(catalogue)
+}
+
+fn diagnosis(missing: &[RuntimeDependency]) -> RuntimeDiagnosis {
+    RuntimeDiagnosis {
+        readiness: RuntimeReadiness::Blocked,
+        dependencies: RuntimeDependency::ALL
+            .into_iter()
+            .map(|dependency| DependencyStatus {
+                dependency,
+                state: if missing.contains(&dependency) {
+                    DependencyState::Missing
+                } else {
+                    DependencyState::Available {
+                        version: String::from("fixture 1"),
+                    }
+                },
+            })
+            .collect(),
+    }
+}
+
+fn optional_plan(
+    profile: SetupProfile,
+    missing: &[RuntimeDependency],
+    include: OptionalComponentSet,
+    target: ManagedTarget,
+) -> Result<ManagedSetupPlan, Box<dyn std::error::Error>> {
+    Ok(plan_managed_setup_including(
+        profile,
+        diagnosis(missing),
+        target,
+        SetupSelectionState::default(),
+        include,
+        1_000,
+        Some(optional_catalogue()?),
+    ))
+}
+
+const YT_DLP_ONLY: OptionalComponentSet =
+    OptionalComponentSet::EMPTY.with(OptionalComponent::YtDlp);
+
+/// #409: the default desktop plan offers yt-dlp and installs nothing of it;
+/// leaving it out changes nothing the digest binds, and the plan says the
+/// operator must decide.
+#[test]
+fn the_default_desktop_plan_offers_the_optional_component_and_installs_none_of_it() -> TestResult {
+    let plan = optional_plan(
+        SetupProfile::Desktop,
+        &RuntimeDependency::ALL,
+        OptionalComponentSet::EMPTY,
+        ManagedTarget::Ubuntu2404X86_64,
+    )?;
+    assert_eq!(plan.optional.len(), 1);
+    let offer = &plan.optional[0];
+    assert_eq!(offer.component, OptionalComponent::YtDlp);
+    assert_eq!(offer.disposition, OptionalComponentDisposition::NotIncluded);
+    assert_eq!(
+        offer
+            .artifacts
+            .iter()
+            .map(|artifact| artifact.component)
+            .collect::<Vec<_>>(),
+        [DENO, YT_DLP]
+    );
+    assert_eq!(offer.download_bytes(), 20);
+    assert_eq!(offer.actions, [] as [ManagedSetupAction; 0]);
+    assert!(plan.operator_decision_required());
+    assert_eq!(plan.optional_actions().count(), 0);
+    assert!(
+        plan.actions
+            .iter()
+            .all(|action| !action.artifact.component.is_optional())
+    );
+
+    let without_offer = plan_managed_setup(
+        SetupProfile::Desktop,
+        diagnosis(&RuntimeDependency::ALL),
+        ManagedTarget::Ubuntu2404X86_64,
+        SetupSelectionState::default(),
+        1_000,
+        Some(test_catalogue()?),
+    );
+    assert_eq!(plan.digest, without_offer.digest);
+    Ok(())
+}
+
+/// `--include yt_dlp` adds the runtime and yt-dlp, in that order, after the
+/// core; the digest changes, so the plan without them does not accept it.
+#[test]
+fn including_yt_dlp_adds_the_runtime_and_yt_dlp_and_changes_the_digest() -> TestResult {
+    let left_out = optional_plan(
+        SetupProfile::Desktop,
+        &RuntimeDependency::ALL,
+        OptionalComponentSet::EMPTY,
+        ManagedTarget::Ubuntu2404X86_64,
+    )?;
+    let included = optional_plan(
+        SetupProfile::Desktop,
+        &RuntimeDependency::ALL,
+        YT_DLP_ONLY,
+        ManagedTarget::Ubuntu2404X86_64,
+    )?;
+    assert_eq!(
+        included.optional[0].disposition,
+        OptionalComponentDisposition::Included
+    );
+    assert_eq!(
+        included
+            .optional_actions()
+            .map(|action| (action.id.as_str(), action.artifact.component))
+            .collect::<Vec<_>>(),
+        [
+            ("install-js_runtime_deno", DENO),
+            ("install-yt_dlp", YT_DLP)
+        ]
+    );
+    assert_eq!(included.actions, left_out.actions);
+    assert_eq!(included.included(), YT_DLP_ONLY);
+    assert!(included.operator_decision_required());
+    let (Some(included_digest), Some(left_out_digest)) = (&included.digest, &left_out.digest)
+    else {
+        return Err("both plans have digests".into());
+    };
+    assert_ne!(included_digest, left_out_digest);
+    assert!(included.validate_acceptance(left_out_digest).is_err());
+    assert!(included.validate_acceptance(included_digest).is_ok());
+
+    // A changed banner is a changed plan.
+    let mut catalogue = optional_catalogue()?;
+    catalogue.compatibility.optional_banners[1].first_line_prefix = String::from("other");
+    let changed = plan_managed_setup_including(
+        SetupProfile::Desktop,
+        diagnosis(&RuntimeDependency::ALL),
+        ManagedTarget::Ubuntu2404X86_64,
+        SetupSelectionState::default(),
+        YT_DLP_ONLY,
+        1_000,
+        Some(catalogue),
+    );
+    assert_ne!(changed.digest, included.digest);
+
+    // With every core tool present, the optional part alone is a plan to
+    // install, not "nothing required".
+    let only_optional = optional_plan(
+        SetupProfile::Desktop,
+        &[],
+        YT_DLP_ONLY,
+        ManagedTarget::Ubuntu2404X86_64,
+    )?;
+    assert_eq!(
+        only_optional.availability,
+        ManagedPlanAvailability::Qualified
+    );
+    assert!(only_optional.digest.is_some());
+    Ok(())
+}
+
+/// The worker plan neither includes nor lists it unless asked; an
+/// unavailable host lists it as unavailable and asks no decision.
+#[test]
+fn the_worker_plan_and_an_unavailable_host_do_not_offer_it() -> TestResult {
+    let worker = optional_plan(
+        SetupProfile::Worker,
+        &RuntimeDependency::ALL,
+        OptionalComponentSet::EMPTY,
+        ManagedTarget::Ubuntu2404X86_64,
+    )?;
+    assert_eq!(worker.optional, []);
+    assert!(!worker.operator_decision_required());
+    let asked = optional_plan(
+        SetupProfile::Worker,
+        &RuntimeDependency::ALL,
+        YT_DLP_ONLY,
+        ManagedTarget::Ubuntu2404X86_64,
+    )?;
+    assert_eq!(
+        asked.optional[0].disposition,
+        OptionalComponentDisposition::Included
+    );
+
+    for include in [OptionalComponentSet::EMPTY, YT_DLP_ONLY] {
+        let elsewhere = optional_plan(
+            SetupProfile::Desktop,
+            &RuntimeDependency::ALL,
+            include,
+            ManagedTarget::WindowsX86_64,
+        )?;
+        assert_eq!(
+            elsewhere.optional[0].disposition,
+            OptionalComponentDisposition::Unavailable
+        );
+        assert_eq!(elsewhere.optional[0].artifacts, []);
+        assert!(!elsewhere.operator_decision_required());
+        assert_eq!(elsewhere.optional_actions().count(), 0);
+    }
+    // An expired catalogue cannot plan it either.
+    let expired = plan_managed_setup_including(
+        SetupProfile::Desktop,
+        diagnosis(&RuntimeDependency::ALL),
+        ManagedTarget::Ubuntu2404X86_64,
+        SetupSelectionState::default(),
+        YT_DLP_ONLY,
+        3_000,
+        Some(optional_catalogue()?),
+    );
+    assert_eq!(
+        expired.optional[0].disposition,
+        OptionalComponentDisposition::Unavailable
+    );
+    Ok(())
+}
+
+/// A catalogue whose optional part is out of order, or lacks a banner, is
+/// invalid and plans nothing.
+#[test]
+fn an_inconsistent_optional_catalogue_is_invalid() -> TestResult {
+    let mut reversed = optional_catalogue()?;
+    reversed.optional_artifacts.reverse();
+    let mut no_banner = optional_catalogue()?;
+    no_banner.compatibility.optional_banners.pop();
+    let mut core_in_optional = optional_catalogue()?;
+    core_in_optional.optional_artifacts[0].component = MEDIA;
+    for catalogue in [reversed, no_banner, core_in_optional] {
+        let plan = plan_managed_setup_including(
+            SetupProfile::Desktop,
+            diagnosis(&RuntimeDependency::ALL),
+            ManagedTarget::Ubuntu2404X86_64,
+            SetupSelectionState::default(),
+            YT_DLP_ONLY,
+            1_000,
+            Some(catalogue),
+        );
+        assert_eq!(plan.availability, ManagedPlanAvailability::CatalogueInvalid);
+        assert_eq!(plan.digest, None);
+        assert_eq!(plan.optional_actions().count(), 0);
+    }
+    Ok(())
+}
+
+type PlanParts = (Vec<ManagedSetupAction>, Vec<ManagedSetupAction>);
+
+fn included_plan_actions() -> Result<PlanParts, Box<dyn std::error::Error>> {
+    let plan = optional_plan(
+        SetupProfile::Desktop,
+        &RuntimeDependency::ALL,
+        YT_DLP_ONLY,
+        ManagedTarget::Ubuntu2404X86_64,
+    )?;
+    let optional = plan.optional_actions().cloned().collect();
+    Ok((plan.actions, optional))
+}
+
+fn optional_outcomes(
+    report: &vsift_application::ManagedInstallReport,
+) -> Vec<ComponentInstallOutcome> {
+    report
+        .optional
+        .iter()
+        .map(|component| component.outcome)
+        .collect()
+}
+
+/// The optional part installs after the core, its two components staged
+/// and smoked together, and progress counts both parts.
+#[tokio::test]
+async fn the_optional_part_installs_after_the_core_and_together() -> TestResult {
+    let (core, optional) = included_plan_actions()?;
+    let installer = FakeInstaller::new();
+    let progress = RecordedProgress::default();
+
+    let report = install_managed_plan(&installer, &core, &optional, &progress).await;
+
+    assert_eq!(outcomes(&report), [ComponentInstallOutcome::Activated; 3]);
+    assert_eq!(
+        optional_outcomes(&report),
+        [ComponentInstallOutcome::Activated; 2]
+    );
+    assert_eq!(report.failure_code(), None);
+    assert_eq!(report.optional_failure(), None);
+    assert!(report.optional_installed());
+    let journal = installer.journal();
+    assert_eq!(journal.staged, [MEDIA, WHISPER, MODEL, DENO, YT_DLP]);
+    assert_eq!(
+        journal.smoked,
+        [vec![MEDIA], vec![WHISPER, MODEL], vec![DENO, YT_DLP]]
+    );
+    assert_eq!(journal.activated, [MEDIA, WHISPER, MODEL, DENO, YT_DLP]);
+    let completed: Vec<(u64, Option<u64>)> = lock(&progress.updates)
+        .iter()
+        .map(|update| (update.completed, update.total))
+        .collect();
+    assert_eq!(
+        completed,
+        [(0, Some(5)), (1, Some(5)), (3, Some(5)), (5, Some(5))]
+    );
+    Ok(())
+}
+
+/// #409: a blocked optional download never fails or blocks the core. The
+/// core is active, the transaction has no failure code, and the optional
+/// part reports the typed reason with the runtime's stage discarded.
+#[tokio::test]
+async fn an_optional_failure_never_fails_the_core() -> TestResult {
+    let (core, optional) = included_plan_actions()?;
+    for reason in DownloadFailureReason::ALL {
+        let mut installer = FakeInstaller::new();
+        installer.stage_failures.insert(
+            key(YT_DLP),
+            StageFailure {
+                failure: ComponentInstallFailure::at(
+                    InstallStep::Download,
+                    InstallFailureReason::Download(reason),
+                ),
+                stage: None,
+            },
+        );
+
+        let report =
+            install_managed_plan(&installer, &core, &optional, &RecordedProgress::default()).await;
+
+        assert_eq!(outcomes(&report), [ComponentInstallOutcome::Activated; 3]);
+        assert_eq!(report.failure_code(), None, "{reason:?}");
+        let yt_dlp_failed = failed(
+            Some(InstallStep::Download),
+            InstallFailureReason::Download(reason),
+        );
+        assert_eq!(optional_outcomes(&report), [BLOCKED, yt_dlp_failed]);
+        assert_eq!(report.optional[0].stage, Some(StageDisposal::Discarded));
+        assert_eq!(
+            report.optional_failure().map(|(component, _)| component),
+            Some(YT_DLP)
+        );
+        assert!(!report.optional_installed());
+        let journal = installer.journal();
+        assert_eq!(journal.activated, [MEDIA, WHISPER, MODEL]);
+        assert_eq!(journal.discarded, [DENO]);
+    }
+
+    // A failed optional smoke is the same: the core stays installed.
+    let installer = FakeInstaller::new();
+    let failure = CompatibilitySmokeFailure {
+        check: CompatibilitySmokeCheck::Banner,
+        reason: CompatibilitySmokeFailureReason::BannerMismatch,
+    };
+    *lock(&installer.smoke_verdicts) = vec![
+        CompatibilitySmokeVerdict::Passed,
+        CompatibilitySmokeVerdict::Passed,
+        CompatibilitySmokeVerdict::Failed(failure),
+    ];
+    let report =
+        install_managed_plan(&installer, &core, &optional, &RecordedProgress::default()).await;
+    let smoked = failed(
+        Some(InstallStep::Smoke),
+        InstallFailureReason::Smoke(failure),
+    );
+    assert_eq!(report.failure_code(), None);
+    assert_eq!(optional_outcomes(&report), [smoked, smoked]);
+    assert_eq!(installer.journal().discarded, [DENO, YT_DLP]);
+    Ok(())
+}
+
+/// A core failure is a failure exactly as before, and the optional part is
+/// blocked: nothing of it is fetched.
+#[tokio::test]
+async fn a_core_failure_blocks_the_optional_part() -> TestResult {
+    let (core, optional) = included_plan_actions()?;
+    let mut installer = FakeInstaller::new();
+    installer.stage_failures.insert(
+        key(MEDIA),
+        StageFailure {
+            failure: ComponentInstallFailure::at(
+                InstallStep::Download,
+                InstallFailureReason::Download(DownloadFailureReason::ProxyAuth),
+            ),
+            stage: None,
+        },
+    );
+
+    let report =
+        install_managed_plan(&installer, &core, &optional, &RecordedProgress::default()).await;
+
+    assert_eq!(report.failure_code(), Some(FailureCode::DownloadFailed));
+    assert_eq!(optional_outcomes(&report), [BLOCKED, BLOCKED]);
+    assert_eq!(report.optional_failure(), None);
+    assert_eq!(installer.journal().staged, [] as [ManagedComponent; 0]);
+    Ok(())
+}
+
+/// A rerun with the optional components current fetches nothing of them;
+/// with only the runtime current, yt-dlp is staged and smoked alone.
+#[tokio::test]
+async fn a_rerun_skips_optional_components_already_current() -> TestResult {
+    let (core, optional) = included_plan_actions()?;
+    let mut installer = FakeInstaller::new();
+    installer.current = vec![MEDIA, WHISPER, MODEL, DENO];
+
+    let report =
+        install_managed_plan(&installer, &core, &optional, &RecordedProgress::default()).await;
+
+    assert_eq!(
+        optional_outcomes(&report),
+        [
+            ComponentInstallOutcome::AlreadyCurrent,
+            ComponentInstallOutcome::Activated
+        ]
+    );
+    assert_eq!(installer.journal().smoked, [vec![YT_DLP]]);
+    Ok(())
 }

@@ -20,7 +20,28 @@
       "items": { "$ref": "#/$defs/component" }
     },
     "cleanup": { "$ref": "#/$defs/cleanup" },
-    "next_step": { "type": "string", "minLength": 1, "maxLength": 512 }
+    "next_step": { "type": "string", "minLength": 1, "maxLength": 512 },
+    "core": {
+      "description": "Added in 0.3.0 (#409), present only when the plan includes an optional component: ready when every core component is installed and selected, failed otherwise. A result whose core is ready is a success whatever happened to the optional part.",
+      "enum": ["ready", "failed"]
+    },
+    "optional_components": {
+      "description": "Added in 0.3.0 (#409), present only when the plan includes an optional component: each optional component in install order (js_runtime_deno, then yt_dlp), installed after the core. A core failure leaves them blocked; their own failure never fails the core.",
+      "type": "array", "minItems": 1, "maxItems": 4,
+      "items": { "$ref": "#/$defs/component" }
+    },
+    "online_video": {
+      "description": "Added in 0.3.0 (#409), present only when the plan includes an optional component: installed when yt-dlp and its runtime are installed and selected; not_installed with the component that failed, its typed reason and failure code, and fixed advice that says local investigation is not affected.",
+      "type": "object", "additionalProperties": false,
+      "required": ["status", "component", "reason", "failure_code", "next_step"],
+      "properties": {
+        "status": { "enum": ["installed", "not_installed"] },
+        "component": { "enum": [null, "js_runtime_deno", "yt_dlp"] },
+        "reason": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/component/properties/reason/oneOf/1" }] },
+        "failure_code": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/component/properties/failure_code/oneOf/1" }] },
+        "next_step": { "type": "string", "minLength": 1, "maxLength": 640 }
+      }
+    }
   },
   "$defs": {
     "cleanup": {
@@ -44,7 +65,7 @@
       "additionalProperties": false,
       "required": ["component", "version", "status"],
       "properties": {
-        "component": { "enum": ["ffmpeg_ffprobe", "whisper_cli", "whisper_model"] },
+        "component": { "enum": ["ffmpeg_ffprobe", "whisper_cli", "whisper_model", "js_runtime_deno", "yt_dlp"] },
         "version": { "type": "string", "pattern": "^[a-z0-9]([a-z0-9._-]{0,62}[a-z0-9])?$" },
         "status": {
           "enum": ["removed", "already_absent", "in_use", "selected", "unexpected_content", "storage_failure"]
@@ -66,7 +87,7 @@
         "retention_reason"
       ],
       "properties": {
-        "component": { "enum": ["ffmpeg_ffprobe", "whisper_cli", "whisper_model"] },
+        "component": { "enum": ["ffmpeg_ffprobe", "whisper_cli", "whisper_model", "js_runtime_deno", "yt_dlp"] },
         "version": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$" },
         "status": { "enum": ["activated", "already_current", "failed"] },
         "step": {

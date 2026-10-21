@@ -18,8 +18,13 @@
 //! 2. **Banner.** `ffmpeg -version` and `ffprobe -version` must print the
 //!    policy's reviewed build prefix on their first line; `whisper-cli --help`
 //!    must exit successfully (whisper.cpp prints no version banner, and its
-//!    executable's SHA-256 is already bound by the review). Each run is bounded
-//!    by the policy's stream limit and media deadline.
+//!    executable's SHA-256 is already bound by the review). The optional
+//!    components' executables, `deno --version` and `yt-dlp --ignore-config
+//!    --no-plugin-dirs --version`, must print their reviewed banners; they run
+//!    with the private smoke directory as their temporary folder (the
+//!    one-file yt-dlp unpacks itself there and must remove what it unpacked,
+//!    or the recheck fails). Each run is bounded by the policy's stream limit
+//!    and media deadline.
 //! 3. **Media fixture.** The existing [`FixtureMediaToolVerifier`] runs the
 //!    reviewed F01 checks through the staged `FFmpeg` and `FFprobe`, within the
 //!    media deadline; it already bounds the generated audio by the policy.
@@ -214,7 +219,41 @@ struct BannerProbe {
     executable: TrustedExecutable,
     arguments: &'static [&'static str],
     expected_prefix: Option<String>,
+    environment: BannerEnvironment,
 }
+
+/// The environment a banner run gets beyond the supervisor's empty one.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum BannerEnvironment {
+    /// Nothing: the core tools need no variable to print their banner.
+    Empty,
+    /// The private smoke directory as the temporary folder, and the fixed
+    /// variables of an optional component: `YTDLP_NO_PLUGINS` for yt-dlp,
+    /// no update check and no colour for Deno.
+    Optional(&'static [(&'static str, &'static str)]),
+}
+
+/// The optional components' executables, the arguments that print their
+/// version and the fixed variables they run with (ADR 0028 section 4).
+const OPTIONAL_BANNERS: [(
+    ManagedComponent,
+    ManagedRuntimeRole,
+    &[&str],
+    &[(&str, &str)],
+); 2] = [
+    (
+        ManagedComponent::JsRuntimeDeno,
+        ManagedRuntimeRole::Deno,
+        &["--version"],
+        &[("DENO_NO_UPDATE_CHECK", "1"), ("NO_COLOR", "1")],
+    ),
+    (
+        ManagedComponent::YtDlp,
+        ManagedRuntimeRole::YtDlp,
+        &["--ignore-config", "--no-plugin-dirs", "--version"],
+        &[("YTDLP_NO_PLUGINS", "1")],
+    ),
+];
 
 /// What the resolved candidates and companions ask the smoke to run.
 struct SmokePlan {
@@ -289,11 +328,13 @@ impl<V: SmokeFixtureVerifiers> StagedCompatibilitySmoke<V> {
                 executable: ffmpeg.clone(),
                 arguments: &["-version"],
                 expected_prefix: Some(self.policy.expected_ffmpeg_version.clone()),
+                environment: BannerEnvironment::Empty,
             });
             banners.push(BannerProbe {
                 executable: ffprobe.clone(),
                 arguments: &["-version"],
                 expected_prefix: Some(self.policy.expected_ffprobe_version.clone()),
+                environment: BannerEnvironment::Empty,
             });
             Some(MediaProviderConformance::r0(ffmpeg, ffprobe))
         } else if speech_needed {
@@ -314,6 +355,7 @@ impl<V: SmokeFixtureVerifiers> StagedCompatibilitySmoke<V> {
                     executable: whisper.clone(),
                     arguments: &["--help"],
                     expected_prefix: None,
+                    environment: BannerEnvironment::Empty,
                 });
                 whisper
             } else {
@@ -335,6 +377,26 @@ impl<V: SmokeFixtureVerifiers> StagedCompatibilitySmoke<V> {
             None
         };
 
+        for (component, role, arguments, variables) in OPTIONAL_BANNERS {
+            if let Some(candidate) = staged(component) {
+                let executable = staged_executable(candidate, role)?;
+                // A catalogue without the banner is refused before any
+                // plan exists; reaching here without one is not the
+                // candidate's fault.
+                let prefix = self
+                    .policy
+                    .optional_banner(component)
+                    .filter(|prefix| !prefix.is_empty())
+                    .ok_or(failure(Check::Layout, Reason::Preparation))?;
+                banners.push(BannerProbe {
+                    executable,
+                    arguments,
+                    expected_prefix: Some(prefix.to_owned()),
+                    environment: BannerEnvironment::Optional(variables),
+                });
+            }
+        }
+
         Ok(SmokePlan {
             banners,
             media,
@@ -349,7 +411,7 @@ impl<V: SmokeFixtureVerifiers> StagedCompatibilitySmoke<V> {
         smoke_path: &Path,
     ) -> Result<(), CompatibilitySmokeFailure> {
         for probe in &plan.banners {
-            self.banner(probe)
+            self.banner(probe, smoke_path)
                 .await
                 .map_err(|reason| failure(Check::Banner, reason))?;
         }
@@ -368,7 +430,7 @@ impl<V: SmokeFixtureVerifiers> StagedCompatibilitySmoke<V> {
         Ok(())
     }
 
-    async fn banner(&self, probe: &BannerProbe) -> Result<(), Reason> {
+    async fn banner(&self, probe: &BannerProbe, smoke_path: &Path) -> Result<(), Reason> {
         let limit = NonZeroUsize::new(self.policy.stream_limit_bytes).ok_or(Reason::Preparation)?;
         let supervisor = ProcessSupervisor::new(
             SupervisorPolicy::default().with_stream_limits(limit, limit),
@@ -383,6 +445,23 @@ impl<V: SmokeFixtureVerifiers> StagedCompatibilitySmoke<V> {
         )
         .map_err(|_| Reason::Preparation)?
         .with_arguments(probe.arguments.iter().copied());
+        let request = match probe.environment {
+            BannerEnvironment::Empty => request,
+            BannerEnvironment::Optional(variables) => {
+                let mut request = request;
+                for name in ["TMPDIR", "TEMP", "TMP"] {
+                    request = request
+                        .with_environment(name, smoke_path.as_os_str())
+                        .map_err(|_| Reason::Preparation)?;
+                }
+                for (name, value) in variables {
+                    request = request
+                        .with_environment(*name, *value)
+                        .map_err(|_| Reason::Preparation)?;
+                }
+                request
+            }
+        };
         let outcome = supervisor
             .run(request, self.cancellation.child())
             .await

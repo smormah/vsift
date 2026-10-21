@@ -5,7 +5,8 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 use vsift_application::{
     LocalAsrCheckOutcome, LocalAsrSetupStatus, ManagedPlanAvailability, ManagedPlanObservation,
-    ManagedSetupAction, ManagedSetupPlan, ManagedUpdate, ObservedModel, PlannedSupply,
+    ManagedSetupAction, ManagedSetupPlan, ManagedUpdate, ObservedModel, OnlineVideoCapability,
+    OptionalComponent, OptionalComponentDisposition, OptionalComponentPlan, PlannedSupply,
     RuntimeDiagnosis, SetupDependencyDisposition, SetupModelDisposition, SetupProfile,
     SupersessionReason,
 };
@@ -71,6 +72,100 @@ pub struct SetupCheckResponse {
     dependencies: Vec<SetupCheckDependencyResponse>,
     local_asr: LocalAsrSetupResponse,
     managed_updates: Vec<ManagedUpdateResponse>,
+    online_video: OnlineVideoCheckResponse,
+}
+
+/// The `online_video` object of a `setup check` response (since `0.3.0`,
+/// #409): the optional online-video components, apart from the local-video
+/// readiness the response's `status` reports.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+struct OnlineVideoCheckResponse {
+    status: &'static str,
+    components: Vec<OnlineVideoComponentResponse>,
+    next_step: String,
+    add_command: Option<SuggestedVsiftCommand>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+struct OnlineVideoComponentResponse {
+    component: &'static str,
+    version: String,
+}
+
+/// A `vsift` command as an executable and an argument array.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+struct SuggestedVsiftCommand {
+    executable: &'static str,
+    arguments: Vec<&'static str>,
+}
+
+/// The `online_video.next_step` of `setup check`, for the readable output
+/// too.
+#[must_use]
+pub fn online_video_check_step(
+    capability: &OnlineVideoCapability,
+    profile: SetupProfile,
+) -> String {
+    OnlineVideoCheckResponse::new(capability, profile).next_step
+}
+
+impl OnlineVideoCheckResponse {
+    fn new(capability: &OnlineVideoCapability, profile: SetupProfile) -> Self {
+        let (components, next_step, add_command) = match capability {
+            OnlineVideoCapability::Installed(components) => (
+                components
+                    .iter()
+                    .map(|(component, version)| OnlineVideoComponentResponse {
+                        component: component.identifier(),
+                        version: version.clone(),
+                    })
+                    .collect(),
+                String::from(
+                    "Online videos can be fetched with ingest --url: yt-dlp and its JavaScript runtime are installed. Sites change and can break extraction; a newer reviewed yt-dlp comes with a VSift release, and managed_updates names it when one is known.",
+                ),
+                None,
+            ),
+            OnlineVideoCapability::NotInstalled if profile == SetupProfile::Worker => (
+                Vec::new(),
+                String::from(
+                    "Online videos are not installed. The worker profile does not offer the optional yt-dlp; an operator adds it with setup plan --profile worker --include yt_dlp only for a host that runs acquisition.",
+                ),
+                None,
+            ),
+            OnlineVideoCapability::NotInstalled => (
+                Vec::new(),
+                format!(
+                    "Online videos from YouTube and other sites need the optional yt-dlp component, which is not installed; local investigation does not need it. Ask the operator first; to add it, run vsift setup plan --profile {} --include yt_dlp --json and accept that plan.",
+                    profile.identifier()
+                ),
+                Some(SuggestedVsiftCommand {
+                    executable: "vsift",
+                    arguments: vec![
+                        "setup",
+                        "plan",
+                        "--profile",
+                        profile.identifier(),
+                        "--include",
+                        "yt_dlp",
+                        "--json",
+                    ],
+                }),
+            ),
+            OnlineVideoCapability::Unavailable => (
+                Vec::new(),
+                String::from(
+                    "A managed yt-dlp is offered on Ubuntu 24.04 x86-64 only. Direct HTTPS video links (ingest --url) work without it, as does every local file.",
+                ),
+                None,
+            ),
+        };
+        Self {
+            status: capability.identifier(),
+            components,
+            next_step,
+            add_command,
+        }
+    }
 }
 
 /// One entry of `managed_updates` (since `0.2.3`): a managed version this
@@ -158,7 +253,31 @@ impl SetupCheckResponse {
                 .collect(),
             local_asr: LocalAsrSetupResponse::new(*local_asr),
             managed_updates: Vec::new(),
+            // Until the host says what is installed, the honest default:
+            // offered but not installed where managed installation is
+            // qualified, unavailable elsewhere.
+            online_video: OnlineVideoCheckResponse::new(
+                &if managed_install == ManagedPlanAvailability::Qualified {
+                    OnlineVideoCapability::NotInstalled
+                } else {
+                    OnlineVideoCapability::Unavailable
+                },
+                profile,
+            ),
         }
+    }
+
+    /// Sets what the check found about online videos (the additive
+    /// `online_video` object; until set, `not_installed` where managed
+    /// installation is qualified and `unavailable` elsewhere).
+    #[must_use]
+    pub fn with_online_video(
+        mut self,
+        capability: &OnlineVideoCapability,
+        profile: SetupProfile,
+    ) -> Self {
+        self.online_video = OnlineVideoCheckResponse::new(capability, profile);
+        self
     }
 
     /// Adds the managed versions the check used that the current catalogue
@@ -486,6 +605,16 @@ pub struct SetupPlanResponse {
     install_needed: bool,
     actions: Vec<SetupPlanActionResponse>,
     dependencies: Vec<SetupPlanDependencyResponse>,
+    /// The optional components the plan offers, includes or cannot offer
+    /// here (#409, since `0.3.0`). A saved plan from an earlier release has
+    /// none.
+    #[serde(default)]
+    optional_components: Vec<SetupPlanOptionalResponse>,
+    /// The instruction to whoever runs setup, when the plan offers or
+    /// includes an optional component: tell the operator and ask before
+    /// accepting. `null` otherwise.
+    #[serde(default)]
+    operator_decision_required: Option<String>,
 }
 
 impl SetupPlanResponse {
@@ -535,7 +664,54 @@ impl SetupPlanResponse {
                     )
                 })
                 .collect(),
+            optional_components: plan
+                .optional
+                .iter()
+                .map(|optional| optional_response(plan.profile, optional, observation))
+                .collect(),
+            operator_decision_required: plan
+                .operator_decision_required()
+                .then(|| OPERATOR_DECISION_INSTRUCTION.to_owned()),
         }
+        .with_optional_install_needed(plan, observation)
+    }
+
+    /// `install_needed` also counts an included optional component that is
+    /// not current yet.
+    fn with_optional_install_needed(
+        mut self,
+        plan: &ManagedSetupPlan,
+        observation: &ManagedPlanObservation,
+    ) -> Self {
+        self.install_needed = self.install_needed
+            || plan
+                .optional_actions()
+                .any(|action| !observation.is_current(action.artifact.component));
+        self
+    }
+
+    /// The optional components' entries, for presentation.
+    #[must_use]
+    pub fn optional_components(&self) -> Vec<OptionalComponentView<'_>> {
+        self.optional_components
+            .iter()
+            .map(|optional| OptionalComponentView {
+                component: &optional.component,
+                status: &optional.status,
+                summary: &optional.summary,
+                add_command: optional
+                    .add_command
+                    .as_ref()
+                    .map(|command| command.arguments.as_slice()),
+                next_step: &optional.next_step,
+            })
+            .collect()
+    }
+
+    /// The instruction to ask the operator, when the plan carries one.
+    #[must_use]
+    pub fn operator_decision_required(&self) -> Option<&str> {
+        self.operator_decision_required.as_deref()
     }
 
     /// The plan without its observed state: what the digest binds and
@@ -551,7 +727,165 @@ impl SetupPlanResponse {
         for action in &mut intent.actions {
             action.state.clear();
         }
+        for optional in &mut intent.optional_components {
+            for action in &mut optional.actions {
+                action.state.clear();
+            }
+        }
         intent
+    }
+}
+
+/// The instruction a plan that offers or includes an optional component
+/// carries for whoever runs setup (#409): an agent that has never seen the
+/// skill relays it too, because it is in the plan.
+pub const OPERATOR_DECISION_INSTRUCTION: &str = "Before accepting this plan, tell the operator about each optional component in optional_components in one or two plain sentences (what it does, its licence, its download size, and that each site's terms apply) and ask whether to include it. Include it only after a yes: run its add_command, review that plan and accept it instead. Never accept a plan that includes it without a yes, and never leave it unmentioned. Local investigation does not need it.";
+
+/// What an optional component adds, in the plan's words.
+const YT_DLP_PURPOSE: &str = "Fetches a video from a public web page (YouTube and other sites) when you give VSift a link with ingest --url, using yt-dlp and the JavaScript runtime it needs. Direct HTTPS video links work without it.";
+
+/// The notice every offer of yt-dlp carries.
+pub const SITE_TERMS_NOTICE: &str = "Downloading from a site is subject to that site's terms, which are yours to follow. VSift does not get round sign-in, DRM, age, region or bot checks.";
+
+/// A borrowed view of one optional component of a plan, for presentation.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct OptionalComponentView<'plan> {
+    /// The component's identifier (`yt_dlp`).
+    pub component: &'plan str,
+    /// `included`, `not_included` or `unavailable`.
+    pub status: &'plan str,
+    /// The one plain sentence about it.
+    pub summary: &'plan str,
+    /// The arguments of the `vsift` command that adds it, when it can be.
+    pub add_command: Option<&'plan [String]>,
+    /// What to do next about it.
+    pub next_step: &'plan str,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+struct SetupPlanOptionalResponse {
+    component: String,
+    status: String,
+    installs: Vec<String>,
+    summary: String,
+    purpose: String,
+    download_bytes: Option<u64>,
+    licences: Vec<SetupPlanLicenceResponse>,
+    terms_notice: String,
+    add_command: Option<SetupPlanCommandResponse>,
+    actions: Vec<SetupPlanActionResponse>,
+    next_step: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+struct SetupPlanLicenceResponse {
+    component: String,
+    licence: String,
+}
+
+/// A `vsift` command, as an executable and an argument array, run without
+/// a shell.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+struct SetupPlanCommandResponse {
+    executable: String,
+    arguments: Vec<String>,
+}
+
+fn optional_response(
+    profile: SetupProfile,
+    optional: &OptionalComponentPlan,
+    observation: &ManagedPlanObservation,
+) -> SetupPlanOptionalResponse {
+    let component = optional.component.identifier();
+    let available = optional.disposition != OptionalComponentDisposition::Unavailable;
+    let download_bytes = available.then(|| optional.download_bytes());
+    let add_command =
+        (optional.disposition == OptionalComponentDisposition::NotIncluded).then(|| {
+            SetupPlanCommandResponse {
+                executable: String::from("vsift"),
+                arguments: [
+                    "setup",
+                    "plan",
+                    "--profile",
+                    profile.identifier(),
+                    "--include",
+                    component,
+                    "--json",
+                ]
+                .into_iter()
+                .map(str::to_owned)
+                .collect(),
+            }
+        });
+    let next_step = match optional.disposition {
+        OptionalComponentDisposition::Included => String::from(
+            "Included: accepting this plan installs the JavaScript runtime and yt-dlp after the core components. If either cannot be installed, the core is still installed and VSift is ready for local videos.",
+        ),
+        OptionalComponentDisposition::NotIncluded => format!(
+            "Not included. Ask the operator first; to add it, run vsift setup plan --profile {} --include {component} --json and review that plan instead.",
+            profile.identifier()
+        ),
+        OptionalComponentDisposition::Unavailable => String::from(
+            "A managed yt-dlp is offered on Ubuntu 24.04 x86-64 only, so this plan cannot include it. Direct HTTPS video links (ingest --url) work without it, as does every local file.",
+        ),
+    };
+    SetupPlanOptionalResponse {
+        component: component.to_owned(),
+        status: optional.disposition.identifier().to_owned(),
+        installs: optional
+            .component
+            .components()
+            .iter()
+            .map(|installed| installed.identifier().to_owned())
+            .collect(),
+        summary: optional_summary(optional.component, optional.disposition, download_bytes),
+        purpose: YT_DLP_PURPOSE.to_owned(),
+        download_bytes,
+        licences: optional
+            .artifacts
+            .iter()
+            .map(|artifact| SetupPlanLicenceResponse {
+                component: artifact.component.identifier().to_owned(),
+                licence: artifact.licence.clone(),
+            })
+            .collect(),
+        terms_notice: SITE_TERMS_NOTICE.to_owned(),
+        add_command,
+        actions: optional
+            .actions
+            .iter()
+            .map(|action| {
+                action_response(action, observation.is_current(action.artifact.component))
+            })
+            .collect(),
+        next_step,
+    }
+}
+
+/// The one plain sentence about an optional component that an agent relays
+/// to the operator: what it does, its size, its licence and the site terms.
+fn optional_summary(
+    component: OptionalComponent,
+    disposition: OptionalComponentDisposition,
+    download_bytes: Option<u64>,
+) -> String {
+    match component {
+        OptionalComponent::YtDlp => {
+            let size = download_bytes.map_or_else(String::new, |bytes| {
+                format!(", about {} MB to download", bytes.div_ceil(1_000_000))
+            });
+            let lead = match disposition {
+                OptionalComponentDisposition::Included => "Included",
+                OptionalComponentDisposition::NotIncluded => "Not included",
+                OptionalComponentDisposition::Unavailable => "Not available here",
+            };
+            format!(
+                "{lead}: yt-dlp (optional{size}; GPL-3.0-or-later, with the MIT-licensed Deno runtime) fetches videos from YouTube and other sites when you give VSift a link. Downloading is subject to each site's terms."
+            )
+        }
     }
 }
 
@@ -908,6 +1242,30 @@ impl SavedSetupPlan {
             return Err(FailureCode::InvalidArgument);
         }
         Ok(())
+    }
+
+    /// The optional components the saved plan includes, which the current
+    /// plan must include too before it can accept it (#409).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`FailureCode::InvalidArgument`] for an unknown component or
+    /// status.
+    pub fn included_optional(
+        &self,
+    ) -> Result<vsift_application::OptionalComponentSet, FailureCode> {
+        self.data.optional_components.iter().try_fold(
+            vsift_application::OptionalComponentSet::EMPTY,
+            |set, optional| {
+                let component = OptionalComponent::from_identifier(&optional.component)
+                    .ok_or(FailureCode::InvalidArgument)?;
+                match optional.status.as_str() {
+                    "included" => Ok(set.with(component)),
+                    "not_included" | "unavailable" => Ok(set),
+                    _ => Err(FailureCode::InvalidArgument),
+                }
+            },
+        )
     }
 
     /// Returns the profile that must be re-observed before acceptance.

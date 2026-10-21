@@ -8,11 +8,19 @@
 //! a caller always sees which components are installed. Every value is a
 //! closed identifier; nothing here carries a path, a URL a server chose,
 //! provider output or credentials.
+//!
+//! A plan that includes optional components (#409) adds three members: the
+//! core's status, the optional components in their own list, and an
+//! `online_video` summary. They are absent otherwise, so the result of a
+//! plan without them is unchanged. A failure of the optional part never
+//! makes the result a failure: the core is ready, and `online_video` says
+//! what failed and that local investigation is not affected.
 
 use serde::Serialize;
 use vsift_application::{
-    ComponentInstallFailure, ComponentInstallOutcome, ComponentInstallReport, InstallFailureReason,
-    InstallStep, ManagedInstallReport, StageDisposal, StageSweep, VersionRemovalReport,
+    ComponentInstallFailure, ComponentInstallOutcome, ComponentInstallReport,
+    DownloadFailureReason, InstallFailureReason, InstallStep, ManagedInstallReport, StageDisposal,
+    StageSweep, VersionRemovalReport,
 };
 use vsift_domain::{ManagedComponent, SharedLibraryName};
 
@@ -46,6 +54,28 @@ pub struct SetupInstallResponse {
     components: Vec<InstallComponentResponse>,
     cleanup: InstallCleanupResponse,
     next_step: &'static str,
+    /// `ready` or `failed`, only when the plan includes an optional
+    /// component.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    core: Option<&'static str>,
+    /// The optional components, after the core, only when the plan
+    /// includes one.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    optional_components: Vec<InstallComponentResponse>,
+    /// Whether online videos can be fetched now, only when the plan
+    /// includes an optional component.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    online_video: Option<OnlineVideoInstallResponse>,
+}
+
+/// The `online_video` member of a `setup install` result.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+struct OnlineVideoInstallResponse {
+    status: &'static str,
+    component: Option<&'static str>,
+    reason: Option<&'static str>,
+    failure_code: Option<&'static str>,
+    next_step: String,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
@@ -75,8 +105,12 @@ impl SetupInstallResponse {
         source: InstallSource,
         report: &ManagedInstallReport,
     ) -> Self {
+        let optional = !report.optional.is_empty();
         let next_step = match report.failure_code() {
-            None if report.components.is_empty() => {
+            None if optional && !report.optional_installed() => {
+                "VSift is ready for local videos: every core component is installed and selected. Online videos were not installed (online_video says why); local investigation is not affected."
+            }
+            None if report.components.is_empty() && !optional => {
                 "Nothing needed installing. Run setup check to see what each command will use."
             }
             None => {
@@ -92,7 +126,34 @@ impl SetupInstallResponse {
             components: report.components.iter().map(component_response).collect(),
             cleanup: InstallCleanupResponse::default(),
             next_step,
+            core: optional.then_some(if report.failure_code().is_none() {
+                "ready"
+            } else {
+                "failed"
+            }),
+            optional_components: report.optional.iter().map(component_response).collect(),
+            online_video: optional.then(|| online_video_response(report)),
         }
+    }
+
+    /// The warning a successful result carries when its optional part was
+    /// not installed, so the impression is never that VSift is broken; `None`
+    /// otherwise.
+    #[must_use]
+    pub fn optional_warning(&self) -> Option<&'static str> {
+        self.online_video
+            .as_ref()
+            .filter(|online| online.status == "not_installed" && self.core == Some("ready"))
+            .map(|_| ONLINE_VIDEO_NOT_INSTALLED_WARNING)
+    }
+
+    /// The `online_video` advice, when the plan included an optional
+    /// component.
+    #[must_use]
+    pub fn online_video_next_step(&self) -> Option<&str> {
+        self.online_video
+            .as_ref()
+            .map(|online| online.next_step.as_str())
     }
 
     /// Adds what the stale-stage sweep before the transaction and the
@@ -137,6 +198,105 @@ fn component_response(report: &ComponentInstallReport) -> InstallComponentRespon
         stage,
         retention_reason,
     }
+}
+
+/// The envelope warning of a successful install whose optional part failed.
+pub const ONLINE_VIDEO_NOT_INSTALLED_WARNING: &str = "online_video_not_installed: VSift is ready for local videos, but the optional online-video components were not installed; data.online_video says why.";
+
+fn online_video_response(report: &ManagedInstallReport) -> OnlineVideoInstallResponse {
+    if report.optional_installed() {
+        return OnlineVideoInstallResponse {
+            status: "installed",
+            component: None,
+            reason: None,
+            failure_code: None,
+            next_step: String::from(
+                "Online videos can be fetched: yt-dlp and its JavaScript runtime are installed and selected.",
+            ),
+        };
+    }
+    match report.optional_failure() {
+        Some((component, failure)) => OnlineVideoInstallResponse {
+            status: "not_installed",
+            component: Some(component.identifier()),
+            reason: Some(failure.reason.identifier()),
+            failure_code: failure
+                .reason
+                .failure_code()
+                .map(vsift_domain::FailureCode::identifier),
+            next_step: optional_install_failure_summary(component, failure),
+        },
+        // The core failed, so the optional part was never attempted.
+        None => OnlineVideoInstallResponse {
+            status: "not_installed",
+            component: None,
+            reason: Some(InstallFailureReason::Blocked.identifier()),
+            failure_code: None,
+            next_step: String::from(
+                "Online videos were not installed because a core component failed first; fix that failure and run the same setup install again.",
+            ),
+        },
+    }
+}
+
+/// Fixed-prose advice for an optional component that was not installed
+/// (#409): what failed, that only the online-video part failed, what to
+/// try. Typed identifiers only, never a path, URL, server text or proxy
+/// credentials.
+#[must_use]
+pub fn optional_install_failure_summary(
+    component: ManagedComponent,
+    failure: ComponentInstallFailure,
+) -> String {
+    let component = component.identifier();
+    let reason = failure.reason.identifier();
+    let unaffected = "VSift is ready for local videos; only the online-video part failed.";
+    let retry = "run the same setup install again: it keeps what is installed and retries the online-video part.";
+    let (cause, what_to_try) = match failure.reason {
+        InstallFailureReason::Download(DownloadFailureReason::ProxyAuth) => (
+            "the network's proxy asked for credentials",
+            "Ask whoever runs the network to allow downloads from github.com, then",
+        ),
+        InstallFailureReason::Download(
+            DownloadFailureReason::Offline | DownloadFailureReason::Tls,
+        ) => (
+            "the download from github.com was blocked or could not connect",
+            "Check the network, TLS inspection or proxy (or ask whoever runs it), then",
+        ),
+        InstallFailureReason::Download(_) => (
+            "the download from github.com did not complete",
+            "Check the network or proxy, then",
+        ),
+        InstallFailureReason::Smoke(_) => (
+            "it did not pass its compatibility check on this machine",
+            "If a retry fails the same way, report it; meanwhile",
+        ),
+        InstallFailureReason::ArtifactMissing | InstallFailureReason::ArtifactNotRegularFile => (
+            "the artifact folder has no regular file for it",
+            "Add the file under the name its source URL in the plan ends with, then",
+        ),
+        InstallFailureReason::DigestMismatch
+        | InstallFailureReason::SizeMismatch
+        | InstallFailureReason::ReviewMismatch => (
+            "its bytes differ from the reviewed file, so none of them was run",
+            "If a retry fails the same way, report it; otherwise",
+        ),
+        InstallFailureReason::Storage => (
+            "VSift could not write its private managed folder",
+            "Free disk space or fix the folder's permissions, then",
+        ),
+        InstallFailureReason::Cancelled => ("the installation was cancelled", "To continue,"),
+        InstallFailureReason::Blocked => ("the component before it failed", "Then"),
+    };
+    let offline = match failure.reason {
+        InstallFailureReason::Download(_) => {
+            " Without network access, put the plan's files in one folder and pass it with --artifact-dir."
+        }
+        _ => "",
+    };
+    format!(
+        "Online videos were not installed: {component} failed ({reason}) because {cause}. {unaffected} {what_to_try} {retry}{offline}"
+    )
 }
 
 /// Remediation when another `setup install` holds the managed root.

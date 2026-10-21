@@ -396,6 +396,20 @@ pub(crate) struct SetupInstall {
     pub(crate) components: Vec<InstallComponent>,
     pub(crate) cleanup: InstallCleanup,
     pub(crate) next_step: String,
+    /// The three members of a plan with optional components (#409).
+    #[serde(default)]
+    pub(crate) core: Option<String>,
+    #[serde(default)]
+    pub(crate) optional_components: Vec<InstallComponent>,
+    #[serde(default)]
+    pub(crate) online_video: Option<InstallOnlineVideo>,
+}
+
+/// The `online_video` summary of a `setup install` result.
+#[derive(Debug, Deserialize)]
+pub(crate) struct InstallOnlineVideo {
+    pub(crate) status: String,
+    pub(crate) next_step: String,
 }
 
 /// What `setup install` cleaned up around its transaction (P13 PR 6).
@@ -530,6 +544,28 @@ pub(crate) struct SetupPlan {
     pub(crate) install_needed: Option<bool>,
     pub(crate) actions: Vec<PlanAction>,
     pub(crate) dependencies: Vec<PlanDependency>,
+    /// Absent from plans made before `0.3.0` (#409).
+    #[serde(default)]
+    pub(crate) optional_components: Vec<PlanOptional>,
+    #[serde(default)]
+    pub(crate) operator_decision_required: Option<String>,
+}
+
+/// One optional component a plan offers, includes or cannot offer.
+#[derive(Debug, Deserialize)]
+pub(crate) struct PlanOptional {
+    pub(crate) component: String,
+    pub(crate) summary: String,
+    pub(crate) add_command: Option<PlanCommand>,
+    pub(crate) actions: Vec<PlanAction>,
+    pub(crate) next_step: String,
+}
+
+/// A `vsift` command as an executable and an argument array.
+#[derive(Debug, Deserialize)]
+pub(crate) struct PlanCommand {
+    pub(crate) executable: String,
+    pub(crate) arguments: Vec<String>,
 }
 
 /// The plan's local-ASR model: a summary identifier in the unqualified
