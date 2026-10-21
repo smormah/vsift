@@ -376,6 +376,7 @@ fn page_response(revision: &TranscriptRevision) -> Built<OperationResponse<Value
             segments: &segments,
             next_cursor: None,
             coverage: &coverage,
+            time_anchors: &vsift_domain::TimeAnchors::none(),
         }),
     )?
     .with_lifecycle(LifecycleResponse::ephemeral(EXPIRES_AT.to_owned())))
@@ -506,6 +507,7 @@ fn a_spliced_revision_streams_schema_valid_evidence() -> TestResult {
             segments: &segments,
             next_cursor: None,
             coverage: &coverage,
+            time_anchors: &vsift_domain::TimeAnchors::none(),
         },
         LifecycleResponse::ephemeral(EXPIRES_AT.to_owned()),
     )?;
@@ -540,6 +542,7 @@ fn local_asr_revisions_and_segments_satisfy_their_schemas() -> TestResult {
             segments: &segments,
             next_cursor: None,
             coverage: &coverage,
+            time_anchors: &vsift_domain::TimeAnchors::none(),
         }),
     )?)?;
     let item = &response["data"]["items"][0];
@@ -1698,6 +1701,7 @@ fn session_status_lists_jobs_additively() -> TestResult {
         artifact_bytes: 3,
         generation: 3,
         expires_at: EXPIRES_AT.to_owned(),
+        time_anchor: None,
     };
     let plain = serde_json::to_value(&status)?;
     let job = SessionJobData::new(
@@ -1785,6 +1789,7 @@ fn get(revision: &TranscriptRevision, window: TimeRange, view: ResultView) -> Bu
             segments: &segments,
             next_cursor: None,
             coverage: &coverage,
+            time_anchors: &vsift_domain::TimeAnchors::none(),
         },
         LifecycleResponse::ephemeral(EXPIRES_AT.to_owned()),
         view,
@@ -1992,6 +1997,7 @@ async fn a_read_over_a_gap_is_partial_and_names_the_gap() -> TestResult {
             segments: &segments,
             next_cursor: None,
             coverage: &coverage,
+            time_anchors: &vsift_domain::TimeAnchors::none(),
         },
         LifecycleResponse::ephemeral(EXPIRES_AT.to_owned()),
     )?;
@@ -2029,6 +2035,7 @@ async fn a_read_over_a_gap_is_partial_and_names_the_gap() -> TestResult {
             hits: Vec::new(),
             next_cursor: None,
             coverage: &search_coverage,
+            time_anchors: &vsift_domain::TimeAnchors::none(),
         },
         LifecycleResponse::ephemeral(EXPIRES_AT.to_owned()),
     )?)?;
@@ -2364,6 +2371,7 @@ async fn a_read_and_a_search_agree_on_every_range() -> TestResult {
                 hits: Vec::new(),
                 next_cursor: None,
                 coverage: &coverage,
+                time_anchors: &vsift_domain::TimeAnchors::none(),
             },
             LifecycleResponse::ephemeral(EXPIRES_AT.to_owned()),
         )?)?;

@@ -31,6 +31,7 @@
 //! [`result`] answers `None` only for `setup check` (rendered from its typed
 //! report by [`setup_check`]) and a rejected command line, which only fails.
 
+mod clock;
 mod evidence;
 mod failure;
 mod handoff;

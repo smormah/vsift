@@ -135,8 +135,42 @@ fn f10_revision() -> Result<TranscriptRevision, Box<dyn std::error::Error>> {
     })?)
 }
 
+/// Writes `text` over an example when `VSIFT_REGENERATE_CONTRACT_EXAMPLES=1`.
+fn regenerate(relative_path: &str, text: &str) -> Result<(), Box<dyn std::error::Error>> {
+    if std::env::var("VSIFT_REGENERATE_CONTRACT_EXAMPLES").is_ok_and(|value| value == "1") {
+        fs::write(schema_root().join(relative_path), text)?;
+    }
+    Ok(())
+}
+
+/// The anchors of the time-anchoring examples (ADR 0029): the operator's
+/// statement and a container time an hour and a half later, which the
+/// recording's encoder wrote, so the two conflict.
+fn example_anchors() -> Result<vsift_domain::TimeAnchors, Box<dyn std::error::Error>> {
+    let start = MediaTime::from_micros(0);
+    Ok(vsift_domain::TimeAnchors::new(vec![
+        vsift_domain::TimeAnchor::new(
+            vsift_domain::AnchorSource::Operator,
+            start,
+            vsift_domain::ClockReading::parse("2026-09-18T09:15:00+01:00")?,
+        ),
+        vsift_domain::TimeAnchor::new(
+            vsift_domain::AnchorSource::ContainerCreationTime,
+            start,
+            vsift_domain::ClockReading::parse("2026-09-18T09:45:12Z")?,
+        ),
+    ])?)
+}
+
 fn ingest_response(
     revision: &TranscriptRevision,
+) -> Result<OperationResponse<Value>, Box<dyn std::error::Error>> {
+    anchored_ingest_response(revision, vsift_domain::TimeAnchors::none())
+}
+
+fn anchored_ingest_response(
+    revision: &TranscriptRevision,
+    time_anchors: vsift_domain::TimeAnchors,
 ) -> Result<OperationResponse<Value>, Box<dyn std::error::Error>> {
     let opened = OpenSessionOutcome {
         session_id: SessionId::parse(SESSION)?,
@@ -145,6 +179,7 @@ fn ingest_response(
         generation: StorageGeneration::from_value(1),
         publication: PublicationGuarantee::ProcessCrashConsistent,
         lifetime: SessionLifetime::open(1_790_208_000)?,
+        time_anchors,
     };
     Ok(OperationResponse::complete(
         "ingest",
@@ -159,6 +194,22 @@ fn page_response(
     from: u64,
     to: u64,
     limit: u16,
+) -> Result<OperationResponse<Value>, Box<dyn std::error::Error>> {
+    anchored_page_response(
+        revision,
+        from,
+        to,
+        limit,
+        &vsift_domain::TimeAnchors::none(),
+    )
+}
+
+fn anchored_page_response(
+    revision: &TranscriptRevision,
+    from: u64,
+    to: u64,
+    limit: u16,
+    time_anchors: &vsift_domain::TimeAnchors,
 ) -> Result<OperationResponse<Value>, Box<dyn std::error::Error>> {
     let session = SessionId::parse(SESSION)?;
     let range = TimeRange::new(MediaTime::from_micros(from), MediaTime::from_micros(to))?;
@@ -184,6 +235,7 @@ fn page_response(
             segments: &segments,
             next_cursor: cursor.as_deref(),
             coverage: &page.coverage,
+            time_anchors,
         }),
     )?
     .with_lifecycle(LifecycleResponse::ephemeral(EXPIRES_AT.to_owned())))
@@ -200,6 +252,50 @@ fn ingest_with_a_supplied_transcript_matches_the_frozen_example() -> TestResult 
         &response["data"]["transcript"],
     )?;
     assert_eq!(response, load("examples/ingest.transcript.json")?);
+    Ok(())
+}
+
+/// Time anchoring (ADR 0029): `ingest` with an anchor states it, and
+/// `transcript get` gives every segment its clock times; both match their
+/// examples and the schemas.
+#[test]
+fn anchored_results_match_their_examples() -> TestResult {
+    let revision = f10_revision()?;
+    let ingest = serde_json::to_value(anchored_ingest_response(&revision, example_anchors()?)?)?;
+    regenerate(
+        "examples/ingest.time-anchor.json",
+        &format!(
+            "{}
+",
+            serde_json::to_string_pretty(&ingest)?
+        ),
+    )?;
+    validate("operation-response.schema.json", &ingest)?;
+    validate("ingest-data.schema.json", &ingest["data"])?;
+    assert_eq!(ingest, load("examples/ingest.time-anchor.json")?);
+    assert_eq!(ingest["data"]["time_anchor"]["consistency"], "conflicting");
+
+    let page = serde_json::to_value(anchored_page_response(
+        &revision,
+        0,
+        12_000_000,
+        2,
+        &example_anchors()?,
+    )?)?;
+    regenerate(
+        "examples/transcript-get.clock-time.json",
+        &format!(
+            "{}
+",
+            serde_json::to_string_pretty(&page)?
+        ),
+    )?;
+    validate("transcript-get-data.schema.json", &page["data"])?;
+    assert_eq!(page, load("examples/transcript-get.clock-time.json")?);
+    assert_eq!(
+        page["data"]["items"][0]["clock_time"]["start"]["local"],
+        "2026-09-18T09:15:01.000000"
+    );
     Ok(())
 }
 
@@ -284,6 +380,7 @@ fn plain_ingest_data_is_unchanged_and_schema_valid() -> TestResult {
         generation: StorageGeneration::from_value(1),
         publication: PublicationGuarantee::ProcessCrashConsistent,
         lifetime: SessionLifetime::open(1_000)?,
+        time_anchors: vsift_domain::TimeAnchors::none(),
     };
     let data = serde_json::to_value(OpenData::new(&opened, EXPIRES_AT.to_owned()))?;
 
@@ -533,6 +630,7 @@ fn view_response(
             segments: &segments,
             next_cursor: cursor.as_deref(),
             coverage: &page.coverage,
+            time_anchors: &vsift_domain::TimeAnchors::none(),
         },
         LifecycleResponse::ephemeral(EXPIRES_AT.to_owned()),
         view,
@@ -794,6 +892,7 @@ fn the_stream_states_the_coverage_its_page_does() -> TestResult {
             segments: &revision.segments()[..2],
             next_cursor: None,
             coverage: &SearchCoverage::of(&revision, Some(range)),
+            time_anchors: &vsift_domain::TimeAnchors::none(),
         },
         LifecycleResponse::ephemeral(EXPIRES_AT.to_owned()),
     )?;

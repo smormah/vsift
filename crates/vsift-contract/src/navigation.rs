@@ -37,10 +37,11 @@ use vsift_domain::{
     AUDIO_CLIP_SAMPLE_RATE, BurstExtent, EvidenceDetail, EvidenceId, EvidenceItem,
     EvidenceMediaKind, EvidenceOperation, EvidenceRecord, EvidenceRequest, EvidenceSelection,
     EvidenceSubject, FrameRef, FrameSelectionError, NeighbourStop, PartialReason, SourceCheck,
+    TimeAnchors,
 };
 
 use crate::{
-    CommandName, EvidenceEventResponse, LifecycleResponse, OperationResponse,
+    ClockTimeData, CommandName, EvidenceEventResponse, LifecycleResponse, OperationResponse,
     TerminalEventResponse, delivered_path::delivered_path_text, stream::EvidenceStream,
 };
 
@@ -192,6 +193,9 @@ pub struct EvidencePresentation<'a> {
     pub reused: bool,
     /// One verified file per item, in the record's item order.
     pub files: &'a [DeliveredEvidenceFile<'a>],
+    /// The session's clock-time anchors, from which every item's
+    /// `clock_time` is derived (ADR 0029).
+    pub time_anchors: &'a TimeAnchors,
 }
 
 /// Why an evidence result could not be presented.
@@ -498,6 +502,10 @@ pub struct FrameEvidenceData {
     image: ImageData,
     profile: &'static str,
     tool_fingerprint: Option<String>,
+    /// The item's real-world clock time (ADR 0029); absent when the session
+    /// has no time anchor.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    clock_time: Option<ClockTimeData>,
 }
 
 impl FrameEvidenceData {
@@ -506,8 +514,9 @@ impl FrameEvidenceData {
         &self.evidence_id
     }
 
-    /// Presents one frame or crop item of `record`; `None` for an audio clip.
-    fn new(record: &EvidenceRecord, item: &EvidenceItem) -> Option<Self> {
+    /// Presents one frame or crop item of `record`, with the clock time of
+    /// its frame from `anchors`; `None` for an audio clip.
+    fn new(record: &EvidenceRecord, item: &EvidenceItem, anchors: &TimeAnchors) -> Option<Self> {
         let (kind, frame, crop) = match item.subject() {
             EvidenceSubject::Frame(frame) => ("frame", frame, None),
             EvidenceSubject::Crop { frame, region } => (
@@ -544,6 +553,7 @@ impl FrameEvidenceData {
             tool_fingerprint: item
                 .tool_fingerprint()
                 .map(|fingerprint| fingerprint.as_str().to_owned()),
+            clock_time: ClockTimeData::point(anchors, frame.time),
         })
     }
 }
@@ -629,12 +639,15 @@ impl FrameSummary {
         })
     }
 
-    fn items(record: &EvidenceRecord) -> Result<Vec<FrameEvidenceData>, EvidencePresentationError> {
+    fn items(
+        presentation: &EvidencePresentation<'_>,
+    ) -> Result<Vec<FrameEvidenceData>, EvidencePresentationError> {
+        let record = presentation.record;
         record
             .items()
             .iter()
             .map(|item| {
-                FrameEvidenceData::new(record, item)
+                FrameEvidenceData::new(record, item, presentation.time_anchors)
                     .ok_or(EvidencePresentationError::OperationMismatch)
             })
             .collect()
@@ -716,7 +729,7 @@ pub fn frame_response(
     lifecycle: LifecycleResponse,
 ) -> Result<OperationResponse<serde_json::Value>, EvidencePresentationError> {
     let summary = FrameSummary::new(presentation)?;
-    let items = FrameSummary::items(presentation.record)?;
+    let items = FrameSummary::items(presentation)?;
     let data = FrameData {
         session_id: summary.session_id,
         source_id: summary.source_id,
@@ -766,7 +779,7 @@ impl FrameEvidenceStream {
     ) -> Result<Self, EvidencePresentationError> {
         let summary = FrameSummary::new(presentation)?;
         let records: Vec<_> = (0_u64..)
-            .zip(FrameSummary::items(presentation.record)?)
+            .zip(FrameSummary::items(presentation)?)
             .map(|(sequence, item)| {
                 EvidenceEventResponse::frame_evidence(sequence, summary.command, item)
             })
@@ -829,6 +842,10 @@ pub struct AudioEvidenceData {
     audio: ClipData,
     profile: &'static str,
     tool_fingerprint: Option<String>,
+    /// The item's real-world clock time (ADR 0029); absent when the session
+    /// has no time anchor.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    clock_time: Option<ClockTimeData>,
 }
 
 impl AudioEvidenceData {
@@ -837,8 +854,10 @@ impl AudioEvidenceData {
         &self.evidence_id
     }
 
-    /// Presents one audio item of `record`; `None` for a frame or crop.
-    fn new(record: &EvidenceRecord, item: &EvidenceItem) -> Option<Self> {
+    /// Presents one audio item of `record`, with the clock times of its
+    /// planned range and its first decoded sample from `anchors`; `None` for
+    /// a frame or crop.
+    fn new(record: &EvidenceRecord, item: &EvidenceItem, anchors: &TimeAnchors) -> Option<Self> {
         let EvidenceSubject::Audio {
             stream_index,
             range,
@@ -868,6 +887,7 @@ impl AudioEvidenceData {
             tool_fingerprint: item
                 .tool_fingerprint()
                 .map(|fingerprint| fingerprint.as_str().to_owned()),
+            clock_time: ClockTimeData::range_with_point(anchors, *range, *actual_start),
         })
     }
 }
@@ -900,7 +920,7 @@ impl AudioSummary {
             .items()
             .iter()
             .map(|item| {
-                AudioEvidenceData::new(record, item)
+                AudioEvidenceData::new(record, item, presentation.time_anchors)
                     .ok_or(EvidencePresentationError::OperationMismatch)
             })
             .collect::<Result<Vec<_>, _>>()?;

@@ -32,6 +32,24 @@ note asks the reader to take your word.
 Always give the **time you got**, not the time you asked for. They differ by up to a frame, and a claim
 about a moment is a claim about the frame VSift really returned.
 
+## When it happened by the clock
+
+Every time above is a time into the video. To match a moment with a server log or a chat, you need the time
+on the clock. From version 0.3.0, VSift gives it when it knows when the recording started: give the start
+yourself when you open the video (`vsift ingest recording.mp4 --recorded-at 2026-10-21T14:03:12+01:00`), or let
+VSift read it from the file, where phone and screen recorders often write it. Each result then has a
+`clock_time`, and `ingest` and `session status` a `time_anchor` that says where the time came from:
+
+- `operator`: the time you gave. VSift takes it as exact.
+- `quicktime_creationdate`: the recording app's own note of when it started, usually with the time zone.
+- `container_creation_time`: when the file was made. Often that is when it was converted or copied, not
+  when it was recorded, so check it.
+
+If the sources disagree, `time_anchor` says `conflicting`: say so in your report. A clock time with
+`utc: null` is a local time whose zone is not known; it cannot be matched with logs in UTC until you know the
+zone, and VSift never compares it with the other sources (a clock in a screen share may show another
+country's time). VSift never uses the date a file was saved or downloaded, and a time is never guessed.
+
 ## Rules for good evidence
 
 1. **Quote the visible form.** When you copy words from a transcript, copy `display_text` (the line after

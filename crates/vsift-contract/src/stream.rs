@@ -13,7 +13,7 @@
 //! same stream for the same page.
 
 use serde::Serialize;
-use vsift_domain::{TranscriptRevision, TranscriptSegment};
+use vsift_domain::{TimeAnchors, TranscriptRevision, TranscriptSegment};
 
 use crate::{
     AudioEvidenceData, CONTRACT_VERSION, CommandName, FrameEvidenceData, LifecycleResponse,
@@ -200,6 +200,7 @@ impl EvidenceEventResponse {
         command: CommandName,
         revision: &TranscriptRevision,
         segment: &TranscriptSegment,
+        anchors: &TimeAnchors,
     ) -> Self {
         Self {
             schema_version: CONTRACT_VERSION,
@@ -209,9 +210,9 @@ impl EvidenceEventResponse {
             operation_id: None,
             record_type: EvidenceRecordType::TranscriptSegment.identifier(),
             key: segment.id().as_str().to_owned(),
-            record: EvidenceRecord::TranscriptSegment(Box::new(TranscriptSegmentData::new(
-                revision, segment,
-            ))),
+            record: EvidenceRecord::TranscriptSegment(Box::new(
+                TranscriptSegmentData::new(revision, segment).with_clock_time(anchors),
+            )),
         }
     }
 }
@@ -335,7 +336,13 @@ impl TranscriptEvidenceStream {
         let records: Vec<_> = (0_u64..)
             .zip(page.segments)
             .map(|(sequence, segment)| {
-                EvidenceEventResponse::transcript_segment(sequence, command, page.revision, segment)
+                EvidenceEventResponse::transcript_segment(
+                    sequence,
+                    command,
+                    page.revision,
+                    segment,
+                    page.time_anchors,
+                )
             })
             .collect();
         let data = TranscriptStreamData {

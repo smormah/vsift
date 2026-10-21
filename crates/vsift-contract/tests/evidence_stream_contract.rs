@@ -214,6 +214,7 @@ fn page(
         segments: &segments,
         next_cursor: next_cursor.as_deref(),
         coverage: &page.coverage,
+        time_anchors: &vsift_domain::TimeAnchors::none(),
     };
     let json = serde_json::to_value(transcript_get_response(
         &presentation,

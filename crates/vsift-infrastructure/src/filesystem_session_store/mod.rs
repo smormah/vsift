@@ -37,6 +37,7 @@ mod root;
 mod stored;
 #[cfg(test)]
 mod tests;
+mod time_anchors;
 mod work;
 #[cfg(test)]
 mod worker_request_tests;
@@ -61,7 +62,7 @@ use vsift_application::{SessionStorageError, StorageCapabilities};
 use vsift_domain::{
     DurabilityRequirement, EvidenceMediaKind, EvidenceRecord, OperationId, SessionArtifactKind,
     SessionId, SessionLifetime, SessionLifetimePolicy, SessionPhase, SourceId, StorageGeneration,
-    WorkspacePolicy, WorkspaceRetention,
+    TimeAnchors, WorkspacePolicy, WorkspaceRetention,
 };
 
 use crate::{VerifiedSourceIdentity, file_lock::HeldFileLock};
@@ -376,6 +377,7 @@ pub struct SessionStatus {
     generation: StorageGeneration,
     artifact_count: usize,
     artifact_bytes: u64,
+    time_anchors: TimeAnchors,
 }
 
 /// Explicit portability requested for a user-selected retained bundle.
@@ -571,6 +573,13 @@ impl SessionStatus {
     pub const fn artifact_bytes(&self) -> u64 {
         self.artifact_bytes
     }
+
+    /// The clock-time anchors stored when the session opened (ADR 0029);
+    /// empty when no clock time is known.
+    #[must_use]
+    pub const fn time_anchors(&self) -> &TimeAnchors {
+        &self.time_anchors
+    }
 }
 
 enum LifecycleUpdate {
@@ -583,6 +592,8 @@ enum LifecycleUpdate {
         artifacts: Vec<StoredArtifact>,
         /// The lifetime rules of the root the session opens in.
         lifetime: SessionLifetimePolicy,
+        /// The source's time anchors, stored once (ADR 0029).
+        time_anchors: Vec<time_anchors::StoredTimeAnchor>,
     },
     Renew {
         now: u64,
@@ -1193,6 +1204,11 @@ struct StoredLifecycle {
     /// session, whose record is unchanged since P05.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     workspace_retention_seconds: Option<u64>,
+    /// The source's clock-time anchors (time anchoring, ADR 0029), written at
+    /// activation and carried unchanged; absent when there are none, so a
+    /// session without them is recorded exactly as before.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    time_anchors: Vec<time_anchors::StoredTimeAnchor>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

@@ -346,6 +346,7 @@ fn search(
             .collect(),
         next_cursor: next_cursor.as_deref(),
         coverage: &page.coverage,
+        time_anchors: &vsift_domain::TimeAnchors::none(),
     };
     let lifecycle = || LifecycleResponse::ephemeral(EXPIRES_AT.to_owned());
     let json = serde_json::to_value(search_response(&presentation, lifecycle())?)?;

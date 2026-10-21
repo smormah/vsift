@@ -379,6 +379,7 @@ fn json_of(record: &EvidenceRecord, reused: bool) -> Built<Value> {
         record,
         reused,
         files: &files,
+        time_anchors: &vsift_domain::TimeAnchors::none(),
     };
     Ok(serde_json::to_value(frame_response(
         &presentation,
@@ -394,6 +395,7 @@ fn lines_of(record: &EvidenceRecord) -> Built<Vec<String>> {
         record,
         reused: false,
         files: &files,
+        time_anchors: &vsift_domain::TimeAnchors::none(),
     };
     let stream = FrameEvidenceStream::new(&presentation, lifecycle())?;
     let mut lines = stream
@@ -403,6 +405,75 @@ fn lines_of(record: &EvidenceRecord) -> Built<Vec<String>> {
         .collect::<Result<Vec<_>, _>>()?;
     lines.push(serde_json::to_string(stream.terminal())?);
     Ok(lines)
+}
+
+/// The F01 recording's anchor for the clock-time tests: a recorder tag of
+/// 09:30:00 at -05:00 at the start of the timeline.
+fn recorder_anchor() -> Built<vsift_domain::TimeAnchors> {
+    Ok(vsift_domain::TimeAnchors::new(vec![
+        vsift_domain::TimeAnchor::new(
+            vsift_domain::AnchorSource::QuicktimeCreationDate,
+            micros(0),
+            vsift_domain::ClockReading::parse("2026-10-21T09:30:00-05:00")?,
+        ),
+    ])?)
+}
+
+/// Time anchoring (ADR 0029): a frame carries the clock time of the frame
+/// it delivers, not of the time asked for; the schema accepts it.
+#[tokio::test]
+async fn a_frame_carries_the_clock_time_of_the_delivered_frame() -> TestResult {
+    let fixture = Fixture::new()?;
+    let extraction = fixture.frame_get(1_025_000).await?;
+    let paths = placeholder_paths(&extraction.record);
+    let files = delivered(&extraction.record, &paths);
+    let anchors = recorder_anchor()?;
+    let presentation = EvidencePresentation {
+        record: &extraction.record,
+        reused: false,
+        files: &files,
+        time_anchors: &anchors,
+    };
+    let value = serde_json::to_value(frame_response(&presentation, lifecycle())?)?;
+    validate("frame-data.schema.json", &value["data"])?;
+    let item = &value["data"]["items"][0];
+    validate("frame-evidence.schema.json", item)?;
+    assert_eq!(item["frame"]["time_us"], 1_050_000);
+    assert_eq!(
+        item["clock_time"],
+        serde_json::json!({
+            "source": "quicktime_creationdate",
+            "confidence": "high",
+            "at": {"utc": "2026-10-21T14:30:01.050000Z", "local": "2026-10-21T09:30:01.050000", "utc_offset": "-05:00"}
+        })
+    );
+    Ok(())
+}
+
+/// An audio clip carries the clock times of its planned range and of its
+/// first decoded sample.
+#[tokio::test]
+async fn an_audio_clip_carries_the_clock_times_of_its_range_and_first_sample() -> TestResult {
+    let fixture = Fixture::new()?;
+    let extraction = audio_extraction(&fixture, 0, 1_000_000).await?;
+    let paths = placeholder_paths(&extraction.record);
+    let files = delivered(&extraction.record, &paths);
+    let anchors = recorder_anchor()?;
+    let value = serde_json::to_value(audio_response(
+        &EvidencePresentation {
+            record: &extraction.record,
+            reused: false,
+            files: &files,
+            time_anchors: &anchors,
+        },
+        lifecycle(),
+    )?)?;
+    validate("audio-data.schema.json", &value["data"])?;
+    let clock = &value["data"]["items"][0]["clock_time"];
+    assert_eq!(clock["start"]["local"], "2026-10-21T09:30:00.000000");
+    assert_eq!(clock["end"]["local"], "2026-10-21T09:30:01.000000");
+    assert_eq!(clock["at"]["local"], "2026-10-21T09:30:00.064000");
+    Ok(())
 }
 
 fn pretty(value: &Value) -> Built<String> {
@@ -615,6 +686,7 @@ async fn files_that_do_not_match_the_items_are_refused() -> TestResult {
                 record,
                 reused: false,
                 files,
+                time_anchors: &vsift_domain::TimeAnchors::none(),
             },
             lifecycle(),
         )
@@ -659,6 +731,7 @@ async fn a_non_utf8_path_is_a_typed_error() -> TestResult {
                 record: &extraction.record,
                 reused: false,
                 files: &files,
+                time_anchors: &vsift_domain::TimeAnchors::none(),
             },
             lifecycle(),
         ),
@@ -825,6 +898,7 @@ fn audio_json(record: &EvidenceRecord) -> Built<Value> {
             record,
             reused: false,
             files: &files,
+            time_anchors: &vsift_domain::TimeAnchors::none(),
         },
         lifecycle(),
     )?)?)
@@ -889,6 +963,7 @@ async fn the_audio_stream_is_one_clip_then_the_terminal_event() -> TestResult {
         record,
         reused: false,
         files: &files,
+        time_anchors: &vsift_domain::TimeAnchors::none(),
     };
     let stream = AudioEvidenceStream::new(&presentation, lifecycle())?;
     let json = audio_json(record)?;
@@ -920,6 +995,7 @@ async fn the_audio_stream_is_one_clip_then_the_terminal_event() -> TestResult {
                 record: &frame.record,
                 reused: false,
                 files: &frame_files,
+                time_anchors: &vsift_domain::TimeAnchors::none(),
             },
             lifecycle()
         ),

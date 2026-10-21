@@ -17,6 +17,10 @@
     "tool_fingerprint"
   ],
   "properties": {
+    "clock_time": {
+      "description": "The frame's real-world clock time, at (time anchoring, 0.3.0); absent when the session has no time anchor. See time-anchor.schema.json.",
+      "$ref": "time-anchor.schema.json#/$defs/clock_time"
+    },
     "evidence_id": { "$ref": "#/$defs/evidence_id" },
     "source_id": { "type": "string", "pattern": "^src_sha256_[0-9a-f]{64}$" },
     "stream_index": { "$ref": "#/$defs/u32" },

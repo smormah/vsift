@@ -63,6 +63,7 @@ The `error.code` of a failed result is one of these (the schema's own list). Wha
 - [setup-repair.schema.json](#setup-repairschemajson): VSift setup repair data v1
 - [setup-rollback.schema.json](#setup-rollbackschemajson): VSift setup rollback data v1
 - [terminal-event.schema.json](#terminal-eventschemajson): VSift JSONL terminal event v1
+- [time-anchor.schema.json](#time-anchorschemajson): VSift time anchor v1
 - [transcript-get-brief-data.schema.json](#transcript-get-brief-dataschemajson): VSift transcript.get data, brief view v1
 - [transcript-get-data.schema.json](#transcript-get-dataschemajson): VSift transcript.get data v1
 - [transcript-get-stream-data.schema.json](#transcript-get-stream-dataschemajson): VSift transcript.get JSON Lines terminal data v1
@@ -111,6 +112,21 @@ One published audio_evidence record (P09, ADR 0019): a WAV clip of the session's
 
 | Member | Type | Required | Notes |
 | --- | --- | --- | --- |
+| `clock_time` | any or any | no | The clip's real-world clock times (time anchoring, 0.3.0): start and end of its planned range, and at, its first decoded sample (actual_start_us); absent when the session has no time anchor. See time-anchor.schema.json. |
+| `clock_time.source` | "operator" \| "quicktime_creationdate" \| "container_creation_time" | yes |  |
+| `clock_time.confidence` | "exact" \| "high" \| "medium" | yes |  |
+| `clock_time.at` | object or object | no | One clock reading. utc is the exact instant, when the reading names one: RFC 3339 in UTC with six fraction digits and Z. local is what the local clock showed, when the source said so: the date and time with six fraction digits and no zone. utc_offset is the local clock's offset from UTC (+HH:MM or -HH:MM), present only when both are. utc without local: the instant is known, the local zone is not. local without utc: a local time whose zone is not known, which names no instant; matching it with UTC logs needs the zone from elsewhere. |
+| `clock_time.at.utc` | string or null | yes | pattern `^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{6}Z$` |
+| `clock_time.at.local` | string or null | yes | pattern `^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{6}$` |
+| `clock_time.at.utc_offset` | string or null | yes | pattern `^[+-][0-9]{2}:[0-9]{2}$` |
+| `clock_time.start` | object or object | no | One clock reading. utc is the exact instant, when the reading names one: RFC 3339 in UTC with six fraction digits and Z. local is what the local clock showed, when the source said so: the date and time with six fraction digits and no zone. utc_offset is the local clock's offset from UTC (+HH:MM or -HH:MM), present only when both are. utc without local: the instant is known, the local zone is not. local without utc: a local time whose zone is not known, which names no instant; matching it with UTC logs needs the zone from elsewhere. |
+| `clock_time.start.utc` | string or null | yes | pattern `^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{6}Z$` |
+| `clock_time.start.local` | string or null | yes | pattern `^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{6}$` |
+| `clock_time.start.utc_offset` | string or null | yes | pattern `^[+-][0-9]{2}:[0-9]{2}$` |
+| `clock_time.end` | object or object | no | One clock reading. utc is the exact instant, when the reading names one: RFC 3339 in UTC with six fraction digits and Z. local is what the local clock showed, when the source said so: the date and time with six fraction digits and no zone. utc_offset is the local clock's offset from UTC (+HH:MM or -HH:MM), present only when both are. utc without local: the instant is known, the local zone is not. local without utc: a local time whose zone is not known, which names no instant; matching it with UTC logs needs the zone from elsewhere. |
+| `clock_time.end.utc` | string or null | yes | pattern `^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{6}Z$` |
+| `clock_time.end.local` | string or null | yes | pattern `^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{6}$` |
+| `clock_time.end.utc_offset` | string or null | yes | pattern `^[+-][0-9]{2}:[0-9]{2}$` |
 | `evidence_id` | string | yes | pattern `^evd_[a-z0-9]{16,64}$` |
 | `source_id` | string | yes | pattern `^src_sha256_[0-9a-f]{64}$` |
 | `stream_index` | integer | yes | 0 to 4294967295 |
@@ -657,6 +673,21 @@ One published frame_evidence record (P09, ADR 0019): a whole displayed frame of 
 
 | Member | Type | Required | Notes |
 | --- | --- | --- | --- |
+| `clock_time` | any or any | no | The frame's real-world clock time, at (time anchoring, 0.3.0); absent when the session has no time anchor. See time-anchor.schema.json. |
+| `clock_time.source` | "operator" \| "quicktime_creationdate" \| "container_creation_time" | yes |  |
+| `clock_time.confidence` | "exact" \| "high" \| "medium" | yes |  |
+| `clock_time.at` | object or object | no | One clock reading. utc is the exact instant, when the reading names one: RFC 3339 in UTC with six fraction digits and Z. local is what the local clock showed, when the source said so: the date and time with six fraction digits and no zone. utc_offset is the local clock's offset from UTC (+HH:MM or -HH:MM), present only when both are. utc without local: the instant is known, the local zone is not. local without utc: a local time whose zone is not known, which names no instant; matching it with UTC logs needs the zone from elsewhere. |
+| `clock_time.at.utc` | string or null | yes | pattern `^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{6}Z$` |
+| `clock_time.at.local` | string or null | yes | pattern `^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{6}$` |
+| `clock_time.at.utc_offset` | string or null | yes | pattern `^[+-][0-9]{2}:[0-9]{2}$` |
+| `clock_time.start` | object or object | no | One clock reading. utc is the exact instant, when the reading names one: RFC 3339 in UTC with six fraction digits and Z. local is what the local clock showed, when the source said so: the date and time with six fraction digits and no zone. utc_offset is the local clock's offset from UTC (+HH:MM or -HH:MM), present only when both are. utc without local: the instant is known, the local zone is not. local without utc: a local time whose zone is not known, which names no instant; matching it with UTC logs needs the zone from elsewhere. |
+| `clock_time.start.utc` | string or null | yes | pattern `^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{6}Z$` |
+| `clock_time.start.local` | string or null | yes | pattern `^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{6}$` |
+| `clock_time.start.utc_offset` | string or null | yes | pattern `^[+-][0-9]{2}:[0-9]{2}$` |
+| `clock_time.end` | object or object | no | One clock reading. utc is the exact instant, when the reading names one: RFC 3339 in UTC with six fraction digits and Z. local is what the local clock showed, when the source said so: the date and time with six fraction digits and no zone. utc_offset is the local clock's offset from UTC (+HH:MM or -HH:MM), present only when both are. utc without local: the instant is known, the local zone is not. local without utc: a local time whose zone is not known, which names no instant; matching it with UTC logs needs the zone from elsewhere. |
+| `clock_time.end.utc` | string or null | yes | pattern `^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{6}Z$` |
+| `clock_time.end.local` | string or null | yes | pattern `^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{6}$` |
+| `clock_time.end.utc_offset` | string or null | yes | pattern `^[+-][0-9]{2}:[0-9]{2}$` |
 | `evidence_id` | string | yes | pattern `^evd_[a-z0-9]{16,64}$` |
 | `source_id` | string | yes | pattern `^src_sha256_[0-9a-f]{64}$` |
 | `stream_index` | integer | yes | 0 to 4294967295 |
@@ -768,7 +799,7 @@ This schema also holds 4 conditional rules (a member that is required, or fixed,
 
 **VSift ingest data v1** ([the schema](../../../schemas/v1/ingest-data.schema.json))
 
-The data member of a complete ingest result. transcript is present only when a supplied transcript was imported with the session; a plain ingest omits it. publication is the session's own guarantee: process_crash_consistent, or os_crash_durable for a durable session on the qualified profile (P10 engine API; P11 durable workspaces). Validate the envelope with operation-response.schema.json.
+The data member of a complete ingest result. transcript is present only when a supplied transcript was imported with the session; a plain ingest omits it. time_anchor is present only when the session has a clock-time anchor. publication is the session's own guarantee: process_crash_consistent, or os_crash_durable for a durable session on the qualified profile (P10 engine API; P11 durable workspaces). Validate the envelope with operation-response.schema.json.
 
 | Member | Type | Required | Notes |
 | --- | --- | --- | --- |
@@ -779,6 +810,7 @@ The data member of a complete ingest result. transcript is present only when a s
 | `publication` | "process_crash_consistent" \| "os_crash_durable" | yes |  |
 | `expires_at` | string | yes | format date-time |
 | `transcript` | object, see [transcript-revision.schema.json](#transcript-revisionschemajson) | no |  |
+| `time_anchor` | object, see [time-anchor.schema.json](#time-anchorschemajson) | no | When the recording happened by the real-world clock, and on what authority (time anchoring, 0.3.0): from ingest --recorded-at, else the container's recording-time tags, which a plain ingest reads with one FFprobe run when the media tools are set up and verified. Absent when no clock time is known. |
 
 ### job-batch-data.schema.json
 
@@ -1439,6 +1471,32 @@ The last line of every --events jsonl stream; exactly one per stream. Its sequen
 | `result.coverage` | any | yes |  |
 | `result.lifecycle` | any | yes |  |
 
+### time-anchor.schema.json
+
+**VSift time anchor v1** ([the schema](../../../schemas/v1/time-anchor.schema.json))
+
+Time anchoring (0.3.0, ADR 0029): the time_anchor member of ingest and session status data, which says when the recording happened by the real-world clock and on what authority. It is present only when the session has an anchor; a session without one omits it, and every timestamped item then omits clock_time. An anchor ties one position of the timeline (media_time_us) to one clock reading from one source. The sources, in the order clock times are taken from them: operator (ingest --recorded-at, confidence exact), quicktime_creationdate (the recording app's own local-time tag, high) and container_creation_time (the container's UTC creation time, medium: many tools write the time they encoded or remuxed the file, and some devices the end of the recording). A file's modification time is never a source, and an online provider's upload date is not a recording time. consistency says whether the anchors agree: single (one anchor, or no two that name an instant), consistent (every two that name an instant agree within two seconds) or conflicting (two disagree; clock times still come from the first source, and a reader should say they are disputed). Only anchors that name an instant are compared: a local time whose zone is unknown (a clock face, or a statement without an offset) is never compared with another reading. Later releases may add sources (for example clocks visible on screen, at other positions of the timeline) and consistency values; a reader treats an unknown value as a reason to check the anchors list.
+
+| Member | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `consistency` | "single" \| "consistent" \| "conflicting" | yes |  |
+| `source` | "operator" \| "quicktime_creationdate" \| "container_creation_time" | yes | The anchor every clock time of the session comes from: the first of anchors. |
+| `confidence` | "exact" \| "high" \| "medium" | yes |  |
+| `recording_start` | object or object | yes | The clock time of the start of the timeline (media time 0) by the selected anchor. |
+| `recording_start.utc` | string or null | yes | pattern `^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{6}Z$` |
+| `recording_start.local` | string or null | yes | pattern `^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{6}$` |
+| `recording_start.utc_offset` | string or null | yes | pattern `^[+-][0-9]{2}:[0-9]{2}$` |
+| `anchors` | array of object | yes | Every anchor, in the order clock times are taken from them.; 1 to 16 items |
+| `anchors[].source` | "operator" \| "quicktime_creationdate" \| "container_creation_time" | yes |  |
+| `anchors[].confidence` | "exact" \| "high" \| "medium" | yes |  |
+| `anchors[].media_time_us` | integer | yes | The timeline position, in microseconds, whose clock reading this is. 0 for every source of 0.3.0.; at least 0 |
+| `anchors[].time` | object or object | yes | One clock reading. utc is the exact instant, when the reading names one: RFC 3339 in UTC with six fraction digits and Z. local is what the local clock showed, when the source said so: the date and time with six fraction digits and no zone. utc_offset is the local clock's offset from UTC (+HH:MM or -HH:MM), present only when both are. utc without local: the instant is known, the local zone is not. local without utc: a local time whose zone is not known, which names no instant; matching it with UTC logs needs the zone from elsewhere. |
+| `anchors[].time.utc` | string or null | yes | pattern `^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{6}Z$` |
+| `anchors[].time.local` | string or null | yes | pattern `^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{6}$` |
+| `anchors[].time.utc_offset` | string or null | yes | pattern `^[+-][0-9]{2}:[0-9]{2}$` |
+
+This schema also holds 1 conditional rule (a member that is required, or fixed, when another has a given value); read [the schema](../../../schemas/v1/time-anchor.schema.json) for it.
+
 ### transcript-get-brief-data.schema.json
 
 **VSift transcript.get data, brief view v1** ([the schema](../../../schemas/v1/transcript-get-brief-data.schema.json))
@@ -1630,6 +1688,21 @@ One transcript segment as the brief view of transcript.get and search gives it (
 
 | Member | Type | Required | Notes |
 | --- | --- | --- | --- |
+| `clock_time` | any or any | no | As in the full segment: its clock times, start and end; absent when the session has no time anchor. |
+| `clock_time.source` | "operator" \| "quicktime_creationdate" \| "container_creation_time" | yes |  |
+| `clock_time.confidence` | "exact" \| "high" \| "medium" | yes |  |
+| `clock_time.at` | object or object | no | One clock reading. utc is the exact instant, when the reading names one: RFC 3339 in UTC with six fraction digits and Z. local is what the local clock showed, when the source said so: the date and time with six fraction digits and no zone. utc_offset is the local clock's offset from UTC (+HH:MM or -HH:MM), present only when both are. utc without local: the instant is known, the local zone is not. local without utc: a local time whose zone is not known, which names no instant; matching it with UTC logs needs the zone from elsewhere. |
+| `clock_time.at.utc` | string or null | yes | pattern `^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{6}Z$` |
+| `clock_time.at.local` | string or null | yes | pattern `^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{6}$` |
+| `clock_time.at.utc_offset` | string or null | yes | pattern `^[+-][0-9]{2}:[0-9]{2}$` |
+| `clock_time.start` | object or object | no | One clock reading. utc is the exact instant, when the reading names one: RFC 3339 in UTC with six fraction digits and Z. local is what the local clock showed, when the source said so: the date and time with six fraction digits and no zone. utc_offset is the local clock's offset from UTC (+HH:MM or -HH:MM), present only when both are. utc without local: the instant is known, the local zone is not. local without utc: a local time whose zone is not known, which names no instant; matching it with UTC logs needs the zone from elsewhere. |
+| `clock_time.start.utc` | string or null | yes | pattern `^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{6}Z$` |
+| `clock_time.start.local` | string or null | yes | pattern `^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{6}$` |
+| `clock_time.start.utc_offset` | string or null | yes | pattern `^[+-][0-9]{2}:[0-9]{2}$` |
+| `clock_time.end` | object or object | no | One clock reading. utc is the exact instant, when the reading names one: RFC 3339 in UTC with six fraction digits and Z. local is what the local clock showed, when the source said so: the date and time with six fraction digits and no zone. utc_offset is the local clock's offset from UTC (+HH:MM or -HH:MM), present only when both are. utc without local: the instant is known, the local zone is not. local without utc: a local time whose zone is not known, which names no instant; matching it with UTC logs needs the zone from elsewhere. |
+| `clock_time.end.utc` | string or null | yes | pattern `^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{6}Z$` |
+| `clock_time.end.local` | string or null | yes | pattern `^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{6}$` |
+| `clock_time.end.utc_offset` | string or null | yes | pattern `^[+-][0-9]{2}:[0-9]{2}$` |
 | `segment_id` | string | yes | pattern `^tsg_[a-z0-9]{16,64}$` |
 | `start_us` | integer | yes | at least 0 |
 | `end_us` | integer | yes | at least 1 |
@@ -1649,6 +1722,21 @@ One citable, timestamped transcript segment. Each record names its own revision,
 
 | Member | Type | Required | Notes |
 | --- | --- | --- | --- |
+| `clock_time` | any or any | no | The segment's real-world clock times, start and end (time anchoring, 0.3.0); absent when the session has no time anchor. See time-anchor.schema.json. |
+| `clock_time.source` | "operator" \| "quicktime_creationdate" \| "container_creation_time" | yes |  |
+| `clock_time.confidence` | "exact" \| "high" \| "medium" | yes |  |
+| `clock_time.at` | object or object | no | One clock reading. utc is the exact instant, when the reading names one: RFC 3339 in UTC with six fraction digits and Z. local is what the local clock showed, when the source said so: the date and time with six fraction digits and no zone. utc_offset is the local clock's offset from UTC (+HH:MM or -HH:MM), present only when both are. utc without local: the instant is known, the local zone is not. local without utc: a local time whose zone is not known, which names no instant; matching it with UTC logs needs the zone from elsewhere. |
+| `clock_time.at.utc` | string or null | yes | pattern `^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{6}Z$` |
+| `clock_time.at.local` | string or null | yes | pattern `^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{6}$` |
+| `clock_time.at.utc_offset` | string or null | yes | pattern `^[+-][0-9]{2}:[0-9]{2}$` |
+| `clock_time.start` | object or object | no | One clock reading. utc is the exact instant, when the reading names one: RFC 3339 in UTC with six fraction digits and Z. local is what the local clock showed, when the source said so: the date and time with six fraction digits and no zone. utc_offset is the local clock's offset from UTC (+HH:MM or -HH:MM), present only when both are. utc without local: the instant is known, the local zone is not. local without utc: a local time whose zone is not known, which names no instant; matching it with UTC logs needs the zone from elsewhere. |
+| `clock_time.start.utc` | string or null | yes | pattern `^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{6}Z$` |
+| `clock_time.start.local` | string or null | yes | pattern `^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{6}$` |
+| `clock_time.start.utc_offset` | string or null | yes | pattern `^[+-][0-9]{2}:[0-9]{2}$` |
+| `clock_time.end` | object or object | no | One clock reading. utc is the exact instant, when the reading names one: RFC 3339 in UTC with six fraction digits and Z. local is what the local clock showed, when the source said so: the date and time with six fraction digits and no zone. utc_offset is the local clock's offset from UTC (+HH:MM or -HH:MM), present only when both are. utc without local: the instant is known, the local zone is not. local without utc: a local time whose zone is not known, which names no instant; matching it with UTC logs needs the zone from elsewhere. |
+| `clock_time.end.utc` | string or null | yes | pattern `^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{6}Z$` |
+| `clock_time.end.local` | string or null | yes | pattern `^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{6}$` |
+| `clock_time.end.utc_offset` | string or null | yes | pattern `^[+-][0-9]{2}:[0-9]{2}$` |
 | `segment_id` | string | yes | pattern `^tsg_[a-z0-9]{16,64}$` |
 | `revision_id` | string | yes | pattern `^trv_[a-z0-9]{16,64}$` |
 | `source_id` | string | yes | pattern `^src_sha256_[0-9a-f]{64}$` |
@@ -1701,6 +1789,21 @@ One visual candidate as the brief view of candidates gives it (--view brief, 0.2
 
 | Member | Type | Required | Notes |
 | --- | --- | --- | --- |
+| `clock_time` | any or any | no | As in the full candidate: the clock times of its span and representative frame; absent when the session has no time anchor. |
+| `clock_time.source` | "operator" \| "quicktime_creationdate" \| "container_creation_time" | yes |  |
+| `clock_time.confidence` | "exact" \| "high" \| "medium" | yes |  |
+| `clock_time.at` | object or object | no | One clock reading. utc is the exact instant, when the reading names one: RFC 3339 in UTC with six fraction digits and Z. local is what the local clock showed, when the source said so: the date and time with six fraction digits and no zone. utc_offset is the local clock's offset from UTC (+HH:MM or -HH:MM), present only when both are. utc without local: the instant is known, the local zone is not. local without utc: a local time whose zone is not known, which names no instant; matching it with UTC logs needs the zone from elsewhere. |
+| `clock_time.at.utc` | string or null | yes | pattern `^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{6}Z$` |
+| `clock_time.at.local` | string or null | yes | pattern `^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{6}$` |
+| `clock_time.at.utc_offset` | string or null | yes | pattern `^[+-][0-9]{2}:[0-9]{2}$` |
+| `clock_time.start` | object or object | no | One clock reading. utc is the exact instant, when the reading names one: RFC 3339 in UTC with six fraction digits and Z. local is what the local clock showed, when the source said so: the date and time with six fraction digits and no zone. utc_offset is the local clock's offset from UTC (+HH:MM or -HH:MM), present only when both are. utc without local: the instant is known, the local zone is not. local without utc: a local time whose zone is not known, which names no instant; matching it with UTC logs needs the zone from elsewhere. |
+| `clock_time.start.utc` | string or null | yes | pattern `^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{6}Z$` |
+| `clock_time.start.local` | string or null | yes | pattern `^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{6}$` |
+| `clock_time.start.utc_offset` | string or null | yes | pattern `^[+-][0-9]{2}:[0-9]{2}$` |
+| `clock_time.end` | object or object | no | One clock reading. utc is the exact instant, when the reading names one: RFC 3339 in UTC with six fraction digits and Z. local is what the local clock showed, when the source said so: the date and time with six fraction digits and no zone. utc_offset is the local clock's offset from UTC (+HH:MM or -HH:MM), present only when both are. utc without local: the instant is known, the local zone is not. local without utc: a local time whose zone is not known, which names no instant; matching it with UTC logs needs the zone from elsewhere. |
+| `clock_time.end.utc` | string or null | yes | pattern `^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{6}Z$` |
+| `clock_time.end.local` | string or null | yes | pattern `^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{6}$` |
+| `clock_time.end.utc_offset` | string or null | yes | pattern `^[+-][0-9]{2}:[0-9]{2}$` |
 | `candidate_id` | string | yes | Derived from the session, source, stream, analysis profile, window and representative time, so it never changes when later windows are analysed.; pattern `^vcd_[a-z0-9]{16,64}$` |
 | `representative_us` | integer | yes | at least 0 |
 | `span` | object | yes |  |
@@ -1721,6 +1824,21 @@ One visual candidate, a published evidence record (P08, ADR 0018): a moment at w
 
 | Member | Type | Required | Notes |
 | --- | --- | --- | --- |
+| `clock_time` | any or any | no | The candidate's real-world clock times (time anchoring, 0.3.0): start and end of its span, and at, its representative frame; absent when the session has no time anchor. See time-anchor.schema.json. |
+| `clock_time.source` | "operator" \| "quicktime_creationdate" \| "container_creation_time" | yes |  |
+| `clock_time.confidence` | "exact" \| "high" \| "medium" | yes |  |
+| `clock_time.at` | object or object | no | One clock reading. utc is the exact instant, when the reading names one: RFC 3339 in UTC with six fraction digits and Z. local is what the local clock showed, when the source said so: the date and time with six fraction digits and no zone. utc_offset is the local clock's offset from UTC (+HH:MM or -HH:MM), present only when both are. utc without local: the instant is known, the local zone is not. local without utc: a local time whose zone is not known, which names no instant; matching it with UTC logs needs the zone from elsewhere. |
+| `clock_time.at.utc` | string or null | yes | pattern `^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{6}Z$` |
+| `clock_time.at.local` | string or null | yes | pattern `^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{6}$` |
+| `clock_time.at.utc_offset` | string or null | yes | pattern `^[+-][0-9]{2}:[0-9]{2}$` |
+| `clock_time.start` | object or object | no | One clock reading. utc is the exact instant, when the reading names one: RFC 3339 in UTC with six fraction digits and Z. local is what the local clock showed, when the source said so: the date and time with six fraction digits and no zone. utc_offset is the local clock's offset from UTC (+HH:MM or -HH:MM), present only when both are. utc without local: the instant is known, the local zone is not. local without utc: a local time whose zone is not known, which names no instant; matching it with UTC logs needs the zone from elsewhere. |
+| `clock_time.start.utc` | string or null | yes | pattern `^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{6}Z$` |
+| `clock_time.start.local` | string or null | yes | pattern `^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{6}$` |
+| `clock_time.start.utc_offset` | string or null | yes | pattern `^[+-][0-9]{2}:[0-9]{2}$` |
+| `clock_time.end` | object or object | no | One clock reading. utc is the exact instant, when the reading names one: RFC 3339 in UTC with six fraction digits and Z. local is what the local clock showed, when the source said so: the date and time with six fraction digits and no zone. utc_offset is the local clock's offset from UTC (+HH:MM or -HH:MM), present only when both are. utc without local: the instant is known, the local zone is not. local without utc: a local time whose zone is not known, which names no instant; matching it with UTC logs needs the zone from elsewhere. |
+| `clock_time.end.utc` | string or null | yes | pattern `^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{6}Z$` |
+| `clock_time.end.local` | string or null | yes | pattern `^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{6}$` |
+| `clock_time.end.utc_offset` | string or null | yes | pattern `^[+-][0-9]{2}:[0-9]{2}$` |
 | `candidate_id` | string | yes | Derived from the session, source, stream, analysis profile, window and representative time, so it never changes when later windows are analysed.; pattern `^vcd_[a-z0-9]{16,64}$` |
 | `source_id` | string | yes | pattern `^src_sha256_[0-9a-f]{64}$` |
 | `source_segment_id` | string | yes | pattern `^sgm_[a-z0-9]{16,64}$` |

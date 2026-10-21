@@ -181,6 +181,7 @@ async fn seed_session(root: &OwnedRoot) -> Built<()> {
         &OperationId::parse("op_2222222222222222")?,
         StorageGeneration::INITIAL,
         now,
+        &vsift_domain::TimeAnchors::none(),
         &revision,
     )?;
     Ok(())
