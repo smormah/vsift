@@ -219,21 +219,30 @@ impl JobMode {
 }
 
 /// One stream of a `prepare` job (ADR 0033 section 5): a piece of the
-/// preparation that runs as a job of its own.
+/// preparation, run in the order of [`PrepareStream::ALL`].
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum PrepareStream {
+    /// The transcript of the window the caller named first (`--first`, D5):
+    /// a range retranscription on the whole run's chunk grid, sealed at once,
+    /// whose chunks the whole transcript then reuses.
+    FirstWindow,
+    /// The visual-candidate index of the whole source (D6), published in
+    /// batches of windows.
+    Visual,
     /// The transcript: a whole-source retranscription.
     Transcript,
 }
 
 impl PrepareStream {
     /// Every stream, in the order a `prepare` job runs them.
-    pub const ALL: [Self; 1] = [Self::Transcript];
+    pub const ALL: [Self; 3] = [Self::FirstWindow, Self::Visual, Self::Transcript];
 
     /// Stable lowercase identifier used in stored records and contracts.
     #[must_use]
     pub const fn identifier(self) -> &'static str {
         match self {
+            Self::FirstWindow => "first",
+            Self::Visual => "visual",
             Self::Transcript => "transcript",
         }
     }
@@ -246,6 +255,11 @@ impl PrepareStream {
             .find(|stream| stream.identifier() == identifier)
     }
 }
+
+/// The longest window a `prepare` job transcribes first (`--first`): 30
+/// minutes of media, so that what is held for the whole run to reuse stays
+/// bounded (at most 72 R0 chunks).
+pub const MAX_FIRST_WINDOW_MICROS: u64 = 1_800_000_000;
 
 /// Attempt to perform an illegal or duplicate job transition.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

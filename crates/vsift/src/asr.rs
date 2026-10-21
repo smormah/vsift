@@ -24,24 +24,25 @@ use std::{
     num::NonZeroU16,
     path::{Path, PathBuf},
     pin::Pin,
+    sync::{Arc, Mutex},
     time::Duration,
 };
 
 use vsift_application::{
-    AsrFailure, AsrFailureReason, AsrStage, CachedMediaToolVerification, CommitGuard, JobRecord,
-    JobReport, JobRequest, JobSpec, LocalAsrVerification, LocalAsrVerificationFailure,
+    AsrFailure, AsrFailureReason, AsrStage, CachedMediaToolVerification, ChunkSeed, CommitGuard,
+    JobRecord, JobReport, JobRequest, JobSpec, LocalAsrVerification, LocalAsrVerificationFailure,
     LocalAsrVerifier, MediaToolCheck, MediaToolFailure, MediaToolFingerprint,
     MediaToolPreflightFailure, MediaToolPreflightOutcome, MediaToolVerificationCache,
     OperationLookup, RecognitionScope, RecognizerIdentity, RetranscriptionPorts,
     RetranscriptionRun, RevisionStore, SessionStorageError, SourceProbeError, SpeechPcm,
     SpeechRecognitionError, SpeechRecognizer, TranscribeRangeRequest, job_id, lookup_operation,
     preflight_local_asr, recognition_key, retranscribe_operation_key, retranscribe_request_digest,
-    retranscription_range, run_retranscription, whole_file_source_segment,
+    retranscription_range, run_retranscription, seed_key, whole_file_source_segment,
 };
 use vsift_domain::{
-    AdmissionWait, AsrModelProfile, ChunkPlan, JobId, MediaSelection, MediaTime, OperationId,
-    PlannedChunk, ProviderChunkOutput, RuntimeDependency, SessionId, SessionPhase, TimeRange,
-    TranscriptRevision, plan_chunks, recognizer_threads,
+    AdmissionWait, AsrModelProfile, CheckpointOutcome, ChunkPlan, JobId, MediaSelection, MediaTime,
+    OperationId, PlannedChunk, ProviderChunkOutput, RecognitionKey, RuntimeDependency, SessionId,
+    SessionPhase, TimeRange, TranscriptRevision, plan_chunks, recognizer_threads,
 };
 use vsift_infrastructure::{
     BoundSource, ExecutableResolutionError, ExecutableResolver, FfmpegMedia, FfmpegSpeechAudio,
@@ -94,6 +95,82 @@ pub struct RetranscribeRequest {
     /// 0033, D4): all of it, or one unit less for a background run. It caps
     /// whisper.cpp's threads; a host's recognizer reports its own.
     pub share: crate::RecognitionShare,
+    /// Raw chunk answers shared with other runs of the same recognition (ADR
+    /// 0033, D5): the run keeps its own in it and takes those of a chunk with
+    /// the same window instead of recognising it again. `None` shares nothing.
+    pub seed: Option<RecognitionSeed>,
+}
+
+/// Most chunk answers a [`RecognitionSeed`] keeps: a first window of at most
+/// [`vsift_domain::MAX_FIRST_WINDOW_MICROS`] plans at most 72 R0 chunks.
+const MAX_SEED_ANSWERS: usize = 96;
+
+/// Raw chunk answers held in memory for a later run of the same recognition
+/// (ADR 0033, D5; see [`vsift_application::ChunkSeed`]). Cheap to clone; every
+/// clone shares the same answers. They live as long as the process: a runner
+/// that dies loses them, and the later run recognises those chunks itself.
+#[derive(Clone, Default)]
+pub struct RecognitionSeed(Arc<Mutex<Vec<SeedAnswer>>>);
+
+struct SeedAnswer {
+    key: RecognitionKey,
+    window: TimeRange,
+    outcome: CheckpointOutcome,
+}
+
+impl RecognitionSeed {
+    /// An empty seed.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// How many answers it holds.
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.0.lock().map_or(0, |answers| answers.len())
+    }
+
+    /// Whether it holds none.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+}
+
+impl std::fmt::Debug for RecognitionSeed {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("RecognitionSeed")
+            .field("answers", &self.len())
+            .finish()
+    }
+}
+
+impl ChunkSeed for RecognitionSeed {
+    fn keep(&self, key: &RecognitionKey, window: TimeRange, outcome: &CheckpointOutcome) {
+        if let Ok(mut answers) = self.0.lock()
+            && answers.len() < MAX_SEED_ANSWERS
+            && !answers
+                .iter()
+                .any(|answer| answer.key == *key && answer.window == window)
+        {
+            answers.push(SeedAnswer {
+                key: key.clone(),
+                window,
+                outcome: outcome.clone(),
+            });
+        }
+    }
+
+    fn find(&self, key: &RecognitionKey, window: TimeRange) -> Option<CheckpointOutcome> {
+        self.0.lock().ok().and_then(|answers| {
+            answers
+                .iter()
+                .find(|answer| answer.key == *key && answer.window == window)
+                .map(|answer| answer.outcome.clone())
+        })
+    }
 }
 
 /// When a retranscription publishes its revision (ADR 0033).
@@ -444,6 +521,16 @@ impl Engine {
             verification: verification.as_ref(),
         })
         .map_err(|_| EngineError::JobInvariant)?;
+        let seed_key = seed_key(&RecognitionScope {
+            session_id: &request.session,
+            source_id: bound.snapshot().id(),
+            audio_stream: stream,
+            replaced_range: replaced,
+            plan: ChunkPlan::R0,
+            recognizer: &identity,
+            verification: verification.as_ref(),
+        })
+        .map_err(|_| EngineError::JobInvariant)?;
         let operation_key =
             retranscribe_operation_key(&key, base.as_ref().map(TranscriptRevision::id))
                 .map_err(|_| EngineError::JobInvariant)?;
@@ -544,6 +631,13 @@ impl Engine {
                 progress: &progress,
                 publication,
                 stopwatch: &stopwatch,
+                seed: request
+                    .seed
+                    .as_ref()
+                    .map(|seed| vsift_application::SeedPort {
+                        seed,
+                        key: &seed_key,
+                    }),
             },
             &mut guard,
         );
@@ -565,6 +659,38 @@ impl Engine {
             revision: outcome.revision,
             job: JobSummary::from_report(outcome.report),
         })
+    }
+
+    /// The length of a session's committed source, from a probe of its copy
+    /// (ADR 0033, D5: a first window is put on the whole run's chunk grid,
+    /// which needs the end). The media tools are resolved and proven first,
+    /// as for any probe.
+    ///
+    /// # Errors
+    ///
+    /// A missing root or session, missing or failing media tools, a source
+    /// copy that cannot be bound, and a probe failure.
+    pub(crate) async fn committed_source_duration(
+        &self,
+        session: &SessionId,
+        cancellation: &Cancellation,
+    ) -> Result<MediaTime, EngineError> {
+        let tools = self.local_asr_media_tools()?;
+        self.ensure_media_tools_verified(&tools).await?;
+        let (store, now) = self.existing_store()?;
+        let store = store.ok_or(EngineError::SessionRoot(SessionRootError::Missing))?;
+        let bound = BoundSource::open_committed(&store, session, now)
+            .map_err(|error| EngineError::Storage(snapshot_storage_error(&error)))?;
+        let media = FfmpegMedia::new(
+            tools,
+            self.config().host_isolation.into_infrastructure(),
+            &store,
+        );
+        let description = media
+            .probe(&bound, cancellation.0.clone())
+            .await
+            .map_err(|error| EngineError::SourceProbe(probe_error(&error)))?;
+        Ok(description.duration)
     }
 
     /// The committed result of a succeeded job, returned again without

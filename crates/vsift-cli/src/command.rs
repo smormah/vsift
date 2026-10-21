@@ -1110,14 +1110,15 @@ pub(crate) enum JobCommand {
     Resume(JobIdentityArguments),
     /// Cancel one job, or ask the process running it to stop.
     Cancel(JobIdentityArguments),
-    /// Prepare a session's transcript as one job and follow it with job
-    /// status: in the background for a recording of ten minutes or more,
-    /// in the foreground for a shorter one.
+    /// Prepare a session as one job and follow it with job status: index its
+    /// video for candidates, then transcribe it; in the background for a
+    /// recording of ten minutes or more, in the foreground for a shorter one.
     ///
     /// A background job publishes the transcript as it goes: search and
     /// transcript get answer over the finished part, marked partial, while it
-    /// runs. job status reports how far it has come in seconds of the
-    /// recording, its speed and an estimate of the time left. job cancel or
+    /// runs. job status reports how far each step has come in seconds of the
+    /// recording, its speed and an estimate of the time left. With --first,
+    /// the range named is transcribed before everything else. job cancel or
     /// session close stops it, and what it published stays.
     Start(JobStartArguments),
 }
@@ -1202,6 +1203,41 @@ pub(crate) struct JobStartArguments {
     /// length: quick under ten minutes, watched from ten minutes on.
     #[arg(long, value_enum)]
     pub mode: Option<JobModeArgument>,
+    /// The window to transcribe first: its start and end in microseconds of
+    /// the recording joined by a colon (60000000:70000000), at most 30 minutes
+    /// long. When the user named a moment, it is ready within about one
+    /// window's recognition, before the rest.
+    #[arg(long, value_name = "FROM_US:TO_US", value_parser = parse_first_window)]
+    pub first: Option<FirstWindow>,
+}
+
+/// A first window given as `<from_us>:<to_us>`.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct FirstWindow {
+    /// Inclusive start, in microseconds.
+    pub(crate) from_us: u64,
+    /// Exclusive end, in microseconds.
+    pub(crate) to_us: u64,
+}
+
+/// Parses `<from_us>:<to_us>`: two whole numbers of microseconds, the first
+/// smaller, at most 30 minutes apart.
+fn parse_first_window(text: &str) -> Result<FirstWindow, String> {
+    let (from, to) = text
+        .split_once(':')
+        .ok_or_else(|| "expected <from_us>:<to_us>".to_owned())?;
+    let number = |part: &str| {
+        part.parse::<u64>()
+            .map_err(|_| "each side is a whole number of microseconds".to_owned())
+    };
+    let (from_us, to_us) = (number(from)?, number(to)?);
+    if to_us <= from_us {
+        return Err("the window must end after it starts".to_owned());
+    }
+    if to_us - from_us > vsift::MAX_FIRST_WINDOW_MICROS {
+        return Err("the window is at most 30 minutes (1800000000 microseconds)".to_owned());
+    }
+    Ok(FirstWindow { from_us, to_us })
 }
 
 /// How a started job runs.
