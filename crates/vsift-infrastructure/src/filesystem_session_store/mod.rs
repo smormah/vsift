@@ -232,20 +232,19 @@ pub struct FilesystemSessionStore {
 /// Dropping the value releases every reservation. The slot files themselves are
 /// immutable anchors and are never replaced during normal operation.
 pub struct FilesystemAdmissionPermit {
+    /// The slots, and for queued work (ADR 0033 section 6) the marker that
+    /// makes an ordinary caller who finds the slots taken wait for them
+    /// instead of being refused: one list, so the permit stays as small as
+    /// before.
     _slots: Vec<HeldFileLock>,
-    /// Held by queued work (ADR 0033 section 6), so that an ordinary caller
-    /// that finds the slots taken waits for them instead of being refused.
-    _queued: Option<HeldFileLock>,
 }
 
 impl FilesystemAdmissionPermit {
     /// The same slots, held for queued work under `marker`.
     pub(super) fn marked_queued(self, marker: HeldFileLock) -> Self {
-        let Self { _slots: slots, .. } = self;
-        Self {
-            _slots: slots,
-            _queued: Some(marker),
-        }
+        let Self { _slots: mut held } = self;
+        held.push(marker);
+        Self { _slots: held }
     }
 }
 

@@ -1019,10 +1019,7 @@ fn acquire_slots(
             Err(fs::TryLockError::Error(error)) => return Err(map_storage_io(error)),
         }
         if slots.len() == usize::from(weight) {
-            return Ok(FilesystemAdmissionPermit {
-                _slots: slots,
-                _queued: None,
-            });
+            return Ok(FilesystemAdmissionPermit { _slots: slots });
         }
     }
     Err(SessionStorageError::Busy)
