@@ -21,7 +21,7 @@ use ort::{
 
 use crate::{
     RunnerFailure,
-    cli::{Backend, Layout, MAX_MODEL_BYTES},
+    cli::{Backend, Layout, MAX_MODEL_BYTES, file_sha256},
     pipeline::{Inference, InferenceError, Model},
     recognition::Dictionary,
     tensor::Tensor,
@@ -57,14 +57,12 @@ impl Backend for OnnxRuntime {
 
     fn runtime_version(&self, layout: &Layout) -> Result<String, RunnerFailure> {
         load(layout)?;
-        let info = ort::info();
-        version_from_build_info(info).ok_or_else(|| {
-            diagnose(&format!(
-                "the runtime's build information names no release: {}",
-                info.chars().take(240).collect::<String>()
-            ));
+        let library = layout.runtime.join(RUNTIME_LIBRARY);
+        let digest = file_sha256(&library, MAX_RUNTIME_LIBRARY_BYTES).map_err(|_| {
+            diagnose("the runtime library could not be read to name it");
             RunnerFailure::RuntimeUnavailable
-        })
+        })?;
+        Ok(runtime_version_of(&digest))
     }
 
     fn open(
@@ -163,41 +161,48 @@ impl Inference for OnnxSession {
     }
 }
 
-/// The runtime's version from its build information, whose release branch is
-/// `rel-<major>.<minor>.<patch>` (for example `git-branch=rel-1.31.0`); `None`
-/// when it does not say, so a build that cannot name its runtime is refused.
+/// The ONNX Runtime libraries the runner is released with, by the SHA-256 of
+/// the library file and the version Microsoft's archive names. The runtime's
+/// own build information names no release (`git-branch=HEAD` in 1.31.0), and its
+/// version string is reached only through the C API's raw calls, so the runner
+/// names the library by its bytes: a pinned library is its version; any other is
+/// `sha256-` and the first 16 hexadecimal digits of its digest, so a different
+/// library is always a different engine build and never claims a version.
+pub const KNOWN_RUNTIMES: &[(&str, &str)] = &[(
+    // onnxruntime-linux-x64-1.31.0.tgz, lib/libonnxruntime.so.1.31.0 (hosted
+    // staging of `P16 OCR runner`, run 39597504891).
+    "469849977cb60744ea160927e1a3a0643fd4c55c0aff743251c6d293402e334e",
+    "1.31.0",
+)];
+
+/// Largest runtime library the runner hashes.
+pub const MAX_RUNTIME_LIBRARY_BYTES: u64 = 256 * 1024 * 1024;
+
+/// The version label of a runtime library of SHA-256 `digest` (see [`KNOWN_RUNTIMES`]).
 #[must_use]
-pub fn version_from_build_info(info: &str) -> Option<String> {
-    let start = info.find("git-branch=rel-")? + "git-branch=rel-".len();
-    let version: String = info
-        .get(start..)?
-        .chars()
-        .take_while(|character| character.is_ascii_digit() || *character == '.')
-        .collect();
-    let parts: Vec<&str> = version.split('.').collect();
-    (parts.len() == 3 && parts.iter().all(|part| !part.is_empty()) && version.len() <= 32)
-        .then_some(version)
+pub fn runtime_version_of(digest: &str) -> String {
+    KNOWN_RUNTIMES
+        .iter()
+        .find(|(known, _)| *known == digest)
+        .map_or_else(
+            || format!("sha256-{}", digest.chars().take(16).collect::<String>()),
+            |(_, version)| (*version).to_owned(),
+        )
 }
 
 #[cfg(test)]
 mod tests {
-    use super::version_from_build_info;
+    use super::runtime_version_of;
 
     #[test]
-    fn the_runtime_version_is_its_release_branch() {
+    fn a_pinned_library_is_its_version_and_any_other_is_named_by_its_digest() {
         assert_eq!(
-            version_from_build_info(
-                "ORT Build Info: git-branch=rel-1.31.0, git-commit-id=abc, build type=Release"
-            ),
-            Some(String::from("1.31.0"))
+            runtime_version_of("469849977cb60744ea160927e1a3a0643fd4c55c0aff743251c6d293402e334e"),
+            "1.31.0"
         );
-        for unnamed in [
-            "",
-            "ORT Build Info: git-branch=main, git-commit-id=abc",
-            "git-branch=rel-1.31",
-            "git-branch=rel-1..0",
-        ] {
-            assert_eq!(version_from_build_info(unnamed), None, "{unnamed}");
-        }
+        assert_eq!(
+            runtime_version_of("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"),
+            "sha256-0123456789abcdef"
+        );
     }
 }

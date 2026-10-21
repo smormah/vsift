@@ -97,6 +97,13 @@ it, and none is guessed here.
 
 ## 6. What VSift checks at run time
 
+The runtime's version in `describe` is named by the library's SHA-256 (`KNOWN_RUNTIMES` in
+`crates/vsift-ocr-runner/src/onnx.rs`): ONNX Runtime 1.31.0's build information says
+`git-branch=HEAD`, and its version string is reachable only through raw C calls. A pinned library is
+`1.31.0`; any other library is `sha256-<16 hex digits>`, a different engine build. Linux x64's
+library is `469849977cb60744ea160927e1a3a0643fd4c55c0aff743251c6d293402e334e` (29,345,384 bytes);
+the Windows and macOS digests come from the same workflow's staging.
+
 Whatever installed the runner, `vsift ocr` runs `describe` first and records the runner's own
 SHA-256 and version, the runtime version and the two model digests as the engine build of the
 index it writes (ADR 0030 decision 7). A different build starts a new index.

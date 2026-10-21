@@ -306,7 +306,7 @@ fn read_bounded(path: &Path, limit: u64) -> io::Result<Vec<u8>> {
 }
 
 /// The lower-case SHA-256 of a file of at most `limit` bytes, read in blocks.
-fn file_sha256(path: &Path, limit: u64) -> io::Result<String> {
+pub(crate) fn file_sha256(path: &Path, limit: u64) -> io::Result<String> {
     let mut file = File::open(path)?.take(limit.saturating_add(1));
     let mut hasher = Sha256::new();
     let mut block = vec![0_u8; 64 * 1024];

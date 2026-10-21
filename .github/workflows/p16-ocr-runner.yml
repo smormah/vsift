@@ -220,7 +220,9 @@ jobs:
 
   platforms:
     name: Runner on ${{ matrix.os }}
-    needs: linux
+    # Staging and `describe` run whatever Linux's job did; reading Linux's frames needs them.
+    needs: [tooling-tests, linux]
+    if: ${{ !cancelled() && needs.tooling-tests.result == 'success' }}
     strategy:
       fail-fast: false
       matrix:
@@ -253,12 +255,14 @@ jobs:
           python tools/p16_ocr_runner.py describe --runner "$RUNNER_TEMP/runner/${{ matrix.executable }}" | tee "$RUNNER_TEMP/report/describe-${{ matrix.platform }}.json"
 
       - name: Fetch the synthetic frames Linux read
+        if: needs.linux.result == 'success'
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: p16-ocr-runner-synthetic
           path: ${{ runner.temp }}/synthetic-h264
 
       - name: Read them here and hold the text to Linux's
+        if: needs.linux.result == 'success'
         run: |
           set -euo pipefail
           python tools/p16_ocr_runner.py recognise --runner "$RUNNER_TEMP/runner/${{ matrix.executable }}" --frames "$RUNNER_TEMP/synthetic-h264"
