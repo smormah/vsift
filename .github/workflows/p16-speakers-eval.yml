@@ -124,10 +124,14 @@ jobs:
           "$RUNNER_TEMP/p16-venv/bin/python" tools/p16_speakers_eval.py synthesize
           --assets "$RUNNER_TEMP/p16-assets" --output-dir "$RUNNER_TEMP/p16-speech"
 
+      # Kokoro's output can differ by CPU (L-200's kind), so the CPU and every
+      # conversation's digest are printed: runs compare only on equal digests.
       - name: Lay out the conversations and write their truth
-        run: >-
-          python tools/p16_speakers_eval.py assemble --output-dir "$RUNNER_TEMP/p16-speech"
-          --ffmpeg "$RUNNER_TEMP/p16-ffmpeg/bin/ffmpeg" | tee -a "$GITHUB_STEP_SUMMARY"
+        run: |
+          set -euo pipefail
+          grep -m1 "model name" /proc/cpuinfo
+          python tools/p16_speakers_eval.py assemble --output-dir "$RUNNER_TEMP/p16-speech" \
+            --ffmpeg "$RUNNER_TEMP/p16-ffmpeg/bin/ffmpeg" | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Keep the conversations and their truth
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

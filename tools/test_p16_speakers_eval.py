@@ -139,6 +139,32 @@ class ScoringTests(unittest.TestCase):
         self.assertEqual(evaluation.diarization_error(ALTERNATING, shifted, 20_000_000)["der"], 0.0)
         self.assertGreater(evaluation.diarization_error(ALTERNATING, shifted, 20_000_000, collar_us=0)["der"], 0.0)
 
+    def test_unscored_ranges_are_left_out_like_the_collar(self) -> None:
+        wrong_in_one_turn = ALTERNATING[:2] + [{**ALTERNATING[2], "speaker": "B"}] + ALTERNATING[3:]
+        scored = evaluation.diarization_error(ALTERNATING, wrong_in_one_turn, 20_000_000, collar_us=0)
+        self.assertAlmostEqual(scored["confusion"], 0.25, places=2)
+        unscored = [{"start_us": 10_000_000, "end_us": 14_000_000}]
+        left_out = evaluation.diarization_error(ALTERNATING, wrong_in_one_turn, 20_000_000, 0, unscored)
+        self.assertEqual(left_out["der"], 0.0)
+
+    def test_the_rm06_reference_is_well_formed(self) -> None:
+        path = Path(evaluation.__file__).with_name("p16_speakers_rm06_reference.json")
+        turns, count, unscored = evaluation.read_reference(path)
+        self.assertEqual(count, 2)
+        self.assertEqual({turn["speaker"] for turn in turns}, {"A", "B", "C"})
+        spans = sorted([(t["start_us"], t["end_us"]) for t in turns] + [(u["start_us"], u["end_us"]) for u in unscored])
+        for (_, end), (start, _) in zip(spans, spans[1:]):
+            self.assertLessEqual(end, start)
+        self.assertLessEqual(spans[-1][1], 623_851_000)
+
+    def test_a_reference_with_an_undeclared_speaker_is_refused(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "reference.json"
+            path.write_text(json.dumps({"speakers": {"A": "x"}, "count_given": 1, "unscored": [],
+                                        "turns": [{"speaker": "B", "start_s": 1, "end_s": 2}]}), encoding="utf-8")
+            with self.assertRaises(evaluation.EvaluationError):
+                evaluation.read_reference(path)
+
     def test_extra_found_speakers_map_one_to_one(self) -> None:
         overlap = {"A": {"x": 5, "y": 9, "z": 0}, "B": {"x": 7, "y": 8, "z": 1}}
         self.assertEqual(evaluation.best_mapping(overlap, ["A", "B"], ["x", "y", "z"]), {"A": "y", "B": "x"})

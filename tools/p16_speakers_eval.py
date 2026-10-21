@@ -407,7 +407,8 @@ def assemble(output_dir: Path, ffmpeg: Path) -> list[dict]:
         with (fixtures / f"{item.fixture_id}.truth.json").open("xb") as handle:
             handle.write(recipe.json_bytes(truth))
         summaries.append({"fixture": item.fixture_id, "seconds": round(truth["duration_us"] / MICROSECONDS, 2),
-                          "turns": len(truth["turns"]), "speakers": len(item.voices), "clipped": clipped})
+                          "turns": len(truth["turns"]), "speakers": len(item.voices), "clipped": clipped,
+                          "wav_sha256": truth["wav_sha256"]})
     return summaries
 
 
@@ -825,12 +826,19 @@ def best_mapping(overlap: Mapping[str, Mapping[str, int]], reference: Sequence[s
 
 
 def diarization_error(reference: Sequence[dict], hypothesis: Sequence[dict], duration_us: int,
-                      collar_us: int = COLLAR_US) -> dict:
-    """NIST-style DER with overlap scored: miss, false alarm and confusion over true speech."""
+                      collar_us: int = COLLAR_US, unscored: Sequence[dict] = ()) -> dict:
+    """NIST-style DER with overlap scored: miss, false alarm and confusion over true speech.
+
+    ``unscored`` ranges (a read reference's stretches whose speaker could not be told,
+    such as one segment holding a question and its answer) are left out, like the collar.
+    """
     frames = frame_count(duration_us)
     ref = activity(reference, frames)
     hyp = activity(hypothesis, frames)
     mask = collar_mask(reference, frames, collar_us)
+    for stretch in unscored:
+        for index in range(max(0, stretch["start_us"] // FRAME_US), min(frames, -(-stretch["end_us"] // FRAME_US))):
+            mask[index] = 0
     ref_labels = sorted(ref)
     hyp_labels = sorted(hyp)
     overlap = {r: {h: 0 for h in hyp_labels} for r in ref_labels}
@@ -1119,6 +1127,34 @@ class EvaluationInput:
     collar_us: int
     exact: bool
     transcribe: bool
+    unscored: tuple[dict, ...] = ()
+
+
+def read_reference(path: Path) -> tuple[list[dict], int, tuple[dict, ...]]:
+    """A read reference: its turns, the speaker count a user would give, the unscored ranges.
+
+    Times are whole seconds with two decimals in the file (the transcript's segment
+    bounds), held as microseconds here.
+    """
+    document = recipe.load_json(path)
+
+    def span(entry: dict) -> tuple[int, int]:
+        start, end = round(float(entry["start_s"]) * MICROSECONDS), round(float(entry["end_s"]) * MICROSECONDS)
+        if end <= start:
+            raise EvaluationError(f"{path.name} holds an empty or reversed range at {entry['start_s']} s")
+        return start, end
+
+    turns = []
+    for entry in document["turns"]:
+        if entry["speaker"] not in document["speakers"]:
+            raise EvaluationError(f"{path.name} names an undeclared speaker {entry['speaker']}")
+        start, end = span(entry)
+        turns.append({"speaker": entry["speaker"], "start_us": start, "end_us": end})
+    unscored = tuple({"start_us": span(entry)[0], "end_us": span(entry)[1]} for entry in document["unscored"])
+    count = int(document["count_given"])
+    if not 1 <= count <= len(document["speakers"]):
+        raise EvaluationError(f"{path.name} gives an impossible speaker count")
+    return turns, count, unscored
 
 
 def load_inputs(inputs_dir: Path, rm06_reference: Path | None) -> list[EvaluationInput]:
@@ -1131,12 +1167,11 @@ def load_inputs(inputs_dir: Path, rm06_reference: Path | None) -> list[Evaluatio
     if rm06.is_file():
         reference = None
         speakers = 2
+        unscored: tuple[dict, ...] = ()
         if rm06_reference is not None and rm06_reference.is_file():
-            document = recipe.load_json(rm06_reference)
-            reference = [{"speaker": turn["speaker"], "start_us": turn["start_us"], "end_us": turn["end_us"]}
-                         for turn in document["turns"]]
-            speakers = len({turn["speaker"] for turn in reference})
-        loaded.append(EvaluationInput("RM06", rm06, reference, speakers, REFERENCE_COLLAR_US, False, True))
+            reference, speakers, unscored = read_reference(rm06_reference)
+        loaded.append(EvaluationInput("RM06", rm06, reference, speakers, REFERENCE_COLLAR_US, False, True,
+                                      unscored))
     rm09 = inputs_dir / "media" / "RM09.wav"
     if rm09.is_file():
         loaded.append(EvaluationInput("RM09", rm09, None, None, COLLAR_US, False, False))
@@ -1176,7 +1211,7 @@ def evaluate(tools: Path, inputs_dir: Path, whisper_cli: Path | None, whisper_mo
                 (work / f"{item.input_id}.{candidate.candidate_id.replace('/', '_')}.json").write_text(
                     json.dumps(turns), encoding="utf-8")
                 if item.reference is not None:
-                    score = diarization_error(item.reference, turns, duration, item.collar_us)
+                    score = diarization_error(item.reference, turns, duration, item.collar_us, item.unscored)
                     row["score"] = score
                     if item.input_id in segments_by_input:
                         row["segments"] = segment_attribution(item.reference, turns, segments_by_input[item.input_id],

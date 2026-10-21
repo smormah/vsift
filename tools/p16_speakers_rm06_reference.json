@@ -1,0 +1,121 @@
+{
+  "item": "RM06",
+  "title": "Space Station Astronaut Discusses Record Breaking Mission with Previous Record Holder (NASA Johnson Space Center, public domain)",
+  "method": "Labelled from the text of the whisper.cpp base transcript of hosted run 39527538316 (who asks, who answers, who is addressed by name, and the '>>' turn marks), without listening. The run printed each engine's labels beside the text; they were not used to decide a turn. Each turn runs over whole transcript segments, so its bounds are segment bounds (precision about one segment); a segment that holds two speakers is unscored. Read on 2026-10-21.",
+  "speakers": {
+    "A": "the caller on the ground, the previous record holder, who asks the questions",
+    "B": "the astronaut on the station, who answers",
+    "C": "the ground controller who closes the event (the last nine seconds)"
+  },
+  "count_given": 2,
+  "count_note": "The count a user would give for a two-person call; the controller's closing words are a third voice the user may not count, so a known-count run is asked for two.",
+  "turns": [
+    {
+      "speaker": "B",
+      "start_s": 3.48,
+      "end_s": 11.04
+    },
+    {
+      "speaker": "A",
+      "start_s": 11.04,
+      "end_s": 17.76
+    },
+    {
+      "speaker": "B",
+      "start_s": 17.76,
+      "end_s": 20.12
+    },
+    {
+      "speaker": "A",
+      "start_s": 20.12,
+      "end_s": 46.72
+    },
+    {
+      "speaker": "B",
+      "start_s": 46.72,
+      "end_s": 90.96
+    },
+    {
+      "speaker": "A",
+      "start_s": 90.96,
+      "end_s": 107.76
+    },
+    {
+      "speaker": "B",
+      "start_s": 110.48,
+      "end_s": 170.52
+    },
+    {
+      "speaker": "A",
+      "start_s": 170.52,
+      "end_s": 193.92
+    },
+    {
+      "speaker": "B",
+      "start_s": 193.92,
+      "end_s": 255.8
+    },
+    {
+      "speaker": "A",
+      "start_s": 255.8,
+      "end_s": 277.0
+    },
+    {
+      "speaker": "B",
+      "start_s": 277.0,
+      "end_s": 368.12
+    },
+    {
+      "speaker": "A",
+      "start_s": 368.12,
+      "end_s": 377.08
+    },
+    {
+      "speaker": "B",
+      "start_s": 377.08,
+      "end_s": 400.8
+    },
+    {
+      "speaker": "A",
+      "start_s": 400.8,
+      "end_s": 429.88
+    },
+    {
+      "speaker": "B",
+      "start_s": 429.88,
+      "end_s": 470.88
+    },
+    {
+      "speaker": "A",
+      "start_s": 488.88,
+      "end_s": 532.88
+    },
+    {
+      "speaker": "B",
+      "start_s": 532.88,
+      "end_s": 601.88
+    },
+    {
+      "speaker": "A",
+      "start_s": 601.88,
+      "end_s": 605.88
+    },
+    {
+      "speaker": "C",
+      "start_s": 605.88,
+      "end_s": 614.88
+    }
+  ],
+  "unscored": [
+    {
+      "start_s": 0.0,
+      "end_s": 3.48,
+      "why": "the call-up ('Station, Houston ...'): the caller or the controller"
+    },
+    {
+      "start_s": 470.88,
+      "end_s": 488.88,
+      "why": "one segment holds A's question and B's one-line answer"
+    }
+  ]
+}
