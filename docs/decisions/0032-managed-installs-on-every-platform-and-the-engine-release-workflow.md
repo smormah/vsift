@@ -167,3 +167,24 @@ and Deno 2.9.7 pins on Ubuntu (catalogue revision `ubuntu-24.04-x86_64-2026-10-2
 39535463204). Reused from #503: the plan and install shapes, the core-then-optional transaction, the pins and their
 hosted review; replaced: its one-entry zip reader (by the general one) and its online-video-only members (by the
 group-generic `optional_groups` and `optional_components`).
+
+## Implementation note, 2026-10-21 (slice 2: the engine release workflow)
+
+- **D2 measured.** The hosted inventory of `b5454/whisper-bin-x64.zip` (run 39604340709, `tools/p06_archive_inventory.py`,
+  which now reads what each PE file imports) shows `whisper-cli.exe`, `whisper.dll` and the ggml DLLs importing
+  `msvcp140.dll`, `vcruntime140.dll`, `vcruntime140_1.dll` and, for ggml, `vcomp140.dll`: the Visual C++
+  redistributable a clean Windows need not have. The same run shows FFmpeg's Windows build importing only the
+  universal C runtime and system DLLs, and both zips using only what the zip reader accepts (deflate, with stored in
+  FFmpeg's; no Zip64, comments or backslash names). So VSift builds whisper.cpp for Windows too: one executable with
+  the static C runtime, no OpenMP and the AVX2, FMA and F16C instructions every processor Windows 11 accepts has;
+  P07's accuracy check is rerun on it before the catalogue pins it.
+- **The workflow** (`.github/workflows/engines.yml`, runbook [`engines.md`](../operations/engines.md)) has the jobs
+  `guard`, `build` (a literal matrix of three legs on `macos-15`, `windows-2025` and `macos-15`; a dispatch builds only
+  the chosen engine's leg), `plan`, `attest` and `publish`. Recipes and build scripts are in `tools/engines/`; each
+  build fetches the pinned commit, builds twice, compares byte for byte and packages deterministically with an
+  inventory the catalogue pins from.
+- **Rule 10 of the workflow lint** (`workflows/engines.rs`) holds it to the release workflow's standard, with 28
+  broken copies of the real file each refused; rules 4 and 9 now name the engine workflow too (its `attest` job is
+  the only other one with `id-token`, and it has no LOKI job).
+- **Nothing is published by this slice.** The first publishes need the maintainer's tag ruleset for the engine tags,
+  the engine tag patterns in the `release` environment's allowed refs, a tag and an approval each.

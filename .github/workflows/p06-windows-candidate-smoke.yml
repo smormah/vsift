@@ -29,5 +29,11 @@ jobs:
       - name: Inventory the pinned whisper.cpp archive
         run: python tools/p06_archive_inventory.py windows-whisper
 
+      # ADR 0032: the same inventory of the pinned FFmpeg zip, with what each
+      # PE file imports and which zip features each writer used, for the
+      # Windows managed catalogue.
+      - name: Inventory the pinned FFmpeg archive
+        run: python tools/p06_archive_inventory.py windows-ffmpeg
+
       - name: Run pinned candidate compatibility smoke
         run: python tools/p06_windows_candidate_smoke.py

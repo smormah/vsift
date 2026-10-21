@@ -27,7 +27,8 @@
 //!    LOKI job has no trigger but `schedule` and `workflow_dispatch`: never
 //!    `pull_request`, `pull_request_target`, `push`, `workflow_run`,
 //!    `issue_comment`, `workflow_call` or any other event.
-//! 4. **Never the release path.** The release workflow has no LOKI job, and a
+//! 4. **Never the release path.** The release workflow and the engine workflow
+//!    (ADR 0032) have no LOKI job, and a
 //!    workflow with one grants no write scope but a hosted job's
 //!    `issues: write` (its failure report), so it cannot attest (`id-token`,
 //!    `attestations`), sign with an OIDC identity, push or release; it runs
@@ -108,11 +109,11 @@ pub(super) fn check_runners(lint: &mut Lint<'_>, workflow: &Hash) {
         .map(|id| format!("`{id}`"))
         .collect::<Vec<_>>()
         .join(", ");
-    if lint.release {
+    if lint.release || lint.engines {
         lint.report(&format!(
             "runs {job_list} on the self-hosted runner; the release workflow runs only on \
-             GitHub-hosted runners (ADR 0025), and its attestations are verified with \
-             `--deny-self-hosted-runners`"
+             GitHub-hosted runners, and so does the engine workflow (ADR 0025, ADR 0032); \
+             their attestations are verified with `--deny-self-hosted-runners`"
         ));
     }
     check_triggers(lint, workflow, &job_list);
