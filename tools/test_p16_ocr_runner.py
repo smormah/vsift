@@ -162,6 +162,26 @@ class DiagnoseTests(unittest.TestCase):
         self.assertEqual(tally["reference_confidence"]["unpaired_missed/low"], 1)
 
 
+class CrosscheckTests(unittest.TestCase):
+    def test_the_reference_recogniser_on_our_boxes_is_counted_against_both_readings(self) -> None:
+        import tempfile  # noqa: PLC0415
+        from pathlib import Path  # noqa: PLC0415
+
+        with tempfile.TemporaryDirectory() as folder:
+            frames = Path(folder)
+            (frames / f"ocr-{runner.REFERENCE_ENGINE}.jsonl").write_text(json.dumps(
+                {"file": "f.png", "seconds": 0.1, "lines": [
+                    {"text": "Total 4407", "box": [10, 10, 100, 20], "confidence": 0.9}]}) + "\n", encoding="utf-8")
+            (frames / f"ocr-{runner.ENGINE_NAME}.jsonl").write_text(json.dumps(
+                {"file": "f.png", "seconds": 0.1, "lines": [
+                    {"text": "Total 4401", "box": [10, 10, 100, 20], "confidence": 0.9}]}) + "\n", encoding="utf-8")
+            counts = runner.crosscheck_frames(frames, lambda _crop: "Total 4407", lambda _path: None,
+                                              lambda _image, _box: None)
+        self.assertEqual(counts["same_as_runner"], 0)
+        self.assertEqual(counts["same_as_reference_pipeline"], 1)
+        self.assertEqual(counts["kinds_against_runner"], {"near": 1})
+
+
 class EndToEndTests(unittest.TestCase):
     def test_a_number_counts_as_found_only_within_a_screen_that_showed_it(self) -> None:
         truth = {"hold_us": 3_000_000, "screens": [

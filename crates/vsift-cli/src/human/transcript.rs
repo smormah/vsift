@@ -142,7 +142,13 @@ pub(super) fn search(envelope: &Envelope<Search>) -> Result<RenderedText, TooLar
             .map(|hit| hit.tier.as_str())
     });
     push_next_page(&mut text, data.next_cursor.as_deref());
-    if let Some(screen_text) = &data.screen_text {
+    // A session `ocr` has not read says nothing here, so a reader who never uses
+    // OCR sees the search as before; `ocr search` and `--json` state `not_run`.
+    if let Some(screen_text) = data
+        .screen_text
+        .as_ref()
+        .filter(|part| part.state != "not_run")
+    {
         push_screen_text_hits(&mut text, screen_text);
     }
     push_outcome(&mut text, envelope);

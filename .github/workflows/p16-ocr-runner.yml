@@ -185,6 +185,13 @@ jobs:
           python3 tools/p16_ocr_runner.py diagnose --work "$RUNNER_TEMP/work" --report "$RUNNER_TEMP/report/differences.json" \
             --frames synthetic-h264 --frames RM01 --frames RM04 --frames RM10
 
+      - name: The reference's recogniser on the runner's boxes (counts only)
+        run: |
+          set -euo pipefail
+          PYTHONPATH="$GITHUB_WORKSPACE/tools" "$RUNNER_TEMP/venv/bin/python" tools/p16_ocr_runner.py crosscheck \
+            --work "$RUNNER_TEMP/work" --report "$RUNNER_TEMP/report/crosscheck.json" \
+            --frames synthetic-h264 --frames RM01 --frames RM04 --frames RM10
+
       - name: vsift ocr and ocr search, end to end (no transcript; one video without audio, one with a silent track)
         run: |
           set -euo pipefail

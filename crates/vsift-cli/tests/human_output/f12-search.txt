@@ -12,7 +12,4 @@ tsg_47dbdd6de215a6fddfedb4d7d79b64ef  00:00:03.500000 --> 00:00:05.000000  match
   cue 3 at line 10
   | Status shown to reviewers: <U+202E>DELIAF<U+202C> build<U+200B> pass<U+200D>ed
 
-On-screen text: not_run
-Run vsift ocr on the session to read it.
-
 Lifecycle: ephemeral, expires <TIME>

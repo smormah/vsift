@@ -651,6 +651,80 @@ def command_diagnose(arguments: argparse.Namespace) -> int:
     return 0
 
 
+def crosscheck_frames(frames_dir: Path, recognise_crop: Callable[[object], str], read_image: Callable[[Path], object],
+                      crop: Callable[[object, tuple[int, int, int, int]], object]) -> dict:
+    """The reference's recogniser on the runner's own boxes, against the runner's text and the reference's.
+
+    Counts only. `same_as_runner` near 1 means that, given the same box, the two
+    recognisers agree, so the differences come from the boxes and crops; low
+    means they come from recognition (its input or its decoding).
+    """
+    reference = {reading.file: reading for reading in
+                 evaluation.read_recognitions(frames_dir / f"ocr-{REFERENCE_ENGINE}.jsonl")}
+    own = evaluation.read_recognitions(frames_dir / f"ocr-{ENGINE_NAME}.jsonl")
+    counts = {"lines": 0, "same_as_runner": 0, "same_as_reference_pipeline": 0,
+              "reference_pipeline_lines_paired": 0, "kinds_against_runner": {}}
+    for reading in own:
+        image = read_image(frames_dir / reading.file)
+        theirs = reference.get(reading.file)
+        for line in reading.lines:
+            text = recognise_crop(crop(image, line.box))
+            counts["lines"] += 1
+            kind = text_difference(line.text, text)
+            counts["kinds_against_runner"][kind] = counts["kinds_against_runner"].get(kind, 0) + 1
+            if kind == "equal":
+                counts["same_as_runner"] += 1
+            if theirs is not None:
+                best = max(theirs.lines, key=lambda other: iou(other.box, line.box), default=None)
+                if best is not None and iou(best.box, line.box) >= PAIRING_IOU:
+                    counts["reference_pipeline_lines_paired"] += 1
+                    if evaluation.normalise(best.text) == evaluation.normalise(text):
+                        counts["same_as_reference_pipeline"] += 1
+    return counts
+
+
+def command_crosscheck(arguments: argparse.Namespace) -> int:
+    """Runs in the reference's virtual environment (RapidOCR, OpenCV): hosted only."""
+    import cv2  # noqa: PLC0415 - the reference's environment only
+    from rapidocr import LangDet, LangRec, ModelType, OCRVersion, RapidOCR  # noqa: PLC0415
+    import rapidocr  # noqa: PLC0415
+
+    config = Path(rapidocr.__file__).parent / "config.yaml"
+    if config.is_file():
+        print("RapidOCR's own settings (its packaged config.yaml, Det and Rec sections):")
+        section = ""
+        for row in config.read_text(encoding="utf-8").splitlines():
+            if row and not row.startswith(" "):
+                section = row.rstrip(":")
+            if section in {"Det", "Rec", "Global"}:
+                print("  " + row)
+    engine = RapidOCR(params={
+        "Global.use_cls": False, "Global.log_level": "warning",
+        "Det.ocr_version": OCRVersion("PP-OCRv5"), "Det.model_type": ModelType("mobile"),
+        "Det.lang_type": LangDet("multi"),
+        "Rec.ocr_version": OCRVersion("PP-OCRv5"), "Rec.model_type": ModelType("mobile"),
+        "Rec.lang_type": LangRec("latin"),
+    })
+
+    def recognise_crop(image: object) -> str:
+        result = engine(image, use_det=False, use_cls=False, use_rec=True)
+        texts = getattr(result, "txts", None) or ()
+        return str(texts[0]).strip() if texts else ""
+
+    def read_image(path: Path) -> object:
+        return cv2.imread(str(path), cv2.IMREAD_COLOR)
+
+    def crop(image: object, box: tuple[int, int, int, int]) -> object:
+        x, y, width, height = box
+        return image[y:y + height, x:x + width]  # type: ignore[index]
+
+    report = {folder: crosscheck_frames(Path(arguments.work) / folder, recognise_crop, read_image, crop)
+              for folder in arguments.frames}
+    Path(arguments.report).write_text(json.dumps(report, indent=1) + "\n", encoding="utf-8")
+    print(json.dumps(report, indent=1))
+    return 0
+
+
 def command_compare(arguments: argparse.Namespace) -> int:
     linux = evaluation.read_recognitions(Path(arguments.linux))
     other = evaluation.read_recognitions(Path(arguments.other))
@@ -695,6 +769,11 @@ def main(argv: Sequence[str]) -> int:
         diagnosing.add_argument(option, required=True)
     diagnosing.add_argument("--frames", action="append", required=True)
     diagnosing.set_defaults(handler=command_diagnose)
+    crossing = commands.add_parser("crosscheck")
+    for option in ("--work", "--report"):
+        crossing.add_argument(option, required=True)
+    crossing.add_argument("--frames", action="append", required=True)
+    crossing.set_defaults(handler=command_crosscheck)
     platform = commands.add_parser("compare")
     platform.add_argument("--linux", required=True)
     platform.add_argument("--other", required=True)
