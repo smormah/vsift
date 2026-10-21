@@ -310,7 +310,9 @@ Three causes cover nearly every case.
   holds, [L-160](../planning/known-limits.md#l-160)) is damage to them. They read the newest revision first: if that one
   holds the member, nothing of the session can be read; if only an older revision does, the newest reads normally and the
   older ones fail when asked for by id, in `handoff check --session` and in `bundle validate`. Nothing is wrong with the
-  session. Use the newer VSift, or discard it.
+  session. Use the newer VSift, or discard it. The same holds for a session with speaker labels opened by a release
+  before `0.3.0`: it does not know the stored speaker record, so it refuses the whole session
+  ([L-218](../planning/known-limits.md#l-218)).
 
 ## Problems installing or starting VSift
 

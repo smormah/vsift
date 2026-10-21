@@ -1687,6 +1687,11 @@ Schemas: `speakers.schema.json` (the block, the per-segment label, the result da
 `bundle validate` (identity, bounds, values). Examples: `transcript-speakers.json`,
 `transcript-get.speakers.json`, `search.speakers.json`.
 
+**Rolling back.** A release before `0.3.0` does not know the `speaker_record` kind and reads a session that holds one
+as damaged (`INTEGRITY_FAILURE`): every command on that session fails, and `bundle validate` refuses a bundle made
+from it. A session that never ran `transcript speakers` is unchanged. Use the newer version, or discard the session
+([L-218](../planning/known-limits.md#l-218), an accepted residual).
+
 **Failures.** `MISSING_CAPABILITY` when the engine or a model is neither given nor installed (the
 remediation names `setup install` and the three options; transcripts and search work without them) or
 the engine fails or answers in another format; `RESOURCE_LIMIT` for a range longer than the cap (the

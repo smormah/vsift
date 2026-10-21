@@ -57,3 +57,5 @@ using the VSift skill records a name only when you give it.
 - **Nothing about a voice is kept.** The tool works out what each voice sounds like in its own memory and forgets
   it when it ends. VSift keeps only the labels, their times and the names you recorded, in the session, which is
   removed when it expires unless you keep it.
+- **Older versions cannot open it.** A release before `0.3.0` reads a session with speaker labels as damaged
+  (`INTEGRITY_FAILURE`) and refuses all of it ([L-218](../planning/known-limits.md#l-218)).

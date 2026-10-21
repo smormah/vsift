@@ -219,6 +219,7 @@ Each entry has these fields:
 | [L-205](#l-205) | One diarization hears at most two hours (it holds the whole stretch in memory, about 1 GiB an hour); a longer recording is labelled a part at a time, and labels of two parts are not linked | performance | medium | `0.3.0` (speaker labels) | [#108](https://github.com/smormah/vsift/issues/108) | open |
 | [L-206](#l-206) | Speaker-label accuracy rests on synthetic voices and one real two-person call whose reference was read from its transcript, not heard | accuracy/ASR | medium | `0.3.0` (speaker labels) | [#108](https://github.com/smormah/vsift/issues/108) | open |
 | [L-207](#l-207) | Two similar voices are heard as one speaker, and the labels then name that one speaker with confidence for both | accuracy/ASR | medium | `0.3.0` (speaker labels) | [#108](https://github.com/smormah/vsift/issues/108) | open |
+| [L-218](#l-218) | A session or bundle that holds a speaker record is read as damaged by releases before `0.3.0`: the whole session is refused, not only its labels | integrity/durability | low | unscheduled | none | accepted residual |
 
 Counts: 1 high, 50 medium, 111 low (162 entries).
 
@@ -5110,6 +5111,19 @@ that week.**
 - **Mitigation (the maintainer's decision of 2026-10-21):** every label is presented as provisional ("S2, by voice"); the user's verified names are the only identity; the fixed statement every answer with labels carries (`speakers.statement`, `cli-v1.md`, the guide's speaker-labels page) says that two similar voices can share one label. A user who knows the count can give it (it does not cure this case).
 - **Next step:** watch the real recordings of L-206 for merges; a per-label confidence an answer could show is a later design question.
 - **Owner:** `0.3.0` (speaker labels). **Issue:** [#108](https://github.com/smormah/vsift/issues/108). **Status:** open. **Review:** pending.
+
+### L-218
+
+**A session or bundle that holds a speaker record is read as damaged (`INTEGRITY_FAILURE`) by releases before `0.3.0`, and the whole session is refused, not only its labels (`0.3.0`, speaker labels, 2026-10-21).**
+
+- **What:** `transcript speakers` stores an immutable `speaker_record` artifact, a new stored kind. A release before `0.3.0` reads the session's own record strictly, and an artifact kind it does not know makes that record unreadable: after a rollback, or with a mixed install, every command on the session fails with `INTEGRITY_FAILURE`, and `bundle validate` refuses a bundle exported from it. A session with no speaker labels is unchanged and reads as before. Nothing already written is rewritten.
+- **What a user sees:** `INTEGRITY_FAILURE` on a session nothing is wrong with, after opening it with an older VSift.
+- **Evidence:** `crates/vsift-infrastructure/src/filesystem_session_store/mod.rs` (`StoredArtifactKind`, read strictly), `crates/vsift-infrastructure/src/speaker_record.rs`, the `CHANGELOG.md` entry for speaker labels, [ADR 0031](../decisions/0031-speaker-labels.md).
+- **Impact: low. The rubric line applied is the third one:** it needs a rollback or a mixed install, the workaround is the newer version or a new session, and desktop investigations are disposable by default.
+- **Why:** labels need a stored record (they are derived from it on every read, and names are added by new records); the JSON contract is additive, and older releases fail closed on what they do not know, by design, as with every new stored kind (L-160's kind).
+- **Mitigation:** use `0.3.0` or later, or discard the session; a session that never ran `transcript speakers` is not affected.
+- **Next step:** none planned; reading unknown stored kinds leniently would relax the strictness decided for integrity, which is the maintainer's decision and not a task.
+- **Owner:** unscheduled. **Issue:** none, on purpose (accepted by the maintainer on 2026-10-21, relayed by the supervisor). **Status:** accepted residual. **Review:** pending.
 
 ## Review workflow
 

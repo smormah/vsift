@@ -119,6 +119,8 @@ reference change with them.
 - Two similar voices can share one label with nothing in the output to say so (L-207); the
   provisional wording and the accuracy statement carry that limit.
 - The evidence for accuracy is synthetic speech and a few real recordings (L-206).
+- A release before `0.3.0` reads a session or bundle that holds a speaker record as damaged and refuses
+  the whole session (L-218, an accepted residual, as for every new stored kind).
 
 ## Alternatives considered
 
