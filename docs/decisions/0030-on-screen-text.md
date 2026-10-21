@@ -42,7 +42,7 @@ way is proposed. The runner takes image paths and writes bounded JSON Lines: per
 text and confidence.
 
 The runner's pipeline (detection resize, normalisation, the DB post-process, reading order, line
-crops, recognition batches and CTC decoding) is pure Rust over an `Inference` port, so all of it
+crops, recognition one line at a time and CTC decoding) is pure Rust over an `Inference` port, so all of it
 is tested without the runtime; only the two model calls go through ONNX Runtime.
 
 ### 2. Publishing (maintainer)
@@ -167,6 +167,15 @@ session's expiry. Its envelope is `partial` with a fixed warning while the state
 first-page member stay as they are. The use case (`page_screen_text` in `vsift-application`) reads one
 session's index and nothing else, so the search across kept sessions planned for 0.3.0's second wave
 calls it once per session.
+
+## Note of 2026-10-21: one line at a time, and the parity measured (decision 1)
+
+The reference pipeline reads lines in batches of six, each padded to the widest; the hosted
+characterisation (L-204) showed that this padding, like cutting a slightly rotated rectangle instead
+of an upright one, changes 5 to 7% of real-recording lines in the reference itself. The runner now
+reads each line alone, so a line's text never depends on its neighbours; on identical crops it writes
+the reference recogniser's text for 98% of real-recording lines, it is about twice as fast, and its
+synthetic accuracy is unchanged.
 
 ## Note of 2026-10-21: the `ort` dependency review (decision 1)
 
