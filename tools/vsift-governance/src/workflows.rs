@@ -15,7 +15,7 @@
 //!    `read` or `none`; a job that needs a write scope names it itself, and
 //!    `read-all` and `write-all` are refused everywhere;
 //! 4. `id-token: write` appears only in the release workflow's `attest` and
-//!    `publish` jobs;
+//!    `publish` jobs and in the engine workflow's `attest` job (ADR 0032);
 //! 5. a `run` script interpolates only expressions whose values an outsider
 //!    cannot choose (`runner`, `matrix`, `strategy`, `job` and a closed list of
 //!    `github` fields); anything else reaches the script through `env`;
@@ -37,8 +37,14 @@
 //!    self-hosted runner, `loki`, and a workflow with a job there is started
 //!    only by `schedule` or `workflow_dispatch`, is not the release path,
 //!    holds no write scope but its hosted report job's `issues: write`, names
-//!    no secret, keeps no credential in the checkout and bounds the job's time.
+//!    no secret, keeps no credential in the checkout and bounds the job's time;
+//! 10. the engine release workflow (ADR 0032, the `engines` module) publishes
+//!     only as that module describes: from a dispatch of an engine tag with
+//!     `dry_run` cleared, in the protected `release` environment, never as the
+//!     latest release and never replacing an asset, exactly the planned and
+//!     attested files.
 
+mod engines;
 mod publish;
 mod runners;
 
@@ -53,9 +59,17 @@ pub(crate) const WORKFLOW_DIRECTORY: &str = ".github/workflows";
 /// `attest` and `publish` jobs) and the one the release-build rule applies to.
 pub(crate) const RELEASE_WORKFLOW: &str = ".github/workflows/release.yml";
 
+/// The engine release workflow (ADR 0032), the other workflow that publishes
+/// (rule 10) and the only other one allowed an OIDC token, in its `attest` job.
+pub(crate) const ENGINES_WORKFLOW: &str = ".github/workflows/engines.yml";
+
 /// Jobs of the release workflow that may request `id-token: write`
 /// (ADR 0023: the Sigstore attestation and the npm trusted publish).
 const ID_TOKEN_JOBS: [&str; 2] = ["attest", "publish"];
+
+/// The job of the engine workflow that may request `id-token: write`
+/// (ADR 0032: the build provenance attestation).
+const ENGINE_ID_TOKEN_JOB: &str = "attest";
 
 /// Text that must not appear in any key or value of the release workflow.
 ///
@@ -160,6 +174,7 @@ pub(crate) fn check_workflow(messages: &mut Vec<String>, relative_path: &str, te
         messages,
         path: relative_path,
         release: relative_path == RELEASE_WORKFLOW,
+        engines: relative_path == ENGINES_WORKFLOW,
     };
     lint.refuse_merge_keys(workflow);
     lint.check_triggers(workflow);
@@ -170,12 +185,17 @@ pub(crate) fn check_workflow(messages: &mut Vec<String>, relative_path: &str, te
         lint.check_release_text(workflow);
         publish::check_publishing(&mut lint, workflow);
     }
+    if lint.engines {
+        engines::check_engines(&mut lint, workflow);
+    }
 }
 
 struct Lint<'a> {
     messages: &'a mut Vec<String>,
     path: &'a str,
     release: bool,
+    /// Whether this is the engine release workflow (rule 10).
+    engines: bool,
 }
 
 impl Lint<'_> {
@@ -287,10 +307,12 @@ impl Lint<'_> {
                     if scope == "id-token"
                         && level == "write"
                         && !(self.release && ID_TOKEN_JOBS.contains(&id))
+                        && !(self.engines && id == ENGINE_ID_TOKEN_JOB)
                     {
                         self.report(&format!(
                             "{owner} requests `id-token: write`; only the release workflow's \
-                             `attest` and `publish` jobs may (ADR 0023)"
+                             `attest` and `publish` jobs and the engine workflow's `attest` job \
+                             may (ADR 0023, ADR 0032)"
                         ));
                     }
                 }
