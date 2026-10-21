@@ -50,9 +50,10 @@ use vsift_infrastructure::{
     MAX_TAR_STREAM_BYTES, MAX_XZ_ARCHIVE_BYTES, MountDevice, NetworkInterfaces, SourceContainer,
     VisualSamplingWindow, WhisperOutputLimits, classify_mountinfo, classify_os_release,
     classify_root_mount, decode_chunk_checkpoint, decode_evidence_record, decode_job_record,
-    decode_request_record, decode_screen_text_index_record, decode_transcript_parts, decode_transcript_record,
-    decode_visual_index_record, encode_chunk_checkpoint, encode_evidence_record, encode_job_record,
-    encode_request_record, encode_screen_text_index_record, encode_transcript_part, encode_transcript_record,
+    decode_request_record, decode_screen_text_index_record, decode_transcript_parts,
+    decode_transcript_record, decode_visual_index_record, encode_chunk_checkpoint,
+    encode_evidence_record, encode_job_record, encode_request_record,
+    encode_screen_text_index_record, encode_transcript_part, encode_transcript_record,
     encode_visual_index_record, inspect_bzip2_tar_inventory, inspect_gzip_tar_inventory,
     inspect_tar_inventory, inspect_xz_tar_inventory, inspect_zip_inventory,
     inspect_zip_selected_files, parse_ashowinfo_start, parse_cgroup_limit, parse_cpu_max,
@@ -724,7 +725,9 @@ fn check_transcript_record(data: &[u8]) -> Result<(), Violation> {
 pub const TRANSCRIPT_PART_SEPARATOR: u8 = 0x1e;
 
 fn check_transcript_part(data: &[u8]) -> Result<(), Violation> {
-    let parts: Vec<&[u8]> = data.split(|byte| *byte == TRANSCRIPT_PART_SEPARATOR).collect();
+    let parts: Vec<&[u8]> = data
+        .split(|byte| *byte == TRANSCRIPT_PART_SEPARATOR)
+        .collect();
     let Ok(open) = decode_transcript_parts(&parts) else {
         return Ok(());
     };
