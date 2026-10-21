@@ -147,6 +147,7 @@ fn json(output: &Output) -> Built<Value> {
         match value["command"].as_str() {
             Some("search") => validate("search-data.schema.json", &value["data"])?,
             Some("ocr") => validate("screen-text-data.schema.json", &value["data"])?,
+            Some("ocr.search") => validate("ocr-search-data.schema.json", &value["data"])?,
             _ => {}
         }
     }
@@ -163,6 +164,12 @@ struct Seeded {
 }
 
 async fn seed_session(root: &OwnedRoot) -> Built<Seeded> {
+    seed(root, true).await
+}
+
+/// A session over a stand-in source, with the F10 import as its transcript or,
+/// for a silent recording, without any.
+async fn seed(root: &OwnedRoot, with_transcript: bool) -> Built<Seeded> {
     let source = root.path("stand-in.mp4");
     fs::write(&source, b"\0\0\0\x18ftypisomocr-contract")?;
     let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
@@ -185,22 +192,28 @@ async fn seed_session(root: &OwnedRoot) -> Built<Seeded> {
         &OperationId::parse("op_1111111111111111")?,
         &source,
     )?;
-    let supplied = read_supplied_transcript(&repository("fixtures/corpus/transcripts/F10.srt"))?;
-    let revision = build_imported_revision(ImportedRevisionRequest {
-        session_id: &session_id,
-        source_id: snapshot.id(),
-        source_duration: MediaTime::from_micros(12 * SECOND),
-        supplied: &supplied,
-        offset: TranscriptOffset::from_micros(500_000)?,
-        number: NonZeroU32::MIN,
-    })?;
-    let generation = store.activate_with_transcript(
-        &snapshot,
-        &OperationId::parse("op_2222222222222222")?,
-        StorageGeneration::INITIAL,
-        now,
-        &revision,
-    )?;
+    let activation = OperationId::parse("op_2222222222222222")?;
+    let generation = if with_transcript {
+        let supplied =
+            read_supplied_transcript(&repository("fixtures/corpus/transcripts/F10.srt"))?;
+        let revision = build_imported_revision(ImportedRevisionRequest {
+            session_id: &session_id,
+            source_id: snapshot.id(),
+            source_duration: MediaTime::from_micros(12 * SECOND),
+            supplied: &supplied,
+            offset: TranscriptOffset::from_micros(500_000)?,
+            number: NonZeroU32::MIN,
+        })?;
+        store.activate_with_transcript(
+            &snapshot,
+            &activation,
+            StorageGeneration::INITIAL,
+            now,
+            &revision,
+        )?
+    } else {
+        store.activate_source(&snapshot, &activation, StorageGeneration::INITIAL, now)?
+    };
     let source_id = snapshot.id().clone();
     drop(snapshot);
     Ok(Seeded {
@@ -453,5 +466,62 @@ async fn search_finds_text_read_off_the_screen_with_its_frame_time_and_region() 
     assert!(text.contains("On-screen hits: 1 of 1"), "{text}");
     assert!(text.contains("region: 400,280 480x40"), "{text}");
     assert!(text.contains("  | Dialog R-17"), "{text}");
+    Ok(())
+}
+
+/// On a session without any transcript (a silent recording), `search` refuses
+/// as it always has, and `ocr search` finds and pages what `ocr` read.
+#[tokio::test]
+async fn ocr_search_finds_on_screen_text_without_a_transcript() -> TestResult {
+    let root = OwnedRoot::new()?;
+    let seeded = seed(&root, false).await?;
+    let session = seeded.session_id.as_str().to_owned();
+    let before = json(&vsift(
+        &root,
+        &["ocr", "search", &session, "--query", "R-17", "--json"],
+    )?)?;
+    assert_eq!(before["command"], "ocr.search");
+    assert_eq!(before["status"], "partial");
+    assert_eq!(before["data"]["state"], "not_run");
+    commit_index(&seeded)?;
+    let refused = vsift(&root, &["search", &session, "--query", "R-17", "--json"])?;
+    assert_eq!(refused.status.code(), Some(2));
+    let page = json(&vsift(
+        &root,
+        &[
+            "ocr",
+            "search",
+            &session,
+            "--query",
+            "dialog r 17",
+            "--json",
+        ],
+    )?)?;
+    assert_eq!(page["data"]["total_hits"], 1);
+    let hit = &page["data"]["hits"][0];
+    assert_eq!(hit["text"], "Dialog R-17");
+    assert_eq!(hit["frame"]["time_us"], 2 * SECOND);
+    assert_eq!(hit["frames"], 2);
+    assert_eq!(page["data"]["next_cursor"], Value::Null);
+
+    let human = vsift(&root, &["ocr", "search", &session, "--query", "R-17"])?;
+    assert_eq!(human.status.code(), Some(0));
+    let text = String::from_utf8(human.stdout)?;
+    assert!(text.contains("On-screen search of session"), "{text}");
+    assert!(text.contains("  | Dialog R-17"), "{text}");
+
+    let forged = vsift(
+        &root,
+        &[
+            "ocr", "search", &session, "--query", "R-17", "--cursor", "v1.bad", "--json",
+        ],
+    )?;
+    assert_eq!(forged.status.code(), Some(2));
+    let refusal: Value = serde_json::from_slice(&forged.stdout)?;
+    assert_eq!(refusal["error"]["code"], "INVALID_ARGUMENT");
+    assert_eq!(
+        refusal["error"]["remediation"][0]["summary"],
+        vsift_contract::OCR_SEARCH_CURSOR_REMEDIATION
+    );
     Ok(())
 }

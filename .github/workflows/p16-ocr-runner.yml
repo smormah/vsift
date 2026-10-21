@@ -9,8 +9,9 @@ name: P16 OCR runner
 #   the evaluation's frames (synthetic screens with known text, and RM01, RM04
 #   and RM10 from the test-media release, held to their pins) compares the
 #   runner line by line with RapidOCR's reference pipeline on the same models
-#   (parity), and runs `vsift ocr` to complete coverage and `vsift search` over
-#   what the screens showed (end to end). The real recordings' frames and
+#   (parity), and runs `vsift ocr` to complete coverage and `vsift ocr search`
+#   over what the screens showed (end to end), on sessions without a transcript,
+#   one of them a synthetic video with a silent audio track. The real recordings' frames and
 #   recognised text stay on the runner: only numbers and which interface labels
 #   were found leave it, as in `P16 OCR evaluation`.
 # - `platforms` (Windows, macOS): builds and stages the runner there and reads
@@ -29,6 +30,12 @@ on:
       - crates/vsift-infrastructure/src/ocr_runner.rs
       - crates/vsift-infrastructure/src/ocr_runner/**
       - crates/vsift/src/screen_text.rs
+      - crates/vsift/src/search.rs
+      - crates/vsift-application/src/screen_text.rs
+      - crates/vsift-application/src/screen_text/**
+      - crates/vsift-application/src/screen_text_search.rs
+      - crates/vsift-application/src/screen_text_search/**
+      - crates/vsift-cli/src/ocr.rs
       - tools/p16_ocr_runner.py
       - tools/test_p16_ocr_runner.py
   workflow_dispatch:
@@ -172,14 +179,18 @@ jobs:
             --frames RM01 --frames RM04 --frames RM10
           { echo '## Parity'; echo; echo '```json'; cat "$RUNNER_TEMP/report/parity.json"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: vsift ocr and search, end to end
+      - name: vsift ocr and ocr search, end to end (no transcript; one video without audio, one with a silent track)
         run: |
           set -euo pipefail
+          /usr/bin/ffmpeg -hide_banner -loglevel error -i "$RUNNER_TEMP/synthetic/synthetic-h264.mp4" \
+            -f lavfi -i anullsrc=r=48000:cl=stereo -shortest -map 0:v -map 1:a -c:v copy -c:a aac \
+            "$RUNNER_TEMP/synthetic/synthetic-h264-silent.mp4"
           python3 tools/p16_ocr_runner.py end-to-end --vsift "$GITHUB_WORKSPACE/target/release/vsift" \
             --ffmpeg "$VSIFT_EVAL_FFMPEG" --ffprobe "$VSIFT_EVAL_FFPROBE" --work "$RUNNER_TEMP/e2e-work" \
             --runner "$RUNNER_TEMP/runner/vsift-ocr-runner" --synthetic "$RUNNER_TEMP/synthetic" \
             --report "$RUNNER_TEMP/report/end-to-end.json" \
             --synthetic-video "$RUNNER_TEMP/synthetic/synthetic-h264.mp4" \
+            --synthetic-video "$RUNNER_TEMP/synthetic/synthetic-h264-silent.mp4" \
             --real "RM01=$REAL_RM01" --real "RM04=$REAL_RM04" --real "RM10=$REAL_RM10"
           { echo '## End to end'; echo; echo '```json'; python3 -c "import json,sys; r=json.load(open(sys.argv[1])); r.pop('steps', None); print(json.dumps(r, indent=1, ensure_ascii=False))" "$RUNNER_TEMP/report/end-to-end.json"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
 

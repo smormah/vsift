@@ -5,7 +5,7 @@ use super::{
     text::{Placement, RenderedText, TerminalText, TooLarge},
     time::{push_range, push_span},
     view::{
-        Envelope, Markup, Retranscription, Search, SearchScreenText, TranscriptCoverage,
+        Envelope, Markup, OcrSearch, Retranscription, Search, SearchScreenText, TranscriptCoverage,
         TranscriptPage, TranscriptRevision, TranscriptSegment,
     },
 };
@@ -145,6 +145,32 @@ pub(super) fn search(envelope: &Envelope<Search>) -> Result<RenderedText, TooLar
     if let Some(screen_text) = &data.screen_text {
         push_screen_text_hits(&mut text, screen_text);
     }
+    push_outcome(&mut text, envelope);
+    text.finish()
+}
+
+/// `ocr search`: one page of on-screen hits, how much of the range was read,
+/// and the next page's cursor.
+pub(super) fn ocr_search(envelope: &Envelope<OcrSearch>) -> Result<RenderedText, TooLarge> {
+    let data = &envelope.data;
+    let mut text = TerminalText::result();
+    text.push_fixed("On-screen search of session ")
+        .push_value(&data.session_id)
+        .end_line();
+    // The terms are the caller's own text; only their number is shown.
+    text.push_fixed("Query terms: ")
+        .push_unsigned(count(data.query.terms.len()))
+        .end_line();
+    text.push_fixed("Range: ");
+    match data.range {
+        Some(range) => push_range(&mut text, range),
+        None => {
+            text.push_fixed("the whole video");
+        }
+    }
+    text.end_line();
+    push_screen_text_hits(&mut text, &data.part);
+    push_next_page(&mut text, data.next_cursor.as_deref());
     push_outcome(&mut text, envelope);
     text.finish()
 }

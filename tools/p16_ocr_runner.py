@@ -16,7 +16,7 @@ measures it on frames VSift itself extracts:
   pipeline, `ocr-ppocr-v5-mobile-latin.jsonl`) line by line, and scores the
   runner against the synthetic truth as the evaluation scored the engines.
 - `end-to-end`: `vsift ocr` over a whole video until its coverage is complete,
-  then `vsift search` for what the screen showed: the synthetic numbers (with
+  then `vsift ocr search` for what the screen showed: the synthetic numbers (with
   their truth times) or a real recording's interface labels.
 - `compare`: the runner's readings on another platform against Linux's.
 
@@ -364,7 +364,7 @@ def agreement(linux: list[Recognition], other: list[Recognition]) -> dict:
     return {"lines": lines, "equal": equal, "agreement": round(equal / lines, 4) if lines else None}
 
 
-# --- end to end: vsift ocr and search ------------------------------------------------------------
+# --- end to end: vsift ocr and ocr search ------------------------------------------------------------
 
 @dataclass
 class OcrRun:
@@ -398,10 +398,19 @@ def ocr_until_complete(vsift: evaluation.Vsift, session: str, runner: Path, max_
 
 
 def screen_text_hits(vsift: evaluation.Vsift, session: str, query: str) -> list[dict]:
-    """The on-screen hits of one search's first page, at most 100."""
-    # `--query=` keeps a query that starts with a hyphen a value, not an option.
-    data = vsift(f"search {len(query)} chars", ["search", session, f"--query={query}", "--limit", "100"])["data"]
-    return (data.get("screen_text") or {}).get("hits") or []
+    """Every on-screen hit of `ocr search`, page after page (no transcript needed)."""
+    hits: list[dict] = []
+    cursor = None
+    while True:
+        # `--query=` keeps a query that starts with a hyphen a value, not an option.
+        arguments = ["ocr", "search", session, f"--query={query}", "--limit", "100"]
+        if cursor:
+            arguments += ["--cursor", cursor]
+        data = vsift(f"ocr search {len(query)} chars", arguments)["data"]
+        hits.extend(data["hits"])
+        cursor = data.get("next_cursor")
+        if not cursor:
+            return hits
 
 
 def synthetic_found(truth: dict, hits_by_number: dict[str, list[dict]]) -> dict:
@@ -420,17 +429,9 @@ def synthetic_found(truth: dict, hits_by_number: dict[str, list[dict]]) -> dict:
     return {"numbers": numbers, "found": found, "found_share": round(found / numbers, 4) if numbers else None}
 
 
-# `search` needs a transcript revision (on-screen hits ride on its first page), and the
-# synthetic videos have no audio and the hosted job no recogniser, so each session is
-# opened with a supplied one-cue transcript that names none of the searched words.
-PLACEHOLDER_TRANSCRIPT = "1\n00:00:00,000 --> 00:00:01,000\nend-to-end check\n"
-
-
-def ingest(vsift: evaluation.Vsift, video: Path, scratch: Path) -> str:
-    scratch.mkdir(parents=True, exist_ok=True)
-    transcript = scratch / f"{video.stem}.placeholder.srt"
-    transcript.write_text(PLACEHOLDER_TRANSCRIPT, encoding="utf-8")
-    return vsift("ingest", ["ingest", str(video), "--transcript", str(transcript)])["data"]["session_id"]
+def ingest(vsift: evaluation.Vsift, video: Path) -> str:
+    """A session without any transcript: `ocr search` needs none."""
+    return vsift("ingest", ["ingest", str(video)])["data"]["session_id"]
 
 
 def summarise_run(run: OcrRun) -> dict:
@@ -440,7 +441,7 @@ def summarise_run(run: OcrRun) -> dict:
 
 
 def end_to_end_synthetic(vsift: evaluation.Vsift, video: Path, truth: dict, runner: Path, max_calls: int) -> dict:
-    session = ingest(vsift, video, vsift.root.parent / "transcripts")
+    session = ingest(vsift, video)
     run = ocr_until_complete(vsift, session, runner, max_calls)
     numbers = sorted({token for screen in truth["screens"] for line in screen["lines"]
                       for token in evaluation.tokens(line["text"]) if evaluation.is_number(token)})
@@ -450,7 +451,7 @@ def end_to_end_synthetic(vsift: evaluation.Vsift, video: Path, truth: dict, runn
 
 
 def end_to_end_real(vsift: evaluation.Vsift, item: str, video: Path, runner: Path, max_calls: int) -> dict:
-    session = ingest(vsift, video, vsift.root.parent / "transcripts")
+    session = ingest(vsift, video)
     run = ocr_until_complete(vsift, session, runner, max_calls)
     labels = []
     for spellings in evaluation.LEXICON.get(item, []):

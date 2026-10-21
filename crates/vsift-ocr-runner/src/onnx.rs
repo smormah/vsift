@@ -175,6 +175,11 @@ pub const KNOWN_RUNTIMES: &[(&str, &str)] = &[
         "469849977cb60744ea160927e1a3a0643fd4c55c0aff743251c6d293402e334e",
         "1.31.0",
     ),
+    // onnxruntime-osx-arm64-1.31.0.tgz, lib/libonnxruntime.1.31.0.dylib (run 39599637458).
+    (
+        "2a50a63e7f41f8d4d551d3ee47248df3864f6540109fce8ad520ca3b51af4b70",
+        "1.31.0",
+    ),
     // onnxruntime-win-x64-1.31.0.zip, lib/onnxruntime.dll (run 39598128889).
     (
         "0c42dc4e278f0968fdf9ebf1b1e54a74c657a9942e70803e453c91993451cf4c",

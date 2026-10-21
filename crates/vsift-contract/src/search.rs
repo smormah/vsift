@@ -114,12 +114,12 @@ pub struct SearchPresentation<'a> {
 
 /// How the query was read: its normalised words, in query order.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-struct SearchQueryData {
+pub(crate) struct SearchQueryData {
     terms: Vec<String>,
 }
 
 impl SearchQueryData {
-    fn new(query: &SearchQuery) -> Self {
+    pub(crate) fn new(query: &SearchQuery) -> Self {
         Self {
             terms: query
                 .terms()

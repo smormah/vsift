@@ -40,10 +40,10 @@ use vsift_application::{
     merge_screen_text, read_screen_text_within,
 };
 use vsift_domain::{
-    CandidateOmission, DEFAULT_READ_PERIOD_MICROS, FailureCode, MAX_READ_PERIOD_MICROS,
-    MIN_READ_PERIOD_MICROS, MediaTime, ReadTarget, ScreenTextCoverage, ScreenTextError,
-    ScreenTextIndex, ScreenTextProfile, ScreenTextProvider, SessionArtifactKind, SessionId,
-    TimeRange, VisualCandidateId, VisualCoverageGap, VisualStreamError, plan_reads,
+    CandidateOmission, CursorError, DEFAULT_READ_PERIOD_MICROS, FailureCode,
+    MAX_READ_PERIOD_MICROS, MIN_READ_PERIOD_MICROS, MediaTime, ReadTarget, ScreenTextCoverage,
+    ScreenTextError, ScreenTextIndex, ScreenTextProfile, ScreenTextProvider, SessionArtifactKind,
+    SessionId, TimeRange, VisualCandidateId, VisualCoverageGap, VisualStreamError, plan_reads,
 };
 use vsift_infrastructure::{
     BoundSource, ExecutableResolutionError, ExecutableResolver, FfmpegFrameExtractor, FfmpegMedia,
@@ -158,10 +158,21 @@ impl ScreenTextResults {
         self.stop
     }
 
-    /// Ranges whose candidates could not be listed yet (the visual index's gaps).
+    /// The visual index's gaps in the range, as `candidates` reports them.
     #[must_use]
     pub fn visual_gaps(&self) -> &[VisualCoverageGap] {
         &self.visual_gaps
+    }
+
+    /// Whether the plan holds every candidate the range will have: no window
+    /// is still to be analysed (`not_analyzed`) or to be tried again
+    /// (`deadline_exceeded`). A window the media tools cannot decode, a cell
+    /// without a decoded frame and a window over its candidate budget are
+    /// final: no later call adds candidates there, and their periodic reads
+    /// are planned like any other.
+    #[must_use]
+    pub fn candidates_complete(&self) -> bool {
+        !self.visual_gaps.iter().any(|gap| gap.reason.is_retryable())
     }
 
     /// The period the plan used.
@@ -188,6 +199,9 @@ pub enum OcrError {
     InvalidPeriod,
     /// The frame budget is outside 1 to 200.
     InvalidBudget,
+    /// An `ocr search` cursor is malformed, expired, or of another search,
+    /// session or index revision.
+    Cursor(CursorError),
 }
 
 impl OcrError {
@@ -203,7 +217,9 @@ impl OcrError {
                 FailureCode::ResourceLimit
             }
             Self::Index(_) => FailureCode::Internal,
-            Self::InvalidPeriod | Self::InvalidBudget => FailureCode::InvalidArgument,
+            Self::InvalidPeriod | Self::InvalidBudget | Self::Cursor(_) => {
+                FailureCode::InvalidArgument
+            }
         }
     }
 }
@@ -271,6 +287,7 @@ impl fmt::Display for OcrError {
                 formatter.write_str("the read period is outside one second to ten minutes")
             }
             Self::InvalidBudget => formatter.write_str("the frame budget is outside 1 to 200"),
+            Self::Cursor(error) => error.fmt(formatter),
         }
     }
 }
@@ -280,6 +297,7 @@ impl std::error::Error for OcrError {
         match self {
             Self::Failed(error) => Some(error),
             Self::Index(error) => Some(error),
+            Self::Cursor(error) => Some(error),
             Self::RunnerUnavailable
             | Self::Stopped(_)
             | Self::BudgetExhausted

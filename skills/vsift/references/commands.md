@@ -62,6 +62,7 @@ whole; do not pipe it into `grep`, `head` or anything else.
 | `vsift search` | free | Literal words, never a pattern. |
 | `vsift candidates` | free | Shortlist only. |
 | `vsift ocr` | explicit | Reads text on the screen with the optional OCR runner; it costs minutes of CPU on a long video, so only when the user asks for on-screen text. Each call reads at most `--max-frames` frames; `search` then finds the text with the transcript. |
+| `vsift ocr search` | free | On-screen text that `ocr` read, with or without a transcript; each hit cites its frame, time and region; page with `--cursor`. |
 | `vsift frame get` | free | Counts against the image budget when you open the image. |
 | `vsift frame neighbours` | free | Counts as a refinement. |
 | `vsift frame burst` | free | `--max-frames` within the burst budget. |

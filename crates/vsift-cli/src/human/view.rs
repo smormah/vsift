@@ -252,6 +252,17 @@ pub(crate) struct Search {
     pub(crate) screen_text: Option<SearchScreenText>,
 }
 
+/// `ocr search` data (`ocr-search-data.schema.json`): one page of on-screen hits.
+#[derive(Debug, Deserialize)]
+pub(crate) struct OcrSearch {
+    pub(crate) session_id: String,
+    pub(crate) query: SearchQuery,
+    pub(crate) range: Option<Range>,
+    pub(crate) next_cursor: Option<String>,
+    #[serde(flatten)]
+    pub(crate) part: SearchScreenText,
+}
+
 /// The on-screen text part of a `search` first page.
 #[derive(Debug, Deserialize)]
 pub(crate) struct SearchScreenText {

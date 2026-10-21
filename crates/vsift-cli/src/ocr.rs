@@ -7,12 +7,19 @@ use std::num::NonZeroU16;
 
 use vsift::{
     Cancellation, Engine, FailureCode, ScreenTextRange, ScreenTextRequest, ScreenTextResults,
+    ScreenTextSearchRequest, ScreenTextSearchResults, SearchRange,
 };
 use vsift_contract::{
-    LifecycleResponse, OperationResponse, ScreenTextPresentation, screen_text_response,
+    LifecycleResponse, OperationResponse, ScreenTextPresentation, ScreenTextSearchPagePresentation,
+    screen_text_response, screen_text_search_response,
 };
 
-use crate::{CommandFailure, command::OcrArguments, session::session_lifecycle};
+use crate::{
+    CommandFailure,
+    command::{OcrArguments, OcrSearchArguments},
+    search::screen_text_part,
+    session::session_lifecycle,
+};
 
 fn presentation(results: &ScreenTextResults) -> ScreenTextPresentation<'_> {
     ScreenTextPresentation {
@@ -21,7 +28,7 @@ fn presentation(results: &ScreenTextResults) -> ScreenTextPresentation<'_> {
         range: results.range(),
         period_micros: results.period_micros(),
         coverage: results.coverage(),
-        candidates_complete: results.visual_gaps().is_empty(),
+        candidates_complete: results.candidates_complete(),
         read_now: results.read_now(),
         stop: results.stop(),
         visual_gaps: results.visual_gaps(),
@@ -38,6 +45,10 @@ pub(crate) async fn ocr(
     arguments: OcrArguments,
     cancellation: &Cancellation,
 ) -> Result<OperationResponse<serde_json::Value>, CommandFailure> {
+    // The parser requires the session whenever no subcommand is given.
+    let session = arguments
+        .session
+        .ok_or_else(|| CommandFailure::from(FailureCode::InvalidArgument))?;
     let range = match (arguments.from, arguments.to) {
         (Some(from_micros), Some(to_micros)) => Some(ScreenTextRange {
             from_micros,
@@ -47,7 +58,7 @@ pub(crate) async fn ocr(
     };
     let results = engine
         .read_screen_text(ScreenTextRequest {
-            session: arguments.session,
+            session,
             range,
             period_micros: arguments.period_us,
             max_frames: arguments.max_frames,
@@ -59,4 +70,43 @@ pub(crate) async fn ocr(
         .map_err(CommandFailure::from)?;
     screen_text_response(&presentation(&results), lifecycle(&results)?)
         .map_err(|_| CommandFailure::from(FailureCode::Internal))
+}
+
+/// Pages a session's on-screen text and presents the page as one result.
+pub(crate) fn search(
+    engine: &Engine,
+    arguments: OcrSearchArguments,
+) -> Result<OperationResponse<serde_json::Value>, CommandFailure> {
+    let range = match (arguments.from, arguments.to) {
+        (Some(from_micros), Some(to_micros)) => Some(SearchRange {
+            from_micros,
+            to_micros,
+        }),
+        _ => None,
+    };
+    let results = engine
+        .search_screen_text(ScreenTextSearchRequest {
+            session: arguments.session,
+            query: arguments.query,
+            range,
+            limit: arguments.limit,
+            cursor: arguments.cursor,
+        })
+        .map_err(CommandFailure::from)?;
+    let lifecycle = search_lifecycle(&results)?;
+    screen_text_search_response(
+        &ScreenTextSearchPagePresentation {
+            session_id: results.session().session_id(),
+            query: results.query(),
+            range: results.range(),
+            part: screen_text_part(results.screen_text()),
+            next_cursor: results.next_cursor(),
+        },
+        lifecycle,
+    )
+    .map_err(|_| CommandFailure::from(FailureCode::Internal))
+}
+
+fn search_lifecycle(results: &ScreenTextSearchResults) -> Result<LifecycleResponse, FailureCode> {
+    session_lifecycle(results.session().lifetime())
 }

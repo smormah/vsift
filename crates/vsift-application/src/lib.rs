@@ -16,6 +16,7 @@ mod local_asr_setup;
 mod managed_lifecycle;
 mod provisioning;
 mod screen_text;
+mod screen_text_search;
 mod search;
 mod session;
 mod storage;
@@ -64,6 +65,9 @@ pub use screen_text::{
     ScreenTextReader, ScreenTextStop, continued_index, merge_screen_text, pending_targets,
     read_screen_text_within, screen_text_index_id, screen_text_line_id,
     verify_screen_text_identities,
+};
+pub use screen_text_search::{
+    ScreenTextPage, ScreenTextPageRequest, page_screen_text, screen_text_query_digest,
 };
 pub use search::{SearchPage, SearchPageRequest, page_search, search_query_digest};
 pub use session::{

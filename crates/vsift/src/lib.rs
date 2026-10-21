@@ -150,8 +150,8 @@ pub use screen_text::{
     ScreenTextResults,
 };
 pub use search::{
-    ScreenTextResultHit, ScreenTextSearch, SearchRange, SearchRequest, SearchResultHit,
-    SearchResults,
+    ScreenTextResultHit, ScreenTextSearch, ScreenTextSearchRequest, ScreenTextSearchResults,
+    SearchRange, SearchRequest, SearchResultHit, SearchResults,
 };
 pub use sessions::{
     BundleSummary, CleanDecision, CleanEntry, CleanMode, CleanPage, CleanRequest, CleanScope,

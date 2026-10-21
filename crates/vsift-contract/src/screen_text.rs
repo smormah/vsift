@@ -18,12 +18,12 @@ use serde::Serialize;
 use vsift_application::ScreenTextStop;
 use vsift_domain::{
     FrameRef, MediaTime, ScreenTextCoverage, ScreenTextIndex, ScreenTextLine, SearchMatch,
-    SessionId, TimeRange, VisualCandidateId, VisualCoverageGap,
+    SearchQuery, SessionId, TimeRange, VisualCandidateId, VisualCoverageGap,
 };
 
 use crate::{
     CommandName, ConfidenceResponse, CoverageResponse, LifecycleResponse, OperationResponse,
-    text::render_hidden_characters, transcript::RangeData,
+    search::SearchQueryData, text::render_hidden_characters, transcript::RangeData,
 };
 
 /// Most candidate identities one hit lists: a frame is rarely the
@@ -155,6 +155,8 @@ struct GapData {
     from_us: u64,
     to_us: u64,
     reason: &'static str,
+    #[serde(skip)]
+    retryable: bool,
 }
 
 /// Data of a complete or partial `ocr` result.
@@ -192,6 +194,7 @@ impl ScreenTextData {
                     from_us: gap.range.start().as_micros(),
                     to_us: gap.range.end().as_micros(),
                     reason: gap.reason.identifier(),
+                    retryable: gap.reason.is_retryable(),
                 })
                 .collect(),
         }
@@ -221,10 +224,14 @@ pub fn screen_text_response(
 }
 
 /// The envelope coverage of an `ocr` result: truncated while the range is not
-/// wholly read; its gaps are the visual index's gaps (where candidates are not
-/// known), and its reasons name what is missing: `frames_pending`,
-/// `frames_failed`, then each visual gap reason once.
+/// wholly read; its gaps are then the visual index's gaps that a later
+/// `candidates` call can still fill, and its reasons name what is missing:
+/// `frames_pending`, `frames_failed`, then each of those gaps' reasons once. A
+/// complete result has none, whatever final gaps `candidate_gaps` lists.
 fn envelope_coverage(data: &ScreenTextData) -> CoverageResponse {
+    if data.coverage.is_complete() {
+        return CoverageResponse::new(false, Vec::new(), Vec::new());
+    }
     let mut reasons = Vec::new();
     if data.coverage.pending > 0 {
         reasons.push(FRAMES_PENDING_REASON.to_owned());
@@ -232,15 +239,19 @@ fn envelope_coverage(data: &ScreenTextData) -> CoverageResponse {
     if data.coverage.failed > 0 {
         reasons.push(FRAMES_FAILED_REASON.to_owned());
     }
-    for gap in &data.candidate_gaps {
+    let open: Vec<&GapData> = data
+        .candidate_gaps
+        .iter()
+        .filter(|gap| gap.retryable)
+        .collect();
+    for gap in &open {
         if !reasons.iter().any(|reason| reason == gap.reason) {
             reasons.push(gap.reason.to_owned());
         }
     }
     CoverageResponse::new(
-        !data.coverage.is_complete(),
-        data.candidate_gaps
-            .iter()
+        true,
+        open.iter()
             .map(|gap| format!("{}-{}", gap.from_us, gap.to_us))
             .collect(),
         reasons,
@@ -383,4 +394,101 @@ impl ScreenTextSearchData {
             coverage,
         }
     }
+}
+
+/// Fixed warning of an `ocr search` page whose range is not wholly read.
+pub const OCR_SEARCH_PARTIAL_WARNING: &str = "Not every planned frame of the searched range has been read, so text shown there may not be found: coverage counts the frames read, failed and still pending, and says whether the range's candidates are all known (state not_run: ocr has not read this session). Run ocr for the range, then search again.";
+
+/// Remediation for an `ocr search` cursor that cannot continue.
+pub const OCR_SEARCH_CURSOR_REMEDIATION: &str = "The cursor cannot continue this on-screen search: it belongs to another session, query or range, it expired, or ocr has read more frames since (each ocr call commits a new index revision). Run ocr search again without --cursor and pass back only the next_cursor it returns.";
+
+/// Envelope coverage reason: `ocr` has not read the session.
+pub const NOT_RUN_REASON: &str = "not_run";
+
+/// Envelope coverage reason: a visual window of the range is not analysed, so
+/// its candidates are not in the plan.
+pub const CANDIDATES_INCOMPLETE_REASON: &str = "candidates_incomplete";
+
+/// One `ocr search` page as a host presents it (ADR 0030 decision 13).
+#[derive(Clone, Debug)]
+pub struct ScreenTextSearchPagePresentation<'a> {
+    /// The session searched.
+    pub session_id: &'a SessionId,
+    /// The validated query.
+    pub query: &'a SearchQuery,
+    /// The requested range, if any.
+    pub range: Option<TimeRange>,
+    /// The hits, the total, the index and the coverage.
+    pub part: ScreenTextSearchPresentation<'a>,
+    /// The encoded continuation token, absent on the last page.
+    pub next_cursor: Option<&'a str>,
+}
+
+/// Data of a complete or partial `ocr search` page.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct ScreenTextSearchPageData {
+    session_id: String,
+    query: SearchQueryData,
+    range: Option<RangeData>,
+    state: &'static str,
+    index: Option<IndexData>,
+    hits: Vec<HitData>,
+    total_hits: usize,
+    next_cursor: Option<String>,
+    coverage: CoverageData,
+}
+
+impl ScreenTextSearchPageData {
+    /// Presents one page.
+    #[must_use]
+    pub fn new(page: &ScreenTextSearchPagePresentation<'_>) -> Self {
+        let part = ScreenTextSearchData::new(&page.part);
+        Self {
+            session_id: page.session_id.as_str().to_owned(),
+            query: SearchQueryData::new(page.query),
+            range: page.range.map(RangeData::new),
+            state: part.state,
+            index: part.index,
+            hits: part.hits,
+            total_hits: part.total_hits,
+            next_cursor: page.next_cursor.map(str::to_owned),
+            coverage: part.coverage,
+        }
+    }
+}
+
+/// The complete `ocr search` result: `partial`, with a warning and truncated
+/// envelope coverage, while its state is not `complete`.
+///
+/// # Errors
+///
+/// Returns the serialization error when the data cannot be represented as JSON.
+pub fn screen_text_search_response(
+    page: &ScreenTextSearchPagePresentation<'_>,
+    lifecycle: LifecycleResponse,
+) -> Result<OperationResponse<serde_json::Value>, serde_json::Error> {
+    let data = ScreenTextSearchPageData::new(page);
+    let mut reasons = Vec::new();
+    if data.index.is_none() {
+        reasons.push(NOT_RUN_REASON.to_owned());
+    } else {
+        if data.coverage.pending > 0 {
+            reasons.push(FRAMES_PENDING_REASON.to_owned());
+        }
+        if data.coverage.failed > 0 {
+            reasons.push(FRAMES_FAILED_REASON.to_owned());
+        }
+        if !data.coverage.candidates_complete {
+            reasons.push(CANDIDATES_INCOMPLETE_REASON.to_owned());
+        }
+    }
+    let complete = data.state == "complete";
+    let response = OperationResponse::complete(CommandName::OcrSearch.identifier(), &data)?
+        .with_lifecycle(lifecycle)
+        .with_coverage(CoverageResponse::new(!complete, Vec::new(), reasons));
+    Ok(if complete {
+        response
+    } else {
+        response.with_warnings(&[OCR_SEARCH_PARTIAL_WARNING])
+    })
 }

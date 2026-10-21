@@ -129,7 +129,9 @@ pub(crate) enum Command {
     /// range's plan (every visual candidate's frame and one frame every
     /// --period-us), then stops; run it again to continue. The answer counts the
     /// frames read, failed and pending, and is partial until the plan is read.
-    /// search then finds the text, each hit citing its frame, time and region.
+    /// ocr search then pages the text it read, each hit citing its frame, time
+    /// and region, with or without a transcript (search's first page shows it
+    /// beside the transcript).
     Ocr(OcrArguments),
     /// Extract or navigate source-grounded frames.
     Frame(FrameArguments),
@@ -700,11 +702,17 @@ pub(crate) struct SearchArguments {
     pub view: ViewArgument,
 }
 
-/// A bounded request to read on-screen text off a session's frames (ADR 0030).
+/// A bounded request to read on-screen text off a session's frames (ADR 0030),
+/// or, with `search`, a page of what was read.
 #[derive(Args, Debug)]
+#[command(args_conflicts_with_subcommands = true, subcommand_negates_reqs = true)]
 pub(crate) struct OcrArguments {
+    /// Search the on-screen text ocr has read instead of reading more.
+    #[command(subcommand)]
+    pub command: Option<OcrCommand>,
     /// Session whose video is read.
-    pub session: SessionId,
+    #[arg(required = true)]
+    pub session: Option<SessionId>,
     /// Inclusive source-timeline start in microseconds; requires --to. Omit
     /// both to read the whole video.
     #[arg(long, requires = "to")]
@@ -727,6 +735,43 @@ pub(crate) struct OcrArguments {
     /// Inference threads, 1 through 8; defaults to 2.
     #[arg(long, value_parser = clap::value_parser!(u16).range(1..=8))]
     pub threads: Option<u16>,
+}
+
+/// What `ocr` does instead of reading frames.
+#[derive(Debug, Subcommand)]
+pub(crate) enum OcrCommand {
+    /// Page the on-screen text ocr has read for a literal query.
+    ///
+    /// Works with or without a transcript. Each hit cites the frame it was read
+    /// on (time, timestamp, size), its region and how long it stayed; every hit
+    /// is paged with --cursor. The answer is partial, and says how much of the
+    /// range was read, until ocr has read every planned frame: text on a frame
+    /// not read cannot be found. Runs no tool and writes nothing.
+    Search(OcrSearchArguments),
+}
+
+/// A bounded literal search of a session's on-screen text (ADR 0030).
+#[derive(Args, Debug)]
+pub(crate) struct OcrSearchArguments {
+    /// Session to search.
+    pub session: SessionId,
+    /// Literal query text, at most 256 bytes; it is never interpreted as code
+    /// or a regular expression.
+    #[arg(long)]
+    pub query: String,
+    /// Inclusive source-timeline start in microseconds; requires --to. Omit
+    /// both to search the whole video.
+    #[arg(long, requires = "to")]
+    pub from: Option<u64>,
+    /// Exclusive source-timeline end in microseconds; requires --from.
+    #[arg(long, requires = "from")]
+    pub to: Option<u64>,
+    /// Hits per page, 1 through 100; defaults to 20.
+    #[arg(long, value_parser = clap::value_parser!(u16).range(1..=100))]
+    pub limit: Option<u16>,
+    /// Opaque continuation token returned by the previous page of the same search.
+    #[arg(long)]
+    pub cursor: Option<String>,
 }
 
 /// Visual-candidate page request; missing windows of the range are analysed
@@ -1107,6 +1152,10 @@ mod tests {
         let mut identifiers = BTreeSet::new();
         for namespace in root.get_subcommands() {
             if namespace.has_subcommands() {
+                // `ocr` both runs itself and has `ocr search`.
+                if namespace.is_args_conflicts_with_subcommands_set() {
+                    identifiers.insert(namespace.get_name().to_owned());
+                }
                 for operation in namespace.get_subcommands() {
                     identifiers.insert(format!(
                         "{}.{}",

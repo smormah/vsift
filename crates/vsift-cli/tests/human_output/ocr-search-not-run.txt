@@ -1,0 +1,10 @@
+On-screen search of session ses_0123456789abcdef0123456789abcdef
+Query terms: 1
+Range: the whole video
+
+On-screen text: not_run
+Run vsift ocr on the session to read it.
+
+Status: partial (the warnings below say what is missing)
+Lifecycle: ephemeral, expires 2026-09-25T00:00:00Z
+Warning: Not every planned frame of the searched range has been read, so text shown there may not be found: coverage counts the frames read, failed and still pending, and says whether the range's candidates are all known (state not_run: ocr has not read this session). Run ocr for the range, then search again.

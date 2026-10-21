@@ -598,3 +598,145 @@ fn ocr_remediations_name_the_runner_and_ask_rather_than_search() {
     assert!(OCR_RUNNER_REMEDIATION.contains("ask the user"));
     assert!(OCR_FAILED_REMEDIATION.contains("Nothing was committed"));
 }
+
+const OCR_SEARCH_EXAMPLE: &str = "examples/ocr-search.json";
+const OCR_SEARCH_NOT_RUN_EXAMPLE: &str = "examples/ocr-search.not-run.json";
+
+/// One `ocr search` page of `query` over `index` (none: `ocr` has not run).
+fn ocr_search(
+    query: &str,
+    index: Option<&ScreenTextIndex>,
+    limit: u16,
+    cursor: Option<String>,
+) -> Built<Value> {
+    let session = SessionId::parse(SESSION)?;
+    let query = SearchQuery::parse(query)?;
+    let page = match index {
+        Some(index) => Some(vsift_application::page_screen_text(
+            &session,
+            index,
+            &vsift_application::ScreenTextPageRequest {
+                query: query.clone(),
+                range: None,
+                limit: PageLimit::new(limit)?,
+                cursor,
+            },
+            CURSOR_EXPIRES_US,
+            NOW_US,
+        )?),
+        None => None,
+    };
+    let candidates: Vec<Vec<VisualCandidateId>> = page
+        .iter()
+        .flat_map(|page| page.hits.iter())
+        .map(|hit| {
+            hit.first
+                .targets
+                .iter()
+                .filter_map(|target| target.candidate.clone())
+                .collect()
+        })
+        .collect();
+    let hits = page
+        .iter()
+        .flat_map(|page| page.hits.iter())
+        .zip(&candidates)
+        .map(|(hit, candidates)| ScreenTextHitPresentation {
+            line: hit.line,
+            frame: &hit.first.frame,
+            candidates,
+            last_time: hit.last_time,
+            frames: hit.frames,
+            tier: hit.tier,
+        })
+        .collect();
+    let next_cursor = page
+        .as_ref()
+        .and_then(|page| page.next_cursor.as_ref())
+        .map(vsift_domain::CursorToken::encode);
+    let coverage = match index {
+        Some(index) => ScreenTextCoverage::of(&plan()?, Some(index)),
+        None => ScreenTextCoverage::default(),
+    };
+    Ok(serde_json::to_value(
+        vsift_contract::screen_text_search_response(
+            &vsift_contract::ScreenTextSearchPagePresentation {
+                session_id: &session,
+                query: &query,
+                range: None,
+                part: ScreenTextSearchPresentation {
+                    index,
+                    hits,
+                    total_hits: page.as_ref().map_or(0, |page| page.total_hits),
+                    coverage,
+                    candidates_complete: index.is_some(),
+                    period_micros: index.map(ScreenTextIndex::period_micros),
+                },
+                next_cursor: next_cursor.as_deref(),
+            },
+            lifecycle(),
+        )?,
+    )?)
+}
+
+#[test]
+fn ocr_search_pages_every_on_screen_hit_without_a_transcript() -> TestResult {
+    let index = index(10)?;
+    let first = ocr_search("R-17", Some(&index), 1, None)?;
+    regenerate(OCR_SEARCH_EXAMPLE, &first)?;
+    validate("operation-response.schema.json", &first)?;
+    validate("ocr-search-data.schema.json", &first["data"])?;
+    assert!(
+        first == load(OCR_SEARCH_EXAMPLE)?,
+        "the ocr search result differs from {OCR_SEARCH_EXAMPLE}"
+    );
+    assert_eq!(first["command"], "ocr.search");
+    assert_eq!(first["status"], "complete");
+    let data = &first["data"];
+    assert_eq!(data["state"], "complete");
+    assert_eq!(data["total_hits"], 2);
+    assert_eq!(data["hits"][0]["text"], "Dialog R-17");
+    let cursor = data["next_cursor"].as_str().ok_or("no cursor")?.to_owned();
+    let second = ocr_search("R-17", Some(&index), 1, Some(cursor))?;
+    validate("ocr-search-data.schema.json", &second["data"])?;
+    assert_eq!(second["data"]["hits"][0]["text"], "Close R-17");
+    assert_eq!(second["data"]["next_cursor"], Value::Null);
+    assert_eq!(second["data"]["total_hits"], 2);
+    Ok(())
+}
+
+#[test]
+fn ocr_search_before_ocr_is_partial_and_says_not_run() -> TestResult {
+    let response = ocr_search("R-17", None, 20, None)?;
+    regenerate(OCR_SEARCH_NOT_RUN_EXAMPLE, &response)?;
+    validate("operation-response.schema.json", &response)?;
+    validate("ocr-search-data.schema.json", &response["data"])?;
+    assert!(
+        response == load(OCR_SEARCH_NOT_RUN_EXAMPLE)?,
+        "the ocr search result differs from {OCR_SEARCH_NOT_RUN_EXAMPLE}"
+    );
+    assert_eq!(response["status"], "partial");
+    assert_eq!(response["data"]["state"], "not_run");
+    assert_eq!(
+        response["coverage"],
+        serde_json::json!({"truncated": true, "gaps": [], "reasons": ["not_run"]})
+    );
+    assert_eq!(
+        response["warnings"],
+        serde_json::json!([vsift_contract::OCR_SEARCH_PARTIAL_WARNING])
+    );
+    Ok(())
+}
+
+#[test]
+fn a_partly_read_ocr_search_names_what_is_missing() -> TestResult {
+    let index = index(5)?;
+    let response = ocr_search("Dialog", Some(&index), 20, None)?;
+    validate("ocr-search-data.schema.json", &response["data"])?;
+    assert_eq!(response["status"], "partial");
+    assert_eq!(
+        response["coverage"]["reasons"],
+        serde_json::json!(["frames_pending"])
+    );
+    Ok(())
+}

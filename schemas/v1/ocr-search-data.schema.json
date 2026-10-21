@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vsift.dev/schemas/v1/ocr-search-data.schema.json",
+  "title": "VSift ocr.search data v1",
+  "description": "The data member of a complete or partial ocr.search result (0.3.0, ADR 0030 decision 13): one bounded page of the query's occurrences in the session's screen-text index, with or without a transcript. Occurrences are matched as search matches transcript segments (phrase, then all_terms) and ranked by tier, then by first appearance; a line read on consecutive read frames with the same words in the same place is one occurrence. Each hit cites its first frame, its region, its text and display_text, the runner's uncalibrated confidence, how long it stayed and the candidates of its frame (screen-text-data.schema.json#/$defs/hit). total_hits counts the whole search on every page. state is not_run before ocr has read the session, partial while its coverage of the searched range is not complete and complete otherwise; coverage is the screen-text coverage block. Validate the envelope with operation-response.schema.json: its coverage member is truncated, and its status partial with a fixed warning, exactly when state is not complete; its reasons name not_run, or frames_pending, frames_failed and candidates_incomplete. Pass next_cursor back with the same session, query and range; it is rejected for any other search or session, after the session expires, or once ocr has committed a new index revision. Absence of a hit is never evidence the text was not on screen: only planned frames are read.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "session_id",
+    "query",
+    "range",
+    "state",
+    "index",
+    "hits",
+    "total_hits",
+    "next_cursor",
+    "coverage"
+  ],
+  "properties": {
+    "session_id": { "type": "string", "pattern": "^ses_[a-z0-9]{16,64}$" },
+    "query": { "$ref": "search-data.schema.json#/$defs/query" },
+    "range": {
+      "description": "The requested range, or null when the whole index was searched.",
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "screen-text-data.schema.json#/$defs/range" }
+      ]
+    },
+    "state": { "enum": ["not_run", "partial", "complete"] },
+    "index": {
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "screen-text-data.schema.json#/$defs/index" }
+      ]
+    },
+    "hits": {
+      "type": "array",
+      "maxItems": 100,
+      "items": { "$ref": "screen-text-data.schema.json#/$defs/hit" }
+    },
+    "total_hits": { "type": "integer", "minimum": 0 },
+    "next_cursor": { "$ref": "search-data.schema.json#/$defs/next_cursor" },
+    "coverage": { "$ref": "screen-text-data.schema.json#/$defs/coverage" }
+  }
+}

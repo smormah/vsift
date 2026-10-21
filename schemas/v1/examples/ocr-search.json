@@ -1,0 +1,83 @@
+{
+  "command": "ocr.search",
+  "coverage": {
+    "gaps": [],
+    "reasons": [],
+    "truncated": false
+  },
+  "data": {
+    "coverage": {
+      "candidates_complete": true,
+      "failed": 0,
+      "pending": 0,
+      "period_us": 5000000,
+      "planned": 4,
+      "read": 4,
+      "scope": "screen_text",
+      "unresolved": 0
+    },
+    "hits": [
+      {
+        "candidate_ids": [],
+        "confidence": {
+          "origin": "provider_uncalibrated",
+          "value_basis_points": 9731
+        },
+        "display_text": "Dialog R-17",
+        "frame": {
+          "height": 720,
+          "pts": 150,
+          "stream_index": 0,
+          "time_base_denominator": 30,
+          "time_base_numerator": 1,
+          "time_us": 5000000,
+          "width": 1280
+        },
+        "frames": 2,
+        "last_time_us": 6000000,
+        "line_id": "stl_00c6d6d00917be8b0ddef115cd4fb948",
+        "match": "phrase",
+        "region": {
+          "height": 32,
+          "width": 360,
+          "x": 420,
+          "y": 300
+        },
+        "text": "Dialog R-17"
+      }
+    ],
+    "index": {
+      "engine": {
+        "detector_sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+        "profile": "ppocrv5-latin-v1",
+        "recognizer_sha256": "3333333333333333333333333333333333333333333333333333333333333333",
+        "runner_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+        "runner_version": "0.1.0",
+        "runtime_version": "1.31.0"
+      },
+      "frames": 4,
+      "index_id": "sti_6acf6ced07743f5711fb499cdd6d43b7",
+      "lines": 4,
+      "revision": 1
+    },
+    "next_cursor": "v1|ses_0123456789abcdef0123456789abcdef|1|39f5069ab1d69cdb1249774bd10114118a21dd3b1fa4a3a1b785004501e0c22a|1-1|1790294400000000",
+    "query": {
+      "terms": [
+        "r17"
+      ]
+    },
+    "range": null,
+    "session_id": "ses_0123456789abcdef0123456789abcdef",
+    "state": "complete",
+    "total_hits": 2
+  },
+  "error": null,
+  "lifecycle": {
+    "expires_at": "2026-09-25T00:00:00Z",
+    "mode": "ephemeral"
+  },
+  "operation_id": null,
+  "schema_version": "1",
+  "status": "complete",
+  "warnings": []
+}
