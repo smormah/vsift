@@ -99,6 +99,18 @@ real meetings, accents or noisy rooms, so every accuracy figure below says what 
   rest as not transcribed, and the silence the first run found is not listed as silence any more. The stretch is listed
   wrongly and is never reported as silence: the safe error. Transcribing the stretch again, or the whole recording, clears it.
 
+## The voices: speaker labels (`0.3.0`)
+
+- **A label is a voice, not a person, and it is provisional** ([L-207](../planning/known-limits.md#l-207)). Two
+  similar voices can share one label with nothing in the answer to show it; in the tests, two similar synthetic
+  voices were always heard as one. A name appears only when you record it ([speaker labels](speaker-labels.md)).
+- **One label per segment, or none.** A segment in which two people speak, or with little speech heard, has no
+  confident speaker, and a search by speaker does not find it.
+- **Two hours per run** ([L-205](../planning/known-limits.md#l-205)): the tool holds the whole stretch in memory
+  (about 2 GB for two hours). Label a longer recording a part at a time; labels of two parts are not linked.
+- **Measured on little real speech** ([L-206](../planning/known-limits.md#l-206)): synthetic conversations and one
+  real two-person call, whose reference was read from its transcript.
+
 ## The pictures: screen changes and frames
 
 - **Small changes are often not listed** ([L-028](../planning/known-limits.md#l-028)). The size of a change VSift
