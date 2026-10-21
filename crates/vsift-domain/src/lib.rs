@@ -82,7 +82,7 @@ pub use retry::{
 pub use search::{
     CoverageBasis, MAX_SEARCH_QUERY_BYTES, MAX_SEARCH_TERMS, SearchCoverage, SearchHit,
     SearchMatch, SearchPosition, SearchQuery, SearchQueryRejection, SearchSlice,
-    normalise_search_text, search_revision,
+    normalise_search_text, search_revision, search_revision_among,
 };
 pub use session::{
     SessionArtifactKind, SessionLifetime, SessionLifetimePolicy, SessionPhase,

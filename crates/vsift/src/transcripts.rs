@@ -7,7 +7,7 @@ use vsift_application::{
     page_transcript,
 };
 use vsift_domain::{
-    MediaTime, PageLimit, RuntimeDependency, SearchCoverage, SessionId, TimeRange,
+    MediaTime, PageLimit, RuntimeDependency, SearchCoverage, SessionId, SpeakerRecord, TimeRange,
     TranscriptImportError, TranscriptOffset, TranscriptRevision, TranscriptRevisionId,
     TranscriptSegment,
 };
@@ -52,9 +52,17 @@ pub struct TranscriptExcerpt {
     segments: Vec<TranscriptSegment>,
     next_cursor: Option<String>,
     coverage: SearchCoverage,
+    speakers: Option<SpeakerRecord>,
 }
 
 impl TranscriptExcerpt {
+    /// The revision's newest speaker record, with every label derived (ADR 0031);
+    /// `None` when the revision has no speaker labels.
+    #[must_use]
+    pub const fn speakers(&self) -> Option<&SpeakerRecord> {
+        self.speakers.as_ref()
+    }
+
     /// Session state observed when the page was read.
     #[must_use]
     pub const fn session(&self) -> &SessionSnapshot {
@@ -152,6 +160,7 @@ impl Engine {
         } = page;
         let segments = segments.into_iter().cloned().collect();
         let next_cursor = next_cursor.map(|cursor| cursor.encode());
+        let speakers = crate::speakers::newest_record(&store, &query.session, &revision, now)?;
         Ok(TranscriptExcerpt {
             session: SessionSnapshot::observe(&status, now),
             revision,
@@ -159,6 +168,7 @@ impl Engine {
             segments,
             next_cursor,
             coverage,
+            speakers,
         })
     }
 

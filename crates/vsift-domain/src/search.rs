@@ -53,12 +53,12 @@ mod coverage;
 #[cfg(test)]
 mod tests;
 
-use std::{error::Error, fmt};
+use std::{collections::BTreeSet, error::Error, fmt};
 
 pub(crate) use coverage::carried_untranscribed_for;
 pub use coverage::{CoverageBasis, SearchCoverage};
 
-use crate::{PageLimit, TimeRange, TranscriptRevision, TranscriptSegment};
+use crate::{PageLimit, TimeRange, TranscriptRevision, TranscriptSegment, TranscriptSegmentId};
 
 /// Largest accepted query, in UTF-8 bytes, before normalisation.
 pub const MAX_SEARCH_QUERY_BYTES: usize = 256;
@@ -330,6 +330,23 @@ pub fn search_revision<'a>(
     after: Option<SearchPosition>,
     limit: PageLimit,
 ) -> SearchSlice<'a> {
+    search_revision_among(revision, query, window, after, limit, None)
+}
+
+/// [`search_revision`] over only the segments `among` names (a speaker filter, ADR
+/// 0031); `None` searches every segment, exactly as [`search_revision`].
+///
+/// The rank order is unchanged: a filter removes segments, never reorders them, so a
+/// hit's rank position (tier, ordinal) is the same with and without it.
+#[must_use]
+pub fn search_revision_among<'a>(
+    revision: &'a TranscriptRevision,
+    query: &SearchQuery,
+    window: Option<TimeRange>,
+    after: Option<SearchPosition>,
+    limit: PageLimit,
+    among: Option<&BTreeSet<TranscriptSegmentId>>,
+) -> SearchSlice<'a> {
     let limit = usize::from(limit.get());
     let wanted = limit.saturating_add(1);
     let mut matcher = Matcher::new(query);
@@ -340,7 +357,7 @@ pub fn search_revision<'a>(
                 usize::try_from(position.ordinal()).unwrap_or(usize::MAX)
             });
             let mut all_terms = Vec::new();
-            for segment in in_window(segments.iter().skip(skip), window) {
+            for segment in in_window(segments.iter().skip(skip), window, among) {
                 if matcher.classify(segment.text().text()) == Some(SearchMatch::AllTerms) {
                     all_terms.push(SearchHit {
                         segment,
@@ -357,7 +374,7 @@ pub fn search_revision<'a>(
             let phrase_after = after.map_or(0, SearchPosition::ordinal);
             let mut phrases = Vec::new();
             let mut all_terms = Vec::new();
-            for segment in in_window(segments.iter(), window) {
+            for segment in in_window(segments.iter(), window, among) {
                 match matcher.classify(segment.text().text()) {
                     Some(SearchMatch::Phrase) if segment.ordinal() > phrase_after => {
                         phrases.push(SearchHit {
@@ -391,12 +408,14 @@ pub fn search_revision<'a>(
 fn in_window<'a>(
     segments: impl Iterator<Item = &'a TranscriptSegment>,
     window: Option<TimeRange>,
+    among: Option<&BTreeSet<TranscriptSegmentId>>,
 ) -> impl Iterator<Item = &'a TranscriptSegment> {
     segments
         .take_while(move |segment| {
             window.is_none_or(|window| segment.range().start() < window.end())
         })
         .filter(move |segment| window.is_none_or(|window| segment.intersects(window)))
+        .filter(move |segment| among.is_none_or(|among| among.contains(segment.id())))
 }
 
 /// Classifies texts against one query, reusing its word buffers.

@@ -23,15 +23,19 @@
 use serde::Serialize;
 use vsift_domain::{
     AlignmentOrigin, AsrChunkOutcome, AsrRun, JobId, MAX_CUE_TEXT_BYTES, ProviderEndTrim,
-    SearchCoverage, SegmentOrigin, SessionId, SourceSegment, TimeRange, TranscriptImportError,
-    TranscriptOffset, TranscriptProvenance, TranscriptRejection, TranscriptRevision,
-    TranscriptSegment, TranscriptWarningKind,
+    SearchCoverage, SegmentOrigin, SessionId, SourceSegment, SpeakerRecord, TimeRange,
+    TranscriptImportError, TranscriptOffset, TranscriptProvenance, TranscriptRejection,
+    TranscriptRevision, TranscriptSegment, TranscriptWarningKind,
 };
 
 use crate::{
     CommandName, ConfidenceResponse, CoverageResponse, LifecycleResponse, OperationResponse,
     ResultView, render_hidden_characters, sanitize_untrusted_text,
     search::{TranscriptCoverageData, bounded, envelope_coverage},
+    speakers::{
+        BriefSpeakerLabelData, SegmentSpeakerLabelData, SpeakersData, segment_label,
+        with_unlabelled_warning,
+    },
     view::BRIEF_VIEW,
 };
 
@@ -265,9 +269,26 @@ pub struct TranscriptSegmentData {
     cue: Option<CueData>,
     #[serde(skip_serializing_if = "Option::is_none")]
     carried_from: Option<CarriedFromData>,
+    /// The segment's speaker under the revision's newest speaker record (ADR 0031);
+    /// absent when the revision has none. Distinct from `speaker`, a `WebVTT` voice tag.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    speaker_label: Option<SegmentSpeakerLabelData>,
 }
 
 impl TranscriptSegmentData {
+    /// Presents one segment of `revision` with its speaker under `speakers`, the
+    /// revision's newest speaker record, when it has one.
+    #[must_use]
+    pub fn labelled(
+        revision: &TranscriptRevision,
+        segment: &TranscriptSegment,
+        speakers: Option<&SpeakerRecord>,
+    ) -> Self {
+        let mut data = Self::new(revision, segment);
+        data.speaker_label = segment_label(speakers, segment);
+        data
+    }
+
     /// Presents one segment of `revision`.
     ///
     /// The alignment and language are those of the provenance that produced
@@ -364,6 +385,7 @@ impl TranscriptSegmentData {
                 revision_id: carried.revision().as_str().to_owned(),
                 segment_id: carried.segment().as_str().to_owned(),
             }),
+            speaker_label: None,
         }
     }
 }
@@ -398,6 +420,9 @@ pub(crate) struct BriefTranscriptSegmentData {
     /// Present only on a carried segment, as in the full item.
     #[serde(skip_serializing_if = "Option::is_none")]
     carried_from: Option<CarriedFromData>,
+    /// The speaker label and how it reads, when the revision has speaker labels.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    speaker_label: Option<BriefSpeakerLabelData>,
 }
 
 /// A speaker without its raw label: the label to quote and where it came from.
@@ -419,6 +444,10 @@ impl From<&TranscriptSegmentData> for BriefTranscriptSegmentData {
                 origin: speaker.origin,
             }),
             carried_from: full.carried_from.clone(),
+            speaker_label: full
+                .speaker_label
+                .as_ref()
+                .map(SegmentSpeakerLabelData::brief),
         }
     }
 }
@@ -663,12 +692,25 @@ pub struct TranscriptPageData {
     items: Vec<TranscriptSegmentData>,
     next_cursor: Option<String>,
     transcript_coverage: TranscriptCoverageData,
+    /// The revision's newest speaker record (ADR 0031); absent when it has none.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    speakers: Option<SpeakersData>,
 }
 
 impl TranscriptPageData {
     /// Presents one page read from a revision.
     #[must_use]
     pub fn new(page: &TranscriptPresentation<'_>) -> Self {
+        Self::with_speakers(page, None)
+    }
+
+    /// Presents one page read from a revision, with its speaker labels when
+    /// `speakers` (the revision's newest speaker record) is given.
+    #[must_use]
+    pub fn with_speakers(
+        page: &TranscriptPresentation<'_>,
+        speakers: Option<&SpeakerRecord>,
+    ) -> Self {
         Self {
             session_id: page.session_id.as_str().to_owned(),
             revision: TranscriptRevisionData::new(page.revision),
@@ -676,10 +718,11 @@ impl TranscriptPageData {
             items: page
                 .segments
                 .iter()
-                .map(|segment| TranscriptSegmentData::new(page.revision, segment))
+                .map(|segment| TranscriptSegmentData::labelled(page.revision, segment, speakers))
                 .collect(),
             next_cursor: page.next_cursor.map(str::to_owned),
             transcript_coverage: TranscriptCoverageData::new(page.coverage),
+            speakers: speakers.map(SpeakersData::new),
         }
     }
 }
@@ -700,6 +743,8 @@ pub struct TranscriptBriefPageData {
     items: Vec<BriefTranscriptSegmentData>,
     next_cursor: Option<String>,
     transcript_coverage: TranscriptCoverageData,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    speakers: Option<SpeakersData>,
 }
 
 impl TranscriptBriefPageData {
@@ -725,6 +770,7 @@ impl From<&TranscriptPageData> for TranscriptBriefPageData {
                 .collect(),
             next_cursor: full.next_cursor.clone(),
             transcript_coverage: full.transcript_coverage.clone(),
+            speakers: full.speakers.clone(),
         }
     }
 }
@@ -795,16 +841,35 @@ pub fn transcript_get_response(
     lifecycle: LifecycleResponse,
     view: ResultView,
 ) -> Result<OperationResponse<serde_json::Value>, serde_json::Error> {
+    transcript_get_response_with_speakers(page, None, lifecycle, view)
+}
+
+/// [`transcript_get_response`] with the revision's speaker labels (ADR 0031): each
+/// item's `speaker_label` and the page's `speakers` block, from `speakers`, the
+/// revision's newest speaker record. When some segment of the revision has no label,
+/// the answer also carries [`crate::UNLABELLED_SEGMENTS_WARNING`]; the status is the
+/// transcript read's own.
+///
+/// # Errors
+///
+/// Returns the serialization error when the data cannot be represented as JSON.
+pub fn transcript_get_response_with_speakers(
+    page: &TranscriptPresentation<'_>,
+    speakers: Option<&SpeakerRecord>,
+    lifecycle: LifecycleResponse,
+    view: ResultView,
+) -> Result<OperationResponse<serde_json::Value>, serde_json::Error> {
     let command = CommandName::TranscriptGet.identifier();
+    let full = TranscriptPageData::with_speakers(page, speakers);
     let response = match view {
-        ResultView::Full => OperationResponse::complete(command, &TranscriptPageData::new(page))?,
+        ResultView::Full => OperationResponse::complete(command, &full)?,
         ResultView::Brief => {
-            OperationResponse::complete(command, &TranscriptBriefPageData::new(page))?
+            OperationResponse::complete(command, &TranscriptBriefPageData::from(&full))?
         }
     };
-    Ok(finish_transcript_read(
-        response.with_lifecycle(lifecycle),
-        page.coverage,
+    Ok(with_unlabelled_warning(
+        finish_transcript_read(response.with_lifecycle(lifecycle), page.coverage),
+        speakers,
     ))
 }
 

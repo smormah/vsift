@@ -16,14 +16,15 @@
 
 use serde::Serialize;
 use vsift_domain::{
-    SearchCoverage, SearchMatch, SearchQuery, SearchQueryRejection, SessionId, TimeRange,
-    TranscriptRevision, TranscriptSegment,
+    SearchCoverage, SearchMatch, SearchQuery, SearchQueryRejection, SessionId, SpeakerRecord,
+    SpeakerTag, TimeRange, TranscriptRevision, TranscriptSegment,
 };
 
 use crate::{
     CommandName, CoverageResponse, EvidenceEventResponse, LifecycleResponse, OperationResponse,
     ResultView, TerminalEventResponse, TranscriptRevisionData, TranscriptSegmentData,
     sanitize_untrusted_text,
+    speakers::{SpeakersData, with_unlabelled_warning},
     stream::EvidenceStream,
     transcript::{BriefTranscriptSegmentData, RangeData},
     view::BRIEF_VIEW,
@@ -109,10 +110,13 @@ pub struct SearchPresentation<'a> {
     pub coverage: &'a SearchCoverage,
 }
 
-/// How the query was read: its normalised words, in query order.
+/// How the query was read: its normalised words, in query order, and the speaker
+/// label it was filtered by, if any (ADR 0031).
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 struct SearchQueryData {
     terms: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    speaker: Option<String>,
 }
 
 impl SearchQueryData {
@@ -123,6 +127,7 @@ impl SearchQueryData {
                 .iter()
                 .map(|term| sanitize_untrusted_text(term, MAX_PRESENTED_TERM_BYTES))
                 .collect(),
+            speaker: None,
         }
     }
 }
@@ -186,25 +191,45 @@ pub struct SearchData {
     hits: Vec<SearchHitData>,
     next_cursor: Option<String>,
     transcript_coverage: TranscriptCoverageData,
+    /// The revision's newest speaker record (ADR 0031); absent when it has none.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    speakers: Option<SpeakersData>,
 }
 
 impl SearchData {
     /// Presents one page of search results.
     #[must_use]
     pub fn new(page: &SearchPresentation<'_>) -> Self {
+        Self::with_speakers(page, None, None)
+    }
+
+    /// Presents one page of search results with the revision's speaker labels, when
+    /// `speakers` (its newest speaker record) is given, and the speaker label the
+    /// search was filtered by.
+    #[must_use]
+    pub fn with_speakers(
+        page: &SearchPresentation<'_>,
+        speakers: Option<&SpeakerRecord>,
+        filter: Option<SpeakerTag>,
+    ) -> Self {
+        let mut query = SearchQueryData::new(page.query);
+        query.speaker = filter.map(|tag| tag.to_string());
         Self {
             session_id: page.session_id.as_str().to_owned(),
             revision: TranscriptRevisionData::new(page.revision),
-            query: SearchQueryData::new(page.query),
+            query,
             range: page.range.map(RangeData::new),
             items: page
                 .hits
                 .iter()
-                .map(|(segment, _)| TranscriptSegmentData::new(page.revision, segment))
+                .map(|(segment, _)| {
+                    TranscriptSegmentData::labelled(page.revision, segment, speakers)
+                })
                 .collect(),
             hits: hit_data(page),
             next_cursor: page.next_cursor.map(str::to_owned),
             transcript_coverage: TranscriptCoverageData::new(page.coverage),
+            speakers: speakers.map(SpeakersData::new),
         }
     }
 }
@@ -228,6 +253,8 @@ pub struct SearchBriefData {
     hits: Vec<SearchHitData>,
     next_cursor: Option<String>,
     transcript_coverage: TranscriptCoverageData,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    speakers: Option<SpeakersData>,
 }
 
 impl SearchBriefData {
@@ -255,6 +282,7 @@ impl From<&SearchData> for SearchBriefData {
             hits: full.hits.clone(),
             next_cursor: full.next_cursor.clone(),
             transcript_coverage: full.transcript_coverage.clone(),
+            speakers: full.speakers.clone(),
         }
     }
 }
@@ -358,12 +386,35 @@ pub fn search_response_with_view(
     lifecycle: LifecycleResponse,
     view: ResultView,
 ) -> Result<OperationResponse<serde_json::Value>, serde_json::Error> {
+    search_response_with_speakers(page, None, None, lifecycle, view)
+}
+
+/// [`search_response_with_view`] with the revision's speaker labels (ADR 0031): each
+/// item's `speaker_label`, the page's `speakers` block and, for a search filtered by
+/// `filter`, the label in `query.speaker`. When some segment of the revision has no
+/// label the answer also carries [`crate::UNLABELLED_SEGMENTS_WARNING`], because a
+/// filtered search cannot find those segments.
+///
+/// # Errors
+///
+/// Returns the serialization error when the data cannot be represented as JSON.
+pub fn search_response_with_speakers(
+    page: &SearchPresentation<'_>,
+    speakers: Option<&SpeakerRecord>,
+    filter: Option<SpeakerTag>,
+    lifecycle: LifecycleResponse,
+    view: ResultView,
+) -> Result<OperationResponse<serde_json::Value>, serde_json::Error> {
     let command = CommandName::Search.identifier();
+    let full = SearchData::with_speakers(page, speakers, filter);
     let response = match view {
-        ResultView::Full => OperationResponse::complete(command, &SearchData::new(page))?,
-        ResultView::Brief => OperationResponse::complete(command, &SearchBriefData::new(page))?,
+        ResultView::Full => OperationResponse::complete(command, &full)?,
+        ResultView::Brief => OperationResponse::complete(command, &SearchBriefData::from(&full))?,
     };
-    Ok(finish(response, page.revision, page.coverage, lifecycle))
+    Ok(with_unlabelled_warning(
+        finish(response, page.revision, page.coverage, lifecycle),
+        speakers,
+    ))
 }
 
 /// One `search` page as a JSON Lines evidence stream.

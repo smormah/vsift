@@ -113,6 +113,7 @@ mod progress;
 mod search;
 mod sessions;
 mod setup;
+mod speakers;
 mod transcripts;
 mod verification;
 mod worker;
@@ -153,6 +154,10 @@ pub use sessions::{
 pub use setup::{
     DEFAULT_PROBE_TIMEOUT, EvaluatedSetupPlan, ExecutableSelections, SetupCheckReport,
     SetupCheckRequest, SetupPlanRequest,
+};
+pub use speakers::{
+    DIARIZER_EXECUTABLE, DiarizerSelection, NameSpeakerRequest, SpeakersRange, SpeakersRequest,
+    SpeakersView,
 };
 pub use transcripts::{TranscriptExcerpt, TranscriptQuery};
 pub use verification::{

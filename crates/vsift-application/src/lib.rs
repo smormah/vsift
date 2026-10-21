@@ -57,7 +57,10 @@ pub use job::{
     observed_state, recognition_key, reconcile, resumable_request, retranscribe_operation_key,
     retranscribe_request_digest, run_retranscription, worker_step_operation_id,
 };
-pub use search::{SearchPage, SearchPageRequest, page_search, search_query_digest};
+pub use search::{
+    SearchPage, SearchPageRequest, SpeakerFilter, page_search, page_search_by_speaker,
+    search_query_digest,
+};
 pub use session::{
     ForegroundSessionPort, NeverCancelled, OpenSession, OpenSessionError, OpenSessionOutcome,
     OpenSessionRequest, SourcePathFault, SpecialFileKind, StageCancellation, StagedSessionSource,
