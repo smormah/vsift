@@ -181,10 +181,19 @@ pub(crate) struct Speakers {
     pub(crate) record_id: String,
     pub(crate) precision: String,
     pub(crate) given_speaker_count: Option<u8>,
+    #[serde(default)]
+    pub(crate) count_shortfall: Option<SpeakerCountShortfall>,
     pub(crate) diarized_range: Range,
     pub(crate) labels: Vec<SpeakerLabelSummary>,
     pub(crate) coverage: SpeakerCoverage,
     pub(crate) statement: String,
+}
+
+/// A given speaker count the engine did not keep, with what to do about it.
+#[derive(Debug, Deserialize)]
+pub(crate) struct SpeakerCountShortfall {
+    pub(crate) warning: String,
+    pub(crate) remediation: String,
 }
 
 /// One label of a speaker record.

@@ -1076,6 +1076,11 @@ The data member of a complete or partial search result asked for with --view bri
 | `speakers.labelling` | "speaker-labels-v1" | yes | speaker-labels-v1: a segment gets the label that holds at least 70% of the speech the engine heard inside it, when that speech covers at least half of the segment; otherwise it has no confident speaker. |
 | `speakers.precision` | "segment" | yes |  |
 | `speakers.given_speaker_count` | integer or null | yes | The speaker count the user gave, passed to the engine as given; null when the engine counted.; 1 to 16 |
+| `speakers.count_shortfall` | object | no | Present only when the user gave a speaker count and the engine kept fewer voices apart: voices may be merged under one label. remediation points at the automatic count. |
+| `speakers.count_shortfall.requested_speaker_count` | integer | yes | 2 to 16 |
+| `speakers.count_shortfall.found_speaker_count` | integer | yes | 1 to 15 |
+| `speakers.count_shortfall.warning` | string | yes | 1 to 512 characters |
+| `speakers.count_shortfall.remediation` | string | yes | 1 to 512 characters |
 | `speakers.diarized_range` | object | yes | The source time the engine heard: the whole source, or the range asked for (at most the duration cap). |
 | `speakers.diarized_range.from_us` | integer | yes | at least 0 |
 | `speakers.diarized_range.to_us` | integer | yes | at least 1 |
@@ -1151,6 +1156,11 @@ The data member of a complete or partial search result: one bounded page of the 
 | `speakers.labelling` | "speaker-labels-v1" | yes | speaker-labels-v1: a segment gets the label that holds at least 70% of the speech the engine heard inside it, when that speech covers at least half of the segment; otherwise it has no confident speaker. |
 | `speakers.precision` | "segment" | yes |  |
 | `speakers.given_speaker_count` | integer or null | yes | The speaker count the user gave, passed to the engine as given; null when the engine counted.; 1 to 16 |
+| `speakers.count_shortfall` | object | no | Present only when the user gave a speaker count and the engine kept fewer voices apart: voices may be merged under one label. remediation points at the automatic count. |
+| `speakers.count_shortfall.requested_speaker_count` | integer | yes | 2 to 16 |
+| `speakers.count_shortfall.found_speaker_count` | integer | yes | 1 to 15 |
+| `speakers.count_shortfall.warning` | string | yes | 1 to 512 characters |
+| `speakers.count_shortfall.remediation` | string | yes | 1 to 512 characters |
 | `speakers.diarized_range` | object | yes | The source time the engine heard: the whole source, or the range asked for (at most the duration cap). |
 | `speakers.diarized_range.from_us` | integer | yes | at least 0 |
 | `speakers.diarized_range.to_us` | integer | yes | at least 1 |
@@ -1226,6 +1236,11 @@ The data member of the complete or partial terminal result that ends a search --
 | `speakers.labelling` | "speaker-labels-v1" | yes | speaker-labels-v1: a segment gets the label that holds at least 70% of the speech the engine heard inside it, when that speech covers at least half of the segment; otherwise it has no confident speaker. |
 | `speakers.precision` | "segment" | yes |  |
 | `speakers.given_speaker_count` | integer or null | yes | The speaker count the user gave, passed to the engine as given; null when the engine counted.; 1 to 16 |
+| `speakers.count_shortfall` | object | no | Present only when the user gave a speaker count and the engine kept fewer voices apart: voices may be merged under one label. remediation points at the automatic count. |
+| `speakers.count_shortfall.requested_speaker_count` | integer | yes | 2 to 16 |
+| `speakers.count_shortfall.found_speaker_count` | integer | yes | 1 to 15 |
+| `speakers.count_shortfall.warning` | string | yes | 1 to 512 characters |
+| `speakers.count_shortfall.remediation` | string | yes | 1 to 512 characters |
 | `speakers.diarized_range` | object | yes | The source time the engine heard: the whole source, or the range asked for (at most the duration cap). |
 | `speakers.diarized_range.from_us` | integer | yes | at least 0 |
 | `speakers.diarized_range.to_us` | integer | yes | at least 1 |
@@ -1545,6 +1560,11 @@ Speaker labels (0.3.0, ADR 0031): the speakers block that transcript.get, search
 | `labelling` | "speaker-labels-v1" | yes | speaker-labels-v1: a segment gets the label that holds at least 70% of the speech the engine heard inside it, when that speech covers at least half of the segment; otherwise it has no confident speaker. |
 | `precision` | "segment" | yes |  |
 | `given_speaker_count` | integer or null | yes | The speaker count the user gave, passed to the engine as given; null when the engine counted.; 1 to 16 |
+| `count_shortfall` | object | no | Present only when the user gave a speaker count and the engine kept fewer voices apart: voices may be merged under one label. remediation points at the automatic count. |
+| `count_shortfall.requested_speaker_count` | integer | yes | 2 to 16 |
+| `count_shortfall.found_speaker_count` | integer | yes | 1 to 15 |
+| `count_shortfall.warning` | string | yes | 1 to 512 characters |
+| `count_shortfall.remediation` | string | yes | 1 to 512 characters |
 | `diarized_range` | object | yes | The source time the engine heard: the whole source, or the range asked for (at most the duration cap). |
 | `diarized_range.from_us` | integer | yes | at least 0 |
 | `diarized_range.to_us` | integer | yes | at least 1 |
@@ -1639,6 +1659,11 @@ The data member of a complete or partial transcript.get result asked for with --
 | `speakers.labelling` | "speaker-labels-v1" | yes | speaker-labels-v1: a segment gets the label that holds at least 70% of the speech the engine heard inside it, when that speech covers at least half of the segment; otherwise it has no confident speaker. |
 | `speakers.precision` | "segment" | yes |  |
 | `speakers.given_speaker_count` | integer or null | yes | The speaker count the user gave, passed to the engine as given; null when the engine counted.; 1 to 16 |
+| `speakers.count_shortfall` | object | no | Present only when the user gave a speaker count and the engine kept fewer voices apart: voices may be merged under one label. remediation points at the automatic count. |
+| `speakers.count_shortfall.requested_speaker_count` | integer | yes | 2 to 16 |
+| `speakers.count_shortfall.found_speaker_count` | integer | yes | 1 to 15 |
+| `speakers.count_shortfall.warning` | string | yes | 1 to 512 characters |
+| `speakers.count_shortfall.remediation` | string | yes | 1 to 512 characters |
 | `speakers.diarized_range` | object | yes | The source time the engine heard: the whole source, or the range asked for (at most the duration cap). |
 | `speakers.diarized_range.from_us` | integer | yes | at least 0 |
 | `speakers.diarized_range.to_us` | integer | yes | at least 1 |
@@ -1708,6 +1733,11 @@ The data member of a complete or partial transcript.get result: one bounded page
 | `speakers.labelling` | "speaker-labels-v1" | yes | speaker-labels-v1: a segment gets the label that holds at least 70% of the speech the engine heard inside it, when that speech covers at least half of the segment; otherwise it has no confident speaker. |
 | `speakers.precision` | "segment" | yes |  |
 | `speakers.given_speaker_count` | integer or null | yes | The speaker count the user gave, passed to the engine as given; null when the engine counted.; 1 to 16 |
+| `speakers.count_shortfall` | object | no | Present only when the user gave a speaker count and the engine kept fewer voices apart: voices may be merged under one label. remediation points at the automatic count. |
+| `speakers.count_shortfall.requested_speaker_count` | integer | yes | 2 to 16 |
+| `speakers.count_shortfall.found_speaker_count` | integer | yes | 1 to 15 |
+| `speakers.count_shortfall.warning` | string | yes | 1 to 512 characters |
+| `speakers.count_shortfall.remediation` | string | yes | 1 to 512 characters |
 | `speakers.diarized_range` | object | yes | The source time the engine heard: the whole source, or the range asked for (at most the duration cap). |
 | `speakers.diarized_range.from_us` | integer | yes | at least 0 |
 | `speakers.diarized_range.to_us` | integer | yes | at least 1 |
@@ -1777,6 +1807,11 @@ The data member of the complete or partial terminal result that ends a transcrip
 | `speakers.labelling` | "speaker-labels-v1" | yes | speaker-labels-v1: a segment gets the label that holds at least 70% of the speech the engine heard inside it, when that speech covers at least half of the segment; otherwise it has no confident speaker. |
 | `speakers.precision` | "segment" | yes |  |
 | `speakers.given_speaker_count` | integer or null | yes | The speaker count the user gave, passed to the engine as given; null when the engine counted.; 1 to 16 |
+| `speakers.count_shortfall` | object | no | Present only when the user gave a speaker count and the engine kept fewer voices apart: voices may be merged under one label. remediation points at the automatic count. |
+| `speakers.count_shortfall.requested_speaker_count` | integer | yes | 2 to 16 |
+| `speakers.count_shortfall.found_speaker_count` | integer | yes | 1 to 15 |
+| `speakers.count_shortfall.warning` | string | yes | 1 to 512 characters |
+| `speakers.count_shortfall.remediation` | string | yes | 1 to 512 characters |
 | `speakers.diarized_range` | object | yes | The source time the engine heard: the whole source, or the range asked for (at most the duration cap). |
 | `speakers.diarized_range.from_us` | integer | yes | at least 0 |
 | `speakers.diarized_range.to_us` | integer | yes | at least 1 |
@@ -1992,6 +2027,11 @@ The data member of a complete or partial transcript.speakers or transcript.name-
 | `speakers.labelling` | "speaker-labels-v1" | yes | speaker-labels-v1: a segment gets the label that holds at least 70% of the speech the engine heard inside it, when that speech covers at least half of the segment; otherwise it has no confident speaker. |
 | `speakers.precision` | "segment" | yes |  |
 | `speakers.given_speaker_count` | integer or null | yes | The speaker count the user gave, passed to the engine as given; null when the engine counted.; 1 to 16 |
+| `speakers.count_shortfall` | object | no | Present only when the user gave a speaker count and the engine kept fewer voices apart: voices may be merged under one label. remediation points at the automatic count. |
+| `speakers.count_shortfall.requested_speaker_count` | integer | yes | 2 to 16 |
+| `speakers.count_shortfall.found_speaker_count` | integer | yes | 1 to 15 |
+| `speakers.count_shortfall.warning` | string | yes | 1 to 512 characters |
+| `speakers.count_shortfall.remediation` | string | yes | 1 to 512 characters |
 | `speakers.diarized_range` | object | yes | The source time the engine heard: the whole source, or the range asked for (at most the duration cap). |
 | `speakers.diarized_range.from_us` | integer | yes | at least 0 |
 | `speakers.diarized_range.to_us` | integer | yes | at least 1 |

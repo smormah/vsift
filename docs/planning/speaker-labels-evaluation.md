@@ -104,7 +104,8 @@ macOS; it printed RM06's labelled transcript and every candidate's RM06 turns, f
 read and RM06 scored offline with the tool's own scorer), and **39567789710** (the shortlist again, scoring RM06 from the
 committed reference with the same numbers, and the time and memory against length of section 6.4), and
 **39595991957** (2026-10-21: RM11 only, with the recommended engine, two alternatives and polyvoice; it printed RM11's
-labelled transcript and turns, from which its reference was read and RM11 scored offline with the tool's own scorer). In the tables, "known" means the speaker count was given; "auto-t" means sherpa-onnx's distance threshold t.
+labelled transcript and turns, from which its reference was read and RM11 scored offline with the tool's own scorer;
+**39597641002** scored it from the committed reference with the same numbers). In the tables, "known" means the speaker count was given; "auto-t" means sherpa-onnx's distance threshold t.
 
 ### 6.1 Synthetic conversations (Ubuntu, run 39518020351)
 
@@ -160,7 +161,7 @@ short extra labels (the closing controller is a real third voice).
 
 **RM11's accuracy against its read reference** (run 39595991957; 145 scored segments; four unscored stretches (two short
 interjections, a sentence the interviewer cut off, laughter) and a 0.5 s collar left out; scored offline from the logged
-turns with the tool's own scorer):
+turns with the tool's own scorer, and again by run 39597641002 from the committed reference, with the same numbers):
 
 | Candidate | Speakers found / given | DER | Confusion | Segments labelled | Of those, right | Wrong, of all segments | RTF; peak MiB |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -296,7 +297,8 @@ What is built on the branch (the commands, JSON and failures are in `docs/contra
 the domain's speaker record (labels derived from the turns on every read), the diarization port and use cases, the
 strict stored record and its session sub-budget (128 records), the sherpa-onnx adapter, `transcript speakers`,
 `transcript name-speaker`, `search --speaker`, the labels in `transcript get` and `search` (full and brief views),
-the schemas and examples, the skill's command table, and an opt-in end-to-end test with the real engine (`P16
+the schemas and examples, the count shortfall (`count_shortfall` in the `speakers` block when a given count is not
+kept, added on 2026-10-21 after RM11), the skill's command table, and an opt-in end-to-end test with the real engine (`P16
 speakers end to end`). **Not built yet:** the managed install (it waits for the managed-install system's extension;
 until then the tool is given with `--diarizer` or found on the filtered `PATH`, and the models with
 `--segmentation-model` and `--embedding-model`) and a `setup check` row for the tool. The design as proposed:

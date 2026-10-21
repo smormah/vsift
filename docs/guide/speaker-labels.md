@@ -16,6 +16,9 @@ vsift transcript speakers <session> --diarizer <tool> --segmentation-model <mode
 ```
 
 Give `--speakers` when you know how many people speak; it is passed on as given. Without it, the tool decides.
+If the tool keeps fewer voices apart than you gave, the answer says so (`count_shortfall`: found 2 of the 3
+requested) because two people may then share a label. Run it again without `--speakers`: on one of the recordings
+tested, that kept apart two voices a given count had merged.
 On the hosted test machine it took about a twelfth of the recording's length: around five minutes for an hour; a slower computer takes longer. One run hears at
 most two hours; for a longer recording, label a part at a time with `--from` and `--to` (in microseconds). Labels
 of two parts are not linked: `S1` in one part need not be `S1` in the other.

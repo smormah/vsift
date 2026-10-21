@@ -92,9 +92,9 @@ pub use speakers::{
     DiarizationEngine, DiarizationError, DiarizationProvenance, DiarizedTurn, EngineSpeaker,
     LabelledTurn, MAX_DIARIZED_SPEAKERS, MAX_DIARIZED_TURNS, MAX_GIVEN_SPEAKERS,
     MAX_VERIFIED_NAME_BYTES, MAX_VERIFIED_NAMES, NoConfidentSpeaker, SegmentAttribution,
-    SegmentSpeaker, SpeakerCount, SpeakerCountError, SpeakerCoverage, SpeakerLabellingProfile,
-    SpeakerRecord, SpeakerRecordParts, SpeakerSummary, SpeakerTag, SpeakerTagError, VerifiedName,
-    VerifiedNameError, label_turns, segment_speaker,
+    SegmentSpeaker, SpeakerCount, SpeakerCountError, SpeakerCountShortfall, SpeakerCoverage,
+    SpeakerLabellingProfile, SpeakerRecord, SpeakerRecordParts, SpeakerSummary, SpeakerTag,
+    SpeakerTagError, VerifiedName, VerifiedNameError, label_turns, segment_speaker,
 };
 pub use storage::{
     DurabilityRequirement, GenerationError, PublicationGuarantee, StorageGeneration,

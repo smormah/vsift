@@ -146,6 +146,15 @@ fn turn(start: u64, end: u64, speaker: u16) -> Result<DiarizedTurn, Box<dyn Erro
 /// Commits the F10 session and, unless `labelled` is false, its first speaker
 /// record: S1 holds the first segment, S2 the second, and the third is half each.
 async fn seed(root: &OwnedRoot, labelled: bool) -> Result<(), Box<dyn Error>> {
+    seed_told(root, labelled, SpeakerCount::Automatic).await
+}
+
+/// [`seed`] with `count` recorded as what was asked of the engine (two voices either way).
+async fn seed_told(
+    root: &OwnedRoot,
+    labelled: bool,
+    count: SpeakerCount,
+) -> Result<(), Box<dyn Error>> {
     let source = root.path("f10-stand-in.mp4");
     fs::write(&source, b"\0\0\0\x18ftypisomspeaker-labels")?;
     let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
@@ -201,7 +210,7 @@ async fn seed(root: &OwnedRoot, labelled: bool) -> Result<(), Box<dyn Error>> {
             MediaTime::from_micros(0),
             MediaTime::from_micros(12_000_000),
         )?,
-        count: SpeakerCount::Automatic,
+        count,
         profile: SpeakerLabellingProfile::V1,
         provenance: DiarizationProvenance::new(
             DiarizationEngine::SherpaOnnx,
@@ -225,6 +234,52 @@ async fn seed(root: &OwnedRoot, labelled: bool) -> Result<(), Box<dyn Error>> {
         &encode_speaker_record(&session_id, &parts)?,
         now,
     )?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_given_count_the_engine_did_not_keep_is_warned_in_json_and_in_the_terminal() -> TestResult
+{
+    let root = OwnedRoot::new()?;
+    // A stand-in turn set: told three, the engine kept two voices apart.
+    seed_told(&root, true, SpeakerCount::given(3)?).await?;
+    let page = json(&vsift(
+        &root,
+        &[
+            "transcript",
+            "get",
+            SESSION,
+            "--from",
+            "0",
+            "--to",
+            "12000000",
+            "--json",
+        ],
+    )?)?;
+    validate("operation-response.schema.json", &page)?;
+    validate("transcript-get-data.schema.json", &page["data"])?;
+    let shortfall = &page["data"]["speakers"]["count_shortfall"];
+    assert_eq!(shortfall["requested_speaker_count"], 3);
+    assert_eq!(shortfall["found_speaker_count"], 2);
+    let shown = vsift(
+        &root,
+        &[
+            "transcript",
+            "get",
+            SESSION,
+            "--from",
+            "0",
+            "--to",
+            "12000000",
+        ],
+    )?;
+    assert_eq!(shown.status.code(), Some(0));
+    let shown = String::from_utf8(shown.stdout)?;
+    assert!(
+        shown.contains("Warning: The engine kept 2 of the 3 speakers requested apart"),
+        "{shown}"
+    );
+    assert!(shown.contains("without --speakers"), "{shown}");
     Ok(())
 }
 

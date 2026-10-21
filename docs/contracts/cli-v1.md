@@ -1643,7 +1643,11 @@ transcript revision (the newest by default) by voice. The external engine (sherp
 models) hears the session's committed audio, which VSift decodes into a 16 kHz mono WAV in the
 operation's private work folder; the engine never sees the source file, and the WAV is removed when
 the run ends. A given `--speakers` count is passed to the engine as given; without it the engine counts
-with its reviewed distance threshold (0.9). One diarization hears at most two hours (the duration cap;
+with its reviewed distance threshold (0.9). A given count is not a guarantee: the engine can still keep fewer
+voices apart (on RM11, told three, it kept two). Then the `speakers` block carries `count_shortfall`
+(`requested_speaker_count`, `found_speaker_count`, a `warning` that voices may be merged, and a `remediation`
+pointing at the automatic count); the member is absent otherwise, so an answer without a shortfall is unchanged
+([L-207](../planning/known-limits.md#l-207)). One diarization hears at most two hours (the duration cap;
 a longer source is labelled a part at a time with `--from` and `--to`, and labels of different parts are
 not linked). The engine's turns become a new immutable **speaker record** (`spk_...`) of the session;
 its labels are derived from the turns and the revision whenever it is read.

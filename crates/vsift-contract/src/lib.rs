@@ -241,8 +241,8 @@ pub use setup::{
 };
 pub use speakers::{
     DIARIZATION_RANGE_REMEDIATION, DIARIZER_REMEDIATION, NO_SPEAKER_RECORD_REMEDIATION,
-    SPEAKER_LABELS_STATEMENT, SpeakersData, SpeakersPresentation, SpeakersResultData,
-    UNLABELLED_SEGMENTS_WARNING, speakers_response,
+    SPEAKER_COUNT_SHORTFALL_REMEDIATION, SPEAKER_LABELS_STATEMENT, SpeakersData,
+    SpeakersPresentation, SpeakersResultData, UNLABELLED_SEGMENTS_WARNING, speakers_response,
 };
 pub use storage::{
     PrivateFolder, SESSION_NOT_PUBLISHED_REMEDIATION, SESSION_ROOT_NAME_REMEDIATION,

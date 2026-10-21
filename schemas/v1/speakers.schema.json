@@ -45,6 +45,18 @@
             { "type": "integer", "minimum": 1, "maximum": 16 }
           ]
         },
+        "count_shortfall": {
+          "description": "Present only when the user gave a speaker count and the engine kept fewer voices apart: voices may be merged under one label. remediation points at the automatic count.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["requested_speaker_count", "found_speaker_count", "warning", "remediation"],
+          "properties": {
+            "requested_speaker_count": { "type": "integer", "minimum": 2, "maximum": 16 },
+            "found_speaker_count": { "type": "integer", "minimum": 1, "maximum": 15 },
+            "warning": { "type": "string", "minLength": 1, "maxLength": 512 },
+            "remediation": { "type": "string", "minLength": 1, "maxLength": 512 }
+          }
+        },
         "diarized_range": {
           "description": "The source time the engine heard: the whole source, or the range asked for (at most the duration cap).",
           "$ref": "search-data.schema.json#/$defs/range"

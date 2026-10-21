@@ -327,3 +327,32 @@ fn speaker_labels_names_and_counts_are_bounded() -> TestResult {
     );
     Ok(())
 }
+
+#[test]
+fn a_given_count_the_engine_did_not_keep_is_a_shortfall() -> TestResult {
+    // A stand-in for RM11 told three: a controller, an interviewer and an astronaut,
+    // with the controller's and the interviewer's turns under one engine speaker.
+    let revision = revision(&[(0, 4), (5, 9), (10, 14), (15, 19)])?;
+    let turns = vec![
+        turn(0, 4 * SECOND, 0)?,
+        turn(5 * SECOND, 9 * SECOND, 0)?,
+        turn(10 * SECOND, 14 * SECOND, 1)?,
+        turn(15 * SECOND, 19 * SECOND, 0)?,
+    ];
+    let mut told = parts(&revision, turns.clone())?;
+    told.count = SpeakerCount::given(3)?;
+    let shortfall = SpeakerRecord::derive(told, &revision)?
+        .count_shortfall()
+        .ok_or("no shortfall")?;
+    assert_eq!((shortfall.requested(), shortfall.found()), (3, 2));
+
+    let mut met = parts(&revision, turns.clone())?;
+    met.count = SpeakerCount::given(2)?;
+    assert_eq!(
+        SpeakerRecord::derive(met, &revision)?.count_shortfall(),
+        None
+    );
+    let automatic = SpeakerRecord::derive(parts(&revision, turns)?, &revision)?;
+    assert_eq!(automatic.count_shortfall(), None);
+    Ok(())
+}

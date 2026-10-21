@@ -378,6 +378,14 @@ fn push_speakers(text: &mut TerminalText, speakers: &Speakers) {
         }
     }
     text.end_line();
+    if let Some(shortfall) = &speakers.count_shortfall {
+        text.push_fixed("  Warning: ")
+            .push_value(&shortfall.warning)
+            .end_line();
+        text.push_fixed("  ")
+            .push_value(&shortfall.remediation)
+            .end_line();
+    }
     for label in &speakers.labels {
         text.push_fixed("  ")
             .push_untrusted(&label.display, Placement::Inline)

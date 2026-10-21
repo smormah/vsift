@@ -691,6 +691,20 @@ impl SpeakerRecord {
         self.parts.names.get(&tag)
     }
 
+    /// The shortfall when the user gave a speaker count and the engine kept fewer
+    /// voices apart; `None` for an automatic count or when it kept at least as many.
+    ///
+    /// A given count is passed to the engine, but the engine can still put two voices
+    /// under one label (on RM11, told three, it kept two), so a count the user knows is
+    /// not a guarantee and an answer must say when it was not met.
+    #[must_use]
+    pub fn count_shortfall(&self) -> Option<SpeakerCountShortfall> {
+        let requested = self.parts.count.given_count()?;
+        let found: BTreeSet<SpeakerTag> = self.turns.iter().map(|turn| turn.tag).collect();
+        let found = u8::try_from(found.len()).ok()?;
+        (found < requested).then_some(SpeakerCountShortfall { requested, found })
+    }
+
     /// Every label the turns have, in order, with its totals.
     #[must_use]
     pub fn speakers(&self) -> Vec<SpeakerSummary> {
@@ -786,6 +800,28 @@ fn push_merged(ranges: &mut Vec<TimeRange>, range: TimeRange) {
         return;
     }
     ranges.push(range);
+}
+
+/// A given speaker count the engine did not meet: it kept `found` voices apart where
+/// the user asked for `requested`, so some voices may share a label.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct SpeakerCountShortfall {
+    requested: u8,
+    found: u8,
+}
+
+impl SpeakerCountShortfall {
+    /// The count the user gave.
+    #[must_use]
+    pub const fn requested(self) -> u8 {
+        self.requested
+    }
+
+    /// The labels the engine's turns have (fewer than requested).
+    #[must_use]
+    pub const fn found(self) -> u8 {
+        self.found
+    }
 }
 
 /// One label's totals in a record.

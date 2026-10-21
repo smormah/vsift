@@ -30,7 +30,9 @@ two-person call, and the maintainer chose on 2026-10-21:
    and the register states the provenance gap ([L-217](../planning/known-limits.md#l-217), recorded by the
    managed-install story).
 3. **The count:** automatic at the distance threshold 0.9 when the user gives none; a given count
-   is passed through.
+   is passed through. When the engine keeps fewer voices apart than the given count, the `speakers`
+   block says so (`count_shortfall`, with a remediation pointing at the automatic count): the
+   supervisor's decision of 2026-10-21 after RM11, where told three it kept two (L-207).
 4. **Labels are provisional** ("S2, by voice"). The user's verified names are the only identity.
    The accuracy statement names the similar-voice case (L-207).
 5. **Long recordings:** a duration cap with a typed refusal and a remediation, set by measurement,

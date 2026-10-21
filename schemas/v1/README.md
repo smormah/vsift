@@ -138,7 +138,8 @@ These files are the machine-readable public v1 boundary:
   `transcript get`, `search`, `transcript speakers` and `transcript name-speaker` carry, the
   per-segment `speaker_label` (full and brief) and the result data of the two speaker
   commands. Labels are provisional, by voice, with segment precision; a verified name is
-  the user's statement. Both members are absent when a revision has no speaker record,
+  the user's statement. `count_shortfall` appears in the block only when a given speaker
+  count was not kept (voices may be merged). Both members are absent when a revision has no speaker record,
   so an answer without labels is unchanged (examples `transcript-speakers.json`,
   `transcript-get.speakers.json`, `search.speakers.json`);
 - `transcript-speakers-data.schema.json` â the `data` member of a complete or partial

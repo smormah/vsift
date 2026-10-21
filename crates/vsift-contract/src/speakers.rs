@@ -12,8 +12,8 @@
 
 use serde::Serialize;
 use vsift_domain::{
-    NoConfidentSpeaker, SegmentAttribution, SegmentSpeaker, SessionId, SpeakerRecord, SpeakerTag,
-    TranscriptRevision,
+    NoConfidentSpeaker, SegmentAttribution, SegmentSpeaker, SessionId, SpeakerCountShortfall,
+    SpeakerRecord, SpeakerTag, TranscriptRevision,
 };
 
 use crate::{
@@ -28,6 +28,32 @@ pub const SPEAKER_LABELS_STATEMENT: &str = "Speaker labels are provisional: S1, 
 
 /// The fixed warning of an answer that shows labels when some segments have none.
 pub const UNLABELLED_SEGMENTS_WARNING: &str = "Some segments have no confident speaker (the engine heard little speech there, or more than one voice), and some may lie outside the audio the engine heard; speakers.coverage lists them. A search filtered by speaker does not find those segments.";
+
+/// The fixed remediation of a speaker count the engine did not keep.
+pub const SPEAKER_COUNT_SHORTFALL_REMEDIATION: &str = "Run transcript speakers again without --speakers: the automatic count can keep apart voices that a given count merged. Before relying on a label, listen to some of its segments (vsift audio).";
+
+/// The engine kept fewer voices apart than the user asked for (absent otherwise).
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+struct SpeakerCountShortfallData {
+    requested_speaker_count: u8,
+    found_speaker_count: u8,
+    warning: String,
+    remediation: &'static str,
+}
+
+impl SpeakerCountShortfallData {
+    fn new(shortfall: SpeakerCountShortfall) -> Self {
+        let (requested, found) = (shortfall.requested(), shortfall.found());
+        Self {
+            requested_speaker_count: requested,
+            found_speaker_count: found,
+            warning: format!(
+                "The engine kept {found} of the {requested} speakers requested apart: voices may be merged, so one label can hold the words of more than one person."
+            ),
+            remediation: SPEAKER_COUNT_SHORTFALL_REMEDIATION,
+        }
+    }
+}
 
 /// One label of a record, with the user's name if they recorded one.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
@@ -70,6 +96,9 @@ pub struct SpeakersData {
     labelling: &'static str,
     precision: &'static str,
     given_speaker_count: Option<u8>,
+    /// Present only when a given count was not met, so an answer without one is unchanged.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    count_shortfall: Option<SpeakerCountShortfallData>,
     diarized_range: RangeData,
     engine: SpeakerEngineData,
     labels: Vec<SpeakerLabelData>,
@@ -95,6 +124,7 @@ impl SpeakersData {
             labelling: parts.profile.identifier(),
             precision: PRECISION,
             given_speaker_count: parts.count.given_count(),
+            count_shortfall: record.count_shortfall().map(SpeakerCountShortfallData::new),
             diarized_range: RangeData::new(parts.diarized_range),
             engine: SpeakerEngineData {
                 name: parts.provenance.engine().identifier(),

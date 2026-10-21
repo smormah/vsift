@@ -15,9 +15,9 @@ name: P16 speakers evaluation
 # run the 90-minute evaluation again); the evaluation itself runs on a manual
 # dispatch (`gh workflow run p16-speakers-eval.yml --ref <branch>`). The recorded
 # runs (39518020351, 39527538316, 39567789710) ran on pull-request events before
-# this rule. The read-reference job runs on pull requests too while a recording's
-# reference is being read (RM11's, 2026-10-21), and goes to dispatch once it is
-# recorded. Advisory evidence: no release gate reads it. It cannot publish anything:
+# this rule. The read-reference job ran on pull requests while RM11's reference was
+# read and scored (runs 39595991957 and 39597641002, 2026-10-21) and runs on dispatch
+# since. Advisory evidence: no release gate reads it. It cannot publish anything:
 # no write scope, no secret.
 on:
   pull_request:
@@ -251,6 +251,7 @@ jobs:
   read-reference:
     name: RM11 labelled transcript for its reference (ubuntu-24.04)
     needs: tooling-tests
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     permissions:

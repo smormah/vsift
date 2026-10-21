@@ -20,10 +20,10 @@ use vsift_application::{
     speaker_record_id,
 };
 use vsift_contract::{
-    CommandName, LifecycleResponse, ResultView, SearchPresentation, SpeakersPresentation,
-    TranscriptPresentation, UNLABELLED_SEGMENTS_WARNING, search_response_with_speakers,
-    search_response_with_view, speakers_response, transcript_get_response,
-    transcript_get_response_with_speakers,
+    CommandName, LifecycleResponse, ResultView, SPEAKER_COUNT_SHORTFALL_REMEDIATION,
+    SearchPresentation, SpeakersData, SpeakersPresentation, TranscriptPresentation,
+    UNLABELLED_SEGMENTS_WARNING, search_response_with_speakers, search_response_with_view,
+    speakers_response, transcript_get_response, transcript_get_response_with_speakers,
 };
 use vsift_domain::{
     CueSource, CueText, CueTiming, DiarizationEngine, DiarizationProvenance, DiarizedTurn,
@@ -159,6 +159,16 @@ fn turn(start: u64, end: u64, speaker: u16) -> Built<DiarizedTurn> {
 
 /// S1 holds the first segment, S2 the second; the third is half each.
 fn record(revision: &TranscriptRevision, with_name: bool, number: u32) -> Built<SpeakerRecord> {
+    record_told(revision, with_name, number, SpeakerCount::given(2)?)
+}
+
+/// [`record`]'s two voices, made with `count` asked of the engine.
+fn record_told(
+    revision: &TranscriptRevision,
+    with_name: bool,
+    number: u32,
+    count: SpeakerCount,
+) -> Built<SpeakerRecord> {
     let session = SessionId::parse(SESSION)?;
     let number = NonZeroU32::new(number).ok_or("zero number")?;
     let mut names = BTreeMap::new();
@@ -178,7 +188,7 @@ fn record(revision: &TranscriptRevision, with_name: bool, number: u32) -> Built<
                 MediaTime::from_micros(0),
                 MediaTime::from_micros(12_000_000),
             )?,
-            count: SpeakerCount::given(2)?,
+            count,
             profile: SpeakerLabellingProfile::V1,
             provenance: DiarizationProvenance::new(
                 DiarizationEngine::SherpaOnnx,
@@ -252,6 +262,45 @@ fn a_named_label_reads_as_the_users_statement() -> TestResult {
     let label = &response["data"]["speakers"]["labels"][1];
     assert_eq!(label["verified_name"], "Alice Example");
     assert_eq!(label["display"], "Alice Example (S2, named by the user)");
+    Ok(())
+}
+
+#[test]
+fn a_given_count_the_engine_kept_fewer_voices_of_is_a_warning_in_the_block() -> TestResult {
+    let revision = f10_revision()?;
+    let session = SessionId::parse(SESSION)?;
+    // A stand-in turn set: told three, the engine kept two voices apart.
+    let record = record_told(&revision, false, 1, SpeakerCount::given(3)?)?;
+    let response = serde_json::to_value(speakers_response(
+        CommandName::TranscriptSpeakers,
+        &SpeakersPresentation {
+            session_id: &session,
+            revision: &revision,
+            record: &record,
+            records: 1,
+        },
+        lifecycle(),
+    )?)?;
+    validate("operation-response.schema.json", &response)?;
+    validate("transcript-speakers-data.schema.json", &response["data"])?;
+    let shortfall = &response["data"]["speakers"]["count_shortfall"];
+    assert_eq!(shortfall["requested_speaker_count"], 3);
+    assert_eq!(shortfall["found_speaker_count"], 2);
+    assert_eq!(
+        shortfall["warning"],
+        "The engine kept 2 of the 3 speakers requested apart: voices may be merged, so one label can hold the words of more than one person."
+    );
+    assert_eq!(
+        shortfall["remediation"],
+        SPEAKER_COUNT_SHORTFALL_REMEDIATION
+    );
+
+    // A count the engine met, and an automatic count, carry no such member.
+    for count in [SpeakerCount::given(2)?, SpeakerCount::Automatic] {
+        let met = SpeakersData::new(&record_told(&revision, false, 1, count)?);
+        let block = serde_json::to_value(met)?;
+        assert!(block.get("count_shortfall").is_none(), "{count:?}");
+    }
     Ok(())
 }
 
