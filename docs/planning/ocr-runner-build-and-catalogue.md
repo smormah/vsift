@@ -21,6 +21,12 @@ One folder, with nothing outside it and nothing read from the environment
 | `models/latin_PP-OCRv5_rec_mobile.onnx` | PP-OCRv5 mobile Latin recognizer; its dictionary is read from the model's own `character` metadata | Section 4 |
 | `LICENSES/` | The runner's licence, ONNX Runtime's `LICENSE` and `ThirdPartyNotices.txt`, PaddleOCR's Apache-2.0 licence for the models | The three sources |
 
+The runner also accepts the same files **flat beside the executable** (the managed store keeps a
+component's files in one folder): for each file it looks in its subfolder first, then for the same
+name next to the executable (`Layout::beside`, tests
+`files_are_found_in_their_subfolders_first_then_beside_the_executable` and
+`describe_works_from_the_managed_stores_flat_folder`).
+
 `vsift ocr` runs the folder's executable, which it is given by `--runner`, by
 `setup configure ocr-runner --executable`, or (later) by the managed install. The library file
 names inside `onnxruntime/` are those of Microsoft's 1.31.0 archives; the release workflow's

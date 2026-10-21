@@ -27,17 +27,6 @@ use crate::{
     tensor::Tensor,
 };
 
-/// The ONNX Runtime library's file name in [`Layout::runtime`], as Microsoft's
-/// 1.31.0 archive names it in its `lib` folder.
-#[cfg(target_os = "windows")]
-pub const RUNTIME_LIBRARY: &str = "onnxruntime.dll";
-/// See the Windows definition.
-#[cfg(target_os = "macos")]
-pub const RUNTIME_LIBRARY: &str = "libonnxruntime.1.31.0.dylib";
-/// See the Windows definition.
-#[cfg(not(any(target_os = "windows", target_os = "macos")))]
-pub const RUNTIME_LIBRARY: &str = "libonnxruntime.so.1.31.0";
-
 /// The recognizer model's metadata key that lists its characters, one a line.
 pub const DICTIONARY_KEY: &str = "character";
 
@@ -57,11 +46,11 @@ impl Backend for OnnxRuntime {
 
     fn runtime_version(&self, layout: &Layout) -> Result<String, RunnerFailure> {
         load(layout)?;
-        let library = layout.runtime.join(RUNTIME_LIBRARY);
-        let digest = file_sha256(&library, MAX_RUNTIME_LIBRARY_BYTES).map_err(|_| {
-            diagnose("the runtime library could not be read to name it");
-            RunnerFailure::RuntimeUnavailable
-        })?;
+        let digest =
+            file_sha256(&layout.runtime_library, MAX_RUNTIME_LIBRARY_BYTES).map_err(|_| {
+                diagnose("the runtime library could not be read to name it");
+                RunnerFailure::RuntimeUnavailable
+            })?;
         Ok(runtime_version_of(&digest))
     }
 
@@ -98,11 +87,11 @@ fn diagnose(message: &str) {
 
 /// Loads the library once; later calls find it loaded.
 fn load(layout: &Layout) -> Result<(), RunnerFailure> {
-    let library = layout.runtime.join(RUNTIME_LIBRARY);
+    let library = &layout.runtime_library;
     if !library.is_file() {
         return Err(RunnerFailure::RuntimeUnavailable);
     }
-    let _applied = ort::init_from(&library)
+    let _applied = ort::init_from(library)
         .map_err(|error| {
             diagnose(&format!("ONNX Runtime could not be loaded: {error}"));
             RunnerFailure::RuntimeUnavailable

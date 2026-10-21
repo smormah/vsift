@@ -8,7 +8,10 @@ use std::{
     sync::atomic::{AtomicU64, Ordering},
 };
 
-use super::{Backend, Command, Layout, MAX_IMAGES, run};
+use super::{
+    Backend, Command, DETECTOR_FILE, Layout, MAX_IMAGES, MODELS_FOLDER, RECOGNIZER_FILE,
+    RUNTIME_FOLDER, RUNTIME_LIBRARY, run,
+};
 use crate::{
     RunnerFailure,
     pipeline::{Inference, InferenceError, Model},
@@ -284,6 +287,66 @@ fn read_answers_every_image_in_order_and_goes_on_after_a_bad_one() -> TestResult
     assert_eq!(
         records.get(1).map(|record| &record["code"]),
         Some(&"inference_failed".into())
+    );
+    Ok(())
+}
+
+#[test]
+fn files_are_found_in_their_subfolders_first_then_beside_the_executable() -> TestResult {
+    let folder = Folder::new()?;
+    let flat = |name: &str| folder.0.join(name);
+    let nested = |sub: &str, name: &str| folder.0.join(sub).join(name);
+    // Nothing installed: the subfolder paths, so a failure names them.
+    let empty = Layout::beside(&folder.0);
+    assert_eq!(
+        empty.runtime_library,
+        nested(RUNTIME_FOLDER, RUNTIME_LIBRARY)
+    );
+    assert_eq!(empty.detector, nested(MODELS_FOLDER, DETECTOR_FILE));
+    // The managed store's flat folder: every file beside the executable.
+    for name in [RUNTIME_LIBRARY, DETECTOR_FILE, RECOGNIZER_FILE] {
+        fs::write(flat(name), b"flat")?;
+    }
+    let managed = Layout::beside(&folder.0);
+    assert_eq!(managed.runtime_library, flat(RUNTIME_LIBRARY));
+    assert_eq!(managed.detector, flat(DETECTOR_FILE));
+    assert_eq!(managed.recognizer, flat(RECOGNIZER_FILE));
+    // A release archive's subfolders win over files beside the executable.
+    fs::create_dir_all(nested(RUNTIME_FOLDER, ""))?;
+    fs::create_dir_all(nested(MODELS_FOLDER, ""))?;
+    for (sub, name) in [
+        (RUNTIME_FOLDER, RUNTIME_LIBRARY),
+        (MODELS_FOLDER, DETECTOR_FILE),
+        (MODELS_FOLDER, RECOGNIZER_FILE),
+    ] {
+        fs::write(nested(sub, name), b"nested")?;
+    }
+    let archive = Layout::beside(&folder.0);
+    assert_eq!(
+        archive.runtime_library,
+        nested(RUNTIME_FOLDER, RUNTIME_LIBRARY)
+    );
+    assert_eq!(archive.recognizer, nested(MODELS_FOLDER, RECOGNIZER_FILE));
+    Ok(())
+}
+
+#[test]
+fn describe_works_from_the_managed_stores_flat_folder() -> TestResult {
+    let folder = Folder::new()?;
+    fs::write(folder.0.join(DETECTOR_FILE), b"detector bytes")?;
+    fs::write(folder.0.join(RECOGNIZER_FILE), b"recognizer bytes")?;
+    let mut stdout = Vec::new();
+    let status = run(
+        &arguments(&["describe"]),
+        &Layout::beside(&folder.0),
+        &Scripted::new(true, false),
+        &mut stdout,
+    );
+    assert_eq!(status, 0);
+    let records = lines(&stdout)?;
+    assert_eq!(
+        records.first().map(|record| &record["detector_sha256"]),
+        Some(&"1157d519da9b32785f9089e5f3246268f92403102d5fa18f33c3fd640889e62d".into())
     );
     Ok(())
 }

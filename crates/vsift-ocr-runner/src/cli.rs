@@ -55,14 +55,24 @@ pub const DETECTOR_FILE: &str = "ch_PP-OCRv5_det_mobile.onnx";
 pub const RECOGNIZER_FILE: &str = "latin_PP-OCRv5_rec_mobile.onnx";
 /// The folder beside the executable that holds the ONNX Runtime library.
 pub const RUNTIME_FOLDER: &str = "onnxruntime";
+/// The ONNX Runtime library's file name, as Microsoft's 1.31.0 archive names it
+/// in its `lib` folder.
+#[cfg(target_os = "windows")]
+pub const RUNTIME_LIBRARY: &str = "onnxruntime.dll";
+/// See the Windows definition.
+#[cfg(target_os = "macos")]
+pub const RUNTIME_LIBRARY: &str = "libonnxruntime.1.31.0.dylib";
+/// See the Windows definition.
+#[cfg(not(any(target_os = "windows", target_os = "macos")))]
+pub const RUNTIME_LIBRARY: &str = "libonnxruntime.so.1.31.0";
 
 const HEX_DIGITS: &[u8; 16] = b"0123456789abcdef";
 
 /// Where the runner's files are: everything beside its own executable.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Layout {
-    /// The folder of the ONNX Runtime shared library.
-    pub runtime: PathBuf,
+    /// The ONNX Runtime shared library.
+    pub runtime_library: PathBuf,
     /// The detection model.
     pub detector: PathBuf,
     /// The recognition model.
@@ -70,14 +80,26 @@ pub struct Layout {
 }
 
 impl Layout {
-    /// The layout of a runner installed in `folder`.
+    /// The layout of a runner installed in `folder`. Each file is looked for in
+    /// its subfolder first (`onnxruntime/`, `models/`, as a release archive
+    /// unpacks), then under the same name beside the executable (as the managed
+    /// store keeps a component's files, in one flat folder). A file found in
+    /// neither place keeps its subfolder path, so the failure names that.
     #[must_use]
     pub fn beside(folder: &Path) -> Self {
-        let models = folder.join(MODELS_FOLDER);
+        let either = |subfolder: &str, name: &str| {
+            let nested = folder.join(subfolder).join(name);
+            let flat = folder.join(name);
+            if !nested.is_file() && flat.is_file() {
+                flat
+            } else {
+                nested
+            }
+        };
         Self {
-            runtime: folder.join(RUNTIME_FOLDER),
-            detector: models.join(DETECTOR_FILE),
-            recognizer: models.join(RECOGNIZER_FILE),
+            runtime_library: either(RUNTIME_FOLDER, RUNTIME_LIBRARY),
+            detector: either(MODELS_FOLDER, DETECTOR_FILE),
+            recognizer: either(MODELS_FOLDER, RECOGNIZER_FILE),
         }
     }
 }
@@ -87,7 +109,7 @@ pub trait Backend {
     /// A loaded pair of models, ready to run.
     type Session: Inference;
 
-    /// The runtime's own version, once it is loaded from `layout.runtime`.
+    /// The runtime's own version, once it is loaded from `layout.runtime_library`.
     ///
     /// # Errors
     ///
