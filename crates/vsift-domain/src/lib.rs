@@ -28,7 +28,7 @@ use std::time::Duration;
 pub use admission::{
     ADMISSION_RETRY_AFTER, AdmissionBudget, AdmissionBudgetError, AdmissionDecision, AdmissionWait,
     MAX_ADMISSION_WAIT, MAX_RECOGNIZER_THREADS, SINGLE_STAGE_WEIGHT, VISUAL_WINDOW_WEIGHT,
-    recognizer_threads,
+    leaving_one_free, recognizer_threads,
 };
 pub use asr::{
     AsrChunkOutcome, AsrChunkRecord, AsrDecodingProfile, AsrModel, AsrModelProfile, AsrProvider,
@@ -62,13 +62,16 @@ pub use identity::{
     ArtifactId, EvidenceId, IdentifierError, JobId, OperationId, OperationKey, SessionId, SourceId,
     SourceSegmentId, TranscriptRevisionId, TranscriptSegmentId, VisualCandidateId, VisualIndexId,
 };
-pub use job::{JobKind, JobState, JobTransitionError};
+pub use job::{JobKind, JobMode, JobState, JobTransitionError, PrepareStream};
 pub use media::{
     DisplayRotation, MediaDecodeSupport, MediaDescription, MediaSelection, MediaSelectionError,
     MediaStream, MediaStreamKind, VisualStreamError,
 };
 pub use pagination::{CursorError, CursorToken, PageLimit, PageLimitError, QueryDigest};
-pub use progress::{ProgressStage, ProgressUnit, ProgressUpdate};
+pub use progress::{
+    ESTIMATE_MIN_FRESH_CHUNKS, ESTIMATE_MIN_FRESH_MICROS, MediaProgress, ProgressStage,
+    ProgressUnit, ProgressUpdate,
+};
 pub use provisioning::{
     ArtifactIntegrity, ArtifactIntegrityError, MAX_MANAGED_ARTIFACT_BYTES, MAX_MANAGED_KEY_BYTES,
     MAX_SHARED_LIBRARY_NAME_BYTES, ManagedArtifactFormat, ManagedComponent, ManagedTarget,

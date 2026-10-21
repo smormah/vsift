@@ -202,6 +202,7 @@ async fn run(
             key: &key,
             progress: &NoProgress,
             observer: &cuts,
+            stopwatch: &vsift_application::StoppedStopwatch,
         },
         &Audio,
         &Recogniser { again },

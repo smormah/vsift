@@ -890,12 +890,63 @@ pub(crate) struct RecoverableJob {
     pub(crate) attempts: u64,
     pub(crate) result: Option<JobResult>,
     pub(crate) failure: Option<JobFailure>,
+    /// A `prepare` job's streams (ADR 0033); absent for every other kind.
+    #[serde(default)]
+    pub(crate) streams: Option<Vec<JobStream>>,
 }
 
 /// What a job was asked to do.
 #[derive(Debug, Deserialize)]
 pub(crate) struct JobRequest {
     pub(crate) range: Option<Range>,
+    /// A `prepare` job's mode.
+    #[serde(default)]
+    pub(crate) mode: Option<String>,
+}
+
+/// One stream of a `prepare` job.
+#[derive(Debug, Deserialize)]
+pub(crate) struct JobStream {
+    pub(crate) stream: String,
+    pub(crate) job_id: Option<String>,
+    pub(crate) state: String,
+    pub(crate) chunks_done: Option<u64>,
+    pub(crate) chunks_total: Option<u64>,
+    pub(crate) published_until_us: Option<u64>,
+    pub(crate) media: Option<MediaProgressView>,
+}
+
+/// How far a stream has come in media time.
+#[derive(Debug, Deserialize)]
+pub(crate) struct MediaProgressView {
+    pub(crate) done_us: u64,
+    pub(crate) total_us: Option<u64>,
+    pub(crate) speed: Option<f64>,
+    pub(crate) percent: Option<u64>,
+    pub(crate) estimate: Option<EstimateView>,
+}
+
+/// An estimate of the time left.
+#[derive(Debug, Deserialize)]
+pub(crate) struct EstimateView {
+    pub(crate) remaining_ms: u64,
+}
+
+/// `job.start` data.
+#[derive(Debug, Deserialize)]
+pub(crate) struct JobStart {
+    pub(crate) job: RecoverableJob,
+    pub(crate) start: JobStarted,
+    pub(crate) outcome: Option<Retranscription>,
+}
+
+/// What `job start` did.
+#[derive(Debug, Deserialize)]
+pub(crate) struct JobStarted {
+    pub(crate) state: String,
+    pub(crate) mode: String,
+    pub(crate) mode_basis: String,
+    pub(crate) runner: String,
 }
 
 /// How far a job has come.

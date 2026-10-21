@@ -15,7 +15,7 @@
 //! splicing it into the revision it supersedes when the run covered only part
 //! of the source (decision D3, ADR 0017).
 
-use std::{error::Error, fmt, future::Future, num::NonZeroU16, num::NonZeroU32};
+use std::{error::Error, fmt, future::Future, num::NonZeroU16, num::NonZeroU32, time::Duration};
 
 use vsift_domain::{
     AsrChunkOutcome, AsrChunkRecord, AsrDecodingProfile, AsrModel, AsrModelProfile,
@@ -527,6 +527,9 @@ pub struct CheckpointScope<'a, K> {
     /// publish what is settled (ADR 0033); [`NoObserver`] when nothing is
     /// published before the run ends.
     pub observer: &'a dyn RunObserver,
+    /// The clock the run's speed is read on (ADR 0033): the progress it
+    /// reports carries its media figures.
+    pub stopwatch: &'a dyn crate::Stopwatch,
 }
 
 /// Told after every finished chunk of a run what the run has so far (ADR
@@ -804,16 +807,20 @@ where
     let chunks = plan_run(&request)?;
     ensure_identity(recognizer, request.expected).await?;
     let total = u64::try_from(chunks.len()).ok();
-    let report = |completed: u64| {
+    let mut meter = scope
+        .as_ref()
+        .map(|scope| Meter::started(request.range, scope.stopwatch));
+    let report = |completed: u64, meter: Option<&Meter<'_>>| {
         if let Some(scope) = &scope {
             scope.progress.report(ProgressUpdate {
                 stage: ProgressStage::RecognisingSpeech,
                 completed,
                 total,
+                media: meter.map(Meter::figures),
             });
         }
     };
-    report(0);
+    report(0, meter.as_ref());
     let mut completed = 0_u64;
 
     let mut usage = CheckpointUse::default();
@@ -832,6 +839,7 @@ where
         let reused = scope
             .as_ref()
             .and_then(|scope| reuse_checkpoint(scope, &chunk, bounds, &mut usage));
+        let fresh = reused.is_none();
         let result = if let Some(result) = reused {
             result
         } else {
@@ -861,9 +869,13 @@ where
             }
             result
         };
+        let reached = chunk.window().end();
         gathered.take(chunk, result);
         completed = completed.saturating_add(1);
-        report(completed);
+        if let Some(meter) = &mut meter {
+            meter.finished(reached, fresh);
+        }
+        report(completed, meter.as_ref());
         observer.chunk_finished(&RunSoFar {
             request: &request,
             planned: &chunks,
@@ -906,6 +918,72 @@ where
         },
         usage,
     ))
+}
+
+/// Times a run's chunks for its media progress (ADR 0033, D8): where they
+/// reach, and what the chunks recognised in this run (not taken from a
+/// checkpoint) advanced it by and took. The clock starts once the plan is
+/// made and the recognizer is known, after any admission wait.
+struct Meter<'a> {
+    stopwatch: &'a dyn crate::Stopwatch,
+    from_us: u64,
+    to_us: u64,
+    started: Duration,
+    last: Duration,
+    done_until_us: u64,
+    fresh_media_us: u64,
+    fresh_elapsed_us: u64,
+    fresh_chunks: u32,
+}
+
+impl<'a> Meter<'a> {
+    fn started(range: TimeRange, stopwatch: &'a dyn crate::Stopwatch) -> Self {
+        let now = stopwatch.elapsed();
+        Self {
+            stopwatch,
+            from_us: range.start().as_micros(),
+            to_us: range.end().as_micros(),
+            started: now,
+            last: now,
+            done_until_us: range.start().as_micros(),
+            fresh_media_us: 0,
+            fresh_elapsed_us: 0,
+            fresh_chunks: 0,
+        }
+    }
+
+    /// One more chunk finished, its window ending at `reached`.
+    fn finished(&mut self, reached: MediaTime, fresh: bool) {
+        let now = self.stopwatch.elapsed();
+        let reached = reached.as_micros().min(self.to_us).max(self.done_until_us);
+        if fresh {
+            self.fresh_media_us = self
+                .fresh_media_us
+                .saturating_add(reached - self.done_until_us);
+            self.fresh_elapsed_us = self
+                .fresh_elapsed_us
+                .saturating_add(micros(now.saturating_sub(self.last)));
+            self.fresh_chunks = self.fresh_chunks.saturating_add(1);
+        }
+        self.done_until_us = reached;
+        self.last = now;
+    }
+
+    fn figures(&self) -> vsift_domain::MediaProgress {
+        vsift_domain::MediaProgress {
+            from_us: self.from_us,
+            done_until_us: self.done_until_us,
+            to_us: Some(self.to_us),
+            elapsed_us: micros(self.stopwatch.elapsed().saturating_sub(self.started)),
+            fresh_media_us: self.fresh_media_us,
+            fresh_elapsed_us: self.fresh_elapsed_us,
+            fresh_chunks: self.fresh_chunks,
+        }
+    }
+}
+
+fn micros(duration: Duration) -> u64 {
+    u64::try_from(duration.as_micros()).unwrap_or(u64::MAX)
 }
 
 /// The chunk's stored result, if a usable checkpoint of this run holds it.

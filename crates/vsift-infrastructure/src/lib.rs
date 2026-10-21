@@ -29,6 +29,7 @@ mod archive_inventory;
 mod batch_file;
 mod bounded_tar_inventory;
 mod contained_source_store;
+mod detached_runner;
 mod durable_profile;
 mod evidence_media;
 mod evidence_record;
@@ -86,6 +87,7 @@ pub use bounded_tar_inventory::{
     inspect_tar_selected_files, stage_tar_selected_files,
 };
 pub use contained_source_store::ContainedSourceStore;
+pub use detached_runner::{DetachedRunner, Detachment, launch_detached};
 pub use durable_profile::{
     MAX_MOUNTINFO_BYTES, MAX_OS_RELEASE_BYTES, MountDevice, MountInfoError, MountProfile,
     OsReleaseError, OsReleaseProfile, RootMountAccess, classify_mountinfo, classify_os_release,

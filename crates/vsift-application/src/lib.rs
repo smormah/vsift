@@ -31,7 +31,7 @@ pub use asr::{
     UnusableChunks, build_asr_revision, build_open_asr_revision, build_stopped_asr_revision,
     retranscription_range, transcribe_range, transcribe_range_checkpointed,
 };
-pub use clock::{Clock, ClockError};
+pub use clock::{Clock, ClockError, StoppedStopwatch, Stopwatch};
 pub use evidence::{
     AudioExtractor, CropRequest, EvidenceBudget, EvidenceCall, EvidenceControl, EvidenceError,
     EvidenceExtraction, EvidenceIdentityError, EvidenceMediaError, EvidenceScope, EvidenceStop,
@@ -49,16 +49,18 @@ pub use install::{
 };
 pub use job::{
     CancelOutcome, CancelRequest, CheckpointRead, CheckpointStoreError, ChunkCheckpoints,
-    CommitGuard, CommitLedger, JobChange, JobCommit, JobKeyError, JobLiveness, JobOwner, JobRecord,
-    JobReport, JobRequest, JobRunError, JobSpec, JobStore, JobStoreError, JobView,
-    LIVE_JOB_RETRY_AFTER, MAX_JOB_OPERATION_IDS, MAX_RECORDED_FAILURES, MAX_SESSION_JOBS,
-    NoCheckpoints, OperationLookup, Publication, PublishedOpenRevision, PublishingStopped,
+    CommitGuard, CommitLedger, JobChange, JobCommit, JobKeyError, JobLiveness, JobOwner,
+    JobProgressLog, JobRecord, JobReport, JobRequest, JobRunError, JobSpec, JobStore,
+    JobStoreError, JobView, LIVE_JOB_RETRY_AFTER, MAX_JOB_OPERATION_IDS, MAX_RECORDED_FAILURES,
+    MAX_SESSION_JOBS, NoCheckpoints, OperationLookup, PrepareError, PrepareOutcome,
+    PrepareProgress, PrepareStreams, Publication, PublishedOpenRevision, PublishingStopped,
     RecognitionScope, Reconciled, RequestDigest, Resumability, RetranscriptionOutcome,
-    RetranscriptionPorts, RetranscriptionRun, RetryTimer, RevisionStore, SessionHead, Stopwatch,
-    cancel_job, commit_operation_id, job_id, job_status, lookup_operation, observed_state,
-    part_operation_id, recognition_key, reconcile, resumable_request, retranscribe_operation_key,
-    retranscribe_request_digest, run_retranscription, seal_stopped, seal_stopped_now,
-    stop_operation_id, worker_step_operation_id,
+    RetranscriptionPorts, RetranscriptionRun, RetryTimer, RevisionStore, SessionHead,
+    StreamProgress, StreamStop, cancel_job, commit_operation_id, job_id, job_status,
+    lookup_operation, observed_state, part_operation_id, prepare_operation_key,
+    prepare_request_digest, prepare_spec, recognition_key, reconcile, resumable_request,
+    retranscribe_operation_key, retranscribe_request_digest, run_prepare, run_retranscription,
+    seal_stopped, seal_stopped_now, stop_operation_id, worker_step_operation_id,
 };
 pub use search::{SearchPage, SearchPageRequest, page_search, search_query_digest};
 pub use session::{

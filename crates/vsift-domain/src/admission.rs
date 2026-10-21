@@ -61,6 +61,22 @@ pub fn recognizer_threads(parallelism: Option<NonZeroUsize>, capacity: NonZeroU1
     machine.min(MAX_RECOGNIZER_THREADS).min(capacity)
 }
 
+/// The share of a root's admission `capacity` a background recognition takes
+/// (ADR 0033, D4): one unit less than the whole, when that leaves it at least
+/// one, so evidence calls (`frame get`, crops, audio clips) are admitted while
+/// it runs. A root of one unit has nothing to spare and gives it all.
+///
+/// The share caps the recognizer's threads ([`recognizer_threads`]), which
+/// are part of the run's provenance: a background revision is not the same
+/// revision as a foreground one on the same root.
+#[must_use]
+pub const fn leaving_one_free(capacity: NonZeroU16) -> NonZeroU16 {
+    match NonZeroU16::new(capacity.get() - 1) {
+        Some(share) => share,
+        None => capacity,
+    }
+}
+
 /// The longest admission wait a caller may ask for: 60 s.
 pub const MAX_ADMISSION_WAIT: Duration = Duration::from_secs(60);
 /// First polling ceiling of a bounded wait.
@@ -180,10 +196,29 @@ mod tests {
 
     use super::{
         ADMISSION_RETRY_AFTER, AdmissionBudget, AdmissionBudgetError, AdmissionDecision,
-        AdmissionWait, MAX_ADMISSION_WAIT, MAX_RECOGNIZER_THREADS, recognizer_threads,
+        AdmissionWait, MAX_ADMISSION_WAIT, MAX_RECOGNIZER_THREADS, leaving_one_free,
+        recognizer_threads,
     };
     use crate::Jitter;
 
+    /// D4 (ADR 0033): a background recognition leaves one unit free, except
+    /// on a root of one unit, which has nothing to spare.
+    #[test]
+    fn a_background_share_leaves_one_unit_free() -> Result<(), &'static str> {
+        let units = |count| NonZeroU16::new(count).ok_or("zero");
+        assert_eq!(leaving_one_free(units(1)?), units(1)?);
+        assert_eq!(leaving_one_free(units(2)?), units(1)?);
+        assert_eq!(leaving_one_free(units(4)?), units(3)?);
+        // The threads follow the share: four on a machine of eight threads and
+        // a root of four units, three in the background.
+        let eight = NonZeroUsize::new(8).ok_or("zero")?;
+        assert_eq!(recognizer_threads(Some(eight), units(4)?), units(4)?);
+        assert_eq!(
+            recognizer_threads(Some(eight), leaving_one_free(units(4)?)),
+            units(3)?
+        );
+        Ok(())
+    }
     #[test]
     fn recognizer_threads_are_capped_by_capacity() -> Result<(), Box<dyn std::error::Error>> {
         let capacity = |value| NonZeroU16::new(value).ok_or("zero");

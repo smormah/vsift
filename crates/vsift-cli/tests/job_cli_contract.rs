@@ -379,23 +379,15 @@ fn run(
     )
 }
 
-/// A stopwatch that never moves: with an interval of zero, a run publishes a
-/// part after every chunk that settles something (ADR 0033).
-struct Still;
-
-impl vsift_application::Stopwatch for Still {
-    fn elapsed(&self) -> Duration {
-        Duration::ZERO
-    }
-}
-
-/// [`run`], publishing the revision as `publication` says.
+/// [`run`], publishing the revision as `publication` says (on a stopwatch
+/// that never moves, so an interval of zero publishes after every chunk that
+/// settles something).
 fn run_publishing(
     store: &FilesystemSessionStore,
     resolved: &Resolved,
     operation: Option<&OperationId>,
     fails_at: Option<u32>,
-    publication: vsift_application::Publication<'_>,
+    publication: vsift_application::Publication,
 ) -> Built<bool> {
     let status = store.session_status(&resolved.spec.session_id)?;
     let identity = identity().map_err(|_| "no identity")?;
@@ -429,6 +421,7 @@ fn run_publishing(
             },
             progress: &vsift_application::NoProgress,
             publication,
+            stopwatch: &vsift_application::StoppedStopwatch,
         },
         &mut Unchanged,
     ))?;
@@ -883,7 +876,6 @@ fn a_cancel_that_cannot_seal_its_revision_says_so_and_names_the_cancel() -> Test
     let job = resolved.spec.job_id.clone();
     let publication = vsift_application::Publication::AsItGoes {
         interval: Duration::ZERO,
-        stopwatch: &Still,
     };
     assert!(!run_publishing(
         &store,
@@ -1086,5 +1078,129 @@ fn an_operation_id_reused_for_another_request_conflicts_through_the_flag() -> Te
     assert_eq!(value["data"]["job"]["replayed"], true);
     assert_eq!(value["data"]["job"]["job_id"], job.as_str());
     assert_eq!(generation(&root)?, before);
+    Ok(())
+}
+
+// ------------------------------------------------------------ job start (ADR 0033)
+
+/// A complete `job start` result whose data is schema-valid.
+fn start_result(output: &Output) -> Built<Value> {
+    let value = json(output)?;
+    assert_eq!(output.status.code(), Some(0), "{value}");
+    assert_eq!(value["command"], "job.start");
+    assert_eq!(value["status"], "complete");
+    validate("job-start-data.schema.json", &value["data"])?;
+    Ok(value)
+}
+
+/// Asks `job status` until the job has no live owner, for at most 30 s.
+fn settled_status(root: &OwnedRoot, job: &str) -> Built<Value> {
+    let waited = std::time::Instant::now();
+    loop {
+        let status = job_result(
+            &vsift(root, &["job", "status", job, "--json"])?,
+            "job.status",
+        )?;
+        if status["data"]["live_owner"] == false && status["data"]["state"] != "queued" {
+            return Ok(status);
+        }
+        if waited.elapsed() > Duration::from_secs(30) {
+            return Err(format!("the runner never settled: {status}").into());
+        }
+        std::thread::sleep(Duration::from_millis(100));
+    }
+}
+
+/// ADR 0033 section 5: on a session with no transcript yet (its length is not
+/// known), `job start` is watched: it starts the background runner, which
+/// takes the job before the call answers. Without whisper.cpp the runner's
+/// transcript stream fails with `MISSING_CAPABILITY`, so the job ends failed
+/// and no runner is left. A second `job start` starts the failed job again.
+#[test]
+fn job_start_hands_a_watched_job_to_a_background_runner() -> TestResult {
+    let root = OwnedRoot::new()?;
+    let session = seed_session(&root)?;
+    let started = start_result(&vsift(
+        &root,
+        &["job", "start", session.as_str(), "--json"],
+    )?)?;
+    let data = &started["data"];
+    assert_eq!(data["start"]["state"], "created");
+    assert_eq!(data["start"]["mode"], "watched");
+    assert_eq!(data["start"]["mode_basis"], "length_unknown");
+    assert_eq!(data["start"]["runner"], "background");
+    assert!(data["start"]["detachment"].is_string());
+    assert_eq!(data["outcome"], Value::Null);
+    assert_eq!(data["job"]["kind"], "prepare");
+    assert_eq!(data["job"]["request"]["mode"], "watched");
+    assert_no_path(&started, &root.0);
+    let job = data["job"]["job_id"].as_str().ok_or("no job")?.to_owned();
+
+    let status = settled_status(&root, &job)?;
+    assert_eq!(status["data"]["state"], "failed", "{status}");
+    assert_eq!(status["data"]["failure"]["code"], "MISSING_CAPABILITY");
+    let streams = status["data"]["streams"].as_array().ok_or("no streams")?;
+    assert_eq!(streams.len(), 1);
+    assert_eq!(streams[0]["stream"], "transcript");
+    // The stream failed before its retranscription had a job.
+    assert_eq!(streams[0]["state"], "not_started");
+
+    let again = start_result(&vsift(
+        &root,
+        &["job", "start", session.as_str(), "--json"],
+    )?)?;
+    assert_eq!(again["data"]["start"]["state"], "restarted");
+    assert_eq!(again["data"]["job"]["job_id"], job.as_str());
+    settled_status(&root, &job)?;
+    Ok(())
+}
+
+/// ADR 0033 section 6: `--mode quick` runs the job in the foreground and
+/// answers when it ends, here with the stream's failure; `job status` then
+/// reports the failed `prepare` job, and the readable text of `job start`
+/// names it too.
+#[test]
+fn a_quick_job_start_runs_in_the_foreground() -> TestResult {
+    let root = OwnedRoot::new()?;
+    let session = seed_session(&root)?;
+    let output = vsift(
+        &root,
+        &[
+            "job",
+            "start",
+            session.as_str(),
+            "--mode",
+            "quick",
+            "--json",
+        ],
+    )?;
+    assert_failure(&output, "job.start", "MISSING_CAPABILITY", 2)?;
+    let listed = json(&vsift(
+        &root,
+        &["session", "status", session.as_str(), "--json"],
+    )?)?;
+    let jobs = listed["data"]["jobs"].as_array().ok_or("no jobs")?;
+    let prepare = jobs
+        .iter()
+        .find(|job| job["kind"] == "prepare")
+        .ok_or("no prepare job")?;
+    assert_eq!(prepare["state"], "failed");
+    assert_eq!(prepare["live_owner"], false);
+    let job = prepare["job_id"].as_str().ok_or("no job id")?;
+    let status = job_result(
+        &vsift(&root, &["job", "status", job, "--json"])?,
+        "job.status",
+    )?;
+    assert_eq!(status["data"]["request"]["mode"], "quick");
+
+    // Readable text: the job and its stream, no progress line (standard
+    // error is not a terminal here).
+    let text = vsift(&root, &["job", "status", job])?;
+    assert_eq!(text.status.code(), Some(0));
+    let shown = String::from_utf8(text.stdout)?;
+    assert!(shown.contains("(prepare)"), "{shown}");
+    assert!(shown.contains("Mode: quick"), "{shown}");
+    assert!(shown.contains("Stream transcript: not_started"), "{shown}");
+    assert!(!String::from_utf8(text.stderr)?.contains('\r'));
     Ok(())
 }

@@ -163,6 +163,7 @@ fn report(progress: &dyn ProgressSink, completed: u64, total: u64) {
         stage: ProgressStage::FetchingArtifact,
         completed: completed.min(total),
         total: Some(total),
+        media: None,
     });
 }
 

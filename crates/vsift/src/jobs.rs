@@ -7,12 +7,13 @@
 //! only the job id a retranscription reported.
 
 use vsift_application::{
-    CancelOutcome, JobLiveness, JobRecord, JobRequest, JobStore, JobView, Resumability, cancel_job,
-    job_status as job_status_query, observed_state, resumable_request,
+    CancelOutcome, JobLiveness, JobProgressLog as _, JobRecord, JobRequest, JobStore, JobView,
+    Resumability, cancel_job, job_status as job_status_query, observed_state, resumable_request,
 };
 use vsift_domain::{
-    AdmissionWait, AttemptFailure, JobId, JobKind, JobState, OperationId, SessionId, SessionPhase,
-    StorageGeneration, TimeRange, TranscriptRevisionId,
+    AdmissionWait, AttemptFailure, JobId, JobKind, JobMode, JobState, MediaProgress, OperationId,
+    PrepareStream, ProgressStage, RevisionState, SessionId, SessionPhase, StorageGeneration,
+    TimeRange, TranscriptRevisionId,
 };
 use vsift_infrastructure::FilesystemSessionStore;
 
@@ -49,6 +50,82 @@ pub struct JobStatusReport {
     operation_id: Option<OperationId>,
     resumability: Resumability,
     last_failure: Option<AttemptFailure>,
+    mode: Option<JobMode>,
+    streams: Vec<StreamStatus>,
+}
+
+/// Where one stream of a `prepare` job is (ADR 0033 section 5), as
+/// `job status` reports it.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct StreamStatus {
+    stream: PrepareStream,
+    job_id: Option<JobId>,
+    state: Option<JobState>,
+    stage: Option<ProgressStage>,
+    chunks_done: Option<u64>,
+    chunks_total: Option<u64>,
+    media: Option<MediaProgress>,
+    published_until_us: Option<u64>,
+    live: bool,
+}
+
+impl StreamStatus {
+    /// The stream.
+    #[must_use]
+    pub const fn stream(&self) -> PrepareStream {
+        self.stream
+    }
+
+    /// The stream's own job, once it has one.
+    #[must_use]
+    pub const fn job_id(&self) -> Option<&JobId> {
+        self.job_id.as_ref()
+    }
+
+    /// The state of the stream's job as a reader observes it; `None` before
+    /// the stream has a job.
+    #[must_use]
+    pub const fn state(&self) -> Option<JobState> {
+        self.state
+    }
+
+    /// The stage the stream last reported.
+    #[must_use]
+    pub const fn stage(&self) -> Option<ProgressStage> {
+        self.stage
+    }
+
+    /// Chunks done, reused ones included, as last reported.
+    #[must_use]
+    pub const fn chunks_done(&self) -> Option<u64> {
+        self.chunks_done
+    }
+
+    /// Chunks planned, when known.
+    #[must_use]
+    pub const fn chunks_total(&self) -> Option<u64> {
+        self.chunks_total
+    }
+
+    /// How far the stream has come in media time, as last reported.
+    #[must_use]
+    pub const fn media(&self) -> Option<MediaProgress> {
+        self.media
+    }
+
+    /// Up to where its revision is published (an open revision of the
+    /// stream's job), or its whole range once sealed.
+    #[must_use]
+    pub const fn published_until_us(&self) -> Option<u64> {
+        self.published_until_us
+    }
+
+    /// Whether a process runs the stream's job right now: only then is an
+    /// estimate of the time left meaningful.
+    #[must_use]
+    pub const fn live(&self) -> bool {
+        self.live
+    }
 }
 
 impl JobStatusReport {
@@ -59,7 +136,7 @@ impl JobStatusReport {
         let live = view.liveness == JobLiveness::Owned;
         let resumability = Resumability::of(state, view.liveness, session_open);
         let record = view.record;
-        let JobRequest::Retranscribe { range } = record.request;
+        let range = record.request.range();
         let succeeded = record
             .commit
             .as_ref()
@@ -90,7 +167,23 @@ impl JobStatusReport {
             operation_ids: record.operation_ids,
             resumability,
             last_failure,
+            mode: record.request.mode(),
+            streams: Vec::new(),
         }
+    }
+
+    /// How a `prepare` job runs (ADR 0033 section 6); `None` for every other
+    /// kind.
+    #[must_use]
+    pub const fn mode(&self) -> Option<JobMode> {
+        self.mode
+    }
+
+    /// Where each started stream of a `prepare` job is; empty for every
+    /// other kind.
+    #[must_use]
+    pub fn streams(&self) -> &[StreamStatus] {
+        &self.streams
     }
 
     /// The job.
@@ -233,6 +326,10 @@ pub struct JobResumeReport {
 }
 
 impl JobResumeReport {
+    pub(crate) const fn new(outcome: RetranscribeOutcome, status: JobStatusReport) -> Self {
+        Self { outcome, status }
+    }
+
     /// The retranscription the job committed (or had committed).
     #[must_use]
     pub const fn outcome(&self) -> &RetranscribeOutcome {
@@ -386,7 +483,12 @@ impl Engine {
         let view = job_status_query(&store, &session, job, now)?;
         let open = session_open(&store, &session, now)?;
         let state = view.effective_state();
-        Ok(JobStatusReport::from_view(view, state, open))
+        let kind = view.record.request.kind();
+        let mut report = JobStatusReport::from_view(view, state, open);
+        if kind == JobKind::Prepare {
+            report.streams = stream_statuses(&store, &session, job, now)?;
+        }
+        Ok(report)
     }
 
     /// Resumes an interrupted job (the `ResumeJob` use case) by running its
@@ -417,8 +519,22 @@ impl Engine {
                 job: request.job,
             });
         }
+        let range = match record.request {
+            JobRequest::Retranscribe { range } => range,
+            JobRequest::Prepare { mode } => {
+                // Boxed: the prepare path nests a whole retranscription, and an
+                // unboxed future that size overflows a host's main-thread stack.
+                return Box::pin(self.resume_prepare(
+                    store,
+                    session,
+                    request.job.clone(),
+                    mode,
+                    request,
+                ))
+                .await;
+            }
+        };
         drop(store);
-        let JobRequest::Retranscribe { range } = record.request;
         let outcome = self
             .retranscribe(RetranscribeRequest {
                 session,
@@ -431,6 +547,7 @@ impl Engine {
                 progress: request.progress,
                 admission: request.admission,
                 publication: request.publication,
+                share: crate::RecognitionShare::Whole,
             })
             .await?;
         let status = self.job_status(outcome.job().job_id())?;
@@ -452,6 +569,22 @@ impl Engine {
     /// and storage failures.
     pub fn job_cancel(&self, job: &JobId) -> Result<JobCancelReport, EngineError> {
         let (store, session, now) = self.job_session(job)?;
+        // A `prepare` job's streams are jobs of their own: each is cancelled
+        // with it (best effort; its runner cancels a stream it sees stop).
+        if let Ok(Some(view)) = store.job(&session, job)
+            && view.record.request.kind() == JobKind::Prepare
+            && let Ok(Some(progress)) = store.read_progress(&session, job)
+        {
+            for stream in progress
+                .streams
+                .iter()
+                .filter_map(|stream| stream.job.as_ref())
+            {
+                if stream != job {
+                    let _ = self.job_cancel(stream);
+                }
+            }
+        }
         let outcome = cancel_job(&store, &session, job, now)?;
         // A job no process runs is cancelled here, so its open revision, if it
         // published one, is sealed as stopped here too (ADR 0033, D1); a live
@@ -574,8 +707,59 @@ impl Engine {
     }
 }
 
+/// Where each started stream of the `prepare` job `job` is: its progress
+/// record for the figures, the stream's own job for its state, and the
+/// session's open revision for what is published.
+fn stream_statuses(
+    store: &FilesystemSessionStore,
+    session: &SessionId,
+    job: &JobId,
+    now: u64,
+) -> Result<Vec<StreamStatus>, EngineError> {
+    let Some(progress) = store.read_progress(session, job)? else {
+        return Ok(Vec::new());
+    };
+    let open = store.read_open_transcript(session, now).ok().flatten();
+    let mut streams = Vec::with_capacity(progress.streams.len());
+    for stream in progress.streams {
+        let view = match &stream.job {
+            Some(id) => store.job(session, id)?,
+            None => None,
+        };
+        let state = view
+            .as_ref()
+            .map(|view| observed_state(view, store))
+            .transpose()?;
+        let live = view
+            .as_ref()
+            .is_some_and(|view| view.liveness == JobLiveness::Owned);
+        let media = stream.update.and_then(|update| update.media);
+        let published_until_us = match (&stream.job, state) {
+            (_, Some(JobState::Succeeded)) => media.and_then(|media| media.to_us),
+            (Some(id), _) => open
+                .as_ref()
+                .filter(|open| open.job_id == *id && open.revision.state() == RevisionState::Open)
+                .and_then(|open| open.revision.published_until())
+                .map(vsift_domain::MediaTime::as_micros),
+            (None, _) => None,
+        };
+        streams.push(StreamStatus {
+            stream: stream.stream,
+            job_id: stream.job,
+            state,
+            stage: stream.update.map(|update| update.stage),
+            chunks_done: stream.update.map(|update| update.completed),
+            chunks_total: stream.update.and_then(|update| update.total),
+            media,
+            published_until_us,
+            live,
+        });
+    }
+    Ok(streams)
+}
+
 /// Whether `session` is open and unexpired at `now`.
-fn session_open(
+pub(crate) fn session_open(
     store: &FilesystemSessionStore,
     session: &SessionId,
     now: u64,

@@ -314,6 +314,7 @@ fn request(
         progress: ProgressObserver::none(),
         admission: vsift::AdmissionWait::Immediate,
         publication: vsift::RetranscribePublication::AtTheSeal,
+        share: vsift::RecognitionShare::Whole,
     }
 }
 
@@ -464,6 +465,7 @@ async fn committed_through_the_use_case(
             classify: |_| FailureCode::Internal,
             progress: &vsift_application::NoProgress,
             publication: vsift_application::Publication::AtTheSeal,
+            stopwatch: &vsift_application::StoppedStopwatch,
         },
         &mut Unchanged,
     )
@@ -693,6 +695,7 @@ async fn a_frame_during_a_transcription_of_its_session_is_busy_and_names_the_job
             classify: |_| FailureCode::Internal,
             progress: &vsift_application::NoProgress,
             publication: vsift_application::Publication::AtTheSeal,
+            stopwatch: &vsift_application::StoppedStopwatch,
         },
         &mut unchanged,
     );

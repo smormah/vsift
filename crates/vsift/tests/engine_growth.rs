@@ -1,6 +1,8 @@
 //! A transcription published as it goes, through the engine (ADR 0033): read
 //! while it runs, followed with a since token, and sealed with every segment it
-//! published; cancelled while it runs, it keeps them as a stopped revision.
+//! published; cancelled while it runs, it keeps them as a stopped revision. A
+//! watched `prepare` job reports its progress in media time while it runs, and
+//! `session close` stops it.
 //!
 //! The recogniser is a deterministic stand-in that holds at one chunk until the
 //! test lets it go; the audio is decoded by real `FFmpeg` from a looped speech
@@ -36,6 +38,7 @@ use vsift::{
     RetranscribeRequest, SearchRequest, SessionId, SessionRootLocation, Sha256Hex, SpeechPcm,
     SpeechRecognitionError, SpeechRecognizer, TranscriptQuery, UserConfigurationLocation,
 };
+use vsift::{JobMode, JobResumeRequest, JobStartRequest, JobStartState, JobState, SessionPhase};
 use vsift_domain::RevisionState;
 
 type TestResult = Result<(), Box<dyn Error>>;
@@ -252,6 +255,7 @@ fn published_as_it_goes(session: &SessionId) -> RetranscribeRequest {
         publication: RetranscribePublication::AsItGoes {
             interval: Duration::ZERO,
         },
+        share: vsift::RecognitionShare::Whole,
     }
 }
 
@@ -389,5 +393,139 @@ async fn a_job_cancelled_while_it_runs_keeps_what_it_published() -> TestResult {
         Some(published.segments())
     );
     assert_eq!(stopped.coverage().pending(), []);
+    Ok(())
+}
+
+fn resumed(job: &vsift::JobId) -> JobResumeRequest {
+    JobResumeRequest {
+        job: job.clone(),
+        cancellation: Cancellation::new(),
+        progress: ProgressObserver::none(),
+        admission: vsift::AdmissionWait::Immediate,
+        publication: RetranscribePublication::AtTheSeal,
+    }
+}
+
+/// ADR 0033 sections 5 and 6: a watched `prepare` job runs its transcript as
+/// a job of its own that publishes as it goes. While it holds, `job status`
+/// in another engine reports the stream's job, its media progress and how far
+/// it is published, and `job start` again finds the running job; once it
+/// seals, the job succeeded and `job start` answers that it is done.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "requires FFmpeg and FFprobe on PATH"]
+async fn a_watched_job_reports_its_progress_while_it_publishes() -> TestResult {
+    let root = OwnedRoot::new()?;
+    let recogniser = HeldRecogniser::default();
+    let runner = Arc::new(engine(&root, &recogniser));
+    let clip = looped_clip(&root)?;
+    let session_id = session(&runner, &clip).await?;
+    let request = JobStartRequest {
+        session: session_id.clone(),
+        mode: Some(JobMode::Watched),
+    };
+    let plan = runner.job_start(&request)?;
+    assert_eq!(plan.start(), JobStartState::Created);
+    assert_eq!(plan.status().state(), JobState::Queued);
+    let job = plan.job_id().clone();
+    let running = {
+        let runner = Arc::clone(&runner);
+        let request = resumed(&job);
+        tokio::spawn(async move { runner.job_resume(request).await })
+    };
+    until_held(&recogniser).await?;
+    // The runner records its progress at most once a second.
+    tokio::time::sleep(vsift::PROGRESS_RECORD_INTERVAL * 2).await;
+
+    let other = engine(&root, &recogniser);
+    let status = other.job_status(&job)?;
+    assert!(status.live());
+    assert_eq!(status.mode(), Some(JobMode::Watched));
+    let [stream] = status.streams() else {
+        return Err("not one stream".into());
+    };
+    assert!(stream.live());
+    assert_eq!(stream.state(), Some(JobState::Running));
+    let media = stream.media().ok_or("no media progress")?;
+    assert_eq!(media.done_until_us, 80_000_000, "three chunks reach 80 s");
+    assert!(media.total_us().is_some_and(|total| total > 130_000_000));
+    assert_eq!(media.fresh_chunks, 3);
+    assert!(stream.published_until_us().is_some_and(|until| until > 0));
+    assert_eq!(other.job_start(&request)?.start(), JobStartState::Running);
+    let read = other.transcript(whole(&session_id, None))?;
+    assert_eq!(read.revision().state(), RevisionState::Open);
+
+    recogniser.released.store(true, Ordering::SeqCst);
+    let report = running.await??;
+    assert_eq!(report.status().state(), JobState::Succeeded);
+    assert_eq!(report.outcome().revision().state(), RevisionState::Sealed);
+    let status = other.job_status(&job)?;
+    assert_eq!(
+        status
+            .streams()
+            .first()
+            .and_then(vsift::StreamStatus::state),
+        Some(JobState::Succeeded)
+    );
+    let again = other.job_start(&request)?;
+    assert_eq!(again.start(), JobStartState::Done);
+    assert_eq!(again.job_id(), &job);
+    Ok(())
+}
+
+/// ADR 0033 section 5: `session close` asks the running `prepare` job to stop
+/// and waits for it: the runner seals what it published as stopped, the job is
+/// cancelled, nothing of the session runs any more, and the session closes.
+#[tokio::test(flavor = "multi_thread", worker_threads = 3)]
+#[ignore = "requires FFmpeg and FFprobe on PATH"]
+async fn session_close_stops_a_running_prepare_job() -> TestResult {
+    let root = OwnedRoot::new()?;
+    let recogniser = HeldRecogniser::default();
+    let runner = Arc::new(engine(&root, &recogniser));
+    let clip = looped_clip(&root)?;
+    let session_id = session(&runner, &clip).await?;
+    let plan = runner.job_start(&JobStartRequest {
+        session: session_id.clone(),
+        mode: Some(JobMode::Watched),
+    })?;
+    let job = plan.job_id().clone();
+    let running = {
+        let runner = Arc::clone(&runner);
+        let request = resumed(&job);
+        tokio::spawn(async move { runner.job_resume(request).await })
+    };
+    until_held(&recogniser).await?;
+    let closing = {
+        let other = engine(&root, &recogniser);
+        let session_id = session_id.clone();
+        tokio::task::spawn_blocking(move || {
+            let started = Instant::now();
+            other
+                .close_session(&session_id)
+                .map(|closed| (closed, started.elapsed()))
+        })
+    };
+    // The stand-in recogniser does not hear the cancellation: let it finish
+    // its chunk, as a provider killed by the supervisor would end it.
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    recogniser.released.store(true, Ordering::SeqCst);
+    let failure = running.await?.err().ok_or("the job ran to its seal")?;
+    assert_eq!(failure.failure_code(), FailureCode::Cancelled);
+    let (closed, waited) = closing.await??;
+    assert_eq!(closed.phase(), SessionPhase::Closed);
+    assert!(
+        waited < vsift::SESSION_CLOSE_JOB_WAIT,
+        "the close waited it out"
+    );
+    let other = engine(&root, &recogniser);
+    let status = other.job_status(&job)?;
+    assert_eq!(status.state(), JobState::Cancelled);
+    assert!(!status.live());
+    assert!(
+        other
+            .session_jobs(&session_id)?
+            .entries()
+            .iter()
+            .all(|entry| !entry.live())
+    );
     Ok(())
 }

@@ -232,7 +232,10 @@ pub struct RetranscriptionPorts<'a, S, A, R, C, T> {
     /// nobody watches.
     pub progress: &'a dyn crate::ProgressSink,
     /// Whether the run publishes its revision as it goes (ADR 0033).
-    pub publication: super::Publication<'a>,
+    pub publication: super::Publication,
+    /// The clock the run's publication interval and its speed are read on
+    /// ([`crate::StoppedStopwatch`] for a host that needs neither).
+    pub stopwatch: &'a dyn crate::Stopwatch,
 }
 
 /// What a run tells its caller about the job behind it.
@@ -753,6 +756,7 @@ where
         run,
         ports.store,
         ports.publication,
+        ports.stopwatch,
         owner.record().epoch,
         owner.record().attempt,
     );
@@ -769,6 +773,7 @@ where
                 key: &run.spec.recognition_key,
                 progress: ports.progress,
                 observer: &publisher,
+                stopwatch: ports.stopwatch,
             },
             ports.audio,
             ports.recognizer,

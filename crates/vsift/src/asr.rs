@@ -90,6 +90,10 @@ pub struct RetranscribeRequest {
     /// When the run publishes its revision (ADR 0033): as it goes, so that
     /// readers see it grow, or only when it ends.
     pub publication: RetranscribePublication,
+    /// How much of the root's admission capacity the recognition takes (ADR
+    /// 0033, D4): all of it, or one unit less for a background run. It caps
+    /// whisper.cpp's threads; a host's recognizer reports its own.
+    pub share: crate::RecognitionShare,
 }
 
 /// When a retranscription publishes its revision (ADR 0033).
@@ -343,7 +347,13 @@ impl Engine {
 
         // 2. Resolve and identify everything before anything runs.
         let tools = self.local_asr_media_tools()?;
-        let recognizer = self.select_recognizer(self.admission_capacity_hint())?;
+        let capacity = match request.share {
+            crate::RecognitionShare::Whole => self.admission_capacity_hint(),
+            crate::RecognitionShare::LeavingOneFree => {
+                vsift_domain::leaving_one_free(self.admission_capacity_hint())
+            }
+        };
+        let recognizer = self.select_recognizer(capacity)?;
         let identity = match &recognizer {
             SelectedRecognizer::Whisper(cli) => cli.recognizer_identity().await,
             SelectedRecognizer::Host(host) => host.recognizer.identity_boxed().await,
@@ -521,10 +531,7 @@ impl Engine {
         let publication = match request.publication {
             RetranscribePublication::AtTheSeal => vsift_application::Publication::AtTheSeal,
             RetranscribePublication::AsItGoes { interval } => {
-                vsift_application::Publication::AsItGoes {
-                    interval,
-                    stopwatch: &stopwatch,
-                }
+                vsift_application::Publication::AsItGoes { interval }
             }
         };
         let running = run_retranscription(
@@ -538,6 +545,7 @@ impl Engine {
                 classify: job_failure_code,
                 progress: &progress,
                 publication,
+                stopwatch: &stopwatch,
             },
             &mut guard,
         );

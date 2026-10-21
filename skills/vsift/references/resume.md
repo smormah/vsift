@@ -133,6 +133,37 @@ vsift job resume <job> --events jsonl | tail -n 1
 6. The same transcription command with the same `--operation-id` also continues an
    interrupted job, and returns the committed revision (`replayed`) once it finished.
 
+## A transcription in the background
+
+`vsift job start` transcribes a recording of 10 minutes or more in the background (`data.start.runner`
+`background`); `data.job.job_id` is its job. It runs on its own while you work, and leaves room for frames:
+
+- Go on with FIND_SPOKEN_SPANS and the states after it at once. `search` and `transcript get` answer over the
+  part already transcribed: the answer is `partial`, with the reason `transcription_pending`, and
+  `transcript_coverage.pending_ranges` lists what is not transcribed yet. That is a gap still being filled, not
+  silence.
+- Between later steps check the job (each check is a tool call), and each time tell the user how far it is:
+
+```console
+vsift job status <job> --json
+```
+
+  `data.streams[]` holds the transcript's `state` and, in `media`, `done_us` of `total_us` (microseconds of the
+  recording), `percent`, `speed` (times real time) and `estimate.remaining_ms`: an estimate from the speed so far,
+  not a promise.
+- To read only what was transcribed after an earlier answer, pass that answer's `data.since.since_token`:
+
+```console
+vsift search <session> --query "<text>" --since "<since-token>" --view brief --limit <n> --json
+vsift transcript get <session> --since "<since-token>" --view brief --limit <n> --json
+```
+
+- The transcript is complete only once `job status` says `succeeded`; never call it complete before. If your
+  budget runs out first, go to REPORT with status `partial`, a `transcript` gap (reason `untranscribed_range`) for
+  what is still pending, and the resume card with the `job_id` and `vsift job status <job> --json` as its
+  `next_command`.
+- Stopping it needs the user's word (`job cancel` is `explicit`); what it transcribed stays.
+
 ## A transcription that is still running
 
 When your tool call timed out, the job may still run: a client can keep a timed-out command
@@ -145,6 +176,8 @@ a second transcription. You do not know the job's id after a timeout, so, in thi
    `live_owner`, `resumable`).
 2. `vsift job status <job> --json` for that job, once, if there is one, to read `state` and `failure`.
 3. Act on what it says:
+   - A `prepare` job you started with `job start` (`kind` `prepare`) runs in the background on purpose:
+     go on as "A transcription in the background" above says; frames work while it runs.
    - A process holds the job (`live_owner` true: `state` `running`, `committing` or
      `cancelling`): stop media work and go to REPORT with status `partial`. Record a `visual`
      gap with the reason `not_inspected` and the code `BUSY` for what you could not look at,

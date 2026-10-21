@@ -110,6 +110,7 @@ mod jobs;
 mod lifecycle;
 mod local_asr_check;
 mod managed;
+mod prepare;
 mod progress;
 mod search;
 mod sessions;
@@ -144,16 +145,20 @@ pub use install::{SetupInstallOutcome, SetupInstallRequest};
 pub use isolation::{IsolationGap, IsolationGaps, IsolationProfile, attest_host_isolation};
 pub use jobs::{
     JobCancelOutcome, JobCancelReport, JobResumeReport, JobResumeRequest, JobStatusReport,
-    MAX_LISTED_SESSION_JOBS, SessionJobEntry, SessionJobs,
+    MAX_LISTED_SESSION_JOBS, SessionJobEntry, SessionJobs, StreamStatus,
 };
 pub use lifecycle::{InstallCleanup, ManagedListing, ManagedRepairDiagnosis};
 pub use local_asr_check::DEFAULT_LOCAL_ASR_CHECK_BUDGET;
+pub use prepare::{
+    JobStartPlan, JobStartRequest, JobStartState, ModeBasis, PROGRESS_RECORD_INTERVAL,
+    RecognitionShare,
+};
 pub use progress::{AdmissionWaiting, JobProgress, ProgressObserver};
 pub use search::{SearchRange, SearchRequest, SearchResultHit, SearchResults};
 pub use sessions::{
     BundleSummary, CleanDecision, CleanEntry, CleanMode, CleanPage, CleanRequest, CleanScope,
-    FreeSpaceReserveCheck, IngestOutcome, IngestRequest, SessionListEntry, SessionPage,
-    SessionSnapshot, SourceRetention, SuppliedTranscriptRequest,
+    FreeSpaceReserveCheck, IngestOutcome, IngestRequest, SESSION_CLOSE_JOB_WAIT, SessionListEntry,
+    SessionPage, SessionSnapshot, SourceRetention, SuppliedTranscriptRequest,
 };
 pub use setup::{
     DEFAULT_PROBE_TIMEOUT, EvaluatedSetupPlan, ExecutableSelections, SetupCheckReport,
@@ -163,6 +168,9 @@ pub use transcripts::{TranscriptExcerpt, TranscriptQuery};
 pub use verification::{
     Cancellation, MediaToolSelection, MediaToolVerificationRequest, ModelSelection,
 };
+/// Starting the background runner of `job start` (ADR 0033): the host gives
+/// the executable and its arguments, and the runner outlives it.
+pub use vsift_infrastructure::{DetachedRunner, Detachment, launch_detached};
 pub use worker::{MAX_CANDIDATE_CALLS, WorkOutcome, WorkRequestRun};
 pub use workspace::{WorkspaceInit, WorkspaceInitOutcome, WorkspaceInitRequest};
 
@@ -207,12 +215,12 @@ pub use vsift_domain::GeometryError;
 pub use vsift_domain::{
     ADMISSION_RETRY_AFTER, AdmissionBudget, AdmissionBudgetError, AdmissionWait, AttemptFailure,
     DependencyState, DependencyStatus, DurabilityRequirement, EvidenceId, FailureClass,
-    FailureCode, IdentifierError, JobId, JobKind, JobState, MAX_ADMISSION_WAIT,
-    MAX_RECOGNIZER_THREADS, OperationId, OperationStatus, ProbeTimeout, ProbeTimeoutKind,
-    ProgressStage, ProgressUnit, ProgressUpdate, PublicationGuarantee, RuntimeCapability,
-    RuntimeDependency, RuntimeReadiness, SessionId, SessionLifetime, SessionLifetimePolicy,
-    SessionPhase, SourceId, StorageGeneration, WorkspacePolicy, WorkspacePolicyError,
-    WorkspaceRetention,
+    FailureCode, IdentifierError, JobId, JobKind, JobMode, JobState, MAX_ADMISSION_WAIT,
+    MAX_RECOGNIZER_THREADS, MediaProgress, OperationId, OperationStatus, PrepareStream,
+    ProbeTimeout, ProbeTimeoutKind, ProgressStage, ProgressUnit, ProgressUpdate,
+    PublicationGuarantee, RuntimeCapability, RuntimeDependency, RuntimeReadiness, SessionId,
+    SessionLifetime, SessionLifetimePolicy, SessionPhase, SourceId, StorageGeneration,
+    WorkspacePolicy, WorkspacePolicyError, WorkspaceRetention,
 };
 /// Transcript evidence values that appear in this API.
 pub use vsift_domain::{

@@ -297,6 +297,7 @@ async fn run(
             classify,
             progress: &NoProgress,
             publication: vsift_application::Publication::AtTheSeal,
+            stopwatch: &vsift_application::StoppedStopwatch,
         },
         &mut Unchanged,
     )
@@ -467,6 +468,113 @@ fn damaged_forged_or_future_job_records_fail_closed() -> TestResult {
     }
     fs::write(&path, original)?;
     assert!(store.job(&session_id()?, &job)?.is_some());
+    Ok(())
+}
+
+/// ADR 0033: a `prepare` job's record keeps its mode and only its mode, and
+/// its progress record reads back strictly, a damaged one as none.
+#[test]
+fn a_prepare_job_and_its_progress_record_read_back_strictly() -> TestResult {
+    use vsift_application::{JobProgressLog, PrepareProgress, StreamProgress};
+    use vsift_domain::{JobMode, MediaProgress, PrepareStream, ProgressStage, ProgressUpdate};
+
+    let fixture = Fixture::new()?;
+    let store = open_session(&fixture, StoredDurability::Ephemeral)?;
+    let session = session_id()?;
+    let spec = vsift_application::prepare_spec(&session, JobMode::Watched, None)?;
+    let job = spec.job_id.clone();
+    drop(store.open_or_create(&spec, now()?)?);
+    let view = store.job(&session, &job)?.ok_or("no view")?;
+    assert_eq!(
+        view.record.request,
+        JobRequest::Prepare {
+            mode: JobMode::Watched
+        }
+    );
+    assert_eq!(view.record.planned_chunks, None);
+
+    // A `prepare` record with a range, without a mode, or a retranscription
+    // with a mode, is damaged.
+    let path = job_path(&fixture, &job).join("job.json");
+    let original = fs::read_to_string(&path)?;
+    assert!(original.contains("\"request\":{\"range\":null,\"mode\":\"watched\"}"));
+    for (label, damaged) in [
+        (
+            "a range",
+            original.replace(
+                "\"range\":null",
+                "\"range\":{\"from_us\":0,\"to_us\":1000000}",
+            ),
+        ),
+        ("no mode", original.replace(",\"mode\":\"watched\"", "")),
+        (
+            "an unknown mode",
+            original.replace("\"watched\"", "\"queued\""),
+        ),
+        (
+            "another kind",
+            original.replace("\"kind\":\"prepare\"", "\"kind\":\"retranscribe\""),
+        ),
+    ] {
+        fs::write(&path, &damaged)?;
+        assert_eq!(
+            store.job(&session, &job).err(),
+            Some(JobStoreError::Storage(
+                SessionStorageError::IntegrityFailure
+            )),
+            "{label}"
+        );
+    }
+    fs::write(&path, original)?;
+
+    assert_eq!(store.read_progress(&session, &job)?, None);
+    let progress = PrepareProgress {
+        streams: vec![StreamProgress {
+            stream: PrepareStream::Transcript,
+            job: Some(JobId::parse("job_0123456789abcdef0123456789abcdef")?),
+            update: Some(ProgressUpdate {
+                stage: ProgressStage::RecognisingSpeech,
+                completed: 3,
+                total: Some(10),
+                media: Some(MediaProgress {
+                    from_us: 0,
+                    done_until_us: 80 * SECOND,
+                    to_us: Some(250 * SECOND),
+                    elapsed_us: 40 * SECOND,
+                    fresh_media_us: 55 * SECOND,
+                    fresh_elapsed_us: 30 * SECOND,
+                    fresh_chunks: 2,
+                }),
+            }),
+        }],
+        recorded_at_unix_seconds: now()?,
+    };
+    store.record_progress(&session, &job, &progress)?;
+    assert_eq!(store.read_progress(&session, &job)?, Some(progress.clone()));
+    let record = job_path(&fixture, &job).join("progress.json");
+    let stored = fs::read_to_string(&record)?;
+    for (label, damaged) in [
+        ("truncated", stored[..stored.len() / 2].to_owned()),
+        ("unknown field", stored.replacen('{', "{\"extra\":1,", 1)),
+        (
+            "past its end",
+            stored.replace("\"done_until_us\":80000000", "\"done_until_us\":300000000"),
+        ),
+        (
+            "another format",
+            stored.replace("vsift.job_progress", "vsift.other"),
+        ),
+        (
+            "an unknown stream",
+            stored.replace("\"transcript\"", "\"visual\""),
+        ),
+    ] {
+        fs::write(&record, &damaged)?;
+        assert_eq!(store.read_progress(&session, &job)?, None, "{label}");
+    }
+    // Rewriting replaces it whole.
+    store.record_progress(&session, &job, &progress)?;
+    assert_eq!(store.read_progress(&session, &job)?, Some(progress));
     Ok(())
 }
 
