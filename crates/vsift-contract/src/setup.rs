@@ -168,6 +168,24 @@ impl SetupCheckResponse {
         }
     }
 
+    /// Sets, per dependency, whether managed installation can supply it here
+    /// (ADR 0032): a target's catalogue may offer only some core components,
+    /// so the host's availability is `unavailable_target` for a dependency
+    /// whose component it does not offer.
+    #[must_use]
+    pub fn with_managed_install_for<F>(mut self, availability: F) -> Self
+    where
+        F: Fn(RuntimeDependency) -> ManagedPlanAvailability,
+    {
+        for dependency in &mut self.dependencies {
+            if let Some(remediation) = dependency.remediation.as_mut() {
+                remediation.managed_install =
+                    availability(dependency.runtime_dependency).identifier();
+            }
+        }
+        self
+    }
+
     /// Sets what the check found about each optional component (the
     /// additive `optional_components` array, since `0.3.0`; empty until
     /// set). The engine lists every optional component of this release.
@@ -247,6 +265,8 @@ impl LocalAsrSetupResponse {
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 struct SetupCheckDependencyResponse {
+    #[serde(skip)]
+    runtime_dependency: RuntimeDependency,
     dependency: &'static str,
     capability: &'static str,
     status: &'static str,
@@ -285,6 +305,7 @@ impl SetupCheckDependencyResponse {
             DependencyState::Missing | DependencyState::TimedOut(_) => None,
         };
         Self {
+            runtime_dependency: status.dependency,
             dependency: status.dependency.identifier(),
             capability: status.dependency.capability().identifier(),
             status: status.state.identifier(),

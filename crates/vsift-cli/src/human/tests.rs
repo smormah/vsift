@@ -264,6 +264,7 @@ fn setup_check_text(
         },
         crate::setup::ManagedSetupFacts {
             availability: managed_install,
+            by_dependency: [managed_install; 3],
             updates: &[],
             optional: &[(
                 vsift::OptionalComponent::OnlineLinks,
@@ -315,6 +316,7 @@ fn a_superseded_managed_version_gets_a_marked_line_and_the_step() -> TestResult 
             local_asr,
             crate::setup::ManagedSetupFacts {
                 availability: ManagedPlanAvailability::Qualified,
+                by_dependency: [ManagedPlanAvailability::Qualified; 3],
                 updates: std::slice::from_ref(&update),
                 optional: &[(
                     vsift::OptionalComponent::OnlineLinks,
@@ -342,6 +344,7 @@ fn a_superseded_managed_version_gets_a_marked_line_and_the_step() -> TestResult 
         local_asr,
         crate::setup::ManagedSetupFacts {
             availability: ManagedPlanAvailability::Qualified,
+            by_dependency: [ManagedPlanAvailability::Qualified; 3],
             updates: &[],
             optional: &[(
                 vsift::OptionalComponent::OnlineLinks,

@@ -416,6 +416,13 @@ vsift setup check                                  # each tool now reports [mana
 If a download fails, section 9 lists each reason. VSift also falls back to section 5.2
 whenever it cannot install safely.
 
+### 5.1b Windows x64 (since `0.3.0`)
+
+`vsift setup plan` and `vsift setup install` work the same way on Windows x64, with the managed folder under
+`%LOCALAPPDATA%\vsift\managed-v1`. For now they install FFmpeg and FFprobe (BtbN's LGPL build of the same version
+as on Ubuntu, a 147 MB zip) and, when a whisper.cpp already works on the machine, the speech model; whisper.cpp
+itself is still yours to install or register (section 5.2) until VSift's own Windows build of it joins the plan.
+
 ### 5.1a Optional components (since `0.3.0`)
 
 Some capabilities need an extra tool that local investigation does not: they are **optional components**, named

@@ -2746,6 +2746,11 @@ come with their stories.
   with `name`, `status` (`installed` with `components` and their versions, `not_installed` when it is offered here
   and not every part is installed, `unavailable`), `next_step` and `add_command` (on the desktop profile, when not
   installed). It never changes `status`, the local-video readiness.
+- **Catalogues per target (ADR 0032):** Windows x86-64 has a catalogue (FFmpeg and FFprobe, and the model) beside
+  Ubuntu 24.04 x86-64's; a target's catalogue may offer only some core components. A dependency whose component
+  it does not offer is `manual_selection_required` in the plan, and its `setup check` remediation's
+  `managed_install` is `unavailable_target` while the other dependencies' say `catalogue_accepted`; the model is
+  planned only where a whisper.cpp can smoke it.
 - **Archive formats:** a plan action's `format` gains `zip` (read by the bounded zip reader: stored or deflated
   entries, no Zip64, no links, no comments) and `tar_bz2` (one bzip2 stream).
 - **Values that may grow (D3, the maintainer's decision of 2026-10-21).** The catalogue-content fields may gain
