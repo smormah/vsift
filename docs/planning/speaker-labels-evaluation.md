@@ -267,7 +267,8 @@ managed-install story),
 typed refusal and a remediation, about two hours if an 8 GB machine allows (section 6.4: it does), (6) labels
 provisional ("S2, by voice"), the user's verified names the only identity, and the accuracy statement naming the
 similar-voice case, (7) one more public-domain recording of two or three people for the test-media release, and the
-maintainer listens to confirm RM06's reference and the new one (RM11, added and scored on 2026-10-21, section 6.2).
+maintainer listens to confirm RM06's reference and the new one (RM11, added and scored on 2026-10-21, section 6.2), with
+[the listening sheet](speaker-listening-sheet.md).
 The options as they were put:
 
 1. **The engine.** sherpa-onnx + TitaNet small (recommended), polyvoice, or neither for `0.3.0` (speaker labels move

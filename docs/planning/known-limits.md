@@ -5097,7 +5097,7 @@ that week.**
 - **Impact: medium by the rubric:** the accuracy statement leans on this evidence, and real meetings are more varied than it.
 - **Why:** the real-media set was chosen for transcription and screens; RM06 and RM11 are its only conversations of a few people, both NASA space-to-ground links.
 - **Mitigation:** the labelling marks a segment "no confident speaker" when no one voice holds it, and every label is provisional.
-- **Next step (the maintainer's decision of 2026-10-21):** the maintainer listens to RM06 and RM11 to confirm their references (RM11 joined the test-media release on 2026-10-21 and was scored the same day); a recording that is not a space-to-ground link (a meeting in one room, crosstalk) is still missing.
+- **Next step (the maintainer's decision of 2026-10-21):** the maintainer listens to RM06 and RM11 to confirm their references with [the listening sheet](speaker-listening-sheet.md) (twelve spot checks, about ten minutes; RM11 joined the test-media release on 2026-10-21 and was scored the same day); a recording that is not a space-to-ground link (a meeting in one room, crosstalk) is still missing.
 - **Owner:** `0.3.0` (speaker labels). **Issue:** [#108](https://github.com/smormah/vsift/issues/108). **Status:** open. **Review:** pending.
 
 ### L-207
