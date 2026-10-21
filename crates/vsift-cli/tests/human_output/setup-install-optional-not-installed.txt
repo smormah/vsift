@@ -1,0 +1,15 @@
+VSift setup install
+Catalogue: ubuntu-24.04-x86_64-2026-10-21-r4
+Source: publisher
+[already_current] ffmpeg_ffprobe fixture-ffmpeg-ffprobe
+[already_current] whisper_cli fixture-whisper-cli
+[already_current] whisper_model fixture-whisper-model
+Core: ready
+[failed] js_runtime_deno deno-2.9.7-x86_64-linux-gnu: download proxy_auth, DOWNLOAD_FAILED
+[failed] yt_dlp yt-dlp-2026.08.19-linux-x86_64: blocked
+Optional component online_links: not_installed
+  The optional online links component was not installed: js_runtime_deno failed (proxy_auth) because the network's proxy asked for credentials. VSift is ready for local videos; only the optional online links component failed. Ask whoever runs the network to allow the download, then run the same setup install again: it keeps what is installed and retries what is not. Without network access, put the plan's files in one folder and pass it with --artifact-dir.
+Next: VSift is ready for local videos: every core component is installed and selected. An optional component was not installed (optional_groups says which and why); local investigation is not affected.
+
+Status: partial (the warnings below say what is missing)
+Warning: optional_component_not_installed: VSift is ready for local videos, but an optional component was not installed; data.optional_groups says which and why.

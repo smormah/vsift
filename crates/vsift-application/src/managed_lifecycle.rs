@@ -30,7 +30,10 @@ use crate::StageRetentionReason;
 /// and the one selected before it (ADR 0023 §3 step 6).
 pub const RETAINED_MANAGED_VERSIONS: usize = 2;
 
-/// Every managed component, in the order installation and listings use.
+/// Every core managed component, in the order installation and listings
+/// use. A listing always names these; an optional component
+/// ([`ManagedComponent::is_optional`]) is listed after them only when the
+/// store holds something of it (#409).
 pub const MANAGED_COMPONENTS: [ManagedComponent; 3] = [
     ManagedComponent::MediaTools,
     ManagedComponent::WhisperCli,
@@ -249,8 +252,9 @@ impl ComponentInventory {
 /// Everything the private managed store holds.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ManagedInventory {
-    /// Every managed component, in [`MANAGED_COMPONENTS`] order, also those
-    /// with nothing installed.
+    /// Every core managed component, in [`MANAGED_COMPONENTS`] order, also
+    /// those with nothing installed, then each optional component the store
+    /// holds a version or a selection of, in [`ManagedComponent::ALL`] order.
     pub components: Vec<ComponentInventory>,
     /// Abandoned stages a sweep would remove.
     pub stale_stages: usize,
@@ -291,6 +295,40 @@ impl ManagedInventory {
         self.components
             .iter()
             .find(|inventory| inventory.component == component)
+    }
+
+    /// The inventory of `component`, added in [`ManagedComponent::ALL`]
+    /// order when the store holds the first thing of an optional one.
+    pub fn component_mut(&mut self, component: ManagedComponent) -> &mut ComponentInventory {
+        let found = self
+            .components
+            .iter()
+            .position(|inventory| inventory.component == component);
+        let position = if let Some(position) = found {
+            position
+        } else {
+            let rank = |candidate: ManagedComponent| {
+                ManagedComponent::ALL
+                    .iter()
+                    .position(|known| *known == candidate)
+                    .unwrap_or(usize::MAX)
+            };
+            let position = self
+                .components
+                .iter()
+                .position(|inventory| rank(inventory.component) > rank(component))
+                .unwrap_or(self.components.len());
+            self.components.insert(
+                position,
+                ComponentInventory {
+                    component,
+                    selection: ManagedSelection::None,
+                    versions: Vec::new(),
+                },
+            );
+            position
+        };
+        &mut self.components[position]
     }
 }
 

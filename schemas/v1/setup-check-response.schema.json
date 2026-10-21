@@ -110,12 +110,49 @@
         "additionalProperties": false,
         "required": ["component", "selected_version", "reviewed_version", "reason", "next_step"],
         "properties": {
-          "component": { "enum": ["ffmpeg_ffprobe", "whisper_cli", "whisper_model"] },
+          "component": { "enum": ["ffmpeg_ffprobe", "whisper_cli", "whisper_model", "js_runtime_deno", "yt_dlp"] },
           "selected_version": { "type": "string", "minLength": 1, "maxLength": 64 },
           "reviewed_version": { "type": "string", "minLength": 1, "maxLength": 64 },
           "reason": { "enum": ["security_fixes", "maintenance"] },
           "next_step": { "type": "string", "maxLength": 240 }
         }
+      }
+    },
+    "optional_components": {
+      "description": "Added in 0.3.0 (ADR 0032), absent from earlier builds: every optional component of this release, in plan order, apart from the local-video status above, which they never change. installed when every managed component of it is installed, selected and verified (components gives their versions); not_installed when it is offered on this host and not every part of it is installed (add_command is the vsift command that plans it, on the desktop profile; ask the operator first); unavailable when no managed version of it is offered on this host.",
+      "type": "array",
+      "maxItems": 8,
+      "items": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "status", "components", "next_step", "add_command"],
+      "properties": {
+        "name": { "description": "This list may gain values in a later release (ADR 0032, cli-v1.md): treat it as open, and skip a value you do not know.", "enum": ["online_links"] },
+        "status": { "enum": ["installed", "not_installed", "unavailable"] },
+        "components": {
+          "type": "array", "maxItems": 8,
+          "items": {
+            "type": "object", "additionalProperties": false, "required": ["component", "version"],
+            "properties": {
+              "component": { "description": "This list may gain values in a later release (ADR 0032, cli-v1.md): treat it as open, and skip a value you do not know.", "enum": ["js_runtime_deno", "yt_dlp"] },
+              "version": { "type": "string", "minLength": 1, "maxLength": 64 }
+            }
+          }
+        },
+        "next_step": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "add_command": {
+          "oneOf": [
+            { "type": "null" },
+            {
+              "type": "object", "additionalProperties": false, "required": ["executable", "arguments"],
+              "properties": {
+                "executable": { "const": "vsift" },
+                "arguments": { "type": "array", "minItems": 1, "maxItems": 16, "items": { "type": "string", "minLength": 1, "maxLength": 64 } }
+              }
+            }
+          ]
+        }
+      }
       }
     },
     "dependencies": {

@@ -8,12 +8,23 @@
 //! a caller always sees which components are installed. Every value is a
 //! closed identifier; nothing here carries a path, a URL a server chose,
 //! provider output or credentials.
+//!
+//! A plan that includes optional components (ADR 0032) adds three members:
+//! the core's status, the optional components' managed components in their
+//! own list, and `optional_groups`, one summary per optional component. They
+//! are absent otherwise, so the result of a plan without them is unchanged.
+//! A failure of an optional component never makes the result a failure: the
+//! core is ready, the result is `partial` with a warning, and its summary
+//! says what failed and that local investigation is not affected.
 
 use serde::Serialize;
 use vsift_application::{
-    ComponentInstallFailure, ComponentInstallOutcome, ComponentInstallReport, InstallFailureReason,
-    InstallStep, ManagedInstallReport, StageDisposal, StageSweep, VersionRemovalReport,
+    ComponentInstallFailure, ComponentInstallOutcome, ComponentInstallReport,
+    DownloadFailureReason, InstallFailureReason, InstallStep, ManagedInstallReport,
+    OptionalComponent, OptionalGroupOutcome, StageDisposal, StageSweep, VersionRemovalReport,
 };
+
+use crate::optional_component::optional_component_text;
 use vsift_domain::{ManagedComponent, SharedLibraryName};
 
 use crate::lifecycle::InstallCleanupResponse;
@@ -46,6 +57,29 @@ pub struct SetupInstallResponse {
     components: Vec<InstallComponentResponse>,
     cleanup: InstallCleanupResponse,
     next_step: &'static str,
+    /// `ready` or `failed`, only when the plan includes an optional
+    /// component.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    core: Option<&'static str>,
+    /// The optional components, after the core, only when the plan
+    /// includes one.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    optional_components: Vec<InstallComponentResponse>,
+    /// One summary per optional component the plan includes, only when it
+    /// includes one.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    optional_groups: Vec<OptionalGroupInstallResponse>,
+}
+
+/// One entry of a `setup install` result's `optional_groups`.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+struct OptionalGroupInstallResponse {
+    name: &'static str,
+    status: &'static str,
+    component: Option<&'static str>,
+    reason: Option<&'static str>,
+    failure_code: Option<&'static str>,
+    next_step: String,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
@@ -75,8 +109,12 @@ impl SetupInstallResponse {
         source: InstallSource,
         report: &ManagedInstallReport,
     ) -> Self {
+        let optional = !report.optional.is_empty();
         let next_step = match report.failure_code() {
-            None if report.components.is_empty() => {
+            None if optional && !report.optional_installed() => {
+                "VSift is ready for local videos: every core component is installed and selected. An optional component was not installed (optional_groups says which and why); local investigation is not affected."
+            }
+            None if report.components.is_empty() && !optional => {
                 "Nothing needed installing. Run setup check to see what each command will use."
             }
             None => {
@@ -92,7 +130,41 @@ impl SetupInstallResponse {
             components: report.components.iter().map(component_response).collect(),
             cleanup: InstallCleanupResponse::default(),
             next_step,
+            core: optional.then_some(if report.failure_code().is_none() {
+                "ready"
+            } else {
+                "failed"
+            }),
+            optional_components: report.optional.iter().map(component_response).collect(),
+            optional_groups: report
+                .optional_groups()
+                .iter()
+                .map(|outcome| optional_group_response(outcome, report.failure_code().is_none()))
+                .collect(),
         }
+    }
+
+    /// The warning a successful result carries when an optional component
+    /// was not installed, so the impression is never that `VSift` is broken;
+    /// `None` otherwise. Such a result is `partial` (ADR 0032).
+    #[must_use]
+    pub fn optional_warning(&self) -> Option<&'static str> {
+        (self.core == Some("ready")
+            && self
+                .optional_groups
+                .iter()
+                .any(|group| group.status == "not_installed"))
+        .then_some(OPTIONAL_COMPONENT_NOT_INSTALLED_WARNING)
+    }
+
+    /// Each optional component's name and advice, when the plan included
+    /// one, in plan order.
+    #[must_use]
+    pub fn optional_group_steps(&self) -> Vec<(&str, &str, &str)> {
+        self.optional_groups
+            .iter()
+            .map(|group| (group.name, group.status, group.next_step.as_str()))
+            .collect()
     }
 
     /// Adds what the stale-stage sweep before the transaction and the
@@ -137,6 +209,127 @@ fn component_response(report: &ComponentInstallReport) -> InstallComponentRespon
         stage,
         retention_reason,
     }
+}
+
+/// The envelope warning of a successful install in which an optional
+/// component was not installed (ADR 0032).
+pub const OPTIONAL_COMPONENT_NOT_INSTALLED_WARNING: &str = "optional_component_not_installed: VSift is ready for local videos, but an optional component was not installed; data.optional_groups says which and why.";
+
+fn optional_group_response(
+    outcome: &OptionalGroupOutcome,
+    core_ready: bool,
+) -> OptionalGroupInstallResponse {
+    let text = optional_component_text(outcome.group);
+    let name = outcome.group.identifier();
+    if outcome.installed {
+        return OptionalGroupInstallResponse {
+            name,
+            status: "installed",
+            component: None,
+            reason: None,
+            failure_code: None,
+            next_step: format!(
+                "The optional {} component is installed and selected.",
+                text.name_in_prose
+            ),
+        };
+    }
+    match outcome.failure {
+        Some((component, failure)) => OptionalGroupInstallResponse {
+            name,
+            status: "not_installed",
+            component: Some(component.identifier()),
+            reason: Some(failure.reason.identifier()),
+            failure_code: failure
+                .reason
+                .failure_code()
+                .map(vsift_domain::FailureCode::identifier),
+            next_step: optional_install_failure_summary(outcome.group, component, failure),
+        },
+        // The core failed, so the optional part was never attempted.
+        None => OptionalGroupInstallResponse {
+            name,
+            status: "not_installed",
+            component: None,
+            reason: Some(InstallFailureReason::Blocked.identifier()),
+            failure_code: None,
+            next_step: if core_ready {
+                format!(
+                    "The optional {} component was not installed; run the same setup install again.",
+                    text.name_in_prose
+                )
+            } else {
+                format!(
+                    "The optional {} component was not installed because a core component failed first; fix that failure and run the same setup install again.",
+                    text.name_in_prose
+                )
+            },
+        },
+    }
+}
+
+/// Fixed-prose advice for an optional component that was not installed
+/// (ADR 0032): what failed, that only that optional component failed, what
+/// to try. Typed identifiers only, never a path, URL, server text or proxy
+/// credentials.
+#[must_use]
+pub fn optional_install_failure_summary(
+    group: OptionalComponent,
+    component: ManagedComponent,
+    failure: ComponentInstallFailure,
+) -> String {
+    let what = optional_component_text(group).name_in_prose;
+    let component = component.identifier();
+    let reason = failure.reason.identifier();
+    let unaffected =
+        format!("VSift is ready for local videos; only the optional {what} component failed.");
+    let retry =
+        "run the same setup install again: it keeps what is installed and retries what is not.";
+    let (cause, what_to_try) = match failure.reason {
+        InstallFailureReason::Download(DownloadFailureReason::ProxyAuth) => (
+            "the network's proxy asked for credentials",
+            "Ask whoever runs the network to allow the download, then",
+        ),
+        InstallFailureReason::Download(
+            DownloadFailureReason::Offline | DownloadFailureReason::Tls,
+        ) => (
+            "the download was blocked or could not connect",
+            "Check the network, TLS inspection or proxy (or ask whoever runs it), then",
+        ),
+        InstallFailureReason::Download(_) => (
+            "the download did not complete",
+            "Check the network or proxy, then",
+        ),
+        InstallFailureReason::Smoke(_) => (
+            "it did not pass its compatibility check on this machine",
+            "If a retry fails the same way, report it; meanwhile",
+        ),
+        InstallFailureReason::ArtifactMissing | InstallFailureReason::ArtifactNotRegularFile => (
+            "the artifact folder has no regular file for it",
+            "Add the file under the name its source URL in the plan ends with, then",
+        ),
+        InstallFailureReason::DigestMismatch
+        | InstallFailureReason::SizeMismatch
+        | InstallFailureReason::ReviewMismatch => (
+            "its bytes differ from the reviewed file, so none of them was run",
+            "If a retry fails the same way, report it; otherwise",
+        ),
+        InstallFailureReason::Storage => (
+            "VSift could not write its private managed folder",
+            "Free disk space or fix the folder's permissions, then",
+        ),
+        InstallFailureReason::Cancelled => ("the installation was cancelled", "To continue,"),
+        InstallFailureReason::Blocked => ("the component before it failed", "Then"),
+    };
+    let offline = match failure.reason {
+        InstallFailureReason::Download(_) => {
+            " Without network access, put the plan's files in one folder and pass it with --artifact-dir."
+        }
+        _ => "",
+    };
+    format!(
+        "The optional {what} component was not installed: {component} failed ({reason}) because {cause}. {unaffected} {what_to_try} {retry}{offline}"
+    )
 }
 
 /// Remediation when another `setup install` holds the managed root.

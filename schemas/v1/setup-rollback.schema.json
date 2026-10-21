@@ -7,7 +7,7 @@
   "additionalProperties": false,
   "required": ["component", "status", "selected_version", "replaced_version", "next_step"],
   "properties": {
-    "component": { "enum": ["ffmpeg_ffprobe", "whisper_cli", "whisper_model"] },
+    "component": { "enum": ["ffmpeg_ffprobe", "whisper_cli", "whisper_model", "js_runtime_deno", "yt_dlp"] },
     "status": { "enum": ["rolled_back", "already_selected"] },
     "selected_version": {
       "type": "string",

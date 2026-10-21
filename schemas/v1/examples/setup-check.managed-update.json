@@ -16,5 +16,6 @@
   },
   "managed_updates": [
     { "component": "whisper_cli", "selected_version": "whisper.cpp-v1.9.2-ubuntu-x64", "reviewed_version": "whisper.cpp-v1.9.5-ubuntu-x64", "reason": "security_fixes", "next_step": "The reviewed build is now whisper.cpp-v1.9.5-ubuntu-x64, which carries security fixes the selected one lacks: review setup plan, then accept it with setup install, which installs and selects it." }
-  ]
+  ],
+  "optional_components": []
 }

@@ -476,6 +476,20 @@ fn publish_stand_in(base: &Base, component: ManagedComponent, version: &str) -> 
             vec![(ManagedRuntimeRole::SpeechModel, String::from("model.bin"))],
             false,
         ),
+        ManagedComponent::JsRuntimeDeno => (
+            vec![(
+                ManagedRuntimeRole::Deno,
+                executable_name(ManagedRuntimeRole::Deno)?,
+            )],
+            true,
+        ),
+        ManagedComponent::YtDlp => (
+            vec![(
+                ManagedRuntimeRole::YtDlp,
+                executable_name(ManagedRuntimeRole::YtDlp)?,
+            )],
+            true,
+        ),
     };
     let contents: &[u8] = if executables {
         b"#!/bin/sh\nexit 0\n"

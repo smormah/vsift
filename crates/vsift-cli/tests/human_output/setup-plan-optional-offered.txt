@@ -1,0 +1,23 @@
+VSift setup plan (read-only; nothing was changed)
+Profile: desktop
+Readiness: ready
+Target: ubuntu_24_04_x86_64
+Verification: executable_probe_and_reviewed_catalogue
+Managed installation: not_required
+Catalogue: ubuntu-24.04-x86_64-2026-10-21-r4 (no new plans after 2033-05-18T03:33:20Z)
+Plan digest: a05d2b02e5242fc486d49377776c45faa807a6449fe9b5446c586c135e034936
+
+Optional components:
+  Not included (optional, about 83 MB to download): yt-dlp (GPL-3.0-or-later, with the MIT-licensed Deno runtime) fetches videos from YouTube and other sites when you give VSift a link. Downloading is subject to each site's terms.
+  To add it: vsift setup plan --profile desktop --include online_links --json
+  Next: Not included. Ask the operator first; to add it, run vsift setup plan --profile desktop --include online_links --json and review that plan instead.
+Ask the operator: Before accepting this plan, tell the operator about each optional component in optional_components in one or two plain sentences (what it does, its licence, its download size, and its terms notice when it has one) and ask whether to include it. Include it only after a yes: run its add_command, review that plan and accept it instead. Never accept a plan that includes it without a yes, and never leave it unmentioned. Local investigation does not need it.
+
+ffmpeg: available, existing_executable_probe_only
+  Next: Keep this executable selected and verify provider compatibility before use.
+ffprobe: available, existing_executable_probe_only
+  Next: Keep this executable selected and verify provider compatibility before use.
+whisper: available, existing_executable_probe_only
+  Next: Keep this executable selected and verify provider compatibility before use.
+Local ASR model: configured_present_unverified, configured_model_probe_only
+  Next: Keep the configured model selected and validate it with provider preflight before use.

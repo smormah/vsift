@@ -21,6 +21,15 @@
 //! after it are reported `blocked`, never attempted. Nothing here decides
 //! how bytes are fetched, staged or published: infrastructure does, behind
 //! [`ManagedComponentInstaller`].
+//!
+//! A plan may also include optional components (ADR 0032), each a named
+//! group of managed components. They are installed after every core
+//! component, each group as a part of its own ([`install_managed_plan`]): a
+//! core failure blocks them, but a failure of one never blocks or fails a
+//! core component or another group, and the report keeps them apart, so a
+//! proxy that blocks an optional download leaves `VSift` ready for local
+//! videos and says so. The parts of one group that still need installing
+//! are staged and smoked together, like the recognizer and its model.
 
 use std::future::Future;
 
@@ -28,8 +37,8 @@ use vsift_domain::{FailureCode, ManagedComponent, ProgressStage, ProgressUpdate}
 
 use crate::{
     CompatibilitySmoke, CompatibilitySmokeFailure, CompatibilitySmokeFailureReason,
-    ManagedSetupAction, ProgressSink, SmokeStageOutcome, StageDisposal, StagedManagedComponent,
-    smoke_before_activation,
+    ManagedSetupAction, OptionalComponent, ProgressSink, SmokeStageOutcome, StageDisposal,
+    StagedManagedComponent, smoke_before_activation,
 };
 
 /// Why a download from the reviewed publisher did not complete
@@ -251,33 +260,110 @@ pub struct ComponentInstallReport {
 /// The outcome of one accepted plan's installation, in plan order.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ManagedInstallReport {
-    /// Every action of the plan, in order.
+    /// Every core action of the plan, in order.
     pub components: Vec<ComponentInstallReport>,
+    /// Every optional action of the plan, in order, after the core (#409);
+    /// empty when the plan includes none.
+    pub optional: Vec<ComponentInstallReport>,
 }
 
 impl ManagedInstallReport {
-    /// The first component failure that stopped the transaction, if any.
+    /// The first core component failure that stopped the transaction, if
+    /// any. An optional component's failure is never one.
     #[must_use]
     pub fn first_failure(&self) -> Option<(ManagedComponent, ComponentInstallFailure)> {
-        self.components
-            .iter()
-            .find_map(|report| match report.outcome {
+        first_failure_of(&self.components)
+    }
+
+    /// The public failure code of the transaction: that of its first core
+    /// failure, or `None` when every core component is active, whatever
+    /// happened to the optional part.
+    #[must_use]
+    pub fn failure_code(&self) -> Option<FailureCode> {
+        self.first_failure()
+            .and_then(|(_, failure)| failure.reason.failure_code())
+    }
+
+    /// The first optional component failure that stopped the optional
+    /// part, if any. When the core failed, the optional part is blocked and
+    /// this is `None`.
+    #[must_use]
+    pub fn optional_failure(&self) -> Option<(ManagedComponent, ComponentInstallFailure)> {
+        first_failure_of(&self.optional)
+    }
+
+    /// Each optional component the plan includes, in plan order, with the
+    /// first failure of its own part (`None` when every part of it is
+    /// active, or when the core failed first and it was never attempted).
+    #[must_use]
+    pub fn optional_groups(&self) -> Vec<OptionalGroupOutcome> {
+        let mut groups: Vec<OptionalGroupOutcome> = Vec::new();
+        for report in &self.optional {
+            let Some(group) = OptionalComponent::of(report.component) else {
+                continue;
+            };
+            let installed = matches!(
+                report.outcome,
+                ComponentInstallOutcome::Activated | ComponentInstallOutcome::AlreadyCurrent
+            );
+            let failure = match report.outcome {
                 ComponentInstallOutcome::Failed(failure)
                     if failure.reason != InstallFailureReason::Blocked =>
                 {
                     Some((report.component, failure))
                 }
                 _ => None,
-            })
+            };
+            match groups.iter_mut().find(|outcome| outcome.group == group) {
+                Some(outcome) => {
+                    outcome.installed &= installed;
+                    outcome.failure = outcome.failure.or(failure);
+                }
+                None => groups.push(OptionalGroupOutcome {
+                    group,
+                    installed,
+                    failure,
+                }),
+            }
+        }
+        groups
     }
 
-    /// The public failure code of the transaction: that of its first
-    /// failure, or `None` when every component is active.
+    /// Whether every optional component the plan includes is active.
     #[must_use]
-    pub fn failure_code(&self) -> Option<FailureCode> {
-        self.first_failure()
-            .and_then(|(_, failure)| failure.reason.failure_code())
+    pub fn optional_installed(&self) -> bool {
+        self.optional.iter().all(|report| {
+            matches!(
+                report.outcome,
+                ComponentInstallOutcome::Activated | ComponentInstallOutcome::AlreadyCurrent
+            )
+        })
     }
+}
+
+/// What happened to one optional component of a plan.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct OptionalGroupOutcome {
+    /// The optional component.
+    pub group: OptionalComponent,
+    /// Whether every managed component of it is active now.
+    pub installed: bool,
+    /// The first failure of its own part; `None` when it is installed or
+    /// was blocked by a core failure.
+    pub failure: Option<(ManagedComponent, ComponentInstallFailure)>,
+}
+
+fn first_failure_of(
+    reports: &[ComponentInstallReport],
+) -> Option<(ManagedComponent, ComponentInstallFailure)> {
+    reports.iter().find_map(|report| match report.outcome {
+        ComponentInstallOutcome::Failed(failure)
+            if failure.reason != InstallFailureReason::Blocked =>
+        {
+            Some((report.component, failure))
+        }
+        _ => None,
+    })
 }
 
 /// A component that could not be staged, and what cleanup did with the
@@ -342,7 +428,8 @@ pub trait ManagedComponentInstaller: Send + Sync {
     fn is_cancelled(&self) -> bool;
 }
 
-/// Installs the accepted plan's `actions` in their order and reports each.
+/// Installs the accepted plan's core `actions` in their order and reports
+/// each; the plan includes no optional component.
 ///
 /// The caller holds the install guard and has revalidated the plan against
 /// the current machine and the supplied acceptance digest immediately
@@ -356,7 +443,86 @@ pub async fn install_managed_components<I>(
 where
     I: ManagedComponentInstaller,
 {
-    let mut reports: Vec<ComponentInstallReport> = actions
+    install_managed_plan(installer, actions, &[], progress).await
+}
+
+/// Installs an accepted plan: every core action first, in order, then each
+/// optional component's actions as a part of its own (ADR 0032).
+///
+/// A core failure stops the transaction and reports every optional action
+/// `blocked`. An optional component's failure stops only its own part: the
+/// core and every other optional component are installed whatever happens
+/// to it, and [`ManagedInstallReport::failure_code`] stays that of the
+/// core. The components of one optional component that still need
+/// installing are staged, smoked and activated as one unit. `optional` is
+/// in plan order, each optional component's actions together; `progress`
+/// counts every action.
+pub async fn install_managed_plan<I>(
+    installer: &I,
+    core: &[ManagedSetupAction],
+    optional: &[ManagedSetupAction],
+    progress: &dyn ProgressSink,
+) -> ManagedInstallReport
+where
+    I: ManagedComponentInstaller,
+{
+    let mut core_reports = blocked_reports(core);
+    let mut optional_reports = blocked_reports(optional);
+    let total = u64::try_from(core.len().saturating_add(optional.len())).unwrap_or(u64::MAX);
+    let mut finished = 0_u64;
+    report_components(progress, finished, total);
+
+    let core_installed = install_part(
+        installer,
+        core,
+        &mut core_reports,
+        Grouping::Core,
+        progress,
+        &mut finished,
+        total,
+    )
+    .await;
+    if core_installed {
+        let mut start = 0;
+        while start < optional.len() {
+            let group = OptionalComponent::of(optional[start].artifact.component);
+            let length = optional[start..]
+                .iter()
+                .take_while(|action| OptionalComponent::of(action.artifact.component) == group)
+                .count();
+            let end = start + length.max(1);
+            install_part(
+                installer,
+                &optional[start..end],
+                &mut optional_reports[start..end],
+                Grouping::Together,
+                progress,
+                &mut finished,
+                total,
+            )
+            .await;
+            start = end;
+        }
+    }
+    ManagedInstallReport {
+        components: core_reports,
+        optional: optional_reports,
+    }
+}
+
+/// How a part's pending components are grouped into units.
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum Grouping {
+    /// The core: the recognizer and its model form one unit when both still
+    /// need installing; every other component is a unit of its own.
+    Core,
+    /// An optional component: every part of it that still needs installing
+    /// forms one unit, smoked together.
+    Together,
+}
+
+fn blocked_reports(actions: &[ManagedSetupAction]) -> Vec<ComponentInstallReport> {
+    actions
         .iter()
         .map(|action| ComponentInstallReport {
             component: action.artifact.component,
@@ -364,28 +530,33 @@ where
             outcome: ComponentInstallOutcome::Failed(ComponentInstallFailure::blocked()),
             stage: None,
         })
-        .collect();
-    let total = u64::try_from(actions.len()).unwrap_or(u64::MAX);
-    let mut finished = 0_u64;
-    report_components(progress, finished, total);
+        .collect()
+}
 
-    let mut stopped = false;
-    for unit in install_units(installer, actions, &mut reports) {
-        if stopped {
-            break;
-        }
-        finished = finished.saturating_add(count(&unit.already_current));
+/// Installs one part of a plan in order; `false` when a failure stopped it.
+async fn install_part<I: ManagedComponentInstaller>(
+    installer: &I,
+    actions: &[ManagedSetupAction],
+    reports: &mut [ComponentInstallReport],
+    grouping: Grouping,
+    progress: &dyn ProgressSink,
+    finished: &mut u64,
+    total: u64,
+) -> bool {
+    for unit in install_units(installer, actions, reports, grouping) {
+        *finished = finished.saturating_add(count(&unit.already_current));
         if unit.pending.is_empty() {
-            report_components(progress, finished, total);
+            report_components(progress, *finished, total);
             continue;
         }
-        stopped = !install_unit(installer, actions, &unit.pending, &mut reports).await;
-        finished = finished.saturating_add(count(&unit.pending));
-        report_components(progress, finished, total);
+        let unit_installed = install_unit(installer, actions, &unit.pending, reports).await;
+        *finished = finished.saturating_add(count(&unit.pending));
+        report_components(progress, *finished, total);
+        if !unit_installed {
+            return false;
+        }
     }
-    ManagedInstallReport {
-        components: reports,
-    }
+    true
 }
 
 /// Components installed together: the ones already current, and the ones
@@ -395,15 +566,13 @@ struct InstallUnit {
     pending: Vec<usize>,
 }
 
-/// Groups the plan into units, marking every already current component.
-///
-/// The whisper.cpp CLI and the model form one unit when both still need
-/// installing, because neither can be smoked without the other; every
-/// other component is a unit of its own.
+/// Groups a part into units, marking every already current component, as
+/// `grouping` says.
 fn install_units<I: ManagedComponentInstaller>(
     installer: &I,
     actions: &[ManagedSetupAction],
     reports: &mut [ComponentInstallReport],
+    grouping: Grouping,
 ) -> Vec<InstallUnit> {
     let mut pending = Vec::with_capacity(actions.len());
     let mut units: Vec<InstallUnit> = Vec::with_capacity(actions.len());
@@ -422,21 +591,28 @@ fn install_units<I: ManagedComponentInstaller>(
             });
         }
     }
-    let whisper = pending
-        .iter()
-        .position(|&index| actions[index].artifact.component == ManagedComponent::WhisperCli);
-    let model = pending
-        .iter()
-        .position(|&index| actions[index].artifact.component == ManagedComponent::WhisperModel);
-    if let (Some(whisper), Some(model)) = (whisper, model) {
-        let whisper_index = pending[whisper];
-        let model_index = pending[model];
-        units.retain(|unit| unit.pending != [model_index]);
-        if let Some(unit) = units
-            .iter_mut()
-            .find(|unit| unit.pending == [whisper_index])
-        {
-            unit.pending.push(model_index);
+    let joined: Vec<usize> = match grouping {
+        Grouping::Together => pending.clone(),
+        Grouping::Core => {
+            let pending_index = |component| {
+                pending
+                    .iter()
+                    .copied()
+                    .find(|&index| actions[index].artifact.component == component)
+            };
+            match (
+                pending_index(ManagedComponent::WhisperCli),
+                pending_index(ManagedComponent::WhisperModel),
+            ) {
+                (Some(whisper), Some(model)) => vec![whisper, model],
+                _ => Vec::new(),
+            }
+        }
+    };
+    if let [first, rest @ ..] = joined.as_slice() {
+        units.retain(|unit| !rest.iter().any(|index| unit.pending == [*index]));
+        if let Some(unit) = units.iter_mut().find(|unit| unit.pending == [*first]) {
+            unit.pending.extend_from_slice(rest);
         }
     }
     units

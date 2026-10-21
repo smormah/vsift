@@ -55,7 +55,7 @@
         "component": {
           "oneOf": [
             { "type": "null" },
-            { "enum": ["ffmpeg_ffprobe", "whisper_cli", "whisper_model"] }
+            { "enum": ["ffmpeg_ffprobe", "whisper_cli", "whisper_model", "js_runtime_deno", "yt_dlp"] }
           ]
         },
         "version": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/version_key" }] },
