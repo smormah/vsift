@@ -56,6 +56,20 @@ two-person call, and the maintainer chose on 2026-10-21:
 - **Absent engine:** a speaker request refuses with the existing `missing_capability` failure and
   a remediation naming `setup install`; every other command works as before.
 
+### The managed install and its notice
+
+Each managed system gets three components: the sherpa-onnx tool (with its ONNX Runtime library beside it) and the two
+model files, pinned by URL, size and SHA-256 (the models by the publishers' published digests: Hugging Face's LFS
+SHA-256 for the segmentation model at revision `9403a690`, sherpa-onnx's `checksum.txt` for `TitaNet` small; the engine
+archives by GitHub's release-asset digest, the only one published, a provenance gap the register states). The install
+ships this attribution notice with the models, which covers both of `TitaNet`'s licence statements:
+
+> Speaker diarization uses the pyannote segmentation 3.0 model (Copyright (c) 2022 CNRS, MIT licence; ONNX export by
+> the sherpa-onnx project) and NVIDIA's NeMo `TitaNet` small speaker-embedding model (Copyright NVIDIA Corporation;
+> distributed under the NeMo Toolkit's Apache License 2.0, and attributed here as the Creative Commons Attribution 4.0
+> licence of NVIDIA's `TitaNet` model card requires), run by sherpa-onnx (Apache License 2.0) with ONNX Runtime (MIT
+> licence).
+
 ### A speaker record per transcript revision, derived on every read
 
 - Transcript revisions stay immutable, and the stored transcript record keeps rejecting unknown
