@@ -75,6 +75,21 @@ pub trait RevisionStore: Send + Sync {
     /// root's whole capacity.
     fn admit(&self, weight: NonZeroU16) -> Result<Self::Permit, SessionStorageError>;
 
+    /// Takes `weight` units for queued work (ADR 0033 section 6), marked as
+    /// such for as long as the permit is held, so that an ordinary caller that
+    /// finds the capacity taken waits for it to be given back at the next chunk
+    /// boundary instead of being refused.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::admit`].
+    fn admit_queued(&self, weight: NonZeroU16) -> Result<Self::Permit, SessionStorageError>;
+
+    /// Whether an ordinary caller waits for capacity queued work holds: queued
+    /// work then gives its permit back at its next chunk boundary. A read
+    /// failure counts as nobody waiting.
+    fn others_waiting(&self) -> bool;
+
     /// The committed head of an open, unexpired session.
     ///
     /// # Errors
@@ -755,6 +770,9 @@ where
     let permit = admit_waiting(run, ports, admission_wait)
         .await
         .map_err(|error| (AttemptStop::failed(error), None))?;
+    // Queued work holds its permit in a gate that gives it back at a chunk
+    // boundary when someone waits for capacity (ADR 0033 section 6).
+    let gate = QueuedGate::holding(ports, run.transcribe.expected.threads, permit);
     let publisher = super::publish::Publisher::new(
         run,
         ports.store,
@@ -778,6 +796,8 @@ where
                 observer: &publisher,
                 stopwatch: ports.stopwatch,
                 seed: ports.seed,
+                gate: (run.admission == AdmissionWait::Queued)
+                    .then_some(&gate as &dyn crate::ChunkGate),
             },
             ports.audio,
             ports.recognizer,
@@ -785,7 +805,7 @@ where
         )
         .await
     };
-    drop(permit);
+    drop(gate);
     let (transcription, usage) = match recognised {
         Ok(result) => result,
         Err(failure) => {
@@ -869,7 +889,17 @@ where
     let mut polls = 0_u32;
     let mut this_wait = Duration::ZERO;
     loop {
-        match ports.store.admit(weight) {
+        let admitted = if run.admission == AdmissionWait::Queued {
+            // Queued work never takes capacity someone else waits for.
+            if ports.store.others_waiting() {
+                Err(SessionStorageError::Busy)
+            } else {
+                ports.store.admit_queued(weight)
+            }
+        } else {
+            ports.store.admit(weight)
+        };
+        match admitted {
             Ok(permit) => return Ok(permit),
             Err(SessionStorageError::Busy) => {}
             Err(other) => return Err(JobRunError::Storage(other)),
@@ -878,6 +908,7 @@ where
             AdmissionWait::Immediate => {
                 return Err(JobRunError::Storage(SessionStorageError::Busy));
             }
+            AdmissionWait::Queued => vsift_domain::QUEUED_ADMISSION_POLL,
             AdmissionWait::Bounded(_) => {
                 match run.admission.decide(polls, this_wait, ports.timer.jitter()) {
                     AdmissionDecision::PollAfter(delay) => delay,
@@ -907,6 +938,81 @@ where
                 .into(),
             });
         }
+    }
+}
+
+/// The permit of a queued run, given back at a chunk boundary while an ordinary
+/// caller waits for capacity and taken back once nobody does (ADR 0033 section
+/// 6). For every other run it only holds the permit.
+struct QueuedGate<'a, S: RevisionStore, T, C> {
+    store: &'a S,
+    timer: &'a T,
+    cancellation: &'a C,
+    weight: NonZeroU16,
+    permit: std::sync::Mutex<Option<S::Permit>>,
+}
+
+impl<'a, S: RevisionStore, T, C> QueuedGate<'a, S, T, C> {
+    fn holding<A, R>(
+        ports: &RetranscriptionPorts<'a, S, A, R, C, T>,
+        weight: NonZeroU16,
+        permit: S::Permit,
+    ) -> Self {
+        Self {
+            store: ports.store,
+            timer: ports.timer,
+            cancellation: ports.cancellation,
+            weight,
+            permit: std::sync::Mutex::new(Some(permit)),
+        }
+    }
+}
+
+impl<S, T, C> crate::ChunkGate for QueuedGate<'_, S, T, C>
+where
+    S: RevisionStore,
+    T: RetryTimer,
+    C: AsrCancellation,
+{
+    fn before_chunk(
+        &self,
+    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), AsrFailure>> + Send + '_>> {
+        Box::pin(async move {
+            if !self.store.others_waiting() {
+                return Ok(());
+            }
+            // Gives the capacity back: the waiting caller takes it now.
+            if let Ok(mut held) = self.permit.lock() {
+                held.take();
+            }
+            loop {
+                self.timer.sleep(vsift_domain::QUEUED_ADMISSION_POLL).await;
+                if self.cancellation.is_cancelled() {
+                    return Err(AsrFailure::at(
+                        AsrStage::AudioExtraction,
+                        AsrFailureReason::Cancelled,
+                    ));
+                }
+                if self.store.others_waiting() {
+                    continue;
+                }
+                match self.store.admit_queued(self.weight) {
+                    Ok(permit) => {
+                        if let Ok(mut held) = self.permit.lock() {
+                            *held = Some(permit);
+                        }
+                        return Ok(());
+                    }
+                    Err(SessionStorageError::Busy) => {}
+                    Err(_) => {
+                        return Err(AsrFailure::at(
+                            AsrStage::AudioExtraction,
+                            AsrFailureReason::Busy,
+                        ));
+                    }
+                }
+            }
+        })
     }
 }
 

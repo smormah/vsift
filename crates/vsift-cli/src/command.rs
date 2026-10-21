@@ -1199,8 +1199,9 @@ pub(crate) struct JobStartArguments {
     /// Session to prepare (a `ses_` identity).
     pub session: SessionId,
     /// quick runs in the foreground and answers when done; watched runs in
-    /// the background and answers at once. Defaults by the recording's
-    /// length: quick under ten minutes, watched from ten minutes on.
+    /// the background and answers at once; queued waits its turn in the
+    /// root's queue in the background. Defaults by the recording's length:
+    /// quick under ten minutes, watched from ten minutes on.
     #[arg(long, value_enum)]
     pub mode: Option<JobModeArgument>,
     /// The window to transcribe first: its start and end in microseconds of
@@ -1247,6 +1248,10 @@ pub(crate) enum JobModeArgument {
     Quick,
     /// In the background: the command answers once a runner holds the job.
     Watched,
+    /// In the root's queue, after the jobs queued before it, one at a time at
+    /// the whole capacity, giving way at every chunk to anyone who waits: for
+    /// several recordings, or when there is no rush.
+    Queued,
 }
 
 impl From<JobModeArgument> for vsift::JobMode {
@@ -1254,6 +1259,7 @@ impl From<JobModeArgument> for vsift::JobMode {
         match value {
             JobModeArgument::Quick => Self::Quick,
             JobModeArgument::Watched => Self::Watched,
+            JobModeArgument::Queued => Self::Queued,
         }
     }
 }

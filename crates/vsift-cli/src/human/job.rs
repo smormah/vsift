@@ -159,6 +159,16 @@ fn push_job(text: &mut TerminalText, heading: &'static str, job: &RecoverableJob
     if let Some(mode) = &job.request.mode {
         text.push_fixed("Mode: ").push_value(mode).end_line();
     }
+    if let Some(position) = job.queue_position {
+        text.push_fixed("Queue position: ")
+            .push_unsigned(position)
+            .push_fixed(if position == 0 {
+                " (next to run)"
+            } else {
+                " (jobs queued before it run first)"
+            })
+            .end_line();
+    }
     if let Some(first) = job.request.first {
         text.push_fixed("First window: ");
         push_range(text, first);

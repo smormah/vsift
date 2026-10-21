@@ -54,6 +54,7 @@ pub struct JobStatusReport {
     mode: Option<JobMode>,
     first: Option<TimeRange>,
     streams: Vec<StreamStatus>,
+    queue_position: Option<usize>,
 }
 
 /// Where one stream of a `prepare` job is (ADR 0033 section 5), as
@@ -180,6 +181,7 @@ impl JobStatusReport {
             mode: record.request.mode(),
             first: record.request.first(),
             streams: Vec::new(),
+            queue_position: None,
         }
     }
 
@@ -194,6 +196,13 @@ impl JobStatusReport {
     #[must_use]
     pub const fn first(&self) -> Option<TimeRange> {
         self.first
+    }
+
+    /// Where a queued `prepare` job that has not started stands in the root's
+    /// queue: 0 for the next to run (ADR 0033 section 6).
+    #[must_use]
+    pub const fn queue_position(&self) -> Option<usize> {
+        self.queue_position
     }
 
     /// Where each started stream of a `prepare` job is; empty for every
@@ -505,6 +514,13 @@ impl Engine {
         if kind == JobKind::Prepare {
             let prepare = (report.state(), report.live());
             report.streams = stream_statuses(&store, &session, job, prepare, now)?;
+            // A queued job that has not started says where it stands (ADR 0033
+            // section 6).
+            if report.mode == Some(JobMode::Queued)
+                && matches!(report.state, JobState::Queued | JobState::Interrupted)
+            {
+                report.queue_position = crate::prepare::queue_position(&store, job);
+            }
         }
         Ok(report)
     }
@@ -589,6 +605,13 @@ impl Engine {
             }
         }
         let outcome = cancel_job(&store, &session, job, now)?;
+        // A cancelled queued job leaves the root's queue.
+        if matches!(
+            outcome,
+            CancelOutcome::Cancelled | CancelOutcome::AlreadyEnded(JobState::Cancelled)
+        ) {
+            store.dequeue_job(job);
+        }
         // A job no process runs is cancelled here, so its open revision, if it
         // published one, is sealed as stopped here too (ADR 0033, D1); a live
         // owner seals its own when it sees the request. A session busy now

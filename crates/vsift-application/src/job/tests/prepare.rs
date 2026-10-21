@@ -53,6 +53,8 @@ struct Scripted {
     ran: Mutex<Vec<PrepareStream>>,
     cancelled: Mutex<Vec<JobId>>,
     first_seen: Mutex<Vec<Option<vsift_domain::TimeRange>>>,
+    /// How the wait for the job's turn ends (at once and well by default).
+    wait: Mutex<Option<Result<(), StreamStop>>>,
 }
 
 impl Scripted {
@@ -63,6 +65,7 @@ impl Scripted {
             ran: Mutex::default(),
             cancelled: Mutex::default(),
             first_seen: Mutex::default(),
+            wait: Mutex::default(),
         }
     }
 
@@ -110,6 +113,19 @@ impl PrepareStreams for Scripted {
                 .unwrap_or(Err(StreamStop::Failed { failure: None }))
                 .map(StreamEnd::Committed),
         })
+    }
+
+    fn before_start(
+        &self,
+        _mode: JobMode,
+    ) -> impl std::future::Future<Output = Result<(), StreamStop>> + Send {
+        std::future::ready(
+            self.wait
+                .lock()
+                .ok()
+                .and_then(|mut wait| wait.take())
+                .unwrap_or(Ok(())),
+        )
     }
 
     fn cancel(&self, job: &JobId) -> impl std::future::Future<Output = ()> + Send {
@@ -314,5 +330,46 @@ async fn a_first_window_runs_first_and_the_whole_transcript_is_recorded() -> Tes
             .iter()
             .all(|seen| *seen == Some(window))
     );
+    Ok(())
+}
+
+/// ADR 0033 section 6: a queued job stays queued while it waits its turn; a
+/// cancellation then cancels it, and a stopped runner leaves it queued for the
+/// next runner, which starts it once its turn comes.
+#[tokio::test]
+async fn a_queued_job_waits_queued_and_a_cancel_while_waiting_cancels_it() -> TestResult {
+    let store = MemoryStore::default();
+    let job = queued(&store, JobMode::Queued)?;
+    let stopped = Scripted {
+        wait: Mutex::new(Some(Err(StreamStop::Interrupted {
+            job: None,
+            failure: None,
+        }))),
+        ..Scripted::ending(Ok(commit()?))
+    };
+    let outcome = run_prepare(&store, &session()?, &job, &FixedClock, &stopped).await?;
+    assert!(matches!(
+        outcome,
+        PrepareOutcome::Stopped(StreamStop::Interrupted { .. })
+    ));
+    assert_eq!(stopped.ran(), [] as [PrepareStream; 0]);
+    assert_eq!(state(&store, &job)?, JobState::Queued);
+    let record = store.job(&session()?, &job)?.ok_or("no job")?.record;
+    assert_eq!(record.attempt, 0, "a wait is no attempt");
+
+    let cancelled = Scripted {
+        wait: Mutex::new(Some(Err(StreamStop::Cancelled))),
+        ..Scripted::ending(Ok(commit()?))
+    };
+    let outcome = run_prepare(&store, &session()?, &job, &FixedClock, &cancelled).await?;
+    assert_eq!(outcome, PrepareOutcome::Stopped(StreamStop::Cancelled));
+    assert_eq!(state(&store, &job)?, JobState::Cancelled);
+
+    // Its turn comes: the next job runs its streams.
+    let store = MemoryStore::default();
+    let job = queued(&store, JobMode::Queued)?;
+    let turn = Scripted::ending(Ok(commit()?));
+    let outcome = run_prepare(&store, &session()?, &job, &FixedClock, &turn).await?;
+    assert_eq!(outcome, PrepareOutcome::Succeeded(commit()?));
     Ok(())
 }
