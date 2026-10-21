@@ -34,14 +34,14 @@ pub use asr::{
     AsrChunkOutcome, AsrChunkRecord, AsrDecodingProfile, AsrModel, AsrModelProfile, AsrProvider,
     AsrProviderBuild, AsrRun, AsrRunParts, AsrSegmentDraft, ChunkPlan, ChunkPlanError,
     ChunkSegments, ChunkTime, DigestError, EarlierTextRule, MAX_CHUNK_WINDOW_MICROS,
-    MAX_PLANNED_CHUNKS, MAX_PROVIDER_SEGMENTS, MAX_PROVIDER_TOKENS, MIN_RECOGNITION_MICROS,
-    MIN_RECOGNITION_SAMPLES, MIN_SEGMENTS_FOR_REJECTION_RATIO, MergedSegment, MergedTranscript,
-    PROVIDER_END_TOLERANCE_MICROS, PlannedChunk, ProviderChunkOutput, ProviderOutputError,
-    ProviderSegment, ProviderToken, ProviderTokenKind, ReviewedAsrModel,
-    SEAM_COVERAGE_TOLERANCE_MICROS, SPEECH_SAMPLE_RATE, Sha256Hex,
-    UNUSABLE_CHUNK_SHARE_DENOMINATOR, ValidatedChunk, decoded_audio_range,
+    MAX_EARLY_AUDIO_MICROS, MAX_PLANNED_CHUNKS, MAX_PROVIDER_SEGMENTS, MAX_PROVIDER_TOKENS,
+    MIN_RECOGNITION_MICROS, MIN_RECOGNITION_SAMPLES, MIN_SEGMENTS_FOR_REJECTION_RATIO,
+    MergedSegment, MergedTranscript, PROVIDER_END_TOLERANCE_MICROS, PlannedChunk,
+    ProviderChunkOutput, ProviderOutputError, ProviderSegment, ProviderToken, ProviderTokenKind,
+    ReviewedAsrModel, SEAM_COVERAGE_TOLERANCE_MICROS, SPEECH_SAMPLE_RATE, SettledTranscript,
+    Sha256Hex, UNUSABLE_CHUNK_SHARE_DENOMINATOR, ValidatedChunk, decoded_audio_range,
     is_below_recognition_floor, is_silent_pcm, merge_chunks, plan_chunks, rounds_to_no_pcm_sample,
-    unusable_chunks_end_the_run, validate_chunk_output,
+    settled_merge, unusable_chunks_end_the_run, validate_chunk_output,
 };
 pub use checkpoint::{CheckpointOutcome, ChunkCheckpoint, RecognitionKey};
 pub use evidence::{
