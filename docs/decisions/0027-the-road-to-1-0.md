@@ -19,8 +19,8 @@ R1 (packets P15 to P20, which add OCR, speaker labels, a managed catalogue, stit
 operated worker plane) only on the maintainer's word, with no date for `1.0.0`. Three facts made
 that order wrong.
 
-1. **VSift is not alone.** Other tools already let a coding agent investigate a video. The one the
-   maintainer chose as the reference is talkthrough-mcp (MIT, Python). Four capabilities that the
+1. **VSift is not alone.** Other tools already let a coding agent investigate a video. The maintainer
+   chose one of them as the reference (unnamed here: public documents name no other tools). Four capabilities that the
    maintainer wants VSift to match (on-screen text, speaker labels, links to online videos, and the
    time of day on results) are missing from VSift today. VSift's strengths (source-grounded
    evidence, exact frames and crops, honest coverage, a stable CLI contract, local-first operation)
