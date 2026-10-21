@@ -155,9 +155,6 @@ pub use setup::{
     DEFAULT_PROBE_TIMEOUT, EvaluatedSetupPlan, ExecutableSelections, SetupCheckReport,
     SetupCheckRequest, SetupPlanRequest,
 };
-pub use vsift_application::{
-    DiarizationRunError, MAX_DIARIZATION_MICROS, SpeakerLabelError,
-};
 pub use speakers::{
     DIARIZER_EXECUTABLE, DiarizerSelection, NameSpeakerRequest, SpeakersRange, SpeakersRequest,
     SpeakersView,
@@ -166,6 +163,7 @@ pub use transcripts::{TranscriptExcerpt, TranscriptQuery};
 pub use verification::{
     Cancellation, MediaToolSelection, MediaToolVerificationRequest, ModelSelection,
 };
+pub use vsift_application::{DiarizationRunError, MAX_DIARIZATION_MICROS, SpeakerLabelError};
 pub use worker::{MAX_CANDIDATE_CALLS, WorkOutcome, WorkRequestRun};
 pub use workspace::{WorkspaceInit, WorkspaceInitOutcome, WorkspaceInitRequest};
 
