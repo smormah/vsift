@@ -774,6 +774,7 @@ async fn a_retranscribe_step_with_an_unusable_chunk_is_partial_with_the_direct_c
             progress: ProgressObserver::none(),
             admission: AdmissionWait::Immediate,
             publication: vsift::RetranscribePublication::AtTheSeal,
+            share: vsift::RecognitionShare::Whole,
         })
         .await?;
     let direct = stated(direct.revision())?;

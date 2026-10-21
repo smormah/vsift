@@ -294,6 +294,7 @@ fn request(session: &SessionId, range: Option<(u64, u64)>) -> RetranscribeReques
         progress: ProgressObserver::none(),
         admission: vsift::AdmissionWait::Immediate,
         publication: vsift::RetranscribePublication::AtTheSeal,
+        share: vsift::RecognitionShare::Whole,
     }
 }
 

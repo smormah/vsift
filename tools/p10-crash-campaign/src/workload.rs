@@ -714,6 +714,7 @@ async fn retranscribe(
             classify: job_failure,
             progress: &vsift_application::NoProgress,
             publication: vsift_application::Publication::AtTheSeal,
+            stopwatch: &vsift_application::StoppedStopwatch,
         },
         &mut SourceUnchanged,
     )

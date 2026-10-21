@@ -335,6 +335,7 @@ pub(crate) async fn retranscribe(
             publication: vsift::RetranscribePublication::AsItGoes {
                 interval: vsift::PUBLICATION_INTERVAL,
             },
+            share: vsift::RecognitionShare::Whole,
         })
         .await?;
     let presented = retranscription(&outcome)?;

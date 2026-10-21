@@ -8,7 +8,7 @@ use std::{
     num::NonZeroU16,
     sync::{
         Arc, Mutex, MutexGuard,
-        atomic::{AtomicBool, AtomicUsize, Ordering},
+        atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering},
     },
     time::Duration,
 };
@@ -37,6 +37,8 @@ use crate::{
     SpeechRecognitionError, SpeechRecognizer, TranscribeRangeRequest, transcribe_range,
     transcribe_range_checkpointed,
 };
+
+mod prepare;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 type Built<T> = Result<T, Box<dyn std::error::Error>>;
@@ -895,15 +897,6 @@ struct Harness {
     as_it_goes: bool,
 }
 
-/// A stopwatch that never moves: with an interval of zero, every chunk is due.
-struct StoppedClock;
-
-impl crate::Stopwatch for StoppedClock {
-    fn elapsed(&self) -> Duration {
-        Duration::ZERO
-    }
-}
-
 /// A request resolved against the session's current head.
 struct Resolved {
     spec: JobSpec,
@@ -957,11 +950,12 @@ impl Harness {
         })
     }
 
-    fn publication(&self) -> crate::Publication<'static> {
+    /// With an interval of zero on a stopwatch that never moves, every chunk
+    /// is due.
+    fn publication(&self) -> crate::Publication {
         if self.as_it_goes {
             crate::Publication::AsItGoes {
                 interval: Duration::ZERO,
-                stopwatch: &StoppedClock,
             }
         } else {
             crate::Publication::AtTheSeal
@@ -1046,6 +1040,7 @@ impl Harness {
                 classify,
                 progress: &NoProgress,
                 publication: self.publication(),
+                stopwatch: &crate::StoppedStopwatch,
             },
             &mut guard,
         )
@@ -1210,6 +1205,7 @@ async fn a_cancel_after_published_parts_seals_a_stopped_revision() -> TestResult
             classify,
             progress: &NoProgress,
             publication: harness.publication(),
+            stopwatch: &crate::StoppedStopwatch,
         },
         &mut guard,
     )
@@ -1318,6 +1314,7 @@ async fn a_run_over_its_own_checkpoints_decodes_and_recognises_nothing() -> Test
         key: &resolved.spec.recognition_key,
         progress: &progress,
         observer: &crate::NoObserver,
+        stopwatch: &crate::StoppedStopwatch,
     };
     let every_chunk = [(0, Some(3)), (1, Some(3)), (2, Some(3)), (3, Some(3))];
     let never = Flag(Arc::new(AtomicBool::new(false)));
@@ -1346,6 +1343,78 @@ async fn a_run_over_its_own_checkpoints_decodes_and_recognises_nothing() -> Test
     Ok(())
 }
 
+/// A stopwatch that moves ten seconds every time it is read.
+#[derive(Default)]
+struct TickingStopwatch(AtomicU64);
+
+impl crate::Stopwatch for TickingStopwatch {
+    fn elapsed(&self) -> Duration {
+        Duration::from_secs(self.0.fetch_add(10, Ordering::SeqCst))
+    }
+}
+
+/// ADR 0033, D8: a run reports where its chunks reach in media time, and its
+/// speed counts only the chunks it recognised; chunks taken from checkpoints
+/// advance the position and leave the speed and the estimate alone.
+#[tokio::test]
+async fn progress_reports_media_time_and_a_speed_of_fresh_chunks_only() -> TestResult {
+    let harness = Harness::new()?;
+    let resolved = harness.resolve(None)?;
+    let (owner, _) = harness.store.open_or_create(&resolved.spec, NOW)?;
+    let request = TranscribeRangeRequest {
+        source_segment: &harness.source,
+        range: range(0, 70 * SECOND)?,
+        plan: ChunkPlan::R0,
+        audio_stream: 1,
+        expected: &harness.identity,
+    };
+    let progress = RecordedProgress::default();
+    let stopwatch = TickingStopwatch::default();
+    let scope = CheckpointScope {
+        checkpoints: &owner,
+        key: &resolved.spec.recognition_key,
+        progress: &progress,
+        observer: &crate::NoObserver,
+        stopwatch: &stopwatch,
+    };
+    let never = Flag(Arc::new(AtomicBool::new(false)));
+    let media = |progress: &RecordedProgress| -> Built<Vec<vsift_domain::MediaProgress>> {
+        let mut reports = progress.0.lock().map_err(|_| "progress lock poisoned")?;
+        Ok(reports
+            .drain(..)
+            .filter_map(|update| update.media)
+            .collect())
+    };
+    transcribe_range_checkpointed(request, scope, &harness.audio, &harness.recognizer, &never)
+        .await?;
+    let fresh = media(&progress)?;
+    // Before any chunk, then after each: the windows end at 30, 55 and 70 s.
+    let reached: Vec<u64> = fresh.iter().map(|media| media.done_until_us).collect();
+    assert_eq!(reached, [0, 30 * SECOND, 55 * SECOND, 70 * SECOND]);
+    let last = fresh.last().ok_or("no progress")?;
+    assert_eq!(last.to_us, Some(70 * SECOND));
+    assert_eq!(last.fresh_chunks, 3);
+    assert_eq!(last.fresh_media_us, 70 * SECOND);
+    assert!(last.fresh_elapsed_us > 0);
+    assert!(last.speed_millis().is_some());
+    assert_eq!(last.percent(), Some(100));
+    let after_two = fresh.get(2).ok_or("no second chunk")?;
+    assert_eq!(after_two.fresh_chunks, 2);
+    assert!(after_two.estimate_remaining_us().is_some());
+
+    // A second run over the same checkpoints recognises nothing: the position
+    // still reaches the end, and there is no speed to report.
+    transcribe_range_checkpointed(request, scope, &harness.audio, &harness.recognizer, &never)
+        .await?;
+    let reused = media(&progress)?;
+    let last = reused.last().ok_or("no progress")?;
+    assert_eq!(last.done_until_us, 70 * SECOND);
+    assert_eq!(last.fresh_chunks, 0);
+    assert_eq!(last.speed_millis(), None);
+    assert_eq!(last.estimate_remaining_us(), None);
+    Ok(())
+}
+
 /// S-08 at the use-case level: a checkpoint of another run, one whose audio
 /// cannot be the chunk's and one whose output the domain rejects are all
 /// removed and redone, never used.
@@ -1367,6 +1436,7 @@ async fn foreign_or_invalid_checkpoints_are_discarded_and_redone() -> TestResult
         key: &resolved.spec.recognition_key,
         progress: &NoProgress,
         observer: &crate::NoObserver,
+        stopwatch: &crate::StoppedStopwatch,
     };
     let (control, _) =
         transcribe_range_checkpointed(request, scope, &harness.audio, &harness.recognizer, &never)
@@ -1445,6 +1515,7 @@ async fn a_checkpoint_stored_for_a_window_under_the_floor_is_not_reused_as_speec
         key: &resolved.spec.recognition_key,
         progress: &NoProgress,
         observer: &crate::NoObserver,
+        stopwatch: &crate::StoppedStopwatch,
     };
     let chunks = vsift_domain::plan_chunks(harness.source.id(), request.range, ChunkPlan::R0)?;
     let [chunk] = chunks.as_slice() else {
@@ -1740,6 +1811,7 @@ impl Harness {
                 classify,
                 progress,
                 publication: crate::Publication::AtTheSeal,
+                stopwatch: &crate::StoppedStopwatch,
             },
             &mut guard,
         )
@@ -2049,6 +2121,7 @@ async fn a_range_cut_mid_speech_commits_its_overrunning_segment_cut_at_the_range
         key: &resolved.spec.recognition_key,
         progress: &NoProgress,
         observer: &crate::NoObserver,
+        stopwatch: &crate::StoppedStopwatch,
     };
     let never = Flag(Arc::new(AtomicBool::new(false)));
     let (fresh, _) =
@@ -2403,6 +2476,7 @@ async fn a_cancel_requested_during_the_run_wins_before_the_commit() -> TestResul
             classify,
             progress: &NoProgress,
             publication: crate::Publication::AtTheSeal,
+            stopwatch: &crate::StoppedStopwatch,
         },
         &mut guard,
     )

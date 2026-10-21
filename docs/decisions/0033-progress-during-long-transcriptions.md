@@ -171,11 +171,12 @@ tells agents: when the user names a moment, start with that window.
   by its explicit path, as `job resume <job> --json`, with the caller's global options, its standard
   streams connected to nothing and its working folder the executable's own (#469). No shell is used. On
   Unix it gets a process group of its own (`process_group(0)`), so a terminal's Ctrl-C and a kill of the
-  caller's group do not reach it. On Windows it starts with `DETACHED_PROCESS`, `CREATE_NEW_PROCESS_GROUP`
-  and `CREATE_NO_WINDOW`, and with `CREATE_BREAKAWAY_FROM_JOB` when the caller's job object allows it; the
-  answer says which. `job start` waits up to 10 s for the runner to hold the job's owner lock; if it does
+  caller's group do not reach it. On Windows it starts with `CREATE_NO_WINDOW` (a hidden console of its
+  own, which its providers share, rather than `DETACHED_PROCESS`, for the reason the process supervisor
+  gives) and `CREATE_NEW_PROCESS_GROUP`, and with `CREATE_BREAKAWAY_FROM_JOB` when the caller's job object
+  allows it; the answer says which (`detachment`). `job start` waits up to 10 s for the runner to hold the job's owner lock; if it does
   not, it kills the child, leaves the job resumable and says to run `job resume` in the foreground.
-- **No orphans, with bounds.** A watcher reads the job's cancel request every 0.5 s and cancels the run,
+- **No orphans, with bounds.** A watcher reads the job's cancel request every 0.25 s and cancels the run,
   and the process supervisor kills a running provider on cancellation, so `job cancel` stops the runner in
   about a second, not at the next chunk. `session close` asks every live job of the session to cancel,
   waits up to 10 s, then closes; a runner that missed it fails its next publication, sees the session
@@ -358,6 +359,69 @@ The background start, the status, the modes and the skill follow in the third.
 - **Not in this pull request:** the background runner, the status in seconds, the live line, the modes,
   the skill, the visual stream (sections 4 to 7); the crash campaign's workload still publishes at the
   seal only, and a workload with parts is added with the background runner.
+
+## Implementation notes: the third pull request (2026-10-21)
+
+The third pull request implements sections 5 and 6 for the transcript stream: `job start`, the `prepare`
+job, the background runner, the status in seconds, cancellation and `session close`, the live line, the
+quick and watched modes, D4 and the skill.
+
+- **Domain.** `JobKind::Prepare`; `JobMode` (`quick`, `watched`) with `QUICK_LIMIT_MICROS` (ten minutes)
+  and `for_duration` (quick under it, watched from it on and when the length is unknown); `PrepareStream`
+  (`transcript`); `leaving_one_free` (D4: the root's capacity less one, when that leaves one);
+  `MediaProgress` (where the finished chunks reach, the elapsed time, and what the fresh chunks advanced
+  and took) with `percent`, `speed_millis` and `estimate_remaining_us` (D8: at least
+  `ESTIMATE_MIN_FRESH_CHUNKS`, 2, and `ESTIMATE_MIN_FRESH_MICROS`, 20 s); `ProgressUpdate.media`.
+- **Application.** `JobRequest::Prepare { mode }` and its keys (`vsift.prepare-request.v1`,
+  `vsift.prepare-op.v1`: the session, the mode and the sealed base; `prepare_spec`); the `run_prepare` use
+  case over a `PrepareStreams` port: it takes the job over, reconciles it, starts it, runs each stream and
+  records the last stream's commit as its own (so a `prepare` job that died while committing is reconciled
+  from the manifest chain like any job), or how a stream stopped; a stream that stops while the job is
+  asked to cancel is cancelled too, so no open revision is left behind. `JobProgressLog`, the advisory
+  progress record a runner writes. The run's `Stopwatch` moved to the ports (`StoppedStopwatch` for hosts
+  that time nothing); `Publication` holds only its interval. `run_chunks` meters its chunks
+  (`Meter`): the clock starts once the plan is made, after any admission wait, and a chunk taken from a
+  checkpoint advances the position, not the speed.
+- **Infrastructure.** The `prepare` record (`request.mode`, no range, no planned chunks; version 1 of the
+  job record, decoded strictly); `progress.json` in the job's folder (`vsift.job_progress` version 1,
+  rewritten without synchronisation, read strictly, a damaged one as none); `launch_detached`, which starts
+  the runner as section 5 says and reports its `Detachment`.
+- **Engine.** `job_start` (the mode and its basis, the job created, taken up, restarted, found running, or
+  `done` when the newest revision is a succeeded `prepare` job's commit); `job_resume` of a `prepare` job
+  runs it through `EngineStreams`: its transcript is `retranscribe` of the whole source, published as it
+  goes and with `RecognitionShare::LeavingOneFree` in the watched mode, at the seal and whole in the quick
+  mode, watched for the `prepare` job's own cancellation, while a loop records the stream's progress once
+  a second. `job_status` adds the mode and the streams (the stream's job, its observed state, its figures
+  and how far its open revision is published); `job_cancel` of a `prepare` job cancels its stream's job;
+  `close_session` asks every live job of the session to cancel and waits up to `SESSION_CLOSE_JOB_WAIT`
+  (10 s). The prepare path's futures are boxed: unboxed, they overflowed the main-thread stack of a debug
+  build on Windows.
+- **CLI and contract.** `job start [--mode quick|watched]` (`job.start`, `job-start-data.schema.json`);
+  the runner's arguments are the CLI's (`job resume <job> --json`, `--session-root`,
+  `--host-isolation`), and it answers once the runner holds the job or has moved it on (within
+  `RUNNER_HANDSHAKE`, 10 s; otherwise the runner is ended and the call fails `DEADLINE_EXCEEDED`, or
+  `MISSING_CAPABILITY` when it could not start or ended first, naming the job and suggesting `job resume`).
+  `job-data` gains `request.mode` and `streams` with `$defs.media_progress`, which progress events reuse
+  (`media`). The live line is written by the task that owns the output, from the newest observation, at
+  most once a second, and cleared before the result. The top-level help's example names `job start`.
+- **Skill.** PREPARE starts the transcription with `job start` (a VSift before 0.3.0 refuses it, and the
+  skill falls back to `transcript retranscribe`); `resume.md` gains "A transcription in the background" (go
+  on at once, check `job status` between steps and report its progress, read the published part,
+  `--since`, never call it complete before `succeeded`), and a running `prepare` job is no longer a reason
+  to stop media work; `commands.md` classes `job start` `free` and allows the `--since` forms.
+- **Tests.** The estimate's thresholds and the modes' threshold (domain); the `prepare` job's identity,
+  commit, interruption and resume, cancellation of its stream and busy refusal, and the meter over fresh and
+  reused chunks (application); the `prepare` record and the progress record read strictly (storage); the
+  contract and its frozen examples (`job_start_contract`); through the binary, a watched `job start` whose
+  runner takes the job before the call answers and ends it failed without whisper.cpp, a restart, and a
+  quick one in the foreground (`job_cli_contract`); opt-in with `FFmpeg`, a watched job's progress and
+  published part read from another engine while it holds, and `session close` stopping it
+  (`engine_growth`).
+- **Not in this pull request.** `--first` (section 4) and the visual stream come with the fourth pull
+  request, whose `prepare` job has more than one step; the queued mode with the fifth. The crash
+  campaign's workload still publishes at the seal only; a workload with parts needs its verifier to accept
+  an open revision and is a follow-up. A runner whose session expires is not stopped at once: the expired
+  session refuses its parts and its seal, and it ends when its run does (L-220).
 
 ## Decisions for the maintainer
 

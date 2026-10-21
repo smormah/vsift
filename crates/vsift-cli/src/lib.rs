@@ -14,6 +14,7 @@ mod human;
 mod job;
 mod json_input;
 mod ocr;
+mod live_line;
 mod output;
 mod parse_failure;
 mod progress;
@@ -115,7 +116,10 @@ const fn is_long_running(command: &Command) -> bool {
         Command::Job(arguments) => {
             matches!(
                 arguments.command,
-                JobCommand::Resume(_) | JobCommand::Run(_) | JobCommand::Batch(_)
+                JobCommand::Resume(_)
+                    | JobCommand::Run(_)
+                    | JobCommand::Batch(_)
+                    | JobCommand::Start(_)
             )
         }
         // `setup install` downloads, verifies and smokes for minutes; an
@@ -256,6 +260,22 @@ where
             }
         }
         None => HostIsolation::ProcessOnly,
+    };
+    // A background runner of `job start` is started with the same operator
+    // options (ADR 0033).
+    let runner = job::RunnerOptions {
+        session_root: cli.session_root.clone(),
+        host_isolation: cli.host_isolation,
+    };
+    // The live progress line (ADR 0033): readable text on a terminal, and
+    // only in the real process, whose standard error is the terminal.
+    let line = if mode == OutputMode::Human
+        && interruption == Interruption::Trapped
+        && std::io::IsTerminal::is_terminal(&io::stderr())
+    {
+        live_line::LiveLine::Shown
+    } else {
+        live_line::LiveLine::Hidden
     };
     let engine = compose_engine(cli.session_root, isolation, ports);
     // One cancellation for the whole command; registered before any work
@@ -437,12 +457,9 @@ where
                     .await
                 }
                 TranscriptCommand::Retranscribe(arguments) => {
-                    let result = session::retranscribe(
-                        &engine,
-                        arguments,
-                        &cancellation,
-                        ProgressObserver::none(),
-                    )
+                    let result = live_line::with_live_line(&mut writer, line, |observer| {
+                        session::retranscribe(&engine, arguments, &cancellation, observer)
+                    })
                     .await;
                     write_session_result(&mut writer, mode, operation, result)
                 }
@@ -538,7 +555,34 @@ where
                     .await;
                 }
                 JobCommand::Resume(arguments) => {
-                    job::resume(&engine, arguments, &cancellation, ProgressObserver::none()).await
+                    live_line::with_live_line(&mut writer, line, |observer| {
+                        job::resume(&engine, arguments, &cancellation, observer)
+                    })
+                    .await
+                }
+                JobCommand::Start(arguments) if mode == OutputMode::JsonLines => {
+                    return progress::stream_with_progress(&mut writer, operation, |observer| {
+                        Box::pin(job::start(
+                            &engine,
+                            arguments,
+                            &runner,
+                            &cancellation,
+                            observer,
+                        ))
+                    })
+                    .await;
+                }
+                JobCommand::Start(arguments) => {
+                    live_line::with_live_line(&mut writer, line, |observer| {
+                        Box::pin(job::start(
+                            &engine,
+                            arguments,
+                            &runner,
+                            &cancellation,
+                            observer,
+                        ))
+                    })
+                    .await
                 }
                 JobCommand::Run(arguments) => {
                     let shutdown = shutdown.unwrap_or_else(|| {
