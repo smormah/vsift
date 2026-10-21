@@ -88,11 +88,12 @@ The operator often knows the start exactly. VSift read none of this before `0.3.
    - `ingest` and `session status` (and `renew`, `close`, `session list` items) gain
      `time_anchor`: `consistency`, the selected `source` and `confidence`,
      `recording_start`, and `anchors` (each with `source`, `confidence`, `media_time_us`
-     and `time`). `consistency` is `single` (one anchor, or none that can be compared),
-     `consistent` (every two that can be compared agree within two seconds, and at least
-     two can be) or `conflicting` (two disagree; clock times still come from the ladder's
-     first and a reader says they are disputed). Two anchors are compared by their instants
-     when both name one, else by their local times when both know one.
+     and `time`). `consistency` is `single` (one anchor, or no two that name an instant),
+     `consistent` (every two that name an instant agree within two seconds, and at least
+     two do) or `conflicting` (two disagree; clock times still come from the ladder's
+     first and a reader says they are disputed). Two anchors are compared only by their
+     instants. A local time whose zone is unknown is never compared, with another one or
+     with a zoned reading's local time (decision 9).
    - Every timestamped item gains `clock_time` (`source`, `confidence`, and `at` for a
      point, `start` and `end` for a range): transcript segments (full, brief and streamed),
      visual candidates (span and representative frame), frames and crops (the delivered
@@ -106,7 +107,8 @@ The operator often knows the start exactly. VSift read none of this before `0.3.
    adds anchors from clocks visible on screen, with their own `source` (for example
    `screen_clock`), a `media_time_us` other than 0 and their own confidence (a rollover
    gives second precision), as new entries of the same `anchors` list; cross-checks between
-   sources report through the same `consistency` member; cut or pause detection from drift
+   sources that name an instant report through the same `consistency` member (decision 9);
+   cut or pause detection from drift
    adds optional members (for example a per-anchor `drift_us`, a list of timeline segments
    and a per-item `clock_time.segment`) and may let `clock_time` come from the nearest
    anchor of the item's segment. Nothing in stage 1 assumes a single anchor or position 0:
@@ -117,6 +119,35 @@ The operator often knows the start exactly. VSift read none of this before `0.3.
    (`additionalProperties: false`); the agent reads them from the JSON. Adding them to the
    handoff and the skill's procedure is a trial-freeze change for the `0.3.0` cut, in one
    place, if the maintainer wants it.
+
+9. **A clock face is not an instant (maintainer, 2026-10-21; binding on stage 2).** Screen
+   shares in meetings span countries: the presenter's taskbar shows the presenter's own zone,
+   the recording's tags show the recorder's machine, and logs may print UTC. Three clocks in
+   one recording can disagree by whole hours and all be right.
+   - **Absolute times come only from zone-aware sources:**
+     - `--recorded-at` with an offset or `Z`;
+     - the file's UTC tags;
+     - on-screen timestamps that state their zone (`Z`, `+hh:mm`).
+   - **Each on-screen clock without a zone is a source of its own,** read as a local time
+     whose zone is unknown, and never converted to an instant silently.
+     - When an absolute source exists too, stage 2 reports an **offset observation** between
+       them, marked as an inference and never applied to clock times. For example: "this
+       clock runs −05:00 from the recording's UTC start".
+     - Only the user confirms a zone, with an option such as `--screen-zone <IANA zone>`
+       naming the clock source it applies to. A confirmed clock then becomes zone-aware,
+       with its own source and confidence.
+   - **The zone-independent parts of stage 2 are its core value:**
+     - cut and pause detection, from how each clock moves against video time;
+     - rollover precision within each clock's own timeline;
+     - several clocks tracked separately, where a difference in their rates is flagged and a
+       difference in their offsets is not.
+   - **Stage 1's JSON already fits:** every anchor keeps its own `source`, and `consistency`
+     compares absolute anchors only, never a local time whose zone is unknown.
+     - Stage 1's own sources can give such a time: a `--recorded-at` without an offset, or a
+       recording app's tag without one.
+     - Until the maintainer's decision, two such anchors, or one beside a zoned reading,
+       were compared by their local times; that was corrected with this decision and pinned
+       by the test `consistency_never_compares_a_local_time_whose_zone_is_unknown`.
 
 ## Consequences
 
@@ -132,7 +163,8 @@ The operator often knows the start exactly. VSift read none of this before `0.3.
 ## Verification
 
 - Domain: the grammar, offsets, leap years, round trips through Unix time, the ladder, the
-  plausibility window, consistency, shifting across midnight (`time_anchor` tests).
+  plausibility window, consistency (absolute anchors only, decision 9), shifting across
+  midnight (`time_anchor` tests).
 - Probe parsing of the two tags, recorder tag first, and an unreadable tag left out
   (`ffmpeg_media` tests); the fuzz target `ffprobe_metadata` with a new seed
   (`recorder-tags.json`) and an invariant on the tags.
