@@ -226,6 +226,7 @@ fn picture_response(
             record: results.record(),
             reused: results.reused(),
             files: &files,
+            time_anchors: results.session().time_anchors(),
         },
         lifecycle(results)?,
     )
@@ -241,6 +242,7 @@ fn picture_stream(results: &EvidenceResults) -> Result<FrameEvidenceStream, Comm
             record: results.record(),
             reused: results.reused(),
             files: &files,
+            time_anchors: results.session().time_anchors(),
         },
         lifecycle(results)?,
     )
@@ -296,6 +298,7 @@ pub(crate) async fn audio(
             record: results.record(),
             reused: results.reused(),
             files: &files,
+            time_anchors: results.session().time_anchors(),
         },
         lifecycle(&results)?,
     )
@@ -316,6 +319,7 @@ pub(crate) async fn audio_stream(
             record: results.record(),
             reused: results.reused(),
             files: &files,
+            time_anchors: results.session().time_anchors(),
         },
         lifecycle(&results)?,
     )

@@ -43,6 +43,11 @@ Current-state handoff, rewritten in every change; history: git, `CHANGELOG.md`, 
   - **Left in step 2:** the managed-install work's `ocr-runner-v0.1.0` release and catalogue entries from the per-platform inventory (`docs/planning/ocr-runner-build-and-catalogue.md` section 7; the file list goes through the coordinator). The trial freeze is rewritten at the merge rebase (`v030-rules.md`); until then `the_committed_freezes_still_hold` fails on this branch by design.
   - **Decided:** the maintainer accepted ADR 0030's decisions 7 to 12 on 2026-10-21 (default period 10 s, the index, search's first-page member, `explicit` in the skill, L-203) and chose decision 13 (`ocr search`) the same day. The skill changed in one place (`references/commands.md`): the trial freeze is rewritten at the merge rebase (`v030-rules.md`); until then `the_committed_freezes_still_hold` fails on this branch by design.
 
+## `0.3.0` (planned cut about 2026-11-27; drafts until `main` opens after the `0.2.3` cut)
+
+- **Time anchoring, stage 1 (draft pull request, branch `v030/time-anchoring`; ADR 0029 proposed; L-210):** built and tested locally; **left:** the hosted run of `P07 local ASR` with the new real-tag step (`time_anchor_real_tags`), review, and the maintainer's calls on whether the skill and handoff carry clock times (a trial-freeze change at the cut) and whether bundles and worker requests carry anchors. Stage 2 (on-screen clocks) is a later story on OCR.
+- **Online links (#407, #409; ADR 0028):** decided on 2026-10-21 (the command `ingest --url`, port 443, the proxy rule of L-208, the caps, `SOURCE_FETCH_FAILED`, a managed yt-dlp 2026.08.19 and Deno 2.9.7 on Linux x64, stream-copy joining of separate audio and video); three draft pull requests in order: #407, #409's setup half, #409's acquisition half.
+
 ## What `0.2.2` holds (cycle 1, released 2026-10-18)
 
 - **Program:** #404 (`28cf6f8`), #362 (`14c02a5f`; `0.2.1` reads such a record as damaged), #361, #334, #394 (L-176 is the maintainer's float-parsing choice), #266 on Windows (`fs4` 1.1.0), #325 step 1, #264, #232, #370 (the refusal stays, R1), #371, #366 (128 KiB), #367 (`candidates --omit periodic`), #396 and #395, #419 (the cost itself is R1, L-170), #433, #436 (L-177).

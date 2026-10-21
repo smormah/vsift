@@ -839,6 +839,7 @@ impl Engine {
                     RequestDurability::Ephemeral => DurabilityRequirement::Ephemeral,
                 },
                 session_id: Some(session.clone()),
+                recorded_at: None,
             })
             .await?;
         Ok(StepDone {

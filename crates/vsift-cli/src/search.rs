@@ -46,6 +46,7 @@ fn presentation(results: &SearchResults) -> SearchPresentation<'_> {
         coverage: results.coverage(),
         screen_text: results.screen_text().map(screen_text_part),
         growth: crate::session::read_growth(results.growth()),
+        time_anchors: results.session().time_anchors(),
     }
 }
 

@@ -30,7 +30,7 @@ use vsift_contract::{
     decode_strict_json, decode_work_request, validate_steps,
 };
 use vsift_domain::{
-    ArtifactId, CropRect, CursorToken, EvidenceId, FrameDimensions, JobId, LanguageTag,
+    AnchorSource, ArtifactId, CropRect, CursorToken, EvidenceId, FrameDimensions, JobId, LanguageTag,
     ListingTail, MAX_CUE_TEXT_BYTES, MAX_LISTED_FRAMES, MAX_MANAGED_KEY_BYTES, MAX_RECORD_ITEMS,
     MAX_RECORD_SELECTIONS, MAX_SCREEN_TEXT_CHARS, MAX_SCREEN_TEXT_FRAMES, MAX_SCREEN_TEXT_LINES,
     MAX_SCREEN_TEXT_LINES_PER_FRAME, MAX_SEARCH_QUERY_BYTES, MAX_SEARCH_TERMS, MAX_TRANSCRIPT_CUES,
@@ -405,6 +405,9 @@ pub enum Violation {
     DuplicateStreamIndex,
     /// A video stream lacks dimensions or another stream has them.
     DimensionsMismatch,
+    /// Accepted metadata reports more recording-time tags than the probe
+    /// names, one twice, the operator's source, or one away from the start.
+    ClockTagsInvalid,
     /// An accepted cursor did not decode to itself after encoding.
     CursorRoundTripChanged,
     /// Accepted visual samples do not match the decoded frames: another
@@ -525,6 +528,7 @@ impl fmt::Display for Violation {
             Self::ZeroDuration => "accepted metadata has a zero duration",
             Self::DuplicateStreamIndex => "accepted metadata repeats a stream index",
             Self::DimensionsMismatch => "stream dimensions do not match the stream kind",
+            Self::ClockTagsInvalid => "accepted metadata reports impossible recording-time tags",
             Self::CursorRoundTripChanged => "an accepted cursor changed in a round trip",
             Self::VisualSamplesMismatch => "accepted visual samples do not match the frames",
             Self::VisualAnalysisInvalid => "the window analysis of accepted samples is invalid",
@@ -766,6 +770,19 @@ fn check_ffprobe_metadata(data: &[u8]) -> Result<(), Violation> {
             if (stream.kind == MediaStreamKind::Video) != stream.encoded_dimensions.is_some() {
                 return Err(Violation::DimensionsMismatch);
             }
+        }
+        // Time anchoring (ADR 0029): at most the two named tags, never the
+        // operator's source, each at the start of the timeline.
+        if description.clock_tags.len() > 2
+            || description.clock_tags.iter().any(|tag| {
+                tag.source() == AnchorSource::Operator || tag.media_time().as_micros() != 0
+            })
+            || description
+                .clock_tags
+                .windows(2)
+                .any(|pair| pair[0].source() == pair[1].source())
+        {
+            return Err(Violation::ClockTagsInvalid);
         }
     }
     Ok(())

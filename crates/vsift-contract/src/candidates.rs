@@ -23,11 +23,12 @@ use vsift_domain::{
     VISUAL_CELL_MICROS, VISUAL_FRAME_HEIGHT, VISUAL_FRAME_WIDTH, VISUAL_SAMPLE_INTERVAL_MICROS,
     VISUAL_WINDOW_MICROS, VisualCandidate, VisualCoverageGap, VisualIndex, VisualWindow,
 };
+use vsift_domain::{MediaTime, TimeAnchors};
 
 use crate::{
-    CommandName, CoverageResponse, EvidenceEventResponse, LifecycleResponse, MAX_COVERAGE_RANGES,
-    OperationResponse, ResultView, TerminalEventResponse, stream::EvidenceStream,
-    transcript::RangeData, view::BRIEF_VIEW,
+    ClockTimeData, CommandName, CoverageResponse, EvidenceEventResponse, LifecycleResponse,
+    MAX_COVERAGE_RANGES, OperationResponse, ResultView, TerminalEventResponse,
+    stream::EvidenceStream, transcript::RangeData, view::BRIEF_VIEW,
 };
 
 /// Envelope reason: more gaps exist than the envelope lists.
@@ -73,6 +74,9 @@ pub struct CandidatesPresentation<'a> {
     pub omission: CandidateOmission,
     /// How many candidates of the whole range the omission left out.
     pub omitted: usize,
+    /// The session's clock-time anchors, from which every item's
+    /// `clock_time` is derived (ADR 0029).
+    pub time_anchors: &'a TimeAnchors,
 }
 
 /// What a page left out, at the caller's request (`--omit`, #367): the
@@ -147,6 +151,10 @@ pub struct VisualCandidateData {
     sample_count: u16,
     displayed_dimensions: DimensionsData,
     analysis: AnalysisData,
+    /// The candidate's real-world clock times (ADR 0029): its span's ends and
+    /// its representative frame; absent when the session has no time anchor.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    clock_time: Option<ClockTimeData>,
 }
 
 /// What every candidate of one visual index repeats in the full view: the
@@ -237,7 +245,28 @@ impl VisualCandidateData {
             sample_count: candidate.sample_count(),
             displayed_dimensions: constants.displayed_dimensions,
             analysis: constants.analysis,
+            clock_time: None,
         }
+    }
+
+    /// Adds the clock times of the candidate's span and representative
+    /// frame from the session's anchors (ADR 0029); without an anchor the
+    /// item is unchanged.
+    #[must_use]
+    pub fn with_clock_time(mut self, anchors: &TimeAnchors) -> Self {
+        self.clock_time = TimeRange::new(
+            MediaTime::from_micros(self.span.from_us),
+            MediaTime::from_micros(self.span.to_us),
+        )
+        .ok()
+        .and_then(|span| {
+            ClockTimeData::range_with_point(
+                anchors,
+                span,
+                MediaTime::from_micros(self.representative_us),
+            )
+        });
+        self
     }
 }
 
@@ -263,6 +292,9 @@ pub(crate) struct BriefVisualCandidateData {
     #[serde(skip_serializing_if = "Option::is_none")]
     change: Option<ChangeData>,
     visual_hash: String,
+    /// As in the full item.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    clock_time: Option<ClockTimeData>,
 }
 
 impl From<&VisualCandidateData> for BriefVisualCandidateData {
@@ -275,6 +307,7 @@ impl From<&VisualCandidateData> for BriefVisualCandidateData {
             stability: full.stability,
             change: full.change,
             visual_hash: full.visual_hash.clone(),
+            clock_time: full.clock_time.clone(),
         }
     }
 }
@@ -395,6 +428,7 @@ impl CandidatesData {
                 .iter()
                 .map(|candidate| {
                     VisualCandidateData::new(page.index, page.source_segment_id, candidate)
+                        .with_clock_time(page.time_anchors)
                 })
                 .collect(),
             next_cursor: page.next_cursor.map(str::to_owned),
@@ -580,7 +614,8 @@ impl CandidatesEvidenceStream {
                 EvidenceEventResponse::visual_candidate(
                     sequence,
                     command,
-                    VisualCandidateData::new(page.index, page.source_segment_id, candidate),
+                    VisualCandidateData::new(page.index, page.source_segment_id, candidate)
+                        .with_clock_time(page.time_anchors),
                 )
             })
             .collect();

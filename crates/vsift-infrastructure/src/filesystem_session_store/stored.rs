@@ -108,6 +108,7 @@ impl StoredLifecycle {
             generation: StorageGeneration::from_value(generation),
             artifact_count: self.artifacts.len(),
             artifact_bytes,
+            time_anchors: super::time_anchors::decode_time_anchors(&self.time_anchors)?,
         })
     }
 }

@@ -13,9 +13,10 @@ use sha2::{Digest, Sha256};
 use vsift_domain::{
     Confidence, CursorError, CursorToken, MediaTime, PageLimit, ParsedTranscript, QueryDigest,
     SearchCoverage, SegmentOrigin, SessionId, SidecarIdentity, SourceId, SourceSegment,
-    SourceSegmentId, TimeRange, TranscriptImportError, TranscriptOffset, TranscriptProvenance,
-    TranscriptRevision, TranscriptRevisionError, TranscriptRevisionId, TranscriptRevisionParts,
-    TranscriptSegment, TranscriptSegmentId, TranscriptSegmentParts, align_imported_cues,
+    SourceSegmentId, TimeAnchor, TimeRange, TranscriptImportError, TranscriptOffset,
+    TranscriptProvenance, TranscriptRevision, TranscriptRevisionError, TranscriptRevisionId,
+    TranscriptRevisionParts, TranscriptSegment, TranscriptSegmentId, TranscriptSegmentParts,
+    align_imported_cues,
 };
 
 use crate::session::{SourcePathFault, SpecialFileKind};
@@ -121,16 +122,41 @@ impl fmt::Display for SourceProbeError {
 
 impl Error for SourceProbeError {}
 
-/// Port that reports the normalized duration of a held source snapshot.
-///
-/// The duration bounds which supplied cues can be cited: a cue beyond the
-/// end of the media cannot refer to anything in it.
-pub trait SourceDurationProbe<S>: Send + Sync {
-    /// Probes `source` and returns its positive normalized duration.
-    fn source_duration(
+/// What one probe of a held source snapshot reports to ingest.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ProbedSource {
+    /// The positive normalized duration. It bounds which supplied cues can
+    /// be cited: a cue beyond the end of the media cannot refer to anything
+    /// in it.
+    pub duration: MediaTime,
+    /// The container's recording-time tags that parsed, as anchors (time
+    /// anchoring, ADR 0029); not yet judged for plausibility.
+    pub clock_tags: Vec<TimeAnchor>,
+}
+
+/// Port that probes a held source snapshot once, through the restricted
+/// media adapter.
+pub trait SourceProbe<S>: Send + Sync {
+    /// Probes `source`: its duration and its recording-time tags.
+    fn probe_source(
         &self,
         source: &S,
-    ) -> impl Future<Output = Result<MediaTime, SourceProbeError>> + Send;
+    ) -> impl Future<Output = Result<ProbedSource, SourceProbeError>> + Send;
+}
+
+/// A probe for an ingest whose media tools are not set up: it never runs a
+/// provider and always answers [`SourceProbeError::Io`], so a plain ingest
+/// stores no container anchors and still succeeds.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct NoSourceProbe;
+
+impl<S: Sync> SourceProbe<S> for NoSourceProbe {
+    fn probe_source(
+        &self,
+        _source: &S,
+    ) -> impl Future<Output = Result<ProbedSource, SourceProbeError>> + Send {
+        std::future::ready(Err(SourceProbeError::Io))
+    }
 }
 
 /// Why an imported revision could not be built.

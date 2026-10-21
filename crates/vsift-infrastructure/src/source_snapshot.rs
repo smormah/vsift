@@ -535,12 +535,14 @@ impl ForegroundSessionPort for FilesystemSessionStore {
         operation_id: &OperationId,
         expected_generation: vsift_domain::StorageGeneration,
         now_unix_seconds: u64,
+        time_anchors: &vsift_domain::TimeAnchors,
     ) -> Result<vsift_domain::StorageGeneration, OpenSessionError> {
-        self.activate_source(
+        self.activate_anchored_source(
             snapshot,
             operation_id,
             expected_generation,
             now_unix_seconds,
+            time_anchors,
         )
         .map_err(OpenSessionError::Storage)
     }
@@ -551,6 +553,7 @@ impl ForegroundSessionPort for FilesystemSessionStore {
         operation_id: &OperationId,
         expected_generation: vsift_domain::StorageGeneration,
         now_unix_seconds: u64,
+        time_anchors: &vsift_domain::TimeAnchors,
         transcript: &vsift_domain::TranscriptRevision,
     ) -> Result<vsift_domain::StorageGeneration, OpenSessionError> {
         let record =
@@ -560,6 +563,7 @@ impl ForegroundSessionPort for FilesystemSessionStore {
             operation_id,
             expected_generation,
             now_unix_seconds,
+            time_anchors,
             vsift_domain::SessionArtifactKind::TranscriptRecord,
             &record,
         )

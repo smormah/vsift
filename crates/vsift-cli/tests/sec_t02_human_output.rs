@@ -206,6 +206,7 @@ async fn seed_session(root: &OwnedRoot, sidecar: &Path) -> Result<(), Box<dyn Er
         &OperationId::parse("op_5ec7020000000003")?,
         StorageGeneration::INITIAL,
         now,
+        &vsift_domain::TimeAnchors::none(),
         &revision,
     )?;
     Ok(())
