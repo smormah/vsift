@@ -5,8 +5,8 @@ use super::{
     text::{Placement, RenderedText, TerminalText, TooLarge},
     time::{push_range, push_span},
     view::{
-        Envelope, Markup, OcrSearch, Retranscription, Search, SearchScreenText, TranscriptCoverage,
-        TranscriptPage, TranscriptRevision, TranscriptSegment,
+        Envelope, Markup, OcrSearch, Retranscription, Search, SearchScreenText, Since,
+        TranscriptCoverage, TranscriptPage, TranscriptRevision, TranscriptSegment,
     },
 };
 
@@ -38,8 +38,28 @@ pub(super) fn page(envelope: &Envelope<TranscriptPage>) -> Result<RenderedText, 
         .end_line();
     push_segments(&mut text, &page.items, |_| None);
     push_next_page(&mut text, page.next_cursor.as_deref());
+    push_since(&mut text, page.since.as_ref());
     push_outcome(&mut text, envelope);
     text.finish()
+}
+
+/// Writes the token a reader follows a growing transcript with (ADR 0033), if
+/// the answer has one.
+fn push_since(text: &mut TerminalText, since: Option<&Since>) {
+    let Some(since) = since else {
+        return;
+    };
+    text.push_fixed("Revision state: ")
+        .push_value(&since.revision_state)
+        .push_fixed(if since.more {
+            " (more is published already)"
+        } else {
+            ""
+        })
+        .end_line();
+    text.push_fixed("What is published next: --since ")
+        .push_value(&since.token)
+        .end_line();
 }
 
 /// `transcript retranscribe`: the new revision and the job behind it.
@@ -142,6 +162,7 @@ pub(super) fn search(envelope: &Envelope<Search>) -> Result<RenderedText, TooLar
             .map(|hit| hit.tier.as_str())
     });
     push_next_page(&mut text, data.next_cursor.as_deref());
+    push_since(&mut text, data.since.as_ref());
     // A session `ocr` has not read says nothing here, so a reader who never uses
     // OCR sees the search as before; `ocr search` and `--json` state `not_run`.
     if let Some(screen_text) = data
@@ -272,6 +293,17 @@ fn push_coverage_ranges(
         "Transcribed without speech:",
         &coverage.no_speech_ranges,
     );
+    push_ranges(
+        text,
+        "Pending (the transcription is still running; it will be published there):",
+        &coverage.pending_ranges,
+    );
+    if let Some(cover) = &coverage.pending_covered_by {
+        text.push_fixed("Earlier text over the pending part: --revision ")
+            .push_value(&cover.revision_id)
+            .end_line();
+        push_ranges(text, "Held there by it:", &cover.ranges);
+    }
     if coverage.ranges_truncated {
         text.push_fixed("Range lists are cut at 100 each; use --json for the full coverage.")
             .end_line();

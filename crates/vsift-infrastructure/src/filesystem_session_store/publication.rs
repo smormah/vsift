@@ -267,6 +267,9 @@ pub(super) fn update_lifecycle(
             record.phase = StoredSessionPhase::Closed;
             Ok(Some(record))
         }
+        LifecycleUpdate::SealTranscript { artifact, now } => {
+            seal_transcript(current, artifact, now)
+        }
         LifecycleUpdate::AddArtifact { artifact, now } => {
             let mut record = current.ok_or(SessionStorageError::StateConflict)?;
             let lifetime = record.validated_lifetime()?;
@@ -274,6 +277,7 @@ pub(super) fn update_lifecycle(
                 return Err(SessionStorageError::StateConflict);
             }
             validate_artifact_record(&artifact)?;
+            refuse_another_record_while_open(&record, &artifact)?;
             if record.artifacts.len() >= MAX_SESSION_ARTIFACTS
                 || record
                     .artifacts
@@ -302,6 +306,47 @@ pub(super) fn update_lifecycle(
             now,
         } => add_evidence(current, artifacts, verified_identity, now).map(Some),
     }
+}
+
+/// While a revision is open (ADR 0033) only its own run adds to the
+/// transcript: another record is refused, and its seal goes through
+/// [`LifecycleUpdate::SealTranscript`].
+fn refuse_another_record_while_open(
+    record: &StoredLifecycle,
+    artifact: &StoredArtifact,
+) -> Result<(), SessionStorageError> {
+    if artifact.kind == StoredArtifactKind::TranscriptRecord
+        && record
+            .artifacts
+            .iter()
+            .any(|existing| existing.kind == StoredArtifactKind::TranscriptPart)
+    {
+        return Err(SessionStorageError::StateConflict);
+    }
+    Ok(())
+}
+
+/// Adds the transcript record that seals the open revision and retires every
+/// part of it (ADR 0033): only while the session holds parts, and then exactly
+/// as an added record is checked.
+fn seal_transcript(
+    current: Option<StoredLifecycle>,
+    artifact: StoredArtifact,
+    now: u64,
+) -> Result<Option<StoredLifecycle>, SessionStorageError> {
+    let mut record = current.ok_or(SessionStorageError::StateConflict)?;
+    if artifact.kind != StoredArtifactKind::TranscriptRecord
+        || !record
+            .artifacts
+            .iter()
+            .any(|existing| existing.kind == StoredArtifactKind::TranscriptPart)
+    {
+        return Err(SessionStorageError::StateConflict);
+    }
+    record
+        .artifacts
+        .retain(|existing| existing.kind != StoredArtifactKind::TranscriptPart);
+    update_lifecycle(Some(record), LifecycleUpdate::AddArtifact { artifact, now })
 }
 
 /// Adds one evidence call's artifacts and verified source identity.
@@ -370,7 +415,9 @@ pub(super) fn sub_budget_full(artifacts: &[StoredArtifact], kind: StoredArtifact
             .filter(|existing| existing.kind == of)
             .count()
     };
-    if kind == StoredArtifactKind::VisualIndexRecord {
+    if kind == StoredArtifactKind::TranscriptPart {
+        count(kind) >= crate::MAX_TRANSCRIPT_PARTS
+    } else if kind == StoredArtifactKind::VisualIndexRecord {
         count(kind) >= crate::MAX_VISUAL_INDEX_RECORDS
     } else if kind == StoredArtifactKind::ScreenTextIndexRecord {
         count(kind) >= crate::MAX_SCREEN_TEXT_INDEX_RECORDS

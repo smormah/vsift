@@ -48,6 +48,9 @@ pub struct SearchRequest {
     pub limit: Option<u16>,
     /// Opaque continuation token from the previous page of the same search.
     pub cursor: Option<String>,
+    /// A `since` token of an earlier answer (ADR 0033): search only what the
+    /// revision it follows published after it, in start order.
+    pub since: Option<String>,
 }
 
 /// One segment that matched, and how.
@@ -210,6 +213,7 @@ pub struct SearchResults {
     next_cursor: Option<String>,
     coverage: SearchCoverage,
     screen_text: Option<ScreenTextSearch>,
+    growth: crate::growth::ReadGrowth,
 }
 
 impl SearchResults {
@@ -261,6 +265,12 @@ impl SearchResults {
     pub const fn coverage(&self) -> &SearchCoverage {
         &self.coverage
     }
+
+    /// What the search of a growing transcript adds (ADR 0033).
+    #[must_use]
+    pub const fn growth(&self) -> &crate::growth::ReadGrowth {
+        &self.growth
+    }
 }
 
 impl Engine {
@@ -299,6 +309,9 @@ impl Engine {
         let (store, now) = self.existing_store()?;
         let store = store.ok_or(EngineError::SessionRoot(SessionRootError::Missing))?;
         let first_page = request.cursor.is_none();
+        if let Some(since) = &request.since {
+            return search_since(&store, &request, query, range, limit, since, now);
+        }
         let (revision, status) = match &request.revision {
             None => store
                 .read_transcript(&request.session, now)?
@@ -346,6 +359,15 @@ impl Engine {
         } else {
             None
         };
+        let growth = crate::growth::read_growth(
+            &store,
+            &request.session,
+            &revision,
+            &coverage,
+            None,
+            expires_at,
+            now,
+        )?;
         Ok(SearchResults {
             session: SessionSnapshot::observe(&status, now),
             revision,
@@ -355,6 +377,7 @@ impl Engine {
             next_cursor,
             coverage,
             screen_text,
+            growth,
         })
     }
 }
@@ -625,4 +648,72 @@ impl Engine {
             next_cursor,
         })
     }
+}
+
+/// A `search --since` (ADR 0033): the hits among what the token's revision
+/// published after it, in start order, at most `limit`.
+fn search_since(
+    store: &vsift_infrastructure::FilesystemSessionStore,
+    request: &SearchRequest,
+    query: SearchQuery,
+    range: Option<TimeRange>,
+    limit: PageLimit,
+    since: &str,
+    now: u64,
+) -> Result<SearchResults, EngineError> {
+    let (revision, status, watermark) =
+        crate::growth::since_target(store, &request.session, since, now)?;
+    if request
+        .revision
+        .as_ref()
+        .is_some_and(|wanted| wanted != revision.id())
+    {
+        return Err(EngineError::TranscriptQuery(
+            vsift_application::TranscriptQueryError::Cursor(vsift_domain::CursorError::WrongQuery),
+        ));
+    }
+    let expires_at = status
+        .lifetime()
+        .expires_at_unix_seconds()
+        .saturating_mul(MICROS_PER_SECOND);
+    let page = vsift_application::page_since(
+        &request.session,
+        &revision,
+        watermark,
+        range,
+        Some(&query),
+        limit,
+        expires_at,
+    )
+    .map_err(crate::growth::cursor_error)?;
+    let hits = page
+        .segments
+        .iter()
+        .filter_map(|(segment, tier)| {
+            tier.map(|tier| SearchResultHit {
+                segment: (*segment).clone(),
+                tier,
+            })
+        })
+        .collect();
+    let coverage = SearchCoverage::of(&revision, range);
+    let growth = crate::growth::read_growth(
+        store,
+        &request.session,
+        &revision,
+        &coverage,
+        Some((page.next.encode(), page.more)),
+        expires_at,
+        now,
+    )?;
+    Ok(SearchResults {
+        session: SessionSnapshot::observe(&status, now),
+        revision,
+        query,
+        range,
+        hits,
+        next_cursor: None,
+        coverage,
+        growth,
+    })
 }

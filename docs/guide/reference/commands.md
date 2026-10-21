@@ -1023,7 +1023,7 @@ Read timestamped text from a bounded range.
 
 Over a part of the range that was not transcribed the answer is partial and names the part: an empty page there is a gap, not a silence.
 
-Usage: vsift transcript get [OPTIONS] --from <FROM> --to <TO> <SESSION>
+Usage: vsift transcript get [OPTIONS] <SESSION>
 
 Arguments:
   <SESSION>
@@ -1031,7 +1031,7 @@ Arguments:
 
 Options:
       --from <FROM>
-          Inclusive source-timeline start in microseconds
+          Inclusive source-timeline start in microseconds; with --since it may be left out (from the start)
 
       --json
           Emit one versioned JSON terminal result
@@ -1043,7 +1043,7 @@ Options:
           - jsonl: One bounded JSON object per line
 
       --to <TO>
-          Exclusive source-timeline end in microseconds
+          Exclusive source-timeline end in microseconds; with --since it may be left out (to the end)
 
       --limit <LIMIT>
           Segments per page, 1 through 100; defaults to 20. The maximum stays 100; full segments are large, and --view brief makes a long page smaller
@@ -1064,7 +1064,10 @@ Options:
           [default: process-only]
 
       --revision <REVISION>
-          Revision to read (a `trv_` identity); defaults to the newest
+          Revision to read (a `trv_` identity); defaults to the newest, which may be a revision still being transcribed (open, so the answer is partial)
+
+      --since <TOKEN>
+          The since token of an earlier answer (`data.since.since_token`): read only what was published after it, in start order, in the revision that answer read. Use it to follow a transcription while it runs
 
       --view <VIEW>
           Which answer to give. `brief` keeps each segment's ids, times and `display_text` (and `carried_from` on a carried segment) and leaves out what the segments of a revision repeat; those members stay once in the revision block, which is the same in both views, so each segment is smaller. Read the full view for everything else
@@ -1180,7 +1183,10 @@ Options:
           Opaque continuation token returned by the previous page of the same search
 
       --revision <REVISION>
-          Revision to search (a `trv_` identity); defaults to the newest
+          Revision to search (a `trv_` identity); defaults to the newest, which may be a revision still being transcribed (open, so the answer is partial)
+
+      --since <TOKEN>
+          The since token of an earlier answer (`data.since.since_token`): search only what was published after it, in start order, in the revision that answer read
 
       --view <VIEW>
           Which answer to give. `brief` keeps each found segment's ids, times and `display_text` (and `carried_from` on a carried segment) and leaves out what the segments of a revision repeat; those members stay once in the revision block, which is the same in both views, so each segment is smaller. Read the full view for everything else

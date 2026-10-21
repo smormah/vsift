@@ -19,6 +19,7 @@ mod screen_text;
 mod screen_text_search;
 mod search;
 mod session;
+mod since;
 mod storage;
 mod transcript;
 mod verification;
@@ -26,9 +27,10 @@ mod visual;
 
 pub use asr::{
     AsrCancellation, AsrFailure, AsrFailureReason, AsrRevisionRequest, AsrRunFailure, AsrStage,
-    AsrTranscription, CheckpointScope, CheckpointUse, NoProgress, ProgressSink, RecognizerIdentity,
-    RevisionSplice, SpeechAudioError, SpeechAudioSource, SpeechPcm, SpeechRecognitionError,
-    SpeechRecognizer, TranscribeRangeRequest, UnusableChunk, UnusableChunks, build_asr_revision,
+    AsrTranscription, CheckpointScope, CheckpointUse, NoObserver, NoProgress, ProgressSink,
+    RecognizerIdentity, RevisionSplice, RunObserver, RunSoFar, SpeechAudioError, SpeechAudioSource,
+    SpeechPcm, SpeechRecognitionError, SpeechRecognizer, TranscribeRangeRequest, UnusableChunk,
+    UnusableChunks, build_asr_revision, build_open_asr_revision, build_stopped_asr_revision,
     retranscription_range, transcribe_range, transcribe_range_checkpointed,
 };
 pub use clock::{Clock, ClockError};
@@ -53,11 +55,13 @@ pub use job::{
     CommitGuard, CommitLedger, JobChange, JobCommit, JobKeyError, JobLiveness, JobOwner, JobRecord,
     JobReport, JobRequest, JobRunError, JobSpec, JobStore, JobStoreError, JobView,
     LIVE_JOB_RETRY_AFTER, MAX_JOB_OPERATION_IDS, MAX_RECORDED_FAILURES, MAX_SESSION_JOBS,
-    NoCheckpoints, OperationLookup, RecognitionScope, Reconciled, RequestDigest, Resumability,
-    RetranscriptionOutcome, RetranscriptionPorts, RetranscriptionRun, RetryTimer, RevisionStore,
-    SessionHead, cancel_job, commit_operation_id, job_id, job_status, lookup_operation,
-    observed_state, recognition_key, reconcile, resumable_request, retranscribe_operation_key,
-    retranscribe_request_digest, run_retranscription, worker_step_operation_id,
+    NoCheckpoints, OperationLookup, Publication, PublishedOpenRevision, PublishingStopped,
+    RecognitionScope, Reconciled, RequestDigest, Resumability, RetranscriptionOutcome,
+    RetranscriptionPorts, RetranscriptionRun, RetryTimer, RevisionStore, SessionHead, Stopwatch,
+    cancel_job, commit_operation_id, job_id, job_status, lookup_operation, observed_state,
+    part_operation_id, recognition_key, reconcile, resumable_request, retranscribe_operation_key,
+    retranscribe_request_digest, run_retranscription, seal_stopped, seal_stopped_now,
+    stop_operation_id, worker_step_operation_id,
 };
 pub use screen_text::{
     AnalysedPlanError, AnalysedWindowsPlan, DEFAULT_SCREEN_TEXT_FRAMES_PER_CALL, EngineLine,
@@ -74,6 +78,9 @@ pub use search::{SearchPage, SearchPageRequest, page_search, search_query_digest
 pub use session::{
     ForegroundSessionPort, NeverCancelled, OpenSession, OpenSessionError, OpenSessionOutcome,
     OpenSessionRequest, SourcePathFault, SpecialFileKind, StageCancellation, StagedSessionSource,
+};
+pub use since::{
+    SincePage, page_since, since_digest, since_revision, since_token, since_watermark,
 };
 
 pub use managed_lifecycle::{

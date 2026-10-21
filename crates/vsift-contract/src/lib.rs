@@ -113,6 +113,7 @@ mod delivered_path;
 mod envelope;
 mod events;
 mod evidence;
+mod growth;
 mod handoff;
 mod input;
 mod install;
@@ -140,6 +141,10 @@ pub use events::{
     LifecycleEventResponse, LifecycleKind, LifecycleReason, MAX_EVENT_LINE_BYTES,
     MAX_PROGRESS_EVENTS, PROGRESS_INTERVAL_MS, ProgressEventResponse, ProgressReport, Readiness,
     RequestEnd, RequestRef, ResultEventResponse,
+};
+pub use growth::{
+    PendingCover, ReadGrowth, SinceRead, TRANSCRIPTION_PENDING_REASON,
+    TRANSCRIPTION_PENDING_WARNING,
 };
 pub use input::{JsonLimits, StrictJsonError, decode_strict_json};
 pub use request::{

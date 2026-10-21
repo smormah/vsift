@@ -42,6 +42,7 @@
     "screen_text": {
       "description": "Since 0.3.0 (ADR 0030), on a first page only: the query's occurrences in on-screen text read by ocr, with each hit's frame, time and region, and how much of the searched range's plan is read. Absent on a page a cursor continues and from releases before 0.3.0. It never changes the envelope's status or coverage.",
       "$ref": "screen-text-data.schema.json#/$defs/search_part"
-    }
+    },
+    "since": { "$ref": "search-data.schema.json#/$defs/since" }
   }
 }

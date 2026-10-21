@@ -27,6 +27,7 @@ fn run(engine: &Engine, arguments: SearchArguments) -> Result<SearchResults, Com
         range,
         limit: arguments.limit,
         cursor: arguments.cursor,
+        since: arguments.since,
     })?)
 }
 
@@ -44,6 +45,7 @@ fn presentation(results: &SearchResults) -> SearchPresentation<'_> {
         next_cursor: results.next_cursor(),
         coverage: results.coverage(),
         screen_text: results.screen_text().map(screen_text_part),
+        growth: crate::session::read_growth(results.growth()),
     }
 }
 

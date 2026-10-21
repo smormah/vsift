@@ -50,9 +50,9 @@ use vsift_infrastructure::{
     MAX_TAR_STREAM_BYTES, MAX_XZ_ARCHIVE_BYTES, MountDevice, NetworkInterfaces, SourceContainer,
     VisualSamplingWindow, WhisperOutputLimits, classify_mountinfo, classify_os_release,
     classify_root_mount, decode_chunk_checkpoint, decode_evidence_record, decode_job_record,
-    decode_request_record, decode_screen_text_index_record, decode_transcript_record,
+    decode_request_record, decode_screen_text_index_record, decode_transcript_parts, decode_transcript_record,
     decode_visual_index_record, encode_chunk_checkpoint, encode_evidence_record, encode_job_record,
-    encode_request_record, encode_screen_text_index_record, encode_transcript_record,
+    encode_request_record, encode_screen_text_index_record, encode_transcript_part, encode_transcript_record,
     encode_visual_index_record, inspect_bzip2_tar_inventory, inspect_gzip_tar_inventory,
     inspect_tar_inventory, inspect_xz_tar_inventory, inspect_zip_inventory,
     inspect_zip_selected_files, parse_ashowinfo_start, parse_cgroup_limit, parse_cpu_max,
@@ -116,6 +116,11 @@ pub enum Target {
     /// The stored transcript record (versions 1 and 2) through
     /// `decode_transcript_record`, as `bundle validate` reads it.
     TranscriptRecord,
+    /// The parts of an open transcript revision (ADR 0033) through
+    /// `decode_transcript_parts`, as a session read rebuilds the revision. The
+    /// input is the parts in order, separated by the byte 0x1E (which a JSON
+    /// text cannot hold unescaped).
+    TranscriptPart,
     /// `FFprobe` metadata through `parse_ffprobe_metadata`, for both containers.
     FfprobeMetadata,
     /// The `transcript get --cursor` continuation token through `CursorToken::parse`.
@@ -236,7 +241,7 @@ pub enum Target {
 
 impl Target {
     /// Every target, in the order CI runs them.
-    pub const ALL: [Self; 35] = [
+    pub const ALL: [Self; 36] = [
         Self::TranscriptSrt,
         Self::TranscriptWebVtt,
         Self::WhisperFullJson,
@@ -272,6 +277,7 @@ impl Target {
         Self::Bzip2TarInventory,
         Self::OcrRunnerOutput,
         Self::ScreenTextIndexRecord,
+        Self::TranscriptPart,
     ];
 
     /// The target's `cargo fuzz` name, which is also its seed directory name.
@@ -313,6 +319,7 @@ impl Target {
             Self::Bzip2TarInventory => "bzip2_tar_inventory",
             Self::OcrRunnerOutput => "ocr_runner_output",
             Self::ScreenTextIndexRecord => "screen_text_index_record",
+            Self::TranscriptPart => "transcript_part",
         }
     }
 
@@ -358,6 +365,7 @@ impl Target {
             Self::Bzip2TarInventory => check_bzip2_tar_inventory(data),
             Self::OcrRunnerOutput => check_ocr_runner_output(data),
             Self::ScreenTextIndexRecord => check_screen_text_index_record(data),
+            Self::TranscriptPart => check_transcript_part(data),
         }
     }
 }
@@ -388,6 +396,8 @@ pub enum Violation {
     RecordNotReencodable,
     /// An accepted transcript record changed when encoded and decoded again.
     RecordRoundTripChanged,
+    /// Parts were read back as a revision that is not open (ADR 0033).
+    PartNotOpen,
     /// Accepted `FFprobe` metadata has a zero duration.
     ZeroDuration,
     /// Accepted `FFprobe` metadata repeats a stream index.
@@ -510,6 +520,7 @@ impl fmt::Display for Violation {
             Self::ValidatedSegmentOutOfBounds => "a validated segment is out of bounds",
             Self::RecordNotReencodable => "an accepted record could not be encoded again",
             Self::RecordRoundTripChanged => "an accepted record changed in a round trip",
+            Self::PartNotOpen => "parts were read back as a revision that is not open",
             Self::ZeroDuration => "accepted metadata has a zero duration",
             Self::DuplicateStreamIndex => "accepted metadata repeats a stream index",
             Self::DimensionsMismatch => "stream dimensions do not match the stream kind",
@@ -705,6 +716,33 @@ fn check_transcript_record(data: &[u8]) -> Result<(), Violation> {
         encode_transcript_record(&revision).map_err(|_| Violation::RecordNotReencodable)?;
     match decode_transcript_record(&encoded) {
         Ok(decoded) if decoded == revision => Ok(()),
+        _ => Err(Violation::RecordRoundTripChanged),
+    }
+}
+
+/// The separator of the parts in a [`Target::TranscriptPart`] input.
+pub const TRANSCRIPT_PART_SEPARATOR: u8 = 0x1e;
+
+fn check_transcript_part(data: &[u8]) -> Result<(), Violation> {
+    let parts: Vec<&[u8]> = data.split(|byte| *byte == TRANSCRIPT_PART_SEPARATOR).collect();
+    let Ok(open) = decode_transcript_parts(&parts) else {
+        return Ok(());
+    };
+    if open.revision.state() != vsift_domain::RevisionState::Open {
+        return Err(Violation::PartNotOpen);
+    }
+    // The revision the parts make is one an encoder writes as a single part
+    // and reads back unchanged.
+    let whole = encode_transcript_part(
+        &open.revision,
+        &open.job_id,
+        std::num::NonZeroU32::MIN,
+        0,
+        open.merge_rules,
+    )
+    .map_err(|_| Violation::RecordNotReencodable)?;
+    match decode_transcript_parts(&[whole]) {
+        Ok(read) if read.revision == open.revision && read.job_id == open.job_id => Ok(()),
         _ => Err(Violation::RecordRoundTripChanged),
     }
 }

@@ -401,6 +401,7 @@ fn run(
                 _ => FailureCode::Internal,
             },
             progress: &vsift_application::NoProgress,
+            publication: vsift_application::Publication::AtTheSeal,
         },
         &mut Unchanged,
     ))?;

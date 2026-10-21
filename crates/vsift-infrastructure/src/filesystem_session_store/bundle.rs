@@ -68,6 +68,15 @@ impl FilesystemSessionStore {
             .lifecycle
             .ok_or(SessionStorageError::StateConflict)?;
         let status = record.to_status(session_id.clone(), committed.manifest.generation)?;
+        // An open revision (ADR 0033) is still growing: a bundle holds only
+        // what is sealed, so it is retained once the revision is sealed.
+        if record
+            .artifacts
+            .iter()
+            .any(|artifact| artifact.kind == StoredArtifactKind::TranscriptPart)
+        {
+            return Err(SessionStorageError::StateConflict);
+        }
 
         let parent_path = output_path
             .parent()
@@ -271,6 +280,10 @@ impl FilesystemSessionStore {
                 // read, so a bundle validates only if its transcript could be
                 // cited.
                 read_transcript_artifact(&bundle, artifact, &source_id)?;
+            } else if artifact.kind == StoredArtifactKind::TranscriptPart {
+                // A bundle is retained only from a session whose revisions are
+                // sealed, so a part in one is damage.
+                return Err(SessionStorageError::IntegrityFailure);
             } else if artifact.kind == StoredArtifactKind::VisualIndexRecord {
                 // The same reasoning as for transcripts: every visual-index
                 // record is decoded with the window grid, coverage, policy

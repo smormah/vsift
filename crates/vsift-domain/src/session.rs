@@ -11,6 +11,12 @@ pub enum SessionPhase {
     Closed,
 }
 
+/// The most parts an open transcript revision has (ADR 0033, D7). A run
+/// publishes more seldom as it grows, so that it stays within the bound: a
+/// part needs at least `planned chunks / 64` more finished chunks than the one
+/// before.
+pub const MAX_TRANSCRIPT_PARTS: usize = 64;
+
 /// Artifact kinds a session publishes: P04 media evidence, P07 transcript
 /// records, P08 visual-index records, P09 evidence clips and records, and
 /// on-screen text index records (ADR 0030).
@@ -35,6 +41,11 @@ pub enum SessionArtifactKind {
     /// the OCR engine, stored as versioned JSON (ADR 0030). Each revision of an
     /// index is a superset of the one before it.
     ScreenTextIndexRecord,
+    /// One part of an open transcript revision: the segments a run published
+    /// since the part before, with the revision as it stands (ADR 0033). The
+    /// generation that seals the revision retires its parts; a sealed session
+    /// holds none.
+    TranscriptPart,
 }
 
 impl SessionArtifactKind {
@@ -49,6 +60,7 @@ impl SessionArtifactKind {
             Self::AudioWav => "audio_wav",
             Self::EvidenceRecord => "evidence_record",
             Self::ScreenTextIndexRecord => "screen_text_index_record",
+            Self::TranscriptPart => "transcript_part",
         }
     }
 
@@ -62,7 +74,8 @@ impl SessionArtifactKind {
             Self::TranscriptRecord
             | Self::VisualIndexRecord
             | Self::EvidenceRecord
-            | Self::ScreenTextIndexRecord => "json",
+            | Self::ScreenTextIndexRecord
+            | Self::TranscriptPart => "json",
         }
     }
 }

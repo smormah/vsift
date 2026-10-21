@@ -347,6 +347,7 @@ fn search(
         next_cursor: next_cursor.as_deref(),
         coverage: &page.coverage,
         screen_text: None,
+        growth: vsift_contract::ReadGrowth::default(),
     };
     let lifecycle = || LifecycleResponse::ephemeral(EXPIRES_AT.to_owned());
     let json = serde_json::to_value(search_response(&presentation, lifecycle())?)?;
