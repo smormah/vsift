@@ -1772,6 +1772,7 @@ Counts: 1 high, 54 medium, 117 low (172 entries).
 - **Evidence:** `plan_reads` and its tests in `crates/vsift-domain/src/screen_text/tests.rs`; the profile in `ScreenTextProfile`; the evaluation's scripts row in [`ocr-engine-evaluation.md`](ocr-engine-evaluation.md).
 - **Impact: medium by the rubric:** users meet both in normal use, and the coverage block counts planned frames, not the frames between them.
 - **Mitigation:** the contract and the result schemas say that an absent hit is not evidence that the text was not shown; `--period-us` down to 1 s reads more frames at a higher cost; `frame get` and `frame burst` show any moment.
+- **A gap found and closed in the same change (2026-10-21):** the first hosted end-to-end run showed that `search`, which refuses a session without a transcript, was the only way to find on-screen text, so text read off a silent recording could not be found. The maintainer chose a command of its own: `ocr search` pages every on-screen hit with or without a transcript (ADR 0030 decision 13; `ocr_search_finds_on_screen_text_without_a_transcript` through the binary, and the hosted run on a video without audio and one with a silent track).
 - **Next step:** more scripts with PP-OCR's other recognizers as further profiles (a new profile is a new index); measuring on real recordings how often a short-lived text falls between planned frames at the default period.
 - **Owner:** unscheduled. **Issue:** none yet. **Status:** open. **Review:** pending.
 

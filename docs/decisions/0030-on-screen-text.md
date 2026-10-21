@@ -3,7 +3,9 @@
 - Status: Accepted (the maintainer, 2026-10-21). Decisions 1 to 6 are the maintainer's, after the
   engine evaluation of [`ocr-engine-evaluation.md`](../planning/ocr-engine-evaluation.md);
   decisions 7 to 12 were proposed by the OCR work and accepted by the maintainer the same day as
-  recommended, the default period of 10 s included.
+  recommended, the default period of 10 s included; decision 13 (`ocr search`) is the maintainer's
+  choice of the same day, after the first hosted run showed that text read off a recording without a
+  transcript could not be searched.
 - Date: 2026-10-21
 - Release: 0.3.0
 - Refines: [ADR 0003](0003-external-runtime-adapters.md) (an engine is an external
@@ -150,6 +152,21 @@ A release before 0.3.0 does not know the new artifact kind and refuses a session
 holds one (`UNSUPPORTED_SCHEMA` or `INTEGRITY_FAILURE` from its strict reader); a session without
 on-screen text is unchanged. This is recorded as L-203 rather than avoided, because silently
 skipping an unknown artifact would break the strict-bundle rule.
+
+### 13. `ocr search`: on-screen text is searched with or without a transcript (maintainer)
+
+`search` refuses a session without a transcript (since P08), and its `screen_text` member rides on
+its first page, so text `ocr` read off a silent recording could not be found at all. Making search's
+transcript members optional would not be additive. So `vsift ocr search <session> --query <text>
+[--from --to] [--limit] [--cursor]` (`ocr-search-data.schema.json`) pages every on-screen
+occurrence of one session, with or without a transcript, by the same matching and grouping as
+decision 10, with `total_hits`, the `state` and coverage block, and a cursor of its own bound to the
+session, the index revision (a new `ocr` revision ends it), the range, the normalised query and the
+session's expiry. Its envelope is `partial` with a fixed warning while the state is not `complete`
+(reasons `not_run`, or `frames_pending`, `frames_failed`, `candidates_incomplete`). `search` and its
+first-page member stay as they are. The use case (`page_screen_text` in `vsift-application`) reads one
+session's index and nothing else, so the search across kept sessions planned for 0.3.0's second wave
+calls it once per session.
 
 ## Note of 2026-10-21: the `ort` dependency review (decision 1)
 

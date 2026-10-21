@@ -202,6 +202,11 @@ These files are the machine-readable public v1 boundary:
   bundle's `visual_index_record` artifact: one revision of the visual index with every
   recorded window and candidate, as stored (P08). A storage record, not a response:
   its `schema_version` is the integer record version `1`;
+- `ocr-search-data.schema.json` - the `data` member of a complete or partial `ocr.search`
+  result (0.3.0, ADR 0030 decision 13): one page of the query's on-screen occurrences of one
+  session, with or without a transcript (`query.terms`, `range`, `state`, `index`, `hits` as
+  `screen-text-data.schema.json#/$defs/hit`, `total_hits`, `next_cursor` and the screen-text
+  `coverage`); `partial`, with truncated envelope coverage, while the state is not `complete`;
 - `bundle-screen-text-index-record.schema.json` - the content of a session or retained
   bundle's `screen_text_index_record` artifact (0.3.0, ADR 0030): one revision of the
   screen-text index, with the engine build, the period, every attempted frame (its exact
@@ -369,6 +374,9 @@ synthetic 15 s video every 5 s plus one visual candidate at 6 s, built by `vsift
 frame limit after two with the candidates of 12-15 s not yet known (`partial`, coverage
 `frames_pending` and `deadline_exceeded`), and a search for `R-17` whose first page finds the
 transcript cue and two on-screen hits, one held over two frames in the same place.
+`ocr-search.json` pages the same index for `R-17` one hit at a time (the first page, with its
+cursor) and `ocr-search.not-run.json` is the answer before `ocr` has read the session (`partial`,
+reason `not_run`); both are built by `screen_text_contract`.
 `bundle-screen-text-index-record.json` is a two-frame index record (one read, one rejected
 image, one target with no frame), checked by `vsift-infrastructure`'s
 `screen_text_index_store` tests, which also validate the records of a real retained bundle.

@@ -78,7 +78,7 @@ stopped between two provider calls answers `CANCELLED`, never that a tool could 
 | `transcript retranscribe` | New local-ASR transcript revision, whole source or one range; a recoverable job since P10 PR 2 | Implemented in P07 increment 3b |
 | `search` | Bounded, ranked literal transcript search with honest coverage | Implemented in P08 PR 1 |
 | `candidates` | Bounded visual-candidate retrieval with honest coverage; analyses missing windows first | Implemented in P08 PR 4 |
-| `ocr` | Opt-in, bounded, resumable reading of on-screen text off the candidates' frames and one frame a period, with the optional OCR runner; `search` then finds it with frame, time and region | 0.3.0 (ADR 0030); the runner's hosted parity run and its managed install are in progress |
+| `ocr`, `ocr search` | Opt-in, bounded, resumable reading of on-screen text off the candidates' frames and one frame a period, with the optional OCR runner; `ocr search` pages it with frame, time and region, with or without a transcript, and `search`'s first page shows it beside the transcript | 0.3.0 (ADR 0030); the runner's hosted parity run and its managed install are in progress |
 | `frame get/neighbours/burst` | Exact source frames, their neighbours and bursts, with requested and actual time, lineage and reuse | Implemented in P09 PR 3 |
 | `crop`, `audio` | Native crops of frames and crops; bounded WAV clips of the source audio | Implemented in P09 PR 4 |
 | `bundle validate` | Bounded data-only bundle validation | Implemented in P05 |
@@ -1760,7 +1760,8 @@ vsift search ses_0123456789abcdef --query "invoice 4407" --json
 [--runner <path>] [--threads 1..8]` reads the text shown on the session's video with the
 optional OCR runner and commits what it read to the session's screen-text index
 ([ADR 0030](../decisions/0030-on-screen-text.md)). It is opt-in: nothing else runs it, and
-nothing else needs the runner. `search` then finds the text (below).
+nothing else needs the runner. `ocr search` then pages the text, with or without a transcript, and
+`search`'s first page shows it beside the transcript (below).
 
 **What is read.** The plan of a range is the representative frame of every visual candidate in
 it (as `candidates` lists them; the call analyses missing windows first, exactly as
@@ -1804,12 +1805,13 @@ call attempted), `stopped` (why it ended with reads pending: `frame_limit`, `dea
 `coverage` (scope `screen_text`) counts the range's planned reads once each: `planned` = `read` +
 `failed` (the runner rejected the image or failed on it; not retried by the same build) +
 `unresolved` + `pending`, with `period_us` and `candidates_complete` (false while a visual window
-of the range is not analysed, so its candidates are not in the plan; `candidate_gaps` lists those
-windows as `candidates` reports them). **Coverage is never hidden:** the envelope `coverage` is
+of the range can still be analysed, `not_analyzed` or `deadline_exceeded`, so its candidates are not
+yet in the plan; `candidate_gaps` lists every visual gap as `candidates` reports them, the final ones,
+`undecodable`, `no_decoded_frame` and `candidate_budget_exhausted`, included). **Coverage is never hidden:** the envelope `coverage` is
 `truncated`, and the status `partial` with the fixed warning `Not every planned frame of the range
 has been read: ...`, exactly while a read is pending or failed or the candidates are not all known;
-its `gaps` are the candidate gaps as `"<from_us>-<to_us>"` and its `reasons` name `frames_pending`,
-`frames_failed` and each candidate gap reason. A partial result exits 0.
+its `gaps` are the candidate gaps that can still be filled, as `"<from_us>-<to_us>"`, and its
+`reasons` name `frames_pending`, `frames_failed` and each of those gaps' reasons. A partial result exits 0.
 
 **Search.** Since `0.3.0` a `search` first page has a `screen_text` member
 ([`search.screen-text.json`](../../schemas/v1/examples/search.screen-text.json); the definition is
@@ -1828,6 +1830,24 @@ a page a `--cursor` continues: on-screen hits are not paged. An absent hit is no
 text was not on screen: only planned frames are read. On-screen text is untrusted evidence, like a
 transcript: quote `display_text`, and check the frame (`frame get --at <time_us>`) before relying on
 a value.
+
+**`ocr search` (0.3.0, ADR 0030 decision 13).** `ocr search <session> --query <text> [--from <us>
+--to <us>] [--limit 1..100] [--cursor <token>]` pages every occurrence of the query in the session's
+screen-text index, **with or without a transcript**: a silent recording is searched like any other.
+Matching, grouping and ranking are those of `search`'s `screen_text` member (phrase, then
+`all_terms`, each by first appearance; a line held in one place over consecutive read frames is one
+hit). `data` ([`ocr-search-data.schema.json`](../../schemas/v1/ocr-search-data.schema.json), examples
+[`ocr-search.json`](../../schemas/v1/examples/ocr-search.json) and
+[`ocr-search.not-run.json`](../../schemas/v1/examples/ocr-search.not-run.json)) holds `session_id`,
+`query.terms`, `range`, `state` (`not_run`, `partial`, `complete`), `index`, `hits` (20 by default),
+`total_hits` (the whole search, on every page), `next_cursor` and the screen-text `coverage` of the
+searched range. While the state is not `complete` the envelope `coverage` is `truncated` with reasons
+`not_run`, or `frames_pending`, `frames_failed` and `candidates_incomplete`, and the status `partial`
+with the fixed warning `Not every planned frame of the searched range has been read, ...`; it exits 0.
+The cursor is bound to the session, the index revision, the range and the normalised query, and the
+session's expiry; once `ocr` commits a new revision, or for any other search, it is `INVALID_ARGUMENT`
+with the remediation `The cursor cannot continue this on-screen search: ...`. It runs no tool and
+writes nothing. A rejected query, an empty range and a closed or expired session fail as for `search`.
 
 **Storage.** Each call that attempts a frame commits one `screen_text_index_record` artifact
 (strict versioned JSON, at most 48 MiB, at most 64 per session; the shape is

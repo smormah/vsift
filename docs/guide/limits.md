@@ -111,8 +111,8 @@ real meetings, accents or noisy rooms, so every accuracy figure below says what 
 - **No real motion has been measured** ([L-030](../planning/known-limits.md#l-030)). The practice recordings
   draw no scrolling, cursor movement or loading animation, so how well VSift sees those is unknown.
 - **VSift reads text in a picture only when you ask** (`vsift ocr`, new in 0.3.0, with the optional OCR runner). It
-  then reads Latin-script text off each candidate's frame and one frame every 10 seconds, and `search` finds it with
-  the frame, time and place on the screen. It reads only those frames, and no other script
+  then reads Latin-script text off each candidate's frame and one frame every 10 seconds, and `ocr search` finds it with
+  the frame, time and place on the screen, even in a recording with no speech. It reads only those frames, and no other script
   ([L-202](../planning/known-limits.md#l-202)); a text that appears and goes between them is not found. What it read
   is the engine's reading: check the frame before you rely on a value. Without `ocr`, VSift gives you the frame and
   you (or an assistant that can open images) read it. A crop at native size helps with small text. **Small numbers can be misread** ([L-018](../planning/known-limits.md#l-018)):
