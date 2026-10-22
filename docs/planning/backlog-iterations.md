@@ -17,7 +17,7 @@ earlier plan: where they disagree with this section, this section wins, and each
 | --- | --- | --- | --- |
 | `0.2.3` | **Cycle 2, all of it**, with the monthly round as planned. The FFmpeg re-pin is not in it. | Midnight on Friday 23 October (local time) | About 26 to 27 October |
 | `0.2.4` | **A hot fix from `release/0.2.x`: the FFmpeg update** ([#351](https://github.com/smormah/vsift/issues/351), [#272](https://github.com/smormah/vsift/issues/272)). It needs the month-end build of 2026-10-31, so it cannot be in `0.2.3`. | Early November, outside the weekly window | Early November, after the hot fix's checks |
-| `0.3.0` | **A normal stable release** that adds what the scope below lists. | About Friday 27 November | About 30 November or 1 December |
+| `0.3.0` | **A normal stable release** that adds what the scope below lists. It may move by **up to a week** (to about 4 December) so that "never wait in the dark" is qualified (decided 2026-10-21; see the deadline rule below). | About Friday 27 November, at the latest about 4 December | About 30 November or 1 December, at the latest about 7 December |
 | The announcement | **The word goes out with `0.3.0`.** The README (D4) and the launch checklist, which were cycle 3's items, are done in November. | | Early December |
 | `1.0.0` | The first release with a stability promise. [#188](https://github.com/smormah/vsift/issues/188) (RQ-14, adversarial containment) is required, produced as denied-action probes that the maintainer reviews before they run, and so is [#176](https://github.com/smormah/vsift/issues/176)'s API stability promise. Any `0.3.0` feature that was not qualified at its cut is decided here. The probes' stand-in provider and harness are written by the maintainer by hand; their techniques are not described in public documents. | End of December or the first week of January | |
 
@@ -36,8 +36,9 @@ table goes into public documents.
 - **Beyond it:**
   - "What changed on screen" between two times.
   - Search across kept sessions (a first step towards P18's catalogue; nothing is indexed unless the user keeps a session).
-  - The language of each chunk ([#474](https://github.com/smormah/vsift/issues/474), [L-188](known-limits.md#l-188), moved back from R1).
-- **The deadline rule.** A feature that is not qualified at the cut moves to 1.0; nothing ships half-built. Each feature is built in slices that stand on their own.
+  - **Never wait in the dark** (decided 2026-10-21; designed in ADR 0033, in review): progress during long transcriptions. A long transcription runs in the background and reports status in seconds (percent, chunks, elapsed time and an estimate); the part that is finished can be read and searched while the rest runs; the stretch the user asks for is transcribed first; the terminal shows a live line; and an interrupted run resumes rather than restarts. There are **three modes**, chosen automatically and overridden with `--mode`: *quick* (short clips, under about 10 minutes, in the foreground), *watched* (a long recording with someone waiting) and *queued* (nobody waiting, or several recordings; first in, first out per root, and interactive work goes first). It is also the foundation for live sources ([#107](https://github.com/smormah/vsift/issues/107), [#410](https://github.com/smormah/vsift/issues/410)): VSift delivers fresh evidence, and what it means is the agent's or the person's call.
+- **Moved to `1.0.0`:** the language of each chunk ([#474](https://github.com/smormah/vsift/issues/474), decided 2026-10-21 and recorded on the issue), to make room for progress during long transcriptions. The limit stays documented in the guide and in [L-188](known-limits.md#l-188).
+- **The deadline rule.** A feature that is not qualified at the cut moves to the next release; nothing ships half-built. Each feature is built in slices that stand on their own. **`0.3.0` may move by up to a week** (to about 4 December) for "never wait in the dark". Before that happens, "what changed on screen" or "search across kept sessions" moves to a `0.3.1`.
 - **Not chosen:** an MCP server (it stays R2) and ready-made workflow prompts.
 - **How the new engines come in:** as adapters, optional and pinned in the managed catalogue, with the core path working when one is absent; the choice of each engine is the maintainer's, after an evaluation that reports licence, size, platforms, accuracy and security. Public JSON v1 changes only by addition.
 - **No `0.3.0` work reaches `main` before the `0.2.3` cut.** Pull requests for it stay drafts until the supervisor opens `main`.
@@ -59,11 +60,11 @@ table goes into public documents.
 | `0.2.2` | **The current stable release: cycle 1, delivered.** Published 2026-10-18 from `release/0.2.x` (tag `v0.2.2` at `0dadc69df4f5`; npm `latest`; publish run 39127747535), with the evidence of its candidate and the hosted checks of its own bytes, the journeys on hosted Windows among them (#404's fix). RQ-14, RQ-16 and RQ-17 are waived for `0.2.2`, none a pass. The plan and its records are [`release-0.2.2.md`](release-0.2.2.md); the runbook's records are [`release.md`](../operations/release.md) 6.19 and 6.20. |
 | `0.2.3` | **Cycle 2, the candidate `0.2.3-rc.1` is cut by the version-bump pull request of 2026-10-22 (merged to `main` before the night's nightly), not tagged or published; the tag and the release branch are made at midnight on Friday 23 October (decided 2026-10-21), without the FFmpeg re-pin.** The cut set RQ-16 back to `planned` (L-179) and lists RQ-14 and RQ-17 for a decision. The plan is [`release-0.2.3.md`](release-0.2.3.md); the runbook is [`release.md`](../operations/release.md) 6.21. |
 | `0.2.4` | A hot fix from `release/0.2.x` in early November: the FFmpeg update. Planned, not started. |
-| `0.3.0` | A normal stable release at the end of November (the road to 1.0, above). Planned, not started. |
+| `0.3.0` | A normal stable release at the end of November, or up to a week later (the road to 1.0, above). Drafts open (OCR, speaker labels, direct links, time anchoring stage 1, managed installs, progress), merged one at a time after the `0.2.3` cut. |
 
 The `0.2.x` line is R0 maintenance. R1 (packets P15 to P20, issues #25 to #30) is planned in
 [`r1-industrial-capability-expansion.md`](r1-industrial-capability-expansion.md) and not started; since 2026-10-21 it follows `1.0.0`,
-and part of it (OCR, speaker labels, online links, the language of each chunk) is built earlier, as `0.3.0`.
+and part of it (OCR, speaker labels, online links) is built earlier, as `0.3.0`.
 
 ## The decisions of 2026-10-16
 
@@ -189,7 +190,7 @@ nightly; the long hosted runs for what the cycle touched; an uncounted skill smo
 ## R1 (P15 to P20)
 
 **Reshaped on 2026-10-21 (the road to 1.0, above; [ADR 0027](../decisions/0027-the-road-to-1-0.md)).** R1 starts after `1.0.0`, with P15's decision packet, and not before the maintainer says.
-- **Moved out of R1 into `0.3.0`:** P16's OCR and speaker labels, slices 1 and 3 of #406 (#407 and #409), and #474 (the language of each chunk).
+- **Moved out of R1 into `0.3.0`:** P16's OCR and speaker labels, and slices 1 and 3 of #406 (#407 and #409). #474 (the language of each chunk) went to `1.0.0` instead (decided 2026-10-21, later that day).
 - **Required for `1.0.0`:** #188 (adversarial containment; the stand-in provider and its harness are written by the maintainer by hand, and the probes' techniques are not described in public documents) and #176's API stability promise.
 - **R1 keeps:** P15, P17 (stitching), P18 (the catalogue; `0.3.0`'s search across kept sessions is a first step), P19, P20, #408, #410, #107, #368, #147 and #174, with the rest of P16 (VAD, embeddings, visual tags) and the items below that `0.3.0` and `1.0.0` do not take.
 
