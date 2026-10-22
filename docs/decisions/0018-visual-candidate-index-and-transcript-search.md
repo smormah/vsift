@@ -315,3 +315,11 @@ per-call window budget, and a commit race merged at most three times before `BUS
   decision.
 - Accent and Unicode-form differences are not folded, and cross-segment phrases are not
   found; both are documented limits.
+
+## Note, 2026-10-21 (0.3.0, ADR 0033): searching and reading an open revision
+
+A search or read without `--revision` reads the newest revision, which since 0.3.0 can be an open one
+that its run is still publishing: the answer is `partial` and lists what is pending, and its cursor
+pages within the revision as it grows (a later page may miss a hit published after the first; known
+limit L-219). `--since` searches only what was published after an earlier answer
+([ADR 0033](0033-progress-during-long-transcriptions.md) section 3).

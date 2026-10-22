@@ -15,6 +15,7 @@
 use serde::Serialize;
 use vsift_domain::{TranscriptRevision, TranscriptSegment};
 
+use crate::growth::SinceData;
 use crate::{
     AudioEvidenceData, CONTRACT_VERSION, CommandName, FrameEvidenceData, LifecycleResponse,
     OperationResponse, TerminalEventResponse, TranscriptRevisionData, TranscriptSegmentData,
@@ -302,6 +303,8 @@ pub struct TranscriptStreamData {
     record_count: usize,
     next_cursor: Option<String>,
     transcript_coverage: TranscriptCoverageData,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    since: Option<SinceData>,
 }
 
 /// One `transcript.get` page as a JSON Lines evidence stream.
@@ -344,7 +347,8 @@ impl TranscriptEvidenceStream {
             range: RangeData::new(page.range),
             record_count: records.len(),
             next_cursor: page.next_cursor.map(str::to_owned),
-            transcript_coverage: TranscriptCoverageData::new(page.coverage),
+            transcript_coverage: TranscriptCoverageData::with_growth(page.coverage, page.growth),
+            since: page.growth.since.map(SinceData::new),
         };
         let result = finish_transcript_read(
             OperationResponse::complete(command.identifier(), &data)?.with_lifecycle(lifecycle),

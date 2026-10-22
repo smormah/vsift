@@ -580,6 +580,7 @@ mod tests {
                 stage: ProgressStage::RunningRequest,
                 completed: 0,
                 total: Some(2),
+                media: None,
             },
         }
     }

@@ -1,0 +1,191 @@
+{
+  "command": "search",
+  "coverage": {
+    "gaps": [
+      "70000000-120000000"
+    ],
+    "reasons": [
+      "untranscribed_range",
+      "transcription_pending"
+    ],
+    "truncated": true
+  },
+  "data": {
+    "hits": [
+      {
+        "match": "phrase",
+        "segment_id": "tsg_d2ab92eaf6f8e69ff5bd32a766b56752"
+      },
+      {
+        "match": "phrase",
+        "segment_id": "tsg_4aaf80307e1af7b73b804a49a6bff34e"
+      }
+    ],
+    "items": [
+      {
+        "alignment": {
+          "chunk_audio_end_us": 55000000,
+          "chunk_audio_start_us": 25000000,
+          "chunk_index": 1,
+          "decoding_profile": "r0-v1",
+          "end_trimmed": false,
+          "executable_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+          "model_profile": "base",
+          "model_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+          "origin": "local_asr",
+          "provider": "whisper_cpp",
+          "provider_end_us": 15000000,
+          "provider_start_us": 12000000
+        },
+        "confidence": {
+          "origin": "unavailable",
+          "value_basis_points": null
+        },
+        "cue": null,
+        "display_text": "chunk 1 said second",
+        "end_us": 40000000,
+        "language": "en",
+        "markup": "none",
+        "original_text": null,
+        "revision_id": "trv_322f80d1fbd97aa8c28d24a249757a7a",
+        "segment_id": "tsg_d2ab92eaf6f8e69ff5bd32a766b56752",
+        "source_id": "src_sha256_0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "source_segment_id": "sgm_02f1ec5104b39a416aa8182970f01c81",
+        "speaker": null,
+        "start_us": 37000000,
+        "text": "chunk 1 said second"
+      },
+      {
+        "alignment": {
+          "chunk_audio_end_us": 80000000,
+          "chunk_audio_start_us": 50000000,
+          "chunk_index": 2,
+          "decoding_profile": "r0-v1",
+          "end_trimmed": false,
+          "executable_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+          "model_profile": "base",
+          "model_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+          "origin": "local_asr",
+          "provider": "whisper_cpp",
+          "provider_end_us": 15000000,
+          "provider_start_us": 12000000
+        },
+        "confidence": {
+          "origin": "unavailable",
+          "value_basis_points": null
+        },
+        "cue": null,
+        "display_text": "chunk 2 said second",
+        "end_us": 65000000,
+        "language": "en",
+        "markup": "none",
+        "original_text": null,
+        "revision_id": "trv_322f80d1fbd97aa8c28d24a249757a7a",
+        "segment_id": "tsg_4aaf80307e1af7b73b804a49a6bff34e",
+        "source_id": "src_sha256_0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "source_segment_id": "sgm_02f1ec5104b39a416aa8182970f01c81",
+        "speaker": null,
+        "start_us": 62000000,
+        "text": "chunk 2 said second"
+      }
+    ],
+    "next_cursor": null,
+    "query": {
+      "terms": [
+        "second"
+      ]
+    },
+    "range": null,
+    "revision": {
+      "alignment": {
+        "origin": "local_asr"
+      },
+      "carried_segment_count": 0,
+      "language": "en",
+      "local_asr": {
+        "audio_stream": 1,
+        "chunk_count": 5,
+        "covered_range": {
+          "from_us": 0,
+          "to_us": 120000000
+        },
+        "decoding_profile": "r0-v1",
+        "executable_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "model_profile": "base",
+        "model_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "no_audio_chunks": 0,
+        "overlap_us": 5000000,
+        "pending_chunks": 2,
+        "provider": "whisper_cpp",
+        "silent_chunks": 0,
+        "threads": 4,
+        "transcribed_chunks": 3,
+        "window_us": 30000000
+      },
+      "published_until_us": 70000000,
+      "replaced_range": null,
+      "revision": 1,
+      "revision_id": "trv_322f80d1fbd97aa8c28d24a249757a7a",
+      "segment_count": 6,
+      "sidecar": null,
+      "source_id": "src_sha256_0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      "source_segments": [
+        {
+          "end_us": 120000000,
+          "index": 0,
+          "source_segment_id": "sgm_02f1ec5104b39a416aa8182970f01c81",
+          "start_us": 0,
+          "state": "closed"
+        }
+      ],
+      "state": "open",
+      "supersedes": null,
+      "warnings": []
+    },
+    "session_id": "ses_0123456789abcdef0123456789abcdef",
+    "since": {
+      "more": false,
+      "revision_state": "open",
+      "since_token": "v1|ses_0123456789abcdef0123456789abcdef|1|8ed9f7c82b7a251708fce42bab607317c0eaeb38e975b838c9d9a880f802ae17|6|1790294400000000"
+    },
+    "transcript_coverage": {
+      "basis": "local_asr",
+      "no_speech_ranges": [],
+      "pending_ranges": [
+        {
+          "from_us": 70000000,
+          "to_us": 120000000
+        }
+      ],
+      "ranges_truncated": false,
+      "scope": "transcript_text",
+      "searched_range": {
+        "from_us": 0,
+        "to_us": 120000000
+      },
+      "transcribed_ranges": [
+        {
+          "from_us": 0,
+          "to_us": 70000000
+        }
+      ],
+      "untranscribed_ranges": [
+        {
+          "from_us": 70000000,
+          "to_us": 120000000
+        }
+      ]
+    }
+  },
+  "error": null,
+  "lifecycle": {
+    "expires_at": "2026-09-25T00:00:00Z",
+    "mode": "ephemeral"
+  },
+  "operation_id": null,
+  "schema_version": "1",
+  "status": "partial",
+  "warnings": [
+    "The transcription of this video is still running, so part of the requested range is not published yet: it is listed as pending, and as not transcribed, which does not mean nothing was said there. What is shown is final and can be cited. To read what is published next, pass the answer's since token back with --since; where an earlier revision still holds text over the pending part, it is named under pending_covered_by and can be read with --revision."
+  ]
+}

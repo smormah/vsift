@@ -13,7 +13,10 @@ use super::{
     text::{RenderedText, TerminalText, TooLarge},
     time::push_range,
     transcript::{count, push_retranscription},
-    view::{BatchSummary, Envelope, JobResume, RecoverableJob, WorkResult, WorkStep},
+    view::{
+        BatchSummary, Envelope, JobResume, JobStart, JobStream, RecoverableJob, WorkResult,
+        WorkStep,
+    },
 };
 
 /// The coverage reason that says a step's gap list was cut at 100.
@@ -39,6 +42,87 @@ pub(super) fn resume(envelope: &Envelope<JobResume>) -> Result<RenderedText, Too
     push_retranscription(&mut text, &data.outcome);
     push_outcome(&mut text, envelope);
     text.finish()
+}
+
+/// `job start`: what it did, the job, and the retranscription a foreground
+/// run committed.
+pub(super) fn start(envelope: &Envelope<JobStart>) -> Result<RenderedText, TooLarge> {
+    let data = &envelope.data;
+    let mut text = TerminalText::result();
+    text.push_fixed("Started: ")
+        .push_value(&data.start.state)
+        .push_fixed(", mode ")
+        .push_value(&data.start.mode)
+        .push_fixed(" (")
+        .push_value(&data.start.mode_basis)
+        .push_fixed("), runner ")
+        .push_value(&data.start.runner)
+        .end_line();
+    push_job(&mut text, "Job ", &data.job);
+    if data.start.runner == "background" {
+        text.push_fixed("Follow it: vsift job status ")
+            .push_value(&data.job.job_id)
+            .end_line();
+        text.push_fixed(
+            "Read the finished part while it runs with search and transcript get; it is marked partial.",
+        )
+        .end_line();
+    }
+    if let Some(outcome) = &data.outcome {
+        text.blank_line();
+        push_retranscription(&mut text, outcome);
+    }
+    push_outcome(&mut text, envelope);
+    text.finish()
+}
+
+/// Writes one stream of a `prepare` job: its state and how far it has come.
+fn push_stream(text: &mut TerminalText, stream: &JobStream) {
+    text.push_fixed("Stream ")
+        .push_value(&stream.stream)
+        .push_fixed(": ")
+        .push_value(&stream.state);
+    if let Some(job) = &stream.job_id {
+        text.push_fixed(" (job ").push_value(job).push_fixed(")");
+    }
+    text.end_line();
+    if let Some(media) = &stream.media {
+        text.push_fixed("  Done: ");
+        super::time::push_clock(text, media.done_us);
+        if let Some(total) = media.total_us {
+            text.push_fixed(" of ");
+            super::time::push_clock(text, total);
+        }
+        if let Some(percent) = media.percent {
+            text.push_fixed(" (")
+                .push_unsigned(percent)
+                .push_fixed("%)");
+        }
+        text.end_line();
+        if let Some(speed) = media.speed {
+            text.push_fixed("  Speed: ")
+                .push_value(&format!("{speed:.1}"))
+                .push_fixed("x real time")
+                .end_line();
+        }
+        if let Some(estimate) = &media.estimate {
+            text.push_fixed("  Time left: about ")
+                .push_unsigned(estimate.remaining_ms.div_ceil(60_000))
+                .push_fixed(" min (an estimate from the measured speed)")
+                .end_line();
+        }
+    } else if let Some(done) = stream.chunks_done {
+        text.push_fixed("  Chunks done: ").push_unsigned(done);
+        if let Some(total) = stream.chunks_total {
+            text.push_fixed(" of ").push_unsigned(total);
+        }
+        text.end_line();
+    }
+    if let Some(published) = stream.published_until_us {
+        text.push_fixed("  Published until: ");
+        super::time::push_clock(text, published);
+        text.end_line();
+    }
 }
 
 /// Writes a job: identity, state, what it was asked, how far it came and
@@ -72,6 +156,14 @@ fn push_job(text: &mut TerminalText, heading: &'static str, job: &RecoverableJob
             .push_value(operation)
             .end_line();
     }
+    if let Some(mode) = &job.request.mode {
+        text.push_fixed("Mode: ").push_value(mode).end_line();
+    }
+    if let Some(first) = job.request.first {
+        text.push_fixed("First window: ");
+        push_range(text, first);
+        text.end_line();
+    }
     text.push_fixed("Range: ");
     match job.request.range {
         Some(range) => push_range(text, range),
@@ -90,6 +182,9 @@ fn push_job(text: &mut TerminalText, heading: &'static str, job: &RecoverableJob
     text.push_fixed("Attempts in this epoch: ")
         .push_unsigned(job.attempts)
         .end_line();
+    for stream in job.streams.iter().flatten() {
+        push_stream(text, stream);
+    }
     if let Some(result) = &job.result {
         text.push_fixed("Result: revision ")
             .push_value(&result.revision_id)

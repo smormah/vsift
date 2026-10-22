@@ -209,6 +209,18 @@ pub enum EngineError {
         /// The live transcription job of that session.
         job: JobId,
     },
+    /// The session holds an open revision (ADR 0033) whose job has ended
+    /// without sealing it: `job cancel` of a job no process ran met a busy
+    /// session, so its stopped seal did not land (RV-1 finding 7). Nothing
+    /// else may write a transcript of the session until the revision is
+    /// sealed, and waiting does not help: cancelling the job again seals it.
+    /// The answer is `BUSY`, as for a running transcription.
+    RevisionLeftOpen {
+        /// The session that holds the open revision.
+        session: SessionId,
+        /// The ended job whose revision it is.
+        job: JobId,
+    },
     /// The operation id was used earlier in the session for a different
     /// request, whose result is kept (maintainer decision D-4).
     IdempotencyConflict {
@@ -225,6 +237,14 @@ pub enum EngineError {
     /// committed and the job failed. Running the request again widens it over
     /// the newest revision.
     RetranscriptionSuperseded {
+        /// The failed job.
+        job: JobId,
+    },
+    /// What the run would seal differs from what it published (ADR 0033): a
+    /// resume by a `VSift` with other merge rules. The revision was sealed as
+    /// stopped at what was published, which stays; the job failed, and a new
+    /// retranscription of the rest continues it.
+    RetranscriptionPublishedDiffers {
         /// The failed job.
         job: JobId,
     },
@@ -463,10 +483,12 @@ impl EngineError {
             | Self::TranscriptAssembly(_)
             | Self::EvidenceAssembly
             | Self::JobInvariant => FailureCode::Internal,
+            Self::RetranscriptionPublishedDiffers { .. } => FailureCode::IntegrityFailure,
             Self::IsolationUnavailable(_) => FailureCode::IsolationUnavailable,
             Self::Worker(failure) => failure.failure_code(),
             Self::JobBusy { .. }
             | Self::TranscriptionRunning { .. }
+            | Self::RevisionLeftOpen { .. }
             | Self::RetranscriptionSuperseded { .. }
             | Self::AdmissionBusy { .. }
             | Self::ManagedInstallBusy => FailureCode::Busy,
@@ -847,6 +869,9 @@ impl fmt::Display for EngineError {
             Self::TranscriptionRunning { .. } => formatter.write_str(
                 "a transcription of the session is running and holds the session root's capacity",
             ),
+            Self::RevisionLeftOpen { .. } => formatter.write_str(
+                "the session's open revision belongs to a job that has ended without sealing it",
+            ),
             Self::IdempotencyConflict { .. } => {
                 formatter.write_str("the operation id is bound to a different request")
             }
@@ -854,6 +879,9 @@ impl fmt::Display for EngineError {
             Self::RetranscriptionSuperseded { .. } => {
                 formatter.write_str("another revision replaced part of the range during the run")
             }
+            Self::RetranscriptionPublishedDiffers { .. } => formatter.write_str(
+                "the run would seal other text than it published; the published part was kept",
+            ),
             Self::JobNotResumable { state, .. } => write!(
                 formatter,
                 "the job is {} and cannot be resumed",
@@ -951,9 +979,11 @@ impl Error for EngineError {
             | Self::ArtifactDirectoryNotAbsolute
             | Self::JobBusy { .. }
             | Self::TranscriptionRunning { .. }
+            | Self::RevisionLeftOpen { .. }
             | Self::IdempotencyConflict { .. }
             | Self::JobCancelled { .. }
             | Self::RetranscriptionSuperseded { .. }
+            | Self::RetranscriptionPublishedDiffers { .. }
             | Self::JobNotResumable { .. }
             | Self::JobInterrupted { .. }
             | Self::JobSessionNotOpen { .. }
@@ -976,9 +1006,11 @@ impl EngineError {
         match self {
             Self::JobBusy { job }
             | Self::TranscriptionRunning { job, .. }
+            | Self::RevisionLeftOpen { job, .. }
             | Self::IdempotencyConflict { job }
             | Self::JobCancelled { job }
             | Self::RetranscriptionSuperseded { job }
+            | Self::RetranscriptionPublishedDiffers { job }
             | Self::LocalAsrOutputUnusable { job, .. }
             | Self::JobNotResumable { job, .. }
             | Self::JobInterrupted { job, .. }
@@ -994,7 +1026,8 @@ impl EngineError {
         match self {
             Self::JobInterrupted { session, .. }
             | Self::JobSessionNotOpen { session, .. }
-            | Self::TranscriptionRunning { session, .. } => Some(session),
+            | Self::TranscriptionRunning { session, .. }
+            | Self::RevisionLeftOpen { session, .. } => Some(session),
             _ => None,
         }
     }
@@ -1061,6 +1094,7 @@ impl From<JobRunError> for EngineError {
             JobRunError::NotResumable { job, state } => Self::JobNotResumable { job, state },
             JobRunError::Cancelled { job } => Self::JobCancelled { job },
             JobRunError::Superseded { job } => Self::RetranscriptionSuperseded { job },
+            JobRunError::PublishedDiffers { job } => Self::RetranscriptionPublishedDiffers { job },
             JobRunError::Asr { job, failure }
                 if failure.failure.reason.cannot_succeed_on_resume() =>
             {

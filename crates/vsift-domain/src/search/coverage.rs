@@ -63,7 +63,7 @@
 //! No-speech ranges never contain a segment of the revision.
 
 use crate::{
-    AsrChunkOutcome, AsrRun, InheritedRevision, TimeRange, TranscriptProvenance,
+    AsrChunkOutcome, AsrRun, InheritedRevision, RevisionState, TimeRange, TranscriptProvenance,
     TranscriptRevision,
     spans::{Span, join_nearest, merged, span, subtract, to_range, to_ranges},
 };
@@ -110,6 +110,7 @@ pub struct SearchCoverage {
     transcribed: Vec<TimeRange>,
     untranscribed: Vec<TimeRange>,
     no_speech: Vec<TimeRange>,
+    pending: Vec<TimeRange>,
 }
 
 impl SearchCoverage {
@@ -133,18 +134,70 @@ impl SearchCoverage {
                 transcribed: Vec::new(),
                 untranscribed: Vec::new(),
                 no_speech: Vec::new(),
+                pending: Vec::new(),
             };
         };
-        let transcribed = clip(&transcribed, searched_span);
+        // An open or stopped revision's own run counts only before the time it
+        // is published until (ADR 0033): from there on only the revision's
+        // segments cover anything (a stopped revision's earlier text kept past
+        // it, an open one's last segments where they overhang it), and what an
+        // open revision has not covered there is pending.
+        // A stopped revision's cut ends with the range its run replaced: after
+        // it the text it carries counts as it always did. An open one carries
+        // nothing after the time it is published until, so its cut runs to the
+        // end of the source.
+        let cut_end = match (revision.state(), revision.replaced_range()) {
+            (RevisionState::Stopped, Some(replaced)) => replaced.end().as_micros(),
+            _ => source.1,
+        };
+        let cut = revision
+            .published_until()
+            .and_then(|until| intersection((until.as_micros(), cut_end), searched_span))
+            .map_or_else(Vec::new, |cut| vec![cut]);
+        let segments_in_cut = subtract(
+            &cut,
+            &subtract(
+                &cut,
+                &merged(
+                    revision
+                        .segments()
+                        .iter()
+                        .map(|segment| span(segment.range()))
+                        .collect(),
+                ),
+            ),
+        );
+        let transcribed = merged(
+            subtract(&clip(&transcribed, searched_span), &cut)
+                .into_iter()
+                .chain(segments_in_cut)
+                .collect(),
+        );
         let untranscribed = subtract(&[searched_span], &transcribed);
-        let no_speech = clip(&no_speech, searched_span);
+        let no_speech = subtract(&clip(&no_speech, searched_span), &cut);
+        let pending = if revision.state() == RevisionState::Open {
+            subtract(&cut, &transcribed)
+        } else {
+            Vec::new()
+        };
         Self {
             basis,
             searched: to_range(searched_span),
             transcribed: to_ranges(&transcribed),
             untranscribed: to_ranges(&untranscribed),
             no_speech: to_ranges(&no_speech),
+            pending: to_ranges(&pending),
         }
+    }
+
+    /// The part of the untranscribed ranges that an open revision will still
+    /// publish (ADR 0033): what of the searched range from the time it is
+    /// published until no segment covers. Empty for a sealed or stopped
+    /// revision. A pending part is untranscribed too: a word said there cannot
+    /// be found yet.
+    #[must_use]
+    pub fn pending(&self) -> &[TimeRange] {
+        &self.pending
     }
 
     /// Where the revision's words came from.
@@ -248,7 +301,12 @@ fn run_windows(run: &AsrRun) -> RunWindows {
             AsrChunkOutcome::Silent { .. } | AsrChunkOutcome::NoAudio => {
                 windows.quiet.push(window);
             }
-            AsrChunkOutcome::Unusable { .. } => windows.unusable.push(window),
+            // Examined (an earlier revision's coverage is not counted there)
+            // and not covered: an unusable answer, a chunk a stopped run never
+            // reached, and one an open revision has not published yet.
+            AsrChunkOutcome::Unusable { .. }
+            | AsrChunkOutcome::NotReached
+            | AsrChunkOutcome::Pending => windows.unusable.push(window),
         }
     }
     windows.transcribed = merged(windows.transcribed);

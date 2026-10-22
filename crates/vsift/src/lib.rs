@@ -102,6 +102,7 @@ mod candidates;
 mod engine;
 mod error;
 mod evidence;
+mod growth;
 mod handoff;
 mod install;
 mod isolation;
@@ -109,6 +110,7 @@ mod jobs;
 mod lifecycle;
 mod local_asr_check;
 mod managed;
+mod prepare;
 mod progress;
 mod search;
 mod sessions;
@@ -118,7 +120,10 @@ mod verification;
 mod worker;
 mod workspace;
 
-pub use asr::{JobSummary, RetranscribeOutcome, RetranscribeRange, RetranscribeRequest};
+pub use asr::{
+    JobSummary, PUBLICATION_INTERVAL, RecognitionSeed, RetranscribeOutcome,
+    RetranscribePublication, RetranscribeRange, RetranscribeRequest,
+};
 pub use batch::{BatchEvent, BatchLineEnd, BatchProgress, MAX_BATCH_CONCURRENCY, WorkBatchRun};
 pub use candidates::{CandidatesRange, CandidatesRequest, CandidatesResults};
 pub use engine::{
@@ -134,21 +139,26 @@ pub use evidence::{
     DEFAULT_NEIGHBOUR_COUNT, EvidenceFile, EvidenceResults, FrameBurstRequest, FrameGetRequest,
     FrameNeighboursRequest, FrameTarget,
 };
+pub use growth::ReadGrowth;
 pub use handoff::HandoffSessionLookup;
 pub use install::{SetupInstallOutcome, SetupInstallRequest};
 pub use isolation::{IsolationGap, IsolationGaps, IsolationProfile, attest_host_isolation};
 pub use jobs::{
     JobCancelOutcome, JobCancelReport, JobResumeReport, JobResumeRequest, JobStatusReport,
-    MAX_LISTED_SESSION_JOBS, SessionJobEntry, SessionJobs,
+    MAX_LISTED_SESSION_JOBS, SessionJobEntry, SessionJobs, StreamStatus,
 };
 pub use lifecycle::{InstallCleanup, ManagedListing, ManagedRepairDiagnosis};
 pub use local_asr_check::DEFAULT_LOCAL_ASR_CHECK_BUDGET;
+pub use prepare::{
+    JobStartPlan, JobStartRequest, JobStartState, ModeBasis, PROGRESS_RECORD_INTERVAL,
+    RecognitionShare, VISUAL_BATCH_WINDOWS,
+};
 pub use progress::{AdmissionWaiting, JobProgress, ProgressObserver};
 pub use search::{SearchRange, SearchRequest, SearchResultHit, SearchResults};
 pub use sessions::{
     BundleSummary, CleanDecision, CleanEntry, CleanMode, CleanPage, CleanRequest, CleanScope,
-    FreeSpaceReserveCheck, IngestOutcome, IngestRequest, SessionListEntry, SessionPage,
-    SessionSnapshot, SourceRetention, SuppliedTranscriptRequest,
+    FreeSpaceReserveCheck, IngestOutcome, IngestRequest, SESSION_CLOSE_JOB_WAIT, SessionListEntry,
+    SessionPage, SessionSnapshot, SourceRetention, SuppliedTranscriptRequest,
 };
 pub use setup::{
     DEFAULT_PROBE_TIMEOUT, EvaluatedSetupPlan, ExecutableSelections, SetupCheckReport,
@@ -158,6 +168,11 @@ pub use transcripts::{TranscriptExcerpt, TranscriptQuery};
 pub use verification::{
     Cancellation, MediaToolSelection, MediaToolVerificationRequest, ModelSelection,
 };
+/// Where a stream of a `prepare` job is (`job status`, ADR 0033).
+pub use vsift_application::StreamPhase;
+/// Starting the background runner of `job start` (ADR 0033): the host gives
+/// the executable and its arguments, and the runner outlives it.
+pub use vsift_infrastructure::{DetachedRunner, Detachment, launch_detached};
 pub use worker::{MAX_CANDIDATE_CALLS, WorkOutcome, WorkRequestRun};
 pub use workspace::{WorkspaceInit, WorkspaceInitOutcome, WorkspaceInitRequest};
 
@@ -202,12 +217,12 @@ pub use vsift_domain::GeometryError;
 pub use vsift_domain::{
     ADMISSION_RETRY_AFTER, AdmissionBudget, AdmissionBudgetError, AdmissionWait, AttemptFailure,
     DependencyState, DependencyStatus, DurabilityRequirement, EvidenceId, FailureClass,
-    FailureCode, IdentifierError, JobId, JobKind, JobState, MAX_ADMISSION_WAIT,
-    MAX_RECOGNIZER_THREADS, OperationId, OperationStatus, ProbeTimeout, ProbeTimeoutKind,
-    ProgressStage, ProgressUnit, ProgressUpdate, PublicationGuarantee, RuntimeCapability,
-    RuntimeDependency, RuntimeReadiness, SessionId, SessionLifetime, SessionLifetimePolicy,
-    SessionPhase, SourceId, StorageGeneration, WorkspacePolicy, WorkspacePolicyError,
-    WorkspaceRetention,
+    FailureCode, IdentifierError, JobId, JobKind, JobMode, JobState, MAX_ADMISSION_WAIT,
+    MAX_FIRST_WINDOW_MICROS, MAX_RECOGNIZER_THREADS, MediaProgress, OperationId, OperationStatus,
+    PrepareStream, ProbeTimeout, ProbeTimeoutKind, ProgressStage, ProgressUnit, ProgressUpdate,
+    PublicationGuarantee, RuntimeCapability, RuntimeDependency, RuntimeReadiness, SessionId,
+    SessionLifetime, SessionLifetimePolicy, SessionPhase, SourceId, StorageGeneration,
+    WorkspacePolicy, WorkspacePolicyError, WorkspaceRetention,
 };
 /// Transcript evidence values that appear in this API.
 pub use vsift_domain::{

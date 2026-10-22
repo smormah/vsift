@@ -213,6 +213,7 @@ fn classify(error: &JobRunError) -> FailureCode {
         },
         JobRunError::Storage(_) | JobRunError::Job(_) => FailureCode::StorageIo,
         JobRunError::Assembly(_) | JobRunError::Key(_) => FailureCode::Internal,
+        JobRunError::PublishedDiffers { .. } => FailureCode::IntegrityFailure,
     }
 }
 
@@ -250,7 +251,10 @@ fn resolve(store: &FilesystemSessionStore, requested: Option<TimeRange>) -> Buil
             request_digest: retranscribe_request_digest(&session, requested)?,
             operation_key,
             recognition_key: key,
-            request: JobRequest::Retranscribe { range: requested },
+            request: JobRequest::Retranscribe {
+                range: requested,
+                share: vsift_domain::RecognitionShare::Whole,
+            },
             planned_chunks: None,
         },
         replaced,
@@ -295,6 +299,9 @@ async fn run(
             timer: &InstantTimer,
             classify,
             progress: &NoProgress,
+            publication: vsift_application::Publication::AtTheSeal,
+            stopwatch: &vsift_application::StoppedStopwatch,
+            seed: None,
         },
         &mut Unchanged,
     )
@@ -400,7 +407,10 @@ fn a_job_is_created_indexed_owned_and_listed() -> TestResult {
     assert_eq!(listed[0].record.job_id, job);
     // A spec whose keys differ from the stored record's is refused.
     let mut forged = resolved.spec.clone();
-    forged.request = JobRequest::Retranscribe { range: None };
+    forged.request = JobRequest::Retranscribe {
+        range: None,
+        share: vsift_domain::RecognitionShare::Whole,
+    };
     assert!(matches!(
         store.open_or_create(&forged, now()?),
         Err(JobStoreError::Storage(
@@ -465,6 +475,200 @@ fn damaged_forged_or_future_job_records_fail_closed() -> TestResult {
     }
     fs::write(&path, original)?;
     assert!(store.job(&session_id()?, &job)?.is_some());
+    Ok(())
+}
+
+/// RV-1 finding 2: a watched run's retranscription records the share it
+/// recognises with, which a resume needs to compute the same job. The whole
+/// writes nothing, so such a record reads as before; the same work asked for
+/// with the whole opens the same job, which keeps its share; and `whole`
+/// written out or an unknown share is refused.
+#[test]
+fn a_retranscriptions_share_is_recorded_when_it_is_not_the_whole() -> TestResult {
+    use vsift_domain::RecognitionShare;
+
+    let fixture = Fixture::new()?;
+    let store = open_session(&fixture, StoredDurability::Ephemeral)?;
+    let session = session_id()?;
+    let mut resolved = resolve(&store, requested()?)?;
+    let job = resolved.spec.job_id.clone();
+    let path = job_path(&fixture, &job).join("job.json");
+    resolved.spec.request = JobRequest::Retranscribe {
+        range: requested()?,
+        share: RecognitionShare::LeavingOneFree,
+    };
+    drop(store.open_or_create(&resolved.spec, now()?)?);
+    let written = fs::read_to_string(&path)?;
+    let recorded = "\"share\":\"leaving_one_free\"";
+    assert!(written.contains(recorded), "{written}");
+    let view = store.job(&session, &job)?.ok_or("no view")?;
+    assert_eq!(
+        view.record.request.share(),
+        Some(RecognitionShare::LeavingOneFree)
+    );
+
+    let mut whole = resolved.spec.clone();
+    whole.request = JobRequest::Retranscribe {
+        range: requested()?,
+        share: RecognitionShare::Whole,
+    };
+    drop(store.open_or_create(&whole, now()?)?);
+    let view = store.job(&session, &job)?.ok_or("no view")?;
+    assert_eq!(
+        view.record.request.share(),
+        Some(RecognitionShare::LeavingOneFree)
+    );
+
+    for (label, damaged) in [
+        (
+            "whole written out",
+            written.replace(recorded, "\"share\":\"whole\""),
+        ),
+        (
+            "unknown share",
+            written.replace(recorded, "\"share\":\"half\""),
+        ),
+    ] {
+        assert_ne!(damaged, written, "{label}");
+        fs::write(&path, &damaged)?;
+        assert_eq!(
+            store.job(&session, &job).err(),
+            Some(JobStoreError::Storage(
+                SessionStorageError::IntegrityFailure
+            )),
+            "{label}"
+        );
+    }
+    fs::write(&path, &written)?;
+    assert!(store.job(&session, &job)?.is_some());
+    Ok(())
+}
+
+/// ADR 0033: a `prepare` job's record keeps its mode and only its mode, and
+/// its progress record reads back strictly, a damaged one as none.
+#[test]
+#[allow(
+    clippy::too_many_lines,
+    reason = "One record's round trip and every damage it refuses, side by side"
+)]
+fn a_prepare_job_and_its_progress_record_read_back_strictly() -> TestResult {
+    use vsift_application::{JobProgressLog, PrepareProgress, StreamProgress};
+    use vsift_domain::{JobMode, MediaProgress, PrepareStream, ProgressStage, ProgressUpdate};
+
+    let fixture = Fixture::new()?;
+    let store = open_session(&fixture, StoredDurability::Ephemeral)?;
+    let session = session_id()?;
+    let first = range(25 * SECOND, 85 * SECOND)?;
+    let spec = vsift_application::prepare_spec(&session, JobMode::Watched, Some(first), None)?;
+    let job = spec.job_id.clone();
+    drop(store.open_or_create(&spec, now()?)?);
+    let view = store.job(&session, &job)?.ok_or("no view")?;
+    assert_eq!(
+        view.record.request,
+        JobRequest::Prepare {
+            mode: JobMode::Watched,
+            first: Some(first)
+        }
+    );
+    assert_eq!(view.record.planned_chunks, None);
+
+    // A `prepare` record with a range, without a mode, or a retranscription
+    // with a mode, is damaged.
+    let path = job_path(&fixture, &job).join("job.json");
+    let original = fs::read_to_string(&path)?;
+    assert!(original.contains(
+        "\"request\":{\"range\":null,\"mode\":\"watched\",\"first\":{\"from_us\":25000000,\"to_us\":85000000}}"
+    ));
+    for (label, damaged) in [
+        (
+            "a range",
+            original.replace(
+                "\"range\":null",
+                "\"range\":{\"from_us\":0,\"to_us\":1000000}",
+            ),
+        ),
+        ("no mode", original.replace(",\"mode\":\"watched\"", "")),
+        (
+            "an unknown mode",
+            original.replace("\"watched\"", "\"queued\""),
+        ),
+        (
+            "a first window over its bound",
+            original.replace("\"to_us\":85000000", "\"to_us\":2000000000"),
+        ),
+        (
+            "an empty first window",
+            original.replace("\"to_us\":85000000", "\"to_us\":25000000"),
+        ),
+        (
+            "another kind",
+            original.replace("\"kind\":\"prepare\"", "\"kind\":\"retranscribe\""),
+        ),
+    ] {
+        fs::write(&path, &damaged)?;
+        assert_eq!(
+            store.job(&session, &job).err(),
+            Some(JobStoreError::Storage(
+                SessionStorageError::IntegrityFailure
+            )),
+            "{label}"
+        );
+    }
+    fs::write(&path, original)?;
+
+    assert_eq!(store.read_progress(&session, &job)?, None);
+    let progress = PrepareProgress {
+        streams: vec![StreamProgress {
+            stream: PrepareStream::Transcript,
+            job: Some(JobId::parse("job_0123456789abcdef0123456789abcdef")?),
+            phase: vsift_application::StreamPhase::Running,
+            update: Some(ProgressUpdate {
+                stage: ProgressStage::RecognisingSpeech,
+                completed: 3,
+                total: Some(10),
+                media: Some(MediaProgress {
+                    from_us: 0,
+                    done_until_us: 80 * SECOND,
+                    to_us: Some(250 * SECOND),
+                    elapsed_us: 40 * SECOND,
+                    fresh_media_us: 55 * SECOND,
+                    fresh_elapsed_us: 30 * SECOND,
+                    fresh_chunks: 2,
+                }),
+            }),
+        }],
+        recorded_at_unix_seconds: now()?,
+    };
+    store.record_progress(&session, &job, &progress)?;
+    assert_eq!(store.read_progress(&session, &job)?, Some(progress.clone()));
+    let record = job_path(&fixture, &job).join("progress.json");
+    let stored = fs::read_to_string(&record)?;
+    for (label, damaged) in [
+        ("truncated", stored[..stored.len() / 2].to_owned()),
+        ("unknown field", stored.replacen('{', "{\"extra\":1,", 1)),
+        (
+            "past its end",
+            stored.replace("\"done_until_us\":80000000", "\"done_until_us\":300000000"),
+        ),
+        (
+            "another format",
+            stored.replace("vsift.job_progress", "vsift.other"),
+        ),
+        (
+            "an unknown stream",
+            stored.replace("\"transcript\"", "\"audio\""),
+        ),
+        (
+            "an unknown phase",
+            stored.replace("\"running\"", "\"paused\""),
+        ),
+    ] {
+        fs::write(&record, &damaged)?;
+        assert_eq!(store.read_progress(&session, &job)?, None, "{label}");
+    }
+    // Rewriting replaces it whole.
+    store.record_progress(&session, &job, &progress)?;
+    assert_eq!(store.read_progress(&session, &job)?, Some(progress));
     Ok(())
 }
 

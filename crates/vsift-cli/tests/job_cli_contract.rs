@@ -351,7 +351,10 @@ fn resolve(
             request_digest: retranscribe_request_digest(session, requested)?,
             operation_key,
             recognition_key: key,
-            request: JobRequest::Retranscribe { range: requested },
+            request: JobRequest::Retranscribe {
+                range: requested,
+                share: vsift_domain::RecognitionShare::Whole,
+            },
             planned_chunks: Some(u32::try_from(planned.len())?),
         },
         segment,
@@ -369,6 +372,25 @@ fn run(
     resolved: &Resolved,
     operation: Option<&OperationId>,
     fails_at: Option<u32>,
+) -> Built<bool> {
+    run_publishing(
+        store,
+        resolved,
+        operation,
+        fails_at,
+        vsift_application::Publication::AtTheSeal,
+    )
+}
+
+/// [`run`], publishing the revision as `publication` says (on a stopwatch
+/// that never moves, so an interval of zero publishes after every chunk that
+/// settles something).
+fn run_publishing(
+    store: &FilesystemSessionStore,
+    resolved: &Resolved,
+    operation: Option<&OperationId>,
+    fails_at: Option<u32>,
+    publication: vsift_application::Publication,
 ) -> Built<bool> {
     let status = store.session_status(&resolved.spec.session_id)?;
     let identity = identity().map_err(|_| "no identity")?;
@@ -401,6 +423,9 @@ fn run(
                 _ => FailureCode::Internal,
             },
             progress: &vsift_application::NoProgress,
+            publication,
+            stopwatch: &vsift_application::StoppedStopwatch,
+            seed: None,
         },
         &mut Unchanged,
     ))?;
@@ -841,6 +866,105 @@ fn an_interrupted_job_is_cancelled_and_its_checkpoints_removed() -> TestResult {
     Ok(())
 }
 
+/// RV-1 finding 7: `job cancel` of an interrupted job that published part of
+/// its revision, while the session is busy, cancels the job but cannot seal
+/// the revision as stopped, and says so (`revision_left_open`). A write to the
+/// session is then refused `BUSY` with `job cancel <job>` as the remediation,
+/// since waiting for an ended job would not help; cancelling again seals it.
+#[test]
+fn a_cancel_that_cannot_seal_its_revision_says_so_and_names_the_cancel() -> TestResult {
+    let root = OwnedRoot::new()?;
+    let session = seed_session(&root)?;
+    let store = store(&root)?;
+    let resolved = resolve(&store, &session, None)?;
+    let job = resolved.spec.job_id.clone();
+    let publication = vsift_application::Publication::AsItGoes {
+        interval: Duration::ZERO,
+    };
+    assert!(!run_publishing(
+        &store,
+        &resolved,
+        None,
+        Some(1),
+        publication
+    )?);
+    drop(store);
+    let to = SOURCE_MICROS.to_string();
+    let read = [
+        "transcript",
+        "get",
+        SESSION,
+        "--from",
+        "0",
+        "--to",
+        &to,
+        "--json",
+    ];
+    let open = json(&vsift(&root, &read)?)?;
+    assert_eq!(open["data"]["revision"]["state"], "open", "{open}");
+
+    // Another process holds the session's writer lock while the job is
+    // cancelled, so the stopped seal finds the session busy every time.
+    let writer = fs::OpenOptions::new().read(true).write(true).open(
+        root.sessions()
+            .join("coordination")
+            .join(format!("{SESSION}.writer.lock")),
+    )?;
+    writer.try_lock()?;
+    let cancelled = job_result(
+        &vsift(&root, &["job", "cancel", job.as_str(), "--json"])?,
+        "job.cancel",
+    )?;
+    writer.unlock()?;
+    drop(writer);
+    assert_eq!(cancelled["data"]["state"], "cancelled");
+    assert_eq!(
+        cancelled["warnings"],
+        json!([vsift_contract::REVISION_LEFT_OPEN_WARNING])
+    );
+    let still = json(&vsift(&root, &read)?)?;
+    assert_eq!(still["data"]["revision"]["state"], "open");
+
+    let bundle = root.path("bundle");
+    let refused = assert_failure(
+        &vsift(
+            &root,
+            &[
+                "session",
+                "retain",
+                SESSION,
+                "--output",
+                bundle.to_str().ok_or("path")?,
+                "--json",
+            ],
+        )?,
+        "session.retain",
+        "BUSY",
+        4,
+    )?;
+    assert_eq!(
+        refused["error"]["affected_ids"],
+        json!([SESSION, job.as_str()])
+    );
+    assert_eq!(
+        refused["error"]["remediation"][0]["summary"],
+        vsift_contract::REVISION_LEFT_OPEN_REMEDIATION
+    );
+    assert_eq!(
+        refused["error"]["remediation"][0]["command"],
+        json!({"executable": "vsift", "arguments": ["job", "cancel", job.as_str()]})
+    );
+
+    let again = job_result(
+        &vsift(&root, &["job", "cancel", job.as_str(), "--json"])?,
+        "job.cancel",
+    )?;
+    assert_eq!(again["warnings"], json!([]));
+    let stopped = json(&vsift(&root, &read)?)?;
+    assert_eq!(stopped["data"]["revision"]["state"], "stopped");
+    Ok(())
+}
+
 /// A job whose session was closed cannot continue: `job resume` fails before
 /// anything runs with the session and job named and the renew-or-reopen
 /// remediation; `job status` says why it is not resumable.
@@ -958,5 +1082,262 @@ fn an_operation_id_reused_for_another_request_conflicts_through_the_flag() -> Te
     assert_eq!(value["data"]["job"]["replayed"], true);
     assert_eq!(value["data"]["job"]["job_id"], job.as_str());
     assert_eq!(generation(&root)?, before);
+    Ok(())
+}
+
+// ------------------------------------------------------------ job start (ADR 0033)
+
+/// A complete `job start` result whose data is schema-valid.
+fn start_result(output: &Output) -> Built<Value> {
+    let value = json(output)?;
+    assert_eq!(output.status.code(), Some(0), "{value}");
+    assert_eq!(value["command"], "job.start");
+    assert_eq!(value["status"], "complete");
+    validate("job-start-data.schema.json", &value["data"])?;
+    Ok(value)
+}
+
+/// Asks `job status` until the job has no live owner, for at most 30 s.
+fn settled_status(root: &OwnedRoot, job: &str) -> Built<Value> {
+    let waited = std::time::Instant::now();
+    loop {
+        let status = job_result(
+            &vsift(root, &["job", "status", job, "--json"])?,
+            "job.status",
+        )?;
+        if status["data"]["live_owner"] == false && status["data"]["state"] != "queued" {
+            return Ok(status);
+        }
+        if waited.elapsed() > Duration::from_secs(30) {
+            return Err(format!("the runner never settled: {status}").into());
+        }
+        std::thread::sleep(Duration::from_millis(100));
+    }
+}
+
+/// ADR 0033 section 5: on a session with no transcript yet (its length is not
+/// known), `job start` is watched: it starts the background runner, which
+/// takes the job before the call answers. Without whisper.cpp the runner's
+/// transcript stream fails with `MISSING_CAPABILITY`, so the job ends failed
+/// and no runner is left. A second `job start` starts the failed job again.
+#[test]
+fn job_start_hands_a_watched_job_to_a_background_runner() -> TestResult {
+    let root = OwnedRoot::new()?;
+    let session = seed_session(&root)?;
+    let started = start_result(&vsift(
+        &root,
+        &["job", "start", session.as_str(), "--json"],
+    )?)?;
+    let data = &started["data"];
+    assert_eq!(data["start"]["state"], "created");
+    assert_eq!(data["start"]["mode"], "watched");
+    assert_eq!(data["start"]["mode_basis"], "length_unknown");
+    assert_eq!(data["start"]["runner"], "background");
+    assert!(data["start"]["detachment"].is_string());
+    assert_eq!(data["outcome"], Value::Null);
+    assert_eq!(data["job"]["kind"], "prepare");
+    assert_eq!(data["job"]["request"]["mode"], "watched");
+    assert_no_path(&started, &root.0);
+    let job = data["job"]["job_id"].as_str().ok_or("no job")?.to_owned();
+
+    let status = settled_status(&root, &job)?;
+    assert_eq!(status["data"]["state"], "failed", "{status}");
+    assert_eq!(status["data"]["failure"]["code"], "MISSING_CAPABILITY");
+    let streams = status["data"]["streams"].as_array().ok_or("no streams")?;
+    // The visual stream runs first (D6) and failed before it analysed anything:
+    // the transcript never started.
+    assert_eq!(streams.len(), 1);
+    assert_eq!(streams[0]["stream"], "visual");
+    assert_eq!(streams[0]["state"], "not_started");
+    assert_eq!(streams[0]["job_id"], Value::Null);
+
+    let again = start_result(&vsift(
+        &root,
+        &["job", "start", session.as_str(), "--json"],
+    )?)?;
+    assert_eq!(again["data"]["start"]["state"], "restarted");
+    assert_eq!(again["data"]["job"]["job_id"], job.as_str());
+    settled_status(&root, &job)?;
+    Ok(())
+}
+
+/// A watched `prepare` job of `session` that a runner started and that the
+/// test process holds as its owner.
+fn started_prepare(
+    root: &OwnedRoot,
+    session: &SessionId,
+) -> Built<(vsift_infrastructure::FilesystemJobOwner, JobId)> {
+    let spec =
+        vsift_application::prepare_spec(session, vsift_domain::JobMode::Watched, None, None)?;
+    let job = spec.job_id.clone();
+    let (mut owner, created) = store(root)?.open_or_create(&spec, now()?)?;
+    assert!(created);
+    owner.apply(&JobChange::Start, now()?)?;
+    Ok((owner, job))
+}
+
+/// Starts the session's watched job again and checks the answer came only
+/// once a runner held the job or had ended it (RV-1 finding 3), then that
+/// the runner ran it (without whisper.cpp its transcript stream fails).
+fn restart_watched(root: &OwnedRoot, session: &SessionId, job: &JobId, start: &str) -> TestResult {
+    let started = start_result(&vsift(
+        root,
+        &[
+            "job",
+            "start",
+            session.as_str(),
+            "--mode",
+            "watched",
+            "--json",
+        ],
+    )?)?;
+    let data = &started["data"];
+    assert_eq!(data["job"]["job_id"], job.as_str());
+    assert_eq!(data["start"]["state"], start, "{started}");
+    assert_eq!(data["start"]["runner"], "background");
+    assert!(
+        data["job"]["live_owner"] == true || data["job"]["state"] == "failed",
+        "answered before a runner held the job: {started}"
+    );
+    let status = settled_status(root, job.as_str())?;
+    assert_eq!(status["data"]["state"], "failed", "{status}");
+    assert_eq!(status["data"]["failure"]["code"], "MISSING_CAPABILITY");
+    Ok(())
+}
+
+/// RV-1 finding 3: `job start` of a session whose watched `prepare` was
+/// interrupted (its runner died) waits, as for a new job, until the new
+/// runner holds the job or has ended it, rather than answering at once
+/// because the job is not `queued`.
+#[test]
+fn job_start_of_an_interrupted_watched_job_waits_for_its_runner() -> TestResult {
+    let root = OwnedRoot::new()?;
+    let session = seed_session(&root)?;
+    let (owner, job) = started_prepare(&root, &session)?;
+    drop(owner);
+    let status = job_result(
+        &vsift(&root, &["job", "status", job.as_str(), "--json"])?,
+        "job.status",
+    )?;
+    assert_eq!(status["data"]["state"], "interrupted");
+    restart_watched(&root, &session, &job, "waiting")
+}
+
+/// RV-1 finding 3: a watched `prepare` whose cancellation its runner never
+/// finished (the runner died while `cancelling`) is cancelled, so `job start`
+/// starts it again (`restarted`) and its runner runs it, instead of handing it
+/// as waiting to a runner that refuses a cancelled job.
+#[test]
+fn job_start_of_a_job_left_cancelling_starts_it_again() -> TestResult {
+    let root = OwnedRoot::new()?;
+    let session = seed_session(&root)?;
+    let (owner, job) = started_prepare(&root, &session)?;
+    let asked = job_result(
+        &vsift(&root, &["job", "cancel", job.as_str(), "--json"])?,
+        "job.cancel",
+    )?;
+    assert_eq!(asked["data"]["state"], "cancelling");
+    drop(owner);
+    restart_watched(&root, &session, &job, "restarted")
+}
+
+/// ADR 0033 section 6: `--mode quick` runs the job in the foreground and
+/// answers when it ends, here with the stream's failure; `job status` then
+/// reports the failed `prepare` job, and the readable text of `job start`
+/// names it too.
+#[test]
+fn a_quick_job_start_runs_in_the_foreground() -> TestResult {
+    let root = OwnedRoot::new()?;
+    let session = seed_session(&root)?;
+    let output = vsift(
+        &root,
+        &[
+            "job",
+            "start",
+            session.as_str(),
+            "--mode",
+            "quick",
+            "--json",
+        ],
+    )?;
+    assert_failure(&output, "job.start", "MISSING_CAPABILITY", 2)?;
+    let listed = json(&vsift(
+        &root,
+        &["session", "status", session.as_str(), "--json"],
+    )?)?;
+    let jobs = listed["data"]["jobs"].as_array().ok_or("no jobs")?;
+    let prepare = jobs
+        .iter()
+        .find(|job| job["kind"] == "prepare")
+        .ok_or("no prepare job")?;
+    assert_eq!(prepare["state"], "failed");
+    assert_eq!(prepare["live_owner"], false);
+    let job = prepare["job_id"].as_str().ok_or("no job id")?;
+    let status = job_result(
+        &vsift(&root, &["job", "status", job, "--json"])?,
+        "job.status",
+    )?;
+    assert_eq!(status["data"]["request"]["mode"], "quick");
+
+    // Readable text: the job and its stream, no progress line (standard
+    // error is not a terminal here).
+    let text = vsift(&root, &["job", "status", job])?;
+    assert_eq!(text.status.code(), Some(0));
+    let shown = String::from_utf8(text.stdout)?;
+    assert!(shown.contains("(prepare)"), "{shown}");
+    assert!(shown.contains("Mode: quick"), "{shown}");
+    assert!(shown.contains("Stream visual: not_started"), "{shown}");
+    assert!(!String::from_utf8(text.stderr)?.contains('\r'));
+    Ok(())
+}
+
+/// D5: `--first <from_us>:<to_us>` is checked before anything is read (an
+/// empty, reversed, malformed or over-long window is a parse failure) and a
+/// valid one is recorded on the job, which a later start finds again.
+#[test]
+fn a_first_window_is_checked_and_recorded() -> TestResult {
+    let root = OwnedRoot::new()?;
+    let session = seed_session(&root)?;
+    for bad in ["10:5", "5:5", "five:ten", "0:1800000001", "100"] {
+        let output = vsift(
+            &root,
+            &["job", "start", session.as_str(), "--first", bad, "--json"],
+        )?;
+        let value = assert_failure(&output, "parse", "INVALID_ARGUMENT", 2)?;
+        assert_no_path(&value, &root.0);
+    }
+    let output = vsift(
+        &root,
+        &[
+            "job",
+            "start",
+            session.as_str(),
+            "--mode",
+            "quick",
+            "--first",
+            "60000000:70000000",
+            "--json",
+        ],
+    )?;
+    // Without media tools the quick run fails; the job keeps its window.
+    assert_failure(&output, "job.start", "MISSING_CAPABILITY", 2)?;
+    let listed = json(&vsift(
+        &root,
+        &["session", "status", session.as_str(), "--json"],
+    )?)?;
+    let job = listed["data"]["jobs"]
+        .as_array()
+        .and_then(|jobs| jobs.iter().find(|job| job["kind"] == "prepare"))
+        .and_then(|job| job["job_id"].as_str())
+        .ok_or("no prepare job")?
+        .to_owned();
+    let status = job_result(
+        &vsift(&root, &["job", "status", &job, "--json"])?,
+        "job.status",
+    )?;
+    assert_eq!(
+        status["data"]["request"]["first"],
+        json!({"from_us": 60_000_000, "to_us": 70_000_000})
+    );
     Ok(())
 }

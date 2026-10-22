@@ -293,6 +293,9 @@ fn request(session: &SessionId, range: Option<(u64, u64)>) -> RetranscribeReques
         cancellation: Cancellation::new(),
         progress: ProgressObserver::none(),
         admission: vsift::AdmissionWait::Immediate,
+        publication: vsift::RetranscribePublication::AtTheSeal,
+        share: vsift::RecognitionShare::Whole,
+        seed: None,
     }
 }
 
@@ -304,6 +307,7 @@ fn read(session: &SessionId, revision: Option<vsift::TranscriptRevisionId>) -> T
         to_micros: 60 * SECOND,
         limit: Some(100),
         cursor: None,
+        since: None,
     }
 }
 

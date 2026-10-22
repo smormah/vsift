@@ -326,6 +326,8 @@ fn job_failures_validate_with_their_hints() -> TestResult {
     }
     for prose in [
         CANCELLATION_TOO_LATE_WARNING,
+        vsift_contract::REVISION_LEFT_OPEN_WARNING,
+        vsift_contract::REVISION_LEFT_OPEN_REMEDIATION,
         RESUMED_FROM_CHECKPOINT_WARNING,
         CHECKPOINT_DISCARDED_WARNING,
         IDEMPOTENCY_CONFLICT_REMEDIATION,
@@ -376,6 +378,7 @@ fn page_response(revision: &TranscriptRevision) -> Built<OperationResponse<Value
             segments: &segments,
             next_cursor: None,
             coverage: &coverage,
+            growth: vsift_contract::ReadGrowth::default(),
         }),
     )?
     .with_lifecycle(LifecycleResponse::ephemeral(EXPIRES_AT.to_owned())))
@@ -430,6 +433,7 @@ fn a_retranscription_stream_matches_the_frozen_example() -> TestResult {
                     stage: ProgressStage::RecognisingSpeech,
                     completed,
                     total: Some(1),
+                    media: None,
                 },
                 job: Some(&job),
                 request: None,
@@ -506,6 +510,7 @@ fn a_spliced_revision_streams_schema_valid_evidence() -> TestResult {
             segments: &segments,
             next_cursor: None,
             coverage: &coverage,
+            growth: vsift_contract::ReadGrowth::default(),
         },
         LifecycleResponse::ephemeral(EXPIRES_AT.to_owned()),
     )?;
@@ -540,6 +545,7 @@ fn local_asr_revisions_and_segments_satisfy_their_schemas() -> TestResult {
             segments: &segments,
             next_cursor: None,
             coverage: &coverage,
+            growth: vsift_contract::ReadGrowth::default(),
         }),
     )?)?;
     let item = &response["data"]["items"][0];
@@ -1500,6 +1506,9 @@ fn f01_job(
         attempts: 1,
         result,
         failure,
+        mode: None,
+        streams: &[],
+        first: None,
     }))
 }
 
@@ -1785,6 +1794,7 @@ fn get(revision: &TranscriptRevision, window: TimeRange, view: ResultView) -> Bu
             segments: &segments,
             next_cursor: None,
             coverage: &coverage,
+            growth: vsift_contract::ReadGrowth::default(),
         },
         LifecycleResponse::ephemeral(EXPIRES_AT.to_owned()),
         view,
@@ -1992,6 +2002,7 @@ async fn a_read_over_a_gap_is_partial_and_names_the_gap() -> TestResult {
             segments: &segments,
             next_cursor: None,
             coverage: &coverage,
+            growth: vsift_contract::ReadGrowth::default(),
         },
         LifecycleResponse::ephemeral(EXPIRES_AT.to_owned()),
     )?;
@@ -2029,6 +2040,7 @@ async fn a_read_over_a_gap_is_partial_and_names_the_gap() -> TestResult {
             hits: Vec::new(),
             next_cursor: None,
             coverage: &search_coverage,
+            growth: vsift_contract::ReadGrowth::default(),
         },
         LifecycleResponse::ephemeral(EXPIRES_AT.to_owned()),
     )?)?;
@@ -2364,6 +2376,7 @@ async fn a_read_and_a_search_agree_on_every_range() -> TestResult {
                 hits: Vec::new(),
                 next_cursor: None,
                 coverage: &coverage,
+                growth: vsift_contract::ReadGrowth::default(),
             },
             LifecycleResponse::ephemeral(EXPIRES_AT.to_owned()),
         )?)?;

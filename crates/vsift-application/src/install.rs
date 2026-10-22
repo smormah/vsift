@@ -524,5 +524,6 @@ fn report_components(progress: &dyn ProgressSink, finished: u64, total: u64) {
         stage: ProgressStage::InstallingComponents,
         completed: finished.min(total),
         total: Some(total),
+        media: None,
     });
 }

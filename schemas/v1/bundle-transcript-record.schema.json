@@ -360,6 +360,11 @@
             "$ref": "#/$defs/range"
           }
         },
+        "published_until_us": {
+          "description": "Since 0.3.0 (ADR 0033): present only on a stopped revision, the time its run had published until when it was cancelled or failed in a way it could not resume from; its chunks it never reached are not_reached. Omitted from every other record, so they are written as before; a release before 0.3.0 reads this member, and the outcome not_reached, as damage.",
+          "type": "integer",
+          "minimum": 0
+        },
         "unplaced_ranges": {
           "description": "Since 0.2.1 (#359): the stretches of this record's own run where the recogniser wrote words that no segment holds, in start order, merged, inside the source and inside the range the run covered. See local_asr.unplaced_ranges of the revision summary for what a stretch is. Omitted when empty, which is every record whose run rejected nothing of the kind, so such a record is written as before and is read by a release before 0.2.1; a release before it reads this member as damage, as it reads carried_untranscribed.",
           "type": "array",
@@ -878,7 +883,8 @@
                   "transcribed",
                   "silent",
                   "no_audio",
-                  "unusable"
+                  "unusable",
+                  "not_reached"
                 ]
               },
               "audio": {

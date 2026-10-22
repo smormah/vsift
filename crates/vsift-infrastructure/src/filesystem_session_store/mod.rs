@@ -592,6 +592,12 @@ enum LifecycleUpdate {
         artifact: StoredArtifact,
         now: u64,
     },
+    /// The transcript record that seals an open revision (ADR 0033): added,
+    /// and every part of the open revision retired, in one generation.
+    SealTranscript {
+        artifact: StoredArtifact,
+        now: u64,
+    },
     /// An evidence call's media and record, all in one generation, and the
     /// source identity it verified, if it hashed the copy in full.
     AddEvidence {
@@ -1213,6 +1219,7 @@ enum StoredArtifactKind {
     VisualIndexRecord,
     AudioWav,
     EvidenceRecord,
+    TranscriptPart,
 }
 
 impl StoredArtifactKind {
@@ -1224,6 +1231,7 @@ impl StoredArtifactKind {
             SessionArtifactKind::VisualIndexRecord => Self::VisualIndexRecord,
             SessionArtifactKind::AudioWav => Self::AudioWav,
             SessionArtifactKind::EvidenceRecord => Self::EvidenceRecord,
+            SessionArtifactKind::TranscriptPart => Self::TranscriptPart,
         }
     }
 
@@ -1239,7 +1247,10 @@ impl StoredArtifactKind {
             Self::FramePng => "png",
             Self::AudioPcm => "pcm",
             Self::AudioWav => "wav",
-            Self::TranscriptRecord | Self::VisualIndexRecord | Self::EvidenceRecord => "json",
+            Self::TranscriptRecord
+            | Self::VisualIndexRecord
+            | Self::EvidenceRecord
+            | Self::TranscriptPart => "json",
         }
     }
 
@@ -1248,7 +1259,7 @@ impl StoredArtifactKind {
     const fn is_evidence(self) -> bool {
         match self {
             Self::FramePng | Self::AudioPcm | Self::AudioWav | Self::EvidenceRecord => true,
-            Self::TranscriptRecord | Self::VisualIndexRecord => false,
+            Self::TranscriptRecord | Self::VisualIndexRecord | Self::TranscriptPart => false,
         }
     }
 
@@ -1261,6 +1272,7 @@ impl StoredArtifactKind {
             Self::VisualIndexRecord => crate::MAX_VISUAL_INDEX_RECORD_BYTES,
             Self::AudioWav => crate::MAX_AUDIO_WAV_BYTES,
             Self::EvidenceRecord => crate::MAX_EVIDENCE_RECORD_BYTES,
+            Self::TranscriptPart => crate::MAX_TRANSCRIPT_PART_BYTES,
         }
     }
 }

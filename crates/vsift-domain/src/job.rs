@@ -131,17 +131,23 @@ impl JobState {
 pub enum JobKind {
     /// `transcript retranscribe`: local speech recognition of a session range.
     Retranscribe,
+    /// `job start` (ADR 0033): the preparation of a session, step by step (the
+    /// transcript, and first a window the caller named), run in the
+    /// foreground or by a runner in the background. Its transcript is a
+    /// retranscribe job of its own, which keeps its checkpoints.
+    Prepare,
 }
 
 impl JobKind {
     /// Every kind.
-    pub const ALL: [Self; 1] = [Self::Retranscribe];
+    pub const ALL: [Self; 2] = [Self::Retranscribe, Self::Prepare];
 
     /// Stable lowercase identifier used in stored records and contracts.
     #[must_use]
     pub const fn identifier(self) -> &'static str {
         match self {
             Self::Retranscribe => "retranscribe",
+            Self::Prepare => "prepare",
         }
     }
 
@@ -153,6 +159,107 @@ impl JobKind {
             .find(|kind| kind.identifier() == identifier)
     }
 }
+
+/// How a job runs, chosen by who is waiting (ADR 0033 section 6). The modes
+/// are parameters of one path, never separate code paths.
+///
+/// The third mode the record names, queued, comes with the root's queue.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum JobMode {
+    /// Someone waits for a short recording: the call runs in the foreground
+    /// and answers when done; the revision is sealed in one generation.
+    Quick,
+    /// Someone waits for a long one: a runner works in the background,
+    /// publishes the revision as it goes, reports its progress and leaves one
+    /// unit of the root's admission capacity free for evidence.
+    Watched,
+}
+
+impl JobMode {
+    /// Every mode.
+    pub const ALL: [Self; 2] = [Self::Quick, Self::Watched];
+
+    /// The recordings shorter than this are quick by default; longer ones are
+    /// watched (ADR 0033 section 6): ten minutes of media.
+    ///
+    /// Why ten minutes: a quick run answers in one call, and on the reference
+    /// machines a ten-minute recording is recognised in about one to four
+    /// minutes, which is as long as a caller should be kept waiting without
+    /// a status. The figure is checked on the hosted real-media workflow.
+    pub const QUICK_LIMIT_MICROS: u64 = 600_000_000;
+
+    /// Stable lowercase identifier used in stored records and contracts.
+    #[must_use]
+    pub const fn identifier(self) -> &'static str {
+        match self {
+            Self::Quick => "quick",
+            Self::Watched => "watched",
+        }
+    }
+
+    /// Parses a stable identifier.
+    #[must_use]
+    pub fn parse(identifier: &str) -> Option<Self> {
+        Self::ALL
+            .into_iter()
+            .find(|mode| mode.identifier() == identifier)
+    }
+
+    /// The mode a request that names none runs in, for a recording of
+    /// `duration_micros` (`None` when its length is not known yet): quick
+    /// under [`Self::QUICK_LIMIT_MICROS`], watched from it on and when the
+    /// length is unknown, so a long recording never keeps a caller waiting.
+    #[must_use]
+    pub const fn for_duration(duration_micros: Option<u64>) -> Self {
+        match duration_micros {
+            Some(duration) if duration < Self::QUICK_LIMIT_MICROS => Self::Quick,
+            _ => Self::Watched,
+        }
+    }
+}
+
+/// One stream of a `prepare` job (ADR 0033 section 5): a piece of the
+/// preparation, run in the order of [`PrepareStream::ALL`].
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub enum PrepareStream {
+    /// The transcript of the window the caller named first (`--first`, D5):
+    /// a range retranscription on the whole run's chunk grid, sealed at once,
+    /// whose chunks the whole transcript then reuses.
+    FirstWindow,
+    /// The visual-candidate index of the whole source (D6), published in
+    /// batches of windows.
+    Visual,
+    /// The transcript: a whole-source retranscription.
+    Transcript,
+}
+
+impl PrepareStream {
+    /// Every stream, in the order a `prepare` job runs them.
+    pub const ALL: [Self; 3] = [Self::FirstWindow, Self::Visual, Self::Transcript];
+
+    /// Stable lowercase identifier used in stored records and contracts.
+    #[must_use]
+    pub const fn identifier(self) -> &'static str {
+        match self {
+            Self::FirstWindow => "first",
+            Self::Visual => "visual",
+            Self::Transcript => "transcript",
+        }
+    }
+
+    /// Parses a stable identifier.
+    #[must_use]
+    pub fn parse(identifier: &str) -> Option<Self> {
+        Self::ALL
+            .into_iter()
+            .find(|stream| stream.identifier() == identifier)
+    }
+}
+
+/// The longest window a `prepare` job transcribes first (`--first`): 30
+/// minutes of media, so that what is held for the whole run to reuse stays
+/// bounded (at most 72 R0 chunks).
+pub const MAX_FIRST_WINDOW_MICROS: u64 = 1_800_000_000;
 
 /// Attempt to perform an illegal or duplicate job transition.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -197,7 +304,30 @@ impl Error for JobTransitionError {}
 
 #[cfg(test)]
 mod tests {
-    use super::{JobKind, JobState};
+    use super::{JobKind, JobMode, JobState, PrepareStream};
+
+    /// ADR 0033 section 6: under ten minutes is quick, from ten minutes on and
+    /// with no known length is watched; identifiers round-trip.
+    #[test]
+    fn the_mode_follows_the_recordings_length() {
+        let limit = JobMode::QUICK_LIMIT_MICROS;
+        assert_eq!(JobMode::for_duration(Some(0)), JobMode::Quick);
+        assert_eq!(JobMode::for_duration(Some(limit - 1)), JobMode::Quick);
+        assert_eq!(JobMode::for_duration(Some(limit)), JobMode::Watched);
+        assert_eq!(
+            JobMode::for_duration(Some(4 * 3_600_000_000)),
+            JobMode::Watched
+        );
+        assert_eq!(JobMode::for_duration(None), JobMode::Watched);
+        for mode in JobMode::ALL {
+            assert_eq!(JobMode::parse(mode.identifier()), Some(mode));
+        }
+        for stream in PrepareStream::ALL {
+            assert_eq!(PrepareStream::parse(stream.identifier()), Some(stream));
+        }
+        assert_eq!(JobKind::parse("prepare"), Some(JobKind::Prepare));
+        assert_eq!(JobMode::parse("queued"), None);
+    }
 
     /// C-09: the whole graph, edge by edge. Anything not listed is illegal.
     #[test]

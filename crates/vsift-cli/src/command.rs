@@ -29,9 +29,12 @@ A typical investigation (every command takes --json):
                                 shifted from the video's)
        Without one, speech is found only when local speech recognition is set up (setup
        check says); then run:
-         vsift transcript retranscribe <session> --json
-       It can take minutes. If recognition is not set up there is no speech evidence: say
-       so; do not install anything.
+         vsift job start <session> --json
+       A recording under 10 minutes is transcribed before it answers. A longer one is
+       transcribed in the background: follow it with vsift job status <job> --json, and
+       search and read the part already done meanwhile (answers say partial). If
+       recognition is not set up there is no speech evidence: say so; do not install
+       anything.
   3. vsift search <session> --query <words> --limit 20 --json
      vsift transcript get <session> --from <us> --to <us> --limit 20 --json
        What was said. Every time is microseconds from the start of the video.
@@ -605,22 +608,30 @@ impl ViewArgument {
 pub(crate) struct TranscriptGetArguments {
     /// Session containing the transcript.
     pub session: SessionId,
-    /// Inclusive source-timeline start in microseconds.
-    #[arg(long)]
-    pub from: u64,
-    /// Exclusive source-timeline end in microseconds.
-    #[arg(long)]
-    pub to: u64,
+    /// Inclusive source-timeline start in microseconds; with --since it may be
+    /// left out (from the start).
+    #[arg(long, required_unless_present = "since")]
+    pub from: Option<u64>,
+    /// Exclusive source-timeline end in microseconds; with --since it may be
+    /// left out (to the end).
+    #[arg(long, required_unless_present = "since")]
+    pub to: Option<u64>,
     /// Segments per page, 1 through 100; defaults to 20. The maximum stays 100;
     /// full segments are large, and --view brief makes a long page smaller.
     #[arg(long, value_parser = clap::value_parser!(u16).range(1..=100))]
     pub limit: Option<u16>,
     /// Opaque continuation token returned by the previous page of the same query.
-    #[arg(long)]
+    #[arg(long, conflicts_with = "since")]
     pub cursor: Option<String>,
-    /// Revision to read (a `trv_` identity); defaults to the newest.
+    /// Revision to read (a `trv_` identity); defaults to the newest, which may
+    /// be a revision still being transcribed (open, so the answer is partial).
     #[arg(long)]
     pub revision: Option<TranscriptRevisionId>,
+    /// The since token of an earlier answer (`data.since.since_token`): read
+    /// only what was published after it, in start order, in the revision that
+    /// answer read. Use it to follow a transcription while it runs.
+    #[arg(long, value_name = "TOKEN")]
+    pub since: Option<String>,
     /// Which answer to give. `brief` keeps each segment's ids, times and
     /// `display_text` (and `carried_from` on a carried segment) and leaves out
     /// what the segments of a revision repeat; those members stay once in the
@@ -671,11 +682,18 @@ pub(crate) struct SearchArguments {
     #[arg(long, value_parser = clap::value_parser!(u16).range(1..=100))]
     pub limit: Option<u16>,
     /// Opaque continuation token returned by the previous page of the same search.
-    #[arg(long)]
+    #[arg(long, conflicts_with = "since")]
     pub cursor: Option<String>,
-    /// Revision to search (a `trv_` identity); defaults to the newest.
+    /// Revision to search (a `trv_` identity); defaults to the newest, which
+    /// may be a revision still being transcribed (open, so the answer is
+    /// partial).
     #[arg(long)]
     pub revision: Option<TranscriptRevisionId>,
+    /// The since token of an earlier answer (`data.since.since_token`): search
+    /// only what was published after it, in start order, in the revision that
+    /// answer read.
+    #[arg(long, value_name = "TOKEN")]
+    pub since: Option<String>,
     /// Which answer to give. `brief` keeps each found segment's ids, times and
     /// `display_text` (and `carried_from` on a carried segment) and leaves out
     /// what the segments of a revision repeat; those members stay once in the
@@ -967,6 +985,17 @@ pub(crate) enum JobCommand {
     Resume(JobIdentityArguments),
     /// Cancel one job, or ask the process running it to stop.
     Cancel(JobIdentityArguments),
+    /// Prepare a session as one job and follow it with job status: index its
+    /// video for candidates, then transcribe it; in the background for a
+    /// recording of ten minutes or more, in the foreground for a shorter one.
+    ///
+    /// A background job publishes the transcript as it goes: search and
+    /// transcript get answer over the finished part, marked partial, while it
+    /// runs. job status reports how far each step has come in seconds of the
+    /// recording, its speed and an estimate of the time left. With --first,
+    /// the range named is transcribed before everything else. job cancel or
+    /// session close stops it, and what it published stays.
+    Start(JobStartArguments),
 }
 
 impl JobCommand {
@@ -978,6 +1007,7 @@ impl JobCommand {
             Self::Status(_) => CommandName::JobStatus,
             Self::Resume(_) => CommandName::JobResume,
             Self::Cancel(_) => CommandName::JobCancel,
+            Self::Start(_) => CommandName::JobStart,
         }
     }
 }
@@ -1036,6 +1066,71 @@ pub(crate) struct JobBatchArguments {
     /// 60000.
     #[arg(long, value_parser = clap::value_parser!(u64).range(0..=60_000), default_value_t = 60_000)]
     pub admission_wait_ms: u64,
+}
+
+/// The session to prepare and, optionally, how (ADR 0033).
+#[derive(Args, Debug)]
+pub(crate) struct JobStartArguments {
+    /// Session to prepare (a `ses_` identity).
+    pub session: SessionId,
+    /// quick runs in the foreground and answers when done; watched runs in
+    /// the background and answers at once. Defaults by the recording's
+    /// length: quick under ten minutes, watched from ten minutes on.
+    #[arg(long, value_enum)]
+    pub mode: Option<JobModeArgument>,
+    /// The window to transcribe first: its start and end in microseconds of
+    /// the recording joined by a colon (60000000:70000000), at most 30 minutes
+    /// long. When the user named a moment, it is ready within about one
+    /// window's recognition, before the rest.
+    #[arg(long, value_name = "FROM_US:TO_US", value_parser = parse_first_window)]
+    pub first: Option<FirstWindow>,
+}
+
+/// A first window given as `<from_us>:<to_us>`.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct FirstWindow {
+    /// Inclusive start, in microseconds.
+    pub(crate) from_us: u64,
+    /// Exclusive end, in microseconds.
+    pub(crate) to_us: u64,
+}
+
+/// Parses `<from_us>:<to_us>`: two whole numbers of microseconds, the first
+/// smaller, at most 30 minutes apart.
+fn parse_first_window(text: &str) -> Result<FirstWindow, String> {
+    let (from, to) = text
+        .split_once(':')
+        .ok_or_else(|| "expected <from_us>:<to_us>".to_owned())?;
+    let number = |part: &str| {
+        part.parse::<u64>()
+            .map_err(|_| "each side is a whole number of microseconds".to_owned())
+    };
+    let (from_us, to_us) = (number(from)?, number(to)?);
+    if to_us <= from_us {
+        return Err("the window must end after it starts".to_owned());
+    }
+    if to_us - from_us > vsift::MAX_FIRST_WINDOW_MICROS {
+        return Err("the window is at most 30 minutes (1800000000 microseconds)".to_owned());
+    }
+    Ok(FirstWindow { from_us, to_us })
+}
+
+/// How a started job runs.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
+pub(crate) enum JobModeArgument {
+    /// In the foreground: the command answers when the job is done.
+    Quick,
+    /// In the background: the command answers once a runner holds the job.
+    Watched,
+}
+
+impl From<JobModeArgument> for vsift::JobMode {
+    fn from(value: JobModeArgument) -> Self {
+        match value {
+            JobModeArgument::Quick => Self::Quick,
+            JobModeArgument::Watched => Self::Watched,
+        }
+    }
 }
 
 /// One validated job identifier; the job's session is found through the
@@ -1143,8 +1238,8 @@ mod tests {
         }
     }
 
-    /// The example also names the optional transcript options, the retranscribe
-    /// command and the operator-only options; each is real.
+    /// The example also names the optional transcript options, the job
+    /// commands of a transcription and the operator-only options; each is real.
     #[test]
     fn the_options_the_example_mentions_in_prose_are_real_options() {
         for line in [
@@ -1158,13 +1253,8 @@ mod tests {
                 "500000",
             ]
             .as_slice(),
-            [
-                "vsift",
-                "transcript",
-                "retranscribe",
-                "ses_0123456789abcdef",
-            ]
-            .as_slice(),
+            ["vsift", "job", "start", "ses_0123456789abcdef"].as_slice(),
+            ["vsift", "job", "status", "job_0123456789abcdef"].as_slice(),
             [
                 "vsift",
                 "--session-root",
@@ -1182,7 +1272,8 @@ mod tests {
         for needle in [
             "--transcript <file>",
             "--transcript-offset <microseconds>",
-            "vsift transcript retranscribe <session> --json",
+            "vsift job start <session> --json",
+            "vsift job status <job> --json",
             "--session-root and --host-isolation are for operators",
         ] {
             assert!(TYPICAL_INVESTIGATION_HELP.contains(needle), "{needle}");

@@ -249,10 +249,13 @@ fn read_transcript(
     Ok(engine.transcript(TranscriptQuery {
         session: arguments.session,
         revision: arguments.revision,
-        from_micros: arguments.from,
-        to_micros: arguments.to,
+        // Without --since both are required by the parser; a --since read
+        // left without them reads the whole source, which the engine clips to.
+        from_micros: arguments.from.unwrap_or(0),
+        to_micros: arguments.to.unwrap_or(u64::MAX),
         limit: arguments.limit,
         cursor: arguments.cursor,
+        since: arguments.since,
     })?)
 }
 
@@ -328,6 +331,12 @@ pub(crate) async fn retranscribe(
             progress,
             // Interactive: contention keeps P10's two bounded retries.
             admission: vsift::AdmissionWait::Immediate,
+            // Published as it goes (ADR 0033): readers see the revision grow.
+            publication: vsift::RetranscribePublication::AsItGoes {
+                interval: vsift::PUBLICATION_INTERVAL,
+            },
+            share: vsift::RecognitionShare::Whole,
+            seed: None,
         })
         .await?;
     let presented = retranscription(&outcome)?;
@@ -350,6 +359,19 @@ fn presentation(excerpt: &TranscriptExcerpt) -> TranscriptPresentation<'_> {
         segments: excerpt.segments(),
         next_cursor: excerpt.next_cursor(),
         coverage: excerpt.coverage(),
+        growth: read_growth(excerpt.growth()),
+    }
+}
+
+/// The contract's view of what a read of a growing transcript adds (ADR 0033).
+pub(crate) fn read_growth(growth: &vsift::ReadGrowth) -> vsift_contract::ReadGrowth<'_> {
+    vsift_contract::ReadGrowth {
+        pending_covered_by: growth
+            .pending_covered_by()
+            .map(|(revision, ranges)| vsift_contract::PendingCover { revision, ranges }),
+        since: growth
+            .since()
+            .map(|(token, state, more)| vsift_contract::SinceRead { token, state, more }),
     }
 }
 

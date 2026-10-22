@@ -1,0 +1,54 @@
+{
+  "command": "job.status",
+  "coverage": null,
+  "data": {
+    "attempts": 1,
+    "failure": null,
+    "job_id": "job_0123456789abcdef0123456789abcdef",
+    "kind": "prepare",
+    "live_owner": true,
+    "operation_id": null,
+    "progress": {
+      "chunks_checkpointed": 0,
+      "chunks_total": null
+    },
+    "request": {
+      "mode": "watched",
+      "range": null
+    },
+    "result": null,
+    "resumable": false,
+    "resumable_reason": "live_owner",
+    "session_id": "ses_0123456789abcdef0123456789abcdef",
+    "state": "running",
+    "streams": [
+      {
+        "chunks_done": 17,
+        "chunks_total": 60,
+        "job_id": "job_fedcba9876543210fedcba9876543210",
+        "media": {
+          "done_us": 420000000,
+          "elapsed_ms": 170000,
+          "estimate": {
+            "basis": "cumulative_measured_speed",
+            "fresh_chunks": 16,
+            "remaining_ms": 432000
+          },
+          "percent": 28,
+          "speed": 2.5,
+          "total_us": 1500000000
+        },
+        "published_until_us": 395000000,
+        "stage": "recognising_speech",
+        "state": "running",
+        "stream": "transcript"
+      }
+    ]
+  },
+  "error": null,
+  "lifecycle": null,
+  "operation_id": null,
+  "schema_version": "1",
+  "status": "complete",
+  "warnings": []
+}

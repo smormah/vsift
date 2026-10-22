@@ -146,6 +146,7 @@ fn render_value(
         CommandName::JobStatus => job::status("Job ", &envelope(value)?),
         CommandName::JobCancel => job::status("Cancel requested for job ", &envelope(value)?),
         CommandName::JobResume => job::resume(&envelope(value)?),
+        CommandName::JobStart => job::start(&envelope(value)?),
         CommandName::JobRun => job::run(&envelope(value)?),
         CommandName::JobBatch => job::batch(&envelope(value)?),
         CommandName::HandoffCheck => handoff::check(&envelope(value)?),

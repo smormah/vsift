@@ -540,3 +540,13 @@ Two additions to sections 4 and 5, proposed with [ADR 0017's note of the same da
   page cache, which is exactly what fsyncgate makes untrustworthy.
 - **A dependency for durable storage (an embedded database).** ADR 0010 alternative 2;
   it does not make external artifact files durable and needs its own review.
+
+## Note, 2026-10-21 (0.3.0, ADR 0033): parts before the commit, and a stopped seal
+
+Section 4 says a cancellation that wins leaves no generation. Since 0.3.0 a job that publishes as it goes
+commits parts of its open revision before its commit, each under a deterministic operation id of its
+attempt (`vsift.job-part.v1`), and the commit that seals the revision retires them in the same
+generation. A cancellation that wins after parts were committed seals the revision as stopped at what
+was published (`vsift.job-stop.v1`), so what was shown stays; a job that published nothing still leaves
+no generation ([ADR 0033](0033-progress-during-long-transcriptions.md), D1). The job record's format is
+unchanged: the part record names its job. The text above is kept as written.

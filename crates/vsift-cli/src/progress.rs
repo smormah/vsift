@@ -223,6 +223,7 @@ mod tests {
                 stage: ProgressStage::RecognisingSpeech,
                 completed,
                 total: Some(4),
+                media: None,
             },
         })
     }

@@ -970,8 +970,9 @@ every chunk, reused ones included; at most one per second; example
 [`transcript-retranscribe.events.jsonl`](../../schemas/v1/examples/transcript-retranscribe.events.jsonl))
 and then its one terminal event, whose result is the `--json` result; stream the
 records with `transcript get --revision <revision_id> --events jsonl`, page by page. A first Ctrl-C or `SIGTERM` (see
-Interruption above) stops the run before its commit: nothing is committed, whisper.cpp
-is stopped and reaped, the chunks it finished are kept for a resume (below), and the
+Interruption above) stops the run before its commit: nothing is sealed (since 0.3.0 the
+parts it published stay, its revision open; see "Transcripts published as they go"
+below), whisper.cpp is stopped and reaped, the chunks it finished are kept for a resume (below), and the
 failure is `CANCELLED` (exit 6) with the session and job in `error.affected_ids` and a
 remediation whose `command` is `vsift job resume <job>`
 ([example](../../schemas/v1/examples/retranscribe-cancelled.json)). A run killed
@@ -1057,7 +1058,7 @@ writes the resumed run's chunk progress, as `transcript retranscribe` does (P11 
 - `job status <job>` reports one job
   ([`job-data.schema.json`](../../schemas/v1/job-data.schema.json), example
   [`job-status.json`](../../schemas/v1/examples/job-status.json)): `job_id`,
-  `session_id`, `kind` (`retranscribe`), `state` (`queued`, `running`, `cancelling`,
+  `session_id`, `kind` (`retranscribe`, or since 0.3.0 `prepare`), `state` (`queued`, `running`, `cancelling`,
   `committing`, `interrupted`, `succeeded`, `failed`, `cancelled`), `live_owner`
   (a process holds the job now), `resumable` and `resumable_reason` (`interrupted`,
   `not_started`, or why not: `live_owner`, `succeeded`, `failed`, `cancelled`,
@@ -1085,8 +1086,14 @@ writes the resumed run's chunk progress, as `transcript retranscribe` does (P11 
   marked `cancelling` and its owner notices within 250 ms, stops its provider and
   cancels the job before any commit (the owner's own command then fails `CANCELLED`); a
   job that is `committing` or `succeeded` keeps its result and the answer carries the
-  warning `cancellation_too_late`; a failed or cancelled job is reported as it is.
-  Repeating a cancel changes nothing. A cancelled or failed job is started afresh (a
+  warning `cancellation_too_late`; a failed or cancelled job is reported as it is. Since
+  0.3.0 a cancelled job that had published part of its revision seals it as stopped,
+  keeping every published segment (see "Transcripts published as they go"). When that
+  seal cannot land now (the session is busy), the job is still cancelled and the answer
+  carries the warning `revision_left_open`: the revision stays open, and every other
+  transcription or retention of the session answers `BUSY` with the remediation
+  `job cancel <job>` until a repeated cancel seals it. Otherwise repeating a cancel
+  changes nothing. A cancelled or failed job is started afresh (a
   new epoch) by running the original command again.
 
 `session status <session>` additionally lists the session's newest jobs, most recently
@@ -1104,6 +1111,199 @@ member of the status is unchanged; `session list`, `renew` and `close` do not li
 | `job resume` interrupted by Ctrl-C/`SIGTERM` | `CANCELLED` (exit 6; the session and job named, `job resume` suggested again) |
 | `job cancel` while an owner appeared meanwhile, or the state lock stayed busy | `BUSY` |
 | Every failure of `transcript retranscribe` (the resumed run) | as listed above |
+
+### Transcripts published as they go (0.3.0, ADR 0033)
+
+```console
+vsift transcript retranscribe ses_0123456789abcdef --json
+vsift transcript get ses_0123456789abcdef --from 0 --to 600000000 --json
+vsift transcript get ses_0123456789abcdef --since <since_token> --json
+vsift search ses_0123456789abcdef --query "error 42" --since <since_token> --json
+```
+
+**A revision grows as its run goes ([ADR 0033](../decisions/0033-progress-during-long-transcriptions.md)).**
+Since 0.3.0 `transcript retranscribe` and `job resume` publish their revision while they
+run: the revision is **open** from its first part, and after a chunk, at most every 10 s
+and in at most 64 parts, the run commits what no chunk still to come can change (every
+stretch of speech that ends before the next chunk's earliest possible audio; the merge
+rules themselves are unchanged). A published segment is final: it is cited at once and
+has the same identity, time and text in the revision the run **seals** when it ends,
+which is the revision a run that published nothing would seal, byte for byte. A worker's
+`retranscribe` step publishes only at its seal, as before. While a revision is open,
+`transcript get` and `search` read it by default (the newest revision); the revision it
+supersedes stays readable with `--revision`. A session holds at most one open revision:
+another `transcript retranscribe` of it answers `BUSY` naming the job, as a frame does
+while a transcription runs, and `session retain` answers the same until the revision is
+sealed.
+
+**Reading an open revision.** The answer is `partial`: what the run has not published yet
+is listed in `transcript_coverage.untranscribed_ranges` and also in `pending_ranges`
+(new, present only then); the envelope coverage gives the reason `untranscribed_range`
+followed by `transcription_pending`; and the fixed warning says what is pending, that it
+is not silence, and how to read on. Where the revision it supersedes still holds text
+over the pending part, `transcript_coverage.pending_covered_by` names that revision and
+those ranges, for `--revision`. The revision block carries `state` (`open`) and
+`published_until_us` (the time before which it is final), and `local_asr.pending_chunks`.
+A sealed revision read without `--since` carries none of these members, so every such
+answer is the one 0.2.x gave. Examples:
+[`transcript-get.open.json`](../../schemas/v1/examples/transcript-get.open.json) and
+[`search.open.json`](../../schemas/v1/examples/search.open.json). Over an open revision
+the coverage is as of the page that was read; a search's later pages may miss a hit
+published after its first page, which `--since` finds (known limit L-219).
+
+**Following it: `--since`.** Every answer to `--since`, and every answer over an open
+revision that ends its read (it has no `next_cursor`), has `data.since`: `since_token`,
+`revision_state` (`open`, `sealed` or `stopped`) and `more` (the answer stopped at its
+limit with more already published). A paged read gives it on its last page only: a token
+follows on from everything its answer's revision held, so one given on an earlier page
+would skip the pages between. Follow `next_cursor` to the last page (the cursor reads
+the same revision while it grows), then follow the token.
+`transcript get --since <token>` answers the segments the token's revision published
+after it, in start order (`--from` and `--to` may then be left out; the range is clipped
+to the source), and `search --since <token>` the hits among them. A token follows the
+one revision its answer read, into its sealed or stopped form, and never another; it is
+bound to the session and expires with it, like a cursor, and is refused (the cursor's
+`INVALID_ARGUMENT`) for another session, another `--revision` or after the session
+expires. `--since` cannot be combined with `--cursor`.
+
+**Ending early: stopped revisions (changed behaviour, D1).** Nothing published is taken
+back. A job that is cancelled (`job cancel`), or fails in a way it cannot resume from
+(most of its chunks unusable, its attempts used up), after it had published part of its
+revision seals it as **stopped**: every published segment stays, followed by the text of
+the revision it supersedes that starts at or after the time it stopped at, inside the
+replaced range where the run wrote nothing (and everything after the range); the chunks
+it never reached are `not_reached` (`local_asr.not_reached_chunks`); `state` is `stopped`
+and `published_until_us` the time it stopped at; and a read of it is `partial` with the
+part it did not reach untranscribed, unless earlier text covers it. Until 0.2.x such a
+run committed nothing. A run that published nothing (a run stopped before its first
+part, a worker's step) still commits nothing. A first Ctrl-C or `SIGTERM` leaves the
+job interrupted as before, with its revision open: `job resume` continues the same
+revision from its next part, and `job cancel` seals it as stopped. A resume by a VSift
+whose merge rules differ from the ones that published the revision seals it as stopped
+and fails `INTEGRITY_FAILURE`; retranscribe the rest with `--from` and `--to`.
+
+| Condition | Code |
+| --- | --- |
+| `transcript retranscribe` of a session whose open revision another job publishes | `BUSY` (the session and the job in `affected_ids`) |
+| `session retain` while a revision is open | `BUSY` (the session and the job in `affected_ids`) |
+| Either of the two above when the open revision's job has ended (its `job cancel` could not seal it) | `BUSY` (the session and the job in `affected_ids`; the remediation's command is `job cancel <job>`, which seals the revision as stopped) |
+| `--since` with a malformed, foreign or expired token, or with another `--revision` | `INVALID_ARGUMENT` (the cursor's remediation) |
+| A resume under other merge rules than the open revision's | `INTEGRITY_FAILURE` (the stopped revision is committed) |
+
+### `job start`: preparing a session in the foreground or the background (0.3.0, ADR 0033)
+
+```console
+vsift job start ses_0123456789abcdef --json
+vsift job start ses_0123456789abcdef --mode watched --json
+vsift job start ses_0123456789abcdef --first 600000000:660000000 --json
+vsift job status job_0123456789abcdef0123456789abcdef --json
+```
+
+**One command for the transcription, chosen by who is waiting
+([ADR 0033](../decisions/0033-progress-during-long-transcriptions.md) sections 5 and 6).**
+`job start <session>` records the session's `prepare` job and runs it in one of two modes:
+
+- **quick** (the default for a recording under 10 minutes): in the foreground, as
+  `transcript retranscribe` does; the call answers when the job is done and the revision
+  is sealed in one generation;
+- **watched** (the default from 10 minutes on, and when the session holds no transcript
+  yet, so its length is not known): a runner in the background, which publishes the
+  revision as it goes ("Transcripts published as they go") and leaves one unit of the
+  root's admission capacity free, so `frame get`, crops and audio clips are admitted while
+  it runs. The call answers once the runner holds the job, or has ended it already, within
+  10 s; a job that was interrupted before is not taken until a runner holds it.
+
+`--mode quick|watched` overrides the choice.
+
+**Its steps, in order (the `streams` of `job status`):**
+
+1. **`first`**, with `--first <from_us>:<to_us>` (at most 30 minutes; an empty, reversed or
+   longer window is a `parse` failure): the range the caller named, widened to whole chunks of
+   the whole run's chunk plan (from the start of the chunk at or before it to the end of the chunk
+   that reaches its end) and retranscribed as a range, sealed at once as a revision of its own,
+   whose id is in that stream's job's result. Its chunks' answers are kept in the runner's memory
+   for the whole transcript (D5).
+2. **`visual`**: the source's visual-candidate index, analysed in batches of 10 windows (10
+   minutes of video), each committed as an index revision, until every window is indexed;
+   `candidates` is then a warm read. A source without video skips it (`state` `skipped`). It has
+   no job of its own: its `state` is `running` while the runner works on it, `succeeded` once every
+   window is indexed, and the `prepare` job's otherwise; a resume analyses only the windows still
+   missing. Its `media` counts windows of video (`published_until_us` is how far it is indexed).
+3. **`transcript`**: the whole-source retranscription. It takes the first window's answers for
+   the chunks with the same window instead of recognising them again (`outcome.job.chunks_reused`
+   counts them), so its revision is the one a run without `--first` makes. While it runs, a read of
+   the window names the first window's revision in `pending_covered_by` for what it has not
+   published yet.
+
+The job derives from the session, the mode, the first window and the sealed revision it starts
+from: asked again while it runs, `job start` finds it
+(`start.state` `running`); once it succeeded, the session is prepared and `job start`
+answers `done` with the same job; a failed or cancelled one starts again (`restarted`), as
+does one left `cancelling` by a runner that died before it finished cancelling; an
+interrupted one is taken up again (`waiting`). The transcript runs as a whole-source
+retranscription job of its own, so its checkpoints, resume and commit are those of
+"P10 recoverable jobs". A watched recognition runs with fewer threads (the root's
+capacity less one), which its provenance records, so its revision is not the same
+revision as a foreground run's (L-154). The transcript's job records that share, so
+`job resume` of it, from `job status` streams or `session status`, recognises with the
+same share and continues the same job.
+
+**The answer** ([`job-start-data.schema.json`](../../schemas/v1/job-start-data.schema.json),
+example [`job-start.watched.json`](../../schemas/v1/examples/job-start.watched.json)):
+`job` (the `prepare` job, `job-data`, with `request.first` when one was named), `start` (`state`, `mode`, `mode_basis`: `requested`,
+`short_recording`, `long_recording` or `length_unknown`; `runner`: `foreground`,
+`background` or `none`; and for a background runner its `detachment`) and `outcome`, for a
+quick job the retranscription it committed, exactly as `transcript retranscribe` reports
+it (with its operation id, lifecycle and warnings in the envelope), and `null` otherwise.
+
+**The runner.** The same executable, by its own path, as `job resume <job> --json` with the
+caller's `--session-root` and `--host-isolation`, its standard streams connected to
+nothing and its working folder the executable's own; no shell. On Unix it leads a process
+group of its own (`detachment` `process_group`), so a terminal's Ctrl-C and a kill of the
+caller's group do not reach it. On Windows it starts in a hidden console and a process
+group of its own and leaves the caller's job object (`left_callers_job`), unless that job
+forbids it (`in_callers_job`: whatever ends the caller's job, such as an IDE's terminal,
+ends the runner too). A runner that does not hold the job within 10 s is ended and the
+call fails (below); the job waits for `job resume`, which runs it in the foreground.
+
+**Following it.** `job status` of a `prepare` job adds `request.mode` and `streams`, one
+entry a started stream (`transcript`): the stream's own `job_id` once it has one, its
+`state` (that job's, or `not_started`), `stage`, `chunks_done` and `chunks_total`,
+`published_until_us` (how far its revision is published) and `media`: `done_us` of
+`total_us` microseconds of the recording, `elapsed_ms`, `speed` (media seconds a wall
+second over the chunks recognised in this attempt; chunks reused from checkpoints do not
+count, nor does an admission wait), `percent`, and `estimate` (`remaining_ms`, `basis`
+`cumulative_measured_speed`, `fresh_chunks`): the media still to do over that speed,
+`null` until two fresh chunks and 20 s of work, and only while a process runs the stream.
+It is optimistic over silence, and labelled an estimate. The runner records these figures
+at most once a second; they are advisory. Example:
+[`job-status.prepare.json`](../../schemas/v1/examples/job-status.prepare.json). A
+`recognising_speech` progress event of `--events jsonl` (`transcript retranscribe`,
+`job resume`, `job start`) carries the same `media` member.
+
+**Stopping it.** `job cancel` of the `prepare` job cancels its stream's job too: the
+runner stops its provider within about a second and seals what it published as stopped.
+**`session close` now stops the session's running jobs (changed behaviour):** it asks
+every job a process runs to cancel, waits up to 10 s for them to stop, then closes; a
+runner that has not stopped by then fails its next publication on the closed session and
+ends. Until 0.2.x a close while a transcription ran answered `BUSY`. A runner killed
+outright leaves the job interrupted and resumable; on Windows its providers end with it,
+on Unix a provider can outlive it until its chunk ends (L-220).
+
+**The live line.** When the output is readable text (no `--json` or `--events`) and
+standard error is a terminal, `transcript retranscribe`, `job resume` and a quick
+`job start` show one line on standard error, updated at most once a second and cleared
+before the result: `Transcribing 34:10 of 1:30:00 (37%), 2.1x real time, about 27 min left
+(estimate)`. It never appears in JSON or JSON Lines output, nor when standard error is a
+file or a pipe.
+
+| Condition | Code |
+| --- | --- |
+| `job start` of a session that is closed or expired | `INVALID_ARGUMENT` (the session and job in `affected_ids`, as for `job resume`) |
+| `job start` of a session the root does not hold | as `session status` |
+| The background runner could not be started, or ended before it held the job | `MISSING_CAPABILITY` (the job in `affected_ids`, `job resume <job>` suggested) |
+| The background runner did not hold the job within 10 s | `DEADLINE_EXCEEDED` (the same) |
+| A quick job's transcription fails | as `transcript retranscribe` |
 
 ### P11 `job run`
 

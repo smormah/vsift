@@ -45,6 +45,7 @@
 - [vsift job status](#vsift-job-status): Report one job: state, resumability, progress, result or failure
 - [vsift job resume](#vsift-job-resume): Continue one interrupted job from its checkpoints
 - [vsift job cancel](#vsift-job-cancel): Cancel one job, or ask the process running it to stop
+- [vsift job start](#vsift-job-start): Prepare a session as one job and follow it with job status: index its video for candidates, then transcribe it; in the background for a recording of ten minutes or more, in the foreground for a shorter one
 - [vsift handoff](#vsift-handoff): Check an agent's draft handoff report before it is sent
 - [vsift handoff check](#vsift-handoff-check): Check a draft report and its vsift-handoff block against the skill's handoff schema and rules; reads the draft from standard input unless --file names it
 
@@ -109,9 +110,12 @@ A typical investigation (every command takes --json):
                                 shifted from the video's)
        Without one, speech is found only when local speech recognition is set up (setup
        check says); then run:
-         vsift transcript retranscribe <session> --json
-       It can take minutes. If recognition is not set up there is no speech evidence: say
-       so; do not install anything.
+         vsift job start <session> --json
+       A recording under 10 minutes is transcribed before it answers. A longer one is
+       transcribed in the background: follow it with vsift job status <job> --json, and
+       search and read the part already done meanwhile (answers say partial). If
+       recognition is not set up there is no speech evidence: say so; do not install
+       anything.
   3. vsift search <session> --query <words> --limit 20 --json
      vsift transcript get <session> --from <us> --to <us> --limit 20 --json
        What was said. Every time is microseconds from the start of the video.
@@ -1010,7 +1014,7 @@ Read timestamped text from a bounded range.
 
 Over a part of the range that was not transcribed the answer is partial and names the part: an empty page there is a gap, not a silence.
 
-Usage: vsift transcript get [OPTIONS] --from <FROM> --to <TO> <SESSION>
+Usage: vsift transcript get [OPTIONS] <SESSION>
 
 Arguments:
   <SESSION>
@@ -1018,7 +1022,7 @@ Arguments:
 
 Options:
       --from <FROM>
-          Inclusive source-timeline start in microseconds
+          Inclusive source-timeline start in microseconds; with --since it may be left out (from the start)
 
       --json
           Emit one versioned JSON terminal result
@@ -1030,7 +1034,7 @@ Options:
           - jsonl: One bounded JSON object per line
 
       --to <TO>
-          Exclusive source-timeline end in microseconds
+          Exclusive source-timeline end in microseconds; with --since it may be left out (to the end)
 
       --limit <LIMIT>
           Segments per page, 1 through 100; defaults to 20. The maximum stays 100; full segments are large, and --view brief makes a long page smaller
@@ -1051,7 +1055,10 @@ Options:
           [default: process-only]
 
       --revision <REVISION>
-          Revision to read (a `trv_` identity); defaults to the newest
+          Revision to read (a `trv_` identity); defaults to the newest, which may be a revision still being transcribed (open, so the answer is partial)
+
+      --since <TOKEN>
+          The since token of an earlier answer (`data.since.since_token`): read only what was published after it, in start order, in the revision that answer read. Use it to follow a transcription while it runs
 
       --view <VIEW>
           Which answer to give. `brief` keeps each segment's ids, times and `display_text` (and `carried_from` on a carried segment) and leaves out what the segments of a revision repeat; those members stay once in the revision block, which is the same in both views, so each segment is smaller. Read the full view for everything else
@@ -1167,7 +1174,10 @@ Options:
           Opaque continuation token returned by the previous page of the same search
 
       --revision <REVISION>
-          Revision to search (a `trv_` identity); defaults to the newest
+          Revision to search (a `trv_` identity); defaults to the newest, which may be a revision still being transcribed (open, so the answer is partial)
+
+      --since <TOKEN>
+          The since token of an earlier answer (`data.since.since_token`): search only what was published after it, in start order, in the revision that answer read
 
       --view <VIEW>
           Which answer to give. `brief` keeps each found segment's ids, times and `display_text` (and `carried_from` on a carried segment) and leaves out what the segments of a revision repeat; those members stay once in the revision block, which is the same in both views, so each segment is smaller. Read the full view for everything else
@@ -1623,6 +1633,7 @@ Commands:
   status  Report one job: state, resumability, progress, result or failure
   resume  Continue one interrupted job from its checkpoints
   cancel  Cancel one job, or ask the process running it to stop
+  start   Prepare a session as one job and follow it with job status: index its video for candidates, then transcribe it; in the background for a recording of ten minutes or more, in the foreground for a shorter one
 
 Options:
       --json
@@ -1863,6 +1874,57 @@ Options:
 
           Possible values:
           - jsonl: One bounded JSON object per line
+
+      --session-root <SESSION_ROOT>
+          For operators who run a worker host; an agent leaves it out. Explicit private disposable-session root; defaults to the per-user cache
+
+      --host-isolation <HOST_ISOLATION>
+          For operators who run a worker host; an agent leaves it out. Isolation to run under; strict-linux is attested before any work
+
+          Possible values:
+          - process-only: Per-process containment only; no strict boundary is claimed
+          - strict-linux: The strict Linux worker boundary: accepted only when the kernel attests a cgroup v2 with CPU, memory and process limits, a read-only root and no network but loopback; otherwise `ISOLATION_UNAVAILABLE` before any work
+
+          [default: process-only]
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
+## vsift job start
+
+Prepare a session as one job and follow it with job status: index its video for candidates, then transcribe it; in the background for a recording of ten minutes or more, in the foreground for a shorter one.
+
+```text
+Prepare a session as one job and follow it with job status: index its video for candidates, then transcribe it; in the background for a recording of ten minutes or more, in the foreground for a shorter one.
+
+A background job publishes the transcript as it goes: search and transcript get answer over the finished part, marked partial, while it runs. job status reports how far each step has come in seconds of the recording, its speed and an estimate of the time left. With --first, the range named is transcribed before everything else. job cancel or session close stops it, and what it published stays.
+
+Usage: vsift job start [OPTIONS] <SESSION>
+
+Arguments:
+  <SESSION>
+          Session to prepare (a `ses_` identity)
+
+Options:
+      --json
+          Emit one versioned JSON terminal result
+
+      --mode <MODE>
+          quick runs in the foreground and answers when done; watched runs in the background and answers at once. Defaults by the recording's length: quick under ten minutes, watched from ten minutes on
+
+          Possible values:
+          - quick:   In the foreground: the command answers when the job is done
+          - watched: In the background: the command answers once a runner holds the job
+
+      --events <EVENTS>
+          Emit versioned evidence, progress and terminal records as JSON Lines
+
+          Possible values:
+          - jsonl: One bounded JSON object per line
+
+      --first <FROM_US:TO_US>
+          The window to transcribe first: its start and end in microseconds of the recording joined by a colon (60000000:70000000), at most 30 minutes long. When the user named a moment, it is ready within about one window's recognition, before the rest
 
       --session-root <SESSION_ROOT>
           For operators who run a worker host; an agent leaves it out. Explicit private disposable-session root; defaults to the per-user cache

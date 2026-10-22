@@ -47,6 +47,10 @@ pub struct ProgressEventResponse {
     total: Option<u64>,
     unit: &'static str,
     progress_dropped: u64,
+    /// How far the stage has come in media time (ADR 0033), for
+    /// `recognising_speech`; absent otherwise.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    media: Option<crate::MediaProgressData>,
 }
 
 /// What one progress event reports, besides its position in the stream.
@@ -79,6 +83,11 @@ impl ProgressEventResponse {
             total: report.update.total,
             unit: report.update.stage.unit().identifier(),
             progress_dropped: report.dropped,
+            // The run reporting it is running: its estimate means something.
+            media: report
+                .update
+                .media
+                .map(|media| crate::MediaProgressData::new(&media, true)),
         }
     }
 }

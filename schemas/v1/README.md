@@ -116,10 +116,20 @@ These files are the machine-readable public v1 boundary:
   `live_owner`, `resumable` and `resumable_reason`, the `operation_id` a retry should
   carry, `request.range`, `progress` (`chunks_total`, `chunks_checkpointed`),
   `attempts`, `result` (`revision_id`, `generation`) and `failure` (`code`,
-  `retryable`). It never names a path, transcript text or provider output;
+  `retryable`). It never names a path, transcript text or provider output. Since 0.3.0
+  (ADR 0033) a `prepare` job (`kind`) adds `request.mode`, `request.first` (the window
+  named with `--first`) and `streams` (`first`, `visual`, `transcript`, in the order they
+  run; `skipped` for a source without video), each stream with its own job (none for
+  `visual`), state, chunks, `published_until_us` and `media` (`$defs.media_progress`:
+  `done_us`, `total_us`, `elapsed_ms`, `speed`, `percent` and an `estimate` with its
+  `basis`), which `progress-event.schema.json` holds an equal copy of for its `media` member;
 - `job-resume-data.schema.json` â the `data` member of a complete `job.resume` result
   (P10 PR 3): `job` (job data after the run) and `outcome` (exactly the
   `transcript.retranscribe` data);
+- `job-start-data.schema.json` â the `data` member of a complete `job.start` result
+  (0.3.0, ADR 0033): `job` (the `prepare` job's data), `start` (`state`, `mode`,
+  `mode_basis`, `runner`, `detachment`) and `outcome` (the `transcript.retranscribe`
+  data of a job that ran in the foreground, else `null`);
 - `transcript-get-stream-data.schema.json` â the `data` member of the terminal
   event that ends a `transcript.get --events jsonl` stream: the page without its
   items, with `record_count`, the continuation cursor (P07) and, since 0.2.1, the
@@ -329,6 +339,13 @@ a read of the 55 s stand-in recording of `transcript-retranscribe.partial.json` 
 length, `partial` with the gap 30-55 s (made by `local_asr_contract`, like that example).
 The contract tests build each brief example from the same code as the full answer and compare;
 they also hold every brief item to be a projection of its full item.
+`transcript-get.open.json` and `search.open.json` (0.3.0, ADR 0033) read a revision that is still
+being published: a 120 s stand-in run of six chunks, cut after its third, so it is `open`, final
+before 70 s and pending after it. They show the revision's `state` and `published_until_us`,
+`transcript_coverage.pending_ranges`, the envelope reason `transcription_pending`, the fixed warning
+and `data.since` with its token; `growing_transcript_contract` makes them with the application's
+own run and compares, and holds the brief and stream forms, `pending_covered_by` and a stopped
+revision to their schemas. A sealed revision read without `--since` has none of these members.
 `candidates.omit-periodic.json` and `candidates.omit-periodic.brief.json` (0.2.2, #367) are the
 F02 page of `candidates.json` asked for with `--omit periodic`: the same candidates without the
 one whose only reason is `periodic_coverage`, and `data.omitted` saying so (`count` 1); every other

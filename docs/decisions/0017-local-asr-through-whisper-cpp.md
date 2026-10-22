@@ -895,3 +895,14 @@ repetition in recognition (with #474), were not taken. After the fix RM09's chun
 went from 16 to 9 (the rest are the language limit, L-188). Tests: `a_repeated_copy_in_one_chunk_no_longer_hides_the_next_chunks_words`
 (it failed before), `a_sentence_said_twice_is_kept_twice`, `only_a_segment_with_the_same_words_as_the_one_before_is_a_repeat`;
 the properties against the frozen earlier merge, which use unique words, are unchanged.
+
+## Note, 2026-10-21 (0.3.0, ADR 0033): a revision is published as its run goes
+
+This record says a run commits its revision once, when it ends, and that a failed or cancelled run
+commits nothing. Since 0.3.0 that holds only for a run that publishes at its seal (a worker's step).
+`transcript retranscribe` and `job resume` publish the settled part of their merge while they run, as
+parts of an open revision with its final identity; the merge rules of this record are unchanged, and
+the sealed revision is the one a run that published nothing seals. A run that is cancelled, or fails in
+a way it cannot resume from, after it published part of its revision seals it as stopped, keeping every
+published segment ([ADR 0033](0033-progress-during-long-transcriptions.md), D1). The text above is
+kept as written.

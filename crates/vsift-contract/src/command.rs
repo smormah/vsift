@@ -75,6 +75,9 @@ pub enum CommandName {
     JobResume,
     /// `job cancel`.
     JobCancel,
+    /// `job start` (0.3.0, ADR 0033): prepare a session as one job, in the
+    /// foreground or in the background.
+    JobStart,
     /// `session init-workspace` (P11): create a worker workspace with an
     /// operator policy.
     SessionInitWorkspace,
@@ -89,7 +92,7 @@ impl CommandName {
     /// Contract tests iterate this list to prove each identifier satisfies the
     /// published schemas. An exhaustive private `ordinal` match and a
     /// compile-time assertion keep it in step with the variants.
-    pub const ALL: [Self; 34] = [
+    pub const ALL: [Self; 35] = [
         Self::Parse,
         Self::SetupCheck,
         Self::SetupPlan,
@@ -124,6 +127,7 @@ impl CommandName {
         Self::JobCancel,
         Self::SessionInitWorkspace,
         Self::HandoffCheck,
+        Self::JobStart,
     ];
 
     /// Returns the stable identifier written to the envelope's `command` field.
@@ -164,6 +168,7 @@ impl CommandName {
             Self::JobCancel => "job.cancel",
             Self::SessionInitWorkspace => "session.init-workspace",
             Self::HandoffCheck => "handoff.check",
+            Self::JobStart => "job.start",
         }
     }
 
@@ -211,6 +216,7 @@ impl CommandName {
             Self::JobCancel => 31,
             Self::SessionInitWorkspace => 32,
             Self::HandoffCheck => 33,
+            Self::JobStart => 34,
         }
     }
 }
