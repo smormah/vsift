@@ -1241,6 +1241,61 @@ fn job_start_of_a_job_left_cancelling_starts_it_again() -> TestResult {
     restart_watched(&root, &session, &job, "restarted")
 }
 
+/// RV-1 finding 1: a queued job whose runner died (its entry old and at the
+/// head of the root's queue, its job queued with no live owner) does not hold
+/// up a queued job started after it: that job's runner takes the turn and runs
+/// it (without whisper.cpp its stream fails), and the dead entry keeps its
+/// place at the head for when its job runs again.
+#[test]
+fn a_dead_head_of_the_queue_does_not_hold_up_a_live_job() -> TestResult {
+    let root = OwnedRoot::new()?;
+    let session = seed_session(&root)?;
+    let store = store(&root)?;
+    let dead = vsift_application::prepare_spec(
+        &session,
+        vsift_domain::JobMode::Queued,
+        Some(range(0, 30 * SECOND)?),
+        None,
+    )?;
+    drop(store.open_or_create(&dead, now()?)?);
+    store.enqueue_job(&session, &dead.job_id, now()?.saturating_sub(3_600))?;
+    drop(store);
+
+    let started = start_result(&vsift(
+        &root,
+        &[
+            "job",
+            "start",
+            session.as_str(),
+            "--mode",
+            "queued",
+            "--json",
+        ],
+    )?)?;
+    let job = started["data"]["job"]["job_id"]
+        .as_str()
+        .ok_or("no job")?
+        .to_owned();
+    assert_ne!(job, dead.job_id.as_str());
+    let status = match settled_status(&root, &job) {
+        Ok(status) => status,
+        Err(error) => {
+            // Starved behind the dead entry, the runner would wait for ever.
+            let _ = vsift(&root, &["job", "cancel", &job, "--json"]);
+            return Err(error);
+        }
+    };
+    assert_eq!(status["data"]["state"], "failed", "{status}");
+    assert_eq!(status["data"]["failure"]["code"], "MISSING_CAPABILITY");
+    let head = job_result(
+        &vsift(&root, &["job", "status", dead.job_id.as_str(), "--json"])?,
+        "job.status",
+    )?;
+    assert_eq!(head["data"]["state"], "queued");
+    assert_eq!(head["data"]["queue_position"], 0, "{head}");
+    Ok(())
+}
+
 /// ADR 0033 section 6: `--mode quick` runs the job in the foreground and
 /// answers when it ends, here with the stream's failure; `job status` then
 /// reports the failed `prepare` job, and the readable text of `job start`

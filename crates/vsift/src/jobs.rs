@@ -519,7 +519,7 @@ impl Engine {
             if report.mode == Some(JobMode::Queued)
                 && matches!(report.state, JobState::Queued | JobState::Interrupted)
             {
-                report.queue_position = crate::prepare::queue_position(&store, job);
+                report.queue_position = crate::prepare::queue_position(&store, job, now);
             }
         }
         Ok(report)

@@ -754,7 +754,8 @@ impl PrepareStreams for EngineStreams<'_> {
                     failure: None,
                 });
             }
-            let position = queue_position(self.store, &self.prepare);
+            let now = self.engine.now_unix_seconds().unwrap_or_default();
+            let position = queue_position(self.store, &self.prepare, now);
             if position == Some(0)
                 && let Ok(Some(turn)) = self.store.try_take_queue_turn()
             {
@@ -766,7 +767,6 @@ impl PrepareStreams for EngineStreams<'_> {
             if position.is_none() {
                 // Not in the queue (it was removed, or the queue is full when
                 // it was started): it takes its place now.
-                let now = self.engine.now_unix_seconds().unwrap_or_default();
                 if self
                     .store
                     .enqueue_job(&self.session, &self.prepare, now)
@@ -787,25 +787,40 @@ impl PrepareStreams for EngineStreams<'_> {
 /// How often a queued job waiting its turn looks at the queue.
 const QUEUE_TURN_POLL: Duration = Duration::from_secs(2);
 
-/// Where `job` stands in the root's queue (0 for the next to run), among the
-/// entries whose job has not ended; an ended job's entry is removed as it is
-/// found. `None` when the job is not in the queue or the queue cannot be read.
-pub(crate) fn queue_position(store: &FilesystemSessionStore, job: &JobId) -> Option<usize> {
+/// How long an entry counts in the queue without a live runner: its runner
+/// may still be starting (`job start` waits up to 10 s for it to hold the
+/// job).
+const QUEUE_START_GRACE_SECONDS: u64 = 30;
+
+/// Where `job` stands in the root's queue at `now_unix_seconds` (0 for the
+/// next to run), among the entries ahead of it that wait for their turn: an
+/// entry whose job a runner holds, or one entered less than
+/// [`QUEUE_START_GRACE_SECONDS`] ago. An entry that no process runs (its runner
+/// was killed, or the machine restarted) keeps its place but does not hold up
+/// the live jobs behind it (RV-1 finding 1); once its job runs again, it is
+/// ahead of them. An ended job's entry is removed as it is found. `None` when
+/// the job is not in the queue or the queue cannot be read.
+pub(crate) fn queue_position(
+    store: &FilesystemSessionStore,
+    job: &JobId,
+    now_unix_seconds: u64,
+) -> Option<usize> {
     let entries = store.job_queue().ok()?;
     let mut position = 0;
     for entry in entries {
         let view = store.job(&entry.session_id, &entry.job_id).ok().flatten();
-        let ended = view
-            .as_ref()
-            .is_none_or(|view| view.record.state.is_terminal());
-        if ended {
+        let Some(view) = view.filter(|view| !view.record.state.is_terminal()) else {
             store.dequeue_job(&entry.job_id);
             continue;
-        }
+        };
         if entry.job_id == *job {
             return Some(position);
         }
-        position += 1;
+        let starting = now_unix_seconds.saturating_sub(entry.entered_at_unix_seconds)
+            < QUEUE_START_GRACE_SECONDS;
+        if view.liveness == vsift_application::JobLiveness::Owned || starting {
+            position += 1;
+        }
     }
     None
 }
