@@ -100,6 +100,7 @@ fn status(state: SessionState) -> StatusData {
         artifact_bytes: 512,
         generation: 3,
         expires_at: String::from(EXPIRES_AT),
+        origin: None,
     }
 }
 

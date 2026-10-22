@@ -1698,6 +1698,7 @@ fn session_status_lists_jobs_additively() -> TestResult {
         artifact_bytes: 3,
         generation: 3,
         expires_at: EXPIRES_AT.to_owned(),
+        origin: None,
     };
     let plain = serde_json::to_value(&status)?;
     let job = SessionJobData::new(

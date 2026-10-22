@@ -38,6 +38,16 @@ Lifecycle: ephemeral, expires 2026-10-05T17:21:00Z
 Your original is never changed, and the path can be relative. Keep the session id: every later command
 takes it as `<session>`.
 
+**A video from a link (from 0.3.0).** If you have a direct `https://` link to the video file (it ends in
+`.mp4`, `.mov`, `.mkv` or `.webm`, or downloads a video when you open it), give it instead of the path:
+`vsift ingest --url <link>`. VSift downloads it once into the session, with a limit of 4 GiB and 30 minutes
+(`--max-download-bytes` and `--max-download-seconds` raise them), and everything after that works offline, as
+for a file. `--url -` reads the link from standard input, so a link with a private token stays out of your shell
+history. The link is never stored: the session keeps only the host and a fingerprint of it (`Fetched from:`). A
+web page, such as a video site's page, is not a video file and is refused; links that need a sign-in, and links to
+your own network, never work. If the download fails, the answer says why
+([troubleshooting](troubleshooting.md#source_fetch_failed-a-video-link-could-not-be-fetched)), and your local files are not affected.
+
 ## 2. Check the video opens
 
 If the file is not a video VSift can read, the first command that looks inside will say so with

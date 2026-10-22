@@ -59,7 +59,8 @@ pub use job::{
 pub use search::{SearchPage, SearchPageRequest, page_search, search_query_digest};
 pub use session::{
     ForegroundSessionPort, NeverCancelled, OpenSession, OpenSessionError, OpenSessionOutcome,
-    OpenSessionRequest, SourcePathFault, SpecialFileKind, StageCancellation, StagedSessionSource,
+    OpenSessionRequest, SessionSource, SourcePathFault, SpecialFileKind, StageCancellation,
+    StagedSessionSource,
 };
 
 pub use managed_lifecycle::{

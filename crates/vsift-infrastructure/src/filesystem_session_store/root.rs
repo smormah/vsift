@@ -309,12 +309,7 @@ impl FilesystemSessionStore {
         &self,
         incoming_bytes: u64,
     ) -> Result<FreeSpaceCheck, SessionStorageError> {
-        decide_room(
-            available_bytes(&self.root, &self.root_path),
-            incoming_bytes,
-            COPY_ROOM_MARGIN_BYTES,
-            FreeSpaceStrictness::BestEffort,
-        )
+        decide_copy_room(available_bytes(&self.root, &self.root_path), incoming_bytes)
     }
 
     /// The lifetime rules of sessions opened in this root.
@@ -749,6 +744,22 @@ enum FreeSpaceStrictness {
     /// A desktop root's check is a courtesy before a copy: unreadable space is
     /// not checked, and the copy's own write failure stays the backstop.
     BestEffort,
+}
+
+/// The decision of [`FilesystemSessionStore::ensure_room_for_copy`] for
+/// `available` bytes: best effort, with [`COPY_ROOM_MARGIN_BYTES`] kept free.
+/// Shared with the link test route's simulated free space, so a test of a
+/// short filesystem is judged by the production rule.
+pub(crate) fn decide_copy_room(
+    available: Option<u64>,
+    incoming_bytes: u64,
+) -> Result<FreeSpaceCheck, SessionStorageError> {
+    decide_room(
+        available,
+        incoming_bytes,
+        COPY_ROOM_MARGIN_BYTES,
+        FreeSpaceStrictness::BestEffort,
+    )
 }
 
 /// Decides whether `incoming_bytes` and `keep_free` fit in `available`

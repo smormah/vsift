@@ -3,9 +3,9 @@
 use std::{error::Error, fmt, num::NonZeroU32, path::PathBuf};
 
 use vsift_domain::{
-    DurabilityRequirement, OperationId, PublicationGuarantee, SessionId, SessionLifetime,
-    SessionLifetimePolicy, SourceId, StorageGeneration, TranscriptImportError, TranscriptRevision,
-    TranscriptRevisionError,
+    DownloadLimits, DurabilityRequirement, OperationId, PublicationGuarantee, SessionId,
+    SessionLifetime, SessionLifetimePolicy, SourceFetchReason, SourceId, SourceLink, SourceOrigin,
+    StorageGeneration, TranscriptImportError, TranscriptRevision, TranscriptRevisionError,
 };
 
 use crate::{
@@ -43,6 +43,11 @@ pub trait StagedSessionSource {
     fn source_id(&self) -> &SourceId;
     /// Bound source byte count.
     fn source_bytes(&self) -> u64;
+    /// Where the bytes were fetched from, for a source fetched from a link
+    /// (ADR 0028); `None` for a local file's copy.
+    fn origin(&self) -> Option<&SourceOrigin> {
+        None
+    }
 }
 
 /// Contained source and lifecycle operations needed to open one investigation.
@@ -84,6 +89,24 @@ pub trait ForegroundSessionPort: SessionStore {
         cancellation: &dyn StageCancellation,
     ) -> Result<Self::Snapshot, OpenSessionError>;
 
+    /// Fetches one video from a direct HTTPS link into the session's source
+    /// slot, within `limits`, checking `cancellation` as the bytes arrive
+    /// (ADR 0028). The snapshot records the fetch's origin.
+    ///
+    /// # Errors
+    ///
+    /// [`OpenSessionError::SourceFetch`] with the typed reason, a storage
+    /// failure, [`OpenSessionError::SourceNoRoom`] or
+    /// [`OpenSessionError::Cancelled`]; a failed fetch leaves no file.
+    fn stage_link(
+        &self,
+        session_id: &SessionId,
+        operation_id: &OperationId,
+        link: &SourceLink,
+        limits: DownloadLimits,
+        cancellation: &dyn StageCancellation,
+    ) -> impl Future<Output = Result<Self::Snapshot, OpenSessionError>> + Send;
+
     /// Publishes source binding and expiry in a fenced immutable generation.
     ///
     /// # Errors
@@ -114,11 +137,26 @@ pub trait ForegroundSessionPort: SessionStore {
     ) -> Result<StorageGeneration, OpenSessionError>;
 }
 
+/// Where a new session's source comes from.
+#[derive(Clone, Debug)]
+pub enum SessionSource {
+    /// A local file the caller selected, copied into the session.
+    Local(PathBuf),
+    /// A direct HTTPS link to a video file, fetched into the session within
+    /// its limits (ADR 0028).
+    Link {
+        /// The link, never printed or stored.
+        link: SourceLink,
+        /// The fetch's size and time bounds.
+        limits: DownloadLimits,
+    },
+}
+
 /// Explicit source, identity, guarantee, and clock inputs for one foreground open.
 #[derive(Clone, Debug)]
 pub struct OpenSessionRequest {
-    /// Caller-selected local media path.
-    pub source: PathBuf,
+    /// Where the source comes from: a local file or a link.
+    pub source: SessionSource,
     /// Fresh opaque session identity.
     pub session_id: SessionId,
     /// Idempotency identity for initialization.
@@ -148,6 +186,8 @@ pub struct OpenSessionOutcome {
     pub publication: PublicationGuarantee,
     /// Default expiry from the initial open.
     pub lifetime: SessionLifetime,
+    /// Where a fetched source came from (ADR 0028); `None` for a local file.
+    pub origin: Option<SourceOrigin>,
 }
 
 /// Why the path a caller named could not be opened as a file, in the three
@@ -292,6 +332,10 @@ pub enum OpenSessionError {
     /// activated, and the unactivated registration is removed like that of any
     /// failed open.
     Cancelled,
+    /// A link given as the source could not be fetched (ADR 0028), for the
+    /// typed reason: published as `SOURCE_FETCH_FAILED`. Nothing was
+    /// activated and no partial file remains; local files are unaffected.
+    SourceFetch(SourceFetchReason),
 }
 
 impl fmt::Display for OpenSessionError {
@@ -320,6 +364,7 @@ impl fmt::Display for OpenSessionError {
             Self::TranscriptRejected(error) => error.fmt(formatter),
             Self::TranscriptInvalid(error) => error.fmt(formatter),
             Self::Cancelled => formatter.write_str("opening the session was cancelled"),
+            Self::SourceFetch(reason) => reason.fmt(formatter),
         }
     }
 }
@@ -451,12 +496,25 @@ impl<S: ForegroundSessionPort> OpenSession<S> {
                 request.durability,
             ))
             .await?;
-        let snapshot = self.port.stage_source(
-            &request.session_id,
-            &request.stage_operation_id,
-            &request.source,
-            cancellation,
-        )?;
+        let snapshot = match &request.source {
+            SessionSource::Local(path) => self.port.stage_source(
+                &request.session_id,
+                &request.stage_operation_id,
+                path,
+                cancellation,
+            )?,
+            SessionSource::Link { link, limits } => {
+                self.port
+                    .stage_link(
+                        &request.session_id,
+                        &request.stage_operation_id,
+                        link,
+                        *limits,
+                        cancellation,
+                    )
+                    .await?
+            }
+        };
         Ok(PreparedOpen {
             _registration: registration,
             initialized,
@@ -491,6 +549,7 @@ impl<R, T: StagedSessionSource> PreparedOpen<R, T> {
             generation,
             publication: self.publication,
             lifetime: self.lifetime,
+            origin: self.snapshot.origin().cloned(),
         }
     }
 }
@@ -589,6 +648,18 @@ mod tests {
             Err(SessionStorageError::Io.into())
         }
 
+        fn stage_link(
+            &self,
+            _session_id: &SessionId,
+            _operation_id: &OperationId,
+            _link: &vsift_domain::SourceLink,
+            _limits: vsift_domain::DownloadLimits,
+            _cancellation: &dyn super::StageCancellation,
+        ) -> impl Future<Output = Result<Self::Snapshot, OpenSessionError>> + Send {
+            self.calls.fetch_add(1, Ordering::SeqCst);
+            ready(Err(SessionStorageError::Io.into()))
+        }
+
         fn activate(
             &self,
             _snapshot: &Self::Snapshot,
@@ -623,7 +694,7 @@ mod tests {
         let result = use_case
             .execute(
                 OpenSessionRequest {
-                    source: PathBuf::from("unused"),
+                    source: super::SessionSource::Local(PathBuf::from("unused")),
                     session_id: SessionId::parse("ses_0123456789abcdef")?,
                     initialize_operation_id: OperationId::parse("op_0123456789abcdef")?,
                     stage_operation_id: OperationId::parse("op_1111111111111111")?,
@@ -659,10 +730,11 @@ mod transcript_open_tests {
     };
 
     use vsift_domain::{
-        CueSource, CueText, CueTiming, DurabilityRequirement, ImportedCue, MediaTime, OperationId,
-        ParsedTranscript, PublicationGuarantee, SessionId, SidecarIdentity, SourceId,
-        StorageGeneration, TranscriptFormat, TranscriptImportError, TranscriptOffset,
-        TranscriptRejection, TranscriptRevision, TranscriptWarnings,
+        AddressCheck, CueSource, CueText, CueTiming, DirectLinkOrigin, DownloadLimits,
+        DurabilityRequirement, HostName, ImportedCue, MediaTime, OperationId, ParsedTranscript,
+        PublicationGuarantee, SessionId, Sha256Hex, SidecarIdentity, SourceFetchReason, SourceId,
+        SourceLink, SourceOrigin, StorageGeneration, TranscriptFormat, TranscriptImportError,
+        TranscriptOffset, TranscriptRejection, TranscriptRevision, TranscriptWarnings,
     };
 
     use crate::{
@@ -680,7 +752,7 @@ mod transcript_open_tests {
 
     const DIGEST: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
-    struct Snapshot(SourceId);
+    struct Snapshot(SourceId, Option<SourceOrigin>);
 
     impl StagedSessionSource for Snapshot {
         fn source_id(&self) -> &SourceId {
@@ -689,6 +761,10 @@ mod transcript_open_tests {
 
         fn source_bytes(&self) -> u64 {
             1_024
+        }
+
+        fn origin(&self) -> Option<&SourceOrigin> {
+            self.1.as_ref()
         }
     }
 
@@ -759,7 +835,32 @@ mod transcript_open_tests {
         ) -> Result<Self::Snapshot, OpenSessionError> {
             Ok(Snapshot(
                 SourceId::from_sha256(DIGEST).map_err(|_| OpenSessionError::InvalidSource)?,
+                None,
             ))
+        }
+
+        fn stage_link(
+            &self,
+            _session_id: &SessionId,
+            _operation_id: &OperationId,
+            link: &SourceLink,
+            limits: DownloadLimits,
+            _cancellation: &dyn super::StageCancellation,
+        ) -> impl Future<Output = Result<Self::Snapshot, OpenSessionError>> + Send {
+            // A link whose host is `fails.example.test` fails offline; any
+            // other is fetched at the limit's size.
+            let result = if link.expose().contains("fails.example.test") {
+                Err(OpenSessionError::SourceFetch(SourceFetchReason::Offline))
+            } else {
+                origin(limits.max_bytes()).and_then(|origin| {
+                    Ok(Snapshot(
+                        SourceId::from_sha256(DIGEST)
+                            .map_err(|_| OpenSessionError::InvalidSource)?,
+                        Some(origin),
+                    ))
+                })
+            };
+            ready(result)
         }
 
         fn activate(
@@ -797,9 +898,72 @@ mod transcript_open_tests {
         }
     }
 
+    /// The origin a stand-in fetch of `bytes` records.
+    fn origin(bytes: u64) -> Result<SourceOrigin, OpenSessionError> {
+        let host =
+            HostName::parse("videos.example.test").map_err(|_| OpenSessionError::InvalidSource)?;
+        let digest = Sha256Hex::parse(DIGEST).map_err(|_| OpenSessionError::InvalidSource)?;
+        DirectLinkOrigin::new(
+            digest,
+            (host.clone(), host),
+            0,
+            AddressCheck::Direct,
+            1_000,
+            bytes,
+        )
+        .map(SourceOrigin::DirectHttps)
+        .map_err(|_| OpenSessionError::InvalidSource)
+    }
+
+    fn link_request(link: &str) -> Result<OpenSessionRequest, Box<dyn Error>> {
+        let mut request = request()?;
+        request.source = super::SessionSource::Link {
+            link: SourceLink::parse(link)?,
+            limits: DownloadLimits::new(Some(2_048), None)?,
+        };
+        Ok(request)
+    }
+
+    /// ADR 0028: a link source is fetched by the port's `stage_link`, and the
+    /// outcome carries the origin the snapshot recorded.
+    #[tokio::test]
+    async fn a_link_source_is_fetched_and_its_origin_reported() -> TestResult {
+        let port = RecordingPort::default();
+        let opened = OpenSession::new(port.clone())
+            .execute(
+                link_request("https://videos.example.test/a.mp4?token=t")?,
+                &super::NeverCancelled,
+            )
+            .await?;
+        let Some(SourceOrigin::DirectHttps(origin)) = opened.origin else {
+            return Err("no origin".into());
+        };
+        assert_eq!(origin.bytes(), 2_048, "the limits reached the port");
+        assert_eq!(port.activations(), [None]);
+        Ok(())
+    }
+
+    /// A failed fetch never activates the session and keeps its reason.
+    #[tokio::test]
+    async fn a_failed_fetch_never_activates_the_session() -> TestResult {
+        let port = RecordingPort::default();
+        let result = OpenSession::new(port.clone())
+            .execute(
+                link_request("https://fails.example.test/a.mp4")?,
+                &super::NeverCancelled,
+            )
+            .await;
+        assert_eq!(
+            result.map(|opened| opened.generation),
+            Err(OpenSessionError::SourceFetch(SourceFetchReason::Offline))
+        );
+        assert_eq!(port.activations(), [] as [Option<TranscriptRevision>; 0]);
+        Ok(())
+    }
+
     fn request() -> Result<OpenSessionRequest, Box<dyn Error>> {
         Ok(OpenSessionRequest {
-            source: PathBuf::from("unused"),
+            source: super::SessionSource::Local(PathBuf::from("unused")),
             session_id: SessionId::parse("ses_0123456789abcdef")?,
             initialize_operation_id: OperationId::parse("op_0123456789abcdef")?,
             stage_operation_id: OperationId::parse("op_1111111111111111")?,

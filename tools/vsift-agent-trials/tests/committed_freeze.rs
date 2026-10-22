@@ -60,6 +60,12 @@ fn the_committed_freezes_still_hold() -> TestResult {
 /// visible: changing this constant is the decision to cut another candidate and write a new freeze
 /// (`docs/operations/release.md` section 6.8), and it shows in the diff of a test, not only of a data file.
 ///
+/// The freeze of 2026-10-22 is a **draft freeze, rewritten at the merge rebase** (0.3.0 development freeze; the final
+/// freeze is recorded at the 0.3.0 cut). The direct-links pull request changed the skill, `bd205d6c...` to
+/// `dcdf68fb...`, so this digest moved `30293090...` to the value below; the other six components are unchanged. The
+/// supervisor allowed drafts to rewrite the freeze provisionally on 2026-10-21 so that CI runs every test; it is
+/// written again on the new `main` when the pull request is rebased to merge. No batch has run under it.
+///
 /// The freeze of 2026-10-19 is new on purpose (#468, the toolchain re-pin to Rust 1.99.1), and this time the
 /// `grader` component changed, `57507fad...` to `9ecd1121...`: the new pedantic lint `clippy::assert_is_empty`
 /// fires in the test modules of the grader's `src`, and the maintainer decided on 2026-10-19 to rewrite every
@@ -98,7 +104,7 @@ fn the_committed_freezes_still_hold() -> TestResult {
 /// in `batch-2-rc.3/` and `batch-3-rc.3/`); the first two candidates' was
 /// `1e89b5cc488e7245d1a6d63ec8809c1f8a5c137ee87f5ed05f9b692c2af6e392` (copies in `batch-2-rc.1/` and
 /// `batch-2-rc.2/`).
-const CUT_FREEZE_SHA256: &str = "302930904439c2eb49e43396f30d2088481d1a6fb7f47467dd29f08a1e0bb073";
+const CUT_FREEZE_SHA256: &str = "dd01c3dcaa41654c6a02b567e12e056aae9f7d7ae75ff263cd92eff4fa28f6e2";
 
 #[test]
 fn the_committed_freezes_are_the_ones_written_at_the_cut() -> TestResult {

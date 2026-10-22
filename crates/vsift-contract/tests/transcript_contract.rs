@@ -145,6 +145,7 @@ fn ingest_response(
         generation: StorageGeneration::from_value(1),
         publication: PublicationGuarantee::ProcessCrashConsistent,
         lifetime: SessionLifetime::open(1_790_208_000)?,
+        origin: None,
     };
     Ok(OperationResponse::complete(
         "ingest",
@@ -284,6 +285,7 @@ fn plain_ingest_data_is_unchanged_and_schema_valid() -> TestResult {
         generation: StorageGeneration::from_value(1),
         publication: PublicationGuarantee::ProcessCrashConsistent,
         lifetime: SessionLifetime::open(1_000)?,
+        origin: None,
     };
     let data = serde_json::to_value(OpenData::new(&opened, EXPIRES_AT.to_owned()))?;
 

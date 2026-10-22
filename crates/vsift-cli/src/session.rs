@@ -10,19 +10,20 @@ use serde::Serialize;
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 use vsift::{
     BundleSummary, Cancellation, CleanDecision, CleanEntry, CleanMode, CleanPage, CleanRequest,
-    CleanScope, DurabilityRequirement, Engine, FailureCode, IngestRequest, ProgressObserver,
+    CleanScope, DownloadLimits, DurabilityRequirement, Engine, EngineError, FailureCode,
+    IngestOutcome, IngestRequest, LinkIngestRequest, OpenSessionError, ProgressObserver,
     RetranscribeOutcome, RetranscribeRange, RetranscribeRequest, SessionJobs, SessionLifetime,
-    SessionLifetimePolicy, SessionListEntry, SessionPage, SessionSnapshot, SourceRetention,
-    SuppliedTranscriptRequest, TranscriptExcerpt, TranscriptQuery, WorkspaceInitRequest,
-    WorkspacePolicy, WorkspaceRetention,
+    SessionLifetimePolicy, SessionListEntry, SessionPage, SessionSnapshot, SourceFetchReason,
+    SourceLink, SourceRetention, SuppliedTranscriptRequest, TranscriptExcerpt, TranscriptQuery,
+    WorkspaceInitRequest, WorkspacePolicy, WorkspaceRetention,
 };
 use vsift_contract::{
     BundleData, BundleSourceInclusion, CleanData, CleanItem, CleanItemOutcome, CommandName,
-    LifecycleResponse, ListedSession, OpenData, OperationResponse, PageData, RequestDurability,
-    ResultView, RetranscribeJob, SessionJobData, SessionState, SessionStatusData, StatusData,
-    TranscriptEvidenceStream, TranscriptPresentation, TranscriptRetranscribeData, WorkspaceData,
-    WorkspaceInitOutcome, finish_retranscription, job_warning_messages, transcript_get_response,
-    transcript_warning_messages,
+    LifecycleResponse, ListedSession, OpenData, OperationResponse, OriginData, PageData,
+    RequestDurability, ResultView, RetranscribeJob, SessionJobData, SessionState,
+    SessionStatusData, StatusData, TranscriptEvidenceStream, TranscriptPresentation,
+    TranscriptRetranscribeData, WorkspaceData, WorkspaceInitOutcome, finish_retranscription,
+    job_warning_messages, transcript_get_response, transcript_warning_messages,
 };
 
 use crate::{
@@ -75,6 +76,7 @@ fn status_data(snapshot: &SessionSnapshot) -> Result<StatusData, FailureCode> {
         artifact_bytes: snapshot.artifact_bytes(),
         generation: snapshot.generation().value(),
         expires_at: rfc3339(snapshot.lifetime().expires_at_unix_seconds())?,
+        origin: snapshot.origin().and_then(OriginData::new),
     })
 }
 
@@ -222,14 +224,30 @@ pub(crate) async fn ingest(
         path,
         offset_micros: arguments.transcript_offset.unwrap_or(0),
     });
-    let outcome = engine
-        .ingest(IngestRequest {
-            source: arguments.source,
-            transcript,
-            cancellation: cancellation.clone(),
-            durability: vsift::DurabilityRequirement::Ephemeral,
-        })
-        .await?;
+    let outcome = match (arguments.source, arguments.url) {
+        (Some(source), None) => {
+            engine
+                .ingest(IngestRequest {
+                    source,
+                    transcript,
+                    cancellation: cancellation.clone(),
+                    durability: vsift::DurabilityRequirement::Ephemeral,
+                })
+                .await?
+        }
+        (None, Some(link)) => {
+            ingest_link(
+                engine,
+                &link,
+                (arguments.max_download_bytes, arguments.max_download_seconds),
+                transcript,
+                cancellation,
+            )
+            .await?
+        }
+        // The argument group requires exactly one.
+        _ => return Err(CommandFailure::from(FailureCode::InvalidArgument)),
+    };
     let expires_at = rfc3339(outcome.session.lifetime.expires_at_unix_seconds())?;
     let mut data = OpenData::new(&outcome.session, expires_at);
     let mut warnings = Vec::new();
@@ -240,6 +258,51 @@ pub(crate) async fn ingest(
     Ok(response(CommandName::Ingest, &data)?
         .with_lifecycle(session_lifecycle(outcome.session.lifetime)?)
         .with_warnings(&warnings))
+}
+
+/// The most bytes `--url -` reads from standard input: the longest link
+/// and a line ending.
+const MAX_STDIN_LINK_BYTES: u64 = 2_050;
+
+/// `ingest --url`: reads the link (from standard input for `-`), checks its
+/// shape and fetches it (ADR 0028). The link is never echoed: a malformed
+/// one is `SOURCE_FETCH_FAILED` with the reason `not_https` and nothing else.
+async fn ingest_link(
+    engine: &Engine,
+    argument: &str,
+    (max_bytes, max_seconds): (Option<u64>, Option<u32>),
+    transcript: Option<SuppliedTranscriptRequest>,
+    cancellation: &Cancellation,
+) -> Result<IngestOutcome, CommandFailure> {
+    let text = if argument == "-" {
+        let mut text = String::new();
+        std::io::Read::read_to_string(
+            &mut std::io::Read::take(std::io::stdin().lock(), MAX_STDIN_LINK_BYTES),
+            &mut text,
+        )
+        .map_err(|_| fetch_failure(SourceFetchReason::NotHttps))?;
+        text.trim_end_matches(['\r', '\n']).to_owned()
+    } else {
+        argument.to_owned()
+    };
+    let link = SourceLink::parse(&text).map_err(fetch_failure)?;
+    let limits = DownloadLimits::new(max_bytes, max_seconds)
+        .map_err(|_| CommandFailure::from(FailureCode::InvalidArgument))?;
+    Ok(engine
+        .ingest_link(LinkIngestRequest {
+            link,
+            limits,
+            transcript,
+            cancellation: cancellation.clone(),
+            durability: DurabilityRequirement::Ephemeral,
+        })
+        .await?)
+}
+
+fn fetch_failure(reason: SourceFetchReason) -> CommandFailure {
+    CommandFailure::from(EngineError::OpenSession(OpenSessionError::SourceFetch(
+        reason,
+    )))
 }
 
 fn read_transcript(

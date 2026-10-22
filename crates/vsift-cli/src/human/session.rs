@@ -5,7 +5,7 @@ use vsift_contract::CommandName;
 use super::{
     push_outcome,
     text::{RenderedText, TerminalText, TooLarge},
-    view::{Bundle, CleanPage, Envelope, Opened, SessionPage, SessionStatus, Workspace},
+    view::{Bundle, CleanPage, Envelope, Opened, Origin, SessionPage, SessionStatus, Workspace},
 };
 
 /// `ingest`: the newly opened session and any imported transcript.
@@ -47,6 +47,7 @@ pub(super) fn ingest(envelope: &Envelope<Opened>) -> Result<RenderedText, TooLar
             text.push_fixed("Transcript: none imported").end_line();
         }
     }
+    push_origin(&mut text, data.origin.as_ref());
     push_outcome(&mut text, envelope);
     text.finish()
 }
@@ -236,6 +237,33 @@ fn push_status_lines(text: &mut TerminalText, status: &SessionStatus) {
     text.push_fixed("Generation: ")
         .push_unsigned(status.generation)
         .end_line();
+    push_origin(text, status.origin.as_ref());
+}
+
+/// The `Fetched from:` line of a source fetched from a link (ADR 0028):
+/// hosts and the time only, never the link.
+fn push_origin(text: &mut TerminalText, origin: Option<&Origin>) {
+    let Some(origin) = origin else {
+        return;
+    };
+    text.push_fixed("Fetched from: ")
+        .push_value(&origin.final_host);
+    if origin.final_host != origin.requested_host {
+        text.push_fixed(" (link to ")
+            .push_value(&origin.requested_host)
+            .push_fixed(", ")
+            .push_unsigned(origin.redirects)
+            .push_fixed(if origin.redirects == 1 {
+                " redirect)"
+            } else {
+                " redirects)"
+            });
+    }
+    text.push_fixed(" at ").push_value(&origin.retrieved_at);
+    if origin.address_check == "proxy_resolved" {
+        text.push_fixed(", through a proxy that resolved the name");
+    }
+    text.end_line();
 }
 
 /// Writes a source identity and its size.
