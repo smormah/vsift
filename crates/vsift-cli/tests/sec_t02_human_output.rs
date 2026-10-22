@@ -550,6 +550,34 @@ fn setup_commands_render_readable_text() -> TestResult {
             ". Managed installation is not available for this target.",
             ". <MANAGED INSTALLATION>",
         );
+    // So does whether the optional online-video component is offered (#409).
+    let mut text = text;
+    for (status, capability) in [
+        (
+            "not_installed",
+            vsift_application::OptionalCapability::NotInstalled,
+        ),
+        (
+            "unavailable",
+            vsift_application::OptionalCapability::Unavailable,
+        ),
+    ] {
+        let line = format!(
+            "Optional component online_links: {status}
+  {}
+",
+            vsift_contract::optional_check_step(
+                vsift_application::OptionalComponent::OnlineLinks,
+                &capability,
+                vsift_application::SetupProfile::Desktop
+            )
+        );
+        text = text.replace(
+            &line,
+            "<ONLINE VIDEOS>
+",
+        );
+    }
     check_snapshot("setup-check-blocked", &text)?;
 
     let tool = root.write("stand-in-ffprobe", b"not a real tool")?;

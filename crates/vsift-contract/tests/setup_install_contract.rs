@@ -65,6 +65,8 @@ fn component(
         ManagedComponent::MediaTools => "n9.0.1-11-ge47273f4d9-20260831",
         ManagedComponent::WhisperCli => "whisper.cpp-v1.9.2-ubuntu-x64",
         ManagedComponent::WhisperModel => "whisper-base-multilingual-80da2d8",
+        ManagedComponent::JsRuntimeDeno => "deno-2.9.7-x86_64-linux-gnu",
+        ManagedComponent::YtDlp => "yt-dlp-2026.08.19-linux-x86_64",
     };
     ComponentInstallReport {
         component,
@@ -76,6 +78,7 @@ fn component(
 
 fn activated_report() -> ManagedInstallReport {
     ManagedInstallReport {
+        optional: Vec::new(),
         components: [
             ManagedComponent::MediaTools,
             ManagedComponent::WhisperCli,
@@ -97,6 +100,7 @@ fn activated_report() -> ManagedInstallReport {
 /// failed: the example of a failed install.
 fn failed_report() -> ManagedInstallReport {
     ManagedInstallReport {
+        optional: Vec::new(),
         components: vec![
             component(
                 ManagedComponent::MediaTools,
@@ -197,6 +201,7 @@ fn missing_library_report(
 ) -> Result<ManagedInstallReport, Box<dyn std::error::Error>> {
     let name = SharedLibraryName::parse(library).ok_or("not a library name")?;
     Ok(ManagedInstallReport {
+        optional: Vec::new(),
         components: vec![
             component(
                 ManagedComponent::MediaTools,
@@ -308,6 +313,7 @@ fn another_missing_library_gets_no_guessed_package() -> TestResult {
 #[test]
 fn a_provider_failure_without_a_library_is_unchanged() -> TestResult {
     let report = ManagedInstallReport {
+        optional: Vec::new(),
         components: vec![component(
             ManagedComponent::WhisperCli,
             ComponentInstallOutcome::Failed(ComponentInstallFailure::at(
@@ -403,6 +409,7 @@ fn every_failure_validates_and_has_a_bounded_remediation() -> TestResult {
             )),
         ] {
             let report = ManagedInstallReport {
+                optional: Vec::new(),
                 components: vec![
                     component(
                         ManagedComponent::MediaTools,

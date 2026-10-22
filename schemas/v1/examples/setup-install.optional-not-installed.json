@@ -1,0 +1,92 @@
+{
+  "command": "setup.install",
+  "coverage": null,
+  "data": {
+    "catalogue_revision": "ubuntu-24.04-x86_64-2026-10-21-r4",
+    "cleanup": {
+      "stale_stages_removed": 0,
+      "stale_stages_retained": 0,
+      "versions": []
+    },
+    "components": [
+      {
+        "component": "ffmpeg_ffprobe",
+        "failure_code": null,
+        "reason": null,
+        "retention_reason": null,
+        "smoke_check": null,
+        "stage": null,
+        "status": "already_current",
+        "step": null,
+        "version": "fixture-ffmpeg-ffprobe"
+      },
+      {
+        "component": "whisper_cli",
+        "failure_code": null,
+        "reason": null,
+        "retention_reason": null,
+        "smoke_check": null,
+        "stage": null,
+        "status": "already_current",
+        "step": null,
+        "version": "fixture-whisper-cli"
+      },
+      {
+        "component": "whisper_model",
+        "failure_code": null,
+        "reason": null,
+        "retention_reason": null,
+        "smoke_check": null,
+        "stage": null,
+        "status": "already_current",
+        "step": null,
+        "version": "fixture-whisper-model"
+      }
+    ],
+    "core": "ready",
+    "next_step": "VSift is ready for local videos: every core component is installed and selected. An optional component was not installed (optional_groups says which and why); local investigation is not affected.",
+    "optional_components": [
+      {
+        "component": "js_runtime_deno",
+        "failure_code": "DOWNLOAD_FAILED",
+        "reason": "proxy_auth",
+        "retention_reason": null,
+        "smoke_check": null,
+        "stage": null,
+        "status": "failed",
+        "step": "download",
+        "version": "deno-2.9.7-x86_64-linux-gnu"
+      },
+      {
+        "component": "yt_dlp",
+        "failure_code": null,
+        "reason": "blocked",
+        "retention_reason": null,
+        "smoke_check": null,
+        "stage": null,
+        "status": "failed",
+        "step": null,
+        "version": "yt-dlp-2026.08.19-linux-x86_64"
+      }
+    ],
+    "optional_groups": [
+      {
+        "component": "js_runtime_deno",
+        "failure_code": "DOWNLOAD_FAILED",
+        "name": "online_links",
+        "next_step": "The optional online links component was not installed: js_runtime_deno failed (proxy_auth) because the network's proxy asked for credentials. VSift is ready for local videos; only the optional online links component failed. Ask whoever runs the network to allow the download, then run the same setup install again: it keeps what is installed and retries what is not. Without network access, put the plan's files in one folder and pass it with --artifact-dir.",
+        "reason": "proxy_auth",
+        "status": "not_installed"
+      }
+    ],
+    "source": "publisher"
+  },
+  "error": null,
+  "lifecycle": null,
+  "operation_id": null,
+  "schema_version": "1",
+  "status": "partial",
+  "warnings": [
+    "optional_component_not_installed: VSift is ready for local videos, but an optional component was not installed; data.optional_groups says which and why."
+  ]
+}

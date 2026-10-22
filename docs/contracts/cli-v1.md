@@ -2714,6 +2714,49 @@ four. The commands are short: `--events jsonl` writes the terminal event alone, 
 interruption ends them with the operating system's default; every step is
 crash-consistent (one rename per selection, removals and sweeps a rerun finishes).
 
+### Optional components and archive formats (0.3.0, ADR 0032)
+
+[ADR 0032](../decisions/0032-managed-installs-on-every-platform-and-the-engine-release-workflow.md) adds **optional
+components**: named groups of managed components that a plan installs only when asked. The one this release has is
+`online_links` (yt-dlp and the Deno runtime it needs, offered on Ubuntu 24.04 x86-64 only); `ocr` and `speakers`
+come with their stories.
+
+- **`setup plan --include <name>`** (repeatable; an older release answers it as an unknown argument) adds the
+  group's actions to the plan. The plan's additive `optional_components` array lists every optional component of
+  the release on the desktop profile (only what is included on the worker profile), each with `name`, `status`
+  (`included`, `not_included` or `unavailable` on this host), `installs` (its managed components in install order),
+  a one-sentence `summary` to relay to the operator, `purpose`, `download_bytes` (`null` when unavailable),
+  `licences`, `terms_notice` (`null` when none applies), `add_command` (the `vsift` command, as an executable and an
+  argument array, that makes the plan with it; `null` unless not included), its own `actions` (only when included)
+  and `next_step`. `operator_decision_required` is the instruction to whoever runs setup to tell the operator about
+  each optional component and ask before accepting, or `null` when the plan neither offers nor includes one. The
+  top-level `actions` stay the core's. An included group is part of the plan's intent and digest; a plan that
+  includes nothing is digested exactly as before.
+- **`setup install`** reads the included groups from the saved plan. The core installs first, as before: its first
+  failure stops the installation, which fails with that failure's code, and every optional action is `blocked`.
+  Then each included group installs as a part of its own (its pending components staged and smoked together); a
+  group's failure stops only that group. **When every core component is installed and an optional component is
+  not, the result is `partial` and exits 0**, with the warning `optional_component_not_installed: ...`. Only when
+  the plan includes an optional component does `data` carry `core` (`ready` or `failed`), `optional_components`
+  (each managed component of the included groups, in the shape of `components`) and `optional_groups` (per group:
+  `name`, `status` `installed` or `not_installed`, the managed `component` that failed, its `reason` and
+  `failure_code`, both `null` when it is installed, and fixed-prose `next_step` advice that says local
+  investigation is not affected).
+- **`setup check`** carries the additive `optional_components` array: every optional component of the release
+  with `name`, `status` (`installed` with `components` and their versions, `not_installed` when it is offered here
+  and not every part is installed, `unavailable`), `next_step` and `add_command` (on the desktop profile, when not
+  installed). It never changes `status`, the local-video readiness.
+- **Archive formats:** a plan action's `format` gains `zip` (read by the bounded zip reader: stored or deflated
+  entries, no Zip64, no links, no comments) and `tar_bz2` (one bzip2 stream).
+- **Values that may grow (D3, the maintainer's decision of 2026-10-21).** The catalogue-content fields may gain
+  values within v1: a plan action's `format`, `component` and `id`; an optional component's `name` and the
+  managed components it `installs`; the `component` values of the managed lifecycle commands and of
+  `managed_updates`; and the maximum number of actions an optional component carries. **Readers must not treat
+  these as closed lists:** a value a reader does not know is a component or format it does not handle, and is
+  skipped, not an error. New components appear only behind `--include`: a plan, install or check that includes no
+  optional component names none of them. Every other v1 rule is unchanged (no member is removed or reinterpreted,
+  and a published failure code stays).
+
 ## Output protocol
 
 Human output (without `--json` or `--events`) is readable terminal text on stdout.
@@ -3116,7 +3159,9 @@ Unknown schema majors are rejected. Request/config documents are strict and reje
 unknown or missing fields, invalid enums, more than 1,048,576 input bytes, and nesting
 deeper than 64 containers (a P11 job request or batch line: 65,536 bytes and 16 levels).
 Within major v1, readers must ignore additive response
-fields; producers must not reinterpret or remove existing fields without a new major.
+fields; producers must not reinterpret or remove existing fields without a new major. Since `0.3.0` the
+catalogue-content fields of the setup commands may also gain values, and readers must not treat them as closed
+lists ("Optional components and archive formats" above, ADR 0032).
 Additive response fields so far: the `setup check` `local_asr` object (P07) and, in `0.2.3`, its `managed_updates` array, a
 transcript segment's `display_text` and its speaker's `display_label` (2026-09-29), and,
 in `0.2.1`, `transcript get`'s `transcript_coverage` (also in its stream's terminal

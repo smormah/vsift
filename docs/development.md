@@ -275,6 +275,11 @@ relative-path and bundle-name grammar of a worker request against a model). A se
 fixture, an inline example, or derived from code and rebuilt by `VSIFT_REGENERATE_FUZZ_SEEDS=1` (the
 replay tests refuse a seed whose origin is not listed in `fuzz/tests/replay.rs`).
 
+ADR 0032 (managed installs on Windows and macOS) adds two archive targets: `zip_inventory` (a zip through
+`inspect_zip_inventory`, then its first regular file through `inspect_zip_selected_files` with a digest no
+content has, which must never pass) and `bzip2_tar_inventory` (sherpa-onnx's `.tar.bz2` through
+`inspect_bzip2_tar_inventory`, run as the gzip and XZ targets are). That makes 33 targets.
+
 The `Fuzz` workflow takes at most 14,400 s a target (`seconds`, default 300; the P14 campaign asks for
 3,600) and keeps each target's log, corpus and a coverage-plateau line
 (`tools/p14-campaigns/fuzz-summary.cjs`); a pull request that changes `fuzz/` or the workflow runs a

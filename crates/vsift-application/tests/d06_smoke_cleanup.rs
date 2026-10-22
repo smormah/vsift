@@ -188,7 +188,9 @@ fn test_catalogue() -> Result<AcceptedManagedCatalogue, Box<dyn std::error::Erro
             inference_deadline_seconds: 180,
             audio_sample_rate_hz: 16_000,
             audio_channels: 1,
+            optional_banners: Vec::new(),
         },
+        optional_artifacts: Vec::new(),
         superseded: Vec::new(),
     })
 }

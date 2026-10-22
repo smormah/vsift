@@ -28,6 +28,8 @@ compile_error!(
 mod archive_inventory;
 mod batch_file;
 mod bounded_tar_inventory;
+mod bounded_zip_inventory;
+mod bzip2_tar_inventory;
 mod contained_source_store;
 mod durable_profile;
 mod evidence_media;
@@ -84,6 +86,14 @@ pub use batch_file::{BatchFile, BatchFileError, BatchLine, BatchLines};
 pub use bounded_tar_inventory::{
     MAX_TAR_STREAM_BYTES, ReviewedArchiveFile, TarInventoryError, inspect_tar_inventory,
     inspect_tar_selected_files, stage_tar_selected_files,
+};
+pub use bounded_zip_inventory::{
+    MAX_ZIP_ARCHIVE_BYTES, ZipInventoryError, inspect_zip_inventory, inspect_zip_selected_files,
+    stage_zip_selected_files,
+};
+pub use bzip2_tar_inventory::{
+    Bzip2TarInventoryError, MAX_BZIP2_ARCHIVE_BYTES, inspect_bzip2_tar_inventory,
+    inspect_bzip2_tar_selected_files, stage_bzip2_tar_selected_files,
 };
 pub use contained_source_store::ContainedSourceStore;
 pub use durable_profile::{
