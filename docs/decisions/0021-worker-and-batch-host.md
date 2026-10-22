@@ -776,3 +776,16 @@ A call that analysed nothing and stopped on admission is now the step's failure
 not analysed again). When the wait runs out the request fails `BUSY` and stays resumable, as
 a step whose first call was refused did before. A call that analysed nothing for another
 reason (a window's deadline, a cancellation) still ends the step.
+
+## Note, 2026-10-21 (0.3.0, ADR 0033): a background recognition leaves one unit free
+
+Section 5a reserves a recognition's threads of the root's capacity for its whole run. Since 0.3.0 a
+watched (background) recognition started by `job start` runs with the root's capacity less one unit
+as its share, when that leaves at least one, so `frame get`, crops and audio clips are admitted while
+it runs (the maintainer's decision D4 of [ADR 0033](0033-progress-during-long-transcriptions.md)).
+Interactive, quick and worker runs keep the whole capacity, and this section is otherwise unchanged.
+Queued work (`job start --mode queued`, ADR 0033 section 6) takes the whole capacity but gives it back at
+every chunk boundary while an ordinary caller waits for it; such a caller waits (up to 120 s; a worker request's `admission_waiting` event then has `reason` `queued_work`) instead of
+being refused while queued work holds the slots.
+The thread count is part of a run's provenance, so a background revision is a different revision from
+a foreground one on the same root (known limit L-154). The text above is kept as written.

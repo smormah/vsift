@@ -24,6 +24,25 @@ impl fmt::Display for ClockError {
 
 impl Error for ClockError {}
 
+/// Reads a monotonic clock: how long the process has run. A run reads it for
+/// the interval between two published parts and for its speed (ADR 0033).
+/// Injected, like every clock a use case reads.
+pub trait Stopwatch: Send + Sync {
+    /// Time since an origin fixed for the process.
+    fn elapsed(&self) -> std::time::Duration;
+}
+
+/// A stopwatch that never advances: for hosts that neither publish as they
+/// go nor show a speed. A run timed on it reports no speed and no estimate.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct StoppedStopwatch;
+
+impl Stopwatch for StoppedStopwatch {
+    fn elapsed(&self) -> std::time::Duration {
+        std::time::Duration::ZERO
+    }
+}
+
 /// Port that reports the current wall-clock time.
 ///
 /// Resolution is whole seconds because every lifecycle rule (idle expiry, the

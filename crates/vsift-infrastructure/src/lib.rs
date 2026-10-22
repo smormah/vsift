@@ -29,6 +29,7 @@ mod archive_inventory;
 mod batch_file;
 mod bounded_tar_inventory;
 mod contained_source_store;
+mod detached_runner;
 mod durable_profile;
 mod evidence_media;
 mod evidence_record;
@@ -86,6 +87,7 @@ pub use bounded_tar_inventory::{
     inspect_tar_selected_files, stage_tar_selected_files,
 };
 pub use contained_source_store::ContainedSourceStore;
+pub use detached_runner::{DetachedRunner, Detachment, launch_detached};
 pub use durable_profile::{
     MAX_MOUNTINFO_BYTES, MAX_OS_RELEASE_BYTES, MountDevice, MountInfoError, MountProfile,
     OsReleaseError, OsReleaseProfile, RootMountAccess, classify_mountinfo, classify_os_release,
@@ -116,12 +118,12 @@ pub use filesystem_session_store::{
     BundleSourcePolicy, BundleStatus, CleanOutcome, DEFAULT_ADMISSION_CAPACITY, EvidenceInventory,
     EvidenceMediaFile, ExclusiveSessionLifetimeHold, FREE_SPACE_RESERVE_BYTES,
     FilesystemAdmissionPermit, FilesystemJobOwner, FilesystemSessionStore, FreeSpaceCheck,
-    JOB_CANCEL_POLL, MAX_RECORDED_DOCUMENT_BYTES, MAX_RECORDED_STEPS, MAX_REQUEST_RECORD_BYTES,
-    MAX_REQUEST_RECORDS, RecordedRequestResult, RequestRecordWrite, SessionIndexPage,
-    SessionReadHold, SessionRegistration, SessionStatus, SessionStoreOpenError,
-    SessionWorkDirectory, WorkerRequestClaim, WorkerRequestOwner, WorkerRequestRecord,
-    decode_chunk_checkpoint, decode_job_record, decode_request_record, encode_chunk_checkpoint,
-    encode_job_record, encode_request_record,
+    JOB_CANCEL_POLL, MAX_QUEUED_JOBS, MAX_RECORDED_DOCUMENT_BYTES, MAX_RECORDED_STEPS,
+    MAX_REQUEST_RECORD_BYTES, MAX_REQUEST_RECORDS, QueueTurn, QueuedEntry, RecordedRequestResult,
+    RequestRecordWrite, SessionIndexPage, SessionReadHold, SessionRegistration, SessionStatus,
+    SessionStoreOpenError, SessionWorkDirectory, WorkerRequestClaim, WorkerRequestOwner,
+    WorkerRequestRecord, decode_chunk_checkpoint, decode_job_record, decode_request_record,
+    encode_chunk_checkpoint, encode_job_record, encode_request_record,
 };
 pub use gzip_tar_inventory::{
     GzipTarInventoryError, MAX_GZIP_ARCHIVE_BYTES, inspect_gzip_tar_inventory,
@@ -200,9 +202,13 @@ pub use source_snapshot::{
     MAX_SOURCE_BYTES, MAX_SOURCE_READ_DURATION, SourceContainer, SourceError, SourceSnapshot,
 };
 pub use speech_audio::FfmpegSpeechAudio;
-pub use system_clock::SystemClock;
+pub use system_clock::{MonotonicStopwatch, SystemClock};
 pub use transcript_record::{
     MAX_TRANSCRIPT_RECORD_BYTES, decode_transcript_record, encode_transcript_record,
+    part::{
+        MAX_TRANSCRIPT_PART_BYTES, MAX_TRANSCRIPT_PARTS, OpenRevisionRecord,
+        decode_transcript_parts, encode_transcript_part,
+    },
 };
 pub use transcript_sidecar::{
     MAX_LINE_BYTES, parse_supplied_transcript, read_supplied_transcript,

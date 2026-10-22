@@ -159,6 +159,23 @@ where
         let _ignored = self.standard_error.write_all(text.as_str().as_bytes());
     }
 
+    /// Writes the live progress line over the previous one (ADR 0033): a
+    /// carriage return, the line and an erase to its end, flushed. Best
+    /// effort. The line is built from fixed words and figures only.
+    pub(crate) fn write_live_line(&mut self, line: &str) {
+        let safe = terminal_safe_text(line, MAX_DIAGNOSTIC_BYTES.saturating_sub(8));
+        let _ignored = write!(self.standard_error, "\r{safe}\x1b[K")
+            .and_then(|()| self.standard_error.flush());
+    }
+
+    /// Clears the live progress line before the result is written.
+    pub(crate) fn clear_live_line(&mut self) {
+        let _ignored = self
+            .standard_error
+            .write_all(b"\r\x1b[K")
+            .and_then(|()| self.standard_error.flush());
+    }
+
     /// Best-effort bounded diagnostic output; stderr failure never panics.
     ///
     /// Diagnostics can repeat text the user or a provider supplied (the

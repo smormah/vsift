@@ -111,6 +111,67 @@ impl FilesystemSessionStore {
         .map(|_| ())
     }
 
+    /// Reads the revision numbered `number` of an open session, open or
+    /// sealed (ADR 0033: a since token names its revision by number, which no
+    /// other revision of the session has).
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::read_transcript`]; a number the session does not hold is
+    /// `Ok(None)`.
+    pub fn read_transcript_where_number(
+        &self,
+        session_id: &SessionId,
+        number: u32,
+        now_unix_seconds: u64,
+    ) -> Result<Option<(TranscriptRevision, SessionStatus)>, SessionStorageError> {
+        self.read_transcript_where(session_id, now_unix_seconds, |candidate| {
+            candidate.number() == number
+        })
+    }
+
+    /// Reads a session's open revision (ADR 0033) from its parts, if it has
+    /// one, verified and decoded as [`Self::read_transcript`] reads a record.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::read_transcript`].
+    pub fn read_open_transcript(
+        &self,
+        session_id: &SessionId,
+        now_unix_seconds: u64,
+    ) -> Result<Option<crate::OpenRevisionRecord>, SessionStorageError> {
+        let _hold = self.acquire_read(session_id)?;
+        let sessions = self
+            .root
+            .open_dir_nofollow(SESSIONS_DIRECTORY)
+            .map_err(map_storage_io)?;
+        let session = sessions
+            .open_dir_nofollow(session_id.as_str())
+            .map_err(map_committed_io)?;
+        let committed = read_committed_manifest(&session, session_id, self.chain_check())?;
+        let record = committed
+            .manifest
+            .lifecycle
+            .ok_or(SessionStorageError::StateConflict)?;
+        let status = record.to_status(session_id.clone(), committed.manifest.generation)?;
+        if status.phase() != SessionPhase::Open || status.lifetime().expired(now_unix_seconds) {
+            return Err(SessionStorageError::StateConflict);
+        }
+        let parts: Vec<&StoredArtifact> = record
+            .artifacts
+            .iter()
+            .filter(|artifact| artifact.kind == StoredArtifactKind::TranscriptPart)
+            .collect();
+        if parts.is_empty() {
+            return Ok(None);
+        }
+        let artifacts = session
+            .open_dir_nofollow(ARTIFACTS_DIRECTORY)
+            .map_err(map_committed_io)?;
+        read_transcript_parts(&artifacts, &parts, status.source_id()).map(Some)
+    }
+
     pub(super) fn read_transcript_where(
         &self,
         session_id: &SessionId,
@@ -147,18 +208,31 @@ impl FilesystemSessionStore {
             return Err(SessionStorageError::StateConflict);
         }
         observed(&status);
+        let parts: Vec<&StoredArtifact> = record
+            .artifacts
+            .iter()
+            .filter(|artifact| artifact.kind == StoredArtifactKind::TranscriptPart)
+            .collect();
         let mut records = record
             .artifacts
             .iter()
             .rev()
             .filter(|artifact| artifact.kind == StoredArtifactKind::TranscriptRecord)
             .peekable();
-        if records.peek().is_none() {
+        if records.peek().is_none() && parts.is_empty() {
             return Ok(None);
         }
         let artifacts = session
             .open_dir_nofollow(ARTIFACTS_DIRECTORY)
             .map_err(map_committed_io)?;
+        // An open revision (ADR 0033) is the newest: it supersedes the newest
+        // sealed one, and no other revision is sealed while it is open.
+        if !parts.is_empty() {
+            let open = read_transcript_parts(&artifacts, &parts, status.source_id())?;
+            if wanted(&open.revision) {
+                return Ok(Some((open.revision, status)));
+            }
+        }
         for artifact in records {
             let revision = read_transcript_artifact(&artifacts, artifact, status.source_id())?;
             if wanted(&revision) {
@@ -331,6 +405,36 @@ pub(super) fn read_transcript_artifact(
         return Err(SessionStorageError::IntegrityFailure);
     }
     Ok(revision)
+}
+
+/// Reads, verifies and decodes every part of a session's open revision (ADR
+/// 0033), in the order the manifest lists them: each part's recorded size
+/// and digest are checked before any byte is interpreted, and the revision
+/// must describe `source_id`.
+pub(super) fn read_transcript_parts(
+    directory: &Dir,
+    parts: &[&StoredArtifact],
+    source_id: &SourceId,
+) -> Result<crate::OpenRevisionRecord, SessionStorageError> {
+    let mut encoded = Vec::with_capacity(parts.len());
+    for artifact in parts {
+        let file = open_regular_file(directory, &artifact.name, false).map_err(map_committed_io)?;
+        let mut bytes = Vec::new();
+        file.take(artifact.bytes.saturating_add(1))
+            .read_to_end(&mut bytes)
+            .map_err(map_storage_io)?;
+        if u64::try_from(bytes.len()).ok() != Some(artifact.bytes)
+            || sha256_hex(&bytes) != artifact.sha256
+        {
+            return Err(SessionStorageError::IntegrityFailure);
+        }
+        encoded.push(bytes);
+    }
+    let open = crate::decode_transcript_parts(&encoded)?;
+    if open.revision.source_id() != source_id {
+        return Err(SessionStorageError::IntegrityFailure);
+    }
+    Ok(open)
 }
 
 /// Reads, verifies and decodes one visual-index record artifact.

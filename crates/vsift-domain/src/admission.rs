@@ -61,6 +61,70 @@ pub fn recognizer_threads(parallelism: Option<NonZeroUsize>, capacity: NonZeroU1
     machine.min(MAX_RECOGNIZER_THREADS).min(capacity)
 }
 
+/// The share of a root's admission `capacity` a background recognition takes
+/// (ADR 0033, D4): one unit less than the whole, when that leaves it at least
+/// one, so evidence calls (`frame get`, crops, audio clips) are admitted while
+/// it runs. A root of one unit has nothing to spare and gives it all.
+///
+/// The share caps the recognizer's threads ([`recognizer_threads`]), which
+/// are part of the run's provenance: a background revision is not the same
+/// revision as a foreground one on the same root.
+#[must_use]
+pub const fn leaving_one_free(capacity: NonZeroU16) -> NonZeroU16 {
+    match NonZeroU16::new(capacity.get() - 1) {
+        Some(share) => share,
+        None => capacity,
+    }
+}
+
+/// The share of the root's admission capacity a recognition takes (ADR 0033,
+/// D4).
+///
+/// The share caps whisper.cpp's threads, which are part of the recognition
+/// key and so of the job's identity: a job is resumed with the share it was
+/// recorded with, or the resume would be another job (RV-1 finding 2).
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum RecognitionShare {
+    /// All of it, as before 0.3.0: interactive and quick runs.
+    #[default]
+    Whole,
+    /// One unit less, when that leaves at least one, so that evidence calls
+    /// are admitted while it runs: a watched (background) run. The recognizer
+    /// runs with fewer threads, which its provenance records.
+    LeavingOneFree,
+}
+
+impl RecognitionShare {
+    /// Every share, in declaration order.
+    pub const ALL: [Self; 2] = [Self::Whole, Self::LeavingOneFree];
+
+    /// The stable identifier a job record keeps.
+    #[must_use]
+    pub const fn identifier(self) -> &'static str {
+        match self {
+            Self::Whole => "whole",
+            Self::LeavingOneFree => "leaving_one_free",
+        }
+    }
+
+    /// The share named by `identifier`, if any.
+    #[must_use]
+    pub fn parse(identifier: &str) -> Option<Self> {
+        Self::ALL
+            .into_iter()
+            .find(|share| share.identifier() == identifier)
+    }
+
+    /// The part of `capacity` the recognition takes.
+    #[must_use]
+    pub const fn of(self, capacity: NonZeroU16) -> NonZeroU16 {
+        match self {
+            Self::Whole => capacity,
+            Self::LeavingOneFree => leaving_one_free(capacity),
+        }
+    }
+}
+
 /// The longest admission wait a caller may ask for: 60 s.
 pub const MAX_ADMISSION_WAIT: Duration = Duration::from_secs(60);
 /// First polling ceiling of a bounded wait.
@@ -124,7 +188,24 @@ pub enum AdmissionWait {
     /// Poll with a full-jitter backoff until capacity frees or the budget
     /// is spent, then report `BUSY` with a retry hint (job commands, P11).
     Bounded(AdmissionBudget),
+    /// Queued work (ADR 0033 section 6): poll every [`QUEUED_ADMISSION_POLL`]
+    /// for as long as it takes, since nobody waits for it, and yield the
+    /// capacity at every chunk boundary to anyone who waits for it.
+    Queued,
 }
+
+/// How often queued work asks for capacity again while it waits.
+pub const QUEUED_ADMISSION_POLL: Duration = Duration::from_millis(500);
+
+/// How long an ordinary caller waits for queued work to give back the
+/// capacity it holds (ADR 0033 section 6): queued work yields at its next
+/// chunk boundary, and a chunk takes well under this on any machine `VSift`
+/// supports. Past it, the caller is answered `BUSY` as before.
+pub const QUEUED_YIELD_WAIT: Duration = Duration::from_secs(120);
+
+/// How often an ordinary caller that waits for queued work to give back the
+/// capacity looks at it again.
+pub const QUEUED_YIELD_POLL: Duration = Duration::from_millis(50);
 
 /// What follows one busy admission attempt.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -152,8 +233,10 @@ impl AdmissionWait {
         let busy = AdmissionDecision::Busy {
             retry_after: ADMISSION_RETRY_AFTER,
         };
-        let Self::Bounded(budget) = self else {
-            return busy;
+        let budget = match self {
+            Self::Bounded(budget) => budget,
+            Self::Queued => return AdmissionDecision::PollAfter(QUEUED_ADMISSION_POLL),
+            Self::Immediate => return busy,
         };
         let Some(remaining) = budget
             .duration()
@@ -180,10 +263,29 @@ mod tests {
 
     use super::{
         ADMISSION_RETRY_AFTER, AdmissionBudget, AdmissionBudgetError, AdmissionDecision,
-        AdmissionWait, MAX_ADMISSION_WAIT, MAX_RECOGNIZER_THREADS, recognizer_threads,
+        AdmissionWait, MAX_ADMISSION_WAIT, MAX_RECOGNIZER_THREADS, leaving_one_free,
+        recognizer_threads,
     };
     use crate::Jitter;
 
+    /// D4 (ADR 0033): a background recognition leaves one unit free, except
+    /// on a root of one unit, which has nothing to spare.
+    #[test]
+    fn a_background_share_leaves_one_unit_free() -> Result<(), &'static str> {
+        let units = |count| NonZeroU16::new(count).ok_or("zero");
+        assert_eq!(leaving_one_free(units(1)?), units(1)?);
+        assert_eq!(leaving_one_free(units(2)?), units(1)?);
+        assert_eq!(leaving_one_free(units(4)?), units(3)?);
+        // The threads follow the share: four on a machine of eight threads and
+        // a root of four units, three in the background.
+        let eight = NonZeroUsize::new(8).ok_or("zero")?;
+        assert_eq!(recognizer_threads(Some(eight), units(4)?), units(4)?);
+        assert_eq!(
+            recognizer_threads(Some(eight), leaving_one_free(units(4)?)),
+            units(3)?
+        );
+        Ok(())
+    }
     #[test]
     fn recognizer_threads_are_capped_by_capacity() -> Result<(), Box<dyn std::error::Error>> {
         let capacity = |value| NonZeroU16::new(value).ok_or("zero");

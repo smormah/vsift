@@ -13,6 +13,7 @@ mod handoff;
 mod human;
 mod job;
 mod json_input;
+mod live_line;
 mod output;
 mod parse_failure;
 mod progress;
@@ -51,15 +52,15 @@ use vsift_contract::{
     JOB_SESSION_NOT_OPEN_REMEDIATION, LOCAL_ASR_MODEL_REMEDIATION, LOCAL_ASR_TOOLS_REMEDIATION,
     MANAGED_INSTALL_BUSY_REMEDIATION, MANAGED_STORAGE_REMEDIATION, MANAGED_UNAVAILABLE_REMEDIATION,
     MEDIA_TOOLS_FOR_TRANSCRIPT_REMEDIATION, NO_AUDIO_STREAM_REMEDIATION, NO_TRANSCRIPT_REMEDIATION,
-    NO_VIDEO_STREAM_REMEDIATION, OperationResponse, SESSION_NOT_PUBLISHED_REMEDIATION,
-    SESSION_ROOT_NAME_REMEDIATION, SESSION_ROOT_OWN_ACCESS_REMEDIATION,
-    SOURCE_ACCESS_DENIED_REMEDIATION, SOURCE_COPY_TOO_SLOW_REMEDIATION,
-    SOURCE_COPY_WOULD_BE_TOO_SLOW_REMEDIATION, SOURCE_IS_FOLDER_REMEDIATION,
-    SOURCE_IS_LINK_REMEDIATION, SOURCE_NO_ROOM_REMEDIATION, SOURCE_NOT_FOUND_REMEDIATION,
-    SOURCE_SPECIAL_FILE_REMEDIATION, STALE_PLAN_REMEDIATION, SUPERSEDED_REMEDIATION,
-    TRANSCRIPTION_RUNNING_REMEDIATION, TerminalEventResponse, UNKNOWN_JOB_REMEDIATION,
-    UNKNOWN_REVISION_REMEDIATION, UNOWNED_SESSION_ROOT_REMEDIATION, UNPINNED_MODEL_REMEDIATION,
-    VISUAL_TOOLS_REMEDIATION, WORKSPACE_NOT_DURABLE_REMEDIATION,
+    NO_VIDEO_STREAM_REMEDIATION, OperationResponse, REVISION_LEFT_OPEN_REMEDIATION,
+    SESSION_NOT_PUBLISHED_REMEDIATION, SESSION_ROOT_NAME_REMEDIATION,
+    SESSION_ROOT_OWN_ACCESS_REMEDIATION, SOURCE_ACCESS_DENIED_REMEDIATION,
+    SOURCE_COPY_TOO_SLOW_REMEDIATION, SOURCE_COPY_WOULD_BE_TOO_SLOW_REMEDIATION,
+    SOURCE_IS_FOLDER_REMEDIATION, SOURCE_IS_LINK_REMEDIATION, SOURCE_NO_ROOM_REMEDIATION,
+    SOURCE_NOT_FOUND_REMEDIATION, SOURCE_SPECIAL_FILE_REMEDIATION, STALE_PLAN_REMEDIATION,
+    SUPERSEDED_REMEDIATION, TRANSCRIPTION_RUNNING_REMEDIATION, TerminalEventResponse,
+    UNKNOWN_JOB_REMEDIATION, UNKNOWN_REVISION_REMEDIATION, UNOWNED_SESSION_ROOT_REMEDIATION,
+    UNPINNED_MODEL_REMEDIATION, VISUAL_TOOLS_REMEDIATION, WORKSPACE_NOT_DURABLE_REMEDIATION,
     WORKSPACE_POLICY_MISMATCH_REMEDIATION, WORKSPACE_ROOT_REMEDIATION, local_asr_failure_summary,
     local_asr_verification_summary, managed_lifecycle_remediation, media_tool_verification_summary,
     non_private_folder_summary, search_query_rejection_summary, transcript_rejection_summary,
@@ -109,7 +110,10 @@ const fn is_long_running(command: &Command) -> bool {
         Command::Job(arguments) => {
             matches!(
                 arguments.command,
-                JobCommand::Resume(_) | JobCommand::Run(_) | JobCommand::Batch(_)
+                JobCommand::Resume(_)
+                    | JobCommand::Run(_)
+                    | JobCommand::Batch(_)
+                    | JobCommand::Start(_)
             )
         }
         // `setup install` downloads, verifies and smokes for minutes; an
@@ -246,6 +250,22 @@ where
             }
         }
         None => HostIsolation::ProcessOnly,
+    };
+    // A background runner of `job start` is started with the same operator
+    // options (ADR 0033).
+    let runner = job::RunnerOptions {
+        session_root: cli.session_root.clone(),
+        host_isolation: cli.host_isolation,
+    };
+    // The live progress line (ADR 0033): readable text on a terminal, and
+    // only in the real process, whose standard error is the terminal.
+    let line = if mode == OutputMode::Human
+        && interruption == Interruption::Trapped
+        && std::io::IsTerminal::is_terminal(&io::stderr())
+    {
+        live_line::LiveLine::Shown
+    } else {
+        live_line::LiveLine::Hidden
     };
     let engine = compose_engine(cli.session_root, isolation, ports);
     // One cancellation for the whole command; registered before any work
@@ -414,17 +434,24 @@ where
                 }
                 TranscriptCommand::Retranscribe(arguments) if mode == OutputMode::JsonLines => {
                     progress::stream_with_progress(&mut writer, operation, |observer| {
-                        session::retranscribe(&engine, arguments, &cancellation, observer)
+                        Box::pin(session::retranscribe(
+                            &engine,
+                            arguments,
+                            &cancellation,
+                            observer,
+                        ))
                     })
                     .await
                 }
                 TranscriptCommand::Retranscribe(arguments) => {
-                    let result = session::retranscribe(
-                        &engine,
-                        arguments,
-                        &cancellation,
-                        ProgressObserver::none(),
-                    )
+                    let result = live_line::with_live_line(&mut writer, line, |observer| {
+                        Box::pin(session::retranscribe(
+                            &engine,
+                            arguments,
+                            &cancellation,
+                            observer,
+                        ))
+                    })
                     .await;
                     write_session_result(&mut writer, mode, operation, result)
                 }
@@ -504,12 +531,39 @@ where
                 JobCommand::Cancel(arguments) => job::cancel(&engine, arguments),
                 JobCommand::Resume(arguments) if mode == OutputMode::JsonLines => {
                     return progress::stream_with_progress(&mut writer, operation, |observer| {
-                        job::resume(&engine, arguments, &cancellation, observer)
+                        Box::pin(job::resume(&engine, arguments, &cancellation, observer))
                     })
                     .await;
                 }
                 JobCommand::Resume(arguments) => {
-                    job::resume(&engine, arguments, &cancellation, ProgressObserver::none()).await
+                    live_line::with_live_line(&mut writer, line, |observer| {
+                        Box::pin(job::resume(&engine, arguments, &cancellation, observer))
+                    })
+                    .await
+                }
+                JobCommand::Start(arguments) if mode == OutputMode::JsonLines => {
+                    return progress::stream_with_progress(&mut writer, operation, |observer| {
+                        Box::pin(job::start(
+                            &engine,
+                            arguments,
+                            &runner,
+                            &cancellation,
+                            observer,
+                        ))
+                    })
+                    .await;
+                }
+                JobCommand::Start(arguments) => {
+                    live_line::with_live_line(&mut writer, line, |observer| {
+                        Box::pin(job::start(
+                            &engine,
+                            arguments,
+                            &runner,
+                            &cancellation,
+                            observer,
+                        ))
+                    })
+                    .await
                 }
                 JobCommand::Run(arguments) => {
                     let shutdown = shutdown.unwrap_or_else(|| {
@@ -704,6 +758,15 @@ impl From<EngineError> for CommandFailure {
                     job.as_str().to_owned(),
                 ]
             }
+            // RV-1 finding 7: the job has ended, so only cancelling it again
+            // seals its revision.
+            EngineError::RevisionLeftOpen { job, .. } => {
+                vec![
+                    "job".to_owned(),
+                    "cancel".to_owned(),
+                    job.as_str().to_owned(),
+                ]
+            }
             EngineError::ManagedLifecycle(refusal) => managed_lifecycle_remediation(*refusal)
                 .1
                 .iter()
@@ -748,6 +811,7 @@ fn local_asr_remediation(error: &EngineError) -> Option<String> {
         EngineError::TranscriptionRunning { .. } => {
             Some(TRANSCRIPTION_RUNNING_REMEDIATION.to_owned())
         }
+        EngineError::RevisionLeftOpen { .. } => Some(REVISION_LEFT_OPEN_REMEDIATION.to_owned()),
         EngineError::IdempotencyConflict { .. } => {
             Some(IDEMPOTENCY_CONFLICT_REMEDIATION.to_owned())
         }

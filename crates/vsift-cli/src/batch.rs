@@ -74,6 +74,7 @@ enum Observed {
     AdmissionWaiting {
         line: u32,
         operation_id: OperationId,
+        cause: vsift::AdmissionWaitCause,
     },
 }
 
@@ -302,10 +303,11 @@ fn gated_observer(
             gate.queue_full();
         }
     })
-    .with_admission_waiting(move |_| {
+    .with_admission_waiting(move |waits| {
         let _ = waiting.send(Observed::AdmissionWaiting {
             line,
             operation_id: waiting_id.clone(),
+            cause: waits.cause,
         });
     })
 }
@@ -353,14 +355,19 @@ where
                     },
                 ))
             }),
-            Observed::AdmissionWaiting { line, operation_id } => self.emit(|sequence| {
-                Event::Lifecycle(LifecycleEventResponse::admission_waiting(
+            Observed::AdmissionWaiting {
+                line,
+                operation_id,
+                cause,
+            } => self.emit(|sequence| {
+                Event::Lifecycle(crate::progress::admission_waiting_event(
                     sequence,
                     COMMAND,
                     &RequestRef {
                         line: Some(line),
                         operation_id: Some(&operation_id),
                     },
+                    cause,
                 ))
             }),
         }
@@ -580,6 +587,7 @@ mod tests {
                 stage: ProgressStage::RunningRequest,
                 completed: 0,
                 total: Some(2),
+                media: None,
             },
         }
     }
@@ -610,6 +618,7 @@ mod tests {
             observer.admission_waiting(&vsift::AdmissionWaiting {
                 job: None,
                 weight: std::num::NonZeroU16::MIN,
+                cause: vsift::AdmissionWaitCause::CapacityInUse,
             });
         }
         let mut queued = 0;

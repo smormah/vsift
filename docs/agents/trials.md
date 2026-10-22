@@ -936,6 +936,24 @@ and the whole-freeze digest `302930904439c2eb49e43396f30d2088481d1a6fb7f47467dd2
 moved with it. **The seventh candidate's batches ran under `10180cd8...`, and that file is kept beside their records as `freeze-0.2.2-rc.1.json` in both folders.**
 No batch has run under the new freeze. Batch 3 checks its cold components against batch 1's freeze, so it needs `-AllowGraderChange` (as since 2026-10-04); cycle 3's batch-3
 rerun uses it, by the same decision.
+**On 2026-10-21 the freeze is new again: a draft freeze, rewritten at the merge rebase (0.3.0 development freeze; the final freeze is
+recorded at the 0.3.0 cut).** The progress story's third pull request ([ADR 0033](../decisions/0033-progress-during-long-transcriptions.md))
+changed the skill: PREPARE starts the transcription with `job start`, and `references/resume.md` follows a transcription in the background
+([`skill.md`](skill.md), "The change for 0.3.0"). The supervisor allowed draft pull requests to rewrite the freeze provisionally on
+2026-10-21, so that CI runs every test rather than stopping at `committed_freeze`: `freeze write` at `5a4eab0f1cae`, the commit of that
+pull request's branch at which the skill changed, gave the `skill` digest `3291a3ba12bd4ed7b5c5dd82c0143ed5a1a79bd7c68222790973675fb3384e22`
+(it was `bd205d6c...`) and the whole-freeze digest `3f9f44fb93fe7b8064c52633293a149f04fe2b70f0547325a056d7d9a7bcf790` (it was `30293090...`);
+the other six components are unchanged, and the pin in `committed_freeze` moved with it. It is written again on the new `main` when the pull
+request is rebased to merge. No batch has run under it, and none is run for this change.
+**Later on 2026-10-21 the draft freeze is written again (the progress story's fourth pull request, rewritten at the merge rebase too).**
+The skill adds `--first <from-us>:<to-us>` when the user named a moment and says that `candidates` answers without analysing once the video is
+indexed: `freeze write` at `09a06463597f` gave the `skill` digest `f09eea124480b74d0147cd894c018647c95cdd3a35fbebc5a53b0f0198011280` (it was `3291a3ba...`) and the whole-freeze
+digest `8cd377873b4551a7ca2d67de36310352d8c089d83db94e897c8462f0fbfd6823` (it was `3f9f44fb...`); the other six components are unchanged, and the pin in `committed_freeze` moved with it.
+No batch has run under it.
+**Once more on 2026-10-21 (the fifth pull request, the queued mode; rewritten at the merge rebase too):** `references/resume.md` starts several
+recordings, or one with no rush, with `--mode queued`: `freeze write` at `2f8ab8d4e32c` gave the `skill` digest `d903e2ec8ea9f8076fe822517d3b3d0f8267669305257ccf91f02f405121814f` (it was
+`f09eea12...`) and the whole-freeze digest `54dfa5cfd6a9fd7bf98a46234550f348209c8dc41683aa80c977fedc6c7d365b` (it was `8cd37787...`); the other six components are unchanged, and the pin in
+`committed_freeze` moved with it. No batch has run under it.
 
 ## Usage capture (P14)
 

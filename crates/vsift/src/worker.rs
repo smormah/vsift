@@ -681,6 +681,7 @@ impl Engine {
                         run.progress.admission_waiting(&AdmissionWaiting {
                             job: failed.job.clone(),
                             weight: NonZeroU16::MIN,
+                            cause: crate::progress::AdmissionWaitCause::CapacityInUse,
                         });
                     }
                     if !sleep_unless_cancelled(delay, &context.work.0).await {
@@ -730,6 +731,11 @@ impl Engine {
                             cancellation: context.work.clone(),
                             progress: run.progress.clone(),
                             admission: run.admission,
+                            // A worker's step publishes only at its seal, so a
+                            // supervisor's request result is what it was.
+                            publication: crate::RetranscribePublication::AtTheSeal,
+                            share: crate::RecognitionShare::Whole,
+                            seed: None,
                         })
                         .await
                         .map_err(|error| StepError {
@@ -1312,6 +1318,7 @@ fn report_steps(observer: &ProgressObserver, completed: usize, total: u64) {
             stage: ProgressStage::RunningRequest,
             completed: u64::try_from(completed).unwrap_or(u64::MAX),
             total: Some(total),
+            media: None,
         },
     });
 }

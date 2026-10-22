@@ -17,6 +17,7 @@ mod managed_lifecycle;
 mod provisioning;
 mod search;
 mod session;
+mod since;
 mod storage;
 mod transcript;
 mod verification;
@@ -24,12 +25,14 @@ mod visual;
 
 pub use asr::{
     AsrCancellation, AsrFailure, AsrFailureReason, AsrRevisionRequest, AsrRunFailure, AsrStage,
-    AsrTranscription, CheckpointScope, CheckpointUse, NoProgress, ProgressSink, RecognizerIdentity,
-    RevisionSplice, SpeechAudioError, SpeechAudioSource, SpeechPcm, SpeechRecognitionError,
-    SpeechRecognizer, TranscribeRangeRequest, UnusableChunk, UnusableChunks, build_asr_revision,
-    retranscription_range, transcribe_range, transcribe_range_checkpointed,
+    AsrTranscription, CheckpointScope, CheckpointUse, ChunkGate, ChunkSeed, NoObserver, NoProgress,
+    ProgressSink, RecognizerIdentity, RevisionSplice, RunObserver, RunSoFar, SeedPort,
+    SpeechAudioError, SpeechAudioSource, SpeechPcm, SpeechRecognitionError, SpeechRecognizer,
+    TranscribeRangeRequest, UnusableChunk, UnusableChunks, build_asr_revision,
+    build_open_asr_revision, build_stopped_asr_revision, retranscription_range, transcribe_range,
+    transcribe_range_checkpointed,
 };
-pub use clock::{Clock, ClockError};
+pub use clock::{Clock, ClockError, StoppedStopwatch, Stopwatch};
 pub use evidence::{
     AudioExtractor, CropRequest, EvidenceBudget, EvidenceCall, EvidenceControl, EvidenceError,
     EvidenceExtraction, EvidenceIdentityError, EvidenceMediaError, EvidenceScope, EvidenceStop,
@@ -47,19 +50,26 @@ pub use install::{
 };
 pub use job::{
     CancelOutcome, CancelRequest, CheckpointRead, CheckpointStoreError, ChunkCheckpoints,
-    CommitGuard, CommitLedger, JobChange, JobCommit, JobKeyError, JobLiveness, JobOwner, JobRecord,
-    JobReport, JobRequest, JobRunError, JobSpec, JobStore, JobStoreError, JobView,
-    LIVE_JOB_RETRY_AFTER, MAX_JOB_OPERATION_IDS, MAX_RECORDED_FAILURES, MAX_SESSION_JOBS,
-    NoCheckpoints, OperationLookup, RecognitionScope, Reconciled, RequestDigest, Resumability,
-    RetranscriptionOutcome, RetranscriptionPorts, RetranscriptionRun, RetryTimer, RevisionStore,
-    SessionHead, cancel_job, commit_operation_id, job_id, job_status, lookup_operation,
-    observed_state, recognition_key, reconcile, resumable_request, retranscribe_operation_key,
-    retranscribe_request_digest, run_retranscription, worker_step_operation_id,
+    CommitGuard, CommitLedger, JobChange, JobCommit, JobKeyError, JobLiveness, JobOwner,
+    JobProgressLog, JobRecord, JobReport, JobRequest, JobRunError, JobSpec, JobStore,
+    JobStoreError, JobView, LIVE_JOB_RETRY_AFTER, MAX_JOB_OPERATION_IDS, MAX_RECORDED_FAILURES,
+    MAX_SESSION_JOBS, NoCheckpoints, OperationLookup, PrepareError, PrepareOutcome,
+    PrepareProgress, PrepareStreams, Publication, PublishedOpenRevision, PublishingStopped,
+    RecognitionScope, Reconciled, RequestDigest, Resumability, RetranscriptionOutcome,
+    RetranscriptionPorts, RetranscriptionRun, RetryTimer, RevisionStore, SessionHead, StreamEnd,
+    StreamPhase, StreamProgress, StreamStop, cancel_job, commit_operation_id, job_id, job_status,
+    lookup_operation, observed_state, part_operation_id, prepare_operation_key,
+    prepare_request_digest, prepare_spec, recognition_key, reconcile, resumable_request,
+    retranscribe_operation_key, retranscribe_request_digest, run_prepare, run_retranscription,
+    seal_stopped, seal_stopped_now, seed_key, stop_operation_id, worker_step_operation_id,
 };
 pub use search::{SearchPage, SearchPageRequest, page_search, search_query_digest};
 pub use session::{
     ForegroundSessionPort, NeverCancelled, OpenSession, OpenSessionError, OpenSessionOutcome,
     OpenSessionRequest, SourcePathFault, SpecialFileKind, StageCancellation, StagedSessionSource,
+};
+pub use since::{
+    SincePage, page_since, since_digest, since_revision, since_token, since_watermark,
 };
 
 pub use managed_lifecycle::{

@@ -269,6 +269,11 @@ impl Engine {
         Ok(self.ports.clock.now_unix_seconds()?)
     }
 
+    /// The injected clock, for a use case that reads the time as it goes.
+    pub(crate) fn clock(&self) -> &dyn vsift_application::Clock {
+        self.ports.clock.as_ref()
+    }
+
     /// How long a failed open waits for a busy root to remove its registration.
     pub(crate) const fn failed_open_removal_wait(&self) -> Duration {
         self.ports.failed_open_removal_wait
