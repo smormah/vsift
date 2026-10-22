@@ -66,6 +66,10 @@ const INSTALL_ADVICE: [&str; 10] = [
     "absolute path",
 ];
 
+/// The readable answer's row for an optional component (ADR 0032): it follows
+/// the tool rows and is not about them.
+const OPTIONAL_ROW: &str = "Optional component ";
+
 const AFTER_WHAT_HAPPENED: &str = " A first run after an install or restart can be slow. Run setup check again, or allow more time with --timeout-seconds (up to 60).";
 
 fn main() -> ExitCode {
@@ -189,6 +193,47 @@ fn schema() -> TestResult<Value> {
     Ok(serde_json::from_str(&fs::read_to_string(path)?)?)
 }
 
+/// The readable answer must not advise getting a tool, as the module
+/// documentation says, apart from an optional component's own row.
+fn ensure_no_missing_tool_advice(text: &str, tool_text: &str) -> TestResult {
+    // The rule is about the three tools. An optional component that is
+    // genuinely not installed (ADR 0032, offered on Ubuntu only) keeps its own
+    // row after the local ASR lines, and its hint is the right advice for that
+    // component: `vsift setup plan --include online_links`. So the tool advice
+    // is checked on everything before that block, and the block itself must
+    // say nothing about the tools or the deadline.
+    let (tools_part, optional_part) = match text.find(OPTIONAL_ROW) {
+        Some(start) => text.split_at(start),
+        None => (text, ""),
+    };
+    for phrase in
+        INSTALL_ADVICE
+            .into_iter()
+            .chain(["[missing]", "[unhealthy]", "not found", tool_text])
+    {
+        ensure(!tools_part.contains(phrase), || {
+            format!("the readable answer says {phrase:?}: {text}")
+        })?;
+    }
+    for tool_word in [
+        "FFmpeg", "FFprobe", "Whisper", "whisper", "timeout", "deadline",
+    ] {
+        ensure(!optional_part.contains(tool_word), || {
+            format!("the optional component block mentions {tool_word:?}: {text}")
+        })?;
+    }
+    ensure(
+        optional_part
+            .lines()
+            .filter(|line| !line.starts_with(' '))
+            .all(|line| {
+                line.starts_with(OPTIONAL_ROW) || line.starts_with("Executable probes only")
+            }),
+        || format!("something other than optional components follows the tools: {text}"),
+    )?;
+    Ok(())
+}
+
 fn run() -> TestResult {
     let root = OwnedRoot::new()?;
     let tool = root.silent_tool()?;
@@ -222,16 +267,7 @@ fn run() -> TestResult {
             == 3,
         || format!("each tool has the timeout advice once: {text}"),
     )?;
-    for phrase in INSTALL_ADVICE.into_iter().chain([
-        "[missing]",
-        "[unhealthy]",
-        "not found",
-        tool_text.as_str(),
-    ]) {
-        ensure(!text.contains(phrase), || {
-            format!("the readable answer says {phrase:?}: {text}")
-        })?;
-    }
+    ensure_no_missing_tool_advice(&text, &tool_text)?;
 
     // The JSON answer.
     let json = setup_check(&root, &tool, &["--json"])?;
