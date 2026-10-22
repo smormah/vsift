@@ -1,7 +1,8 @@
 //! Stored shapes of a job: its record (`job.json`), an operation binding
-//! (`jobs/by-operation/<op>.json`), its root index entry and its chunk
-//! checkpoints (`chunks/<ordinal>.json`), each strictly versioned (ADR 0020
-//! section 4).
+//! (`jobs/by-operation/<op>.json`), its root index entry, its chunk
+//! checkpoints (`chunks/<ordinal>.json`) and, for a `prepare` job, its
+//! progress record (`progress.json`, ADR 0033), each strictly versioned (ADR
+//! 0020 section 4).
 //!
 //! Every shape is decoded with unknown fields rejected and every value
 //! validated; a newer schema version is reported as such. A job record whose
@@ -11,14 +12,16 @@
 
 use serde::{Deserialize, Serialize};
 use vsift_application::{
-    JobCommit, JobRecord, JobRequest, RequestDigest, SessionStorageError, job_id as derive_job_id,
+    JobCommit, JobRecord, JobRequest, PrepareProgress, RequestDigest, SessionStorageError,
+    StreamProgress, job_id as derive_job_id,
 };
 use vsift_domain::{
     AttemptFailure, CheckpointOutcome, ChunkCheckpoint, ChunkTime, CueText, FailureCode, JobId,
-    JobKind, JobState, LanguageTag, MAX_JOB_ATTEMPTS, MAX_PLANNED_CHUNKS, MAX_PROVIDER_SEGMENTS,
-    MAX_PROVIDER_TOKENS, MediaTime, OperationId, OperationKey, ProviderChunkOutput,
+    JobKind, JobMode, JobState, LanguageTag, MAX_JOB_ATTEMPTS, MAX_PLANNED_CHUNKS,
+    MAX_PROVIDER_SEGMENTS, MAX_PROVIDER_TOKENS, MediaProgress, MediaTime, OperationId,
+    OperationKey, PrepareStream, ProgressStage, ProgressUpdate, ProviderChunkOutput,
     ProviderOutputError, ProviderSegment, ProviderToken, ProviderTokenKind, RecognitionKey,
-    SessionId, Sha256Hex, StorageGeneration, TimeRange, TranscriptRevisionId,
+    RecognitionShare, SessionId, Sha256Hex, StorageGeneration, TimeRange, TranscriptRevisionId,
 };
 
 use super::{MetadataVersion, STORAGE_SCHEMA_VERSION, sha256_hex, stored::parse_versioned_json};
@@ -57,6 +60,14 @@ impl StoredRange {
 #[serde(deny_unknown_fields)]
 struct StoredJobRequest {
     range: Option<StoredRange>,
+    /// The mode of a `prepare` job (ADR 0033); absent for every other kind.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    mode: Option<String>,
+    /// The share a retranscription recognises with when it is not the whole
+    /// (ADR 0033, D4: a watched run's `leaving_one_free`); absent otherwise,
+    /// so every record written before it reads as before.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    share: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -112,7 +123,6 @@ impl MetadataVersion for StoredJob {
 ///
 /// [`SessionStorageError::Io`] only if serialisation failed.
 pub(super) fn encode_job(record: &JobRecord) -> Result<Vec<u8>, SessionStorageError> {
-    let JobRequest::Retranscribe { range } = record.request;
     let stored = StoredJob {
         schema_version: STORAGE_SCHEMA_VERSION,
         job_id: record.job_id.as_str().to_owned(),
@@ -122,7 +132,16 @@ pub(super) fn encode_job(record: &JobRecord) -> Result<Vec<u8>, SessionStorageEr
         operation_key: record.operation_key.as_str().to_owned(),
         recognition_key: record.recognition_key.as_str().to_owned(),
         request: StoredJobRequest {
-            range: range.map(StoredRange::of),
+            range: record.request.range().map(StoredRange::of),
+            mode: record
+                .request
+                .mode()
+                .map(|mode| mode.identifier().to_owned()),
+            share: record
+                .request
+                .share()
+                .filter(|share| *share != RecognitionShare::Whole)
+                .map(|share| share.identifier().to_owned()),
         },
         planned_chunks: record.planned_chunks,
         operation_ids: record
@@ -179,13 +198,30 @@ fn validate_job(stored: StoredJob, job_id: &JobId, session_id: &SessionId) -> Op
         return None;
     }
     let kind = JobKind::parse(&stored.kind)?;
-    let request = match kind {
-        JobKind::Retranscribe => JobRequest::Retranscribe {
+    let request = match (kind, stored.request.mode) {
+        (JobKind::Retranscribe, None) => JobRequest::Retranscribe {
             range: match stored.request.range {
                 Some(range) => Some(range.range()?),
                 None => None,
             },
+            // Only a share other than the whole is written.
+            share: match stored.request.share.as_deref() {
+                None => RecognitionShare::Whole,
+                Some(identifier) => RecognitionShare::parse(identifier)
+                    .filter(|share| *share != RecognitionShare::Whole)?,
+            },
         },
+        // A `prepare` job prepares the whole session and plans no chunks.
+        (JobKind::Prepare, Some(mode))
+            if stored.request.range.is_none()
+                && stored.request.share.is_none()
+                && stored.planned_chunks.is_none() =>
+        {
+            JobRequest::Prepare {
+                mode: JobMode::parse(&mode)?,
+            }
+        }
+        _ => return None,
     };
     let operation_key = OperationKey::parse(stored.operation_key).ok()?;
     // The identity must derive from the record's own keys.
@@ -708,4 +744,174 @@ mod tests {
         }
         Ok(())
     }
+}
+
+/// Largest progress record of a `prepare` job.
+pub(super) const MAX_PROGRESS_BYTES: u64 = 16 * 1024;
+
+/// What the progress record calls itself.
+const PROGRESS_FORMAT: &str = "vsift.job_progress";
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct StoredMedia {
+    from_us: u64,
+    done_until_us: u64,
+    to_us: Option<u64>,
+    elapsed_us: u64,
+    fresh_media_us: u64,
+    fresh_elapsed_us: u64,
+    fresh_chunks: u32,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct StoredUpdate {
+    stage: String,
+    completed: u64,
+    total: Option<u64>,
+    media: Option<StoredMedia>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct StoredStream {
+    stream: String,
+    job_id: Option<String>,
+    update: Option<StoredUpdate>,
+}
+
+/// `progress.json` v1: where a `prepare` job's streams are, as its runner
+/// last recorded it (ADR 0033). Advisory, and read strictly: a record that
+/// fails any check is read as none.
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct StoredProgress {
+    schema_version: u16,
+    format: String,
+    streams: Vec<StoredStream>,
+    recorded_at_unix_seconds: u64,
+}
+
+impl MetadataVersion for StoredProgress {
+    fn schema_version(&self) -> u16 {
+        self.schema_version
+    }
+}
+
+/// Encodes a progress record.
+///
+/// # Errors
+///
+/// [`SessionStorageError::Io`] only if serialisation failed.
+pub(super) fn encode_progress(progress: &PrepareProgress) -> Result<Vec<u8>, SessionStorageError> {
+    let stored = StoredProgress {
+        schema_version: STORAGE_SCHEMA_VERSION,
+        format: PROGRESS_FORMAT.to_owned(),
+        streams: progress
+            .streams
+            .iter()
+            .map(|stream| StoredStream {
+                stream: stream.stream.identifier().to_owned(),
+                job_id: stream.job.as_ref().map(|job| job.as_str().to_owned()),
+                update: stream.update.map(|update| StoredUpdate {
+                    stage: update.stage.identifier().to_owned(),
+                    completed: update.completed,
+                    total: update.total,
+                    media: update.media.map(|media| StoredMedia {
+                        from_us: media.from_us,
+                        done_until_us: media.done_until_us,
+                        to_us: media.to_us,
+                        elapsed_us: media.elapsed_us,
+                        fresh_media_us: media.fresh_media_us,
+                        fresh_elapsed_us: media.fresh_elapsed_us,
+                        fresh_chunks: media.fresh_chunks,
+                    }),
+                }),
+            })
+            .collect(),
+        recorded_at_unix_seconds: progress.recorded_at_unix_seconds,
+    };
+    serde_json::to_vec(&stored).map_err(|_| SessionStorageError::Io)
+}
+
+/// Decodes a progress record.
+///
+/// # Errors
+///
+/// [`SessionStorageError::UnsupportedVersion`] for a newer record and
+/// [`SessionStorageError::IntegrityFailure`] for anything else that is not a
+/// valid record.
+pub(super) fn decode_progress(bytes: &[u8]) -> Result<PrepareProgress, SessionStorageError> {
+    let stored: StoredProgress = parse_versioned_json(bytes)?;
+    validate_progress(stored).ok_or(SessionStorageError::IntegrityFailure)
+}
+
+fn validate_progress(stored: StoredProgress) -> Option<PrepareProgress> {
+    if stored.format != PROGRESS_FORMAT || stored.streams.len() > PrepareStream::ALL.len() {
+        return None;
+    }
+    let mut streams: Vec<StreamProgress> = Vec::with_capacity(stored.streams.len());
+    for stream in stored.streams {
+        let kind = PrepareStream::parse(&stream.stream)?;
+        if streams.iter().any(|seen| seen.stream == kind) {
+            return None;
+        }
+        let job = match stream.job_id {
+            Some(job) => Some(JobId::parse(job).ok()?),
+            None => None,
+        };
+        let update = match stream.update {
+            Some(update) => Some(validate_update(update)?),
+            None => None,
+        };
+        streams.push(StreamProgress {
+            stream: kind,
+            job,
+            update,
+        });
+    }
+    Some(PrepareProgress {
+        streams,
+        recorded_at_unix_seconds: stored.recorded_at_unix_seconds,
+    })
+}
+
+fn validate_update(update: StoredUpdate) -> Option<ProgressUpdate> {
+    let stage = ProgressStage::ALL
+        .into_iter()
+        .find(|stage| stage.identifier() == update.stage)?;
+    if update.total.is_some_and(|total| update.completed > total) {
+        return None;
+    }
+    let media = match update.media {
+        Some(media) => {
+            let ends_in_order = media
+                .to_us
+                .is_none_or(|to| to >= media.from_us && media.done_until_us <= to);
+            if media.done_until_us < media.from_us
+                || !ends_in_order
+                || media.fresh_media_us > media.done_until_us - media.from_us
+                || media.fresh_elapsed_us > media.elapsed_us
+            {
+                return None;
+            }
+            Some(MediaProgress {
+                from_us: media.from_us,
+                done_until_us: media.done_until_us,
+                to_us: media.to_us,
+                elapsed_us: media.elapsed_us,
+                fresh_media_us: media.fresh_media_us,
+                fresh_elapsed_us: media.fresh_elapsed_us,
+                fresh_chunks: media.fresh_chunks,
+            })
+        }
+        None => None,
+    };
+    Some(ProgressUpdate {
+        stage,
+        completed: update.completed,
+        total: update.total,
+        media,
+    })
 }

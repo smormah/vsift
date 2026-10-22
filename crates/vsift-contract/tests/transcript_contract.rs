@@ -184,6 +184,7 @@ fn page_response(
             segments: &segments,
             next_cursor: cursor.as_deref(),
             coverage: &page.coverage,
+            growth: vsift_contract::ReadGrowth::default(),
         }),
     )?
     .with_lifecycle(LifecycleResponse::ephemeral(EXPIRES_AT.to_owned())))
@@ -533,6 +534,7 @@ fn view_response(
             segments: &segments,
             next_cursor: cursor.as_deref(),
             coverage: &page.coverage,
+            growth: vsift_contract::ReadGrowth::default(),
         },
         LifecycleResponse::ephemeral(EXPIRES_AT.to_owned()),
         view,
@@ -794,6 +796,7 @@ fn the_stream_states_the_coverage_its_page_does() -> TestResult {
             segments: &revision.segments()[..2],
             next_cursor: None,
             coverage: &SearchCoverage::of(&revision, Some(range)),
+            growth: vsift_contract::ReadGrowth::default(),
         },
         LifecycleResponse::ephemeral(EXPIRES_AT.to_owned()),
     )?;

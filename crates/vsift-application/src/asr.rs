@@ -15,7 +15,7 @@
 //! splicing it into the revision it supersedes when the run covered only part
 //! of the source (decision D3, ADR 0017).
 
-use std::{error::Error, fmt, future::Future, num::NonZeroU16, num::NonZeroU32};
+use std::{error::Error, fmt, future::Future, num::NonZeroU16, num::NonZeroU32, time::Duration};
 
 use vsift_domain::{
     AsrChunkOutcome, AsrChunkRecord, AsrDecodingProfile, AsrModel, AsrModelProfile,
@@ -26,7 +26,7 @@ use vsift_domain::{
     TimeRange, TranscriptProvenance, TranscriptRevision, TranscriptRevisionError,
     TranscriptRevisionId, TranscriptRevisionParts, TranscriptSegment, TranscriptSegmentParts,
     TranscriptWarningKind, TranscriptWarnings, ValidatedChunk, decoded_audio_range,
-    is_below_recognition_floor, is_silent_pcm, merge_chunks, plan_chunks,
+    is_below_recognition_floor, is_silent_pcm, merge_chunks, plan_chunks, settled_merge,
     unusable_chunks_end_the_run, validate_chunk_output,
 };
 
@@ -479,6 +479,7 @@ where
     run_chunks(
         request,
         None::<CheckpointScope<'_, NoCheckpoints>>,
+        &NoObserver,
         audio,
         recognizer,
         cancellation,
@@ -522,6 +523,156 @@ pub struct CheckpointScope<'a, K> {
     /// Receives `recognising_speech` progress: 0 of the planned chunks once
     /// the plan is made, then one more after every chunk, reused or fresh.
     pub progress: &'a dyn ProgressSink,
+    /// Told after every chunk what the run has so far, so that a job can
+    /// publish what is settled (ADR 0033); [`NoObserver`] when nothing is
+    /// published before the run ends.
+    pub observer: &'a dyn RunObserver,
+    /// The clock the run's speed is read on (ADR 0033): the progress it
+    /// reports carries its media figures.
+    pub stopwatch: &'a dyn crate::Stopwatch,
+}
+
+/// Told after every finished chunk of a run what the run has so far (ADR
+/// 0033), between chunks, on the run's own task.
+///
+/// It must return promptly: the next chunk waits for it. A job publishes the
+/// settled part of the run from it ([`RunSoFar::open`]).
+pub trait RunObserver: Send + Sync {
+    /// Receives the run after one more chunk.
+    fn chunk_finished(&self, run: &RunSoFar<'_>);
+}
+
+/// An observer that publishes nothing: the run's revision appears when the
+/// run ends, as before ADR 0033.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct NoObserver;
+
+impl RunObserver for NoObserver {
+    fn chunk_finished(&self, _run: &RunSoFar<'_>) {}
+}
+
+/// What a run has after one of its chunks finished, in plan order, for
+/// [`RunObserver::chunk_finished`].
+pub struct RunSoFar<'a> {
+    request: &'a TranscribeRangeRequest<'a>,
+    planned: &'a [PlannedChunk],
+    gathered: &'a Gathered,
+    all_checkpointed: bool,
+}
+
+impl RunSoFar<'_> {
+    /// How many chunks are finished, the first ones of the plan.
+    #[must_use]
+    pub const fn finished(&self) -> usize {
+        self.gathered.records.len()
+    }
+
+    /// How many chunks the run planned.
+    #[must_use]
+    pub const fn planned(&self) -> usize {
+        self.planned.len()
+    }
+
+    /// The first chunk that is not finished, `None` once every chunk is.
+    #[must_use]
+    pub fn next(&self) -> Option<&PlannedChunk> {
+        self.planned.get(self.finished())
+    }
+
+    /// Whether the outcome of every finished chunk is kept in a stored
+    /// checkpoint. Only then may the run publish: a resumed run reads finished
+    /// chunks from their checkpoints, and a chunk recognised again might be
+    /// heard differently than the one that was published.
+    #[must_use]
+    pub const fn all_checkpointed(&self) -> bool {
+        self.all_checkpointed
+    }
+
+    /// Whether the decoded audio of every finished chunk began no more than
+    /// `max_early_audio_us` before its window, as [`RunSoFar::open`] needs of
+    /// the chunks still to come (ADR 0033; [`vsift_domain::MAX_EARLY_AUDIO_MICROS`]).
+    #[must_use]
+    pub fn audio_began_in_time(&self, max_early_audio_us: u64) -> bool {
+        self.gathered.records.iter().all(|record| {
+            let audio = match record.outcome() {
+                AsrChunkOutcome::Transcribed { audio }
+                | AsrChunkOutcome::Silent { audio }
+                | AsrChunkOutcome::Unusable { audio } => audio,
+                AsrChunkOutcome::NoAudio
+                | AsrChunkOutcome::Pending
+                | AsrChunkOutcome::NotReached => {
+                    return true;
+                }
+            };
+            audio.start().as_micros().saturating_add(max_early_audio_us)
+                >= record.chunk().window().start().as_micros()
+        })
+    }
+
+    /// The source time the finished chunks reach: the end of the last finished
+    /// chunk's window (the start of the run's range before any finished).
+    #[must_use]
+    pub fn finished_until(&self) -> MediaTime {
+        self.gathered
+            .records
+            .last()
+            .map_or(self.request.range.start(), |record| {
+                record.chunk().window().end()
+            })
+    }
+
+    /// The run as an open revision would hold it now (ADR 0033): what
+    /// [`settled_merge`] settles of the finished chunks, with every other
+    /// chunk [`AsrChunkOutcome::Pending`], and the time it is settled until.
+    /// The warnings and language are those of the finished chunks so far.
+    ///
+    /// # Errors
+    ///
+    /// [`AsrStage::Assembly`] when the run's provenance cannot be built, an
+    /// internal fault.
+    pub fn open(
+        &self,
+        max_early_audio_us: u64,
+    ) -> Result<(AsrTranscription, MediaTime), AsrFailure> {
+        let settled = settled_merge(&self.gathered.merge_input, self.next(), max_early_audio_us);
+        let mut warnings = self.gathered.warnings.clone();
+        warnings.extend(&self.gathered.gap_warnings());
+        warnings.extend(&settled.warnings);
+        let run = self.run_with_the_rest(AsrChunkOutcome::Pending)?;
+        Ok((
+            AsrTranscription {
+                run,
+                language: agreed_language(self.gathered.languages.clone()),
+                segments: settled.segments,
+                unplaced: settled.unplaced,
+                warnings,
+            },
+            settled.settled_until,
+        ))
+    }
+
+    /// The run's provenance: the finished chunks' outcomes, and `rest` for
+    /// every chunk not finished.
+    fn run_with_the_rest(&self, rest: AsrChunkOutcome) -> Result<AsrRun, AsrFailure> {
+        let mut chunks = self.gathered.records.clone();
+        chunks.extend(
+            self.planned
+                .iter()
+                .skip(self.finished())
+                .map(|chunk| AsrChunkRecord::new(chunk.clone(), rest)),
+        );
+        let expected = self.request.expected;
+        AsrRun::new(AsrRunParts {
+            provider: expected.provider.clone(),
+            model: expected.model.clone(),
+            decoding: expected.decoding,
+            plan: self.request.plan,
+            threads: expected.threads,
+            audio_stream: self.request.audio_stream,
+            chunks,
+        })
+        .map_err(|error| AsrFailure::at(AsrStage::Assembly, AsrFailureReason::InvalidRun(error)))
+    }
 }
 
 // Two references: copyable whatever `K` is, which a derive would not allow.
@@ -610,7 +761,15 @@ where
     C: AsrCancellation,
     K: ChunkCheckpoints,
 {
-    run_chunks(request, Some(scope), audio, recognizer, cancellation).await
+    run_chunks(
+        request,
+        Some(scope),
+        scope.observer,
+        audio,
+        recognizer,
+        cancellation,
+    )
+    .await
 }
 
 /// What one chunk became.
@@ -633,6 +792,7 @@ enum ChunkResult {
 async fn run_chunks<A, R, C, K>(
     request: TranscribeRangeRequest<'_>,
     scope: Option<CheckpointScope<'_, K>>,
+    observer: &dyn RunObserver,
     audio: &A,
     recognizer: &R,
     cancellation: &C,
@@ -647,22 +807,29 @@ where
     let chunks = plan_run(&request)?;
     ensure_identity(recognizer, request.expected).await?;
     let total = u64::try_from(chunks.len()).ok();
-    let report = |completed: u64| {
+    let mut meter = scope
+        .as_ref()
+        .map(|scope| Meter::started(request.range, scope.stopwatch));
+    let report = |completed: u64, meter: Option<&Meter<'_>>| {
         if let Some(scope) = &scope {
             scope.progress.report(ProgressUpdate {
                 stage: ProgressStage::RecognisingSpeech,
                 completed,
                 total,
+                media: meter.map(Meter::figures),
             });
         }
     };
-    report(0);
+    report(0, meter.as_ref());
     let mut completed = 0_u64;
 
     let mut usage = CheckpointUse::default();
     let planned = u32::try_from(chunks.len()).unwrap_or(u32::MAX);
     let mut gathered = Gathered::with_capacity(chunks.len());
-    for chunk in chunks {
+    // Only a run whose every finished chunk is kept in a checkpoint may
+    // publish (ADR 0033): see [`RunSoFar::all_checkpointed`].
+    let mut all_checkpointed = scope.is_some();
+    for chunk in chunks.iter().cloned() {
         let index = chunk.index();
         let at_chunk = |failure: AsrFailure| AsrRunFailure {
             failure,
@@ -672,6 +839,7 @@ where
         let reused = scope
             .as_ref()
             .and_then(|scope| reuse_checkpoint(scope, &chunk, bounds, &mut usage));
+        let fresh = reused.is_none();
         let result = if let Some(result) = reused {
             result
         } else {
@@ -690,18 +858,30 @@ where
                 ensure_identity(recognizer, request.expected).await?;
             }
             if let Some(scope) = &scope {
-                // Best effort by design: see the port's documentation.
-                let _ = scope.checkpoints.store(&ChunkCheckpoint::new(
+                // Best effort by design: see the port's documentation. A
+                // checkpoint that could not be stored stops the run publishing.
+                let stored = scope.checkpoints.store(&ChunkCheckpoint::new(
                     scope.key.clone(),
                     &chunk,
                     checkpoint,
                 ));
+                all_checkpointed &= stored.is_ok();
             }
             result
         };
+        let reached = chunk.window().end();
         gathered.take(chunk, result);
         completed = completed.saturating_add(1);
-        report(completed);
+        if let Some(meter) = &mut meter {
+            meter.finished(reached, fresh);
+        }
+        report(completed, meter.as_ref());
+        observer.chunk_finished(&RunSoFar {
+            request: &request,
+            planned: &chunks,
+            gathered: &gathered,
+            all_checkpointed,
+        });
         // The verdict is a share of the answered chunks, so it is known as soon
         // as no chunk still to come could change it. A recognizer that answers
         // with garbage is therefore not run to the end of a long recording.
@@ -738,6 +918,72 @@ where
         },
         usage,
     ))
+}
+
+/// Times a run's chunks for its media progress (ADR 0033, D8): where they
+/// reach, and what the chunks recognised in this run (not taken from a
+/// checkpoint) advanced it by and took. The clock starts once the plan is
+/// made and the recognizer is known, after any admission wait.
+struct Meter<'a> {
+    stopwatch: &'a dyn crate::Stopwatch,
+    from_us: u64,
+    to_us: u64,
+    started: Duration,
+    last: Duration,
+    done_until_us: u64,
+    fresh_media_us: u64,
+    fresh_elapsed_us: u64,
+    fresh_chunks: u32,
+}
+
+impl<'a> Meter<'a> {
+    fn started(range: TimeRange, stopwatch: &'a dyn crate::Stopwatch) -> Self {
+        let now = stopwatch.elapsed();
+        Self {
+            stopwatch,
+            from_us: range.start().as_micros(),
+            to_us: range.end().as_micros(),
+            started: now,
+            last: now,
+            done_until_us: range.start().as_micros(),
+            fresh_media_us: 0,
+            fresh_elapsed_us: 0,
+            fresh_chunks: 0,
+        }
+    }
+
+    /// One more chunk finished, its window ending at `reached`.
+    fn finished(&mut self, reached: MediaTime, fresh: bool) {
+        let now = self.stopwatch.elapsed();
+        let reached = reached.as_micros().min(self.to_us).max(self.done_until_us);
+        if fresh {
+            self.fresh_media_us = self
+                .fresh_media_us
+                .saturating_add(reached - self.done_until_us);
+            self.fresh_elapsed_us = self
+                .fresh_elapsed_us
+                .saturating_add(micros(now.saturating_sub(self.last)));
+            self.fresh_chunks = self.fresh_chunks.saturating_add(1);
+        }
+        self.done_until_us = reached;
+        self.last = now;
+    }
+
+    fn figures(&self) -> vsift_domain::MediaProgress {
+        vsift_domain::MediaProgress {
+            from_us: self.from_us,
+            done_until_us: self.done_until_us,
+            to_us: Some(self.to_us),
+            elapsed_us: micros(self.stopwatch.elapsed().saturating_sub(self.started)),
+            fresh_media_us: self.fresh_media_us,
+            fresh_elapsed_us: self.fresh_elapsed_us,
+            fresh_chunks: self.fresh_chunks,
+        }
+    }
+}
+
+fn micros(duration: Duration) -> u64 {
+    u64::try_from(duration.as_micros()).unwrap_or(u64::MAX)
 }
 
 /// The chunk's stored result, if a usable checkpoint of this run holds it.
@@ -1029,17 +1275,24 @@ impl Gathered {
     /// Counts the chunks that were recorded as gaps, quiet or not, under their
     /// warnings.
     fn count_gaps(&mut self) {
+        let gaps = self.gap_warnings();
+        self.warnings.extend(&gaps);
+    }
+
+    /// The warnings that count the chunks recorded as gaps so far.
+    fn gap_warnings(&self) -> TranscriptWarnings {
+        let mut warnings = TranscriptWarnings::default();
         if let Some(first) = self.first_gap {
-            self.warnings
-                .add(TranscriptWarningKind::SilentChunksSkipped, self.gaps, first);
+            warnings.add(TranscriptWarningKind::SilentChunksSkipped, self.gaps, first);
         }
         if let Some(first) = self.first_unusable_ordinal {
-            self.warnings.add(
+            warnings.add(
                 TranscriptWarningKind::ProviderChunksRejected,
                 self.unusable,
                 first,
             );
         }
+        warnings
     }
 
     /// The failure of the run, if it is certain by now: `done` of `planned`
@@ -1198,6 +1451,182 @@ impl Assembled<'_> {
 pub fn build_asr_revision(
     request: AsrRevisionRequest<'_>,
 ) -> Result<TranscriptRevision, TranscriptBuildError> {
+    TranscriptRevision::new(assemble_asr_revision(request)?).map_err(TranscriptBuildError::Invalid)
+}
+
+/// The **open** revision a run that publishes as it goes has settled so far
+/// (ADR 0033): the first segments of the revision [`build_asr_revision`] will
+/// build when the run ends, with the same identities, times and text, and
+/// nothing a chunk still to come could change.
+///
+/// `request.transcription` is the run so far: its chunks that are finished
+/// with their outcomes and the rest [`AsrChunkOutcome::Pending`], and as its
+/// segments and unplaced stretches what [`vsift_domain::settled_merge`] settled
+/// before `settled_until`. The revision is assembled exactly as the sealed one
+/// is, then cut at the first segment that a later publication could precede or
+/// change:
+///
+/// - a segment of the run that ends after `settled_until`;
+/// - a segment of the superseded revision inside the replaced range that
+///   reaches past `settled_until`: whether it is kept depends on chunks still
+///   to come ([`EarlierTextRule`]), and it would sort before what follows it;
+/// - anything after the replaced range, which the run carries at the seal.
+///
+/// The open revision is published until the start of the first segment cut
+/// away (or `settled_until`, if that is earlier): no later segment starts
+/// before it.
+///
+/// # Errors
+///
+/// As [`build_asr_revision`].
+pub fn build_open_asr_revision(
+    request: AsrRevisionRequest<'_>,
+    settled_until: MediaTime,
+) -> Result<TranscriptRevision, TranscriptBuildError> {
+    let reach_back = request.splice.map_or(settled_until, |splice| {
+        let replaced = splice.replaced_range;
+        splice
+            .base
+            .segments()
+            .iter()
+            .filter(|segment| {
+                let range = segment.range();
+                range.start() >= replaced.start()
+                    && range.start() < settled_until
+                    && range.end() > settled_until
+            })
+            .map(|segment| segment.range().start())
+            .fold(settled_until, MediaTime::min)
+    });
+    let mut parts = assemble_asr_revision(request)?;
+    let kept = parts
+        .segments
+        .iter()
+        .take_while(|segment| segment.range().end() <= reach_back)
+        .count();
+    let published_until = parts.segments.get(kept).map_or(reach_back, |first_cut| {
+        first_cut.range().start().min(reach_back)
+    });
+    parts.segments.truncate(kept);
+    let segments = &parts.segments;
+    parts.inherited.retain(|inherited| {
+        segments.iter().any(|segment| {
+            segment
+                .carried_from()
+                .is_some_and(|carried| carried.revision() == inherited.id())
+        })
+    });
+    parts
+        .unplaced
+        .retain(|stretch| stretch.end() <= published_until);
+    TranscriptRevision::new_open(parts, published_until).map_err(TranscriptBuildError::Invalid)
+}
+
+/// The **stopped** revision a run seals when it is cancelled, or fails in a
+/// way it cannot resume from, after it published `open` (ADR 0033, D1).
+///
+/// Nothing published is taken back: the stopped revision holds every segment
+/// of `open`, with the same identities, and after them the text of `base` (the
+/// revision `open` supersedes) that starts at or after the time `open` is
+/// published until and that [`EarlierTextRule::stopped_at`] keeps: everything
+/// after the replaced range, and inside it the text where the run wrote nothing.
+/// Every chunk `open` had not published is [`AsrChunkOutcome::NotReached`]: a
+/// search counts the run's own reading only before that time.
+///
+/// # Errors
+///
+/// [`TranscriptBuildError::Invalid`] when `open` is not an open local-ASR
+/// revision, `base` is not the revision it supersedes, or the assembly violates
+/// an invariant.
+pub fn build_stopped_asr_revision(
+    open: &TranscriptRevision,
+    base: Option<&TranscriptRevision>,
+) -> Result<TranscriptRevision, TranscriptBuildError> {
+    let invalid = TranscriptBuildError::Invalid(TranscriptRevisionError::InvalidGrowth);
+    let (TranscriptProvenance::LocalAsr(open_run), Some(stopped_at)) =
+        (open.provenance(), open.published_until())
+    else {
+        return Err(invalid);
+    };
+    if base.map(TranscriptRevision::id) != open.supersedes() {
+        return Err(invalid);
+    }
+    let chunks = open_run
+        .chunks()
+        .iter()
+        .map(|record| match record.outcome() {
+            AsrChunkOutcome::Pending => {
+                AsrChunkRecord::new(record.chunk().clone(), AsrChunkOutcome::NotReached)
+            }
+            _ => record.clone(),
+        })
+        .collect();
+    let run = AsrRun::new(AsrRunParts {
+        provider: open_run.provider().clone(),
+        model: open_run.model().clone(),
+        decoding: open_run.decoding(),
+        plan: open_run.plan(),
+        threads: open_run.threads(),
+        audio_stream: open_run.audio_stream(),
+        chunks,
+    })
+    .map_err(TranscriptBuildError::Invalid)?;
+    let mut segments = open.segments().to_vec();
+    let mut inherited = open.inherited().to_vec();
+    let mut carried_untranscribed = open.carried_untranscribed().to_vec();
+    if let (Some(base), Some(replaced)) = (base, open.replaced_range()) {
+        let rule = EarlierTextRule::new(
+            replaced,
+            &run,
+            segments
+                .iter()
+                .filter(|segment| segment.carried_from().is_none())
+                .map(TranscriptSegment::range),
+        )
+        .stopped_at(stopped_at);
+        let splice = RevisionSplice {
+            base,
+            replaced_range: replaced,
+        };
+        let (carried, carried_from) = carried_segments(splice, &rule, |segment| {
+            segment.range().start() >= stopped_at
+        })?;
+        for entry in carried_from {
+            if !inherited.iter().any(|known| known.id() == entry.id()) {
+                inherited.push(entry);
+            }
+        }
+        // Ordinals continue after the published segments.
+        let added = identified_segments_from(open.id(), segments.len(), carried)?;
+        segments.extend(added);
+        carried_untranscribed = base.carried_untranscribed_for(replaced, &inherited);
+    }
+    TranscriptRevision::new_stopped(
+        TranscriptRevisionParts {
+            id: open.id().clone(),
+            number: NonZeroU32::new(open.number()).ok_or(invalid)?,
+            source_id: open.source_id().clone(),
+            source_segment: open.source_segment().clone(),
+            provenance: TranscriptProvenance::LocalAsr(run),
+            supersedes: open.supersedes().cloned(),
+            replaced_range: open.replaced_range(),
+            inherited,
+            carried_untranscribed,
+            unplaced: open.unplaced().to_vec(),
+            language: open.language().cloned(),
+            segments,
+            warnings: open.warnings().clone(),
+        },
+        stopped_at,
+    )
+    .map_err(TranscriptBuildError::Invalid)
+}
+
+/// Every part of the revision a run builds, before it is validated as sealed
+/// or open.
+fn assemble_asr_revision(
+    request: AsrRevisionRequest<'_>,
+) -> Result<TranscriptRevisionParts, TranscriptBuildError> {
     let transcription = request.transcription;
     let run = &transcription.run;
     let covered = run.covered_range().ok_or(TranscriptBuildError::Invalid(
@@ -1236,10 +1665,11 @@ pub fn build_asr_revision(
         ],
     ))
     .map_err(|_| TranscriptBuildError::Invalid(TranscriptRevisionError::InvalidIdentity))?;
-    let any_unusable = run
-        .chunks()
-        .iter()
-        .any(|record| matches!(record.outcome(), AsrChunkOutcome::Unusable { .. }));
+    // A run that could not use some answer, stopped before a chunk, or has not
+    // published a chunk yet has not heard all of its range.
+    let any_unusable = run.chunks().iter().any(|record| {
+        record.outcome().left_unread() || record.outcome() == AsrChunkOutcome::Pending
+    });
     let mut warnings = transcription.warnings;
     // "No speech was recognised" is a statement about the whole range, so it is
     // made only by a run that read all of it: a run that could not use its
@@ -1261,7 +1691,7 @@ pub fn build_asr_revision(
                     .iter()
                     .map(|merged| merged.segment.range()),
             );
-            let (carried, inherited) = carried_segments(splice, &rule)?;
+            let (carried, inherited) = carried_segments(splice, &rule, |_| true)?;
             // What the superseded revision left untranscribed outside this
             // run's range stays so wherever a window or file this revision
             // carries would otherwise be counted over it; the run that left it
@@ -1279,7 +1709,7 @@ pub fn build_asr_revision(
     // Stable: ties keep carried segments first, then provider order.
     assembled.sort_by_key(Assembled::order_key);
     let segments = identified_segments(&revision_id, assembled)?;
-    TranscriptRevision::new(TranscriptRevisionParts {
+    Ok(TranscriptRevisionParts {
         id: revision_id,
         number: request.number,
         source_id: request.source_id.clone(),
@@ -1294,7 +1724,6 @@ pub fn build_asr_revision(
         segments,
         warnings,
     })
-    .map_err(TranscriptBuildError::Invalid)
 }
 
 /// Gives assembled segments their ordinals and identities in `revision_id`.
@@ -1302,9 +1731,19 @@ fn identified_segments(
     revision_id: &TranscriptRevisionId,
     assembled: Vec<Assembled<'_>>,
 ) -> Result<Vec<TranscriptSegment>, TranscriptBuildError> {
+    identified_segments_from(revision_id, 0, assembled)
+}
+
+/// [`identified_segments`] for segments that follow `before` segments the
+/// revision already holds: the first gets the ordinal `before + 1`.
+fn identified_segments_from(
+    revision_id: &TranscriptRevisionId,
+    before: usize,
+    assembled: Vec<Assembled<'_>>,
+) -> Result<Vec<TranscriptSegment>, TranscriptBuildError> {
     let mut segments = Vec::with_capacity(assembled.len());
     for (index, entry) in assembled.into_iter().enumerate() {
-        let ordinal = u32::try_from(index + 1)
+        let ordinal = u32::try_from(before + index + 1)
             .ok()
             .and_then(NonZeroU32::new)
             .ok_or(TranscriptBuildError::Invalid(
@@ -1361,12 +1800,13 @@ fn identified_segments(
 fn carried_segments<'a>(
     splice: RevisionSplice<'a>,
     rule: &EarlierTextRule,
+    wanted: impl Fn(&TranscriptSegment) -> bool,
 ) -> Result<(Vec<Assembled<'a>>, Vec<InheritedRevision>), TranscriptBuildError> {
     let base = splice.base;
     let mut carried = Vec::new();
     let mut inherited: Vec<InheritedRevision> = Vec::new();
     for segment in base.segments() {
-        if !rule.carries(segment.range()) {
+        if !rule.carries(segment.range()) || !wanted(segment) {
             continue;
         }
         let (origin, source) = match segment.carried_from() {

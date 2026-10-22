@@ -11,6 +11,12 @@ pub enum SessionPhase {
     Closed,
 }
 
+/// The most parts an open transcript revision has (ADR 0033, D7). A run
+/// publishes more seldom as it grows, so that it stays within the bound: a
+/// part needs at least `planned chunks / 64` more finished chunks than the one
+/// before.
+pub const MAX_TRANSCRIPT_PARTS: usize = 64;
+
 /// Artifact kinds a session publishes: P04 media evidence, P07 transcript
 /// records, P08 visual-index records and P09 evidence clips and records.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -30,6 +36,11 @@ pub enum SessionArtifactKind {
     /// The lineage of one evidence call: its request, the frames or clip it
     /// selected and the items it extracted, stored as versioned JSON (P09).
     EvidenceRecord,
+    /// One part of an open transcript revision: the segments a run published
+    /// since the part before, with the revision as it stands (ADR 0033). The
+    /// generation that seals the revision retires its parts; a sealed session
+    /// holds none.
+    TranscriptPart,
 }
 
 impl SessionArtifactKind {
@@ -43,6 +54,7 @@ impl SessionArtifactKind {
             Self::VisualIndexRecord => "visual_index_record",
             Self::AudioWav => "audio_wav",
             Self::EvidenceRecord => "evidence_record",
+            Self::TranscriptPart => "transcript_part",
         }
     }
 
@@ -53,7 +65,10 @@ impl SessionArtifactKind {
             Self::FramePng => "png",
             Self::AudioPcm => "pcm",
             Self::AudioWav => "wav",
-            Self::TranscriptRecord | Self::VisualIndexRecord | Self::EvidenceRecord => "json",
+            Self::TranscriptRecord
+            | Self::VisualIndexRecord
+            | Self::EvidenceRecord
+            | Self::TranscriptPart => "json",
         }
     }
 }

@@ -62,7 +62,7 @@ const MAX_RESUME_BYTES: usize = 2 * 1024;
 /// Placeholders the skill's command lines use, with a value the parser
 /// accepts. An unknown placeholder fails the guard, so a new one is added here
 /// deliberately.
-const PLACEHOLDERS: [(&str, &str); 23] = [
+const PLACEHOLDERS: [(&str, &str); 24] = [
     ("namespace", "session"),
     ("operation", "retain"),
     ("video", "recording.mp4"),
@@ -81,6 +81,7 @@ const PLACEHOLDERS: [(&str, &str); 23] = [
     ("operation-id", "op_0123456789abcdef"),
     ("revision", "trv_0123456789abcdef"),
     ("cursor", "opaque-cursor"),
+    ("since-token", "opaque-token"),
     ("new-directory", "evidence-bundle"),
     ("bundle-directory", "evidence-bundle"),
     ("executable", "ffmpeg-bin"),

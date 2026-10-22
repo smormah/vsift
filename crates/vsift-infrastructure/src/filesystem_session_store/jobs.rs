@@ -38,11 +38,12 @@ use sha2::{Digest, Sha256};
 use vsift_application::{
     CancelRequest, CheckpointRead, CheckpointStoreError, ChunkCheckpoints, CommitLedger, JobChange,
     JobLiveness, JobOwner, JobRecord, JobSpec, JobStore, JobStoreError, JobView, MAX_SESSION_JOBS,
-    RevisionStore, SessionHead, SessionStorageError,
+    PublishedOpenRevision, RevisionStore, SessionHead, SessionStorageError,
 };
 use vsift_domain::{
-    ChunkCheckpoint, JobId, JobState, MAX_PLANNED_CHUNKS, OperationId, SessionArtifactKind,
-    SessionId, SessionPhase, StorageGeneration, TranscriptRevision, TranscriptRevisionId,
+    ChunkCheckpoint, JobId, JobState, MAX_PLANNED_CHUNKS, MERGE_RULES_VERSION, OperationId,
+    SessionArtifactKind, SessionId, SessionPhase, StorageGeneration, TranscriptRevision,
+    TranscriptRevisionId,
 };
 
 use super::map_committed_io;
@@ -52,6 +53,7 @@ use super::{
     chain::read_committed_manifest,
     commit::sync_directory,
     create_private_child_directory,
+    evidence::ArtifactCommit,
     job_records::{
         MAX_CHECKPOINT_BYTES, StoredBinding, StoredJobIndex, checkpoint_name, checkpoint_ordinal,
         decode_checkpoint, decode_job, encode_checkpoint, encode_job,
@@ -73,6 +75,8 @@ const JOB_STAGED_FILE: &str = "job.json.tmp";
 const OWNER_LOCK_FILE: &str = "owner.lock";
 const STATE_LOCK_FILE: &str = "state.lock";
 const CHUNKS_DIRECTORY: &str = "chunks";
+const PROGRESS_FILE: &str = "progress.json";
+const PROGRESS_STAGED_FILE: &str = "progress.json.tmp";
 const JOB_INDEX_DIRECTORY: &str = "job-index";
 /// Most operation bindings one session keeps.
 const MAX_SESSION_BINDINGS: usize = 256;
@@ -220,7 +224,7 @@ impl FilesystemSessionStore {
                     if record.request_digest != spec.request_digest
                         || record.operation_key != spec.operation_key
                         || record.recognition_key != spec.recognition_key
-                        || record.request != spec.request
+                        || !record.request.same_work(spec.request)
                     {
                         return Err(SessionStorageError::IntegrityFailure.into());
                     }
@@ -465,6 +469,76 @@ impl FilesystemSessionStore {
             liveness: liveness(&job)?,
             checkpoints: count_checkpoints(&job)?,
         }))
+    }
+}
+
+impl vsift_application::JobProgressLog for FilesystemSessionStore {
+    fn record_progress(
+        &self,
+        session_id: &SessionId,
+        job_id: &JobId,
+        progress: &vsift_application::PrepareProgress,
+    ) -> Result<(), SessionStorageError> {
+        let opened = self
+            .session_jobs_directory(session_id, false)
+            .map_err(job_storage_error)?
+            .ok_or(SessionStorageError::StateConflict)?;
+        let jobs = opened.jobs.ok_or(SessionStorageError::StateConflict)?;
+        let job = jobs
+            .open_dir_nofollow(job_id.as_str())
+            .map_err(map_committed_io)?;
+        let bytes = super::job_records::encode_progress(progress)?;
+        // Advisory and rewritten every second: never synchronised to disk.
+        replace_file(
+            &job,
+            PROGRESS_FILE,
+            PROGRESS_STAGED_FILE,
+            &bytes,
+            StoredDurability::Ephemeral,
+            None,
+        )
+    }
+
+    fn read_progress(
+        &self,
+        session_id: &SessionId,
+        job_id: &JobId,
+    ) -> Result<Option<vsift_application::PrepareProgress>, SessionStorageError> {
+        let Some(opened) = self
+            .session_jobs_directory(session_id, false)
+            .map_err(job_storage_error)?
+        else {
+            return Ok(None);
+        };
+        let Some(jobs) = &opened.jobs else {
+            return Ok(None);
+        };
+        if !jobs.try_exists(job_id.as_str()).map_err(map_storage_io)? {
+            return Ok(None);
+        }
+        let job = jobs
+            .open_dir_nofollow(job_id.as_str())
+            .map_err(map_committed_io)?;
+        let file = match open_replaced_file(&job, PROGRESS_FILE, false) {
+            Ok(file) => file,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(_) => return Ok(None),
+        };
+        let Ok(bytes) = super::read_bounded_to(file, super::job_records::MAX_PROGRESS_BYTES) else {
+            return Ok(None);
+        };
+        // A damaged record is read as none: progress is advisory.
+        Ok(super::job_records::decode_progress(&bytes).ok())
+    }
+}
+
+/// The storage failure behind a job store failure.
+const fn job_storage_error(error: JobStoreError) -> SessionStorageError {
+    match error {
+        JobStoreError::Storage(storage) => storage,
+        JobStoreError::NotFound | JobStoreError::Transition(_) | JobStoreError::StaleOwner => {
+            SessionStorageError::StateConflict
+        }
     }
 }
 
@@ -891,6 +965,63 @@ impl RevisionStore for FilesystemSessionStore {
             .map(|(revision, _)| revision))
     }
 
+    fn open_revision(
+        &self,
+        session_id: &SessionId,
+        now: u64,
+    ) -> Result<Option<PublishedOpenRevision>, SessionStorageError> {
+        Ok(self
+            .read_open_transcript(session_id, now)?
+            .map(|open| PublishedOpenRevision {
+                revision: open.revision,
+                parts: open.parts,
+                merge_rules: open.merge_rules,
+                job_id: open.job_id,
+            }))
+    }
+
+    fn publish_part(
+        &self,
+        session_id: &SessionId,
+        operation_id: &OperationId,
+        expected: StorageGeneration,
+        open: &TranscriptRevision,
+        job: &JobId,
+        part: std::num::NonZeroU32,
+        first: usize,
+        now: u64,
+    ) -> Result<StorageGeneration, SessionStorageError> {
+        // A part continues the open revision exactly, or begins one over the
+        // newest sealed revision; anything else would leave parts that cannot
+        // be read together. The read and the commit are fenced by the
+        // generation, so nothing can come between them.
+        let follows = if let Some(published) = self.read_open_transcript(session_id, now)? {
+            published.revision.id() == open.id()
+                && published.job_id == *job
+                && published.parts.checked_add(1) == Some(part)
+                && published.revision.segments().len() == first
+                && open.segments().get(..first) == Some(published.revision.segments())
+        } else {
+            let (newest, _) = self.read_transcript_head(session_id, now)?;
+            part.get() == 1
+                && first == 0
+                && open.supersedes() == newest.as_ref().map(TranscriptRevision::id)
+                && newest.is_none_or(|newest| newest.number() < open.number())
+        };
+        if !follows {
+            return Err(SessionStorageError::StateConflict);
+        }
+        let bytes = crate::encode_transcript_part(open, job, part, first, MERGE_RULES_VERSION)?;
+        self.publish_artifact(
+            session_id,
+            operation_id,
+            expected,
+            SessionArtifactKind::TranscriptPart,
+            &bytes,
+            now,
+        )
+    }
+
     fn publish_revision(
         &self,
         session_id: &SessionId,
@@ -900,13 +1031,21 @@ impl RevisionStore for FilesystemSessionStore {
         now: u64,
     ) -> Result<StorageGeneration, SessionStorageError> {
         let record = encode_transcript_record(revision)?;
-        self.publish_artifact(
+        // An open revision is sealed by the record with its identity; the
+        // store refuses any other record while one is open.
+        let commit = match self.read_open_transcript(session_id, now)? {
+            Some(open) if open.revision.id() == revision.id() => ArtifactCommit::SealTranscript,
+            Some(_) => return Err(SessionStorageError::StateConflict),
+            None => ArtifactCommit::Add,
+        };
+        self.publish_artifact_as(
             session_id,
             operation_id,
             expected,
             SessionArtifactKind::TranscriptRecord,
             &record,
             now,
+            commit,
         )
     }
 }

@@ -60,6 +60,14 @@ fn the_committed_freezes_still_hold() -> TestResult {
 /// visible: changing this constant is the decision to cut another candidate and write a new freeze
 /// (`docs/operations/release.md` section 6.8), and it shows in the diff of a test, not only of a data file.
 ///
+/// The freeze of 2026-10-21 is a **draft freeze, rewritten at the merge rebase** (0.3.0 development freeze; the final
+/// freeze is recorded at the 0.3.0 cut). The progress story's third pull request (ADR 0033) changed the skill: PREPARE
+/// starts the transcription with `job start`, and `resume.md` follows a transcription in the background
+/// (`docs/agents/skill.md`, "The change for 0.3.0"), so the `skill` component changed, `bd205d6c...` to
+/// `3291a3ba...`, and this digest, `30293090...` to the value below. The other six components are unchanged. The
+/// supervisor allowed drafts to rewrite the freeze provisionally on 2026-10-21 so that CI runs every test; it is
+/// written again on the new `main` when the pull request is rebased to merge. No batch has run under it.
+///
 /// The freeze of 2026-10-19 is new on purpose (#468, the toolchain re-pin to Rust 1.99.1), and this time the
 /// `grader` component changed, `57507fad...` to `9ecd1121...`: the new pedantic lint `clippy::assert_is_empty`
 /// fires in the test modules of the grader's `src`, and the maintainer decided on 2026-10-19 to rewrite every
@@ -98,7 +106,7 @@ fn the_committed_freezes_still_hold() -> TestResult {
 /// in `batch-2-rc.3/` and `batch-3-rc.3/`); the first two candidates' was
 /// `1e89b5cc488e7245d1a6d63ec8809c1f8a5c137ee87f5ed05f9b692c2af6e392` (copies in `batch-2-rc.1/` and
 /// `batch-2-rc.2/`).
-const CUT_FREEZE_SHA256: &str = "302930904439c2eb49e43396f30d2088481d1a6fb7f47467dd29f08a1e0bb073";
+const CUT_FREEZE_SHA256: &str = "3f9f44fb93fe7b8064c52633293a149f04fe2b70f0547325a056d7d9a7bcf790";
 
 #[test]
 fn the_committed_freezes_are_the_ones_written_at_the_cut() -> TestResult {

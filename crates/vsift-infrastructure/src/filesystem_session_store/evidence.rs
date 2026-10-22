@@ -23,6 +23,16 @@ use super::{
 };
 use crate::{VerifiedSourceIdentity, file_lock::HeldFileLock};
 
+/// How one artifact joins the session's manifest.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum ArtifactCommit {
+    /// Added beside what the manifest lists.
+    Add,
+    /// The transcript record that seals the session's open revision: added,
+    /// and every part of that revision retired, in one generation (ADR 0033).
+    SealTranscript,
+}
+
 /// The inputs of one evidence commit besides its session and generation.
 #[derive(Clone, Copy)]
 pub(super) struct EvidenceFiles<'a> {
@@ -55,6 +65,32 @@ impl FilesystemSessionStore {
         kind: SessionArtifactKind,
         bytes: &[u8],
         now_unix_seconds: u64,
+    ) -> Result<StorageGeneration, SessionStorageError> {
+        self.publish_artifact_as(
+            session_id,
+            operation_id,
+            expected_generation,
+            kind,
+            bytes,
+            now_unix_seconds,
+            ArtifactCommit::Add,
+        )
+    }
+
+    /// [`Self::publish_artifact`], adding the artifact as `commit` says.
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "One generation's inputs; the store's other commits take the same"
+    )]
+    pub(super) fn publish_artifact_as(
+        &self,
+        session_id: &SessionId,
+        operation_id: &OperationId,
+        expected_generation: StorageGeneration,
+        kind: SessionArtifactKind,
+        bytes: &[u8],
+        now_unix_seconds: u64,
+        commit: ArtifactCommit,
     ) -> Result<StorageGeneration, SessionStorageError> {
         let max = StoredArtifactKind::from_domain(kind).max_bytes();
         if bytes.is_empty() || bytes.len() > max {
@@ -115,19 +151,27 @@ impl FilesystemSessionStore {
             expected_generation,
             durability.requirement(),
         );
+        let artifact = StoredArtifact {
+            kind: StoredArtifactKind::from_domain(kind),
+            name,
+            sha256: digest,
+            bytes: u64::try_from(bytes.len())
+                .map_err(|_| SessionStorageError::CapacityExhausted)?,
+        };
+        let update = match commit {
+            ArtifactCommit::Add => LifecycleUpdate::AddArtifact {
+                artifact,
+                now: now_unix_seconds,
+            },
+            ArtifactCommit::SealTranscript => LifecycleUpdate::SealTranscript {
+                artifact,
+                now: now_unix_seconds,
+            },
+        };
         publish_generation_while_locked(
             &self.root,
             &request,
-            LifecycleUpdate::AddArtifact {
-                artifact: StoredArtifact {
-                    kind: StoredArtifactKind::from_domain(kind),
-                    name,
-                    sha256: digest,
-                    bytes: u64::try_from(bytes.len())
-                        .map_err(|_| SessionStorageError::CapacityExhausted)?,
-                },
-                now: now_unix_seconds,
-            },
+            update,
             &hooks,
             Some(&self.verified_heads),
         )
@@ -336,7 +380,8 @@ impl FilesystemSessionStore {
                 }
                 StoredArtifactKind::AudioPcm
                 | StoredArtifactKind::TranscriptRecord
-                | StoredArtifactKind::VisualIndexRecord => {}
+                | StoredArtifactKind::VisualIndexRecord
+                | StoredArtifactKind::TranscriptPart => {}
             }
         }
         Ok(EvidenceInventory {

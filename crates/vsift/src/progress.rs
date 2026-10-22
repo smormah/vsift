@@ -160,6 +160,7 @@ mod tests {
             stage: ProgressStage::RecognisingSpeech,
             completed: 1,
             total: Some(2),
+            media: None,
         };
         observer.for_job(&job).report(update);
         ProgressObserver::none().for_job(&job).report(update);

@@ -87,7 +87,35 @@ pub struct RetranscribeRequest {
     /// at most 60 s for a job host, after which the run answers
     /// [`EngineError::AdmissionBusy`] with a retry hint.
     pub admission: AdmissionWait,
+    /// When the run publishes its revision (ADR 0033): as it goes, so that
+    /// readers see it grow, or only when it ends.
+    pub publication: RetranscribePublication,
+    /// How much of the root's admission capacity the recognition takes (ADR
+    /// 0033, D4): all of it, or one unit less for a background run. It caps
+    /// whisper.cpp's threads; a host's recognizer reports its own.
+    pub share: crate::RecognitionShare,
 }
+
+/// When a retranscription publishes its revision (ADR 0033).
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum RetranscribePublication {
+    /// Only when the run ends, in one generation, as before 0.3.0: a quick or
+    /// queued run, and a worker's step.
+    #[default]
+    AtTheSeal,
+    /// As it goes: what the run has settled, at most once every `interval`
+    /// and in at most [`vsift_domain::MAX_TRANSCRIPT_PARTS`] parts. A run that
+    /// is cancelled, or fails in a way it cannot resume from, then keeps what
+    /// it published as a stopped revision.
+    AsItGoes {
+        /// The least time between two parts.
+        interval: std::time::Duration,
+    },
+}
+
+/// The interval a watched run publishes at (ADR 0033, D7): about ten
+/// seconds.
+pub const PUBLICATION_INTERVAL: std::time::Duration = std::time::Duration::from_secs(10);
 
 /// A half-open source range to retranscribe, in microseconds.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -319,7 +347,8 @@ impl Engine {
 
         // 2. Resolve and identify everything before anything runs.
         let tools = self.local_asr_media_tools()?;
-        let recognizer = self.select_recognizer(self.admission_capacity_hint())?;
+        let capacity = request.share.of(self.admission_capacity_hint());
+        let recognizer = self.select_recognizer(capacity)?;
         let identity = match &recognizer {
             SelectedRecognizer::Whisper(cli) => cli.recognizer_identity().await,
             SelectedRecognizer::Host(host) => host.recognizer.identity_boxed().await,
@@ -340,7 +369,28 @@ impl Engine {
         let store = store.ok_or(EngineError::SessionRoot(SessionRootError::Missing))?;
         // The newest revision and the generation come from one manifest, so
         // the commit below never builds on a base older than it expects.
-        let (base, status) = store.read_transcript_head(&request.session, now)?;
+        let (newest, status) = store.read_transcript_head(&request.session, now)?;
+        // An open revision (ADR 0033) is not a base: the revision it supersedes
+        // is, and only the job that publishes it may continue it (checked once
+        // the request names its job, below).
+        let (base, open_job) = match newest {
+            Some(open) if open.state() == vsift_domain::RevisionState::Open => {
+                let job = store
+                    .read_open_transcript(&request.session, now)?
+                    .map(|open| open.job_id);
+                let base = match open.supersedes() {
+                    Some(id) => Some(
+                        store
+                            .read_transcript_revision(&request.session, id, now)?
+                            .map(|(revision, _)| revision)
+                            .ok_or(EngineError::Storage(SessionStorageError::IntegrityFailure))?,
+                    ),
+                    None => None,
+                };
+                (base, job)
+            }
+            other => (other, None),
+        };
         // A recognition reserves its threads of the root (X-07): one that
         // could never fit is refused before any work.
         admission_fits(&store, identity.threads)?;
@@ -404,9 +454,22 @@ impl Engine {
             request_digest: digest,
             operation_key,
             recognition_key: key,
-            request: JobRequest::Retranscribe { range: requested },
+            request: JobRequest::Retranscribe {
+                range: requested,
+                share: request.share,
+            },
             planned_chunks,
         };
+        if let Some(job) = open_job
+            && job != spec.job_id
+        {
+            return Err(crate::jobs::open_revision_refusal(
+                &store,
+                &request.session,
+                job,
+                now,
+            ));
+        }
 
         // 7. Recognise from the job's checkpoints and the audio, assemble the
         // complete revision, verify the copy and commit exactly once. Each
@@ -462,6 +525,13 @@ impl Engine {
             }
         };
         let progress = request.progress.for_job(&spec.job_id);
+        let stopwatch = vsift_infrastructure::MonotonicStopwatch::started();
+        let publication = match request.publication {
+            RetranscribePublication::AtTheSeal => vsift_application::Publication::AtTheSeal,
+            RetranscribePublication::AsItGoes { interval } => {
+                vsift_application::Publication::AsItGoes { interval }
+            }
+        };
         let running = run_retranscription(
             run,
             RetranscriptionPorts {
@@ -472,6 +542,8 @@ impl Engine {
                 timer: &TokioRetryTimer,
                 classify: job_failure_code,
                 progress: &progress,
+                publication,
+                stopwatch: &stopwatch,
             },
             &mut guard,
         );

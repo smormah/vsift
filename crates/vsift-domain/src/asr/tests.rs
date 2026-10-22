@@ -31,6 +31,8 @@ use crate::{
     spans::{SpanSet, merged, span},
 };
 
+mod settled;
+
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 type Built<T> = Result<T, Box<dyn std::error::Error>>;
 
@@ -116,6 +118,12 @@ fn empty(chunk_index: u32, window: (u64, u64)) -> Built<ChunkSegments> {
 }
 
 fn texts(chunks: &[ChunkSegments]) -> (Vec<String>, u32) {
+    // ADR 0033: every merge these tests make is also cut after each of its
+    // chunks, and each cut must settle a prefix of this very merge.
+    assert_eq!(
+        settled::every_cut_settles_a_prefix(chunks).map(|_| ()),
+        Ok(())
+    );
     let merged = merge_chunks(chunks);
     let duplicates = merged
         .warnings
@@ -2047,10 +2055,23 @@ fn generated_with(
     early_ms: u64,
     words: Words<'_>,
 ) -> Built<Option<Generated>> {
+    generated_with_plan(ChunkPlan::R0, from_ms, total_ms, answers, early_ms, words)
+}
+
+/// [`generated_with`] for any chunk plan (ADR 0033 cuts runs of smaller chunks
+/// too).
+fn generated_with_plan(
+    plan: ChunkPlan,
+    from_ms: u64,
+    total_ms: u64,
+    answers: &[ChunkAnswer],
+    early_ms: u64,
+    words: Words<'_>,
+) -> Built<Option<Generated>> {
     let planned = plan_chunks(
         &segment_id()?,
         range(from_ms * 1_000, total_ms * 1_000)?,
-        ChunkPlan::R0,
+        plan,
     )?;
     let (mut chunks, mut records) = (Vec::new(), Vec::new());
     for (planned, (delay, shape, junk)) in planned.iter().zip(answers) {

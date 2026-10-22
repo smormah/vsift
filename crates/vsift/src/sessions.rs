@@ -464,6 +464,12 @@ impl BundleSummary {
     }
 }
 
+/// How long `session close` waits for the session's running jobs to stop
+/// after asking them to cancel (ADR 0033 section 5).
+pub const SESSION_CLOSE_JOB_WAIT: std::time::Duration = std::time::Duration::from_secs(10);
+
+/// How often `session close` looks whether they have.
+const SESSION_CLOSE_JOB_POLL: std::time::Duration = std::time::Duration::from_millis(100);
 impl Engine {
     /// Copies and hashes one local source into a new disposable session,
     /// optionally importing a supplied transcript with it.
@@ -724,16 +730,55 @@ impl Engine {
 
     /// Closes one session; it becomes eligible for cleanup.
     ///
+    /// A job of the session that a process runs (a background runner, ADR
+    /// 0033) is asked to cancel first, and the close waits up to
+    /// [`SESSION_CLOSE_JOB_WAIT`] for every such job to stop, so the runner
+    /// seals what it published as stopped and ends. A runner that has not
+    /// stopped by then fails its next publication on the closed session and
+    /// ends there. With no job running, nothing waits.
+    ///
     /// # Errors
     ///
     /// Fails when the session cannot be read or closed.
     pub fn close_session(&self, session_id: &SessionId) -> Result<SessionSnapshot, EngineError> {
+        self.stop_live_jobs(session_id);
         let (store, now) = self.existing_store()?;
         let store = store.ok_or(EngineError::SessionRoot(SessionRootError::Missing))?;
         let current = published_status(&store, session_id)?;
         store.close_session(session_id, &self.new_operation_id()?, current.generation())?;
         let status = published_status(&store, session_id)?;
         Ok(SessionSnapshot::observe(&status, now))
+    }
+
+    /// Asks every job of `session_id` that a process runs to cancel, and waits
+    /// up to [`SESSION_CLOSE_JOB_WAIT`] for them to stop. Best effort: a job
+    /// listing that cannot be read leaves the close to go ahead.
+    fn stop_live_jobs(&self, session_id: &SessionId) {
+        let live = |engine: &Self| -> Vec<vsift_domain::JobId> {
+            let Ok((Some(store), _)) = engine.existing_store() else {
+                return Vec::new();
+            };
+            vsift_application::JobStore::session_jobs(&store, session_id)
+                .map(|views| {
+                    views
+                        .into_iter()
+                        .filter(|view| view.liveness == vsift_application::JobLiveness::Owned)
+                        .map(|view| view.record.job_id)
+                        .collect()
+                })
+                .unwrap_or_default()
+        };
+        let running = live(self);
+        if running.is_empty() {
+            return;
+        }
+        for job in &running {
+            let _ = self.job_cancel(job);
+        }
+        let waited = std::time::Instant::now();
+        while waited.elapsed() < SESSION_CLOSE_JOB_WAIT && !live(self).is_empty() {
+            std::thread::sleep(SESSION_CLOSE_JOB_POLL);
+        }
     }
 
     /// Exports one session to a new directory as a validated portable bundle.
@@ -750,9 +795,19 @@ impl Engine {
         output: &Path,
         retention: SourceRetention,
     ) -> Result<BundleSummary, EngineError> {
-        let (store, _now) = self.existing_store()?;
+        let (store, now) = self.existing_store()?;
         let store = store.ok_or(EngineError::SessionRoot(SessionRootError::Missing))?;
         let output = absolute_selection(output)?;
+        // A bundle holds only sealed revisions (ADR 0033): while a revision is
+        // open, retaining waits for its transcription, which is named.
+        if let Ok(Some(open)) = store.read_open_transcript(session_id, now) {
+            return Err(crate::jobs::open_revision_refusal(
+                &store,
+                session_id,
+                open.job_id,
+                now,
+            ));
+        }
         let bundle = store.retain_bundle(session_id, &output, retention.policy())?;
         Ok(BundleSummary::from_status(&bundle))
     }
