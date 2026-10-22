@@ -120,6 +120,7 @@ mod job;
 mod lifecycle;
 mod local_asr;
 mod navigation;
+mod optional_component;
 mod request;
 mod search;
 mod session;
@@ -192,8 +193,9 @@ pub use handoff::{
 };
 pub use install::{
     ARTIFACT_DIRECTORY_REMEDIATION, InstallSource, MANAGED_INSTALL_BUSY_REMEDIATION,
-    MANAGED_STORAGE_REMEDIATION, MANAGED_UNAVAILABLE_REMEDIATION, STALE_PLAN_REMEDIATION,
-    SetupInstallResponse, setup_install_failure_summary,
+    MANAGED_STORAGE_REMEDIATION, MANAGED_UNAVAILABLE_REMEDIATION,
+    OPTIONAL_COMPONENT_NOT_INSTALLED_WARNING, STALE_PLAN_REMEDIATION, SetupInstallResponse,
+    optional_install_failure_summary, setup_install_failure_summary,
 };
 pub use job::{
     JOB_CANCELLED_REMEDIATION, JOB_INTERRUPTED_REMEDIATION, JOB_NOT_RESUMABLE_REMEDIATION,
@@ -223,6 +225,10 @@ pub use navigation::{
     UNKNOWN_CANDIDATE_REMEDIATION, UNKNOWN_EVIDENCE_REMEDIATION, audio_response, frame_response,
     frame_selection_summary, partial_evidence_warning,
 };
+pub use optional_component::{
+    OptionalComponentText, SITE_TERMS_NOTICE, include_command_arguments, optional_check_step,
+    optional_component_text,
+};
 pub use search::{
     MAX_COVERAGE_RANGES, SearchBriefData, SearchData, SearchEvidenceStream, SearchPresentation,
     SearchStreamData, UNPLACED_WORDS_SEARCH_WARNING, UNTRANSCRIBED_SEARCH_WARNING,
@@ -234,8 +240,9 @@ pub use session::{
 };
 pub use setup::{
     ConfiguredModelResponse, ConfiguredSelectionResponse, DependencyLookup, MAX_PROBE_TIMEOUT,
-    NO_FOLDER_SEARCH_ADVICE, ProbeTimeHeadroom, SavedSetupPlan, SetupCheckResponse,
-    SetupPlanResponse, explicit_path_option, managed_update_next_step, probe_deadline_text,
+    NO_FOLDER_SEARCH_ADVICE, OPERATOR_DECISION_INSTRUCTION, OptionalComponentView,
+    ProbeTimeHeadroom, SavedSetupPlan, SetupCheckResponse, SetupPlanResponse, explicit_path_option,
+    managed_update_next_step, probe_deadline_text,
 };
 pub use storage::{
     PrivateFolder, SESSION_NOT_PUBLISHED_REMEDIATION, SESSION_ROOT_NAME_REMEDIATION,

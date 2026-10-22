@@ -43,18 +43,19 @@ use vsift_domain::{
 use vsift_infrastructure::{
     ArchiveEntry, ArchiveEntryKind, ArchiveInventoryBounds, BatchFileError, BatchLine as FileLine,
     BatchLines, CgroupLimit, CgroupMembership, FrameListingWindow, MAX_ARCHIVE_ENTRIES,
-    MAX_ARCHIVE_EXPANDED_BYTES, MAX_CGROUP_DEPTH, MAX_DIAGNOSTIC_BYTES, MAX_GZIP_ARCHIVE_BYTES,
-    MAX_LISTING_DIAGNOSTIC_BYTES, MAX_NET_DEV_BYTES, MAX_OS_RELEASE_BYTES, MAX_TAR_STREAM_BYTES,
-    MAX_XZ_ARCHIVE_BYTES, MountDevice, NetworkInterfaces, SourceContainer, VisualSamplingWindow,
-    WhisperOutputLimits, classify_mountinfo, classify_os_release, classify_root_mount,
-    decode_chunk_checkpoint, decode_evidence_record, decode_job_record, decode_request_record,
-    decode_transcript_record, decode_visual_index_record, encode_chunk_checkpoint,
-    encode_evidence_record, encode_job_record, encode_request_record, encode_transcript_record,
-    encode_visual_index_record, inspect_gzip_tar_inventory, inspect_tar_inventory,
-    inspect_xz_tar_inventory, parse_ashowinfo_start, parse_cgroup_limit, parse_cpu_max,
-    parse_ffprobe_metadata, parse_frame_listing, parse_frame_showinfo, parse_net_dev,
-    parse_png_sequence, parse_proc_cgroup, parse_supplied_transcript, parse_visual_samples,
-    parse_whisper_full_json,
+    MAX_ARCHIVE_EXPANDED_BYTES, MAX_BZIP2_ARCHIVE_BYTES, MAX_CGROUP_DEPTH, MAX_DIAGNOSTIC_BYTES,
+    MAX_GZIP_ARCHIVE_BYTES, MAX_LISTING_DIAGNOSTIC_BYTES, MAX_NET_DEV_BYTES, MAX_OS_RELEASE_BYTES,
+    MAX_TAR_STREAM_BYTES, MAX_XZ_ARCHIVE_BYTES, MountDevice, NetworkInterfaces, SourceContainer,
+    VisualSamplingWindow, WhisperOutputLimits, classify_mountinfo, classify_os_release,
+    classify_root_mount, decode_chunk_checkpoint, decode_evidence_record, decode_job_record,
+    decode_request_record, decode_transcript_record, decode_visual_index_record,
+    encode_chunk_checkpoint, encode_evidence_record, encode_job_record, encode_request_record,
+    encode_transcript_record, encode_visual_index_record, inspect_bzip2_tar_inventory,
+    inspect_gzip_tar_inventory, inspect_tar_inventory, inspect_xz_tar_inventory,
+    inspect_zip_inventory, inspect_zip_selected_files, parse_ashowinfo_start, parse_cgroup_limit,
+    parse_cpu_max, parse_ffprobe_metadata, parse_frame_listing, parse_frame_showinfo,
+    parse_net_dev, parse_png_sequence, parse_proc_cgroup, parse_supplied_transcript,
+    parse_visual_samples, parse_whisper_full_json,
 };
 #[cfg(unix)]
 use vsift_infrastructure::{BundleSourcePolicy, FilesystemSessionStore};
@@ -205,11 +206,19 @@ pub enum Target {
     /// name, held to an independent statement of their grammars (P14 PR 4,
     /// SEC-07). The input is the text.
     InputPath,
+    /// A zip archive through `inspect_zip_inventory`, then the first regular
+    /// entry through `inspect_zip_selected_files` with a digest it cannot
+    /// have, which must never be accepted (ADR 0032). The input is the
+    /// archive.
+    ZipInventory,
+    /// A bzip2 stream through `inspect_bzip2_tar_inventory` (ADR 0032). The
+    /// input is the compressed file.
+    Bzip2TarInventory,
 }
 
 impl Target {
     /// Every target, in the order CI runs them.
-    pub const ALL: [Self; 31] = [
+    pub const ALL: [Self; 33] = [
         Self::TranscriptSrt,
         Self::TranscriptWebVtt,
         Self::WhisperFullJson,
@@ -241,6 +250,8 @@ impl Target {
         Self::XzTarInventory,
         Self::Identifiers,
         Self::InputPath,
+        Self::ZipInventory,
+        Self::Bzip2TarInventory,
     ];
 
     /// The target's `cargo fuzz` name, which is also its seed directory name.
@@ -278,6 +289,8 @@ impl Target {
             Self::XzTarInventory => "xz_tar_inventory",
             Self::Identifiers => "identifiers",
             Self::InputPath => "input_path",
+            Self::ZipInventory => "zip_inventory",
+            Self::Bzip2TarInventory => "bzip2_tar_inventory",
         }
     }
 
@@ -319,6 +332,8 @@ impl Target {
             Self::XzTarInventory => check_xz_tar_inventory(data),
             Self::Identifiers => check_identifiers(data),
             Self::InputPath => check_input_path(data),
+            Self::ZipInventory => check_zip_inventory(data),
+            Self::Bzip2TarInventory => check_bzip2_tar_inventory(data),
         }
     }
 }
@@ -1926,6 +1941,77 @@ fn check_gzip_tar_inventory(data: &[u8]) -> Result<(), Violation> {
             check_inventory(found, entries, bytes)?;
             if input_bytes > ceiling(stream) {
                 return Err(Violation::ArchiveInventoryInconsistent);
+            }
+        }
+        if inspect() != first {
+            return Err(Violation::ArchiveInventoryInconsistent);
+        }
+    }
+    Ok(())
+}
+
+fn check_bzip2_tar_inventory(data: &[u8]) -> Result<(), Violation> {
+    let ceiling = |stream: u64| {
+        if stream == SMALL_ARCHIVE_BUDGET.2 {
+            SMALL_COMPRESSED_BYTES
+        } else {
+            MAX_BZIP2_ARCHIVE_BYTES
+        }
+    };
+    let input_bytes = u64::try_from(data.len()).unwrap_or(u64::MAX);
+    for (entries, bytes, stream) in [SMALL_ARCHIVE_BUDGET, PRODUCTION_ARCHIVE_BUDGET] {
+        let bounds =
+            ArchiveInventoryBounds::new(entries, bytes).map_err(|_| Violation::HarnessSetup)?;
+        let inspect =
+            || inspect_bzip2_tar_inventory(Cursor::new(data), ceiling(stream), stream, bounds, &[]);
+        let first = inspect();
+        if let Ok(found) = &first {
+            check_inventory(found, entries, bytes)?;
+            if input_bytes > ceiling(stream) {
+                return Err(Violation::ArchiveInventoryInconsistent);
+            }
+        }
+        if inspect() != first {
+            return Err(Violation::ArchiveInventoryInconsistent);
+        }
+    }
+    Ok(())
+}
+
+/// A zip under both budgets: an accepted index keeps the archive rules and
+/// the answer is the same twice; and a selection of its first regular file
+/// with a digest no content has (all zeros) is never accepted, which drives
+/// the bounded expansion of that entry.
+fn check_zip_inventory(data: &[u8]) -> Result<(), Violation> {
+    let Ok(archive_bytes) = u64::try_from(data.len()) else {
+        return Ok(());
+    };
+    if archive_bytes == 0 {
+        return Ok(());
+    }
+    for (entries, bytes, _) in [SMALL_ARCHIVE_BUDGET, PRODUCTION_ARCHIVE_BUDGET] {
+        let bounds =
+            ArchiveInventoryBounds::new(entries, bytes).map_err(|_| Violation::HarnessSetup)?;
+        let inspect = || inspect_zip_inventory(Cursor::new(data), archive_bytes, bounds);
+        let first = inspect();
+        if let Ok(found) = &first {
+            check_inventory(found, entries, bytes)?;
+            if let Some(entry) = found
+                .iter()
+                .find(|entry| entry.kind == ArchiveEntryKind::Regular && entry.bytes > 0)
+            {
+                let impossible =
+                    vsift_domain::ArtifactIntegrity::from_sha256_hex(entry.bytes, &"0".repeat(64))
+                        .map_err(|_| Violation::HarnessSetup)?;
+                let selected = [vsift_infrastructure::ReviewedArchiveFile {
+                    path: &entry.path,
+                    integrity: impossible,
+                }];
+                if inspect_zip_selected_files(Cursor::new(data), archive_bytes, bounds, &selected)
+                    .is_ok()
+                {
+                    return Err(Violation::ArchiveInventoryInconsistent);
+                }
             }
         }
         if inspect() != first {

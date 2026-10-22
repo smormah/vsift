@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://vsift.dev/schemas/v1/setup-list.schema.json",
   "title": "VSift setup list data v1",
-  "description": "The data of a setup.list result (P13 PR 6, ADR 0023): every managed component, always in the order ffmpeg_ffprobe, whisper_cli, whisper_model, with its selection, its selected and previous versions and every published version with whether it verifies. Read-only: listing creates and changes nothing. managed_install says whether managed installation can install on this host (catalogue_accepted only on Ubuntu 24.04 x86-64); managed_folder is absent when this user has no managed folder, and every component then has no versions. selection is verified when commands use the selected version (it verifies and its manifest is the one the selection names), unverified when they do not (the version is missing, does not verify or is being removed), unreadable when the selection cannot be read, and none when nothing is selected. A version's state is verified, removal_interrupted (a removal stopped; setup remove finishes it) or unverified with a fault. stale_stages and retained_stages count stages abandoned by earlier installations that setup remove --stale-stages would remove or would keep for the user. Every string is a closed identifier, a managed version key or fixed prose; no path.",
+  "description": "The data of a setup.list result (P13 PR 6, ADR 0023): every core managed component, always in the order ffmpeg_ffprobe, whisper_cli, whisper_model, then (since 0.3.0, #409) each optional component the store holds a version or a selection of, js_runtime_deno then yt_dlp, with its selection, its selected and previous versions and every published version with whether it verifies. Read-only: listing creates and changes nothing. managed_install says whether managed installation can install on this host (catalogue_accepted only on Ubuntu 24.04 x86-64); managed_folder is absent when this user has no managed folder, and every component then has no versions. selection is verified when commands use the selected version (it verifies and its manifest is the one the selection names), unverified when they do not (the version is missing, does not verify or is being removed), unreadable when the selection cannot be read, and none when nothing is selected. A version's state is verified, removal_interrupted (a removal stopped; setup remove finishes it) or unverified with a fault. stale_stages and retained_stages count stages abandoned by earlier installations that setup remove --stale-stages would remove or would keep for the user. Every string is a closed identifier, a managed version key or fixed prose; no path.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -26,7 +26,7 @@
     "components": {
       "type": "array",
       "minItems": 3,
-      "maxItems": 3,
+      "maxItems": 5,
       "items": { "$ref": "#/$defs/component" }
     },
     "stale_stages": { "type": "integer", "minimum": 0 },
@@ -43,7 +43,7 @@
       "additionalProperties": false,
       "required": ["component", "selection", "selected_version", "previous_version", "versions"],
       "properties": {
-        "component": { "enum": ["ffmpeg_ffprobe", "whisper_cli", "whisper_model"] },
+        "component": { "enum": ["ffmpeg_ffprobe", "whisper_cli", "whisper_model", "js_runtime_deno", "yt_dlp"] },
         "selection": { "enum": ["none", "verified", "unverified", "unreadable"] },
         "selected_version": {
           "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/version_key" }]

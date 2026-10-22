@@ -54,7 +54,7 @@ pub(crate) struct ManagedModel {
 /// opened, verified and held at most once, on first use.
 pub(crate) struct ManagedLookup<'engine> {
     engine: &'engine Engine,
-    opened: [Opened; 3],
+    opened: [Opened; 5],
 }
 
 /// What one lookup found for one component.
@@ -73,6 +73,8 @@ const fn slot(component: ManagedComponent) -> usize {
         ManagedComponent::MediaTools => 0,
         ManagedComponent::WhisperCli => 1,
         ManagedComponent::WhisperModel => 2,
+        ManagedComponent::JsRuntimeDeno => 3,
+        ManagedComponent::YtDlp => 4,
     }
 }
 
@@ -110,17 +112,15 @@ impl ManagedLookup<'_> {
     /// The verified versions this lookup has opened so far, in component
     /// order; it opens nothing new, so asking costs no hashing.
     pub(crate) fn opened_versions(&self) -> Vec<(ManagedComponent, String)> {
-        [
-            ManagedComponent::MediaTools,
-            ManagedComponent::WhisperCli,
-            ManagedComponent::WhisperModel,
-        ]
-        .into_iter()
-        .filter_map(|component| match &self.opened[slot(component)] {
-            Opened::Held(hold) => Some((component, hold.runtime().identity().version().to_owned())),
-            Opened::NotYet | Opened::Absent => None,
-        })
-        .collect()
+        ManagedComponent::ALL
+            .into_iter()
+            .filter_map(|component| match &self.opened[slot(component)] {
+                Opened::Held(hold) => {
+                    Some((component, hold.runtime().identity().version().to_owned()))
+                }
+                Opened::NotYet | Opened::Absent => None,
+            })
+            .collect()
     }
 
     /// The managed model file, with its version's hold.
@@ -152,7 +152,13 @@ impl Engine {
     pub(crate) const fn managed_lookup(&self) -> ManagedLookup<'_> {
         ManagedLookup {
             engine: self,
-            opened: [Opened::NotYet, Opened::NotYet, Opened::NotYet],
+            opened: [
+                Opened::NotYet,
+                Opened::NotYet,
+                Opened::NotYet,
+                Opened::NotYet,
+                Opened::NotYet,
+            ],
         }
     }
 

@@ -480,6 +480,7 @@ impl Fixture {
             stop_new_plans_at: 2_000,
             stop_new_plans_date: String::from("fixture-date"),
             artifacts: vec![media, whisper, model],
+            optional_artifacts: Vec::new(),
             compatibility: policy()?,
             superseded: Vec::new(),
         };
