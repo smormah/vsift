@@ -217,30 +217,64 @@ fn serve(
 }
 
 /// A plain-HTTP proxy on `127.0.0.1` that tunnels every `CONNECT` to the
-/// test server, or answers it with `407`.
-fn start_proxy(target_port: u16, demand_credentials: bool) -> TestResult<u16> {
+/// test server, or answers it with `407`, and records each `CONNECT` target.
+struct TestProxy {
+    port: u16,
+    connects: Arc<Mutex<Vec<String>>>,
+}
+
+impl TestProxy {
+    /// The proxy as a proxy variable would name it.
+    fn address(&self) -> String {
+        format!("http://127.0.0.1:{}", self.port)
+    }
+
+    fn connects(&self) -> Vec<String> {
+        self.connects
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
+    }
+}
+
+fn start_proxy(target_port: u16, demand_credentials: bool) -> TestResult<TestProxy> {
     let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0))?;
     let port = listener.local_addr()?.port();
+    let connects = Arc::new(Mutex::new(Vec::new()));
+    let log = Arc::clone(&connects);
     thread::spawn(move || {
         for client in listener.incoming().flatten() {
+            let log = Arc::clone(&log);
             thread::spawn(move || {
-                let _ = tunnel(client, target_port, demand_credentials);
+                let _ = tunnel(client, target_port, demand_credentials, &log);
             });
         }
     });
-    Ok(port)
+    Ok(TestProxy { port, connects })
 }
 
 fn tunnel(
     mut client: TcpStream,
     target_port: u16,
     demand_credentials: bool,
+    connects: &Mutex<Vec<String>>,
 ) -> std::io::Result<()> {
     let mut reader = BufReader::new(client.try_clone()?);
+    let mut first = true;
     loop {
         let mut line = String::new();
         if reader.read_line(&mut line)? == 0 || line == "\r\n" {
             break;
+        }
+        if first {
+            // `CONNECT host:port HTTP/1.1`: keep the target.
+            if let Some(target) = line.split_whitespace().nth(1) {
+                connects
+                    .lock()
+                    .unwrap_or_else(PoisonError::into_inner)
+                    .push(target.to_owned());
+            }
+            first = false;
         }
     }
     if demand_credentials {
@@ -396,15 +430,27 @@ async fn refused(
     answers: &Arc<TestAnswers>,
     reason: SourceFetchReason,
 ) -> TestResult {
-    let root = OwnedRoot::new()?;
-    let store = session(&root).await?;
-    let result = fetch(
-        &store,
-        &server.link(host, path)?,
+    refused_on(
+        server,
+        (host, path),
         limits,
         route(server, answers)?,
+        reason,
     )
-    .await;
+    .await
+}
+
+/// [`refused`] through `route`.
+async fn refused_on(
+    server: &HttpsServer,
+    (host, path): (&str, &str),
+    limits: DownloadLimits,
+    route: LinkTestRoute,
+    reason: SourceFetchReason,
+) -> TestResult {
+    let root = OwnedRoot::new()?;
+    let store = session(&root).await?;
+    let result = fetch(&store, &server.link(host, path)?, limits, route).await;
     let Err(error) = result else {
         return Err(format!("{path} was accepted").into());
     };
@@ -503,11 +549,32 @@ async fn a_video_is_fetched_with_or_without_a_length_and_its_origin_recorded() -
     Ok(())
 }
 
+/// `/hop<n>` redirects to `/hop<n-1>`, and `/hop1` to the video: `/hop<n>`
+/// is a chain of `n` redirects.
+fn route_redirect_chain(server: &HttpsServer, length: usize) {
+    let port = server.port;
+    for hop in 1..=length {
+        let next = if hop == 1 {
+            "/video.mp4".to_owned()
+        } else {
+            format!("/hop{}", hop - 1)
+        };
+        server.route(
+            &format!("/hop{hop}"),
+            Reply::Status(
+                "302 Found",
+                format!("Location: https://cdn.example.test:{port}{next}\r\n"),
+            ),
+        );
+    }
+}
+
 #[tokio::test]
-async fn redirects_are_followed_three_times_on_https_only() -> TestResult {
+async fn at_most_three_redirects_are_followed_on_https_only() -> TestResult {
     let server = HttpsServer::trusted()?;
     let port = server.port;
     server.route("/video.mp4", body(video_body(64_000), true));
+    route_redirect_chain(&server, 4);
     server.route(
         "/moved",
         Reply::Status(
@@ -570,8 +637,26 @@ async fn redirects_are_followed_three_times_on_https_only() -> TestResult {
     };
     assert_eq!(origin.final_host().as_str(), "cdn.example.test");
     assert_eq!(origin.redirects(), 1);
+    drop(snapshot);
+
+    // Three redirects, as the contract says, are followed.
+    let root = OwnedRoot::new()?;
+    let store = session(&root).await?;
+    let snapshot = fetch(
+        &store,
+        &server.link("video.example.test", "/hop3")?,
+        DownloadLimits::DEFAULT,
+        route(&server, &answers)?,
+    )
+    .await?;
+    let Some(SourceOrigin::DirectHttps(origin)) = snapshot.origin() else {
+        return Err("no origin".into());
+    };
+    assert_eq!(origin.redirects(), 3);
+    drop(snapshot);
 
     for (path, reason) in [
+        ("/hop4", SourceFetchReason::RedirectPolicy),
         ("/loop", SourceFetchReason::RedirectPolicy),
         ("/to-http", SourceFetchReason::RedirectPolicy),
         ("/to-private", SourceFetchReason::AddressRefused),
@@ -854,7 +939,7 @@ async fn through_a_proxy_the_origin_says_the_proxy_resolved_the_name() -> TestRe
         &store,
         &server.link("video.example.test", "/video.mp4")?,
         DownloadLimits::DEFAULT,
-        route(&server, &answers)?.through_proxy(&format!("http://127.0.0.1:{tunnel}")),
+        route(&server, &answers)?.through_proxy(&tunnel.address()),
     )
     .await?;
     let Some(SourceOrigin::DirectHttps(origin)) = snapshot.origin() else {
@@ -870,7 +955,7 @@ async fn through_a_proxy_the_origin_says_the_proxy_resolved_the_name() -> TestRe
         &store,
         &server.link("video.example.test", "/video.mp4")?,
         DownloadLimits::DEFAULT,
-        route(&server, &answers)?.through_proxy(&format!("http://127.0.0.1:{demanding}")),
+        route(&server, &answers)?.through_proxy(&demanding.address()),
     )
     .await;
     assert!(
@@ -891,7 +976,7 @@ async fn through_a_proxy_the_origin_says_the_proxy_resolved_the_name() -> TestRe
         &store,
         &link,
         DownloadLimits::DEFAULT,
-        route(&server, &answers)?.through_proxy(&format!("http://127.0.0.1:{tunnel}")),
+        route(&server, &answers)?.through_proxy(&tunnel.address()),
     )
     .await;
     assert!(
@@ -902,6 +987,163 @@ async fn through_a_proxy_the_origin_says_the_proxy_resolved_the_name() -> TestRe
         "{:?}",
         result.err()
     );
+    Ok(())
+}
+
+#[tokio::test]
+async fn through_a_proxy_a_redirect_to_an_internal_name_is_refused() -> TestResult {
+    let server = HttpsServer::trusted()?;
+    let port = server.port;
+    server.route("/internal.mp4", body(video_body(64_000), true));
+    for (path, host) in [("/to-corp", "wiki.corp"), ("/to-single-label", "intranet")] {
+        server.route(
+            path,
+            Reply::Status(
+                "302 Found",
+                format!("Location: https://{host}:{port}/internal.mp4\r\n"),
+            ),
+        );
+    }
+    let answers = answers();
+    let tunnel = start_proxy(server.port, false)?;
+    for path in ["/to-corp", "/to-single-label"] {
+        refused_on(
+            &server,
+            ("video.example.test", path),
+            DownloadLimits::DEFAULT,
+            route(&server, &answers)?.through_proxy(&tunnel.address()),
+            SourceFetchReason::AddressRefused,
+        )
+        .await?;
+    }
+    // The public link went through the proxy; the internal hops never did.
+    let connects = tunnel.connects();
+    assert!(
+        connects
+            .iter()
+            .all(|target| target.starts_with("video.example.test:")),
+        "{connects:?}"
+    );
+    assert!(
+        server
+            .requests()
+            .iter()
+            .all(|request| !request.contains("/internal.mp4")),
+        "an internal hop was requested"
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_proxy_value_is_read_as_curl_reads_it_and_an_unusable_one_is_refused() -> TestResult {
+    let server = HttpsServer::trusted()?;
+    server.route("/video.mp4", body(video_body(64_000), true));
+    let answers = answers();
+    let tunnel = start_proxy(server.port, false)?;
+    // `host:port` with no scheme is an HTTP proxy.
+    let root = OwnedRoot::new()?;
+    let store = session(&root).await?;
+    let snapshot = fetch(
+        &store,
+        &server.link("video.example.test", "/video.mp4")?,
+        DownloadLimits::DEFAULT,
+        route(&server, &answers)?.through_proxy(&format!("127.0.0.1:{}", tunnel.port)),
+    )
+    .await?;
+    let Some(SourceOrigin::DirectHttps(origin)) = snapshot.origin() else {
+        return Err("no origin".into());
+    };
+    assert_eq!(origin.address_check(), AddressCheck::ProxyResolved);
+    assert_eq!(tunnel.connects().len(), 1);
+    drop(snapshot);
+    // A value that is no proxy is refused, never ignored: the fetch does
+    // not go direct past it.
+    let before = server.requests().len();
+    for unusable in ["http://bad host:3128", "ftp://127.0.0.1:21", "http://"] {
+        refused_on(
+            &server,
+            ("video.example.test", "/video.mp4"),
+            DownloadLimits::DEFAULT,
+            route(&server, &answers)?.through_proxy(unusable),
+            SourceFetchReason::ProxyUnusable,
+        )
+        .await?;
+    }
+    assert_eq!(server.requests().len(), before, "a request went direct");
+    Ok(())
+}
+
+/// The margin the session root keeps free beyond a source (16 MiB,
+/// `COPY_ROOM_MARGIN_BYTES`).
+const COPY_MARGIN: u64 = 16 * 1024 * 1024;
+
+#[tokio::test]
+async fn a_body_without_a_length_needs_room_for_itself_not_for_the_limit() -> TestResult {
+    let server = HttpsServer::trusted()?;
+    server.route("/streamed.mp4", body(video_body(150_000), false));
+    server.route("/declared.mp4", body(video_body(150_000), true));
+    let answers = answers();
+    // Far less than the 4 GiB limit is free, but room for the first 64 MiB
+    // block and the margin.
+    let free = COPY_MARGIN + 80 * 1024 * 1024;
+    for path in ["/streamed.mp4", "/declared.mp4"] {
+        let root = OwnedRoot::new()?;
+        let store = session(&root).await?;
+        let snapshot = fetch(
+            &store,
+            &server.link("video.example.test", path)?,
+            DownloadLimits::DEFAULT,
+            route(&server, &answers)?.with_free_space(free),
+        )
+        .await?;
+        assert_eq!(snapshot.bytes(), 150_000, "{path}");
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_body_without_a_length_is_checked_for_room_as_it_arrives() -> TestResult {
+    let server = HttpsServer::trusted()?;
+    server.route("/fits.mp4", body(video_body(300_000), false));
+    server.route("/too-big.mp4", body(video_body(1_000_000), false));
+    server.route("/too-big-declared.mp4", body(video_body(1_000_000), true));
+    let answers = answers();
+    // Checked every 256 KiB: room for two blocks and the margin, not three.
+    let step = 256 * 1024;
+    let free = COPY_MARGIN + 600 * 1024;
+    let short = || -> TestResult<LinkTestRoute> {
+        Ok(route(&server, &answers)?
+            .with_room_step(step)
+            .with_free_space(free))
+    };
+    let root = OwnedRoot::new()?;
+    let store = session(&root).await?;
+    let snapshot = fetch(
+        &store,
+        &server.link("video.example.test", "/fits.mp4")?,
+        DownloadLimits::DEFAULT,
+        short()?,
+    )
+    .await?;
+    assert_eq!(snapshot.bytes(), 300_000);
+    drop(snapshot);
+    for path in ["/too-big.mp4", "/too-big-declared.mp4"] {
+        let root = OwnedRoot::new()?;
+        let store = session(&root).await?;
+        let result = fetch(
+            &store,
+            &server.link("video.example.test", path)?,
+            DownloadLimits::DEFAULT,
+            short()?,
+        )
+        .await;
+        assert!(
+            matches!(result, Err(SourceError::NoRoom)),
+            "{path}: {:?}",
+            result.err()
+        );
+        assert_eq!(source_files(&root)?, Vec::<PathBuf>::new(), "{path}");
+    }
     Ok(())
 }
 

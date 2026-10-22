@@ -542,6 +542,9 @@ struct SourceSlot<'store> {
     header: [u8; MAGIC_BYTES],
     header_count: usize,
     total: u64,
+    /// The free space the link test route simulates, if any.
+    #[cfg(any(test, feature = "install-test-hooks"))]
+    simulated_free_space: Option<u64>,
     _admission: crate::FilesystemAdmissionPermit,
 }
 
@@ -578,6 +581,8 @@ impl<'store> SourceSlot<'store> {
             header: [0; MAGIC_BYTES],
             header_count: 0,
             total: 0,
+            #[cfg(any(test, feature = "install-test-hooks"))]
+            simulated_free_space: None,
             _admission: admission,
         })
     }
@@ -653,6 +658,14 @@ impl LinkSink for SourceSlot<'_> {
     fn ensure_room(&self, bytes: u64) -> Result<(), LinkSinkError> {
         // Best effort, as for a copy: only a read that shows the space is
         // short refuses; anything else is found by a failed write.
+        #[cfg(any(test, feature = "install-test-hooks"))]
+        if let Some(available) = self.simulated_free_space {
+            let left = available.saturating_sub(self.total);
+            return match crate::filesystem_session_store::decide_copy_room(Some(left), bytes) {
+                Err(SessionStorageError::CapacityExhausted) => Err(LinkSinkError::NoRoom),
+                _ => Ok(()),
+            };
+        }
         match self.store.ensure_room_for_copy(bytes) {
             Err(SessionStorageError::CapacityExhausted) => Err(LinkSinkError::NoRoom),
             _ => Ok(()),
@@ -723,6 +736,10 @@ impl SourceSnapshot {
         cancellation: &dyn StageCancellation,
     ) -> Result<Self, SourceError> {
         let mut slot = SourceSlot::create(store, session_id, operation_id)?;
+        #[cfg(any(test, feature = "install-test-hooks"))]
+        {
+            slot.simulated_free_space = route.free_space();
+        }
         let fetched = fetch_link(link, limits, route, &mut slot, cancellation)
             .await
             .map_err(|error| match error {

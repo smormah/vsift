@@ -990,7 +990,7 @@ This schema also holds 3 conditional rules (a member that is required, or fixed,
 | `error.remediation[].command` | object or null | yes |  |
 | `error.remediation[].command.executable` | string | yes | 1 to 4096 characters |
 | `error.remediation[].command.arguments` | array of string | yes | at most 64 items; each: at most 4096 characters |
-| `error.reason` | string | no | The typed reason of a code that has reasons; absent for every other code. SOURCE_FETCH_FAILED (0.3.0, ADR 0028): not_https, credentials_in_link, port_not_allowed, address_refused, tls, redirect_policy, http_status, proxy_auth, offline, stalled, deadline, size, partial, compressed, web_page, not_a_video, truncated, disabled_by_policy or strict_isolation. A later release may add reasons; a reader treats an unknown one as the code alone.; pattern `^[a-z][a-z0-9_]{0,63}$` |
+| `error.reason` | string | no | The typed reason of a code that has reasons; absent for every other code. SOURCE_FETCH_FAILED (0.3.0, ADR 0028): not_https, credentials_in_link, port_not_allowed, address_refused, tls, redirect_policy, http_status, proxy_auth, proxy_unusable, offline, stalled, deadline, size, partial, compressed, web_page, not_a_video, truncated or strict_isolation. A later release may add reasons; a reader treats an unknown one as the code alone.; pattern `^[a-z][a-z0-9_]{0,63}$` |
 | `coverage` | object or null | yes |  |
 | `coverage.truncated` | boolean | yes |  |
 | `coverage.gaps` | array of string | yes | at most 100 items; each: at most 256 characters |

@@ -79,6 +79,9 @@ pub const fn source_fetch_remediation(reason: SourceFetchReason) -> &'static str
         SourceFetchReason::ProxyAuth => {
             "Fetching the video link failed; nothing was opened and local video files are not affected. The network's proxy asked for credentials (reason proxy_auth). Tell the user; proxy credentials are set in the proxy environment variables by the user or their administrator, never by you."
         }
+        SourceFetchReason::ProxyUnusable => {
+            "Fetching the video link failed; nothing was opened and local video files are not affected. The proxy named by the HTTPS_PROXY or ALL_PROXY environment variable is not a proxy address VSift can use, so nothing was sent rather than going around it (reason proxy_unusable). Tell the user; the variable is set by the user or their administrator, as a proxy URL or as host:port, and never by you."
+        }
         SourceFetchReason::Offline => {
             "Fetching the video link failed; nothing was opened and local video files are not affected. The server could not be reached or its name not resolved (reason offline). Check the network with the user and run the command again, or ask for the file."
         }
@@ -105,9 +108,6 @@ pub const fn source_fetch_remediation(reason: SourceFetchReason) -> &'static str
         }
         SourceFetchReason::Truncated => {
             "Fetching the video link failed; nothing was opened and local video files are not affected. The connection ended before the whole video arrived (reason truncated). Run the command again, or ask the user for the file."
-        }
-        SourceFetchReason::DisabledByPolicy => {
-            "Fetching the video link failed; nothing was opened and local video files are not affected. Fetching links is turned off on this computer (reason disabled_by_policy). Ask the user for the file."
         }
         SourceFetchReason::StrictIsolation => {
             "Fetching the video link failed; nothing was opened and local video files are not affected. This host runs with strict isolation, which allows no network (reason strict_isolation). Fetch the video on a host that may use the network, then give this host the file."

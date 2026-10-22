@@ -49,6 +49,10 @@ pub enum SourceFetchReason {
     HttpStatus,
     /// A proxy asked for credentials.
     ProxyAuth,
+    /// The proxy the environment names (`HTTPS_PROXY` or `ALL_PROXY`) is not
+    /// a proxy address `VSift` can use. It is refused rather than ignored, so a
+    /// fetch never goes direct past a proxy the user set.
+    ProxyUnusable,
     /// The name could not be resolved or the server not reached.
     Offline,
     /// No byte arrived for 30 seconds.
@@ -67,8 +71,6 @@ pub enum SourceFetchReason {
     NotAVideo,
     /// The body ended before the length the server announced.
     Truncated,
-    /// Fetching links is turned off for this host.
-    DisabledByPolicy,
     /// The host runs with strict isolation, which allows no network.
     StrictIsolation,
 }
@@ -84,6 +86,7 @@ impl SourceFetchReason {
         Self::RedirectPolicy,
         Self::HttpStatus,
         Self::ProxyAuth,
+        Self::ProxyUnusable,
         Self::Offline,
         Self::Stalled,
         Self::Deadline,
@@ -93,7 +96,6 @@ impl SourceFetchReason {
         Self::WebPage,
         Self::NotAVideo,
         Self::Truncated,
-        Self::DisabledByPolicy,
         Self::StrictIsolation,
     ];
 
@@ -109,6 +111,7 @@ impl SourceFetchReason {
             Self::RedirectPolicy => "redirect_policy",
             Self::HttpStatus => "http_status",
             Self::ProxyAuth => "proxy_auth",
+            Self::ProxyUnusable => "proxy_unusable",
             Self::Offline => "offline",
             Self::Stalled => "stalled",
             Self::Deadline => "deadline",
@@ -118,7 +121,6 @@ impl SourceFetchReason {
             Self::WebPage => "web_page",
             Self::NotAVideo => "not_a_video",
             Self::Truncated => "truncated",
-            Self::DisabledByPolicy => "disabled_by_policy",
             Self::StrictIsolation => "strict_isolation",
         }
     }

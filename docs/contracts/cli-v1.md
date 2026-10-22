@@ -119,13 +119,20 @@ metadata addresses, carrier-grade NAT, documentation, multicast, reserved, IPv6 
 IPv4-mapped, 6to4, Teredo and NAT64 forms of those are refused), so the address checked is the address connected
 to; a host written as an address is checked too. Through a proxy named by `HTTPS_PROXY` or `ALL_PROXY` (and not
 excluded by `NO_PROXY`) the proxy resolves the name, so VSift refuses only internal-looking names (one label,
-`localhost`, `.local`, `.localhost`, `.internal`, `.lan`, `.home.arpa`, `.corp`, `.intranet`) and addresses, and the
-origin says `proxy_resolved` (known limit L-208). One `GET` with `Accept-Encoding: identity`, a `User-Agent` of
+`localhost`, `.local`, `.localhost`, `.internal`, `.lan`, `.home.arpa`, `.corp`, `.intranet`) and addresses, on the
+link and on every redirect, and the origin says `proxy_resolved` (known limit L-208). A proxy value is read as curl
+reads it (a URL, or `host:port` for an HTTP proxy); a value that is set but is not a usable `http` or `https` proxy
+is refused with `proxy_unusable` and never ignored, so a fetch never goes direct past a proxy the user set.
+`NO_PROXY` is matched by host name only: an entry is the host, a domain it is under (with or without a leading
+`.`), or `*`. One `GET` with `Accept-Encoding: identity`, a `User-Agent` of
 `VSift/<version> link-ingest` and nothing personal: no cookie, no `Authorization`, no `Referer`. Only a complete
 `200 OK` identity body is accepted; a text content type stops at once as a web page, and the first 12 bytes must be
 an MP4/MOV (`ftyp`) or Matroska/WebM file. `--max-download-bytes` (default 4 GiB, at most 20 GiB) and
 `--max-download-seconds` (default 1800, at most 14400) bound it; bytes are counted as they arrive, a declared length
-over the limit is refused before the body, and a transfer with no byte for 30 seconds stops. The body is written
+over the limit is refused before the body, and a transfer with no byte for 30 seconds stops. Free space is checked
+for a declared length before the body, and for a body without one 64 MiB at a time as it arrives, so a small video
+sent without a length needs room for itself, not for the download limit; a shortage is `STORAGE_IO` (exit 7), as for
+a copy. The body is written
 straight into the session's own private source slot, so a fetched video is a session artifact like a copied one
 (closed, expired and cleaned with the session; retained only with `session retain --include-source`); a fetch that
 fails leaves no file and no session. **The link is never stored, printed or logged**: `ingest` and `session status`
@@ -134,10 +141,14 @@ parsed, `requested_host`, `final_host`, `redirects`, `address_check` `direct` or
 and `bytes`; example [`ingest.url.json`](../../schemas/v1/examples/ingest.url.json)), absent for a local file. A
 link that cannot be fetched answers the new code `SOURCE_FETCH_FAILED` (exit 3) with `error.reason` (`not_https`,
 `credentials_in_link`, `port_not_allowed`, `address_refused`, `tls`, `redirect_policy`, `http_status`,
-`proxy_auth`, `offline`, `stalled`, `deadline`, `size`, `partial`, `compressed`, `web_page`, `not_a_video`,
-`truncated`, `disabled_by_policy`, `strict_isolation`) and a fixed remediation that names the online step and says
-local files are not affected; it never echoes the link, the server's text or proxy credentials (example
-[`ingest-url-address-refused.json`](../../schemas/v1/examples/ingest-url-address-refused.json)). With
+`proxy_auth`, `proxy_unusable`, `offline`, `stalled`, `deadline`, `size`, `partial`, `compressed`, `web_page`,
+`not_a_video`, `truncated`, `strict_isolation`) and a fixed remediation that names the online step and says local
+files are not affected; it never echoes the link, the server's text or proxy credentials (example
+[`ingest-url-address-refused.json`](../../schemas/v1/examples/ingest-url-address-refused.json)).
+**`SOURCE_FETCH_FAILED` is `retryable: false` as a code, whatever its reason:** nothing retries it automatically.
+The reasons `offline`, `stalled`, `truncated` and `deadline` describe a transfer that may succeed if the caller
+runs the command again (with a longer `--max-download-seconds` for `deadline`), as their remediations say; that
+retry is the caller's decision, not the envelope's. With
 `--host-isolation strict-linux`, which allows no network, it answers `strict_isolation` before anything is fetched,
 and a worker job request takes no link. A development build resolves no name (the P13 network guard), so it
 answers `offline` for any public name unless `VSIFT_DEV_PUBLISHER_NETWORK=allow`. `DOWNLOAD_FAILED` stays the code

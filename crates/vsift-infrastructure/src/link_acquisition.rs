@@ -14,8 +14,14 @@
 //! private address. A host written as an address is checked by the link and
 //! redirect policy ([`check_link`]), because it is never resolved. Through a
 //! proxy from the environment the proxy resolves the name; then only
-//! addresses and names for internal hosts are refused, and the origin says
-//! `proxy_resolved` (known limit L-208).
+//! addresses and names for internal hosts are refused, on the link and on
+//! every redirect, and the origin says `proxy_resolved` (known limit L-208).
+//! A proxy variable that is set but unusable is refused, never ignored.
+//!
+//! Cancellation and the deadline are observed while the fetch waits for the
+//! response and for each chunk. Writing a chunk and the final flush to disk
+//! are not interrupted, so on a slow disk a cancellation or the deadline takes
+//! effect once they finish.
 //!
 //! Failures carry a typed [`SourceFetchReason`], never the server's text, the
 //! link or proxy credentials.
@@ -51,6 +57,11 @@ const STALL_DEADLINE: Duration = Duration::from_secs(30);
 const CANCEL_POLL: Duration = Duration::from_millis(200);
 /// The one port a link may name.
 const HTTPS_PORT: u16 = 443;
+/// How much room a body of unknown length must find before the next block of
+/// it is written: checked before the first byte and again as each block
+/// begins, so a small video sent without a length needs room for itself,
+/// not for the whole download limit.
+const ROOM_STEP: u64 = 64 * 1024 * 1024;
 /// The bytes that identify an admitted container (ISO base media `ftyp` at
 /// offset 4, Matroska's EBML header at 0).
 pub(crate) const MAGIC_BYTES: usize = 12;
@@ -163,6 +174,14 @@ pub fn is_internal_name(host: &str) -> bool {
         || INTERNAL_SUFFIXES
             .iter()
             .any(|suffix| host.ends_with(suffix))
+}
+
+/// Whether a proxy must not be asked for `url`: its host is a name for an
+/// internal host ([`is_internal_name`]). Applied to the link and to every
+/// redirect when a proxy resolves names, because `VSift` then cannot see the
+/// address; a host written as an address is judged by [`check_link`].
+fn internal_through_proxy(url: &Url) -> bool {
+    url.domain().is_some_and(is_internal_name)
 }
 
 /// What the link and redirect policy allows besides public HTTPS on 443:
@@ -281,17 +300,39 @@ fn screen(
 /// `https_proxy`), else `ALL_PROXY` (or `all_proxy`), unless `NO_PROXY` (or
 /// `no_proxy`) lists the host. `VSift` decides this itself, so it knows when
 /// the proxy, not `VSift`, resolves the name.
-fn environment_proxy(url: &Url) -> Option<Url> {
+///
+/// # Errors
+///
+/// [`SourceFetchReason::ProxyUnusable`] when a proxy is named for `url` but
+/// is not one `VSift` can use ([`parse_proxy`]).
+fn environment_proxy(url: &Url) -> Result<Option<Url>, SourceFetchReason> {
+    proxy_from_variables(url, |name| std::env::var(name).ok())
+}
+
+/// [`environment_proxy`] with the variables read by `variable`, so the rule
+/// is tested without changing the process environment.
+///
+/// `NO_PROXY` entries are compared by host name only: an entry is the host
+/// itself or a domain it is under (a leading `.` is optional), or `*` for
+/// every host. Wildcards inside an entry, addresses, address ranges and
+/// ports are not read (the troubleshooting guide says so).
+fn proxy_from_variables(
+    url: &Url,
+    variable: impl Fn(&str) -> Option<String>,
+) -> Result<Option<Url>, SourceFetchReason> {
     let read = |names: [&str; 2]| {
-        names.into_iter().find_map(|name| {
-            std::env::var(name)
-                .ok()
-                .filter(|value| !value.trim().is_empty())
-        })
+        names
+            .into_iter()
+            .find_map(|name| variable(name).filter(|value| !value.trim().is_empty()))
     };
-    let proxy =
-        read(["HTTPS_PROXY", "https_proxy"]).or_else(|| read(["ALL_PROXY", "all_proxy"]))?;
-    let host = url.host_str()?.to_ascii_lowercase();
+    let Some(proxy) =
+        read(["HTTPS_PROXY", "https_proxy"]).or_else(|| read(["ALL_PROXY", "all_proxy"]))
+    else {
+        return Ok(None);
+    };
+    let Some(host) = url.host_str().map(str::to_ascii_lowercase) else {
+        return Ok(None);
+    };
     if let Some(excluded) = read(["NO_PROXY", "no_proxy"])
         && excluded.split(',').map(str::trim).any(|entry| {
             let entry = entry.trim_start_matches('.').to_ascii_lowercase();
@@ -299,9 +340,33 @@ fn environment_proxy(url: &Url) -> Option<Url> {
                 || (!entry.is_empty() && (host == entry || host.ends_with(&format!(".{entry}"))))
         })
     {
-        return None;
+        return Ok(None);
     }
-    Url::parse(&proxy).ok()
+    parse_proxy(&proxy).map(Some)
+}
+
+/// A proxy value as curl reads it: a URL, or `host:port` with `http://`
+/// assumed. Only an `http` or `https` proxy with a host is usable.
+///
+/// # Errors
+///
+/// [`SourceFetchReason::ProxyUnusable`] for anything else. A proxy the user
+/// set is never ignored: going direct would bypass it.
+fn parse_proxy(value: &str) -> Result<Url, SourceFetchReason> {
+    let value = value.trim();
+    let parsed = if value.contains("://") {
+        Url::parse(value)
+    } else {
+        Url::parse(&format!("http://{value}"))
+    };
+    let proxy = parsed.map_err(|_| SourceFetchReason::ProxyUnusable)?;
+    let usable = matches!(proxy.scheme(), "http" | "https")
+        && proxy.host_str().is_some_and(|host| !host.is_empty());
+    if usable {
+        Ok(proxy)
+    } else {
+        Err(SourceFetchReason::ProxyUnusable)
+    }
 }
 
 /// The receiving end of a fetch: the session's source slot. A fetch hands it
@@ -315,7 +380,8 @@ pub(crate) trait LinkSink: Send {
     fn append(&mut self, chunk: &[u8]) -> Result<(), LinkSinkError>;
     /// The first [`MAGIC_BYTES`] bytes, once that many have arrived.
     fn header(&self) -> Option<&[u8]>;
-    /// Whether the slot's filesystem has room for `bytes` more.
+    /// Whether the slot's filesystem has room for `bytes` more than the slot
+    /// already holds.
     ///
     /// # Errors
     ///
@@ -384,6 +450,20 @@ impl LinkRoute {
         STALL_DEADLINE
     }
 
+    fn room_step(&self) -> u64 {
+        #[cfg(any(test, feature = "install-test-hooks"))]
+        if let Some(route) = &self.test {
+            return route.room_step;
+        }
+        ROOM_STEP
+    }
+
+    /// The free space the test route simulates for the source slot, if any.
+    #[cfg(any(test, feature = "install-test-hooks"))]
+    pub(crate) fn free_space(&self) -> Option<u64> {
+        self.test.as_ref().and_then(|route| route.free_space)
+    }
+
     fn allowance(&self) -> Allowance {
         #[cfg(any(test, feature = "install-test-hooks"))]
         if let Some(route) = &self.test {
@@ -445,6 +525,8 @@ pub struct LinkTestRoute {
     answers: Arc<TestAnswers>,
     proxy: Option<String>,
     stall: Duration,
+    room_step: u64,
+    free_space: Option<u64>,
 }
 
 #[cfg(any(test, feature = "install-test-hooks"))]
@@ -459,6 +541,8 @@ impl LinkTestRoute {
             answers,
             proxy: None,
             stall: STALL_DEADLINE,
+            room_step: ROOM_STEP,
+            free_space: None,
         }
     }
 
@@ -470,10 +554,30 @@ impl LinkTestRoute {
         self
     }
 
-    /// The same route through an explicit proxy (`http://127.0.0.1:<port>`).
+    /// The same route through an explicit proxy, read as a proxy variable's
+    /// value is (`http://127.0.0.1:<port>`, or `127.0.0.1:<port>`).
     #[must_use]
     pub fn through_proxy(mut self, proxy: &str) -> Self {
         self.proxy = Some(proxy.to_owned());
+        self
+    }
+
+    /// The same route with the source slot's filesystem reporting
+    /// `available` bytes free before the fetch (less what the slot has
+    /// written since), judged by the production rule, so a short disk is
+    /// tested without filling one.
+    #[must_use]
+    pub const fn with_free_space(mut self, available: u64) -> Self {
+        self.free_space = Some(available);
+        self
+    }
+
+    /// The same route checking room every `bytes` of a body of unknown
+    /// length instead of every 64 MiB, so the check is seen with a small
+    /// body.
+    #[must_use]
+    pub const fn with_room_step(mut self, bytes: u64) -> Self {
+        self.room_step = bytes;
         self
     }
 }
@@ -486,11 +590,18 @@ fn client(
     redirects: &Arc<AtomicU8>,
 ) -> Result<Client, SourceFetchReason> {
     let counter = Arc::clone(redirects);
+    let proxied = proxy.is_some();
     let redirect = Policy::custom(move |attempt| {
-        if attempt.previous().len() >= usize::from(MAX_SOURCE_REDIRECTS) {
+        // `previous()` holds every URL already requested, the link included,
+        // so it is 1 at the first redirect and 4 only at a fourth (reqwest's
+        // own limit compares the same way).
+        if attempt.previous().len() > usize::from(MAX_SOURCE_REDIRECTS) {
             return attempt.error(PolicyRefusal(SourceFetchReason::RedirectPolicy));
         }
         match check_link(attempt.url(), allowance) {
+            Ok(()) if proxied && internal_through_proxy(attempt.url()) => {
+                attempt.error(PolicyRefusal(SourceFetchReason::AddressRefused))
+            }
             Ok(()) => {
                 counter.fetch_add(1, Ordering::Relaxed);
                 attempt.follow()
@@ -522,8 +633,9 @@ fn client(
     };
     let mut builder = builder.dns_resolver(resolver);
     if let Some(proxy) = proxy {
-        builder = builder
-            .proxy(reqwest::Proxy::https(proxy.clone()).map_err(|_| SourceFetchReason::Offline)?);
+        builder = builder.proxy(
+            reqwest::Proxy::https(proxy.clone()).map_err(|_| SourceFetchReason::ProxyUnusable)?,
+        );
     }
     #[cfg(any(test, feature = "install-test-hooks"))]
     if let Some(test) = &route.test {
@@ -536,14 +648,17 @@ fn client(
     builder.build().map_err(|_| SourceFetchReason::Tls)
 }
 
-/// The proxy a fetch uses: the test route's, or the environment's.
-fn proxy_for(route: &LinkRoute, url: &Url) -> Option<Url> {
+/// The proxy a fetch uses: the test route's, or the environment's, each read
+/// by [`parse_proxy`].
+///
+/// # Errors
+///
+/// [`SourceFetchReason::ProxyUnusable`] for a proxy that is named but
+/// unusable.
+fn proxy_for(route: &LinkRoute, url: &Url) -> Result<Option<Url>, SourceFetchReason> {
     #[cfg(any(test, feature = "install-test-hooks"))]
     if let Some(test) = &route.test {
-        return test
-            .proxy
-            .as_deref()
-            .and_then(|proxy| Url::parse(proxy).ok());
+        return test.proxy.as_deref().map(parse_proxy).transpose();
     }
     #[cfg(not(any(test, feature = "install-test-hooks")))]
     let _ = route;
@@ -551,7 +666,8 @@ fn proxy_for(route: &LinkRoute, url: &Url) -> Option<Url> {
 }
 
 /// Fetches `link` into `sink`, within `limits`, checking `cancellation` at
-/// least every 200 ms.
+/// least every 200 ms while it waits for the response and for each chunk
+/// (not while a chunk is written: see the module documentation).
 ///
 /// # Errors
 ///
@@ -574,9 +690,9 @@ pub(crate) async fn fetch_link(
     let allowance = route.allowance();
     check_link(&url, allowance).map_err(refused)?;
     let requested_host = host_name(&url).ok_or(refused(SourceFetchReason::NotHttps))?;
-    let proxy = proxy_for(route, &url);
+    let proxy = proxy_for(route, &url).map_err(refused)?;
     let address_check = if proxy.is_some() {
-        if url.domain().is_some_and(is_internal_name) {
+        if internal_through_proxy(&url) {
             return Err(refused(SourceFetchReason::AddressRefused));
         }
         AddressCheck::ProxyResolved
@@ -595,12 +711,12 @@ pub(crate) async fn fetch_link(
         .await?
         .map_err(|error| refused(classify(&error)))?;
     let declared = check_response(&response, limits).map_err(refused)?;
-    if let Some(declared) = declared {
-        sink.ensure_room(declared).map_err(LinkFetchError::Sink)?;
-    } else {
-        sink.ensure_room(limits.max_bytes())
-            .map_err(LinkFetchError::Sink)?;
-    }
+    // Room for the declared length, or for the first block of a body of
+    // unknown length; such a body asks again as each later block begins.
+    let room_step = route.room_step().max(1);
+    let mut room_through = declared.unwrap_or_else(|| room_step.min(limits.max_bytes()));
+    sink.ensure_room(room_through)
+        .map_err(LinkFetchError::Sink)?;
     let mut received = 0_u64;
     let mut judged = false;
     loop {
@@ -618,13 +734,24 @@ pub(crate) async fn fetch_link(
         let Some(chunk) = chunk else {
             break;
         };
-        received = received
+        let after = received
             .checked_add(u64::try_from(chunk.len()).map_err(|_| refused(SourceFetchReason::Size))?)
             .ok_or(refused(SourceFetchReason::Size))?;
-        if received > limits.max_bytes() {
+        if after > limits.max_bytes() {
             return Err(refused(SourceFetchReason::Size));
         }
+        if after > room_through {
+            // The next block: room from what the slot holds now to its end.
+            let through = room_through
+                .saturating_add(room_step)
+                .max(after)
+                .min(limits.max_bytes());
+            sink.ensure_room(through - received)
+                .map_err(LinkFetchError::Sink)?;
+            room_through = through;
+        }
         sink.append(&chunk).map_err(LinkFetchError::Sink)?;
+        received = after;
         if !judged && let Some(header) = sink.header() {
             judge_header(header).map_err(refused)?;
             judged = true;
@@ -918,6 +1045,109 @@ mod tests {
         ] {
             assert!(!is_internal_name(name), "{name}");
         }
+    }
+
+    #[test]
+    fn a_proxy_value_is_a_url_or_host_and_port_and_anything_else_is_refused()
+    -> Result<(), Box<dyn Error>> {
+        for (value, proxy) in [
+            ("proxy.corp:3128", "http://proxy.corp:3128/"),
+            ("127.0.0.1:3128", "http://127.0.0.1:3128/"),
+            (
+                " http://proxy.example.org:8080 ",
+                "http://proxy.example.org:8080/",
+            ),
+            ("https://proxy.example.org", "https://proxy.example.org/"),
+            (
+                "http://user:secret@proxy.example.org:3128",
+                "http://user:secret@proxy.example.org:3128/",
+            ),
+        ] {
+            assert_eq!(parse_proxy(value)?.as_str(), proxy, "{value}");
+        }
+        for value in [
+            "http://bad host:3128",
+            "socks5://proxy.example.org:1080",
+            "ftp://proxy.example.org",
+            "http://",
+            "proxy.example.org:port",
+            "file:///proxy",
+        ] {
+            assert_eq!(
+                parse_proxy(value),
+                Err(SourceFetchReason::ProxyUnusable),
+                "{value}"
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn a_set_proxy_variable_is_used_or_refused_never_ignored() -> Result<(), Box<dyn Error>> {
+        const UNUSABLE: &str = "http://bad host:3128";
+        let link = Url::parse("https://videos.example.org/a.mp4")?;
+        let proxy = |pairs: &[(&str, &str)]| {
+            proxy_from_variables(&link, |name| {
+                pairs
+                    .iter()
+                    .find(|(key, _)| *key == name)
+                    .map(|(_, value)| (*value).to_owned())
+            })
+            .map(|found| found.map(String::from))
+        };
+        assert_eq!(proxy(&[]), Ok(None));
+        assert_eq!(
+            proxy(&[("https_proxy", "proxy.corp:3128")]),
+            Ok(Some("http://proxy.corp:3128/".to_owned()))
+        );
+        assert_eq!(
+            proxy(&[("ALL_PROXY", "http://all.example.org:8080")]),
+            Ok(Some("http://all.example.org:8080/".to_owned()))
+        );
+        // Unusable: refused, whichever variable names it.
+        for name in ["HTTPS_PROXY", "https_proxy", "ALL_PROXY", "all_proxy"] {
+            assert_eq!(
+                proxy(&[(name, UNUSABLE)]),
+                Err(SourceFetchReason::ProxyUnusable),
+                "{name}"
+            );
+        }
+        // A host NO_PROXY excludes goes direct, whatever the proxy value.
+        for (name, excluded) in [
+            ("NO_PROXY", "videos.example.org"),
+            ("no_proxy", "example.org"),
+            ("NO_PROXY", ".example.org"),
+            ("NO_PROXY", "*"),
+            ("NO_PROXY", "other.test, example.org"),
+        ] {
+            assert_eq!(
+                proxy(&[("HTTPS_PROXY", UNUSABLE), (name, excluded)]),
+                Ok(None),
+                "{excluded}"
+            );
+        }
+        // A suffix matches only at a label boundary.
+        assert_eq!(
+            proxy(&[("HTTPS_PROXY", UNUSABLE), ("NO_PROXY", "ample.org")]),
+            Err(SourceFetchReason::ProxyUnusable)
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn through_a_proxy_internal_names_are_refused_and_addresses_left_to_the_link_check()
+    -> Result<(), Box<dyn Error>> {
+        for link in [
+            "https://wiki.corp/x.mp4",
+            "https://intranet/x.mp4",
+            "https://nas.local./x.mp4",
+        ] {
+            assert!(internal_through_proxy(&Url::parse(link)?), "{link}");
+        }
+        for link in ["https://videos.example.org/x.mp4", "https://8.8.8.8/x.mp4"] {
+            assert!(!internal_through_proxy(&Url::parse(link)?), "{link}");
+        }
+        Ok(())
     }
 
     #[test]

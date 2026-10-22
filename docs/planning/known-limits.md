@@ -5098,11 +5098,15 @@ that week.**
   When `HTTPS_PROXY` or `ALL_PROXY` names a proxy (and `NO_PROXY` does not exclude the host), the proxy resolves
   the name and opens the connection, so VSift cannot see or check the address. It then refuses only hosts written as
   a non-public address and internal-looking names (one label, `localhost`, `.local`, `.localhost`, `.internal`,
-  `.lan`, `.home.arpa`, `.corp`, `.intranet`), follows the proxy, and records `address_check: "proxy_resolved"` in
-  the session's origin. A public-looking name that the proxy's resolver maps to an internal address is reached
+  `.lan`, `.home.arpa`, `.corp`, `.intranet`), on the link and on every redirect (since review RV-3, 2026-10-22),
+  follows the proxy, and records `address_check: "proxy_resolved"` in the session's origin.
+  `NO_PROXY` is matched by host name only (a host, a domain it is under, or `*`); a wildcard inside an entry, an
+  address, a range or a port is not read, so such an entry sends its host through the proxy (troubleshooting says
+  which forms work). A public-looking name that the proxy's resolver maps to an internal address is reached
   through the proxy.
 - **Evidence:** `crates/vsift-infrastructure/src/link_acquisition.rs` (`environment_proxy`, `is_internal_name`);
-  `link_transfer`'s `through_a_proxy_the_origin_says_the_proxy_resolved_the_name`.
+  `link_transfer`'s `through_a_proxy_the_origin_says_the_proxy_resolved_the_name` and
+  `through_a_proxy_a_redirect_to_an_internal_name_is_refused`.
 - **Impact: low by the rubric** (needs a proxy that reaches internal hosts and a chosen link): the proxy is the
   organisation's own control point, and the origin says the address was not checked.
 - **Why:** the maintainer's decision of 2026-10-21: organisations need their proxy, and refusing every proxied

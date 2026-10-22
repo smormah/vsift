@@ -62,7 +62,8 @@ the default.
   these. reqwest connects only to the addresses the resolver returned, so the address checked
   is the address connected to and DNS rebinding cannot get through. A host written as an IP
   address is never resolved, so the URL and redirect policy checks it directly, on every hop.
-- **Redirects:** at most three, each re-checked (HTTPS, port, no credentials, address).
+- **Redirects:** at most three, each re-checked (HTTPS, port, no credentials, address, and
+  through a proxy an internal-looking name; amended 2026-10-22).
 - **Proxies:** reqwest takes a proxy from `HTTPS_PROXY`, `ALL_PROXY` and `NO_PROXY` only.
   Through a proxy the proxy resolves the name and VSift cannot see the address. **Decided
   (supervisor, 2026-10-21):** VSift follows the proxy (organisations need it), refuses IP
@@ -74,7 +75,8 @@ the default.
   (`--max-download-bytes`, at most the 20 GiB source maximum). Bytes are counted as they
   arrive, so a missing or false `Content-Length` cannot pass; a declared length over the cap
   is refused before the body; free space is checked for the declared length (or the cap)
-  with the existing margin. The 4-hour duration is checked by the probe afterwards.
+  with the existing margin. *(Amended 2026-10-22: for a body of unknown length, 64 MiB at a
+  time as it arrives, not the cap.)* The 4-hour duration is checked by the probe afterwards.
 - **Response:** only a complete `200 OK`; a `206`, any `Content-Range` or a compressed body is
   refused (`Accept-Encoding: identity`). The server's content type is not trusted, but a text
   type stops at once as a web page. The first 12 bytes must be ISO base media (`ftyp`) or
@@ -85,9 +87,11 @@ the default.
   `Referer`. No telemetry; nothing else is contacted.
 - **Failure code (decided):** a new code, `SOURCE_FETCH_FAILED` (exit 3), with typed reasons:
   `not_https`, `credentials_in_link`, `port_not_allowed`, `address_refused`, `tls`,
-  `redirect_policy`, `http_status`, `proxy_auth`, `offline`, `stalled`, `deadline`, `size`,
-  `partial`, `compressed`, `web_page`, `not_a_video`, `truncated`, `disabled_by_policy`,
-  `strict_isolation`. `DOWNLOAD_FAILED` stays the setup code (its fixed message is about the
+  `redirect_policy`, `http_status`, `proxy_auth`, `proxy_unusable`, `offline`, `stalled`,
+  `deadline`, `size`, `partial`, `compressed`, `web_page`, `not_a_video`, `truncated`,
+  `strict_isolation`. *(Amended 2026-10-22, see the review note below: `proxy_unusable` is
+  added; `disabled_by_policy`, in the first draft, is reserved for `1.0` and added with its
+  switch.)* `DOWNLOAD_FAILED` stays the setup code (its fixed message is about the
   reviewed publisher). Every remediation names the online step and its cause and says local
   files still work; none echoes the URL, the server's text or proxy credentials. `web_page`
   names the optional component (section 4) with `required_authority: "user_confirmation"`.
@@ -492,6 +496,29 @@ schema's gap codes gain `SOURCE_FETCH_FAILED`, with the matching row of the voca
 voids the trial freeze, which is rewritten at this pull request's rebase (the supervisor's decision). Its "do
 not use for streaming URLs" is still true of pages and streams, and its wording changes once, at the `0.3.0`
 freeze, with #409's.
+
+*Review note, 2026-10-22 (RV-3, before #502's merge):* a read-only review of #502 found one high, three medium and
+five low findings; the pull request changes these before it merges, and this ADR's decisions otherwise stand.
+
+- **Internal names through a proxy, on every hop.** Through a proxy the redirect policy now refuses an internal-looking
+  name on each hop, as the link's own host is refused (section 3, "Redirects" and "Proxies"): before, only the first
+  URL was checked, and a public link that redirected to an internal name was followed through the proxy.
+- **Three redirects means three.** The policy compared with `>=` and refused the third redirect; it now follows
+  three and refuses a fourth.
+- **Free space for a body of unknown length** is checked 64 MiB at a time as it arrives (the store's own rule and
+  margin each time), not for the whole download limit before the first byte, which refused a small video sent without
+  a length on a volume with less free space than the limit. A failed write still reports a shortage, as for a copy.
+- **A proxy value that is set is used or refused, never ignored.** A proxy value is read as curl reads it (a URL, or
+  `host:port` for an HTTP proxy). Any other value, or a scheme other than `http` or `https`, is the new reason
+  `proxy_unusable`, whose remediation names the variables and never the value. Before, an unparsable value sent the
+  fetch direct, past the proxy the user set.
+- **`disabled_by_policy` is reserved for `1.0`** (the planner's decision of 2026-10-22). Nothing produced it, and a
+  published v1 reason cannot be removed; it is added, additively, with the organisation-wide switch that returns it
+  (see Consequences), which moves to `1.0`.
+- **Documented:** `SOURCE_FETCH_FAILED` is `retryable: false` as a code, and the retry of a transient reason is the
+  caller's (`cli-v1.md`); the `NO_PROXY` forms read (troubleshooting); cancellation and the deadline are observed while
+  the fetch waits for the network, not during a chunk's write or the final flush; the CLI contract cases use a
+  `.invalid` host, so a release-profile test run reaches no server either.
 
 ## Consequences
 

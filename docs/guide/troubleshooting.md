@@ -307,10 +307,19 @@ work as before, and the answer's `reason` says why. The link itself is never pri
 | `not_https`, `credentials_in_link`, `port_not_allowed` | The link is not `https://`, carries a user name or password, or names another port than 443. | Ask for a plain `https://` link to the file, or for the file. |
 | `address_refused` | The link, or a redirect, points at a private, local or internal address. VSift never fetches those. | If the video is on your own network, download it and open the file. |
 | `web_page`, `not_a_video` | The link is a web page (such as a video site's page), or what it serves is not a video file. | Use the link to the video file itself, or download the video and open the file. |
-| `tls`, `proxy_auth`, `offline`, `stalled`, `truncated` | The network: a certificate that is not trusted, a proxy that wants credentials, no connection, no data for 30 seconds, a connection that ended early. | Check the network and run the command again. Proxy settings come from `HTTPS_PROXY` and `NO_PROXY`. |
+| `tls`, `proxy_auth`, `offline`, `stalled`, `truncated` | The network: a certificate that is not trusted, a proxy that wants credentials, no connection, no data for 30 seconds, a connection that ended early. | Check the network and run the command again. Proxy settings come from `HTTPS_PROXY` (or `ALL_PROXY`) and `NO_PROXY` (see below). |
+| `proxy_unusable` | `HTTPS_PROXY` or `ALL_PROXY` is set, but not to a proxy VSift can use. VSift does not go around a proxy you set. | Set it to the proxy's URL (`http://proxy.example:3128`) or to `host:port`, or unset it to connect directly. |
 | `size`, `deadline` | The video is larger than the download limit (4 GiB by default) or took longer than the time limit (30 minutes). | `--max-download-bytes` (up to 20 GiB) and `--max-download-seconds` (up to 4 hours) raise them. |
 | `http_status`, `partial`, `compressed`, `redirect_policy` | The server did not send the whole video: an error, a part of it, a compressed body, or too many or unsafe redirects. | Check the link; a link that needs a sign-in does not work, because VSift never signs in. |
-| `strict_isolation`, `disabled_by_policy` | This host allows no network for VSift. | Fetch the video elsewhere and give this host the file. |
+| `strict_isolation` | This host allows no network for VSift. | Fetch the video elsewhere and give this host the file. |
+
+**Proxies.** VSift reads `HTTPS_PROXY` (or `https_proxy`), else `ALL_PROXY` (or `all_proxy`), as a proxy URL or as
+`host:port`. VSift uses `http` and `https` proxies only. `NO_PROXY` (or `no_proxy`) is a comma-separated list
+matched by host name only: an entry is a host (`videos.example.org`), a domain whose hosts it covers (`example.org` or
+`.example.org`), or `*` for every host. Other forms that some tools accept are not read: a wildcard inside an entry
+(`*.example.org`), an IP address or a CIDR range, and an entry with a port. A host they were meant to exclude is sent
+through the proxy. Through a proxy, VSift cannot see the address a name resolves to, so it refuses internal-looking
+names (one label, `localhost`, `.local`, `.internal`, `.corp` and the like), on the link and on every redirect.
 
 ## `INTEGRITY_FAILURE`: what is stored is not what VSift wrote
 

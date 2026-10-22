@@ -70,8 +70,10 @@ pub struct LinkIngestRequest {
     pub limits: DownloadLimits,
     /// Optional supplied `SubRip` or `WebVTT` transcript to import with it.
     pub transcript: Option<SuppliedTranscriptRequest>,
-    /// Signal that stops the fetch within 200 ms and the transcript's
-    /// duration probe; a cancelled ingest opens no session.
+    /// Signal that stops the fetch within 200 ms while it waits for the
+    /// network (a chunk being written, and the final flush, finish first)
+    /// and the transcript's duration probe; a cancelled ingest opens no
+    /// session.
     pub cancellation: Cancellation,
     /// How the session publishes, as for [`IngestRequest::durability`].
     pub durability: DurabilityRequirement,

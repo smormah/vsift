@@ -117,7 +117,7 @@
           "items": { "$ref": "#/$defs/remediation" }
         },
         "reason": {
-          "description": "The typed reason of a code that has reasons; absent for every other code. SOURCE_FETCH_FAILED (0.3.0, ADR 0028): not_https, credentials_in_link, port_not_allowed, address_refused, tls, redirect_policy, http_status, proxy_auth, offline, stalled, deadline, size, partial, compressed, web_page, not_a_video, truncated, disabled_by_policy or strict_isolation. A later release may add reasons; a reader treats an unknown one as the code alone.",
+          "description": "The typed reason of a code that has reasons; absent for every other code. SOURCE_FETCH_FAILED (0.3.0, ADR 0028): not_https, credentials_in_link, port_not_allowed, address_refused, tls, redirect_policy, http_status, proxy_auth, proxy_unusable, offline, stalled, deadline, size, partial, compressed, web_page, not_a_video, truncated or strict_isolation. A later release may add reasons; a reader treats an unknown one as the code alone.",
           "type": "string",
           "pattern": "^[a-z][a-z0-9_]{0,63}$"
         }

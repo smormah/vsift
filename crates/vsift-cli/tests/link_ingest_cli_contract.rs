@@ -1,7 +1,9 @@
 //! Public CLI contract for `ingest --url` (ADR 0028, #407), through the
 //! binary, with no network: every case is refused before a connection, and
 //! a development build resolves no name (the P13 network guard), so a public
-//! name answers `offline` here. The fetch itself is tested against a local
+//! name answers `offline` here. Every host is under `.invalid`, which never
+//! resolves, so a release-profile run, which does resolve names, reaches no
+//! server either. The fetch itself is tested against a local
 //! HTTPS server in `vsift-infrastructure`'s `link_transfer`.
 
 use std::{
@@ -156,20 +158,20 @@ fn links_that_break_a_rule_are_refused_before_anything_is_sent() -> TestResult {
     let root = OwnedRoot::new()?;
     for (link, reason) in [
         (
-            format!("http://videos.example.org/a.mp4?token={SENTINEL}"),
+            format!("http://videos.example.invalid/a.mp4?token={SENTINEL}"),
             "not_https",
         ),
         (
-            format!("ftp://videos.example.org/{SENTINEL}.mp4"),
+            format!("ftp://videos.example.invalid/{SENTINEL}.mp4"),
             "not_https",
         ),
         (format!("/home/example/{SENTINEL}.mp4"), "not_https"),
         (
-            format!("https://user:{SENTINEL}@videos.example.org/a.mp4"),
+            format!("https://user:{SENTINEL}@videos.example.invalid/a.mp4"),
             "credentials_in_link",
         ),
         (
-            format!("https://videos.example.org:8443/a.mp4?token={SENTINEL}"),
+            format!("https://videos.example.invalid:8443/a.mp4?token={SENTINEL}"),
             "port_not_allowed",
         ),
         (
@@ -189,8 +191,11 @@ fn links_that_break_a_rule_are_refused_before_anything_is_sent() -> TestResult {
             "address_refused",
         ),
         // A development build resolves no name, so a public name is offline.
+        // The name is under `.invalid`, which never resolves, so a release
+        // build's run of this test (which does resolve) reaches no server
+        // either and answers the same.
         (
-            format!("https://videos.example.org/{SENTINEL}/a.mp4"),
+            format!("https://videos.example.invalid/{SENTINEL}/a.mp4"),
             "offline",
         ),
     ] {
@@ -227,7 +232,7 @@ fn the_options_are_checked_as_arguments() -> TestResult {
             "ingest",
             "video.mp4",
             "--url",
-            "https://videos.example.org/a.mp4",
+            "https://videos.example.invalid/a.mp4",
             "--json",
         ],
         vec![
@@ -240,7 +245,7 @@ fn the_options_are_checked_as_arguments() -> TestResult {
         vec![
             "ingest",
             "--url",
-            "https://videos.example.org/a.mp4",
+            "https://videos.example.invalid/a.mp4",
             "--max-download-bytes",
             "0",
             "--json",
@@ -248,7 +253,7 @@ fn the_options_are_checked_as_arguments() -> TestResult {
         vec![
             "ingest",
             "--url",
-            "https://videos.example.org/a.mp4",
+            "https://videos.example.invalid/a.mp4",
             "--max-download-bytes",
             "21474836481",
             "--json",
@@ -256,7 +261,7 @@ fn the_options_are_checked_as_arguments() -> TestResult {
         vec![
             "ingest",
             "--url",
-            "https://videos.example.org/a.mp4",
+            "https://videos.example.invalid/a.mp4",
             "--max-download-seconds",
             "14401",
             "--json",
