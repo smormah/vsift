@@ -583,10 +583,16 @@ All are taken (2026-10-21):
   ended, or has nearly spent its attempts, is stopped.
 - **Verifier.** Besides the existing checks, a part's acknowledgement is held (its generation's manifest
   unchanged; its revision still the newest, or found by identity), and every session's newest revision is
-  held to a seal-only run of the stand-ins rebuilt in memory: a sealed revision equals it byte for byte; an
-  open one, rebuilt from its parts after the crash, is a prefix of it with nothing left to come before the
-  time it is published until; a stopped one keeps that prefix. Parts are listed only while a revision is
-  open, and at most 64.
+  held to a seal-only run of the stand-ins rebuilt in memory, over the range the workload asked for (the
+  whole stand-in source for a revision published as it goes; the request of the job that committed a
+  sealed one), never the range the revision declares: a sealed revision equals it byte for byte; an open
+  one, rebuilt from its parts after the crash, is a prefix of it with nothing left to come before the time
+  it is published until; a stopped one equals, byte for byte, the stopped seal of the reference run's own
+  cut after the chunks it reached (its published segments, the earlier text after them and its chunk
+  outcomes). Parts are listed only while a revision is open, and at most 64. **Review RV-1
+  (2026-10-22):** the range and the stopped check were the revision's own and a prefix before (findings 6
+  and 5); unit tests feed the verifier a stopped seal that dropped its last published segment, one that
+  added an unpublished one, and a revision whose run lost its last chunk.
 - **Kill points (unit level, child processes, stand-in recogniser, an ordinary root):** each of
   `artifact-install`, `manifest-rename`, `pointer-rename`, `pointer-directory-sync` and `job-committing`, at
   every part's commit and at the seal (alternating with `chunk-recognised:1` to move the run on), and at the

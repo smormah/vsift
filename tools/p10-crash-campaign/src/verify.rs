@@ -13,12 +13,17 @@
 //!   job reads (and is reconciled if its owner died);
 //! - **against a seal-only run** (ADR 0033): the session's newest revision is
 //!   rebuilt in memory from the stand-ins, as a run that publishes only at its
-//!   seal makes it. A sealed revision must equal it byte for byte; an open one
-//!   (rebuilt from its parts after the crash) must be a prefix of it, with the
-//!   same identities, times and text, and nothing of it left to come before
-//!   the time it is published until; a stopped one must keep that prefix.
-//!   Parts are listed only while a revision is open, and at most
-//!   [`MAX_TRANSCRIPT_PARTS`] of them.
+//!   seal makes it, over the range the workload asked for (the whole stand-in
+//!   source for a revision published as it goes, the job's own request for a
+//!   sealed one), never the range the revision itself declares (RV-1 finding
+//!   6). A sealed revision must equal it byte for byte; an open one (rebuilt
+//!   from its parts after the crash) must be a prefix of it, with the same
+//!   identities, times and text, and nothing of it left to come before the time
+//!   it is published until; a stopped one must equal, byte for byte, the
+//!   stopped seal of the reference run's own cut after the chunks it reached,
+//!   so its published segments, the earlier text after them and its chunk
+//!   outcomes are all pinned (RV-1 finding 5). Parts are listed only while a
+//!   revision is open, and at most [`MAX_TRANSCRIPT_PARTS`] of them.
 //!
 //! An acknowledgement is lost when its session is missing or unreadable,
 //! the head is below the acknowledged generation, the acknowledged
@@ -40,12 +45,15 @@ use serde_json::Value;
 use sha2::{Digest as _, Sha256};
 use vsift::EngineError;
 use vsift_application::{
-    AsrRevisionRequest, JobStore, RevisionSplice, TranscribeRangeRequest, build_asr_revision,
-    job_status, transcribe_range, whole_file_source_segment,
+    AsrFailure, AsrRevisionRequest, AsrTranscription, CheckpointScope, JobStore, NoCheckpoints,
+    NoProgress, RevisionSplice, RunObserver, RunSoFar, StoppedStopwatch, TranscribeRangeRequest,
+    build_asr_revision, build_open_asr_revision, build_stopped_asr_revision, job_status,
+    retranscription_range, transcribe_range_checkpointed, whole_file_source_segment,
 };
 use vsift_domain::{
-    ChunkPlan, FailureCode, JobId, MediaTime, OperationId, PublicationGuarantee, RevisionState,
-    SessionId, TranscriptProvenance, TranscriptRevision,
+    AsrChunkOutcome, ChunkPlan, FailureCode, JobId, MAX_EARLY_AUDIO_MICROS, MediaTime, OperationId,
+    PublicationGuarantee, RecognitionKey, RevisionState, SessionId, Sha256Hex, SourceId,
+    SourceSegment, TimeRange, TranscriptProvenance, TranscriptRevision,
 };
 use vsift_infrastructure::{
     FilesystemSessionStore, MAX_TRANSCRIPT_PARTS, encode_transcript_record,
@@ -53,7 +61,10 @@ use vsift_infrastructure::{
 
 use crate::{
     protocol::{Ack, OperationKind},
-    standins::{NeverStop, SPEECH_MICROS, StandInAudio, StandInRecognizer, recognizer_identity},
+    standins::{
+        NeverStop, SPEECH_MICROS, STAND_IN_DIGEST, StandInAudio, StandInRecognizer,
+        recognizer_identity,
+    },
 };
 
 /// Largest manifest the verifier reads (the store's own bound is 128 KiB).
@@ -563,25 +574,42 @@ pub fn check_newest_revision(
         }
         (RevisionState::Sealed | RevisionState::Stopped, None) => {}
     }
-    let reference = seal_only(store, session, &newest, now)?;
-    if newest.id() != reference.id() {
+    check_revision(store, session, &newest, now)
+}
+
+/// Holds `revision`, as the newest revision of `session`, to the seal-only
+/// run of the range its workload asked for: see the module.
+///
+/// # Errors
+///
+/// What is wrong, as a short fixed name.
+pub(crate) fn check_revision(
+    store: &FilesystemSessionStore,
+    session: &SessionId,
+    revision: &TranscriptRevision,
+    now: u64,
+) -> Result<(), &'static str> {
+    let reference = Reference::of(store, session, revision, now)?;
+    if revision.id() != reference.sealed.id() {
         return Err("identity-differs");
     }
-    match newest.state() {
+    match revision.state() {
         RevisionState::Sealed => {
-            let stored = encode_transcript_record(&newest).map_err(|_| "unencodable")?;
-            let expected = encode_transcript_record(&reference).map_err(|_| "unencodable")?;
+            let stored = encode_transcript_record(revision).map_err(|_| "unencodable")?;
+            let expected =
+                encode_transcript_record(&reference.sealed).map_err(|_| "unencodable")?;
             if stored != expected {
                 return Err("sealed-differs-from-a-seal-only-run");
             }
         }
         RevisionState::Open => {
-            let until = newest.published_until().ok_or("open-without-until")?;
-            let count = newest.segments().len();
-            if reference.segments().get(..count) != Some(newest.segments()) {
+            let until = revision.published_until().ok_or("open-without-until")?;
+            let count = revision.segments().len();
+            if reference.sealed.segments().get(..count) != Some(revision.segments()) {
                 return Err("open-not-a-prefix");
             }
             if reference
+                .sealed
                 .segments()
                 .get(count..)
                 .unwrap_or_default()
@@ -592,95 +620,252 @@ pub fn check_newest_revision(
             }
         }
         RevisionState::Stopped => {
-            let until = newest.published_until().ok_or("stopped-without-until")?;
-            let published = newest
-                .segments()
+            let TranscriptProvenance::LocalAsr(run) = revision.provenance() else {
+                return Err("not-recognised");
+            };
+            // The run's chunks it had reached when it published last; the
+            // rest are `not_reached`.
+            let reached = run
+                .chunks()
                 .iter()
-                .take_while(|segment| segment.range().start() < until)
+                .filter(|record| !matches!(record.outcome(), AsrChunkOutcome::NotReached))
                 .count();
-            if reference.segments().get(..published) != newest.segments().get(..published) {
-                return Err("stopped-lost-what-it-published");
+            let open = reference.open_after(session, reached)?;
+            let expected = build_stopped_asr_revision(&open, reference.base.as_ref())
+                .map_err(|_| "unbuildable")?;
+            let stored = encode_transcript_record(revision).map_err(|_| "unencodable")?;
+            let expected = encode_transcript_record(&expected).map_err(|_| "unencodable")?;
+            if stored != expected {
+                return Err("stopped-differs-from-the-reference-cut");
             }
         }
     }
     Ok(())
 }
 
-/// The revision `revision` would be had its run published only at its seal:
-/// the stand-ins' recognition of the range it replaced, assembled over the
-/// revision it supersedes.
-fn seal_only(
+/// The range the workload asked `revision`'s run to replace, never the range
+/// the revision declares (RV-1 finding 6): only the growing workloads (`grow`,
+/// `part`, `stop`) publish as they go, and they transcribe the whole stand-in
+/// source; a sealed revision's range is its job's own request, found by the
+/// revision number the job committed. Widened over `base` as the run widened
+/// it.
+fn workload_range(
     store: &FilesystemSessionStore,
     session: &SessionId,
     revision: &TranscriptRevision,
+    base: Option<&TranscriptRevision>,
+    source: TimeRange,
     now: u64,
-) -> Result<TranscriptRevision, &'static str> {
-    let TranscriptProvenance::LocalAsr(run) = revision.provenance() else {
-        return Err("not-recognised");
+) -> Result<TimeRange, &'static str> {
+    let requested = match revision.state() {
+        RevisionState::Open | RevisionState::Stopped => None,
+        RevisionState::Sealed => {
+            let mut requested = None;
+            for view in store.session_jobs(session).map_err(|_| "jobs-unreadable")? {
+                let Some(commit) = &view.record.commit else {
+                    continue;
+                };
+                let committed = store
+                    .read_transcript_revision(session, &commit.revision_id, now)
+                    .map_err(|_| "committed-unreadable")?;
+                if committed.is_some_and(|(committed, _)| committed.number() == revision.number()) {
+                    requested = Some(view.record.request.range());
+                    break;
+                }
+            }
+            requested.ok_or("sealed-without-its-job")?
+        }
     };
-    let status = store
-        .session_status(session)
-        .map_err(|_| "status-unreadable")?;
-    let segment =
-        whole_file_source_segment(status.source_id(), MediaTime::from_micros(SPEECH_MICROS))
-            .map_err(|_| "segment")?;
-    let base = match revision.supersedes() {
-        Some(id) => Some(
-            store
-                .read_transcript_revision(session, id, now)
-                .map_err(|_| "base-unreadable")?
-                .map(|(base, _)| base)
-                .ok_or("base-missing")?,
-        ),
-        None => None,
-    };
-    let replaced = revision
-        .replaced_range()
-        .or_else(|| run.covered_range())
-        .ok_or("no-range")?;
-    let identity = recognizer_identity().map_err(|_| "identity")?;
-    // The stand-in recognizer waits on a Tokio timer, and the verifier may be
-    // called from inside a runtime or outside one: the recognition runs on a
-    // thread and a runtime of its own.
-    let transcription = std::thread::scope(|scope| {
-        scope
-            .spawn(|| {
-                let runtime = tokio::runtime::Builder::new_current_thread()
-                    .enable_time()
-                    .build()
-                    .map_err(|_| "runtime")?;
-                runtime
-                    .block_on(transcribe_range(
-                        TranscribeRangeRequest {
-                            source_segment: &segment,
-                            range: replaced,
-                            plan: ChunkPlan::R0,
-                            audio_stream: 1,
-                            expected: &identity,
-                        },
-                        &StandInAudio,
-                        &StandInRecognizer {
-                            delay: Duration::ZERO,
-                        },
-                        &NeverStop,
-                    ))
-                    .map_err(|_| "recognition")
-            })
-            .join()
-            .map_err(|_| "recognition")?
-    })?;
-    build_asr_revision(AsrRevisionRequest {
-        session_id: session,
-        source_id: status.source_id(),
-        source_segment: &segment,
-        number: NonZeroU32::new(revision.number()).ok_or("number")?,
-        transcription,
-        splice: base.as_ref().map(|base| RevisionSplice {
+    Ok(retranscription_range(base, requested, source))
+}
+
+/// Records what a part published after every chunk would hold.
+struct Cuts(std::sync::Mutex<Vec<Result<(AsrTranscription, MediaTime), AsrFailure>>>);
+
+impl RunObserver for Cuts {
+    fn chunk_finished(&self, run: &RunSoFar<'_>) {
+        if let Ok(mut cuts) = self.0.lock() {
+            cuts.push(run.open(MAX_EARLY_AUDIO_MICROS));
+        }
+    }
+}
+
+/// The seal-only run of a revision's workload range: the revision it seals,
+/// and what it had settled after each of its chunks.
+pub(crate) struct Reference {
+    /// The revision the run seals.
+    pub(crate) sealed: TranscriptRevision,
+    /// After chunk `n` (index `n - 1`), what a part published then holds.
+    cuts: Vec<Result<(AsrTranscription, MediaTime), AsrFailure>>,
+    base: Option<TranscriptRevision>,
+    source_id: SourceId,
+    segment: SourceSegment,
+    number: NonZeroU32,
+    replaced: TimeRange,
+}
+
+impl Reference {
+    /// The reference of `revision`, the newest revision of `session`.
+    ///
+    /// # Errors
+    ///
+    /// What is wrong, as a short fixed name.
+    pub(crate) fn of(
+        store: &FilesystemSessionStore,
+        session: &SessionId,
+        revision: &TranscriptRevision,
+        now: u64,
+    ) -> Result<Self, &'static str> {
+        let TranscriptProvenance::LocalAsr(_) = revision.provenance() else {
+            return Err("not-recognised");
+        };
+        let status = store
+            .session_status(session)
+            .map_err(|_| "status-unreadable")?;
+        let segment =
+            whole_file_source_segment(status.source_id(), MediaTime::from_micros(SPEECH_MICROS))
+                .map_err(|_| "segment")?;
+        let base = match revision.supersedes() {
+            Some(id) => Some(
+                store
+                    .read_transcript_revision(session, id, now)
+                    .map_err(|_| "base-unreadable")?
+                    .map(|(base, _)| base)
+                    .ok_or("base-missing")?,
+            ),
+            None => None,
+        };
+        let replaced = workload_range(
+            store,
+            session,
+            revision,
+            base.as_ref(),
+            segment.range(),
+            now,
+        )?;
+        Self::over(
+            session,
+            status.source_id(),
+            segment,
+            NonZeroU32::new(revision.number()).ok_or("number")?,
             base,
-            replaced_range: replaced,
-        }),
-    })
-    .map_err(|_| "unbuildable")
+            replaced,
+        )
+    }
+
+    /// The seal-only run of `replaced` of the stand-in source, as revision
+    /// `number` of `session` over `base`.
+    ///
+    /// # Errors
+    ///
+    /// What is wrong, as a short fixed name.
+    pub(crate) fn over(
+        session: &SessionId,
+        source_id: &SourceId,
+        segment: SourceSegment,
+        number: NonZeroU32,
+        base: Option<TranscriptRevision>,
+        replaced: TimeRange,
+    ) -> Result<Self, &'static str> {
+        let identity = recognizer_identity().map_err(|_| "identity")?;
+        let key = RecognitionKey::new(Sha256Hex::parse(STAND_IN_DIGEST).map_err(|_| "key")?);
+        let cuts = Cuts(std::sync::Mutex::new(Vec::new()));
+        // The stand-in recognizer waits on a Tokio timer, and the verifier may
+        // be called from inside a runtime or outside one: the recognition runs
+        // on a thread and a runtime of its own.
+        let transcription = std::thread::scope(|scope| {
+            scope
+                .spawn(|| {
+                    let runtime = tokio::runtime::Builder::new_current_thread()
+                        .enable_time()
+                        .build()
+                        .map_err(|_| "runtime")?;
+                    runtime
+                        .block_on(transcribe_range_checkpointed(
+                            TranscribeRangeRequest {
+                                source_segment: &segment,
+                                range: replaced,
+                                plan: ChunkPlan::R0,
+                                audio_stream: 1,
+                                expected: &identity,
+                            },
+                            CheckpointScope {
+                                checkpoints: &NoCheckpoints,
+                                key: &key,
+                                progress: &NoProgress,
+                                observer: &cuts,
+                                stopwatch: &StoppedStopwatch,
+                                seed: None,
+                                gate: None,
+                            },
+                            &StandInAudio,
+                            &StandInRecognizer {
+                                delay: Duration::ZERO,
+                            },
+                            &NeverStop,
+                        ))
+                        .map(|(transcription, _)| transcription)
+                        .map_err(|_| "recognition")
+                })
+                .join()
+                .map_err(|_| "recognition")?
+        })?;
+        let sealed = build_asr_revision(AsrRevisionRequest {
+            session_id: session,
+            source_id,
+            source_segment: &segment,
+            number,
+            transcription,
+            splice: base.as_ref().map(|base| RevisionSplice {
+                base,
+                replaced_range: replaced,
+            }),
+        })
+        .map_err(|_| "unbuildable")?;
+        Ok(Self {
+            sealed,
+            cuts: cuts.0.into_inner().map_err(|_| "recognition")?,
+            base,
+            source_id: source_id.clone(),
+            segment,
+            number,
+            replaced,
+        })
+    }
+
+    /// The open revision a part published after the first `chunks` chunks of
+    /// the run holds.
+    ///
+    /// # Errors
+    ///
+    /// `no-such-cut` when the run has no such cut.
+    pub(crate) fn open_after(
+        &self,
+        session: &SessionId,
+        chunks: usize,
+    ) -> Result<TranscriptRevision, &'static str> {
+        let (transcription, settled_until) = chunks
+            .checked_sub(1)
+            .and_then(|index| self.cuts.get(index))
+            .ok_or("no-such-cut")?
+            .clone()
+            .map_err(|_| "no-such-cut")?;
+        build_open_asr_revision(
+            AsrRevisionRequest {
+                session_id: session,
+                source_id: &self.source_id,
+                source_segment: &self.segment,
+                number: self.number,
+                transcription,
+                splice: self.base.as_ref().map(|base| RevisionSplice {
+                    base,
+                    replaced_range: self.replaced,
+                }),
+            },
+            settled_until,
+        )
+        .map_err(|_| "unbuildable")
+    }
 }
 
 /// Reads every worker request record on disk through the store (P11 PR 3):
