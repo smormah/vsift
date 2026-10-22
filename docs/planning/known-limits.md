@@ -217,8 +217,9 @@ Each entry has these fields:
 | [L-200](#l-200) | The same VSift, whisper.cpp, model and audio can give a slightly different transcript on another CPU, so two hosted runs, and two machines, are comparable only on the same CPU model | process/CI | low | unscheduled | [#486](https://github.com/smormah/vsift/issues/486) | monitoring |
 | [L-201](#l-201) | A recogniser repetition inside one chunk could hide what the next chunk heard at a seam; since `0.2.3` an exact repeat of the segment before claims no time, and other loops are left | accuracy/ASR | low | unscheduled | [#485](https://github.com/smormah/vsift/issues/485) | monitoring |
 | [L-208](#l-208) | `ingest --url` through a proxy from the environment cannot check the address the proxy connects to: only internal-looking names and addresses are refused, and the origin says `proxy_resolved` | security | low | unscheduled | [#407](https://github.com/smormah/vsift/issues/407) | open |
+| [L-228](#l-228) | The TLS test certificates of the link-transfer fixtures expire on 2029-01-19, and `link_transfer` fails from then until they are regenerated | process/CI | low | maintenance, before 2028-12 | none | open |
 
-Counts: 1 high, 52 medium, 117 low (170 entries).
+Counts: 1 high, 52 medium, 118 low (171 entries).
 
 ## Security
 
@@ -5111,6 +5112,25 @@ that week.**
 - **Next step:** with #409, an administrator allowlist or policy file that `ingest --url` honours.
 - **Owner:** unscheduled. **Issue:** [#407](https://github.com/smormah/vsift/issues/407). **Status:** open.
   **Review:** pending.
+
+### L-228
+
+**The TLS test certificates of the link-transfer fixtures expire on 2029-01-19 (ADR 0028, #407; added 2026-10-22).**
+
+- **What:** `link_transfer` serves a committed server certificate from a local HTTPS server and trusts a committed
+  test root. The server certificate is valid for 820 days because macOS refuses more than 825, even for a root the
+  test trusts itself, so it expires on 2029-01-19. From then on the `link_transfer` tests fail with a TLS failure on
+  every system until the certificates are regenerated. Production code is not affected.
+- **Evidence:** `crates/vsift-infrastructure/tests/fixtures/tls/README.md` (why 820 days, and the commands);
+  `crates/vsift-infrastructure/tests/link_transfer.rs`.
+- **Impact: low by the rubric:** a bounded, dated maintenance cost in tests only; nothing a user meets.
+- **Why:** a certificate valid for 100 years, as the first version was, passes on Windows but not on macOS. Making the
+  certificates at test time would need a new dependency used only by tests, which the planner rejected on 2026-10-22.
+- **Mitigation:** the expiry date is in the fixtures README and here.
+- **Next step:** before 2028-12, regenerate the root and the server certificate with the commands in the fixtures
+  README (`openssl req -x509 ...` for the root, then `openssl req` and `openssl x509 -req ... -days 820` for the
+  server certificate), run `link_transfer`, and commit the three files.
+- **Owner:** maintenance, before 2028-12. **Issue:** none. **Status:** open. **Review:** pending.
 
 ## Review workflow
 

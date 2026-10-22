@@ -48,6 +48,7 @@ macOS also refuses a server certificate that is valid for more than 825 days, ev
 when the test trusts its root itself, so the root is valid for 100 years but the server
 certificate for 820 days. It expires on **2029-01-19**; regenerate it with the commands
 below before then (the root key is not kept, so regenerate both certificates).
+This is recorded as L-228 in `docs/planning/known-limits.md`.
 
 ```console
 openssl req -x509 -newkey rsa:2048 -nodes -sha256 -keyout link-test-ca.key.pem \
