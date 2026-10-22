@@ -675,7 +675,7 @@ mod tests {
     use crate::{
         protocol::{Ack, OperationKind, parse_events},
         rng::SplitMix64,
-        verify::{check_newest_revision, verify},
+        verify::{Reference, check_newest_revision, check_revision, verify},
         workload::{Acknowledger, Channel, MAX_ACK_BYTES, OperationStop, read_text, unix_seconds},
     };
 
@@ -878,6 +878,185 @@ mod tests {
         fixture.verified("after a run over the stopped revision")?;
         assert_eq!(fixture.newest_state(&session)?, Some(RevisionState::Sealed));
         Ok(())
+    }
+
+    /// The parts of `revision`, to forge another from.
+    fn parts_of(
+        revision: &vsift_domain::TranscriptRevision,
+    ) -> Built<vsift_domain::TranscriptRevisionParts> {
+        Ok(vsift_domain::TranscriptRevisionParts {
+            id: revision.id().clone(),
+            number: std::num::NonZeroU32::new(revision.number()).ok_or("number")?,
+            source_id: revision.source_id().clone(),
+            source_segment: revision.source_segment().clone(),
+            provenance: revision.provenance().clone(),
+            supersedes: revision.supersedes().cloned(),
+            replaced_range: revision.replaced_range(),
+            inherited: revision.inherited().to_vec(),
+            carried_untranscribed: revision.carried_untranscribed().to_vec(),
+            unplaced: revision.unplaced().to_vec(),
+            language: revision.language().cloned(),
+            segments: revision.segments().to_vec(),
+            warnings: revision.warnings().clone(),
+        })
+    }
+
+    /// The session's newest revision.
+    fn newest(fixture: &Fixture, session: &SessionId) -> Built<vsift_domain::TranscriptRevision> {
+        let (newest, _) = fixture
+            .store()?
+            .read_transcript_head(session, unix_seconds()?)?;
+        Ok(newest.ok_or("no revision")?)
+    }
+
+    /// RV-1 finding 5: a stopped seal is held to the stopped seal of the
+    /// reference run's own cut, so one that dropped its last published segment,
+    /// or added a segment it never published (claiming to have stopped at it),
+    /// is damage, although every segment it holds before the time it stopped
+    /// at is the reference's.
+    #[tokio::test]
+    async fn a_stopped_seal_that_drops_or_adds_a_segment_is_damage() -> TestResult {
+        let fixture = Fixture::new()?;
+        let session = fixture.session().await?;
+        operation(&fixture, &session, Ending::StopAfterFirstPart).await?;
+        let store = fixture.store()?;
+        let now = unix_seconds()?;
+        let stopped = newest(&fixture, &session)?;
+        assert_eq!(stopped.state(), RevisionState::Stopped);
+        let until = stopped.published_until().ok_or("no until")?;
+        check_revision(&store, &session, &stopped, now)?;
+
+        let mut dropped = parts_of(&stopped)?;
+        assert!(dropped.segments.pop().is_some(), "nothing was published");
+        let dropped = vsift_domain::TranscriptRevision::new_stopped(dropped, until)?;
+        assert_eq!(
+            check_revision(&store, &session, &dropped, now),
+            Err("stopped-differs-from-the-reference-cut")
+        );
+
+        let reference = Reference::of(&store, &session, &stopped, now)?;
+        let unpublished = reference
+            .sealed
+            .segments()
+            .get(stopped.segments().len())
+            .ok_or("nothing after what was published")?
+            .clone();
+        // A stopped revision's own segments start no later than the time it
+        // stopped at (the domain refuses any other), so the forgery that adds
+        // what was never published also claims to have stopped at it.
+        let claimed = unpublished.range().start();
+        assert!(claimed >= until);
+        let mut added = parts_of(&stopped)?;
+        added.segments.push(unpublished);
+        added.provenance = reaching_one_more_chunk(&stopped, &reference.sealed)?;
+        let added = vsift_domain::TranscriptRevision::new_stopped(added, claimed)?;
+        assert_eq!(
+            check_revision(&store, &session, &added, now),
+            Err("stopped-differs-from-the-reference-cut")
+        );
+        Ok(())
+    }
+
+    /// The provenance of `stopped` with one more chunk reached, as the
+    /// reference run recognised it: a segment of that chunk may then be held.
+    fn reaching_one_more_chunk(
+        stopped: &vsift_domain::TranscriptRevision,
+        reference: &vsift_domain::TranscriptRevision,
+    ) -> Built<vsift_domain::TranscriptProvenance> {
+        use vsift_domain::{
+            AsrChunkOutcome, AsrChunkRecord, AsrRun, AsrRunParts, TranscriptProvenance,
+        };
+
+        let (TranscriptProvenance::LocalAsr(run), TranscriptProvenance::LocalAsr(heard)) =
+            (stopped.provenance(), reference.provenance())
+        else {
+            return Err("not recognised".into());
+        };
+        let reached = run
+            .chunks()
+            .iter()
+            .filter(|record| !matches!(record.outcome(), AsrChunkOutcome::NotReached))
+            .count()
+            + 1;
+        let chunks = heard
+            .chunks()
+            .iter()
+            .enumerate()
+            .map(|(index, record)| {
+                if index < reached {
+                    record.clone()
+                } else {
+                    AsrChunkRecord::new(record.chunk().clone(), AsrChunkOutcome::NotReached)
+                }
+            })
+            .collect();
+        Ok(TranscriptProvenance::LocalAsr(AsrRun::new(AsrRunParts {
+            provider: run.provider().clone(),
+            model: run.model().clone(),
+            decoding: run.decoding(),
+            plan: run.plan(),
+            threads: run.threads(),
+            audio_stream: run.audio_stream(),
+            chunks,
+        })?))
+    }
+
+    /// RV-1 finding 6: a sealed first revision whose run lost its last chunk,
+    /// consistent in itself (a seal-only run of its own shorter range makes it
+    /// byte for byte), is damage: the reference covers the range the workload
+    /// asked for, the whole stand-in source.
+    #[tokio::test]
+    async fn a_revision_that_lost_its_last_chunk_is_damage() -> TestResult {
+        let fixture = Fixture::new()?;
+        let session = fixture.session().await?;
+        operation(&fixture, &session, Ending::Seal).await?;
+        let store = fixture.store()?;
+        let now = unix_seconds()?;
+        let sealed = newest(&fixture, &session)?;
+        assert_eq!(sealed.state(), RevisionState::Sealed);
+        assert!(sealed.supersedes().is_none());
+        check_revision(&store, &session, &sealed, now)?;
+
+        let vsift_domain::TranscriptProvenance::LocalAsr(run) = sealed.provenance() else {
+            return Err("not recognised".into());
+        };
+        let chunks = run.chunks();
+        let before_last = chunks
+            .len()
+            .checked_sub(2)
+            .and_then(|index| chunks.get(index))
+            .ok_or("too few chunks")?;
+        let shorter = vsift_domain::TimeRange::new(
+            sealed.source_segment().range().start(),
+            before_last.chunk().window().end(),
+        )?;
+        let lost = Reference::over(
+            &session,
+            sealed.source_id(),
+            sealed.source_segment().clone(),
+            std::num::NonZeroU32::new(sealed.number()).ok_or("number")?,
+            None,
+            shorter,
+        )?
+        .sealed;
+        assert_eq!(
+            chunk_count(&lost)? + 1,
+            chunks.len(),
+            "the forged run did not lose one chunk"
+        );
+        assert_eq!(
+            check_revision(&store, &session, &lost, now),
+            Err("identity-differs")
+        );
+        Ok(())
+    }
+
+    /// How many chunks a recognised revision's run holds.
+    fn chunk_count(revision: &vsift_domain::TranscriptRevision) -> Built<usize> {
+        match revision.provenance() {
+            vsift_domain::TranscriptProvenance::LocalAsr(run) => Ok(run.chunks().len()),
+            vsift_domain::TranscriptProvenance::Imported { .. } => Err("not recognised".into()),
+        }
     }
 
     /// The verifier's seal-only run also makes what the workload's ordinary
