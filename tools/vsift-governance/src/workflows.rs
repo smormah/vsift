@@ -148,7 +148,12 @@ pub(crate) fn validate_workflows(messages: &mut Vec<String>, root: &Path) {
     for name in names {
         let relative = format!("{WORKFLOW_DIRECTORY}/{name}");
         match fs::read_to_string(root.join(&relative)) {
-            Ok(text) => check_workflow(messages, &relative, &text),
+            Ok(text) => {
+                check_workflow(messages, &relative, &text);
+                if relative == ENGINES_WORKFLOW {
+                    engines::check_matrix_against_recipes(messages, root, &text);
+                }
+            }
             Err(error) => messages.push(format!("{relative} could not be read: {error}")),
         }
     }

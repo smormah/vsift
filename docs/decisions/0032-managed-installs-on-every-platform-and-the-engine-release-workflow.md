@@ -183,8 +183,8 @@ group-generic `optional_groups` and `optional_components`).
   the chosen engine's leg), `plan`, `attest` and `publish`. Recipes and build scripts are in `tools/engines/`; each
   build fetches the pinned commit, builds twice, compares byte for byte and packages deterministically with an
   inventory the catalogue pins from.
-- **Rule 10 of the workflow lint** (`workflows/engines.rs`) holds it to the release workflow's standard, with 28
-  broken copies of the real file each refused; rules 4 and 9 now name the engine workflow too (its `attest` job is
+- **Rule 10 of the workflow lint** (`workflows/engines.rs`) holds it to the release workflow's standard, with 55
+  broken copies of the real file each refused (28 at first, 27 added by the review of 2026-10-22 below); rules 4 and 9 now name the engine workflow too (its `attest` job is
   the only other one with `id-token`, and it has no LOKI job).
 - **The OCR runner** (the coordinator's request of 2026-10-21) is a fourth engine with three targets: VSift's own
   crate built as VSift is, its folder assembled by the OCR story's stage tool (the runtime library and the models
@@ -195,3 +195,30 @@ group-generic `optional_groups` and `optional_components`).
   39607212953, found the macOS FFprobe builds different until `ZERO_AR_DATE=1`).
 - **Nothing is published by this slice.** The first publishes need the maintainer's tag ruleset for the engine tags,
   the engine tag patterns in the `release` environment's allowed refs, a tag and an approval each.
+
+## Review note, 2026-10-22 (RV-3 on the engine release workflow)
+
+A read-only review found the workflow sound and the lint short of what the maintainer is asked to rely on. Changes
+in the same pull request; the design is as above.
+
+- **The lint holds the tag guard (finding 16).** The guard's checks (the ref is the engine's tag and never `v*`, the
+  tag still names the run's commit, the commit is on `main`, no release, no draft) had been shell text only, so
+  deleting any left every rule green. Each is now a required whole command in the guard's script, in front of the
+  line that sets `mode=publish`; the accepted engine names are exactly the dispatch input's options and none starts
+  with `v`; `publish` repeats the ref, tag and draft checks after the approval; and `ENGINE_TAG`, `GIT_REF`,
+  `SOURCE_COMMIT` and `REPOSITORY` are bound only to the guard's output or the `github` context fields, never
+  `github.ref_name`. Fifteen broken copies pin it.
+- **A draft is a release (10).** GitHub answers 404 to a tag lookup for a draft, so the guard lists the releases as
+  well and refuses with "a draft exists; delete it first"; `publish` checks again with its write token. Whether a
+  read-only job token lists drafts is not something the review could confirm, which is why the second check
+  exists.
+- **The plan names the targets (12).** The guard reads the recipe's `TARGETS` into an output; `plan` fails unless
+  exactly those targets' sums files are present; and the lint compares the build matrix with the recipes.
+- **Spellings (13, 14).** `gh` with global flags before `release`, `-XDELETE`, `-fkey=value` and `-Fkey=value` are
+  refused; `secrets` is refused as a word in any form.
+- **One publish group for each engine tag (15):** `engines-publish-${{ needs.guard.outputs.tag }}`, still never
+  cancelled, so a queued publish of one engine is not replaced by another's.
+- **Accepted, not changed (11).** `attest` signs the planned files before the maintainer's approval at `publish`. A
+  rejected publish leaves a provenance statement for files that were never released: it says what was built, not
+  that it was released, and the catalogue pins only a release's assets. Moving `attest` into the `release`
+  environment would mean two approvals for each publish, so it stays where it is.
