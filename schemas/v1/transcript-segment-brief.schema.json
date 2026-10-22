@@ -35,6 +35,10 @@
         "revision_id": { "type": "string", "pattern": "^trv_[a-z0-9]{16,64}$" },
         "segment_id": { "type": "string", "pattern": "^tsg_[a-z0-9]{16,64}$" }
       }
+    },
+    "speaker_label": {
+      "description": "The full segment's speaker_label reduced to its label and how it reads, present only when the revision has speaker labels (0.3.0).",
+      "$ref": "speakers.schema.json#/$defs/segment_speaker_label_brief"
     }
   }
 }

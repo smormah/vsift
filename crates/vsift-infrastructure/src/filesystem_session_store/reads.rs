@@ -1,4 +1,5 @@
-//! Verified reads of committed transcript, visual-index and evidence records and the source copy.
+//! Verified reads of committed transcript, visual-index, evidence and speaker records and the
+//! source copy.
 
 use std::{io::Read, path::PathBuf};
 
@@ -6,14 +7,14 @@ use cap_fs_ext::DirExt;
 use cap_std::fs::Dir;
 use vsift_application::SessionStorageError;
 use vsift_domain::{
-    EvidenceRecord, SessionId, SessionPhase, SourceId, TranscriptRevision, TranscriptRevisionId,
-    VisualIndex,
+    EvidenceRecord, SessionId, SessionPhase, SourceId, SpeakerRecordParts, TranscriptRevision,
+    TranscriptRevisionId, VisualIndex,
 };
 
 use super::map_committed_io;
 use super::{
     ARTIFACTS_DIRECTORY, CommittedSource, FilesystemSessionStore, SESSIONS_DIRECTORY,
-    SessionReadHold, SessionStatus, StoredArtifact, StoredArtifactKind,
+    SessionReadHold, SessionStatus, SpeakerRecordRead, StoredArtifact, StoredArtifactKind,
     chain::read_committed_manifest, map_storage_io, open_regular_file, sha256_hex,
 };
 use crate::VerifiedSourceIdentity;
@@ -218,6 +219,69 @@ impl FilesystemSessionStore {
         Ok(Some((index, status)))
     }
 
+    /// The newest speaker record of an open session that labels `revision_id`, with
+    /// how many speaker records the session holds and its published status.
+    ///
+    /// Records are read from the newest back; each is checked against the committed
+    /// manifest's size and SHA-256 before any byte is interpreted, then decoded
+    /// strictly ([`crate::decode_speaker_record`]) and must describe the session's
+    /// source. The labels are not read: the caller derives them from the record and
+    /// its revision. `revision_id` of `None` takes the newest record of any revision.
+    ///
+    /// # Errors
+    ///
+    /// Closed or expired sessions conflict; a changed, oversized or invalid record is
+    /// an integrity failure, and a newer record version is unsupported.
+    pub fn read_speaker_record(
+        &self,
+        session_id: &SessionId,
+        revision_id: Option<&TranscriptRevisionId>,
+        now_unix_seconds: u64,
+    ) -> Result<SpeakerRecordRead, SessionStorageError> {
+        let _hold = self.acquire_read(session_id)?;
+        let sessions = self
+            .root
+            .open_dir_nofollow(SESSIONS_DIRECTORY)
+            .map_err(map_storage_io)?;
+        let session = sessions
+            .open_dir_nofollow(session_id.as_str())
+            .map_err(map_committed_io)?;
+        let committed = read_committed_manifest(&session, session_id, self.chain_check())?;
+        let record = committed
+            .manifest
+            .lifecycle
+            .ok_or(SessionStorageError::StateConflict)?;
+        let status = record.to_status(session_id.clone(), committed.manifest.generation)?;
+        if status.phase() != SessionPhase::Open || status.lifetime().expired(now_unix_seconds) {
+            return Err(SessionStorageError::StateConflict);
+        }
+        let speaker_artifacts: Vec<&StoredArtifact> = record
+            .artifacts
+            .iter()
+            .filter(|artifact| artifact.kind == StoredArtifactKind::SpeakerRecord)
+            .collect();
+        let count = speaker_artifacts.len();
+        let mut found = None;
+        if !speaker_artifacts.is_empty() {
+            let artifacts = session
+                .open_dir_nofollow(ARTIFACTS_DIRECTORY)
+                .map_err(map_committed_io)?;
+            for artifact in speaker_artifacts.iter().rev() {
+                let parts =
+                    read_speaker_artifact(&artifacts, artifact, session_id, status.source_id())?;
+                if revision_id.is_none_or(|wanted| &parts.revision_id == wanted) {
+                    found = Some(parts);
+                    break;
+                }
+            }
+        }
+        Ok(SpeakerRecordRead {
+            record: found,
+            records: count,
+            status,
+        })
+    }
+
     /// Opens the committed private source copy of an open session under a
     /// shared lifetime hold, with the identity its lifecycle record gives it.
     pub(crate) fn committed_source(
@@ -359,6 +423,34 @@ pub(super) fn read_visual_index_artifact(
         return Err(SessionStorageError::IntegrityFailure);
     }
     Ok(index)
+}
+
+/// Reads, verifies and decodes one speaker record artifact (ADR 0031).
+///
+/// As for the other records, the recorded size and digest are checked before any
+/// byte is interpreted; the record is then decoded strictly, must belong to
+/// `session_id` and must describe `source_id`.
+pub(super) fn read_speaker_artifact(
+    directory: &Dir,
+    artifact: &StoredArtifact,
+    session_id: &SessionId,
+    source_id: &SourceId,
+) -> Result<SpeakerRecordParts, SessionStorageError> {
+    let file = open_regular_file(directory, &artifact.name, false).map_err(map_committed_io)?;
+    let mut bytes = Vec::new();
+    file.take(artifact.bytes.saturating_add(1))
+        .read_to_end(&mut bytes)
+        .map_err(map_storage_io)?;
+    if u64::try_from(bytes.len()).ok() != Some(artifact.bytes)
+        || sha256_hex(&bytes) != artifact.sha256
+    {
+        return Err(SessionStorageError::IntegrityFailure);
+    }
+    let parts = crate::decode_speaker_record(&bytes, session_id)?;
+    if &parts.source_id != source_id {
+        return Err(SessionStorageError::IntegrityFailure);
+    }
+    Ok(parts)
 }
 
 /// Reads, verifies and decodes one evidence record artifact.

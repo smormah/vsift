@@ -32,6 +32,10 @@
     "transcript_coverage": {
       "description": "The coverage of the whole requested range, the same on every page of one request, as search reports it: always present since 0.2.1, but not listed in required, because answers of the published 0.1.0 (kept valid against this schema by the compatibility test) have none.",
       "$ref": "search-data.schema.json#/$defs/transcript_coverage"
+    },
+    "speakers": {
+      "description": "The revision's newest speaker record (0.3.0, ADR 0031), present only when the revision has one: see speakers.schema.json. Each item then carries its speaker_label.",
+      "$ref": "speakers.schema.json#/$defs/speakers"
     }
   }
 }

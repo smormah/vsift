@@ -45,21 +45,22 @@ use vsift::{
 use vsift_contract::{
     ADMISSION_BUSY_REMEDIATION, ADMISSION_CAPACITY_REMEDIATION, ARTIFACT_DIRECTORY_REMEDIATION,
     CANDIDATE_CURSOR_REMEDIATION, CommandName, ConfiguredModelResponse,
-    ConfiguredSelectionResponse, DURABILITY_UNAVAILABLE_REMEDIATION, EvidenceStream,
-    IDEMPOTENCY_CONFLICT_REMEDIATION, ISOLATION_UNAVAILABLE_REMEDIATION, JOB_BUSY_REMEDIATION,
-    JOB_CANCELLED_REMEDIATION, JOB_INTERRUPTED_REMEDIATION, JOB_NOT_RESUMABLE_REMEDIATION,
-    JOB_SESSION_NOT_OPEN_REMEDIATION, LOCAL_ASR_MODEL_REMEDIATION, LOCAL_ASR_TOOLS_REMEDIATION,
-    MANAGED_INSTALL_BUSY_REMEDIATION, MANAGED_STORAGE_REMEDIATION, MANAGED_UNAVAILABLE_REMEDIATION,
-    MEDIA_TOOLS_FOR_TRANSCRIPT_REMEDIATION, NO_AUDIO_STREAM_REMEDIATION, NO_TRANSCRIPT_REMEDIATION,
-    NO_VIDEO_STREAM_REMEDIATION, OperationResponse, SESSION_NOT_PUBLISHED_REMEDIATION,
-    SESSION_ROOT_NAME_REMEDIATION, SESSION_ROOT_OWN_ACCESS_REMEDIATION,
-    SOURCE_ACCESS_DENIED_REMEDIATION, SOURCE_COPY_TOO_SLOW_REMEDIATION,
-    SOURCE_COPY_WOULD_BE_TOO_SLOW_REMEDIATION, SOURCE_IS_FOLDER_REMEDIATION,
-    SOURCE_IS_LINK_REMEDIATION, SOURCE_NO_ROOM_REMEDIATION, SOURCE_NOT_FOUND_REMEDIATION,
-    SOURCE_SPECIAL_FILE_REMEDIATION, STALE_PLAN_REMEDIATION, SUPERSEDED_REMEDIATION,
-    TRANSCRIPTION_RUNNING_REMEDIATION, TerminalEventResponse, UNKNOWN_JOB_REMEDIATION,
-    UNKNOWN_REVISION_REMEDIATION, UNOWNED_SESSION_ROOT_REMEDIATION, UNPINNED_MODEL_REMEDIATION,
-    VISUAL_TOOLS_REMEDIATION, WORKSPACE_NOT_DURABLE_REMEDIATION,
+    ConfiguredSelectionResponse, DIARIZATION_RANGE_REMEDIATION, DIARIZER_REMEDIATION,
+    DURABILITY_UNAVAILABLE_REMEDIATION, EvidenceStream, IDEMPOTENCY_CONFLICT_REMEDIATION,
+    ISOLATION_UNAVAILABLE_REMEDIATION, JOB_BUSY_REMEDIATION, JOB_CANCELLED_REMEDIATION,
+    JOB_INTERRUPTED_REMEDIATION, JOB_NOT_RESUMABLE_REMEDIATION, JOB_SESSION_NOT_OPEN_REMEDIATION,
+    LOCAL_ASR_MODEL_REMEDIATION, LOCAL_ASR_TOOLS_REMEDIATION, MANAGED_INSTALL_BUSY_REMEDIATION,
+    MANAGED_STORAGE_REMEDIATION, MANAGED_UNAVAILABLE_REMEDIATION,
+    MEDIA_TOOLS_FOR_TRANSCRIPT_REMEDIATION, NO_AUDIO_STREAM_REMEDIATION,
+    NO_SPEAKER_RECORD_REMEDIATION, NO_TRANSCRIPT_REMEDIATION, NO_VIDEO_STREAM_REMEDIATION,
+    OperationResponse, SESSION_NOT_PUBLISHED_REMEDIATION, SESSION_ROOT_NAME_REMEDIATION,
+    SESSION_ROOT_OWN_ACCESS_REMEDIATION, SOURCE_ACCESS_DENIED_REMEDIATION,
+    SOURCE_COPY_TOO_SLOW_REMEDIATION, SOURCE_COPY_WOULD_BE_TOO_SLOW_REMEDIATION,
+    SOURCE_IS_FOLDER_REMEDIATION, SOURCE_IS_LINK_REMEDIATION, SOURCE_NO_ROOM_REMEDIATION,
+    SOURCE_NOT_FOUND_REMEDIATION, SOURCE_SPECIAL_FILE_REMEDIATION, STALE_PLAN_REMEDIATION,
+    SUPERSEDED_REMEDIATION, TRANSCRIPTION_RUNNING_REMEDIATION, TerminalEventResponse,
+    UNKNOWN_JOB_REMEDIATION, UNKNOWN_REVISION_REMEDIATION, UNOWNED_SESSION_ROOT_REMEDIATION,
+    UNPINNED_MODEL_REMEDIATION, VISUAL_TOOLS_REMEDIATION, WORKSPACE_NOT_DURABLE_REMEDIATION,
     WORKSPACE_POLICY_MISMATCH_REMEDIATION, WORKSPACE_ROOT_REMEDIATION, local_asr_failure_summary,
     local_asr_verification_summary, managed_lifecycle_remediation, media_tool_verification_summary,
     non_private_folder_summary, search_query_rejection_summary, transcript_rejection_summary,
@@ -104,7 +105,10 @@ const fn is_long_running(command: &Command) -> bool {
         | Command::Crop(_)
         | Command::Audio(_) => true,
         Command::Transcript(arguments) => {
-            matches!(arguments.command, TranscriptCommand::Retranscribe(_))
+            matches!(
+                arguments.command,
+                TranscriptCommand::Retranscribe(_) | TranscriptCommand::Speakers(_)
+            )
         }
         Command::Job(arguments) => {
             matches!(
@@ -428,6 +432,15 @@ where
                     .await;
                     write_session_result(&mut writer, mode, operation, result)
                 }
+                TranscriptCommand::Speakers(arguments) => {
+                    let result =
+                        session::transcript_speakers(&engine, arguments, &cancellation).await;
+                    write_session_result(&mut writer, mode, operation, result)
+                }
+                TranscriptCommand::NameSpeaker(arguments) => {
+                    let result = session::transcript_name_speaker(&engine, arguments);
+                    write_session_result(&mut writer, mode, operation, result)
+                }
             }
         }
         Command::Session(arguments) => {
@@ -741,6 +754,11 @@ fn local_asr_remediation(error: &EngineError) -> Option<String> {
         EngineError::NoAudioStream => Some(NO_AUDIO_STREAM_REMEDIATION.to_owned()),
         EngineError::TranscriptUnavailable => Some(NO_TRANSCRIPT_REMEDIATION.to_owned()),
         EngineError::TranscriptRevisionNotFound => Some(UNKNOWN_REVISION_REMEDIATION.to_owned()),
+        EngineError::DiarizerUnavailable => Some(DIARIZER_REMEDIATION.to_owned()),
+        EngineError::SpeakerRecordNotFound => Some(NO_SPEAKER_RECORD_REMEDIATION.to_owned()),
+        EngineError::SpeakerLabels(vsift::SpeakerLabelError::RangeTooLong { .. }) => {
+            Some(DIARIZATION_RANGE_REMEDIATION.to_owned())
+        }
         EngineError::VisualToolUnavailable(_) => Some(VISUAL_TOOLS_REMEDIATION.to_owned()),
         EngineError::NoVideoStream => Some(NO_VIDEO_STREAM_REMEDIATION.to_owned()),
         EngineError::CandidateCursorWithoutIndex => Some(CANDIDATE_CURSOR_REMEDIATION.to_owned()),

@@ -216,6 +216,10 @@ Each entry has these fields:
 | [L-199](#l-199) | Words the recogniser writes over noise alone are reported as speech, so a search can find text nobody said | accuracy/ASR | medium | cycle 3 | [#150](https://github.com/smormah/vsift/issues/150) | deferred |
 | [L-200](#l-200) | The same VSift, whisper.cpp, model and audio can give a slightly different transcript on another CPU, so two hosted runs, and two machines, are comparable only on the same CPU model | process/CI | low | unscheduled | [#486](https://github.com/smormah/vsift/issues/486) | monitoring |
 | [L-201](#l-201) | A recogniser repetition inside one chunk could hide what the next chunk heard at a seam; since `0.2.3` an exact repeat of the segment before claims no time, and other loops are left | accuracy/ASR | low | unscheduled | [#485](https://github.com/smormah/vsift/issues/485) | monitoring |
+| [L-205](#l-205) | One diarization hears at most two hours (it holds the whole stretch in memory, about 1 GiB an hour); a longer recording is labelled a part at a time, and labels of two parts are not linked | performance | medium | `0.3.0` (speaker labels) | [#108](https://github.com/smormah/vsift/issues/108) | open |
+| [L-206](#l-206) | Speaker-label accuracy rests on synthetic voices and two real recordings whose references were read from their transcripts, not heard | accuracy/ASR | medium | `0.3.0` (speaker labels) | [#108](https://github.com/smormah/vsift/issues/108) | open |
+| [L-207](#l-207) | Two similar voices are heard as one speaker, and the labels then name that one speaker with confidence for both | accuracy/ASR | medium | `0.3.0` (speaker labels) | [#108](https://github.com/smormah/vsift/issues/108) | open |
+| [L-218](#l-218) | A session or bundle that holds a speaker record is read as damaged by releases before `0.3.0`: the whole session is refused, not only its labels | integrity/durability | low | unscheduled | none | accepted residual |
 
 Counts: 1 high, 50 medium, 111 low (162 entries).
 
@@ -5084,6 +5088,55 @@ that week.**
 - **Mitigation:** every segment cites its time, so an agent can take the WAV clip of it or a frame and check; confidence stays `provider_uncalibrated`.
 - **Decision (the maintainer, 2026-10-20):** decided in cycle 3, after the real-media set (#363) has measured it on real recordings; the choice then is whether to filter segments over non-speech (a voice-activity check or whisper.cpp's no-speech probability) or to mark them. Until then the noise-only figure is reported on every `P07 local ASR` run, not gated.
 - **Owner:** cycle 3. **Issue:** [#150](https://github.com/smormah/vsift/issues/150). **Status:** deferred. **Review:** rescheduled to cycle 3 (2026-10-20, by the maintainer: after the real-media set has measured it).
+
+### L-205
+
+**One diarization hears at most two hours, because the engine holds the whole stretch in memory; a longer recording is labelled a part at a time, and the labels of two parts are not linked (`0.3.0`, speaker labels, 2026-10-21).**
+
+- **What:** the engine diarizes the stretch it is given at once: it keeps its audio and every speaker embedding in memory until it clusters. Measured on a hosted Ubuntu runner (16 GB, two threads per model) on real speech repeated to length (run 39567789710): with the automatic count 620 MiB at 30 minutes, 1.0 GiB at one hour, 2.0 GiB at two and 3.1 GiB at three; with a given count about half. Time grows linearly, at about a twelfth of real time. The maintainer decided on 2026-10-21 on a duration cap with a typed refusal, about two hours if an 8 GB machine allows; it is two hours (`MAX_DIARIZATION_MICROS`). A longer range is refused with `RESOURCE_LIMIT` and a remediation naming `--from` and `--to`; segments outside the range heard are reported as `not_diarized`. `S1` of one part need not be `S1` of another.
+- **Evidence:** [`speaker-labels-evaluation.md`](speaker-labels-evaluation.md) section 6.4; `a_range_longer_than_the_cap_is_refused_with_the_cap` and `segments_outside_the_diarized_audio_are_not_diarized` (the application's and the domain's `speakers` tests).
+- **Impact: medium by the rubric:** a meeting longer than two hours is common enough, and its two halves get unlinked labels.
+- **Why:** clustering compares every embedding of the stretch with every other, so the engine is built to see the whole stretch; linking labels across windows needs embeddings VSift does not keep (no voiceprints, ADR 0031).
+- **Mitigation:** label the part that matters; name the labels of each part with `transcript name-speaker`.
+- **Next step:** measure on a machine with 8 GB of memory (LOKI or a hosted runner with a memory limit) that two hours fit beside a desktop's own use; windowed diarization with linked labels is a later design question.
+- **Owner:** `0.3.0` (speaker labels). **Issue:** [#108](https://github.com/smormah/vsift/issues/108). **Status:** open. **Review:** pending.
+
+### L-206
+
+**Speaker-label accuracy rests on synthetic voices and two real recordings whose references were read from their transcripts, not heard (`0.3.0`, speaker labels, 2026-10-21).**
+
+- **What:** the evaluation's exact truth comes from five Kokoro conversations (one to three synthetic voices, 45 to 75 s); the only real recording with a reference is RM06 (two men on a space-to-ground link, and a controller's closing nine seconds), labelled by reading who asks and who answers, at segment precision, with two stretches left unscored. No accented, crosstalk-heavy, many-speaker or mixed-gender real recording has a reference, and RM09's speaker count is unknown.
+- **Evidence:** [`speaker-labels-evaluation.md`](speaker-labels-evaluation.md) sections 5 and 6.2; `tools/p16_speakers_rm06_reference.json` and `tools/p16_speakers_rm11_reference.json`; the hosted end-to-end test `p16_speakers_e2e` on the synthetic two-voice call. RM11 (NASA, 2026-10-21: a controller, an interviewer and an astronaut, 18:36, read from run 39595991957): with the recommended engine and the automatic count, 2.1% of 145 scored segments got the wrong label.
+- **Impact: medium by the rubric:** the accuracy statement leans on this evidence, and real meetings are more varied than it.
+- **Why:** the real-media set was chosen for transcription and screens; RM06 and RM11 are its only conversations of a few people, both NASA space-to-ground links.
+- **Mitigation:** the labelling marks a segment "no confident speaker" when no one voice holds it, and every label is provisional.
+- **Next step (the maintainer's decision of 2026-10-21):** the maintainer listens to RM06 and RM11 to confirm their references with [the listening sheet](speaker-listening-sheet.md) (twelve spot checks, about ten minutes; RM11 joined the test-media release on 2026-10-21 and was scored the same day); a recording that is not a space-to-ground link (a meeting in one room, crosstalk) is still missing.
+- **Owner:** `0.3.0` (speaker labels). **Issue:** [#108](https://github.com/smormah/vsift/issues/108). **Status:** open. **Review:** pending.
+
+### L-207
+
+**Two similar voices are heard as one speaker, and the labels then name that one speaker with confidence for both (`0.3.0`, speaker labels, 2026-10-21).**
+
+- **What:** on the synthetic call `SPK2-FF` (two similar American female voices) every engine evaluated found one speaker (or two that do not follow the voices), and the labelling rule then gave 100% of segments a speaker with 28.6% of them wrong: a merge is invisible to a rule that only checks that one label holds each segment. On RM06 the automatic count also added short extra labels (five found for three voices).
+- **Evidence:** [`speaker-labels-evaluation.md`](speaker-labels-evaluation.md) sections 6.1 and 6.2; runs 39518020351, 39527538316 and 39567789710. On RM11 (run 39595991957), told three speakers, TitaNet found two and put the controller's words under the interviewer's label (6.9% of segments wrong): two voices on the ground side of one link merged, and the given count did not prevent it; the automatic count kept them apart (2.1% wrong).
+- **Impact: medium by the rubric:** an agent could attribute one person's words to another in a normal recording (two colleagues with similar voices).
+- **Why:** the embeddings of two similar voices are close enough to cluster together; no engine's confidence separates that case.
+- **Mitigation (the maintainer's decision of 2026-10-21):** every label is presented as provisional ("S2, by voice"); the user's verified names are the only identity; the fixed statement every answer with labels carries (`speakers.statement`, `cli-v1.md`, the guide's speaker-labels page) says that two similar voices can share one label; when a given count is not kept, the `speakers` block says so (`count_shortfall`, found M of the N requested, with the automatic count as the remediation; added 2026-10-21 after RM11). A user who knows the count can give it (it does not cure this case).
+- **Next step:** watch the real recordings of L-206 for merges; a per-label confidence an answer could show is a later design question.
+- **Owner:** `0.3.0` (speaker labels). **Issue:** [#108](https://github.com/smormah/vsift/issues/108). **Status:** open. **Review:** pending.
+
+### L-218
+
+**A session or bundle that holds a speaker record is read as damaged (`INTEGRITY_FAILURE`) by releases before `0.3.0`, and the whole session is refused, not only its labels (`0.3.0`, speaker labels, 2026-10-21).**
+
+- **What:** `transcript speakers` stores an immutable `speaker_record` artifact, a new stored kind. A release before `0.3.0` reads the session's own record strictly, and an artifact kind it does not know makes that record unreadable: after a rollback, or with a mixed install, every command on the session fails with `INTEGRITY_FAILURE`, and `bundle validate` refuses a bundle exported from it. A session with no speaker labels is unchanged and reads as before. Nothing already written is rewritten.
+- **What a user sees:** `INTEGRITY_FAILURE` on a session nothing is wrong with, after opening it with an older VSift.
+- **Evidence:** `crates/vsift-infrastructure/src/filesystem_session_store/mod.rs` (`StoredArtifactKind`, read strictly), `crates/vsift-infrastructure/src/speaker_record.rs`, the `CHANGELOG.md` entry for speaker labels, [ADR 0031](../decisions/0031-speaker-labels.md).
+- **Impact: low. The rubric line applied is the third one:** it needs a rollback or a mixed install, the workaround is the newer version or a new session, and desktop investigations are disposable by default.
+- **Why:** labels need a stored record (they are derived from it on every read, and names are added by new records); the JSON contract is additive, and older releases fail closed on what they do not know, by design, as with every new stored kind (L-160's kind).
+- **Mitigation:** use `0.3.0` or later, or discard the session; a session that never ran `transcript speakers` is not affected.
+- **Next step:** none planned; reading unknown stored kinds leniently would relax the strictness decided for integrity, which is the maintainer's decision and not a task.
+- **Owner:** unscheduled. **Issue:** none, on purpose (accepted by the maintainer on 2026-10-21, relayed by the supervisor). **Status:** accepted residual. **Review:** pending.
 
 ## Review workflow
 

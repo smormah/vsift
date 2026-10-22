@@ -62,6 +62,7 @@ The `error.code` of a failed result is one of these (the schema's own list). Wha
 - [setup-remove.schema.json](#setup-removeschemajson): VSift setup remove data v1
 - [setup-repair.schema.json](#setup-repairschemajson): VSift setup repair data v1
 - [setup-rollback.schema.json](#setup-rollbackschemajson): VSift setup rollback data v1
+- [speakers.schema.json](#speakersschemajson): VSift speaker labels v1
 - [terminal-event.schema.json](#terminal-eventschemajson): VSift JSONL terminal event v1
 - [transcript-get-brief-data.schema.json](#transcript-get-brief-dataschemajson): VSift transcript.get data, brief view v1
 - [transcript-get-data.schema.json](#transcript-get-dataschemajson): VSift transcript.get data v1
@@ -70,6 +71,7 @@ The `error.code` of a failed result is one of these (the schema's own list). Wha
 - [transcript-revision.schema.json](#transcript-revisionschemajson): VSift transcript revision summary v1
 - [transcript-segment-brief.schema.json](#transcript-segment-briefschemajson): VSift transcript segment, brief view v1
 - [transcript-segment.schema.json](#transcript-segmentschemajson): VSift transcript segment evidence record v1
+- [transcript-speakers-data.schema.json](#transcript-speakers-dataschemajson): VSift transcript.speakers and transcript.name-speaker data v1
 - [visual-candidate-brief.schema.json](#visual-candidate-briefschemajson): VSift visual candidate, brief view v1
 - [visual-candidate.schema.json](#visual-candidateschemajson): VSift visual candidate v1
 - [workspace-data.schema.json](#workspace-dataschemajson): VSift session.init-workspace data v1
@@ -1042,6 +1044,7 @@ The data member of a complete or partial search result asked for with --view bri
 | `revision` | object, see [transcript-revision.schema.json](#transcript-revisionschemajson) | yes |  |
 | `query` | object | yes |  |
 | `query.terms` | array of string | yes | The normalised query words, in query order: lowercase letters and digits, with a decimal point only between digits.; 1 to 16 items; each: 1 to 1024 characters |
+| `query.speaker` | string | no | The speaker label the search was filtered by (search --speaker, 0.3.0), present only for a filtered search: only segments with that label were searched, and segments with no confident speaker never are.; pattern `^S[1-9][0-9]?$` |
 | `range` | object or null | yes |  |
 | `range.from_us` | integer | yes | at least 0 |
 | `range.to_us` | integer | yes | at least 1 |
@@ -1066,6 +1069,48 @@ The data member of a complete or partial search result asked for with --view bri
 | `transcript_coverage.no_speech_ranges[].from_us` | integer | yes | at least 0 |
 | `transcript_coverage.no_speech_ranges[].to_us` | integer | yes | at least 1 |
 | `transcript_coverage.ranges_truncated` | boolean | yes | True when a range list held more than 100 ranges and only its first 100, in start order, are listed. |
+| `speakers` | object | no | The revision's newest speaker record (0.3.0, ADR 0031), present only when the revision has one: see speakers.schema.json. Each item then carries its speaker_label. |
+| `speakers.record_id` | string | yes | pattern `^spk_[a-z0-9]{16,64}$` |
+| `speakers.record_number` | integer | yes | 1-based number of the record among the session's speaker records: each labelling and each recorded or cleared name commits the next one.; at least 1 |
+| `speakers.revision_id` | string | yes | pattern `^trv_[a-z0-9]{16,64}$` |
+| `speakers.labelling` | "speaker-labels-v1" | yes | speaker-labels-v1: a segment gets the label that holds at least 70% of the speech the engine heard inside it, when that speech covers at least half of the segment; otherwise it has no confident speaker. |
+| `speakers.precision` | "segment" | yes |  |
+| `speakers.given_speaker_count` | integer or null | yes | The speaker count the user gave, passed to the engine as given; null when the engine counted.; 1 to 16 |
+| `speakers.count_shortfall` | object | no | Present only when the user gave a speaker count and the engine kept fewer voices apart: voices may be merged under one label. remediation points at the automatic count. |
+| `speakers.count_shortfall.requested_speaker_count` | integer | yes | 2 to 16 |
+| `speakers.count_shortfall.found_speaker_count` | integer | yes | 1 to 15 |
+| `speakers.count_shortfall.warning` | string | yes | 1 to 512 characters |
+| `speakers.count_shortfall.remediation` | string | yes | 1 to 512 characters |
+| `speakers.diarized_range` | object | yes | The source time the engine heard: the whole source, or the range asked for (at most the duration cap). |
+| `speakers.diarized_range.from_us` | integer | yes | at least 0 |
+| `speakers.diarized_range.to_us` | integer | yes | at least 1 |
+| `speakers.engine` | object | yes |  |
+| `speakers.engine.name` | "sherpa-onnx" | yes |  |
+| `speakers.engine.executable_sha256` | string | yes | pattern `^[0-9a-f]{64}$` |
+| `speakers.engine.segmentation_model_sha256` | string | yes | pattern `^[0-9a-f]{64}$` |
+| `speakers.engine.embedding_model_sha256` | string | yes | pattern `^[0-9a-f]{64}$` |
+| `speakers.labels` | array of object | yes | at most 64 items |
+| `speakers.labels[].label` | string | yes | pattern `^S[1-9][0-9]?$` |
+| `speakers.labels[].display` | string | yes | How the label reads in a report: 'S2, by voice', or '<name> (S2, named by the user)'.; 1 to 1024 characters |
+| `speakers.labels[].verified_name` | string or null | yes | The name the user recorded for the label, exactly as given (1 to 128 bytes, no control character); null when none.; 1 to 128 characters |
+| `speakers.labels[].first_heard_us` | integer | yes | at least 0 |
+| `speakers.labels[].speech_us` | integer | yes | at least 0 |
+| `speakers.labels[].labelled_segments` | integer | yes | at least 0 |
+| `speakers.coverage` | object | yes | Which of the revision's segments have a label, which have no confident speaker, and which lie outside the audio the engine heard; each list is merged, in start order, and cut at 100 ranges (ranges_truncated). |
+| `speakers.coverage.labelled_segments` | integer | yes | at least 0 |
+| `speakers.coverage.no_confident_speaker_segments` | integer | yes | at least 0 |
+| `speakers.coverage.not_diarized_segments` | integer | yes | at least 0 |
+| `speakers.coverage.labelled_ranges` | array of object | yes | at most 100 items |
+| `speakers.coverage.labelled_ranges[].from_us` | integer | yes | at least 0 |
+| `speakers.coverage.labelled_ranges[].to_us` | integer | yes | at least 1 |
+| `speakers.coverage.no_confident_speaker_ranges` | array of object | yes | at most 100 items |
+| `speakers.coverage.no_confident_speaker_ranges[].from_us` | integer | yes | at least 0 |
+| `speakers.coverage.no_confident_speaker_ranges[].to_us` | integer | yes | at least 1 |
+| `speakers.coverage.not_diarized_ranges` | array of object | yes | at most 100 items |
+| `speakers.coverage.not_diarized_ranges[].from_us` | integer | yes | at least 0 |
+| `speakers.coverage.not_diarized_ranges[].to_us` | integer | yes | at least 1 |
+| `speakers.coverage.ranges_truncated` | boolean | yes |  |
+| `speakers.statement` | string | yes | Fixed prose saying what a label is and is not.; 1 to 1024 characters |
 
 ### search-data.schema.json
 
@@ -1079,6 +1124,7 @@ The data member of a complete or partial search result: one bounded page of the 
 | `revision` | object, see [transcript-revision.schema.json](#transcript-revisionschemajson) | yes |  |
 | `query` | object | yes |  |
 | `query.terms` | array of string | yes | The normalised query words, in query order: lowercase letters and digits, with a decimal point only between digits.; 1 to 16 items; each: 1 to 1024 characters |
+| `query.speaker` | string | no | The speaker label the search was filtered by (search --speaker, 0.3.0), present only for a filtered search: only segments with that label were searched, and segments with no confident speaker never are.; pattern `^S[1-9][0-9]?$` |
 | `range` | object or null | yes |  |
 | `range.from_us` | integer | yes | at least 0 |
 | `range.to_us` | integer | yes | at least 1 |
@@ -1103,6 +1149,48 @@ The data member of a complete or partial search result: one bounded page of the 
 | `transcript_coverage.no_speech_ranges[].from_us` | integer | yes | at least 0 |
 | `transcript_coverage.no_speech_ranges[].to_us` | integer | yes | at least 1 |
 | `transcript_coverage.ranges_truncated` | boolean | yes | True when a range list held more than 100 ranges and only its first 100, in start order, are listed. |
+| `speakers` | object | no | The revision's newest speaker record (0.3.0, ADR 0031), present only when the revision has one: see speakers.schema.json. Each item then carries its speaker_label. |
+| `speakers.record_id` | string | yes | pattern `^spk_[a-z0-9]{16,64}$` |
+| `speakers.record_number` | integer | yes | 1-based number of the record among the session's speaker records: each labelling and each recorded or cleared name commits the next one.; at least 1 |
+| `speakers.revision_id` | string | yes | pattern `^trv_[a-z0-9]{16,64}$` |
+| `speakers.labelling` | "speaker-labels-v1" | yes | speaker-labels-v1: a segment gets the label that holds at least 70% of the speech the engine heard inside it, when that speech covers at least half of the segment; otherwise it has no confident speaker. |
+| `speakers.precision` | "segment" | yes |  |
+| `speakers.given_speaker_count` | integer or null | yes | The speaker count the user gave, passed to the engine as given; null when the engine counted.; 1 to 16 |
+| `speakers.count_shortfall` | object | no | Present only when the user gave a speaker count and the engine kept fewer voices apart: voices may be merged under one label. remediation points at the automatic count. |
+| `speakers.count_shortfall.requested_speaker_count` | integer | yes | 2 to 16 |
+| `speakers.count_shortfall.found_speaker_count` | integer | yes | 1 to 15 |
+| `speakers.count_shortfall.warning` | string | yes | 1 to 512 characters |
+| `speakers.count_shortfall.remediation` | string | yes | 1 to 512 characters |
+| `speakers.diarized_range` | object | yes | The source time the engine heard: the whole source, or the range asked for (at most the duration cap). |
+| `speakers.diarized_range.from_us` | integer | yes | at least 0 |
+| `speakers.diarized_range.to_us` | integer | yes | at least 1 |
+| `speakers.engine` | object | yes |  |
+| `speakers.engine.name` | "sherpa-onnx" | yes |  |
+| `speakers.engine.executable_sha256` | string | yes | pattern `^[0-9a-f]{64}$` |
+| `speakers.engine.segmentation_model_sha256` | string | yes | pattern `^[0-9a-f]{64}$` |
+| `speakers.engine.embedding_model_sha256` | string | yes | pattern `^[0-9a-f]{64}$` |
+| `speakers.labels` | array of object | yes | at most 64 items |
+| `speakers.labels[].label` | string | yes | pattern `^S[1-9][0-9]?$` |
+| `speakers.labels[].display` | string | yes | How the label reads in a report: 'S2, by voice', or '<name> (S2, named by the user)'.; 1 to 1024 characters |
+| `speakers.labels[].verified_name` | string or null | yes | The name the user recorded for the label, exactly as given (1 to 128 bytes, no control character); null when none.; 1 to 128 characters |
+| `speakers.labels[].first_heard_us` | integer | yes | at least 0 |
+| `speakers.labels[].speech_us` | integer | yes | at least 0 |
+| `speakers.labels[].labelled_segments` | integer | yes | at least 0 |
+| `speakers.coverage` | object | yes | Which of the revision's segments have a label, which have no confident speaker, and which lie outside the audio the engine heard; each list is merged, in start order, and cut at 100 ranges (ranges_truncated). |
+| `speakers.coverage.labelled_segments` | integer | yes | at least 0 |
+| `speakers.coverage.no_confident_speaker_segments` | integer | yes | at least 0 |
+| `speakers.coverage.not_diarized_segments` | integer | yes | at least 0 |
+| `speakers.coverage.labelled_ranges` | array of object | yes | at most 100 items |
+| `speakers.coverage.labelled_ranges[].from_us` | integer | yes | at least 0 |
+| `speakers.coverage.labelled_ranges[].to_us` | integer | yes | at least 1 |
+| `speakers.coverage.no_confident_speaker_ranges` | array of object | yes | at most 100 items |
+| `speakers.coverage.no_confident_speaker_ranges[].from_us` | integer | yes | at least 0 |
+| `speakers.coverage.no_confident_speaker_ranges[].to_us` | integer | yes | at least 1 |
+| `speakers.coverage.not_diarized_ranges` | array of object | yes | at most 100 items |
+| `speakers.coverage.not_diarized_ranges[].from_us` | integer | yes | at least 0 |
+| `speakers.coverage.not_diarized_ranges[].to_us` | integer | yes | at least 1 |
+| `speakers.coverage.ranges_truncated` | boolean | yes |  |
+| `speakers.statement` | string | yes | Fixed prose saying what a label is and is not.; 1 to 1024 characters |
 
 ### search-stream-data.schema.json
 
@@ -1116,6 +1204,7 @@ The data member of the complete or partial terminal result that ends a search --
 | `revision` | object, see [transcript-revision.schema.json](#transcript-revisionschemajson) | yes |  |
 | `query` | object | yes |  |
 | `query.terms` | array of string | yes | The normalised query words, in query order: lowercase letters and digits, with a decimal point only between digits.; 1 to 16 items; each: 1 to 1024 characters |
+| `query.speaker` | string | no | The speaker label the search was filtered by (search --speaker, 0.3.0), present only for a filtered search: only segments with that label were searched, and segments with no confident speaker never are.; pattern `^S[1-9][0-9]?$` |
 | `range` | object or null | yes |  |
 | `range.from_us` | integer | yes | at least 0 |
 | `range.to_us` | integer | yes | at least 1 |
@@ -1140,6 +1229,48 @@ The data member of the complete or partial terminal result that ends a search --
 | `transcript_coverage.no_speech_ranges[].from_us` | integer | yes | at least 0 |
 | `transcript_coverage.no_speech_ranges[].to_us` | integer | yes | at least 1 |
 | `transcript_coverage.ranges_truncated` | boolean | yes | True when a range list held more than 100 ranges and only its first 100, in start order, are listed. |
+| `speakers` | object | no | The revision's newest speaker record (0.3.0, ADR 0031), present only when the revision has one: see speakers.schema.json. Each evidence record then carries its speaker_label. |
+| `speakers.record_id` | string | yes | pattern `^spk_[a-z0-9]{16,64}$` |
+| `speakers.record_number` | integer | yes | 1-based number of the record among the session's speaker records: each labelling and each recorded or cleared name commits the next one.; at least 1 |
+| `speakers.revision_id` | string | yes | pattern `^trv_[a-z0-9]{16,64}$` |
+| `speakers.labelling` | "speaker-labels-v1" | yes | speaker-labels-v1: a segment gets the label that holds at least 70% of the speech the engine heard inside it, when that speech covers at least half of the segment; otherwise it has no confident speaker. |
+| `speakers.precision` | "segment" | yes |  |
+| `speakers.given_speaker_count` | integer or null | yes | The speaker count the user gave, passed to the engine as given; null when the engine counted.; 1 to 16 |
+| `speakers.count_shortfall` | object | no | Present only when the user gave a speaker count and the engine kept fewer voices apart: voices may be merged under one label. remediation points at the automatic count. |
+| `speakers.count_shortfall.requested_speaker_count` | integer | yes | 2 to 16 |
+| `speakers.count_shortfall.found_speaker_count` | integer | yes | 1 to 15 |
+| `speakers.count_shortfall.warning` | string | yes | 1 to 512 characters |
+| `speakers.count_shortfall.remediation` | string | yes | 1 to 512 characters |
+| `speakers.diarized_range` | object | yes | The source time the engine heard: the whole source, or the range asked for (at most the duration cap). |
+| `speakers.diarized_range.from_us` | integer | yes | at least 0 |
+| `speakers.diarized_range.to_us` | integer | yes | at least 1 |
+| `speakers.engine` | object | yes |  |
+| `speakers.engine.name` | "sherpa-onnx" | yes |  |
+| `speakers.engine.executable_sha256` | string | yes | pattern `^[0-9a-f]{64}$` |
+| `speakers.engine.segmentation_model_sha256` | string | yes | pattern `^[0-9a-f]{64}$` |
+| `speakers.engine.embedding_model_sha256` | string | yes | pattern `^[0-9a-f]{64}$` |
+| `speakers.labels` | array of object | yes | at most 64 items |
+| `speakers.labels[].label` | string | yes | pattern `^S[1-9][0-9]?$` |
+| `speakers.labels[].display` | string | yes | How the label reads in a report: 'S2, by voice', or '<name> (S2, named by the user)'.; 1 to 1024 characters |
+| `speakers.labels[].verified_name` | string or null | yes | The name the user recorded for the label, exactly as given (1 to 128 bytes, no control character); null when none.; 1 to 128 characters |
+| `speakers.labels[].first_heard_us` | integer | yes | at least 0 |
+| `speakers.labels[].speech_us` | integer | yes | at least 0 |
+| `speakers.labels[].labelled_segments` | integer | yes | at least 0 |
+| `speakers.coverage` | object | yes | Which of the revision's segments have a label, which have no confident speaker, and which lie outside the audio the engine heard; each list is merged, in start order, and cut at 100 ranges (ranges_truncated). |
+| `speakers.coverage.labelled_segments` | integer | yes | at least 0 |
+| `speakers.coverage.no_confident_speaker_segments` | integer | yes | at least 0 |
+| `speakers.coverage.not_diarized_segments` | integer | yes | at least 0 |
+| `speakers.coverage.labelled_ranges` | array of object | yes | at most 100 items |
+| `speakers.coverage.labelled_ranges[].from_us` | integer | yes | at least 0 |
+| `speakers.coverage.labelled_ranges[].to_us` | integer | yes | at least 1 |
+| `speakers.coverage.no_confident_speaker_ranges` | array of object | yes | at most 100 items |
+| `speakers.coverage.no_confident_speaker_ranges[].from_us` | integer | yes | at least 0 |
+| `speakers.coverage.no_confident_speaker_ranges[].to_us` | integer | yes | at least 1 |
+| `speakers.coverage.not_diarized_ranges` | array of object | yes | at most 100 items |
+| `speakers.coverage.not_diarized_ranges[].from_us` | integer | yes | at least 0 |
+| `speakers.coverage.not_diarized_ranges[].to_us` | integer | yes | at least 1 |
+| `speakers.coverage.ranges_truncated` | boolean | yes |  |
+| `speakers.statement` | string | yes | Fixed prose saying what a label is and is not.; 1 to 1024 characters |
 
 ### setup-check-response.schema.json
 
@@ -1415,6 +1546,56 @@ The data of a complete setup.rollback result (P13 PR 6, ADR 0023). Without --ver
 | `replaced_version` | string or null | yes | pattern `^[a-z0-9]([a-z0-9._-]{0,62}[a-z0-9])?$` |
 | `next_step` | string | yes | 1 to 512 characters |
 
+### speakers.schema.json
+
+**VSift speaker labels v1** ([the schema](../../../schemas/v1/speakers.schema.json))
+
+Speaker labels (0.3.0, ADR 0031): the speakers block that transcript.get, search, transcript.speakers and transcript.name-speaker carry, and the per-segment speaker_label. Labels are provisional: S1, S2 and so on group transcript segments the diarization engine heard in one voice, numbered by when each voice is first heard. A label is not who the person is, two similar voices can share one label, and a segment in which two people speak is not split: the labels have segment precision. A verified_name is the user's own statement, never inferred from a voice or the screen. This is distinct from a segment's speaker member, a voice tag of a supplied WebVTT file. No voice-derived vector is ever part of an answer or a stored record.
+
+| Member | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `record_id` | string | yes | pattern `^spk_[a-z0-9]{16,64}$` |
+| `record_number` | integer | yes | 1-based number of the record among the session's speaker records: each labelling and each recorded or cleared name commits the next one.; at least 1 |
+| `revision_id` | string | yes | pattern `^trv_[a-z0-9]{16,64}$` |
+| `labelling` | "speaker-labels-v1" | yes | speaker-labels-v1: a segment gets the label that holds at least 70% of the speech the engine heard inside it, when that speech covers at least half of the segment; otherwise it has no confident speaker. |
+| `precision` | "segment" | yes |  |
+| `given_speaker_count` | integer or null | yes | The speaker count the user gave, passed to the engine as given; null when the engine counted.; 1 to 16 |
+| `count_shortfall` | object | no | Present only when the user gave a speaker count and the engine kept fewer voices apart: voices may be merged under one label. remediation points at the automatic count. |
+| `count_shortfall.requested_speaker_count` | integer | yes | 2 to 16 |
+| `count_shortfall.found_speaker_count` | integer | yes | 1 to 15 |
+| `count_shortfall.warning` | string | yes | 1 to 512 characters |
+| `count_shortfall.remediation` | string | yes | 1 to 512 characters |
+| `diarized_range` | object | yes | The source time the engine heard: the whole source, or the range asked for (at most the duration cap). |
+| `diarized_range.from_us` | integer | yes | at least 0 |
+| `diarized_range.to_us` | integer | yes | at least 1 |
+| `engine` | object | yes |  |
+| `engine.name` | "sherpa-onnx" | yes |  |
+| `engine.executable_sha256` | string | yes | pattern `^[0-9a-f]{64}$` |
+| `engine.segmentation_model_sha256` | string | yes | pattern `^[0-9a-f]{64}$` |
+| `engine.embedding_model_sha256` | string | yes | pattern `^[0-9a-f]{64}$` |
+| `labels` | array of object | yes | at most 64 items |
+| `labels[].label` | string | yes | pattern `^S[1-9][0-9]?$` |
+| `labels[].display` | string | yes | How the label reads in a report: 'S2, by voice', or '<name> (S2, named by the user)'.; 1 to 1024 characters |
+| `labels[].verified_name` | string or null | yes | The name the user recorded for the label, exactly as given (1 to 128 bytes, no control character); null when none.; 1 to 128 characters |
+| `labels[].first_heard_us` | integer | yes | at least 0 |
+| `labels[].speech_us` | integer | yes | at least 0 |
+| `labels[].labelled_segments` | integer | yes | at least 0 |
+| `coverage` | object | yes | Which of the revision's segments have a label, which have no confident speaker, and which lie outside the audio the engine heard; each list is merged, in start order, and cut at 100 ranges (ranges_truncated). |
+| `coverage.labelled_segments` | integer | yes | at least 0 |
+| `coverage.no_confident_speaker_segments` | integer | yes | at least 0 |
+| `coverage.not_diarized_segments` | integer | yes | at least 0 |
+| `coverage.labelled_ranges` | array of object | yes | at most 100 items |
+| `coverage.labelled_ranges[].from_us` | integer | yes | at least 0 |
+| `coverage.labelled_ranges[].to_us` | integer | yes | at least 1 |
+| `coverage.no_confident_speaker_ranges` | array of object | yes | at most 100 items |
+| `coverage.no_confident_speaker_ranges[].from_us` | integer | yes | at least 0 |
+| `coverage.no_confident_speaker_ranges[].to_us` | integer | yes | at least 1 |
+| `coverage.not_diarized_ranges` | array of object | yes | at most 100 items |
+| `coverage.not_diarized_ranges[].from_us` | integer | yes | at least 0 |
+| `coverage.not_diarized_ranges[].to_us` | integer | yes | at least 1 |
+| `coverage.ranges_truncated` | boolean | yes |  |
+| `statement` | string | yes | Fixed prose saying what a label is and is not.; 1 to 1024 characters |
+
 ### terminal-event.schema.json
 
 **VSift JSONL terminal event v1** ([the schema](../../../schemas/v1/terminal-event.schema.json))
@@ -1471,6 +1652,48 @@ The data member of a complete or partial transcript.get result asked for with --
 | `transcript_coverage.no_speech_ranges[].from_us` | integer | yes | at least 0 |
 | `transcript_coverage.no_speech_ranges[].to_us` | integer | yes | at least 1 |
 | `transcript_coverage.ranges_truncated` | boolean | yes | True when a range list held more than 100 ranges and only its first 100, in start order, are listed. |
+| `speakers` | object | no | The revision's newest speaker record (0.3.0, ADR 0031), present only when the revision has one: see speakers.schema.json. Each item then carries its speaker_label. |
+| `speakers.record_id` | string | yes | pattern `^spk_[a-z0-9]{16,64}$` |
+| `speakers.record_number` | integer | yes | 1-based number of the record among the session's speaker records: each labelling and each recorded or cleared name commits the next one.; at least 1 |
+| `speakers.revision_id` | string | yes | pattern `^trv_[a-z0-9]{16,64}$` |
+| `speakers.labelling` | "speaker-labels-v1" | yes | speaker-labels-v1: a segment gets the label that holds at least 70% of the speech the engine heard inside it, when that speech covers at least half of the segment; otherwise it has no confident speaker. |
+| `speakers.precision` | "segment" | yes |  |
+| `speakers.given_speaker_count` | integer or null | yes | The speaker count the user gave, passed to the engine as given; null when the engine counted.; 1 to 16 |
+| `speakers.count_shortfall` | object | no | Present only when the user gave a speaker count and the engine kept fewer voices apart: voices may be merged under one label. remediation points at the automatic count. |
+| `speakers.count_shortfall.requested_speaker_count` | integer | yes | 2 to 16 |
+| `speakers.count_shortfall.found_speaker_count` | integer | yes | 1 to 15 |
+| `speakers.count_shortfall.warning` | string | yes | 1 to 512 characters |
+| `speakers.count_shortfall.remediation` | string | yes | 1 to 512 characters |
+| `speakers.diarized_range` | object | yes | The source time the engine heard: the whole source, or the range asked for (at most the duration cap). |
+| `speakers.diarized_range.from_us` | integer | yes | at least 0 |
+| `speakers.diarized_range.to_us` | integer | yes | at least 1 |
+| `speakers.engine` | object | yes |  |
+| `speakers.engine.name` | "sherpa-onnx" | yes |  |
+| `speakers.engine.executable_sha256` | string | yes | pattern `^[0-9a-f]{64}$` |
+| `speakers.engine.segmentation_model_sha256` | string | yes | pattern `^[0-9a-f]{64}$` |
+| `speakers.engine.embedding_model_sha256` | string | yes | pattern `^[0-9a-f]{64}$` |
+| `speakers.labels` | array of object | yes | at most 64 items |
+| `speakers.labels[].label` | string | yes | pattern `^S[1-9][0-9]?$` |
+| `speakers.labels[].display` | string | yes | How the label reads in a report: 'S2, by voice', or '<name> (S2, named by the user)'.; 1 to 1024 characters |
+| `speakers.labels[].verified_name` | string or null | yes | The name the user recorded for the label, exactly as given (1 to 128 bytes, no control character); null when none.; 1 to 128 characters |
+| `speakers.labels[].first_heard_us` | integer | yes | at least 0 |
+| `speakers.labels[].speech_us` | integer | yes | at least 0 |
+| `speakers.labels[].labelled_segments` | integer | yes | at least 0 |
+| `speakers.coverage` | object | yes | Which of the revision's segments have a label, which have no confident speaker, and which lie outside the audio the engine heard; each list is merged, in start order, and cut at 100 ranges (ranges_truncated). |
+| `speakers.coverage.labelled_segments` | integer | yes | at least 0 |
+| `speakers.coverage.no_confident_speaker_segments` | integer | yes | at least 0 |
+| `speakers.coverage.not_diarized_segments` | integer | yes | at least 0 |
+| `speakers.coverage.labelled_ranges` | array of object | yes | at most 100 items |
+| `speakers.coverage.labelled_ranges[].from_us` | integer | yes | at least 0 |
+| `speakers.coverage.labelled_ranges[].to_us` | integer | yes | at least 1 |
+| `speakers.coverage.no_confident_speaker_ranges` | array of object | yes | at most 100 items |
+| `speakers.coverage.no_confident_speaker_ranges[].from_us` | integer | yes | at least 0 |
+| `speakers.coverage.no_confident_speaker_ranges[].to_us` | integer | yes | at least 1 |
+| `speakers.coverage.not_diarized_ranges` | array of object | yes | at most 100 items |
+| `speakers.coverage.not_diarized_ranges[].from_us` | integer | yes | at least 0 |
+| `speakers.coverage.not_diarized_ranges[].to_us` | integer | yes | at least 1 |
+| `speakers.coverage.ranges_truncated` | boolean | yes |  |
+| `speakers.statement` | string | yes | Fixed prose saying what a label is and is not.; 1 to 1024 characters |
 
 ### transcript-get-data.schema.json
 
@@ -1503,6 +1726,48 @@ The data member of a complete or partial transcript.get result: one bounded page
 | `transcript_coverage.no_speech_ranges[].from_us` | integer | yes | at least 0 |
 | `transcript_coverage.no_speech_ranges[].to_us` | integer | yes | at least 1 |
 | `transcript_coverage.ranges_truncated` | boolean | yes | True when a range list held more than 100 ranges and only its first 100, in start order, are listed. |
+| `speakers` | object | no | The revision's newest speaker record (0.3.0, ADR 0031), present only when the revision has one: see speakers.schema.json. Each item then carries its speaker_label. |
+| `speakers.record_id` | string | yes | pattern `^spk_[a-z0-9]{16,64}$` |
+| `speakers.record_number` | integer | yes | 1-based number of the record among the session's speaker records: each labelling and each recorded or cleared name commits the next one.; at least 1 |
+| `speakers.revision_id` | string | yes | pattern `^trv_[a-z0-9]{16,64}$` |
+| `speakers.labelling` | "speaker-labels-v1" | yes | speaker-labels-v1: a segment gets the label that holds at least 70% of the speech the engine heard inside it, when that speech covers at least half of the segment; otherwise it has no confident speaker. |
+| `speakers.precision` | "segment" | yes |  |
+| `speakers.given_speaker_count` | integer or null | yes | The speaker count the user gave, passed to the engine as given; null when the engine counted.; 1 to 16 |
+| `speakers.count_shortfall` | object | no | Present only when the user gave a speaker count and the engine kept fewer voices apart: voices may be merged under one label. remediation points at the automatic count. |
+| `speakers.count_shortfall.requested_speaker_count` | integer | yes | 2 to 16 |
+| `speakers.count_shortfall.found_speaker_count` | integer | yes | 1 to 15 |
+| `speakers.count_shortfall.warning` | string | yes | 1 to 512 characters |
+| `speakers.count_shortfall.remediation` | string | yes | 1 to 512 characters |
+| `speakers.diarized_range` | object | yes | The source time the engine heard: the whole source, or the range asked for (at most the duration cap). |
+| `speakers.diarized_range.from_us` | integer | yes | at least 0 |
+| `speakers.diarized_range.to_us` | integer | yes | at least 1 |
+| `speakers.engine` | object | yes |  |
+| `speakers.engine.name` | "sherpa-onnx" | yes |  |
+| `speakers.engine.executable_sha256` | string | yes | pattern `^[0-9a-f]{64}$` |
+| `speakers.engine.segmentation_model_sha256` | string | yes | pattern `^[0-9a-f]{64}$` |
+| `speakers.engine.embedding_model_sha256` | string | yes | pattern `^[0-9a-f]{64}$` |
+| `speakers.labels` | array of object | yes | at most 64 items |
+| `speakers.labels[].label` | string | yes | pattern `^S[1-9][0-9]?$` |
+| `speakers.labels[].display` | string | yes | How the label reads in a report: 'S2, by voice', or '<name> (S2, named by the user)'.; 1 to 1024 characters |
+| `speakers.labels[].verified_name` | string or null | yes | The name the user recorded for the label, exactly as given (1 to 128 bytes, no control character); null when none.; 1 to 128 characters |
+| `speakers.labels[].first_heard_us` | integer | yes | at least 0 |
+| `speakers.labels[].speech_us` | integer | yes | at least 0 |
+| `speakers.labels[].labelled_segments` | integer | yes | at least 0 |
+| `speakers.coverage` | object | yes | Which of the revision's segments have a label, which have no confident speaker, and which lie outside the audio the engine heard; each list is merged, in start order, and cut at 100 ranges (ranges_truncated). |
+| `speakers.coverage.labelled_segments` | integer | yes | at least 0 |
+| `speakers.coverage.no_confident_speaker_segments` | integer | yes | at least 0 |
+| `speakers.coverage.not_diarized_segments` | integer | yes | at least 0 |
+| `speakers.coverage.labelled_ranges` | array of object | yes | at most 100 items |
+| `speakers.coverage.labelled_ranges[].from_us` | integer | yes | at least 0 |
+| `speakers.coverage.labelled_ranges[].to_us` | integer | yes | at least 1 |
+| `speakers.coverage.no_confident_speaker_ranges` | array of object | yes | at most 100 items |
+| `speakers.coverage.no_confident_speaker_ranges[].from_us` | integer | yes | at least 0 |
+| `speakers.coverage.no_confident_speaker_ranges[].to_us` | integer | yes | at least 1 |
+| `speakers.coverage.not_diarized_ranges` | array of object | yes | at most 100 items |
+| `speakers.coverage.not_diarized_ranges[].from_us` | integer | yes | at least 0 |
+| `speakers.coverage.not_diarized_ranges[].to_us` | integer | yes | at least 1 |
+| `speakers.coverage.ranges_truncated` | boolean | yes |  |
+| `speakers.statement` | string | yes | Fixed prose saying what a label is and is not.; 1 to 1024 characters |
 
 ### transcript-get-stream-data.schema.json
 
@@ -1535,6 +1800,48 @@ The data member of the complete or partial terminal result that ends a transcrip
 | `transcript_coverage.no_speech_ranges[].from_us` | integer | yes | at least 0 |
 | `transcript_coverage.no_speech_ranges[].to_us` | integer | yes | at least 1 |
 | `transcript_coverage.ranges_truncated` | boolean | yes | True when a range list held more than 100 ranges and only its first 100, in start order, are listed. |
+| `speakers` | object | no | The revision's newest speaker record (0.3.0, ADR 0031), present only when the revision has one: see speakers.schema.json. Each evidence record then carries its speaker_label. |
+| `speakers.record_id` | string | yes | pattern `^spk_[a-z0-9]{16,64}$` |
+| `speakers.record_number` | integer | yes | 1-based number of the record among the session's speaker records: each labelling and each recorded or cleared name commits the next one.; at least 1 |
+| `speakers.revision_id` | string | yes | pattern `^trv_[a-z0-9]{16,64}$` |
+| `speakers.labelling` | "speaker-labels-v1" | yes | speaker-labels-v1: a segment gets the label that holds at least 70% of the speech the engine heard inside it, when that speech covers at least half of the segment; otherwise it has no confident speaker. |
+| `speakers.precision` | "segment" | yes |  |
+| `speakers.given_speaker_count` | integer or null | yes | The speaker count the user gave, passed to the engine as given; null when the engine counted.; 1 to 16 |
+| `speakers.count_shortfall` | object | no | Present only when the user gave a speaker count and the engine kept fewer voices apart: voices may be merged under one label. remediation points at the automatic count. |
+| `speakers.count_shortfall.requested_speaker_count` | integer | yes | 2 to 16 |
+| `speakers.count_shortfall.found_speaker_count` | integer | yes | 1 to 15 |
+| `speakers.count_shortfall.warning` | string | yes | 1 to 512 characters |
+| `speakers.count_shortfall.remediation` | string | yes | 1 to 512 characters |
+| `speakers.diarized_range` | object | yes | The source time the engine heard: the whole source, or the range asked for (at most the duration cap). |
+| `speakers.diarized_range.from_us` | integer | yes | at least 0 |
+| `speakers.diarized_range.to_us` | integer | yes | at least 1 |
+| `speakers.engine` | object | yes |  |
+| `speakers.engine.name` | "sherpa-onnx" | yes |  |
+| `speakers.engine.executable_sha256` | string | yes | pattern `^[0-9a-f]{64}$` |
+| `speakers.engine.segmentation_model_sha256` | string | yes | pattern `^[0-9a-f]{64}$` |
+| `speakers.engine.embedding_model_sha256` | string | yes | pattern `^[0-9a-f]{64}$` |
+| `speakers.labels` | array of object | yes | at most 64 items |
+| `speakers.labels[].label` | string | yes | pattern `^S[1-9][0-9]?$` |
+| `speakers.labels[].display` | string | yes | How the label reads in a report: 'S2, by voice', or '<name> (S2, named by the user)'.; 1 to 1024 characters |
+| `speakers.labels[].verified_name` | string or null | yes | The name the user recorded for the label, exactly as given (1 to 128 bytes, no control character); null when none.; 1 to 128 characters |
+| `speakers.labels[].first_heard_us` | integer | yes | at least 0 |
+| `speakers.labels[].speech_us` | integer | yes | at least 0 |
+| `speakers.labels[].labelled_segments` | integer | yes | at least 0 |
+| `speakers.coverage` | object | yes | Which of the revision's segments have a label, which have no confident speaker, and which lie outside the audio the engine heard; each list is merged, in start order, and cut at 100 ranges (ranges_truncated). |
+| `speakers.coverage.labelled_segments` | integer | yes | at least 0 |
+| `speakers.coverage.no_confident_speaker_segments` | integer | yes | at least 0 |
+| `speakers.coverage.not_diarized_segments` | integer | yes | at least 0 |
+| `speakers.coverage.labelled_ranges` | array of object | yes | at most 100 items |
+| `speakers.coverage.labelled_ranges[].from_us` | integer | yes | at least 0 |
+| `speakers.coverage.labelled_ranges[].to_us` | integer | yes | at least 1 |
+| `speakers.coverage.no_confident_speaker_ranges` | array of object | yes | at most 100 items |
+| `speakers.coverage.no_confident_speaker_ranges[].from_us` | integer | yes | at least 0 |
+| `speakers.coverage.no_confident_speaker_ranges[].to_us` | integer | yes | at least 1 |
+| `speakers.coverage.not_diarized_ranges` | array of object | yes | at most 100 items |
+| `speakers.coverage.not_diarized_ranges[].from_us` | integer | yes | at least 0 |
+| `speakers.coverage.not_diarized_ranges[].to_us` | integer | yes | at least 1 |
+| `speakers.coverage.ranges_truncated` | boolean | yes |  |
+| `speakers.statement` | string | yes | Fixed prose saying what a label is and is not.; 1 to 1024 characters |
 
 ### transcript-retranscribe-data.schema.json
 
@@ -1640,6 +1947,9 @@ One transcript segment as the brief view of transcript.get and search gives it (
 | `carried_from` | object | no | Present only on a segment carried unchanged into a spliced revision: the revision that first produced the text and the segment's identity there, as in transcript-segment.schema.json. That revision stays readable with transcript get --revision. |
 | `carried_from.revision_id` | string | yes | pattern `^trv_[a-z0-9]{16,64}$` |
 | `carried_from.segment_id` | string | yes | pattern `^tsg_[a-z0-9]{16,64}$` |
+| `speaker_label` | object | no | The full segment's speaker_label reduced to its label and how it reads, present only when the revision has speaker labels (0.3.0). |
+| `speaker_label.label` | string or null | yes | pattern `^S[1-9][0-9]?$` |
+| `speaker_label.display` | string | yes | 1 to 1024 characters |
 
 ### transcript-segment.schema.json
 
@@ -1690,8 +2000,69 @@ One citable, timestamped transcript segment. Each record names its own revision,
 | `carried_from` | object | no | Present only on a segment carried unchanged into a spliced revision: the revision that first produced the text and the segment's identity there. That revision stays readable with transcript get --revision. |
 | `carried_from.revision_id` | string | yes | pattern `^trv_[a-z0-9]{16,64}$` |
 | `carried_from.segment_id` | string | yes | pattern `^tsg_[a-z0-9]{16,64}$` |
+| `speaker_label` | object | no | The segment's speaker by voice (0.3.0, ADR 0031), present only when the revision has speaker labels: see speakers.schema.json. Distinct from speaker, a WebVTT voice tag. |
+| `speaker_label.record_id` | string | yes | pattern `^spk_[a-z0-9]{16,64}$` |
+| `speaker_label.label` | string or null | yes | pattern `^S[1-9][0-9]?$` |
+| `speaker_label.display` | string | yes | 1 to 1024 characters |
+| `speaker_label.verified_name` | string or null | yes | 1 to 128 characters |
+| `speaker_label.no_confident_speaker` | "little_speech" \| "mixed" or null | yes |  |
+| `speaker_label.dominant_share_basis_points` | integer or null | yes | 0 to 10000 |
+| `speaker_label.speech_share_basis_points` | integer or null | yes | 0 to 10000 |
 
 This schema also holds 1 conditional rule (a member that is required, or fixed, when another has a given value); read [the schema](../../../schemas/v1/transcript-segment.schema.json) for it.
+
+### transcript-speakers-data.schema.json
+
+**VSift transcript.speakers and transcript.name-speaker data v1** ([the schema](../../../schemas/v1/transcript-speakers-data.schema.json))
+
+The data member of a complete or partial transcript.speakers or transcript.name-speaker result (0.3.0, ADR 0031): the speaker record the command committed. See speakers.schema.json for what a label is and is not.
+
+| Member | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `session_id` | string | yes | pattern `^ses_[a-z0-9]{16,64}$` |
+| `speakers` | object | yes |  |
+| `speakers.record_id` | string | yes | pattern `^spk_[a-z0-9]{16,64}$` |
+| `speakers.record_number` | integer | yes | 1-based number of the record among the session's speaker records: each labelling and each recorded or cleared name commits the next one.; at least 1 |
+| `speakers.revision_id` | string | yes | pattern `^trv_[a-z0-9]{16,64}$` |
+| `speakers.labelling` | "speaker-labels-v1" | yes | speaker-labels-v1: a segment gets the label that holds at least 70% of the speech the engine heard inside it, when that speech covers at least half of the segment; otherwise it has no confident speaker. |
+| `speakers.precision` | "segment" | yes |  |
+| `speakers.given_speaker_count` | integer or null | yes | The speaker count the user gave, passed to the engine as given; null when the engine counted.; 1 to 16 |
+| `speakers.count_shortfall` | object | no | Present only when the user gave a speaker count and the engine kept fewer voices apart: voices may be merged under one label. remediation points at the automatic count. |
+| `speakers.count_shortfall.requested_speaker_count` | integer | yes | 2 to 16 |
+| `speakers.count_shortfall.found_speaker_count` | integer | yes | 1 to 15 |
+| `speakers.count_shortfall.warning` | string | yes | 1 to 512 characters |
+| `speakers.count_shortfall.remediation` | string | yes | 1 to 512 characters |
+| `speakers.diarized_range` | object | yes | The source time the engine heard: the whole source, or the range asked for (at most the duration cap). |
+| `speakers.diarized_range.from_us` | integer | yes | at least 0 |
+| `speakers.diarized_range.to_us` | integer | yes | at least 1 |
+| `speakers.engine` | object | yes |  |
+| `speakers.engine.name` | "sherpa-onnx" | yes |  |
+| `speakers.engine.executable_sha256` | string | yes | pattern `^[0-9a-f]{64}$` |
+| `speakers.engine.segmentation_model_sha256` | string | yes | pattern `^[0-9a-f]{64}$` |
+| `speakers.engine.embedding_model_sha256` | string | yes | pattern `^[0-9a-f]{64}$` |
+| `speakers.labels` | array of object | yes | at most 64 items |
+| `speakers.labels[].label` | string | yes | pattern `^S[1-9][0-9]?$` |
+| `speakers.labels[].display` | string | yes | How the label reads in a report: 'S2, by voice', or '<name> (S2, named by the user)'.; 1 to 1024 characters |
+| `speakers.labels[].verified_name` | string or null | yes | The name the user recorded for the label, exactly as given (1 to 128 bytes, no control character); null when none.; 1 to 128 characters |
+| `speakers.labels[].first_heard_us` | integer | yes | at least 0 |
+| `speakers.labels[].speech_us` | integer | yes | at least 0 |
+| `speakers.labels[].labelled_segments` | integer | yes | at least 0 |
+| `speakers.coverage` | object | yes | Which of the revision's segments have a label, which have no confident speaker, and which lie outside the audio the engine heard; each list is merged, in start order, and cut at 100 ranges (ranges_truncated). |
+| `speakers.coverage.labelled_segments` | integer | yes | at least 0 |
+| `speakers.coverage.no_confident_speaker_segments` | integer | yes | at least 0 |
+| `speakers.coverage.not_diarized_segments` | integer | yes | at least 0 |
+| `speakers.coverage.labelled_ranges` | array of object | yes | at most 100 items |
+| `speakers.coverage.labelled_ranges[].from_us` | integer | yes | at least 0 |
+| `speakers.coverage.labelled_ranges[].to_us` | integer | yes | at least 1 |
+| `speakers.coverage.no_confident_speaker_ranges` | array of object | yes | at most 100 items |
+| `speakers.coverage.no_confident_speaker_ranges[].from_us` | integer | yes | at least 0 |
+| `speakers.coverage.no_confident_speaker_ranges[].to_us` | integer | yes | at least 1 |
+| `speakers.coverage.not_diarized_ranges` | array of object | yes | at most 100 items |
+| `speakers.coverage.not_diarized_ranges[].from_us` | integer | yes | at least 0 |
+| `speakers.coverage.not_diarized_ranges[].to_us` | integer | yes | at least 1 |
+| `speakers.coverage.ranges_truncated` | boolean | yes |  |
+| `speakers.statement` | string | yes | Fixed prose saying what a label is and is not.; 1 to 1024 characters |
+| `records_in_session` | integer | yes | 1 to 128 |
 
 ### visual-candidate-brief.schema.json
 

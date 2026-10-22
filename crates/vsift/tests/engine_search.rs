@@ -182,6 +182,7 @@ impl Harness {
             range: None,
             limit: None,
             cursor: None,
+            speaker: None,
         }
     }
 }
@@ -342,6 +343,7 @@ async fn queries_are_rejected_before_any_read() -> TestResult {
                 range: None,
                 limit: None,
                 cursor: None,
+                speaker: None,
             })
             .err()
             .ok_or("a rejected query was accepted")?;

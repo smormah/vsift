@@ -60,6 +60,8 @@ whole; do not pipe it into `grep`, `head` or anything else.
 | `vsift transcript get` | free | Bounded pages around `search` hits (or a resume card's windows); run `search` first to find what was said. |
 | `vsift transcript retranscribe` | free | Only when the session has no usable transcript or a range needs checking (for a stretch a `partial` read lists: once, and only if the question needs it, see handoff.md); always with `--operation-id`. |
 | `vsift search` | free | Literal words, never a pattern. |
+| `vsift transcript speakers` | free | Only when the question is who said what: labels the transcript's segments by voice (S1, S2) once per session; add `--speakers <n>` when the user says how many people speak. Labels are provisional ("S2, by voice"), never who the person is. |
+| `vsift transcript name-speaker` | explicit | Records a name the user gives for a label; never a name you inferred from a voice, the screen or the words. |
 | `vsift candidates` | free | Shortlist only. |
 | `vsift frame get` | free | Counts against the image budget when you open the image. |
 | `vsift frame neighbours` | free | Counts as a refinement. |

@@ -1,0 +1,474 @@
+name: P16 speakers evaluation
+
+# The engine evaluation for speaker labels, "who said what" (0.3.0; the design and the
+# results are docs/planning/speaker-labels-evaluation.md). It compares pinned external
+# diarization engines (sherpa-onnx with several embedding models, polyvoice and
+# whisper.cpp's tinydiarize) on synthetic conversations with exact truth, generated
+# here with the P07 Kokoro recipe, and on RM06 (NASA, two people and a third briefly),
+# RM11 (NASA, a controller, an interviewer and an astronaut) and RM09 (NASA, 28 minutes, for cost) from the
+# project's test-media release, all public domain. Nothing it stages reaches a VSift
+# build or the maintainer's machine; the jobs keep numbers, the synthetic fixtures and
+# the labelled transcripts of RM06 and RM11 only.
+#
+# Triggers: a pull request that changes the evaluation runs its tooling tests (a
+# pull request's path filter sees the whole pull request, so every later push would
+# run the 90-minute evaluation again); the evaluation itself runs on a manual
+# dispatch (`gh workflow run p16-speakers-eval.yml --ref <branch>`). The recorded
+# runs (39518020351, 39527538316, 39567789710) ran on pull-request events before
+# this rule. The read-reference job ran on pull requests while RM11's reference was
+# read and scored (runs 39595991957 and 39597641002, 2026-10-21) and runs on dispatch
+# since. Advisory evidence: no release gate reads it. It cannot publish anything:
+# no write scope, no secret.
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/p16-speakers-eval.yml
+      - tools/p16_speakers_eval.py
+      - tools/test_p16_speakers_eval.py
+      - tools/p16_speakers_rm06_reference.json
+      - tools/p16_speakers_rm11_reference.json
+      - tools/p14-campaigns/real-media/manifest.json
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: p16-speakers-eval-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  NODE_VERSION: "22.23.3"
+
+jobs:
+  tooling-tests:
+    name: Tooling tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Test the evaluation without engines, models or network
+        run: python -m unittest discover -s tools -p test_p16_speakers_eval.py -v
+
+  fixtures:
+    name: Synthetic conversations (Kokoro)
+    needs: tooling-tests
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Download and extract the pinned P06 FFmpeg build
+        run: |
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          import sys
+
+          sys.path.insert(0, str(Path.cwd() / "tools"))
+          from p06_ubuntu_candidate_smoke import ARCHIVES, FFMPEG_SELECTED, extract_candidate
+          from p06_windows_candidate_smoke import verified_download
+
+          temporary = Path(os.environ["RUNNER_TEMP"])
+          url, size, digest = ARCHIVES["ffmpeg"]
+          archive = temporary / "p16-ffmpeg.tar.xz"
+          verified_download(url, archive, size, digest)
+          extract_candidate(archive, temporary / "p16-ffmpeg", FFMPEG_SELECTED, {})
+          archive.unlink()
+          PY
+
+      - name: Run the FFmpeg-backed assembly test with the pinned build
+        env:
+          VSIFT_P07_FFMPEG: ${{ runner.temp }}/p16-ffmpeg/bin/ffmpeg
+          VSIFT_P07_FFPROBE: ${{ runner.temp }}/p16-ffmpeg/bin/ffprobe
+        run: python -m unittest discover -s tools -p test_p16_speakers_eval.py -k assembly -v
+
+      - name: Fetch the pinned Kokoro revision, voices and spaCy English pipeline
+        run: |
+          python tools/generate_p07_speech.py fetch --assets "$RUNNER_TEMP/p16-assets"
+          python tools/p16_speakers_eval.py fetch-voices --assets "$RUNNER_TEMP/p16-assets"
+
+      - name: Install the pinned P07 generation environment
+        run: |
+          python -m venv "$RUNNER_TEMP/p16-venv"
+          venv_python="$RUNNER_TEMP/p16-venv/bin/python"
+          "$venv_python" -m pip install --no-input --disable-pip-version-check \
+            --index-url https://download.pytorch.org/whl/cpu "torch==2.14.0+cpu"
+          "$venv_python" -m pip install --no-input --disable-pip-version-check \
+            -r tools/p07-speech-requirements.txt \
+            "$RUNNER_TEMP/p16-assets/wheels/en_core_web_sm-3.8.0-py3-none-any.whl"
+
+      - name: Speak every turn offline
+        env:
+          HF_HUB_OFFLINE: "1"
+          TRANSFORMERS_OFFLINE: "1"
+        run: >-
+          "$RUNNER_TEMP/p16-venv/bin/python" tools/p16_speakers_eval.py synthesize
+          --assets "$RUNNER_TEMP/p16-assets" --output-dir "$RUNNER_TEMP/p16-speech"
+
+      # Kokoro's output can differ by CPU (L-200's kind), so the CPU and every
+      # conversation's digest are printed: runs compare only on equal digests.
+      - name: Lay out the conversations and write their truth
+        run: |
+          set -euo pipefail
+          grep -m1 "model name" /proc/cpuinfo
+          python tools/p16_speakers_eval.py assemble --output-dir "$RUNNER_TEMP/p16-speech" \
+            --ffmpeg "$RUNNER_TEMP/p16-ffmpeg/bin/ffmpeg" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Keep the conversations and their truth
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: p16-speaker-fixtures
+          path: |
+            ${{ runner.temp }}/p16-speech/fixtures
+            ${{ runner.temp }}/p16-speech/speaker-synthesis.json
+          if-no-files-found: error
+          retention-days: 30
+
+  evaluate:
+    name: Evaluate the candidates (ubuntu-24.04)
+    needs: fixtures
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Set up the pinned Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          package-manager-cache: false
+
+      - name: Fetch the synthetic conversations
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: p16-speaker-fixtures
+          path: ${{ runner.temp }}/p16-inputs
+
+      - name: Stage pinned FFmpeg, whisper.cpp v1.9.5 and both pinned models
+        run: python tools/p07_local_asr_tools.py "${{ runner.temp }}/vsift-tools"
+
+      - name: Fetch RM06, RM09 and RM11 from the test-media release, held to their pins
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/real-media"
+          node tools/p14-campaigns/real-media.cjs cross-check "$RUNNER_TEMP/real-media" \
+            --item RM06 --item RM09 --item RM11
+          python tools/p16_speakers_eval.py media --media "$RUNNER_TEMP/real-media" \
+            --ffmpeg "$(command -v ffmpeg)" --output-dir "$RUNNER_TEMP/p16-inputs/media" \
+            --item RM06 --item RM09 --item RM11
+
+      - name: Stage the pinned engines and models
+        run: python tools/p16_speakers_eval.py stage --dest "$RUNNER_TEMP/p16-tools"
+
+      - name: Show the engines' shared libraries and the host
+        run: |
+          set -euo pipefail
+          python -c "import platform, os; print(platform.platform(), platform.processor(), os.cpu_count())"
+          grep -m1 "model name" /proc/cpuinfo
+          binary="$(find "$RUNNER_TEMP/p16-tools/sherpa-onnx" -name sherpa-onnx-offline-speaker-diarization -type f)"
+          LD_LIBRARY_PATH="$(dirname "$(dirname "$binary")")/lib" ldd "$binary"
+          readelf -d "$binary" | grep -E "RPATH|RUNPATH|NEEDED" || true
+          ldd "$RUNNER_TEMP/p16-tools/polyvoice/polyvoice" || true
+
+      - name: Run and score every candidate
+        run: |
+          set -euo pipefail
+          reference=()
+          for item in RM06 RM11; do
+            file="tools/p16_speakers_${item,,}_reference.json"
+            if [ -f "$file" ]; then
+              reference+=(--reference "$item=$file")
+            fi
+          done
+          python tools/p16_speakers_eval.py evaluate --tools "$RUNNER_TEMP/p16-tools" \
+            --inputs "$RUNNER_TEMP/p16-inputs" --whisper-cli "$VSIFT_TEST_WHISPER_CLI" \
+            --whisper-model "$VSIFT_TEST_WHISPER_MODEL" --output-dir "$RUNNER_TEMP/p16-report" \
+            "${reference[@]}"
+          cat "$RUNNER_TEMP/p16-report/summary.md" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Trace the default engines for network calls
+        run: |
+          set -euo pipefail
+          if ! command -v strace >/dev/null; then
+            sudo apt-get install --yes --no-install-recommends strace
+          fi
+          python tools/p16_speakers_eval.py network-check --tools "$RUNNER_TEMP/p16-tools" \
+            --wav "$RUNNER_TEMP/p16-inputs/fixtures/SPK2-MF.wav" --output "$RUNNER_TEMP/p16-report/network.json"
+
+      - name: Keep the report (numbers, hypotheses and the read items' labelled transcripts)
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: p16-speakers-eval-ubuntu
+          path: |
+            ${{ runner.temp }}/p16-report
+            ${{ runner.temp }}/p16-tools/inventory.json
+          if-no-files-found: warn
+          retention-days: 90
+
+  # The managed install's file list (ADR 0031, ADR 0032): every member of this platform's
+  # pinned sherpa-onnx archive with its size and SHA-256, the libraries the tool names
+  # (as far as the archive holds them), and a run of the tool on a short tone from one
+  # flat folder holding only those, with no library path variable, as the managed store
+  # keeps a component. Recorded from run 39621390749 (2026-10-21,
+  # speaker-labels-evaluation.md section 10.1); it runs on dispatch since.
+  flat-folder:
+    name: Managed file list, flat folder on ${{ matrix.os }}
+    needs: tooling-tests
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-24.04
+          - windows-2025
+          - macos-15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: List the archive, find the tool's libraries and run it from a flat folder
+        run: >-
+          python tools/p16_speakers_eval.py flat-check --dest "$RUNNER_TEMP/p16-flat"
+          --output "$RUNNER_TEMP/p16-flat-report/inventory-${{ matrix.os }}.json"
+
+      - name: Keep the file list
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: p16-speakers-flat-${{ matrix.os }}
+          path: ${{ runner.temp }}/p16-flat-report
+          if-no-files-found: warn
+          retention-days: 90
+
+  # A read item's reference (docs/planning/speaker-labels-evaluation.md section 5): the
+  # recording transcribed and labelled by the recommended engine and two alternatives,
+  # printed to the log with each run's turns so a person can read the reference from the
+  # text and the maintainer confirm it by listening. RM11 is public domain (NASA).
+  read-reference:
+    name: RM11 labelled transcript for its reference (ubuntu-24.04)
+    needs: tooling-tests
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Set up the pinned Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          package-manager-cache: false
+
+      - name: Stage pinned FFmpeg, whisper.cpp v1.9.5 and both pinned models
+        run: python tools/p07_local_asr_tools.py "${{ runner.temp }}/vsift-tools"
+
+      # RM11 is trust on first use (NASA publishes no checksum): this second fetch, from
+      # the test-media release on a hosted runner, is held to the pin and printed.
+      - name: Fetch RM11 from the test-media release, held to its pin, and probe it
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/real-media"
+          node tools/p14-campaigns/real-media.cjs cross-check "$RUNNER_TEMP/real-media" --item RM11
+          ffprobe -v error -show_entries format=duration,format_name:stream=codec_type,codec_name,width,height,avg_frame_rate,sample_rate,channels \
+            -of json "$RUNNER_TEMP/real-media/RM11/RM11-nasa-exp70-kake-interview.mp4"
+          python tools/p16_speakers_eval.py media --media "$RUNNER_TEMP/real-media" \
+            --ffmpeg "$(command -v ffmpeg)" --output-dir "$RUNNER_TEMP/p16-inputs/media" --item RM11
+
+      - name: Stage the pinned engines and models
+        run: python tools/p16_speakers_eval.py stage --dest "$RUNNER_TEMP/p16-tools"
+
+      - name: Transcribe, label and print RM11 with its turns
+        run: |
+          set -euo pipefail
+          reference=()
+          if [ -f tools/p16_speakers_rm11_reference.json ]; then
+            reference=(--reference RM11=tools/p16_speakers_rm11_reference.json)
+          fi
+          python tools/p16_speakers_eval.py evaluate --tools "$RUNNER_TEMP/p16-tools" \
+            --inputs "$RUNNER_TEMP/p16-inputs" --whisper-cli "$VSIFT_TEST_WHISPER_CLI" \
+            --whisper-model "$VSIFT_TEST_WHISPER_MODEL" --output-dir "$RUNNER_TEMP/p16-report" \
+            --candidate sherpa/titanet-small/auto-0.9 --candidate sherpa/titanet-small/known \
+            --candidate sherpa/wespeaker-r34/known --candidate polyvoice/auto "${reference[@]}"
+          cat "$RUNNER_TEMP/p16-report/summary.md" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Keep the report (numbers, hypotheses and RM11's labelled transcript)
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: p16-speakers-rm11-reference
+          path: ${{ runner.temp }}/p16-report
+          if-no-files-found: warn
+          retention-days: 90
+
+  # The duration cap of one diarization (the maintainer's decision of 2026-10-21: about
+  # two hours if an 8 GB machine allows): the recommended engine's time and peak memory
+  # on RM09 and RM06 repeated to 30, 60, 120 and 180 minutes.
+  scaling:
+    name: Time and memory against length (ubuntu-24.04)
+    needs: tooling-tests
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 330
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Set up the pinned Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          package-manager-cache: false
+
+      - name: Stage pinned FFmpeg, whisper.cpp v1.9.5 and both pinned models
+        run: python tools/p07_local_asr_tools.py "${{ runner.temp }}/vsift-tools"
+
+      - name: Fetch RM06 and RM09 from the test-media release, held to their pins
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/real-media"
+          node tools/p14-campaigns/real-media.cjs cross-check "$RUNNER_TEMP/real-media" --item RM06 --item RM09
+          python tools/p16_speakers_eval.py media --media "$RUNNER_TEMP/real-media" \
+            --ffmpeg "$(command -v ffmpeg)" --output-dir "$RUNNER_TEMP/p16-media" --item RM06 --item RM09
+
+      - name: Stage the pinned engines and models
+        run: python tools/p16_speakers_eval.py stage --dest "$RUNNER_TEMP/p16-tools"
+
+      - name: Measure time and peak memory against length
+        run: |
+          set -euo pipefail
+          grep -m1 "model name" /proc/cpuinfo
+          free -m
+          mkdir -p "$RUNNER_TEMP/p16-scaling"
+          python tools/p16_speakers_eval.py scaling --tools "$RUNNER_TEMP/p16-tools" \
+            --source "$RUNNER_TEMP/p16-media/RM09.wav" --source "$RUNNER_TEMP/p16-media/RM06.wav" \
+            --minutes 30 --minutes 60 --minutes 120 --minutes 180 \
+            --output "$RUNNER_TEMP/p16-scaling/scaling.json"
+
+      - name: Keep the measurement
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: p16-speakers-scaling
+          path: ${{ runner.temp }}/p16-scaling
+          if-no-files-found: warn
+          retention-days: 90
+
+  platforms:
+    name: Official builds on ${{ matrix.os }}
+    needs: fixtures
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - windows-2025
+          - macos-15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Fetch the synthetic conversations
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: p16-speaker-fixtures
+          path: ${{ runner.temp }}/p16-inputs
+
+      - name: Stage this platform's pinned builds
+        run: python tools/p16_speakers_eval.py stage --dest "$RUNNER_TEMP/p16-tools"
+
+      - name: Run and score the default candidates
+        run: |
+          set -euo pipefail
+          python tools/p16_speakers_eval.py evaluate --tools "$RUNNER_TEMP/p16-tools" \
+            --inputs "$RUNNER_TEMP/p16-inputs" --output-dir "$RUNNER_TEMP/p16-report"
+          cat "$RUNNER_TEMP/p16-report/summary.md" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Keep the report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: p16-speakers-eval-${{ matrix.os }}
+          path: |
+            ${{ runner.temp }}/p16-report
+            ${{ runner.temp }}/p16-tools/inventory.json
+          if-no-files-found: warn
+          retention-days: 90

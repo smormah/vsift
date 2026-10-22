@@ -9,12 +9,12 @@
 use std::{error::Error, fmt};
 
 use vsift_application::{
-    AsrFailure, AsrFailureReason, AsrStage, CandidateQueryError, ClockError, EvidenceMediaError,
-    IdentifierGenerationError, JobRunError, JobStoreError, LIVE_JOB_RETRY_AFTER,
-    LocalAsrVerificationFailure, ManagedLifecycleRefusal, MediaToolFailure,
+    AsrFailure, AsrFailureReason, AsrStage, CandidateQueryError, ClockError, DiarizationRunError,
+    EvidenceMediaError, IdentifierGenerationError, JobRunError, JobStoreError,
+    LIVE_JOB_RETRY_AFTER, LocalAsrVerificationFailure, ManagedLifecycleRefusal, MediaToolFailure,
     MediaToolPreflightFailure, OpenSessionError, PlanAcceptanceError, SessionStorageError,
-    SourcePathFault, SourceProbeError, SpecialFileKind, TranscriptBuildError, TranscriptQueryError,
-    VisualExtensionStop, VisualIndexBuildError, VisualSamplingError,
+    SourcePathFault, SourceProbeError, SpeakerLabelError, SpecialFileKind, TranscriptBuildError,
+    TranscriptQueryError, VisualExtensionStop, VisualIndexBuildError, VisualSamplingError,
 };
 use vsift_contract::PrivateFolder;
 
@@ -26,8 +26,8 @@ use crate::isolation::IsolationGaps;
 /// retry would only find it busy again.
 pub const MANAGED_INSTALL_RETRY_AFTER_MS: u64 = 30_000;
 use vsift_domain::{
-    FailureCode, FrameSelectionError, JobId, JobState, NavigationError, RuntimeDependency,
-    SearchQueryRejection, SessionId, TranscriptImportError,
+    DiarizationError, FailureCode, FrameSelectionError, JobId, JobState, NavigationError,
+    RuntimeDependency, SearchQueryRejection, SessionId, TranscriptImportError,
 };
 use vsift_infrastructure::{
     ExecutableResolutionError, SessionRootError as InfrastructureSessionRootError,
@@ -130,6 +130,20 @@ pub enum EngineError {
     SourceProbe(SourceProbeError),
     /// The session holds no transcript revision with the requested identity.
     TranscriptRevisionNotFound,
+    /// The speaker-diarization tool, or one of its two model files, was neither given
+    /// nor found (ADR 0031); the tool is looked up on the filtered `PATH`, the models
+    /// never are.
+    DiarizerUnavailable,
+    /// A speaker count was not a whole number from 1 to 16.
+    InvalidSpeakerCount,
+    /// A speaker label was not `S` and a number from 1 to 64.
+    InvalidSpeakerLabel,
+    /// A speaker name was empty, longer than 128 bytes, or held a control character.
+    InvalidSpeakerName,
+    /// The revision has no speaker record to name a label in; label its speakers first.
+    SpeakerRecordNotFound,
+    /// Speaker labels could not be made or named; nothing was committed.
+    SpeakerLabels(SpeakerLabelError),
     /// A completed recognition run could not be assembled into a revision;
     /// this is an internal fault.
     TranscriptAssembly(TranscriptBuildError),
@@ -389,6 +403,10 @@ impl EngineError {
     /// The mapping is the single authority for every host, so the same failure
     /// is reported with the same code by the CLI and by any later host.
     #[must_use]
+    #[allow(
+        clippy::too_many_lines,
+        reason = "One exhaustive match is the single authority for every public code"
+    )]
     pub const fn failure_code(&self) -> FailureCode {
         match self {
             Self::SessionRoot(error) => error.failure_code(),
@@ -428,6 +446,10 @@ impl EngineError {
             | Self::NoAudioStream
             | Self::RangeOutsideSource
             | Self::TranscriptRevisionNotFound
+            | Self::InvalidSpeakerCount
+            | Self::InvalidSpeakerLabel
+            | Self::InvalidSpeakerName
+            | Self::SpeakerRecordNotFound
             | Self::SearchQueryRejected(_)
             | Self::NoVideoStream
             | Self::CandidateQuery(_)
@@ -453,7 +475,9 @@ impl EngineError {
             | Self::LocalAsrModelUnavailable
             | Self::LocalAsrModelNotPinned
             | Self::VisualToolUnavailable(_)
+            | Self::DiarizerUnavailable
             | Self::Executable(ExecutableRejection::NotFound) => FailureCode::MissingCapability,
+            Self::SpeakerLabels(error) => speaker_label_failure_code(*error),
             Self::VisualAnalysisStopped(stop) => visual_stop_failure_code(*stop),
             Self::VisualIndexBuild(error) => visual_index_failure_code(*error),
             Self::SessionIndexInconsistent
@@ -581,6 +605,47 @@ pub(crate) const fn asr_failure_code(failure: AsrFailure) -> FailureCode {
             | AsrStage::Assembly => FailureCode::MissingCapability,
         },
         AsrFailureReason::InvalidRun(_) => FailureCode::Internal,
+    }
+}
+
+/// Public code for speaker labels that could not be made or named (ADR 0031): the
+/// codes a transcription uses for the same failures, and `RESOURCE_LIMIT` for a range
+/// longer than the duration cap.
+pub(crate) const fn speaker_label_failure_code(error: SpeakerLabelError) -> FailureCode {
+    match error {
+        SpeakerLabelError::RangeOutsideSource
+        | SpeakerLabelError::RangeTooShort
+        | SpeakerLabelError::Record(DiarizationError::NameForUnknownLabel) => {
+            FailureCode::InvalidArgument
+        }
+        SpeakerLabelError::RangeTooLong { .. }
+        | SpeakerLabelError::Diarization(
+            DiarizationRunError::ResourceLimit | DiarizationRunError::AbnormalTermination,
+        )
+        | SpeakerLabelError::Record(
+            DiarizationError::TooManyTurns | DiarizationError::TooManySpeakers,
+        ) => FailureCode::ResourceLimit,
+        SpeakerLabelError::Diarization(
+            DiarizationRunError::EngineUnavailable
+            | DiarizationRunError::EngineFailed
+            | DiarizationRunError::UnparseableOutput,
+        )
+        | SpeakerLabelError::EngineChanged
+        | SpeakerLabelError::Record(DiarizationError::TurnOutsideAudio) => {
+            FailureCode::MissingCapability
+        }
+        SpeakerLabelError::Diarization(DiarizationRunError::Deadline) => {
+            FailureCode::DeadlineExceeded
+        }
+        SpeakerLabelError::Diarization(DiarizationRunError::Cancelled) => FailureCode::Cancelled,
+        SpeakerLabelError::Diarization(DiarizationRunError::Busy) => FailureCode::Busy,
+        SpeakerLabelError::Diarization(DiarizationRunError::NoAudio) => FailureCode::InvalidSource,
+        SpeakerLabelError::Diarization(DiarizationRunError::Source) => {
+            FailureCode::IntegrityFailure
+        }
+        SpeakerLabelError::Diarization(DiarizationRunError::Workspace) => FailureCode::StorageIo,
+        SpeakerLabelError::Record(DiarizationError::OtherRevision)
+        | SpeakerLabelError::Identity => FailureCode::Internal,
     }
 }
 
@@ -787,6 +852,20 @@ impl fmt::Display for EngineError {
             Self::TranscriptRevisionNotFound => {
                 formatter.write_str("the session has no transcript revision with that identity")
             }
+            Self::DiarizerUnavailable => formatter
+                .write_str("the speaker-diarization tool or one of its two models was not found"),
+            Self::InvalidSpeakerCount => {
+                formatter.write_str("a speaker count is a whole number from 1 to 16")
+            }
+            Self::InvalidSpeakerLabel => {
+                formatter.write_str("a speaker label is S followed by a number, such as S2")
+            }
+            Self::InvalidSpeakerName => formatter
+                .write_str("a speaker name is 1 to 128 bytes and holds no control character"),
+            Self::SpeakerRecordNotFound => {
+                formatter.write_str("the transcript revision has no speaker labels yet")
+            }
+            Self::SpeakerLabels(error) => error.fmt(formatter),
             Self::TranscriptAssembly(error) => error.fmt(formatter),
             Self::SearchQueryRejected(rejection) => rejection.fmt(formatter),
             Self::VisualToolUnavailable(dependency) => write!(
@@ -907,6 +986,7 @@ impl Error for EngineError {
             Self::SourceProbe(error) => Some(error),
             Self::TranscriptAssembly(error) => Some(error),
             Self::SearchQueryRejected(error) => Some(error),
+            Self::SpeakerLabels(error) => Some(error),
             Self::CandidateQuery(error) => Some(error),
             Self::VisualIndexBuild(error) => Some(error),
             Self::FrameNotSelected(error) => Some(error),
@@ -933,6 +1013,11 @@ impl Error for EngineError {
             | Self::NoAudioStream
             | Self::RangeOutsideSource
             | Self::TranscriptRevisionNotFound
+            | Self::DiarizerUnavailable
+            | Self::InvalidSpeakerCount
+            | Self::InvalidSpeakerLabel
+            | Self::InvalidSpeakerName
+            | Self::SpeakerRecordNotFound
             | Self::WorkingDirectoryUnavailable
             | Self::MediaToolUnavailable(_)
             | Self::MediaToolVerificationFailed(_)

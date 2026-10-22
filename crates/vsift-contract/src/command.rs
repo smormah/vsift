@@ -81,6 +81,12 @@ pub enum CommandName {
     /// `handoff check` (P13 PR 5): check an agent's draft report against the
     /// skill's handoff schema and rules.
     HandoffCheck,
+    /// `transcript speakers` (ADR 0031): label a transcript revision's segments by
+    /// voice with the speaker-diarization engine.
+    TranscriptSpeakers,
+    /// `transcript name-speaker` (ADR 0031): record or clear the user's verified name
+    /// for a speaker label.
+    TranscriptNameSpeaker,
 }
 
 impl CommandName {
@@ -89,7 +95,7 @@ impl CommandName {
     /// Contract tests iterate this list to prove each identifier satisfies the
     /// published schemas. An exhaustive private `ordinal` match and a
     /// compile-time assertion keep it in step with the variants.
-    pub const ALL: [Self; 34] = [
+    pub const ALL: [Self; 36] = [
         Self::Parse,
         Self::SetupCheck,
         Self::SetupPlan,
@@ -124,6 +130,8 @@ impl CommandName {
         Self::JobCancel,
         Self::SessionInitWorkspace,
         Self::HandoffCheck,
+        Self::TranscriptSpeakers,
+        Self::TranscriptNameSpeaker,
     ];
 
     /// Returns the stable identifier written to the envelope's `command` field.
@@ -164,6 +172,8 @@ impl CommandName {
             Self::JobCancel => "job.cancel",
             Self::SessionInitWorkspace => "session.init-workspace",
             Self::HandoffCheck => "handoff.check",
+            Self::TranscriptSpeakers => "transcript.speakers",
+            Self::TranscriptNameSpeaker => "transcript.name-speaker",
         }
     }
 
@@ -211,6 +221,8 @@ impl CommandName {
             Self::JobCancel => 31,
             Self::SessionInitWorkspace => 32,
             Self::HandoffCheck => 33,
+            Self::TranscriptSpeakers => 34,
+            Self::TranscriptNameSpeaker => 35,
         }
     }
 }

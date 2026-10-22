@@ -5,8 +5,8 @@ use super::{
     text::{Placement, RenderedText, TerminalText, TooLarge},
     time::{push_range, push_span},
     view::{
-        Envelope, Markup, Retranscription, Search, TranscriptCoverage, TranscriptPage,
-        TranscriptRevision, TranscriptSegment,
+        Envelope, Markup, Retranscription, Search, Speakers, SpeakersResult, TranscriptCoverage,
+        TranscriptPage, TranscriptRevision, TranscriptSegment,
     },
 };
 
@@ -32,6 +32,9 @@ pub(super) fn page(envelope: &Envelope<TranscriptPage>) -> Result<RenderedText, 
     // for a range that is wholly transcribed.
     if let Some(coverage) = &page.transcript_coverage {
         push_coverage_ranges(&mut text, coverage, READ_NOT_TRANSCRIBED);
+    }
+    if let Some(speakers) = &page.speakers {
+        push_speakers(&mut text, speakers);
     }
     text.push_fixed("Segments on this page: ")
         .push_unsigned(count(page.items.len()))
@@ -132,6 +135,9 @@ pub(super) fn search(envelope: &Envelope<Search>) -> Result<RenderedText, TooLar
     }
     text.end_line();
     push_coverage_ranges(&mut text, coverage, SEARCH_NOT_TRANSCRIBED);
+    if let Some(speakers) = &data.speakers {
+        push_speakers(&mut text, speakers);
+    }
     text.push_fixed("Hits on this page: ")
         .push_unsigned(count(data.hits.len()))
         .end_line();
@@ -331,6 +337,76 @@ fn push_segment_details(text: &mut TerminalText, segment: &TranscriptSegment) {
             .push_untrusted(&speaker.display_label, Placement::Inline)
             .end_line();
     }
+    if let Some(label) = &segment.speaker_label {
+        text.push_fixed("  Speaker label (provisional): ")
+            .push_untrusted(&label.display, Placement::Inline)
+            .end_line();
+    }
+}
+
+/// `transcript speakers` and `transcript name-speaker`: the record's labels.
+pub(super) fn speakers(envelope: &Envelope<SpeakersResult>) -> Result<RenderedText, TooLarge> {
+    let data = &envelope.data;
+    let mut text = TerminalText::result();
+    text.push_fixed("Speaker labels of session ")
+        .push_value(&data.session_id)
+        .end_line();
+    push_speakers(&mut text, &data.speakers);
+    text.push_fixed("Read the labelled segments: vsift transcript get ")
+        .push_value(&data.session_id)
+        .push_fixed(" --from <us> --to <us>")
+        .end_line();
+    push_outcome(&mut text, envelope);
+    text.finish()
+}
+
+/// Writes a speaker record's labels and coverage, with what a label is.
+fn push_speakers(text: &mut TerminalText, speakers: &Speakers) {
+    text.push_fixed("Speaker labels: record ")
+        .push_value(&speakers.record_id)
+        .push_fixed(", precision ")
+        .push_value(&speakers.precision)
+        .push_fixed(", heard ");
+    push_range(text, speakers.diarized_range);
+    match speakers.given_speaker_count {
+        Some(count) => {
+            text.push_fixed(", speakers given: ")
+                .push_unsigned(u64::from(count));
+        }
+        None => {
+            text.push_fixed(", speakers counted by the engine");
+        }
+    }
+    text.end_line();
+    if let Some(shortfall) = &speakers.count_shortfall {
+        text.push_fixed("  Warning: ")
+            .push_value(&shortfall.warning)
+            .end_line();
+        text.push_fixed("  ")
+            .push_value(&shortfall.remediation)
+            .end_line();
+    }
+    for label in &speakers.labels {
+        text.push_fixed("  ")
+            .push_untrusted(&label.display, Placement::Inline)
+            .push_fixed(": ")
+            .push_unsigned(label.labelled_segments)
+            .push_fixed(" segments, ")
+            .push_unsigned(label.speech_us / 1_000_000)
+            .push_fixed(" s of speech")
+            .end_line();
+    }
+    let coverage = &speakers.coverage;
+    text.push_fixed("  Segments labelled: ")
+        .push_unsigned(coverage.labelled_segments)
+        .push_fixed(", no confident speaker: ")
+        .push_unsigned(coverage.no_confident_speaker_segments)
+        .push_fixed(", not heard by the engine: ")
+        .push_unsigned(coverage.not_diarized_segments)
+        .end_line();
+    text.push_fixed("  ")
+        .push_value(&speakers.statement)
+        .end_line();
 }
 
 /// How many stretches of unplaced words a revision's text lists, as many as a

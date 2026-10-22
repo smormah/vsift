@@ -170,6 +170,10 @@
         "revision_id": { "type": "string", "pattern": "^trv_[a-z0-9]{16,64}$" },
         "segment_id": { "type": "string", "pattern": "^tsg_[a-z0-9]{16,64}$" }
       }
+    },
+    "speaker_label": {
+      "description": "The segment's speaker by voice (0.3.0, ADR 0031), present only when the revision has speaker labels: see speakers.schema.json. Distinct from speaker, a WebVTT voice tag.",
+      "$ref": "speakers.schema.json#/$defs/segment_speaker_label"
     }
   },
   "allOf": [

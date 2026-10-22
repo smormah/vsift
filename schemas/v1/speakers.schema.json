@@ -1,0 +1,209 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vsift.dev/schemas/v1/speakers.schema.json",
+  "title": "VSift speaker labels v1",
+  "description": "Speaker labels (0.3.0, ADR 0031): the speakers block that transcript.get, search, transcript.speakers and transcript.name-speaker carry, and the per-segment speaker_label. Labels are provisional: S1, S2 and so on group transcript segments the diarization engine heard in one voice, numbered by when each voice is first heard. A label is not who the person is, two similar voices can share one label, and a segment in which two people speak is not split: the labels have segment precision. A verified_name is the user's own statement, never inferred from a voice or the screen. This is distinct from a segment's speaker member, a voice tag of a supplied WebVTT file. No voice-derived vector is ever part of an answer or a stored record.",
+  "$ref": "#/$defs/speakers",
+  "$defs": {
+    "label": {
+      "type": "string",
+      "pattern": "^S[1-9][0-9]?$"
+    },
+    "speakers": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "record_id",
+        "record_number",
+        "revision_id",
+        "labelling",
+        "precision",
+        "given_speaker_count",
+        "diarized_range",
+        "engine",
+        "labels",
+        "coverage",
+        "statement"
+      ],
+      "properties": {
+        "record_id": { "type": "string", "pattern": "^spk_[a-z0-9]{16,64}$" },
+        "record_number": {
+          "description": "1-based number of the record among the session's speaker records: each labelling and each recorded or cleared name commits the next one.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "revision_id": { "type": "string", "pattern": "^trv_[a-z0-9]{16,64}$" },
+        "labelling": {
+          "description": "speaker-labels-v1: a segment gets the label that holds at least 70% of the speech the engine heard inside it, when that speech covers at least half of the segment; otherwise it has no confident speaker.",
+          "enum": ["speaker-labels-v1"]
+        },
+        "precision": { "enum": ["segment"] },
+        "given_speaker_count": {
+          "description": "The speaker count the user gave, passed to the engine as given; null when the engine counted.",
+          "oneOf": [
+            { "type": "null" },
+            { "type": "integer", "minimum": 1, "maximum": 16 }
+          ]
+        },
+        "count_shortfall": {
+          "description": "Present only when the user gave a speaker count and the engine kept fewer voices apart: voices may be merged under one label. remediation points at the automatic count.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["requested_speaker_count", "found_speaker_count", "warning", "remediation"],
+          "properties": {
+            "requested_speaker_count": { "type": "integer", "minimum": 2, "maximum": 16 },
+            "found_speaker_count": { "type": "integer", "minimum": 1, "maximum": 15 },
+            "warning": { "type": "string", "minLength": 1, "maxLength": 512 },
+            "remediation": { "type": "string", "minLength": 1, "maxLength": 512 }
+          }
+        },
+        "diarized_range": {
+          "description": "The source time the engine heard: the whole source, or the range asked for (at most the duration cap).",
+          "$ref": "search-data.schema.json#/$defs/range"
+        },
+        "engine": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "executable_sha256", "segmentation_model_sha256", "embedding_model_sha256"],
+          "properties": {
+            "name": { "enum": ["sherpa-onnx"] },
+            "executable_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+            "segmentation_model_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+            "embedding_model_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+          }
+        },
+        "labels": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["label", "display", "verified_name", "first_heard_us", "speech_us", "labelled_segments"],
+            "properties": {
+              "label": { "$ref": "#/$defs/label" },
+              "display": {
+                "description": "How the label reads in a report: 'S2, by voice', or '<name> (S2, named by the user)'.",
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1024
+              },
+              "verified_name": {
+                "description": "The name the user recorded for the label, exactly as given (1 to 128 bytes, no control character); null when none.",
+                "oneOf": [
+                  { "type": "null" },
+                  { "type": "string", "minLength": 1, "maxLength": 128 }
+                ]
+              },
+              "first_heard_us": { "type": "integer", "minimum": 0 },
+              "speech_us": { "type": "integer", "minimum": 0 },
+              "labelled_segments": { "type": "integer", "minimum": 0 }
+            }
+          }
+        },
+        "coverage": {
+          "description": "Which of the revision's segments have a label, which have no confident speaker, and which lie outside the audio the engine heard; each list is merged, in start order, and cut at 100 ranges (ranges_truncated).",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "labelled_segments",
+            "no_confident_speaker_segments",
+            "not_diarized_segments",
+            "labelled_ranges",
+            "no_confident_speaker_ranges",
+            "not_diarized_ranges",
+            "ranges_truncated"
+          ],
+          "properties": {
+            "labelled_segments": { "type": "integer", "minimum": 0 },
+            "no_confident_speaker_segments": { "type": "integer", "minimum": 0 },
+            "not_diarized_segments": { "type": "integer", "minimum": 0 },
+            "labelled_ranges": { "$ref": "search-data.schema.json#/$defs/ranges" },
+            "no_confident_speaker_ranges": { "$ref": "search-data.schema.json#/$defs/ranges" },
+            "not_diarized_ranges": { "$ref": "search-data.schema.json#/$defs/ranges" },
+            "ranges_truncated": { "type": "boolean" }
+          }
+        },
+        "statement": {
+          "description": "Fixed prose saying what a label is and is not.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024
+        }
+      }
+    },
+    "segment_speaker_label": {
+      "description": "A segment's speaker under the revision's newest speaker record. label is null when no label clearly holds the segment, and no_confident_speaker then says why: little_speech (the engine heard speech in less than half of it) or mixed (no label holds 70% of the speech, often two people).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "record_id",
+        "label",
+        "display",
+        "verified_name",
+        "no_confident_speaker",
+        "dominant_share_basis_points",
+        "speech_share_basis_points"
+      ],
+      "properties": {
+        "record_id": { "type": "string", "pattern": "^spk_[a-z0-9]{16,64}$" },
+        "label": {
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/label" }
+          ]
+        },
+        "display": { "type": "string", "minLength": 1, "maxLength": 1024 },
+        "verified_name": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "string", "minLength": 1, "maxLength": 128 }
+          ]
+        },
+        "no_confident_speaker": {
+          "oneOf": [
+            { "type": "null" },
+            { "enum": ["little_speech", "mixed"] }
+          ]
+        },
+        "dominant_share_basis_points": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "integer", "minimum": 0, "maximum": 10000 }
+          ]
+        },
+        "speech_share_basis_points": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "integer", "minimum": 0, "maximum": 10000 }
+          ]
+        }
+      }
+    },
+    "segment_speaker_label_brief": {
+      "description": "A segment's speaker label in the brief view: the label (null for no confident speaker) and how it reads.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["label", "display"],
+      "properties": {
+        "label": {
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/label" }
+          ]
+        },
+        "display": { "type": "string", "minLength": 1, "maxLength": 1024 }
+      }
+    },
+    "result_data": {
+      "description": "The data member of a transcript.speakers or transcript.name-speaker result: the record it committed. The envelope's status is partial, with a fixed warning, when some segment has no label; it still exits 0.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["session_id", "speakers", "records_in_session"],
+      "properties": {
+        "session_id": { "type": "string", "pattern": "^ses_[a-z0-9]{16,64}$" },
+        "speakers": { "$ref": "#/$defs/speakers" },
+        "records_in_session": { "type": "integer", "minimum": 1, "maximum": 128 }
+      }
+    }
+  }
+}

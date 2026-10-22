@@ -13,13 +13,14 @@
 //! same stream for the same page.
 
 use serde::Serialize;
-use vsift_domain::{TranscriptRevision, TranscriptSegment};
+use vsift_domain::{SpeakerRecord, TranscriptRevision, TranscriptSegment};
 
 use crate::{
     AudioEvidenceData, CONTRACT_VERSION, CommandName, FrameEvidenceData, LifecycleResponse,
     OperationResponse, TerminalEventResponse, TranscriptRevisionData, TranscriptSegmentData,
     VisualCandidateData,
     search::TranscriptCoverageData,
+    speakers::{SpeakersData, with_unlabelled_warning},
     transcript::{RangeData, TranscriptPresentation, finish_transcript_read},
 };
 
@@ -195,11 +196,14 @@ pub struct EvidenceEventResponse {
 }
 
 impl EvidenceEventResponse {
-    pub(crate) fn transcript_segment(
+    /// A segment's evidence event with its speaker label under `speakers`, the
+    /// revision's newest speaker record, when there is one (ADR 0031).
+    pub(crate) fn labelled_transcript_segment(
         sequence: u64,
         command: CommandName,
         revision: &TranscriptRevision,
         segment: &TranscriptSegment,
+        speakers: Option<&SpeakerRecord>,
     ) -> Self {
         Self {
             schema_version: CONTRACT_VERSION,
@@ -209,8 +213,8 @@ impl EvidenceEventResponse {
             operation_id: None,
             record_type: EvidenceRecordType::TranscriptSegment.identifier(),
             key: segment.id().as_str().to_owned(),
-            record: EvidenceRecord::TranscriptSegment(Box::new(TranscriptSegmentData::new(
-                revision, segment,
+            record: EvidenceRecord::TranscriptSegment(Box::new(TranscriptSegmentData::labelled(
+                revision, segment, speakers,
             ))),
         }
     }
@@ -302,6 +306,9 @@ pub struct TranscriptStreamData {
     record_count: usize,
     next_cursor: Option<String>,
     transcript_coverage: TranscriptCoverageData,
+    /// The revision's newest speaker record (ADR 0031); absent when it has none.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    speakers: Option<SpeakersData>,
 }
 
 /// One `transcript.get` page as a JSON Lines evidence stream.
@@ -331,11 +338,33 @@ impl TranscriptEvidenceStream {
         page: &TranscriptPresentation<'_>,
         lifecycle: LifecycleResponse,
     ) -> Result<Self, serde_json::Error> {
+        Self::with_speakers(page, None, lifecycle)
+    }
+
+    /// [`Self::new`] with the revision's speaker labels (ADR 0031): each record's
+    /// `speaker_label` and the terminal data's `speakers`, from `speakers`, the
+    /// revision's newest speaker record.
+    ///
+    /// # Errors
+    ///
+    /// Returns the serialization error when the terminal data cannot be
+    /// represented as JSON.
+    pub fn with_speakers(
+        page: &TranscriptPresentation<'_>,
+        speakers: Option<&SpeakerRecord>,
+        lifecycle: LifecycleResponse,
+    ) -> Result<Self, serde_json::Error> {
         let command = CommandName::TranscriptGet;
         let records: Vec<_> = (0_u64..)
             .zip(page.segments)
             .map(|(sequence, segment)| {
-                EvidenceEventResponse::transcript_segment(sequence, command, page.revision, segment)
+                EvidenceEventResponse::labelled_transcript_segment(
+                    sequence,
+                    command,
+                    page.revision,
+                    segment,
+                    speakers,
+                )
             })
             .collect();
         let data = TranscriptStreamData {
@@ -345,10 +374,14 @@ impl TranscriptEvidenceStream {
             record_count: records.len(),
             next_cursor: page.next_cursor.map(str::to_owned),
             transcript_coverage: TranscriptCoverageData::new(page.coverage),
+            speakers: speakers.map(SpeakersData::new),
         };
-        let result = finish_transcript_read(
-            OperationResponse::complete(command.identifier(), &data)?.with_lifecycle(lifecycle),
-            page.coverage,
+        let result = with_unlabelled_warning(
+            finish_transcript_read(
+                OperationResponse::complete(command.identifier(), &data)?.with_lifecycle(lifecycle),
+                page.coverage,
+            ),
+            speakers,
         );
         let terminal_sequence = u64::try_from(records.len()).unwrap_or(u64::MAX);
         Ok(Self {

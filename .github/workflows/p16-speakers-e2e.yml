@@ -1,0 +1,100 @@
+name: P16 speakers end to end
+
+# Speaker labels (0.3.0, ADR 0031) through the compiled binary with the real
+# engine: the opt-in test crates/vsift-cli/tests/p16_speakers_e2e.rs makes a video
+# of a synthetic two-voice conversation (exact truth), opens it with its true turns
+# as a transcript, labels it with the pinned sherpa-onnx tool and models, reads the
+# labels back, names one and searches by the name. The conversation is synthesized
+# here with the P07 Kokoro recipe; the tools are the pinned builds, given to the
+# test by absolute path. Nothing it stages reaches a VSift build or a development
+# machine.
+#
+# Triggers: a pull request that changes the speaker code, the test or this file;
+# a manual dispatch once the workflow is on `main`. No write scope, no secret.
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/p16-speakers-e2e.yml
+      - crates/vsift-cli/tests/p16_speakers_e2e.rs
+      - crates/vsift/src/speakers.rs
+      - crates/vsift-infrastructure/src/sherpa_diarizer.rs
+      - crates/vsift-infrastructure/src/speaker_record.rs
+      - crates/vsift-application/src/speakers.rs
+      - crates/vsift-domain/src/speakers.rs
+      - crates/vsift-contract/src/speakers.rs
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: p16-speakers-e2e-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  end-to-end:
+    name: Speaker labels end to end (ubuntu-24.04)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Stage pinned FFmpeg, whisper.cpp v1.9.5 and both pinned models
+        run: python tools/p07_local_asr_tools.py "${{ runner.temp }}/vsift-tools"
+
+      - name: Stage the pinned diarization engine and models
+        run: python tools/p16_speakers_eval.py stage --dest "$RUNNER_TEMP/p16-tools"
+
+      - name: Fetch the pinned Kokoro revision, voices and spaCy English pipeline
+        run: |
+          python tools/generate_p07_speech.py fetch --assets "$RUNNER_TEMP/p16-assets"
+          python tools/p16_speakers_eval.py fetch-voices --assets "$RUNNER_TEMP/p16-assets"
+
+      - name: Install the pinned P07 generation environment
+        run: |
+          python -m venv "$RUNNER_TEMP/p16-venv"
+          venv_python="$RUNNER_TEMP/p16-venv/bin/python"
+          "$venv_python" -m pip install --no-input --disable-pip-version-check \
+            --index-url https://download.pytorch.org/whl/cpu "torch==2.14.0+cpu"
+          "$venv_python" -m pip install --no-input --disable-pip-version-check \
+            -r tools/p07-speech-requirements.txt \
+            "$RUNNER_TEMP/p16-assets/wheels/en_core_web_sm-3.8.0-py3-none-any.whl"
+
+      - name: Make the conversations
+        env:
+          HF_HUB_OFFLINE: "1"
+          TRANSFORMERS_OFFLINE: "1"
+        run: |
+          set -euo pipefail
+          "$RUNNER_TEMP/p16-venv/bin/python" tools/p16_speakers_eval.py synthesize \
+            --assets "$RUNNER_TEMP/p16-assets" --output-dir "$RUNNER_TEMP/p16-speech"
+          python tools/p16_speakers_eval.py assemble --output-dir "$RUNNER_TEMP/p16-speech" \
+            --ffmpeg "$(command -v ffmpeg)"
+
+      - name: Run the opt-in end-to-end test with the pinned tools
+        run: |
+          set -euo pipefail
+          inventory="$RUNNER_TEMP/p16-tools/inventory.json"
+          diarizer="$RUNNER_TEMP/p16-tools/$(python -c "import json,sys; print(json.load(open(sys.argv[1]))['engines']['sherpa-onnx']['binary'])" "$inventory")"
+          VSIFT_TEST_FFMPEG="$(command -v ffmpeg)" \
+          VSIFT_TEST_FFPROBE="$(command -v ffprobe)" \
+          VSIFT_TEST_DIARIZER="$diarizer" \
+          VSIFT_TEST_SEGMENTATION_MODEL="$RUNNER_TEMP/p16-tools/models/pyannote-segmentation-3.0.onnx" \
+          VSIFT_TEST_EMBEDDING_MODEL="$RUNNER_TEMP/p16-tools/models/nemo_en_titanet_small.onnx" \
+          VSIFT_TEST_SPEAKER_FIXTURES="$RUNNER_TEMP/p16-speech/fixtures" \
+            cargo test --release -p vsift-cli --locked --test p16_speakers_e2e -- --ignored --nocapture

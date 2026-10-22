@@ -1,9 +1,9 @@
 //! Bounded literal search of a session's transcript.
 
-use vsift_application::{SearchPageRequest, page_search};
+use vsift_application::{SearchPageRequest, SpeakerFilter, page_search_by_speaker};
 use vsift_domain::{
-    MediaTime, PageLimit, SearchCoverage, SearchMatch, SearchQuery, SessionId, TimeRange,
-    TranscriptRevision, TranscriptRevisionId, TranscriptSegment,
+    MediaTime, PageLimit, SearchCoverage, SearchMatch, SearchQuery, SessionId, SpeakerRecord,
+    SpeakerTag, TimeRange, TranscriptRevision, TranscriptRevisionId, TranscriptSegment,
 };
 
 use crate::{
@@ -40,6 +40,9 @@ pub struct SearchRequest {
     pub limit: Option<u16>,
     /// Opaque continuation token from the previous page of the same search.
     pub cursor: Option<String>,
+    /// Only segments of this speaker are searched (ADR 0031): a label such as `S2`,
+    /// or a name the user verified for one. `None` searches every segment.
+    pub speaker: Option<String>,
 }
 
 /// One segment that matched, and how.
@@ -73,9 +76,24 @@ pub struct SearchResults {
     hits: Vec<SearchResultHit>,
     next_cursor: Option<String>,
     coverage: SearchCoverage,
+    speakers: Option<SpeakerRecord>,
+    speaker_filter: Option<SpeakerTag>,
 }
 
 impl SearchResults {
+    /// The revision's newest speaker record, with every label derived (ADR 0031);
+    /// `None` when the revision has no speaker labels.
+    #[must_use]
+    pub const fn speakers(&self) -> Option<&SpeakerRecord> {
+        self.speakers.as_ref()
+    }
+
+    /// The speaker label the search was filtered by, if any.
+    #[must_use]
+    pub const fn speaker_filter(&self) -> Option<SpeakerTag> {
+        self.speaker_filter
+    }
+
     /// Session state observed when the search ran.
     #[must_use]
     pub const fn session(&self) -> &SessionSnapshot {
@@ -166,7 +184,12 @@ impl Engine {
             .lifetime()
             .expires_at_unix_seconds()
             .saturating_mul(MICROS_PER_SECOND);
-        let page = page_search(
+        let speakers = crate::speakers::newest_record(&store, &request.session, &revision, now)?;
+        let speaker_filter = match &request.speaker {
+            None => None,
+            Some(wanted) => Some(crate::speakers::resolve_speaker(speakers.as_ref(), wanted)?),
+        };
+        let page = page_search_by_speaker(
             &request.session,
             &revision,
             &SearchPageRequest {
@@ -175,6 +198,10 @@ impl Engine {
                 limit,
                 cursor: request.cursor,
             },
+            speakers
+                .as_ref()
+                .zip(speaker_filter)
+                .map(|(record, tag)| SpeakerFilter { record, tag }),
             expires_at,
             now.saturating_mul(MICROS_PER_SECOND),
         )
@@ -197,6 +224,8 @@ impl Engine {
             hits,
             next_cursor,
             coverage,
+            speakers,
+            speaker_filter,
         })
     }
 }

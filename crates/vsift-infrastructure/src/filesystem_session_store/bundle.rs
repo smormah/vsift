@@ -22,7 +22,10 @@ use super::{
     open_regular_file,
     publication::evidence_artifact_count,
     read_bounded_manifest,
-    reads::{read_evidence_artifact, read_transcript_artifact, read_visual_index_artifact},
+    reads::{
+        read_evidence_artifact, read_speaker_artifact, read_transcript_artifact,
+        read_visual_index_artifact,
+    },
     root::{validate_platform_root_permissions, validate_root_selection, validate_same_object},
     sha256_hex,
     stored::{parse_versioned_json, validate_artifact_record},
@@ -274,6 +277,11 @@ impl FilesystemSessionStore {
                 // and identity rules a session read applies (ADR 0013 note
                 // of 2026-09-26).
                 read_visual_index_artifact(&bundle, artifact, &session_id, &source_id)?;
+            } else if artifact.kind == StoredArtifactKind::SpeakerRecord {
+                // A speaker record is decoded with the identity, bound and value
+                // rules a session read applies (ADR 0031); its labels are derived
+                // from its turns and its revision whenever it is read.
+                read_speaker_artifact(&bundle, artifact, &session_id, &source_id)?;
             } else {
                 let file =
                     open_regular_file(&bundle, &artifact.name, false).map_err(map_committed_io)?;

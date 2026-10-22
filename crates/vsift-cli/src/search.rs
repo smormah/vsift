@@ -6,7 +6,7 @@
 use vsift::{Engine, FailureCode, SearchRange, SearchRequest, SearchResults};
 use vsift_contract::{
     LifecycleResponse, OperationResponse, ResultView, SearchEvidenceStream, SearchPresentation,
-    search_response_with_view,
+    search_response_with_speakers,
 };
 
 use crate::{CommandFailure, command::SearchArguments, session::session_lifecycle};
@@ -26,6 +26,7 @@ fn run(engine: &Engine, arguments: SearchArguments) -> Result<SearchResults, Com
         range,
         limit: arguments.limit,
         cursor: arguments.cursor,
+        speaker: arguments.speaker,
     })?)
 }
 
@@ -57,8 +58,14 @@ pub(crate) fn search(
     view: ResultView,
 ) -> Result<OperationResponse<serde_json::Value>, CommandFailure> {
     let results = run(engine, arguments)?;
-    search_response_with_view(&presentation(&results), lifecycle(&results)?, view)
-        .map_err(|_| CommandFailure::from(FailureCode::Internal))
+    search_response_with_speakers(
+        &presentation(&results),
+        results.speakers(),
+        results.speaker_filter(),
+        lifecycle(&results)?,
+        view,
+    )
+    .map_err(|_| CommandFailure::from(FailureCode::Internal))
 }
 
 /// Searches a session's transcript and presents one page as an evidence
@@ -72,6 +79,11 @@ pub(crate) fn search_stream(
 ) -> Result<SearchEvidenceStream, CommandFailure> {
     crate::read_view::refuse_brief_stream(arguments.view)?;
     let results = run(engine, arguments)?;
-    SearchEvidenceStream::new(&presentation(&results), lifecycle(&results)?)
-        .map_err(|_| CommandFailure::from(FailureCode::Internal))
+    SearchEvidenceStream::with_speakers(
+        &presentation(&results),
+        results.speakers(),
+        results.speaker_filter(),
+        lifecycle(&results)?,
+    )
+    .map_err(|_| CommandFailure::from(FailureCode::Internal))
 }

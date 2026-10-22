@@ -17,6 +17,7 @@ mod managed_lifecycle;
 mod provisioning;
 mod search;
 mod session;
+mod speakers;
 mod storage;
 mod transcript;
 mod verification;
@@ -56,7 +57,10 @@ pub use job::{
     observed_state, recognition_key, reconcile, resumable_request, retranscribe_operation_key,
     retranscribe_request_digest, run_retranscription, worker_step_operation_id,
 };
-pub use search::{SearchPage, SearchPageRequest, page_search, search_query_digest};
+pub use search::{
+    SearchPage, SearchPageRequest, SpeakerFilter, page_search, page_search_by_speaker,
+    search_query_digest,
+};
 pub use session::{
     ForegroundSessionPort, NeverCancelled, OpenSession, OpenSessionError, OpenSessionOutcome,
     OpenSessionRequest, SourcePathFault, SpecialFileKind, StageCancellation, StagedSessionSource,
@@ -86,6 +90,11 @@ pub use provisioning::{
     SetupProfile, SetupSelectionState, SmokeStageOutcome, StageDisposal, StageRetentionReason,
     StagedManagedComponent, SupersededManagedVersion, SupersessionReason, plan_managed_setup,
     smoke_before_activation,
+};
+pub use speakers::{
+    DiarizationRequest, DiarizationRunError, LabelSpeakersRequest, MAX_DIARIZATION_MICROS,
+    MIN_DIARIZATION_MICROS, SpeakerDiarizer, SpeakerLabelError, diarization_range, label_speakers,
+    name_speaker, speaker_record_id,
 };
 pub use storage::{
     AuthorizedSessionGenerationPublication, AuthorizedSessionStorageInitialization,

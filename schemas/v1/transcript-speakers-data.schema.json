@@ -1,0 +1,7 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vsift.dev/schemas/v1/transcript-speakers-data.schema.json",
+  "title": "VSift transcript.speakers and transcript.name-speaker data v1",
+  "description": "The data member of a complete or partial transcript.speakers or transcript.name-speaker result (0.3.0, ADR 0031): the speaker record the command committed. See speakers.schema.json for what a label is and is not.",
+  "$ref": "speakers.schema.json#/$defs/result_data"
+}

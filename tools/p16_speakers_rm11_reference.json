@@ -1,0 +1,162 @@
+{
+  "item": "RM11",
+  "title": "Expedition 70 Astronaut Loral O\u2019Hara Talks with KAKE-TV, Wichita, Kansas (NASA, public domain)",
+  "method": "Labelled from the text of the whisper.cpp base transcript of hosted run 39595991957 (who calls, who asks, who answers, who is addressed by name), without listening. The run printed each engine's labels beside the text; they were not used to decide a turn. Each turn runs over whole transcript segments, so its bounds are segment bounds (precision about one segment); consecutive segments of one speaker less than two seconds apart form one turn. Segments whose speaker the text does not tell (two short interjections, a sentence cut off by the interviewer) and the laughter are unscored; the music is not speech. Read on 2026-10-21; to be confirmed by the maintainer listening.",
+  "speakers": {
+    "A": "the ground controller in Mission Control Houston, who opens and closes the event",
+    "B": "the astronaut on the station, who answers",
+    "C": "the television station's interviewer on the ground, who asks the questions"
+  },
+  "count_given": 3,
+  "count_note": "The interviewer, the astronaut and the controller who opens and closes the event: a user who knows the event gives three.",
+  "turns": [
+    {
+      "speaker": "A",
+      "start_s": 566.58,
+      "end_s": 569.22
+    },
+    {
+      "speaker": "B",
+      "start_s": 573.54,
+      "end_s": 577.0
+    },
+    {
+      "speaker": "A",
+      "start_s": 577.0,
+      "end_s": 582.18
+    },
+    {
+      "speaker": "A",
+      "start_s": 635.5,
+      "end_s": 641.22
+    },
+    {
+      "speaker": "C",
+      "start_s": 659.96,
+      "end_s": 663.9
+    },
+    {
+      "speaker": "B",
+      "start_s": 667.92,
+      "end_s": 672.22
+    },
+    {
+      "speaker": "C",
+      "start_s": 672.22,
+      "end_s": 674.42
+    },
+    {
+      "speaker": "B",
+      "start_s": 677.94,
+      "end_s": 681.14
+    },
+    {
+      "speaker": "C",
+      "start_s": 682.24,
+      "end_s": 692.76
+    },
+    {
+      "speaker": "B",
+      "start_s": 697.3,
+      "end_s": 702.02
+    },
+    {
+      "speaker": "C",
+      "start_s": 703.58,
+      "end_s": 707.18
+    },
+    {
+      "speaker": "C",
+      "start_s": 786.66,
+      "end_s": 799.94
+    },
+    {
+      "speaker": "B",
+      "start_s": 803.5,
+      "end_s": 807.98
+    },
+    {
+      "speaker": "C",
+      "start_s": 808.7,
+      "end_s": 834.7
+    },
+    {
+      "speaker": "B",
+      "start_s": 838.54,
+      "end_s": 887.94
+    },
+    {
+      "speaker": "C",
+      "start_s": 892.54,
+      "end_s": 894.7
+    },
+    {
+      "speaker": "B",
+      "start_s": 894.7,
+      "end_s": 939.9
+    },
+    {
+      "speaker": "C",
+      "start_s": 941.02,
+      "end_s": 953.54
+    },
+    {
+      "speaker": "B",
+      "start_s": 959.06,
+      "end_s": 1019.34
+    },
+    {
+      "speaker": "C",
+      "start_s": 1020.5,
+      "end_s": 1028.86
+    },
+    {
+      "speaker": "B",
+      "start_s": 1032.38,
+      "end_s": 1060.9
+    },
+    {
+      "speaker": "C",
+      "start_s": 1060.9,
+      "end_s": 1067.34
+    },
+    {
+      "speaker": "B",
+      "start_s": 1069.86,
+      "end_s": 1078.54
+    },
+    {
+      "speaker": "C",
+      "start_s": 1080.34,
+      "end_s": 1090.46
+    },
+    {
+      "speaker": "B",
+      "start_s": 1093.14,
+      "end_s": 1095.42
+    },
+    {
+      "speaker": "A",
+      "start_s": 1099.42,
+      "end_s": 1107.78
+    }
+  ],
+  "unscored": [
+    {
+      "start_s": 571.0,
+      "end_s": 572.0
+    },
+    {
+      "start_s": 658.22,
+      "end_s": 659.96
+    },
+    {
+      "start_s": 889.22,
+      "end_s": 892.54
+    },
+    {
+      "start_s": 1078.54,
+      "end_s": 1080.34
+    }
+  ]
+}

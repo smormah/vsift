@@ -564,6 +564,21 @@ pub(crate) enum TranscriptCommand {
     /// Transcribe the session's speech locally with whisper.cpp into a new
     /// revision: the whole video, or one range of it.
     Retranscribe(TranscriptRetranscribeArguments),
+    /// Label a transcript revision's segments by voice (S1, S2, ...) with the
+    /// speaker-diarization engine.
+    ///
+    /// Labels are provisional: a label groups segments heard in one voice; it is
+    /// not who the person is, and two similar voices can share one. A segment in
+    /// which two people speak is not split. Segments no voice clearly holds have
+    /// no confident speaker. transcript get and search then show the labels.
+    Speakers(TranscriptSpeakersArguments),
+    /// Record, or clear, the user's verified name for a speaker label.
+    ///
+    /// The name is the user's own statement, shown beside the label; `VSift` never
+    /// infers a name from a voice or the screen. It writes a new speaker record of
+    /// the same labels, so earlier answers stay as they were.
+    #[command(name = "name-speaker")]
+    NameSpeaker(TranscriptNameSpeakerArguments),
 }
 
 impl TranscriptCommand {
@@ -572,6 +587,8 @@ impl TranscriptCommand {
         match self {
             Self::Get(_) => CommandName::TranscriptGet,
             Self::Retranscribe(_) => CommandName::TranscriptRetranscribe,
+            Self::Speakers(_) => CommandName::TranscriptSpeakers,
+            Self::NameSpeaker(_) => CommandName::TranscriptNameSpeaker,
         }
     }
 }
@@ -650,6 +667,56 @@ pub(crate) struct TranscriptRetranscribeArguments {
     pub operation_id: Option<OperationId>,
 }
 
+/// Speaker labels for a transcript revision (ADR 0031).
+#[derive(Args, Debug)]
+pub(crate) struct TranscriptSpeakersArguments {
+    /// Session whose transcript is labelled.
+    pub session: SessionId,
+    /// Revision to label (a `trv_` identity); defaults to the newest.
+    #[arg(long)]
+    pub revision: Option<TranscriptRevisionId>,
+    /// Inclusive source-timeline start in microseconds; requires --to. Omit both
+    /// to hear the whole video, at most two hours.
+    #[arg(long, requires = "to")]
+    pub from: Option<u64>,
+    /// Exclusive source-timeline end in microseconds; requires --from.
+    #[arg(long, requires = "from")]
+    pub to: Option<u64>,
+    /// How many people speak, if the user knows it (1 to 16); passed to the engine
+    /// as given. Omit it to let the engine decide.
+    #[arg(long, value_parser = clap::value_parser!(u8).range(1..=16))]
+    pub speakers: Option<u8>,
+    /// The speaker-diarization tool (sherpa-onnx-offline-speaker-diarization);
+    /// defaults to the managed install, then the filtered PATH.
+    #[arg(long, value_name = "PATH")]
+    pub diarizer: Option<PathBuf>,
+    /// The pyannote segmentation 3.0 model file; defaults to the managed install.
+    #[arg(long, value_name = "PATH")]
+    pub segmentation_model: Option<PathBuf>,
+    /// The `NeMo` `TitaNet` small embedding model file; defaults to the managed install.
+    #[arg(long, value_name = "PATH")]
+    pub embedding_model: Option<PathBuf>,
+}
+
+/// A verified name for a speaker label (ADR 0031).
+#[derive(Args, Debug)]
+pub(crate) struct TranscriptNameSpeakerArguments {
+    /// Session whose speaker labels are named.
+    pub session: SessionId,
+    /// The label to name, such as S2.
+    #[arg(long)]
+    pub label: String,
+    /// The name the user verified (1 to 128 bytes), kept exactly as given.
+    #[arg(long, required_unless_present = "clear", conflicts_with = "clear")]
+    pub name: Option<String>,
+    /// Remove the label's name instead.
+    #[arg(long)]
+    pub clear: bool,
+    /// Revision whose newest speaker record is named; defaults to the newest.
+    #[arg(long)]
+    pub revision: Option<TranscriptRevisionId>,
+}
+
 /// Bounded literal transcript search.
 #[derive(Args, Debug)]
 pub(crate) struct SearchArguments {
@@ -676,6 +743,11 @@ pub(crate) struct SearchArguments {
     /// Revision to search (a `trv_` identity); defaults to the newest.
     #[arg(long)]
     pub revision: Option<TranscriptRevisionId>,
+    /// Search only the segments of one speaker: a label such as S2, or a name the
+    /// user recorded for one. Needs the revision's speaker labels (transcript
+    /// speakers); segments with no confident speaker are not searched.
+    #[arg(long)]
+    pub speaker: Option<String>,
     /// Which answer to give. `brief` keeps each found segment's ids, times and
     /// `display_text` (and `carried_from` on a carried segment) and leaves out
     /// what the segments of a revision repeat; those members stay once in the

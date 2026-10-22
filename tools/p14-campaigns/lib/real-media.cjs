@@ -23,8 +23,11 @@ const SET_ID = 'vsift-real-media';
 const MAX_ITEM_BYTES = 300 * 1024 * 1024;
 /** Every item that is not withdrawn, together. */
 const MAX_SET_BYTES = 750 * 1024 * 1024;
-/** The set itself, its approved items: at most eight, and 500 MB together (the maintainer's limits of 2026-10-19). */
-const MAX_APPROVED_ITEMS = 8;
+/**
+ * The set itself, its approved items: at most nine, and 500 MB together (the maintainer's limits of 2026-10-19;
+ * nine since the approval of 2026-10-21 to add a recording of two or three speakers, RM11).
+ */
+const MAX_APPROVED_ITEMS = 9;
 const MAX_APPROVED_BYTES = 500_000_000;
 const MAX_REDIRECTS = 5;
 /** A transfer that sends nothing for this long is abandoned. */
@@ -73,6 +76,7 @@ const COVERS = Object.freeze([
   'non-english-or-accented',
   'leading-silence',
   'lecture-or-meeting',
+  'two-or-three-speakers',
   'vertical-variable-frame-rate',
 ]);
 /** The shapes the set must hold before it is used as evidence; the vertical phone video is wanted but optional. */
