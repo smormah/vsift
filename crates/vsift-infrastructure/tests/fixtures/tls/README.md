@@ -35,18 +35,28 @@ route (`install-test-hooks`), so `ingest --url`'s fetch meets a real TLS server
 without the network. No release build can trust this root, and no build packages
 these files.
 
-Generated on 2026-10-21 with OpenSSL 1.1.1k:
+Regenerated on 2026-10-22 with OpenSSL 1.1.1k. The first version (2026-10-21) was
+made with `req -x509 ... -addext "basicConstraints=critical,CA:TRUE"`, which adds
+the default `basicConstraints` of OpenSSL's `v3_ca` section as well, so the root
+carried the extension twice. SChannel (Windows) accepted that; OpenSSL refused
+the root as an issuer and every handshake failed with the typed `tls` reason on
+Linux and macOS. Every extension therefore comes from an explicit configuration
+and appears once, and `openssl x509 -noout -text` on each certificate must show
+each extension exactly once.
 
 ```console
-openssl req -x509 -newkey rsa:2048 -nodes -sha256 -keyout link-test-ca.key.pem \
-  -out link-test-ca.cert.pem -days 36500 -subj "/CN=vsift-link-test-ca" \
-  -addext "basicConstraints=critical,CA:TRUE" -addext "keyUsage=critical,keyCertSign,cRLSign"
-openssl req -newkey rsa:2048 -nodes -sha256 -keyout link-test-server.key.pem \
-  -out server.csr -subj "/CN=video.example.test"
-openssl x509 -req -in server.csr -CA link-test-ca.cert.pem -CAkey link-test-ca.key.pem \
-  -CAcreateserial -out link-test-server.cert.pem -days 36500 -sha256 -extfile leaf.ext
+openssl req -x509 -newkey rsa:2048 -nodes -sha256 -keyout link-test-ca.key.pem   -out link-test-ca.cert.pem -days 36500 -config ca.cnf
+openssl req -newkey rsa:2048 -nodes -sha256 -keyout link-test-server.key.pem   -out server.csr -subj "/CN=video.example.test"
+openssl x509 -req -in server.csr -CA link-test-ca.cert.pem -CAkey link-test-ca.key.pem   -CAcreateserial -out link-test-server.cert.pem -days 36500 -sha256 -extfile leaf.ext
+openssl verify -purpose sslserver -CAfile link-test-ca.cert.pem link-test-server.cert.pem
 ```
 
-where `leaf.ext` holds `basicConstraints=critical,CA:FALSE`,
+where `ca.cnf` holds `[req]` with `distinguished_name=dn`, `prompt=no` and
+`x509_extensions=v3_ca`, `[dn]` with `CN=vsift-link-test-ca`, and `[v3_ca]` with
+`subjectKeyIdentifier=hash`, `authorityKeyIdentifier=keyid`,
+`basicConstraints=critical,CA:TRUE` and `keyUsage=critical,keyCertSign,cRLSign`;
+and `leaf.ext` holds `subjectKeyIdentifier=hash`, `authorityKeyIdentifier=keyid`,
+`basicConstraints=critical,CA:FALSE`,
 `keyUsage=critical,digitalSignature,keyEncipherment`, `extendedKeyUsage=serverAuth`
-and the `subjectAltName` above.
+and the `subjectAltName` above. Delete `link-test-ca.key.pem`, `server.csr` and
+the serial file afterwards; the root's private key is not kept.
