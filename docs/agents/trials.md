@@ -921,7 +921,7 @@ components are unchanged, and the pin in `committed_freeze` moved with it. No ba
 so `batch-2/freeze.json` and `batch-3/freeze.json` are unchanged (whole-freeze digest `10180cd88ec994dc48079f3aed46e5343a43b79264056e7b6af206c4b85f74c0`, `skill`
 `bd205d6c...`, written at `7e3330a1c725`), both `freeze check` runs answer `nothing frozen has changed`, and the pin in `committed_freeze` is the same. **The maintainer decided that
 batches 2 and 3 run on this candidate**, against the published `0.2.2-rc.1` (`-Version 0.2.2-rc.1`), each on the maintainer's own go after the publish, batch 3 with
-`-AllowGraderChange` as before. **They ran on 2026-10-18** (their records, state files and summaries are in `docs/planning/p14-agent-trials/batch-2/` and `batch-3/`, the readings
+`-AllowGraderChange` as before. **They ran on 2026-10-18** (their records, state files and summaries were in `docs/planning/p14-agent-trials/batch-2/` and `batch-3/` and are in `batch-2-0.2.2-rc.1/` and `batch-3-0.2.2-rc.1/` since the cut of `0.2.3-rc.1`, the readings
 beside them, and the results are in `docs/planning/release-0.2.2.md`; the release `0.2.2` has the same skill). **The cut moved the sixth candidate's records aside**, because the campaign script refuses a state file recorded for another version: `records/`,
 `state-claude.json`, `state-codex.json`, `summary.json` and `SUMMARY.md` of each batch are in `docs/planning/p14-agent-trials/batch-2-0.2.1-rc.3/` and `batch-3-0.2.1-rc.3/`, and
 the file they ran under (`freeze-0.2.1-rc.3.json`, whole-freeze digest `a48567ac...`) is `freeze.json` there; nothing in them changed, and `batch-2/` and `batch-3/` hold
@@ -933,9 +933,17 @@ Rust 1.99.1). Its new pedantic clippy lint `assert_is_empty` fires in the test m
 code changed: every rewritten line is an `assert!(x.is_empty())` in a `#[cfg(test)]` module that became `assert_eq!(x, ...)` against an empty value. `freeze write` at
 `f30144e7a5a3`, the commit of that pull request's branch at which the grader changed, gave the `grader` digest `9ecd1121eb3080c04533266ebcb8930f162c5274823ddaee45c8f47611b27fa4` (it was `57507fad...`)
 and the whole-freeze digest `302930904439c2eb49e43396f30d2088481d1a6fb7f47467dd29f08a1e0bb073` (it was `10180cd8...`); the other six components are unchanged, and the pin in `committed_freeze`
-moved with it. **The seventh candidate's batches ran under `10180cd8...`, and that file is kept beside their records as `freeze-0.2.2-rc.1.json` in both folders.**
+moved with it. **The seventh candidate's batches ran under `10180cd8...`, and that file is kept with their records as `freeze.json` in `batch-2-0.2.2-rc.1/` and `batch-3-0.2.2-rc.1/`** (beside them as `freeze-0.2.2-rc.1.json` until the cut of `0.2.3-rc.1`).
 No batch has run under the new freeze. Batch 3 checks its cold components against batch 1's freeze, so it needs `-AllowGraderChange` (as since 2026-10-04); cycle 3's batch-3
 rerun uses it, by the same decision.
+
+**The eighth candidate, `0.2.3-rc.1` (cut 2026-10-22, the first candidate of `0.2.3`, cycle 2), keeps that freeze byte for byte:** the skill did not change in the cycle, so
+`batch-2/freeze.json` and `batch-3/freeze.json` are unchanged (whole-freeze digest `302930904439c2eb49e43396f30d2088481d1a6fb7f47467dd29f08a1e0bb073`), both `freeze check`
+runs answer `nothing frozen has changed` and the pin in `committed_freeze` is the same. **The cut moved the seventh candidate's records aside**, because the campaign script refuses a
+state file recorded for another version: `records/`, `state-claude.json`, `state-codex.json`, `summary.json` and `SUMMARY.md` of each batch are in
+`docs/planning/p14-agent-trials/batch-2-0.2.2-rc.1/` and `batch-3-0.2.2-rc.1/`, with the file they ran under (`freeze-0.2.2-rc.1.json`, whole-freeze digest `10180cd8...`) as
+`freeze.json` there; nothing in them changed, and `batch-2/` and `batch-3/` hold only the freeze. **No batch has run on `0.2.3-rc.1`;** whether they do, against the published
+`0.2.3-rc.1` (`-Version 0.2.3-rc.1`, batch 3 with `-AllowGraderChange`), or RQ-16 is waived again, is the maintainer's decision at the window (`docs/planning/release-0.2.3.md`).
 
 ## Usage capture (P14)
 
