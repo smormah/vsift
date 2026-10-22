@@ -64,9 +64,14 @@ pub trait RevisionStore: Send + Sync {
     /// A held admission slot; dropping it releases the slot.
     type Permit: Send;
 
+    /// A held demand for the capacity queued work holds; dropping it ends the
+    /// demand.
+    type Demand: Send;
+
     /// Takes `weight` units of the session root's admission capacity
-    /// without waiting: a recognition reserves its recognizer threads
-    /// (X-07).
+    /// without waiting, not even for queued work to give them back: a
+    /// recognition reserves its recognizer threads (X-07), and the run waits
+    /// for queued work itself, where it can say so ([`Self::demand_capacity`]).
     ///
     /// # Errors
     ///
@@ -74,6 +79,32 @@ pub trait RevisionStore: Send + Sync {
     /// [`SessionStorageError::CapacityExhausted`] when `weight` exceeds the
     /// root's whole capacity.
     fn admit(&self, weight: NonZeroU16) -> Result<Self::Permit, SessionStorageError>;
+
+    /// Takes `weight` units for queued work (ADR 0033 section 6), marked as
+    /// such for as long as the permit is held, so that an ordinary caller that
+    /// finds the capacity taken waits for it to be given back at the next chunk
+    /// boundary instead of being refused.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::admit`].
+    fn admit_queued(&self, weight: NonZeroU16) -> Result<Self::Permit, SessionStorageError>;
+
+    /// Whether an ordinary caller waits for capacity queued work holds: queued
+    /// work then gives its permit back at its next chunk boundary. A read
+    /// failure counts as nobody waiting.
+    fn others_waiting(&self) -> bool;
+
+    /// When queued work holds the root's capacity, demands it: queued work
+    /// gives it back at its next chunk boundary for as long as the demand is
+    /// held (ADR 0033 section 6). `None` when no queued work holds it, or the
+    /// demand cannot be recorded; the caller is then refused as for any
+    /// contention.
+    fn demand_capacity(&self) -> Option<Self::Demand>;
+
+    /// Whether queued work still holds the root's capacity. A read failure
+    /// counts as it does not.
+    fn queued_work_holds(&self) -> bool;
 
     /// The committed head of an open, unexpired session.
     ///
@@ -95,14 +126,54 @@ pub trait RevisionStore: Send + Sync {
         now: u64,
     ) -> Result<Option<TranscriptRevision>, SessionStorageError>;
 
+    /// The session's open revision and how it was published, if it has one
+    /// (ADR 0033).
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::head`].
+    fn open_revision(
+        &self,
+        session_id: &SessionId,
+        now: u64,
+    ) -> Result<Option<PublishedOpenRevision>, SessionStorageError>;
+
+    /// Commits part `part` of the open revision `open`, which `job` publishes,
+    /// as the generation after `expected`, under `operation_id`: the revision
+    /// as it stands, with its segments from position `first` on, the ones no
+    /// earlier part published (ADR 0033).
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::publish_revision`], and
+    /// [`SessionStorageError::CapacityExhausted`] past the parts a revision
+    /// may have.
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "One generation's inputs; the store's other commits take the same"
+    )]
+    fn publish_part(
+        &self,
+        session_id: &SessionId,
+        operation_id: &OperationId,
+        expected: StorageGeneration,
+        open: &TranscriptRevision,
+        job: &JobId,
+        part: NonZeroU32,
+        first: usize,
+        now: u64,
+    ) -> Result<StorageGeneration, SessionStorageError>;
+
     /// Commits `revision` as the generation after `expected`, under
-    /// `operation_id`.
+    /// `operation_id`. When the session has an open revision with the same
+    /// identity, the commit seals it: the same generation retires its parts
+    /// (ADR 0033).
     ///
     /// # Errors
     ///
     /// [`SessionStorageError::StateConflict`] when the session moved past
-    /// `expected` or is closed, [`SessionStorageError::Busy`] under
-    /// contention, and storage failures.
+    /// `expected` or is closed, or holds another revision that is open,
+    /// [`SessionStorageError::Busy`] under contention, and storage failures.
     fn publish_revision(
         &self,
         session_id: &SessionId,
@@ -111,6 +182,20 @@ pub trait RevisionStore: Send + Sync {
         revision: &TranscriptRevision,
         now: u64,
     ) -> Result<StorageGeneration, SessionStorageError>;
+}
+
+/// A session's open revision as its parts publish it (ADR 0033).
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PublishedOpenRevision {
+    /// The revision, as an open one.
+    pub revision: TranscriptRevision,
+    /// How many parts it has.
+    pub parts: NonZeroU32,
+    /// The merge-rules version of the run that wrote its last part
+    /// ([`vsift_domain::MERGE_RULES_VERSION`]).
+    pub merge_rules: u32,
+    /// The job whose run publishes it.
+    pub job_id: JobId,
 }
 
 /// Draws jitter and waits: the retry policy's only side effects.
@@ -177,6 +262,14 @@ pub struct RetranscriptionPorts<'a, S, A, R, C, T> {
     /// Receives the run's chunk progress (P11); [`crate::NoProgress`] when
     /// nobody watches.
     pub progress: &'a dyn crate::ProgressSink,
+    /// Whether the run publishes its revision as it goes (ADR 0033).
+    pub publication: super::Publication,
+    /// The clock the run's publication interval and its speed are read on
+    /// ([`crate::StoppedStopwatch`] for a host that needs neither).
+    pub stopwatch: &'a dyn crate::Stopwatch,
+    /// Answers shared with other runs of the same recognition (ADR 0033,
+    /// D5); `None` for a run that shares nothing.
+    pub seed: Option<crate::SeedPort<'a>>,
 }
 
 /// What a run tells its caller about the job behind it.
@@ -253,6 +346,15 @@ pub enum JobRunError {
     Job(JobStoreError),
     /// A key could not be derived; an internal fault.
     Key(JobKeyError),
+    /// What the run would seal differs from what it, or an earlier attempt,
+    /// published (ADR 0033): the merge rules changed between them. Published
+    /// text is never rewritten, so the revision is sealed as stopped at what
+    /// was published and the job fails; a new retranscription of the rest
+    /// continues it.
+    PublishedDiffers {
+        /// The failed job.
+        job: JobId,
+    },
     /// The root's capacity stayed taken for the whole bounded admission
     /// wait; the job stays resumable and is not retried automatically,
     /// because the wait already spent the caller's budget.
@@ -290,6 +392,9 @@ impl fmt::Display for JobRunError {
             Self::AdmissionBusy { .. } => {
                 formatter.write_str("the root's admission capacity stayed taken")
             }
+            Self::PublishedDiffers { .. } => {
+                formatter.write_str("what the run would seal differs from what it published")
+            }
         }
     }
 }
@@ -306,6 +411,7 @@ impl JobRunError {
     pub const fn cannot_succeed_on_resume(&self) -> bool {
         match self {
             Self::Asr { failure, .. } => failure.failure.reason.cannot_succeed_on_resume(),
+            Self::PublishedDiffers { .. } => true,
             Self::Busy { .. }
             | Self::IdempotencyConflict { .. }
             | Self::NotResumable { .. }
@@ -329,6 +435,7 @@ impl JobRunError {
             | Self::Cancelled { job }
             | Self::Superseded { job }
             | Self::Asr { job, .. }
+            | Self::PublishedDiffers { job }
             | Self::AdmissionBusy { job, .. } => Some(job),
             Self::Assembly(_) | Self::Storage(_) | Self::Job(_) | Self::Key(_) => None,
         }
@@ -429,20 +536,12 @@ where
     let mut retries = 0_u32;
     let mut first_use: Option<CheckpointUse> = None;
     let mut discarded = 0_u32;
-    let mut admission_wait = Duration::ZERO;
+    let mut waits = AdmissionWaits::default();
     loop {
         owner
             .apply(&JobChange::Start, run.now)
             .map_err(JobRunError::Job)?;
-        let attempt = attempt_once(
-            &run,
-            &ports,
-            &mut owner,
-            guard,
-            &mut retries,
-            &mut admission_wait,
-        )
-        .await;
+        let attempt = attempt_once(&run, &ports, &mut owner, guard, &mut retries, &mut waits).await;
         match attempt {
             Ok((revision, usage, commit_operation)) => {
                 let first = first_use.unwrap_or(usage);
@@ -460,7 +559,7 @@ where
                         chunks_reused: first.reused,
                         checkpoints_discarded: discarded,
                         replayed: false,
-                        admission_wait,
+                        admission_wait: waits.waited,
                     },
                 });
             }
@@ -469,7 +568,7 @@ where
                     first_use.get_or_insert(usage);
                     discarded = discarded.saturating_add(usage.discarded);
                 }
-                let delay = settle_failure(&run, &ports, &mut owner, stop, retries)?;
+                let delay = settle_failure(&run, &ports, &mut owner, stop, retries).await?;
                 retries = retries.saturating_add(1);
                 ports.timer.sleep(delay).await;
             }
@@ -485,7 +584,7 @@ where
 /// ([`JobRunError::cannot_succeed_on_resume`]), and is interrupted
 /// (resumable) otherwise. Returns the backoff before an automatic retry, or the error
 /// that ends the call.
-fn settle_failure<S, A, R, C, T>(
+async fn settle_failure<S, A, R, C, T>(
     run: &RetranscriptionRun<'_>,
     ports: &RetranscriptionPorts<'_, S, A, R, C, T>,
     owner: &mut S::Owner,
@@ -493,18 +592,22 @@ fn settle_failure<S, A, R, C, T>(
     retries: u32,
 ) -> Result<Duration, JobRunError>
 where
-    S: JobStore,
+    S: JobStore + RevisionStore,
     T: RetryTimer,
 {
     let job = &run.spec.job_id;
     let (error, chunk) = match stop {
-        AttemptStop::CancelledByRequest => return Err(JobRunError::Cancelled { job: job.clone() }),
+        AttemptStop::CancelledByRequest => {
+            seal_what_was_published(run, ports, owner).await;
+            return Err(JobRunError::Cancelled { job: job.clone() });
+        }
         AttemptStop::Failed { error, chunk } => (error, chunk),
     };
     if owner.cancel_requested() {
         owner
             .apply(&JobChange::Cancel, run.now)
             .map_err(JobRunError::Job)?;
+        seal_what_was_published(run, ports, owner).await;
         return Err(JobRunError::Cancelled { job: job.clone() });
     }
     let code = (ports.classify)(&error);
@@ -522,6 +625,9 @@ where
         JobChange::Interrupt(Some(failure))
     };
     owner.apply(&change, run.now).map_err(JobRunError::Job)?;
+    if ends {
+        seal_what_was_published(run, ports, owner).await;
+    }
     // A bounded admission wait already spent the caller's budget: retrying
     // would wait again.
     let waited_out = matches!(error, JobRunError::AdmissionBusy { .. });
@@ -531,6 +637,32 @@ where
             Err(error)
         }
     }
+}
+
+/// Seals the job's open revision as stopped at what it published, if it
+/// published anything (ADR 0033, D1): a job that is cancelled, or fails in a
+/// way it cannot resume from, keeps what it showed. Best effort: a seal that
+/// cannot be committed now leaves the revision open, and a later
+/// cancellation or resume tries again.
+async fn seal_what_was_published<S, A, R, C, T>(
+    run: &RetranscriptionRun<'_>,
+    ports: &RetranscriptionPorts<'_, S, A, R, C, T>,
+    owner: &S::Owner,
+) where
+    S: JobStore + RevisionStore,
+    T: RetryTimer,
+{
+    let record = owner.record();
+    let _ = super::seal_stopped(
+        ports.store,
+        ports.timer,
+        &run.spec.session_id,
+        &run.spec.job_id,
+        record.epoch,
+        record.attempt,
+        run.now,
+    )
+    .await;
 }
 
 /// A job whose owner lock is held elsewhere is busy; anything else is a
@@ -629,7 +761,7 @@ async fn attempt_once<S, A, R, C, T, G>(
     owner: &mut S::Owner,
     guard: &mut G,
     retries: &mut u32,
-    admission_wait: &mut Duration,
+    waits: &mut AdmissionWaits,
 ) -> AttemptResult
 where
     S: JobStore + CommitLedger + RevisionStore,
@@ -643,9 +775,20 @@ where
     // The permit covers the recognizer's threads and the chunk decoding the
     // attempt does between recognitions: one reservation for everything the
     // attempt runs, so the root is never oversubscribed (X-07).
-    let permit = admit_waiting(run, ports, admission_wait)
+    let permit = admit_waiting(run, ports, waits)
         .await
         .map_err(|error| (AttemptStop::failed(error), None))?;
+    // Queued work holds its permit in a gate that gives it back at a chunk
+    // boundary when someone waits for capacity (ADR 0033 section 6).
+    let gate = QueuedGate::holding(ports, run.transcribe.expected.threads, permit);
+    let publisher = super::publish::Publisher::new(
+        run,
+        ports.store,
+        ports.publication,
+        ports.stopwatch,
+        owner.record().epoch,
+        owner.record().attempt,
+    );
     let recognised = {
         let shared: &S::Owner = owner;
         let cancellation = JobAwareCancellation {
@@ -658,6 +801,11 @@ where
                 checkpoints: shared,
                 key: &run.spec.recognition_key,
                 progress: ports.progress,
+                observer: &publisher,
+                stopwatch: ports.stopwatch,
+                seed: ports.seed,
+                gate: (run.admission == AdmissionWait::Queued)
+                    .then_some(&gate as &dyn crate::ChunkGate),
             },
             ports.audio,
             ports.recognizer,
@@ -665,7 +813,7 @@ where
         )
         .await
     };
-    drop(permit);
+    drop(gate);
     let (transcription, usage) = match recognised {
         Ok(result) => result,
         Err(failure) => {
@@ -694,6 +842,19 @@ where
     }
     let revision = assemble(run, run.base, &transcription)
         .map_err(|error| with_usage(AttemptStop::failed(JobRunError::Assembly(error))))?;
+    // What the run seals must begin with what it published (ADR 0033); the
+    // merge-equivalence tests hold it, and a resume under other merge rules is
+    // the one way it cannot.
+    let (shown, publishing) = publisher.outcome();
+    if let Some(shown) = &shown
+        && (publishing == Some(super::PublishingStopped::Diverged)
+            || revision.id() != shown.id()
+            || revision.segments().get(..shown.segments().len()) != Some(shown.segments()))
+    {
+        return Err(with_usage(AttemptStop::failed(
+            JobRunError::PublishedDiffers { job: job.clone() },
+        )));
+    }
     guard
         .verify()
         .map_err(|error| with_usage(AttemptStop::failed(JobRunError::Storage(error))))?;
@@ -721,11 +882,17 @@ where
 /// the policy's full-jitter backoff until the capacity frees, the caller
 /// cancels (the attempt then fails as a cancelled recognition) or the budget
 /// is spent ([`JobRunError::AdmissionBusy`]); the progress sink hears once
-/// that the run waits, and the time spent is added to `waited`.
+/// that the run waits, and the time spent is added to `waits`.
+///
+/// Either first waits, up to [`vsift_domain::QUEUED_YIELD_WAIT`] over all the
+/// run's attempts, for queued work that holds the capacity to give it back
+/// (ADR 0033 section 6), and the progress sink hears once that it does: the
+/// wait happens here, on the run's timer, rather than inside the store, so
+/// the person or agent waiting is told and the wait never blocks a thread.
 async fn admit_waiting<S, A, R, C, T>(
     run: &RetranscriptionRun<'_>,
     ports: &RetranscriptionPorts<'_, S, A, R, C, T>,
-    waited: &mut Duration,
+    waits: &mut AdmissionWaits,
 ) -> Result<S::Permit, JobRunError>
 where
     S: RevisionStore,
@@ -736,15 +903,31 @@ where
     let mut polls = 0_u32;
     let mut this_wait = Duration::ZERO;
     loop {
-        match ports.store.admit(weight) {
+        let admitted = if run.admission == AdmissionWait::Queued {
+            // Queued work never takes capacity someone else waits for.
+            if ports.store.others_waiting() {
+                Err(SessionStorageError::Busy)
+            } else {
+                ports.store.admit_queued(weight)
+            }
+        } else {
+            ports.store.admit(weight)
+        };
+        match admitted {
             Ok(permit) => return Ok(permit),
             Err(SessionStorageError::Busy) => {}
             Err(other) => return Err(JobRunError::Storage(other)),
+        }
+        if run.admission != AdmissionWait::Queued
+            && let Some(permit) = waits.for_queued_work(run, ports, weight).await?
+        {
+            return Ok(permit);
         }
         let delay = match run.admission {
             AdmissionWait::Immediate => {
                 return Err(JobRunError::Storage(SessionStorageError::Busy));
             }
+            AdmissionWait::Queued => vsift_domain::QUEUED_ADMISSION_POLL,
             AdmissionWait::Bounded(_) => {
                 match run.admission.decide(polls, this_wait, ports.timer.jitter()) {
                     AdmissionDecision::PollAfter(delay) => delay,
@@ -762,18 +945,162 @@ where
         }
         ports.timer.sleep(delay).await;
         this_wait = this_wait.saturating_add(delay);
-        *waited = waited.saturating_add(delay);
+        waits.waited = waits.waited.saturating_add(delay);
         polls = polls.saturating_add(1);
         if ports.cancellation.is_cancelled() {
-            return Err(JobRunError::Asr {
-                job: run.spec.job_id.clone(),
-                failure: AsrFailure {
-                    stage: AsrStage::Planning,
-                    reason: AsrFailureReason::Cancelled,
-                }
-                .into(),
-            });
+            return Err(cancelled_while_waiting(run));
         }
+    }
+}
+
+/// The failure of a run cancelled while it waited for capacity.
+fn cancelled_while_waiting(run: &RetranscriptionRun<'_>) -> JobRunError {
+    JobRunError::Asr {
+        job: run.spec.job_id.clone(),
+        failure: AsrFailure {
+            stage: AsrStage::Planning,
+            reason: AsrFailureReason::Cancelled,
+        }
+        .into(),
+    }
+}
+
+/// The time a run has waited for admission over all its attempts, and its
+/// wait for queued work to give back the capacity it holds (ADR 0033 section
+/// 6): at most [`vsift_domain::QUEUED_YIELD_WAIT`] over the whole run, every
+/// attempt included, announced once.
+#[derive(Debug, Default)]
+struct AdmissionWaits {
+    /// Every wait, reported as the run's `admission_wait`.
+    waited: Duration,
+    /// The part spent waiting for queued work.
+    queued_spent: Duration,
+    announced: bool,
+}
+
+impl AdmissionWaits {
+    /// Waits, demanding the capacity, while queued work holds it: the permit
+    /// once it is given back and taken, or `None` when no queued work holds
+    /// it, it was given back to someone else or the wait is spent. Every poll
+    /// is added to `waited`.
+    async fn for_queued_work<S, A, R, C, T>(
+        &mut self,
+        run: &RetranscriptionRun<'_>,
+        ports: &RetranscriptionPorts<'_, S, A, R, C, T>,
+        weight: NonZeroU16,
+    ) -> Result<Option<S::Permit>, JobRunError>
+    where
+        S: RevisionStore,
+        C: AsrCancellation,
+        T: RetryTimer,
+    {
+        if self.queued_spent >= vsift_domain::QUEUED_YIELD_WAIT {
+            return Ok(None);
+        }
+        let Some(_demand) = ports.store.demand_capacity() else {
+            return Ok(None);
+        };
+        if !self.announced {
+            self.announced = true;
+            ports.progress.queued_work_waiting(weight);
+        }
+        loop {
+            ports.timer.sleep(vsift_domain::QUEUED_YIELD_POLL).await;
+            self.queued_spent = self
+                .queued_spent
+                .saturating_add(vsift_domain::QUEUED_YIELD_POLL);
+            self.waited = self.waited.saturating_add(vsift_domain::QUEUED_YIELD_POLL);
+            if ports.cancellation.is_cancelled() {
+                return Err(cancelled_while_waiting(run));
+            }
+            match ports.store.admit(weight) {
+                Ok(permit) => return Ok(Some(permit)),
+                Err(SessionStorageError::Busy) => {}
+                Err(other) => return Err(JobRunError::Storage(other)),
+            }
+            // Given back and taken by someone else, or the wait is over: the
+            // run is refused as for any contention.
+            if !ports.store.queued_work_holds()
+                || self.queued_spent >= vsift_domain::QUEUED_YIELD_WAIT
+            {
+                return Ok(None);
+            }
+        }
+    }
+}
+
+/// The permit of a queued run, given back at a chunk boundary while an ordinary
+/// caller waits for capacity and taken back once nobody does (ADR 0033 section
+/// 6). For every other run it only holds the permit.
+struct QueuedGate<'a, S: RevisionStore, T, C> {
+    store: &'a S,
+    timer: &'a T,
+    cancellation: &'a C,
+    weight: NonZeroU16,
+    permit: std::sync::Mutex<Option<S::Permit>>,
+}
+
+impl<'a, S: RevisionStore, T, C> QueuedGate<'a, S, T, C> {
+    fn holding<A, R>(
+        ports: &RetranscriptionPorts<'a, S, A, R, C, T>,
+        weight: NonZeroU16,
+        permit: S::Permit,
+    ) -> Self {
+        Self {
+            store: ports.store,
+            timer: ports.timer,
+            cancellation: ports.cancellation,
+            weight,
+            permit: std::sync::Mutex::new(Some(permit)),
+        }
+    }
+}
+
+impl<S, T, C> crate::ChunkGate for QueuedGate<'_, S, T, C>
+where
+    S: RevisionStore,
+    T: RetryTimer,
+    C: AsrCancellation,
+{
+    fn before_chunk(
+        &self,
+    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), AsrFailure>> + Send + '_>> {
+        Box::pin(async move {
+            if !self.store.others_waiting() {
+                return Ok(());
+            }
+            // Gives the capacity back: the waiting caller takes it now.
+            if let Ok(mut held) = self.permit.lock() {
+                held.take();
+            }
+            loop {
+                self.timer.sleep(vsift_domain::QUEUED_ADMISSION_POLL).await;
+                if self.cancellation.is_cancelled() {
+                    return Err(AsrFailure::at(
+                        AsrStage::AudioExtraction,
+                        AsrFailureReason::Cancelled,
+                    ));
+                }
+                if self.store.others_waiting() {
+                    continue;
+                }
+                match self.store.admit_queued(self.weight) {
+                    Ok(permit) => {
+                        if let Ok(mut held) = self.permit.lock() {
+                            *held = Some(permit);
+                        }
+                        return Ok(());
+                    }
+                    Err(SessionStorageError::Busy) => {}
+                    Err(_) => {
+                        return Err(AsrFailure::at(
+                            AsrStage::AudioExtraction,
+                            AsrFailureReason::Busy,
+                        ));
+                    }
+                }
+            }
+        })
     }
 }
 
@@ -880,7 +1207,10 @@ where
             .head(session, run.now)
             .map_err(|error| AttemptStop::failed(JobRunError::Storage(error)))?;
         let newest_id = head.newest.as_ref().map(|newest| newest.id().clone());
-        if newest_id != base_id {
+        // The run's own open revision (ADR 0033) is what this commit seals,
+        // not a revision that superseded the base.
+        let ours = newest_id.as_ref() == Some(revision.id());
+        if newest_id != base_id && !ours {
             // Another revision superseded the base. The recognised range is
             // still right only if widening the request over the new newest
             // revision gives the same range; then splice onto it.

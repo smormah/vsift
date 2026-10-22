@@ -27,21 +27,23 @@ use std::time::Duration;
 
 pub use admission::{
     ADMISSION_RETRY_AFTER, AdmissionBudget, AdmissionBudgetError, AdmissionDecision, AdmissionWait,
-    MAX_ADMISSION_WAIT, MAX_RECOGNIZER_THREADS, SINGLE_STAGE_WEIGHT, VISUAL_WINDOW_WEIGHT,
-    recognizer_threads,
+    MAX_ADMISSION_WAIT, MAX_RECOGNIZER_THREADS, QUEUED_ADMISSION_POLL, QUEUED_YIELD_POLL,
+    QUEUED_YIELD_WAIT, RecognitionShare, SINGLE_STAGE_WEIGHT, VISUAL_WINDOW_WEIGHT,
+    leaving_one_free, recognizer_threads,
 };
 pub use asr::{
     AsrChunkOutcome, AsrChunkRecord, AsrDecodingProfile, AsrModel, AsrModelProfile, AsrProvider,
     AsrProviderBuild, AsrRun, AsrRunParts, AsrSegmentDraft, ChunkPlan, ChunkPlanError,
     ChunkSegments, ChunkTime, DigestError, EarlierTextRule, MAX_CHUNK_WINDOW_MICROS,
-    MAX_PLANNED_CHUNKS, MAX_PROVIDER_SEGMENTS, MAX_PROVIDER_TOKENS, MIN_RECOGNITION_MICROS,
-    MIN_RECOGNITION_SAMPLES, MIN_SEGMENTS_FOR_REJECTION_RATIO, MergedSegment, MergedTranscript,
+    MAX_EARLY_AUDIO_MICROS, MAX_PLANNED_CHUNKS, MAX_PROVIDER_SEGMENTS, MAX_PROVIDER_TOKENS,
+    MERGE_RULES_VERSION, MIN_RECOGNITION_MICROS, MIN_RECOGNITION_SAMPLES,
+    MIN_SEGMENTS_FOR_REJECTION_RATIO, MergedSegment, MergedTranscript,
     PROVIDER_END_TOLERANCE_MICROS, PlannedChunk, ProviderChunkOutput, ProviderOutputError,
     ProviderSegment, ProviderToken, ProviderTokenKind, ReviewedAsrModel,
-    SEAM_COVERAGE_TOLERANCE_MICROS, SPEECH_SAMPLE_RATE, Sha256Hex,
-    UNUSABLE_CHUNK_SHARE_DENOMINATOR, ValidatedChunk, decoded_audio_range,
+    SEAM_COVERAGE_TOLERANCE_MICROS, SPEECH_SAMPLE_RATE, SettledTranscript, Sha256Hex,
+    UNUSABLE_CHUNK_SHARE_DENOMINATOR, ValidatedChunk, align_to_chunk_grid, decoded_audio_range,
     is_below_recognition_floor, is_silent_pcm, merge_chunks, plan_chunks, rounds_to_no_pcm_sample,
-    unusable_chunks_end_the_run, validate_chunk_output,
+    settled_merge, unusable_chunks_end_the_run, validate_chunk_output,
 };
 pub use checkpoint::{CheckpointOutcome, ChunkCheckpoint, RecognitionKey};
 pub use evidence::{
@@ -61,13 +63,18 @@ pub use identity::{
     ArtifactId, EvidenceId, IdentifierError, JobId, OperationId, OperationKey, SessionId, SourceId,
     SourceSegmentId, TranscriptRevisionId, TranscriptSegmentId, VisualCandidateId, VisualIndexId,
 };
-pub use job::{JobKind, JobState, JobTransitionError};
+pub use job::{
+    JobKind, JobMode, JobState, JobTransitionError, MAX_FIRST_WINDOW_MICROS, PrepareStream,
+};
 pub use media::{
     DisplayRotation, MediaDecodeSupport, MediaDescription, MediaSelection, MediaSelectionError,
     MediaStream, MediaStreamKind, VisualStreamError,
 };
 pub use pagination::{CursorError, CursorToken, PageLimit, PageLimitError, QueryDigest};
-pub use progress::{ProgressStage, ProgressUnit, ProgressUpdate};
+pub use progress::{
+    ESTIMATE_MIN_FRESH_CHUNKS, ESTIMATE_MIN_FRESH_MICROS, MediaProgress, ProgressStage,
+    ProgressUnit, ProgressUpdate,
+};
 pub use provisioning::{
     ArtifactIntegrity, ArtifactIntegrityError, MAX_MANAGED_ARTIFACT_BYTES, MAX_MANAGED_KEY_BYTES,
     MAX_SHARED_LIBRARY_NAME_BYTES, ManagedArtifactFormat, ManagedComponent, ManagedTarget,
@@ -83,8 +90,9 @@ pub use search::{
     normalise_search_text, search_revision,
 };
 pub use session::{
-    SessionArtifactKind, SessionLifetime, SessionLifetimePolicy, SessionPhase,
-    SessionTransitionError, WorkspacePolicy, WorkspacePolicyError, WorkspaceRetention,
+    MAX_TRANSCRIPT_PARTS, SessionArtifactKind, SessionLifetime, SessionLifetimePolicy,
+    SessionPhase, SessionTransitionError, WorkspacePolicy, WorkspacePolicyError,
+    WorkspaceRetention,
 };
 pub use storage::{
     DurabilityRequirement, GenerationError, PublicationGuarantee, StorageGeneration,
@@ -98,11 +106,11 @@ pub use transcript::{
     ImportedCue, InheritedRevision, LanguageTag, LanguageTagError, MAX_CARRIED_UNTRANSCRIBED,
     MAX_CUE_TEXT_BYTES, MAX_SUPPLIED_TRANSCRIPT_BYTES, MAX_TRANSCRIPT_CUES,
     MAX_TRANSCRIPT_OFFSET_MICROS, MAX_UNPLACED_STRETCHES, ParsedTranscript, ProviderEndTrim,
-    SegmentOrigin, SidecarIdentity, SourceSegment, SourceSegmentState, TranscriptFormat,
-    TranscriptImportError, TranscriptOffset, TranscriptProvenance, TranscriptRejection,
-    TranscriptRevision, TranscriptRevisionError, TranscriptRevisionParts, TranscriptSegment,
-    TranscriptSegmentParts, TranscriptSlice, TranscriptWarning, TranscriptWarningKind,
-    TranscriptWarnings, align_imported_cues,
+    RevisionState, SegmentOrigin, SidecarIdentity, SourceSegment, SourceSegmentState,
+    TranscriptFormat, TranscriptImportError, TranscriptOffset, TranscriptProvenance,
+    TranscriptRejection, TranscriptRevision, TranscriptRevisionError, TranscriptRevisionParts,
+    TranscriptSegment, TranscriptSegmentParts, TranscriptSlice, TranscriptWarning,
+    TranscriptWarningKind, TranscriptWarnings, align_imported_cues,
 };
 pub use visual::{
     CandidateChange, CandidateDraft, CandidateOmission, CandidateReason, CandidateStability,

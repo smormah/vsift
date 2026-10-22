@@ -32,6 +32,7 @@ mod lifecycle;
 #[cfg(test)]
 mod p10_tests;
 mod publication;
+mod queue;
 mod reads;
 mod root;
 mod stored;
@@ -70,6 +71,7 @@ pub use job_records::{
     decode_chunk_checkpoint, decode_job_record, encode_chunk_checkpoint, encode_job_record,
 };
 pub use jobs::{FilesystemJobOwner, JOB_CANCEL_POLL};
+pub use queue::{MAX_QUEUED_JOBS, QueueTurn, QueuedEntry};
 pub use root::{FREE_SPACE_RESERVE_BYTES, FreeSpaceCheck};
 pub(crate) use root::{RootProvisioningState, root_provisioning_state};
 pub use worker_requests::{
@@ -230,7 +232,20 @@ pub struct FilesystemSessionStore {
 /// Dropping the value releases every reservation. The slot files themselves are
 /// immutable anchors and are never replaced during normal operation.
 pub struct FilesystemAdmissionPermit {
+    /// The slots, and for queued work (ADR 0033 section 6) the marker that
+    /// makes an ordinary caller who finds the slots taken wait for them
+    /// instead of being refused: one list, so the permit stays as small as
+    /// before.
     _slots: Vec<HeldFileLock>,
+}
+
+impl FilesystemAdmissionPermit {
+    /// The same slots, held for queued work under `marker`.
+    pub(super) fn marked_queued(self, marker: HeldFileLock) -> Self {
+        let Self { _slots: mut held } = self;
+        held.push(marker);
+        Self { _slots: held }
+    }
 }
 
 /// A committed metadata snapshot protected by a shared session lifetime hold.
@@ -589,6 +604,12 @@ enum LifecycleUpdate {
     },
     Close,
     AddArtifact {
+        artifact: StoredArtifact,
+        now: u64,
+    },
+    /// The transcript record that seals an open revision (ADR 0033): added,
+    /// and every part of the open revision retired, in one generation.
+    SealTranscript {
         artifact: StoredArtifact,
         now: u64,
     },
@@ -1213,6 +1234,7 @@ enum StoredArtifactKind {
     VisualIndexRecord,
     AudioWav,
     EvidenceRecord,
+    TranscriptPart,
 }
 
 impl StoredArtifactKind {
@@ -1224,6 +1246,7 @@ impl StoredArtifactKind {
             SessionArtifactKind::VisualIndexRecord => Self::VisualIndexRecord,
             SessionArtifactKind::AudioWav => Self::AudioWav,
             SessionArtifactKind::EvidenceRecord => Self::EvidenceRecord,
+            SessionArtifactKind::TranscriptPart => Self::TranscriptPart,
         }
     }
 
@@ -1239,7 +1262,10 @@ impl StoredArtifactKind {
             Self::FramePng => "png",
             Self::AudioPcm => "pcm",
             Self::AudioWav => "wav",
-            Self::TranscriptRecord | Self::VisualIndexRecord | Self::EvidenceRecord => "json",
+            Self::TranscriptRecord
+            | Self::VisualIndexRecord
+            | Self::EvidenceRecord
+            | Self::TranscriptPart => "json",
         }
     }
 
@@ -1248,7 +1274,7 @@ impl StoredArtifactKind {
     const fn is_evidence(self) -> bool {
         match self {
             Self::FramePng | Self::AudioPcm | Self::AudioWav | Self::EvidenceRecord => true,
-            Self::TranscriptRecord | Self::VisualIndexRecord => false,
+            Self::TranscriptRecord | Self::VisualIndexRecord | Self::TranscriptPart => false,
         }
     }
 
@@ -1261,6 +1287,7 @@ impl StoredArtifactKind {
             Self::VisualIndexRecord => crate::MAX_VISUAL_INDEX_RECORD_BYTES,
             Self::AudioWav => crate::MAX_AUDIO_WAV_BYTES,
             Self::EvidenceRecord => crate::MAX_EVIDENCE_RECORD_BYTES,
+            Self::TranscriptPart => crate::MAX_TRANSCRIPT_PART_BYTES,
         }
     }
 }

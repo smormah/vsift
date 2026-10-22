@@ -37,6 +37,8 @@
 //! if the manifest chain holds that operation above that generation, the job
 //! succeeded, whatever its record says; the chain is the source of truth.
 
+mod prepare;
+mod publish;
 mod run;
 #[cfg(test)]
 mod tests;
@@ -44,9 +46,9 @@ mod tests;
 use std::{error::Error, fmt, time::Duration};
 
 use vsift_domain::{
-    AttemptFailure, ChunkCheckpoint, ChunkPlan, JobId, JobKind, JobState, JobTransitionError,
-    OperationId, OperationKey, RecognitionKey, SessionId, Sha256Hex, SourceId, StorageGeneration,
-    TimeRange, TranscriptRevisionId,
+    AttemptFailure, ChunkCheckpoint, ChunkPlan, JobId, JobKind, JobMode, JobState,
+    JobTransitionError, OperationId, OperationKey, RecognitionKey, RecognitionShare, SessionId,
+    Sha256Hex, SourceId, StorageGeneration, TimeRange, TranscriptRevisionId,
 };
 
 use crate::{
@@ -54,9 +56,19 @@ use crate::{
     transcript::{derived_identity, sha256_hex},
 };
 
+pub use prepare::{
+    JobProgressLog, PrepareError, PrepareOutcome, PrepareProgress, PrepareStreams, StreamEnd,
+    StreamPhase, StreamProgress, StreamStop, prepare_operation_key, prepare_request_digest,
+    prepare_spec, run_prepare,
+};
+pub use publish::{
+    Publication, PublishingStopped, part_operation_id, seal_stopped, seal_stopped_now,
+    stop_operation_id,
+};
 pub use run::{
-    CommitGuard, JobReport, JobRunError, RetranscriptionOutcome, RetranscriptionPorts,
-    RetranscriptionRun, RetryTimer, RevisionStore, SessionHead, run_retranscription,
+    CommitGuard, JobReport, JobRunError, PublishedOpenRevision, RetranscriptionOutcome,
+    RetranscriptionPorts, RetranscriptionRun, RetryTimer, RevisionStore, SessionHead,
+    run_retranscription,
 };
 
 /// Command name bound into a retranscription's request digest.
@@ -201,6 +213,40 @@ pub fn recognition_key(scope: &RecognitionScope<'_>) -> Result<RecognitionKey, J
     .map(RecognitionKey::new)
 }
 
+/// The seed key of `scope` (`vsift.recognition-seed.v1`, ADR 0033 section 4):
+/// everything [`recognition_key`] binds but the replaced range, so that a run
+/// over another range of the same recognition can take this run's answers for
+/// a chunk of the same window ([`crate::ChunkSeed`]).
+///
+/// # Errors
+///
+/// [`JobKeyError::NotCanonical`] only through an internal fault.
+pub fn seed_key(scope: &RecognitionScope<'_>) -> Result<RecognitionKey, JobKeyError> {
+    let recognizer = scope.recognizer;
+    let fingerprint = scope.verification.map_or_else(
+        || "none".to_owned(),
+        |fingerprint| sha256_hex_of_digest(fingerprint.digest()),
+    );
+    digest_lines(
+        "vsift.recognition-seed.v1",
+        &[
+            scope.session_id.as_str(),
+            scope.source_id.as_str(),
+            &scope.audio_stream.to_string(),
+            &scope.plan.window_us().to_string(),
+            &scope.plan.overlap_us().to_string(),
+            recognizer.decoding.identifier(),
+            recognizer.provider.provider().identifier(),
+            recognizer.provider.executable_sha256().as_str(),
+            recognizer.model.profile().identifier(),
+            recognizer.model.sha256().as_str(),
+            &recognizer.threads.get().to_string(),
+            &fingerprint,
+        ],
+    )
+    .map(RecognitionKey::new)
+}
+
 fn sha256_hex_of_digest(digest: &[u8; 32]) -> String {
     const HEX: &[u8; 16] = b"0123456789abcdef";
     let mut text = String::with_capacity(64);
@@ -298,6 +344,16 @@ pub enum JobRequest {
     Retranscribe {
         /// The requested range, before it is widened to whole segments.
         range: Option<TimeRange>,
+        /// The share of the root's capacity it recognises with (ADR 0033,
+        /// D4): part of its recognition key, so a resume uses it again.
+        share: RecognitionShare,
+    },
+    /// `job start`: the preparation of a session (ADR 0033).
+    Prepare {
+        /// How it runs.
+        mode: JobMode,
+        /// The window to transcribe first (`--first`), when one was named.
+        first: Option<TimeRange>,
     },
 }
 
@@ -307,6 +363,63 @@ impl JobRequest {
     pub const fn kind(self) -> JobKind {
         match self {
             Self::Retranscribe { .. } => JobKind::Retranscribe,
+            Self::Prepare { .. } => JobKind::Prepare,
+        }
+    }
+
+    /// The range a retranscription was asked for (`None` for the whole
+    /// source, and for every other kind).
+    #[must_use]
+    pub const fn range(self) -> Option<TimeRange> {
+        match self {
+            Self::Retranscribe { range, .. } => range,
+            Self::Prepare { .. } => None,
+        }
+    }
+
+    /// Whether `other` asks for the same work as this request, which a job
+    /// created by either may then run. The share is left out: it is part of
+    /// the recognition key already, and two shares that give the recognizer
+    /// the same threads (a root of one unit, or a host's recognizer, which
+    /// reports its own) name the same job, which keeps the share it was
+    /// created with.
+    #[must_use]
+    pub fn same_work(self, other: Self) -> bool {
+        match (self, other) {
+            (Self::Retranscribe { range, .. }, Self::Retranscribe { range: other, .. }) => {
+                range == other
+            }
+            (Self::Prepare { .. }, Self::Prepare { .. }) => self == other,
+            _ => false,
+        }
+    }
+
+    /// The share of the root's capacity a retranscription recognises with;
+    /// `None` for every other kind.
+    #[must_use]
+    pub const fn share(self) -> Option<RecognitionShare> {
+        match self {
+            Self::Retranscribe { share, .. } => Some(share),
+            Self::Prepare { .. } => None,
+        }
+    }
+
+    /// The mode a `prepare` job runs in; `None` for every other kind.
+    #[must_use]
+    pub const fn mode(self) -> Option<JobMode> {
+        match self {
+            Self::Prepare { mode, .. } => Some(mode),
+            Self::Retranscribe { .. } => None,
+        }
+    }
+
+    /// The window a `prepare` job transcribes first; `None` without one and
+    /// for every other kind.
+    #[must_use]
+    pub const fn first(self) -> Option<TimeRange> {
+        match self {
+            Self::Prepare { first, .. } => first,
+            Self::Retranscribe { .. } => None,
         }
     }
 }

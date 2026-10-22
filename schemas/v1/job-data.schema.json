@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://vsift.dev/schemas/v1/job-data.schema.json",
   "title": "VSift job data v1",
-  "description": "The data member of a complete job.status or job.cancel result: one recoverable job (P10, ADR 0020). Validate the envelope with operation-response.schema.json. state is what a reader observes: a job whose process ended without recording it is reported interrupted (or succeeded, when its commit is in the session's manifest chain), never running. live_owner says a process holds the job right now. resumable says whether job resume would run it now, and resumable_reason why (interrupted, not_started) or why not (live_owner, succeeded, failed, cancelled, session_not_open). operation_id is the id a retry should carry: the first one a caller bound with --operation-id, or for a succeeded job the one its commit is recorded under. request.range is the range the caller asked for (null for the whole source). progress.chunks_total is how many chunks the recognised range is cut into (null for a job created before P10 PR 3) and chunks_checkpointed how many chunk checkpoints the job keeps now (a succeeded, failed or cancelled job keeps none). attempts counts attempts in the job's current epoch. result names the revision and generation a succeeded job committed; failure the public code that ended the last attempt of an interrupted or failed job. A job never names a path, transcript text or provider output.",
+  "description": "The data member of a complete job.status or job.cancel result: one recoverable job (P10, ADR 0020). Validate the envelope with operation-response.schema.json. state is what a reader observes: a job whose process ended without recording it is reported interrupted (or succeeded, when its commit is in the session's manifest chain), never running. live_owner says a process holds the job right now. resumable says whether job resume would run it now, and resumable_reason why (interrupted, not_started) or why not (live_owner, succeeded, failed, cancelled, session_not_open). operation_id is the id a retry should carry: the first one a caller bound with --operation-id, or for a succeeded job the one its commit is recorded under. request.range is the range the caller asked for (null for the whole source). progress.chunks_total is how many chunks the recognised range is cut into (null for a job created before P10 PR 3) and chunks_checkpointed how many chunk checkpoints the job keeps now (a succeeded, failed or cancelled job keeps none). attempts counts attempts in the job's current epoch. result names the revision and generation a succeeded job committed; failure the public code that ended the last attempt of an interrupted or failed job. A job never names a path, transcript text or provider output. Since 0.3.0 (ADR 0033) a job of kind prepare, started by job.start, prepares a session: request.mode says how it runs (quick in the foreground, watched in the background by a runner, queued in the root's queue: first in, first out, one at a time a root, at the whole capacity, yielding it at every chunk boundary to anyone who waits for it, and publishing at its seal) and request.first the window it transcribes first, when one was named (--first), its progress counts are null and zero, and streams lists its started streams in the order they run (first: the window named with --first, retranscribed as a range on the whole run's chunk grid; visual: the visual-candidate index of the source, in batches of windows, with no job of its own; transcript: a whole-source retranscription): state is the stream's job's (not_started before it has one; for visual, running while the runner works on it, succeeded once every window is indexed, and skipped for a source without video), stage, chunks_done and chunks_total as the stream last reported them, published_until_us how far its revision is published (an open revision of the stream's job, or the whole range once it succeeded), and media how far it has come in media time ($defs.media_progress). streams appears for a prepare job only, and queue_position (0 for the next to run) for a queued prepare job that has not started.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -23,7 +23,7 @@
   "properties": {
     "job_id": { "type": "string", "pattern": "^job_[a-z0-9]{16,64}$" },
     "session_id": { "type": "string", "pattern": "^ses_[a-z0-9]{16,64}$" },
-    "kind": { "enum": ["retranscribe"] },
+    "kind": { "enum": ["retranscribe", "prepare"] },
     "state": {
       "enum": [
         "queued",
@@ -60,6 +60,16 @@
       "additionalProperties": false,
       "required": ["range"],
       "properties": {
+        "mode": { "enum": ["quick", "watched", "queued"] },
+        "first": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["from_us", "to_us"],
+          "properties": {
+            "from_us": { "type": "integer", "minimum": 0 },
+            "to_us": { "type": "integer", "minimum": 1 }
+          }
+        },
         "range": {
           "oneOf": [
             { "type": "null" },
@@ -91,6 +101,12 @@
       }
     },
     "attempts": { "type": "integer", "minimum": 0, "maximum": 16 },
+    "queue_position": { "type": "integer", "minimum": 0, "maximum": 255 },
+    "streams": {
+      "type": "array",
+      "maxItems": 3,
+      "items": { "$ref": "#/$defs/stream" }
+    },
     "result": {
       "oneOf": [
         { "type": "null" },
@@ -136,6 +152,85 @@
           }
         }
       ]
+    }
+  },
+  "$defs": {
+    "stream": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "stream",
+        "job_id",
+        "state",
+        "stage",
+        "chunks_done",
+        "chunks_total",
+        "published_until_us",
+        "media"
+      ],
+      "properties": {
+        "stream": { "enum": ["first", "visual", "transcript"] },
+        "job_id": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "string", "pattern": "^job_[a-z0-9]{16,64}$" }
+          ]
+        },
+        "state": {
+          "enum": [
+            "not_started",
+            "skipped",
+            "queued",
+            "running",
+            "cancelling",
+            "committing",
+            "interrupted",
+            "succeeded",
+            "failed",
+            "cancelled"
+          ]
+        },
+        "stage": {
+          "oneOf": [
+            { "type": "null" },
+            { "enum": ["copying_source", "recognising_speech", "analysing_video", "running_request", "fetching_artifact", "installing_components"] }
+          ]
+        },
+        "chunks_done": { "oneOf": [{ "type": "null" }, { "type": "integer", "minimum": 0 }] },
+        "chunks_total": { "oneOf": [{ "type": "null" }, { "type": "integer", "minimum": 0 }] },
+        "published_until_us": { "oneOf": [{ "type": "null" }, { "type": "integer", "minimum": 0 }] },
+        "media": {
+          "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/media_progress" }]
+        }
+      }
+    },
+    "media_progress": {
+      "description": "How far a recognition has come in media time (ADR 0033): done_us of total_us microseconds of the recording (total_us null when the end is not known), elapsed_ms of wall time in this attempt, speed in media seconds a wall second over the chunks recognised in this attempt (null before the first; chunks reused from checkpoints do not count), percent done rounded down (null without an end), and estimate, the wall time left as the media still to do over that speed (basis cumulative_measured_speed), null until at least two fresh chunks and 20 s of work have run, and in job.status only while a process runs the stream. Advisory: optimistic over silence.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["done_us", "total_us", "elapsed_ms", "speed", "percent", "estimate"],
+      "properties": {
+        "done_us": { "type": "integer", "minimum": 0 },
+        "total_us": { "oneOf": [{ "type": "null" }, { "type": "integer", "minimum": 0 }] },
+        "elapsed_ms": { "type": "integer", "minimum": 0 },
+        "speed": { "oneOf": [{ "type": "null" }, { "type": "number", "minimum": 0 }] },
+        "percent": { "oneOf": [{ "type": "null" }, { "type": "integer", "minimum": 0, "maximum": 100 }] },
+        "estimate": {
+          "oneOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["remaining_ms", "basis", "fresh_chunks"],
+              "properties": {
+                "remaining_ms": { "type": "integer", "minimum": 0 },
+                "basis": { "const": "cumulative_measured_speed" },
+                "fresh_chunks": { "type": "integer", "minimum": 2 }
+              }
+            }
+          ]
+        }
+      }
     }
   }
 }

@@ -8,7 +8,7 @@ use std::{
     num::NonZeroU16,
     sync::{
         Arc, Mutex, MutexGuard,
-        atomic::{AtomicBool, AtomicUsize, Ordering},
+        atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering},
     },
     time::Duration,
 };
@@ -37,6 +37,8 @@ use crate::{
     SpeechRecognitionError, SpeechRecognizer, TranscribeRangeRequest, transcribe_range,
     transcribe_range_checkpointed,
 };
+
+mod prepare;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 type Built<T> = Result<T, Box<dyn std::error::Error>>;
@@ -452,7 +454,25 @@ struct Shared {
     publish_faults: VecDeque<PublishFault>,
     busy_admissions: u32,
     admitted_weights: Vec<u16>,
+    /// Queued admissions (ADR 0033 section 6), and the answers of
+    /// `others_waiting`, in order (nobody waits once they run out).
+    queued_admissions: usize,
+    others_waiting: VecDeque<bool>,
+    /// How often `others_waiting` was asked.
+    waiting_asked: usize,
+    /// What each `demand_capacity` and `queued_work_holds` call finds, in
+    /// order: whether queued work holds the capacity (it does not once they
+    /// run out).
+    queued_holds: VecDeque<bool>,
+    /// Demands taken.
+    demands: usize,
     publishes: usize,
+    /// The open revision (ADR 0033): every part as published, in order, and
+    /// the job that publishes it.
+    parts: Vec<TranscriptRevision>,
+    open_job: Option<JobId>,
+    /// Every part ever published, sealed or not, with its part number.
+    part_history: Vec<(u32, TranscriptRevision)>,
 }
 
 impl Shared {
@@ -737,6 +757,7 @@ impl CommitLedger for MemoryStore {
 
 impl RevisionStore for MemoryStore {
     type Permit = ();
+    type Demand = ();
 
     fn admit(&self, weight: NonZeroU16) -> Result<Self::Permit, SessionStorageError> {
         let mut shared = self.lock()?;
@@ -748,12 +769,97 @@ impl RevisionStore for MemoryStore {
         Ok(())
     }
 
+    fn admit_queued(&self, weight: NonZeroU16) -> Result<Self::Permit, SessionStorageError> {
+        let mut shared = self.lock()?;
+        shared.admitted_weights.push(weight.get());
+        shared.queued_admissions += 1;
+        Ok(())
+    }
+
+    fn others_waiting(&self) -> bool {
+        self.lock().is_ok_and(|mut shared| {
+            shared.waiting_asked += 1;
+            shared.others_waiting.pop_front().unwrap_or(false)
+        })
+    }
+
+    fn demand_capacity(&self) -> Option<Self::Demand> {
+        let mut shared = self.lock().ok()?;
+        if shared.queued_holds.pop_front().unwrap_or(false) {
+            shared.demands += 1;
+            Some(())
+        } else {
+            None
+        }
+    }
+
+    fn queued_work_holds(&self) -> bool {
+        self.lock()
+            .is_ok_and(|mut shared| shared.queued_holds.pop_front().unwrap_or(false))
+    }
+
     fn head(&self, _session_id: &SessionId, _now: u64) -> Result<SessionHead, SessionStorageError> {
         let shared = self.lock()?;
         Ok(SessionHead {
             generation: StorageGeneration::from_value(shared.generation()),
-            newest: shared.revisions.last().cloned(),
+            newest: shared.parts.last().or(shared.revisions.last()).cloned(),
         })
+    }
+
+    fn open_revision(
+        &self,
+        _session_id: &SessionId,
+        _now: u64,
+    ) -> Result<Option<crate::PublishedOpenRevision>, SessionStorageError> {
+        let shared = self.lock()?;
+        let (Some(revision), Some(job_id)) = (shared.parts.last(), shared.open_job.clone()) else {
+            return Ok(None);
+        };
+        Ok(Some(crate::PublishedOpenRevision {
+            revision: revision.clone(),
+            parts: std::num::NonZeroU32::new(u32::try_from(shared.parts.len()).unwrap_or(u32::MAX))
+                .ok_or(SessionStorageError::Io)?,
+            merge_rules: vsift_domain::MERGE_RULES_VERSION,
+            job_id,
+        }))
+    }
+
+    fn publish_part(
+        &self,
+        _session_id: &SessionId,
+        operation_id: &OperationId,
+        expected: StorageGeneration,
+        open: &TranscriptRevision,
+        job: &JobId,
+        part: std::num::NonZeroU32,
+        first: usize,
+        _now: u64,
+    ) -> Result<StorageGeneration, SessionStorageError> {
+        let mut shared = self.lock()?;
+        if shared.generation() != expected.value() {
+            return Err(SessionStorageError::StateConflict);
+        }
+        let follows = match shared.parts.last() {
+            Some(last) => {
+                shared.open_job.as_ref() == Some(job)
+                    && last.id() == open.id()
+                    && usize::try_from(part.get()).ok() == Some(shared.parts.len() + 1)
+                    && last.segments().len() == first
+                    && open.segments().get(..first) == Some(last.segments())
+            }
+            None => part.get() == 1 && first == 0,
+        };
+        if !follows {
+            return Err(SessionStorageError::IntegrityFailure);
+        }
+        let generation = shared.generation() + 1;
+        shared
+            .chain
+            .push((generation, operation_id.as_str().to_owned()));
+        shared.parts.push(open.clone());
+        shared.part_history.push((part.get(), open.clone()));
+        shared.open_job = Some(job.clone());
+        Ok(StorageGeneration::from_value(generation))
     }
 
     fn revision(
@@ -794,6 +900,17 @@ impl RevisionStore for MemoryStore {
         if shared.generation() != expected.value() {
             return Err(SessionStorageError::StateConflict);
         }
+        // An open revision is sealed by its own identity only (ADR 0033).
+        match shared.parts.last() {
+            Some(open) if open.id() != revision.id() => {
+                return Err(SessionStorageError::StateConflict);
+            }
+            Some(_) => {
+                shared.parts.clear();
+                shared.open_job = None;
+            }
+            None => {}
+        }
         let generation = shared.generation() + 1;
         shared
             .chain
@@ -818,6 +935,8 @@ struct Harness {
     source_id: SourceId,
     identity: RecognizerIdentity,
     admission: AdmissionWait,
+    /// Whether runs publish as they go (ADR 0033).
+    as_it_goes: bool,
 }
 
 /// A request resolved against the session's current head.
@@ -846,6 +965,7 @@ fn classify(error: &JobRunError) -> FailureCode {
         },
         JobRunError::Storage(_) | JobRunError::Job(_) => FailureCode::StorageIo,
         JobRunError::Assembly(_) | JobRunError::Key(_) => FailureCode::Internal,
+        JobRunError::PublishedDiffers { .. } => FailureCode::IntegrityFailure,
     }
 }
 
@@ -860,12 +980,44 @@ impl Harness {
             source_id: source_id()?,
             identity: identity()?,
             admission: AdmissionWait::Immediate,
+            as_it_goes: false,
         })
+    }
+
+    /// A harness whose runs publish as they go, a part after every chunk.
+    fn publishing() -> Built<Self> {
+        Ok(Self {
+            as_it_goes: true,
+            ..Self::new()?
+        })
+    }
+
+    /// With an interval of zero on a stopwatch that never moves, every chunk
+    /// is due.
+    fn publication(&self) -> crate::Publication {
+        if self.as_it_goes {
+            crate::Publication::AsItGoes {
+                interval: Duration::ZERO,
+            }
+        } else {
+            crate::Publication::AtTheSeal
+        }
     }
 
     fn resolve(&self, requested: Option<TimeRange>) -> Built<Resolved> {
         let session = session()?;
-        let head = self.store.head(&session, NOW)?;
+        let mut head = self.store.head(&session, NOW)?;
+        // As the engine does: an open revision is not a base, the revision it
+        // supersedes is (ADR 0033).
+        if let Some(open) = head
+            .newest
+            .take_if(|newest| newest.state() == vsift_domain::RevisionState::Open)
+        {
+            head.newest = match open.supersedes() {
+                Some(base) => self.store.revision(&session, base, NOW)?,
+                None => None,
+            };
+        }
         let replaced =
             crate::retranscription_range(head.newest.as_ref(), requested, self.source.range());
         let key = recognition_key(&RecognitionScope {
@@ -886,7 +1038,10 @@ impl Harness {
                 request_digest: retranscribe_request_digest(&session, requested)?,
                 operation_key,
                 recognition_key: key,
-                request: JobRequest::Retranscribe { range: requested },
+                request: JobRequest::Retranscribe {
+                    range: requested,
+                    share: vsift_domain::RecognitionShare::Whole,
+                },
                 planned_chunks: None,
             },
             replaced,
@@ -929,6 +1084,9 @@ impl Harness {
                 timer: &self.timer,
                 classify,
                 progress: &NoProgress,
+                publication: self.publication(),
+                stopwatch: &crate::StoppedStopwatch,
+                seed: None,
             },
             &mut guard,
         )
@@ -967,6 +1125,190 @@ impl Harness {
     fn generation(&self) -> Built<u64> {
         self.store.with(|shared| shared.generation())
     }
+
+    fn part_history(&self) -> Built<Vec<(u32, TranscriptRevision)>> {
+        self.store.with(|shared| shared.part_history.clone())
+    }
+
+    fn newest(&self) -> Built<Option<TranscriptRevision>> {
+        Ok(self.store.head(&session()?, NOW)?.newest)
+    }
+}
+
+// ---------------------------------------------------------------- publication (ADR 0033)
+
+/// Every published part is a prefix of the next and of the sealed revision,
+/// and the parts are numbered 1, 2, ... with no gap.
+fn assert_parts_grow_into(
+    parts: &[(u32, TranscriptRevision)],
+    sealed: &TranscriptRevision,
+) -> TestResult {
+    let mut before: Option<&TranscriptRevision> = None;
+    for (index, (number, part)) in parts.iter().enumerate() {
+        assert_eq!(usize::try_from(*number)?, index + 1);
+        assert_eq!(part.state(), vsift_domain::RevisionState::Open);
+        assert_eq!(part.id(), sealed.id());
+        let count = part.segments().len();
+        assert_eq!(sealed.segments().get(..count), Some(part.segments()));
+        if let Some(before) = before {
+            assert_eq!(
+                part.segments().get(..before.segments().len()),
+                Some(before.segments())
+            );
+            assert!(part.published_until() >= before.published_until());
+        }
+        before = Some(part);
+    }
+    Ok(())
+}
+
+/// ADR 0033: a run that publishes as it goes commits parts while it runs, each
+/// a prefix of the next, and seals exactly the revision a run that publishes
+/// only at its seal makes: the same identity, segments and provenance.
+#[tokio::test]
+async fn a_run_published_as_it_goes_seals_the_revision_a_sealed_run_makes() -> TestResult {
+    let reference = Harness::new()?;
+    let sealed_once = reference.request(None, None).await??.revision;
+    assert_eq!(reference.part_history()?.len(), 0);
+
+    let harness = Harness::publishing()?;
+    let outcome = harness.request(None, None).await??;
+    assert_eq!(outcome.revision, sealed_once);
+    let parts = harness.part_history()?;
+    // Five chunks: a part after each of the first four at most (the last
+    // chunk is published by the seal), and at least one.
+    assert!(
+        !parts.is_empty() && parts.len() <= 4,
+        "{} parts",
+        parts.len()
+    );
+    assert_parts_grow_into(&parts, &outcome.revision)?;
+    assert!(
+        parts.iter().any(|(_, part)| !part.segments().is_empty()),
+        "no part published a segment"
+    );
+    // Sealed: the parts are retired, and the newest revision is the sealed one.
+    assert_eq!(harness.newest()?, Some(outcome.revision.clone()));
+    assert_eq!(
+        outcome.revision.state(),
+        vsift_domain::RevisionState::Sealed
+    );
+    assert_eq!(harness.store.open_revision(&session()?, NOW)?, None);
+    Ok(())
+}
+
+/// ADR 0033, D1: a job cancelled after it published parts keeps every
+/// published segment: its revision is sealed as stopped, and the job is
+/// cancelled.
+#[tokio::test]
+async fn a_cancel_after_published_parts_seals_a_stopped_revision() -> TestResult {
+    let harness = Harness::publishing()?;
+    let resolved = harness.resolve(None)?;
+    let job = resolved.spec.job_id.clone();
+    let store = harness.store.clone();
+    let requester = session()?;
+    let cancelling = {
+        let job = job.clone();
+        move || -> Result<CancelRequest, JobStoreError> {
+            store.request_cancel(&requester, &job, NOW)
+        }
+    };
+    // Chunk 3 raises the flag; the watcher then files `job cancel`.
+    harness.recognizer.fault_at(3, Fault::Raises);
+    let flag = Arc::clone(&harness.recognizer.flag);
+    let watcher = std::thread::spawn(move || {
+        while !flag.load(Ordering::SeqCst) {
+            std::thread::yield_now();
+        }
+        cancelling()
+    });
+    let never = Flag(Arc::new(AtomicBool::new(false)));
+    let mut guard = CountingGuard::default();
+    let outcome = run_retranscription(
+        RetranscriptionRun {
+            spec: &resolved.spec,
+            operation_id: None,
+            transcribe: TranscribeRangeRequest {
+                source_segment: &harness.source,
+                range: resolved.replaced,
+                plan: ChunkPlan::R0,
+                audio_stream: 1,
+                expected: &harness.identity,
+            },
+            source_id: &harness.source_id,
+            requested: None,
+            base: None,
+            observed: resolved.observed,
+            now: NOW,
+            admission: AdmissionWait::Immediate,
+        },
+        RetranscriptionPorts {
+            store: &SlowStore(&harness.store),
+            audio: &harness.audio,
+            recognizer: &harness.recognizer,
+            cancellation: &never,
+            timer: &harness.timer,
+            classify,
+            progress: &NoProgress,
+            publication: harness.publication(),
+            stopwatch: &crate::StoppedStopwatch,
+            seed: None,
+        },
+        &mut guard,
+    )
+    .await;
+    let filed = watcher.join().map_err(|_| "watcher panicked")??;
+    assert_eq!(filed, CancelRequest::Requested);
+    assert_eq!(outcome, Err(JobRunError::Cancelled { job: job.clone() }));
+    assert_eq!(harness.record(&job)?.state, JobState::Cancelled);
+    let parts = harness.part_history()?;
+    let last = parts
+        .last()
+        .map(|(_, part)| part.clone())
+        .ok_or("no part")?;
+    let stopped = harness.newest()?.ok_or("no revision")?;
+    assert_eq!(stopped.state(), vsift_domain::RevisionState::Stopped);
+    assert_eq!(stopped.id(), last.id());
+    assert_eq!(stopped.published_until(), last.published_until());
+    assert_parts_grow_into(&parts, &stopped)?;
+    assert_eq!(harness.store.open_revision(&session()?, NOW)?, None);
+    Ok(())
+}
+
+/// ADR 0033: a run interrupted after it published parts leaves its revision
+/// open; resuming the job continues the same revision, from the next part
+/// number, and seals what an uninterrupted run seals.
+#[tokio::test]
+async fn an_interrupted_run_stays_open_and_its_resume_continues_the_revision() -> TestResult {
+    let reference = Harness::new()?;
+    let sealed_once = reference.request(None, None).await??.revision;
+
+    let harness = Harness::publishing()?;
+    harness
+        .recognizer
+        .fault_at(3, Fault::Fails(SpeechRecognitionError::Io));
+    let resolved = harness.resolve(None)?;
+    let first = harness.run(&resolved, None).await;
+    assert!(first.is_err(), "{first:?}");
+    let job = resolved.spec.job_id.clone();
+    assert_eq!(harness.record(&job)?.state, JobState::Interrupted);
+    let open = harness.newest()?.ok_or("no revision")?;
+    assert_eq!(open.state(), vsift_domain::RevisionState::Open);
+    let published = harness.part_history()?.len();
+    assert!(published > 0);
+
+    harness.recognizer.clear();
+    let resumed = harness.resolve(None)?;
+    assert_eq!(
+        resumed.spec.job_id, job,
+        "the same request names the same job"
+    );
+    let outcome = harness.run(&resumed, None).await?;
+    assert_eq!(outcome.revision, sealed_once);
+    let parts = harness.part_history()?;
+    assert!(parts.len() >= published);
+    assert_parts_grow_into(&parts, &outcome.revision)?;
+    Ok(())
 }
 
 // ---------------------------------------------------------------- checkpoints
@@ -1018,6 +1360,10 @@ async fn a_run_over_its_own_checkpoints_decodes_and_recognises_nothing() -> Test
         checkpoints: &owner,
         key: &resolved.spec.recognition_key,
         progress: &progress,
+        observer: &crate::NoObserver,
+        stopwatch: &crate::StoppedStopwatch,
+        seed: None,
+        gate: None,
     };
     let every_chunk = [(0, Some(3)), (1, Some(3)), (2, Some(3)), (3, Some(3))];
     let never = Flag(Arc::new(AtomicBool::new(false)));
@@ -1046,6 +1392,255 @@ async fn a_run_over_its_own_checkpoints_decodes_and_recognises_nothing() -> Test
     Ok(())
 }
 
+/// A stopwatch that moves ten seconds every time it is read.
+#[derive(Default)]
+struct TickingStopwatch(AtomicU64);
+
+impl crate::Stopwatch for TickingStopwatch {
+    fn elapsed(&self) -> Duration {
+        Duration::from_secs(self.0.fetch_add(10, Ordering::SeqCst))
+    }
+}
+
+/// ADR 0033, D8: a run reports where its chunks reach in media time, and its
+/// speed counts only the chunks it recognised; chunks taken from checkpoints
+/// advance the position and leave the speed and the estimate alone.
+#[tokio::test]
+async fn progress_reports_media_time_and_a_speed_of_fresh_chunks_only() -> TestResult {
+    let harness = Harness::new()?;
+    let resolved = harness.resolve(None)?;
+    let (owner, _) = harness.store.open_or_create(&resolved.spec, NOW)?;
+    let request = TranscribeRangeRequest {
+        source_segment: &harness.source,
+        range: range(0, 70 * SECOND)?,
+        plan: ChunkPlan::R0,
+        audio_stream: 1,
+        expected: &harness.identity,
+    };
+    let progress = RecordedProgress::default();
+    let stopwatch = TickingStopwatch::default();
+    let scope = CheckpointScope {
+        checkpoints: &owner,
+        key: &resolved.spec.recognition_key,
+        progress: &progress,
+        observer: &crate::NoObserver,
+        stopwatch: &stopwatch,
+        seed: None,
+        gate: None,
+    };
+    let never = Flag(Arc::new(AtomicBool::new(false)));
+    let media = |progress: &RecordedProgress| -> Built<Vec<vsift_domain::MediaProgress>> {
+        let mut reports = progress.0.lock().map_err(|_| "progress lock poisoned")?;
+        Ok(reports
+            .drain(..)
+            .filter_map(|update| update.media)
+            .collect())
+    };
+    transcribe_range_checkpointed(request, scope, &harness.audio, &harness.recognizer, &never)
+        .await?;
+    let fresh = media(&progress)?;
+    // Before any chunk, then after each: the windows end at 30, 55 and 70 s.
+    let reached: Vec<u64> = fresh.iter().map(|media| media.done_until_us).collect();
+    assert_eq!(reached, [0, 30 * SECOND, 55 * SECOND, 70 * SECOND]);
+    let last = fresh.last().ok_or("no progress")?;
+    assert_eq!(last.to_us, Some(70 * SECOND));
+    assert_eq!(last.fresh_chunks, 3);
+    assert_eq!(last.fresh_media_us, 70 * SECOND);
+    assert!(last.fresh_elapsed_us > 0);
+    assert!(last.speed_millis().is_some());
+    assert_eq!(last.percent(), Some(100));
+    let after_two = fresh.get(2).ok_or("no second chunk")?;
+    assert_eq!(after_two.fresh_chunks, 2);
+    assert!(after_two.estimate_remaining_us().is_some());
+
+    // A second run over the same checkpoints recognises nothing: the position
+    // still reaches the end, and there is no speed to report.
+    transcribe_range_checkpointed(request, scope, &harness.audio, &harness.recognizer, &never)
+        .await?;
+    let reused = media(&progress)?;
+    let last = reused.last().ok_or("no progress")?;
+    assert_eq!(last.done_until_us, 70 * SECOND);
+    assert_eq!(last.fresh_chunks, 0);
+    assert_eq!(last.speed_millis(), None);
+    assert_eq!(last.estimate_remaining_us(), None);
+    Ok(())
+}
+
+/// A recognizer that, like a real one, hears only the chunk's audio: its
+/// answer depends on the window, never on the chunk's place in a plan.
+#[derive(Default)]
+struct WindowRecognizer {
+    calls: AtomicUsize,
+}
+
+impl SpeechRecognizer for WindowRecognizer {
+    fn identity(
+        &self,
+    ) -> impl Future<Output = Result<RecognizerIdentity, SpeechRecognitionError>> + Send {
+        std::future::ready(identity().map_err(|_| SpeechRecognitionError::Io))
+    }
+
+    fn recognize(
+        &self,
+        chunk: &PlannedChunk,
+        _pcm: &SpeechPcm,
+    ) -> impl Future<Output = Result<ProviderChunkOutput, SpeechRecognitionError>> + Send {
+        self.calls.fetch_add(1, Ordering::SeqCst);
+        let start_ms = chunk.window().start().as_micros() / 1_000;
+        let answer = (|| {
+            let text = format!("words heard from {start_ms} ms");
+            let text = CueText::new(text.clone(), text).map_err(|_| SpeechRecognitionError::Io)?;
+            let third = chunk.window().duration_micros() / 3_000;
+            let start = if start_ms == 0 { 10_000 } else { 6_000 }.min(third);
+            let length = 2_000.min(third);
+            Ok(ProviderChunkOutput {
+                language: LanguageTag::parse("en").ok(),
+                segments: vec![ProviderSegment {
+                    start: ChunkTime::from_millis(start).ok_or(SpeechRecognitionError::Io)?,
+                    end: ChunkTime::from_millis(start + length)
+                        .ok_or(SpeechRecognitionError::Io)?,
+                    text: Some(text),
+                    tokens: vec![ProviderToken {
+                        kind: ProviderTokenKind::Text,
+                        #[allow(
+                            clippy::cast_precision_loss,
+                            reason = "a start of at most minutes, in seconds, is exact in an f64"
+                        )]
+                        probability: 0.1 + (start_ms / 1_000) as f64 / 700.0,
+                    }],
+                }],
+            })
+        })();
+        std::future::ready(answer)
+    }
+}
+
+/// A seed held in memory, as the engine's is.
+#[derive(Default)]
+struct MemorySeed(
+    Mutex<
+        Vec<(
+            vsift_domain::RecognitionKey,
+            TimeRange,
+            vsift_domain::CheckpointOutcome,
+        )>,
+    >,
+);
+
+impl crate::ChunkSeed for MemorySeed {
+    fn keep(
+        &self,
+        key: &vsift_domain::RecognitionKey,
+        window: TimeRange,
+        outcome: &vsift_domain::CheckpointOutcome,
+    ) {
+        if let Ok(mut answers) = self.0.lock() {
+            answers.push((key.clone(), window, outcome.clone()));
+        }
+    }
+
+    fn find(
+        &self,
+        key: &vsift_domain::RecognitionKey,
+        window: TimeRange,
+    ) -> Option<vsift_domain::CheckpointOutcome> {
+        self.0.lock().ok().and_then(|answers| {
+            answers
+                .iter()
+                .find(|(kept, kept_window, _)| kept == key && *kept_window == window)
+                .map(|(_, _, outcome)| outcome.clone())
+        })
+    }
+}
+
+/// D5: a whole run takes the answers a first-window run of the same
+/// recognition kept, for the chunks of the same window, and recognises only
+/// the others; what it makes is what it makes recognising every chunk itself.
+/// A run under another seed key takes nothing.
+#[tokio::test]
+async fn a_whole_run_takes_the_first_windows_answers_and_makes_the_same_transcript() -> TestResult {
+    let harness = Harness::new()?;
+    let source_end = harness.source.range().end();
+    let window = vsift_domain::align_to_chunk_grid(
+        range(25 * SECOND, 85 * SECOND)?,
+        ChunkPlan::R0,
+        source_end,
+    )
+    .ok_or("no grid range")?;
+    assert_eq!(window, range(25 * SECOND, 105 * SECOND)?);
+    let seed = MemorySeed::default();
+    let seed_key = crate::seed_key(&RecognitionScope {
+        session_id: &session()?,
+        source_id: &harness.source_id,
+        audio_stream: 1,
+        replaced_range: window,
+        plan: ChunkPlan::R0,
+        recognizer: &harness.identity,
+        verification: None,
+    })?;
+    let never = Flag(Arc::new(AtomicBool::new(false)));
+    let recognizer = WindowRecognizer::default();
+    let request = |range: TimeRange| TranscribeRangeRequest {
+        source_segment: &harness.source,
+        range,
+        plan: ChunkPlan::R0,
+        audio_stream: 1,
+        expected: &harness.identity,
+    };
+
+    // The first window: three chunks recognised and kept in the seed.
+    let first = harness.resolve(Some(window))?;
+    let (first_owner, _) = harness.store.open_or_create(&first.spec, NOW)?;
+    let scope = |owner, key| CheckpointScope {
+        checkpoints: owner,
+        key,
+        progress: &NoProgress,
+        observer: &crate::NoObserver,
+        stopwatch: &crate::StoppedStopwatch,
+        seed: Some(crate::SeedPort {
+            seed: &seed,
+            key: &seed_key,
+        }),
+        gate: None,
+    };
+    transcribe_range_checkpointed(
+        request(window),
+        scope(&first_owner, &first.spec.recognition_key),
+        &harness.audio,
+        &recognizer,
+        &never,
+    )
+    .await?;
+    assert_eq!(recognizer.calls.load(Ordering::SeqCst), 3);
+
+    // The whole run recognises only the two chunks outside the window.
+    let whole = harness.resolve(None)?;
+    let (whole_owner, _) = harness.store.open_or_create(&whole.spec, NOW)?;
+    let before = recognizer.calls.load(Ordering::SeqCst);
+    let (seeded, used) = transcribe_range_checkpointed(
+        request(whole.replaced),
+        scope(&whole_owner, &whole.spec.recognition_key),
+        &harness.audio,
+        &recognizer,
+        &never,
+    )
+    .await?;
+    assert_eq!(recognizer.calls.load(Ordering::SeqCst) - before, 2);
+    assert_eq!(used.reused, 3);
+    // The answers it took are its own checkpoints now: a resume needs no seed.
+    assert_eq!(harness.checkpoints(&whole.spec.job_id)?, 5);
+
+    // It is what the whole run makes recognising every chunk itself.
+    let plain =
+        transcribe_range(request(whole.replaced), &harness.audio, &recognizer, &never).await?;
+    assert_eq!(seeded, plain);
+
+    // Under another seed key (another recognizer, say) nothing is taken.
+    let other_key = vsift_domain::RecognitionKey::new(Sha256Hex::parse(DIGEST)?);
+    assert!(crate::ChunkSeed::find(&seed, &other_key, range(25 * SECOND, 55 * SECOND)?).is_none());
+    Ok(())
+}
+
 /// S-08 at the use-case level: a checkpoint of another run, one whose audio
 /// cannot be the chunk's and one whose output the domain rejects are all
 /// removed and redone, never used.
@@ -1066,6 +1661,10 @@ async fn foreign_or_invalid_checkpoints_are_discarded_and_redone() -> TestResult
         checkpoints: &owner,
         key: &resolved.spec.recognition_key,
         progress: &NoProgress,
+        observer: &crate::NoObserver,
+        stopwatch: &crate::StoppedStopwatch,
+        seed: None,
+        gate: None,
     };
     let (control, _) =
         transcribe_range_checkpointed(request, scope, &harness.audio, &harness.recognizer, &never)
@@ -1143,6 +1742,10 @@ async fn a_checkpoint_stored_for_a_window_under_the_floor_is_not_reused_as_speec
         checkpoints: &owner,
         key: &resolved.spec.recognition_key,
         progress: &NoProgress,
+        observer: &crate::NoObserver,
+        stopwatch: &crate::StoppedStopwatch,
+        seed: None,
+        gate: None,
     };
     let chunks = vsift_domain::plan_chunks(harness.source.id(), request.range, ChunkPlan::R0)?;
     let [chunk] = chunks.as_slice() else {
@@ -1437,6 +2040,9 @@ impl Harness {
                 timer: &self.timer,
                 classify,
                 progress,
+                publication: crate::Publication::AtTheSeal,
+                stopwatch: &crate::StoppedStopwatch,
+                seed: None,
             },
             &mut guard,
         )
@@ -1472,6 +2078,150 @@ async fn a_bounded_admission_wait_polls_until_the_capacity_frees() -> TestResult
             .with(|shared| shared.admitted_weights.clone())?,
         vec![4, 4, 4, 4]
     );
+    Ok(())
+}
+
+/// ADR 0033 section 6: queued work takes capacity only while nobody waits for
+/// it, gives it back at the next chunk boundary when someone does, takes it
+/// back once nobody does, and commits what an ordinary run commits.
+#[tokio::test]
+async fn a_queued_run_yields_its_capacity_at_a_chunk_boundary() -> TestResult {
+    let harness = Harness::new()?;
+    // Someone waits when the run first asks, and again before its second
+    // chunk, for two polls.
+    harness.store.with(|shared| {
+        shared.others_waiting = [true, false, true, true, false].into();
+    })?;
+    let waits = WaitRecorder::default();
+    let queued = harness
+        .run_admitted(AdmissionWait::Queued, &waits)
+        .await??;
+    let (admitted, asked) = harness
+        .store
+        .with(|shared| (shared.queued_admissions, shared.waiting_asked))?;
+    // Taken once at the start and once after the yield.
+    assert_eq!(admitted, 2);
+    // Once at the start (twice: busy, then free), and before each of the
+    // other chunks, with two polls inside the yield.
+    assert!(asked >= 6, "asked {asked} times");
+    assert_eq!(
+        harness.timer.sleeps(),
+        vec![vsift_domain::QUEUED_ADMISSION_POLL; 3]
+    );
+    // The same revision an ordinary run commits.
+    let ordinary = Harness::new()?;
+    let committed = ordinary
+        .run_admitted(AdmissionWait::Immediate, &waits)
+        .await??;
+    assert_eq!(queued.revision, committed.revision);
+    Ok(())
+}
+
+/// Counts the waits for queued work a run announces, apart from the others.
+#[derive(Default)]
+struct QueuedWaitRecorder {
+    queued: AtomicUsize,
+    capacity: AtomicUsize,
+}
+
+impl ProgressSink for QueuedWaitRecorder {
+    fn report(&self, _update: ProgressUpdate) {}
+
+    fn admission_waiting(&self, _weight: NonZeroU16) {
+        self.capacity.fetch_add(1, Ordering::SeqCst);
+    }
+
+    fn queued_work_waiting(&self, weight: NonZeroU16) {
+        assert_eq!(weight.get(), 4, "the recognizer's threads");
+        self.queued.fetch_add(1, Ordering::SeqCst);
+    }
+}
+
+/// ADR 0033 section 6: an ordinary run that finds the capacity held by queued
+/// work demands it, says once that it waits for queued work, polls on its own
+/// timer until the capacity is given back, counts the wait and commits.
+#[tokio::test]
+async fn an_ordinary_run_says_it_waits_for_queued_work() -> TestResult {
+    let harness = Harness::new()?;
+    harness.store.with(|shared| {
+        // Busy at first and for two polls; queued work holds it throughout.
+        shared.busy_admissions = 3;
+        shared.queued_holds = [true, true, true].into();
+    })?;
+    let waits = QueuedWaitRecorder::default();
+    let committed = harness
+        .run_admitted(AdmissionWait::Immediate, &waits)
+        .await??;
+    assert_eq!(committed.revision.number(), 1);
+    assert_eq!(
+        harness.timer.sleeps(),
+        vec![vsift_domain::QUEUED_YIELD_POLL; 3]
+    );
+    assert_eq!(
+        committed.report.admission_wait,
+        vsift_domain::QUEUED_YIELD_POLL * 3
+    );
+    assert_eq!(waits.queued.load(Ordering::SeqCst), 1);
+    assert_eq!(waits.capacity.load(Ordering::SeqCst), 0);
+    assert_eq!(harness.store.with(|shared| shared.demands)?, 1);
+    Ok(())
+}
+
+/// ADR 0033 section 6: the wait for queued work lasts at most
+/// `QUEUED_YIELD_WAIT` over the whole run, its retries included, and is
+/// announced once; then the run is refused as for any contention.
+#[tokio::test]
+async fn a_wait_for_queued_work_is_bounded_over_the_whole_run() -> TestResult {
+    let harness = Harness::new()?;
+    let polls =
+        vsift_domain::QUEUED_YIELD_WAIT.as_millis() / vsift_domain::QUEUED_YIELD_POLL.as_millis();
+    let polls = usize::try_from(polls)?;
+    harness.store.with(|shared| {
+        shared.busy_admissions = u32::MAX;
+        shared.queued_holds = std::iter::repeat_n(true, polls * 2).collect();
+    })?;
+    let waits = QueuedWaitRecorder::default();
+    let outcome = harness
+        .run_admitted(AdmissionWait::Immediate, &waits)
+        .await?;
+    assert_eq!(
+        outcome,
+        Err(JobRunError::Storage(SessionStorageError::Busy))
+    );
+    let sleeps = harness.timer.sleeps();
+    let queued_polls = sleeps
+        .iter()
+        .filter(|sleep| **sleep == vsift_domain::QUEUED_YIELD_POLL)
+        .count();
+    assert_eq!(queued_polls, polls);
+    // Then P10's two retries, which wait no more for queued work.
+    assert_eq!(
+        sleeps[polls..],
+        [Duration::from_millis(100), Duration::from_millis(200)]
+    );
+    assert_eq!(waits.queued.load(Ordering::SeqCst), 1);
+    assert_eq!(harness.store.with(|shared| shared.demands)?, 1);
+    Ok(())
+}
+
+/// ADR 0033 section 6: capacity that is busy while no queued work holds it is
+/// refused at once, as before, without a demand or a wait.
+#[tokio::test]
+async fn busy_capacity_without_queued_work_is_not_waited_for() -> TestResult {
+    let harness = Harness::new()?;
+    harness
+        .store
+        .with(|shared| shared.busy_admissions = u32::MAX)?;
+    let waits = QueuedWaitRecorder::default();
+    let outcome = harness
+        .run_admitted(AdmissionWait::Immediate, &waits)
+        .await?;
+    assert_eq!(
+        outcome,
+        Err(JobRunError::Storage(SessionStorageError::Busy))
+    );
+    assert_eq!(waits.queued.load(Ordering::SeqCst), 0);
+    assert_eq!(harness.store.with(|shared| shared.demands)?, 0);
     Ok(())
 }
 
@@ -1745,6 +2495,10 @@ async fn a_range_cut_mid_speech_commits_its_overrunning_segment_cut_at_the_range
         checkpoints: &owner,
         key: &resolved.spec.recognition_key,
         progress: &NoProgress,
+        observer: &crate::NoObserver,
+        stopwatch: &crate::StoppedStopwatch,
+        seed: None,
+        gate: None,
     };
     let never = Flag(Arc::new(AtomicBool::new(false)));
     let (fresh, _) =
@@ -2098,6 +2852,9 @@ async fn a_cancel_requested_during_the_run_wins_before_the_commit() -> TestResul
             timer: &harness.timer,
             classify,
             progress: &NoProgress,
+            publication: crate::Publication::AtTheSeal,
+            stopwatch: &crate::StoppedStopwatch,
+            seed: None,
         },
         &mut guard,
     )
@@ -2210,9 +2967,26 @@ impl CommitLedger for SlowStore<'_> {
 
 impl RevisionStore for SlowStore<'_> {
     type Permit = ();
+    type Demand = ();
 
     fn admit(&self, weight: NonZeroU16) -> Result<Self::Permit, SessionStorageError> {
         self.0.admit(weight)
+    }
+
+    fn admit_queued(&self, weight: NonZeroU16) -> Result<Self::Permit, SessionStorageError> {
+        self.0.admit_queued(weight)
+    }
+
+    fn others_waiting(&self) -> bool {
+        self.0.others_waiting()
+    }
+
+    fn demand_capacity(&self) -> Option<Self::Demand> {
+        self.0.demand_capacity()
+    }
+
+    fn queued_work_holds(&self) -> bool {
+        self.0.queued_work_holds()
     }
 
     fn head(&self, session_id: &SessionId, now: u64) -> Result<SessionHead, SessionStorageError> {
@@ -2226,6 +3000,37 @@ impl RevisionStore for SlowStore<'_> {
         now: u64,
     ) -> Result<Option<TranscriptRevision>, SessionStorageError> {
         self.0.revision(session_id, revision_id, now)
+    }
+
+    fn open_revision(
+        &self,
+        session_id: &SessionId,
+        now: u64,
+    ) -> Result<Option<crate::PublishedOpenRevision>, SessionStorageError> {
+        self.0.open_revision(session_id, now)
+    }
+
+    fn publish_part(
+        &self,
+        session_id: &SessionId,
+        operation_id: &OperationId,
+        expected: StorageGeneration,
+        open: &TranscriptRevision,
+        job: &JobId,
+        part: std::num::NonZeroU32,
+        first: usize,
+        now: u64,
+    ) -> Result<StorageGeneration, SessionStorageError> {
+        self.0.publish_part(
+            session_id,
+            operation_id,
+            expected,
+            open,
+            job,
+            part,
+            first,
+            now,
+        )
     }
 
     fn publish_revision(

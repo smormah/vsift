@@ -282,7 +282,12 @@ fn verify_point(
         Acknowledgements::Session(acks) => {
             let required = acks.get(..point.required).unwrap_or(acks);
             let now = unix_seconds()?;
-            let mut findings = verify(root, required, now);
+            let mut findings = verify(
+                root,
+                required,
+                now,
+                vsift_domain::PublicationGuarantee::OsCrashDurable,
+            );
             if findings.clean() {
                 probe_writes(root, required, now, &mut findings);
             }

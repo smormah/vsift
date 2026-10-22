@@ -47,6 +47,10 @@ pub struct ProgressEventResponse {
     total: Option<u64>,
     unit: &'static str,
     progress_dropped: u64,
+    /// How far the stage has come in media time (ADR 0033), for
+    /// `recognising_speech`; absent otherwise.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    media: Option<crate::MediaProgressData>,
 }
 
 /// What one progress event reports, besides its position in the stream.
@@ -79,6 +83,11 @@ impl ProgressEventResponse {
             total: report.update.total,
             unit: report.update.stage.unit().identifier(),
             progress_dropped: report.dropped,
+            // The run reporting it is running: its estimate means something.
+            media: report
+                .update
+                .media
+                .map(|media| crate::MediaProgressData::new(&media, true)),
         }
     }
 }
@@ -140,17 +149,21 @@ pub enum LifecycleReason {
     InputError,
     /// The admission capacity is in use.
     AdmissionCapacity,
+    /// Queued work holds the admission capacity and gives it back at its
+    /// next chunk boundary (ADR 0033 section 6).
+    QueuedWork,
 }
 
 impl LifecycleReason {
     /// Every reason, in declaration order.
-    pub const ALL: [Self; 6] = [
+    pub const ALL: [Self; 7] = [
         Self::EndOfInput,
         Self::Shutdown,
         Self::DrainTimeout,
         Self::LineLimit,
         Self::InputError,
         Self::AdmissionCapacity,
+        Self::QueuedWork,
     ];
 
     /// The stable identifier.
@@ -163,6 +176,7 @@ impl LifecycleReason {
             Self::LineLimit => "line_limit",
             Self::InputError => "input_error",
             Self::AdmissionCapacity => "admission_capacity",
+            Self::QueuedWork => "queued_work",
         }
     }
 }
@@ -296,6 +310,21 @@ impl LifecycleEventResponse {
         let mut event =
             Self::bare(sequence, command, LifecycleKind::AdmissionWaiting).for_request(request);
         event.reason = Some(LifecycleReason::AdmissionCapacity.identifier());
+        event
+    }
+
+    /// A request, or an interactive command (`request` empty), waits for
+    /// queued work to give back the admission capacity it holds (ADR 0033
+    /// section 6).
+    #[must_use]
+    pub fn queued_work_waiting(
+        sequence: u64,
+        command: CommandName,
+        request: &RequestRef<'_>,
+    ) -> Self {
+        let mut event =
+            Self::bare(sequence, command, LifecycleKind::AdmissionWaiting).for_request(request);
+        event.reason = Some(LifecycleReason::QueuedWork.identifier());
         event
     }
 

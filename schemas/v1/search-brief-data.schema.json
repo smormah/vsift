@@ -38,6 +38,7 @@
       "items": { "$ref": "search-data.schema.json#/$defs/hit" }
     },
     "next_cursor": { "$ref": "search-data.schema.json#/$defs/next_cursor" },
-    "transcript_coverage": { "$ref": "search-data.schema.json#/$defs/transcript_coverage" }
+    "transcript_coverage": { "$ref": "search-data.schema.json#/$defs/transcript_coverage" },
+    "since": { "$ref": "search-data.schema.json#/$defs/since" }
   }
 }

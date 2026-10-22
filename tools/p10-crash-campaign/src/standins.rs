@@ -28,8 +28,10 @@ pub const STAND_IN_DIGEST: &str =
 /// Frames of the synthetic video: 6 s at 20 fps.
 pub const VIDEO_FRAMES: i64 = 120;
 const FRAME_MICROS: u64 = 50_000;
-/// The synthetic source's speech: three R0 chunks (0-30, 25-55 and 50-60 s).
-pub const SPEECH_MICROS: u64 = 60_000_000;
+/// The synthetic source's speech: four R0 chunks (0-30, 25-55, 50-80 and
+/// 75-105 s), so a run that publishes as it goes commits three parts before
+/// its seal (ADR 0033).
+pub const SPEECH_MICROS: u64 = 105_000_000;
 
 /// The start of an 8-bit RGB PNG of `width` x `height`, then `marker`.
 fn fake_png(width: u32, height: u32, marker: &str) -> Vec<u8> {

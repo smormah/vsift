@@ -37,15 +37,30 @@ pub struct ProgressObserver {
 /// The callback told when a run starts waiting for admission capacity.
 type AdmissionCallback = dyn Fn(&AdmissionWaiting) + Send + Sync;
 
-/// A run waits for its admission weight of the root's capacity (a bounded
-/// [`vsift_domain::AdmissionWait`] only): a worker host emits its
-/// `admission_waiting` lifecycle event from this (P11, ADR 0021 section 5a).
+/// A run waits for its admission weight of the root's capacity: a host
+/// emits its `admission_waiting` lifecycle event from this (P11, ADR 0021
+/// section 5a), and an interactive command shows it (ADR 0033 section 6).
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AdmissionWaiting {
     /// The job that waits.
     pub job: Option<JobId>,
     /// The weight it waits for: a recognition's threads.
     pub weight: NonZeroU16,
+    /// Why it waits.
+    pub cause: AdmissionWaitCause,
+}
+
+/// Why a run waits for admission capacity.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AdmissionWaitCause {
+    /// The capacity is in use, and the run's bounded
+    /// [`vsift_domain::AdmissionWait`] polls until it frees (worker hosts).
+    CapacityInUse,
+    /// Queued work holds the capacity and gives it back at its next chunk
+    /// boundary; the run waits for it up to
+    /// [`vsift_domain::QUEUED_YIELD_WAIT`], whatever its admission wait (ADR
+    /// 0033 section 6).
+    QueuedWork,
 }
 
 impl ProgressObserver {
@@ -133,6 +148,15 @@ impl ProgressSink for JobProgressSink<'_> {
         self.observer.admission_waiting(&AdmissionWaiting {
             job: Some(self.job.clone()),
             weight,
+            cause: AdmissionWaitCause::CapacityInUse,
+        });
+    }
+
+    fn queued_work_waiting(&self, weight: NonZeroU16) {
+        self.observer.admission_waiting(&AdmissionWaiting {
+            job: Some(self.job.clone()),
+            weight,
+            cause: AdmissionWaitCause::QueuedWork,
         });
     }
 }
@@ -144,7 +168,7 @@ mod tests {
     use vsift_application::ProgressSink;
     use vsift_domain::{JobId, ProgressStage, ProgressUpdate};
 
-    use super::{AdmissionWaiting, JobProgress, ProgressObserver};
+    use super::{AdmissionWaitCause, AdmissionWaiting, JobProgress, ProgressObserver};
 
     #[test]
     fn a_job_sink_reports_to_the_callback_with_its_job() -> Result<(), Box<dyn std::error::Error>> {
@@ -160,6 +184,7 @@ mod tests {
             stage: ProgressStage::RecognisingSpeech,
             completed: 1,
             total: Some(2),
+            media: None,
         };
         observer.for_job(&job).report(update);
         ProgressObserver::none().for_job(&job).report(update);
@@ -177,7 +202,9 @@ mod tests {
     }
 
     /// P11: a run that waits for admission tells the host once, naming its
-    /// job and weight; an observer without that callback hears nothing.
+    /// job, weight and cause; an observer without that callback hears
+    /// nothing. ADR 0033: a wait for queued work is told the same way, with
+    /// its own cause.
     #[test]
     fn an_admission_wait_reaches_the_admission_callback() -> Result<(), Box<dyn std::error::Error>>
     {
@@ -191,16 +218,28 @@ mod tests {
         let job = JobId::parse("job_0123456789abcdef0123456789abcdef")?;
         let weight = std::num::NonZeroU16::new(4).ok_or("zero")?;
         observer.for_job(&job).admission_waiting(weight);
+        observer.for_job(&job).queued_work_waiting(weight);
         ProgressObserver::none()
             .for_job(&job)
             .admission_waiting(weight);
+        ProgressObserver::none()
+            .for_job(&job)
+            .queued_work_waiting(weight);
         let seen = seen.lock().map_err(|_| "poisoned")?;
         assert_eq!(
             *seen,
-            [AdmissionWaiting {
-                job: Some(job),
-                weight
-            }]
+            [
+                AdmissionWaiting {
+                    job: Some(job.clone()),
+                    weight,
+                    cause: AdmissionWaitCause::CapacityInUse,
+                },
+                AdmissionWaiting {
+                    job: Some(job),
+                    weight,
+                    cause: AdmissionWaitCause::QueuedWork,
+                }
+            ]
         );
         Ok(())
     }

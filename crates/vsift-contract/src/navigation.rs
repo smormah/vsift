@@ -120,6 +120,16 @@ pub const MEDIA_BUSY_REMEDIATION: &str = "Another VSift request is using this se
 /// Fixed prose; it names no path, session, job or time.
 pub const TRANSCRIPTION_RUNNING_REMEDIATION: &str = "A transcription of this session is running (the job in affected_ids) and holds this session root's share of the machine's capacity until it ends, so this command could not run. Nothing was committed. Retrying at once will not help: run the suggested job status command, and when it no longer reports the job running, run the same command again. A transcription of a long recording can take many minutes.";
 
+/// Remediation when a write to a session was refused because its open
+/// revision (ADR 0033) belongs to a job that has ended without sealing it: a
+/// `job cancel` of a job no process ran met a busy session (RV-1 finding 7).
+///
+/// Waiting does not help, so the job's `job cancel`, which seals the revision
+/// as stopped, is the remediation's command. The code stays `BUSY`, as for a
+/// running transcription. Fixed prose; it names no path, session, job or
+/// time.
+pub const REVISION_LEFT_OPEN_REMEDIATION: &str = "This session's newest revision is still open, but the job that published it (in affected_ids) has ended, so this command could not run and waiting will not help. Nothing was committed. Run the suggested job cancel command, which seals the revision as stopped and keeps everything it published, then run the same command again.";
+
 /// Remediation when no displayed frame satisfies a frame request, chosen by
 /// the typed reason (ADR 0019 decision 2).
 #[must_use]

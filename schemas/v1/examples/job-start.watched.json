@@ -1,0 +1,42 @@
+{
+  "command": "job.start",
+  "coverage": null,
+  "data": {
+    "job": {
+      "attempts": 1,
+      "failure": null,
+      "job_id": "job_0123456789abcdef0123456789abcdef",
+      "kind": "prepare",
+      "live_owner": true,
+      "operation_id": null,
+      "progress": {
+        "chunks_checkpointed": 0,
+        "chunks_total": null
+      },
+      "request": {
+        "mode": "watched",
+        "range": null
+      },
+      "result": null,
+      "resumable": false,
+      "resumable_reason": "live_owner",
+      "session_id": "ses_0123456789abcdef0123456789abcdef",
+      "state": "running",
+      "streams": []
+    },
+    "outcome": null,
+    "start": {
+      "detachment": "process_group",
+      "mode": "watched",
+      "mode_basis": "long_recording",
+      "runner": "background",
+      "state": "created"
+    }
+  },
+  "error": null,
+  "lifecycle": null,
+  "operation_id": null,
+  "schema_version": "1",
+  "status": "complete",
+  "warnings": []
+}
