@@ -399,9 +399,17 @@ quick and watched modes, D4 and the skill.
   build on Windows.
 - **CLI and contract.** `job start [--mode quick|watched]` (`job.start`, `job-start-data.schema.json`);
   the runner's arguments are the CLI's (`job resume <job> --json`, `--session-root`,
-  `--host-isolation`), and it answers once the runner holds the job or has moved it on (within
+  `--host-isolation`), and it answers once the runner holds the job or has ended it (within
   `RUNNER_HANDSHAKE`, 10 s; otherwise the runner is ended and the call fails `DEADLINE_EXCEEDED`, or
   `MISSING_CAPABILITY` when it could not start or ended first, naming the job and suggesting `job resume`).
+  **Review RV-1 (2026-10-22):** the handshake counts only a live owner or an end the job was not at
+  before the launch, so an interrupted job's state no longer passes for a runner that took it (finding 3);
+  `job_start` reconciles the record it now owns before it chooses, so a job left `cancelling` by a dead
+  runner restarts instead of waiting for a runner that refuses it; and a retranscription job records its
+  `RecognitionShare` (`request.share`, written only when not `whole`, in the domain since), which
+  `job_resume` uses again, since the threads are part of the job's key (finding 2). Two requests that
+  differ only in the share name the same job when their keys agree (a root of one unit, a host's own
+  recognizer) and open it.
   `job-data` gains `request.mode` and `streams` with `$defs.media_progress`, which progress events reuse
   (`media`). The live line is written by the task that owns the output, from the newest observation, at
   most once a second, and cleared before the result. The top-level help's example names `job start`.

@@ -37,17 +37,8 @@ use crate::{
 pub const PROGRESS_RECORD_INTERVAL: Duration = Duration::from_secs(1);
 
 /// The share of the root's admission capacity a recognition takes (ADR 0033,
-/// D4).
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub enum RecognitionShare {
-    /// All of it, as before 0.3.0: interactive and quick runs.
-    #[default]
-    Whole,
-    /// One unit less, when that leaves at least one, so that evidence calls
-    /// are admitted while it runs: a watched (background) run. The recognizer
-    /// runs with fewer threads, which its provenance records.
-    LeavingOneFree,
-}
+/// D4); the domain owns it because a job record keeps it.
+pub use vsift_domain::RecognitionShare;
 
 /// A request to start preparing a session.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -236,6 +227,14 @@ impl Engine {
         let start = match store.open_or_create(&spec, now) {
             Ok((mut owner, created)) => {
                 use vsift_application::JobOwner as _;
+                // This call holds the job now, so an owner its record still
+                // claims is gone: reconcile it first. A job whose dead owner
+                // never finished its cancellation is then cancelled and starts
+                // again, instead of being handed as waiting to a runner that
+                // refuses it as not resumable (RV-1 finding 3).
+                if !created {
+                    vsift_application::reconcile(&mut owner, &store, now)?;
+                }
                 match owner.record().state {
                     _ if created => JobStartState::Created,
                     JobState::Failed | JobState::Cancelled => {

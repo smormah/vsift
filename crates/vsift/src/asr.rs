@@ -347,12 +347,7 @@ impl Engine {
 
         // 2. Resolve and identify everything before anything runs.
         let tools = self.local_asr_media_tools()?;
-        let capacity = match request.share {
-            crate::RecognitionShare::Whole => self.admission_capacity_hint(),
-            crate::RecognitionShare::LeavingOneFree => {
-                vsift_domain::leaving_one_free(self.admission_capacity_hint())
-            }
-        };
+        let capacity = request.share.of(self.admission_capacity_hint());
         let recognizer = self.select_recognizer(capacity)?;
         let identity = match &recognizer {
             SelectedRecognizer::Whisper(cli) => cli.recognizer_identity().await,
@@ -459,7 +454,10 @@ impl Engine {
             request_digest: digest,
             operation_key,
             recognition_key: key,
-            request: JobRequest::Retranscribe { range: requested },
+            request: JobRequest::Retranscribe {
+                range: requested,
+                share: request.share,
+            },
             planned_chunks,
         };
         if let Some(job) = open_job

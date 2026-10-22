@@ -47,8 +47,8 @@ use std::{error::Error, fmt, time::Duration};
 
 use vsift_domain::{
     AttemptFailure, ChunkCheckpoint, ChunkPlan, JobId, JobKind, JobMode, JobState,
-    JobTransitionError, OperationId, OperationKey, RecognitionKey, SessionId, Sha256Hex, SourceId,
-    StorageGeneration, TimeRange, TranscriptRevisionId,
+    JobTransitionError, OperationId, OperationKey, RecognitionKey, RecognitionShare, SessionId,
+    Sha256Hex, SourceId, StorageGeneration, TimeRange, TranscriptRevisionId,
 };
 
 use crate::{
@@ -309,6 +309,9 @@ pub enum JobRequest {
     Retranscribe {
         /// The requested range, before it is widened to whole segments.
         range: Option<TimeRange>,
+        /// The share of the root's capacity it recognises with (ADR 0033,
+        /// D4): part of its recognition key, so a resume uses it again.
+        share: RecognitionShare,
     },
     /// `job start`: the preparation of a session (ADR 0033).
     Prepare {
@@ -332,7 +335,34 @@ impl JobRequest {
     #[must_use]
     pub const fn range(self) -> Option<TimeRange> {
         match self {
-            Self::Retranscribe { range } => range,
+            Self::Retranscribe { range, .. } => range,
+            Self::Prepare { .. } => None,
+        }
+    }
+
+    /// Whether `other` asks for the same work as this request, which a job
+    /// created by either may then run. The share is left out: it is part of
+    /// the recognition key already, and two shares that give the recognizer
+    /// the same threads (a root of one unit, or a host's recognizer, which
+    /// reports its own) name the same job, which keeps the share it was
+    /// created with.
+    #[must_use]
+    pub fn same_work(self, other: Self) -> bool {
+        match (self, other) {
+            (Self::Retranscribe { range, .. }, Self::Retranscribe { range: other, .. }) => {
+                range == other
+            }
+            (Self::Prepare { mode }, Self::Prepare { mode: other }) => mode == other,
+            _ => false,
+        }
+    }
+
+    /// The share of the root's capacity a retranscription recognises with;
+    /// `None` for every other kind.
+    #[must_use]
+    pub const fn share(self) -> Option<RecognitionShare> {
+        match self {
+            Self::Retranscribe { share, .. } => Some(share),
             Self::Prepare { .. } => None,
         }
     }

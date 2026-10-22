@@ -351,7 +351,10 @@ fn resolve(
             request_digest: retranscribe_request_digest(session, requested)?,
             operation_key,
             recognition_key: key,
-            request: JobRequest::Retranscribe { range: requested },
+            request: JobRequest::Retranscribe {
+                range: requested,
+                share: vsift_domain::RecognitionShare::Whole,
+            },
             planned_chunks: Some(u32::try_from(planned.len())?),
         },
         segment,
@@ -1153,6 +1156,85 @@ fn job_start_hands_a_watched_job_to_a_background_runner() -> TestResult {
     assert_eq!(again["data"]["job"]["job_id"], job.as_str());
     settled_status(&root, &job)?;
     Ok(())
+}
+
+/// A watched `prepare` job of `session` that a runner started and that the
+/// test process holds as its owner.
+fn started_prepare(
+    root: &OwnedRoot,
+    session: &SessionId,
+) -> Built<(vsift_infrastructure::FilesystemJobOwner, JobId)> {
+    let spec = vsift_application::prepare_spec(session, vsift_domain::JobMode::Watched, None)?;
+    let job = spec.job_id.clone();
+    let (mut owner, created) = store(root)?.open_or_create(&spec, now()?)?;
+    assert!(created);
+    owner.apply(&JobChange::Start, now()?)?;
+    Ok((owner, job))
+}
+
+/// Starts the session's watched job again and checks the answer came only
+/// once a runner held the job or had ended it (RV-1 finding 3), then that
+/// the runner ran it (without whisper.cpp its transcript stream fails).
+fn restart_watched(root: &OwnedRoot, session: &SessionId, job: &JobId, start: &str) -> TestResult {
+    let started = start_result(&vsift(
+        root,
+        &[
+            "job",
+            "start",
+            session.as_str(),
+            "--mode",
+            "watched",
+            "--json",
+        ],
+    )?)?;
+    let data = &started["data"];
+    assert_eq!(data["job"]["job_id"], job.as_str());
+    assert_eq!(data["start"]["state"], start, "{started}");
+    assert_eq!(data["start"]["runner"], "background");
+    assert!(
+        data["job"]["live_owner"] == true || data["job"]["state"] == "failed",
+        "answered before a runner held the job: {started}"
+    );
+    let status = settled_status(root, job.as_str())?;
+    assert_eq!(status["data"]["state"], "failed", "{status}");
+    assert_eq!(status["data"]["failure"]["code"], "MISSING_CAPABILITY");
+    Ok(())
+}
+
+/// RV-1 finding 3: `job start` of a session whose watched `prepare` was
+/// interrupted (its runner died) waits, as for a new job, until the new
+/// runner holds the job or has ended it, rather than answering at once
+/// because the job is not `queued`.
+#[test]
+fn job_start_of_an_interrupted_watched_job_waits_for_its_runner() -> TestResult {
+    let root = OwnedRoot::new()?;
+    let session = seed_session(&root)?;
+    let (owner, job) = started_prepare(&root, &session)?;
+    drop(owner);
+    let status = job_result(
+        &vsift(&root, &["job", "status", job.as_str(), "--json"])?,
+        "job.status",
+    )?;
+    assert_eq!(status["data"]["state"], "interrupted");
+    restart_watched(&root, &session, &job, "waiting")
+}
+
+/// RV-1 finding 3: a watched `prepare` whose cancellation its runner never
+/// finished (the runner died while `cancelling`) is cancelled, so `job start`
+/// starts it again (`restarted`) and its runner runs it, instead of handing it
+/// as waiting to a runner that refuses a cancelled job.
+#[test]
+fn job_start_of_a_job_left_cancelling_starts_it_again() -> TestResult {
+    let root = OwnedRoot::new()?;
+    let session = seed_session(&root)?;
+    let (owner, job) = started_prepare(&root, &session)?;
+    let asked = job_result(
+        &vsift(&root, &["job", "cancel", job.as_str(), "--json"])?,
+        "job.cancel",
+    )?;
+    assert_eq!(asked["data"]["state"], "cancelling");
+    drop(owner);
+    restart_watched(&root, &session, &job, "restarted")
 }
 
 /// ADR 0033 section 6: `--mode quick` runs the job in the foreground and

@@ -251,7 +251,10 @@ fn resolve(store: &FilesystemSessionStore, requested: Option<TimeRange>) -> Buil
             request_digest: retranscribe_request_digest(&session, requested)?,
             operation_key,
             recognition_key: key,
-            request: JobRequest::Retranscribe { range: requested },
+            request: JobRequest::Retranscribe {
+                range: requested,
+                share: vsift_domain::RecognitionShare::Whole,
+            },
             planned_chunks: None,
         },
         replaced,
@@ -403,7 +406,10 @@ fn a_job_is_created_indexed_owned_and_listed() -> TestResult {
     assert_eq!(listed[0].record.job_id, job);
     // A spec whose keys differ from the stored record's is refused.
     let mut forged = resolved.spec.clone();
-    forged.request = JobRequest::Retranscribe { range: None };
+    forged.request = JobRequest::Retranscribe {
+        range: None,
+        share: vsift_domain::RecognitionShare::Whole,
+    };
     assert!(matches!(
         store.open_or_create(&forged, now()?),
         Err(JobStoreError::Storage(
@@ -468,6 +474,72 @@ fn damaged_forged_or_future_job_records_fail_closed() -> TestResult {
     }
     fs::write(&path, original)?;
     assert!(store.job(&session_id()?, &job)?.is_some());
+    Ok(())
+}
+
+/// RV-1 finding 2: a watched run's retranscription records the share it
+/// recognises with, which a resume needs to compute the same job. The whole
+/// writes nothing, so such a record reads as before; the same work asked for
+/// with the whole opens the same job, which keeps its share; and `whole`
+/// written out or an unknown share is refused.
+#[test]
+fn a_retranscriptions_share_is_recorded_when_it_is_not_the_whole() -> TestResult {
+    use vsift_domain::RecognitionShare;
+
+    let fixture = Fixture::new()?;
+    let store = open_session(&fixture, StoredDurability::Ephemeral)?;
+    let session = session_id()?;
+    let mut resolved = resolve(&store, requested()?)?;
+    let job = resolved.spec.job_id.clone();
+    let path = job_path(&fixture, &job).join("job.json");
+    resolved.spec.request = JobRequest::Retranscribe {
+        range: requested()?,
+        share: RecognitionShare::LeavingOneFree,
+    };
+    drop(store.open_or_create(&resolved.spec, now()?)?);
+    let written = fs::read_to_string(&path)?;
+    let recorded = "\"share\":\"leaving_one_free\"";
+    assert!(written.contains(recorded), "{written}");
+    let view = store.job(&session, &job)?.ok_or("no view")?;
+    assert_eq!(
+        view.record.request.share(),
+        Some(RecognitionShare::LeavingOneFree)
+    );
+
+    let mut whole = resolved.spec.clone();
+    whole.request = JobRequest::Retranscribe {
+        range: requested()?,
+        share: RecognitionShare::Whole,
+    };
+    drop(store.open_or_create(&whole, now()?)?);
+    let view = store.job(&session, &job)?.ok_or("no view")?;
+    assert_eq!(
+        view.record.request.share(),
+        Some(RecognitionShare::LeavingOneFree)
+    );
+
+    for (label, damaged) in [
+        (
+            "whole written out",
+            written.replace(recorded, "\"share\":\"whole\""),
+        ),
+        (
+            "unknown share",
+            written.replace(recorded, "\"share\":\"half\""),
+        ),
+    ] {
+        assert_ne!(damaged, written, "{label}");
+        fs::write(&path, &damaged)?;
+        assert_eq!(
+            store.job(&session, &job).err(),
+            Some(JobStoreError::Storage(
+                SessionStorageError::IntegrityFailure
+            )),
+            "{label}"
+        );
+    }
+    fs::write(&path, &written)?;
+    assert!(store.job(&session, &job)?.is_some());
     Ok(())
 }
 

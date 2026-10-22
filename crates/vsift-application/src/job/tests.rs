@@ -996,7 +996,10 @@ impl Harness {
                 request_digest: retranscribe_request_digest(&session, requested)?,
                 operation_key,
                 recognition_key: key,
-                request: JobRequest::Retranscribe { range: requested },
+                request: JobRequest::Retranscribe {
+                    range: requested,
+                    share: vsift_domain::RecognitionShare::Whole,
+                },
                 planned_chunks: None,
             },
             replaced,

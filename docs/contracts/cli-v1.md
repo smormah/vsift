@@ -1210,17 +1210,21 @@ vsift job status job_0123456789abcdef0123456789abcdef --json
   yet, so its length is not known): a runner in the background, which publishes the
   revision as it goes ("Transcripts published as they go") and leaves one unit of the
   root's admission capacity free, so `frame get`, crops and audio clips are admitted while
-  it runs. The call answers once the runner holds the job, within 10 s.
+  it runs. The call answers once the runner holds the job, or has ended it already, within
+  10 s; a job that was interrupted before is not taken until a runner holds it.
 
 `--mode quick|watched` overrides the choice. The job derives from the session, the mode and
 the sealed revision it starts from: asked again while it runs, `job start` finds it
 (`start.state` `running`); once it succeeded, the session is prepared and `job start`
-answers `done` with the same job; a failed or cancelled one starts again (`restarted`); an
+answers `done` with the same job; a failed or cancelled one starts again (`restarted`), as
+does one left `cancelling` by a runner that died before it finished cancelling; an
 interrupted one is taken up again (`waiting`). The transcript runs as a whole-source
 retranscription job of its own, so its checkpoints, resume and commit are those of
 "P10 recoverable jobs". A watched recognition runs with fewer threads (the root's
 capacity less one), which its provenance records, so its revision is not the same
-revision as a foreground run's (L-154).
+revision as a foreground run's (L-154). The transcript's job records that share, so
+`job resume` of it, from `job status` streams or `session status`, recognises with the
+same share and continues the same job.
 
 **The answer** ([`job-start-data.schema.json`](../../schemas/v1/job-start-data.schema.json),
 example [`job-start.watched.json`](../../schemas/v1/examples/job-start.watched.json)):

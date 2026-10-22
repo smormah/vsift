@@ -201,7 +201,8 @@ pub(crate) async fn start(
             ))
         }
         JobMode::Watched => {
-            let detachment = start_runner(engine, plan.job_id(), runner).await?;
+            let detachment =
+                start_runner(engine, plan.job_id(), plan.status().state(), runner).await?;
             let status = engine.job_status(plan.job_id())?;
             started(&plan, &status, JobRunner::Background(detachment))
         }
@@ -228,6 +229,7 @@ fn started(
 async fn start_runner(
     engine: &Engine,
     job: &vsift::JobId,
+    before: JobState,
     options: &RunnerOptions,
 ) -> Result<&'static str, CommandFailure> {
     let not_started = |code| {
@@ -252,22 +254,72 @@ async fn start_runner(
     let mut runner = vsift::launch_detached(&executable, &runner_arguments(job, options), &folder)
         .map_err(|_| not_started(vsift::FailureCode::MissingCapability))?;
     let detachment = runner.detachment().identifier();
+    let observe = || {
+        engine
+            .job_status(job)
+            .map(|status| Observed {
+                live: status.live(),
+                state: status.state(),
+            })
+            .map_err(CommandFailure::from)
+    };
+    let exited = || runner.try_exited().ok().flatten().is_some();
+    match handshake(before, observe, exited, RUNNER_HANDSHAKE).await? {
+        Handshake::Taken => Ok(detachment),
+        Handshake::RunnerEnded => Err(not_started(vsift::FailureCode::MissingCapability)),
+        Handshake::TimedOut => {
+            let _ = runner.kill();
+            Err(not_started(vsift::FailureCode::DeadlineExceeded))
+        }
+    }
+}
+
+/// One look at a job: whether a process holds it, and its state.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct Observed {
+    live: bool,
+    state: JobState,
+}
+
+/// What the wait for a background runner found.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Handshake {
+    /// The runner holds the job, or has ended it already.
+    Taken,
+    /// The runner exited without taking the job.
+    RunnerEnded,
+    /// The runner did not take the job in time.
+    TimedOut,
+}
+
+/// Waits, for at most `deadline`, until a runner has taken a job whose state
+/// was `before` at the launch: it holds the job (live), or the job reached an
+/// end it was not at before (finished, or failed, already). Any other state
+/// says nothing, whatever it was before: an interrupted job reads
+/// `interrupted` until a runner takes it, and a runner that fails before
+/// that leaves it so (RV-1 finding 3). A runner that exited is checked once
+/// more, since it may have recorded the job's end just before.
+async fn handshake(
+    before: JobState,
+    mut observe: impl FnMut() -> Result<Observed, CommandFailure>,
+    mut exited: impl FnMut() -> bool,
+    deadline: Duration,
+) -> Result<Handshake, CommandFailure> {
+    let taken = |seen: Observed| seen.live || (seen.state.is_terminal() && seen.state != before);
     let waited = std::time::Instant::now();
     loop {
-        // The runner holds the job once it is live, or has moved it on (it
-        // may have finished, or failed, already).
-        let status = engine.job_status(job)?;
-        if status.live() || status.state() != JobState::Queued {
-            return Ok(detachment);
+        if taken(observe()?) {
+            return Ok(Handshake::Taken);
         }
-        let ended = runner.try_exited().ok().flatten().is_some();
-        if ended || waited.elapsed() >= RUNNER_HANDSHAKE {
-            let _ = runner.kill();
-            return Err(not_started(if ended {
-                vsift::FailureCode::MissingCapability
+        if exited() {
+            return Ok(if taken(observe()?) {
+                Handshake::Taken
             } else {
-                vsift::FailureCode::DeadlineExceeded
-            }));
+                Handshake::RunnerEnded
+            });
+        }
+        if waited.elapsed() >= deadline {
+            return Ok(Handshake::TimedOut);
         }
         tokio::time::sleep(RUNNER_POLL).await;
     }
@@ -291,4 +343,78 @@ fn runner_arguments(job: &vsift::JobId, options: &RunnerOptions) -> Vec<OsString
         arguments.push("strict-linux".into());
     }
     arguments
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{cell::RefCell, collections::VecDeque, time::Duration};
+
+    use vsift::JobState;
+
+    use super::{Handshake, Observed, handshake};
+
+    type TestResult = Result<(), Box<dyn std::error::Error>>;
+
+    /// The next scripted answer; the last one repeats.
+    fn next<T: Copy>(queue: &RefCell<VecDeque<T>>) -> Option<T> {
+        let mut queue = queue.borrow_mut();
+        if queue.len() > 1 {
+            queue.pop_front()
+        } else {
+            queue.front().copied()
+        }
+    }
+
+    /// Runs the handshake over scripted looks at the job (the last one
+    /// repeats) and scripted answers to whether the runner exited.
+    fn scripted(
+        before: JobState,
+        looks: &[(bool, JobState)],
+        exits: &[bool],
+    ) -> Result<Handshake, Box<dyn std::error::Error>> {
+        let looks = RefCell::new(looks.iter().copied().collect::<VecDeque<_>>());
+        let exits = RefCell::new(exits.iter().copied().collect::<VecDeque<_>>());
+        let observe = || {
+            let (live, state) = next(&looks).unwrap_or((false, before));
+            Ok(Observed { live, state })
+        };
+        let exited = || next(&exits).unwrap_or(false);
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_time()
+            .build()?;
+        Ok(runtime
+            .block_on(handshake(before, observe, exited, Duration::from_secs(5)))
+            .map_err(|_| "the handshake failed")?)
+    }
+
+    /// RV-1 finding 3: a job that was interrupted before the launch is not
+    /// taken while it reads `interrupted`; a runner that exits then has not
+    /// taken it. Live, or an end recorded after the launch, is taken.
+    #[test]
+    fn a_runner_takes_a_job_only_by_holding_it_or_ending_it() -> TestResult {
+        use JobState::{Cancelled, Failed, Interrupted, Queued, Running};
+
+        assert_eq!(
+            scripted(Interrupted, &[(false, Interrupted)], &[false, true])?,
+            Handshake::RunnerEnded
+        );
+        assert_eq!(
+            scripted(
+                Interrupted,
+                &[(false, Interrupted), (true, Running)],
+                &[false]
+            )?,
+            Handshake::Taken
+        );
+        assert_eq!(
+            scripted(Queued, &[(false, Queued), (false, Failed)], &[true])?,
+            Handshake::Taken
+        );
+        // An end that was there before the launch says nothing.
+        assert_eq!(
+            scripted(Cancelled, &[(false, Cancelled)], &[false, true])?,
+            Handshake::RunnerEnded
+        );
+        Ok(())
+    }
 }
