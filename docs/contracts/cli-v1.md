@@ -1218,7 +1218,11 @@ vsift job status job_0123456789abcdef0123456789abcdef --json
   background that waits its turn in the root's queue (first in, first out, one queued job a
   root at a time, across sessions), then runs at the root's whole capacity and publishes at
   its seal. While it waits, `job status` shows it `queued`, held by a live runner, with
-  `queue_position` (0 for the next to run). **It never blocks someone waiting:** an
+  `queue_position` (0 for the next to run), counting the jobs ahead of it that a runner
+  waits for: a queued job nobody runs (its runner was killed, or the machine restarted)
+  keeps its place but does not hold up the jobs behind it, and runs in its place again
+  once `job start` or `job resume` gives it a runner. Jobs entered in the same second keep
+  the order they arrived in. **It never blocks someone waiting:** an
   interactive command or a watched job that finds the capacity taken by queued work is not
   refused, but waits (up to 120 s) while the queued run gives the capacity back at its next
   chunk boundary, and takes it back once nobody waits. A transcription that waits so says so at once: with `--events jsonl`, a `lifecycle`

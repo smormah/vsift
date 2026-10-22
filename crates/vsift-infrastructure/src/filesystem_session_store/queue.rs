@@ -2,8 +2,11 @@
 //! gives back (ADR 0033 section 6).
 //!
 //! **The queue.** `job start --mode queued` enters its job in `job-queue/`, one
-//! file a job named by when it was entered and its id, so that a listing in
-//! name order is first in, first out and survives a restart. Only one queued
+//! file a job named by a stamp of when it was entered and its id, so that a
+//! listing in name order is first in, first out and survives a restart. The
+//! stamp is the second times 10^9, raised past the newest entry's while
+//! `coordination/job-queue.lock` is held, so two jobs entered in one second
+//! keep the order they arrived in (RV-1 finding 8). Only one queued
 //! job of a root runs at a time: its runner holds `coordination/queue-turn.lock`
 //! for the whole job. An entry whose job has ended is removed when the job
 //! ends, and skipped (and removed) by whoever finds it later.
@@ -38,6 +41,15 @@ use crate::file_lock::HeldFileLock;
 const JOB_QUEUE_DIRECTORY: &str = "job-queue";
 /// Held by the runner whose queued job runs.
 const QUEUE_TURN_LOCK: &str = "queue-turn.lock";
+/// Held while an entry is entered, so that no two entries share a stamp.
+const QUEUE_ENTRY_LOCK: &str = "job-queue.lock";
+/// Stamps a second: an entry's stamp is its second times this, raised past
+/// the newest entry's stamp.
+const STAMPS_PER_SECOND: u64 = 1_000_000_000;
+/// How often, and how many times, entering a job looks for the entry lock,
+/// which is only ever held for the few file operations of one entry.
+const QUEUE_ENTRY_LOCK_POLL: std::time::Duration = std::time::Duration::from_millis(10);
+const QUEUE_ENTRY_LOCK_TRIES: u32 = 500;
 /// Held exclusively by queued work while it holds capacity.
 pub(super) const ADMISSION_QUEUED_LOCK: &str = "admission-queued.lock";
 /// Held shared by ordinary callers that wait for capacity queued work holds.
@@ -52,6 +64,8 @@ pub struct QueuedEntry {
     pub session_id: SessionId,
     /// The job.
     pub job_id: JobId,
+    /// The second it was entered, from its stamp.
+    pub entered_at_unix_seconds: u64,
 }
 
 /// The turn of the queued job that runs: held for the whole job, released when
@@ -61,17 +75,41 @@ pub struct QueueTurn {
     _lock: HeldFileLock,
 }
 
-fn entry_name(entered_at_unix_seconds: u64, job_id: &JobId) -> String {
-    format!("{entered_at_unix_seconds:020}-{}.json", job_id.as_str())
+fn entry_name(stamp: u64, job_id: &JobId) -> String {
+    format!("{stamp:020}-{}.json", job_id.as_str())
 }
 
-/// The job an entry's name holds, if it is an entry.
-fn entry_job(name: &str) -> Option<JobId> {
+/// The stamp and the job an entry's name holds, if it is an entry.
+fn entry_parts(name: &str) -> Option<(u64, JobId)> {
     let (stamp, rest) = name.split_once('-')?;
     if stamp.len() != 20 || !stamp.bytes().all(|byte| byte.is_ascii_digit()) {
         return None;
     }
-    JobId::parse(rest.strip_suffix(".json")?).ok()
+    Some((
+        stamp.parse().ok()?,
+        JobId::parse(rest.strip_suffix(".json")?).ok()?,
+    ))
+}
+
+/// The job an entry's name holds, if it is an entry.
+fn entry_job(name: &str) -> Option<JobId> {
+    entry_parts(name).map(|(_, job)| job)
+}
+
+/// The stamp of an entry entered at `now_unix_seconds` after the entries
+/// `names`: the second times [`STAMPS_PER_SECOND`], or one past the newest
+/// stamp when that is later, so the order of entering is kept within a second
+/// and when the clock steps back.
+fn next_stamp(names: &[String], now_unix_seconds: u64) -> u64 {
+    let newest = names
+        .iter()
+        .filter_map(|name| entry_parts(name))
+        .map(|(stamp, _)| stamp.saturating_add(1))
+        .max()
+        .unwrap_or(0);
+    now_unix_seconds
+        .saturating_mul(STAMPS_PER_SECOND)
+        .max(newest)
 }
 
 impl FilesystemSessionStore {
@@ -107,6 +145,7 @@ impl FilesystemSessionStore {
         now_unix_seconds: u64,
     ) -> Result<(), SessionStorageError> {
         let queue = self.queue_directory(true)?.ok_or(SessionStorageError::Io)?;
+        let _entering = self.take_entry_lock()?;
         let names = entry_names(&queue)?;
         if names
             .iter()
@@ -119,7 +158,7 @@ impl FilesystemSessionStore {
         }
         let bytes = serde_json::to_vec(&StoredJobIndex::new(session_id))
             .map_err(|_| SessionStorageError::Io)?;
-        let name = entry_name(now_unix_seconds, job_id);
+        let name = entry_name(next_stamp(&names, now_unix_seconds), job_id);
         replace_file(
             &queue,
             &name,
@@ -160,11 +199,15 @@ impl FilesystemSessionStore {
         Ok(names
             .into_iter()
             .filter_map(|name| {
-                let job_id = entry_job(&name)?;
+                let (stamp, job_id) = entry_parts(&name)?;
                 let session_id = read_versioned_json_file::<StoredJobIndex>(&queue, &name)
                     .ok()?
                     .session()?;
-                Some(QueuedEntry { session_id, job_id })
+                Some(QueuedEntry {
+                    session_id,
+                    job_id,
+                    entered_at_unix_seconds: stamp / STAMPS_PER_SECOND,
+                })
             })
             .collect())
     }
@@ -246,6 +289,22 @@ impl FilesystemSessionStore {
     pub fn queued_capacity_held(&self) -> bool {
         self.coordination()
             .is_ok_and(|coordination| queued_work_holds(&coordination))
+    }
+
+    /// Takes the lock under which one entry is entered, waiting briefly for
+    /// another entry being entered.
+    fn take_entry_lock(&self) -> Result<HeldFileLock, SessionStorageError> {
+        let coordination = self.coordination()?;
+        for _ in 0..QUEUE_ENTRY_LOCK_TRIES {
+            match HeldFileLock::try_exclusive(
+                create_or_open(&coordination, QUEUE_ENTRY_LOCK)?.into_std(),
+            ) {
+                Ok(lock) => return Ok(lock),
+                Err(fs::TryLockError::WouldBlock) => std::thread::sleep(QUEUE_ENTRY_LOCK_POLL),
+                Err(fs::TryLockError::Error(error)) => return Err(map_storage_io(error)),
+            }
+        }
+        Err(SessionStorageError::Busy)
     }
 
     fn coordination(&self) -> Result<Dir, SessionStorageError> {
@@ -336,8 +395,8 @@ mod tests {
         let one = SessionId::parse("ses_1111111111111111")?;
         let two = SessionId::parse("ses_2222222222222222")?;
         assert_eq!(store.job_queue()?, []);
-        store.enqueue_job(&two, &job('b')?, 200)?;
         store.enqueue_job(&one, &job('a')?, 100)?;
+        store.enqueue_job(&two, &job('b')?, 200)?;
         store.enqueue_job(&one, &job('c')?, 300)?;
         // Entered again later, a job keeps its place.
         store.enqueue_job(&one, &job('a')?, 400)?;
@@ -368,6 +427,35 @@ mod tests {
         assert!(other.try_take_queue_turn()?.is_none(), "two turns at once");
         drop(turn);
         assert!(other.try_take_queue_turn()?.is_some());
+        Ok(())
+    }
+
+    /// RV-1 finding 8: jobs entered in one second keep the order they arrived
+    /// in, not the order of their ids, and the stamp gives each its second.
+    #[test]
+    fn entries_of_one_second_keep_their_order() -> TestResult {
+        let fixture = Fixture::new()?;
+        let store = FilesystemSessionStore::open_existing(&fixture.path)?;
+        let session = SessionId::parse("ses_1111111111111111")?;
+        for digit in ['c', 'a', 'b'] {
+            store.enqueue_job(&session, &job(digit)?, 500)?;
+        }
+        store.enqueue_job(&session, &job('d')?, 501)?;
+        let queue = store.job_queue()?;
+        assert_eq!(
+            queue
+                .iter()
+                .map(|entry| entry.job_id.clone())
+                .collect::<Vec<_>>(),
+            [job('c')?, job('a')?, job('b')?, job('d')?]
+        );
+        assert_eq!(
+            queue
+                .iter()
+                .map(|entry| entry.entered_at_unix_seconds)
+                .collect::<Vec<_>>(),
+            [500, 500, 500, 501]
+        );
         Ok(())
     }
 

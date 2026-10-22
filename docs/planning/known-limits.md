@@ -1804,7 +1804,7 @@ Counts: 1 high, 50 medium, 116 low (167 entries).
 
 **After a restart, a queued job keeps its place in the root's queue but waits until `job start` or `job resume` runs it again: nothing runs the queue on its own (0.3.0, the progress story).**
 
-- **What:** `job start --mode queued` ([ADR 0033](../decisions/0033-progress-during-long-transcriptions.md) section 6) enters the job in the root's queue on disk (`job-queue/`) and starts a background runner that waits its turn. The queue's order survives a restart, a reboot or a killed runner, but no process runs it then: a waiting job stays `queued` (resumable, `not_started`) until someone runs `job start` or `job resume` for it, whose runner takes its turn again in order.
+- **What:** `job start --mode queued` ([ADR 0033](../decisions/0033-progress-during-long-transcriptions.md) section 6) enters the job in the root's queue on disk (`job-queue/`) and starts a background runner that waits its turn. The queue's order survives a restart, a reboot or a killed runner, but no process runs it then: a waiting job stays `queued` (resumable, `not_started`) until someone runs `job start` or `job resume` for it, whose runner takes its turn again in order. Until then the queue passes it over: the live jobs behind it run (since review RV-1; before, they all waited behind it).
 - **Impact: low by the rubric** (a missing convenience): nothing is lost or reordered, and `job status` and `session status` show the job waiting and resumable.
 - **Why:** 0.3.0 has no long-lived host process; each queued job has a runner of its own, which ends with its machine session.
 - **Mitigation:** the skill and the documentation say to check `job status` and run `job resume` for a job that waits with no live owner.

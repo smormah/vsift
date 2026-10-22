@@ -482,7 +482,11 @@ The fifth pull request implements the queued mode of section 6.
   `coordination/queue-turn.lock` for the whole job. A waiting job is still `queued` (a wait is no attempt):
   `run_prepare` asks `PrepareStreams::before_start` before it starts, and a cancellation meanwhile cancels
   it. `job status` reports `queue_position`, counting only entries whose job has not ended (an ended one's
-  entry is removed as it is found).
+  entry is removed as it is found). **Review RV-1 (2026-10-22):** the position, and so the turn, counts only
+  the entries ahead whose job a runner holds or that were entered less than 30 s ago (their runner may
+  still be starting); an entry nobody runs keeps its place without holding up the live jobs behind it
+  (finding 1). An entry's name holds a stamp, the second times 10^9 raised past the newest entry's under
+  `coordination/job-queue.lock`, so jobs entered in one second keep their arrival order (finding 8).
 - **Fairness.** Queued work holds its permit marked by an exclusive lock on
   `coordination/admission-queued.lock`. An ordinary caller (an interactive command, a watched job) that
   finds the slots taken while that marker is held holds a shared lock on
