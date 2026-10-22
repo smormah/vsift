@@ -756,10 +756,12 @@ impl Engine {
         // A bundle holds only sealed revisions (ADR 0033): while a revision is
         // open, retaining waits for its transcription, which is named.
         if let Ok(Some(open)) = store.read_open_transcript(session_id, now) {
-            return Err(EngineError::TranscriptionRunning {
-                session: session_id.clone(),
-                job: open.job_id,
-            });
+            return Err(crate::jobs::open_revision_refusal(
+                &store,
+                session_id,
+                open.job_id,
+                now,
+            ));
         }
         let bundle = store.retain_bundle(session_id, &output, retention.policy())?;
         Ok(BundleSummary::from_status(&bundle))

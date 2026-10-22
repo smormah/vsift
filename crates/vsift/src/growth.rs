@@ -34,8 +34,8 @@ impl ReadGrowth {
 
     /// The token for what the revision publishes after this read, the state of
     /// the revision it follows, and whether more is published after it
-    /// already. Present for a read of an open revision and for a `--since`
-    /// read.
+    /// already. Present for a `--since` read, and for a read of an open
+    /// revision on the page that ends it (no next cursor).
     #[must_use]
     pub fn since(&self) -> Option<(&str, RevisionState, bool)> {
         self.since
@@ -67,23 +67,53 @@ pub(crate) fn since_target(
     Ok((revision, status, watermark))
 }
 
-/// The growth of a read of `revision` whose answer ends at `watermark`
-/// published segments (`more` when it stopped at its limit), with `coverage`
-/// the read's: the token to read on from, for an open revision or a since
-/// read, and the earlier revision over what is pending.
+/// Where a read's answer ends, which decides the since token it carries.
+pub(crate) enum ReadEnd {
+    /// A `--since` read: the token to read on from, and whether it stopped at
+    /// its limit with more published after it.
+    Since(String, bool),
+    /// A plain read whose answer has no next page: over an open revision, its
+    /// token follows on from every segment the revision holds.
+    LastPage,
+    /// A plain read with a next page (`next_cursor`): no since token, because
+    /// the pages still to read come before what is published after them.
+    MorePages,
+}
+
+impl ReadEnd {
+    /// The end of a plain read, from whether its page has a next cursor.
+    pub(crate) const fn of_page<T>(next_cursor: Option<&T>) -> Self {
+        if next_cursor.is_some() {
+            Self::MorePages
+        } else {
+            Self::LastPage
+        }
+    }
+}
+
+/// The growth of a read of `revision` that ends at `end`, with `coverage` the
+/// read's: the token to read on from, for an open revision or a since read,
+/// and the earlier revision over what is pending.
+///
+/// A plain read of an open revision carries a since token only on the page
+/// that ends it (RV-1 finding 4): a token on an earlier page would hold every
+/// segment the revision holds, so a reader who followed it instead of the
+/// cursor would never be given the pages in between. A search's pages are in
+/// rank order, not start order, so no earlier watermark is exact for both
+/// commands; the cursor, bound to the same revision, reads the rest.
 pub(crate) fn read_growth(
     store: &FilesystemSessionStore,
     session: &SessionId,
     revision: &TranscriptRevision,
     coverage: &SearchCoverage,
-    since: Option<(String, bool)>,
+    end: ReadEnd,
     expires_at_micros: u64,
     now: u64,
 ) -> Result<ReadGrowth, EngineError> {
     let state = revision.state();
-    let since = match since {
-        Some((token, more)) => Some((token, state, more)),
-        None if state == RevisionState::Open => Some((
+    let since = match end {
+        ReadEnd::Since(token, more) => Some((token, state, more)),
+        ReadEnd::LastPage if state == RevisionState::Open => Some((
             since_token(
                 session,
                 revision,
@@ -95,7 +125,7 @@ pub(crate) fn read_growth(
             state,
             false,
         )),
-        None => None,
+        ReadEnd::LastPage | ReadEnd::MorePages => None,
     };
     let pending_covered_by = match (revision.supersedes(), coverage.pending()) {
         (Some(base), pending) if !pending.is_empty() => {

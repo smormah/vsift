@@ -216,8 +216,9 @@ pub struct SearchData {
     transcript_coverage: TranscriptCoverageData,
     #[serde(skip_serializing_if = "Option::is_none")]
     screen_text: Option<ScreenTextSearchData>,
-    /// What to search on from (ADR 0033): present over an open revision and
-    /// for a `--since` search.
+    /// What to search on from (ADR 0033): present for a `--since` search, and
+    /// over an open revision on the page that ends the search (no
+    /// `next_cursor`).
     #[serde(skip_serializing_if = "Option::is_none")]
     since: Option<SinceData>,
 }

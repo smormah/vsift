@@ -211,6 +211,18 @@ pub enum EngineError {
         /// The live transcription job of that session.
         job: JobId,
     },
+    /// The session holds an open revision (ADR 0033) whose job has ended
+    /// without sealing it: `job cancel` of a job no process ran met a busy
+    /// session, so its stopped seal did not land (RV-1 finding 7). Nothing
+    /// else may write a transcript of the session until the revision is
+    /// sealed, and waiting does not help: cancelling the job again seals it.
+    /// The answer is `BUSY`, as for a running transcription.
+    RevisionLeftOpen {
+        /// The session that holds the open revision.
+        session: SessionId,
+        /// The ended job whose revision it is.
+        job: JobId,
+    },
     /// The operation id was used earlier in the session for a different
     /// request, whose result is kept (maintainer decision D-4).
     IdempotencyConflict {
@@ -479,6 +491,7 @@ impl EngineError {
             Self::Worker(failure) => failure.failure_code(),
             Self::JobBusy { .. }
             | Self::TranscriptionRunning { .. }
+            | Self::RevisionLeftOpen { .. }
             | Self::RetranscriptionSuperseded { .. }
             | Self::AdmissionBusy { .. }
             | Self::ManagedInstallBusy => FailureCode::Busy,
@@ -860,6 +873,9 @@ impl fmt::Display for EngineError {
             Self::TranscriptionRunning { .. } => formatter.write_str(
                 "a transcription of the session is running and holds the session root's capacity",
             ),
+            Self::RevisionLeftOpen { .. } => formatter.write_str(
+                "the session's open revision belongs to a job that has ended without sealing it",
+            ),
             Self::IdempotencyConflict { .. } => {
                 formatter.write_str("the operation id is bound to a different request")
             }
@@ -968,6 +984,7 @@ impl Error for EngineError {
             | Self::ArtifactDirectoryNotAbsolute
             | Self::JobBusy { .. }
             | Self::TranscriptionRunning { .. }
+            | Self::RevisionLeftOpen { .. }
             | Self::IdempotencyConflict { .. }
             | Self::JobCancelled { .. }
             | Self::RetranscriptionSuperseded { .. }
@@ -994,6 +1011,7 @@ impl EngineError {
         match self {
             Self::JobBusy { job }
             | Self::TranscriptionRunning { job, .. }
+            | Self::RevisionLeftOpen { job, .. }
             | Self::IdempotencyConflict { job }
             | Self::JobCancelled { job }
             | Self::RetranscriptionSuperseded { job }
@@ -1013,7 +1031,8 @@ impl EngineError {
         match self {
             Self::JobInterrupted { session, .. }
             | Self::JobSessionNotOpen { session, .. }
-            | Self::TranscriptionRunning { session, .. } => Some(session),
+            | Self::TranscriptionRunning { session, .. }
+            | Self::RevisionLeftOpen { session, .. } => Some(session),
             _ => None,
         }
     }

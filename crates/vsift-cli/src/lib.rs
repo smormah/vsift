@@ -56,6 +56,7 @@ use vsift_contract::{
     MEDIA_TOOLS_FOR_TRANSCRIPT_REMEDIATION, NO_AUDIO_STREAM_REMEDIATION, NO_TRANSCRIPT_REMEDIATION,
     NO_VIDEO_STREAM_REMEDIATION, OCR_FAILED_REMEDIATION, OCR_INDEX_FULL_REMEDIATION,
     OCR_RUNNER_REMEDIATION, OCR_SEARCH_CURSOR_REMEDIATION, OperationResponse,
+    REVISION_LEFT_OPEN_REMEDIATION,
     SESSION_NOT_PUBLISHED_REMEDIATION, SESSION_ROOT_NAME_REMEDIATION,
     SESSION_ROOT_OWN_ACCESS_REMEDIATION, SOURCE_ACCESS_DENIED_REMEDIATION,
     SOURCE_COPY_TOO_SLOW_REMEDIATION, SOURCE_COPY_WOULD_BE_TOO_SLOW_REMEDIATION,
@@ -734,6 +735,15 @@ impl From<EngineError> for CommandFailure {
                     job.as_str().to_owned(),
                 ]
             }
+            // RV-1 finding 7: the job has ended, so only cancelling it again
+            // seals its revision.
+            EngineError::RevisionLeftOpen { job, .. } => {
+                vec![
+                    "job".to_owned(),
+                    "cancel".to_owned(),
+                    job.as_str().to_owned(),
+                ]
+            }
             EngineError::ManagedLifecycle(refusal) => managed_lifecycle_remediation(*refusal)
                 .1
                 .iter()
@@ -786,6 +796,7 @@ fn local_asr_remediation(error: &EngineError) -> Option<String> {
         EngineError::TranscriptionRunning { .. } => {
             Some(TRANSCRIPTION_RUNNING_REMEDIATION.to_owned())
         }
+        EngineError::RevisionLeftOpen { .. } => Some(REVISION_LEFT_OPEN_REMEDIATION.to_owned()),
         EngineError::IdempotencyConflict { .. } => {
             Some(IDEMPOTENCY_CONFLICT_REMEDIATION.to_owned())
         }

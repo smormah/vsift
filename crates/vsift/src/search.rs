@@ -364,7 +364,7 @@ impl Engine {
             &request.session,
             &revision,
             &coverage,
-            None,
+            crate::growth::ReadEnd::of_page(next_cursor.as_ref()),
             expires_at,
             now,
         )?;
@@ -702,7 +702,7 @@ fn search_since(
         &request.session,
         &revision,
         &coverage,
-        Some((page.next.encode(), page.more)),
+        crate::growth::ReadEnd::Since(page.next.encode(), page.more),
         expires_at,
         now,
     )?;

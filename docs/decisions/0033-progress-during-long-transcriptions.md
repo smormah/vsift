@@ -137,7 +137,9 @@ All of this is additive to JSON v1.
   published after the token, in time order, with the next `since_token`. A token is bound to the
   session, one revision and its watermark (how many of its segments the reader has been given), and always
   reads that revision; once it is sealed or stopped the answer says so and names any successor. `--cursor`
-  still pages inside one since query.
+  still pages inside one since query. A plain read of an open revision gives its token only on the answer
+  that ends the read (no `next_cursor`), so a reader who follows it never skips a page (review RV-1,
+  2026-10-22).
 
 ### 4. The important part first
 

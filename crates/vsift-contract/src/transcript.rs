@@ -693,8 +693,8 @@ pub struct TranscriptPageData {
     items: Vec<TranscriptSegmentData>,
     next_cursor: Option<String>,
     transcript_coverage: TranscriptCoverageData,
-    /// What to read on from (ADR 0033): present over an open revision and for
-    /// a `--since` read.
+    /// What to read on from (ADR 0033): present for a `--since` read, and over
+    /// an open revision on the page that ends the read (no `next_cursor`).
     #[serde(skip_serializing_if = "Option::is_none")]
     since: Option<SinceData>,
 }

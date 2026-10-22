@@ -326,6 +326,8 @@ fn job_failures_validate_with_their_hints() -> TestResult {
     }
     for prose in [
         CANCELLATION_TOO_LATE_WARNING,
+        vsift_contract::REVISION_LEFT_OPEN_WARNING,
+        vsift_contract::REVISION_LEFT_OPEN_REMEDIATION,
         RESUMED_FROM_CHECKPOINT_WARNING,
         CHECKPOINT_DISCARDED_WARNING,
         IDEMPOTENCY_CONFLICT_REMEDIATION,

@@ -455,10 +455,12 @@ impl Engine {
         if let Some(job) = open_job
             && job != spec.job_id
         {
-            return Err(EngineError::TranscriptionRunning {
-                session: request.session.clone(),
+            return Err(crate::jobs::open_revision_refusal(
+                &store,
+                &request.session,
                 job,
-            });
+                now,
+            ));
         }
 
         // 7. Recognise from the job's checkpoints and the audio, assemble the
