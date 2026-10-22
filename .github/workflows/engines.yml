@@ -6,15 +6,17 @@ name: Engines
 # size and SHA-256 like any publisher's.
 #
 #   guard    first, in seconds: which engine, which mode, and for a publish
-#            that the ref is the engine's tag, the tag still names this run's
-#            commit, the commit is on `main` and no release of the tag exists.
+#            that the ref is the engine's tag (never a `v*` tag), the tag still
+#            names this run's commit, the commit is on `main` and neither a
+#            release nor a draft of the tag exists.
 #   build    one leg per engine, each on a GitHub-hosted runner: the pinned
 #            upstream commit fetched and checked, built twice and compared
 #            byte for byte, packaged deterministically
 #            (tools/engines/build-engine.sh). On a dispatch only the chosen
 #            engine's leg builds; a pull request builds all of them.
-#   plan     the chosen engine's files checked against the build's sums and
-#            the plan shown; it decides whether this run publishes.
+#   plan     the chosen engine's files checked against the build's sums, one
+#            leg for each of the recipe's targets and no other, and the plan
+#            shown; it decides whether this run publishes.
 #   attest   only when publishing: build provenance for every asset.
 #   publish  only when publishing, in the protected `release` environment after
 #            the maintainer's approval: a draft release on the existing tag
@@ -67,6 +69,7 @@ jobs:
     outputs:
       engine: ${{ steps.decide.outputs.engine }}
       tag: ${{ steps.decide.outputs.tag }}
+      targets: ${{ steps.decide.outputs.targets }}
       mode: ${{ steps.decide.outputs.mode }}
     steps:
       - name: Check out the recipes
@@ -130,23 +133,28 @@ jobs:
             esac
             return 1
           }
-          # no_release: whether the tag has no release yet; an engine release
-          # is made once and never replaced.
+          # no_release: whether the tag has no release yet, not even a draft; an
+          # engine release is made once and never replaced. GitHub answers 404
+          # to a tag lookup for a draft, so the drafts are listed as well.
           no_release() {
-            local answer
+            local answer drafts
             if answer="$(gh api "repos/smormah/vsift/releases/tags/${tag}" --jq .tag_name 2>&1)"; then
               return 1
             fi
             case "${answer}" in
-              *"HTTP 404"*) return 0 ;;
+              *"HTTP 404"*) ;;
               *) refuse "whether ${tag} has a release could not be read" ;;
             esac
+            drafts="$(gh api "repos/smormah/vsift/releases?per_page=100" --paginate --jq ".[] | select(.tag_name == \"${tag}\") | .tag_name")" || refuse "the releases could not be listed, so whether ${tag} has a draft is unknown"
+            [ -z "${drafts}" ] || refuse "a draft release of ${tag} exists: a failed publish left it; delete the draft first, then dispatch the tag again"
+            return 0
           }
 
           if [ "${EVENT_NAME}" != workflow_dispatch ]; then
             {
               echo "engine=all"
               echo "tag="
+              echo "targets="
               echo "mode=dry-run"
             } >> "${GITHUB_OUTPUT}"
             note "A ${EVENT_NAME} run builds every engine as a dry run and publishes nothing."
@@ -159,6 +167,8 @@ jobs:
           recipe="tools/engines/recipes/${ENGINE_INPUT}.env"
           version="$(awk -F= '$1 == "ENGINE_VERSION" { print $2; exit }' "${recipe}")"
           [[ "${version}" =~ ^[0-9][0-9A-Za-z.]*-r[0-9]+$ ]] || refuse "${recipe} names no version of the form <upstream>-r<n> ('${version}')"
+          targets="$(awk -F= '$1 == "TARGETS" { gsub(/"/, "", $2); print $2; exit }' "${recipe}")"
+          [[ "${targets}" =~ ^[a-z0-9]+(-[a-z0-9]+)*( [a-z0-9]+(-[a-z0-9]+)*)*$ ]] || refuse "${recipe} names no TARGETS ('${targets}')"
           tag="${ENGINE_INPUT}-v${version}"
           case "${DRY_RUN_INPUT}" in
             true) mode=dry-run ;;
@@ -168,6 +178,7 @@ jobs:
           {
             echo "engine=${ENGINE_INPUT}"
             echo "tag=${tag}"
+            echo "targets=${targets}"
           } >> "${GITHUB_OUTPUT}"
           if [ "${mode}" = dry-run ]; then
             echo "mode=dry-run" >> "${GITHUB_OUTPUT}"
@@ -280,6 +291,7 @@ jobs:
         env:
           ENGINE_NAME: ${{ needs.guard.outputs.engine }}
           ENGINE_TAG: ${{ needs.guard.outputs.tag }}
+          ENGINE_TARGETS: ${{ needs.guard.outputs.targets }}
           GUARD_MODE: ${{ needs.guard.outputs.mode }}
         run: |
           set -euo pipefail
@@ -290,13 +302,20 @@ jobs:
             exit 0
           fi
           version="$(printf '%s\n' "${ENGINE_TAG}" | sed "s/^${ENGINE_NAME}-v//")"
-          # Every target of the recipe built, each leg's files exactly its sums.
+          # Every target of the recipe built and no other: one sums file for each
+          # target the recipe names (a dropped matrix leg publishes nothing).
+          [ -n "${ENGINE_TARGETS}" ]
+          expected="$(for target in ${ENGINE_TARGETS}; do printf '%s-%s-%s.sha256\n' "${ENGINE_NAME}" "${version}" "${target}"; done | LC_ALL=C sort)"
+          present="$(cd dist && ls -1 | grep '[.]sha256$' | LC_ALL=C sort)"
+          if [ "${expected}" != "${present}" ]; then
+            printf 'the recipe names the targets: %s\nexpected the sums files:\n%s\nfound:\n%s\n' "${ENGINE_TARGETS}" "${expected}" "${present}" >&2
+            exit 1
+          fi
+          # Each leg's files exactly its sums.
           : > "${RUNNER_TEMP}/sums"
-          count=0
           for sums in dist/*.sha256; do
             (cd dist && sha256sum --check --strict "$(basename "${sums}")")
             cat "${sums}" >> "${RUNNER_TEMP}/sums"
-            count=$((count + 1))
           done
           rm dist/*.sha256
           test "$(ls -A dist | wc -l)" -eq "$(wc -l < "${RUNNER_TEMP}/sums")"
@@ -307,7 +326,6 @@ jobs:
             esac
           done
           LC_ALL=C sort -k2 "${RUNNER_TEMP}/sums" > dist/SHA256SUMS
-          [ "${count}" -ge 1 ]
           {
             echo "mode=${GUARD_MODE}"
             echo "sums<<SUMS"
@@ -330,7 +348,10 @@ jobs:
           if-no-files-found: error
 
   # Only when publishing: a manual dispatch with dry_run cleared, on an engine
-  # tag of smormah/vsift, which the guard and the plan accepted.
+  # tag of smormah/vsift, which the guard and the plan accepted. This job signs
+  # the planned files before the maintainer approves the publish (ADR 0032, note
+  # of 2026-10-22): a publish the maintainer rejects leaves a statement of what
+  # was built, which says nothing of what was released.
   attest:
     name: Attest build provenance
     needs:
@@ -389,7 +410,7 @@ jobs:
     environment:
       name: release
     concurrency:
-      group: engines-publish
+      group: engines-publish-${{ needs.guard.outputs.tag }}
       cancel-in-progress: false
     permissions:
       contents: write
@@ -419,6 +440,8 @@ jobs:
             tagged="$(gh api "repos/smormah/vsift/git/tags/${tagged}" --jq '.object.sha')"
           fi
           [ "${tagged}" = "${SOURCE_COMMIT}" ]
+          drafts="$(gh api "repos/smormah/vsift/releases?per_page=100" --paginate --jq ".[] | select(.tag_name == \"${ENGINE_TAG}\") | .tag_name")"
+          [ -z "${drafts}" ]
 
       - name: Create the release as a draft on the tag, then publish it, never as latest
         env:

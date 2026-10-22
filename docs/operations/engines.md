@@ -49,10 +49,21 @@ reviewed version banner (`n9.0.1-11-ge47273f4d9-vsift-r<n>`) and was configured 
 3. **Dispatch a dry run on the tag:** `gh workflow run engines.yml --repo smormah/vsift --ref <tag> -f
    engine=<engine>`. Read the plan in the run's summary (the files and their digests).
 4. **Dispatch the publish:** the same with `-f dry_run=false`. The guard refuses it unless the ref is the engine's
-   tag, the tag still names the run's commit, the commit is on `main` and the tag has no release. After the build
-   and the plan, `attest` attests every file with build provenance, and `publish` waits for the maintainer's
-   approval of the `release` environment. It then creates the release as a draft on the tag with exactly the
-   planned files, publishes it with `--latest=false`, and reads the assets back by digest.
+   tag (never a `v*` tag), the tag still names the run's commit, the commit is on `main` and the tag has no
+   release **and no draft release**. A failed publish can leave a draft (GitHub answers 404 to a lookup of a
+   draft's tag, so the guard lists the releases too): the guard then refuses with a message saying a draft exists,
+   and the maintainer deletes the draft by hand before dispatching again; the workflow never deletes anything. After
+   the build, the plan (one build for each target the recipe's `TARGETS` names, and no other) and the guard,
+   `attest` attests every file with build provenance, and `publish` waits for the maintainer's approval of the
+   `release` environment. It then checks the tag and the drafts once more, creates the release as a draft on the
+   tag with exactly the planned files, publishes it with `--latest=false`, and reads the assets back by digest.
+   Publishes of different engines queue in their own groups (`engines-publish-<tag>`), so a queued publish of one
+   engine never replaces another's, and none is ever cancelled.
+   **What a rejected approval leaves:** `attest` runs before the approval, so a publish the maintainer rejects
+   leaves a signed provenance statement for files that were never released. It says what was built, not that it was
+   released; the release itself is the only claim of publication, and only the engine's release assets are pinned
+   by the catalogue ([ADR 0032](../decisions/0032-managed-installs-on-every-platform-and-the-engine-release-workflow.md),
+   note of 2026-10-22). Putting `attest` inside the environment would mean two approvals for each publish.
 5. **Pin it in the catalogue** by pull request: the asset's URL
    (`https://github.com/smormah/vsift/releases/download/<tag>/<engine>-<version>.tar.gz`), size and SHA-256, and
    the selected files from the published `.inventory.json`, then the hosted managed smoke on the engine's system.
@@ -68,11 +79,19 @@ Anyone can check a file: `gh attestation verify <file> --repo smormah/vsift`.
 
 ## The rules the workflow is held to
 
-The governance workflow lint's rule 10 (`tools/vsift-governance/src/workflows/engines.rs`), with a test that
-refuses a broken copy of the real workflow for each rule: triggers only `pull_request` and `workflow_dispatch` with
-`engine` and `dry_run` (default `true`); the guard first, never skipped; `attest` and `publish` only under every
-publish condition; write scopes only in `attest` (`id-token`, `attestations`) and `publish` (`contents`); `publish`
-alone in the `release` environment and never cancelled; `gh release` only to create a draft with `--verify-tag`,
-`--draft` and `--latest=false`, publish it with `--draft=false --latest=false` and view it; no upload, `--clobber`,
-deletion, tag or push; `gh api` only reads; the privileged jobs download only this run's engine artifact and
-compare it with the plan's sums; no secret. Rule 9 keeps every job on GitHub-hosted runners.
+The governance workflow lint's rule 10 (`tools/vsift-governance/src/workflows/engines.rs` and its `guard`
+module), with a test that refuses a broken copy of the real workflow for each rule (55 copies): triggers only
+`pull_request` and `workflow_dispatch` with `engine` and `dry_run` (default `true`); the guard first, never skipped,
+**and each of its checks held line by line** (the ref is the engine's tag and never a `v*` tag, the tag still names
+the run's commit, the commit is on `main`, no release and no draft of the tag, all before the line that sets
+`mode=publish`; the accepted engines are exactly the dispatch input's options; `publish` repeats the ref, tag and
+draft checks, and `ENGINE_TAG` is always the guard's output, never `github.ref_name`); `attest` and `publish` only
+under every publish condition; write scopes only in `attest` (`id-token`, `attestations`) and `publish`
+(`contents`); `publish` alone in the `release` environment, in a per-tag group and never cancelled; `gh release`
+(also after global flags such as `-R`) only to create a draft with `--verify-tag`, `--draft` and `--latest=false`,
+publish it with `--draft=false --latest=false` and view it; no upload, `--clobber`, deletion, tag or push; `gh api`
+only reads (no `-X`, `-f`, `-F`, `--method`, `--field` or `--input`, with or without a space); the plan compares its
+sums files with the recipe's targets and the build matrix has one leg for each target a recipe names; the
+privileged jobs download only this run's engine artifact and compare it with the plan's sums; `secrets` is named
+nowhere (not `secrets.X`, `secrets['X']`, `toJSON(secrets)` or `secrets: inherit`). Rule 9 keeps every job on
+GitHub-hosted runners.
