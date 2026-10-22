@@ -104,13 +104,16 @@ const NEVER: [&str; 6] = [
 ];
 
 /// Commands the skill runs only on the user's explicit instruction.
-const EXPLICIT: [&str; 6] = [
+const EXPLICIT: [&str; 7] = [
     "setup.configure",
     "setup.configure-model",
     "session.renew",
     "session.retain",
     "session.clean",
     "job.cancel",
+    // On-screen text costs minutes of CPU on a long video and is opt-in by the
+    // maintainer's decision of 2026-10-21 (ADR 0030).
+    "ocr",
 ];
 
 /// Read-only forms of `explicit` commands that the skill may run freely: the
@@ -475,7 +478,10 @@ fn resolve_operation(arguments: &[String]) -> Option<(String, clap::Command)> {
         path.push(word.clone());
         command = next;
     }
-    (!path.is_empty() && !command.has_subcommands()).then(|| (path.join("."), command))
+    // `ocr` runs itself and has `ocr search`: a command whose own arguments
+    // conflict with its subcommands is an operation too.
+    let operation = !command.has_subcommands() || command.is_args_conflicts_with_subcommands_set();
+    (!path.is_empty() && operation).then(|| (path.join("."), command))
 }
 
 fn long_flags(command: &clap::Command) -> BTreeSet<String> {

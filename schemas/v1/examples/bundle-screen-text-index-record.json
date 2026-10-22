@@ -1,0 +1,82 @@
+{
+  "engine": {
+    "detector_sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+    "recognizer_sha256": "3333333333333333333333333333333333333333333333333333333333333333",
+    "runner_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+    "runner_version": "0.1.0",
+    "runtime_version": "1.31.0"
+  },
+  "format": "vsift.screen_text_index_record",
+  "frames": [
+    {
+      "height": 720,
+      "lines": [
+        {
+          "confidence_bp": 9912,
+          "height": 14,
+          "id": "stl_7296360b7be6db70bb78b1f6af432390",
+          "text": "Invoice total",
+          "width": 300,
+          "x": 40,
+          "y": 28
+        },
+        {
+          "confidence_bp": 8001,
+          "height": 14,
+          "id": "stl_ae96f70339217bac1b3797bbc6c076f6",
+          "text": "4,731,145",
+          "width": 200,
+          "x": 40,
+          "y": 60
+        }
+      ],
+      "outcome": "read",
+      "pts": 30,
+      "targets": [
+        {
+          "time_us": 1000000
+        },
+        {
+          "candidate_id": "vcd_cccccccccccccccccccccccccccccccc",
+          "time_us": 1000000
+        }
+      ],
+      "time_base": [
+        1,
+        30
+      ],
+      "time_us": 1000000,
+      "truncated": false,
+      "width": 1280
+    },
+    {
+      "height": 720,
+      "outcome": "image_rejected",
+      "pts": 300,
+      "targets": [
+        {
+          "time_us": 10000000
+        }
+      ],
+      "time_base": [
+        1,
+        30
+      ],
+      "time_us": 10000000,
+      "width": 1280
+    }
+  ],
+  "index_id": "sti_acf58921b47cafcc03f3fea438bebbb3",
+  "period_us": 10000000,
+  "profile": "ppocrv5-latin-v1",
+  "revision": 2,
+  "schema_version": 1,
+  "session_id": "ses_0123456789abcdef",
+  "source_id": "src_sha256_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "stream_index": 0,
+  "unresolved": [
+    {
+      "time_us": 60000000
+    }
+  ]
+}

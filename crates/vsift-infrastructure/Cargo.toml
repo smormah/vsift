@@ -45,6 +45,17 @@ test = false
 doc = false
 bench = false
 
+# A standard-library-only stand-in for `vsift-ocr-runner` that the OCR adapter's
+# tests (tests/ocr_runner.rs, through CARGO_BIN_EXE_vsift-ocr-stand-in) stage
+# under the names of its behaviours, for the same reason as the smoke fixture.
+# It is never packaged or shipped.
+[[bin]]
+name = "vsift-ocr-stand-in"
+path = "testbin/ocr_runner_stand_in.rs"
+test = false
+doc = false
+bench = false
+
 # The P13 transaction tests drive the real transport through the
 # development-only loopback route (install-test-hooks). They build whenever a
 # workspace test run enables the feature (the engine crate's development

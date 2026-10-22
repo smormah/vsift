@@ -30,6 +30,7 @@ The `error.code` of a failed result is one of these (the schema's own list). Wha
 - [audio-evidence.schema.json](#audio-evidenceschemajson): VSift audio evidence record v1
 - [audio-stream-data.schema.json](#audio-stream-dataschemajson): VSift audio JSON Lines terminal data v1
 - [bundle-evidence-record.schema.json](#bundle-evidence-recordschemajson): VSift retained bundle evidence record v1
+- [bundle-screen-text-index-record.schema.json](#bundle-screen-text-index-recordschemajson): VSift retained bundle screen-text index record v1
 - [bundle-transcript-record.schema.json](#bundle-transcript-recordschemajson): VSift retained bundle transcript record v1
 - [bundle-visual-index-record.schema.json](#bundle-visual-index-recordschemajson): VSift retained bundle visual-index record v1
 - [candidates-brief-data.schema.json](#candidates-brief-dataschemajson): VSift candidates data, brief view v1
@@ -48,9 +49,11 @@ The `error.code` of a failed result is one of these (the schema's own list). Wha
 - [job-result.schema.json](#job-resultschemajson): VSift worker job result v1
 - [job-resume-data.schema.json](#job-resume-dataschemajson): VSift job.resume data v1
 - [lifecycle-event.schema.json](#lifecycle-eventschemajson): VSift JSONL lifecycle event v1
+- [ocr-search-data.schema.json](#ocr-search-dataschemajson): VSift ocr.search data v1
 - [operation-response.schema.json](#operation-responseschemajson): VSift operation terminal response v1
 - [progress-event.schema.json](#progress-eventschemajson): VSift JSONL progress event v1
 - [result-event.schema.json](#result-eventschemajson): VSift JSONL result event v1
+- [screen-text-data.schema.json](#screen-text-dataschemajson): VSift ocr data v1
 - [search-brief-data.schema.json](#search-brief-dataschemajson): VSift search data, brief view v1
 - [search-data.schema.json](#search-dataschemajson): VSift search data v1
 - [search-stream-data.schema.json](#search-stream-dataschemajson): VSift search JSON Lines terminal data v1
@@ -253,6 +256,54 @@ The content of a session or retained bundle artifact whose kind is evidence_reco
 | `items[].tool_fingerprint` | string or null | yes | The media provider's fingerprint (executables' identity, adapter and policy), or null when it could not be computed; then the item identity also digests the media and nothing is reused.; pattern `^[0-9a-f]{64}$` |
 | `items[].source_check` | "identity" \| "full_hash" | yes | How the call that carries this copy of the item checked the session's source copy: identity (its on-disk identity matched the one recorded after an earlier full hash) or full_hash (ADR 0019 D1). |
 | `partial_reason` | "frame_budget" \| "pixel_budget" \| "byte_budget" \| "session_evidence_budget" \| "deadline_exceeded" \| "cancelled" or null | yes | Why the call returned fewer items than its request named; null for a complete record. Only complete records are reused. |
+
+### bundle-screen-text-index-record.schema.json
+
+**VSift retained bundle screen-text index record v1** ([the schema](../../../schemas/v1/bundle-screen-text-index-record.schema.json))
+
+The content of a session or retained bundle artifact whose kind is screen_text_index_record (0.3.0, ADR 0030): one immutable revision of the session's on-screen text index, stored as compact UTF-8 JSON and named artifact-<sha256>.json. This is a storage record, not an operation response: schema_version is the integer record version and format names the record. Each ocr call that attempts a frame commits one; a revision holds every frame of the revision before it read by the same engine build, so only the newest is read. Times are integer microseconds on the normalized source timeline. The record holds no pixels, only what was read and where. A session holds at most 64 such records of at most 48 MiB. Releases before 0.3.0 do not know the kind and refuse a session or bundle that holds one. bundle validate decodes every record strictly (unknown fields, values and newer versions are rejected) and checks what a record could claim without being true: frames in ascending pts order, each with a target, regions inside their frame, the bounds below, and every index and line identity derived again from the session, source, stream, profile, engine build, frame and line ordinal. This schema describes its shape.
+
+| Member | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `schema_version` | constant 1 | yes |  |
+| `format` | constant "vsift.screen_text_index_record" | yes |  |
+| `index_id` | string | yes | pattern `^sti_[a-z0-9]{16,64}$` |
+| `revision` | integer | yes | 1 to 4294967295 |
+| `session_id` | string | yes | pattern `^ses_[a-z0-9]{16,64}$` |
+| `source_id` | string | yes | pattern `^src_sha256_[0-9a-f]{64}$` |
+| `stream_index` | integer | yes | 0 to 4294967295 |
+| `profile` | "ppocrv5-latin-v1" | yes |  |
+| `engine` | object | yes |  |
+| `engine.runner_sha256` | string | yes | pattern `^[0-9a-f]{64}$` |
+| `engine.runner_version` | string | yes | 1 to 64 characters; pattern `^[A-Za-z0-9._+-]+$` |
+| `engine.runtime_version` | string | yes | 1 to 64 characters; pattern `^[A-Za-z0-9._+-]+$` |
+| `engine.detector_sha256` | string | yes | pattern `^[0-9a-f]{64}$` |
+| `engine.recognizer_sha256` | string | yes | pattern `^[0-9a-f]{64}$` |
+| `period_us` | integer | yes | The period of the latest call's plan.; 1000000 to 600000000 |
+| `frames` | array of object | yes | Frames attempted, in strictly ascending pts order.; at most 4096 items |
+| `frames[].pts` | integer | yes |  |
+| `frames[].time_base` | array of integer | yes | [numerator, denominator] of the stream's time base.; exactly 2 items; each: 1 to 4294967295 |
+| `frames[].time_us` | integer | yes | at least 0 |
+| `frames[].width` | integer | yes | 1 to 4294967295 |
+| `frames[].height` | integer | yes | 1 to 4294967295 |
+| `frames[].targets` | array of object | yes | at least 1 items |
+| `frames[].targets[].time_us` | integer | yes | at least 0 |
+| `frames[].targets[].candidate_id` | string | no | pattern `^vcd_[a-z0-9]{16,64}$` |
+| `frames[].outcome` | "read" \| "image_rejected" \| "engine_failed" | yes | read: the runner read the frame (lines may be empty). image_rejected: the runner refused the image. engine_failed: the runner failed on it. |
+| `frames[].truncated` | boolean | no | Present exactly for a read frame: true when the runner cut its lines at its limit or cut a line's text. |
+| `frames[].lines` | array of object | no | Present exactly for a read frame, in reading order.; at most 256 items |
+| `frames[].lines[].id` | string | yes | pattern `^stl_[a-z0-9]{16,64}$` |
+| `frames[].lines[].x` | integer | yes | 0 to 4294967295 |
+| `frames[].lines[].y` | integer | yes | 0 to 4294967295 |
+| `frames[].lines[].width` | integer | yes | 1 to 4294967295 |
+| `frames[].lines[].height` | integer | yes | 1 to 4294967295 |
+| `frames[].lines[].text` | string | yes | 1 to 512 characters |
+| `frames[].lines[].confidence_bp` | integer | yes | The engine's uncalibrated score in basis points.; 0 to 10000 |
+| `unresolved` | array of object | yes | Planned targets that resolved to no decodable frame.; at most 4096 items |
+| `unresolved[].time_us` | integer | yes | at least 0 |
+| `unresolved[].candidate_id` | string | no | pattern `^vcd_[a-z0-9]{16,64}$` |
+
+This schema also holds 1 conditional rule (a member that is required, or fixed, when another has a given value); read [the schema](../../../schemas/v1/bundle-screen-text-index-record.schema.json) for it.
 
 ### bundle-transcript-record.schema.json
 
@@ -956,6 +1007,70 @@ A worker host's own state in a job.run or job.batch --events jsonl stream (P11, 
 
 This schema also holds 3 conditional rules (a member that is required, or fixed, when another has a given value); read [the schema](../../../schemas/v1/lifecycle-event.schema.json) for them.
 
+### ocr-search-data.schema.json
+
+**VSift ocr.search data v1** ([the schema](../../../schemas/v1/ocr-search-data.schema.json))
+
+The data member of a complete or partial ocr.search result (0.3.0, ADR 0030 decision 13): one bounded page of the query's occurrences in the session's screen-text index, with or without a transcript. Occurrences are matched as search matches transcript segments (phrase, then all_terms) and ranked by tier, then by first appearance; a line read on consecutive read frames with the same words in the same place is one occurrence. Each hit cites its first frame, its region, its text and display_text, the runner's uncalibrated confidence, how long it stayed and the candidates of its frame (screen-text-data.schema.json#/$defs/hit). total_hits counts the whole search on every page. state is not_run before ocr has read the session, partial while its coverage of the searched range is not complete and complete otherwise; coverage is the screen-text coverage block. Validate the envelope with operation-response.schema.json: its coverage member is truncated, and its status partial with a fixed warning, exactly when state is not complete; its reasons name not_run, or frames_pending, frames_failed, frames_awaiting_analysis and candidates_incomplete. Pass next_cursor back with the same session, query and range; it is rejected for any other search or session, after the session expires, or once ocr has committed a new index revision. Absence of a hit is never evidence the text was not on screen: only planned frames are read.
+
+| Member | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `session_id` | string | yes | pattern `^ses_[a-z0-9]{16,64}$` |
+| `query` | object | yes |  |
+| `query.terms` | array of string | yes | The normalised query words, in query order: lowercase letters and digits, with a decimal point only between digits.; 1 to 16 items; each: 1 to 1024 characters |
+| `range` | object or null | yes | The requested range, or null when the whole index was searched. |
+| `range.from_us` | integer | yes | at least 0 |
+| `range.to_us` | integer | yes | at least 1 |
+| `state` | "not_run" \| "partial" \| "complete" | yes |  |
+| `index` | object or null | yes |  |
+| `index.index_id` | string | yes | pattern `^sti_[a-z0-9]{16,64}$` |
+| `index.revision` | integer | yes | 1 to 4294967295 |
+| `index.engine` | object | yes | The engine build that read an index: the OCR runner, the ONNX Runtime it loaded and its two models, by version and digest. A different build starts a new index, so text read by two builds is never mixed. |
+| `index.engine.profile` | "ppocrv5-latin-v1" | yes | ppocrv5-latin-v1: PP-OCRv5 mobile detection with the Latin-script recognizer, read with the runner's fixed settings. |
+| `index.engine.runner_version` | string | yes | 1 to 64 characters; pattern `^[A-Za-z0-9._+-]+$` |
+| `index.engine.runner_sha256` | string | yes | pattern `^[0-9a-f]{64}$` |
+| `index.engine.runtime_version` | string | yes | 1 to 64 characters; pattern `^[A-Za-z0-9._+-]+$` |
+| `index.engine.detector_sha256` | string | yes | pattern `^[0-9a-f]{64}$` |
+| `index.engine.recognizer_sha256` | string | yes | pattern `^[0-9a-f]{64}$` |
+| `index.frames` | integer | yes | Frames the index holds, read or unreadable.; 0 to 4096 |
+| `index.lines` | integer | yes | Lines of text the index holds.; 0 to 200000 |
+| `hits` | array of object | yes | at most 100 items |
+| `hits[].line_id` | string | yes | pattern `^stl_[a-z0-9]{16,64}$` |
+| `hits[].match` | "phrase" \| "all_terms" | yes | phrase or all_terms, by the rule search applies to transcript segments. |
+| `hits[].text` | string | yes | The line as the engine read it on the first frame. Hidden characters are kept raw; quote display_text instead.; 1 to 512 characters |
+| `hits[].display_text` | string | yes | text with every hidden character written as visible <U+XXXX> notation, as transcript-segment.schema.json defines it.; 1 to 5120 characters |
+| `hits[].confidence` | object | yes | The engine's own recognition score for the line, provider_uncalibrated: not a probability that the text is right. |
+| `hits[].confidence.value_basis_points` | integer | yes | 0 to 10000 |
+| `hits[].confidence.origin` | constant "provider_uncalibrated" | yes |  |
+| `hits[].frame` | object | yes | The exact displayed frame a line was read from, in frame-evidence.schema.json's terms: frame get at time_us returns it. |
+| `hits[].frame.stream_index` | integer | yes | 0 to 4294967295 |
+| `hits[].frame.time_base_numerator` | integer | yes | 1 to 4294967295 |
+| `hits[].frame.time_base_denominator` | integer | yes | 1 to 4294967295 |
+| `hits[].frame.pts` | integer | yes |  |
+| `hits[].frame.time_us` | integer | yes | at least 0 |
+| `hits[].frame.width` | integer | yes | 1 to 4294967295 |
+| `hits[].frame.height` | integer | yes | 1 to 4294967295 |
+| `hits[].region` | object | yes | The upright rectangle of the frame's displayed pixels the line lies in, inside the frame. |
+| `hits[].region.x` | integer | yes | 0 to 4294967295 |
+| `hits[].region.y` | integer | yes | 0 to 4294967295 |
+| `hits[].region.width` | integer | yes | 1 to 4294967295 |
+| `hits[].region.height` | integer | yes | 1 to 4294967295 |
+| `hits[].last_time_us` | integer | yes | The time of the last consecutive read frame that held the same words in the same place; equal to frame.time_us when only one did.; at least 0 |
+| `hits[].frames` | integer | yes | How many consecutive read frames held it.; 1 to 4096 |
+| `hits[].candidate_ids` | array of string | yes | The visual candidates whose representative frame the first frame is, in time order; empty for a frame read only for its period. At most 32 are listed.; at most 32 items; each: pattern `^vcd_[a-z0-9]{16,64}$` |
+| `total_hits` | integer | yes | at least 0 |
+| `next_cursor` | string or null | yes | 1 to 512 characters |
+| `coverage` | object | yes | How much of the range's plan the index has read. Every planned frame is counted once: planned = read + failed + unresolved + pending; awaiting_analysis counts reads not yet planned. read: its frame was read (it may hold no text). failed: the runner rejected the image or failed on it; it is not read again by the same build. unresolved: the target time resolved to no decodable frame. pending: not attempted yet. Text that appears and goes between two planned frames is not read. |
+| `coverage.scope` | constant "screen_text" | yes | What the block covers: on-screen text only. |
+| `coverage.period_us` | integer or null | yes | The period of the frames planned between candidates: the call's --period-us (default 10000000). In search, the period of the index's latest call; null before ocr has run.; 1000000 to 600000000 |
+| `coverage.planned` | integer | yes | at least 0 |
+| `coverage.read` | integer | yes | at least 0 |
+| `coverage.failed` | integer | yes | at least 0 |
+| `coverage.unresolved` | integer | yes | at least 0 |
+| `coverage.pending` | integer | yes | at least 0 |
+| `coverage.awaiting_analysis` | integer | yes | Periodic reads of the range left out of the plan, not counted in planned, because their visual window is not analysed yet: always 0 when the call analyses missing windows itself, as vsift ocr does; counted by the engine's analysed-windows-only calls (ADR 0033's background prepare job). Coverage is not complete while it is above 0, and the envelope reason is frames_awaiting_analysis.; at least 0 |
+| `coverage.candidates_complete` | boolean | yes | True when no visual window of the range is still to be analysed or tried again (not_analyzed, deadline_exceeded), so the plan holds every candidate the range will have. |
+
 ### operation-response.schema.json
 
 **VSift operation terminal response v1** ([the schema](../../../schemas/v1/operation-response.schema.json))
@@ -1029,6 +1144,47 @@ One worker request's complete result in a job.batch --events jsonl stream (P11, 
 | `line` | integer or null | yes | 1 to 1000 |
 | `result` | object, see [job-result.schema.json](#job-resultschemajson) | yes |  |
 
+### screen-text-data.schema.json
+
+**VSift ocr data v1** ([the schema](../../../schemas/v1/screen-text-data.schema.json))
+
+The data member of a complete or partial ocr result (0.3.0, ADR 0030): what one bounded call read of the on-screen text of a session's video with the optional OCR runner, and how much of the range's plan the session's screen-text index has read. The plan of a range is the representative frame of every visual candidate in it and one frame every coverage.period_us; a call reads at most --max-frames of its pending frames, commits one new index revision, and stops. Run ocr again for the same range to continue: it reads only what is pending. The text itself is found with search, whose first page carries a screen_text member ($defs/search_part) with each hit's frame, time and region. Validate the envelope with operation-response.schema.json: its coverage member is truncated, and its status partial with a warning, exactly when coverage.pending or coverage.failed is not 0 or coverage.candidates_complete is false; then its gaps are the candidate_gaps that candidates can still fill, as from-to microsecond ranges, and its reasons name frames_pending, frames_failed and each of those gaps' reasons, once each, in that order. On-screen text is derived, untrusted evidence: quote display_text, and check the frame itself (frame get at the hit's time) before relying on a value.
+
+| Member | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `session_id` | string | yes | pattern `^ses_[a-z0-9]{16,64}$` |
+| `range` | object | yes | The range read: the requested range, or the whole video, clipped to the video. |
+| `range.from_us` | integer | yes | at least 0 |
+| `range.to_us` | integer | yes | at least 1 |
+| `index` | object or null | yes | The session's newest screen-text index revision after the call; null while no frame of the session has been attempted. |
+| `index.index_id` | string | yes | pattern `^sti_[a-z0-9]{16,64}$` |
+| `index.revision` | integer | yes | 1 to 4294967295 |
+| `index.engine` | object | yes | The engine build that read an index: the OCR runner, the ONNX Runtime it loaded and its two models, by version and digest. A different build starts a new index, so text read by two builds is never mixed. |
+| `index.engine.profile` | "ppocrv5-latin-v1" | yes | ppocrv5-latin-v1: PP-OCRv5 mobile detection with the Latin-script recognizer, read with the runner's fixed settings. |
+| `index.engine.runner_version` | string | yes | 1 to 64 characters; pattern `^[A-Za-z0-9._+-]+$` |
+| `index.engine.runner_sha256` | string | yes | pattern `^[0-9a-f]{64}$` |
+| `index.engine.runtime_version` | string | yes | 1 to 64 characters; pattern `^[A-Za-z0-9._+-]+$` |
+| `index.engine.detector_sha256` | string | yes | pattern `^[0-9a-f]{64}$` |
+| `index.engine.recognizer_sha256` | string | yes | pattern `^[0-9a-f]{64}$` |
+| `index.frames` | integer | yes | Frames the index holds, read or unreadable.; 0 to 4096 |
+| `index.lines` | integer | yes | Lines of text the index holds.; 0 to 200000 |
+| `read_now` | integer | yes | Frames this call attempted: read, or found unreadable.; 0 to 200 |
+| `stopped` | "frame_limit" \| "deadline_exceeded" \| "cancelled" \| "engine_failed" \| "media_failed" \| "index_full" or null | yes | Why the call ended with frames still pending, or null when it was not stopped. frame_limit: it read --max-frames frames. deadline_exceeded: its time ran out. cancelled: it was cancelled. engine_failed: the OCR runner failed and what it had read before is kept. media_failed: the media tools could not extract a frame. index_full (0.3.0, RV-2 finding 5): the index had room for no more frames (4,096 frames, 200,000 lines counted as 256 a frame), so the call read only what fitted; later calls by the same engine build read nothing more of this session. engine_failed also covers a runner whose files changed during the call (its build no longer the one the index records). Every stop keeps what was read before it. |
+| `coverage` | object | yes | How much of the range's plan the index has read. Every planned frame is counted once: planned = read + failed + unresolved + pending; awaiting_analysis counts reads not yet planned. read: its frame was read (it may hold no text). failed: the runner rejected the image or failed on it; it is not read again by the same build. unresolved: the target time resolved to no decodable frame. pending: not attempted yet. Text that appears and goes between two planned frames is not read. |
+| `coverage.scope` | constant "screen_text" | yes | What the block covers: on-screen text only. |
+| `coverage.period_us` | integer or null | yes | The period of the frames planned between candidates: the call's --period-us (default 10000000). In search, the period of the index's latest call; null before ocr has run.; 1000000 to 600000000 |
+| `coverage.planned` | integer | yes | at least 0 |
+| `coverage.read` | integer | yes | at least 0 |
+| `coverage.failed` | integer | yes | at least 0 |
+| `coverage.unresolved` | integer | yes | at least 0 |
+| `coverage.pending` | integer | yes | at least 0 |
+| `coverage.awaiting_analysis` | integer | yes | Periodic reads of the range left out of the plan, not counted in planned, because their visual window is not analysed yet: always 0 when the call analyses missing windows itself, as vsift ocr does; counted by the engine's analysed-windows-only calls (ADR 0033's background prepare job). Coverage is not complete while it is above 0, and the envelope reason is frames_awaiting_analysis.; at least 0 |
+| `coverage.candidates_complete` | boolean | yes | True when no visual window of the range is still to be analysed or tried again (not_analyzed, deadline_exceeded), so the plan holds every candidate the range will have. |
+| `candidate_gaps` | array of object | yes | The visual index's gaps in the range, as candidates reports them, in start order. coverage.candidates_complete is false exactly while one of them can still be filled by candidates (not_analyzed, deadline_exceeded); the other reasons are final (their periodic reads are planned as anywhere else). At most 100 are listed.; at most 100 items |
+| `candidate_gaps[].from_us` | integer | yes | at least 0 |
+| `candidate_gaps[].to_us` | integer | yes | at least 1 |
+| `candidate_gaps[].reason` | "not_analyzed" \| "deadline_exceeded" \| "undecodable" \| "no_decoded_frame" \| "candidate_budget_exhausted" | yes | The visual index's gap reason, as candidates-data.schema.json describes it; run candidates over the range to fill a not_analyzed or deadline_exceeded gap. |
+
 ### search-brief-data.schema.json
 
 **VSift search data, brief view v1** ([the schema](../../../schemas/v1/search-brief-data.schema.json))
@@ -1052,7 +1208,7 @@ The data member of a complete or partial search result asked for with --view bri
 | `next_cursor` | string or null | yes | 1 to 512 characters |
 | `transcript_coverage` | object | yes | What a transcript covers of the range a command was asked about: the searched range of a search, or, since 0.2.1, the requested range of a transcript get, by one rule. A word said in an untranscribed range cannot be found by a search and is not shown by a read: an empty page there is a gap, never evidence of silence. |
 | `transcript_coverage.basis` | "supplied_transcript" \| "local_asr" \| "mixed" | yes | supplied_transcript: a supplied SubRip or WebVTT file, taken to cover the whole source but not verified to be complete. local_asr: local speech recognition only; covered ranges are those it examined. mixed: local speech recognition of part of the source spliced into supplied text elsewhere. |
-| `transcript_coverage.scope` | constant "transcript_text" | yes | What the command looks at: transcript text only. On-screen text is neither searched nor read. |
+| `transcript_coverage.scope` | constant "transcript_text" | yes | What this block covers: transcript text only. On-screen text is not counted here; since 0.3.0 a search first page states its coverage in screen_text.coverage. |
 | `transcript_coverage.searched_range` | object or null | yes | The requested range (the whole source for a search with no range) clipped to the source; null when the requested range lies wholly outside it. For a transcript get it is the range of the read, and every page of one request states the same coverage. |
 | `transcript_coverage.searched_range.from_us` | integer | yes | at least 0 |
 | `transcript_coverage.searched_range.to_us` | integer | yes | at least 1 |
@@ -1066,12 +1222,64 @@ The data member of a complete or partial search result asked for with --view bri
 | `transcript_coverage.no_speech_ranges[].from_us` | integer | yes | at least 0 |
 | `transcript_coverage.no_speech_ranges[].to_us` | integer | yes | at least 1 |
 | `transcript_coverage.ranges_truncated` | boolean | yes | True when a range list held more than 100 ranges and only its first 100, in start order, are listed. |
+| `screen_text` | object | no | Since 0.3.0 (ADR 0030), on a first page only: the query's occurrences in on-screen text read by ocr, with each hit's frame, time and region, and how much of the searched range's plan is read. Absent on a page a cursor continues and from releases before 0.3.0. It never changes the envelope's status or coverage. |
+| `screen_text.state` | "not_run" \| "partial" \| "complete" \| "unavailable" | yes |  |
+| `screen_text.unavailable` | object | no | Present only when an index the member needs could not be read (0.3.0, RV-2 finding 2); the search itself is unchanged. index screen_text: the screen-text index, so state is unavailable and nothing about the screen is known (index null, every count 0). index visual: the visual index, so the hits are listed but nothing is planned and candidates_complete is false (state partial). reason: integrity_failure (its record failed verification), unsupported_version (a newer release wrote it) or unreadable (any other storage failure). |
+| `screen_text.unavailable.index` | "screen_text" \| "visual" | yes |  |
+| `screen_text.unavailable.reason` | "integrity_failure" \| "unsupported_version" \| "unreadable" | yes |  |
+| `screen_text.index` | object or null | yes |  |
+| `screen_text.index.index_id` | string | yes | pattern `^sti_[a-z0-9]{16,64}$` |
+| `screen_text.index.revision` | integer | yes | 1 to 4294967295 |
+| `screen_text.index.engine` | object | yes | The engine build that read an index: the OCR runner, the ONNX Runtime it loaded and its two models, by version and digest. A different build starts a new index, so text read by two builds is never mixed. |
+| `screen_text.index.engine.profile` | "ppocrv5-latin-v1" | yes | ppocrv5-latin-v1: PP-OCRv5 mobile detection with the Latin-script recognizer, read with the runner's fixed settings. |
+| `screen_text.index.engine.runner_version` | string | yes | 1 to 64 characters; pattern `^[A-Za-z0-9._+-]+$` |
+| `screen_text.index.engine.runner_sha256` | string | yes | pattern `^[0-9a-f]{64}$` |
+| `screen_text.index.engine.runtime_version` | string | yes | 1 to 64 characters; pattern `^[A-Za-z0-9._+-]+$` |
+| `screen_text.index.engine.detector_sha256` | string | yes | pattern `^[0-9a-f]{64}$` |
+| `screen_text.index.engine.recognizer_sha256` | string | yes | pattern `^[0-9a-f]{64}$` |
+| `screen_text.index.frames` | integer | yes | Frames the index holds, read or unreadable.; 0 to 4096 |
+| `screen_text.index.lines` | integer | yes | Lines of text the index holds.; 0 to 200000 |
+| `screen_text.hits` | array of object | yes | at most 100 items |
+| `screen_text.hits[].line_id` | string | yes | pattern `^stl_[a-z0-9]{16,64}$` |
+| `screen_text.hits[].match` | "phrase" \| "all_terms" | yes | phrase or all_terms, by the rule search applies to transcript segments. |
+| `screen_text.hits[].text` | string | yes | The line as the engine read it on the first frame. Hidden characters are kept raw; quote display_text instead.; 1 to 512 characters |
+| `screen_text.hits[].display_text` | string | yes | text with every hidden character written as visible <U+XXXX> notation, as transcript-segment.schema.json defines it.; 1 to 5120 characters |
+| `screen_text.hits[].confidence` | object | yes | The engine's own recognition score for the line, provider_uncalibrated: not a probability that the text is right. |
+| `screen_text.hits[].confidence.value_basis_points` | integer | yes | 0 to 10000 |
+| `screen_text.hits[].confidence.origin` | constant "provider_uncalibrated" | yes |  |
+| `screen_text.hits[].frame` | object | yes | The exact displayed frame a line was read from, in frame-evidence.schema.json's terms: frame get at time_us returns it. |
+| `screen_text.hits[].frame.stream_index` | integer | yes | 0 to 4294967295 |
+| `screen_text.hits[].frame.time_base_numerator` | integer | yes | 1 to 4294967295 |
+| `screen_text.hits[].frame.time_base_denominator` | integer | yes | 1 to 4294967295 |
+| `screen_text.hits[].frame.pts` | integer | yes |  |
+| `screen_text.hits[].frame.time_us` | integer | yes | at least 0 |
+| `screen_text.hits[].frame.width` | integer | yes | 1 to 4294967295 |
+| `screen_text.hits[].frame.height` | integer | yes | 1 to 4294967295 |
+| `screen_text.hits[].region` | object | yes | The upright rectangle of the frame's displayed pixels the line lies in, inside the frame. |
+| `screen_text.hits[].region.x` | integer | yes | 0 to 4294967295 |
+| `screen_text.hits[].region.y` | integer | yes | 0 to 4294967295 |
+| `screen_text.hits[].region.width` | integer | yes | 1 to 4294967295 |
+| `screen_text.hits[].region.height` | integer | yes | 1 to 4294967295 |
+| `screen_text.hits[].last_time_us` | integer | yes | The time of the last consecutive read frame that held the same words in the same place; equal to frame.time_us when only one did.; at least 0 |
+| `screen_text.hits[].frames` | integer | yes | How many consecutive read frames held it.; 1 to 4096 |
+| `screen_text.hits[].candidate_ids` | array of string | yes | The visual candidates whose representative frame the first frame is, in time order; empty for a frame read only for its period. At most 32 are listed.; at most 32 items; each: pattern `^vcd_[a-z0-9]{16,64}$` |
+| `screen_text.total_hits` | integer | yes | at least 0 |
+| `screen_text.coverage` | object | yes | How much of the range's plan the index has read. Every planned frame is counted once: planned = read + failed + unresolved + pending; awaiting_analysis counts reads not yet planned. read: its frame was read (it may hold no text). failed: the runner rejected the image or failed on it; it is not read again by the same build. unresolved: the target time resolved to no decodable frame. pending: not attempted yet. Text that appears and goes between two planned frames is not read. |
+| `screen_text.coverage.scope` | constant "screen_text" | yes | What the block covers: on-screen text only. |
+| `screen_text.coverage.period_us` | integer or null | yes | The period of the frames planned between candidates: the call's --period-us (default 10000000). In search, the period of the index's latest call; null before ocr has run.; 1000000 to 600000000 |
+| `screen_text.coverage.planned` | integer | yes | at least 0 |
+| `screen_text.coverage.read` | integer | yes | at least 0 |
+| `screen_text.coverage.failed` | integer | yes | at least 0 |
+| `screen_text.coverage.unresolved` | integer | yes | at least 0 |
+| `screen_text.coverage.pending` | integer | yes | at least 0 |
+| `screen_text.coverage.awaiting_analysis` | integer | yes | Periodic reads of the range left out of the plan, not counted in planned, because their visual window is not analysed yet: always 0 when the call analyses missing windows itself, as vsift ocr does; counted by the engine's analysed-windows-only calls (ADR 0033's background prepare job). Coverage is not complete while it is above 0, and the envelope reason is frames_awaiting_analysis.; at least 0 |
+| `screen_text.coverage.candidates_complete` | boolean | yes | True when no visual window of the range is still to be analysed or tried again (not_analyzed, deadline_exceeded), so the plan holds every candidate the range will have. |
 
 ### search-data.schema.json
 
 **VSift search data v1** ([the schema](../../../schemas/v1/search-data.schema.json))
 
-The data member of a complete or partial search result: one bounded page of the transcript segments that match a literal query, in rank order (phrase matches first, then all-terms matches, each by segment start). items are the matching segments as published transcript evidence records (transcript-segment.schema.json), exactly as transcript.get returns them; hits names each item's segment_id and how it matched, in the same order. query.terms is how the query was normalised. range is the requested range, or null when the whole transcript was searched. transcript_coverage says which parts of the searched range a transcript covers: a word said in an untranscribed range cannot be found, and on-screen text is never searched. Validate the envelope with operation-response.schema.json: its coverage member is truncated, and its status partial, exactly when untranscribed_ranges is not empty. Pass next_cursor back with the same session, query, range and revision to continue; it is rejected for any other search, session or revision, or after the session expires.
+The data member of a complete or partial search result: one bounded page of the transcript segments that match a literal query, in rank order (phrase matches first, then all-terms matches, each by segment start). items are the matching segments as published transcript evidence records (transcript-segment.schema.json), exactly as transcript.get returns them; hits names each item's segment_id and how it matched, in the same order. query.terms is how the query was normalised. range is the requested range, or null when the whole transcript was searched. transcript_coverage says which parts of the searched range a transcript covers: a word said in an untranscribed range cannot be found. Since 0.3.0 a first page also carries screen_text: the query's occurrences in on-screen text that ocr has read, with its own coverage; on-screen text is never part of items, hits, the cursor or transcript_coverage. Validate the envelope with operation-response.schema.json: its coverage member is truncated, and its status partial, exactly when untranscribed_ranges is not empty. Pass next_cursor back with the same session, query, range and revision to continue; it is rejected for any other search, session or revision, or after the session expires.
 
 | Member | Type | Required | Notes |
 | --- | --- | --- | --- |
@@ -1089,7 +1297,7 @@ The data member of a complete or partial search result: one bounded page of the 
 | `next_cursor` | string or null | yes | 1 to 512 characters |
 | `transcript_coverage` | object | yes | What a transcript covers of the range a command was asked about: the searched range of a search, or, since 0.2.1, the requested range of a transcript get, by one rule. A word said in an untranscribed range cannot be found by a search and is not shown by a read: an empty page there is a gap, never evidence of silence. |
 | `transcript_coverage.basis` | "supplied_transcript" \| "local_asr" \| "mixed" | yes | supplied_transcript: a supplied SubRip or WebVTT file, taken to cover the whole source but not verified to be complete. local_asr: local speech recognition only; covered ranges are those it examined. mixed: local speech recognition of part of the source spliced into supplied text elsewhere. |
-| `transcript_coverage.scope` | constant "transcript_text" | yes | What the command looks at: transcript text only. On-screen text is neither searched nor read. |
+| `transcript_coverage.scope` | constant "transcript_text" | yes | What this block covers: transcript text only. On-screen text is not counted here; since 0.3.0 a search first page states its coverage in screen_text.coverage. |
 | `transcript_coverage.searched_range` | object or null | yes | The requested range (the whole source for a search with no range) clipped to the source; null when the requested range lies wholly outside it. For a transcript get it is the range of the read, and every page of one request states the same coverage. |
 | `transcript_coverage.searched_range.from_us` | integer | yes | at least 0 |
 | `transcript_coverage.searched_range.to_us` | integer | yes | at least 1 |
@@ -1103,6 +1311,58 @@ The data member of a complete or partial search result: one bounded page of the 
 | `transcript_coverage.no_speech_ranges[].from_us` | integer | yes | at least 0 |
 | `transcript_coverage.no_speech_ranges[].to_us` | integer | yes | at least 1 |
 | `transcript_coverage.ranges_truncated` | boolean | yes | True when a range list held more than 100 ranges and only its first 100, in start order, are listed. |
+| `screen_text` | object | no | Since 0.3.0 (ADR 0030), on a first page only: the query's occurrences in on-screen text read by ocr, with each hit's frame, time and region, and how much of the searched range's plan is read. Absent on a page a cursor continues and from releases before 0.3.0. It never changes the envelope's status or coverage. |
+| `screen_text.state` | "not_run" \| "partial" \| "complete" \| "unavailable" | yes |  |
+| `screen_text.unavailable` | object | no | Present only when an index the member needs could not be read (0.3.0, RV-2 finding 2); the search itself is unchanged. index screen_text: the screen-text index, so state is unavailable and nothing about the screen is known (index null, every count 0). index visual: the visual index, so the hits are listed but nothing is planned and candidates_complete is false (state partial). reason: integrity_failure (its record failed verification), unsupported_version (a newer release wrote it) or unreadable (any other storage failure). |
+| `screen_text.unavailable.index` | "screen_text" \| "visual" | yes |  |
+| `screen_text.unavailable.reason` | "integrity_failure" \| "unsupported_version" \| "unreadable" | yes |  |
+| `screen_text.index` | object or null | yes |  |
+| `screen_text.index.index_id` | string | yes | pattern `^sti_[a-z0-9]{16,64}$` |
+| `screen_text.index.revision` | integer | yes | 1 to 4294967295 |
+| `screen_text.index.engine` | object | yes | The engine build that read an index: the OCR runner, the ONNX Runtime it loaded and its two models, by version and digest. A different build starts a new index, so text read by two builds is never mixed. |
+| `screen_text.index.engine.profile` | "ppocrv5-latin-v1" | yes | ppocrv5-latin-v1: PP-OCRv5 mobile detection with the Latin-script recognizer, read with the runner's fixed settings. |
+| `screen_text.index.engine.runner_version` | string | yes | 1 to 64 characters; pattern `^[A-Za-z0-9._+-]+$` |
+| `screen_text.index.engine.runner_sha256` | string | yes | pattern `^[0-9a-f]{64}$` |
+| `screen_text.index.engine.runtime_version` | string | yes | 1 to 64 characters; pattern `^[A-Za-z0-9._+-]+$` |
+| `screen_text.index.engine.detector_sha256` | string | yes | pattern `^[0-9a-f]{64}$` |
+| `screen_text.index.engine.recognizer_sha256` | string | yes | pattern `^[0-9a-f]{64}$` |
+| `screen_text.index.frames` | integer | yes | Frames the index holds, read or unreadable.; 0 to 4096 |
+| `screen_text.index.lines` | integer | yes | Lines of text the index holds.; 0 to 200000 |
+| `screen_text.hits` | array of object | yes | at most 100 items |
+| `screen_text.hits[].line_id` | string | yes | pattern `^stl_[a-z0-9]{16,64}$` |
+| `screen_text.hits[].match` | "phrase" \| "all_terms" | yes | phrase or all_terms, by the rule search applies to transcript segments. |
+| `screen_text.hits[].text` | string | yes | The line as the engine read it on the first frame. Hidden characters are kept raw; quote display_text instead.; 1 to 512 characters |
+| `screen_text.hits[].display_text` | string | yes | text with every hidden character written as visible <U+XXXX> notation, as transcript-segment.schema.json defines it.; 1 to 5120 characters |
+| `screen_text.hits[].confidence` | object | yes | The engine's own recognition score for the line, provider_uncalibrated: not a probability that the text is right. |
+| `screen_text.hits[].confidence.value_basis_points` | integer | yes | 0 to 10000 |
+| `screen_text.hits[].confidence.origin` | constant "provider_uncalibrated" | yes |  |
+| `screen_text.hits[].frame` | object | yes | The exact displayed frame a line was read from, in frame-evidence.schema.json's terms: frame get at time_us returns it. |
+| `screen_text.hits[].frame.stream_index` | integer | yes | 0 to 4294967295 |
+| `screen_text.hits[].frame.time_base_numerator` | integer | yes | 1 to 4294967295 |
+| `screen_text.hits[].frame.time_base_denominator` | integer | yes | 1 to 4294967295 |
+| `screen_text.hits[].frame.pts` | integer | yes |  |
+| `screen_text.hits[].frame.time_us` | integer | yes | at least 0 |
+| `screen_text.hits[].frame.width` | integer | yes | 1 to 4294967295 |
+| `screen_text.hits[].frame.height` | integer | yes | 1 to 4294967295 |
+| `screen_text.hits[].region` | object | yes | The upright rectangle of the frame's displayed pixels the line lies in, inside the frame. |
+| `screen_text.hits[].region.x` | integer | yes | 0 to 4294967295 |
+| `screen_text.hits[].region.y` | integer | yes | 0 to 4294967295 |
+| `screen_text.hits[].region.width` | integer | yes | 1 to 4294967295 |
+| `screen_text.hits[].region.height` | integer | yes | 1 to 4294967295 |
+| `screen_text.hits[].last_time_us` | integer | yes | The time of the last consecutive read frame that held the same words in the same place; equal to frame.time_us when only one did.; at least 0 |
+| `screen_text.hits[].frames` | integer | yes | How many consecutive read frames held it.; 1 to 4096 |
+| `screen_text.hits[].candidate_ids` | array of string | yes | The visual candidates whose representative frame the first frame is, in time order; empty for a frame read only for its period. At most 32 are listed.; at most 32 items; each: pattern `^vcd_[a-z0-9]{16,64}$` |
+| `screen_text.total_hits` | integer | yes | at least 0 |
+| `screen_text.coverage` | object | yes | How much of the range's plan the index has read. Every planned frame is counted once: planned = read + failed + unresolved + pending; awaiting_analysis counts reads not yet planned. read: its frame was read (it may hold no text). failed: the runner rejected the image or failed on it; it is not read again by the same build. unresolved: the target time resolved to no decodable frame. pending: not attempted yet. Text that appears and goes between two planned frames is not read. |
+| `screen_text.coverage.scope` | constant "screen_text" | yes | What the block covers: on-screen text only. |
+| `screen_text.coverage.period_us` | integer or null | yes | The period of the frames planned between candidates: the call's --period-us (default 10000000). In search, the period of the index's latest call; null before ocr has run.; 1000000 to 600000000 |
+| `screen_text.coverage.planned` | integer | yes | at least 0 |
+| `screen_text.coverage.read` | integer | yes | at least 0 |
+| `screen_text.coverage.failed` | integer | yes | at least 0 |
+| `screen_text.coverage.unresolved` | integer | yes | at least 0 |
+| `screen_text.coverage.pending` | integer | yes | at least 0 |
+| `screen_text.coverage.awaiting_analysis` | integer | yes | Periodic reads of the range left out of the plan, not counted in planned, because their visual window is not analysed yet: always 0 when the call analyses missing windows itself, as vsift ocr does; counted by the engine's analysed-windows-only calls (ADR 0033's background prepare job). Coverage is not complete while it is above 0, and the envelope reason is frames_awaiting_analysis.; at least 0 |
+| `screen_text.coverage.candidates_complete` | boolean | yes | True when no visual window of the range is still to be analysed or tried again (not_analyzed, deadline_exceeded), so the plan holds every candidate the range will have. |
 
 ### search-stream-data.schema.json
 
@@ -1126,7 +1386,7 @@ The data member of the complete or partial terminal result that ends a search --
 | `next_cursor` | string or null | yes | 1 to 512 characters |
 | `transcript_coverage` | object | yes | What a transcript covers of the range a command was asked about: the searched range of a search, or, since 0.2.1, the requested range of a transcript get, by one rule. A word said in an untranscribed range cannot be found by a search and is not shown by a read: an empty page there is a gap, never evidence of silence. |
 | `transcript_coverage.basis` | "supplied_transcript" \| "local_asr" \| "mixed" | yes | supplied_transcript: a supplied SubRip or WebVTT file, taken to cover the whole source but not verified to be complete. local_asr: local speech recognition only; covered ranges are those it examined. mixed: local speech recognition of part of the source spliced into supplied text elsewhere. |
-| `transcript_coverage.scope` | constant "transcript_text" | yes | What the command looks at: transcript text only. On-screen text is neither searched nor read. |
+| `transcript_coverage.scope` | constant "transcript_text" | yes | What this block covers: transcript text only. On-screen text is not counted here; since 0.3.0 a search first page states its coverage in screen_text.coverage. |
 | `transcript_coverage.searched_range` | object or null | yes | The requested range (the whole source for a search with no range) clipped to the source; null when the requested range lies wholly outside it. For a transcript get it is the range of the read, and every page of one request states the same coverage. |
 | `transcript_coverage.searched_range.from_us` | integer | yes | at least 0 |
 | `transcript_coverage.searched_range.to_us` | integer | yes | at least 1 |
@@ -1140,6 +1400,58 @@ The data member of the complete or partial terminal result that ends a search --
 | `transcript_coverage.no_speech_ranges[].from_us` | integer | yes | at least 0 |
 | `transcript_coverage.no_speech_ranges[].to_us` | integer | yes | at least 1 |
 | `transcript_coverage.ranges_truncated` | boolean | yes | True when a range list held more than 100 ranges and only its first 100, in start order, are listed. |
+| `screen_text` | object | no | Since 0.3.0 (ADR 0030), on a first page only: the query's occurrences in on-screen text read by ocr, with each hit's frame, time and region, and how much of the searched range's plan is read. Absent on a page a cursor continues and from releases before 0.3.0. It never changes the envelope's status or coverage. |
+| `screen_text.state` | "not_run" \| "partial" \| "complete" \| "unavailable" | yes |  |
+| `screen_text.unavailable` | object | no | Present only when an index the member needs could not be read (0.3.0, RV-2 finding 2); the search itself is unchanged. index screen_text: the screen-text index, so state is unavailable and nothing about the screen is known (index null, every count 0). index visual: the visual index, so the hits are listed but nothing is planned and candidates_complete is false (state partial). reason: integrity_failure (its record failed verification), unsupported_version (a newer release wrote it) or unreadable (any other storage failure). |
+| `screen_text.unavailable.index` | "screen_text" \| "visual" | yes |  |
+| `screen_text.unavailable.reason` | "integrity_failure" \| "unsupported_version" \| "unreadable" | yes |  |
+| `screen_text.index` | object or null | yes |  |
+| `screen_text.index.index_id` | string | yes | pattern `^sti_[a-z0-9]{16,64}$` |
+| `screen_text.index.revision` | integer | yes | 1 to 4294967295 |
+| `screen_text.index.engine` | object | yes | The engine build that read an index: the OCR runner, the ONNX Runtime it loaded and its two models, by version and digest. A different build starts a new index, so text read by two builds is never mixed. |
+| `screen_text.index.engine.profile` | "ppocrv5-latin-v1" | yes | ppocrv5-latin-v1: PP-OCRv5 mobile detection with the Latin-script recognizer, read with the runner's fixed settings. |
+| `screen_text.index.engine.runner_version` | string | yes | 1 to 64 characters; pattern `^[A-Za-z0-9._+-]+$` |
+| `screen_text.index.engine.runner_sha256` | string | yes | pattern `^[0-9a-f]{64}$` |
+| `screen_text.index.engine.runtime_version` | string | yes | 1 to 64 characters; pattern `^[A-Za-z0-9._+-]+$` |
+| `screen_text.index.engine.detector_sha256` | string | yes | pattern `^[0-9a-f]{64}$` |
+| `screen_text.index.engine.recognizer_sha256` | string | yes | pattern `^[0-9a-f]{64}$` |
+| `screen_text.index.frames` | integer | yes | Frames the index holds, read or unreadable.; 0 to 4096 |
+| `screen_text.index.lines` | integer | yes | Lines of text the index holds.; 0 to 200000 |
+| `screen_text.hits` | array of object | yes | at most 100 items |
+| `screen_text.hits[].line_id` | string | yes | pattern `^stl_[a-z0-9]{16,64}$` |
+| `screen_text.hits[].match` | "phrase" \| "all_terms" | yes | phrase or all_terms, by the rule search applies to transcript segments. |
+| `screen_text.hits[].text` | string | yes | The line as the engine read it on the first frame. Hidden characters are kept raw; quote display_text instead.; 1 to 512 characters |
+| `screen_text.hits[].display_text` | string | yes | text with every hidden character written as visible <U+XXXX> notation, as transcript-segment.schema.json defines it.; 1 to 5120 characters |
+| `screen_text.hits[].confidence` | object | yes | The engine's own recognition score for the line, provider_uncalibrated: not a probability that the text is right. |
+| `screen_text.hits[].confidence.value_basis_points` | integer | yes | 0 to 10000 |
+| `screen_text.hits[].confidence.origin` | constant "provider_uncalibrated" | yes |  |
+| `screen_text.hits[].frame` | object | yes | The exact displayed frame a line was read from, in frame-evidence.schema.json's terms: frame get at time_us returns it. |
+| `screen_text.hits[].frame.stream_index` | integer | yes | 0 to 4294967295 |
+| `screen_text.hits[].frame.time_base_numerator` | integer | yes | 1 to 4294967295 |
+| `screen_text.hits[].frame.time_base_denominator` | integer | yes | 1 to 4294967295 |
+| `screen_text.hits[].frame.pts` | integer | yes |  |
+| `screen_text.hits[].frame.time_us` | integer | yes | at least 0 |
+| `screen_text.hits[].frame.width` | integer | yes | 1 to 4294967295 |
+| `screen_text.hits[].frame.height` | integer | yes | 1 to 4294967295 |
+| `screen_text.hits[].region` | object | yes | The upright rectangle of the frame's displayed pixels the line lies in, inside the frame. |
+| `screen_text.hits[].region.x` | integer | yes | 0 to 4294967295 |
+| `screen_text.hits[].region.y` | integer | yes | 0 to 4294967295 |
+| `screen_text.hits[].region.width` | integer | yes | 1 to 4294967295 |
+| `screen_text.hits[].region.height` | integer | yes | 1 to 4294967295 |
+| `screen_text.hits[].last_time_us` | integer | yes | The time of the last consecutive read frame that held the same words in the same place; equal to frame.time_us when only one did.; at least 0 |
+| `screen_text.hits[].frames` | integer | yes | How many consecutive read frames held it.; 1 to 4096 |
+| `screen_text.hits[].candidate_ids` | array of string | yes | The visual candidates whose representative frame the first frame is, in time order; empty for a frame read only for its period. At most 32 are listed.; at most 32 items; each: pattern `^vcd_[a-z0-9]{16,64}$` |
+| `screen_text.total_hits` | integer | yes | at least 0 |
+| `screen_text.coverage` | object | yes | How much of the range's plan the index has read. Every planned frame is counted once: planned = read + failed + unresolved + pending; awaiting_analysis counts reads not yet planned. read: its frame was read (it may hold no text). failed: the runner rejected the image or failed on it; it is not read again by the same build. unresolved: the target time resolved to no decodable frame. pending: not attempted yet. Text that appears and goes between two planned frames is not read. |
+| `screen_text.coverage.scope` | constant "screen_text" | yes | What the block covers: on-screen text only. |
+| `screen_text.coverage.period_us` | integer or null | yes | The period of the frames planned between candidates: the call's --period-us (default 10000000). In search, the period of the index's latest call; null before ocr has run.; 1000000 to 600000000 |
+| `screen_text.coverage.planned` | integer | yes | at least 0 |
+| `screen_text.coverage.read` | integer | yes | at least 0 |
+| `screen_text.coverage.failed` | integer | yes | at least 0 |
+| `screen_text.coverage.unresolved` | integer | yes | at least 0 |
+| `screen_text.coverage.pending` | integer | yes | at least 0 |
+| `screen_text.coverage.awaiting_analysis` | integer | yes | Periodic reads of the range left out of the plan, not counted in planned, because their visual window is not analysed yet: always 0 when the call analyses missing windows itself, as vsift ocr does; counted by the engine's analysed-windows-only calls (ADR 0033's background prepare job). Coverage is not complete while it is above 0, and the envelope reason is frames_awaiting_analysis.; at least 0 |
+| `screen_text.coverage.candidates_complete` | boolean | yes | True when no visual window of the range is still to be analysed or tried again (not_analyzed, deadline_exceeded), so the plan holds every candidate the range will have. |
 
 ### setup-check-response.schema.json
 
@@ -1457,7 +1769,7 @@ The data member of a complete or partial transcript.get result asked for with --
 | `next_cursor` | string or null | yes | 1 to 512 characters |
 | `transcript_coverage` | object | yes | What a transcript covers of the range a command was asked about: the searched range of a search, or, since 0.2.1, the requested range of a transcript get, by one rule. A word said in an untranscribed range cannot be found by a search and is not shown by a read: an empty page there is a gap, never evidence of silence. |
 | `transcript_coverage.basis` | "supplied_transcript" \| "local_asr" \| "mixed" | yes | supplied_transcript: a supplied SubRip or WebVTT file, taken to cover the whole source but not verified to be complete. local_asr: local speech recognition only; covered ranges are those it examined. mixed: local speech recognition of part of the source spliced into supplied text elsewhere. |
-| `transcript_coverage.scope` | constant "transcript_text" | yes | What the command looks at: transcript text only. On-screen text is neither searched nor read. |
+| `transcript_coverage.scope` | constant "transcript_text" | yes | What this block covers: transcript text only. On-screen text is not counted here; since 0.3.0 a search first page states its coverage in screen_text.coverage. |
 | `transcript_coverage.searched_range` | object or null | yes | The requested range (the whole source for a search with no range) clipped to the source; null when the requested range lies wholly outside it. For a transcript get it is the range of the read, and every page of one request states the same coverage. |
 | `transcript_coverage.searched_range.from_us` | integer | yes | at least 0 |
 | `transcript_coverage.searched_range.to_us` | integer | yes | at least 1 |
@@ -1489,7 +1801,7 @@ The data member of a complete or partial transcript.get result: one bounded page
 | `next_cursor` | string or null | yes | 1 to 512 characters |
 | `transcript_coverage` | object | no | The coverage of the whole requested range, the same on every page of one request, as search reports it: always present since 0.2.1, but not listed in required, because answers of the published 0.1.0 (kept valid against this schema by the compatibility test) have none. |
 | `transcript_coverage.basis` | "supplied_transcript" \| "local_asr" \| "mixed" | yes | supplied_transcript: a supplied SubRip or WebVTT file, taken to cover the whole source but not verified to be complete. local_asr: local speech recognition only; covered ranges are those it examined. mixed: local speech recognition of part of the source spliced into supplied text elsewhere. |
-| `transcript_coverage.scope` | constant "transcript_text" | yes | What the command looks at: transcript text only. On-screen text is neither searched nor read. |
+| `transcript_coverage.scope` | constant "transcript_text" | yes | What this block covers: transcript text only. On-screen text is not counted here; since 0.3.0 a search first page states its coverage in screen_text.coverage. |
 | `transcript_coverage.searched_range` | object or null | yes | The requested range (the whole source for a search with no range) clipped to the source; null when the requested range lies wholly outside it. For a transcript get it is the range of the read, and every page of one request states the same coverage. |
 | `transcript_coverage.searched_range.from_us` | integer | yes | at least 0 |
 | `transcript_coverage.searched_range.to_us` | integer | yes | at least 1 |
@@ -1521,7 +1833,7 @@ The data member of the complete or partial terminal result that ends a transcrip
 | `next_cursor` | string or null | yes | 1 to 512 characters |
 | `transcript_coverage` | object | no | The coverage of the whole requested range, the same on every page of one request: always present since 0.2.1, but not listed in required, because answers of the published 0.1.0 (kept valid against this schema by the compatibility test) have none. |
 | `transcript_coverage.basis` | "supplied_transcript" \| "local_asr" \| "mixed" | yes | supplied_transcript: a supplied SubRip or WebVTT file, taken to cover the whole source but not verified to be complete. local_asr: local speech recognition only; covered ranges are those it examined. mixed: local speech recognition of part of the source spliced into supplied text elsewhere. |
-| `transcript_coverage.scope` | constant "transcript_text" | yes | What the command looks at: transcript text only. On-screen text is neither searched nor read. |
+| `transcript_coverage.scope` | constant "transcript_text" | yes | What this block covers: transcript text only. On-screen text is not counted here; since 0.3.0 a search first page states its coverage in screen_text.coverage. |
 | `transcript_coverage.searched_range` | object or null | yes | The requested range (the whole source for a search with no range) clipped to the source; null when the requested range lies wholly outside it. For a transcript get it is the range of the read, and every page of one request states the same coverage. |
 | `transcript_coverage.searched_range.from_us` | integer | yes | at least 0 |
 | `transcript_coverage.searched_range.to_us` | integer | yes | at least 1 |

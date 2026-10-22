@@ -1,0 +1,148 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vsift.dev/schemas/v1/bundle-screen-text-index-record.schema.json",
+  "title": "VSift retained bundle screen-text index record v1",
+  "description": "The content of a session or retained bundle artifact whose kind is screen_text_index_record (0.3.0, ADR 0030): one immutable revision of the session's on-screen text index, stored as compact UTF-8 JSON and named artifact-<sha256>.json. This is a storage record, not an operation response: schema_version is the integer record version and format names the record. Each ocr call that attempts a frame commits one; a revision holds every frame of the revision before it read by the same engine build, so only the newest is read. Times are integer microseconds on the normalized source timeline. The record holds no pixels, only what was read and where. A session holds at most 64 such records of at most 48 MiB. Releases before 0.3.0 do not know the kind and refuse a session or bundle that holds one. bundle validate decodes every record strictly (unknown fields, values and newer versions are rejected) and checks what a record could claim without being true: frames in ascending pts order, each with a target, regions inside their frame, the bounds below, and every index and line identity derived again from the session, source, stream, profile, engine build, frame and line ordinal. This schema describes its shape.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "format",
+    "index_id",
+    "revision",
+    "session_id",
+    "source_id",
+    "stream_index",
+    "profile",
+    "engine",
+    "period_us",
+    "frames",
+    "unresolved"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "format": { "const": "vsift.screen_text_index_record" },
+    "index_id": { "type": "string", "pattern": "^sti_[a-z0-9]{16,64}$" },
+    "revision": { "$ref": "#/$defs/positive_u32" },
+    "session_id": { "type": "string", "pattern": "^ses_[a-z0-9]{16,64}$" },
+    "source_id": { "type": "string", "pattern": "^src_sha256_[0-9a-f]{64}$" },
+    "stream_index": { "$ref": "#/$defs/u32" },
+    "profile": { "enum": ["ppocrv5-latin-v1"] },
+    "engine": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "runner_sha256",
+        "runner_version",
+        "runtime_version",
+        "detector_sha256",
+        "recognizer_sha256"
+      ],
+      "properties": {
+        "runner_sha256": { "$ref": "#/$defs/sha256" },
+        "runner_version": { "$ref": "#/$defs/label" },
+        "runtime_version": { "$ref": "#/$defs/label" },
+        "detector_sha256": { "$ref": "#/$defs/sha256" },
+        "recognizer_sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "period_us": {
+      "description": "The period of the latest call's plan.",
+      "type": "integer",
+      "minimum": 1000000,
+      "maximum": 600000000
+    },
+    "frames": {
+      "description": "Frames attempted, in strictly ascending pts order.",
+      "type": "array",
+      "maxItems": 4096,
+      "items": { "$ref": "#/$defs/frame" }
+    },
+    "unresolved": {
+      "description": "Planned targets that resolved to no decodable frame.",
+      "type": "array",
+      "maxItems": 4096,
+      "items": { "$ref": "#/$defs/target" }
+    }
+  },
+  "$defs": {
+    "u32": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+    "positive_u32": { "type": "integer", "minimum": 1, "maximum": 4294967295 },
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "label": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[A-Za-z0-9._+-]+$"
+    },
+    "target": {
+      "description": "A planned read: a time, and the candidate whose representative it is, absent for a periodic read.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["time_us"],
+      "properties": {
+        "time_us": { "type": "integer", "minimum": 0 },
+        "candidate_id": { "type": "string", "pattern": "^vcd_[a-z0-9]{16,64}$" }
+      }
+    },
+    "line": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "x", "y", "width", "height", "text", "confidence_bp"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^stl_[a-z0-9]{16,64}$" },
+        "x": { "$ref": "#/$defs/u32" },
+        "y": { "$ref": "#/$defs/u32" },
+        "width": { "$ref": "#/$defs/positive_u32" },
+        "height": { "$ref": "#/$defs/positive_u32" },
+        "text": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "confidence_bp": {
+          "description": "The engine's uncalibrated score in basis points.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10000
+        }
+      }
+    },
+    "frame": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pts", "time_base", "time_us", "width", "height", "targets", "outcome"],
+      "properties": {
+        "pts": { "type": "integer" },
+        "time_base": {
+          "description": "[numerator, denominator] of the stream's time base.",
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": { "$ref": "#/$defs/positive_u32" }
+        },
+        "time_us": { "type": "integer", "minimum": 0 },
+        "width": { "$ref": "#/$defs/positive_u32" },
+        "height": { "$ref": "#/$defs/positive_u32" },
+        "targets": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/target" }
+        },
+        "outcome": {
+          "description": "read: the runner read the frame (lines may be empty). image_rejected: the runner refused the image. engine_failed: the runner failed on it.",
+          "enum": ["read", "image_rejected", "engine_failed"]
+        },
+        "truncated": {
+          "description": "Present exactly for a read frame: true when the runner cut its lines at its limit or cut a line's text.",
+          "type": "boolean"
+        },
+        "lines": {
+          "description": "Present exactly for a read frame, in reading order.",
+          "type": "array",
+          "maxItems": 256,
+          "items": { "$ref": "#/$defs/line" }
+        }
+      },
+      "if": { "properties": { "outcome": { "const": "read" } } },
+      "then": { "required": ["truncated", "lines"] },
+      "else": { "not": { "anyOf": [{ "required": ["truncated"] }, { "required": ["lines"] }] } }
+    }
+  }
+}

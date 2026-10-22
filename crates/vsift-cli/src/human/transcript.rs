@@ -5,8 +5,8 @@ use super::{
     text::{Placement, RenderedText, TerminalText, TooLarge},
     time::{push_range, push_span},
     view::{
-        Envelope, Markup, Retranscription, Search, TranscriptCoverage, TranscriptPage,
-        TranscriptRevision, TranscriptSegment,
+        Envelope, Markup, OcrSearch, Retranscription, Search, SearchScreenText, TranscriptCoverage,
+        TranscriptPage, TranscriptRevision, TranscriptSegment,
     },
 };
 
@@ -142,8 +142,111 @@ pub(super) fn search(envelope: &Envelope<Search>) -> Result<RenderedText, TooLar
             .map(|hit| hit.tier.as_str())
     });
     push_next_page(&mut text, data.next_cursor.as_deref());
+    // A session `ocr` has not read says nothing here, so a reader who never uses
+    // OCR sees the search as before; `ocr search` and `--json` state `not_run`.
+    if let Some(screen_text) = data
+        .screen_text
+        .as_ref()
+        .filter(|part| part.state != "not_run")
+    {
+        push_screen_text_hits(&mut text, screen_text);
+    }
     push_outcome(&mut text, envelope);
     text.finish()
+}
+
+/// `ocr search`: one page of on-screen hits, how much of the range was read,
+/// and the next page's cursor.
+pub(super) fn ocr_search(envelope: &Envelope<OcrSearch>) -> Result<RenderedText, TooLarge> {
+    let data = &envelope.data;
+    let mut text = TerminalText::result();
+    text.push_fixed("On-screen search of session ")
+        .push_value(&data.session_id)
+        .end_line();
+    // The terms are the caller's own text; only their number is shown.
+    text.push_fixed("Query terms: ")
+        .push_unsigned(count(data.query.terms.len()))
+        .end_line();
+    text.push_fixed("Range: ");
+    match data.range {
+        Some(range) => push_range(&mut text, range),
+        None => {
+            text.push_fixed("the whole video");
+        }
+    }
+    text.end_line();
+    push_screen_text_hits(&mut text, &data.part);
+    push_next_page(&mut text, data.next_cursor.as_deref());
+    push_outcome(&mut text, envelope);
+    text.finish()
+}
+
+/// Writes the on-screen text part of a search: how much was read, then each
+/// hit's time, place and text under the untrusted-evidence label.
+fn push_screen_text_hits(text: &mut TerminalText, part: &SearchScreenText) {
+    text.blank_line();
+    text.push_fixed("On-screen text: ").push_value(&part.state);
+    let coverage = &part.coverage;
+    if part.state != "not_run" && part.state != "unavailable" {
+        text.push_fixed(" (")
+            .push_unsigned(coverage.read)
+            .push_fixed(" of ")
+            .push_unsigned(coverage.planned)
+            .push_fixed(" planned frames read, ")
+            .push_unsigned(coverage.pending)
+            .push_fixed(" pending, ")
+            .push_unsigned(coverage.failed)
+            .push_fixed(" failed)");
+    }
+    text.end_line();
+    if let Some(unavailable) = &part.unavailable {
+        let what = if unavailable.index == "screen_text" {
+            "The session's screen-text index could not be read ("
+        } else {
+            "The session's visual index could not be read, so the coverage is not known ("
+        };
+        text.push_fixed(what)
+            .push_value(&unavailable.reason)
+            .push_fixed("); the transcript search is unaffected.")
+            .end_line();
+    }
+    if part.state == "unavailable" {
+        return;
+    }
+    if part.state == "not_run" {
+        text.push_fixed("Run vsift ocr on the session to read it.")
+            .end_line();
+        return;
+    }
+    text.push_fixed("On-screen hits: ")
+        .push_unsigned(count(part.hits.len()))
+        .push_fixed(" of ")
+        .push_unsigned(part.total_hits)
+        .end_line();
+    if part.hits.is_empty() {
+        return;
+    }
+    text.push_fixed(UNTRUSTED_EVIDENCE).end_line();
+    for hit in &part.hits {
+        text.blank_line();
+        text.push_value(&hit.line_id).push_fixed("  ");
+        push_span(text, hit.frame.time_us, hit.last_time_us);
+        text.push_fixed("  match: ")
+            .push_value(&hit.tier)
+            .push_fixed("  frames: ")
+            .push_unsigned(hit.frames)
+            .push_fixed("  region: ")
+            .push_unsigned(hit.region.x)
+            .push_fixed(",")
+            .push_unsigned(hit.region.y)
+            .push_fixed(" ")
+            .push_unsigned(hit.region.width)
+            .push_fixed("x")
+            .push_unsigned(hit.region.height)
+            .end_line();
+        text.push_untrusted(&hit.display_text, Placement::Quoted);
+    }
+    text.blank_line();
 }
 
 /// The label over the untranscribed ranges of a search.

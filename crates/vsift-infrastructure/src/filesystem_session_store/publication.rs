@@ -360,16 +360,20 @@ pub(super) fn add_evidence(
 
 /// Whether the sub-budget an artifact of `kind` counts against is full.
 ///
-/// Visual-index revisions and evidence (ADR 0019 D4) are bounded separately
-/// so a runaway caller cannot fill the session's 512 artifact slots with
-/// them.
+/// Visual-index revisions, screen-text revisions (ADR 0030) and evidence (ADR
+/// 0019 D4) are bounded separately so a runaway caller cannot fill the
+/// session's 512 artifact slots with them.
 pub(super) fn sub_budget_full(artifacts: &[StoredArtifact], kind: StoredArtifactKind) -> bool {
-    if kind == StoredArtifactKind::VisualIndexRecord {
+    let count = |of: StoredArtifactKind| {
         artifacts
             .iter()
-            .filter(|existing| existing.kind == StoredArtifactKind::VisualIndexRecord)
+            .filter(|existing| existing.kind == of)
             .count()
-            >= crate::MAX_VISUAL_INDEX_RECORDS
+    };
+    if kind == StoredArtifactKind::VisualIndexRecord {
+        count(kind) >= crate::MAX_VISUAL_INDEX_RECORDS
+    } else if kind == StoredArtifactKind::ScreenTextIndexRecord {
+        count(kind) >= crate::MAX_SCREEN_TEXT_INDEX_RECORDS
     } else {
         kind.is_evidence() && evidence_artifact_count(artifacts) >= crate::MAX_EVIDENCE_ARTIFACTS
     }

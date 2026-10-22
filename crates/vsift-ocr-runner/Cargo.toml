@@ -1,0 +1,25 @@
+[package]
+name = "vsift-ocr-runner"
+description = "The OCR runner VSift builds and runs as an external engine: PP-OCR models on ONNX Runtime"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+publish = false
+
+# The runner is an engine of its own, versioned and released apart from VSift
+# (`ocr-runner-v<version>` tags, ADR 0030). No VSift crate depends on it and it
+# depends on no VSift crate: VSift runs it as an external tool under its process
+# supervisor and reads its bounded JSON lines, as it reads whisper.cpp's output.
+[dependencies]
+flate2.workspace = true
+ort.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+
+[lints]
+workspace = true

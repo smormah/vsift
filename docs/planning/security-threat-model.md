@@ -463,6 +463,41 @@ escape control and hidden characters and never echo input into a result. Since P
 delivered paths included (each whole on its own line, a hostile one inert and
 flagged), and SEC-T02 is re-run over all of it (verification section 7).
 
+### 0.3.0 notes: on-screen text (OCR, ADR 0030)
+
+- **SEC-28 (poisoned OCR steers ranking or an agent).** On-screen text is derived, untrusted
+  evidence, labelled and rendered as transcript text is: every hit carries `text` and
+  `display_text` (hidden characters made visible), the engine's uncalibrated score and the exact
+  frame and region it came from, so an agent can check the pixels; readable output quotes it under
+  the untrusted-evidence label (`on_screen_hits_are_quoted_inertly`). It never ranks transcript
+  hits: a search's items, cursor, status and coverage are the transcript's alone, and on-screen
+  hits are a separate, bounded list with their own coverage.
+- **SEC-18/SEC-21 (hostile provider output).** The runner reads pixels from untrusted video, so its
+  answer is untrusted too: at most 4 MiB, protocol 1, one `image` record per image given with that
+  image's size, at most 256 lines an image, anything else the runner's failure
+  (`parse_runner_output` and its tests; the stand-in's `garbage` and `liar` behaviours; the fuzz
+  targets `ocr_runner_output` and `screen_text_index_record`). A line
+  outside its frame, or whose text is empty, longer than 512 characters or holds a control
+  character, makes that frame `engine_failed` rather than evidence. Each stored record is rebuilt
+  through the domain constructors and its identities derived again when read.
+- **SEC-25 and SEC-20 (subprocess environment and oversubscription).** The runner is started
+  like every provider: an explicit executable and argument list, an empty environment, its own
+  folder as its directory with the frames handed over in a private work folder, no shell, the
+  supervisor's deadline and kill. Each process of an `ocr` call gets at most the time the call has
+  left, so the call's 300 s bound holds (RV-2 finding 4). Its threads (1 to 8) are reserved from
+  the session root's admission capacity, as a recognition's are.
+- **Native code.** ONNX Runtime and the models run in the runner's process, never in `vsift`'s, so
+  a crash ends the runner's call (`RESOURCE_LIMIT`), not the supervisor. The runner's own Rust code
+  forbids `unsafe`; its image reader accepts only 8-bit RGB PNG within 16 megapixels and 128 MiB,
+  and the detector's map is bounded before it is reserved whatever the frame's shape (at most 8 Mi
+  pixels; RV-2 finding 1).
+- **The engine build (SEC-21).** Text is attributed to the build that read it. `describe` and every
+  `read` hash the runtime library and both models before loading them; VSift hashes the executable
+  before each batch and refuses a batch whose executable or greeting is not the build `describe`
+  reported, so a runner folder swapped during a call cannot record its text under another build's
+  identity (RV-2 finding 3). The library is loaded only from the runner's own folder by absolute
+  path; an unpinned library is accepted but named by its digest, never by a version.
+
 ## Agent-specific controls
 
 The tool cannot make every downstream model immune to prompt injection. Evidence

@@ -15,6 +15,8 @@ mod job;
 mod local_asr_setup;
 mod managed_lifecycle;
 mod provisioning;
+mod screen_text;
+mod screen_text_search;
 mod search;
 mod session;
 mod storage;
@@ -55,6 +57,17 @@ pub use job::{
     SessionHead, cancel_job, commit_operation_id, job_id, job_status, lookup_operation,
     observed_state, recognition_key, reconcile, resumable_request, retranscribe_operation_key,
     retranscribe_request_digest, run_retranscription, worker_step_operation_id,
+};
+pub use screen_text::{
+    AnalysedPlanError, AnalysedWindowsPlan, DEFAULT_SCREEN_TEXT_FRAMES_PER_CALL, EngineLine,
+    EngineReading, MAX_SCREEN_TEXT_FRAMES_PER_CALL, MAX_SHARED_LISTING_MICROS,
+    ReadScreenTextRequest, ScreenTextBuildError, ScreenTextExtension, ScreenTextImage,
+    ScreenTextReadError, ScreenTextReader, ScreenTextStop, continued_index, frames_with_room,
+    merge_screen_text, pending_targets, plan_analysed_windows, read_screen_text_within,
+    screen_text_index_id, screen_text_line_id, verify_screen_text_identities,
+};
+pub use screen_text_search::{
+    ScreenTextPage, ScreenTextPageRequest, page_screen_text, screen_text_query_digest,
 };
 pub use search::{SearchPage, SearchPageRequest, page_search, search_query_digest};
 pub use session::{

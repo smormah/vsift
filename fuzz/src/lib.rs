@@ -21,6 +21,7 @@ use std::cell::RefCell;
 
 #[cfg(unix)]
 use sha2::{Digest, Sha256};
+use vsift_application::EngineReading;
 use vsift_contract::{
     BatchLine, BundleName, HandoffCheckData, HandoffChecker, JsonLimits, MAX_BATCH_LINES,
     MAX_BUNDLE_NAME_BYTES, MAX_HANDOFF_FINDINGS, MAX_HANDOFF_REPORT_BYTES, MAX_INPUT_PATH_BYTES,
@@ -31,7 +32,8 @@ use vsift_contract::{
 use vsift_domain::{
     ArtifactId, CropRect, CursorToken, EvidenceId, FrameDimensions, JobId, LanguageTag,
     ListingTail, MAX_CUE_TEXT_BYTES, MAX_LISTED_FRAMES, MAX_MANAGED_KEY_BYTES, MAX_RECORD_ITEMS,
-    MAX_RECORD_SELECTIONS, MAX_SEARCH_QUERY_BYTES, MAX_SEARCH_TERMS, MAX_TRANSCRIPT_CUES,
+    MAX_RECORD_SELECTIONS, MAX_SCREEN_TEXT_CHARS, MAX_SCREEN_TEXT_FRAMES, MAX_SCREEN_TEXT_LINES,
+    MAX_SCREEN_TEXT_LINES_PER_FRAME, MAX_SEARCH_QUERY_BYTES, MAX_SEARCH_TERMS, MAX_TRANSCRIPT_CUES,
     MAX_WINDOW_CANDIDATES, ManagedVersionKey, MediaStreamKind, MediaTime, OperationId,
     OperationKey, PlannedChunk, SearchMatch, SearchQuery, SessionId, Sha256Hex, SourceId,
     SourceSegmentId, SpeakerLabel, TimeRange, TranscriptFormat, TranscriptRevisionId,
@@ -48,13 +50,14 @@ use vsift_infrastructure::{
     MAX_XZ_ARCHIVE_BYTES, MountDevice, NetworkInterfaces, SourceContainer, VisualSamplingWindow,
     WhisperOutputLimits, classify_mountinfo, classify_os_release, classify_root_mount,
     decode_chunk_checkpoint, decode_evidence_record, decode_job_record, decode_request_record,
-    decode_transcript_record, decode_visual_index_record, encode_chunk_checkpoint,
-    encode_evidence_record, encode_job_record, encode_request_record, encode_transcript_record,
-    encode_visual_index_record, inspect_gzip_tar_inventory, inspect_tar_inventory,
-    inspect_xz_tar_inventory, parse_ashowinfo_start, parse_cgroup_limit, parse_cpu_max,
-    parse_ffprobe_metadata, parse_frame_listing, parse_frame_showinfo, parse_net_dev,
-    parse_png_sequence, parse_proc_cgroup, parse_supplied_transcript, parse_visual_samples,
-    parse_whisper_full_json,
+    decode_screen_text_index_record, decode_transcript_record, decode_visual_index_record,
+    encode_chunk_checkpoint, encode_evidence_record, encode_job_record, encode_request_record,
+    encode_screen_text_index_record, encode_transcript_record, encode_visual_index_record,
+    inspect_gzip_tar_inventory, inspect_tar_inventory, inspect_xz_tar_inventory,
+    parse_ashowinfo_start, parse_cgroup_limit, parse_cpu_max, parse_ffprobe_metadata,
+    parse_frame_listing, parse_frame_showinfo, parse_net_dev, parse_png_sequence,
+    parse_proc_cgroup, parse_runner_description, parse_runner_output, parse_supplied_transcript,
+    parse_visual_samples, parse_whisper_full_json,
 };
 #[cfg(unix)]
 use vsift_infrastructure::{BundleSourcePolicy, FilesystemSessionStore};
@@ -75,6 +78,13 @@ pub const VISUAL_FUZZ_SESSION: &str = "ses_0123456789abcdef";
 /// Session every fuzzed evidence record is decoded for: the session of the
 /// frozen bundle example the seed copies.
 pub const EVIDENCE_FUZZ_SESSION: &str = "ses_0123456789abcdef0123456789abcdef";
+/// Session every fuzzed screen-text record is decoded for: the session of the
+/// frozen bundle example the seed copies.
+pub const SCREEN_TEXT_FUZZ_SESSION: &str = "ses_0123456789abcdef";
+/// The images every [`Target::OcrRunnerOutput`] run is parsed against: four
+/// 1280x720 frames, as the recorded run under
+/// `crates/vsift-infrastructure/tests/data/ocr_runner/` read them.
+pub const OCR_FUZZ_IMAGES: [(u32, u32); 4] = [(1_280, 720); 4];
 /// The displayed frame every [`Target::CropRect`] outer rectangle is parsed
 /// against: the 1440x900 frame of the domain's own crop tests.
 pub const CROP_FRAME_WIDTH: u32 = 1_440;
@@ -205,11 +215,19 @@ pub enum Target {
     /// name, held to an independent statement of their grammars (P14 PR 4,
     /// SEC-07). The input is the text.
     InputPath,
+    /// The OCR runner's standard output (0.3.0, ADR 0030) through
+    /// `parse_runner_output` for [`OCR_FUZZ_IMAGES`], and the same bytes
+    /// through `parse_runner_description`. The input is the output.
+    OcrRunnerOutput,
+    /// The stored screen-text index record (0.3.0, ADR 0030) through
+    /// `decode_screen_text_index_record`, as a session read and `bundle
+    /// validate` read it. The input is the record.
+    ScreenTextIndexRecord,
 }
 
 impl Target {
     /// Every target, in the order CI runs them.
-    pub const ALL: [Self; 31] = [
+    pub const ALL: [Self; 33] = [
         Self::TranscriptSrt,
         Self::TranscriptWebVtt,
         Self::WhisperFullJson,
@@ -241,6 +259,8 @@ impl Target {
         Self::XzTarInventory,
         Self::Identifiers,
         Self::InputPath,
+        Self::OcrRunnerOutput,
+        Self::ScreenTextIndexRecord,
     ];
 
     /// The target's `cargo fuzz` name, which is also its seed directory name.
@@ -278,6 +298,8 @@ impl Target {
             Self::XzTarInventory => "xz_tar_inventory",
             Self::Identifiers => "identifiers",
             Self::InputPath => "input_path",
+            Self::OcrRunnerOutput => "ocr_runner_output",
+            Self::ScreenTextIndexRecord => "screen_text_index_record",
         }
     }
 
@@ -319,6 +341,8 @@ impl Target {
             Self::XzTarInventory => check_xz_tar_inventory(data),
             Self::Identifiers => check_identifiers(data),
             Self::InputPath => check_input_path(data),
+            Self::OcrRunnerOutput => check_ocr_runner_output(data),
+            Self::ScreenTextIndexRecord => check_screen_text_index_record(data),
         }
     }
 }
@@ -449,6 +473,12 @@ pub enum Violation {
     /// The relative input path or bundle name parser disagreed with the
     /// independent statement of its grammar.
     InputPathInconsistent,
+    /// An accepted runner output gave another number of readings than images,
+    /// or a reading broke the runner's bounds (lines, text, score).
+    OcrRunnerOutputInconsistent,
+    /// An accepted screen-text record could not be encoded again, changed in a
+    /// round trip, or broke an index bound.
+    ScreenTextRecordInconsistent,
 }
 
 impl fmt::Display for Violation {
@@ -522,6 +552,12 @@ impl fmt::Display for Violation {
             }
             Self::InputPathInconsistent => {
                 "an input path or bundle name parser disagrees with the statement of its grammar"
+            }
+            Self::OcrRunnerOutputInconsistent => {
+                "an accepted OCR runner output broke its image count or its bounds"
+            }
+            Self::ScreenTextRecordInconsistent => {
+                "an accepted screen-text record broke a bound or changed in a round trip"
             }
         })
     }
@@ -767,6 +803,48 @@ fn check_visual_samples(data: &[u8]) -> Result<(), Violation> {
     )
     .map_err(|_| Violation::VisualAnalysisInvalid)?;
     Ok(())
+}
+
+fn check_ocr_runner_output(data: &[u8]) -> Result<(), Violation> {
+    // The description parser must only accept or refuse, never panic.
+    let _ = parse_runner_description(data);
+    let Ok(run) = parse_runner_output(data, &OCR_FUZZ_IMAGES) else {
+        return Ok(());
+    };
+    let readings = run.readings;
+    if readings.len() != OCR_FUZZ_IMAGES.len() {
+        return Err(Violation::OcrRunnerOutputInconsistent);
+    }
+    for reading in &readings {
+        if let EngineReading::Lines { lines, .. } = reading
+            && (lines.len() > MAX_SCREEN_TEXT_LINES_PER_FRAME
+                || lines.iter().any(|line| {
+                    line.confidence_basis_points > 10_000
+                        || line.text.len() > MAX_SCREEN_TEXT_CHARS.saturating_mul(4)
+                }))
+        {
+            return Err(Violation::OcrRunnerOutputInconsistent);
+        }
+    }
+    Ok(())
+}
+
+fn check_screen_text_index_record(data: &[u8]) -> Result<(), Violation> {
+    let session =
+        SessionId::parse(SCREEN_TEXT_FUZZ_SESSION).map_err(|_| Violation::HarnessSetup)?;
+    let Ok(index) = decode_screen_text_index_record(data, &session) else {
+        return Ok(());
+    };
+    let lines: usize = index.frames().iter().map(|frame| frame.lines().len()).sum();
+    if index.frames().len() > MAX_SCREEN_TEXT_FRAMES || lines > MAX_SCREEN_TEXT_LINES {
+        return Err(Violation::ScreenTextRecordInconsistent);
+    }
+    let encoded = encode_screen_text_index_record(&index)
+        .map_err(|_| Violation::ScreenTextRecordInconsistent)?;
+    match decode_screen_text_index_record(&encoded, &session) {
+        Ok(decoded) if decoded == index => Ok(()),
+        _ => Err(Violation::ScreenTextRecordInconsistent),
+    }
 }
 
 fn check_visual_index_record(data: &[u8]) -> Result<(), Violation> {
@@ -1579,7 +1657,10 @@ fn artifact_extension(kind: &str) -> Option<&'static str> {
         "frame_png" => Some("png"),
         "audio_pcm" => Some("pcm"),
         "audio_wav" => Some("wav"),
-        "transcript_record" | "visual_index_record" | "evidence_record" => Some("json"),
+        "transcript_record"
+        | "visual_index_record"
+        | "evidence_record"
+        | "screen_text_index_record" => Some("json"),
         _ => None,
     }
 }

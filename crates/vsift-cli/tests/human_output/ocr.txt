@@ -1,0 +1,7 @@
+On-screen text of session ses_0123456789abcdef0123456789abcdef
+Range: 00:00:00.000000 to 00:00:15.000000 (--from 0 --to 15000000)
+Index: sti_6acf6ced07743f5711fb499cdd6d43b7 (revision 1, ppocrv5-latin-v1, runner 0.1.0, ONNX Runtime 1.31.0): 4 frames, 4 lines
+Read by this call: 2 frames
+Plan: 4 frames (the candidates and one every 00:00:05.000000): 4 read, 0 failed, 0 with no frame, 0 pending
+
+Lifecycle: ephemeral, expires 2026-09-25T00:00:00Z

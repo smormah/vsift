@@ -6,8 +6,8 @@ use cap_fs_ext::DirExt;
 use cap_std::fs::Dir;
 use vsift_application::SessionStorageError;
 use vsift_domain::{
-    EvidenceRecord, SessionId, SessionPhase, SourceId, TranscriptRevision, TranscriptRevisionId,
-    VisualIndex,
+    EvidenceRecord, ScreenTextIndex, SessionId, SessionPhase, SourceId, TranscriptRevision,
+    TranscriptRevisionId, VisualIndex,
 };
 
 use super::map_committed_io;
@@ -218,6 +218,95 @@ impl FilesystemSessionStore {
         Ok(Some((index, status)))
     }
 
+    /// Reads the newest committed screen-text index revision of an open session
+    /// (ADR 0030), with the session's status.
+    ///
+    /// Each revision of an index holds every frame of the one before it, so only
+    /// the newest record is read. It is read under a shared lifetime hold, its
+    /// size and SHA-256 are checked against the committed manifest, and it is
+    /// decoded strictly and must describe the session's source.
+    ///
+    /// # Errors
+    ///
+    /// Closed or expired sessions conflict; a changed, oversized or invalid
+    /// record is an integrity failure, and a newer record version is
+    /// unsupported.
+    pub fn read_screen_text_index(
+        &self,
+        session_id: &SessionId,
+        now_unix_seconds: u64,
+    ) -> Result<(Option<ScreenTextIndex>, SessionStatus), SessionStorageError> {
+        let _hold = self.acquire_read(session_id)?;
+        let sessions = self
+            .root
+            .open_dir_nofollow(SESSIONS_DIRECTORY)
+            .map_err(map_storage_io)?;
+        let session = sessions
+            .open_dir_nofollow(session_id.as_str())
+            .map_err(map_committed_io)?;
+        let committed = read_committed_manifest(&session, session_id, self.chain_check())?;
+        let record = committed
+            .manifest
+            .lifecycle
+            .ok_or(SessionStorageError::StateConflict)?;
+        let status = record.to_status(session_id.clone(), committed.manifest.generation)?;
+        if status.phase() != SessionPhase::Open || status.lifetime().expired(now_unix_seconds) {
+            return Err(SessionStorageError::StateConflict);
+        }
+        let Some(newest) = record
+            .artifacts
+            .iter()
+            .rev()
+            .find(|artifact| artifact.kind == StoredArtifactKind::ScreenTextIndexRecord)
+        else {
+            return Ok((None, status));
+        };
+        let artifacts = session
+            .open_dir_nofollow(ARTIFACTS_DIRECTORY)
+            .map_err(map_committed_io)?;
+        let index =
+            read_screen_text_index_artifact(&artifacts, newest, session_id, status.source_id())?;
+        Ok((Some(index), status))
+    }
+
+    /// How many more screen-text index revisions the open session may hold
+    /// (at most [`crate::MAX_SCREEN_TEXT_INDEX_RECORDS`] in all). `ocr` asks
+    /// before it reads anything, so a session with none left costs no runner
+    /// work (RV-2 finding 5).
+    ///
+    /// # Errors
+    ///
+    /// The same as [`Self::read_screen_text_index`], without decoding a record.
+    pub fn screen_text_revisions_left(
+        &self,
+        session_id: &SessionId,
+        now_unix_seconds: u64,
+    ) -> Result<usize, SessionStorageError> {
+        let _hold = self.acquire_read(session_id)?;
+        let sessions = self
+            .root
+            .open_dir_nofollow(SESSIONS_DIRECTORY)
+            .map_err(map_storage_io)?;
+        let session = sessions
+            .open_dir_nofollow(session_id.as_str())
+            .map_err(map_committed_io)?;
+        let committed = read_committed_manifest(&session, session_id, self.chain_check())?;
+        let record = committed
+            .manifest
+            .lifecycle
+            .ok_or(SessionStorageError::StateConflict)?;
+        let status = record.to_status(session_id.clone(), committed.manifest.generation)?;
+        if status.phase() != SessionPhase::Open || status.lifetime().expired(now_unix_seconds) {
+            return Err(SessionStorageError::StateConflict);
+        }
+        let held = record
+            .artifacts
+            .iter()
+            .filter(|artifact| artifact.kind == StoredArtifactKind::ScreenTextIndexRecord)
+            .count();
+        Ok(crate::MAX_SCREEN_TEXT_INDEX_RECORDS.saturating_sub(held))
+    }
+
     /// Opens the committed private source copy of an open session under a
     /// shared lifetime hold, with the identity its lifecycle record gives it.
     pub(crate) fn committed_source(
@@ -356,6 +445,34 @@ pub(super) fn read_visual_index_artifact(
     }
     let index = crate::decode_visual_index_record(&bytes, session_id)?;
     if index.source_id() != source_id {
+        return Err(SessionStorageError::IntegrityFailure);
+    }
+    Ok(index)
+}
+
+/// Reads, verifies and decodes one screen-text index record artifact (ADR 0030).
+///
+/// As for the other records, the recorded size and digest are checked before
+/// any byte is interpreted; the record is then decoded strictly, must belong to
+/// `session_id` and must describe `source_id`.
+pub(super) fn read_screen_text_index_artifact(
+    directory: &Dir,
+    artifact: &StoredArtifact,
+    session_id: &SessionId,
+    source_id: &SourceId,
+) -> Result<ScreenTextIndex, SessionStorageError> {
+    let file = open_regular_file(directory, &artifact.name, false).map_err(map_committed_io)?;
+    let mut bytes = Vec::new();
+    file.take(artifact.bytes.saturating_add(1))
+        .read_to_end(&mut bytes)
+        .map_err(map_storage_io)?;
+    if u64::try_from(bytes.len()).ok() != Some(artifact.bytes)
+        || sha256_hex(&bytes) != artifact.sha256
+    {
+        return Err(SessionStorageError::IntegrityFailure);
+    }
+    let index = crate::decode_screen_text_index_record(&bytes, session_id)?;
+    if index.scope().source_id != *source_id {
         return Err(SessionStorageError::IntegrityFailure);
     }
     Ok(index)

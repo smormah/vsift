@@ -42,18 +42,20 @@ use vsift_domain::{
 };
 use vsift_fuzz::{
     CROP_FRAME_HEIGHT, CROP_FRAME_WIDTH, EVIDENCE_FUZZ_SESSION, JOB_FUZZ_JOB, JOB_FUZZ_SESSION,
-    REQUEST_FUZZ_OPERATION, Target, VISUAL_FUZZ_SESSION, bundle_manifest_input,
-    bundle_manifest_is_accepted, bundle_manifest_refusal, png_sequence_input, visual_samples_input,
+    OCR_FUZZ_IMAGES, REQUEST_FUZZ_OPERATION, SCREEN_TEXT_FUZZ_SESSION, Target, VISUAL_FUZZ_SESSION,
+    bundle_manifest_input, bundle_manifest_is_accepted, bundle_manifest_refusal,
+    png_sequence_input, visual_samples_input,
 };
 use vsift_infrastructure::{
     ArchiveInventoryBounds, BatchLine as FileLine, BatchLines, FrameListingWindow, MountDevice,
     OsReleaseProfile, SourceContainer, VisualSamplingWindow, WhisperOutputLimits,
     classify_mountinfo, classify_os_release, decode_chunk_checkpoint, decode_evidence_record,
-    decode_job_record, decode_request_record, decode_transcript_record, decode_visual_index_record,
-    encode_transcript_record, encode_visual_index_record, inspect_gzip_tar_inventory,
-    inspect_tar_inventory, inspect_xz_tar_inventory, parse_ashowinfo_start, parse_cgroup_limit,
-    parse_cpu_max, parse_ffprobe_metadata, parse_frame_listing, parse_frame_showinfo,
-    parse_net_dev, parse_png_sequence, parse_proc_cgroup, parse_supplied_transcript,
+    decode_job_record, decode_request_record, decode_screen_text_index_record,
+    decode_transcript_record, decode_visual_index_record, encode_transcript_record,
+    encode_visual_index_record, inspect_gzip_tar_inventory, inspect_tar_inventory,
+    inspect_xz_tar_inventory, parse_ashowinfo_start, parse_cgroup_limit, parse_cpu_max,
+    parse_ffprobe_metadata, parse_frame_listing, parse_frame_showinfo, parse_net_dev,
+    parse_png_sequence, parse_proc_cgroup, parse_runner_output, parse_supplied_transcript,
     parse_visual_samples, parse_whisper_full_json,
 };
 
@@ -175,6 +177,8 @@ const TRANSCRIPT_RECORD_EXAMPLES: &str =
 /// store's encoder and the contract's recorded form by `vsift`'s
 /// `request_record_examples`.
 const REQUEST_EXAMPLES: &str = "crates/vsift-infrastructure/tests/data/worker-requests";
+/// The recorded OCR runner outputs the adapter's own tests parse (0.3.0).
+const OCR_RUNNER_OUTPUTS: &str = "crates/vsift-infrastructure/tests/data/ocr_runner";
 /// The frozen worker batch whose lines the request seeds quote.
 const BATCH_EXAMPLE: &str = "schemas/v1/examples/job-batch.requests.jsonl";
 
@@ -182,6 +186,23 @@ const BATCH_EXAMPLE: &str = "schemas/v1/examples/job-batch.requests.jsonl";
 const HUGE_ENVELOPE_NUMBER: &str = "82000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000";
 
 const SEEDS: &[Seed] = &[
+    // The OCR runner's recorded run of four images and its description
+    // (0.3.0, ADR 0030), and the frozen screen-text record example.
+    seed(
+        Target::OcrRunnerOutput,
+        "four-images.jsonl",
+        Origin::Copy(OCR_RUNNER_OUTPUTS),
+    ),
+    seed(
+        Target::OcrRunnerOutput,
+        "describe.json",
+        Origin::Copy(OCR_RUNNER_OUTPUTS),
+    ),
+    seed(
+        Target::ScreenTextIndexRecord,
+        "bundle-screen-text-index-record.json",
+        Origin::Copy("schemas/v1/examples"),
+    ),
     // The skill's own instructions: a report with one valid handoff block,
     // the REPORT skeleton, and every other kind of Markdown the skill uses.
     seed(
@@ -909,6 +930,11 @@ fn well_formed_seeds_are_accepted() -> TestResult {
         (Target::Identifiers, "speaker-label.txt"),
         (Target::InputPath, "walkthrough.txt"),
         (Target::InputPath, "bundle-name.txt"),
+        (Target::OcrRunnerOutput, "four-images.jsonl"),
+        (
+            Target::ScreenTextIndexRecord,
+            "bundle-screen-text-index-record.json",
+        ),
     ];
     for (target, file) in accepted {
         let data = fs::read(seed_directory(target).join(file))?;
@@ -1068,7 +1094,9 @@ fn is_accepted(target: Target, data: &[u8]) -> Result<bool, Box<dyn Error>> {
         | Target::GzipTarInventory
         | Target::XzTarInventory
         | Target::Identifiers
-        | Target::InputPath => is_accepted_in_p14(target, data)?,
+        | Target::InputPath
+        | Target::OcrRunnerOutput
+        | Target::ScreenTextIndexRecord => is_accepted_in_p14(target, data)?,
         // The outer and the inner rectangle are both accepted.
         Target::CropRect => {
             let (outer, inner) = std::str::from_utf8(data)?
@@ -1083,7 +1111,8 @@ fn is_accepted(target: Target, data: &[u8]) -> Result<bool, Box<dyn Error>> {
     })
 }
 
-/// Whether a P14 PR 4 target's parser accepts a well-formed seed.
+/// Whether a P14 PR 4 target's parser (or, since 0.3.0, an OCR one) accepts a
+/// well-formed seed.
 fn is_accepted_in_p14(target: Target, data: &[u8]) -> Result<bool, Box<dyn Error>> {
     Ok(match target {
         // The saved plan is one `setup install` would accept.
@@ -1131,6 +1160,12 @@ fn is_accepted_in_p14(target: Target, data: &[u8]) -> Result<bool, Box<dyn Error
         Target::InputPath => {
             let text = std::str::from_utf8(data)?;
             RelativeInputPath::parse(text).is_ok() || BundleName::parse(text).is_ok()
+        }
+        // 0.3.0 (ADR 0030): the recorded run of four images, and the example record.
+        Target::OcrRunnerOutput => parse_runner_output(data, &OCR_FUZZ_IMAGES).is_ok(),
+        Target::ScreenTextIndexRecord => {
+            decode_screen_text_index_record(data, &SessionId::parse(SCREEN_TEXT_FUZZ_SESSION)?)
+                .is_ok()
         }
         _ => false,
     })
