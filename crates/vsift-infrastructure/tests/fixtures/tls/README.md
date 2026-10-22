@@ -44,10 +44,18 @@ Linux and macOS. Every extension therefore comes from an explicit configuration
 and appears once, and `openssl x509 -noout -text` on each certificate must show
 each extension exactly once.
 
+macOS also refuses a server certificate that is valid for more than 825 days, even
+when the test trusts its root itself, so the root is valid for 100 years but the server
+certificate for 820 days. It expires on **2029-01-19**; regenerate it with the commands
+below before then (the root key is not kept, so regenerate both certificates).
+
 ```console
-openssl req -x509 -newkey rsa:2048 -nodes -sha256 -keyout link-test-ca.key.pem   -out link-test-ca.cert.pem -days 36500 -config ca.cnf
-openssl req -newkey rsa:2048 -nodes -sha256 -keyout link-test-server.key.pem   -out server.csr -subj "/CN=video.example.test"
-openssl x509 -req -in server.csr -CA link-test-ca.cert.pem -CAkey link-test-ca.key.pem   -CAcreateserial -out link-test-server.cert.pem -days 36500 -sha256 -extfile leaf.ext
+openssl req -x509 -newkey rsa:2048 -nodes -sha256 -keyout link-test-ca.key.pem \
+  -out link-test-ca.cert.pem -days 36500 -config ca.cnf
+openssl req -newkey rsa:2048 -nodes -sha256 -keyout link-test-server.key.pem \
+  -out server.csr -subj "/CN=video.example.test"
+openssl x509 -req -in server.csr -CA link-test-ca.cert.pem -CAkey link-test-ca.key.pem \
+  -CAcreateserial -out link-test-server.cert.pem -days 820 -sha256 -extfile leaf.ext
 openssl verify -purpose sslserver -CAfile link-test-ca.cert.pem link-test-server.cert.pem
 ```
 
