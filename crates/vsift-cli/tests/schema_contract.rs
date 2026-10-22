@@ -163,6 +163,51 @@ fn terminal_event_embeds_a_valid_operation_response() -> Result<(), Box<dyn std:
     Ok(())
 }
 
+/// The frozen blocked `setup check` is the Ubuntu 24.04 x86-64 answer; this
+/// turns it into this host's (ADR 0032: a catalogue may offer only some
+/// components, and the optional online links are Ubuntu's alone).
+fn adjust_for_host(blocked: &mut Value) -> Result<(), Box<dyn std::error::Error>> {
+    // ADR 0032: a host's catalogue may offer only some components (Windows
+    // offers FFmpeg and FFprobe, not whisper.cpp yet).
+    let host = vsift_infrastructure::accepted_host_catalogue()?;
+    for dependency in blocked["dependencies"]
+        .as_array_mut()
+        .ok_or_else(|| io::Error::other("example has no dependencies"))?
+    {
+        let supplier = if dependency["dependency"] == "whisper" {
+            vsift_domain::ManagedComponent::WhisperCli
+        } else {
+            vsift_domain::ManagedComponent::MediaTools
+        };
+        let offered = host.as_ref().is_some_and(|catalogue| {
+            catalogue
+                .artifacts
+                .iter()
+                .any(|artifact| artifact.component == supplier)
+        });
+        if !offered {
+            dependency["remediation"]["managed_install"] = Value::from("unavailable_target");
+        }
+    }
+    if vsift_infrastructure::detect_managed_target()
+        != vsift_domain::ManagedTarget::Ubuntu2404X86_64
+    {
+        // Nor is the optional online-links component offered there.
+        blocked["optional_components"] = serde_json::json!([{
+            "name": "online_links",
+            "status": "unavailable",
+            "components": [],
+            "next_step": vsift_contract::optional_check_step(
+                vsift_application::OptionalComponent::OnlineLinks,
+                &vsift_application::OptionalCapability::Unavailable,
+                vsift_application::SetupProfile::Desktop,
+            ),
+            "add_command": null,
+        }]);
+    }
+    Ok(())
+}
+
 #[test]
 fn emitted_json_matches_frozen_examples() -> Result<(), Box<dyn std::error::Error>> {
     let scratch = Scratch::new("vsift-schema-test")?;
@@ -177,16 +222,7 @@ fn emitted_json_matches_frozen_examples() -> Result<(), Box<dyn std::error::Erro
     // Whether managed installation could supply a missing tool depends on
     // the host: the frozen example is the Ubuntu 24.04 x86-64 answer.
     let mut blocked = load("examples/setup-check.blocked.json")?;
-    if vsift_infrastructure::detect_managed_target()
-        != vsift_domain::ManagedTarget::Ubuntu2404X86_64
-    {
-        for dependency in blocked["dependencies"]
-            .as_array_mut()
-            .ok_or_else(|| io::Error::other("example has no dependencies"))?
-        {
-            dependency["remediation"]["managed_install"] = Value::from("unavailable_target");
-        }
-    }
+    adjust_for_host(&mut blocked)?;
     assert_eq!(serde_json::from_slice::<Value>(&setup.stdout)?, blocked);
 
     // No command answers COMMAND_NOT_IMPLEMENTED since P13 PR 6; the
@@ -227,11 +263,18 @@ fn emitted_json_matches_frozen_examples() -> Result<(), Box<dyn std::error::Erro
         "executable_probe_and_reviewed_catalogue"
     );
     assert_eq!(plan_value["data"]["readiness"], "blocked");
-    if plan_value["data"]["target"] == "ubuntu_24_04_x86_64" {
+    // Ubuntu's catalogue installs all three core components; Windows's
+    // (ADR 0032) FFmpeg alone here, as no whisper.cpp could smoke the model.
+    let expected_actions = match plan_value["data"]["target"].as_str() {
+        Some("ubuntu_24_04_x86_64") => Some(3),
+        Some("windows_x86_64") => Some(1),
+        _ => None,
+    };
+    if let Some(expected_actions) = expected_actions {
         assert_eq!(plan_value["data"]["managed_install"], "catalogue_accepted");
         assert_eq!(
             plan_value["data"]["actions"].as_array().map(Vec::len),
-            Some(3)
+            Some(expected_actions)
         );
         assert_eq!(
             plan_value["data"]["plan_digest"].as_str().map(str::len),

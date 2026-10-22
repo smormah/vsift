@@ -14,15 +14,15 @@
 use std::{path::PathBuf, time::Duration};
 
 use vsift_application::{
-    ManagedInstallReport, ManagedPlanAvailability, PlanAcceptanceError, ProgressSink,
-    install_managed_components,
+    ManagedInstallReport, ManagedPlanAvailability, ManagedSetupAction, PlanAcceptanceError,
+    ProgressSink, install_managed_plan,
 };
 use vsift_contract::{InstallSource, SavedSetupPlan};
 use vsift_domain::{FailureCode, ProgressUpdate, RuntimeDependency};
 use vsift_infrastructure::{
     ActionAuthority, ExecutableResolver, ManagedArtifactError, ManagedArtifactSource,
     ManagedInstallerConfig, MediaProviderConformance, ReviewedFixtureVerifiers,
-    ReviewedManagedInstaller, SmokeCompanionSource, SmokeCompanions, accepted_ubuntu_catalogue,
+    ReviewedManagedInstaller, SmokeCompanionSource, SmokeCompanions, accepted_host_catalogue,
 };
 
 use crate::{
@@ -117,6 +117,10 @@ impl Engine {
             .saved_plan
             .profile()
             .map_err(EngineError::SavedPlanRejected)?;
+        let include = request
+            .saved_plan
+            .included_optional()
+            .map_err(EngineError::SavedPlanRejected)?;
         let source = match &request.artifact_directory {
             Some(directory) if directory.is_absolute() => {
                 ManagedArtifactSource::Directory(directory.clone())
@@ -143,13 +147,16 @@ impl Engine {
         let current = self
             .plan_setup_intent(SetupPlanRequest {
                 profile,
+                include,
                 probe_timeout: request.probe_timeout,
             })
             .await?;
         current.validate_acceptance(&request.saved_plan, &request.accepted_digest)?;
         let plan = current.authority();
-        let catalogue =
-            accepted_ubuntu_catalogue().map_err(|_| EngineError::ReviewedPolicyInvalid)?;
+        // The plan was accepted for this host, so its target has a catalogue.
+        let catalogue = accepted_host_catalogue()
+            .map_err(|_| EngineError::ReviewedPolicyInvalid)?
+            .ok_or(EngineError::ReviewedPolicyInvalid)?;
         // No stage can be live while the guard is held, and nothing is staged
         // yet: every stage found now was abandoned by an earlier run.
         let stages = sweep_before_install(&store, &guard);
@@ -172,7 +179,8 @@ impl Engine {
             &guard,
             &sink,
         );
-        let report = install_managed_components(&installer, &plan.actions, &sink).await;
+        let optional: Vec<ManagedSetupAction> = plan.optional_actions().cloned().collect();
+        let report = install_managed_plan(&installer, &plan.actions, &optional, &sink).await;
         drop(installer);
         let versions = clean_up_after_install(&store, &guard);
         drop(guard);

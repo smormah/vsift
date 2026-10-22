@@ -21,6 +21,11 @@ exceptions = [
   # Apache-2.0 WITH LLVM-exception headers); used only by the unpublished fuzz
   # harness in fuzz/, never by a VSift crate. Approved by the maintainer on 2026-09-25.
   { crate = "libfuzzer-sys", allow = ["NCSA"] },
+  # The bzip2 decoder behind the managed installer's .tar.bz2 reader (ADR 0032):
+  # libbz2-rs-sys is a Rust port of libbzip2 under libbzip2's own permissive
+  # licence. Pending the maintainer's approval at the review of the pull request
+  # that adds it.
+  { crate = "libbz2-rs-sys", allow = ["bzip2-1.0.6"] },
 ]
 
 [bans]

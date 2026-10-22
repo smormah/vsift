@@ -14,5 +14,6 @@
     "model": { "status": "not_selected", "profile": null },
     "verification": { "status": "not_run", "source": null, "not_run_reason": "model_not_selected", "check": null, "reason": null }
   },
-  "managed_updates": []
+  "managed_updates": [],
+  "optional_components": []
 }

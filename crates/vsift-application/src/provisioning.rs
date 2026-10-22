@@ -55,6 +55,99 @@ impl SetupProfile {
     }
 }
 
+/// An optional component a user can add to a plan with `setup plan
+/// --include <name>` (ADR 0032): a named group of managed components, never
+/// planned unless included and never needed for local investigation. Each
+/// group installs as a part of its own after the core, so a failure of one
+/// never fails the core or another group. Each feature story adds its group
+/// (ADR 0032: `ocr`, `speakers`, `online_links`).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum OptionalComponent {
+    /// Online links (ADR 0028 section 4): yt-dlp, which fetches a video from
+    /// a public platform page, with the managed JavaScript runtime it runs a
+    /// page's player code with. Offered on Ubuntu 24.04 x86-64 only.
+    OnlineLinks,
+}
+
+impl OptionalComponent {
+    /// Every optional component, in plan order.
+    pub const ALL: [Self; 1] = [Self::OnlineLinks];
+
+    /// The name `setup plan --include` takes and the plan shows.
+    #[must_use]
+    pub const fn identifier(self) -> &'static str {
+        match self {
+            Self::OnlineLinks => "online_links",
+        }
+    }
+
+    /// The optional component `identifier` names.
+    #[must_use]
+    pub fn from_identifier(identifier: &str) -> Option<Self> {
+        Self::ALL
+            .into_iter()
+            .find(|component| component.identifier() == identifier)
+    }
+
+    /// The managed components it installs, in install order: the runtime
+    /// only yt-dlp needs comes with it and before it.
+    #[must_use]
+    pub const fn components(self) -> &'static [ManagedComponent] {
+        match self {
+            Self::OnlineLinks => &[ManagedComponent::JsRuntimeDeno, ManagedComponent::YtDlp],
+        }
+    }
+
+    /// The optional component `component` belongs to; `None` for a core
+    /// component.
+    #[must_use]
+    pub fn of(component: ManagedComponent) -> Option<Self> {
+        Self::ALL
+            .into_iter()
+            .find(|group| group.components().contains(&component))
+    }
+
+    const fn bit(self) -> u8 {
+        match self {
+            Self::OnlineLinks => 1,
+        }
+    }
+}
+
+/// The optional components a user included in a plan.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct OptionalComponentSet(u8);
+
+impl OptionalComponentSet {
+    /// No optional component: the default plan.
+    pub const EMPTY: Self = Self(0);
+
+    /// This set with `component` added.
+    #[must_use]
+    pub const fn with(self, component: OptionalComponent) -> Self {
+        Self(self.0 | component.bit())
+    }
+
+    /// Whether `component` is included.
+    #[must_use]
+    pub const fn contains(self, component: OptionalComponent) -> bool {
+        self.0 & component.bit() != 0
+    }
+
+    /// Whether nothing is included.
+    #[must_use]
+    pub const fn is_empty(self) -> bool {
+        self.0 == 0
+    }
+
+    /// The included components, in plan order.
+    pub fn iter(self) -> impl Iterator<Item = OptionalComponent> {
+        OptionalComponent::ALL
+            .into_iter()
+            .filter(move |component| self.contains(*component))
+    }
+}
+
 /// One exact regular file or regular-file alias accepted into a runtime layout.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ReviewedManagedFile {
@@ -164,6 +257,32 @@ pub struct ReviewedCompatibilityPolicy {
     pub audio_sample_rate_hz: u32,
     /// Required PCM channel count passed between `FFmpeg` and whisper.cpp.
     pub audio_channels: u8,
+    /// The reviewed version banner of each optional component's executable,
+    /// checked by its smoke (ADR 0028 section 4); one per optional component
+    /// the catalogue offers.
+    pub optional_banners: Vec<ReviewedBanner>,
+}
+
+/// The first line an optional component's executable must print when asked
+/// for its version.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ReviewedBanner {
+    /// The component whose executable prints it.
+    pub component: ManagedComponent,
+    /// The reviewed prefix of the first line of its version output.
+    pub first_line_prefix: String,
+}
+
+impl ReviewedCompatibilityPolicy {
+    /// The reviewed banner prefix of `component`'s executable, for an
+    /// optional component.
+    #[must_use]
+    pub fn optional_banner(&self, component: ManagedComponent) -> Option<&str> {
+        self.optional_banners
+            .iter()
+            .find(|banner| banner.component == component)
+            .map(|banner| banner.first_line_prefix.as_str())
+    }
 }
 
 /// A complete target catalogue accepted in reviewed application source.
@@ -177,8 +296,13 @@ pub struct AcceptedManagedCatalogue {
     pub stop_new_plans_at: u64,
     /// Human-readable expiry date disclosed in plans.
     pub stop_new_plans_date: String,
-    /// Complete component set in stable component order.
+    /// Complete core component set in stable component order.
     pub artifacts: Vec<AcceptedManagedArtifact>,
+    /// The optional components' artifacts, in install order
+    /// ([`ManagedComponent::JsRuntimeDeno`], then [`ManagedComponent::YtDlp`]),
+    /// or none on a catalogue that offers none. Never planned unless the user
+    /// includes them.
+    pub optional_artifacts: Vec<AcceptedManagedArtifact>,
     /// Compatibility checks that must pass before publication.
     pub compatibility: ReviewedCompatibilityPolicy,
     /// Earlier reviewed versions this catalogue's pins replace, so that a
@@ -207,6 +331,7 @@ impl AcceptedManagedCatalogue {
         let current = self
             .artifacts
             .iter()
+            .chain(&self.optional_artifacts)
             .find(|artifact| artifact.component == component)?;
         (current.version != selected_version).then(|| ManagedUpdate {
             component,
@@ -374,10 +499,90 @@ pub struct ManagedSetupPlan {
     pub model: SetupModelDisposition,
     /// Exact actions in stable component order.
     pub actions: Vec<ManagedSetupAction>,
+    /// The optional components this plan offers or includes, in plan order
+    /// (#409). An included one's actions follow the core's; the core never
+    /// depends on them.
+    pub optional: Vec<OptionalComponentPlan>,
     /// Canonical SHA-256 acceptance digest, absent when managed setup is unavailable.
     pub digest: Option<String>,
     selection_state: SetupSelectionState,
     compatibility: Option<ReviewedCompatibilityPolicy>,
+}
+
+/// What `setup check` found about one optional component (ADR 0032):
+/// whether its managed components are installed. It never changes the
+/// readiness of the local-video profile.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum OptionalCapability {
+    /// Every managed component of it is installed, selected and verified,
+    /// at these versions, in install order.
+    Installed(Vec<(ManagedComponent, String)>),
+    /// It is offered on this host and not every part of it is installed.
+    NotInstalled,
+    /// No managed version of it is offered on this host.
+    Unavailable,
+}
+
+impl OptionalCapability {
+    /// Stable public identifier.
+    #[must_use]
+    pub const fn identifier(&self) -> &'static str {
+        match self {
+            Self::Installed(_) => "installed",
+            Self::NotInstalled => "not_installed",
+            Self::Unavailable => "unavailable",
+        }
+    }
+}
+
+/// What a plan does about one optional component.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum OptionalComponentDisposition {
+    /// The user included it: its actions are in the plan and its digest.
+    Included,
+    /// Offered and left out. Whoever runs setup must tell the operator about
+    /// it and ask before accepting the plan (#409).
+    NotIncluded,
+    /// No managed version can be planned on this host: it has no accepted,
+    /// unexpired catalogue.
+    Unavailable,
+}
+
+impl OptionalComponentDisposition {
+    /// Stable public identifier.
+    #[must_use]
+    pub const fn identifier(self) -> &'static str {
+        match self {
+            Self::Included => "included",
+            Self::NotIncluded => "not_included",
+            Self::Unavailable => "unavailable",
+        }
+    }
+}
+
+/// One optional component of a plan.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct OptionalComponentPlan {
+    /// The optional component.
+    pub component: OptionalComponent,
+    /// Whether it is included, offered or unavailable here.
+    pub disposition: OptionalComponentDisposition,
+    /// The reviewed artifacts it would install, in install order: what an
+    /// offer states (size, licence); empty when unavailable.
+    pub artifacts: Vec<AcceptedManagedArtifact>,
+    /// The actions that install it, only when included.
+    pub actions: Vec<ManagedSetupAction>,
+}
+
+impl OptionalComponentPlan {
+    /// The bytes its artifacts download, together.
+    #[must_use]
+    pub fn download_bytes(&self) -> u64 {
+        self.artifacts
+            .iter()
+            .map(|artifact| artifact.integrity.bytes())
+            .fold(0, u64::saturating_add)
+    }
 }
 
 /// Which model a command would use now.
@@ -450,6 +655,37 @@ pub enum PlanAcceptanceError {
 }
 
 impl ManagedSetupPlan {
+    /// Whoever runs setup must ask the operator before accepting this plan:
+    /// it offers or includes an optional component (#409). The instruction
+    /// is in the plan itself, so an agent with no skill relays it too.
+    #[must_use]
+    pub fn operator_decision_required(&self) -> bool {
+        self.optional.iter().any(|optional| {
+            matches!(
+                optional.disposition,
+                OptionalComponentDisposition::Included | OptionalComponentDisposition::NotIncluded
+            )
+        })
+    }
+
+    /// Every optional action the plan includes, in install order.
+    pub fn optional_actions(&self) -> impl Iterator<Item = &ManagedSetupAction> {
+        self.optional
+            .iter()
+            .flat_map(|optional| optional.actions.iter())
+    }
+
+    /// The optional components the plan includes.
+    #[must_use]
+    pub fn included(&self) -> OptionalComponentSet {
+        self.optional
+            .iter()
+            .filter(|optional| optional.disposition == OptionalComponentDisposition::Included)
+            .fold(OptionalComponentSet::EMPTY, |set, optional| {
+                set.with(optional.component)
+            })
+    }
+
     /// Verifies explicit authority for this exact plan.
     ///
     /// The caller must rebuild the plan from current state immediately before this
@@ -763,13 +999,43 @@ fn has_duplicate_component<C: StagedManagedComponent>(candidates: &[C]) -> bool 
     })
 }
 
-/// Builds a deterministic, non-mutating plan from current observations.
+/// Builds a deterministic, non-mutating plan from current observations,
+/// with no optional component included.
 #[must_use]
 pub fn plan_managed_setup(
     profile: SetupProfile,
     diagnosis: RuntimeDiagnosis,
     target: ManagedTarget,
     selection_state: SetupSelectionState,
+    now_unix_seconds: u64,
+    catalogue: Option<AcceptedManagedCatalogue>,
+) -> ManagedSetupPlan {
+    plan_managed_setup_including(
+        profile,
+        diagnosis,
+        target,
+        selection_state,
+        OptionalComponentSet::EMPTY,
+        now_unix_seconds,
+        catalogue,
+    )
+}
+
+/// Builds a deterministic, non-mutating plan from current observations,
+/// with the optional components in `include` (#409).
+///
+/// An included component is planned after the core, always: whether it is
+/// installed already is the transaction's `already_current`, so the plan's
+/// intent does not depend on the managed store. A desktop plan lists every
+/// optional component it leaves out, so the operator is told it exists; a
+/// worker plan lists only what was included.
+#[must_use]
+pub fn plan_managed_setup_including(
+    profile: SetupProfile,
+    diagnosis: RuntimeDiagnosis,
+    target: ManagedTarget,
+    selection_state: SetupSelectionState,
+    include: OptionalComponentSet,
     now_unix_seconds: u64,
     catalogue: Option<AcceptedManagedCatalogue>,
 ) -> ManagedSetupPlan {
@@ -802,6 +1068,11 @@ pub fn plan_managed_setup(
     let whisper_missing = diagnosis.dependencies.iter().any(|status| {
         status.dependency == RuntimeDependency::Whisper && status.state.is_unusable()
     });
+    let CoreOffer {
+        media: media_offered,
+        whisper: whisper_offered,
+        model: model_offered,
+    } = CoreOffer::of(catalogue.as_ref().filter(|_| qualified), &diagnosis);
 
     let dependencies = diagnosis
         .dependencies
@@ -810,8 +1081,11 @@ pub fn plan_managed_setup(
             let needs_media = matches!(
                 status.dependency,
                 RuntimeDependency::Ffmpeg | RuntimeDependency::Ffprobe
-            ) && media_missing;
-            let needs_whisper = status.dependency == RuntimeDependency::Whisper && whisper_missing;
+            ) && media_missing
+                && media_offered;
+            let needs_whisper = status.dependency == RuntimeDependency::Whisper
+                && whisper_missing
+                && whisper_offered;
             let disposition = if status.state.is_available() {
                 SetupDependencyDisposition::ExistingProbeOnly
             } else if qualified && status.state.is_unusable() && (needs_media || needs_whisper) {
@@ -825,30 +1099,26 @@ pub fn plan_managed_setup(
 
     let model = if selection_state.model.is_some() {
         SetupModelDisposition::ConfiguredProbeOnly
-    } else if qualified {
+    } else if model_offered {
         SetupModelDisposition::ManagedInstall
     } else {
         SetupModelDisposition::ManualSelection
     };
 
-    let mut actions = Vec::new();
-    if let Some(entry) = catalogue.as_ref().filter(|_| qualified) {
-        for artifact in &entry.artifacts {
-            let required = match artifact.component {
-                ManagedComponent::MediaTools => media_missing,
-                ManagedComponent::WhisperCli => whisper_missing,
-                ManagedComponent::WhisperModel => selection_state.model.is_none(),
-            };
-            if required {
-                actions.push(ManagedSetupAction {
-                    id: format!("install-{}", artifact.component.identifier()),
-                    artifact: artifact.clone(),
-                });
-            }
-        }
-    }
+    let wanted = |component: ManagedComponent| match component {
+        ManagedComponent::MediaTools => media_missing,
+        ManagedComponent::WhisperCli => whisper_missing,
+        ManagedComponent::WhisperModel => selection_state.model.is_none() && model_offered,
+        // The core list holds no optional component (the catalogue check
+        // refuses one); optional ones are planned below.
+        ManagedComponent::JsRuntimeDeno | ManagedComponent::YtDlp => false,
+    };
+    let actions = core_actions(catalogue.as_ref().filter(|_| qualified), wanted);
 
-    let availability = if qualified && actions.is_empty() {
+    let optional =
+        plan_optional_components(profile, include, catalogue.as_ref().filter(|_| qualified));
+    let optional_required = optional.iter().any(|optional| !optional.actions.is_empty());
+    let availability = if qualified && actions.is_empty() && !optional_required {
         ManagedPlanAvailability::NotRequired
     } else {
         availability
@@ -865,6 +1135,7 @@ pub fn plan_managed_setup(
         dependencies,
         model,
         actions,
+        optional,
         digest: None,
         compatibility: catalogue.as_ref().map(|entry| entry.compatibility.clone()),
         selection_state,
@@ -878,35 +1149,180 @@ pub fn plan_managed_setup(
     plan
 }
 
-fn catalogue_is_complete(entry: &AcceptedManagedCatalogue) -> bool {
-    entry.artifacts.len() == 3
-        && compatibility_is_complete(&entry.compatibility)
-        && entry
-            .artifacts
-            .iter()
-            .map(|artifact| artifact.component)
-            .eq([
-                ManagedComponent::MediaTools,
-                ManagedComponent::WhisperCli,
-                ManagedComponent::WhisperModel,
-            ])
-        && entry.artifacts.iter().all(|artifact| {
-            !artifact.files.is_empty()
-                && !artifact.version.is_empty()
-                && !artifact.source_url.is_empty()
-                && !artifact.trust_limit.is_empty()
-                && match artifact.format {
-                    ManagedArtifactFormat::TarXz | ManagedArtifactFormat::TarGz => {
-                        artifact.archive_limits.is_some() && !artifact.selected_files.is_empty()
-                    }
-                    ManagedArtifactFormat::RawFile => {
-                        artifact.archive_limits.is_none()
-                            && artifact.selected_files.is_empty()
-                            && artifact.archive_links.is_empty()
-                            && artifact.runtime_copies.is_empty()
-                    }
-                }
+/// The actions that install the core components `wanted` accepts, in the
+/// catalogue's order.
+fn core_actions(
+    catalogue: Option<&AcceptedManagedCatalogue>,
+    wanted: impl Fn(ManagedComponent) -> bool,
+) -> Vec<ManagedSetupAction> {
+    catalogue
+        .map(|entry| {
+            entry
+                .artifacts
+                .iter()
+                .filter(|artifact| wanted(artifact.component))
+                .map(|artifact| ManagedSetupAction {
+                    id: format!("install-{}", artifact.component.identifier()),
+                    artifact: artifact.clone(),
+                })
+                .collect()
         })
+        .unwrap_or_default()
+}
+
+/// Which core components a plan may install on this host.
+struct CoreOffer {
+    media: bool,
+    whisper: bool,
+    model: bool,
+}
+
+impl CoreOffer {
+    /// What `catalogue` (`None` when managed installation is not qualified)
+    /// offers. A target's catalogue may offer only some core components
+    /// (ADR 0032: one whose reviewed build is not pinned yet stays the
+    /// user's to supply), and the model is smoked with a whisper.cpp, the
+    /// managed one or one that already works here.
+    fn of(catalogue: Option<&AcceptedManagedCatalogue>, diagnosis: &RuntimeDiagnosis) -> Self {
+        let offers = |component: ManagedComponent| {
+            catalogue.is_some_and(|entry| {
+                entry
+                    .artifacts
+                    .iter()
+                    .any(|artifact| artifact.component == component)
+            })
+        };
+        let whisper_available = diagnosis.dependencies.iter().any(|status| {
+            status.dependency == RuntimeDependency::Whisper && status.state.is_available()
+        });
+        let whisper = offers(ManagedComponent::WhisperCli);
+        Self {
+            media: offers(ManagedComponent::MediaTools),
+            whisper,
+            model: offers(ManagedComponent::WhisperModel) && (whisper || whisper_available),
+        }
+    }
+}
+
+/// The optional part of a plan: an entry per optional component the plan
+/// includes, and, for the desktop profile, per one it leaves out.
+fn plan_optional_components(
+    profile: SetupProfile,
+    include: OptionalComponentSet,
+    qualified: Option<&AcceptedManagedCatalogue>,
+) -> Vec<OptionalComponentPlan> {
+    OptionalComponent::ALL
+        .into_iter()
+        .filter(|component| profile == SetupProfile::Desktop || include.contains(*component))
+        .map(|component| {
+            let artifacts: Vec<AcceptedManagedArtifact> = qualified
+                .map(|entry| {
+                    component
+                        .components()
+                        .iter()
+                        .filter_map(|wanted| {
+                            entry
+                                .optional_artifacts
+                                .iter()
+                                .find(|artifact| artifact.component == *wanted)
+                                .cloned()
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+            let available = artifacts.len() == component.components().len();
+            let disposition = if !available {
+                OptionalComponentDisposition::Unavailable
+            } else if include.contains(component) {
+                OptionalComponentDisposition::Included
+            } else {
+                OptionalComponentDisposition::NotIncluded
+            };
+            let actions = if disposition == OptionalComponentDisposition::Included {
+                artifacts
+                    .iter()
+                    .map(|artifact| ManagedSetupAction {
+                        id: format!("install-{}", artifact.component.identifier()),
+                        artifact: artifact.clone(),
+                    })
+                    .collect()
+            } else {
+                Vec::new()
+            };
+            OptionalComponentPlan {
+                component,
+                disposition,
+                artifacts: if available { artifacts } else { Vec::new() },
+                actions,
+            }
+        })
+        .collect()
+}
+
+fn catalogue_is_complete(entry: &AcceptedManagedCatalogue) -> bool {
+    // Each optional artifact belongs to an optional component, appears once
+    // and is complete, with its reviewed banner. A group the catalogue does
+    // not complete is unavailable in the plan, not an invalid catalogue.
+    let optional_complete = entry
+        .optional_artifacts
+        .iter()
+        .enumerate()
+        .all(|(index, artifact)| {
+            OptionalComponent::of(artifact.component).is_some()
+                && entry.optional_artifacts[..index]
+                    .iter()
+                    .all(|earlier| earlier.component != artifact.component)
+                && artifact_is_complete(artifact)
+                && entry
+                    .compatibility
+                    .optional_banner(artifact.component)
+                    .is_some_and(|banner| !banner.is_empty())
+        });
+    // The core components a target's catalogue offers, in plan order, each
+    // once: all three, or fewer while a target's reviewed build of one is
+    // not pinned yet (ADR 0032).
+    let order = [
+        ManagedComponent::MediaTools,
+        ManagedComponent::WhisperCli,
+        ManagedComponent::WhisperModel,
+    ];
+    let ranks: Vec<usize> = entry
+        .artifacts
+        .iter()
+        .filter_map(|artifact| order.iter().position(|core| *core == artifact.component))
+        .collect();
+    !entry.artifacts.is_empty()
+        && ranks.len() == entry.artifacts.len()
+        && ranks.windows(2).all(|pair| pair[0] < pair[1])
+        && compatibility_is_complete(&entry.compatibility)
+        && entry.artifacts.iter().all(artifact_is_complete)
+        && optional_complete
+}
+
+fn artifact_is_complete(artifact: &AcceptedManagedArtifact) -> bool {
+    !artifact.files.is_empty()
+        && !artifact.version.is_empty()
+        && !artifact.source_url.is_empty()
+        && !artifact.trust_limit.is_empty()
+        && match artifact.format {
+            ManagedArtifactFormat::TarXz
+            | ManagedArtifactFormat::TarGz
+            | ManagedArtifactFormat::TarBz2 => {
+                artifact.archive_limits.is_some() && !artifact.selected_files.is_empty()
+            }
+            // A zip's links are refused by its reader, so none is reviewed.
+            ManagedArtifactFormat::Zip => {
+                artifact.archive_limits.is_some()
+                    && !artifact.selected_files.is_empty()
+                    && artifact.archive_links.is_empty()
+            }
+            ManagedArtifactFormat::RawFile => {
+                artifact.archive_limits.is_none()
+                    && artifact.selected_files.is_empty()
+                    && artifact.archive_links.is_empty()
+                    && artifact.runtime_copies.is_empty()
+            }
+        }
 }
 
 fn compatibility_is_complete(policy: &ReviewedCompatibilityPolicy) -> bool {
@@ -985,6 +1401,29 @@ fn plan_digest(plan: &ManagedSetupPlan) -> String {
     for action in &plan.actions {
         digest_field(&mut digest, &action.id);
         digest_artifact(&mut digest, &action.artifact);
+    }
+    // The optional part is bound only when something is included, so a plan
+    // without it is digested exactly as before #409. What a plan offers and
+    // leaves out is fixed by the catalogue revision, which is bound above.
+    for optional in plan
+        .optional
+        .iter()
+        .filter(|optional| optional.disposition == OptionalComponentDisposition::Included)
+    {
+        digest_field(&mut digest, "optional");
+        digest_field(&mut digest, optional.component.identifier());
+        for action in &optional.actions {
+            digest_field(&mut digest, &action.id);
+            digest_artifact(&mut digest, &action.artifact);
+            if let Some(policy) = &plan.compatibility {
+                digest_field(
+                    &mut digest,
+                    policy
+                        .optional_banner(action.artifact.component)
+                        .unwrap_or(""),
+                );
+            }
+        }
     }
     let mut encoded = String::with_capacity(64);
     for byte in digest.finalize() {
@@ -1119,7 +1558,9 @@ mod tests {
                 inference_deadline_seconds: 180,
                 audio_sample_rate_hz: 16_000,
                 audio_channels: 1,
+                optional_banners: Vec::new(),
             },
+            optional_artifacts: Vec::new(),
             superseded: Vec::new(),
         })
     }
@@ -1368,24 +1809,90 @@ mod tests {
     }
 
     #[test]
-    fn incomplete_catalogue_cannot_produce_actions_or_digest()
+    fn an_inconsistent_core_catalogue_cannot_produce_actions_or_digest()
     -> Result<(), Box<dyn std::error::Error>> {
-        let mut incomplete = catalogue()?;
-        incomplete.artifacts.pop();
+        let mut reversed = catalogue()?;
+        reversed.artifacts.reverse();
+        let mut twice = catalogue()?;
+        let first = twice.artifacts[0].clone();
+        twice.artifacts.push(first);
+        let mut empty = catalogue()?;
+        empty.artifacts.clear();
+        for invalid in [reversed, twice, empty] {
+            let plan = plan_managed_setup(
+                SetupProfile::Desktop,
+                diagnosis(&RuntimeDependency::ALL),
+                ManagedTarget::Ubuntu2404X86_64,
+                SetupSelectionState::default(),
+                1_000,
+                Some(invalid),
+            );
+            assert_eq!(plan.availability, ManagedPlanAvailability::CatalogueInvalid);
+            assert_eq!(
+                plan.actions,
+                [] as [crate::provisioning::ManagedSetupAction; 0]
+            );
+            assert!(plan.digest.is_none());
+        }
+        Ok(())
+    }
+
+    /// ADR 0032: a target's catalogue may offer only some core components
+    /// while the reviewed build of another is not pinned yet. The plan
+    /// installs what it offers, leaves the rest to the user, and plans the
+    /// model only when a whisper.cpp can smoke it.
+    #[test]
+    fn a_partial_core_catalogue_plans_what_it_offers_and_leaves_the_rest()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let mut partial = catalogue()?;
+        partial
+            .artifacts
+            .retain(|artifact| artifact.component != ManagedComponent::WhisperCli);
         let plan = plan_managed_setup(
             SetupProfile::Desktop,
             diagnosis(&RuntimeDependency::ALL),
             ManagedTarget::Ubuntu2404X86_64,
             SetupSelectionState::default(),
             1_000,
-            Some(incomplete),
+            Some(partial.clone()),
         );
-        assert_eq!(plan.availability, ManagedPlanAvailability::CatalogueInvalid);
+        assert_eq!(plan.availability, ManagedPlanAvailability::Qualified);
+        let planned: Vec<ManagedComponent> = plan
+            .actions
+            .iter()
+            .map(|action| action.artifact.component)
+            .collect();
+        // Nothing can smoke the model: no managed or working whisper.cpp.
+        assert_eq!(planned, [ManagedComponent::MediaTools]);
+        for (status, disposition) in &plan.dependencies {
+            let expected = if status.dependency == RuntimeDependency::Whisper {
+                SetupDependencyDisposition::ManualSelection
+            } else {
+                SetupDependencyDisposition::ManagedInstall
+            };
+            assert_eq!(*disposition, expected, "{:?}", status.dependency);
+        }
+        assert_eq!(plan.model, super::SetupModelDisposition::ManualSelection);
+
+        // With the user's own whisper.cpp working, the model is planned.
+        let plan = plan_managed_setup(
+            SetupProfile::Desktop,
+            diagnosis(&[RuntimeDependency::Ffmpeg, RuntimeDependency::Ffprobe]),
+            ManagedTarget::Ubuntu2404X86_64,
+            SetupSelectionState::default(),
+            1_000,
+            Some(partial),
+        );
+        let planned: Vec<ManagedComponent> = plan
+            .actions
+            .iter()
+            .map(|action| action.artifact.component)
+            .collect();
         assert_eq!(
-            plan.actions,
-            [] as [crate::provisioning::ManagedSetupAction; 0]
+            planned,
+            [ManagedComponent::MediaTools, ManagedComponent::WhisperModel]
         );
-        assert!(plan.digest.is_none());
+        assert_eq!(plan.model, super::SetupModelDisposition::ManagedInstall);
         Ok(())
     }
 

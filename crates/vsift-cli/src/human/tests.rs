@@ -220,6 +220,16 @@ fn frozen_examples_render_as_readable_text() -> TestResult {
             "setup-plan-timeout",
         ),
         (
+            CommandName::SetupPlan,
+            "setup-plan.optional-offered.json",
+            "setup-plan-optional-offered",
+        ),
+        (
+            CommandName::SetupInstall,
+            "setup-install.optional-not-installed.json",
+            "setup-install-optional-not-installed",
+        ),
+        (
             CommandName::SessionInitWorkspace,
             "workspace-init.json",
             "session-init-workspace",
@@ -252,8 +262,15 @@ fn setup_check_text(
             model: LocalAsrModelStatus::NotSelected,
             verification: LocalAsrCheckOutcome::NotRun(LocalAsrNotRunReason::ModelNotSelected),
         },
-        managed_install,
-        &[],
+        crate::setup::ManagedSetupFacts {
+            availability: managed_install,
+            by_dependency: [managed_install; 3],
+            updates: &[],
+            optional: &[(
+                vsift::OptionalComponent::OnlineLinks,
+                vsift::OptionalCapability::Unavailable,
+            )],
+        },
         ExecutionProfile::Desktop,
         &|_| DependencyLookup::FilteredPath,
     )
@@ -297,8 +314,15 @@ fn a_superseded_managed_version_gets_a_marked_line_and_the_step() -> TestResult 
         let rendered = setup_check(
             &diagnosis,
             local_asr,
-            ManagedPlanAvailability::Qualified,
-            std::slice::from_ref(&update),
+            crate::setup::ManagedSetupFacts {
+                availability: ManagedPlanAvailability::Qualified,
+                by_dependency: [ManagedPlanAvailability::Qualified; 3],
+                updates: std::slice::from_ref(&update),
+                optional: &[(
+                    vsift::OptionalComponent::OnlineLinks,
+                    vsift::OptionalCapability::NotInstalled,
+                )],
+            },
             ExecutionProfile::Desktop,
             &|_| DependencyLookup::ManagedVersion,
         )
@@ -318,8 +342,15 @@ fn a_superseded_managed_version_gets_a_marked_line_and_the_step() -> TestResult 
     let quiet = setup_check(
         &diagnosis,
         local_asr,
-        ManagedPlanAvailability::Qualified,
-        &[],
+        crate::setup::ManagedSetupFacts {
+            availability: ManagedPlanAvailability::Qualified,
+            by_dependency: [ManagedPlanAvailability::Qualified; 3],
+            updates: &[],
+            optional: &[(
+                vsift::OptionalComponent::OnlineLinks,
+                vsift::OptionalCapability::NotInstalled,
+            )],
+        },
         ExecutionProfile::Desktop,
         &|_| DependencyLookup::ManagedVersion,
     )

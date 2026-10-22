@@ -2,10 +2,15 @@
 
 use std::time::Duration;
 
+use crate::optional_component::{
+    OptionalCheckResponse, OptionalComponentText, include_command_arguments,
+    optional_component_text,
+};
 use serde::{Deserialize, Serialize};
 use vsift_application::{
     LocalAsrCheckOutcome, LocalAsrSetupStatus, ManagedPlanAvailability, ManagedPlanObservation,
-    ManagedSetupAction, ManagedSetupPlan, ManagedUpdate, ObservedModel, PlannedSupply,
+    ManagedSetupAction, ManagedSetupPlan, ManagedUpdate, ObservedModel, OptionalCapability,
+    OptionalComponent, OptionalComponentDisposition, OptionalComponentPlan, PlannedSupply,
     RuntimeDiagnosis, SetupDependencyDisposition, SetupModelDisposition, SetupProfile,
     SupersessionReason,
 };
@@ -71,6 +76,7 @@ pub struct SetupCheckResponse {
     dependencies: Vec<SetupCheckDependencyResponse>,
     local_asr: LocalAsrSetupResponse,
     managed_updates: Vec<ManagedUpdateResponse>,
+    optional_components: Vec<OptionalCheckResponse>,
 }
 
 /// One entry of `managed_updates` (since `0.2.3`): a managed version this
@@ -158,7 +164,44 @@ impl SetupCheckResponse {
                 .collect(),
             local_asr: LocalAsrSetupResponse::new(*local_asr),
             managed_updates: Vec::new(),
+            optional_components: Vec::new(),
         }
+    }
+
+    /// Sets, per dependency, whether managed installation can supply it here
+    /// (ADR 0032): a target's catalogue may offer only some core components,
+    /// so the host's availability is `unavailable_target` for a dependency
+    /// whose component it does not offer.
+    #[must_use]
+    pub fn with_managed_install_for<F>(mut self, availability: F) -> Self
+    where
+        F: Fn(RuntimeDependency) -> ManagedPlanAvailability,
+    {
+        for dependency in &mut self.dependencies {
+            if let Some(remediation) = dependency.remediation.as_mut() {
+                remediation.managed_install =
+                    availability(dependency.runtime_dependency).identifier();
+            }
+        }
+        self
+    }
+
+    /// Sets what the check found about each optional component (the
+    /// additive `optional_components` array, since `0.3.0`; empty until
+    /// set). The engine lists every optional component of this release.
+    #[must_use]
+    pub fn with_optional_components(
+        mut self,
+        components: &[(OptionalComponent, OptionalCapability)],
+        profile: SetupProfile,
+    ) -> Self {
+        self.optional_components = components
+            .iter()
+            .map(|(component, capability)| {
+                OptionalCheckResponse::new(*component, capability, profile)
+            })
+            .collect();
+        self
     }
 
     /// Adds the managed versions the check used that the current catalogue
@@ -222,6 +265,8 @@ impl LocalAsrSetupResponse {
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 struct SetupCheckDependencyResponse {
+    #[serde(skip)]
+    runtime_dependency: RuntimeDependency,
     dependency: &'static str,
     capability: &'static str,
     status: &'static str,
@@ -260,6 +305,7 @@ impl SetupCheckDependencyResponse {
             DependencyState::Missing | DependencyState::TimedOut(_) => None,
         };
         Self {
+            runtime_dependency: status.dependency,
             dependency: status.dependency.identifier(),
             capability: status.dependency.capability().identifier(),
             status: status.state.identifier(),
@@ -486,6 +532,16 @@ pub struct SetupPlanResponse {
     install_needed: bool,
     actions: Vec<SetupPlanActionResponse>,
     dependencies: Vec<SetupPlanDependencyResponse>,
+    /// The optional components the plan offers, includes or cannot offer
+    /// here (#409, since `0.3.0`). A saved plan from an earlier release has
+    /// none.
+    #[serde(default)]
+    optional_components: Vec<SetupPlanOptionalResponse>,
+    /// The instruction to whoever runs setup, when the plan offers or
+    /// includes an optional component: tell the operator and ask before
+    /// accepting. `null` otherwise.
+    #[serde(default)]
+    operator_decision_required: Option<String>,
 }
 
 impl SetupPlanResponse {
@@ -535,7 +591,54 @@ impl SetupPlanResponse {
                     )
                 })
                 .collect(),
+            optional_components: plan
+                .optional
+                .iter()
+                .map(|optional| optional_response(plan.profile, optional, observation))
+                .collect(),
+            operator_decision_required: plan
+                .operator_decision_required()
+                .then(|| OPERATOR_DECISION_INSTRUCTION.to_owned()),
         }
+        .with_optional_install_needed(plan, observation)
+    }
+
+    /// `install_needed` also counts an included optional component that is
+    /// not current yet.
+    fn with_optional_install_needed(
+        mut self,
+        plan: &ManagedSetupPlan,
+        observation: &ManagedPlanObservation,
+    ) -> Self {
+        self.install_needed = self.install_needed
+            || plan
+                .optional_actions()
+                .any(|action| !observation.is_current(action.artifact.component));
+        self
+    }
+
+    /// The optional components' entries, for presentation.
+    #[must_use]
+    pub fn optional_components(&self) -> Vec<OptionalComponentView<'_>> {
+        self.optional_components
+            .iter()
+            .map(|optional| OptionalComponentView {
+                name: &optional.name,
+                status: &optional.status,
+                summary: &optional.summary,
+                add_command: optional
+                    .add_command
+                    .as_ref()
+                    .map(|command| command.arguments.as_slice()),
+                next_step: &optional.next_step,
+            })
+            .collect()
+    }
+
+    /// The instruction to ask the operator, when the plan carries one.
+    #[must_use]
+    pub fn operator_decision_required(&self) -> Option<&str> {
+        self.operator_decision_required.as_deref()
     }
 
     /// The plan without its observed state: what the digest binds and
@@ -551,8 +654,151 @@ impl SetupPlanResponse {
         for action in &mut intent.actions {
             action.state.clear();
         }
+        for optional in &mut intent.optional_components {
+            for action in &mut optional.actions {
+                action.state.clear();
+            }
+        }
         intent
     }
+}
+
+/// The instruction a plan that offers or includes an optional component
+/// carries for whoever runs setup (#409): an agent that has never seen the
+/// skill relays it too, because it is in the plan.
+pub const OPERATOR_DECISION_INSTRUCTION: &str = "Before accepting this plan, tell the operator about each optional component in optional_components in one or two plain sentences (what it does, its licence, its download size, and its terms notice when it has one) and ask whether to include it. Include it only after a yes: run its add_command, review that plan and accept it instead. Never accept a plan that includes it without a yes, and never leave it unmentioned. Local investigation does not need it.";
+
+/// A borrowed view of one optional component of a plan, for presentation.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct OptionalComponentView<'plan> {
+    /// The optional component's name (`online_links`).
+    pub name: &'plan str,
+    /// `included`, `not_included` or `unavailable`.
+    pub status: &'plan str,
+    /// The one plain sentence about it.
+    pub summary: &'plan str,
+    /// The arguments of the `vsift` command that adds it, when it can be.
+    pub add_command: Option<&'plan [String]>,
+    /// What to do next about it.
+    pub next_step: &'plan str,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+struct SetupPlanOptionalResponse {
+    name: String,
+    status: String,
+    installs: Vec<String>,
+    summary: String,
+    purpose: String,
+    download_bytes: Option<u64>,
+    licences: Vec<SetupPlanLicenceResponse>,
+    terms_notice: Option<String>,
+    add_command: Option<SetupPlanCommandResponse>,
+    actions: Vec<SetupPlanActionResponse>,
+    next_step: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+struct SetupPlanLicenceResponse {
+    component: String,
+    licence: String,
+}
+
+/// A `vsift` command, as an executable and an argument array, run without
+/// a shell.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+struct SetupPlanCommandResponse {
+    executable: String,
+    arguments: Vec<String>,
+}
+
+fn optional_response(
+    profile: SetupProfile,
+    optional: &OptionalComponentPlan,
+    observation: &ManagedPlanObservation,
+) -> SetupPlanOptionalResponse {
+    let text = optional_component_text(optional.component);
+    let name = optional.component.identifier();
+    let available = optional.disposition != OptionalComponentDisposition::Unavailable;
+    let download_bytes = available.then(|| optional.download_bytes());
+    let add_command =
+        (optional.disposition == OptionalComponentDisposition::NotIncluded).then(|| {
+            SetupPlanCommandResponse {
+                executable: String::from("vsift"),
+                arguments: include_command_arguments(optional.component, profile)
+                    .into_iter()
+                    .map(str::to_owned)
+                    .collect(),
+            }
+        });
+    let next_step = match optional.disposition {
+        OptionalComponentDisposition::Included => format!(
+            "Included: accepting this plan installs the {} components after the core components. If one cannot be installed, the core is still installed and VSift is ready for local videos.",
+            text.name_in_prose
+        ),
+        OptionalComponentDisposition::NotIncluded => format!(
+            "Not included. Ask the operator first; to add it, run vsift setup plan --profile {} --include {name} --json and review that plan instead.",
+            profile.identifier()
+        ),
+        OptionalComponentDisposition::Unavailable => {
+            format!("This plan cannot include it here. {}", text.unavailable)
+        }
+    };
+    SetupPlanOptionalResponse {
+        name: name.to_owned(),
+        status: optional.disposition.identifier().to_owned(),
+        installs: optional
+            .component
+            .components()
+            .iter()
+            .map(|installed| installed.identifier().to_owned())
+            .collect(),
+        summary: optional_summary(text, optional.disposition, download_bytes),
+        purpose: text.purpose.to_owned(),
+        download_bytes,
+        licences: optional
+            .artifacts
+            .iter()
+            .map(|artifact| SetupPlanLicenceResponse {
+                component: artifact.component.identifier().to_owned(),
+                licence: artifact.licence.clone(),
+            })
+            .collect(),
+        terms_notice: text.terms_notice.map(str::to_owned),
+        add_command,
+        actions: optional
+            .actions
+            .iter()
+            .map(|action| {
+                action_response(action, observation.is_current(action.artifact.component))
+            })
+            .collect(),
+        next_step,
+    }
+}
+
+/// The one plain sentence about an optional component that an agent relays
+/// to the operator: what it is, its size, its licences and any terms.
+fn optional_summary(
+    text: OptionalComponentText,
+    disposition: OptionalComponentDisposition,
+    download_bytes: Option<u64>,
+) -> String {
+    let size = download_bytes.map_or_else(String::new, |bytes| {
+        format!(
+            " (optional, about {} MB to download)",
+            bytes.div_ceil(1_000_000)
+        )
+    });
+    let lead = match disposition {
+        OptionalComponentDisposition::Included => "Included",
+        OptionalComponentDisposition::NotIncluded => "Not included",
+        OptionalComponentDisposition::Unavailable => "Not available here",
+    };
+    format!("{lead}{size}: {}", text.subject)
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -908,6 +1154,30 @@ impl SavedSetupPlan {
             return Err(FailureCode::InvalidArgument);
         }
         Ok(())
+    }
+
+    /// The optional components the saved plan includes, which the current
+    /// plan must include too before it can accept it (#409).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`FailureCode::InvalidArgument`] for an unknown component or
+    /// status.
+    pub fn included_optional(
+        &self,
+    ) -> Result<vsift_application::OptionalComponentSet, FailureCode> {
+        self.data.optional_components.iter().try_fold(
+            vsift_application::OptionalComponentSet::EMPTY,
+            |set, optional| {
+                let component = OptionalComponent::from_identifier(&optional.name)
+                    .ok_or(FailureCode::InvalidArgument)?;
+                match optional.status.as_str() {
+                    "included" => Ok(set.with(component)),
+                    "not_included" | "unavailable" => Ok(set),
+                    _ => Err(FailureCode::InvalidArgument),
+                }
+            },
+        )
     }
 
     /// Returns the profile that must be re-observed before acceptance.

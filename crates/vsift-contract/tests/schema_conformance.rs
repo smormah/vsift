@@ -151,17 +151,47 @@ fn published_failure_codes_produce_schema_valid_envelopes() -> TestResult {
     Ok(())
 }
 
+/// Rewrites an example from `value` when `VSIFT_REGENERATE_CONTRACT_EXAMPLES`
+/// is `1`, as the other contract tests do; review the diff.
+fn regenerate(relative_path: &str, value: &Value) -> TestResult {
+    if std::env::var("VSIFT_REGENERATE_CONTRACT_EXAMPLES").is_ok_and(|setting| setting == "1") {
+        std::fs::write(
+            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("../../schemas/v1")
+                .join(relative_path),
+            format!(
+                "{}
+",
+                serde_json::to_string_pretty(value)?
+            ),
+        )?;
+    }
+    Ok(())
+}
+
 #[test]
 fn blocked_setup_check_matches_the_frozen_example() -> TestResult {
-    let response = serde_json::to_value(SetupCheckResponse::new(
-        &diagnosis(&DependencyState::Missing, RuntimeReadiness::Blocked),
-        SetupProfile::Desktop,
-        |_| DependencyLookup::FilteredPath,
-        ManagedPlanAvailability::Qualified,
-        &NOTHING_REGISTERED,
-    ))?;
+    // On the managed target (the example's), the optional components are
+    // offered and not installed.
+    let response = serde_json::to_value(
+        SetupCheckResponse::new(
+            &diagnosis(&DependencyState::Missing, RuntimeReadiness::Blocked),
+            SetupProfile::Desktop,
+            |_| DependencyLookup::FilteredPath,
+            ManagedPlanAvailability::Qualified,
+            &NOTHING_REGISTERED,
+        )
+        .with_optional_components(
+            &[(
+                vsift_application::OptionalComponent::OnlineLinks,
+                vsift_application::OptionalCapability::NotInstalled,
+            )],
+            SetupProfile::Desktop,
+        ),
+    )?;
 
     validate("setup-check-response.schema.json", &response)?;
+    regenerate("examples/setup-check.blocked.json", &response)?;
     assert_eq!(response, load("examples/setup-check.blocked.json")?);
     Ok(())
 }
@@ -213,6 +243,7 @@ fn unavailable_setup_plan_matches_the_frozen_example() -> TestResult {
     let response = serde_json::to_value(unavailable_plan()?)?;
 
     validate("setup-plan.schema.json", &response)?;
+    regenerate("examples/setup-plan.unavailable.json", &response)?;
     assert_eq!(response, load("examples/setup-plan.unavailable.json")?);
     Ok(())
 }

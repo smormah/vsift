@@ -8,8 +8,8 @@ use std::{io::Write, path::Path};
 
 use vsift::{
     Cancellation, Engine, FailureCode, LocalAsrSetupStatus, MANAGED_INSTALL_RETRY_AFTER_MS,
-    ManagedPlanAvailability, ManagedRemovalTarget, ManagedUpdate, ProgressObserver,
-    RuntimeDependency, RuntimeDiagnosis, SetupInstallRequest,
+    ManagedPlanAvailability, ManagedRemovalTarget, ManagedUpdate, OptionalCapability,
+    OptionalComponent, ProgressObserver, RuntimeDependency, RuntimeDiagnosis, SetupInstallRequest,
 };
 use vsift_contract::{
     CommandName, DependencyLookup, JsonLimits, OperationResponse, STALE_PLAN_REMEDIATION,
@@ -33,8 +33,13 @@ use crate::{
 pub(crate) struct ManagedSetupFacts<'report> {
     /// Whether managed installation can supply a missing tool here.
     pub(crate) availability: ManagedPlanAvailability,
+    /// The availability for each dependency, in `RuntimeDependency::ALL`
+    /// order (ADR 0032: a catalogue may offer only some components).
+    pub(crate) by_dependency: [ManagedPlanAvailability; 3],
     /// The managed versions the check opened that the catalogue supersedes.
     pub(crate) updates: &'report [ManagedUpdate],
+    /// Whether each optional component is installed, in plan order.
+    pub(crate) optional: &'report [(OptionalComponent, OptionalCapability)],
 }
 
 /// Writes one completed setup check and returns its compatible exit status.
@@ -59,7 +64,9 @@ where
 {
     let ManagedSetupFacts {
         availability: managed_install,
+        by_dependency,
         updates: managed_updates,
+        optional,
     } = managed;
     let response = SetupCheckResponse::new(
         diagnosis,
@@ -68,17 +75,12 @@ where
         managed_install,
         &local_asr,
     )
-    .with_managed_updates(managed_updates);
+    .with_managed_install_for(|dependency| by_dependency[dependency_slot(dependency)])
+    .with_managed_updates(managed_updates)
+    .with_optional_components(optional, profile.into());
     let output_result = match mode {
         OutputMode::Human => {
-            match crate::human::setup_check(
-                diagnosis,
-                local_asr,
-                managed_install,
-                managed_updates,
-                profile,
-                &lookup,
-            ) {
+            match crate::human::setup_check(diagnosis, local_asr, managed, profile, &lookup) {
                 Ok(text) => writer.write_rendered_stdout(&text),
                 Err(_) => Err(crate::output::OutputError::TooLarge),
             }
@@ -101,6 +103,16 @@ where
 }
 
 /// Reads one bounded, strict `setup plan --json` result supplied for acceptance.
+/// The position of `dependency` in [`RuntimeDependency::ALL`], the order of
+/// [`ManagedSetupFacts::by_dependency`].
+pub(crate) const fn dependency_slot(dependency: RuntimeDependency) -> usize {
+    match dependency {
+        RuntimeDependency::Ffmpeg => 0,
+        RuntimeDependency::Ffprobe => 1,
+        RuntimeDependency::Whisper => 2,
+    }
+}
+
 pub(crate) fn read_saved_plan(path: &Path) -> Result<SavedSetupPlan, FailureCode> {
     let plan: SavedSetupPlan =
         read_json_file(path, JsonLimits::DOCUMENT).map_err(|error| error.code())?;
@@ -157,8 +169,16 @@ pub(crate) async fn install(
     )
     .with_cleanup(&outcome.cleanup().stages, &outcome.cleanup().versions);
     match outcome.report().first_failure() {
-        None => OperationResponse::complete(CommandName::SetupInstall.identifier(), &data)
-            .map_err(|_| CommandFailure::from(FailureCode::Internal)),
+        // The core is installed. When an optional component was not, the
+        // result is still a success, `partial` with a warning so it is seen
+        // (ADR 0032; exit 0).
+        None => match data.optional_warning() {
+            Some(warning) => {
+                OperationResponse::partial(CommandName::SetupInstall.identifier(), &data, warning)
+            }
+            None => OperationResponse::complete(CommandName::SetupInstall.identifier(), &data),
+        }
+        .map_err(|_| CommandFailure::from(FailureCode::Internal)),
         Some((component, failure)) => {
             let code = failure
                 .reason
@@ -264,8 +284,8 @@ mod tests {
         AsrFailure, AsrFailureReason, AsrStage, DependencyState, DependencyStatus,
         LocalAsrCheckFailure, LocalAsrCheckOutcome, LocalAsrModelStatus, LocalAsrNotRunReason,
         LocalAsrSetupStatus, LocalAsrVerificationFailure, LocalAsrVerificationSource,
-        ManagedPlanAvailability, ReviewedAsrModel, RuntimeDependency, RuntimeDiagnosis,
-        RuntimeReadiness,
+        ManagedPlanAvailability, OptionalCapability, OptionalComponent, ReviewedAsrModel,
+        RuntimeDependency, RuntimeDiagnosis, RuntimeReadiness,
     };
     use vsift_contract::DependencyLookup;
 
@@ -330,7 +350,12 @@ mod tests {
                 NOTHING_REGISTERED,
                 ManagedSetupFacts {
                     availability: ManagedPlanAvailability::Qualified,
+                    by_dependency: [ManagedPlanAvailability::Qualified; 3],
                     updates: &[],
+                    optional: &[(
+                        OptionalComponent::OnlineLinks,
+                        OptionalCapability::NotInstalled,
+                    )],
                 },
                 ExecutionProfile::Desktop,
                 OutputMode::Json,
@@ -361,7 +386,12 @@ mod tests {
             NOTHING_REGISTERED,
             ManagedSetupFacts {
                 availability: ManagedPlanAvailability::Qualified,
+                by_dependency: [ManagedPlanAvailability::Qualified; 3],
                 updates: &[],
+                optional: &[(
+                    OptionalComponent::OnlineLinks,
+                    OptionalCapability::NotInstalled,
+                )],
             },
             ExecutionProfile::Desktop,
             OutputMode::Human,
@@ -385,7 +415,12 @@ mod tests {
             NOTHING_REGISTERED,
             ManagedSetupFacts {
                 availability: ManagedPlanAvailability::Qualified,
+                by_dependency: [ManagedPlanAvailability::Qualified; 3],
                 updates: &[],
+                optional: &[(
+                    OptionalComponent::OnlineLinks,
+                    OptionalCapability::NotInstalled,
+                )],
             },
             ExecutionProfile::Worker,
             OutputMode::Human,
@@ -456,7 +491,12 @@ mod tests {
                 local_asr,
                 ManagedSetupFacts {
                     availability: ManagedPlanAvailability::Qualified,
+                    by_dependency: [ManagedPlanAvailability::Qualified; 3],
                     updates: &[],
+                    optional: &[(
+                        OptionalComponent::OnlineLinks,
+                        OptionalCapability::NotInstalled,
+                    )],
                 },
                 ExecutionProfile::Desktop,
                 OutputMode::Human,

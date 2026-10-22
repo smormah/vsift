@@ -29,10 +29,10 @@ use std::{fs, path::Path};
 use cap_fs_ext::DirExt;
 use cap_std::fs::Dir;
 use vsift_application::{
-    MANAGED_COMPONENTS, ManagedInventory, ManagedSelection, ManagedStoreFault,
-    ManagedStoreMaintenance, ManagedStoreReader, ManagedVersionFault, ManagedVersionRecord,
-    ManagedVersionState, PreviousSelection, SelectionFailure, SelectionRecord,
-    StageRetentionReason, StageSweep, VersionRemovalStatus,
+    ManagedInventory, ManagedSelection, ManagedStoreFault, ManagedStoreMaintenance,
+    ManagedStoreReader, ManagedVersionFault, ManagedVersionRecord, ManagedVersionState,
+    PreviousSelection, SelectionFailure, SelectionRecord, StageRetentionReason, StageSweep,
+    VersionRemovalStatus,
 };
 use vsift_domain::ManagedComponent;
 
@@ -61,11 +61,9 @@ const STAGE_PREFIX: &str = "stage-";
 /// The folders a stage may hold, each flat.
 const STAGE_FOLDERS: [&str; 3] = [PAYLOAD, RUNTIME, SMOKE];
 
-/// The managed component a store key names.
+/// The managed component a store key names, core or optional.
 fn managed_component(key: &str) -> Option<ManagedComponent> {
-    MANAGED_COMPONENTS
-        .into_iter()
-        .find(|component| component.identifier() == key)
+    ManagedComponent::from_identifier(key)
 }
 
 /// Whether `name` is the name `create_stage` gives a stage.
@@ -195,16 +193,13 @@ impl ManagedArtifactStore {
                 continue;
             };
             let state = version_state(self.root_path(), versions, name, &identity);
-            if let Some(installed) = inventory
-                .components
-                .iter_mut()
-                .find(|installed| installed.component == component)
-            {
-                installed.versions.push(ManagedVersionRecord {
+            inventory
+                .component_mut(component)
+                .versions
+                .push(ManagedVersionRecord {
                     version: identity.version().to_owned(),
                     state,
                 });
-            }
         }
         Ok(())
     }
@@ -404,13 +399,7 @@ fn inspect_selections(
             }
             Ok(_) | Err(_) => ManagedSelection::Unreadable,
         };
-        if let Some(installed) = inventory
-            .components
-            .iter_mut()
-            .find(|installed| installed.component == component)
-        {
-            installed.selection = selection;
-        }
+        inventory.component_mut(component).selection = selection;
     }
     Ok(())
 }

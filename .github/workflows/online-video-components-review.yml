@@ -1,0 +1,31 @@
+name: Online video components review
+
+# The review of the optional online-video components' pins (ADR 0028 section 4):
+# yt-dlp's signed sums verified with its own key, Deno's one-entry zip read,
+# and both executables started once. It fetches pinned publisher files on a
+# disposable hosted runner only; nothing is fetched to a development machine.
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - .github/workflows/online-video-components-review.yml
+      - tools/online_video_component_review.py
+      - tools/test_online_video_component_review.py
+
+permissions: {}
+
+jobs:
+  review:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out the review script
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Test the review's parsers
+        run: python -m unittest discover -s tools -p test_online_video_component_review.py
+
+      - name: Review the pinned yt-dlp and Deno
+        run: python tools/online_video_component_review.py

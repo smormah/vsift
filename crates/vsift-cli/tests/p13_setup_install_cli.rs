@@ -31,11 +31,11 @@ use assert_cmd::Command;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use tar::{Builder, Header};
-use vsift_domain::{ArtifactIntegrity, ManagedComponent, ManagedTarget};
+use vsift_domain::{ArtifactIntegrity, ManagedComponent};
 use vsift_infrastructure::{
     ArchiveInventoryBounds, ManagedArtifactStore, ManagedRuntimeIdentity, ManagedRuntimeRole,
     ReviewedArchiveFile, ReviewedPayloadArchive, ReviewedRuntimeLayout, StagedManagedCandidate,
-    detect_managed_target, managed_executable_name,
+    managed_executable_name,
 };
 
 type TestResult = Result<(), Box<dyn Error>>;
@@ -134,7 +134,14 @@ impl Drop for Base {
 }
 
 fn qualified() -> bool {
-    detect_managed_target() == ManagedTarget::Ubuntu2404X86_64
+    // ADR 0032: Ubuntu 24.04 and Windows x86-64 have a catalogue.
+    vsift_infrastructure::accepted_host_catalogue().is_ok_and(|catalogue| catalogue.is_some())
+}
+
+/// Whether this host's catalogue is Ubuntu's, whose three core components
+/// the tests below install (Windows's offers fewer, ADR 0032).
+fn ubuntu_catalogue_here() -> bool {
+    vsift_infrastructure::detect_managed_target() == vsift_domain::ManagedTarget::Ubuntu2404X86_64
 }
 
 fn path_text(path: &Path) -> Result<&str, Box<dyn Error>> {
@@ -272,7 +279,7 @@ fn start_proxy() -> Result<u16, Box<dyn Error>> {
 /// then the terminal failure with every component.
 #[test]
 fn a_proxy_demanding_authentication_fails_the_download_without_leaking_credentials() -> TestResult {
-    if !qualified() {
+    if !ubuntu_catalogue_here() {
         println!("skipped: managed installation runs on Ubuntu 24.04 x86-64 only");
         return Ok(());
     }
@@ -476,6 +483,20 @@ fn publish_stand_in(base: &Base, component: ManagedComponent, version: &str) -> 
             vec![(ManagedRuntimeRole::SpeechModel, String::from("model.bin"))],
             false,
         ),
+        ManagedComponent::JsRuntimeDeno => (
+            vec![(
+                ManagedRuntimeRole::Deno,
+                executable_name(ManagedRuntimeRole::Deno)?,
+            )],
+            true,
+        ),
+        ManagedComponent::YtDlp => (
+            vec![(
+                ManagedRuntimeRole::YtDlp,
+                executable_name(ManagedRuntimeRole::YtDlp)?,
+            )],
+            true,
+        ),
     };
     let contents: &[u8] = if executables {
         b"#!/bin/sh\nexit 0\n"
@@ -579,7 +600,7 @@ fn action_version(plan: &Value, index: usize) -> Result<String, Box<dyn Error>> 
 /// same digest.
 #[test]
 fn the_plan_shows_installed_components_and_its_acceptance_survives_the_install() -> TestResult {
-    if !qualified() {
+    if !ubuntu_catalogue_here() {
         println!("skipped: managed installation runs on Ubuntu 24.04 x86-64 only");
         return Ok(());
     }

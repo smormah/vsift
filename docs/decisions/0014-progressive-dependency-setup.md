@@ -254,3 +254,15 @@ advice for a timed-out probe (the note of 2026-10-13) is unchanged. Whether the 
 a cold agent from searching is not shown until the missing-tools cold scenario runs again on a
 build that has them ([L-164](../planning/known-limits.md#l-164)). The decision of this ADR is
 unchanged.
+
+
+## Note, 2026-10-21 (ADR 0032: engines VSift builds itself)
+
+Status: **this ADR stays Accepted; one rule is superseded for named engines.** The direct-origin clarification of
+2026-09-13 ("VSift does not host, mirror or proxy provider binaries") no longer holds for the engines that
+[ADR 0032](0032-managed-installs-on-every-platform-and-the-engine-release-workflow.md) decision D names: where no
+publisher offers a suitable build (whisper.cpp's command line and FFmpeg on macOS arm64, by the maintainer's
+decision of 2026-10-21; whisper.cpp on Windows if its upstream build needs a runtime a clean Windows lacks; the OCR
+runner and its republished models), VSift builds the binary from a pinned upstream source in its engine release
+workflow and hosts it on its own releases, with the licence and, for FFmpeg's LGPL build, the corresponding source.
+VSift still mirrors no binary a publisher builds.
