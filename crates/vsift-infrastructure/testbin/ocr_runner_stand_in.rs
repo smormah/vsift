@@ -14,7 +14,10 @@
 //! - `hang`: sleeps past any deadline;
 //! - `nomodel`: exits 4, the runner's "model unavailable";
 //! - `crash`: aborts, as a crashed or killed runner ends;
-//! - `liar`: answers for one image fewer than it was given.
+//! - `liar`: answers for one image fewer than it was given;
+//! - `drift`: describes itself as `good` does, but its `read` greeting names
+//!   another detection model, as a runner whose model changed between the two
+//!   runs would.
 
 use std::{
     env, fs,
@@ -24,7 +27,10 @@ use std::{
     time::Duration,
 };
 
-const HELLO: &str = r#"{"record":"runner","protocol":1,"runner_version":"0.1.0"}"#;
+/// The greeting of the build `describe` reports: runtime `f…`, models `d…` and `e…`.
+const HELLO: &str = r#"{"record":"runner","protocol":1,"runner_version":"0.1.0","runtime_version":"1.31.0","runtime_sha256":"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff","detector_sha256":"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd","recognizer_sha256":"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"}"#;
+/// The greeting of a run whose detection model changed after `describe`.
+const DRIFTED: &str = r#"{"record":"runner","protocol":1,"runner_version":"0.1.0","runtime_version":"1.31.0","runtime_sha256":"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff","detector_sha256":"0000000000000000000000000000000000000000000000000000000000000000","recognizer_sha256":"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"}"#;
 /// Bytes of a PNG signature and its `IHDR` chunk up to the end of the height.
 const HEADER: usize = 24;
 
@@ -62,7 +68,8 @@ fn run() -> io::Result<ExitCode> {
         Some("describe") => {
             writeln!(
                 stdout,
-                r#"{{"record":"describe","protocol":1,"runner_version":"0.1.0","runtime_version":"1.31.0","profile":"ppocrv5-latin-v1","detector_sha256":"{}","recognizer_sha256":"{}"}}"#,
+                r#"{{"record":"describe","protocol":1,"runner_version":"0.1.0","runtime_version":"1.31.0","runtime_sha256":"{}","profile":"ppocrv5-latin-v1","detector_sha256":"{}","recognizer_sha256":"{}"}}"#,
+                "f".repeat(64),
                 "d".repeat(64),
                 "e".repeat(64)
             )?;
@@ -75,7 +82,8 @@ fn run() -> io::Result<ExitCode> {
             } else {
                 images.len()
             };
-            writeln!(stdout, "{HELLO}")?;
+            let greeting = if behaviour == "drift" { DRIFTED } else { HELLO };
+            writeln!(stdout, "{greeting}")?;
             for (index, path) in images.iter().take(answered).enumerate() {
                 let bytes = fs::read(path)?;
                 let (width, height) = size(&bytes);

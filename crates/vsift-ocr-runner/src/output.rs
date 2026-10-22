@@ -11,7 +11,10 @@ use crate::pipeline::{FrameLine, FrameReading};
 /// The protocol's version, written in the first record.
 pub const PROTOCOL: u32 = 1;
 
-/// The first record: who is answering.
+/// The first record: which engine build is answering. The digests are of the
+/// files this run hashed before it loaded them, so `VSift` can refuse a run by
+/// a build other than the one `describe` reported. Protocol 1 has carried them
+/// since before its first release (ADR 0030 decision 8).
 #[derive(Debug, Serialize)]
 pub struct Hello<'a> {
     /// Always `runner`.
@@ -20,6 +23,14 @@ pub struct Hello<'a> {
     pub protocol: u32,
     /// The runner's own version.
     pub runner_version: &'a str,
+    /// The ONNX Runtime library's version label, as `describe` names it.
+    pub runtime_version: &'a str,
+    /// SHA-256 of that library.
+    pub runtime_sha256: &'a str,
+    /// SHA-256 of the detection model.
+    pub detector_sha256: &'a str,
+    /// SHA-256 of the recognition model.
+    pub recognizer_sha256: &'a str,
 }
 
 /// A line of text read off image `image` (its index on the command line).
@@ -163,9 +174,13 @@ mod tests {
             to_line(&Hello {
                 record: "runner",
                 protocol: 1,
-                runner_version: "0.1.0"
+                runner_version: "0.1.0",
+                runtime_version: "1.31.0",
+                runtime_sha256: "aa",
+                detector_sha256: "bb",
+                recognizer_sha256: "cc",
             }),
-            r#"{"record":"runner","protocol":1,"runner_version":"0.1.0"}"#
+            r#"{"record":"runner","protocol":1,"runner_version":"0.1.0","runtime_version":"1.31.0","runtime_sha256":"aa","detector_sha256":"bb","recognizer_sha256":"cc"}"#
         );
         assert_eq!(
             to_line(&ErrorRecord {

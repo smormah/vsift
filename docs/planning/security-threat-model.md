@@ -481,12 +481,22 @@ flagged), and SEC-T02 is re-run over all of it (verification section 7).
   character, makes that frame `engine_failed` rather than evidence. Each stored record is rebuilt
   through the domain constructors and its identities derived again when read.
 - **SEC-25 and SEC-20 (subprocess environment and oversubscription).** The runner is started
-  like every provider: an explicit executable and argument list, an empty environment, a private
-  work folder, no shell, the supervisor's deadline and kill. Its threads (1 to 8) are reserved
-  from the session root's admission capacity, as a recognition's are.
+  like every provider: an explicit executable and argument list, an empty environment, its own
+  folder as its directory with the frames handed over in a private work folder, no shell, the
+  supervisor's deadline and kill. Each process of an `ocr` call gets at most the time the call has
+  left, so the call's 300 s bound holds (RV-2 finding 4). Its threads (1 to 8) are reserved from
+  the session root's admission capacity, as a recognition's are.
 - **Native code.** ONNX Runtime and the models run in the runner's process, never in `vsift`'s, so
   a crash ends the runner's call (`RESOURCE_LIMIT`), not the supervisor. The runner's own Rust code
-  forbids `unsafe`; its image reader accepts only 8-bit RGB PNG within 16 megapixels and 128 MiB.
+  forbids `unsafe`; its image reader accepts only 8-bit RGB PNG within 16 megapixels and 128 MiB,
+  and the detector's map is bounded before it is reserved whatever the frame's shape (at most 8 Mi
+  pixels; RV-2 finding 1).
+- **The engine build (SEC-21).** Text is attributed to the build that read it. `describe` and every
+  `read` hash the runtime library and both models before loading them; VSift hashes the executable
+  before each batch and refuses a batch whose executable or greeting is not the build `describe`
+  reported, so a runner folder swapped during a call cannot record its text under another build's
+  identity (RV-2 finding 3). The library is loaded only from the runner's own folder by absolute
+  path; an unpinned library is accepted but named by its digest, never by a version.
 
 ## Agent-specific controls
 

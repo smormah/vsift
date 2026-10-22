@@ -4,7 +4,9 @@
 //! The runtime library is loaded at run time from the runner's own
 //! `onnxruntime` folder or beside it ([`Layout::runtime_library`]), never linked at build time and
 //! never looked for anywhere else, so the runner uses exactly the library it
-//! was installed with. Nothing here needs `unsafe`: `ort` holds the C API's
+//! was installed with. The library's SHA-256 is taken before it is loaded
+//! ([`crate::cli::BuildDigests`]) and names it ([`runtime_version_of`]).
+//! Nothing here needs `unsafe`: `ort` holds the C API's
 //! raw calls, and this crate forbids `unsafe` code.
 //!
 //! The runner's own safety net is around what `ort` can refuse: the library
@@ -21,7 +23,7 @@ use ort::{
 
 use crate::{
     RunnerFailure,
-    cli::{Backend, Layout, MAX_MODEL_BYTES, file_sha256},
+    cli::{Backend, Layout, MAX_MODEL_BYTES},
     pipeline::{Inference, InferenceError, Model},
     recognition::Dictionary,
     tensor::Tensor,
@@ -44,14 +46,13 @@ pub struct OnnxSession {
 impl Backend for OnnxRuntime {
     type Session = OnnxSession;
 
-    fn runtime_version(&self, layout: &Layout) -> Result<String, RunnerFailure> {
+    fn runtime_version(
+        &self,
+        layout: &Layout,
+        library_sha256: &str,
+    ) -> Result<String, RunnerFailure> {
         load(layout)?;
-        let digest =
-            file_sha256(&layout.runtime_library, MAX_RUNTIME_LIBRARY_BYTES).map_err(|_| {
-                diagnose("the runtime library could not be read to name it");
-                RunnerFailure::RuntimeUnavailable
-            })?;
-        Ok(runtime_version_of(&digest))
+        Ok(runtime_version_of(library_sha256))
     }
 
     fn open(

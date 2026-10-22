@@ -1778,8 +1778,13 @@ handed to the runner; no pixels are kept.
 
 **Bounded and resumable.** A call reads at most `--max-frames` frames (default 40) of the plan's
 pending reads, in time order, within 300 s, then commits them as one new revision of the index and
-stops. Running `ocr` again for the same range continues: reads the index has attempted are never
-read again by the same engine build. `--threads` (default 2) is the runner's inference threads,
+stops: every media and runner process of the call is given at most the time the call has left, so
+the bound holds however late a batch starts. Running `ocr` again for the same range continues:
+reads the index has attempted are never read again by the same engine build. The budget is first
+clipped to the room the session's index has left (4,096 frames; 200,000 lines, counted as 256 a
+frame): a call that fills it stops as `index_full`, and a call with no room, or on a session that
+already holds 64 index revisions, reads nothing and fails with `RESOURCE_LIMIT` before the runner
+reads a frame. A session's index so holds at most 64 calls' frames (L-202). `--threads` (default 2) is the runner's inference threads,
 taken from the session root's admission capacity like a transcription's.
 
 **The runner.** `vsift-ocr-runner` is VSift's own small program, built from this repository
@@ -1787,12 +1792,17 @@ taken from the session root's admission capacity like a transcription's.
 on Microsoft's ONNX Runtime; it is never linked into `vsift`. The call uses `--runner` if given,
 else the runner `setup configure ocr-runner --executable <path>` recorded (in a file of its own,
 so older releases' configuration is untouched), else `vsift-ocr-runner` on the filtered `PATH`.
-It is run as an external tool with a closed argument list, an empty environment, the private work
-folder as its directory and no shell, first as `describe` (its version, the ONNX Runtime version
-and its two models' SHA-256) and then as `read` on at most eight images at a time; its answer is
-bounded JSON Lines (at most 4 MiB) that VSift checks strictly. The engine build is the runner's
-digest and version, the runtime's version and the two model digests. **A different build starts a
-new index**: text read by two builds is never mixed, and `search` reads the newest index only.
+It is run as an external tool with a closed argument list, an empty environment, its own folder as
+its directory (the frames are handed over by absolute path in the session's private work folder)
+and no shell, first as `describe` (its version, the ONNX Runtime version and that library's
+SHA-256, and its two models' SHA-256) and then as `read` on at most eight images at a time; its
+answer is bounded JSON Lines (at most 4 MiB) that VSift checks strictly. The engine build is the
+runner's digest and version, the runtime's version and the two model digests. **Every `read`
+proves its build:** VSift hashes the executable again first, and the runner's first record names
+the runtime and models it hashed itself before loading them; a batch by any other build (a runner
+folder updated during the call) is refused, its frames stay pending, and when nothing was read the
+call fails with `INTEGRITY_FAILURE`. **A different build starts a new index**: text read by two
+builds is never mixed, and `search` reads the newest index only.
 Only Latin script is read (`ppocrv5-latin-v1`); other scripts are later work.
 
 **Result.** `data` ([`screen-text-data.schema.json`](../../schemas/v1/screen-text-data.schema.json),
@@ -1801,7 +1811,8 @@ examples [`ocr.json`](../../schemas/v1/examples/ocr.json) and
 read (clipped to the video), `index` (the newest revision's `index_id`, `revision`, `engine` and
 its `frames` and `lines` counts; null while nothing has been attempted), `read_now` (the frames this
 call attempted), `stopped` (why it ended with reads pending: `frame_limit`, `deadline_exceeded`,
-`cancelled`, `engine_failed`, `media_failed`; null otherwise), `coverage` and `candidate_gaps`.
+`cancelled`, `engine_failed`, `media_failed`, or `index_full` when the index had room for no more;
+null otherwise), `coverage` and `candidate_gaps`.
 `coverage` (scope `screen_text`) counts the range's planned reads once each: `planned` = `read` +
 `failed` (the runner rejected the image or failed on it; not retried by the same build) +
 `unresolved` + `pending`, with `awaiting_analysis` (reads not planned yet because their visual window is not analysed: always 0 for `vsift ocr`, which analyses missing windows itself; counted by the engine's analysed-windows-only calls for ADR 0033's background `prepare` job), `period_us` and `candidates_complete` (false while a visual window
@@ -1826,7 +1837,12 @@ stayed), and the `candidate_ids` whose representative frame the first frame is. 
 `not_run` before `ocr` has read the session, `partial` while its coverage of the searched range is
 not complete and `complete` otherwise; `coverage` is the same block as `ocr`'s. The member never
 changes the search's status or envelope coverage, which stay the transcript's, and it is absent on
-a page a `--cursor` continues: on-screen hits are not paged. An absent hit is not evidence that the
+a page a `--cursor` continues: on-screen hits are not paged. **On-screen text never fails a
+search:** an index the member cannot read is named in an `unavailable` member (`index`
+`screen_text` or `visual`; `reason` `integrity_failure`, `unsupported_version` or `unreadable`,
+example [`search.screen-text-unavailable.json`](../../schemas/v1/examples/search.screen-text-unavailable.json)).
+An unreadable screen-text index makes the state `unavailable`, with nothing known (as for
+`not_run`); an unreadable visual index leaves the hits listed but nothing planned (`partial`). An absent hit is not evidence that the
 text was not on screen: only planned frames are read. On-screen text is untrusted evidence, like a
 transcript: quote `display_text`, and check the frame (`frame get --at <time_us>`) before relying on
 a value.

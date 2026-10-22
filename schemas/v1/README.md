@@ -374,6 +374,9 @@ synthetic 15 s video every 5 s plus one visual candidate at 6 s, built by `vsift
 frame limit after two with the candidates of 12-15 s not yet known (`partial`, coverage
 `frames_pending` and `deadline_exceeded`), and a search for `R-17` whose first page finds the
 transcript cue and two on-screen hits, one held over two frames in the same place.
+`search.screen-text-unavailable.json` is the same search on a session whose screen-text record
+fails verification: the transcript page is unchanged and the member is `unavailable`, naming the
+index and `integrity_failure`.
 `ocr-search.json` pages the same index for `R-17` one hit at a time (the first page, with its
 cursor) and `ocr-search.not-run.json` is the answer before `ocr` has read the session (`partial`,
 reason `not_run`); both are built by `screen_text_contract`.

@@ -34,7 +34,7 @@
       "maximum": 200
     },
     "stopped": {
-      "description": "Why the call ended with frames still pending, or null when it was not stopped. frame_limit: it read --max-frames frames. deadline_exceeded: its time ran out. cancelled: it was cancelled. engine_failed: the OCR runner failed and what it had read before is kept. media_failed: the media tools could not extract a frame. Every stop keeps what was read before it.",
+      "description": "Why the call ended with frames still pending, or null when it was not stopped. frame_limit: it read --max-frames frames. deadline_exceeded: its time ran out. cancelled: it was cancelled. engine_failed: the OCR runner failed and what it had read before is kept. media_failed: the media tools could not extract a frame. index_full (0.3.0, RV-2 finding 5): the index had room for no more frames (4,096 frames, 200,000 lines counted as 256 a frame), so the call read only what fitted; later calls by the same engine build read nothing more of this session. engine_failed also covers a runner whose files changed during the call (its build no longer the one the index records). Every stop keeps what was read before it.",
       "oneOf": [
         { "type": "null" },
         {
@@ -43,7 +43,8 @@
             "deadline_exceeded",
             "cancelled",
             "engine_failed",
-            "media_failed"
+            "media_failed",
+            "index_full"
           ]
         }
       ]
@@ -285,12 +286,22 @@
       }
     },
     "search_part": {
-      "description": "The screen_text member of a search first page (0.3.0, ADR 0030): the query's occurrences in the session's screen-text index within the searched range, in rank order (phrase matches first, then all-terms matches, each by time), at most the page's limit, with total_hits counting them all. It is on the first page only, never on a page a cursor continues, and it does not change the envelope's status or coverage, which stay the transcript's. state: not_run before ocr has read the session (index is null, every count 0, period_us null and candidates_complete false: nothing about the screen is known); partial while coverage.pending or coverage.failed is not 0 or the candidates are not all known; complete when every planned frame is read or has none. Absence of a hit is never evidence the text was not on screen: only the planned frames were read.",
+      "description": "The screen_text member of a search first page (0.3.0, ADR 0030): the query's occurrences in the session's screen-text index within the searched range, in rank order (phrase matches first, then all-terms matches, each by time), at most the page's limit, with total_hits counting them all. It is on the first page only, never on a page a cursor continues, and it does not change the envelope's status or coverage, which stay the transcript's. state: not_run before ocr has read the session (index is null, every count 0, period_us null and candidates_complete false: nothing about the screen is known); partial while coverage.pending or coverage.failed is not 0 or the candidates are not all known; complete when every planned frame is read or has none; unavailable when the session's screen-text index could not be read (see unavailable; index is null and every count 0, as for not_run). An index that cannot be read never fails the search. Absence of a hit is never evidence the text was not on screen: only the planned frames were read.",
       "type": "object",
       "additionalProperties": false,
       "required": ["state", "index", "hits", "total_hits", "coverage"],
       "properties": {
-        "state": { "enum": ["not_run", "partial", "complete"] },
+        "state": { "enum": ["not_run", "partial", "complete", "unavailable"] },
+        "unavailable": {
+          "description": "Present only when an index the member needs could not be read (0.3.0, RV-2 finding 2); the search itself is unchanged. index screen_text: the screen-text index, so state is unavailable and nothing about the screen is known (index null, every count 0). index visual: the visual index, so the hits are listed but nothing is planned and candidates_complete is false (state partial). reason: integrity_failure (its record failed verification), unsupported_version (a newer release wrote it) or unreadable (any other storage failure).",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["index", "reason"],
+          "properties": {
+            "index": { "enum": ["screen_text", "visual"] },
+            "reason": { "enum": ["integrity_failure", "unsupported_version", "unreadable"] }
+          }
+        },
         "index": {
           "oneOf": [
             { "type": "null" },

@@ -110,11 +110,11 @@ identity a last time; commit, merging onto a concurrent call's revision at most 
 call that stopped after reading something keeps it and is `partial`; one that read nothing and
 stopped fails and commits nothing.
 
-The runner is run with a closed argument list, an empty environment, the work folder as its
-directory, the threads it was given (taken from the session root's admission capacity) and the
-supervisor's deadline and kill. Its output is at most 4 MiB, checked strictly: protocol 1, one
-`image` record per image given, lines inside their image. Anything else is the runner's failure,
-never data.
+The runner is run with a closed argument list, an empty environment, its own folder as its
+directory (the frames are handed over by absolute path in the session's private work folder), the
+threads it was given (taken from the session root's admission capacity) and the supervisor's
+deadline and kill. Its output is at most 4 MiB, checked strictly: protocol 1, one `image` record
+per image given, lines inside their image. Anything else is the runner's failure, never data.
 
 ### 9. The `ocr` result (maintainer, as proposed)
 
@@ -215,6 +215,43 @@ The coordinator gave the download go for `ort` and `ort-sys` 2.0.0-rc.13 and `li
 - **What `ort` can still do that we guard:** it panics if its API is used before a library is
   loaded, so the runner loads the library first and turns every refusal into a typed failure; a
   panic that remains ends the runner's process, which VSift reports as the runner's failure.
+
+## Note of 2026-10-22: the review's fixes (RV-2), before the first merge
+
+A focused review of the draft found one high and four medium defects; each is fixed with a test
+that fails without it. Protocol 1 has not shipped, so it is changed in place, not versioned.
+
+- **Decision 1, a bounded detection map.** A frame of an extreme aspect ratio (128 × 125,000
+  passes the 16-megapixel bound) was enlarged to a map of about 500 million pixels. The
+  enlargement is now capped so the map stays within `max_side`² (4 M pixels) before its sides are
+  rounded, and a map over 8 Mi pixels is refused as `image_invalid` before anything is reserved.
+  The cap was preferred over refusing such frames or capping the longer side, because it leaves
+  the measured pipeline's map unchanged for every aspect ratio up to about 7.4 to 1.
+- **Decision 7, one build per index proven at every read.** `describe` and every `read` hash the
+  runtime library and both models before loading them; `describe` names the library's digest, and
+  `read`'s greeting names the runner version, the runtime version and the three digests. Before
+  each batch VSift hashes the executable again; a batch whose executable or greeting is not the
+  build `describe` reported is refused as `build_changed` (`INTEGRITY_FAILURE` when nothing was
+  read) and nothing of it is kept; batches before it, each proven by its own greeting, are kept.
+- **Decision 5, the 300 s bound holds.** Every media and runner process of a call gets the lesser
+  of its own deadline and the time the call has left, and none starts once nothing is left; the
+  call then stops as `deadline_exceeded`. Only the final commit follows the bound.
+- **Decision 7, a full index costs nothing.** Before anything is read, the frame budget is clipped
+  to the room the index has left: its 4,096 frames, and its 200,000 lines counted as if each new
+  frame held its 256. With no room the call stops as `index_full` (additive in the result) without
+  reading a frame, and a session that already holds 64 revisions fails with `RESOURCE_LIMIT`
+  before the runner is started. The plan-size ceiling this leaves is recorded in L-202.
+- **Decision 10, search never fails because of on-screen text.** The first page reads the
+  screen-text index first, and the visual index only when there is a screen-text index. An index
+  that cannot be read is named in the member (`unavailable`: which index, and `integrity_failure`,
+  `unsupported_version` or `unreadable`), with the new state `unavailable` when it is the
+  screen-text index; the search's status, coverage and transcript hits are unchanged.
+- **Decision 8, the wording.** The runner's directory is its own folder, as the code always did;
+  the decision now says so.
+- **The managed store's flat folder (the planner's decision of 2026-10-22).** The runner finds the
+  runtime and the models in `onnxruntime/` and `models/`, or flat beside its executable, as the
+  managed store keeps a component's files; every basename is unique. The digests are of the files
+  the run loads, in either layout.
 
 ## Consequences
 

@@ -15,11 +15,12 @@ use std::{error::Error, fmt, future::Future, num::NonZeroU32};
 
 use vsift_domain::{
     Confidence, ConfidenceOrigin, FrameDimensions, FrameRef, FrameSelection, FrameTolerance,
-    ListedFrame, MAX_SCREEN_TEXT_LINES_PER_FRAME, MediaTime, ReadTarget, ScreenText,
-    ScreenTextError, ScreenTextFailure, ScreenTextFrame, ScreenTextIndex, ScreenTextIndexId,
-    ScreenTextIndexParts, ScreenTextLine, ScreenTextLineId, ScreenTextOutcome, ScreenTextProvider,
-    ScreenTextScope, TextRegion, TimeRange, VISUAL_WINDOW_MICROS, VisualCandidateId,
-    VisualCoverageGap, VisualIndex, plan_reads_in_analysed_windows, select_frame,
+    ListedFrame, MAX_SCREEN_TEXT_FRAMES, MAX_SCREEN_TEXT_LINES, MAX_SCREEN_TEXT_LINES_PER_FRAME,
+    MediaTime, ReadTarget, ScreenText, ScreenTextError, ScreenTextFailure, ScreenTextFrame,
+    ScreenTextIndex, ScreenTextIndexId, ScreenTextIndexParts, ScreenTextLine, ScreenTextLineId,
+    ScreenTextOutcome, ScreenTextProvider, ScreenTextScope, TextRegion, TimeRange,
+    VISUAL_WINDOW_MICROS, VisualCandidateId, VisualCoverageGap, VisualIndex,
+    plan_reads_in_analysed_windows, select_frame,
 };
 
 use crate::{
@@ -99,11 +100,14 @@ pub enum ScreenTextReadError {
     AbnormalTermination,
     /// The private folder the images are handed over in could not be used.
     Workspace,
+    /// The run was by another engine build than the one that identified itself
+    /// for the call: the runner's executable, runtime or models changed.
+    BuildChanged,
 }
 
 impl ScreenTextReadError {
     /// Every failure.
-    pub const ALL: [Self; 10] = [
+    pub const ALL: [Self; 11] = [
         Self::Unavailable,
         Self::Busy,
         Self::ModelUnavailable,
@@ -114,6 +118,7 @@ impl ScreenTextReadError {
         Self::UnparseableOutput,
         Self::AbnormalTermination,
         Self::Workspace,
+        Self::BuildChanged,
     ];
 
     /// Stable identifier, as public results name it.
@@ -130,6 +135,7 @@ impl ScreenTextReadError {
             Self::UnparseableOutput => "unparseable_output",
             Self::AbnormalTermination => "abnormal_termination",
             Self::Workspace => "workspace",
+            Self::BuildChanged => "build_changed",
         }
     }
 }
@@ -147,6 +153,7 @@ impl fmt::Display for ScreenTextReadError {
             Self::UnparseableOutput => "the OCR engine's output did not follow its protocol",
             Self::AbnormalTermination => "the OCR engine ended abnormally",
             Self::Workspace => "the OCR hand-over folder could not be used",
+            Self::BuildChanged => "the OCR engine's files changed during the call",
         })
     }
 }
@@ -163,9 +170,13 @@ pub trait ScreenTextReader: Send + Sync {
     /// Most images one [`Self::read`] call takes.
     fn max_images_per_run(&self) -> usize;
 
-    /// Reads `images`, answering one reading per image in order.
+    /// Reads `images` with `build`, the build [`Self::identity`] reported,
+    /// answering one reading per image in order. A run by any other build is
+    /// [`ScreenTextReadError::BuildChanged`], so an index only ever holds text
+    /// its own build read (ADR 0030 decision 7).
     fn read(
         &self,
+        build: &ScreenTextProvider,
         images: &[ScreenTextImage<'_>],
     ) -> impl Future<Output = Result<Vec<EngineReading>, ScreenTextReadError>> + Send;
 }
@@ -183,6 +194,9 @@ pub enum ScreenTextStop {
     Engine(ScreenTextReadError),
     /// The media tools failed on a batch; the frames before it are kept.
     Media(EvidenceMediaError),
+    /// The index, or the session's budget of index revisions, has no room for
+    /// more frames: the call read what fitted, or nothing at all.
+    IndexFull,
 }
 
 impl ScreenTextStop {
@@ -195,6 +209,7 @@ impl ScreenTextStop {
             Self::Cancelled => "cancelled",
             Self::Engine(_) => "engine_failed",
             Self::Media(_) => "media_failed",
+            Self::IndexFull => "index_full",
         }
     }
 }
@@ -204,6 +219,8 @@ impl ScreenTextStop {
 pub enum ScreenTextBuildError {
     /// The engine could not report its identity.
     Engine(ScreenTextReadError),
+    /// The session holds as many index revisions as it may: nothing was run.
+    IndexFull,
     /// The previous index belongs to another session, source, stream or profile.
     ScopeMismatch,
     /// An identity could not be derived, or a revision would break a bound.
@@ -214,6 +231,9 @@ impl fmt::Display for ScreenTextBuildError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Engine(error) => error.fmt(formatter),
+            Self::IndexFull => {
+                formatter.write_str("the session holds as many screen-text revisions as it may")
+            }
             Self::ScopeMismatch => formatter.write_str(
                 "the previous screen-text index does not describe this session's stream",
             ),
@@ -254,6 +274,30 @@ pub struct ReadScreenTextRequest<'a> {
     pub plan: &'a [ReadTarget],
     /// Most frames this call reads.
     pub max_frames: u16,
+    /// How many more index revisions the session may hold; with none the call
+    /// fails as [`ScreenTextBuildError::IndexFull`] before the engine runs at all.
+    pub revisions_left: usize,
+}
+
+/// How many more frames the continued index (or a new one) can take: the frame
+/// bound, and the line bound as if every new frame held the most lines a frame
+/// may. The budget is clipped to this before anything is read, so a full index
+/// costs no runner work and a commit never fails on these bounds (RV-2 finding 5).
+#[must_use]
+pub fn frames_with_room(continued: Option<&ScreenTextIndex>) -> usize {
+    let (frames, lines) = continued.map_or((0, 0), |index| {
+        (
+            index.frames().len(),
+            index
+                .frames()
+                .iter()
+                .map(|frame| frame.lines().len())
+                .sum::<usize>(),
+        )
+    });
+    let by_frames = MAX_SCREEN_TEXT_FRAMES.saturating_sub(frames);
+    let by_lines = MAX_SCREEN_TEXT_LINES.saturating_sub(lines) / MAX_SCREEN_TEXT_LINES_PER_FRAME;
+    by_frames.min(by_lines)
 }
 
 /// Derives the identity of revision `number` of an index of `scope`.
@@ -352,8 +396,14 @@ pub fn pending_targets<'a>(
 
 /// Reads the plan's pending targets, at most `max_frames` new frames, in time order.
 ///
+/// The budget is clipped to the room the index has left ([`frames_with_room`]):
+/// a call with no room stops as [`ScreenTextStop::IndexFull`] with nothing read
+/// and no batch run, and one that fills the index stops so too.
+///
 /// # Errors
 ///
+/// [`ScreenTextBuildError::IndexFull`] when the session has no index revision
+/// left ([`ReadScreenTextRequest::revisions_left`]), before the engine runs;
 /// [`ScreenTextBuildError::Engine`] when the engine cannot report its identity,
 /// [`ScreenTextBuildError::ScopeMismatch`] for a previous index of another stream
 /// or session, and [`ScreenTextBuildError::Index`] when an identity cannot be derived.
@@ -368,6 +418,10 @@ pub async fn read_screen_text_within<X: FrameExtractor, R: ScreenTextReader, C: 
     control: &C,
 ) -> Result<ScreenTextExtension, ScreenTextBuildError> {
     let stream = extractor.stream();
+    if request.revisions_left == 0 {
+        // The session-wide budget does not depend on the build: no runner work.
+        return Err(ScreenTextBuildError::IndexFull);
+    }
     let provider = reader
         .identity()
         .await
@@ -396,7 +450,20 @@ pub async fn read_screen_text_within<X: FrameExtractor, R: ScreenTextReader, C: 
         unresolved: Vec::new(),
         stop: None,
     };
-    let budget = usize::from(request.max_frames.clamp(1, MAX_SCREEN_TEXT_FRAMES_PER_CALL));
+    let asked = usize::from(request.max_frames.clamp(1, MAX_SCREEN_TEXT_FRAMES_PER_CALL));
+    let room = frames_with_room(continued);
+    let budget = asked.min(room);
+    let full_stop = if room < asked {
+        ScreenTextStop::IndexFull
+    } else {
+        ScreenTextStop::FrameLimit
+    };
+    if budget == 0 {
+        if !pending.is_empty() {
+            extension.stop = Some(ScreenTextStop::IndexFull);
+        }
+        return Ok(extension);
+    }
     let mut resolved: Vec<(ListedFrame, Vec<ReadTarget>)> = Vec::new();
     // Resolve targets in time order; targets close together share one listing.
     let mut remaining = pending.as_slice();
@@ -472,7 +539,7 @@ pub async fn read_screen_text_within<X: FrameExtractor, R: ScreenTextReader, C: 
     if resolved.len() > budget || (extension.stop.is_none() && !remaining.is_empty()) {
         // Frames past the budget stay pending: their targets were not attempted.
         resolved.truncate(budget);
-        extension.stop = extension.stop.or(Some(ScreenTextStop::FrameLimit));
+        extension.stop = extension.stop.or(Some(full_stop));
     }
     let batch_size = extractor
         .max_frames_per_run()
@@ -502,7 +569,7 @@ pub async fn read_screen_text_within<X: FrameExtractor, R: ScreenTextReader, C: 
                 dimensions: stream.displayed,
             })
             .collect();
-        let readings = match reader.read(&handed).await {
+        let readings = match reader.read(&provider, &handed).await {
             Ok(readings) if readings.len() == batch.len() => readings,
             Ok(_) => {
                 extension.stop = Some(ScreenTextStop::Engine(

@@ -267,9 +267,19 @@ pub(crate) struct OcrSearch {
 #[derive(Debug, Deserialize)]
 pub(crate) struct SearchScreenText {
     pub(crate) state: String,
+    /// An index the member could not read (`search` only).
+    #[serde(default)]
+    pub(crate) unavailable: Option<ScreenTextUnavailable>,
     pub(crate) hits: Vec<ScreenTextHit>,
     pub(crate) total_hits: u64,
     pub(crate) coverage: ScreenTextCoverage,
+}
+
+/// Which index a search's on-screen part could not read, and why.
+#[derive(Debug, Deserialize)]
+pub(crate) struct ScreenTextUnavailable {
+    pub(crate) index: String,
+    pub(crate) reason: String,
 }
 
 /// One occurrence of the query in on-screen text.

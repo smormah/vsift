@@ -237,9 +237,26 @@ def check_description(status: int, stdout: str) -> dict:
                 "profile": "ppocrv5-latin-v1", "detector_sha256": MODELS[DETECTOR][2],
                 "recognizer_sha256": MODELS[RECOGNIZER][2]}
     wrong = sorted(key for key, value in expected.items() if record.get(key) != value)
+    if not is_sha256(record.get("runtime_sha256")):
+        wrong.append("runtime_sha256")
     if wrong:
         raise RunnerCheckError(f"describe differs from the pins in {', '.join(wrong)}")
     return record
+
+
+def is_sha256(value: object) -> bool:
+    return isinstance(value, str) and len(value) == 64 and all(c in "0123456789abcdef" for c in value)
+
+
+def check_greeting(record: dict) -> None:
+    """`read`'s first record names the build it hashed before loading (RV-2 finding 3): the pins."""
+    expected = {"record": "runner", "protocol": 1, "runtime_version": RUNTIME_VERSION,
+                "detector_sha256": MODELS[DETECTOR][2], "recognizer_sha256": MODELS[RECOGNIZER][2]}
+    wrong = sorted(key for key, value in expected.items() if record.get(key) != value)
+    if not is_sha256(record.get("runtime_sha256")):
+        wrong.append("runtime_sha256")
+    if wrong:
+        raise RunnerCheckError(f"read's greeting differs from the pins in {', '.join(wrong)}")
 
 
 def parse_read(stdout: str, count: int) -> list[list[Line] | None]:
@@ -247,6 +264,7 @@ def parse_read(stdout: str, count: int) -> list[list[Line] | None]:
     records = [json.loads(line) for line in stdout.splitlines() if line.strip()]
     if not records or records[0].get("record") != "runner" or records[0].get("protocol") != 1:
         raise RunnerCheckError("read did not start with protocol 1's runner record")
+    check_greeting(records[0])
     readings: list[list[Line] | None] = []
     current: list[Line] = []
     for record in records[1:]:

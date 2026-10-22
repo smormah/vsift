@@ -3,11 +3,13 @@
 //! `VSift` runs the runner with a closed argument list (ADR 0030 decision 8):
 //!
 //! - `describe`: one `describe` record naming the runner's version, the ONNX
-//!   Runtime version it loaded, its profile and its two models' SHA-256, so
-//!   `VSift` can tell one engine build from another;
+//!   Runtime version it loaded and that library's SHA-256, its profile and its
+//!   two models' SHA-256, so `VSift` can tell one engine build from another;
 //! - `read --threads <1..8> --max-lines <1..256> <png>...` (one to eight images):
-//!   the `runner` record, then for each image its lines and its `image` record,
-//!   or its `error` record, in the order given ([`crate::output`]).
+//!   the `runner` record, which names the build again from the files this run
+//!   hashed before it loaded them ([`BuildDigests`]), then for each image its
+//!   lines and its `image` record, or its `error` record, in the order given
+//!   ([`crate::output`]).
 //!
 //! The runtime library and the models sit beside the executable
 //! ([`Layout`]), so the runner reads no environment and no configuration. A
@@ -28,9 +30,10 @@ use sha2::{Digest, Sha256};
 
 use crate::{
     RunnerFailure,
-    detection::DetectionSettings,
+    detection::{DetectionError, DetectionSettings},
+    onnx::MAX_RUNTIME_LIBRARY_BYTES,
     output::{ErrorRecord, Hello, PROTOCOL, reading_records, to_line},
-    pipeline::{Inference, read_frame},
+    pipeline::{Inference, ReadError, read_frame},
     png::{MAX_FILE_BYTES, decode_rgb8},
     recognition::Dictionary,
 };
@@ -109,12 +112,18 @@ pub trait Backend {
     /// A loaded pair of models, ready to run.
     type Session: Inference;
 
-    /// The runtime's own version, once it is loaded from `layout.runtime_library`.
+    /// Loads the runtime from `layout.runtime_library`, whose SHA-256 the
+    /// runner computed just before as `library_sha256`, and returns the
+    /// version label that names it.
     ///
     /// # Errors
     ///
     /// [`RunnerFailure::RuntimeUnavailable`] when the runtime cannot be loaded.
-    fn runtime_version(&self, layout: &Layout) -> Result<String, RunnerFailure>;
+    fn runtime_version(
+        &self,
+        layout: &Layout,
+        library_sha256: &str,
+    ) -> Result<String, RunnerFailure>;
 
     /// Loads the two models with `threads` inference threads, and the
     /// recognizer's dictionary from the model's own metadata.
@@ -190,9 +199,47 @@ struct Description<'a> {
     protocol: u32,
     runner_version: &'static str,
     runtime_version: &'a str,
+    runtime_sha256: &'a str,
     profile: &'static str,
     detector_sha256: &'a str,
     recognizer_sha256: &'a str,
+}
+
+/// The SHA-256 of the three files that, with the executable, make one engine
+/// build. `describe` and every `read` hash them before any of them is loaded,
+/// so a `read` proves in its greeting which build read its images (RV-2
+/// finding 3). The layout may be nested or flat ([`Layout::beside`]); the
+/// digests are of the files the run then loads, wherever they are.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct BuildDigests {
+    /// The ONNX Runtime library.
+    pub runtime: String,
+    /// The detection model.
+    pub detector: String,
+    /// The recognition model.
+    pub recognizer: String,
+}
+
+impl BuildDigests {
+    /// Hashes the layout's files, the models first, each within its bound.
+    ///
+    /// # Errors
+    ///
+    /// [`RunnerFailure::ModelUnavailable`] when a model is missing, unreadable
+    /// or too large, and [`RunnerFailure::RuntimeUnavailable`] for the library.
+    pub fn of(layout: &Layout) -> Result<Self, RunnerFailure> {
+        let detector = file_sha256(&layout.detector, MAX_MODEL_BYTES)
+            .map_err(|_| RunnerFailure::ModelUnavailable)?;
+        let recognizer = file_sha256(&layout.recognizer, MAX_MODEL_BYTES)
+            .map_err(|_| RunnerFailure::ModelUnavailable)?;
+        let runtime = file_sha256(&layout.runtime_library, MAX_RUNTIME_LIBRARY_BYTES)
+            .map_err(|_| RunnerFailure::RuntimeUnavailable)?;
+        Ok(Self {
+            runtime,
+            detector,
+            recognizer,
+        })
+    }
 }
 
 /// Runs the command line `arguments` and returns the exit status.
@@ -246,11 +293,8 @@ fn describe(
     backend: &impl Backend,
     stdout: &mut impl Write,
 ) -> Result<(), RunnerFailure> {
-    let detector = file_sha256(&layout.detector, MAX_MODEL_BYTES)
-        .map_err(|_| RunnerFailure::ModelUnavailable)?;
-    let recognizer = file_sha256(&layout.recognizer, MAX_MODEL_BYTES)
-        .map_err(|_| RunnerFailure::ModelUnavailable)?;
-    let runtime_version = backend.runtime_version(layout)?;
+    let digests = BuildDigests::of(layout)?;
+    let runtime_version = backend.runtime_version(layout, &digests.runtime)?;
     write_record(
         stdout,
         &to_line(&Description {
@@ -258,9 +302,10 @@ fn describe(
             protocol: PROTOCOL,
             runner_version: RUNNER_VERSION,
             runtime_version: &runtime_version,
+            runtime_sha256: &digests.runtime,
             profile: PROFILE,
-            detector_sha256: &detector,
-            recognizer_sha256: &recognizer,
+            detector_sha256: &digests.detector,
+            recognizer_sha256: &digests.recognizer,
         }),
     )?;
     stdout.flush().map_err(|_| RunnerFailure::OutputFailed)
@@ -274,12 +319,22 @@ fn read(
     max_lines: usize,
     images: &[PathBuf],
 ) -> Result<(), RunnerFailure> {
+    // The build is proven before the greeting: the files are hashed, the
+    // runtime is loaded and named, and only then does the greeting say which
+    // build reads. VSift refuses a run whose greeting is not the build
+    // `describe` reported (RV-2 finding 3).
+    let digests = BuildDigests::of(layout)?;
+    let runtime_version = backend.runtime_version(layout, &digests.runtime)?;
     write_record(
         stdout,
         &to_line(&Hello {
             record: "runner",
             protocol: PROTOCOL,
             runner_version: RUNNER_VERSION,
+            runtime_version: &runtime_version,
+            runtime_sha256: &digests.runtime,
+            detector_sha256: &digests.detector,
+            recognizer_sha256: &digests.recognizer,
         }),
     )?;
     let (mut session, dictionary) = backend.open(layout, threads)?;
@@ -297,6 +352,11 @@ fn read(
                 max_lines,
             ) {
                 Ok(reading) => reading_records(index, frame.width(), frame.height(), &reading),
+                // A frame whose detection map would break its bound is the
+                // image's fault, not the models'.
+                Err(ReadError::Detection(DetectionError::InvalidSize)) => {
+                    vec![image_error(index, RunnerFailure::ImageInvalid)]
+                }
                 Err(_) => vec![image_error(index, RunnerFailure::InferenceFailed)],
             },
         };

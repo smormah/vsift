@@ -21,11 +21,20 @@ One folder, with nothing outside it and nothing read from the environment
 | `models/latin_PP-OCRv5_rec_mobile.onnx` | PP-OCRv5 mobile Latin recognizer; its dictionary is read from the model's own `character` metadata | Section 4 |
 | `LICENSES/` | The runner's licence, ONNX Runtime's `LICENSE` and `ThirdPartyNotices.txt`, PaddleOCR's Apache-2.0 licence for the models | The three sources |
 
-The runner also accepts the same files **flat beside the executable** (the managed store keeps a
-component's files in one folder): for each file it looks in its subfolder first, then for the same
-name next to the executable (`Layout::beside`, tests
-`files_are_found_in_their_subfolders_first_then_beside_the_executable` and
-`describe_works_from_the_managed_stores_flat_folder`).
+The runner also accepts the same files **flat beside the executable** (the planner's decision of
+2026-10-22: the managed store keeps a component's files in one folder): for each file it looks in
+its subfolder first, then for the same name next to the executable. Every basename is unique, so
+the two layouts cannot be confused (`Layout::beside`, tests
+`files_are_found_in_their_subfolders_first_then_beside_the_executable`,
+`describe_works_from_the_managed_stores_flat_folder` and
+`the_flat_layout_names_the_same_build_as_the_nested_one`).
+
+**The build is checked in either layout (RV-2 finding 3).** `describe` and every `read` hash the
+runtime library and both models before they load them (`BuildDigests`): `describe` reports the
+library's SHA-256 beside its version label, and `read`'s first record repeats the runner version,
+the runtime version and the three digests. VSift hashes the executable before each `read` and
+refuses a batch whose executable or greeting is not the build `describe` reported (`build_changed`),
+so a folder updated during a call never mixes two builds' text in one index.
 
 `vsift ocr` runs the folder's executable, which it is given by `--runner`, by
 `setup configure ocr-runner --executable`, or (later) by the managed install. The library file

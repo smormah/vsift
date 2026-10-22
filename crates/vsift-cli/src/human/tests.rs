@@ -1024,6 +1024,11 @@ fn part_two_examples_render_as_readable_text() -> TestResult {
             "search.screen-text.json",
             "search-screen-text",
         ),
+        (
+            CommandName::Search,
+            "search.screen-text-unavailable.json",
+            "search-screen-text-unavailable",
+        ),
     ] {
         let text = render(command, &example(file)?)?;
         check_snapshot(snapshot, &text)?;

@@ -227,6 +227,29 @@ async fn seed(root: &OwnedRoot, with_transcript: bool) -> Built<Seeded> {
 /// Commits the index `ocr` would have written after reading the frames at
 /// 2 s and 3 s, which show the dialog's title in one place.
 fn commit_index(seeded: &Seeded) -> TestResult {
+    publish_record(
+        seeded,
+        &encode_screen_text_index_record(&sample_index(seeded)?)?,
+    )
+}
+
+/// Publishes `record` as the session's screen-text index record, as it is:
+/// the store checks its size and digest, not its content.
+fn publish_record(seeded: &Seeded, record: &[u8]) -> TestResult {
+    let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
+    seeded.store.publish_artifact(
+        &seeded.session_id,
+        &OperationId::parse("op_3333333333333333")?,
+        seeded.generation,
+        SessionArtifactKind::ScreenTextIndexRecord,
+        record,
+        now,
+    )?;
+    Ok(())
+}
+
+/// The index of [`commit_index`].
+fn sample_index(seeded: &Seeded) -> Built<ScreenTextIndex> {
     let digest = |fill: char| Sha256Hex::parse(fill.to_string().repeat(64));
     let scope = ScreenTextScope {
         session_id: seeded.session_id.clone(),
@@ -272,23 +295,72 @@ fn commit_index(seeded: &Seeded) -> TestResult {
         });
     }
     let number = NonZeroU32::MIN;
-    let index = ScreenTextIndex::new(ScreenTextIndexParts {
+    Ok(ScreenTextIndex::new(ScreenTextIndexParts {
         id: screen_text_index_id(&scope, number)?,
         revision: number,
         scope,
         period_micros: SECOND,
         frames,
         unresolved: Vec::new(),
-    })?;
-    let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
-    seeded.store.publish_artifact(
-        &seeded.session_id,
-        &OperationId::parse("op_3333333333333333")?,
-        seeded.generation,
-        SessionArtifactKind::ScreenTextIndexRecord,
-        &encode_screen_text_index_record(&index)?,
-        now,
-    )?;
+    })?)
+}
+
+/// `search --json` for `R-17`, with its on-screen member taken out.
+fn search_without_screen_text(root: &OwnedRoot, session: &str) -> Built<(Value, Value)> {
+    let mut value = json(&vsift(
+        root,
+        &["search", session, "--query", "R-17", "--json"],
+    )?)?;
+    let part = value["data"]
+        .as_object_mut()
+        .and_then(|data| data.remove("screen_text"))
+        .ok_or("no screen_text member")?;
+    Ok((value, part))
+}
+
+/// RV-2 finding 2: a screen-text record that fails verification, and one a
+/// newer release wrote, each leave `search` exactly as it is without OCR: the
+/// same status, coverage and transcript hits. Its member says the index could
+/// not be read, and why. Before, `search` was refused as `INTEGRITY_FAILURE` or
+/// `UNSUPPORTED_SCHEMA`.
+#[tokio::test]
+async fn an_unreadable_screen_text_record_never_changes_search() -> TestResult {
+    for (edit, reason) in [
+        ("corrupt", "integrity_failure"),
+        ("newer", "unsupported_version"),
+    ] {
+        let root = OwnedRoot::new()?;
+        let seeded = seed_session(&root).await?;
+        let (expected, part) = search_without_screen_text(&root, seeded.session_id.as_str())?;
+        assert_eq!(part["state"], "not_run");
+        assert_eq!(expected["status"], "complete");
+        let mut record: Value =
+            serde_json::from_slice(&encode_screen_text_index_record(&sample_index(&seeded)?)?)?;
+        if edit == "corrupt" {
+            record["frames"][0]["lines"][0]["id"] = "stl_0000000000000000".into();
+        } else {
+            record["schema_version"] = 99.into();
+        }
+        publish_record(&seeded, &serde_json::to_vec(&record)?)?;
+        let (searched, part) = search_without_screen_text(&root, seeded.session_id.as_str())?;
+        assert_eq!(searched, expected, "{edit}");
+        assert_eq!(part["state"], "unavailable", "{edit}");
+        assert_eq!(
+            part["unavailable"],
+            serde_json::json!({"index": "screen_text", "reason": reason}),
+            "{edit}"
+        );
+        assert_eq!(part["hits"], serde_json::json!([]), "{edit}");
+        let human = vsift(
+            &root,
+            &["search", seeded.session_id.as_str(), "--query", "R-17"],
+        )?;
+        assert_eq!(human.status.code(), Some(0), "{edit}");
+        assert!(
+            String::from_utf8(human.stdout)?.contains("could not be read"),
+            "{edit}"
+        );
+    }
     Ok(())
 }
 

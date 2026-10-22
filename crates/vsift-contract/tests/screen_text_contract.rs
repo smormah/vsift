@@ -19,8 +19,9 @@ use vsift_application::{
 use vsift_contract::{
     EvidenceStream, LifecycleResponse, OCR_FAILED_REMEDIATION, OCR_RUNNER_REMEDIATION, ResultView,
     SCREEN_TEXT_PARTIAL_WARNING, ScreenTextHitPresentation, ScreenTextPresentation,
-    ScreenTextSearchPresentation, SearchEvidenceStream, SearchPresentation, screen_text_response,
-    search_response, search_response_with_view,
+    ScreenTextSearchPresentation, ScreenTextUnavailable, SearchEvidenceStream, SearchPresentation,
+    UnreadableIndex, UnreadableReason, screen_text_response, search_response,
+    search_response_with_view,
 };
 use vsift_domain::{
     Confidence, ConfidenceOrigin, CoverageGapReason, CueSource, CueText, CueTiming,
@@ -390,6 +391,16 @@ struct Page {
 }
 
 fn search(query: &str, index: Option<&ScreenTextIndex>, limit: u16) -> Built<Page> {
+    search_with(query, index, limit, None)
+}
+
+/// [`search`], with an index the member could not read.
+fn search_with(
+    query: &str,
+    index: Option<&ScreenTextIndex>,
+    limit: u16,
+    unavailable: Option<ScreenTextUnavailable>,
+) -> Built<Page> {
     let session = SessionId::parse(SESSION)?;
     let revision = revision()?;
     let query = SearchQuery::parse(query)?;
@@ -441,8 +452,9 @@ fn search(query: &str, index: Option<&ScreenTextIndex>, limit: u16) -> Built<Pag
                 |plan| ScreenTextCoverage::of(&plan, Some(index)),
             )
         }),
-        candidates_complete: index.is_some(),
+        candidates_complete: index.is_some() && unavailable.is_none(),
         period_micros: index.map(ScreenTextIndex::period_micros),
+        unavailable,
     };
     let next_cursor = page
         .next_cursor
@@ -537,6 +549,79 @@ fn a_session_ocr_has_not_read_says_not_run_and_finds_nothing() -> TestResult {
     Ok(())
 }
 
+const SEARCH_UNAVAILABLE_EXAMPLE: &str = "examples/search.screen-text-unavailable.json";
+
+/// RV-2 finding 2: an index the member cannot read is named in it, with why,
+/// and the search is the transcript's exactly as without OCR. A screen-text
+/// index that cannot be read leaves the member `unavailable` with nothing
+/// known; a visual index that cannot be read leaves the hits, `partial`.
+#[test]
+fn an_unreadable_index_is_named_in_the_member_and_never_changes_the_search() -> TestResult {
+    let without = search("R-17", None, 20)?;
+    let page = search_with(
+        "R-17",
+        None,
+        20,
+        Some(ScreenTextUnavailable {
+            index: UnreadableIndex::ScreenText,
+            reason: UnreadableReason::IntegrityFailure,
+        }),
+    )?;
+    regenerate(SEARCH_UNAVAILABLE_EXAMPLE, &page.json)?;
+    validate("operation-response.schema.json", &page.json)?;
+    validate("search-data.schema.json", &page.json["data"])?;
+    assert!(
+        page.json == load(SEARCH_UNAVAILABLE_EXAMPLE)?,
+        "the search result differs from {SEARCH_UNAVAILABLE_EXAMPLE}"
+    );
+    let part = &page.json["data"]["screen_text"];
+    assert_eq!(part["state"], "unavailable");
+    assert_eq!(
+        part["unavailable"],
+        serde_json::json!({"index": "screen_text", "reason": "integrity_failure"})
+    );
+    let mut transcript_only = page.json.clone();
+    let mut expected = without.json.clone();
+    for value in [&mut transcript_only, &mut expected] {
+        if let Some(data) = value["data"].as_object_mut() {
+            data.remove("screen_text");
+        }
+    }
+    assert_eq!(transcript_only, expected);
+    validate("search-brief-data.schema.json", &page.brief["data"])?;
+    validate(
+        "search-stream-data.schema.json",
+        &page.terminal["result"]["data"],
+    )?;
+
+    let index = index(10)?;
+    let page = search_with(
+        "R-17",
+        Some(&index),
+        20,
+        Some(ScreenTextUnavailable {
+            index: UnreadableIndex::Visual,
+            reason: UnreadableReason::UnsupportedVersion,
+        }),
+    )?;
+    validate("search-data.schema.json", &page.json["data"])?;
+    let part = &page.json["data"]["screen_text"];
+    assert_eq!(part["state"], "partial");
+    assert_eq!(part["total_hits"], 2);
+    assert_eq!(
+        part["unavailable"],
+        serde_json::json!({"index": "visual", "reason": "unsupported_version"})
+    );
+    assert_eq!(page.json["status"], "complete");
+    // A page whose indexes were read carries no `unavailable` member.
+    assert!(
+        search("R-17", Some(&index), 20)?.json["data"]["screen_text"]
+            .get("unavailable")
+            .is_none()
+    );
+    Ok(())
+}
+
 #[test]
 fn hits_are_bounded_by_the_page_while_total_hits_counts_them_all() -> TestResult {
     let index = index(10)?;
@@ -583,6 +668,9 @@ fn screen_text_schemas_reject_unknown_fields_values_and_unbounded_text() -> Test
     let mut state = search["data"].clone();
     state["screen_text"]["state"] = "unknown".into();
     assert!(!is_valid("search-data.schema.json", &state)?);
+    let mut reason = load(SEARCH_UNAVAILABLE_EXAMPLE)?["data"].clone();
+    reason["screen_text"]["unavailable"]["reason"] = "tired".into();
+    assert!(!is_valid("search-data.schema.json", &reason)?);
     // Older pages, without the member, stay valid.
     let mut older = search["data"].clone();
     if let Some(data) = older.as_object_mut() {
@@ -671,6 +759,7 @@ fn ocr_search(
                     coverage,
                     candidates_complete: index.is_some(),
                     period_micros: index.map(ScreenTextIndex::period_micros),
+                    unavailable: None,
                 },
                 next_cursor: next_cursor.as_deref(),
             },

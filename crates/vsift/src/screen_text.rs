@@ -60,7 +60,10 @@ use crate::{
     verification::Cancellation,
 };
 
-/// How long one `ocr` call may extract and read, after its candidates.
+/// How long one `ocr` call may prepare, extract and read, after its
+/// candidates. Every media and runner process of the call is given at most
+/// the time left, so a run started late cannot carry the call past it (RV-2
+/// finding 4); only the final commit follows it.
 const CALL_DEADLINE: Duration = Duration::from_secs(300);
 /// How often a commit that lost a race with another writer is merged and retried.
 const MAX_COMMIT_ATTEMPTS: usize = 3;
@@ -257,14 +260,17 @@ const fn read_failure_code(error: ScreenTextReadError) -> FailureCode {
             FailureCode::ResourceLimit
         }
         ScreenTextReadError::Workspace => FailureCode::StorageIo,
+        // The runner's files changed between `describe` and a `read`: what it
+        // would have read cannot be attributed to the build the index records.
+        ScreenTextReadError::BuildChanged => FailureCode::IntegrityFailure,
     }
 }
 
 const fn stop_failure_code(stop: ScreenTextStop) -> FailureCode {
     match stop {
-        ScreenTextStop::FrameLimit | ScreenTextStop::Media(EvidenceMediaError::ResourceLimit) => {
-            FailureCode::ResourceLimit
-        }
+        ScreenTextStop::FrameLimit
+        | ScreenTextStop::IndexFull
+        | ScreenTextStop::Media(EvidenceMediaError::ResourceLimit) => FailureCode::ResourceLimit,
         ScreenTextStop::Deadline | ScreenTextStop::Media(EvidenceMediaError::Deadline) => {
             FailureCode::DeadlineExceeded
         }
@@ -298,6 +304,7 @@ impl fmt::Display for OcrError {
                 ScreenTextStop::Cancelled => "reading screen text was cancelled",
                 ScreenTextStop::Engine(_) => "the OCR runner failed before anything was read",
                 ScreenTextStop::Media(_) => "the media tools failed before anything was read",
+                ScreenTextStop::IndexFull => "the screen-text index has no room for more frames",
             }),
             Self::Index(error) => error.fmt(formatter),
             Self::BudgetExhausted => {
@@ -427,8 +434,11 @@ impl Engine {
                 analysed_plan(&store, &request.session, requested, period, now)?
             }
         };
+        let call_deadline = Instant::now() + CALL_DEADLINE;
         let (previous, status) =
             store.read_screen_text_index(&request.session, self.now_unix_seconds()?)?;
+        let revisions_left =
+            store.screen_text_revisions_left(&request.session, self.now_unix_seconds()?)?;
         let cancellation = request.cancellation.0.clone();
         let tools = self.media_tools()?;
         self.ensure_media_tools_verified_with(&tools, &cancellation)
@@ -439,7 +449,8 @@ impl Engine {
             tools,
             self.config().host_isolation.into_infrastructure(),
             &store,
-        );
+        )
+        .with_call_deadline(call_deadline);
         let description = media
             .probe(&bound, cancellation.clone())
             .await
@@ -461,7 +472,7 @@ impl Engine {
         )
         .map_err(EngineError::EvidenceMedia)?;
         let control = CallControl {
-            deadline: Instant::now() + CALL_DEADLINE,
+            deadline: call_deadline,
             cancellation: cancellation.clone(),
         };
         let source_id = status.source_id().clone();
@@ -472,6 +483,7 @@ impl Engine {
             previous: previous.as_ref(),
             plan: &plan,
             max_frames,
+            revisions_left,
         };
         let extension = match (&runner, self.host_screen_text_reader()) {
             (_, Some(host)) => {
@@ -483,7 +495,7 @@ impl Engine {
                     EngineError::Ocr(OcrError::Failed(ScreenTextReadError::Workspace))
                 })?;
                 let reader = OcrScreenTextReader::new(
-                    runner.clone(),
+                    runner.clone().with_call_deadline(call_deadline),
                     workspace,
                     &store,
                     cancellation.clone(),
@@ -500,6 +512,7 @@ impl Engine {
         drop(media);
         let extension = extension.map_err(|error| match error {
             ScreenTextBuildError::Engine(error) => EngineError::Ocr(OcrError::Failed(error)),
+            ScreenTextBuildError::IndexFull => EngineError::Ocr(OcrError::BudgetExhausted),
             ScreenTextBuildError::ScopeMismatch => {
                 EngineError::Storage(SessionStorageError::IntegrityFailure)
             }
@@ -567,6 +580,7 @@ impl Engine {
                     ScreenTextBuildError::ScopeMismatch | ScreenTextBuildError::Engine(_) => {
                         EngineError::Storage(SessionStorageError::IntegrityFailure)
                     }
+                    ScreenTextBuildError::IndexFull => EngineError::Ocr(OcrError::BudgetExhausted),
                     ScreenTextBuildError::Index(error) => EngineError::Ocr(OcrError::Index(error)),
                 },
             )?;
@@ -700,7 +714,11 @@ type ReadingFuture<'a> =
 pub(crate) trait HostScreenTextReader: Send + Sync {
     fn identity_boxed(&self) -> ProviderFuture<'_>;
     fn max_images_boxed(&self) -> usize;
-    fn read_boxed<'a>(&'a self, images: &'a [ScreenTextImage<'a>]) -> ReadingFuture<'a>;
+    fn read_boxed<'a>(
+        &'a self,
+        build: &'a ScreenTextProvider,
+        images: &'a [ScreenTextImage<'a>],
+    ) -> ReadingFuture<'a>;
 }
 
 impl<Reader: ScreenTextReader> HostScreenTextReader for Reader {
@@ -712,8 +730,12 @@ impl<Reader: ScreenTextReader> HostScreenTextReader for Reader {
         self.max_images_per_run()
     }
 
-    fn read_boxed<'a>(&'a self, images: &'a [ScreenTextImage<'a>]) -> ReadingFuture<'a> {
-        Box::pin(self.read(images))
+    fn read_boxed<'a>(
+        &'a self,
+        build: &'a ScreenTextProvider,
+        images: &'a [ScreenTextImage<'a>],
+    ) -> ReadingFuture<'a> {
+        Box::pin(self.read(build, images))
     }
 }
 
@@ -731,9 +753,10 @@ impl ScreenTextReader for HostScreenTextRef<'_> {
 
     async fn read(
         &self,
+        build: &ScreenTextProvider,
         images: &[ScreenTextImage<'_>],
     ) -> Result<Vec<EngineReading>, ScreenTextReadError> {
-        self.0.read_boxed(images).await
+        self.0.read_boxed(build, images).await
     }
 }
 

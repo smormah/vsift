@@ -1,12 +1,14 @@
 use vsift_application::EngineReading;
 
+use vsift_domain::{ProviderLabel, ScreenTextProvider, Sha256Hex};
+
 use super::{
     MAX_RUNNER_OUTPUT_BYTES, RunnerOutputError, parse_runner_description, parse_runner_output,
 };
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
-const HELLO: &str = r#"{"record":"runner","protocol":1,"runner_version":"0.1.0"}"#;
+const HELLO: &str = r#"{"record":"runner","protocol":1,"runner_version":"0.1.0","runtime_version":"1.31.0","runtime_sha256":"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff","detector_sha256":"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd","recognizer_sha256":"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"}"#;
 
 fn stream(records: &[&str]) -> Vec<u8> {
     let mut text = String::from(HELLO);
@@ -32,7 +34,7 @@ fn a_run_gives_each_image_its_lines_or_its_refusal() -> TestResult {
         r#"{"record":"image","image":2,"width":1280,"height":720,"lines":0,"truncated":true}"#,
         r#"{"record":"error","image":3,"code":"inference_failed"}"#,
     ]);
-    let readings = parse_runner_output(&output, &[SIZE; 4])?;
+    let readings = parse_runner_output(&output, &[SIZE; 4])?.readings;
     let Some(EngineReading::Lines {
         lines,
         truncated: false,
@@ -60,8 +62,12 @@ fn a_run_gives_each_image_its_lines_or_its_refusal() -> TestResult {
 
 #[test]
 fn every_departure_from_the_protocol_is_refused() {
-    let wrong_protocol =
-        String::from(r#"{"record":"runner","protocol":2,"runner_version":"0.1.0"}"#).into_bytes();
+    let wrong_protocol = HELLO
+        .replace("\"protocol\":1", "\"protocol\":2")
+        .into_bytes();
+    let older_greeting =
+        String::from(r#"{"record":"runner","protocol":1,"runner_version":"0.1.0"}"#).into_bytes();
+    let unnamed_model = HELLO.replace(&"d".repeat(64), "D").into_bytes();
     let cases: Vec<(Vec<u8>, usize, RunnerOutputError)> = vec![
         (
             stream(&[
@@ -72,6 +78,8 @@ fn every_departure_from_the_protocol_is_refused() {
         ),
         (Vec::new(), 1, RunnerOutputError::Protocol),
         (wrong_protocol, 0, RunnerOutputError::Protocol),
+        (older_greeting, 0, RunnerOutputError::Malformed),
+        (unnamed_model, 0, RunnerOutputError::Malformed),
         (stream(&[IMAGE_ONE]), 1, RunnerOutputError::Inconsistent),
         (stream(&[LINE]), 1, RunnerOutputError::Inconsistent),
         (
@@ -129,7 +137,7 @@ fn every_departure_from_the_protocol_is_refused() {
 #[test]
 fn a_line_cut_by_the_runner_marks_its_reading_truncated() -> TestResult {
     let cut = LINE.replace("\"text_cut\":false", "\"text_cut\":true");
-    let readings = parse_runner_output(&stream(&[&cut, IMAGE_ONE]), &[SIZE])?;
+    let readings = parse_runner_output(&stream(&[&cut, IMAGE_ONE]), &[SIZE])?.readings;
     assert!(matches!(
         readings.first(),
         Some(EngineReading::Lines {
@@ -154,12 +162,14 @@ fn more_lines_than_a_frame_holds_are_refused() {
 #[test]
 fn the_description_names_the_runtime_profile_and_models() -> TestResult {
     let good = format!(
-        r#"{{"record":"describe","protocol":1,"runner_version":"0.1.0","runtime_version":"1.31.0","profile":"ppocrv5-latin-v1","detector_sha256":"{}","recognizer_sha256":"{}"}}"#,
+        r#"{{"record":"describe","protocol":1,"runner_version":"0.1.0","runtime_version":"1.31.0","runtime_sha256":"{}","profile":"ppocrv5-latin-v1","detector_sha256":"{}","recognizer_sha256":"{}"}}"#,
+        "c".repeat(64),
         "a".repeat(64),
         "b".repeat(64)
     );
     let description = parse_runner_description(good.as_bytes())?;
     assert_eq!(description.runtime_version.as_str(), "1.31.0");
+    assert_eq!(description.runtime_sha256.as_str(), "c".repeat(64));
     assert!(
         parse_runner_description(good.replace("ppocrv5-latin-v1", "other").as_bytes()).is_err()
     );
@@ -176,8 +186,9 @@ fn the_description_names_the_runtime_profile_and_models() -> TestResult {
 #[test]
 fn the_recorded_runs_parse() -> TestResult {
     let data = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/data/ocr_runner");
-    let readings =
-        parse_runner_output(&std::fs::read(data.join("four-images.jsonl"))?, &[SIZE; 4])?;
+    let run = parse_runner_output(&std::fs::read(data.join("four-images.jsonl"))?, &[SIZE; 4])?;
+    assert_eq!(run.greeting.runtime_version.as_str(), "1.31.0");
+    let readings = run.readings;
     assert_eq!(readings.len(), 4);
     assert!(matches!(
         readings.first(),
@@ -194,5 +205,43 @@ fn the_recorded_runs_parse() -> TestResult {
     assert_eq!(readings.get(3), Some(&EngineReading::Failed));
     let description = parse_runner_description(&std::fs::read(data.join("describe.json"))?)?;
     assert_eq!(description.runtime_version.as_str(), "1.31.0");
+    Ok(())
+}
+
+/// RV-2 finding 3: a greeting is the build `describe` reported only when the
+/// runner version, the runtime and both models agree.
+#[test]
+fn a_greeting_names_one_build_exactly() -> TestResult {
+    let greeting = parse_runner_output(&stream(&[LINE, IMAGE_ONE]), &[SIZE])?.greeting;
+    let digest = |fill: char| Sha256Hex::parse(fill.to_string().repeat(64));
+    let build = ScreenTextProvider {
+        runner_sha256: digest('1')?,
+        runner_version: ProviderLabel::parse("0.1.0")?,
+        runtime_version: ProviderLabel::parse("1.31.0")?,
+        detector_sha256: digest('d')?,
+        recognizer_sha256: digest('e')?,
+    };
+    assert!(greeting.is_build(&build));
+    let others = [
+        ScreenTextProvider {
+            runner_version: ProviderLabel::parse("0.1.1")?,
+            ..build.clone()
+        },
+        ScreenTextProvider {
+            runtime_version: ProviderLabel::parse("sha256-0123456789abcdef")?,
+            ..build.clone()
+        },
+        ScreenTextProvider {
+            detector_sha256: digest('0')?,
+            ..build.clone()
+        },
+        ScreenTextProvider {
+            recognizer_sha256: digest('0')?,
+            ..build.clone()
+        },
+    ];
+    for other in &others {
+        assert!(!greeting.is_build(other), "{other:?}");
+    }
     Ok(())
 }

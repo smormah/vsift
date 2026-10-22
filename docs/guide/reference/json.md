@@ -1169,7 +1169,7 @@ The data member of a complete or partial ocr result (0.3.0, ADR 0030): what one 
 | `index.frames` | integer | yes | Frames the index holds, read or unreadable.; 0 to 4096 |
 | `index.lines` | integer | yes | Lines of text the index holds.; 0 to 200000 |
 | `read_now` | integer | yes | Frames this call attempted: read, or found unreadable.; 0 to 200 |
-| `stopped` | "frame_limit" \| "deadline_exceeded" \| "cancelled" \| "engine_failed" \| "media_failed" or null | yes | Why the call ended with frames still pending, or null when it was not stopped. frame_limit: it read --max-frames frames. deadline_exceeded: its time ran out. cancelled: it was cancelled. engine_failed: the OCR runner failed and what it had read before is kept. media_failed: the media tools could not extract a frame. Every stop keeps what was read before it. |
+| `stopped` | "frame_limit" \| "deadline_exceeded" \| "cancelled" \| "engine_failed" \| "media_failed" \| "index_full" or null | yes | Why the call ended with frames still pending, or null when it was not stopped. frame_limit: it read --max-frames frames. deadline_exceeded: its time ran out. cancelled: it was cancelled. engine_failed: the OCR runner failed and what it had read before is kept. media_failed: the media tools could not extract a frame. index_full (0.3.0, RV-2 finding 5): the index had room for no more frames (4,096 frames, 200,000 lines counted as 256 a frame), so the call read only what fitted; later calls by the same engine build read nothing more of this session. engine_failed also covers a runner whose files changed during the call (its build no longer the one the index records). Every stop keeps what was read before it. |
 | `coverage` | object | yes | How much of the range's plan the index has read. Every planned frame is counted once: planned = read + failed + unresolved + pending; awaiting_analysis counts reads not yet planned. read: its frame was read (it may hold no text). failed: the runner rejected the image or failed on it; it is not read again by the same build. unresolved: the target time resolved to no decodable frame. pending: not attempted yet. Text that appears and goes between two planned frames is not read. |
 | `coverage.scope` | constant "screen_text" | yes | What the block covers: on-screen text only. |
 | `coverage.period_us` | integer or null | yes | The period of the frames planned between candidates: the call's --period-us (default 10000000). In search, the period of the index's latest call; null before ocr has run.; 1000000 to 600000000 |
@@ -1223,7 +1223,10 @@ The data member of a complete or partial search result asked for with --view bri
 | `transcript_coverage.no_speech_ranges[].to_us` | integer | yes | at least 1 |
 | `transcript_coverage.ranges_truncated` | boolean | yes | True when a range list held more than 100 ranges and only its first 100, in start order, are listed. |
 | `screen_text` | object | no | Since 0.3.0 (ADR 0030), on a first page only: the query's occurrences in on-screen text read by ocr, with each hit's frame, time and region, and how much of the searched range's plan is read. Absent on a page a cursor continues and from releases before 0.3.0. It never changes the envelope's status or coverage. |
-| `screen_text.state` | "not_run" \| "partial" \| "complete" | yes |  |
+| `screen_text.state` | "not_run" \| "partial" \| "complete" \| "unavailable" | yes |  |
+| `screen_text.unavailable` | object | no | Present only when an index the member needs could not be read (0.3.0, RV-2 finding 2); the search itself is unchanged. index screen_text: the screen-text index, so state is unavailable and nothing about the screen is known (index null, every count 0). index visual: the visual index, so the hits are listed but nothing is planned and candidates_complete is false (state partial). reason: integrity_failure (its record failed verification), unsupported_version (a newer release wrote it) or unreadable (any other storage failure). |
+| `screen_text.unavailable.index` | "screen_text" \| "visual" | yes |  |
+| `screen_text.unavailable.reason` | "integrity_failure" \| "unsupported_version" \| "unreadable" | yes |  |
 | `screen_text.index` | object or null | yes |  |
 | `screen_text.index.index_id` | string | yes | pattern `^sti_[a-z0-9]{16,64}$` |
 | `screen_text.index.revision` | integer | yes | 1 to 4294967295 |
@@ -1309,7 +1312,10 @@ The data member of a complete or partial search result: one bounded page of the 
 | `transcript_coverage.no_speech_ranges[].to_us` | integer | yes | at least 1 |
 | `transcript_coverage.ranges_truncated` | boolean | yes | True when a range list held more than 100 ranges and only its first 100, in start order, are listed. |
 | `screen_text` | object | no | Since 0.3.0 (ADR 0030), on a first page only: the query's occurrences in on-screen text read by ocr, with each hit's frame, time and region, and how much of the searched range's plan is read. Absent on a page a cursor continues and from releases before 0.3.0. It never changes the envelope's status or coverage. |
-| `screen_text.state` | "not_run" \| "partial" \| "complete" | yes |  |
+| `screen_text.state` | "not_run" \| "partial" \| "complete" \| "unavailable" | yes |  |
+| `screen_text.unavailable` | object | no | Present only when an index the member needs could not be read (0.3.0, RV-2 finding 2); the search itself is unchanged. index screen_text: the screen-text index, so state is unavailable and nothing about the screen is known (index null, every count 0). index visual: the visual index, so the hits are listed but nothing is planned and candidates_complete is false (state partial). reason: integrity_failure (its record failed verification), unsupported_version (a newer release wrote it) or unreadable (any other storage failure). |
+| `screen_text.unavailable.index` | "screen_text" \| "visual" | yes |  |
+| `screen_text.unavailable.reason` | "integrity_failure" \| "unsupported_version" \| "unreadable" | yes |  |
 | `screen_text.index` | object or null | yes |  |
 | `screen_text.index.index_id` | string | yes | pattern `^sti_[a-z0-9]{16,64}$` |
 | `screen_text.index.revision` | integer | yes | 1 to 4294967295 |
@@ -1395,7 +1401,10 @@ The data member of the complete or partial terminal result that ends a search --
 | `transcript_coverage.no_speech_ranges[].to_us` | integer | yes | at least 1 |
 | `transcript_coverage.ranges_truncated` | boolean | yes | True when a range list held more than 100 ranges and only its first 100, in start order, are listed. |
 | `screen_text` | object | no | Since 0.3.0 (ADR 0030), on a first page only: the query's occurrences in on-screen text read by ocr, with each hit's frame, time and region, and how much of the searched range's plan is read. Absent on a page a cursor continues and from releases before 0.3.0. It never changes the envelope's status or coverage. |
-| `screen_text.state` | "not_run" \| "partial" \| "complete" | yes |  |
+| `screen_text.state` | "not_run" \| "partial" \| "complete" \| "unavailable" | yes |  |
+| `screen_text.unavailable` | object | no | Present only when an index the member needs could not be read (0.3.0, RV-2 finding 2); the search itself is unchanged. index screen_text: the screen-text index, so state is unavailable and nothing about the screen is known (index null, every count 0). index visual: the visual index, so the hits are listed but nothing is planned and candidates_complete is false (state partial). reason: integrity_failure (its record failed verification), unsupported_version (a newer release wrote it) or unreadable (any other storage failure). |
+| `screen_text.unavailable.index` | "screen_text" \| "visual" | yes |  |
+| `screen_text.unavailable.reason` | "integrity_failure" \| "unsupported_version" \| "unreadable" | yes |  |
 | `screen_text.index` | object or null | yes |  |
 | `screen_text.index.index_id` | string | yes | pattern `^sti_[a-z0-9]{16,64}$` |
 | `screen_text.index.revision` | integer | yes | 1 to 4294967295 |

@@ -808,9 +808,10 @@ fn check_visual_samples(data: &[u8]) -> Result<(), Violation> {
 fn check_ocr_runner_output(data: &[u8]) -> Result<(), Violation> {
     // The description parser must only accept or refuse, never panic.
     let _ = parse_runner_description(data);
-    let Ok(readings) = parse_runner_output(data, &OCR_FUZZ_IMAGES) else {
+    let Ok(run) = parse_runner_output(data, &OCR_FUZZ_IMAGES) else {
         return Ok(());
     };
+    let readings = run.readings;
     if readings.len() != OCR_FUZZ_IMAGES.len() {
         return Err(Violation::OcrRunnerOutputInconsistent);
     }

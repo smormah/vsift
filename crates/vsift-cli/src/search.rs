@@ -68,6 +68,7 @@ pub(crate) fn screen_text_part(part: &ScreenTextSearch) -> ScreenTextSearchPrese
         coverage: part.coverage(),
         candidates_complete: part.candidates_complete(),
         period_micros: part.period_micros(),
+        unavailable: part.unavailable(),
     }
 }
 

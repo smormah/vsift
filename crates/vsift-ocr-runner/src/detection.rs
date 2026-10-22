@@ -86,37 +86,82 @@ pub struct DetectedBox {
     pub score: f32,
 }
 
-/// The detector's input for `frame`: BGR, normalised to -1..1, sides multiples of 32.
+/// Most pixels of the detector's map, checked before any of it is reserved:
+/// 8 Mi pixels, a 96 MiB input tensor. [`detection_map_size`] keeps every
+/// map within `max_side`² (4 M pixels) before its sides are rounded to
+/// multiples of 32, so only a frame of an aspect ratio of about 1,000 to 1
+/// or more, whose shorter side rounds up from 16 pixels to 32, can reach it.
+pub const MAX_DETECTION_MAP_PIXELS: usize = 8 * 1024 * 1024;
+
+/// The detector's map size for a frame of `width` × `height`: the frame
+/// reduced so its longer side is at most `max_side`, then enlarged so its
+/// shorter side reaches `limit_side`, each side rounded to a multiple of 32.
+///
+/// The enlargement is capped so the map's area stays within `max_side`²
+/// (RV-2 finding 1). Without the cap a frame of an extreme aspect ratio,
+/// which the PNG decoder's 16-megapixel bound lets through (128 × 125,000,
+/// say), was enlarged from a 2-pixel shorter side to 736, a map of about 500
+/// million pixels and gigabytes of tensors. The cap was chosen over refusing
+/// such a frame, and over capping the longer side at `max_side`, because it
+/// leaves the measured pipeline's map unchanged for every frame of an aspect
+/// ratio up to about 7.4 to 1 (ultra-wide 32:9 screens included) while it
+/// bounds the memory of every other frame as the reduction bounds a large one.
 ///
 /// # Errors
 ///
-/// [`DetectionError::InvalidSize`] when a resized side would be zero.
-pub fn detection_input(
-    frame: &RgbImage,
+/// [`DetectionError::InvalidSize`] when a side would be zero, or the map
+/// would exceed [`MAX_DETECTION_MAP_PIXELS`].
+pub fn detection_map_size(
+    width: usize,
+    height: usize,
     settings: &DetectionSettings,
-) -> Result<(Tensor, DetectionScale), DetectionError> {
-    let (width, height) = (frame.width(), frame.height());
+) -> Result<(usize, usize), DetectionError> {
     let longer = width.max(height);
     let reduce = if longer > settings.max_side {
         ratio(settings.max_side, longer)
     } else {
         1.0
     };
+    let reduced = |length: usize| floor_index(index_to_f32(length) * reduce);
+    let (reduced_width, reduced_height) = (reduced(width), reduced(height));
+    if reduced_width == 0 || reduced_height == 0 {
+        return Err(DetectionError::InvalidSize);
+    }
     let shorter = index_to_f32(width.min(height)) * reduce;
-    let enlarge = if shorter < index_to_f32(settings.limit_side) {
+    let wanted = if shorter < index_to_f32(settings.limit_side) {
         index_to_f32(settings.limit_side) / shorter
     } else {
         1.0
     };
-    let side = |length: usize| {
-        let scaled =
-            floor_index(index_to_f32(floor_index(index_to_f32(length) * reduce)) * enlarge);
+    // Both reduced sides are at most `max_side`, so the cap is never below 1.
+    let ceiling = index_to_f32(settings.max_side) * index_to_f32(settings.max_side);
+    let cap = (ceiling / (index_to_f32(reduced_width) * index_to_f32(reduced_height))).sqrt();
+    let enlarge = wanted.min(cap);
+    let side = |reduced: usize| {
+        let scaled = floor_index(index_to_f32(reduced) * enlarge);
         round_index(round_half_even(index_to_f32(scaled) / 32.0)) * 32
     };
-    let (map_width, map_height) = (side(width), side(height));
-    if map_width == 0 || map_height == 0 {
+    let (map_width, map_height) = (side(reduced_width), side(reduced_height));
+    let within = map_width
+        .checked_mul(map_height)
+        .is_some_and(|pixels| pixels <= MAX_DETECTION_MAP_PIXELS);
+    if map_width == 0 || map_height == 0 || !within {
         return Err(DetectionError::InvalidSize);
     }
+    Ok((map_width, map_height))
+}
+
+/// The detector's input for `frame`: BGR, normalised to -1..1, sides multiples of 32.
+///
+/// # Errors
+///
+/// [`DetectionError::InvalidSize`] when the map cannot be sized ([`detection_map_size`]).
+pub fn detection_input(
+    frame: &RgbImage,
+    settings: &DetectionSettings,
+) -> Result<(Tensor, DetectionScale), DetectionError> {
+    let (width, height) = (frame.width(), frame.height());
+    let (map_width, map_height) = detection_map_size(width, height, settings)?;
     let resized = frame
         .resized(map_width, map_height)
         .map_err(|_| DetectionError::InvalidSize)?;
@@ -378,7 +423,10 @@ pub fn round_half_even(value: f32) -> f32 {
 
 #[cfg(test)]
 mod tests {
-    use super::{DetectionSettings, Tensor, detected_boxes, detection_input, round_half_even};
+    use super::{
+        DetectionError, DetectionSettings, MAX_DETECTION_MAP_PIXELS, Tensor, detected_boxes,
+        detection_input, detection_map_size, round_half_even,
+    };
     use crate::image::{Rect, RgbImage};
 
     type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -403,6 +451,37 @@ mod tests {
                 .shape(),
             &[1, 3, 1024, 1280]
         );
+        Ok(())
+    }
+
+    /// RV-2 finding 1: a frame the PNG decoder accepts (16.0 megapixels) but of
+    /// an extreme aspect ratio was enlarged to a map of about 500 million
+    /// pixels. Its map is now within `max_side`² before rounding, and within
+    /// the fixed bound after; an ordinary or ultra-wide screen's map is the
+    /// measured pipeline's, uncapped.
+    #[test]
+    fn a_frame_of_an_extreme_aspect_ratio_gets_a_bounded_map() -> TestResult {
+        let settings = DetectionSettings::PP_OCR_V5;
+        for (width, height) in [(128, 125_000), (125_000, 128), (1, 2000), (4, 4_000_000)] {
+            match detection_map_size(width, height, &settings) {
+                Ok((map_width, map_height)) => {
+                    let pixels = map_width * map_height;
+                    assert!(
+                        pixels <= MAX_DETECTION_MAP_PIXELS,
+                        "{width} x {height}: {map_width} x {map_height}"
+                    );
+                }
+                Err(error) => assert_eq!(error, DetectionError::InvalidSize),
+            }
+        }
+        assert_eq!(
+            detection_map_size(128, 125_000, &settings)?,
+            (64, 63_232),
+            "the 2 x 2000 reduction is enlarged only to 4 M pixels"
+        );
+        assert_eq!(detection_map_size(1280, 720, &settings)?, (1312, 736));
+        assert_eq!(detection_map_size(3840, 1080, &settings)?, (2624, 736));
+        assert_eq!(detection_map_size(3840, 2160, &settings)?, (1984, 1120));
         Ok(())
     }
 

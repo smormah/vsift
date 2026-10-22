@@ -187,7 +187,7 @@ fn push_screen_text_hits(text: &mut TerminalText, part: &SearchScreenText) {
     text.blank_line();
     text.push_fixed("On-screen text: ").push_value(&part.state);
     let coverage = &part.coverage;
-    if part.state != "not_run" {
+    if part.state != "not_run" && part.state != "unavailable" {
         text.push_fixed(" (")
             .push_unsigned(coverage.read)
             .push_fixed(" of ")
@@ -199,6 +199,20 @@ fn push_screen_text_hits(text: &mut TerminalText, part: &SearchScreenText) {
             .push_fixed(" failed)");
     }
     text.end_line();
+    if let Some(unavailable) = &part.unavailable {
+        let what = if unavailable.index == "screen_text" {
+            "The session's screen-text index could not be read ("
+        } else {
+            "The session's visual index could not be read, so the coverage is not known ("
+        };
+        text.push_fixed(what)
+            .push_value(&unavailable.reason)
+            .push_fixed("); the transcript search is unaffected.")
+            .end_line();
+    }
+    if part.state == "unavailable" {
+        return;
+    }
     if part.state == "not_run" {
         text.push_fixed("Run vsift ocr on the session to read it.")
             .end_line();

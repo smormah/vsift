@@ -122,6 +122,7 @@ impl FrameExtractor for FakeVideo {
 /// An engine that reads "frame N" off frame N, and can be told to misbehave on one frame.
 struct Scripted {
     runner: char,
+    identities: AtomicUsize,
     reads: AtomicUsize,
     images: AtomicUsize,
     odd: Mutex<Option<(String, EngineReading)>>,
@@ -132,6 +133,7 @@ impl Scripted {
     fn new(runner: char) -> Self {
         Self {
             runner,
+            identities: AtomicUsize::new(0),
             reads: AtomicUsize::new(0),
             images: AtomicUsize::new(0),
             odd: Mutex::new(None),
@@ -157,8 +159,13 @@ impl Scripted {
 
     fn reading(
         &self,
+        build: &ScreenTextProvider,
         images: &[ScreenTextImage<'_>],
     ) -> Result<Vec<EngineReading>, ScreenTextReadError> {
+        // As the runner adapter does: a batch for another build is refused.
+        if *build != self.provider()? {
+            return Err(ScreenTextReadError::BuildChanged);
+        }
         let batch = self.reads.fetch_add(1, Ordering::SeqCst) + 1;
         if let Some((failing, error)) = self.fail_batch
             && failing == batch
@@ -198,6 +205,7 @@ impl ScreenTextReader for Scripted {
     fn identity(
         &self,
     ) -> impl Future<Output = Result<ScreenTextProvider, ScreenTextReadError>> + Send {
+        self.identities.fetch_add(1, Ordering::SeqCst);
         ready(self.provider())
     }
 
@@ -207,9 +215,10 @@ impl ScreenTextReader for Scripted {
 
     fn read(
         &self,
+        build: &ScreenTextProvider,
         images: &[ScreenTextImage<'_>],
     ) -> impl Future<Output = Result<Vec<EngineReading>, ScreenTextReadError>> + Send {
-        ready(self.reading(images))
+        ready(self.reading(build, images))
     }
 }
 
@@ -262,12 +271,162 @@ async fn read(
             previous,
             plan,
             max_frames,
+            revisions_left: 64,
         },
         video,
         engine,
         &running(),
     )
     .await
+}
+
+/// An index of `engine`'s build holding `frames` frames past the fake video's
+/// end (so no target of a plan resolves to one of them), each with `lines` lines.
+fn held_index(engine: &Scripted, frames: usize, lines: usize) -> Built<ScreenTextIndex> {
+    let (session_id, source_id) = ids()?;
+    let scope = vsift_domain::ScreenTextScope {
+        session_id,
+        source_id,
+        stream_index: 0,
+        profile: ScreenTextProfile::PpOcrV5LatinV1,
+        provider: engine.provider()?,
+    };
+    let dimensions = FrameDimensions::new(640, 360)?;
+    let mut held = Vec::with_capacity(frames);
+    for ordinal in 0..frames {
+        let pts = FRAMES + i64::try_from(ordinal)?;
+        let mut read = Vec::with_capacity(lines);
+        for line in 0..lines {
+            read.push(vsift_domain::ScreenTextLine {
+                id: super::screen_text_line_id(&scope, pts, line + 1)?,
+                region: vsift_domain::TextRegion::new(0, 0, 10, 10, dimensions)?,
+                text: vsift_domain::ScreenText::parse("held")?,
+                confidence: vsift_domain::Confidence::provider_score(
+                    9_000,
+                    vsift_domain::ConfidenceOrigin::ProviderUncalibrated,
+                )?,
+            });
+        }
+        held.push(vsift_domain::ScreenTextFrame {
+            frame: vsift_domain::FrameRef {
+                stream_index: 0,
+                time_base: TimeBase::new(1, 10)?,
+                pts,
+                time: frame_time(pts),
+                dimensions,
+            },
+            targets: vec![ReadTarget {
+                time: frame_time(pts),
+                candidate: None,
+            }],
+            outcome: ScreenTextOutcome::Read {
+                lines: read,
+                truncated: false,
+            },
+        });
+    }
+    let revision = std::num::NonZeroU32::MIN;
+    Ok(ScreenTextIndex::new(vsift_domain::ScreenTextIndexParts {
+        id: super::screen_text_index_id(&scope, revision)?,
+        revision,
+        scope,
+        period_micros: DEFAULT_READ_PERIOD_MICROS,
+        frames: held,
+        unresolved: Vec::new(),
+    })?)
+}
+
+/// RV-2 finding 5: the budget is clipped to the room the index has left before
+/// anything is read. An index two frames short of its bound reads two frames
+/// and stops as `index_full`, and the commit then fits; a full one reads
+/// nothing and runs no batch. Before, the call read its whole budget and the
+/// merge failed, every time.
+#[tokio::test]
+async fn a_call_reads_only_what_the_index_has_room_for() -> TestResult {
+    let plan = whole_plan(&[])?;
+    let video = FakeVideo::new()?;
+    let engine = Scripted::new('1');
+    let nearly = held_index(&engine, vsift_domain::MAX_SCREEN_TEXT_FRAMES - 2, 0)?;
+    assert_eq!(super::frames_with_room(Some(&nearly)), 2);
+    let extension = read(&plan, Some(&nearly), &video, &engine, 40).await?;
+    assert_eq!(extension.stop, Some(ScreenTextStop::IndexFull));
+    assert_eq!(extension.frames.len(), 2);
+    let merged = merge_screen_text(Some(&nearly), &extension, DEFAULT_READ_PERIOD_MICROS)?
+        .ok_or("no revision")?;
+    assert_eq!(merged.frames().len(), vsift_domain::MAX_SCREEN_TEXT_FRAMES);
+
+    let reads = engine.reads.load(Ordering::SeqCst);
+    let extension = read(&plan, Some(&merged), &video, &engine, 40).await?;
+    assert_eq!(extension.stop, Some(ScreenTextStop::IndexFull));
+    assert!(extension.frames.is_empty() && extension.unresolved.is_empty());
+    assert_eq!(
+        engine.reads.load(Ordering::SeqCst),
+        reads,
+        "a full index runs no batch"
+    );
+    assert_eq!(video.extractions.load(Ordering::SeqCst), 1);
+    Ok(())
+}
+
+/// The line bound counts too: room is kept for the most lines a frame may hold.
+#[test]
+fn room_counts_lines_as_if_every_new_frame_were_full() -> TestResult {
+    let engine = Scripted::new('1');
+    // A new index: 200,000 lines hold 781 full frames, more than any call reads.
+    assert_eq!(super::frames_with_room(None), 781);
+    // 100 frames of 256 lines leave 174,400 lines: room for 681 full frames,
+    // fewer than the 3,996 the frame bound alone would allow.
+    let lined = held_index(&engine, 100, vsift_domain::MAX_SCREEN_TEXT_LINES_PER_FRAME)?;
+    assert_eq!(super::frames_with_room(Some(&lined)), 681);
+    Ok(())
+}
+
+/// A session that holds as many revisions as it may: the call stops before the
+/// engine identifies itself or reads anything.
+#[tokio::test]
+async fn no_revision_left_runs_nothing() -> TestResult {
+    let plan = whole_plan(&[])?;
+    let video = FakeVideo::new()?;
+    let engine = Scripted::new('1');
+    let (session, source) = ids()?;
+    let outcome = read_screen_text_within(
+        ReadScreenTextRequest {
+            session_id: &session,
+            source_id: &source,
+            profile: ScreenTextProfile::PpOcrV5LatinV1,
+            previous: None,
+            plan: &plan,
+            max_frames: 40,
+            revisions_left: 0,
+        },
+        &video,
+        &engine,
+        &running(),
+    )
+    .await;
+    assert_eq!(outcome, Err(ScreenTextBuildError::IndexFull));
+    assert_eq!(engine.identities.load(Ordering::SeqCst), 0);
+    assert_eq!(video.listings.load(Ordering::SeqCst), 0);
+    Ok(())
+}
+
+/// RV-2 finding 3: each batch is read with the build the engine identified
+/// itself as, and a batch by another build stops the call like any engine
+/// failure, keeping only the batches before it.
+#[tokio::test]
+async fn a_batch_by_another_build_is_refused_and_not_kept() -> TestResult {
+    let plan = whole_plan(&[])?;
+    let video = FakeVideo::new()?;
+    let mut engine = Scripted::new('1');
+    engine.fail_batch = Some((2, ScreenTextReadError::BuildChanged));
+    let extension = read(&plan, None, &video, &engine, 40).await?;
+    assert_eq!(
+        extension.stop,
+        Some(ScreenTextStop::Engine(ScreenTextReadError::BuildChanged))
+    );
+    assert_eq!(extension.frames.len(), 4, "only the first batch is kept");
+    assert_eq!(engine.identities.load(Ordering::SeqCst), 1);
+    Ok(())
 }
 
 fn candidate(suffix: char) -> Built<VisualCandidateId> {
@@ -463,6 +622,7 @@ async fn a_cancelled_call_reads_nothing() -> TestResult {
             previous: None,
             plan: &plan,
             max_frames: 40,
+            revisions_left: 64,
         },
         &video,
         &Scripted::new('1'),

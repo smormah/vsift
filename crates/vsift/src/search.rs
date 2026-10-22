@@ -4,6 +4,7 @@ use vsift_application::{
     ScreenTextPageRequest, SearchPageRequest, clip_to_source, missing_windows, page_screen_text,
     page_search,
 };
+use vsift_contract::{ScreenTextUnavailable, UnreadableIndex, UnreadableReason};
 use vsift_domain::{
     CursorError, FrameRef, MediaTime, PageLimit, ReadTarget, ScreenTextCoverage, ScreenTextIndex,
     ScreenTextLine, ScreenTextOccurrence, SearchCoverage, SearchMatch, SearchQuery, SessionId,
@@ -129,9 +130,36 @@ pub struct ScreenTextSearch {
     coverage: ScreenTextCoverage,
     candidates_complete: bool,
     period_micros: Option<u64>,
+    unavailable: Option<ScreenTextUnavailable>,
 }
 
 impl ScreenTextSearch {
+    /// The part of a session `ocr` has not read: nothing about the screen is known.
+    const fn not_run(unavailable: Option<ScreenTextUnavailable>) -> Self {
+        Self {
+            index: None,
+            hits: Vec::new(),
+            total_hits: 0,
+            coverage: ScreenTextCoverage {
+                planned: 0,
+                read: 0,
+                failed: 0,
+                unresolved: 0,
+                pending: 0,
+                awaiting_analysis: 0,
+            },
+            candidates_complete: false,
+            period_micros: None,
+            unavailable,
+        }
+    }
+
+    /// The index that could not be read for this part, and why; `None` when
+    /// both were read (or there was none). Only `search`'s member sets it.
+    #[must_use]
+    pub const fn unavailable(&self) -> Option<ScreenTextUnavailable> {
+        self.unavailable
+    }
     /// The index searched; `None` when `ocr` has not read this session.
     #[must_use]
     pub const fn index(&self) -> Option<&ScreenTextIndex> {
@@ -314,7 +342,7 @@ impl Engine {
                 range,
                 limit,
                 now,
-            )?)
+            ))
         } else {
             None
         };
@@ -334,6 +362,12 @@ impl Engine {
 /// The on-screen text part of a first page: hits of the session's newest
 /// screen-text index, and the coverage of the range's plan, from the indexes as
 /// they are (no tool runs and nothing is written).
+///
+/// It never fails the search (ADR 0030 decision 10, RV-2 finding 2): an index
+/// that cannot be read is named in the part, with why, and the transcript's
+/// page is returned as it would be without OCR. The screen-text index is read
+/// first, and the visual index only when there is one to plan coverage for, so
+/// a session `ocr` never read costs no visual-index read.
 fn search_screen_text_part(
     store: &FilesystemSessionStore,
     session: &SessionId,
@@ -341,20 +375,28 @@ fn search_screen_text_part(
     range: Option<TimeRange>,
     limit: PageLimit,
     now: u64,
-) -> Result<ScreenTextSearch, EngineError> {
-    let (index, _) = store.read_screen_text_index(session, now)?;
-    let visual = store
-        .read_visual_index(session, now)?
-        .map(|(index, _)| index);
+) -> ScreenTextSearch {
+    let index = match store.read_screen_text_index(session, now) {
+        Ok((index, _)) => index,
+        Err(error) => {
+            return ScreenTextSearch::not_run(Some(ScreenTextUnavailable {
+                index: UnreadableIndex::ScreenText,
+                reason: UnreadableReason::of(&error),
+            }));
+        }
+    };
     let Some(index) = index else {
-        return Ok(ScreenTextSearch {
-            index: None,
-            hits: Vec::new(),
-            total_hits: 0,
-            coverage: ScreenTextCoverage::default(),
-            candidates_complete: false,
-            period_micros: None,
-        });
+        return ScreenTextSearch::not_run(None);
+    };
+    let (visual, unavailable) = match store.read_visual_index(session, now) {
+        Ok(visual) => (visual.map(|(visual, _)| visual), None),
+        Err(error) => (
+            None,
+            Some(ScreenTextUnavailable {
+                index: UnreadableIndex::Visual,
+                reason: UnreadableReason::of(&error),
+            }),
+        ),
     };
     let occurrences = screen_text_occurrences(&index, query, range);
     let total_hits = occurrences.len();
@@ -363,15 +405,19 @@ fn search_screen_text_part(
         .take(usize::from(limit.get()))
         .map(result_hit)
         .collect();
-    let (coverage, candidates_complete) = plan_coverage(visual.as_ref(), &index, range)?;
-    Ok(ScreenTextSearch {
+    // Without a usable visual index nothing is planned and the candidates are
+    // not known: the part is partial, never complete.
+    let (coverage, candidates_complete) = plan_coverage(visual.as_ref(), &index, range)
+        .unwrap_or_else(|_| (ScreenTextCoverage::of(&[], Some(&index)), false));
+    ScreenTextSearch {
         period_micros: Some(index.period_micros()),
         index: Some(index),
         hits,
         total_hits,
         coverage,
         candidates_complete,
-    })
+        unavailable,
+    }
 }
 
 /// One occurrence as the engine's result hit.
@@ -535,14 +581,7 @@ impl Engine {
                 session,
                 query,
                 range,
-                part: ScreenTextSearch {
-                    index: None,
-                    hits: Vec::new(),
-                    total_hits: 0,
-                    coverage: ScreenTextCoverage::default(),
-                    candidates_complete: false,
-                    period_micros: None,
-                },
+                part: ScreenTextSearch::not_run(None),
                 next_cursor: None,
             });
         };
@@ -581,6 +620,7 @@ impl Engine {
                 total_hits,
                 coverage,
                 candidates_complete,
+                unavailable: None,
             },
             next_cursor,
         })

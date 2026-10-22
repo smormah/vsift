@@ -84,13 +84,21 @@ class ArchiveTests(unittest.TestCase):
 class ProtocolTests(unittest.TestCase):
     def describe(self, **changes: object) -> str:
         record = {"record": "describe", "protocol": 1, "runner_version": "0.1.0", "runtime_version": "1.31.0",
-                  "profile": "ppocrv5-latin-v1", "detector_sha256": runner.MODELS[runner.DETECTOR][2],
+                  "runtime_sha256": "a" * 64, "profile": "ppocrv5-latin-v1",
+                  "detector_sha256": runner.MODELS[runner.DETECTOR][2],
                   "recognizer_sha256": runner.MODELS[runner.RECOGNIZER][2], **changes}
         return json.dumps(record) + "\n"
 
+    def greeting(self, **changes: object) -> str:
+        record = {"record": "runner", "protocol": 1, "runner_version": "0.1.0", "runtime_version": "1.31.0",
+                  "runtime_sha256": "a" * 64, "detector_sha256": runner.MODELS[runner.DETECTOR][2],
+                  "recognizer_sha256": runner.MODELS[runner.RECOGNIZER][2], **changes}
+        return json.dumps(record, separators=(",", ":"))
+
     def test_describe_is_held_to_the_pins(self) -> None:
         self.assertEqual(runner.check_description(0, self.describe())["runtime_version"], "1.31.0")
-        for changes in ({"runtime_version": "1.30.0"}, {"detector_sha256": "0" * 64}, {"protocol": 2}):
+        for changes in ({"runtime_version": "1.30.0"}, {"detector_sha256": "0" * 64}, {"protocol": 2},
+                        {"runtime_sha256": "A"}):
             with self.assertRaises(RunnerCheckError):
                 runner.check_description(0, self.describe(**changes))
         with self.assertRaises(RunnerCheckError):
@@ -98,7 +106,7 @@ class ProtocolTests(unittest.TestCase):
 
     def test_a_read_gives_each_image_its_lines_or_none(self) -> None:
         stdout = "\n".join([
-            '{"record":"runner","protocol":1,"runner_version":"0.1.0"}',
+            self.greeting(),
             '{"record":"line","image":0,"x":1,"y":2,"width":30,"height":10,"text":"Total","text_cut":false,"confidence":0.98}',
             '{"record":"image","image":0,"width":64,"height":32,"lines":1,"truncated":false}',
             '{"record":"error","image":1,"code":"image_invalid"}',
@@ -113,6 +121,9 @@ class ProtocolTests(unittest.TestCase):
         misnumbered = stdout.replace('"image":1,"code"', '"image":5,"code"')
         with self.assertRaises(RunnerCheckError):
             runner.parse_read(misnumbered, 2)
+        other_model = stdout.replace(self.greeting(), self.greeting(detector_sha256="0" * 64))
+        with self.assertRaises(RunnerCheckError):
+            runner.parse_read(other_model, 2)
 
 
 class ParityTests(unittest.TestCase):

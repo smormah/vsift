@@ -269,6 +269,44 @@ impl FilesystemSessionStore {
         Ok((Some(index), status))
     }
 
+    /// How many more screen-text index revisions the open session may hold
+    /// (at most [`crate::MAX_SCREEN_TEXT_INDEX_RECORDS`] in all). `ocr` asks
+    /// before it reads anything, so a session with none left costs no runner
+    /// work (RV-2 finding 5).
+    ///
+    /// # Errors
+    ///
+    /// The same as [`Self::read_screen_text_index`], without decoding a record.
+    pub fn screen_text_revisions_left(
+        &self,
+        session_id: &SessionId,
+        now_unix_seconds: u64,
+    ) -> Result<usize, SessionStorageError> {
+        let _hold = self.acquire_read(session_id)?;
+        let sessions = self
+            .root
+            .open_dir_nofollow(SESSIONS_DIRECTORY)
+            .map_err(map_storage_io)?;
+        let session = sessions
+            .open_dir_nofollow(session_id.as_str())
+            .map_err(map_committed_io)?;
+        let committed = read_committed_manifest(&session, session_id, self.chain_check())?;
+        let record = committed
+            .manifest
+            .lifecycle
+            .ok_or(SessionStorageError::StateConflict)?;
+        let status = record.to_status(session_id.clone(), committed.manifest.generation)?;
+        if status.phase() != SessionPhase::Open || status.lifetime().expired(now_unix_seconds) {
+            return Err(SessionStorageError::StateConflict);
+        }
+        let held = record
+            .artifacts
+            .iter()
+            .filter(|artifact| artifact.kind == StoredArtifactKind::ScreenTextIndexRecord)
+            .count();
+        Ok(crate::MAX_SCREEN_TEXT_INDEX_RECORDS.saturating_sub(held))
+    }
+
     /// Opens the committed private source copy of an open session under a
     /// shared lifetime hold, with the identity its lifecycle record gives it.
     pub(crate) fn committed_source(

@@ -10,6 +10,17 @@
 //! length bounded; anything else is [`RunnerOutputError`] and no reading of the
 //! batch is kept. Text checks (empty, control characters, length) and region
 //! checks against the frame are the application's.
+//!
+//! **One engine build per index, proven at every read** (RV-2 finding 3). The
+//! build is learnt once, from `describe` and the executable's own digest. Each
+//! `read` then hashes the executable again before it starts the runner, and the
+//! runner's greeting names the runtime and models it hashed itself before
+//! loading them; a batch by any other build is refused as
+//! [`ScreenTextReadError::BuildChanged`] and nothing of it is kept.
+//!
+//! **The call's bound holds** (RV-2 finding 4). A runner given a call deadline
+//! ([`OcrRunner::with_call_deadline`]) runs each process for at most the time
+//! the call has left, and starts none once it has none.
 
 use std::{
     error::Error,
@@ -17,7 +28,7 @@ use std::{
     fmt, io,
     io::Write,
     num::{NonZeroU16, NonZeroUsize},
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use cap_fs_ext::{FollowSymlinks, OpenOptionsFollowExt};
@@ -90,6 +101,10 @@ enum Record {
     Runner {
         protocol: u32,
         runner_version: String,
+        runtime_version: String,
+        runtime_sha256: String,
+        detector_sha256: String,
+        recognizer_sha256: String,
     },
     Line {
         image: usize,
@@ -114,6 +129,44 @@ enum Record {
     },
 }
 
+/// The build a `read` run says it is: the runner's version, and the runtime and
+/// models it hashed before loading them.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RunnerGreeting {
+    /// The runner's version.
+    pub runner_version: ProviderLabel,
+    /// The ONNX Runtime library's version label, as `describe` names it.
+    pub runtime_version: ProviderLabel,
+    /// SHA-256 of that library.
+    pub runtime_sha256: Sha256Hex,
+    /// SHA-256 of the detection model.
+    pub detector_sha256: Sha256Hex,
+    /// SHA-256 of the recognition model.
+    pub recognizer_sha256: Sha256Hex,
+}
+
+impl RunnerGreeting {
+    /// Whether the run is by the build `describe` reported: the same runner
+    /// version, the same runtime (named by its digest) and the same two models.
+    /// The executable's own digest is `VSift`'s to check, which it does before the run.
+    #[must_use]
+    pub fn is_build(&self, build: &ScreenTextProvider) -> bool {
+        self.runner_version == build.runner_version
+            && self.runtime_version == build.runtime_version
+            && self.detector_sha256 == build.detector_sha256
+            && self.recognizer_sha256 == build.recognizer_sha256
+    }
+}
+
+/// One `read` run's output, parsed: who answered, and one reading per image.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RunnerRun {
+    /// The greeting.
+    pub greeting: RunnerGreeting,
+    /// The readings, in the order the images were given.
+    pub readings: Vec<EngineReading>,
+}
+
 /// Parses one run's output for images of `dimensions` (width, height), in order:
 /// the greeting, then each image's lines and its `image` record, or its `error`
 /// record. A line the runner cut at its length bound marks its image's reading
@@ -128,22 +181,31 @@ enum Record {
 pub fn parse_runner_output(
     stdout: &[u8],
     dimensions: &[(u32, u32)],
-) -> Result<Vec<EngineReading>, RunnerOutputError> {
+) -> Result<RunnerRun, RunnerOutputError> {
     if stdout.len() > MAX_RUNNER_OUTPUT_BYTES {
         return Err(RunnerOutputError::TooLarge);
     }
     let text = std::str::from_utf8(stdout).map_err(|_| RunnerOutputError::Malformed)?;
     let mut records = text.split('\n').filter(|line| !line.is_empty());
-    match records.next().map(serde_json::from_str::<Record>) {
+    let greeting = match records.next().map(serde_json::from_str::<Record>) {
         Some(Ok(Record::Runner {
             protocol: RUNNER_PROTOCOL,
             runner_version,
-        })) => {
-            ProviderLabel::parse(runner_version).map_err(|_| RunnerOutputError::Malformed)?;
-        }
+            runtime_version,
+            runtime_sha256,
+            detector_sha256,
+            recognizer_sha256,
+        })) => greeting(
+            runner_version,
+            runtime_version,
+            runtime_sha256,
+            detector_sha256,
+            recognizer_sha256,
+        )
+        .ok_or(RunnerOutputError::Malformed)?,
         Some(Ok(_)) | None => return Err(RunnerOutputError::Protocol),
         Some(Err(_)) => return Err(RunnerOutputError::Malformed),
-    }
+    };
     let mut readings = Readings {
         dimensions,
         done: Vec::with_capacity(dimensions.len()),
@@ -155,7 +217,26 @@ pub fn parse_runner_output(
             serde_json::from_str(record).map_err(|_| RunnerOutputError::Malformed)?;
         readings.accept(record)?;
     }
-    readings.finish()
+    Ok(RunnerRun {
+        greeting,
+        readings: readings.finish()?,
+    })
+}
+
+fn greeting(
+    runner_version: String,
+    runtime_version: String,
+    runtime_sha256: String,
+    detector_sha256: String,
+    recognizer_sha256: String,
+) -> Option<RunnerGreeting> {
+    Some(RunnerGreeting {
+        runner_version: ProviderLabel::parse(runner_version).ok()?,
+        runtime_version: ProviderLabel::parse(runtime_version).ok()?,
+        runtime_sha256: Sha256Hex::parse(runtime_sha256).ok()?,
+        detector_sha256: Sha256Hex::parse(detector_sha256).ok()?,
+        recognizer_sha256: Sha256Hex::parse(recognizer_sha256).ok()?,
+    })
 }
 
 /// The readings of one run as its records arrive, image by image.
@@ -269,6 +350,7 @@ struct Description {
     protocol: u32,
     runner_version: String,
     runtime_version: String,
+    runtime_sha256: String,
     profile: String,
     detector_sha256: String,
     recognizer_sha256: String,
@@ -281,6 +363,8 @@ pub struct RunnerDescription {
     pub runner_version: ProviderLabel,
     /// The ONNX Runtime version it loaded.
     pub runtime_version: ProviderLabel,
+    /// SHA-256 of the ONNX Runtime library, taken before it was loaded.
+    pub runtime_sha256: Sha256Hex,
     /// The pipeline it runs.
     pub profile: ScreenTextProfile,
     /// SHA-256 of the detection model it loaded.
@@ -309,6 +393,8 @@ pub fn parse_runner_description(stdout: &[u8]) -> Result<RunnerDescription, Runn
             .map_err(|_| RunnerOutputError::Malformed)?,
         runtime_version: ProviderLabel::parse(description.runtime_version)
             .map_err(|_| RunnerOutputError::Malformed)?,
+        runtime_sha256: Sha256Hex::parse(description.runtime_sha256)
+            .map_err(|_| RunnerOutputError::Malformed)?,
         profile: ScreenTextProfile::from_identifier(&description.profile)
             .ok_or(RunnerOutputError::Protocol)?,
         detector_sha256: Sha256Hex::parse(description.detector_sha256)
@@ -324,6 +410,7 @@ pub struct OcrRunner {
     executable: TrustedExecutable,
     threads: NonZeroU16,
     host_isolation: HostIsolation,
+    call_deadline: Option<Instant>,
 }
 
 impl OcrRunner {
@@ -338,7 +425,17 @@ impl OcrRunner {
             executable,
             threads,
             host_isolation,
+            call_deadline: None,
         }
+    }
+
+    /// The same runner bounded by the call it serves: each run gets at most the
+    /// time left until `deadline` (its own deadline otherwise), and none starts
+    /// once the deadline has passed ([`ScreenTextReadError::Deadline`]).
+    #[must_use]
+    pub const fn with_call_deadline(mut self, deadline: Instant) -> Self {
+        self.call_deadline = Some(deadline);
+        self
     }
 
     /// The executable.
@@ -386,20 +483,30 @@ impl OcrRunner {
         })
     }
 
-    /// Reads `images` (at most [`MAX_RUNNER_IMAGES`]), handing them over in `workspace`.
+    /// Reads `images` (at most [`MAX_RUNNER_IMAGES`]) with `build`, the build
+    /// [`Self::identity`] reported, handing them over in `workspace`.
     ///
     /// # Errors
     ///
-    /// [`ScreenTextReadError::Workspace`] when the hand-over files cannot be
-    /// written, and the run's failures; no reading is returned for a failed run.
+    /// [`ScreenTextReadError::BuildChanged`] when the executable or the build
+    /// the run's greeting names is not `build`; [`ScreenTextReadError::Workspace`]
+    /// when the hand-over files cannot be written; and the run's failures. No
+    /// reading is returned for a failed or refused run.
     pub async fn read(
         &self,
         workspace: &ProcessWorkingDirectory,
+        build: &ScreenTextProvider,
         images: &[ScreenTextImage<'_>],
         cancellation: ProcessCancellation,
     ) -> Result<Vec<EngineReading>, ScreenTextReadError> {
         if images.is_empty() || images.len() > MAX_RUNNER_IMAGES {
             return Err(ScreenTextReadError::ProviderFailed);
+        }
+        let (_, digest) = hash_file_bounded(self.executable.path(), MAX_RUNNER_EXECUTABLE_BYTES)
+            .await
+            .map_err(|_| ScreenTextReadError::Unavailable)?;
+        if hex(&digest) != build.runner_sha256.as_str() {
+            return Err(ScreenTextReadError::BuildChanged);
         }
         let directory = Dir::open_ambient_dir(workspace.path(), cap_std::ambient_authority())
             .map_err(|_| ScreenTextReadError::Workspace)?;
@@ -414,7 +521,7 @@ impl OcrRunner {
             written.push(name);
         }
         let result = if written.len() == names.len() {
-            self.read_written(workspace, &names, images, cancellation)
+            self.read_written(workspace, build, &names, images, cancellation)
                 .await
         } else {
             Err(ScreenTextReadError::Workspace)
@@ -430,6 +537,7 @@ impl OcrRunner {
     async fn read_written(
         &self,
         workspace: &ProcessWorkingDirectory,
+        build: &ScreenTextProvider,
         names: &[String],
         images: &[ScreenTextImage<'_>],
         cancellation: ProcessCancellation,
@@ -453,14 +561,18 @@ impl OcrRunner {
             .iter()
             .map(|image| (image.dimensions.width(), image.dimensions.height()))
             .collect();
-        parse_runner_output(&stdout, &sizes).map_err(|error| match error {
+        let run = parse_runner_output(&stdout, &sizes).map_err(|error| match error {
             RunnerOutputError::TooLarge | RunnerOutputError::OverBound => {
                 ScreenTextReadError::ResourceLimit
             }
             RunnerOutputError::Malformed
             | RunnerOutputError::Protocol
             | RunnerOutputError::Inconsistent => ScreenTextReadError::UnparseableOutput,
-        })
+        })?;
+        if !run.greeting.is_build(build) {
+            return Err(ScreenTextReadError::BuildChanged);
+        }
+        Ok(run.readings)
     }
 
     async fn run(
@@ -469,6 +581,16 @@ impl OcrRunner {
         deadline: Duration,
         cancellation: ProcessCancellation,
     ) -> Result<Vec<u8>, ScreenTextReadError> {
+        let deadline = match self.call_deadline {
+            None => deadline,
+            Some(call) => {
+                let left = call.saturating_duration_since(Instant::now());
+                if left.is_zero() {
+                    return Err(ScreenTextReadError::Deadline);
+                }
+                deadline.min(left)
+            }
+        };
         let cwd = ProcessWorkingDirectory::of_executable(&self.executable)
             .map_err(|_| ScreenTextReadError::Unavailable)?;
         let request = ProcessRequest::new(self.executable.clone(), cwd, deadline)
@@ -554,6 +676,7 @@ impl ScreenTextReader for OcrScreenTextReader<'_> {
 
     async fn read(
         &self,
+        build: &ScreenTextProvider,
         images: &[ScreenTextImage<'_>],
     ) -> Result<Vec<EngineReading>, ScreenTextReadError> {
         let _permit =
@@ -566,7 +689,7 @@ impl ScreenTextReader for OcrScreenTextReader<'_> {
                     _ => ScreenTextReadError::Busy,
                 })?;
         self.runner
-            .read(&self.workspace, images, self.cancellation.clone())
+            .read(&self.workspace, build, images, self.cancellation.clone())
             .await
     }
 }

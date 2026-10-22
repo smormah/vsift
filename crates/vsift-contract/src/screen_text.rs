@@ -15,7 +15,7 @@
 //! `not_run` until `ocr` has read the session.
 
 use serde::Serialize;
-use vsift_application::ScreenTextStop;
+use vsift_application::{ScreenTextStop, SessionStorageError};
 use vsift_domain::{
     FrameRef, MediaTime, ScreenTextCoverage, ScreenTextIndex, ScreenTextLine, SearchMatch,
     SearchQuery, SessionId, TimeRange, VisualCandidateId, VisualCoverageGap,
@@ -51,7 +51,11 @@ pub const SCREEN_TEXT_PARTIAL_WARNING: &str = "Not every planned frame of the ra
 pub const OCR_RUNNER_REMEDIATION: &str = "On-screen text is read by the OCR runner, vsift-ocr-runner, with its ONNX Runtime library and models beside it; it is optional and nothing else needs it. Nothing was changed. Install it, or register a working one with setup configure ocr-runner --executable <path>, then run ocr again. No need to search folders: ask the user where it is.";
 
 /// Remediation when the OCR runner could not run, load its models or answer.
-pub const OCR_FAILED_REMEDIATION: &str = "The OCR runner could not read the frames: it did not start, could not load its runtime or models, or did not answer in its protocol. Nothing was committed. Check that its onnxruntime folder and models sit beside it, or register another build with setup configure ocr-runner --executable <path>.";
+pub const OCR_FAILED_REMEDIATION: &str = "The OCR runner could not read the frames: it did not start, could not load its runtime or models, did not answer in its protocol, or its files changed during the call. Nothing was committed. Check that its onnxruntime folder and models sit beside it, or register another build with setup configure ocr-runner --executable <path>; after an update, run ocr again: the new build starts its own index.";
+
+/// Remediation for an `ocr` call that found no room: the session's index, or its
+/// budget of index revisions, is full.
+pub const OCR_INDEX_FULL_REMEDIATION: &str = "The session's screen-text index has no room for more frames (it holds at most 4,096 frames and 200,000 lines, in at most 64 revisions), so nothing was read or committed. Search what it holds with ocr search or search; to read more of the video, open a new session for the rest of it, or read a narrower range with a longer --period-us there.";
 
 /// Everything a host presents about one `ocr` call.
 #[derive(Clone, Debug)]
@@ -302,6 +306,8 @@ pub struct ScreenTextSearchPresentation<'a> {
     pub candidates_complete: bool,
     /// The period of the index's latest plan.
     pub period_micros: Option<u64>,
+    /// An index that could not be read, if one could not; `search` only.
+    pub unavailable: Option<ScreenTextUnavailable>,
 }
 
 /// A region of a frame's displayed pixels.
@@ -377,10 +383,82 @@ impl HitData {
     }
 }
 
+/// An index a `search` first page could not read for its `screen_text` member.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum UnreadableIndex {
+    /// The screen-text index (`ocr`'s record): nothing about the screen is known.
+    ScreenText,
+    /// The visual index: hits are listed, but the plan, and so the coverage, is not known.
+    Visual,
+}
+
+impl UnreadableIndex {
+    /// Stable identifier, as the member names it.
+    #[must_use]
+    pub const fn identifier(self) -> &'static str {
+        match self {
+            Self::ScreenText => "screen_text",
+            Self::Visual => "visual",
+        }
+    }
+}
+
+/// Why an index could not be read.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum UnreadableReason {
+    /// Its record failed verification.
+    IntegrityFailure,
+    /// Its record was written by a newer release.
+    UnsupportedVersion,
+    /// It could not be read for another reason (storage, or the session's state).
+    Unreadable,
+}
+
+impl UnreadableReason {
+    /// The reason for a session-store failure.
+    #[must_use]
+    pub const fn of(error: &SessionStorageError) -> Self {
+        match error {
+            SessionStorageError::IntegrityFailure => Self::IntegrityFailure,
+            SessionStorageError::UnsupportedVersion => Self::UnsupportedVersion,
+            _ => Self::Unreadable,
+        }
+    }
+
+    /// Stable identifier, as the member names it.
+    #[must_use]
+    pub const fn identifier(self) -> &'static str {
+        match self {
+            Self::IntegrityFailure => "integrity_failure",
+            Self::UnsupportedVersion => "unsupported_version",
+            Self::Unreadable => "unreadable",
+        }
+    }
+}
+
+/// An index the `screen_text` member of a `search` first page could not read,
+/// and why. The search itself is unchanged: its status, coverage and transcript
+/// hits never depend on on-screen text (ADR 0030 decision 10, RV-2 finding 2).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ScreenTextUnavailable {
+    /// Which index.
+    pub index: UnreadableIndex,
+    /// Why.
+    pub reason: UnreadableReason,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+struct UnavailableData {
+    index: &'static str,
+    reason: &'static str,
+}
+
 /// The `screen_text` member of a `search` first page.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct ScreenTextSearchData {
     state: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    unavailable: Option<UnavailableData>,
     index: Option<IndexData>,
     hits: Vec<HitData>,
     total_hits: usize,
@@ -393,13 +471,24 @@ impl ScreenTextSearchData {
     pub fn new(part: &ScreenTextSearchPresentation<'_>) -> Self {
         let coverage =
             CoverageData::new(part.coverage, part.period_micros, part.candidates_complete);
-        let state = match part.index {
-            None => "not_run",
-            Some(_) if coverage.is_complete() => "complete",
-            Some(_) => "partial",
+        let state = match (part.unavailable, part.index) {
+            (
+                Some(ScreenTextUnavailable {
+                    index: UnreadableIndex::ScreenText,
+                    ..
+                }),
+                _,
+            ) => "unavailable",
+            (_, None) => "not_run",
+            (_, Some(_)) if coverage.is_complete() => "complete",
+            (_, Some(_)) => "partial",
         };
         Self {
             state,
+            unavailable: part.unavailable.map(|unavailable| UnavailableData {
+                index: unavailable.index.identifier(),
+                reason: unavailable.reason.identifier(),
+            }),
             index: part.index.map(IndexData::new),
             hits: part.hits.iter().map(HitData::new).collect(),
             total_hits: part.total_hits,

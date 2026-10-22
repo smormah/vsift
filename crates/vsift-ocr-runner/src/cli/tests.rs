@@ -98,7 +98,11 @@ impl Scripted {
 impl Backend for Scripted {
     type Session = Blank;
 
-    fn runtime_version(&self, _layout: &Layout) -> Result<String, RunnerFailure> {
+    fn runtime_version(
+        &self,
+        _layout: &Layout,
+        _library_sha256: &str,
+    ) -> Result<String, RunnerFailure> {
         if self.runtime {
             Ok(String::from("1.31.0"))
         } else {
@@ -111,7 +115,7 @@ impl Backend for Scripted {
         layout: &Layout,
         threads: NonZeroU16,
     ) -> Result<(Blank, Dictionary), RunnerFailure> {
-        self.runtime_version(layout)?;
+        self.runtime_version(layout, "")?;
         self.opened.set(threads.get());
         let dictionary =
             Dictionary::from_lines("a\nb").map_err(|_| RunnerFailure::ModelUnavailable)?;
@@ -119,14 +123,36 @@ impl Backend for Scripted {
     }
 }
 
+/// SHA-256 of the bytes `runtime bytes`, `detector bytes` and `recognizer bytes`.
+const RUNTIME_SHA256: &str = "7fc5036745ec73b6169495830cf3ef3b58127addf27fcc0d0b8fe87b4de5808c";
+const DETECTOR_SHA256: &str = "1157d519da9b32785f9089e5f3246268f92403102d5fa18f33c3fd640889e62d";
+const RECOGNIZER_SHA256: &str = "3fb1c140febdef7006834ed9d4e7b93c9a0efadeb241a45f2d388838d7792edf";
+
+/// A runner installed as a release archive unpacks: `onnxruntime/` and `models/`.
 fn installed(folder: &Folder) -> Built<Layout> {
-    let layout = Layout::beside(&folder.0);
-    if let Some(models) = layout.detector.parent() {
-        fs::create_dir_all(models)?;
+    for sub in [RUNTIME_FOLDER, MODELS_FOLDER] {
+        fs::create_dir_all(folder.0.join(sub))?;
     }
+    let layout = Layout::beside(&folder.0);
+    fs::write(&layout.runtime_library, b"runtime bytes")?;
     fs::write(&layout.detector, b"detector bytes")?;
     fs::write(&layout.recognizer, b"recognizer bytes")?;
-    Ok(layout)
+    Ok(Layout::beside(&folder.0))
+}
+
+/// A runner installed as the managed store keeps a component: every file beside it.
+fn installed_flat(folder: &Folder) -> Built<Layout> {
+    fs::write(folder.0.join(RUNTIME_LIBRARY), b"runtime bytes")?;
+    fs::write(folder.0.join(DETECTOR_FILE), b"detector bytes")?;
+    fs::write(folder.0.join(RECOGNIZER_FILE), b"recognizer bytes")?;
+    Ok(Layout::beside(&folder.0))
+}
+
+/// `read`'s arguments for `images`, two threads, eight lines.
+fn read_arguments(images: &[&PathBuf]) -> Vec<OsString> {
+    let mut values = arguments(&["read", "--threads", "2", "--max-lines", "8"]);
+    values.extend(images.iter().map(|path| path.as_os_str().to_owned()));
+    values
 }
 
 fn lines(stdout: &[u8]) -> Built<Vec<serde_json::Value>> {
@@ -185,12 +211,9 @@ fn describe_names_the_build_by_its_versions_and_model_digests() -> TestResult {
     assert_eq!(record["protocol"], 1);
     assert_eq!(record["runtime_version"], "1.31.0");
     assert_eq!(record["profile"], "ppocrv5-latin-v1");
-    // SHA-256 of the bytes "detector bytes".
-    assert_eq!(
-        record["detector_sha256"],
-        "1157d519da9b32785f9089e5f3246268f92403102d5fa18f33c3fd640889e62d"
-    );
-    assert_ne!(record["detector_sha256"], record["recognizer_sha256"]);
+    assert_eq!(record["runtime_sha256"], RUNTIME_SHA256);
+    assert_eq!(record["detector_sha256"], DETECTOR_SHA256);
+    assert_eq!(record["recognizer_sha256"], RECOGNIZER_SHA256);
     Ok(())
 }
 
@@ -210,6 +233,8 @@ fn a_missing_model_or_runtime_is_one_error_record_and_its_status() -> TestResult
         String::from_utf8(stdout)?,
         "{\"record\":\"error\",\"image\":null,\"code\":\"model_unavailable\"}\n"
     );
+    // A runtime that cannot be loaded ends `read` before its greeting, which
+    // names only a build whose files were hashed and whose runtime loaded.
     let layout = installed(&folder)?;
     let mut stdout = Vec::new();
     let status = run(
@@ -219,14 +244,164 @@ fn a_missing_model_or_runtime_is_one_error_record_and_its_status() -> TestResult
         &mut stdout,
     );
     assert_eq!(status, RunnerFailure::RuntimeUnavailable.exit_status());
+    assert_eq!(
+        String::from_utf8(stdout)?,
+        "{\"record\":\"error\",\"image\":null,\"code\":\"runtime_unavailable\"}\n"
+    );
+    // So does a library that is not there to be hashed.
+    fs::remove_file(&layout.runtime_library)?;
+    let mut stdout = Vec::new();
+    let status = run(
+        &arguments(&["read", "--threads", "2", "--max-lines", "8", "a.png"]),
+        &layout,
+        &Scripted::new(true, false),
+        &mut stdout,
+    );
+    assert_eq!(status, RunnerFailure::RuntimeUnavailable.exit_status());
+    Ok(())
+}
+
+/// RV-2 finding 3: `read` hashes the runtime and both models itself before it
+/// loads them, and its greeting names that build, so `VSift` can refuse a run by
+/// another build than `describe` reported. A model changed between the two
+/// runs is named by its new digest.
+#[test]
+fn reads_greeting_names_the_build_it_hashed_before_loading() -> TestResult {
+    let folder = Folder::new()?;
+    let layout = installed(&folder)?;
+    let image = folder.0.join("frame.png");
+    fs::write(
+        &image,
+        encode(64, 32, &vec![255; 64 * 32 * 3], 0, [8, 2, 0, 0, 0]),
+    )?;
+    let mut stdout = Vec::new();
+    assert_eq!(
+        run(
+            &read_arguments(&[&image]),
+            &layout,
+            &Scripted::new(true, false),
+            &mut stdout
+        ),
+        0
+    );
+    let records = lines(&stdout)?;
+    let greeting = records.first().ok_or("no greeting")?;
+    assert_eq!(
+        greeting,
+        &serde_json::json!({
+            "record": "runner",
+            "protocol": 1,
+            "runner_version": super::RUNNER_VERSION,
+            "runtime_version": "1.31.0",
+            "runtime_sha256": RUNTIME_SHA256,
+            "detector_sha256": DETECTOR_SHA256,
+            "recognizer_sha256": RECOGNIZER_SHA256,
+        })
+    );
+    fs::write(&layout.detector, b"changed detector")?;
+    let mut stdout = Vec::new();
+    assert_eq!(
+        run(
+            &read_arguments(&[&image]),
+            &layout,
+            &Scripted::new(true, false),
+            &mut stdout
+        ),
+        0
+    );
     let records = lines(&stdout)?;
     assert_eq!(
-        records.first().map(|record| &record["record"]),
-        Some(&"runner".into())
+        records.first().map(|record| &record["detector_sha256"]),
+        Some(&"35803e6bc5a68d8b0b3706637677a562ea57247de83acc857510256c030879e8".into())
+    );
+    Ok(())
+}
+
+/// The managed store's flat folder (the planner's decision of 2026-10-22):
+/// `describe` and `read` find the runtime and models beside the executable and
+/// name the same build from them as from a release archive's subfolders.
+#[test]
+fn the_flat_layout_names_the_same_build_as_the_nested_one() -> TestResult {
+    let image_folder = Folder::new()?;
+    let image = image_folder.0.join("frame.png");
+    fs::write(
+        &image,
+        encode(64, 32, &vec![255; 64 * 32 * 3], 0, [8, 2, 0, 0, 0]),
+    )?;
+    let mut answers = Vec::new();
+    for flat in [false, true] {
+        let folder = Folder::new()?;
+        let layout = if flat {
+            installed_flat(&folder)?
+        } else {
+            installed(&folder)?
+        };
+        assert_eq!(
+            layout.detector.parent() == Some(folder.0.as_path()),
+            flat,
+            "{layout:?}"
+        );
+        let mut described = Vec::new();
+        let backend = Scripted::new(true, false);
+        assert_eq!(
+            run(&arguments(&["describe"]), &layout, &backend, &mut described),
+            0
+        );
+        let mut read = Vec::new();
+        assert_eq!(
+            run(&read_arguments(&[&image]), &layout, &backend, &mut read),
+            0
+        );
+        let description = lines(&described)?.into_iter().next().ok_or("no record")?;
+        let greeting = lines(&read)?.into_iter().next().ok_or("no greeting")?;
+        for key in ["runtime_sha256", "detector_sha256", "recognizer_sha256"] {
+            assert_eq!(description[key], greeting[key], "{key}, flat: {flat}");
+        }
+        assert_eq!(greeting["runtime_sha256"], RUNTIME_SHA256);
+        answers.push(greeting);
+    }
+    assert_eq!(answers.first(), answers.get(1));
+    Ok(())
+}
+
+/// RV-2 finding 1, end to end: a frame whose detection map would break its
+/// bound is refused as the image's fault, and the run goes on.
+#[test]
+fn a_frame_whose_map_cannot_be_bounded_is_an_invalid_image() -> TestResult {
+    let folder = Folder::new()?;
+    let layout = installed(&folder)?;
+    // 1 x 4000: reduced to 2000 tall, its 1-pixel side becomes 0 and cannot be
+    // enlarged (before RV-2 this was reported as the models' failure).
+    let narrow = folder.0.join("narrow.png");
+    fs::write(
+        &narrow,
+        encode(1, 4000, &vec![255; 4000 * 3], 0, [8, 2, 0, 0, 0]),
+    )?;
+    let good = folder.0.join("good.png");
+    fs::write(
+        &good,
+        encode(64, 32, &vec![255; 64 * 32 * 3], 0, [8, 2, 0, 0, 0]),
+    )?;
+    let mut stdout = Vec::new();
+    assert_eq!(
+        run(
+            &read_arguments(&[&narrow, &good]),
+            &layout,
+            &Scripted::new(true, false),
+            &mut stdout
+        ),
+        0
+    );
+    let records = lines(&stdout)?;
+    assert_eq!(
+        records
+            .get(1)
+            .map(|record| (&record["record"], &record["code"])),
+        Some((&"error".into(), &"image_invalid".into()))
     );
     assert_eq!(
-        records.get(1).map(|record| &record["code"]),
-        Some(&"runtime_unavailable".into())
+        records.get(2).map(|record| &record["record"]),
+        Some(&"image".into())
     );
     Ok(())
 }
@@ -333,8 +508,7 @@ fn files_are_found_in_their_subfolders_first_then_beside_the_executable() -> Tes
 #[test]
 fn describe_works_from_the_managed_stores_flat_folder() -> TestResult {
     let folder = Folder::new()?;
-    fs::write(folder.0.join(DETECTOR_FILE), b"detector bytes")?;
-    fs::write(folder.0.join(RECOGNIZER_FILE), b"recognizer bytes")?;
+    installed_flat(&folder)?;
     let mut stdout = Vec::new();
     let status = run(
         &arguments(&["describe"]),
