@@ -1075,7 +1075,7 @@ The data member of a complete or partial search result asked for with --view bri
 | `transcript_coverage.pending_covered_by.ranges` | array of object | yes | 1 to 100 items |
 | `transcript_coverage.pending_covered_by.ranges[].from_us` | integer | yes | at least 0 |
 | `transcript_coverage.pending_covered_by.ranges[].to_us` | integer | yes | at least 1 |
-| `since` | object | no | Since 0.3.0 (ADR 0033): present over an open revision and in every answer to --since. since_token is passed back with --since to read (or search) only what the revision publishes after this answer, in start order; it follows the one revision this answer read until it is sealed or stopped, and expires with the session. revision_state is that revision's state now; more is true when this answer stopped at its limit with more already published after it. |
+| `since` | object | no | Since 0.3.0 (ADR 0033): present in every answer to --since, and over an open revision in the answer that ends the read (one without next_cursor; a paged read has it on its last page only). since_token is passed back with --since to read (or search) only what the revision publishes after this answer, in start order; it follows the one revision this answer read until it is sealed or stopped, and expires with the session. revision_state is that revision's state now; more is true when this answer stopped at its limit with more already published after it. |
 | `since.since_token` | string | yes | 1 to 512 characters |
 | `since.revision_state` | "open" \| "sealed" \| "stopped" | yes |  |
 | `since.more` | boolean | yes |  |
@@ -1124,7 +1124,7 @@ The data member of a complete or partial search result: one bounded page of the 
 | `transcript_coverage.pending_covered_by.ranges` | array of object | yes | 1 to 100 items |
 | `transcript_coverage.pending_covered_by.ranges[].from_us` | integer | yes | at least 0 |
 | `transcript_coverage.pending_covered_by.ranges[].to_us` | integer | yes | at least 1 |
-| `since` | object | no | Since 0.3.0 (ADR 0033): present over an open revision and in every answer to --since. since_token is passed back with --since to read (or search) only what the revision publishes after this answer, in start order; it follows the one revision this answer read until it is sealed or stopped, and expires with the session. revision_state is that revision's state now; more is true when this answer stopped at its limit with more already published after it. |
+| `since` | object | no | Since 0.3.0 (ADR 0033): present in every answer to --since, and over an open revision in the answer that ends the read (one without next_cursor; a paged read has it on its last page only). since_token is passed back with --since to read (or search) only what the revision publishes after this answer, in start order; it follows the one revision this answer read until it is sealed or stopped, and expires with the session. revision_state is that revision's state now; more is true when this answer stopped at its limit with more already published after it. |
 | `since.since_token` | string | yes | 1 to 512 characters |
 | `since.revision_state` | "open" \| "sealed" \| "stopped" | yes |  |
 | `since.more` | boolean | yes |  |
@@ -1173,7 +1173,7 @@ The data member of the complete or partial terminal result that ends a search --
 | `transcript_coverage.pending_covered_by.ranges` | array of object | yes | 1 to 100 items |
 | `transcript_coverage.pending_covered_by.ranges[].from_us` | integer | yes | at least 0 |
 | `transcript_coverage.pending_covered_by.ranges[].to_us` | integer | yes | at least 1 |
-| `since` | object | no | Since 0.3.0 (ADR 0033): present over an open revision and in every answer to --since. since_token is passed back with --since to read (or search) only what the revision publishes after this answer, in start order; it follows the one revision this answer read until it is sealed or stopped, and expires with the session. revision_state is that revision's state now; more is true when this answer stopped at its limit with more already published after it. |
+| `since` | object | no | Since 0.3.0 (ADR 0033): present in every answer to --since, and over an open revision in the answer that ends the read (one without next_cursor; a paged read has it on its last page only). since_token is passed back with --since to read (or search) only what the revision publishes after this answer, in start order; it follows the one revision this answer read until it is sealed or stopped, and expires with the session. revision_state is that revision's state now; more is true when this answer stopped at its limit with more already published after it. |
 | `since.since_token` | string | yes | 1 to 512 characters |
 | `since.revision_state` | "open" \| "sealed" \| "stopped" | yes |  |
 | `since.more` | boolean | yes |  |
@@ -1516,7 +1516,7 @@ The data member of a complete or partial transcript.get result asked for with --
 | `transcript_coverage.pending_covered_by.ranges` | array of object | yes | 1 to 100 items |
 | `transcript_coverage.pending_covered_by.ranges[].from_us` | integer | yes | at least 0 |
 | `transcript_coverage.pending_covered_by.ranges[].to_us` | integer | yes | at least 1 |
-| `since` | object | no | Since 0.3.0 (ADR 0033): present over an open revision and in every answer to --since. since_token is passed back with --since to read (or search) only what the revision publishes after this answer, in start order; it follows the one revision this answer read until it is sealed or stopped, and expires with the session. revision_state is that revision's state now; more is true when this answer stopped at its limit with more already published after it. |
+| `since` | object | no | Since 0.3.0 (ADR 0033): present in every answer to --since, and over an open revision in the answer that ends the read (one without next_cursor; a paged read has it on its last page only). since_token is passed back with --since to read (or search) only what the revision publishes after this answer, in start order; it follows the one revision this answer read until it is sealed or stopped, and expires with the session. revision_state is that revision's state now; more is true when this answer stopped at its limit with more already published after it. |
 | `since.since_token` | string | yes | 1 to 512 characters |
 | `since.revision_state` | "open" \| "sealed" \| "stopped" | yes |  |
 | `since.more` | boolean | yes |  |
@@ -1560,7 +1560,7 @@ The data member of a complete or partial transcript.get result: one bounded page
 | `transcript_coverage.pending_covered_by.ranges` | array of object | yes | 1 to 100 items |
 | `transcript_coverage.pending_covered_by.ranges[].from_us` | integer | yes | at least 0 |
 | `transcript_coverage.pending_covered_by.ranges[].to_us` | integer | yes | at least 1 |
-| `since` | object | no | Since 0.3.0 (ADR 0033): present over an open revision and in every answer to --since. since_token is passed back with --since to read (or search) only what the revision publishes after this answer, in start order; it follows the one revision this answer read until it is sealed or stopped, and expires with the session. revision_state is that revision's state now; more is true when this answer stopped at its limit with more already published after it. |
+| `since` | object | no | Since 0.3.0 (ADR 0033): present in every answer to --since, and over an open revision in the answer that ends the read (one without next_cursor; a paged read has it on its last page only). since_token is passed back with --since to read (or search) only what the revision publishes after this answer, in start order; it follows the one revision this answer read until it is sealed or stopped, and expires with the session. revision_state is that revision's state now; more is true when this answer stopped at its limit with more already published after it. |
 | `since.since_token` | string | yes | 1 to 512 characters |
 | `since.revision_state` | "open" \| "sealed" \| "stopped" | yes |  |
 | `since.more` | boolean | yes |  |
@@ -1604,7 +1604,7 @@ The data member of the complete or partial terminal result that ends a transcrip
 | `transcript_coverage.pending_covered_by.ranges` | array of object | yes | 1 to 100 items |
 | `transcript_coverage.pending_covered_by.ranges[].from_us` | integer | yes | at least 0 |
 | `transcript_coverage.pending_covered_by.ranges[].to_us` | integer | yes | at least 1 |
-| `since` | object | no | Since 0.3.0 (ADR 0033): present over an open revision and in every answer to --since. since_token is passed back with --since to read (or search) only what the revision publishes after this answer, in start order; it follows the one revision this answer read until it is sealed or stopped, and expires with the session. revision_state is that revision's state now; more is true when this answer stopped at its limit with more already published after it. |
+| `since` | object | no | Since 0.3.0 (ADR 0033): present in every answer to --since, and over an open revision in the answer that ends the read (one without next_cursor; a paged read has it on its last page only). since_token is passed back with --since to read (or search) only what the revision publishes after this answer, in start order; it follows the one revision this answer read until it is sealed or stopped, and expires with the session. revision_state is that revision's state now; more is true when this answer stopped at its limit with more already published after it. |
 | `since.since_token` | string | yes | 1 to 512 characters |
 | `since.revision_state` | "open" \| "sealed" \| "stopped" | yes |  |
 | `since.more` | boolean | yes |  |

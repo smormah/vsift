@@ -370,6 +370,33 @@ fn run(
     operation: Option<&OperationId>,
     fails_at: Option<u32>,
 ) -> Built<bool> {
+    run_publishing(
+        store,
+        resolved,
+        operation,
+        fails_at,
+        vsift_application::Publication::AtTheSeal,
+    )
+}
+
+/// A stopwatch that never moves: with an interval of zero, a run publishes a
+/// part after every chunk that settles something (ADR 0033).
+struct Still;
+
+impl vsift_application::Stopwatch for Still {
+    fn elapsed(&self) -> Duration {
+        Duration::ZERO
+    }
+}
+
+/// [`run`], publishing the revision as `publication` says.
+fn run_publishing(
+    store: &FilesystemSessionStore,
+    resolved: &Resolved,
+    operation: Option<&OperationId>,
+    fails_at: Option<u32>,
+    publication: vsift_application::Publication<'_>,
+) -> Built<bool> {
     let status = store.session_status(&resolved.spec.session_id)?;
     let identity = identity().map_err(|_| "no identity")?;
     let outcome = block_on(run_retranscription(
@@ -401,7 +428,7 @@ fn run(
                 _ => FailureCode::Internal,
             },
             progress: &vsift_application::NoProgress,
-            publication: vsift_application::Publication::AtTheSeal,
+            publication,
         },
         &mut Unchanged,
     ))?;
@@ -839,6 +866,106 @@ fn an_interrupted_job_is_cancelled_and_its_checkpoints_removed() -> TestResult {
         "job.cancel",
     )?;
     assert_eq!(again["data"], cancelled["data"]);
+    Ok(())
+}
+
+/// RV-1 finding 7: `job cancel` of an interrupted job that published part of
+/// its revision, while the session is busy, cancels the job but cannot seal
+/// the revision as stopped, and says so (`revision_left_open`). A write to the
+/// session is then refused `BUSY` with `job cancel <job>` as the remediation,
+/// since waiting for an ended job would not help; cancelling again seals it.
+#[test]
+fn a_cancel_that_cannot_seal_its_revision_says_so_and_names_the_cancel() -> TestResult {
+    let root = OwnedRoot::new()?;
+    let session = seed_session(&root)?;
+    let store = store(&root)?;
+    let resolved = resolve(&store, &session, None)?;
+    let job = resolved.spec.job_id.clone();
+    let publication = vsift_application::Publication::AsItGoes {
+        interval: Duration::ZERO,
+        stopwatch: &Still,
+    };
+    assert!(!run_publishing(
+        &store,
+        &resolved,
+        None,
+        Some(1),
+        publication
+    )?);
+    drop(store);
+    let to = SOURCE_MICROS.to_string();
+    let read = [
+        "transcript",
+        "get",
+        SESSION,
+        "--from",
+        "0",
+        "--to",
+        &to,
+        "--json",
+    ];
+    let open = json(&vsift(&root, &read)?)?;
+    assert_eq!(open["data"]["revision"]["state"], "open", "{open}");
+
+    // Another process holds the session's writer lock while the job is
+    // cancelled, so the stopped seal finds the session busy every time.
+    let writer = fs::OpenOptions::new().read(true).write(true).open(
+        root.sessions()
+            .join("coordination")
+            .join(format!("{SESSION}.writer.lock")),
+    )?;
+    writer.try_lock()?;
+    let cancelled = job_result(
+        &vsift(&root, &["job", "cancel", job.as_str(), "--json"])?,
+        "job.cancel",
+    )?;
+    writer.unlock()?;
+    drop(writer);
+    assert_eq!(cancelled["data"]["state"], "cancelled");
+    assert_eq!(
+        cancelled["warnings"],
+        json!([vsift_contract::REVISION_LEFT_OPEN_WARNING])
+    );
+    let still = json(&vsift(&root, &read)?)?;
+    assert_eq!(still["data"]["revision"]["state"], "open");
+
+    let bundle = root.path("bundle");
+    let refused = assert_failure(
+        &vsift(
+            &root,
+            &[
+                "session",
+                "retain",
+                SESSION,
+                "--output",
+                bundle.to_str().ok_or("path")?,
+                "--json",
+            ],
+        )?,
+        "session.retain",
+        "BUSY",
+        4,
+    )?;
+    assert_eq!(
+        refused["error"]["affected_ids"],
+        json!([SESSION, job.as_str()])
+    );
+    assert_eq!(
+        refused["error"]["remediation"][0]["summary"],
+        vsift_contract::REVISION_LEFT_OPEN_REMEDIATION
+    );
+    assert_eq!(
+        refused["error"]["remediation"][0]["command"],
+        json!({"executable": "vsift", "arguments": ["job", "cancel", job.as_str()]})
+    );
+
+    let again = job_result(
+        &vsift(&root, &["job", "cancel", job.as_str(), "--json"])?,
+        "job.cancel",
+    )?;
+    assert_eq!(again["warnings"], json!([]));
+    let stopped = json(&vsift(&root, &read)?)?;
+    assert_eq!(stopped["data"]["revision"]["state"], "stopped");
     Ok(())
 }
 

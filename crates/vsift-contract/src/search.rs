@@ -210,8 +210,9 @@ pub struct SearchData {
     hits: Vec<SearchHitData>,
     next_cursor: Option<String>,
     transcript_coverage: TranscriptCoverageData,
-    /// What to search on from (ADR 0033): present over an open revision and
-    /// for a `--since` search.
+    /// What to search on from (ADR 0033): present for a `--since` search, and
+    /// over an open revision on the page that ends the search (no
+    /// `next_cursor`).
     #[serde(skip_serializing_if = "Option::is_none")]
     since: Option<SinceData>,
 }

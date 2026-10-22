@@ -1088,8 +1088,12 @@ writes the resumed run's chunk progress, as `transcript retranscribe` does (P11 
   job that is `committing` or `succeeded` keeps its result and the answer carries the
   warning `cancellation_too_late`; a failed or cancelled job is reported as it is. Since
   0.3.0 a cancelled job that had published part of its revision seals it as stopped,
-  keeping every published segment (see "Transcripts published as they go").
-  Repeating a cancel changes nothing. A cancelled or failed job is started afresh (a
+  keeping every published segment (see "Transcripts published as they go"). When that
+  seal cannot land now (the session is busy), the job is still cancelled and the answer
+  carries the warning `revision_left_open`: the revision stays open, and every other
+  transcription or retention of the session answers `BUSY` with the remediation
+  `job cancel <job>` until a repeated cancel seals it. Otherwise repeating a cancel
+  changes nothing. A cancelled or failed job is started afresh (a
   new epoch) by running the original command again.
 
 `session status <session>` additionally lists the session's newest jobs, most recently
@@ -1147,9 +1151,13 @@ answer is the one 0.2.x gave. Examples:
 the coverage is as of the page that was read; a search's later pages may miss a hit
 published after its first page, which `--since` finds (known limit L-219).
 
-**Following it: `--since`.** Every answer over an open revision, and every answer to
-`--since`, has `data.since`: `since_token`, `revision_state` (`open`, `sealed` or
-`stopped`) and `more` (the answer stopped at its limit with more already published).
+**Following it: `--since`.** Every answer to `--since`, and every answer over an open
+revision that ends its read (it has no `next_cursor`), has `data.since`: `since_token`,
+`revision_state` (`open`, `sealed` or `stopped`) and `more` (the answer stopped at its
+limit with more already published). A paged read gives it on its last page only: a token
+follows on from everything its answer's revision held, so one given on an earlier page
+would skip the pages between. Follow `next_cursor` to the last page (the cursor reads
+the same revision while it grows), then follow the token.
 `transcript get --since <token>` answers the segments the token's revision published
 after it, in start order (`--from` and `--to` may then be left out; the range is clipped
 to the source), and `search --since <token>` the hits among them. A token follows the
@@ -1178,6 +1186,7 @@ and fails `INTEGRITY_FAILURE`; retranscribe the rest with `--from` and `--to`.
 | --- | --- |
 | `transcript retranscribe` of a session whose open revision another job publishes | `BUSY` (the session and the job in `affected_ids`) |
 | `session retain` while a revision is open | `BUSY` (the session and the job in `affected_ids`) |
+| Either of the two above when the open revision's job has ended (its `job cancel` could not seal it) | `BUSY` (the session and the job in `affected_ids`; the remediation's command is `job cancel <job>`, which seals the revision as stopped) |
 | `--since` with a malformed, foreign or expired token, or with another `--revision` | `INVALID_ARGUMENT` (the cursor's remediation) |
 | A resume under other merge rules than the open revision's | `INTEGRITY_FAILURE` (the stopped revision is committed) |
 
