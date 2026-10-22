@@ -208,6 +208,19 @@ impl CursorToken {
     pub fn last_item_key(&self) -> &str {
         &self.last_item_key
     }
+
+    /// The snapshot the token belongs to, as it was encoded; for a since token
+    /// (ADR 0033) the number of the revision it follows.
+    #[must_use]
+    pub const fn generation(&self) -> u64 {
+        self.generation
+    }
+
+    /// The query digest the token belongs to, as it was encoded.
+    #[must_use]
+    pub const fn query_digest(&self) -> &QueryDigest {
+        &self.query_digest
+    }
 }
 
 /// Why a continuation token was rejected.

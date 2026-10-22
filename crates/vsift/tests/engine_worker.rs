@@ -748,6 +748,7 @@ async fn a_retranscribe_step_with_an_unusable_chunk_is_partial_with_the_direct_c
         to_micros: 1_000_000,
         limit: Some(1),
         cursor: None,
+        since: None,
     })?;
     let stated = |revision: &TranscriptRevision| -> Built<Value> {
         let response = finish_retranscription(
@@ -772,6 +773,7 @@ async fn a_retranscribe_step_with_an_unusable_chunk_is_partial_with_the_direct_c
             cancellation: Cancellation::new(),
             progress: ProgressObserver::none(),
             admission: AdmissionWait::Immediate,
+            publication: vsift::RetranscribePublication::AtTheSeal,
         })
         .await?;
     let direct = stated(direct.revision())?;

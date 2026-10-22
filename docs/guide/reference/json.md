@@ -321,7 +321,7 @@ The content of a retained bundle artifact whose bundle.json kind is transcript_r
 | `run.chunks[].index` | integer | yes | 0 to 1023 |
 | `run.chunks[].start_us` | integer | yes | at least 0 |
 | `run.chunks[].end_us` | integer | yes | at least 1 |
-| `run.chunks[].outcome` | "transcribed" \| "silent" \| "no_audio" \| "unusable" | yes |  |
+| `run.chunks[].outcome` | "transcribed" \| "silent" \| "no_audio" \| "unusable" \| "not_reached" | yes |  |
 | `run.chunks[].audio` | object or null | yes |  |
 | `run.chunks[].audio.start_us` | integer | yes | at least 0 |
 | `run.chunks[].audio.end_us` | integer | yes | at least 1 |
@@ -332,6 +332,7 @@ The content of a retained bundle artifact whose bundle.json kind is transcript_r
 | `carried_untranscribed` | array of object | no | Since 0.2.1 (#353): the parts outside replaced_range that the superseded revision did not cover and that a window or file this revision carries (inherited) would otherwise be counted over, in start order, merged, inside the source and never overlapping replaced_range. A search of the superseded revision listed these ranges as untranscribed; this revision records them because it keeps the provenance only of the runs whose text it carries, and an earlier run's windows, or an imported file, are not counted over a part that revision left untranscribed. A part nothing inherited claims is not recorded. Omitted when empty, which is every record whose chain holds no unusable chunk and no run with unplaced_ranges (a chain whose superseded revision left a stretch of unplaced words under a window or file this record inherits has it too), so such a record is written as before and is read by a release before 0.2.1; a release before it reads this member as damage.; 1 to 1024 items |
 | `carried_untranscribed[].start_us` | integer | yes | at least 0 |
 | `carried_untranscribed[].end_us` | integer | yes | at least 1 |
+| `published_until_us` | integer | no | Since 0.3.0 (ADR 0033): present only on a stopped revision, the time its run had published until when it was cancelled or failed in a way it could not resume from; its chunks it never reached are not_reached. Omitted from every other record, so they are written as before; a release before 0.3.0 reads this member, and the outcome not_reached, as damage.; at least 0 |
 | `unplaced_ranges` | array of object | no | Since 0.2.1 (#359): the stretches of this record's own run where the recogniser wrote words that no segment holds, in start order, merged, inside the source and inside the range the run covered. See local_asr.unplaced_ranges of the revision summary for what a stretch is. Omitted when empty, which is every record whose run rejected nothing of the kind, so such a record is written as before and is read by a release before 0.2.1; a release before it reads this member as damage, as it reads carried_untranscribed.; 1 to 1024 items |
 | `unplaced_ranges[].start_us` | integer | yes | at least 0 |
 | `unplaced_ranges[].end_us` | integer | yes | at least 1 |
@@ -359,7 +360,7 @@ The content of a retained bundle artifact whose bundle.json kind is transcript_r
 | `inherited[].provenance.local_asr.chunks[].index` | integer | yes | 0 to 1023 |
 | `inherited[].provenance.local_asr.chunks[].start_us` | integer | yes | at least 0 |
 | `inherited[].provenance.local_asr.chunks[].end_us` | integer | yes | at least 1 |
-| `inherited[].provenance.local_asr.chunks[].outcome` | "transcribed" \| "silent" \| "no_audio" \| "unusable" | yes |  |
+| `inherited[].provenance.local_asr.chunks[].outcome` | "transcribed" \| "silent" \| "no_audio" \| "unusable" \| "not_reached" | yes |  |
 | `inherited[].provenance.local_asr.chunks[].audio` | object or null | yes |  |
 | `inherited[].provenance.local_asr.chunks[].audio.start_us` | integer | yes | at least 0 |
 | `inherited[].provenance.local_asr.chunks[].audio.end_us` | integer | yes | at least 1 |
@@ -1066,6 +1067,18 @@ The data member of a complete or partial search result asked for with --view bri
 | `transcript_coverage.no_speech_ranges[].from_us` | integer | yes | at least 0 |
 | `transcript_coverage.no_speech_ranges[].to_us` | integer | yes | at least 1 |
 | `transcript_coverage.ranges_truncated` | boolean | yes | True when a range list held more than 100 ranges and only its first 100, in start order, are listed. |
+| `transcript_coverage.pending_ranges` | array of object | no | Since 0.3.0 (ADR 0033): the part of untranscribed_ranges that an open revision will still publish; absent when nothing is pending. A word said there cannot be found yet; that does not mean none was said.; 1 to 100 items |
+| `transcript_coverage.pending_ranges[].from_us` | integer | yes | at least 0 |
+| `transcript_coverage.pending_ranges[].to_us` | integer | yes | at least 1 |
+| `transcript_coverage.pending_covered_by` | object | no | Since 0.3.0 (ADR 0033): the earlier, sealed revision (the one the open revision supersedes) that still holds text over part of the pending ranges, and those parts; read them with --revision. Absent when there is none. |
+| `transcript_coverage.pending_covered_by.revision_id` | string | yes | pattern `^trv_[a-z0-9]{16,64}$` |
+| `transcript_coverage.pending_covered_by.ranges` | array of object | yes | 1 to 100 items |
+| `transcript_coverage.pending_covered_by.ranges[].from_us` | integer | yes | at least 0 |
+| `transcript_coverage.pending_covered_by.ranges[].to_us` | integer | yes | at least 1 |
+| `since` | object | no | Since 0.3.0 (ADR 0033): present in every answer to --since, and over an open revision in the answer that ends the read (one without next_cursor; a paged read has it on its last page only). since_token is passed back with --since to read (or search) only what the revision publishes after this answer, in start order; it follows the one revision this answer read until it is sealed or stopped, and expires with the session. revision_state is that revision's state now; more is true when this answer stopped at its limit with more already published after it. |
+| `since.since_token` | string | yes | 1 to 512 characters |
+| `since.revision_state` | "open" \| "sealed" \| "stopped" | yes |  |
+| `since.more` | boolean | yes |  |
 
 ### search-data.schema.json
 
@@ -1103,6 +1116,18 @@ The data member of a complete or partial search result: one bounded page of the 
 | `transcript_coverage.no_speech_ranges[].from_us` | integer | yes | at least 0 |
 | `transcript_coverage.no_speech_ranges[].to_us` | integer | yes | at least 1 |
 | `transcript_coverage.ranges_truncated` | boolean | yes | True when a range list held more than 100 ranges and only its first 100, in start order, are listed. |
+| `transcript_coverage.pending_ranges` | array of object | no | Since 0.3.0 (ADR 0033): the part of untranscribed_ranges that an open revision will still publish; absent when nothing is pending. A word said there cannot be found yet; that does not mean none was said.; 1 to 100 items |
+| `transcript_coverage.pending_ranges[].from_us` | integer | yes | at least 0 |
+| `transcript_coverage.pending_ranges[].to_us` | integer | yes | at least 1 |
+| `transcript_coverage.pending_covered_by` | object | no | Since 0.3.0 (ADR 0033): the earlier, sealed revision (the one the open revision supersedes) that still holds text over part of the pending ranges, and those parts; read them with --revision. Absent when there is none. |
+| `transcript_coverage.pending_covered_by.revision_id` | string | yes | pattern `^trv_[a-z0-9]{16,64}$` |
+| `transcript_coverage.pending_covered_by.ranges` | array of object | yes | 1 to 100 items |
+| `transcript_coverage.pending_covered_by.ranges[].from_us` | integer | yes | at least 0 |
+| `transcript_coverage.pending_covered_by.ranges[].to_us` | integer | yes | at least 1 |
+| `since` | object | no | Since 0.3.0 (ADR 0033): present in every answer to --since, and over an open revision in the answer that ends the read (one without next_cursor; a paged read has it on its last page only). since_token is passed back with --since to read (or search) only what the revision publishes after this answer, in start order; it follows the one revision this answer read until it is sealed or stopped, and expires with the session. revision_state is that revision's state now; more is true when this answer stopped at its limit with more already published after it. |
+| `since.since_token` | string | yes | 1 to 512 characters |
+| `since.revision_state` | "open" \| "sealed" \| "stopped" | yes |  |
+| `since.more` | boolean | yes |  |
 
 ### search-stream-data.schema.json
 
@@ -1140,6 +1165,18 @@ The data member of the complete or partial terminal result that ends a search --
 | `transcript_coverage.no_speech_ranges[].from_us` | integer | yes | at least 0 |
 | `transcript_coverage.no_speech_ranges[].to_us` | integer | yes | at least 1 |
 | `transcript_coverage.ranges_truncated` | boolean | yes | True when a range list held more than 100 ranges and only its first 100, in start order, are listed. |
+| `transcript_coverage.pending_ranges` | array of object | no | Since 0.3.0 (ADR 0033): the part of untranscribed_ranges that an open revision will still publish; absent when nothing is pending. A word said there cannot be found yet; that does not mean none was said.; 1 to 100 items |
+| `transcript_coverage.pending_ranges[].from_us` | integer | yes | at least 0 |
+| `transcript_coverage.pending_ranges[].to_us` | integer | yes | at least 1 |
+| `transcript_coverage.pending_covered_by` | object | no | Since 0.3.0 (ADR 0033): the earlier, sealed revision (the one the open revision supersedes) that still holds text over part of the pending ranges, and those parts; read them with --revision. Absent when there is none. |
+| `transcript_coverage.pending_covered_by.revision_id` | string | yes | pattern `^trv_[a-z0-9]{16,64}$` |
+| `transcript_coverage.pending_covered_by.ranges` | array of object | yes | 1 to 100 items |
+| `transcript_coverage.pending_covered_by.ranges[].from_us` | integer | yes | at least 0 |
+| `transcript_coverage.pending_covered_by.ranges[].to_us` | integer | yes | at least 1 |
+| `since` | object | no | Since 0.3.0 (ADR 0033): present in every answer to --since, and over an open revision in the answer that ends the read (one without next_cursor; a paged read has it on its last page only). since_token is passed back with --since to read (or search) only what the revision publishes after this answer, in start order; it follows the one revision this answer read until it is sealed or stopped, and expires with the session. revision_state is that revision's state now; more is true when this answer stopped at its limit with more already published after it. |
+| `since.since_token` | string | yes | 1 to 512 characters |
+| `since.revision_state` | "open" \| "sealed" \| "stopped" | yes |  |
+| `since.more` | boolean | yes |  |
 
 ### setup-check-response.schema.json
 
@@ -1471,6 +1508,18 @@ The data member of a complete or partial transcript.get result asked for with --
 | `transcript_coverage.no_speech_ranges[].from_us` | integer | yes | at least 0 |
 | `transcript_coverage.no_speech_ranges[].to_us` | integer | yes | at least 1 |
 | `transcript_coverage.ranges_truncated` | boolean | yes | True when a range list held more than 100 ranges and only its first 100, in start order, are listed. |
+| `transcript_coverage.pending_ranges` | array of object | no | Since 0.3.0 (ADR 0033): the part of untranscribed_ranges that an open revision will still publish; absent when nothing is pending. A word said there cannot be found yet; that does not mean none was said.; 1 to 100 items |
+| `transcript_coverage.pending_ranges[].from_us` | integer | yes | at least 0 |
+| `transcript_coverage.pending_ranges[].to_us` | integer | yes | at least 1 |
+| `transcript_coverage.pending_covered_by` | object | no | Since 0.3.0 (ADR 0033): the earlier, sealed revision (the one the open revision supersedes) that still holds text over part of the pending ranges, and those parts; read them with --revision. Absent when there is none. |
+| `transcript_coverage.pending_covered_by.revision_id` | string | yes | pattern `^trv_[a-z0-9]{16,64}$` |
+| `transcript_coverage.pending_covered_by.ranges` | array of object | yes | 1 to 100 items |
+| `transcript_coverage.pending_covered_by.ranges[].from_us` | integer | yes | at least 0 |
+| `transcript_coverage.pending_covered_by.ranges[].to_us` | integer | yes | at least 1 |
+| `since` | object | no | Since 0.3.0 (ADR 0033): present in every answer to --since, and over an open revision in the answer that ends the read (one without next_cursor; a paged read has it on its last page only). since_token is passed back with --since to read (or search) only what the revision publishes after this answer, in start order; it follows the one revision this answer read until it is sealed or stopped, and expires with the session. revision_state is that revision's state now; more is true when this answer stopped at its limit with more already published after it. |
+| `since.since_token` | string | yes | 1 to 512 characters |
+| `since.revision_state` | "open" \| "sealed" \| "stopped" | yes |  |
+| `since.more` | boolean | yes |  |
 
 ### transcript-get-data.schema.json
 
@@ -1503,6 +1552,18 @@ The data member of a complete or partial transcript.get result: one bounded page
 | `transcript_coverage.no_speech_ranges[].from_us` | integer | yes | at least 0 |
 | `transcript_coverage.no_speech_ranges[].to_us` | integer | yes | at least 1 |
 | `transcript_coverage.ranges_truncated` | boolean | yes | True when a range list held more than 100 ranges and only its first 100, in start order, are listed. |
+| `transcript_coverage.pending_ranges` | array of object | no | Since 0.3.0 (ADR 0033): the part of untranscribed_ranges that an open revision will still publish; absent when nothing is pending. A word said there cannot be found yet; that does not mean none was said.; 1 to 100 items |
+| `transcript_coverage.pending_ranges[].from_us` | integer | yes | at least 0 |
+| `transcript_coverage.pending_ranges[].to_us` | integer | yes | at least 1 |
+| `transcript_coverage.pending_covered_by` | object | no | Since 0.3.0 (ADR 0033): the earlier, sealed revision (the one the open revision supersedes) that still holds text over part of the pending ranges, and those parts; read them with --revision. Absent when there is none. |
+| `transcript_coverage.pending_covered_by.revision_id` | string | yes | pattern `^trv_[a-z0-9]{16,64}$` |
+| `transcript_coverage.pending_covered_by.ranges` | array of object | yes | 1 to 100 items |
+| `transcript_coverage.pending_covered_by.ranges[].from_us` | integer | yes | at least 0 |
+| `transcript_coverage.pending_covered_by.ranges[].to_us` | integer | yes | at least 1 |
+| `since` | object | no | Since 0.3.0 (ADR 0033): present in every answer to --since, and over an open revision in the answer that ends the read (one without next_cursor; a paged read has it on its last page only). since_token is passed back with --since to read (or search) only what the revision publishes after this answer, in start order; it follows the one revision this answer read until it is sealed or stopped, and expires with the session. revision_state is that revision's state now; more is true when this answer stopped at its limit with more already published after it. |
+| `since.since_token` | string | yes | 1 to 512 characters |
+| `since.revision_state` | "open" \| "sealed" \| "stopped" | yes |  |
+| `since.more` | boolean | yes |  |
 
 ### transcript-get-stream-data.schema.json
 
@@ -1535,6 +1596,18 @@ The data member of the complete or partial terminal result that ends a transcrip
 | `transcript_coverage.no_speech_ranges[].from_us` | integer | yes | at least 0 |
 | `transcript_coverage.no_speech_ranges[].to_us` | integer | yes | at least 1 |
 | `transcript_coverage.ranges_truncated` | boolean | yes | True when a range list held more than 100 ranges and only its first 100, in start order, are listed. |
+| `transcript_coverage.pending_ranges` | array of object | no | Since 0.3.0 (ADR 0033): the part of untranscribed_ranges that an open revision will still publish; absent when nothing is pending. A word said there cannot be found yet; that does not mean none was said.; 1 to 100 items |
+| `transcript_coverage.pending_ranges[].from_us` | integer | yes | at least 0 |
+| `transcript_coverage.pending_ranges[].to_us` | integer | yes | at least 1 |
+| `transcript_coverage.pending_covered_by` | object | no | Since 0.3.0 (ADR 0033): the earlier, sealed revision (the one the open revision supersedes) that still holds text over part of the pending ranges, and those parts; read them with --revision. Absent when there is none. |
+| `transcript_coverage.pending_covered_by.revision_id` | string | yes | pattern `^trv_[a-z0-9]{16,64}$` |
+| `transcript_coverage.pending_covered_by.ranges` | array of object | yes | 1 to 100 items |
+| `transcript_coverage.pending_covered_by.ranges[].from_us` | integer | yes | at least 0 |
+| `transcript_coverage.pending_covered_by.ranges[].to_us` | integer | yes | at least 1 |
+| `since` | object | no | Since 0.3.0 (ADR 0033): present in every answer to --since, and over an open revision in the answer that ends the read (one without next_cursor; a paged read has it on its last page only). since_token is passed back with --since to read (or search) only what the revision publishes after this answer, in start order; it follows the one revision this answer read until it is sealed or stopped, and expires with the session. revision_state is that revision's state now; more is true when this answer stopped at its limit with more already published after it. |
+| `since.since_token` | string | yes | 1 to 512 characters |
+| `since.revision_state` | "open" \| "sealed" \| "stopped" | yes |  |
+| `since.more` | boolean | yes |  |
 
 ### transcript-retranscribe-data.schema.json
 
@@ -1611,6 +1684,8 @@ Identity, alignment and outcome of one immutable transcript revision. Warnings a
 | `local_asr.silent_chunks` | integer | yes | 0 to 1024 |
 | `local_asr.no_audio_chunks` | integer | yes | 0 to 1024 |
 | `local_asr.unusable_chunks` | integer | no | Chunks whose recognised output was unusable as a whole. Absent when there are none, so a revision with none is presented exactly as before 0.2.1.; 1 to 1024 |
+| `local_asr.pending_chunks` | integer | no | Since 0.3.0 (ADR 0033): chunks an open revision has not published yet. Absent when there are none.; 1 to 1024 |
+| `local_asr.not_reached_chunks` | integer | no | Since 0.3.0 (ADR 0033): chunks a stopped run never reached. Like an unusable chunk it is no transcript of this run and not silence, and the earlier text it would have replaced is kept. Absent when there are none.; 1 to 1024 |
 | `local_asr.unplaced_ranges` | array of object | no | Since 0.2.1 (#359): the stretches of this run where the recogniser wrote words that no segment of the revision holds, in start order and merged. A segment the recogniser wrote whose times could not be placed in its audio is rejected and counted by the warning provider_segments_rejected, which carries no time; when it has a letter or digit in its text, the stretch of its chunk's audio from its start (never before it, whatever its end says; for a start at or after the audio's end, the start of the latest segment before it that starts inside the audio, or the audio's start) to the next segment's start, or to the audio's end when no segment after it starts inside the audio, is where its words may lie (an upper bound: the words took part of it). Since 0.2.3 (#383) that includes an empty range, a start in the padding past the audio and a chunk's last segment, which were only counted before; a segment with no letter or digit has no stretch. What is listed is that stretch less everything a kept segment of any chunk covers, where what is left is longer than half a second (the edge margin of the merge, a figure derived for one configuration of the chunk plan, kept after a measurement on real speech (#381); the same length that the merge leaves uncovered at the end of a kept copy). A search of the revision does not count such a stretch as transcribed unless a segment of the revision or a window the run found silent covers it, so a word said there cannot be found and the search says so. The run's own status is unchanged by it. Absent when there are none, which is every revision whose run rejected nothing of the kind, so such a revision is presented exactly as before 0.2.1. At most 1024; where there would be more the nearest are joined, which marks more and never less.; 1 to 1024 items |
 | `local_asr.unplaced_ranges[].from_us` | integer | yes | at least 0 |
 | `local_asr.unplaced_ranges[].to_us` | integer | yes | at least 1 |
@@ -1619,8 +1694,10 @@ Identity, alignment and outcome of one immutable transcript revision. Warnings a
 | `replaced_range.from_us` | integer | yes | at least 0 |
 | `replaced_range.to_us` | integer | yes | at least 1 |
 | `carried_segment_count` | integer | no | Segments carried unchanged from earlier revisions (each names its origin in carried_from), including, since 0.2.1, text kept where it reaches into a part of the replaced range that the run could not read; segment_count minus this is what the run recognised.; 0 to 20000 |
+| `state` | "open" \| "stopped" | no | Since 0.3.0 (ADR 0033): open while the run that makes the revision publishes it as it goes (its segments are final and can be cited, and more may follow); stopped when that run was cancelled, or failed in a way it could not resume from, after it had published part of it (it keeps every published segment and, after them, the earlier text it did not reach). Absent for a sealed revision, which every revision before 0.3.0 and every import is. |
+| `published_until_us` | integer | no | Since 0.3.0 (ADR 0033), exactly with state: for an open revision the time before which it is final (no segment its run will still publish starts before it); for a stopped one the time its run had published until, after which only the earlier text it kept counts as transcribed.; at least 0 |
 
-This schema also holds 1 conditional rule (a member that is required, or fixed, when another has a given value); read [the schema](../../../schemas/v1/transcript-revision.schema.json) for it.
+This schema also holds 2 conditional rules (a member that is required, or fixed, when another has a given value); read [the schema](../../../schemas/v1/transcript-revision.schema.json) for them.
 
 ### transcript-segment-brief.schema.json
 

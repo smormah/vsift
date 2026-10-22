@@ -970,8 +970,9 @@ every chunk, reused ones included; at most one per second; example
 [`transcript-retranscribe.events.jsonl`](../../schemas/v1/examples/transcript-retranscribe.events.jsonl))
 and then its one terminal event, whose result is the `--json` result; stream the
 records with `transcript get --revision <revision_id> --events jsonl`, page by page. A first Ctrl-C or `SIGTERM` (see
-Interruption above) stops the run before its commit: nothing is committed, whisper.cpp
-is stopped and reaped, the chunks it finished are kept for a resume (below), and the
+Interruption above) stops the run before its commit: nothing is sealed (since 0.3.0 the
+parts it published stay, its revision open; see "Transcripts published as they go"
+below), whisper.cpp is stopped and reaped, the chunks it finished are kept for a resume (below), and the
 failure is `CANCELLED` (exit 6) with the session and job in `error.affected_ids` and a
 remediation whose `command` is `vsift job resume <job>`
 ([example](../../schemas/v1/examples/retranscribe-cancelled.json)). A run killed
@@ -1085,8 +1086,14 @@ writes the resumed run's chunk progress, as `transcript retranscribe` does (P11 
   marked `cancelling` and its owner notices within 250 ms, stops its provider and
   cancels the job before any commit (the owner's own command then fails `CANCELLED`); a
   job that is `committing` or `succeeded` keeps its result and the answer carries the
-  warning `cancellation_too_late`; a failed or cancelled job is reported as it is.
-  Repeating a cancel changes nothing. A cancelled or failed job is started afresh (a
+  warning `cancellation_too_late`; a failed or cancelled job is reported as it is. Since
+  0.3.0 a cancelled job that had published part of its revision seals it as stopped,
+  keeping every published segment (see "Transcripts published as they go"). When that
+  seal cannot land now (the session is busy), the job is still cancelled and the answer
+  carries the warning `revision_left_open`: the revision stays open, and every other
+  transcription or retention of the session answers `BUSY` with the remediation
+  `job cancel <job>` until a repeated cancel seals it. Otherwise repeating a cancel
+  changes nothing. A cancelled or failed job is started afresh (a
   new epoch) by running the original command again.
 
 `session status <session>` additionally lists the session's newest jobs, most recently
@@ -1104,6 +1111,84 @@ member of the status is unchanged; `session list`, `renew` and `close` do not li
 | `job resume` interrupted by Ctrl-C/`SIGTERM` | `CANCELLED` (exit 6; the session and job named, `job resume` suggested again) |
 | `job cancel` while an owner appeared meanwhile, or the state lock stayed busy | `BUSY` |
 | Every failure of `transcript retranscribe` (the resumed run) | as listed above |
+
+### Transcripts published as they go (0.3.0, ADR 0033)
+
+```console
+vsift transcript retranscribe ses_0123456789abcdef --json
+vsift transcript get ses_0123456789abcdef --from 0 --to 600000000 --json
+vsift transcript get ses_0123456789abcdef --since <since_token> --json
+vsift search ses_0123456789abcdef --query "error 42" --since <since_token> --json
+```
+
+**A revision grows as its run goes ([ADR 0033](../decisions/0033-progress-during-long-transcriptions.md)).**
+Since 0.3.0 `transcript retranscribe` and `job resume` publish their revision while they
+run: the revision is **open** from its first part, and after a chunk, at most every 10 s
+and in at most 64 parts, the run commits what no chunk still to come can change (every
+stretch of speech that ends before the next chunk's earliest possible audio; the merge
+rules themselves are unchanged). A published segment is final: it is cited at once and
+has the same identity, time and text in the revision the run **seals** when it ends,
+which is the revision a run that published nothing would seal, byte for byte. A worker's
+`retranscribe` step publishes only at its seal, as before. While a revision is open,
+`transcript get` and `search` read it by default (the newest revision); the revision it
+supersedes stays readable with `--revision`. A session holds at most one open revision:
+another `transcript retranscribe` of it answers `BUSY` naming the job, as a frame does
+while a transcription runs, and `session retain` answers the same until the revision is
+sealed.
+
+**Reading an open revision.** The answer is `partial`: what the run has not published yet
+is listed in `transcript_coverage.untranscribed_ranges` and also in `pending_ranges`
+(new, present only then); the envelope coverage gives the reason `untranscribed_range`
+followed by `transcription_pending`; and the fixed warning says what is pending, that it
+is not silence, and how to read on. Where the revision it supersedes still holds text
+over the pending part, `transcript_coverage.pending_covered_by` names that revision and
+those ranges, for `--revision`. The revision block carries `state` (`open`) and
+`published_until_us` (the time before which it is final), and `local_asr.pending_chunks`.
+A sealed revision read without `--since` carries none of these members, so every such
+answer is the one 0.2.x gave. Examples:
+[`transcript-get.open.json`](../../schemas/v1/examples/transcript-get.open.json) and
+[`search.open.json`](../../schemas/v1/examples/search.open.json). Over an open revision
+the coverage is as of the page that was read; a search's later pages may miss a hit
+published after its first page, which `--since` finds (known limit L-219).
+
+**Following it: `--since`.** Every answer to `--since`, and every answer over an open
+revision that ends its read (it has no `next_cursor`), has `data.since`: `since_token`,
+`revision_state` (`open`, `sealed` or `stopped`) and `more` (the answer stopped at its
+limit with more already published). A paged read gives it on its last page only: a token
+follows on from everything its answer's revision held, so one given on an earlier page
+would skip the pages between. Follow `next_cursor` to the last page (the cursor reads
+the same revision while it grows), then follow the token.
+`transcript get --since <token>` answers the segments the token's revision published
+after it, in start order (`--from` and `--to` may then be left out; the range is clipped
+to the source), and `search --since <token>` the hits among them. A token follows the
+one revision its answer read, into its sealed or stopped form, and never another; it is
+bound to the session and expires with it, like a cursor, and is refused (the cursor's
+`INVALID_ARGUMENT`) for another session, another `--revision` or after the session
+expires. `--since` cannot be combined with `--cursor`.
+
+**Ending early: stopped revisions (changed behaviour, D1).** Nothing published is taken
+back. A job that is cancelled (`job cancel`), or fails in a way it cannot resume from
+(most of its chunks unusable, its attempts used up), after it had published part of its
+revision seals it as **stopped**: every published segment stays, followed by the text of
+the revision it supersedes that starts at or after the time it stopped at, inside the
+replaced range where the run wrote nothing (and everything after the range); the chunks
+it never reached are `not_reached` (`local_asr.not_reached_chunks`); `state` is `stopped`
+and `published_until_us` the time it stopped at; and a read of it is `partial` with the
+part it did not reach untranscribed, unless earlier text covers it. Until 0.2.x such a
+run committed nothing. A run that published nothing (a run stopped before its first
+part, a worker's step) still commits nothing. A first Ctrl-C or `SIGTERM` leaves the
+job interrupted as before, with its revision open: `job resume` continues the same
+revision from its next part, and `job cancel` seals it as stopped. A resume by a VSift
+whose merge rules differ from the ones that published the revision seals it as stopped
+and fails `INTEGRITY_FAILURE`; retranscribe the rest with `--from` and `--to`.
+
+| Condition | Code |
+| --- | --- |
+| `transcript retranscribe` of a session whose open revision another job publishes | `BUSY` (the session and the job in `affected_ids`) |
+| `session retain` while a revision is open | `BUSY` (the session and the job in `affected_ids`) |
+| Either of the two above when the open revision's job has ended (its `job cancel` could not seal it) | `BUSY` (the session and the job in `affected_ids`; the remediation's command is `job cancel <job>`, which seals the revision as stopped) |
+| `--since` with a malformed, foreign or expired token, or with another `--revision` | `INVALID_ARGUMENT` (the cursor's remediation) |
+| A resume under other merge rules than the open revision's | `INTEGRITY_FAILURE` (the stopped revision is committed) |
 
 ### P11 `job run`
 

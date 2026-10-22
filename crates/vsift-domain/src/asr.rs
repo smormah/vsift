@@ -34,6 +34,10 @@ use crate::{
     spans::{Span, SpanSet, join_nearest, merged, overlaps_any, span, subtract, to_ranges},
 };
 
+mod settled;
+
+pub use settled::{MAX_EARLY_AUDIO_MICROS, MERGE_RULES_VERSION, SettledTranscript, settled_merge};
+
 /// Sample rate of the speech PCM contract: mono signed 16-bit at 16 kHz.
 pub const SPEECH_SAMPLE_RATE: u32 = 16_000;
 /// Longest chunk window a plan may request; the PCM source bounds one chunk to it.
@@ -704,6 +708,30 @@ pub enum AsrChunkOutcome {
         /// Observed first decoded sample to last decoded sample.
         audio: TimeRange,
     },
+    /// The chunk is planned, and what came of it is not published yet: it is
+    /// not finished, or it finished after what the run has settled
+    /// ([`crate::settled_merge`]). Only an open revision holds it (ADR 0033): a
+    /// sealed revision never does. A pending window is not covered and is not
+    /// no speech; the revision says the part is pending.
+    Pending,
+    /// The run stopped (it was cancelled, or failed in a way it cannot resume
+    /// from) before it finished this chunk, after it had published part of its
+    /// revision (ADR 0033, D1). Only a stopped revision holds it. Like
+    /// [`Self::Unusable`] it is a gap that is not a quiet one: the window is
+    /// not covered, and the text the superseded revision had there is kept
+    /// ([`EarlierTextRule`]) because the run did not read it.
+    NotReached,
+}
+
+impl AsrChunkOutcome {
+    /// Whether the run read nothing usable there although it was meant to: an
+    /// unusable answer, or a chunk the run stopped before. The superseded
+    /// revision's text is kept there ([`EarlierTextRule`]). A pending chunk is
+    /// not such a gap: the run will still read it.
+    #[must_use]
+    pub const fn left_unread(self) -> bool {
+        matches!(self, Self::Unusable { .. } | Self::NotReached)
+    }
 }
 
 /// One chunk of a run and its outcome.
@@ -852,9 +880,12 @@ impl AsrRun {
 
     /// The parts of the run's range that no chunk of it transcribed or found
     /// quiet, because the chunks that cover them were unusable
-    /// ([`AsrChunkOutcome::Unusable`]) and no neighbouring chunk, which overlaps
-    /// them by five seconds, covers them: in start order, merged, empty when the
-    /// run had no unusable chunk (#353).
+    /// ([`AsrChunkOutcome::Unusable`]) or not reached by a run that stopped
+    /// ([`AsrChunkOutcome::NotReached`], ADR 0033), and no neighbouring chunk,
+    /// which overlaps them by five seconds, covers them: in start order,
+    /// merged, empty when the run had no such chunk (#353). A pending chunk
+    /// ([`AsrChunkOutcome::Pending`]) is in neither list: the run still reads
+    /// it.
     ///
     /// These are the ranges the run did not re-transcribe. What becomes of the
     /// text the superseded revision had in and around them is
@@ -866,10 +897,15 @@ impl AsrRun {
         for record in &self.chunks {
             let window = span(record.chunk.window);
             match record.outcome {
-                AsrChunkOutcome::Unusable { .. } => unusable.push(window),
+                AsrChunkOutcome::Unusable { .. } | AsrChunkOutcome::NotReached => {
+                    unusable.push(window);
+                }
                 AsrChunkOutcome::Transcribed { .. }
                 | AsrChunkOutcome::Silent { .. }
                 | AsrChunkOutcome::NoAudio => covered.push(window),
+                // Not read yet, and not left unread either: the run still reads
+                // it, so it neither keeps earlier text nor covers anything.
+                AsrChunkOutcome::Pending => {}
             }
         }
         to_ranges(&subtract(&merged(unusable), &merged(covered)))
@@ -931,6 +967,7 @@ pub struct EarlierTextRule {
     replaced: Span,
     gaps: Vec<Span>,
     written: Vec<Span>,
+    unread_from: Option<u64>,
 }
 
 impl EarlierTextRule {
@@ -944,7 +981,20 @@ impl EarlierTextRule {
             replaced: span(replaced),
             gaps: run.unusable_gaps().into_iter().map(span).collect(),
             written: merged(written.into_iter().map(span).collect()),
+            unread_from: None,
         }
+    }
+
+    /// The rule for a run that stopped (ADR 0033, D1) after publishing its
+    /// revision up to `stopped_at`: what it published is final, so the earlier
+    /// text it keeps besides the rule's own is the text that **starts** at or
+    /// after `stopped_at`, inside the replaced range, where none of its own text
+    /// lies. Earlier text that starts before `stopped_at` is kept only as
+    /// [`Self::new`] keeps it, which is what the open revision kept.
+    #[must_use]
+    pub fn stopped_at(mut self, stopped_at: MediaTime) -> Self {
+        self.unread_from = Some(stopped_at.as_micros());
+        self
     }
 
     /// Whether a segment of the superseded revision at `earlier` is carried
@@ -958,9 +1008,13 @@ impl EarlierTextRule {
         if !overlaps_any(&[self.replaced], candidate) {
             return true;
         }
+        let unread = overlaps_any(&self.gaps, candidate)
+            || self
+                .unread_from
+                .is_some_and(|stopped_at| candidate.0 >= stopped_at);
         self.replaced.0 <= candidate.0
             && candidate.1 <= self.replaced.1
-            && overlaps_any(&self.gaps, candidate)
+            && unread
             && !overlaps_any(&self.written, candidate)
     }
 }

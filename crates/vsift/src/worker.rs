@@ -730,6 +730,9 @@ impl Engine {
                             cancellation: context.work.clone(),
                             progress: run.progress.clone(),
                             admission: run.admission,
+                            // A worker's step publishes only at its seal, so a
+                            // supervisor's request result is what it was.
+                            publication: crate::RetranscribePublication::AtTheSeal,
                         })
                         .await
                         .map_err(|error| StepError {

@@ -1544,3 +1544,128 @@ proptest! {
         prop_assert_eq!(seen, full);
     }
 }
+
+/// The parts of an open (or stopped) revision of a 100 s source: one chunk's
+/// segment at 2-4 s, the run's outcomes `outcomes`.
+fn growth_parts(outcomes: &[AsrChunkOutcome]) -> Built<TranscriptRevisionParts> {
+    let covered = range(0, 100 * SECOND)?;
+    Ok(TranscriptRevisionParts {
+        id: TranscriptRevisionId::parse("trv_0123456789abcdef")?,
+        number: NonZeroU32::MIN,
+        source_id: SourceId::from_sha256(DIGEST)?,
+        source_segment: source_segment(100 * SECOND)?,
+        provenance: TranscriptProvenance::LocalAsr(run(covered, outcomes)?),
+        supersedes: None,
+        replaced_range: None,
+        inherited: Vec::new(),
+        carried_untranscribed: Vec::new(),
+        unplaced: Vec::new(),
+        language: None,
+        segments: vec![TranscriptSegment::new(TranscriptSegmentParts {
+            id: TranscriptSegmentId::parse("tsg_0000000000000001")?,
+            ordinal: NonZeroU32::MIN,
+            range: range(2 * SECOND, 4 * SECOND)?,
+            text: CueText::new("first words".to_owned(), "first words".to_owned())?,
+            speaker: None,
+            confidence: Confidence::unknown(),
+            origin: SegmentOrigin::Asr {
+                chunk: 0,
+                provider_start: ChunkTime::from_micros(2 * SECOND),
+                provider_end: ChunkTime::from_micros(4 * SECOND),
+                trimmed: ProviderEndTrim::Unchanged,
+            },
+        })],
+        warnings: TranscriptWarnings::default(),
+    })
+}
+
+/// The outcomes of a 100 s run whose first chunk transcribed and whose other
+/// three are `rest`.
+fn first_transcribed(rest: AsrChunkOutcome) -> Built<Vec<AsrChunkOutcome>> {
+    Ok(vec![
+        AsrChunkOutcome::Transcribed {
+            audio: range(0, 30 * SECOND)?,
+        },
+        rest,
+        rest,
+        rest,
+    ])
+}
+
+/// ADR 0033: an open revision counts nothing of its run's reading from the
+/// time it is published until, and that part is pending; it is open; and the
+/// constructors keep each state to its own chunks.
+#[test]
+fn an_open_revision_is_pending_from_the_time_it_is_published_until() -> TestResult {
+    let pending = first_transcribed(AsrChunkOutcome::Pending)?;
+    let open =
+        TranscriptRevision::new_open(growth_parts(&pending)?, MediaTime::from_micros(20 * SECOND))?;
+    assert_eq!(open.state(), crate::RevisionState::Open);
+    let coverage = SearchCoverage::of(&open, None);
+    assert_eq!(coverage.transcribed(), [range(0, 20 * SECOND)?]);
+    assert_eq!(
+        coverage.untranscribed(),
+        [range(20 * SECOND, 100 * SECOND)?]
+    );
+    assert_eq!(coverage.pending(), coverage.untranscribed());
+    // Within what is published, the read is complete.
+    let early = SearchCoverage::of(&open, Some(range(0, 10 * SECOND)?));
+    assert!(early.is_complete());
+    assert_eq!(early.pending(), []);
+
+    let growth = Err(crate::TranscriptRevisionError::InvalidGrowth);
+    // A sealed revision holds no pending chunk.
+    assert_eq!(TranscriptRevision::new(growth_parts(&pending)?), growth);
+    // An open one holds a pending chunk and no unreached one, and nothing of
+    // its own after the time it is published until.
+    let sealed_run = first_transcribed(AsrChunkOutcome::Silent {
+        audio: range(25 * SECOND, 55 * SECOND)?,
+    })?;
+    assert_eq!(
+        TranscriptRevision::new_open(
+            growth_parts(&sealed_run)?,
+            MediaTime::from_micros(20 * SECOND)
+        ),
+        growth
+    );
+    assert_eq!(
+        TranscriptRevision::new_open(
+            growth_parts(&first_transcribed(AsrChunkOutcome::NotReached)?)?,
+            MediaTime::from_micros(20 * SECOND)
+        ),
+        growth
+    );
+    assert_eq!(
+        TranscriptRevision::new_open(growth_parts(&pending)?, MediaTime::from_micros(SECOND)),
+        growth
+    );
+    Ok(())
+}
+
+/// ADR 0033, D1: a stopped revision is stopped, counts its run's reading only
+/// before the time it stopped at, and has nothing pending; a sealed one holds
+/// no unreached chunk.
+#[test]
+fn a_stopped_revision_counts_its_run_only_before_it_stopped() -> TestResult {
+    let not_reached = first_transcribed(AsrChunkOutcome::NotReached)?;
+    let stopped = TranscriptRevision::new_stopped(
+        growth_parts(&not_reached)?,
+        MediaTime::from_micros(20 * SECOND),
+    )?;
+    assert_eq!(stopped.state(), crate::RevisionState::Stopped);
+    let coverage = SearchCoverage::of(&stopped, None);
+    assert_eq!(coverage.transcribed(), [range(0, 20 * SECOND)?]);
+    assert_eq!(coverage.pending(), []);
+    assert_eq!(
+        TranscriptRevision::new(growth_parts(&not_reached)?),
+        Err(crate::TranscriptRevisionError::InvalidGrowth)
+    );
+    assert_eq!(
+        TranscriptRevision::new_stopped(
+            growth_parts(&first_transcribed(AsrChunkOutcome::Pending)?)?,
+            MediaTime::from_micros(20 * SECOND)
+        ),
+        Err(crate::TranscriptRevisionError::InvalidGrowth)
+    );
+    Ok(())
+}

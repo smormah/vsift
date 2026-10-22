@@ -213,6 +213,7 @@ fn classify(error: &JobRunError) -> FailureCode {
         },
         JobRunError::Storage(_) | JobRunError::Job(_) => FailureCode::StorageIo,
         JobRunError::Assembly(_) | JobRunError::Key(_) => FailureCode::Internal,
+        JobRunError::PublishedDiffers { .. } => FailureCode::IntegrityFailure,
     }
 }
 
@@ -295,6 +296,7 @@ async fn run(
             timer: &InstantTimer,
             classify,
             progress: &NoProgress,
+            publication: vsift_application::Publication::AtTheSeal,
         },
         &mut Unchanged,
     )

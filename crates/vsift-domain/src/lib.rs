@@ -34,14 +34,15 @@ pub use asr::{
     AsrChunkOutcome, AsrChunkRecord, AsrDecodingProfile, AsrModel, AsrModelProfile, AsrProvider,
     AsrProviderBuild, AsrRun, AsrRunParts, AsrSegmentDraft, ChunkPlan, ChunkPlanError,
     ChunkSegments, ChunkTime, DigestError, EarlierTextRule, MAX_CHUNK_WINDOW_MICROS,
-    MAX_PLANNED_CHUNKS, MAX_PROVIDER_SEGMENTS, MAX_PROVIDER_TOKENS, MIN_RECOGNITION_MICROS,
-    MIN_RECOGNITION_SAMPLES, MIN_SEGMENTS_FOR_REJECTION_RATIO, MergedSegment, MergedTranscript,
+    MAX_EARLY_AUDIO_MICROS, MAX_PLANNED_CHUNKS, MAX_PROVIDER_SEGMENTS, MAX_PROVIDER_TOKENS,
+    MERGE_RULES_VERSION, MIN_RECOGNITION_MICROS, MIN_RECOGNITION_SAMPLES,
+    MIN_SEGMENTS_FOR_REJECTION_RATIO, MergedSegment, MergedTranscript,
     PROVIDER_END_TOLERANCE_MICROS, PlannedChunk, ProviderChunkOutput, ProviderOutputError,
     ProviderSegment, ProviderToken, ProviderTokenKind, ReviewedAsrModel,
-    SEAM_COVERAGE_TOLERANCE_MICROS, SPEECH_SAMPLE_RATE, Sha256Hex,
+    SEAM_COVERAGE_TOLERANCE_MICROS, SPEECH_SAMPLE_RATE, SettledTranscript, Sha256Hex,
     UNUSABLE_CHUNK_SHARE_DENOMINATOR, ValidatedChunk, decoded_audio_range,
     is_below_recognition_floor, is_silent_pcm, merge_chunks, plan_chunks, rounds_to_no_pcm_sample,
-    unusable_chunks_end_the_run, validate_chunk_output,
+    settled_merge, unusable_chunks_end_the_run, validate_chunk_output,
 };
 pub use checkpoint::{CheckpointOutcome, ChunkCheckpoint, RecognitionKey};
 pub use evidence::{
@@ -83,8 +84,9 @@ pub use search::{
     normalise_search_text, search_revision,
 };
 pub use session::{
-    SessionArtifactKind, SessionLifetime, SessionLifetimePolicy, SessionPhase,
-    SessionTransitionError, WorkspacePolicy, WorkspacePolicyError, WorkspaceRetention,
+    MAX_TRANSCRIPT_PARTS, SessionArtifactKind, SessionLifetime, SessionLifetimePolicy,
+    SessionPhase, SessionTransitionError, WorkspacePolicy, WorkspacePolicyError,
+    WorkspaceRetention,
 };
 pub use storage::{
     DurabilityRequirement, GenerationError, PublicationGuarantee, StorageGeneration,
@@ -98,11 +100,11 @@ pub use transcript::{
     ImportedCue, InheritedRevision, LanguageTag, LanguageTagError, MAX_CARRIED_UNTRANSCRIBED,
     MAX_CUE_TEXT_BYTES, MAX_SUPPLIED_TRANSCRIPT_BYTES, MAX_TRANSCRIPT_CUES,
     MAX_TRANSCRIPT_OFFSET_MICROS, MAX_UNPLACED_STRETCHES, ParsedTranscript, ProviderEndTrim,
-    SegmentOrigin, SidecarIdentity, SourceSegment, SourceSegmentState, TranscriptFormat,
-    TranscriptImportError, TranscriptOffset, TranscriptProvenance, TranscriptRejection,
-    TranscriptRevision, TranscriptRevisionError, TranscriptRevisionParts, TranscriptSegment,
-    TranscriptSegmentParts, TranscriptSlice, TranscriptWarning, TranscriptWarningKind,
-    TranscriptWarnings, align_imported_cues,
+    RevisionState, SegmentOrigin, SidecarIdentity, SourceSegment, SourceSegmentState,
+    TranscriptFormat, TranscriptImportError, TranscriptOffset, TranscriptProvenance,
+    TranscriptRejection, TranscriptRevision, TranscriptRevisionError, TranscriptRevisionParts,
+    TranscriptSegment, TranscriptSegmentParts, TranscriptSlice, TranscriptWarning,
+    TranscriptWarningKind, TranscriptWarnings, align_imported_cues,
 };
 pub use visual::{
     CandidateChange, CandidateDraft, CandidateOmission, CandidateReason, CandidateStability,

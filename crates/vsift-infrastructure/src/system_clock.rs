@@ -1,8 +1,8 @@
 //! The operating-system wall clock behind the application [`Clock`] port.
 
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use vsift_application::{Clock, ClockError};
+use vsift_application::{Clock, ClockError, Stopwatch};
 
 /// Reads the host's real-time clock.
 ///
@@ -17,6 +17,25 @@ impl Clock for SystemClock {
             .duration_since(UNIX_EPOCH)
             .map(|duration| duration.as_secs())
             .map_err(|_| ClockError::BeforeUnixEpoch)
+    }
+}
+
+/// The host's monotonic clock, from the moment it was made: the interval
+/// between two parts of a revision published as it goes (ADR 0033).
+#[derive(Clone, Copy, Debug)]
+pub struct MonotonicStopwatch(Instant);
+
+impl MonotonicStopwatch {
+    /// A stopwatch started now.
+    #[must_use]
+    pub fn started() -> Self {
+        Self(Instant::now())
+    }
+}
+
+impl Stopwatch for MonotonicStopwatch {
+    fn elapsed(&self) -> Duration {
+        self.0.elapsed()
     }
 }
 

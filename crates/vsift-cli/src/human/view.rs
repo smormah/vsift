@@ -211,6 +211,18 @@ pub(crate) struct TranscriptPage {
     /// result written before it, which no command now writes.
     #[serde(default)]
     pub(crate) transcript_coverage: Option<TranscriptCoverage>,
+    /// What to read on from, over an open revision (ADR 0033).
+    #[serde(default)]
+    pub(crate) since: Option<Since>,
+}
+
+/// The `since` member of a read of a growing transcript (ADR 0033).
+#[derive(Debug, Deserialize)]
+pub(crate) struct Since {
+    #[serde(rename = "since_token")]
+    pub(crate) token: String,
+    pub(crate) revision_state: String,
+    pub(crate) more: bool,
 }
 
 /// `transcript.retranscribe` data.
@@ -247,6 +259,9 @@ pub(crate) struct Search {
     pub(crate) hits: Vec<SearchHit>,
     pub(crate) next_cursor: Option<String>,
     pub(crate) transcript_coverage: TranscriptCoverage,
+    /// What to search on from, over an open revision (ADR 0033).
+    #[serde(default)]
+    pub(crate) since: Option<Since>,
 }
 
 /// The normalised query; only how many terms it has is shown, because the
@@ -272,6 +287,19 @@ pub(crate) struct TranscriptCoverage {
     pub(crate) untranscribed_ranges: Vec<Range>,
     pub(crate) no_speech_ranges: Vec<Range>,
     pub(crate) ranges_truncated: bool,
+    /// What an open revision will still publish (ADR 0033).
+    #[serde(default)]
+    pub(crate) pending_ranges: Vec<Range>,
+    /// The earlier revision that holds text over part of the pending ranges.
+    #[serde(default)]
+    pub(crate) pending_covered_by: Option<PendingCover>,
+}
+
+/// An earlier revision that holds text over what is pending (ADR 0033).
+#[derive(Debug, Deserialize)]
+pub(crate) struct PendingCover {
+    pub(crate) revision_id: String,
+    pub(crate) ranges: Vec<Range>,
 }
 
 /// `ingest` data.

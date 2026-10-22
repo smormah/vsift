@@ -605,22 +605,30 @@ impl ViewArgument {
 pub(crate) struct TranscriptGetArguments {
     /// Session containing the transcript.
     pub session: SessionId,
-    /// Inclusive source-timeline start in microseconds.
-    #[arg(long)]
-    pub from: u64,
-    /// Exclusive source-timeline end in microseconds.
-    #[arg(long)]
-    pub to: u64,
+    /// Inclusive source-timeline start in microseconds; with --since it may be
+    /// left out (from the start).
+    #[arg(long, required_unless_present = "since")]
+    pub from: Option<u64>,
+    /// Exclusive source-timeline end in microseconds; with --since it may be
+    /// left out (to the end).
+    #[arg(long, required_unless_present = "since")]
+    pub to: Option<u64>,
     /// Segments per page, 1 through 100; defaults to 20. The maximum stays 100;
     /// full segments are large, and --view brief makes a long page smaller.
     #[arg(long, value_parser = clap::value_parser!(u16).range(1..=100))]
     pub limit: Option<u16>,
     /// Opaque continuation token returned by the previous page of the same query.
-    #[arg(long)]
+    #[arg(long, conflicts_with = "since")]
     pub cursor: Option<String>,
-    /// Revision to read (a `trv_` identity); defaults to the newest.
+    /// Revision to read (a `trv_` identity); defaults to the newest, which may
+    /// be a revision still being transcribed (open, so the answer is partial).
     #[arg(long)]
     pub revision: Option<TranscriptRevisionId>,
+    /// The since token of an earlier answer (`data.since.since_token`): read
+    /// only what was published after it, in start order, in the revision that
+    /// answer read. Use it to follow a transcription while it runs.
+    #[arg(long, value_name = "TOKEN")]
+    pub since: Option<String>,
     /// Which answer to give. `brief` keeps each segment's ids, times and
     /// `display_text` (and `carried_from` on a carried segment) and leaves out
     /// what the segments of a revision repeat; those members stay once in the
@@ -671,11 +679,18 @@ pub(crate) struct SearchArguments {
     #[arg(long, value_parser = clap::value_parser!(u16).range(1..=100))]
     pub limit: Option<u16>,
     /// Opaque continuation token returned by the previous page of the same search.
-    #[arg(long)]
+    #[arg(long, conflicts_with = "since")]
     pub cursor: Option<String>,
-    /// Revision to search (a `trv_` identity); defaults to the newest.
+    /// Revision to search (a `trv_` identity); defaults to the newest, which
+    /// may be a revision still being transcribed (open, so the answer is
+    /// partial).
     #[arg(long)]
     pub revision: Option<TranscriptRevisionId>,
+    /// The since token of an earlier answer (`data.since.since_token`): search
+    /// only what was published after it, in start order, in the revision that
+    /// answer read.
+    #[arg(long, value_name = "TOKEN")]
+    pub since: Option<String>,
     /// Which answer to give. `brief` keeps each found segment's ids, times and
     /// `display_text` (and `carried_from` on a carried segment) and leaves out
     /// what the segments of a revision repeat; those members stay once in the
