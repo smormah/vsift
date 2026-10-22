@@ -792,6 +792,9 @@ three items `waived` and none a pass (RQ-14, RQ-16, RQ-17: the check passes a wa
 one status, the current one, and `release_delta` one record, so the check of an earlier version reads the ledger as it is now:
 `--complete-for 0.2.1` now says that `release_delta` is for `0.2.2` and names the items whose entries are `0.2.2`'s (the
 entries for `0.2.1` are in each item's `prior`); when `0.2.1`'s records were made (2026-10-16) it named RQ-05 alone.
+Since the cut of `0.2.3-rc.1` (2026-10-22) it also names RQ-16, which is `planned` for that candidate (its waiver for 0.2.2 is
+kept in the item's `prior`, L-179); `--complete-for 0.2.3-rc.1` is the check of the candidate, and `--complete-for 0.2.2` names RQ-16 until
+the candidate's evidence replaces it.
 
 - **The ledger's shape** (schema version 1; the Rust types in
   `tools/vsift-governance/src/release_evidence/schema.rs` are the schema, and every struct
@@ -865,8 +868,8 @@ node tools/guide/check-examples.cjs --binary target/debug/vsift
   for the first identifier of that kind an earlier command printed on the same page;
   `<candidate:3>` picks the third. A placeholder with no value yet fails the check rather than
   being guessed.
-- **A version bump re-checks the guide.** The guide names a release (`0.2.2`), not a
-  candidate: `0.2.2-rc.1` and `0.2.2` are the same release to these tools (and `0.2.1-rc.1` to `0.2.1-rc.3` and `0.2.1` were another, as `0.2.0-rc.1` to `0.2.0-rc.3` and `0.2.0` were), so the stable commit
+- **A version bump re-checks the guide.** The guide names a release (`0.2.3`), not a
+  candidate: `0.2.3-rc.1` and `0.2.3` are the same release to these tools (and `0.2.2-rc.1` and `0.2.2` were another, as `0.2.1-rc.1` to `0.2.1-rc.3` and `0.2.1` and `0.2.0-rc.1` to `0.2.0-rc.3` and `0.2.0` were), so the stable commit
   needs no guide change, which matters because it may differ from its accepted candidate only in
   version-string files, shipped documents and the work record, and the generated reference pages,
   which name the release, are in none of them ([release process, 6.8](operations/release.md)).

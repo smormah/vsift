@@ -1,13 +1,13 @@
 # Installing VSift
 
-Status: user guide, updated 2026-10-18 (the release 0.2.2) and 2026-10-17 (the cut of the first release candidate of 0.2.2, `0.2.2-rc.1`: the candidates of 0.2.2 and the fix of #404) and 2026-10-16 (0.2.1 is published; its known issues and what was run against it) and 2026-10-15 (the release 0.2.1) and 2026-10-10 (section 7 on upgrading from a candidate of a later release: the cut of the patch release's candidate) and 2026-10-09 (P14 PR 12, the release 0.2.0; P14 PR 10 repeated again, the third candidate; P14 PR 11c;
+Status: user guide, updated 2026-10-22 (the cut of the first release candidate of 0.2.3, `0.2.3-rc.1`: the candidates of 0.2.3) and 2026-10-18 (the release 0.2.2) and 2026-10-17 (the cut of the first release candidate of 0.2.2, `0.2.2-rc.1`: the candidates of 0.2.2 and the fix of #404) and 2026-10-16 (0.2.1 is published; its known issues and what was run against it) and 2026-10-15 (the release 0.2.1) and 2026-10-10 (section 7 on upgrading from a candidate of a later release: the cut of the patch release's candidate) and 2026-10-09 (P14 PR 12, the release 0.2.0; P14 PR 10 repeated again, the third candidate; P14 PR 11c;
 P14 PR 9a; written by P13 PR 11 and PR 12 for the published pre-release;
 [ADR 0023](../decisions/0023-r0-distribution-managed-installation-and-handoff-check.md)).
 **VSift 0.2.2 is the patch release after 0.2.1**, and `npm install vsift-cli` with no tag installs it (it
 replaces 0.2.1 under npm's `latest` dist-tag). The npm packages carry npm provenance, and the native archives on its GitHub release carry a Sigstore build-provenance
 attestation, as every file of the release does. 0.2.0 (2026-10-09) was the first release under `latest` and 0.2.1 (2026-10-15) the one before this; before 0.2.0, `latest` was an empty `0.0.0` placeholder, a package with no command. The
 pre-release 0.1.0 (2026-10-01) and the release candidates of 0.2.0, 0.2.1 and 0.2.2 were installed with `vsift-cli@next`; they stay published, and 0.2.0-rc.1, 0.2.0-rc.2, 0.2.1-rc.1 and 0.2.1-rc.2
-are deprecated (npm warns on an install of any of them and names the release that replaced it). `next` still names 0.2.2-rc.1, the source of 0.2.2; you do not need it. 0.2.2 is not announced.
+are deprecated (npm warns on an install of any of them and names the release that replaced it). `next` still names 0.2.2-rc.1, the source of 0.2.2; you do not need it. 0.2.2 is not announced. The release candidates of the next patch release, 0.2.3 (the first is 0.2.3-rc.1, cut on 2026-10-22), go to `next` when they are published and are never `latest`; you do not need them.
 **0.2.2 is built from the same source as its release candidate, 0.2.2-rc.1**, and differs from it only in its version
 numbers, this guide, the npm package's README and the project's work record (a mechanical check enforces that:
 [`release.md`](release.md) section 6.8). What was tried on that candidate was tried on that source, and it is recorded in the release evidence ledger: the installs, the archives, the offline install, the upgrades,

@@ -25,7 +25,7 @@ published while another candidate of the same release is on `next`, which it sup
 The exact steps for the third candidate, `0.2.1-rc.3`, are section 6.16 (published on 2026-10-13 and accepted as the candidate of the stable release: 6.15's steps with the numbers that
 change, written compactly, because `0.2.1-rc.3` is `0.2.1-rc.2` plus one fix).
 Sections 6.10 to 6.16 are the record of those publishes, not instructions for a version that is
-already published. **For the next stable version, 6.20 (with 6.7 and 6.18) is the model; for the next candidate, 6.19 is. The first candidate of `0.2.2`, `0.2.2-rc.1`, is section 6.19 (cut 2026-10-17 and published on 2026-10-18 from `release/0.2.x`, the first candidate made on a release branch; a record since 2026-10-18), and the stable release `0.2.2` is section 6.20 (published 2026-10-18 from the same branch; a record).** **From 2026-10-16 releases are timed by the weekly window of 6.18** (the cut at Friday or Saturday midnight in the maintainer's local time, from a commit whose nightly passed, the long hosted runs after it, the publish on Monday or Tuesday; hot fixes outside it). **Since 2026-10-17 release candidates and the stable release are made on a release branch, `release/<MAJOR>.<MINOR>.x`, and `main` keeps taking merges during the window** (6.8 and 6.18); the workflow's first job, `guard`, refuses a dispatch on the wrong ref and a candidate whose commit has no passed nightly in seconds, before anything is built (section 1, 6.18). The workflow described here builds, checks and
+already published. **For the next stable version, 6.20 (with 6.7 and 6.18) is the model; for the next candidate, 6.19 is, with 6.21's differences. The first candidate of `0.2.2`, `0.2.2-rc.1`, is section 6.19 (cut 2026-10-17 and published on 2026-10-18 from `release/0.2.x`, the first candidate made on a release branch; a record since 2026-10-18), the stable release `0.2.2` is section 6.20 (published 2026-10-18 from the same branch; a record), and the first candidate of `0.2.3`, `0.2.3-rc.1`, is section 6.21 (cut 2026-10-22, not tagged or published when it was written: the first cut that deletes and makes again an existing release branch).** **From 2026-10-16 releases are timed by the weekly window of 6.18** (the cut at Friday or Saturday midnight in the maintainer's local time, from a commit whose nightly passed, the long hosted runs after it, the publish on Monday or Tuesday; hot fixes outside it). **Since 2026-10-17 release candidates and the stable release are made on a release branch, `release/<MAJOR>.<MINOR>.x`, and `main` keeps taking merges during the window** (6.8 and 6.18); the workflow's first job, `guard`, refuses a dispatch on the wrong ref and a candidate whose commit has no passed nightly in seconds, before anything is built (section 1, 6.18). The workflow described here builds, checks and
 packages the archives, assembles the npm packages and runs their qualification (section 5),
 and on every run writes the publish plan and shows it (a dry run). It publishes only when the maintainer
 dispatches it on a release tag with `dry_run` cleared and then approves the protected
@@ -3298,3 +3298,142 @@ gh workflow run p14-scan-reading.yml --repo smormah/vsift --ref v0.2.2-rc.1 -f v
 **What this run showed about the steps, for the next stable version.** (1) **The 20-minute read-back of #403 held on its second real use** and on its first for `latest`: about a minute and forty seconds, where one package of `0.2.1` took more than five. (2) **The first stable version published from a release branch needed nothing the planning page did not say:** the `guard`, the re-check after the approval and the delta check accepted a tag on `release/0.2.x` with the candidate's tag as its ancestor. (3) **The records change after the publish is the first real test of the `Release window` check's content comparison** (6.18 step 5, [L-173](../planning/known-limits.md#l-173)): with `--records` it reports as missing from `main` the work-record lines that the records change rewrites as current state, and lines that one window commit added and a later window commit replaced; the pull request records why `main` differs. (4) An npm login that has lapsed is found at the deprecation step, after the publish; it delays the deprecations and nothing else, and `npm whoami` in the maintainer's terminal before item 7 finds it first. (5) No other problem with the steps was reported.
 
 **What was not tried, and is not shown.** Yarn's behaviour for an untagged `yarn add vsift-cli` inside its one-day gate (the hosted jobs installed the exact version after the documented exemption); the long runs and the agent batches on the release's own tag (they are the candidate's, carried by the recorded delta); the upgrade from `0.1.0` and `P14 compatibility` on the stable tag (the candidate's runs are recorded); and everything the release ships untried: the adversarial evidence of the worker host's isolation (RQ-14), the cold-agent usefulness of a compact Claude model (RQ-16, #454) and the maintainer's try-outs (RQ-17, [L-143](../planning/known-limits.md#l-143)), each `waived` for `0.2.2` and none a pass. Nothing here announces anything.
+
+### 6.21 The release candidate `0.2.3-rc.1`: the cut, the numbers and the command lines (the first candidate of `0.2.3`, cycle 2; cut 2026-10-22)
+
+**Status when written: cut, not branched, not tagged, not published.** This section was written before the candidate existed anywhere but in the pull request that cuts it; nothing in it has been run. It is **6.18's steps 1 to 3 (the nightly precondition, the cut, the long runs) with this candidate's numbers**, on 6.19's pattern, which is the record of the first candidate made on a release branch and the model for this one (6.19's steps 0 to 9 are followed in the same order; this section lists what differs and every command line that carries a number). The command lines are Git Bash (in PowerShell write `"$t^^{commit}"` for `"$t^{commit}"`). 6.3 (a candidate), 6.4 (the checks of a publish), 6.5 (if something goes wrong) and 6.8 (the release branch) are unchanged. **Two things are new against 6.19:** `release/0.2.x` exists (it holds the stable release `0.2.2` at `0dadc69df4f5`, so the cut deletes and makes it again, step 3), and the window is the monthly round (6.18, "The monthly round"). The plan for the release is [`release-0.2.3.md`](../planning/release-0.2.3.md). Nothing is announced. **No npm command was run for this section:** the integrity values and the tag objects of the earlier versions are read at step 0 and written down there, not here.
+
+**What the candidate is.** `0.2.3-rc.1` is `main` at the merge of the pull request whose title starts "The release candidate 0.2.3-rc.1" (the version bump, the plan, this section, the ledger and the trial records moved aside), on top of `main` at `35728012` (the merge of #507) or later. It carries all of cycle 2 of [`backlog-iterations.md`](../planning/backlog-iterations.md) that is on `main` (the plan's table names each pull request): the Windows long folders (#469), the Windows private folders (#443, ADR 0026, a new workspace crate `vsift-windows-security` and the only `unsafe`), the managed activation's retry (#439), the whisper.cpp re-pin to v1.9.5 and `setup check`'s superseded versions, the seam changes (#380 to #384, #485), the dependency upkeep and the real-media, noisy-speech and visual evaluations. **It does not carry the FFmpeg re-pin** (#351, #272: the hot fix `0.2.4`) or any `0.3.0` work. The skill is unchanged and so is the agent-trial freeze (whole-freeze digest `302930904439c2eb49e43396f30d2088481d1a6fb7f47467dd29f08a1e0bb073`, written 2026-10-19).
+
+**The numbers (read 6.19 and 6.18 with this table).**
+
+| | 6.19 (`0.2.2-rc.1`, 2026-10-17) | This candidate (6.21) |
+| --- | --- | --- |
+| The version, the tag | `0.2.2-rc.1`, `v0.2.2-rc.1` | **`0.2.3-rc.1`, `v0.2.3-rc.1`** (annotated, message `VSift 0.2.3-rc.1`, as every earlier tag) |
+| The commit to tag | the merge commit of "The release candidate 0.2.2-rc.1" on `main`, which is also the head of the new `release/0.2.x` | the merge commit of the pull request whose title starts **"The release candidate 0.2.3-rc.1"**, which is also the head of **the new `release/0.2.x`** |
+| `release/0.2.x` before the cut | did not exist | **exists, at `0dadc69df4f5`** (the stable release `0.2.2`); `Release window` with `records=true`, then deleted by the maintainer, then made again at the new commit (step 3) |
+| The nightly | the latest Nightly run that tested exactly that commit passed | **the same** (scheduled or dispatched; every job but `Report a failure` succeeded; none of that commit still running) |
+| What npm holds before the publish | `next` `0.2.1-rc.3`, `latest` `0.2.1` | **`next` `0.2.2-rc.1`, `latest` `0.2.2`**, on all four packages (to be read at step 0; `0.2.2-rc.1` and `0.2.1-rc.3` are deprecated); `0.2.3-rc.1` is on none (404) |
+| What the dry run's plan does | `next` from `0.2.1-rc.3` to `0.2.2-rc.1`; `latest` stays `0.2.1` | **`next` from `0.2.2-rc.1` to `0.2.3-rc.1`; `latest` stays `0.2.2`**; GitHub's latest release stays `v0.2.2` |
+| What `vsift --version` prints | `vsift 0.2.2-rc.1 (<12 digits>)` | `vsift 0.2.3-rc.1 (<the first 12 digits of the commit>)` |
+| The earlier bytes to write down | eight versions (32 values) and eight tag commits | **every published version's integrity values (6.20 item 4's loop with `0.2.2` added) and ten tag commits** (below), read at step 0 |
+| The agent-trial freeze | #435's, kept | **the freeze of 2026-10-19, kept byte for byte** (`skill` `bd205d6c...`, `grader` `9ecd1121...`, whole freeze `302930904439...`); both `freeze check` runs say `nothing frozen has changed`; the `0.2.2-rc.1` batches' records moved to `batch-2-0.2.2-rc.1/` and `batch-3-0.2.2-rc.1/` in the cut |
+| The upgrade baselines (`from_version`) | `0.2.1`, then `0.2.1-rc.3` | **`0.2.2` first, then `0.2.2-rc.1`**; `0.2.1`, `0.2.0` and `0.1.0` optional; `P14 local upgrade` on the tag (default `0.1.0`) |
+| What this candidate supersedes | nothing | **nothing:** it is the first candidate of `0.2.3`; `0.2.2-rc.1` (already deprecated) stops being `next` |
+| `release-evidence --complete-for` | 17 of 20 | **17 of 20 at the cut** (below); RQ-16 is `planned`, RQ-14 and RQ-17 `waived` and not named |
+| The next candidate, if this one is bad | `0.2.2-rc.2` | `0.2.3-rc.2`: a fix and its bump by pull request into the new `release/0.2.x`, the nightly dispatched on the branch, its head tagged (6.18 step 4) |
+
+**The ten tag commits of the earlier versions** (read from the repository on 2026-10-22; the tags are annotated, and a tag's own object is not listed): `v0.2.0-rc.1` `d5792ce31db1106934233c86d0518c3ad1961e07`, `v0.2.0-rc.2` `7c722d1fc46af7fddeffbaf807028eaec413ace1`, `v0.2.0-rc.3` `83dca856e7a00fc9a71c87baae99f0b1d401dd31`, `v0.2.0` `eeb2a22a46a85ab10a456f2ab5d6a62e292836c5`, `v0.2.1-rc.1` `cb8cb3a6286047db56831459dabd6ee5500a37bd`, `v0.2.1-rc.2` `23ad4927e56f11d8047ca54d59b892516812d8f8`, `v0.2.1-rc.3` `fa380021f2aa8db40fdccdb7c410839e8fc10f4c`, `v0.2.1` `e9ab6e62673328a1645254a4a32e552a2a2f61bf`, `v0.2.2-rc.1` `43a033dbf81346b967b293a150e13306828cac50` and `v0.2.2` `0dadc69df4f5c5c3264be72f04be26a600620fe1`. No `v0.2.3*` tag existed, and `refs/heads/release/0.2.x` named `0dadc69df4f5c5c3264be72f04be26a600620fe1`.
+
+**`release-evidence --complete-for 0.2.3-rc.1` at the cut** (a reading, not a gate; it fails until the runs of step 7 are recorded) names 17 items: RQ-01 to RQ-06, RQ-13, RQ-18 and RQ-19 (`passed` for `0.2.2`, with 58 to 339 files of their scopes changed since), RQ-07 to RQ-12 and RQ-15 (`passed` for `0.2.2-rc.1`, 118 to 130 files changed) and RQ-16 (`planned` by this cut, as [L-179](../planning/known-limits.md#l-179) says: a waived item would pass the check silently). It does not name RQ-14 and RQ-17 (standing waivers: the maintainer decides whether they carry to `0.2.3`) or RQ-20.
+
+**Step 0, before the cut (the supervisor).** The pull request is merged (by the supervisor, on green) and nothing else is cut with it. Then, in a fresh clone or a clean worktree that is not the maintainer's, with no npm login:
+
+```console
+git fetch origin --tags
+gh pr list --repo smormah/vsift --state merged --search "The release candidate 0.2.3-rc.1" --json number,title,mergeCommit --jq ".[] | {number, title, commit: .mergeCommit.oid}"
+git show <the 40-digit commit>:Cargo.toml | grep -m1 "^version"
+git merge-base --is-ancestor <the 40-digit commit> origin/main && echo "on main"
+gh api "repos/smormah/vsift/commits/<the 40-digit commit>/check-runs?per_page=100" --paginate --jq ".check_runs[] | select(.name == \"CI result\") | \"\(.name): \(.status) \(.conclusion)\""
+git ls-remote origin "refs/heads/release/*" "refs/tags/v0.2.3*"
+for b in 2 3; do cargo run --locked -p vsift-agent-trials --bin vsift-agent-trials -- freeze check --repository . --file docs/planning/p14-agent-trials/batch-$b/freeze.json; done
+for p in vsift-cli @vsift/win32-x64 @vsift/darwin-arm64 @vsift/linux-x64; do npm view "$p" dist-tags --json; done
+for v in 0.0.0-stage 0.0.0 0.1.0 0.2.0-rc.1 0.2.0-rc.2 0.2.0-rc.3 0.2.0 0.2.1-rc.1 0.2.1-rc.2 0.2.1-rc.3 0.2.1 0.2.2-rc.1 0.2.2; do for p in vsift-cli @vsift/win32-x64 @vsift/darwin-arm64 @vsift/linux-x64; do i="$(npm view "$p@$v" dist.integrity 2>/dev/null)"; [ -n "$i" ] && echo "$p@$v $i"; done; done
+npm view vsift-cli@0.2.3-rc.1 version
+```
+
+Expect `version = "0.2.3-rc.1"`, `on main`, `CI result: completed success` (wait for it if it is still running: the branch ruleset refuses to create a branch at a commit whose `CI result` has not passed), `ls-remote` printing only `refs/heads/release/0.2.x` at `0dadc69df4f5` and the old tags (no `v0.2.3*`), `nothing frozen has changed` twice, `{ latest: '0.2.2', next: '0.2.2-rc.1' }` four times, the integrity values written down (the file the supervisor keeps; step 7 compares against it) and a 404 for `0.2.3-rc.1`. The npm shell is one with an empty `NPM_CONFIG_USERCONFIG` and `NPM_CONFIG_GLOBALCONFIG`, two different empty files. Take the pull request whose title starts with "The release candidate 0.2.3-rc.1" and whose commit shows that version.
+
+**Step 1, the nightly of exactly that commit (6.18 step 1; 6.19 step 1 with the version).** If `git rev-parse origin/main` still prints the commit, dispatch the nightly on `main` (`gh workflow run nightly.yml --repo smormah/vsift --ref main`); if `main` has moved on, do step 3 first and dispatch it on the new `release/0.2.x` (`--ref release/0.2.x`), whose head is the commit. List with `gh run list --repo smormah/vsift --workflow nightly.yml --commit <the 40-digit commit> --json databaseId,event,status,conclusion,startedAt,url` and watch with `gh run watch <the run id> --repo smormah/vsift --exit-status`. A failure stops the cut (governance rule 14: the issue first, the fix on `main` by pull request, and a cut from the fixed commit; no new bump is needed: `main` still carries `0.2.3-rc.1`). A scheduled nightly (02:41 UTC) counts when it tests that commit.
+
+**Step 2, choose the commit (6.18 step 2.2).** The merge commit of step 0, whose nightly passed in step 1; check once more that `gh run list ... --commit <the 40-digit commit> --json event,status,conclusion --jq ".[]"` lists a `success` as the newest run and nothing `in_progress` or `queued`.
+
+**Step 3, make the release branch again (6.18 step 2.3; the maintainer's administrator login, as for the tags).** The previous window's branch is still there, the stable release of that window is published and its records are on `main`, so it is deleted first, **after** the check that a fix `main` may lack is not left only on it:
+
+```console
+gh workflow run release-window.yml --repo smormah/vsift --ref main -f records=true
+gh run list --repo smormah/vsift --workflow release-window.yml --limit 1 --json databaseId,status,conclusion,url
+git push origin --delete release/0.2.x
+git push origin <the 40-digit commit>:refs/heads/release/0.2.x
+git ls-remote origin refs/heads/release/0.2.x
+```
+
+The `Release window` run must pass (it reports a commit of the old branch that `main` lacks; if it names one, stop and tell the supervisor: the branch is the last place that holds it). The last line prints the commit and `refs/heads/release/0.2.x`. The tags `v0.2.2-rc.1` and `v0.2.2` keep the old branch's commits. From now on every direct push to the branch is refused ("Changes must be made through a pull request"). **The hot fix `0.2.4` is made on this branch after `0.2.3` is published** (the road to 1.0, ADR 0027), so it stays until then.
+
+**Step 4, tag the commit (6.18 step 2.4; 6.3 step 2):**
+
+```console
+git tag -a v0.2.3-rc.1 -m "VSift 0.2.3-rc.1" <the 40-digit commit>
+git push origin v0.2.3-rc.1
+git show --no-patch --format="%H" "v0.2.3-rc.1^{commit}"
+git fetch origin && git merge-base --is-ancestor <the 40-digit commit> origin/release/0.2.x && echo "on the release branch"
+```
+
+The third line prints the commit written down. A wrong tag before anything is published may be moved (`git push origin :refs/tags/v0.2.3-rc.1`, fix, push again); never after step 6.
+
+**Step 5, the dry run on the tag (6.18 step 2.5):**
+
+```console
+gh workflow run release.yml --repo smormah/vsift --ref v0.2.3-rc.1 -f dry_run=true
+gh run list --repo smormah/vsift --workflow release.yml --limit 3 --json databaseId,headBranch,headSha,event,status,conclusion,url
+gh run download <the run id> --repo smormah/vsift --name publish-plan --dir plan-dry
+```
+
+Pick the run whose `headBranch` is `v0.2.3-rc.1` and whose `headSha` is the commit. The `guard` job answers within a minute. Its **Publish plan** must read "Version `0.2.3-rc.1` (release candidate), npm dist-tag `next`, Git tag `v0.2.3-rc.1`", the commit, `workflow_dispatch` on `refs/tags/v0.2.3-rc.1`, and for each of the four packages **`next` from `0.2.2-rc.1` to `0.2.3-rc.1` and `latest` staying `0.2.2`**; `plan-dry/release-notes.md` says "VSift 0.2.3-rc.1 is a release candidate ...". Anything else: do not publish; tell the maintainer.
+
+**Step 6, the publish (the maintainer approves):**
+
+```console
+gh workflow run release.yml --repo smormah/vsift --ref v0.2.3-rc.1 -f dry_run=false
+```
+
+Pick the run as in step 5, download its plan into `plan-publish` and compare: `diff plan-dry/attestation-subjects.sha256 plan-publish/attestation-subjects.sha256 && diff plan-dry/release-assets.sha256 plan-publish/release-assets.sha256 && echo "the same bytes as the dry run"`. Then **the maintainer** reviews the deployment and approves `release`; the supervisor never does. After the approval the `publish` job asks the `guard`'s questions again, publishes the four packages under `next` and reads `next` back every 30 seconds for up to 20 minutes. If it runs out of time with the packages published, **Re-run failed jobs** finishes it (6.5).
+
+**Step 7, check it from outside, then the hosted runs.** From a shell with no npm login and a folder of its own: the four `npm view <package> dist-tags` print **`{ latest: '0.2.2', next: '0.2.3-rc.1' }` four times** and `npm view vsift-cli version` prints `0.2.2`; **the values written down at step 0 are unchanged** (the loop of step 0 prints the same lines) and so are the ten tag commits above (`for t in v0.2.0-rc.1 v0.2.0-rc.2 v0.2.0-rc.3 v0.2.0 v0.2.1-rc.1 v0.2.1-rc.2 v0.2.1-rc.3 v0.2.1 v0.2.2-rc.1 v0.2.2; do git show --no-patch --format="$t %H" "$t^{commit}"; done`). Then:
+
+```console
+mkdir rc-check && cd rc-check && echo '{"private": true}' > package.json
+npm install vsift-cli@next
+npm audit signatures
+npx vsift --version
+gh release view v0.2.3-rc.1 --repo smormah/vsift --json isPrerelease,isDraft,assets --jq "{isPrerelease, isDraft, assets: (.assets | length)}"
+gh api repos/smormah/vsift/releases/latest --jq .tag_name
+```
+
+`npm audit signatures` reports verified signatures and attestations; `npx vsift --version` prints `vsift 0.2.3-rc.1 (<the first 12 digits of the commit>)`; the installed skill equals the tag's (`diff -r skills/vsift rc-check/node_modules/vsift-cli/skills/vsift` from a checkout of the tag prints nothing); `gh release view` prints `isPrerelease` true, `isDraft` false and ten assets, and the last command **`v0.2.2`** (if it prints `v0.2.3-rc.1`: `gh release edit v0.2.3-rc.1 --repo smormah/vsift --latest=false`, then `gh release edit v0.2.2 --repo smormah/vsift --latest`). Every `gh attestation verify` is 6.4's with `--source-ref refs/tags/v0.2.3-rc.1`, `--signer-workflow smormah/vsift/.github/workflows/release.yml` and `--deny-self-hosted-runners`.
+
+**The hosted runs** (the supervisor; each one dispatch, **on the tag**, once, on this candidate's published bytes or its source; nothing from `0.2.2-rc.1`'s or `0.2.2`'s runs is reused, and **none runs on the maintainer's machine**). The quick checks first, right after the publish:
+
+```console
+gh workflow run p14-verify-release.yml --repo smormah/vsift --ref v0.2.3-rc.1 -f version=0.2.3-rc.1
+gh workflow run p14-journeys.yml --repo smormah/vsift --ref v0.2.3-rc.1 -f version=0.2.3-rc.1
+gh workflow run p13-managed-smoke.yml --repo smormah/vsift --ref v0.2.3-rc.1 -f published_version=0.2.3-rc.1
+gh workflow run p14-published-artifacts.yml --repo smormah/vsift --ref v0.2.3-rc.1 -f version=0.2.3-rc.1 -f from_version=0.2.2
+gh workflow run p14-published-artifacts.yml --repo smormah/vsift --ref v0.2.3-rc.1 -f version=0.2.3-rc.1 -f from_version=0.2.2-rc.1
+```
+
+Dispatch the second `P14 published artifacts` only after the first has finished. `P14 verify release` (RQ-19) must say `next 0.2.3-rc.1, latest 0.2.2` for each package and `pre-release true, GitHub's latest release v0.2.2`. `P14 journeys` (RQ-05) must pass on all three systems; `P13 managed smoke` (RQ-06) is also the check of the whisper.cpp re-pin on the published bytes. Then the long runs (6.18 step 3, and the monthly round of 6.18, because the cycle holds a re-pin), one after another and staggered:
+
+```console
+gh workflow run p14-compatibility.yml --repo smormah/vsift --ref v0.2.3-rc.1
+gh workflow run p14-local-upgrade.yml --repo smormah/vsift --ref v0.2.3-rc.1
+gh workflow run p07-local-asr.yml --repo smormah/vsift --ref v0.2.3-rc.1
+gh workflow run fuzz.yml --repo smormah/vsift --ref v0.2.3-rc.1 -f seconds=3600
+gh workflow run p14-stress.yml --repo smormah/vsift --ref v0.2.3-rc.1
+gh workflow run p13-managed-power-loss.yml --repo smormah/vsift --ref v0.2.3-rc.1
+gh workflow run p10-durability-campaign.yml --repo smormah/vsift --ref v0.2.3-rc.1
+gh workflow run p14-load.yml --repo smormah/vsift --ref v0.2.3-rc.1 -f version=0.2.3-rc.1
+gh workflow run p14-malicious-media.yml --repo smormah/vsift --ref v0.2.3-rc.1 -f version=0.2.3-rc.1
+gh workflow run p14-runbook-walk.yml --repo smormah/vsift --ref v0.2.3-rc.1 -f version=0.2.3-rc.1
+gh workflow run p14-scan-reading.yml --repo smormah/vsift --ref v0.2.3-rc.1 -f version=0.2.3-rc.1
+```
+
+`Fuzz` runs 3,600 seconds a target, the budget of the earlier candidates; `P14 stress`, `P14 load`, `P13 managed power loss` and `P10 durability campaign` run with their workflows' defaults (compare each with its ledger note for `0.2.2-rc.1` before dispatching); `P07 local ASR` includes the noisy-speech gate. RQ-13 also needs a dated reading by hand (the cycle's dependency changes: `tokio`, `process-wrap`, `lzma-rust2`, `jsonschema`, the new `vsift-windows-security` crate and its `unsafe`, and whisper.cpp v1.9.5). The Governance job of the `CI` run at the commit is RQ-18's. `P14 real media` may be dispatched once on the tag (advisory, not an evidence item: it reads the test-media release, whatever it holds). **A failed run is a finding: open an issue before re-running** (governance rule 14); a fix is a pull request into the new `release/0.2.x` with its counterpart to `main`, and it means `0.2.3-rc.2` (6.18 step 4).
+
+**Step 8, agent-trial batches 2 and 3: the maintainer's decision.** The skill is unchanged and the freeze is kept, so the batches run, if the maintainer decides so, after the publish and on the maintainer's explicit go for each, one at a time, from a clean checkout at the commit (or any later commit of the branch: the freeze binds digests), against the registry's `0.2.3-rc.1`: the commands of [`p14-batch-2-3-checklist.md`](../planning/p14-batch-2-3-checklist.md) with `-Version 0.2.3-rc.1` (batch 3 with `-AllowGraderChange`). `batch-2/` and `batch-3/` hold only the freeze, so the script finds no state file of another version (the `0.2.2-rc.1` records are in `batch-2-0.2.2-rc.1/` and `batch-3-0.2.2-rc.1/`). Otherwise RQ-15 and RQ-16 need a decision recorded for `0.2.3`.
+
+**Step 9, the records.** A records pull request **to the new `release/0.2.x`** records each run in the ledger from what it computed (RQ-01 to RQ-13, RQ-15, RQ-16, RQ-18, RQ-19), the dated scan reading and the batches' records and readings if they ran, never earlier; the plan page gets a section "The evidence on 0.2.3-rc.1". The maintainer decides RQ-14 and RQ-17 and any finding. Then the stable commit `0.2.3` on the branch (6.18 step 5, with 6.20 as the model, written as its own planning page before the window closes), and after its publish the records change to `main`.
+
+**If something fails.** 6.15's table applies with these readings: the `guard` refusing a dispatch names its reason (the wrong ref, a tag off the branch, a branch without its rule types, or the nightly); step 5's plan must move `next` from **`0.2.2-rc.1`** (anything else: do not publish); the **Registry** guard failing ("`0.2.3-rc.1` is already on npm, and not with these bytes") means the number is used for good and the next candidate is `0.2.3-rc.2`; a bad published version is deprecated on all four packages (never unpublished) and `0.2.3-rc.2` is cut on the branch by 6.18 step 4. If the `Release window` run of step 3 names a commit only the old branch holds, nothing is deleted until the maintainer has decided.
+
+**What is irreversible:** the four published `0.2.3-rc.1` versions and their provenance records; the Sigstore attestations of the ten files and four tarballs (they exist from the end of `attest`, before the approval); the tag once anything was published from it; every published integrity value, which this section does not change; and **the deleted `release/0.2.x`** (its commits stay in the tags `v0.2.2-rc.1` and `v0.2.2`; it can be made again from either). **What is reversible:** `next` (`npm dist-tag add vsift-cli@0.2.2-rc.1 next` for each package, with the maintainer's login and second factor; the workflow never does it), the notes, and a deprecation.

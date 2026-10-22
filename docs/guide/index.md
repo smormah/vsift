@@ -1,6 +1,6 @@
 # VSift user guide
 
-<!-- guide-version: 0.2.2 -->
+<!-- guide-version: 0.2.3 -->
 
 VSift turns a video on your machine into **timestamped speech**, **the moments the screen changed** and
 **the exact frames and audio that prove them**, each with an id you can cite. You use it yourself, from a
@@ -8,11 +8,18 @@ terminal, or you let an AI assistant on your machine use it. Nothing is uploaded
 
 This guide teaches you to do things with it. It is written for anyone with a video, not only for programmers.
 
-**Checked against vsift 0.2.2**: the release `0.2.2` and the release candidate `0.2.2-rc.1` it was built from have
+**Checked against vsift 0.2.3**: the release candidate `0.2.3-rc.1` and the release that follows it are built from
 the same code, so this guide names the release, not a candidate. Where this guide says what a command prints, that
 is real output of that build on practice recordings from the repository, and the examples are re-run whenever the
-code changes ([how](#how-this-guide-is-kept-true)). The release `0.2.1`, which `npm install vsift-cli` installed before
-`0.2.2`, and the candidate `0.2.1-rc.3` it was built from have the same commands and options except
+code changes ([how](#how-this-guide-is-kept-true)). The release `0.2.2`, which `npm install vsift-cli` installs until
+`0.2.3` is published, and the candidate `0.2.2-rc.1` it was built from have the same commands and options as `0.2.3`
+and fewer fixes: on Windows a long per-user folder or session root made every media command fail with
+`MISSING_CAPABILITY`; a recogniser's repeated sentence could hide the next chunk's words where two chunks meet, and the
+rule that removes repeated words at a join could keep a word twice or leave a stretch with no segment; a recogniser
+segment that could not be placed was not always listed as such; `setup check` did not say that a managed tool was
+superseded by a newer reviewed one, and the managed whisper.cpp was v1.9.2; and on Windows a folder that VSift made private could
+briefly lose its own user's entry. The release `0.2.1`, which `npm install vsift-cli` installed before
+`0.2.2`, and the candidate `0.2.1-rc.3` it was built from have the same commands and options as `0.2.2` except
 `candidates --omit`, and fewer fixes: a worker host stopped during a recognition could record the request as failed
 with `MISSING_CAPABILITY` instead of cancelled, and a worker's `retranscribe` step said `complete` over a part it
 could not transcribe; on Windows the free space was not checked before a video was copied; a slow copy ran its full

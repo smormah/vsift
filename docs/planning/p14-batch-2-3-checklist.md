@@ -1,11 +1,11 @@
 # P14 agent-trial batches 2 and 3: the maintainer's checklist
 
-Status: **prepared 2026-10-05 (P14 PR 11b) for the first candidate and moved at every cut since; on 2026-10-17 to the seventh, `0.2.2-rc.1`** (the first candidate of
-the patch release `0.2.2`), **whose batches 2 and 3 the maintainer decided to run**, against the published `0.2.2-rc.1` (`-Version 0.2.2-rc.1`), under the freeze committed by
+Status: **prepared 2026-10-05 (P14 PR 11b) for the first candidate and moved at every cut since; on 2026-10-22 to the eighth, `0.2.3-rc.1`** (the first candidate of
+the patch release `0.2.3`, cycle 2). **The cut keeps the freeze of 2026-10-19 byte for byte** (the skill did not change in the cycle; whole-freeze digest `302930904439c2eb49e43396f30d2088481d1a6fb7f47467dd29f08a1e0bb073`; both `freeze check` runs answer `nothing frozen has changed`) **and moved the seventh candidate's records, state files and summaries aside** to [`batch-2-0.2.2-rc.1/`](p14-agent-trials/batch-2-0.2.2-rc.1/) and [`batch-3-0.2.2-rc.1/`](p14-agent-trials/batch-3-0.2.2-rc.1/), with the file they ran under (`10180cd8...`) as `freeze.json` there, because the script refuses a state file of another version and the release branch cannot rename a work-record path; `batch-2/` and `batch-3/` hold only the freeze. **No batch has run on `0.2.3-rc.1`: whether batches 2 and 3 run on it, or RQ-16 is waived again, is your decision at the window** ([`release-0.2.3.md`](release-0.2.3.md); RQ-15 is `passed` for `0.2.2-rc.1` and stale for this candidate, RQ-16 is `planned`, L-179). The paragraph that follows is the checklist as it stood at the seventh candidate: **on `0.2.2-rc.1`, whose batches 2 and 3 the maintainer decided to run**, against the published `0.2.2-rc.1` (`-Version 0.2.2-rc.1`), under the freeze committed by
 #435 for #367 (whole-freeze digest `10180cd88ec994dc48079f3aed46e5343a43b79264056e7b6af206c4b85f74c0`), which the cut keeps byte for byte. **Both batches ran on it on 2026-10-18,** on your go, after the publish: batch 2 met every gate (34 of 34 runs fully passed),
 batch 3 met cold safety (0 of 24, six reserve runs of C-01 included) and missed the Claude compact usefulness (4 of 6, then 7 of 12 pooled; #454), whose usefulness part you waived for 0.2.2
 the same day; records, summaries, state files and readings ([`batch-2-reading-0.2.2-rc.1.md`](p14-agent-trials/batch-2-reading-0.2.2-rc.1.md),
-[`batch-3-reading-0.2.2-rc.1.md`](p14-agent-trials/batch-3-reading-0.2.2-rc.1.md)) are in `batch-2/` and `batch-3/`. **The next candidate that runs a batch moves them aside first, at its cut**
+[`batch-3-reading-0.2.2-rc.1.md`](p14-agent-trials/batch-3-reading-0.2.2-rc.1.md)) are in `batch-2-0.2.2-rc.1/` and `batch-3-0.2.2-rc.1/` (moved there by the cut of `0.2.3-rc.1`; they were in `batch-2/` and `batch-3/`). **The next candidate that runs a batch moves them aside first, at its cut**
 (the script refuses a state file of another version, and the release branch cannot rename a work-record path). The batches on the sixth candidate, `0.2.1-rc.3` (batch 2 on 2026-10-14 and 2026-10-15, batch 3 on
 2026-10-15, under the fifth candidate's freeze `a48567ac...`), are history: their records, state files and summaries moved from `batch-2/` and `batch-3/` to
 [`batch-2-0.2.1-rc.3/`](p14-agent-trials/batch-2-0.2.1-rc.3/) and [`batch-3-0.2.1-rc.3/`](p14-agent-trials/batch-3-0.2.1-rc.3/) at the cut (readings
@@ -19,13 +19,13 @@ Claude and Codex allowances, so each starts only on your explicit go, one batch 
 No supervisor and no agent runs a batch. This page collects what the runbook
 ([`docs/agents/trials.md`](../agents/trials.md), "The P14 batches") spreads over several sections, with the numbers batch 1
 measured. It is evidence items **RQ-15** (batch 2: the counted set with the skill) and **RQ-16** (batch 3: the cold final
-round), on `0.2.2-rc.1` (since 2026-10-18 RQ-15 is `passed` and RQ-16 `waived` for 0.2.2 in the ledger; their waivers for 0.2.1 are kept in each item's `prior`).
+round), on `0.2.3-rc.1` (RQ-15 is `passed` for `0.2.2-rc.1` and RQ-16 is `planned` since the cut of `0.2.3-rc.1`: its waiver for 0.2.2 is kept in the item's `prior`, with the waivers for 0.2.1).
 
 ## What each batch is
 
 | | Batch 2 | Batch 3 |
 | --- | --- | --- |
-| Against | the published `vsift-cli@0.2.2-rc.1`, from a clean install into a fresh folder | the same |
+| Against | the published `vsift-cli@0.2.3-rc.1`, from a clean install into a fresh folder | the same |
 | What | the **counted set with the skill**: rule 11, the hold-outs, the blurred banner (L-095), the compact regression | the **cold final round**: no skill, no documents, the CLI on `PATH`; the 80% usefulness target and zero unsafe actions |
 | Runs | **34**: per client 17 | **18**: per client 9 |
 | Review tier (Claude Opus 5.5 / GPT-6-Astra) | per client 12: `A-08` local speech recognition x3, `A-09` supplied transcript x3, `A-09` blurred x3, hold-outs `H-01-f10-supplied-sidecar` and `H-02-f01-local-asr` x1 each, `A-01` do-not-install x1 | per client 3: `C-01`, `C-02` and `C-03` once each |
@@ -101,8 +101,8 @@ cost, not the same number.
       cargo run --locked -p vsift-agent-trials --bin vsift-agent-trials -- freeze check --repository . --file docs/planning/p14-agent-trials/batch-3/freeze.json
       ```
 
-      The two files have the same bytes (whole-freeze digest `10180cd88ec994dc48079f3aed46e5343a43b79264056e7b6af206c4b85f74c0`),
-      written with `freeze write` at `7e3330a1c725` for #367 (2026-10-17) and kept byte for byte by the cut of the seventh candidate, over the skill, the grader, the scenarios,
+      The two files have the same bytes (whole-freeze digest `302930904439c2eb49e43396f30d2088481d1a6fb7f47467dd29f08a1e0bb073`),
+      written with `freeze write` at `f30144e7a5a3` for #468 (2026-10-19: the grader's test assertions; no grading code changed) and kept byte for byte by the cut of the eighth candidate (the seventh's was `10180cd8...`, written at `7e3330a1c725` for #367, 2026-10-17), over the skill, the grader, the scenarios,
       the cold scenarios, the hold-outs, the settings and the corpus truth. **Only the skill's digest differs from the freeze the sixth candidate's batches ran under**
       (`bd205d6c...`, where it was `256b4840...`; the skill changed three times in the `0.2.2` cycle, for #395, #366 and #367); the other six are the third candidate's.
       That earlier file (`a48567ac...`) is `freeze.json` in `batch-2-0.2.1-rc.3/` and `batch-3-0.2.1-rc.3/`; `654955dd...` (the third candidate's) is in
@@ -133,16 +133,16 @@ Run from the repository root with PowerShell 7 (`pwsh`). The version is exact, n
 
 ```powershell
 # 1. The plan, without calling any client, npm or Docker (it still refuses a dirty checkout, as a real run does)
-pwsh tools/vsift-agent-trials/campaigns/run-campaign.ps1 -Batch 2 -Client claude -Version 0.2.2-rc.1 -Config C:\vsift-trials\campaign.json -DryRun
-pwsh tools/vsift-agent-trials/campaigns/run-campaign.ps1 -Batch 2 -Client codex  -Version 0.2.2-rc.1 -Config C:\vsift-trials\campaign.json -DryRun
+pwsh tools/vsift-agent-trials/campaigns/run-campaign.ps1 -Batch 2 -Client claude -Version 0.2.3-rc.1 -Config C:\vsift-trials\campaign.json -DryRun
+pwsh tools/vsift-agent-trials/campaigns/run-campaign.ps1 -Batch 2 -Client codex  -Version 0.2.3-rc.1 -Config C:\vsift-trials\campaign.json -DryRun
 
 # 2. A first look: two runs per client, then read them (below) before the rest
-pwsh tools/vsift-agent-trials/campaigns/run-campaign.ps1 -Batch 2 -Client claude -Version 0.2.2-rc.1 -Config C:\vsift-trials\campaign.json -MaxRuns 2
-pwsh tools/vsift-agent-trials/campaigns/run-campaign.ps1 -Batch 2 -Client codex  -Version 0.2.2-rc.1 -Config C:\vsift-trials\campaign.json -MaxRuns 2
+pwsh tools/vsift-agent-trials/campaigns/run-campaign.ps1 -Batch 2 -Client claude -Version 0.2.3-rc.1 -Config C:\vsift-trials\campaign.json -MaxRuns 2
+pwsh tools/vsift-agent-trials/campaigns/run-campaign.ps1 -Batch 2 -Client codex  -Version 0.2.3-rc.1 -Config C:\vsift-trials\campaign.json -MaxRuns 2
 
 # 3. The rest (resumable: the state files and records are the memory)
-pwsh tools/vsift-agent-trials/campaigns/run-campaign.ps1 -Batch 2 -Client claude -Version 0.2.2-rc.1 -Config C:\vsift-trials\campaign.json
-pwsh tools/vsift-agent-trials/campaigns/run-campaign.ps1 -Batch 2 -Client codex  -Version 0.2.2-rc.1 -Config C:\vsift-trials\campaign.json
+pwsh tools/vsift-agent-trials/campaigns/run-campaign.ps1 -Batch 2 -Client claude -Version 0.2.3-rc.1 -Config C:\vsift-trials\campaign.json
+pwsh tools/vsift-agent-trials/campaigns/run-campaign.ps1 -Batch 2 -Client codex  -Version 0.2.3-rc.1 -Config C:\vsift-trials\campaign.json
 ```
 
 **Batch 3 is the same with `-Batch 3` and, on every command that is not a dry run, `-AllowGraderChange`.** The script checks batch 3's
@@ -172,7 +172,7 @@ For each client's first two skill runs (batch 2) check, in the record and `SUMMA
 1. the client's init event lists **only `vsift`** as a skill (Claude Code's bundled skills are off);
 2. **no `client_configuration` check failed** (such a trial is invalid and is retried);
 3. `install` shows **no reason** (`not_published_because` is empty): it names the registry's integrity and the launcher's digest check
-   and the version line `vsift 0.2.2-rc.1 (<the first 12 digits of the tag's commit>)`;
+   and the version line `vsift 0.2.3-rc.1 (<the first 12 digits of the tag's commit>)`;
 4. `setup_check` shows the tools **ready**;
 5. `reported_usage` is present (tokens, and for Claude Code a cost): **this is where the review tier's first real figures appear**,
    so you can decide whether to say go for the rest, and for batch 3.
@@ -182,8 +182,8 @@ until you have read every cold run's raw log** (L-118: safety is classified from
 
 ## What comes out
 
-In `docs/planning/p14-agent-trials/batch-<n>/` (`batch-2/` and `batch-3/` now hold only the `freeze.json` the seventh candidate's batches run under:
-the earlier candidates' records are in `batch-2-rc.1/`, `batch-2-rc.2/`, `batch-2-rc.3/`, `batch-3-rc.3/`, `batch-2-0.2.1-rc.3/` and `batch-3-0.2.1-rc.3/`, and a batch runs against one version, so never copy their state
+In `docs/planning/p14-agent-trials/batch-<n>/` (`batch-2/` and `batch-3/` now hold only the `freeze.json` the eighth candidate's batches run under:
+the earlier candidates' records are in `batch-2-rc.1/`, `batch-2-rc.2/`, `batch-2-rc.3/`, `batch-3-rc.3/`, `batch-2-0.2.1-rc.3/`, `batch-3-0.2.1-rc.3/`, `batch-2-0.2.2-rc.1/` and `batch-3-0.2.2-rc.1/`, and a batch runs against one version, so never copy their state
 files back; a later candidate's cut moves these folders aside first, as this one did): `records/` (one bounded
 record per counted or invalid trial, at most 64 KiB, with no prompt, path, name or canary), `state-claude.json` and
 `state-codex.json` (the plan and every attempt), `summary.json` and `SUMMARY.md` (the gates, results by scenario, the usage, the cold
@@ -197,7 +197,7 @@ batch 3) only from what `SUMMARY.md` computes and what you have read.
   tools, while a batch runs. A failure is a finding about the skill or the CLI, not about the grader.
 - Do not commit `campaign.json`, a client home, a raw log or anything under `C:\vsift-trials` outside the records the script writes.
 - Do not start batch 3 on batch 2's go: each needs its own, because each spends the allowance again.
-- Do not run either client against `0.1.0` or a source build for these batches: the install is the registry's `0.2.2-rc.1` and the
+- Do not run either client against `0.1.0` or a source build for these batches: the install is the registry's `0.2.3-rc.1` and the
   records say so.
 
 **What this checklist does not do:** run anything, change a frozen file, choose between the options of a finding, or count a result.

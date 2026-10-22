@@ -65,8 +65,9 @@ fn the_committed_freezes_still_hold() -> TestResult {
 /// fires in the test modules of the grader's `src`, and the maintainer decided on 2026-10-19 to rewrite every
 /// site (`assert!(x.is_empty())` to `assert_eq!` against an empty value) and accept a new grader freeze. No
 /// grading code changed. This digest moved `10180cd8...` to the value below; the other six components are
-/// unchanged. The seventh candidate's batches ran under `10180cd8...`, and that file is kept beside their records
-/// as `freeze-0.2.2-rc.1.json` in both folders. No batch has run under the new freeze.
+/// unchanged. The seventh candidate's batches ran under `10180cd8...`, and that file is kept with their records
+/// as `freeze.json` in `batch-2-0.2.2-rc.1/` and `batch-3-0.2.2-rc.1/` (the cut of `0.2.3-rc.1` moved it there). The eighth
+/// candidate keeps this freeze. No batch has run under it.
 ///
 /// The freeze of 2026-10-17 is new on purpose (#367), written on top of #366's: the skill shortlists the screens
 /// of a range with no transcript with `candidates --omit periodic` (`docs/agents/skill.md`, "Shortlisting the screens
