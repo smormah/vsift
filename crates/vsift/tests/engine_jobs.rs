@@ -298,6 +298,14 @@ impl Harness {
     }
 }
 
+/// A retranscription's job request, recognising with the whole root.
+fn retranscription(range: Option<TimeRange>) -> JobRequest {
+    JobRequest::Retranscribe {
+        range,
+        share: vsift_domain::RecognitionShare::Whole,
+    }
+}
+
 fn request(
     session: &SessionId,
     range: Option<(u64, u64)>,
@@ -435,7 +443,7 @@ async fn committed_through_the_use_case(
         request_digest: retranscribe_request_digest(session, range)?,
         operation_key,
         recognition_key: key,
-        request: JobRequest::Retranscribe { range },
+        request: retranscription(range),
         planned_chunks: None,
     };
     let outcome = run_retranscription(
@@ -663,7 +671,7 @@ async fn a_frame_during_a_transcription_of_its_session_is_busy_and_names_the_job
         request_digest: retranscribe_request_digest(&session, None)?,
         operation_key,
         recognition_key: key,
-        request: JobRequest::Retranscribe { range: None },
+        request: retranscription(None),
         planned_chunks: None,
     };
     let operation = OperationId::parse(OPERATION)?;

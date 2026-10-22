@@ -52,7 +52,10 @@ fn base_record(state: JobState) -> Built<JobRecord> {
         session_id: session,
         operation_key,
         recognition_key: RecognitionKey::new(Sha256Hex::parse(RECOGNITION_KEY)?),
-        request: JobRequest::Retranscribe { range: requested },
+        request: JobRequest::Retranscribe {
+            range: requested,
+            share: vsift_domain::RecognitionShare::Whole,
+        },
         planned_chunks: Some(1),
         operation_ids: vec![OperationId::parse("op_4f0c2b8e9a1d3c5e7f60718293a4b5c6")?],
         state,

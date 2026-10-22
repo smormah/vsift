@@ -224,7 +224,7 @@ impl FilesystemSessionStore {
                     if record.request_digest != spec.request_digest
                         || record.operation_key != spec.operation_key
                         || record.recognition_key != spec.recognition_key
-                        || record.request != spec.request
+                        || !record.request.same_work(spec.request)
                     {
                         return Err(SessionStorageError::IntegrityFailure.into());
                     }

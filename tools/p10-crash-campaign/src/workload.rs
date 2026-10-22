@@ -632,6 +632,15 @@ async fn evidence(
     })
 }
 
+/// The job request of the workload's retranscriptions: `range`, recognised
+/// with the whole root.
+fn retranscription(range: Option<TimeRange>) -> JobRequest {
+    JobRequest::Retranscribe {
+        range,
+        share: vsift_domain::RecognitionShare::Whole,
+    }
+}
+
 async fn retranscribe(
     config: &WorkloadConfig,
     session: &SessionId,
@@ -682,7 +691,7 @@ async fn retranscribe(
             .map_err(CampaignError::JobKey)?,
         operation_key,
         recognition_key: key,
-        request: JobRequest::Retranscribe { range: requested },
+        request: retranscription(requested),
         planned_chunks: Some(u32::try_from(planned.len()).map_err(|_| CampaignError::StandIn)?),
     };
     let outcome = run_retranscription(

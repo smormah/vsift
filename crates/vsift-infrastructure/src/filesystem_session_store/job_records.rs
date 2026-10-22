@@ -21,7 +21,7 @@ use vsift_domain::{
     MAX_PROVIDER_SEGMENTS, MAX_PROVIDER_TOKENS, MediaProgress, MediaTime, OperationId,
     OperationKey, PrepareStream, ProgressStage, ProgressUpdate, ProviderChunkOutput,
     ProviderOutputError, ProviderSegment, ProviderToken, ProviderTokenKind, RecognitionKey,
-    SessionId, Sha256Hex, StorageGeneration, TimeRange, TranscriptRevisionId,
+    RecognitionShare, SessionId, Sha256Hex, StorageGeneration, TimeRange, TranscriptRevisionId,
 };
 
 use super::{MetadataVersion, STORAGE_SCHEMA_VERSION, sha256_hex, stored::parse_versioned_json};
@@ -63,6 +63,11 @@ struct StoredJobRequest {
     /// The mode of a `prepare` job (ADR 0033); absent for every other kind.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     mode: Option<String>,
+    /// The share a retranscription recognises with when it is not the whole
+    /// (ADR 0033, D4: a watched run's `leaving_one_free`); absent otherwise,
+    /// so every record written before it reads as before.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    share: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -132,6 +137,11 @@ pub(super) fn encode_job(record: &JobRecord) -> Result<Vec<u8>, SessionStorageEr
                 .request
                 .mode()
                 .map(|mode| mode.identifier().to_owned()),
+            share: record
+                .request
+                .share()
+                .filter(|share| *share != RecognitionShare::Whole)
+                .map(|share| share.identifier().to_owned()),
         },
         planned_chunks: record.planned_chunks,
         operation_ids: record
@@ -194,10 +204,18 @@ fn validate_job(stored: StoredJob, job_id: &JobId, session_id: &SessionId) -> Op
                 Some(range) => Some(range.range()?),
                 None => None,
             },
+            // Only a share other than the whole is written.
+            share: match stored.request.share.as_deref() {
+                None => RecognitionShare::Whole,
+                Some(identifier) => RecognitionShare::parse(identifier)
+                    .filter(|share| *share != RecognitionShare::Whole)?,
+            },
         },
         // A `prepare` job prepares the whole session and plans no chunks.
         (JobKind::Prepare, Some(mode))
-            if stored.request.range.is_none() && stored.planned_chunks.is_none() =>
+            if stored.request.range.is_none()
+                && stored.request.share.is_none()
+                && stored.planned_chunks.is_none() =>
         {
             JobRequest::Prepare {
                 mode: JobMode::parse(&mode)?,

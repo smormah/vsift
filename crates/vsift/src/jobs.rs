@@ -519,36 +519,21 @@ impl Engine {
                 job: request.job,
             });
         }
-        let range = match record.request {
-            JobRequest::Retranscribe { range } => range,
-            JobRequest::Prepare { mode } => {
-                // Boxed: the prepare path nests a whole retranscription, and an
-                // unboxed future that size overflows a host's main-thread stack.
-                return Box::pin(self.resume_prepare(
-                    store,
-                    session,
-                    request.job.clone(),
-                    mode,
-                    request,
-                ))
-                .await;
-            }
-        };
+        if let JobRequest::Prepare { mode, .. } = record.request {
+            // Boxed: the prepare path nests a whole retranscription, and an
+            // unboxed future that size overflows a host's main-thread stack.
+            return Box::pin(self.resume_prepare(
+                store,
+                session,
+                request.job.clone(),
+                mode,
+                request,
+            ))
+            .await;
+        }
         drop(store);
         let outcome = self
-            .retranscribe(RetranscribeRequest {
-                session,
-                range: range.map(|range| RetranscribeRange {
-                    from_micros: range.start().as_micros(),
-                    to_micros: range.end().as_micros(),
-                }),
-                operation_id: record.operation_ids.first().cloned(),
-                cancellation: request.cancellation,
-                progress: request.progress,
-                admission: request.admission,
-                publication: request.publication,
-                share: crate::RecognitionShare::Whole,
-            })
+            .retranscribe(resumed_retranscription(session, &record, request))
             .await?;
         let status = self.job_status(outcome.job().job_id())?;
         Ok(JobResumeReport { outcome, status })
@@ -794,5 +779,90 @@ pub(crate) fn open_revision_refusal(
             session: session.clone(),
             job,
         }
+    }
+}
+
+/// The retranscription a resume of `record` runs: its recorded range and
+/// share, under the operation id the caller first bound to it.
+///
+/// The share is the one the job was recorded with: a watched run's child
+/// takes one unit less, and the recognizer's threads are part of the job's
+/// key, so a resume with any other share would compute another job, answer
+/// `BUSY` naming this one or start afresh beside it (RV-1 finding 2).
+fn resumed_retranscription(
+    session: SessionId,
+    record: &JobRecord,
+    request: JobResumeRequest,
+) -> RetranscribeRequest {
+    RetranscribeRequest {
+        session,
+        range: record.request.range().map(|range| RetranscribeRange {
+            from_micros: range.start().as_micros(),
+            to_micros: range.end().as_micros(),
+        }),
+        operation_id: record.operation_ids.first().cloned(),
+        cancellation: request.cancellation,
+        progress: request.progress,
+        admission: request.admission,
+        publication: request.publication,
+        share: record.request.share().unwrap_or_default(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use vsift_application::{
+        JobRecord, JobRequest, JobSpec, RequestDigest, job_id, retranscribe_operation_key,
+    };
+    use vsift_domain::{AdmissionWait, RecognitionKey, RecognitionShare, SessionId, Sha256Hex};
+
+    use super::{JobResumeRequest, resumed_retranscription};
+    use crate::{ProgressObserver, RetranscribePublication, verification::Cancellation};
+
+    type TestResult = Result<(), Box<dyn std::error::Error>>;
+
+    const DIGEST: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+
+    fn record(share: RecognitionShare) -> Result<JobRecord, Box<dyn std::error::Error>> {
+        let session = SessionId::parse("ses_0123456789abcdef0123456789abcdef")?;
+        let key = RecognitionKey::new(Sha256Hex::parse(DIGEST)?);
+        let operation_key = retranscribe_operation_key(&key, None)?;
+        Ok(JobRecord::queued(
+            &JobSpec {
+                job_id: job_id(&session, &operation_key)?,
+                session_id: session,
+                request_digest: RequestDigest::new(Sha256Hex::parse(DIGEST)?),
+                operation_key,
+                recognition_key: key,
+                request: JobRequest::Retranscribe { range: None, share },
+                planned_chunks: None,
+            },
+            1_000,
+        ))
+    }
+
+    /// RV-1 finding 2: `job resume` of a watched run's child (a job recorded
+    /// with one unit less of the root) recognises with that share again, so
+    /// it computes the same job; an ordinary job still takes the whole.
+    #[test]
+    fn a_resume_recognises_with_the_share_its_job_was_recorded_with() -> TestResult {
+        for share in RecognitionShare::ALL {
+            let record = record(share)?;
+            let resumed = resumed_retranscription(
+                record.session_id.clone(),
+                &record,
+                JobResumeRequest {
+                    job: record.job_id.clone(),
+                    cancellation: Cancellation::new(),
+                    progress: ProgressObserver::none(),
+                    admission: AdmissionWait::Immediate,
+                    publication: RetranscribePublication::default(),
+                },
+            );
+            assert_eq!(resumed.share, share);
+            assert_eq!(resumed.range, None);
+            assert_eq!(resumed.session, record.session_id);
+        }
+        Ok(())
     }
 }
