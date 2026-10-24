@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- The `Release window` report no longer fails on what a version bump on `main` does by design (#518): trial records moved with unchanged content into folders named for the previous candidate, lines that name a moved path, the version lines of the guide's index, the installation guide and the launcher's README while `main` is at a newer version, and a waiver kept word for word as a record in the evidence ledger's `prior`. Each is listed in the report; a code file, a moved file that changed, a reworded decision or any other line is still reported. This is a change to the repository's own release tooling, not to the product.
+
 
 ## [0.2.3-rc.1] - 2026-10-22
 

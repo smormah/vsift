@@ -8,6 +8,7 @@ mocked, and nothing leaves the temporary folder.
 
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 import re
@@ -696,6 +697,326 @@ class ExcusedLineTests(unittest.TestCase):
         code, output = self.repo.check(records=True)
         self.assertEqual(code, window.EXIT_MISSING, output)
         self.assertIn("p14-evidence-ledger.json (record)", output)
+
+
+class BumpTests(unittest.TestCase):
+    """The excuses of #518: what a version bump on `main` moves and rewrites by design (excuses 4 to 6).
+
+    Each has a test that it holds and tests that the strictness it must not lose still holds: a
+    changed file, an unrelated line and any code file are reported whatever else is excused.
+    """
+
+    TRIAL = "docs/planning/p14-agent-trials/batch-2/SUMMARY.md"
+    MOVED = "docs/planning/p14-agent-trials/batch-2-0.2.2-rc.1/SUMMARY.md"
+    LEDGER = "docs/planning/p14-evidence-ledger.json"
+
+    def setUp(self) -> None:
+        self._directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self._directory.cleanup)
+        self.repo = Repository(Path(self._directory.name))
+
+    def release(self, subject: str) -> None:
+        self.repo.commit(subject, RELEASE_TIME)
+
+    def bump_main(self, *, newer: bool = True) -> None:
+        """`main`'s own commit: the next cut's version, or a commit that leaves the version as it was."""
+        self.repo.on("main")
+        if newer:
+            self.repo.edit("Cargo.toml", "0.2.2-rc.1", "0.2.3-rc.1")
+        self.repo.commit("The next candidate (#12)", MAIN_LATER)
+
+    def release_adds(self, path: str, content: str) -> None:
+        self.repo.on("release/0.2.x")
+        self.repo.write(path, content)
+        self.release("A window commit (#10)")
+        self.repo.on("main")
+
+    # Excuse 4: a file that main moved.
+
+    def test_a_file_that_main_moved_with_its_content_unchanged_passes_and_is_named(self) -> None:
+        self.release_adds(self.TRIAL, "# Summary\n\nThe batch passed.\n")
+        self.repo.write(self.MOVED, "# Summary\n\nThe batch passed.\n")
+        self.bump_main()
+        code, output = self.repo.check(records=True)
+        self.assertEqual(code, window.EXIT_OK, output)
+        self.assertIn("moved to docs/planning/p14-agent-trials/batch-2-0.2.2-rc.1/SUMMARY.md", output)
+
+    def test_a_file_that_main_moved_and_changed_is_still_reported(self) -> None:
+        self.release_adds(self.TRIAL, "# Summary\n\nThe batch passed.\n")
+        self.repo.write(self.MOVED, "# Summary\n\nThe batch passed, and more.\n")
+        self.bump_main()
+        code, output = self.repo.check(records=True)
+        self.assertEqual(code, window.EXIT_MISSING, output)
+        self.assertIn(f"{self.TRIAL} (record): changed on the release branch, not a file on main", output)
+
+    def test_a_copy_is_not_a_move(self) -> None:
+        self.release_adds(self.TRIAL, "# Summary\n\nThe batch passed.\n")
+        self.repo.on("release/0.2.x")
+        self.repo.write(self.MOVED, "# Summary\n\nThe batch passed.\n")
+        self.release("The same file twice (#11)")
+        self.repo.on("main")
+        self.repo.write(self.MOVED, "# Summary\n\nThe batch passed.\n")
+        self.bump_main()
+        code, output = self.repo.check(records=True)
+        self.assertEqual(code, window.EXIT_MISSING, output)
+        self.assertIn(f"{self.TRIAL} (record)", output)
+
+    def test_a_code_file_that_main_moved_is_still_reported(self) -> None:
+        self.release_adds("crates/engine/src/extra.rs", "fn extra() {}\n")
+        self.repo.write("crates/engine/src/renamed.rs", "fn extra() {}\n")
+        self.bump_main()
+        code, output = self.repo.check()
+        self.assertEqual(code, window.EXIT_MISSING, output)
+        self.assertIn("crates/engine/src/extra.rs (fix): changed on the release branch, not a file on main", output)
+
+    def test_an_empty_file_is_not_a_move(self) -> None:
+        self.release_adds("docs/planning/p14-agent-trials/batch-2/empty.md", "")
+        self.repo.write("docs/planning/other-empty.md", "")
+        self.bump_main()
+        code, output = self.repo.check(records=True)
+        self.assertEqual(code, window.EXIT_MISSING, output)
+
+    # Excuse 5: a line that names a moved path.
+
+    def ledger(self, path: str, status: str = "passed") -> str:
+        return f'{{\n  "reference": "{path}",\n  "status": "{status}"\n}}\n'
+
+    def moved_trial_and_ledger(self, main_ledger: str) -> None:
+        self.release_adds(self.TRIAL, "# Summary\n\nThe batch passed.\n")
+        self.repo.on("release/0.2.x")
+        self.repo.write(self.LEDGER, self.ledger(self.TRIAL))
+        self.release("The ledger (#11)")
+        self.repo.on("main")
+        self.repo.write(self.MOVED, "# Summary\n\nThe batch passed.\n")
+        self.repo.write(self.LEDGER, main_ledger)
+        self.bump_main()
+
+    def test_a_line_naming_a_moved_path_passes_as_main_has_it(self) -> None:
+        self.moved_trial_and_ledger(self.ledger(self.MOVED))
+        code, output = self.repo.check(records=True)
+        self.assertEqual(code, window.EXIT_OK, output)
+        self.assertIn("naming a path that main moved", output)
+
+    def test_a_line_naming_a_moved_path_with_another_change_is_reported(self) -> None:
+        self.moved_trial_and_ledger(self.ledger(self.MOVED, status="failed"))
+        code, output = self.repo.check(records=True)
+        self.assertEqual(code, window.EXIT_MISSING, output)
+        self.assertIn("p14-evidence-ledger.json (record): 1 added line(s) not on main", output)
+
+    def test_a_path_that_is_not_a_found_move_is_not_substituted(self) -> None:
+        self.release_adds(self.TRIAL, "# Summary\n\nThe batch passed.\n")
+        self.repo.on("release/0.2.x")
+        self.repo.write(self.LEDGER, self.ledger(self.TRIAL))
+        self.release("The ledger (#11)")
+        self.repo.on("main")
+        # `main` has the new path, but with other content: the file is not found as a move.
+        self.repo.write(self.MOVED, "# Summary\n\nThe batch passed, and more.\n")
+        self.repo.write(self.LEDGER, self.ledger(self.MOVED))
+        self.bump_main()
+        code, output = self.repo.check(records=True)
+        self.assertEqual(code, window.EXIT_MISSING, output)
+        self.assertIn("p14-evidence-ledger.json (record): 1 added line(s) not on main", output)
+
+    def test_a_relative_link_to_a_moved_path_is_substituted_too(self) -> None:
+        self.assertEqual(
+            window.spellings_of({self.TRIAL: self.MOVED}),
+            {
+                self.TRIAL: self.MOVED,
+                "planning/p14-agent-trials/batch-2/SUMMARY.md": "planning/p14-agent-trials/batch-2-0.2.2-rc.1/SUMMARY.md",
+                "p14-agent-trials/batch-2/SUMMARY.md": "p14-agent-trials/batch-2-0.2.2-rc.1/SUMMARY.md",
+                "batch-2/SUMMARY.md": "batch-2-0.2.2-rc.1/SUMMARY.md",
+            },
+        )
+
+    # Excuse 6: a version line of a shipped document.
+
+    def install_guide(self, release_line: str, main_line: str, *, newer: bool) -> tuple[int, str]:
+        self.repo.on("release/0.2.x")
+        self.repo.edit("docs/operations/install.md", "Use the latest version.", release_line)
+        self.release("The installation guide (#10)")
+        self.repo.on("main")
+        self.repo.edit("docs/operations/install.md", "Use the latest version.", main_line)
+        self.bump_main(newer=newer)
+        return self.repo.check(records=True)
+
+    def test_a_version_only_line_passes_when_main_is_newer(self) -> None:
+        code, output = self.install_guide("Use release 0.2.2.", "Use release 0.2.3-rc.1.", newer=True)
+        self.assertEqual(code, window.EXIT_OK, output)
+        self.assertIn("naming a version, rewritten on main for its newer version 0.2.3-rc.1", output)
+
+    def test_a_version_only_line_is_reported_when_main_is_not_newer(self) -> None:
+        code, output = self.install_guide("Use release 0.2.2.", "Use release 0.2.3-rc.1.", newer=False)
+        self.assertEqual(code, window.EXIT_MISSING, output)
+        self.assertIn("docs/operations/install.md (record): 1 added line(s) not on main", output)
+
+    def test_a_version_line_that_main_rewrote_around_the_version_passes_when_main_is_newer(self) -> None:
+        code, output = self.install_guide(
+            "Use release 0.2.2 and nothing older, as the guide says.",
+            "Use release 0.2.3-rc.1 and nothing older, as the guide says in full.",
+            newer=True,
+        )
+        self.assertEqual(code, window.EXIT_OK, output)
+
+    def test_a_line_that_names_no_version_is_not_a_version_line(self) -> None:
+        code, output = self.install_guide("Use the stable build.", "Use the candidate build.", newer=True)
+        self.assertEqual(code, window.EXIT_MISSING, output)
+        self.assertIn("docs/operations/install.md (record): 1 added line(s) not on main", output)
+
+    def test_a_version_line_of_a_page_that_is_not_a_shipped_version_document_is_reported(self) -> None:
+        self.repo.on("release/0.2.x")
+        self.repo.write("docs/guide/other.md", "Works with 0.2.2.\n")
+        self.release("A guide page (#10)")
+        self.repo.on("main")
+        self.repo.write("docs/guide/other.md", "Works with 0.2.3-rc.1.\n")
+        self.bump_main()
+        code, output = self.repo.check(records=True)
+        self.assertEqual(code, window.EXIT_MISSING, output)
+        self.assertIn("docs/guide/other.md (record): 1 added line(s) not on main", output)
+
+    def test_a_version_looking_change_in_a_code_file_is_reported(self) -> None:
+        self.repo.on("release/0.2.x")
+        self.repo.edit("crates/engine/src/lib.rs", "fn alpha() {}", "fn alpha() { /* needs 0.2.2 */ }")
+        self.release("A window fix (#10)")
+        self.repo.on("main")
+        self.repo.edit("crates/engine/src/lib.rs", "fn alpha() {}", "fn alpha() { /* needs 0.2.3-rc.1 */ }")
+        self.bump_main()
+        code, output = self.repo.check()
+        self.assertEqual(code, window.EXIT_MISSING, output)
+        self.assertIn("crates/engine/src/lib.rs (fix): 1 added line(s) not on main", output)
+
+    def test_a_version_looking_change_in_the_release_guide_is_reported(self) -> None:
+        self.repo.on("release/0.2.x")
+        self.repo.write("docs/operations/release.md", "Cut 0.2.2 on Friday.\n")
+        self.release("The release guide (#10)")
+        self.repo.on("main")
+        self.repo.write("docs/operations/release.md", "Cut 0.2.3-rc.1 on Friday.\n")
+        self.bump_main()
+        code, output = self.repo.check()
+        self.assertEqual(code, window.EXIT_MISSING, output)
+        self.assertIn("docs/operations/release.md (fix)", output)
+
+    def test_versions_are_ordered_as_semver_orders_them(self) -> None:
+        ordered = ["0.2.2-rc.1", "0.2.2-rc.2", "0.2.2-rc.10", "0.2.2", "0.2.3-rc.1", "0.2.3", "0.3.0-rc.1"]
+        keys = [window.version_order(version) for version in ordered]
+        self.assertEqual(keys, sorted(keys))
+        self.assertEqual(len(set(keys)), len(keys))
+        self.assertIsNone(window.version_order("next"))
+
+
+class LedgerBumpTests(unittest.TestCase):
+    """Excuse 7 (#518): a waiver that the bump keeps unchanged as a record in `prior`, and nothing else.
+
+    The branch's item RQ-16 is waived; `main`'s is planned again, with the waiver's text in `prior`
+    under the prefix the bump writes. `RQ-01` is the same on both sides (it carries the lines that
+    every ledger has).
+    """
+
+    LEDGER = "docs/planning/p14-evidence-ledger.json"
+    DECISION = {"type": "record", "path": "docs/planning/release-0.2.2.md"}
+    ISSUE = {"type": "issue", "number": 454}
+
+    def setUp(self) -> None:
+        self._directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self._directory.cleanup)
+        self.repo = Repository(Path(self._directory.name))
+
+    @classmethod
+    def waived(cls, item_id: str, statement: str, reason: str, note: str) -> dict:
+        return {
+            "id": item_id,
+            "status": "waived",
+            "decision": {"statement": statement, "reference": cls.DECISION, "date": "2026-10-18"},
+            "reason": reason,
+            "evidence": [{"reference": cls.ISSUE, "date": "2026-10-18", "note": note}],
+        }
+
+    @classmethod
+    def planned(
+        cls,
+        statement: str,
+        reason: str,
+        note: str,
+        *,
+        candidate: str = "0.2.3-rc.1",
+        keep_evidence: bool = True,
+    ) -> dict:
+        prefix = f"NOT COUNTED for {candidate}, kept as a record: "
+        prior = [
+            {
+                "reference": cls.DECISION,
+                "date": "2026-10-18",
+                "note": f"{prefix}the waiver that was this item's status. The decision, as recorded: {statement} "
+                f"The reason, as recorded: {reason}",
+            }
+        ]
+        if keep_evidence:
+            prior.append(
+                {
+                    "reference": cls.ISSUE,
+                    "date": "2026-10-18",
+                    "note": f"{prefix}evidence of the waiver above, for 0.2.2-rc.1. {note}",
+                }
+            )
+        return {"id": "RQ-16", "status": "planned", "prior": prior}
+
+    def ledger(self, *items: dict) -> str:
+        return json.dumps({"items": list(items)}, indent=2) + chr(10)
+
+    def check_with_main_item(self, main_item: dict, *, newer: bool = True) -> tuple[int, str]:
+        shared = self.waived("RQ-01", "Another decision.", "Another reason.", "Another note.")
+        branch_item = self.waived("RQ-16", "The decision text.", "The reason text.", "The evidence note.")
+        self.repo.on("release/0.2.x")
+        self.repo.write(self.LEDGER, self.ledger(shared, branch_item))
+        self.repo.commit("The ledger (#10)", RELEASE_TIME)
+        self.repo.on("main")
+        self.repo.write(self.LEDGER, self.ledger(shared, main_item))
+        self.repo.on("main")
+        if newer:
+            self.repo.edit("Cargo.toml", "0.2.2-rc.1", "0.2.3-rc.1")
+        self.repo.commit("The next candidate (#12)", MAIN_LATER)
+        return self.repo.check(records=True)
+
+    def test_a_waiver_kept_unchanged_as_a_record_in_prior_passes_and_is_named(self) -> None:
+        code, output = self.check_with_main_item(
+            self.planned("The decision text.", "The reason text.", "The evidence note.")
+        )
+        self.assertEqual(code, window.EXIT_OK, output)
+        self.assertIn("RQ-16: kept as a record in prior", output)
+
+    def test_a_prior_note_that_differs_by_one_word_is_reported(self) -> None:
+        code, output = self.check_with_main_item(
+            self.planned("The decision text.", "The reason text.", "The evidence notes.")
+        )
+        self.assertEqual(code, window.EXIT_MISSING, output)
+        self.assertIn("p14-evidence-ledger.json (record): 1 added line(s) not on main", output)
+
+    def test_a_decision_reworded_in_prior_is_reported(self) -> None:
+        code, output = self.check_with_main_item(
+            self.planned("The decision texts.", "The reason text.", "The evidence note.")
+        )
+        self.assertEqual(code, window.EXIT_MISSING, output)
+        self.assertIn("p14-evidence-ledger.json (record): 2 added line(s) not on main", output)
+
+    def test_the_prefix_of_another_candidate_is_reported(self) -> None:
+        code, output = self.check_with_main_item(
+            self.planned("The decision text.", "The reason text.", "The evidence note.", candidate="0.2.4-rc.1")
+        )
+        self.assertEqual(code, window.EXIT_MISSING, output)
+        self.assertIn("p14-evidence-ledger.json (record): 3 added line(s) not on main", output)
+
+    def test_a_missing_prior_entry_is_reported(self) -> None:
+        code, output = self.check_with_main_item(
+            self.planned("The decision text.", "The reason text.", "The evidence note.", keep_evidence=False)
+        )
+        self.assertEqual(code, window.EXIT_MISSING, output)
+        self.assertIn("p14-evidence-ledger.json (record): 1 added line(s) not on main", output)
+
+    def test_nothing_is_excused_while_main_is_not_at_a_newer_version(self) -> None:
+        code, output = self.check_with_main_item(
+            self.planned("The decision text.", "The reason text.", "The evidence note."), newer=False
+        )
+        self.assertEqual(code, window.EXIT_MISSING, output)
+        self.assertNotIn("kept as a record in prior", output)
 
 
 class ClassificationTests(unittest.TestCase):

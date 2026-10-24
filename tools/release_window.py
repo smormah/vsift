@@ -77,10 +77,44 @@ readings and the README for the new freeze, while the release branch still names
 `.md` suffix is what keeps the trial's `freeze.json` and `state` and `summary` files, and everything in a
 `records/` folder, strict: they are data, and a changed digest there is a different fact, not a reworded one.
 
+A version bump on `main` (the next candidate's pull request, #516, #518) moves and rewrites the previous
+cut's work record, so four more excuses exist. They are what the bump does by design, and each is narrower
+than the file it applies to:
+
+4. *A moved file* (`find_moves`). A work-record file of the branch's head that `main` no longer holds at that
+   path, but holds under another path with the same blob id (the bump moves the previous candidate's trial
+   records into a folder named for it, content unchanged), counts as present, and the report says where it
+   moved to. Only work-record files (`kind_of` is `record`) are matched, only to a path the branch's head does
+   not have, and an empty file never matches. A moved file whose content changed has another blob id and is
+   still reported.
+5. *A line naming a moved path*. A branch line that is not on `main` counts as present when `main` has the same
+   line with the old path replaced by the new one. Only the paths excuse 4 found are replaced (the whole path,
+   or its tail from a folder name on, as a relative link writes it), so a line that differs in anything else
+   is still reported.
+6. *A version line of a shipped document* (`VERSION_DOCUMENTS`: the guide's `index.md`, `docs/operations/install.md`
+   and `npm/vsift-cli/README.md`). A branch line that names a version (`X.Y.Z` or `X.Y.Z-rc.N`) counts as present
+   when `main` has it with only the version strings changed or, as the bump words it, when `main` rewrote it in
+   place (the same test as excuse 3). It applies only while `main`'s workspace version is newer than the branch
+   head's: that is what says the line was rewritten for a later cut and not lost.
+7. *A waiver kept as a record in the evidence ledger* (`ledger_kept_as_records`). The ledger is JSON and the
+   release evidence, so it is not excused by a line test. The bump sets a waived item back to planned and
+   keeps what the waiver said as entries of the item's `prior`. A text of the branch's item (its decision's
+   statement and its reason, or an evidence note) counts as present only when `main`'s same item has a `prior`
+   entry with the same reference (a moved path as `main` has it) and the same date, whose note begins with
+   exactly `NOT COUNTED for <main's workspace version>, kept as a record: ` and contains that text unchanged
+   (for the statement and the reason, both). The version must be `main`'s workspace version and newer than the
+   branch's. Each item so excused is named in the report. Because the text must be there word for word, under
+   that prefix and with the reference and date it had, a reworded decision, a changed date, a missing entry or
+   the prefix of another candidate is reported as before, and a weakened waiver cannot pass as a kept one.
+
+None of the four reaches code. Excuse 4 needs a work-record file, excuse 5 only rewrites paths of files that
+excuse 4 found, excuse 6 is limited to three prose documents, and excuse 7 reads one JSON file: a version-looking change in a source file,
+a workflow, a manifest or any page that is not one of the three is compared exactly as before.
+
 Code, configuration, JSON (the ledger, the trials' `freeze.json` and `records/`), version files, shipped
 documents (`docs/operations/install.md`, `npm/vsift-cli/README.md`) and every other file are compared
-exactly as before: excuse 1 is the only one that reaches them, and it cannot excuse a line the branch
-still has. Every excuse is
+exactly as before, except by the excuses above: excuse 1 reaches them all and cannot excuse a line the branch
+still has; excuses 4 to 7 reach the work-record files, the three documents and the ledger only. Every excuse is
 named in the report, so a reader sees what was not compared.
 
 The script runs `git` with explicit arguments (no shell), reads local objects only, writes
@@ -94,6 +128,7 @@ import argparse
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
+import json
 import re
 import subprocess
 import sys
@@ -142,6 +177,19 @@ REWRITTEN_RECORD_FOLDER = "docs/planning/"
 REWRITTEN_TRIAL_FOLDER = "docs/planning/p14-agent-trials/"
 # A folder of raw run records inside the trial folder: data, compared exactly whatever its suffix.
 TRIAL_DATA_FOLDER = "records"
+# The shipped documents whose version lines a bump rewrites for the next cut (excuse 6; the pages of
+# docs/operations/release.md 6.8 that carry the version in prose). Nothing else gets that excuse.
+VERSION_DOCUMENTS = frozenset(
+    {
+        "docs/guide/index.md",
+        "docs/operations/install.md",
+        "npm/vsift-cli/README.md",
+    }
+)
+# The evidence ledger, whose waived or superseded entries a bump keeps as records in `prior` (excuse 7).
+LEDGER_PATH = "docs/planning/p14-evidence-ledger.json"
+# Git's id of the empty blob: every empty file has it, so it says nothing about a move.
+EMPTY_BLOB = "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391"
 # How much of a line's beginning says that it is the same sentence reworded.
 LEAD_LENGTH = 60
 # A line with fewer words than this is too short for "all its words, in order" to say it is the same sentence.
@@ -154,7 +202,11 @@ QUOTE_LENGTH = 100
 # How many lines of one file are quoted.
 QUOTES_PER_FILE = 3
 
-SEMVER = re.compile(r"\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?(?:\+[0-9A-Za-z.]+)?")
+# A version ends at its last identifier, so the full stop that ends a sentence is not part of it.
+SEMVER = re.compile(r"\d+\.\d+\.\d+(?:-[0-9A-Za-z]+(?:\.[0-9A-Za-z]+)*)?(?:\+[0-9A-Za-z]+(?:\.[0-9A-Za-z]+)*)?")
+# The workspace version is the first `version = "..."` line of the root manifest.
+MANIFEST_VERSION = re.compile(r'^version\s*=\s*"([^"]+)"', re.MULTILINE)
+VERSION_PARTS = re.compile(r"^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.]+))?")
 VERSION_KEY_LINE = re.compile(r'^\s*"?version"?\s*[=:]\s*"')
 
 EXIT_OK = 0
@@ -299,6 +351,26 @@ class Comparison:
     finding: Finding | None
     compared: int
     notes: tuple[str, ...] = ()
+    moved: tuple[tuple[str, str], ...] = ()
+
+
+@dataclass(frozen=True)
+class BranchContext:
+    """What is true of the whole branch, read once: the files `main` moved, and whether its version is newer."""
+
+    moves: dict[str, str] = field(default_factory=dict)
+    # Each spelling of a moved path (whole, or its tail from a folder name on) and where it moved to.
+    spellings: dict[str, str] = field(default_factory=dict)
+    pattern: re.Pattern[str] | None = None
+    main_version: str | None = None
+    head_version: str | None = None
+    main_is_newer: bool = False
+
+    def substitute(self, line: str) -> str:
+        """The line with every moved path replaced by its new place (unchanged if it names none)."""
+        if self.pattern is None:
+            return line
+        return self.pattern.sub(lambda found: self.spellings[found.group(0)], line)
 
 
 @dataclass
@@ -470,6 +542,193 @@ def rewritten_since(
     return Comparison(None, 0, (note,))
 
 
+def version_order(version: str) -> tuple[int, int, int, int, tuple[tuple[int, int, str], ...]] | None:
+    """A sortable key for `X.Y.Z` or `X.Y.Z-rc.N` (a release sorts after its candidates), or None."""
+    parts = VERSION_PARTS.match(version)
+    if parts is None:
+        return None
+    major, minor, patch, pre = parts.groups()
+    identifiers = tuple(
+        (0, int(item), "") if item.isdigit() else (1, 0, item) for item in (pre or "").split(".") if item
+    )
+    return int(major), int(minor), int(patch), 0 if pre else 1, identifiers
+
+
+def workspace_version(repository: Path, ref: str) -> str | None:
+    """The version in the root `Cargo.toml` at `ref`, or None if there is none to read."""
+    try:
+        manifest = text(run_git(repository, "cat-file", "blob", f"{ref}:Cargo.toml"))
+    except GitError:
+        return None
+    found = MANIFEST_VERSION.search(manifest)
+    return found.group(1) if found else None
+
+
+def tree_blobs(repository: Path, ref: str) -> dict[str, str]:
+    """Every file of the tree at `ref` with its blob id."""
+    listed = run_git(repository, "ls-tree", "-r", "-z", ref).split(b"\0")
+    blobs: dict[str, str] = {}
+    for entry in listed:
+        meta, separator, path = entry.partition(b"\t")
+        fields = meta.split()
+        if separator and len(fields) == 3 and fields[1] == b"blob":
+            blobs[path.decode("utf-8", "replace")] = fields[2].decode("ascii", "replace")
+    return blobs
+
+
+def find_moves(repository: Path, main: str, head: str) -> dict[str, str]:
+    """The work-record files of `head` that `main` holds, with the same content, under another path.
+
+    Excuse 4. A file counts as moved only if `main` has no file at its path, the branch's head has no
+    file at the new path (otherwise it would be a copy), both paths are work record, and the file is not
+    empty. When several files of `main` have the content, the one with the same file name is taken.
+    """
+    on_main = tree_blobs(repository, main)
+    on_head = tree_blobs(repository, head)
+    by_blob: dict[str, list[str]] = {}
+    for path, blob in on_main.items():
+        if path not in on_head and kind_of(path) == "record":
+            by_blob.setdefault(blob, []).append(path)
+    moves: dict[str, str] = {}
+    for path, blob in on_head.items():
+        if path in on_main or blob == EMPTY_BLOB or kind_of(path) != "record":
+            continue
+        places = sorted(by_blob.get(blob, []))
+        if places:
+            same_name = [place for place in places if PurePosixPath(place).name == PurePosixPath(path).name]
+            moves[path] = (same_name or places)[0]
+    return moves
+
+
+def spellings_of(moves: dict[str, str]) -> dict[str, str]:
+    """Each way a document can write a moved path (whole, or from a shared folder on, as a relative link does).
+
+    `a/b/c.md` moved to `a/b2/c.md` is also written `b/c.md` in a link relative to `a/`. Every spelling
+    starts at or before the first folder that differs, so the bare file name (which does not say which
+    file is meant) and a tail that skips the moved folder are never replaced.
+    """
+    spellings: dict[str, str] = {}
+    for old, new in moves.items():
+        old_parts = PurePosixPath(old).parts
+        new_parts = PurePosixPath(new).parts
+        shared = 0
+        while shared < min(len(old_parts), len(new_parts)) - 1 and old_parts[shared] == new_parts[shared]:
+            shared += 1
+        for start in range(shared + 1):
+            spellings["/".join(old_parts[start:])] = "/".join(new_parts[start:])
+    return spellings
+
+
+def make_context(repository: Path, main: str, head: str) -> BranchContext:
+    """Read once what the excuses 4 to 7 need to know about the whole branch."""
+    moves = find_moves(repository, main, head)
+    spellings = spellings_of(moves)
+    pattern = None
+    if spellings:
+        alternatives = "|".join(re.escape(spelling) for spelling in sorted(spellings, key=len, reverse=True))
+        # A path is not part of a longer name: `xa/b.md` is not `a/b.md`.
+        pattern = re.compile(rf"(?<![\w-])(?:{alternatives})")
+    main_version = workspace_version(repository, main)
+    head_version = workspace_version(repository, head)
+    main_key = version_order(main_version) if main_version else None
+    head_key = version_order(head_version) if head_version else None
+    newer = main_key is not None and head_key is not None and main_key > head_key
+    return BranchContext(moves, spellings, pattern, main_version, head_version, newer)
+
+
+def describe_moves(moved: Sequence[tuple[str, str]]) -> list[str]:
+    """Notes for the moved files of one commit: one per pair of folders, so 100 records are not 100 lines."""
+    groups: dict[tuple[str, str], list[str]] = {}
+    for old, new in moved:
+        key = (PurePosixPath(old).parent.as_posix(), PurePosixPath(new).parent.as_posix())
+        groups.setdefault(key, []).append(PurePosixPath(old).name)
+    notes = []
+    for (old_folder, new_folder), names in sorted(groups.items()):
+        if len(names) == 1:
+            notes.append(f"{old_folder}/{names[0]}: moved to {new_folder}/{names[0]}, same content")
+        else:
+            notes.append(
+                f"{len(names)} files of {old_folder}/ moved to {new_folder}/, same content "
+                f"(for example {sorted(names)[0]})"
+            )
+    return notes
+
+
+def record_reference(reference: object, moves: dict[str, str]) -> object:
+    """A ledger reference with the path of a file that `main` moved given as `main` has it."""
+    if isinstance(reference, dict) and reference.get("type") == "record":
+        path = reference.get("path")
+        if isinstance(path, str) and path in moves:
+            return {**reference, "path": moves[path]}
+    return reference
+
+
+def ledger_kept_as_records(
+    head_lines: Sequence[str], main_lines: Sequence[str], candidate: str, moves: dict[str, str]
+) -> dict[str, str]:
+    """Excuse 7: the texts of the ledger that `main` kept, unchanged, as records in an item's `prior`.
+
+    A bump sets a waived item back to planned and keeps what its status said as entries of `prior`,
+    each with the same reference and date and a note that begins `NOT COUNTED for <candidate>, kept as
+    a record: `. A text of the branch's item counts only if `main`'s same item has such an entry:
+    - an evidence note: an entry with the same reference and date, whose note begins with that prefix
+      and contains the branch's note unchanged;
+    - the decision's statement and the item's reason: an entry with the decision's reference and date,
+      whose note begins with that prefix and contains both texts unchanged.
+    Anything else (a word changed, another date, a missing entry, another candidate's prefix) is no
+    excuse. Returns each excused text with the id of its item; empty if either file is not the ledger.
+    """
+    try:
+        on_head = json.loads("\n".join(head_lines))
+        on_main = json.loads("\n".join(main_lines))
+        head_items = {item["id"]: item for item in on_head["items"]}
+        main_items = {item["id"]: item for item in on_main["items"]}
+    except (ValueError, KeyError, TypeError):
+        return {}
+    prefix = f"NOT COUNTED for {candidate}, kept as a record: "
+    kept: dict[str, str] = {}
+
+    def held(item_id: str, reference: object, date: object, texts: Sequence[str]) -> bool:
+        prior = main_items[item_id].get("prior")
+        if not isinstance(prior, list):
+            return False
+        wanted = record_reference(reference, moves)
+        return any(
+            isinstance(entry, dict)
+            and entry.get("reference") == wanted
+            and entry.get("date") == date
+            and isinstance(entry.get("note"), str)
+            and entry["note"].startswith(prefix)
+            and all(text in entry["note"][len(prefix) :] for text in texts)
+            for entry in prior
+        )
+
+    for item_id, item in head_items.items():
+        if item_id not in main_items or not isinstance(item, dict):
+            continue
+        for entry in item.get("evidence") or []:
+            if isinstance(entry, dict) and isinstance(entry.get("note"), str):
+                if held(item_id, entry.get("reference"), entry.get("date"), [entry["note"]]):
+                    kept[entry["note"]] = item_id
+        decision = item.get("decision")
+        reason = item.get("reason")
+        if isinstance(decision, dict) and isinstance(decision.get("statement"), str) and isinstance(reason, str):
+            if held(item_id, decision.get("reference"), decision.get("date"), [decision["statement"], reason]):
+                kept[decision["statement"]] = item_id
+                kept[reason] = item_id
+    return kept
+
+
+def json_string_value(line: str) -> str | None:
+    """The string of a `"key": "value",` line of a JSON file written one entry per line, else None."""
+    try:
+        parsed = json.loads("{" + line.strip().rstrip(",") + "}")
+    except ValueError:
+        return None
+    values = list(parsed.values()) if len(parsed) == 1 else []
+    return values[0] if len(values) == 1 and isinstance(values[0], str) else None
+
+
 def compare_change(
     repository: Path,
     change: Change,
@@ -478,6 +737,7 @@ def compare_change(
     cut: str,
     commit: str,
     cache: FileCache,
+    context: BranchContext = BranchContext(),
 ) -> Comparison:
     """Whether `main` has this file's change, how many lines were compared, what was excused."""
     on_main = file_lines(repository, main, change.path, cache)
@@ -489,6 +749,8 @@ def compare_change(
             Finding(change.path, "deleted on the release branch, still on main", kind), 0
         )
     if on_main is None:
+        if change.path in context.moves:
+            return Comparison(None, 0, moved=((change.path, context.moves[change.path]),))
         return Comparison(
             Finding(change.path, "changed on the release branch, not a file on main", kind), 0
         )
@@ -508,17 +770,35 @@ def compare_change(
     head_lines = {normalise(change.path, line) for line in on_head}
     # Excuse 3 needs the cut's file: a line of `main` that the cut does not have is `main`'s own.
     rewritable = is_rewritten_record(change.path)
+    # Excuse 6: a version line of a shipped document, while `main` has the newer version.
+    versioned = PurePosixPath(change.path).as_posix() in VERSION_DOCUMENTS and context.main_is_newer
+    main_versionless = {SEMVER.sub("<V>", line) for line in main_lines} if versioned else set()
+    # Excuse 7: the ledger texts that `main` kept as records, while it is at a newer candidate.
+    kept: dict[str, str] = {}
+    if PurePosixPath(change.path).as_posix() == LEDGER_PATH and context.main_is_newer and context.main_version:
+        kept = ledger_kept_as_records(on_head, on_main, context.main_version, context.moves)
+    kept_items: set[str] = set()
     main_new_leads: set[str] = set()
     main_new_words: list[list[str]] = []
-    if rewritable:
+    # The same, with every version string blanked, for the sentence that `main` rewrote around a new version.
+    versionless_leads: set[str] = set()
+    versionless_words: list[list[str]] = []
+    if rewritable or versioned:
         on_cut = file_lines(repository, cut, change.path, cache) or []
         cut_lines = {normalise(change.path, line) for line in on_cut}
         main_new_leads = {lead(line) for line in main_lines - cut_lines if lead(line)}
         main_new_words = [words(line) for line in main_lines - cut_lines]
+        if versioned:
+            blanked = [SEMVER.sub("<V>", line) for line in main_lines - cut_lines]
+            versionless_leads = {lead(line) for line in blanked if lead(line)}
+            versionless_words = [words(line) for line in blanked]
 
     absent: list[str] = []
     superseded = 0
     rewritten = 0
+    renamed = 0
+    version_lines = 0
+    kept_lines = 0
     for hunk in change.hunks or (Hunk(change.added, change.removed),):
         replaced = [
             normalise(change.path, line)
@@ -531,13 +811,37 @@ def compare_change(
             compared = normalise(change.path, line)
             if not significant(compared) or compared in main_lines or compared in absent:
                 continue
-            if compared not in head_lines:
-                superseded += 1
-            elif rewritable and (
-                replaced_on_main
-                or lead(compared) in main_new_leads
-                or is_extension_of(compared, main_new_words)
+            same_sentence = lead(compared) in main_new_leads or is_extension_of(compared, main_new_words)
+            reworded = replaced_on_main or same_sentence
+            # Excuse 5, then the test of excuse 3 on the line as `main` would write it.
+            moved_line = context.substitute(compared)
+            if moved_line != compared and (
+                moved_line in main_lines
+                or (
+                    rewritable
+                    and (lead(moved_line) in main_new_leads or is_extension_of(moved_line, main_new_words))
+                )
             ):
+                renamed += 1
+            elif compared not in head_lines:
+                superseded += 1
+            elif (
+                versioned
+                and SEMVER.search(compared)
+                and (
+                    SEMVER.sub("<V>", compared) in main_versionless
+                    or same_sentence
+                    or lead(SEMVER.sub("<V>", compared)) in versionless_leads
+                    or is_extension_of(SEMVER.sub("<V>", compared), versionless_words)
+                    # The line replaced one that named a version, and `main` has none of what it replaced.
+                    or (replaced_on_main and any(SEMVER.search(line) for line in replaced))
+                )
+            ):
+                version_lines += 1
+            elif (value := json_string_value(line)) is not None and value in kept:
+                kept_lines += 1
+                kept_items.add(kept[value])
+            elif rewritable and reworded:
                 rewritten += 1
             else:
                 absent.append(compared)
@@ -560,6 +864,18 @@ def compare_change(
         excused.append(f"{superseded} added line(s) replaced by a later window commit")
     if rewritten:
         excused.append(f"{rewritten} added line(s) rewritten on main")
+    if renamed:
+        excused.append(f"{renamed} added line(s) naming a path that main moved, as main has them")
+    if kept_lines:
+        excused.append(
+            f"{kept_lines} added line(s) of {', '.join(sorted(kept_items))}: kept as a record in prior, "
+            f"as the bump to {context.main_version} does"
+        )
+    if version_lines:
+        excused.append(
+            f"{version_lines} added line(s) naming a version, rewritten on main for its newer version "
+            f"{context.main_version} (the branch is at {context.head_version})"
+        )
     notes = (f"{change.path}: {', '.join(excused)}",) if excused else ()
     if not absent and not remaining:
         return Comparison(None, compared_count, notes)
@@ -584,21 +900,25 @@ def check_release_branch(repository: Path, main: str, release: str) -> BranchRep
         run_git(repository, "rev-list", "--reverse", "--no-merges", f"{cut}..{release}")
     ).split()
     head = text(run_git(repository, "rev-parse", release)).strip()
+    context = make_context(repository, main, head)
     reports: list[CommitReport] = []
     cache: FileCache = {}
     for commit in listed:
         subject = text(run_git(repository, "show", "-s", "--format=%s", commit)).strip()
         findings: list[Finding] = []
         notes: list[str] = []
+        moved: list[tuple[str, str]] = []
         compared = 0
         kinds = set()
         for change in commit_changes(repository, commit):
             kinds.add(kind_of(change.path))
-            comparison = compare_change(repository, change, main, head, cut, commit, cache)
+            comparison = compare_change(repository, change, main, head, cut, commit, cache, context)
             compared += comparison.compared
             notes.extend(comparison.notes)
+            moved.extend(comparison.moved)
             if comparison.finding is not None:
                 findings.append(comparison.finding)
+        notes.extend(describe_moves(moved))
         # A commit that changes any code or configuration is a fix, whatever else it changes.
         kind = "fix" if "fix" in kinds else "record"
         reports.append(CommitReport(commit, subject, kind, findings, compared, notes))
