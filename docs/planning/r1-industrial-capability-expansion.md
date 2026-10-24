@@ -3,7 +3,7 @@
 > **Note, 2026-10-21: R1 is reshaped and now follows `1.0.0`** ([ADR 0027](../decisions/0027-the-road-to-1-0.md); the calendar is
 > [`backlog-iterations.md`](backlog-iterations.md), "The road to 1.0"). **Moved into `0.3.0`:** P16's OCR and speaker labels (the
 > rest of P16, voice activity, embeddings and visual tags, stays in R1), slices 1 and 3 of #406 (direct HTTPS links #407 and public
-> pages through an optional yt-dlp component #409) and #474 (the language of each chunk). `0.3.0` also gets time anchoring (a position in the video plus the time it happened, with its evidence, in two stages),
+> pages through an optional yt-dlp component #409) and #474 (the language of each chunk; **#474 moved on to `1.0.0` later the same day**, [ADR 0027's amendment](../decisions/0027-the-road-to-1-0.md)). `0.3.0` also gets time anchoring (a position in the video plus the time it happened, with its evidence, in two stages),
 > "what changed on screen" between two times and search across kept sessions, which is a first step towards P18. **R1 keeps** P15,
 > P17 (stitching), P18 (the managed catalogue), P19, P20, #408, #410, #107, #368, #147 and #174, after `1.0.0`. #188 (adversarial
 > containment) and #176's API stability promise are required for `1.0.0`. An MCP adapter stays R2. The rest of this page is the

@@ -120,7 +120,7 @@ public multi-tenant service ingress remain R2 concerns rather than displacing th
 CLI/skill from the primary integration path.
 
 **Note, 2026-10-21 ([ADR 0027](../decisions/0027-the-road-to-1-0.md)):** R1 now follows `1.0.0`. The OCR and speaker labels of R-15,
-online links, and the language of each chunk are built earlier, as optional adapters in `0.3.0`; the rest of R-15 and R-16 to R-19 stay in R1.
+and online links are built earlier, as optional adapters in `0.3.0` (the language of each chunk moved to `1.0.0` later the same day); the rest of R-15 and R-16 to R-19 stay in R1.
 The calendar is [`backlog-iterations.md`](backlog-iterations.md).
 
 ### What fully functional means in R0

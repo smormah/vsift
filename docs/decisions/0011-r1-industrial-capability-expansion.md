@@ -5,7 +5,8 @@
 - Extends: ADR 0002, ADR 0004 and ADR 0005
 - Does not resolve: the P15 catalogue/orchestration/provider choices
 - Refined by: [ADR 0027](0027-the-road-to-1-0.md) (2026-10-21): R1 now follows `1.0.0`, and P16's OCR and speaker
-  labels, online links (slices 1 and 3 of #406) and #474 are built earlier, in `0.3.0`. Nothing else here changes.
+  labels and online links (slices 1 and 3 of #406) are built earlier, in `0.3.0`, and #474 moves to `1.0.0` ([ADR 0027's
+  amendment](0027-the-road-to-1-0.md) of 2026-10-21). Nothing else here changes.
 
 ## Context
 
