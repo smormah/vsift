@@ -1143,9 +1143,18 @@ candidate is an ancestor of the stable commit there.
     later freeze made `main` rewrite them, #468; the trial pages are prose work records, while the trials'
     `freeze.json`, `state`, `summary` and `records/` files are JSON and stay compared exactly). A new
     register entry or bullet that `main` lacks is reported, and so is a replaced line that `main` kept as
-    the cut had it. Code, configuration, JSON, version files, the two shipped documents, the ledger and every other file
-    (every other folder of `docs/planning/` included) are compared exactly as before, and the first excuse is the
-    only one that reaches them. None of the three
+    the cut had it. **A version bump on `main` (#518) adds four more, each named in the report:** (4) **a
+    work-record file that `main` moved with its content unchanged** (the bump moves the previous candidate's
+    trial records into folders named for it; the report says where each moved, and a code file or a moved file
+    that changed is still reported); (5) **a line that names such a moved path**, when `main` has the same line
+    with the new path; (6) **a line that names a version in the guide's `index.md`, `docs/operations/install.md` or
+    the launcher's README**, when `main` has it with only the version changed or rewrote it in place, and only
+    while `main`'s workspace version is newer than the branch's; (7) **a waiver that `main` kept as a record in the
+    ledger**: a text of the branch's item that `main`'s same item holds word for word in a `prior` entry with the
+    same reference and date, under the note prefix `NOT COUNTED for <main's workspace version>, kept as a record: `.
+    Code, configuration, JSON (the ledger apart from excuse 7), version files, the two shipped documents (apart from
+    excuse 6) and every other file (every other folder of `docs/planning/` included) are compared exactly as before,
+    and the first excuse is the only one that reaches them all. None of these
     can hide a missing code fix: a fix's code is in files none of them applies to (or in a commit
     whose later replacement is itself compared), and a fix's own record, its changelog bullet and its
     register entry, stay compared.
@@ -2967,7 +2976,8 @@ with `gh`, pass `--ref v<version>`. A wrong choice now costs seconds, not the tw
       **Before deleting the old branch, run the `Release window` workflow** (`gh workflow run release-window.yml
       --repo smormah/vsift --ref main -f records=true`, or `python3 tools/release_window.py --records` from a fresh
       clone): the branch is the last place that holds a fix `main` may lack, and the records change should
-      already have shown none.
+      already have shown none. The previous candidate's trial records that the bump moved, the version lines it
+      rewrote and the waivers it kept in the ledger's `prior` are excused and listed, not reported (#518).
    4. **Tag the commit** (6.3 step 2): `git tag -a v0.2.2-rc.1 -m "VSift 0.2.2-rc.1" <commit>` and `git push origin
       v0.2.2-rc.1`.
    5. **Dry run on the tag, then publish** (6.3 steps 3 and 4): `gh workflow run release.yml --repo smormah/vsift
