@@ -25,8 +25,7 @@ ignore-dev-dependencies = true
 
 # The bzip2 decoder behind the managed installer's .tar.bz2 reader (ADR 0032):
 # libbz2-rs-sys is a Rust port of libbzip2 under libbzip2's own permissive
-# licence. Accepted for this crate alone, mirroring its exception in deny.toml,
-# and pending the maintainer's approval of both at the review of the pull
-# request that adds it.
+# licence. Accepted for this crate alone, mirroring its exception in deny.toml;
+# approved by the maintainer on 2026-10-23.
 [libbz2-rs-sys]
 accepted = ["bzip2-1.0.6"]

@@ -62,7 +62,7 @@ Two readers join the tar, gzip and XZ ones, each written as a parser of hostile 
   `.tar.bz2` (D5). One stream only; a second stream or any trailing byte is refused. The decoder is the `bzip2`
   crate over `libbz2-rs-sys`, a Rust port of libbzip2 with no C build, maintained with bzip2 itself by the
   Trifecta Tech Foundation. Its licence, `bzip2-1.0.6` (permissive, BSD-style), is allowed for that crate alone in
-  `deny.toml`, **pending the maintainer's approval at review**.
+  `deny.toml`, **approved by the maintainer on 2026-10-23**.
 
 The plan's `format` gains `zip` and `tar_bz2`. The fuzz harness gains `zip_inventory` and `bzip2_tar_inventory`
 (33 targets).
@@ -153,7 +153,7 @@ includes an optional group.
 
 ## Maintainer-only actions
 
-- Approve the `bzip2-1.0.6` licence exception for `libbz2-rs-sys` (slice 1).
+- Approve the `bzip2-1.0.6` licence exception for `libbz2-rs-sys` (slice 1): approved on 2026-10-23.
 - Approve `engines.yml` and its lint, and every engine publish (slice 2).
 - Add a tag ruleset for the engine tags (`*-v*` other than `v*`), and add those tag patterns to the `release`
   environment's allowed deployment refs (slice 2).
@@ -167,3 +167,11 @@ and Deno 2.9.7 pins on Ubuntu (catalogue revision `ubuntu-24.04-x86_64-2026-10-2
 39535463204). Reused from #503: the plan and install shapes, the core-then-optional transaction, the pins and their
 hosted review; replaced: its one-entry zip reader (by the general one) and its online-video-only members (by the
 group-generic `optional_groups` and `optional_components`).
+
+## Implementation note, 2026-10-25 (slice 1: the maintainer's approvals and the merge rebase)
+
+On 2026-10-23 the maintainer approved three things in slice 1: the `bzip2-1.0.6` licence exception for
+`libbz2-rs-sys` (`deny.toml` and the notices configuration, which now say so), the `Online video components review`
+workflow, and the wording of rule D3 in `cli-v1.md` (the catalogue-content fields may gain values; new components
+appear only behind `--include`). The branch was rebased onto `main` at `f1af235c` (the release candidate
+`0.2.3-rc.1` and the plan records) for the merge; only the records conflicted, and nothing in the design changed.

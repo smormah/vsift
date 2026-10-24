@@ -23,8 +23,7 @@ exceptions = [
   { crate = "libfuzzer-sys", allow = ["NCSA"] },
   # The bzip2 decoder behind the managed installer's .tar.bz2 reader (ADR 0032):
   # libbz2-rs-sys is a Rust port of libbzip2 under libbzip2's own permissive
-  # licence. Pending the maintainer's approval at the review of the pull request
-  # that adds it.
+  # licence. Approved by the maintainer on 2026-10-23.
   { crate = "libbz2-rs-sys", allow = ["bzip2-1.0.6"] },
 ]
 
