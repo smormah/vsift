@@ -110,7 +110,7 @@ Iteration A of the earlier map (closing what `0.2.1` settled) was done on 2026-1
 - **D7. The road to 1.0 (decided 2026-10-21; [ADR 0027](../decisions/0027-the-road-to-1-0.md)).** The cycles are re-cut. Cycle 2 is cut as
   `0.2.3` at midnight on Friday 23 October (local time) and published around 26 to 27 October; the FFmpeg update is a hot fix, `0.2.4`, from
   `release/0.2.x` in early November. `0.3.0`, a normal stable release with OCR, speaker labels, online links, time anchoring, "what changed on
-  screen", search across kept sessions and the language of each chunk, is cut around Friday 27 November and published around
+  screen", search across kept sessions and "never wait in the dark" (progress during long transcriptions; the language of each chunk moved to `1.0.0` later the same day, and `0.3.0` may move by up to a week), is cut around Friday 27 November and published around
   30 November or 1 December; the launch items of cycle 3 (the README and the launch checklist) are done in November and the word goes out
   with `0.3.0` in early December. `1.0.0` follows at the end of December or in the first week of January and requires #188 and #176's
   stability promise. **A feature that is not qualified at a cut moves to the next release (for `0.3.0`, to `1.0.0`); the weekly window

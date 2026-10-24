@@ -52,7 +52,7 @@ that order wrong.
      time. Stage 2 adds anchors from clocks visible on screen (read by OCR), rollover precision to the second, cross-checks that report conflicts,
      and detection of cuts and pauses.
    - **Going beyond it:** "what changed on screen" between two times; search across kept sessions;
-     and the language of each chunk (#474, moved back from R1).
+     and the language of each chunk (#474; moved to `1.0.0`, see the amendment at the end).
    - **Not chosen:** an MCP server, which stays R2 (ADR 0011), and ready-made workflow prompts.
 4. **The deadline rule:** a feature that is not qualified at the cut moves to `1.0.0`. A feature is
    built in slices that each stand on their own, so that a late slice leaves the earlier ones
@@ -131,3 +131,24 @@ that order wrong.
   ADR changes neither. RQ-14 is required for `1.0.0`.
 - The R1 document, the delivery governance page, the planning README and both handoff files carry dated
   notes that point here. Where the earlier pages say "R1" for OCR, speakers or links, read this ADR.
+
+## Amendment, 2026-10-21 (later the same day)
+
+The maintainer made three further decisions on 2026-10-21, after this ADR was accepted. The accepted decision
+text above is unchanged; where it disagrees with this amendment, the amendment wins.
+
+1. **The language of each chunk (#474) moves from `0.3.0` to `1.0.0`** (recorded on the issue), to make room
+   for progress during long transcriptions. The limit stays documented in the guide and in
+   [L-188](../planning/known-limits.md#l-188). Decision 7 above, which moved #474 into `0.3.0`, no longer applies to it.
+2. **"Never wait in the dark" joins the `0.3.0` scope** under "going beyond it": progress during long
+   transcriptions, designed in ADR 0033 (in review). A long transcription runs in the background with status in
+   seconds, the finished part can be read and searched while the rest runs, the stretch the user asks for is
+   transcribed first, the terminal shows a live line, and an interrupted run resumes rather than restarts. It has three
+   modes, chosen automatically and overridden with `--mode`: quick (short clips, under about 10 minutes, in the
+   foreground), watched (long recordings with someone waiting) and queued (nobody waiting, or several
+   recordings; first in, first out per root, with interactive work first). It is the foundation for live sources
+   (#107, #410): VSift delivers fresh evidence, and what it means is the agent's or the person's call. With #474 out and
+   progress in, the "going beyond it" list is: what changed on screen, search across kept sessions, never wait in the dark.
+3. **The deadline rule (decision 4) is relaxed in one way.** A feature that is not qualified at the cut moves to the
+   next release, not necessarily `1.0.0`. `0.3.0` may move by up to a week (to about 4 December) so that progress is
+   qualified; before that happens, "what changed on screen" or "search across kept sessions" moves to a `0.3.1`.
