@@ -236,7 +236,7 @@ pub enum Target {
 
 impl Target {
     /// Every target, in the order CI runs them.
-    pub const ALL: [Self; 33] = [
+    pub const ALL: [Self; 35] = [
         Self::TranscriptSrt,
         Self::TranscriptWebVtt,
         Self::WhisperFullJson,
