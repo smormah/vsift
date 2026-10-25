@@ -56,7 +56,7 @@ use std::{
     ffi::OsStr,
     fmt::Write as _,
     fs,
-    num::NonZeroU16,
+    num::{NonZeroU16, NonZeroUsize},
     path::{Path, PathBuf},
     process::{Command, Stdio},
     sync::{
@@ -77,6 +77,7 @@ use vsift_application::{
 };
 use vsift_domain::{
     AsrModelProfile, ChunkPlan, DurabilityRequirement, MediaSelection, OperationId, SessionId,
+    recognizer_threads,
 };
 use vsift_infrastructure::{
     BoundSource, ExecutableResolver, FfmpegMedia, FfmpegSpeechAudio, FilesystemSessionStore,
@@ -88,8 +89,23 @@ type TestResult = Result<(), Box<dyn Error>>;
 type Built<T> = Result<T, Box<dyn Error>>;
 
 const OWNED_PREFIX: &str = "vsift-p07-asr-qualification-";
-/// The D6 measurement point.
-const THREADS: u16 = 4;
+/// The D6 measurement point: the most recognizer threads the qualification
+/// asks for. A machine with fewer cores gets fewer, as in the product.
+const D6_THREAD_CAP: NonZeroU16 = match NonZeroU16::new(4) {
+    Some(threads) => threads,
+    None => NonZeroU16::MIN,
+};
+/// The environment variable that leaves the noisy-speech set out of a run. The
+/// only accepted value is [`NOISY_SET_SKIP_HOSTED_MACOS`]; a checkpoint of the
+/// journeys workflow names it, so that the omission is explicit and reported.
+const NOISY_SET_SKIP_ENV: &str = "VSIFT_TEST_SKIP_NOISY_SET";
+const NOISY_SET_SKIP_HOSTED_MACOS: &str = "hosted-macos";
+/// Why the noisy-speech set is not run on hosted macOS (issue #520): the
+/// runner (3 cores, a CPU-only Homebrew build) is about 11 times slower than
+/// hosted Ubuntu and Windows, so the set does not fit the 120 s chunk deadline
+/// of its noise-only clips or the job's time limit. `P07 local ASR` measures
+/// and gates the set on Ubuntu and Windows.
+const NOISY_SET_SKIPPED_REASON: &str = "not run on hosted macOS (issue #520, known limit L-230): the runner is too slow for its 120 s chunk deadline and the job's time limit; measured and gated on hosted Ubuntu and Windows by P07 local ASR";
 /// Target length of the concatenated timing clip.
 const TIMING_CLIP_TARGET_US: u64 = 180_000_000;
 const UTTERANCE_GAP_US: u64 = 300_000;
@@ -120,6 +136,33 @@ const NOISY_SET_NOT_GATED: &str = "measured and reported, not gated";
 const RTF_GATE_MILLI: u128 = 500;
 const PEAK_MEMORY_GATE_BYTES: u64 = 400 * 1024 * 1024;
 const MIB: u64 = 1024 * 1024;
+
+/// The recognizer threads of this run: the product's own count for the
+/// machine's parallelism, capped at the D6 measurement point.
+fn threads() -> NonZeroU16 {
+    recognizer_threads(std::thread::available_parallelism().ok(), D6_THREAD_CAP)
+}
+
+/// Whether the run leaves the noisy-speech set out, from the value of
+/// [`NOISY_SET_SKIP_ENV`]. An unknown value is an error, not a silent run.
+fn parse_noisy_set_skip(value: Option<&str>) -> Built<bool> {
+    match value {
+        None | Some("") => Ok(false),
+        Some(NOISY_SET_SKIP_HOSTED_MACOS) => Ok(true),
+        Some(other) => Err(format!(
+            "{NOISY_SET_SKIP_ENV} accepts only {NOISY_SET_SKIP_HOSTED_MACOS:?}, not {other:?}"
+        )
+        .into()),
+    }
+}
+
+fn noisy_set_skipped() -> Built<bool> {
+    match env::var(NOISY_SET_SKIP_ENV) {
+        Ok(value) => parse_noisy_set_skip(Some(&value)),
+        Err(env::VarError::NotPresent) => parse_noisy_set_skip(None),
+        Err(error) => Err(format!("{NOISY_SET_SKIP_ENV} is unreadable: {error}").into()),
+    }
+}
 
 fn repository(relative: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -168,6 +211,29 @@ fn level_gate(
 // ---------------------------------------------------------------------------
 // Scoring rules, always run.
 // ---------------------------------------------------------------------------
+
+#[test]
+fn the_noisy_set_is_skipped_only_by_its_one_named_value() -> TestResult {
+    assert!(!parse_noisy_set_skip(None)?);
+    assert!(!parse_noisy_set_skip(Some(""))?);
+    assert!(parse_noisy_set_skip(Some(NOISY_SET_SKIP_HOSTED_MACOS))?);
+    assert!(parse_noisy_set_skip(Some("1")).is_err());
+    assert!(parse_noisy_set_skip(Some("true")).is_err());
+    Ok(())
+}
+
+#[test]
+fn the_qualification_threads_follow_the_product_and_stay_within_the_d6_point() {
+    let threads = threads();
+    assert!(threads <= D6_THREAD_CAP);
+    let one_core = recognizer_threads(NonZeroUsize::new(1), D6_THREAD_CAP);
+    let three_cores = recognizer_threads(NonZeroUsize::new(3), D6_THREAD_CAP);
+    let many_cores = recognizer_threads(NonZeroUsize::new(16), D6_THREAD_CAP);
+    assert_eq!(
+        (one_core.get(), three_cores.get(), many_cores.get()),
+        (1, 3, 4)
+    );
+}
 
 #[test]
 fn normalisation_follows_the_reviewed_rules() {
@@ -500,7 +566,7 @@ impl Bench {
             WhisperCli::new(
                 self.whisper.clone(),
                 model,
-                NonZeroU16::new(THREADS).ok_or("zero threads")?,
+                threads(),
                 HostIsolation::ProcessOnly,
             )?,
             ProcessWorkingDirectory::new(self.root.0.join("work"))?,
@@ -672,7 +738,7 @@ fn model_load_ms(whisper: &Path, model: &Path, work: &Path) -> Built<f64> {
         ))
         .args([
             "-t",
-            &THREADS.to_string(),
+            &threads().to_string(),
             "-l",
             "auto",
             "-bs",
@@ -1109,6 +1175,7 @@ async fn noisy_speech_set(
 )]
 async fn local_asr_accuracy_timing_and_memory() -> TestResult {
     let started = Instant::now();
+    let skip_noisy_set = noisy_set_skipped()?;
     let bench = Bench::new().await?;
     let expectations = expectations()?;
     let provenance = load_json("fixtures/corpus/generated/speech-provenance.json")?;
@@ -1136,18 +1203,28 @@ async fn local_asr_accuracy_timing_and_memory() -> TestResult {
         if profile == AsrModelProfile::Unreviewed {
             return Err("a model under test is not a reviewed pinned profile".into());
         }
-        println!("profile {} on {THREADS} threads", profile.identifier());
+        println!("profile {} on {} threads", profile.identifier(), threads());
 
         let (fixtures, clean, noisy, unexpected) =
             accuracy(&bench, &recognizer, &identity, &expectations, &variants).await?;
-        let (noisy_set_report, noisy_set_failures) = noisy_speech_set(
-            &bench,
-            &recognizer,
-            &identity,
-            profile == AsrModelProfile::Base,
-        )
-        .await?;
-        failures.extend(noisy_set_failures);
+        let noisy_set_report = if skip_noisy_set {
+            println!("  noisy-speech set: SKIPPED, {NOISY_SET_SKIPPED_REASON}");
+            json!({
+                "set_id": "vsift-noisy-speech-v1",
+                "skipped": true,
+                "reason": NOISY_SET_SKIPPED_REASON,
+            })
+        } else {
+            let (report, set_failures) = noisy_speech_set(
+                &bench,
+                &recognizer,
+                &identity,
+                profile == AsrModelProfile::Base,
+            )
+            .await?;
+            failures.extend(set_failures);
+            report
+        };
 
         let mut load_times = Vec::new();
         for _ in 0..LOAD_TIME_RUNS {
@@ -1266,7 +1343,7 @@ async fn local_asr_accuracy_timing_and_memory() -> TestResult {
         "architecture": env::consts::ARCH,
         "cpu": cpu_model(),
         "logical_processors": std::thread::available_parallelism().map(std::num::NonZero::get).ok(),
-        "recognizer_threads": THREADS,
+        "recognizer_threads": threads().get(),
         "build_profile": if cfg!(debug_assertions) { "debug" } else { "release" },
         "vsift_version": env!("CARGO_PKG_VERSION"),
         "whisper_cli_sha256": vsift_infrastructure::identify_whisper_build(&bench.whisper)

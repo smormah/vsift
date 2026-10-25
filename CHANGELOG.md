@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- The macOS journeys can complete again (#520): their T-04 gates (`p07_asr_gates`, in process on Homebrew's whisper.cpp) no longer run the noisy-speech set, which does not fit the hosted macOS runner (about 11 times slower than Ubuntu and Windows: the noise-only clips straddle the 120 s chunk deadline and the gates exceed the step's time limit; [L-230](docs/planning/known-limits.md#l-230)). The omission is explicit: the checkpoint sets `VSIFT_TEST_SKIP_NOISY_SET=hosted-macos`, and the test's log, its report and the job summary say so; `P07 local ASR` still measures and gates the set on Ubuntu and Windows. The qualification test's thread count now follows the product's own rule (at most four, and no more than the cores). A change to the repository's tests and journeys driver, not to the product.
 - The `Release window` report no longer fails on what a version bump on `main` does by design (#518): trial records moved with unchanged content into folders named for the previous candidate, lines that name a moved path, the version lines of the guide's index, the installation guide and the launcher's README while `main` is at a newer version, and a waiver kept word for word as a record in the evidence ledger's `prior`. Each is listed in the report; a code file, a moved file that changed, a reworded decision or any other line is still reported. This is a change to the repository's own release tooling, not to the product.
 
 
