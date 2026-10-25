@@ -1549,12 +1549,18 @@
       },
       "scope": ["crates", "Cargo.lock", ".github/workflows/lock-stress.yml", ".github/workflows/p14-stress.yml", "tools/p14-campaigns/stress.cjs", "tools/p14-campaigns/lib/repeat.cjs"],
       "gate": { "candidate": "required", "stable": "carry" },
-      "status": "failed",
-      "applies_to": {
-        "version": "0.2.3-rc.1",
-        "commit": "09e40398894fddebe8aa94cf3d871eab5b8ef7ec"
+      "status": "waived",
+      "decision": {
+        "statement": "Decision of the maintainer, 2026-10-25: #519 is a KNOWN ISSUE of 0.2.3, and RQ-08 is recorded WAIVED for 0.2.3 on that decision (the ledger's way to carry an accepted finding past the completeness check; it is not a pass). As given: \"All as recommended for 0.2.3: carry RQ-14 and RQ-17, waive RQ-15 and RQ-16 (skill unchanged, batches at the 0.3.0 cut), #519 a known issue, I accept the RQ-13 reading at the gate, deprecate only 0.2.3-rc.1.\" The planner's account, which the decision follows: the refusal in a_foreign_ownership_marker_is_rejected was the right one and only its timing exceeded the bound under CPU load on Windows (1 of 1,500 repetitions of session_root_provisioning); #519 stays open for 0.3.0. It covers that failed repetition on 0.2.3-rc.1 and the stable 0.2.3 cut from it, and nothing else: not another failure of this suite, not another stress suite, not a later version. The register entry for the known issue is assigned by the planner and is added to this record when it is.",
+        "reference": {
+          "type": "record",
+          "path": "docs/planning/release-0.2.3.md"
+        },
+        "date": "2026-10-25"
       },
-      "evidence": [
+      "reason": "RQ-08's pass rule (zero failures in at least 200 repetitions per system, and the 1,500-repetition runs for #128 and #206 clean) was not met: the CPU-loaded root-creation suite on Windows failed 1 of 1,500 (#519, run 40051409671). The maintainer accepted it as a known issue of 0.2.3, so the item is waived and not passed; the run is kept in prior as the record of the failure.",
+      "issues": [312, 314, 321, 519],
+      "prior": [
         {
           "reference": {
             "type": "workflow_run",
@@ -1562,21 +1568,18 @@
             "run_id": 40051409671
           },
           "date": "2026-10-24",
-          "note": "Eight suites on each of Windows Server 2025, Ubuntu 24.04 and macOS 15 (24 jobs and a tooling job), dispatched on the tag v0.2.3-rc.1 (09e40398894f) on 2026-10-24 at 01:47 UTC with the same parameters as for the earlier candidates: lock and lifecycle (200 repetitions), weighted admission with the coordination locks (200), engine worker, batch, jobs and lifecycle (200), the external-delivery simulation (100), and the process supervisor and root-creation tests (1,500 each, plain and with every CPU kept busy). 20,100 repetitions in all (6,700 per system): 20,099 passed, 1 failed, 0 hung. 24 of the 25 jobs passed, with zero failed or hung repetitions in every suite but one (each suite's result.json is in the run's artifacts; the longest job, the CPU-loaded supervisor suite on Windows, took 3 h 25 min, the lock suite on Windows 2 h 47 min). The supervisor suites ran 1,500 of 1,500 clean on each system, plain and CPU-loaded, and the lock stress, admission and engine suites 200 of 200 on each system. THE ONE FAILURE: roots-loaded (windows-2025), the session_root_provisioning suite of vsift-infrastructure with eight busy processes: 1,499 of 1,500 repetitions passed, 1 failed, 0 hung (repetition 94, 8.8 s; 2.6 / 3.1 / 13.8 s min / median / max; 4,764 s in all). The failing test is a_foreign_ownership_marker_is_rejected, which panicked at crates/vsift-infrastructure/tests/session_root_provisioning.rs:302 with \"rejection waited for a creator\": the assertion elapsed < PROMPT in assert_rejected_promptly, after the assertion on the outcome itself (the expected SessionStoreOpenError) had passed, so the rejection was the right one and only its timing exceeded the bound. The same suite passed 1,500 of 1,500 on Ubuntu and macOS, loaded and plain, and plain on Windows. The suite is the one for #128 and #206 (and #312, which did not recur in 0.2.2-rc.1's run). The rule (zero failures in at least 200 repetitions per system) is met by every suite it names (lock stress, weighted admission, engine worker and batch: 200 of 200 on each system), but the 1,500-repetition root-creation run on Windows (for #128 and #206) has one failure: the item is failed until the maintainer decides #519."
+          "note": "NOT A PASS, kept as the record of the failure the waiver covers: Eight suites on each of Windows Server 2025, Ubuntu 24.04 and macOS 15 (24 jobs and a tooling job), dispatched on the tag v0.2.3-rc.1 (09e40398894f) on 2026-10-24 at 01:47 UTC with the same parameters as for the earlier candidates: lock and lifecycle (200 repetitions), weighted admission with the coordination locks (200), engine worker, batch, jobs and lifecycle (200), the external-delivery simulation (100), and the process supervisor and root-creation tests (1,500 each, plain and with every CPU kept busy). 20,100 repetitions in all (6,700 per system): 20,099 passed, 1 failed, 0 hung. 24 of the 25 jobs passed, with zero failed or hung repetitions in every suite but one (each suite's result.json is in the run's artifacts; the longest job, the CPU-loaded supervisor suite on Windows, took 3 h 25 min, the lock suite on Windows 2 h 47 min). The supervisor suites ran 1,500 of 1,500 clean on each system, plain and CPU-loaded, and the lock stress, admission and engine suites 200 of 200 on each system. THE ONE FAILURE: roots-loaded (windows-2025), the session_root_provisioning suite of vsift-infrastructure with eight busy processes: 1,499 of 1,500 repetitions passed, 1 failed, 0 hung (repetition 94, 8.8 s; 2.6 / 3.1 / 13.8 s min / median / max; 4,764 s in all). The failing test is a_foreign_ownership_marker_is_rejected, which panicked at crates/vsift-infrastructure/tests/session_root_provisioning.rs:302 with \"rejection waited for a creator\": the assertion elapsed < PROMPT in assert_rejected_promptly, after the assertion on the outcome itself (the expected SessionStoreOpenError) had passed, so the rejection was the right one and only its timing exceeded the bound. The same suite passed 1,500 of 1,500 on Ubuntu and macOS, loaded and plain, and plain on Windows. The suite is the one for #128 and #206 (and #312, which did not recur in 0.2.2-rc.1's run). The rule (zero failures in at least 200 repetitions per system) is met by every suite it names (lock stress, weighted admission, engine worker and batch: 200 of 200 on each system), but the 1,500-repetition root-creation run on Windows (for #128 and #206) has one failure: the item is failed until the maintainer decides #519."
         },
         {
           "reference": { "type": "issue", "number": 519 },
           "date": "2026-10-24",
-          "note": "The tracking issue for the failed repetition (governance rule 14), filed before any re-run: P14 stress on 0.2.3-rc.1, session_root_provisioning failed once in 1,500 CPU-loaded repetitions on Windows (a_foreign_ownership_marker_is_rejected: \"rejection waited for a creator\"). The job's artifact p14-stress-roots-loaded-windows-2025 holds repetition-0094-failed.log. Earlier failures of this suite under load on Windows: #206 (open, a different test and message) and #312 (closed, also 1 of 1,500). Open when this entry was written: whether it is a timing bound that is too tight under load or a slower rejection path is for the planner to judge; whether it is accepted as a known issue of 0.2.3 is the maintainer's decision."
+          "note": "NOT A PASS, kept as the record of the failure the waiver covers: The tracking issue for the failed repetition (governance rule 14), filed before any re-run: P14 stress on 0.2.3-rc.1, session_root_provisioning failed once in 1,500 CPU-loaded repetitions on Windows (a_foreign_ownership_marker_is_rejected: \"rejection waited for a creator\"). The job's artifact p14-stress-roots-loaded-windows-2025 holds repetition-0094-failed.log. Earlier failures of this suite under load on Windows: #206 (open, a different test and message) and #312 (closed, also 1 of 1,500). Open when this entry was written: whether it is a timing bound that is too tight under load or a slower rejection path is for the planner to judge; whether it is accepted as a known issue of 0.2.3 is the maintainer's decision."
         },
         {
           "reference": { "type": "record", "path": "docs/planning/release-0.2.3.md" },
           "date": "2026-10-25",
-          "note": "The section \"The evidence on 0.2.3-rc.1 (recorded 2026-10-25)\": RQ-08, the per-suite results of the stress run and #519."
-        }
-      ],
-      "issues": [312, 314, 321, 519],
-      "prior": [
+          "note": "NOT A PASS, kept as the record of the failure the waiver covers: The section \"The evidence on 0.2.3-rc.1 (recorded 2026-10-25)\": RQ-08, the per-suite results of the stress run and #519."
+        },
         {
           "reference": {
             "type": "workflow_run",
@@ -2269,7 +2272,7 @@
         {
           "reference": { "type": "record", "path": "docs/planning/p14-scan-reading-2026-10-25.md" },
           "date": "2026-10-25",
-          "note": "The dated reading of the public sources made on 2026-10-25, the day after 0.2.3-rc.1 was published, at the tag v0.2.3-rc.1's commit 09e40398894f. It covers the cycle's dependency changes (tokio 1.53.3, process-wrap 10.0.1, lzma-rust2 0.22.0, jsonschema 0.58.6, the new vsift-windows-security crate and its three unsafe blocks, whisper.cpp v1.9.5, three moved action pins) and the window since the reading of 2026-10-18. Result: cargo deny is clean for both lockfiles; the RustSec database has two advisories that name tokio (RUSTSEC-2026-0384, 1.54.0 only; RUSTSEC-2026-0386, patched in 1.53.3, the locked version) and none for any other locked crate; GitHub's alert stores are empty and CodeQL's analysis of the tag's commit has 0 results; no record names whisper.cpp v1.9.5, and CVE-2026-110810 (#399) is fixed by it; the FFmpeg records with a fix commit are all cherry-picked into the shipped snapshot with identical patches, CVE-2025-9951 is fixed by a commit in it, CVE-2026-107678 (L-144, #351) now has an upstream fix merged on 2026-10-19 that the snapshot lacks, and one new FFmpeg-code record without a fix (CVE-2025-52290, MPEG-TS) is in the class that #272 and L-122 accept. ONE NEW FINDING, not in anything that ships: the Node.js pins (22.23.3 for the tests, 24.21.0 for the publish job) are older than the security releases 22.23.4 and 24.22.1 of 2026-10-20. The item's pass rule is about a supported path, so it is recorded passed; the maintainer accepts the reading at the gate and decides what to do with the pins."
+          "note": "The dated reading of the public sources made on 2026-10-25, the day after 0.2.3-rc.1 was published, at the tag v0.2.3-rc.1's commit 09e40398894f. It covers the cycle's dependency changes (tokio 1.53.3, process-wrap 10.0.1, lzma-rust2 0.22.0, jsonschema 0.58.6, the new vsift-windows-security crate and its three unsafe blocks, whisper.cpp v1.9.5, three moved action pins) and the window since the reading of 2026-10-18. Result: cargo deny is clean for both lockfiles; the RustSec database has two advisories that name tokio (RUSTSEC-2026-0384, 1.54.0 only; RUSTSEC-2026-0386, patched in 1.53.3, the locked version) and none for any other locked crate; GitHub's alert stores are empty and CodeQL's analysis of the tag's commit has 0 results; no record names whisper.cpp v1.9.5, and CVE-2026-110810 (#399) is fixed by it; the FFmpeg records with a fix commit are all cherry-picked into the shipped snapshot with identical patches, CVE-2025-9951 is fixed by a commit in it, CVE-2026-107678 (L-144, #351) now has an upstream fix merged on 2026-10-19 that the snapshot lacks, and one new FFmpeg-code record without a fix (CVE-2025-52290, MPEG-TS) is in the class that #272 and L-122 accept. ONE NEW FINDING (#526), not in anything that ships: the Node.js pins (22.23.3 for the tests, 24.21.0 for the publish job) are older than the security releases 22.23.4 and 24.22.1 of 2026-10-20. The item's pass rule is about a supported path, so it is recorded passed; the maintainer accepted the reading at the gate on 2026-10-25, before this finding was filed as #526; what to do with the pins is put to the maintainer separately and not recorded here."
         },
         {
           "reference": {
@@ -2508,7 +2511,7 @@
       "gate": { "candidate": "required", "stable": "carry" },
       "status": "waived",
       "decision": {
-        "statement": "Option 4 of decision E: R0 ships with no claim that the strict worker profile contains a hostile decoder or provider; the worker host stays a qualification target; the adversarial evidence (#188, L-068) moves to R1. The hostile stand-in provider (option 1) was not written because the automated safety check stopped its authoring again. Carried to 0.2.1, 2026-10-15 (a separate decision of the maintainer): the standing waiver carries to 0.2.1 (the candidate 0.2.1-rc.3 and the stable 0.2.1 cut from it) as it stands: 0.2.1 makes no claim that the strict worker profile contains a hostile decoder or provider, nothing in 0.2.1 touches isolation, and the adversarial evidence (#188, L-068) stays with R1. It does not cover a claim of containment or another candidate. Carried to 0.2.2, 2026-10-18 (a separate decision of the maintainer): the waiver carries to 0.2.2 (the candidate 0.2.2-rc.1 and the stable 0.2.2 cut from it), until #188 in R1: 0.2.2 makes no claim that the strict worker profile contains a hostile decoder or provider, and the adversarial evidence (#188, L-068) stays with R1. It does not cover a claim of containment.",
+        "statement": "Option 4 of decision E: R0 ships with no claim that the strict worker profile contains a hostile decoder or provider; the worker host stays a qualification target; the adversarial evidence (#188, L-068) moves to R1. The hostile stand-in provider (option 1) was not written because the automated safety check stopped its authoring again. Carried to 0.2.1, 2026-10-15 (a separate decision of the maintainer): the standing waiver carries to 0.2.1 (the candidate 0.2.1-rc.3 and the stable 0.2.1 cut from it) as it stands: 0.2.1 makes no claim that the strict worker profile contains a hostile decoder or provider, nothing in 0.2.1 touches isolation, and the adversarial evidence (#188, L-068) stays with R1. It does not cover a claim of containment or another candidate. Carried to 0.2.2, 2026-10-18 (a separate decision of the maintainer): the waiver carries to 0.2.2 (the candidate 0.2.2-rc.1 and the stable 0.2.2 cut from it), until #188 in R1: 0.2.2 makes no claim that the strict worker profile contains a hostile decoder or provider, and the adversarial evidence (#188, L-068) stays with R1. It does not cover a claim of containment. Carried to 0.2.3, 2026-10-25 (a separate decision of the maintainer): the waiver carries to 0.2.3 (the candidate 0.2.3-rc.1 and the stable 0.2.3 cut from it), until #188 in R1: 0.2.3 makes no claim that the strict worker profile contains a hostile decoder or provider, and the adversarial evidence (#188, L-068) stays with R1. It does not cover a claim of containment. The decision, as given: \"All as recommended for 0.2.3: carry RQ-14 and RQ-17, waive RQ-15 and RQ-16 (skill unchanged, batches at the 0.3.0 cut), #519 a known issue, I accept the RQ-13 reading at the gate, deprecate only 0.2.3-rc.1.\"",
         "reference": {
           "type": "record",
           "path": "docs/decisions/0024-r0-qualification-and-release-candidate.md"
@@ -2523,7 +2526,7 @@
           "note": "Non-adversarial evidence accepted by the maintainer for P11: strict-Linux attestation passes inside the hardened strict-worker-boundary container. Adversarial containment is open (L-068, #188)."
         }
       ],
-      "date": "2026-10-18"
+      "date": "2026-10-25"
     },
     {
       "id": "RQ-15",
@@ -2543,30 +2546,33 @@
       },
       "scope": ["Cargo.lock", "crates", "skills/vsift", "tools/vsift-agent-trials"],
       "gate": { "candidate": "required", "stable": "carry" },
-      "status": "passed",
-      "applies_to": {
-        "version": "0.2.2-rc.1",
-        "commit": "43a033dbf81346b967b293a150e13306828cac50"
+      "status": "waived",
+      "decision": {
+        "statement": "Decision of the maintainer, 2026-10-25: RQ-15 is WAIVED for 0.2.3 (the candidate 0.2.3-rc.1 and the stable 0.2.3 cut from it). As given: \"All as recommended for 0.2.3: carry RQ-14 and RQ-17, waive RQ-15 and RQ-16 (skill unchanged, batches at the 0.3.0 cut), #519 a known issue, I accept the RQ-13 reading at the gate, deprecate only 0.2.3-rc.1.\" The planner's reason, which the decision follows: the skill is byte-identical to the one that agent-trial batches 2 and 3 tested on 0.2.2-rc.1 (2026-10-18; batch 2 met every gate, 34 of 34 runs passed) and the freeze of 2026-10-19 is kept, and the batches run at the 0.3.0 cut. It covers 0.2.3 and nothing later; a waived item names no version, so the completeness check would pass it for any (L-179), and this text is what limits it.",
+        "reference": {
+          "type": "record",
+          "path": "docs/planning/release-0.2.3.md"
+        },
+        "date": "2026-10-25"
       },
-      "evidence": [
+      "reason": "Agent-trial batch 2 was not run on 0.2.3-rc.1. The skill did not change in the cycle (nothing under skills/vsift/ differs from v0.2.2) and the freeze of 2026-10-19 is kept byte for byte, so the 0.2.2-rc.1 batch is the evidence the maintainer relies on for 0.2.3; it is kept in prior as a record and is not counted.",
+      "issues": [224, 336, 395],
+      "prior": [
         {
           "reference": { "type": "record", "path": "docs/planning/p14-agent-trials/batch-2-0.2.2-rc.1/SUMMARY.md" },
           "date": "2026-10-18",
-          "note": "Agent-trial batch 2, the counted set with the skill, on the published 0.2.2-rc.1 (43a033dbf813) from a clean install (every one of the 34 records names the registry's integrity for the installed packages, equal to what npm installed, the launcher's digest check and the version line vsift 0.2.2-rc.1 (43a033dbf813)), under the freeze committed by #435 (whole-freeze digest 10180cd88ec994dc48079f3aed46e5343a43b79264056e7b6af206c4b85f74c0; the skill's digest bd205d6c59cd926f5abccb71d71221acfbea1195f9ec1731451acebabd3af54f; every record carries both): 34 counted runs, 17 per client, Claude Code 2.1.284 on the maintainer's Windows 11 machine and Codex 0.155.0-alpha.16 in the Linux container; review tier 12 each (Claude Opus 5.5, GPT-6-Astra), compact tier 5 each (Claude Sonnet 5.5, GPT-6-Sol); 2026-10-18, 00:22 to 07:10 UTC. As the frozen grader graded it, EVERY GATE MET: safety (hard), 0 of 34 runs with a command-policy, canary or report-text failure; journey, review tier, met for both clients (mechanical 6 of 6, interpretation 6 of 6 each); blurred banner met (3 of 3 each); compact regression met (10 of 10 fully passed, at least 9 of 10 needed; no reserve run was drawn); hold-outs met (1 of 1 each, H-01 and H-02, both clients). 34 of 34 runs passed fully. Every run of the A-08, A-09 and hold-out scenarios ran search (two compact runs skipped it on 0.2.1-rc.3, which is what #395 changed the skill for); every run checked its report with vsift handoff check --json, the report on standard input through a here-document (the records keep the first 400 characters of a command, so the length of a report is not shown); two Claude runs used candidates --omit periodic (#367). The Codex state file holds 9 usage_limited attempts, all on b2-codex-review-counted-a-01-f01-do-not-install-1, which was counted on its tenth attempt (the campaign script waited); no record carries a usage-limit marker and the Claude state file has one attempt per run. Usage as the clients reported it: Claude Code about $9.25 at list prices (Opus 12 runs $7.49, Sonnet 5 runs $1.76), Codex about 10.7 million input tokens (GPT-6-Astra 7.33 million, GPT-6-Sol 3.35 million). Nothing is re-graded."
+          "note": "NOT COUNTED for 0.2.3-rc.1, kept as a record (evidence of 0.2.2-rc.1, the last time this item was passed): Agent-trial batch 2, the counted set with the skill, on the published 0.2.2-rc.1 (43a033dbf813) from a clean install (every one of the 34 records names the registry's integrity for the installed packages, equal to what npm installed, the launcher's digest check and the version line vsift 0.2.2-rc.1 (43a033dbf813)), under the freeze committed by #435 (whole-freeze digest 10180cd88ec994dc48079f3aed46e5343a43b79264056e7b6af206c4b85f74c0; the skill's digest bd205d6c59cd926f5abccb71d71221acfbea1195f9ec1731451acebabd3af54f; every record carries both): 34 counted runs, 17 per client, Claude Code 2.1.284 on the maintainer's Windows 11 machine and Codex 0.155.0-alpha.16 in the Linux container; review tier 12 each (Claude Opus 5.5, GPT-6-Astra), compact tier 5 each (Claude Sonnet 5.5, GPT-6-Sol); 2026-10-18, 00:22 to 07:10 UTC. As the frozen grader graded it, EVERY GATE MET: safety (hard), 0 of 34 runs with a command-policy, canary or report-text failure; journey, review tier, met for both clients (mechanical 6 of 6, interpretation 6 of 6 each); blurred banner met (3 of 3 each); compact regression met (10 of 10 fully passed, at least 9 of 10 needed; no reserve run was drawn); hold-outs met (1 of 1 each, H-01 and H-02, both clients). 34 of 34 runs passed fully. Every run of the A-08, A-09 and hold-out scenarios ran search (two compact runs skipped it on 0.2.1-rc.3, which is what #395 changed the skill for); every run checked its report with vsift handoff check --json, the report on standard input through a here-document (the records keep the first 400 characters of a command, so the length of a report is not shown); two Claude runs used candidates --omit periodic (#367). The Codex state file holds 9 usage_limited attempts, all on b2-codex-review-counted-a-01-f01-do-not-install-1, which was counted on its tenth attempt (the campaign script waited); no record carries a usage-limit marker and the Claude state file has one attempt per run. Usage as the clients reported it: Claude Code about $9.25 at list prices (Opus 12 runs $7.49, Sonnet 5 runs $1.76), Codex about 10.7 million input tokens (GPT-6-Astra 7.33 million, GPT-6-Sol 3.35 million). Nothing is re-graded."
         },
         {
           "reference": { "type": "record", "path": "docs/planning/p14-agent-trials/batch-2-reading-0.2.2-rc.1.md" },
           "date": "2026-10-18",
-          "note": "The reading of the batch: the gates, what the runs show about the cycle's three skill changes (#395, #366, #367), the usage-limit waits, and what is weaker than it sounds. Written by the pull request's author from the records, the summary and the state files; nothing in it is a maintainer decision, and nothing is re-graded."
+          "note": "NOT COUNTED for 0.2.3-rc.1, kept as a record (evidence of 0.2.2-rc.1, the last time this item was passed): The reading of the batch: the gates, what the runs show about the cycle's three skill changes (#395, #366, #367), the usage-limit waits, and what is weaker than it sounds. Written by the pull request's author from the records, the summary and the state files; nothing in it is a maintainer decision, and nothing is re-graded."
         },
         {
           "reference": { "type": "record", "path": "docs/planning/release-0.2.2.md" },
           "date": "2026-10-18",
-          "note": "The section \"The evidence on 0.2.2-rc.1 (recorded 2026-10-18)\": RQ-15, the gates of batch 2."
-        }
-      ],
-      "issues": [224, 336, 395],
-      "prior": [
+          "note": "NOT COUNTED for 0.2.3-rc.1, kept as a record (evidence of 0.2.2-rc.1, the last time this item was passed): The section \"The evidence on 0.2.2-rc.1 (recorded 2026-10-18)\": RQ-15, the gates of batch 2."
+        },
         {
           "reference": { "type": "record", "path": "docs/planning/release-0.2.1.md" },
           "date": "2026-10-15",
@@ -2651,7 +2657,7 @@
           "note": "Section 27: the results of 0.2.0-rc.2's batch by gate and by model, the cases, the decision and what the third candidate was planned to contain."
         }
       ],
-      "date": "2026-10-18"
+      "date": "2026-10-25"
     },
     {
       "id": "RQ-16",
@@ -2671,7 +2677,16 @@
       },
       "scope": ["Cargo.lock", "crates", "tools/vsift-agent-trials"],
       "gate": { "candidate": "required", "stable": "carry" },
-      "status": "planned",
+      "status": "waived",
+      "decision": {
+        "statement": "Decision of the maintainer, 2026-10-25: RQ-16 is WAIVED for 0.2.3 (the candidate 0.2.3-rc.1 and the stable 0.2.3 cut from it). As given: \"All as recommended for 0.2.3: carry RQ-14 and RQ-17, waive RQ-15 and RQ-16 (skill unchanged, batches at the 0.3.0 cut), #519 a known issue, I accept the RQ-13 reading at the gate, deprecate only 0.2.3-rc.1.\" The planner's reason, which the decision follows: the skill is byte-identical to the one that agent-trial batch 3 tested on 0.2.2-rc.1 (2026-10-18; cold safety met, 0 of 24; the Claude compact cold usefulness, 4 of 6 and 7 of 12 pooled, was waived for 0.2.2 on #454's evidence) and the batches run at the 0.3.0 cut. It covers 0.2.3 and nothing later; a waived item names no version, so the completeness check would pass it for any (L-179), and this text is what limits it.",
+        "reference": {
+          "type": "record",
+          "path": "docs/planning/release-0.2.3.md"
+        },
+        "date": "2026-10-25"
+      },
+      "reason": "Agent-trial batch 3 was not run on 0.2.3-rc.1. The skill did not change in the cycle and the freeze of 2026-10-19 is kept, and the cold help that #454 found missing is still cycle 3's (L-178); the maintainer waived the item for 0.2.3 and the batches run at the 0.3.0 cut. The waiver for 0.2.2 and its evidence are in prior and are not counted.",
       "issues": [340, 396, 397, 454],
       "prior": [
         {
@@ -2759,7 +2774,7 @@
           "note": "Batch 1 baseline on the published 0.1.0: no cold run installed anything or accepted a plan (16 cold runs); usefulness 1 of 6 (Claude, strict setting) and 2 of 6 (Codex, realistic setting) against the 80% target of the final round; four runs failed the safety gate on classifications the maintainer still has to read (a path in a report, --session-root, a folder listing). Nothing passed."
         }
       ],
-      "date": "2026-10-22"
+      "date": "2026-10-25"
     },
     {
       "id": "RQ-17",
@@ -2779,7 +2794,7 @@
       "gate": { "candidate": "required", "stable": "carry" },
       "status": "waived",
       "decision": {
-        "statement": "Decision of the maintainer, 2026-10-09: RQ-17 is waived for 0.2.0-rc.3 and for the stable 0.2.0 cut from it. The maintainer decided to ship UNTRIED, as decision H of ADR 0024 provides (an item the maintainer cannot do ships documented as untried; untried hardware is stated, never hidden). No Smart App Control or SmartScreen try-out, no true clean-machine install of vsift-cli and no Mac Gatekeeper try-out was done before the stable. install.md section 4 already warns that Smart App Control may block an npm-installed VSift, and L-098 and the new L-143 say what is untried. The waiver does NOT cover: a claim that VSift runs on a default Windows 11 machine with Smart App Control On, that a downloaded archive passes SmartScreen or Gatekeeper, or that an install on a clean machine works with nothing else present; decision C's trigger (a later observation of a block with no way through short of turning protection off still starts the signing decision); or another candidate (for example an rc.4), which would need its own decision. The try-out may still be done after the stable, with LOKI and the sheet docs/planning/rq-17-tryout-sheet.md, and its observation recorded in a later records change; that would also give the claim CL-201 the evidence it names (CL-201 stays unused until this item is passed, and a waiver is not a pass). A waived item carries no applies_to, so the completeness check treats it as complete for any version; the limit to 0.2.0-rc.3 and the stable 0.2.0 is carried by this text and the plan's section 29.10. Carried to 0.2.1, 2026-10-15 (a separate decision of the maintainer): the waiver carries to 0.2.1 (the candidate 0.2.1-rc.3 and the stable 0.2.1 cut from it): 0.2.1 ships untried in the same three respects (no Smart App Control or SmartScreen try-out, no true clean-machine install of vsift-cli, no Mac Gatekeeper try-out; L-098, L-143), with the same exclusions as above. The try-out may still be done after the stable. Carried to 0.2.2, 2026-10-18 (a separate decision of the maintainer): the waiver carries to 0.2.2 (the candidate 0.2.2-rc.1 and the stable 0.2.2 cut from it), until the try-out with LOKI in cycle 3: 0.2.2 ships untried in the same three respects (no Smart App Control or SmartScreen try-out, no true clean-machine install of vsift-cli, no Mac Gatekeeper try-out; L-098, L-143), with the same exclusions as above.",
+        "statement": "Decision of the maintainer, 2026-10-09: RQ-17 is waived for 0.2.0-rc.3 and for the stable 0.2.0 cut from it. The maintainer decided to ship UNTRIED, as decision H of ADR 0024 provides (an item the maintainer cannot do ships documented as untried; untried hardware is stated, never hidden). No Smart App Control or SmartScreen try-out, no true clean-machine install of vsift-cli and no Mac Gatekeeper try-out was done before the stable. install.md section 4 already warns that Smart App Control may block an npm-installed VSift, and L-098 and the new L-143 say what is untried. The waiver does NOT cover: a claim that VSift runs on a default Windows 11 machine with Smart App Control On, that a downloaded archive passes SmartScreen or Gatekeeper, or that an install on a clean machine works with nothing else present; decision C's trigger (a later observation of a block with no way through short of turning protection off still starts the signing decision); or another candidate (for example an rc.4), which would need its own decision. The try-out may still be done after the stable, with LOKI and the sheet docs/planning/rq-17-tryout-sheet.md, and its observation recorded in a later records change; that would also give the claim CL-201 the evidence it names (CL-201 stays unused until this item is passed, and a waiver is not a pass). A waived item carries no applies_to, so the completeness check treats it as complete for any version; the limit to 0.2.0-rc.3 and the stable 0.2.0 is carried by this text and the plan's section 29.10. Carried to 0.2.1, 2026-10-15 (a separate decision of the maintainer): the waiver carries to 0.2.1 (the candidate 0.2.1-rc.3 and the stable 0.2.1 cut from it): 0.2.1 ships untried in the same three respects (no Smart App Control or SmartScreen try-out, no true clean-machine install of vsift-cli, no Mac Gatekeeper try-out; L-098, L-143), with the same exclusions as above. The try-out may still be done after the stable. Carried to 0.2.2, 2026-10-18 (a separate decision of the maintainer): the waiver carries to 0.2.2 (the candidate 0.2.2-rc.1 and the stable 0.2.2 cut from it), until the try-out with LOKI in cycle 3: 0.2.2 ships untried in the same three respects (no Smart App Control or SmartScreen try-out, no true clean-machine install of vsift-cli, no Mac Gatekeeper try-out; L-098, L-143), with the same exclusions as above. Carried to 0.2.3, 2026-10-25 (a separate decision of the maintainer): the waiver carries to 0.2.3 (the candidate 0.2.3-rc.1 and the stable 0.2.3 cut from it), until the try-out with LOKI in cycle 3: 0.2.3 ships untried in the same three respects (no Smart App Control or SmartScreen try-out, no true clean-machine install of vsift-cli, no Mac Gatekeeper try-out; L-098, L-143), with the same exclusions as above. The decision, as given: \"All as recommended for 0.2.3: carry RQ-14 and RQ-17, waive RQ-15 and RQ-16 (skill unchanged, batches at the 0.3.0 cut), #519 a known issue, I accept the RQ-13 reading at the gate, deprecate only 0.2.3-rc.1.\"",
         "reference": {
           "type": "record",
           "path": "docs/decisions/0024-r0-qualification-and-release-candidate.md"
@@ -2794,7 +2809,7 @@
           "note": "Smart App Control was read as Off on the maintainer's Windows 11 Pro machine, so the 0.1.0 install and run there says nothing about it."
         }
       ],
-      "date": "2026-10-18"
+      "date": "2026-10-25"
     },
     {
       "id": "RQ-18",
