@@ -4,7 +4,9 @@
 # notices cover exactly the crates linked into that target's binary.
 #
 # The accepted licences are deny.toml's allow list; a crate under any other
-# licence fails the notices step, as it fails `cargo deny check`.
+# licence fails the notices step, as it fails `cargo deny check`. The one
+# exception is the per-crate table at the end of this file, which mirrors the
+# exception in deny.toml.
 accepted = [
   "Apache-2.0",
   "Apache-2.0 WITH LLVM-exception",
@@ -20,3 +22,10 @@ ignore-build-dependencies = true
 ignore-dev-dependencies = true
 # The workflow passes --offline: licence texts come only from the crate sources
 # the lockfile names, and no licence service is contacted.
+
+# The bzip2 decoder behind the managed installer's .tar.bz2 reader (ADR 0032):
+# libbz2-rs-sys is a Rust port of libbzip2 under libbzip2's own permissive
+# licence. Accepted for this crate alone, mirroring its exception in deny.toml;
+# approved by the maintainer on 2026-10-23.
+[libbz2-rs-sys]
+accepted = ["bzip2-1.0.6"]

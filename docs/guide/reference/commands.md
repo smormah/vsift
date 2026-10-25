@@ -272,6 +272,12 @@ Options:
           Possible values:
           - jsonl: One bounded JSON object per line
 
+      --include <NAME>
+          Include an optional component (repeatable). `online_links` is what fetching a video from a public web page needs: yt-dlp and the JavaScript runtime it runs (Ubuntu 24.04 x86-64 only). Ask the operator first. The plan lists what it leaves out
+
+          Possible values:
+          - online_links: Online links: yt-dlp and the JavaScript runtime it needs
+
       --session-root <SESSION_ROOT>
           For operators who run a worker host; an agent leaves it out. Explicit private disposable-session root; defaults to the per-user cache
 
@@ -416,9 +422,11 @@ Arguments:
           The managed component; without --version, its selection and every version not in use by a running job
 
           Possible values:
-          - ffmpeg_ffprobe: `FFmpeg` and `FFprobe`
-          - whisper_cli:    The whisper.cpp command-line runtime
-          - whisper_model:  The speech-recognition model
+          - ffmpeg_ffprobe:  `FFmpeg` and `FFprobe`
+          - whisper_cli:     The whisper.cpp command-line runtime
+          - whisper_model:   The speech-recognition model
+          - js_runtime_deno: The optional yt-dlp's JavaScript runtime
+          - yt_dlp:          The optional yt-dlp
 
 Options:
       --json
@@ -466,9 +474,11 @@ Arguments:
           The managed component
 
           Possible values:
-          - ffmpeg_ffprobe: `FFmpeg` and `FFprobe`
-          - whisper_cli:    The whisper.cpp command-line runtime
-          - whisper_model:  The speech-recognition model
+          - ffmpeg_ffprobe:  `FFmpeg` and `FFprobe`
+          - whisper_cli:     The whisper.cpp command-line runtime
+          - whisper_model:   The speech-recognition model
+          - js_runtime_deno: The optional yt-dlp's JavaScript runtime
+          - yt_dlp:          The optional yt-dlp
 
 Options:
       --json

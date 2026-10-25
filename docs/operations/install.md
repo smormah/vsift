@@ -416,6 +416,28 @@ vsift setup check                                  # each tool now reports [mana
 If a download fails, section 9 lists each reason. VSift also falls back to section 5.2
 whenever it cannot install safely.
 
+### 5.1a Optional components (since `0.3.0`)
+
+Some capabilities need an extra tool that local investigation does not: they are **optional components**, named
+groups of managed components that a plan installs only when you ask. A desktop plan lists each one with a sentence
+about it, its download size, its licences and the command that adds it, and tells whoever runs setup to ask you
+first. Nothing optional is installed unless you include it:
+
+```console
+vsift setup plan --profile desktop --include online_links --json > plan.json
+vsift setup install --plan plan.json --accept-plan <the plan digest>
+```
+
+- **`online_links`** is what fetching a video from a public web page (YouTube and other sites) needs: yt-dlp and
+  the Deno runtime it runs (the fetching itself, `ingest --url`, comes with its own change, #409), about 83 MB in two downloads, on Ubuntu 24.04 x64 only. yt-dlp's build is GPL-3.0-or-later,
+  Deno is MIT, and downloading from a site is subject to that site's terms. Direct HTTPS video links do not need it.
+- **Installed after the core.** `setup install` installs FFmpeg, whisper.cpp and the model first, then each
+  optional component on its own. If an optional component cannot be installed (a proxy that blocks its download,
+  say), the core stays installed, the result is `partial` (exit 0) with a warning, and its line says what failed and
+  what to try; run the same command again to retry it.
+- **`setup check`** lists each optional component as `installed`, `not_installed` or `unavailable` on this machine,
+  apart from the status of local investigation.
+
 ### 5.2 Windows, macOS and other machines: bring your own
 
 Install FFmpeg and FFprobe with whatever you normally use, and, for local speech

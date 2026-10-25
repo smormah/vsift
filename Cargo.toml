@@ -29,6 +29,11 @@ readme = "README.md"
 
 [workspace.dependencies]
 assert_cmd = "2.1"
+# sherpa-onnx publishes every prebuilt archive as .tar.bz2 (ADR 0031, ADR 0032).
+# The default back end is libbz2-rs-sys, a Rust port of libbzip2 (no C build),
+# maintained by the Trifecta Tech Foundation with bzip2 itself. Its licence is
+# bzip2-1.0.6, allowed for that crate alone in deny.toml.
+bzip2 = { version = "=0.6.1" }
 flate2 = { version = "=1.1.10", default-features = false, features = ["rust_backend"] }
 getrandom = "0.4"
 jsonschema = { version = "0.58", default-features = false }

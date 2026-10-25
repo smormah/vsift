@@ -4,12 +4,13 @@
 use vsift::{
     DependencyState, LocalAsrCheckOutcome, LocalAsrModelStatus, LocalAsrNotRunReason,
     LocalAsrSetupStatus, LocalAsrVerificationSource, ManagedPlanAvailability, ManagedUpdate,
-    ProbeTimeout, ProbeTimeoutKind, RuntimeDependency, RuntimeDiagnosis, RuntimeReadiness,
-    SupersessionReason,
+    OptionalCapability, OptionalComponent, ProbeTimeout, ProbeTimeoutKind, RuntimeDependency,
+    RuntimeDiagnosis, RuntimeReadiness, SupersessionReason,
 };
 use vsift_contract::{
     DependencyLookup, MAX_PROVIDER_DETAIL_BYTES, NO_FOLDER_SEARCH_ADVICE, ProbeTimeHeadroom,
-    explicit_path_option, managed_update_next_step, probe_deadline_text, sanitize_untrusted_text,
+    explicit_path_option, managed_update_next_step, optional_check_step, probe_deadline_text,
+    sanitize_untrusted_text,
 };
 
 use super::{
@@ -21,7 +22,7 @@ use super::{
         SetupRemove, SetupRepair, SetupRollback, StageSweep, VersionOutcome,
     },
 };
-use crate::command::ExecutionProfile;
+use crate::{command::ExecutionProfile, setup::ManagedSetupFacts};
 
 /// `setup check`, rendered from its typed report: the probe of each
 /// dependency, where its executable came from, and the local-ASR check.
@@ -31,14 +32,18 @@ use crate::command::ExecutionProfile;
 pub(crate) fn setup_check<L>(
     diagnosis: &RuntimeDiagnosis,
     local_asr: LocalAsrSetupStatus,
-    managed_install: ManagedPlanAvailability,
-    managed_updates: &[ManagedUpdate],
+    managed: ManagedSetupFacts<'_>,
     profile: ExecutionProfile,
     lookup: &L,
 ) -> Result<RenderedText, TooLarge>
 where
     L: Fn(RuntimeDependency) -> DependencyLookup,
 {
+    let ManagedSetupFacts {
+        availability: managed_install,
+        updates: managed_updates,
+        optional,
+    } = managed;
     let mut text = TerminalText::result();
     text.push_fixed("VSift setup check").end_line();
     text.push_fixed("Profile: ")
@@ -103,6 +108,9 @@ where
             .end_line();
     }
     push_local_asr(&mut text, local_asr);
+    for (component, capability) in optional {
+        push_optional_component(&mut text, *component, capability, profile);
+    }
     text.push_fixed(
         "Executable probes only show that each tool responds. The local ASR check transcribes a \
          short speech clip built into VSift with the selected tools and model. A supplied \
@@ -110,6 +118,35 @@ where
     )
     .end_line();
     text.finish()
+}
+
+/// One optional component (ADR 0032), apart from the local-video status
+/// above it.
+fn push_optional_component(
+    text: &mut TerminalText,
+    component: OptionalComponent,
+    capability: &OptionalCapability,
+    profile: ExecutionProfile,
+) {
+    text.push_fixed("Optional component ")
+        .push_value(component.identifier())
+        .push_fixed(": ")
+        .push_value(capability.identifier());
+    if let OptionalCapability::Installed(components) = capability {
+        for (index, (managed, version)) in components.iter().enumerate() {
+            text.push_fixed(if index == 0 { " (" } else { ", " })
+                .push_value(managed.identifier())
+                .push_fixed(" ")
+                .push_value(version);
+        }
+        if !components.is_empty() {
+            text.push_fixed(")");
+        }
+    }
+    text.end_line();
+    text.push_fixed("  ")
+        .push_value(&optional_check_step(component, capability, profile.into()))
+        .end_line();
 }
 
 /// The advice under a tool that is missing, or was found and failed its
@@ -311,6 +348,7 @@ pub(super) fn plan(envelope: &Envelope<SetupPlan>) -> Result<RenderedText, TooLa
         None => text.push_fixed("none (nothing to install from this plan)"),
     };
     text.end_line();
+    push_plan_optional(&mut text, plan);
     text.blank_line();
     for dependency in &plan.dependencies {
         text.push_value(&dependency.dependency).push_fixed(": ");
@@ -337,8 +375,52 @@ pub(super) fn plan(envelope: &Envelope<SetupPlan>) -> Result<RenderedText, TooLa
     for action in &plan.actions {
         push_plan_action(&mut text, action);
     }
+    for optional in &plan.optional_components {
+        if !optional.actions.is_empty() {
+            text.blank_line();
+            text.push_fixed("Reviewed optional actions (")
+                .push_value(&optional.name)
+                .push_fixed(", installed after the core):")
+                .end_line();
+        }
+        for action in &optional.actions {
+            push_plan_action(&mut text, action);
+        }
+    }
     push_outcome(&mut text, envelope);
     text.finish()
+}
+
+/// The optional components a plan offers, includes or cannot offer, shown
+/// near the top with the instruction to ask the operator (ADR 0032): opt-in
+/// must not mean hidden.
+fn push_plan_optional(text: &mut TerminalText, plan: &SetupPlan) {
+    if plan.optional_components.is_empty() {
+        return;
+    }
+    text.blank_line();
+    text.push_fixed("Optional components:").end_line();
+    for optional in &plan.optional_components {
+        text.push_fixed("  ")
+            .push_value(&optional.summary)
+            .end_line();
+        if let Some(command) = &optional.add_command {
+            text.push_fixed("  To add it: ")
+                .push_value(&command.executable);
+            for argument in &command.arguments {
+                text.push_fixed(" ").push_value(argument);
+            }
+            text.end_line();
+        }
+        text.push_fixed("  Next: ")
+            .push_value(&optional.next_step)
+            .end_line();
+    }
+    if let Some(instruction) = &plan.operator_decision_required {
+        text.push_fixed("Ask the operator: ")
+            .push_value(instruction)
+            .end_line();
+    }
 }
 
 /// One reviewed managed action of `setup plan` with its observed state.
@@ -407,6 +489,22 @@ pub(super) fn install(envelope: &Envelope<SetupInstall>) -> Result<RenderedText,
     }
     for component in &data.components {
         push_component(&mut text, component);
+    }
+    if let Some(core) = &data.core {
+        text.push_fixed("Core: ").push_value(core).end_line();
+    }
+    for component in &data.optional_components {
+        push_component(&mut text, component);
+    }
+    for group in &data.optional_groups {
+        text.push_fixed("Optional component ")
+            .push_value(&group.name)
+            .push_fixed(": ")
+            .push_value(&group.status)
+            .end_line();
+        text.push_fixed("  ")
+            .push_value(&group.next_step)
+            .end_line();
     }
     push_install_cleanup(&mut text, &data.cleanup);
     text.push_fixed("Next: ")
