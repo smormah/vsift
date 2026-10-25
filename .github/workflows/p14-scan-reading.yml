@@ -122,8 +122,8 @@ jobs:
           # soon as a crate on main named a dependency the tag's workspace lacks.
           # The manifest path leaves the toolchain file of this checkout in force.
           git fetch --depth 1 origin "refs/tags/v${VERSION}:refs/tags/v${VERSION}"
-          git worktree add --detach "${RUNNER_TEMP}/published" "refs/tags/v${VERSION}"
-          cargo metadata --locked --manifest-path "${RUNNER_TEMP}/published/Cargo.toml" \
+          git worktree add --detach "${RUNNER_TEMP}/published-workspace" "refs/tags/v${VERSION}"
+          cargo metadata --locked --manifest-path "${RUNNER_TEMP}/published-workspace/Cargo.toml" \
             --filter-platform x86_64-unknown-linux-gnu --format-version 1 > "${RUNNER_TEMP}/scan/metadata.json"
           node tools/p14-campaigns/scan-inventory.cjs \
             --sbom "${RUNNER_TEMP}/scan/vsift-${VERSION}-x86_64-unknown-linux-gnu.cdx.json" \
