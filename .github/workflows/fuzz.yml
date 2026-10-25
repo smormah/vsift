@@ -19,6 +19,9 @@ name: Fuzz
 #     every target for 15 seconds each, so a broken harness fails before it
 #     merges.
 #
+# ADR 0032 (0.3.0) adds `zip_inventory` and `bzip2_tar_inventory`, the readers
+# of the Windows publishers' zips and sherpa-onnx's .tar.bz2: 33 targets.
+#
 # The workflow cannot publish anything: it has `contents: read` only and uses
 # no secret. Retention is 90 days (the maximum for a public repository; the
 # plan names no figure).
@@ -159,6 +162,8 @@ jobs:
           - xz_tar_inventory
           - identifiers
           - input_path
+          - zip_inventory
+          - bzip2_tar_inventory
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

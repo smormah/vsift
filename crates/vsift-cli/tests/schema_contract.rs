@@ -186,6 +186,18 @@ fn emitted_json_matches_frozen_examples() -> Result<(), Box<dyn std::error::Erro
         {
             dependency["remediation"]["managed_install"] = Value::from("unavailable_target");
         }
+        // Nor is the optional online-links component offered there.
+        blocked["optional_components"] = serde_json::json!([{
+            "name": "online_links",
+            "status": "unavailable",
+            "components": [],
+            "next_step": vsift_contract::optional_check_step(
+                vsift_application::OptionalComponent::OnlineLinks,
+                &vsift_application::OptionalCapability::Unavailable,
+                vsift_application::SetupProfile::Desktop,
+            ),
+            "add_command": null,
+        }]);
     }
     assert_eq!(serde_json::from_slice::<Value>(&setup.stdout)?, blocked);
 

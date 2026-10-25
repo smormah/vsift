@@ -1,18 +1,89 @@
 {
-  "schema_version": "1",
   "command": "setup.check",
-  "profile": "desktop",
-  "status": "blocked",
-  "verification_scope": "executable_probe_only",
-  "local_asr_model": "not_checked",
   "dependencies": [
-    { "dependency": "ffmpeg", "capability": "media_processing", "status": "missing", "detail": null, "lookup": "filtered_path", "validation": "not_validated", "remediation": { "reason": "missing", "managed_install": "catalogue_accepted", "required_authority": "user", "next_step": "Install a trusted FFmpeg or register a working one with setup configure ffmpeg --executable <absolute-path>, then run setup check. No need to search folders: ask the user where it is.", "explicit_path_option": "--ffmpeg" } },
-    { "dependency": "ffprobe", "capability": "media_processing", "status": "missing", "detail": null, "lookup": "filtered_path", "validation": "not_validated", "remediation": { "reason": "missing", "managed_install": "catalogue_accepted", "required_authority": "user", "next_step": "Install a trusted FFprobe or register a working one with setup configure ffprobe --executable <absolute-path>, then run setup check. No need to search folders: ask the user where it is.", "explicit_path_option": "--ffprobe" } },
-    { "dependency": "whisper", "capability": "transcription", "status": "missing", "detail": null, "lookup": "filtered_path", "validation": "not_validated", "remediation": { "reason": "missing", "managed_install": "catalogue_accepted", "required_authority": "user", "next_step": "Install a trusted whisper.cpp CLI or register a working one with setup configure whisper --executable <absolute-path>, then run setup check. No need to search folders: ask the user where it is. A supplied transcript can skip local ASR.", "explicit_path_option": "--whisper" } }
+    {
+      "capability": "media_processing",
+      "dependency": "ffmpeg",
+      "detail": null,
+      "lookup": "filtered_path",
+      "remediation": {
+        "explicit_path_option": "--ffmpeg",
+        "managed_install": "catalogue_accepted",
+        "next_step": "Install a trusted FFmpeg or register a working one with setup configure ffmpeg --executable <absolute-path>, then run setup check. No need to search folders: ask the user where it is.",
+        "reason": "missing",
+        "required_authority": "user"
+      },
+      "status": "missing",
+      "validation": "not_validated"
+    },
+    {
+      "capability": "media_processing",
+      "dependency": "ffprobe",
+      "detail": null,
+      "lookup": "filtered_path",
+      "remediation": {
+        "explicit_path_option": "--ffprobe",
+        "managed_install": "catalogue_accepted",
+        "next_step": "Install a trusted FFprobe or register a working one with setup configure ffprobe --executable <absolute-path>, then run setup check. No need to search folders: ask the user where it is.",
+        "reason": "missing",
+        "required_authority": "user"
+      },
+      "status": "missing",
+      "validation": "not_validated"
+    },
+    {
+      "capability": "transcription",
+      "dependency": "whisper",
+      "detail": null,
+      "lookup": "filtered_path",
+      "remediation": {
+        "explicit_path_option": "--whisper",
+        "managed_install": "catalogue_accepted",
+        "next_step": "Install a trusted whisper.cpp CLI or register a working one with setup configure whisper --executable <absolute-path>, then run setup check. No need to search folders: ask the user where it is. A supplied transcript can skip local ASR.",
+        "reason": "missing",
+        "required_authority": "user"
+      },
+      "status": "missing",
+      "validation": "not_validated"
+    }
   ],
   "local_asr": {
-    "model": { "status": "not_selected", "profile": null },
-    "verification": { "status": "not_run", "source": null, "not_run_reason": "media_tools_unavailable", "check": null, "reason": null }
+    "model": {
+      "profile": null,
+      "status": "not_selected"
+    },
+    "verification": {
+      "check": null,
+      "not_run_reason": "media_tools_unavailable",
+      "reason": null,
+      "source": null,
+      "status": "not_run"
+    }
   },
-  "managed_updates": []
+  "local_asr_model": "not_checked",
+  "managed_updates": [],
+  "optional_components": [
+    {
+      "add_command": {
+        "arguments": [
+          "setup",
+          "plan",
+          "--profile",
+          "desktop",
+          "--include",
+          "online_links",
+          "--json"
+        ],
+        "executable": "vsift"
+      },
+      "components": [],
+      "name": "online_links",
+      "next_step": "The optional online links component is not installed; local investigation does not need it. Ask the operator first; to add it, run vsift setup plan --profile desktop --include online_links --json and accept that plan.",
+      "status": "not_installed"
+    }
+  ],
+  "profile": "desktop",
+  "schema_version": "1",
+  "status": "blocked",
+  "verification_scope": "executable_probe_only"
 }

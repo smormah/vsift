@@ -50,11 +50,12 @@ use vsift_infrastructure::{
     OsReleaseProfile, SourceContainer, VisualSamplingWindow, WhisperOutputLimits,
     classify_mountinfo, classify_os_release, decode_chunk_checkpoint, decode_evidence_record,
     decode_job_record, decode_request_record, decode_transcript_record, decode_visual_index_record,
-    encode_transcript_record, encode_visual_index_record, inspect_gzip_tar_inventory,
-    inspect_tar_inventory, inspect_xz_tar_inventory, parse_ashowinfo_start, parse_cgroup_limit,
-    parse_cpu_max, parse_ffprobe_metadata, parse_frame_listing, parse_frame_showinfo,
-    parse_net_dev, parse_png_sequence, parse_proc_cgroup, parse_supplied_transcript,
-    parse_visual_samples, parse_whisper_full_json,
+    encode_transcript_record, encode_visual_index_record, inspect_bzip2_tar_inventory,
+    inspect_gzip_tar_inventory, inspect_tar_inventory, inspect_xz_tar_inventory,
+    inspect_zip_inventory, parse_ashowinfo_start, parse_cgroup_limit, parse_cpu_max,
+    parse_ffprobe_metadata, parse_frame_listing, parse_frame_showinfo, parse_net_dev,
+    parse_png_sequence, parse_proc_cgroup, parse_supplied_transcript, parse_visual_samples,
+    parse_whisper_full_json,
 };
 
 type TestResult = Result<(), Box<dyn Error>>;
@@ -136,6 +137,9 @@ enum ArchiveFormat {
     Tar,
     Gzip,
     Xz,
+    Bzip2,
+    /// Not a tar: the same tree written as a zip of stored entries.
+    Zip,
 }
 
 struct Seed {
@@ -672,6 +676,42 @@ const SEEDS: &[Seed] = &[
             mirrors: XZ_INVENTORY_TESTS,
         },
     ),
+    seed(
+        Target::ZipInventory,
+        "one-file.zip",
+        Origin::Archive {
+            tree: ArchiveTree::OneFile,
+            format: ArchiveFormat::Zip,
+            mirrors: ZIP_INVENTORY_TESTS,
+        },
+    ),
+    seed(
+        Target::ZipInventory,
+        "tree.zip",
+        Origin::Archive {
+            tree: ArchiveTree::Tree,
+            format: ArchiveFormat::Zip,
+            mirrors: ZIP_INVENTORY_TESTS,
+        },
+    ),
+    seed(
+        Target::Bzip2TarInventory,
+        "one-file.tar.bz2",
+        Origin::Archive {
+            tree: ArchiveTree::OneFile,
+            format: ArchiveFormat::Bzip2,
+            mirrors: BZIP2_INVENTORY_TESTS,
+        },
+    ),
+    seed(
+        Target::Bzip2TarInventory,
+        "tree.tar.bz2",
+        Origin::Archive {
+            tree: ArchiveTree::Tree,
+            format: ArchiveFormat::Bzip2,
+            mirrors: BZIP2_INVENTORY_TESTS,
+        },
+    ),
     // Identifiers that appear in the frozen examples and the catalogue.
     seed(
         Target::Identifiers,
@@ -756,6 +796,8 @@ const SEEDS: &[Seed] = &[
 /// archive seeds mirror (`root/tool`, three bytes).
 const XZ_INVENTORY_TESTS: &str = "crates/vsift-infrastructure/src/xz_tar_inventory.rs";
 const GZIP_INVENTORY_TESTS: &str = "crates/vsift-infrastructure/src/gzip_tar_inventory.rs";
+const ZIP_INVENTORY_TESTS: &str = "crates/vsift-infrastructure/src/bounded_zip_inventory/tests.rs";
+const BZIP2_INVENTORY_TESTS: &str = "crates/vsift-infrastructure/src/bzip2_tar_inventory.rs";
 
 /// `example` with its one `"member":null` replaced by `"member":value`.
 fn edited_example(example: &str, member: &str, value: &str) -> Result<Vec<u8>, Box<dyn Error>> {
@@ -898,6 +940,10 @@ fn well_formed_seeds_are_accepted() -> TestResult {
         (Target::GzipTarInventory, "tree.tar.gz"),
         (Target::XzTarInventory, "one-file.tar.xz"),
         (Target::XzTarInventory, "tree.tar.xz"),
+        (Target::ZipInventory, "one-file.zip"),
+        (Target::ZipInventory, "tree.zip"),
+        (Target::Bzip2TarInventory, "one-file.tar.bz2"),
+        (Target::Bzip2TarInventory, "tree.tar.bz2"),
         (Target::Identifiers, "session-id.txt"),
         (Target::Identifiers, "operation-id.txt"),
         (Target::Identifiers, "job-id.txt"),
@@ -1067,6 +1113,8 @@ fn is_accepted(target: Target, data: &[u8]) -> Result<bool, Box<dyn Error>> {
         | Target::TarInventory
         | Target::GzipTarInventory
         | Target::XzTarInventory
+        | Target::ZipInventory
+        | Target::Bzip2TarInventory
         | Target::Identifiers
         | Target::InputPath => is_accepted_in_p14(target, data)?,
         // The outer and the inner rectangle are both accepted.
@@ -1108,6 +1156,20 @@ fn is_accepted_in_p14(target: Target, data: &[u8]) -> Result<bool, Box<dyn Error
         )
         .is_ok(),
         Target::XzTarInventory => inspect_xz_tar_inventory(
+            Cursor::new(data),
+            SEED_COMPRESSED_BYTES,
+            SEED_STREAM_BYTES,
+            seed_archive_bounds()?,
+            &[],
+        )
+        .is_ok(),
+        Target::ZipInventory => inspect_zip_inventory(
+            Cursor::new(data),
+            u64::try_from(data.len())?,
+            seed_archive_bounds()?,
+        )
+        .is_ok(),
+        Target::Bzip2TarInventory => inspect_bzip2_tar_inventory(
             Cursor::new(data),
             SEED_COMPRESSED_BYTES,
             SEED_STREAM_BYTES,
@@ -1546,8 +1608,17 @@ fn tar_seed(tree: ArchiveTree) -> Result<Vec<u8>, Box<dyn Error>> {
 
 /// An archive seed: the tar, wrapped as the format says.
 fn archive_seed(tree: ArchiveTree, format: ArchiveFormat) -> Result<Vec<u8>, Box<dyn Error>> {
+    if let ArchiveFormat::Zip = format {
+        return zip_seed(tree);
+    }
     let tar = tar_seed(tree)?;
     match format {
+        ArchiveFormat::Zip => zip_seed(tree),
+        ArchiveFormat::Bzip2 => {
+            let mut bzip2 = bzip2::write::BzEncoder::new(Vec::new(), bzip2::Compression::default());
+            bzip2.write_all(&tar)?;
+            Ok(bzip2.finish()?)
+        }
         ArchiveFormat::Tar => Ok(tar),
         ArchiveFormat::Gzip => {
             let mut gzip = GzEncoder::new(Vec::new(), Compression::default());
@@ -1560,6 +1631,66 @@ fn archive_seed(tree: ArchiveTree, format: ArchiveFormat) -> Result<Vec<u8>, Box
             Ok(xz.finish()?)
         }
     }
+}
+
+/// A zip of one of the seed shapes: stored entries made on Unix (mode in the
+/// upper half of the external attributes), each local header followed by its
+/// data, then the central directory and an end record with no comment. A
+/// link has no zip seed: the reader refuses every link.
+fn zip_seed(tree: ArchiveTree) -> Result<Vec<u8>, Box<dyn Error>> {
+    let entries: Vec<(&str, &[u8], u32)> = match tree {
+        ArchiveTree::OneFile => vec![("root/tool", b"abc", 0o100_600)],
+        ArchiveTree::Tree => vec![
+            ("root/", b"", 0o040_700),
+            ("root/bin/tool", b"abc", 0o100_600),
+            ("root/LICENSE.txt", b"A synthetic licence.\n", 0o100_600),
+        ],
+        ArchiveTree::Link => return Err("a zip seed holds no link".into()),
+    };
+    let mut records = Vec::new();
+    let mut central = Vec::new();
+    for (name, content, mode) in &entries {
+        let mut crc = flate2::Crc::new();
+        crc.update(content);
+        let offset = u32::try_from(records.len())?;
+        let length = u32::try_from(content.len())?;
+        let name_length = u16::try_from(name.len())?;
+        records.extend(0x0403_4b50_u32.to_le_bytes());
+        records.extend(10_u16.to_le_bytes());
+        records.extend([0_u8; 8]);
+        records.extend(crc.sum().to_le_bytes());
+        records.extend(length.to_le_bytes());
+        records.extend(length.to_le_bytes());
+        records.extend(name_length.to_le_bytes());
+        records.extend(0_u16.to_le_bytes());
+        records.extend(name.as_bytes());
+        records.extend(*content);
+        central.extend(0x0201_4b50_u32.to_le_bytes());
+        central.extend(u16::from_le_bytes([20, 3]).to_le_bytes());
+        central.extend(10_u16.to_le_bytes());
+        central.extend([0_u8; 8]);
+        central.extend(crc.sum().to_le_bytes());
+        central.extend(length.to_le_bytes());
+        central.extend(length.to_le_bytes());
+        central.extend(name_length.to_le_bytes());
+        central.extend([0_u8; 8]);
+        central.extend((mode << 16).to_le_bytes());
+        central.extend(offset.to_le_bytes());
+        central.extend(name.as_bytes());
+    }
+    let count = u16::try_from(entries.len())?;
+    let central_offset = u32::try_from(records.len())?;
+    let central_size = u32::try_from(central.len())?;
+    let mut archive = records;
+    archive.extend(central);
+    archive.extend(0x0605_4b50_u32.to_le_bytes());
+    archive.extend([0_u8; 4]);
+    archive.extend(count.to_le_bytes());
+    archive.extend(count.to_le_bytes());
+    archive.extend(central_size.to_le_bytes());
+    archive.extend(central_offset.to_le_bytes());
+    archive.extend(0_u16.to_le_bytes());
+    Ok(archive)
 }
 
 /// The budget the well-formed archive seeds are accepted under: the
