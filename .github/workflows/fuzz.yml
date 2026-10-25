@@ -56,7 +56,7 @@ env:
   # MSRV in Cargo.toml) and record the date in the pull request.
   FUZZ_TOOLCHAIN: nightly-2026-09-01
   CARGO_FUZZ_VERSION: 0.13.2
-  NODE_VERSION: "22.23.3"
+  NODE_VERSION: "22.23.4"
 
 jobs:
   smoke:

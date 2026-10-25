@@ -54,7 +54,7 @@ defaults:
 
 env:
   # The pin of the P13 npm qualification (release.yml `env`).
-  NODE_VERSION: "22.23.3"
+  NODE_VERSION: "22.23.4"
 
 jobs:
   verify:
