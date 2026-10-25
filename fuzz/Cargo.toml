@@ -24,6 +24,10 @@ libfuzzer = ["dep:libfuzzer-sys"]
 
 [dependencies]
 libfuzzer-sys = { version = "0.4.13", optional = true }
+# The `ocr_runner_output` target checks the readings the runner's output parser
+# hands the application (0.3.0, ADR 0030); the replay tests also re-derive the
+# local-ASR and visual-index record seeds with it.
+vsift-application = { version = "0.2.3-rc.1", path = "../crates/vsift-application" }
 # The `handoff_check` target reads the published form of a check (P13 PR 5).
 serde_json = "1.0.151"
 # The `bundle_manifest` target (P14 PR 4) names each artifact it invents by its
@@ -34,9 +38,6 @@ vsift-domain = { version = "0.2.3-rc.1", path = "../crates/vsift-domain" }
 vsift-infrastructure = { version = "0.2.3-rc.1", path = "../crates/vsift-infrastructure" }
 
 [dev-dependencies]
-# Re-derive the local-ASR and visual-index record seeds in the replay tests;
-# serde_json (a dependency above) reads the recorded visual samples too.
-vsift-application = { version = "0.2.3-rc.1", path = "../crates/vsift-application" }
 # P14 PR 4: the archive seeds are built the way the infrastructure crate's own
 # archive tests build theirs (a tar, then gzip or xz around it), with the
 # workspace's pinned versions and settings; all three are already in the graph.
@@ -45,6 +46,22 @@ lzma-rust2 = { version = "=0.22.0", default-features = false, features = ["std",
 tar = { version = "=0.4.46", default-features = false }
 # ADR 0032: the bzip2 seeds are built with the workspace's pinned encoder.
 bzip2 = { version = "=0.6.1" }
+
+[[bin]]
+name = "ocr_runner_output"
+path = "fuzz_targets/ocr_runner_output.rs"
+test = false
+doc = false
+bench = false
+required-features = ["libfuzzer"]
+
+[[bin]]
+name = "screen_text_index_record"
+path = "fuzz_targets/screen_text_index_record.rs"
+test = false
+doc = false
+bench = false
+required-features = ["libfuzzer"]
 
 [[bin]]
 name = "request_record"

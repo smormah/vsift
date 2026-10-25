@@ -22,6 +22,8 @@ name: Fuzz
 # ADR 0032 (0.3.0) adds `zip_inventory` and `bzip2_tar_inventory`, the readers
 # of the Windows publishers' zips and sherpa-onnx's .tar.bz2: 33 targets.
 #
+# ADR 0030 (0.3.0) adds `ocr_runner_output` and `screen_text_index_record`: 35 targets.
+#
 # The workflow cannot publish anything: it has `contents: read` only and uses
 # no secret. Retention is 90 days (the maximum for a public repository; the
 # plan names no figure).
@@ -164,6 +166,8 @@ jobs:
           - input_path
           - zip_inventory
           - bzip2_tar_inventory
+          - ocr_runner_output
+          - screen_text_index_record
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

@@ -50,6 +50,7 @@ mod managed_smoke;
 mod managed_store_lifecycle;
 mod media_tool_verification;
 mod media_tool_verification_cache;
+mod ocr_runner;
 mod offline_artifact_import;
 mod private_user_root;
 mod process_dependency_probe;
@@ -58,6 +59,7 @@ mod publisher_artifact_transfer;
 mod random_identifiers;
 mod request_timing;
 mod retry_timer;
+mod screen_text_index_record;
 mod session_root;
 mod source_binding;
 mod source_duration_probe;
@@ -184,6 +186,11 @@ pub use media_tool_verification_cache::{
     MediaToolVerificationAuthority, STALE_VERIFICATION_WORKSPACE_AGE_SECONDS, StaleWorkspaceSweep,
     media_tool_fingerprint,
 };
+pub use ocr_runner::{
+    MAX_RUNNER_EXECUTABLE_BYTES, MAX_RUNNER_IMAGES, MAX_RUNNER_OUTPUT_BYTES, OcrRunner,
+    OcrScreenTextReader, RUNNER_PROTOCOL, RunnerDescription, RunnerOutputError,
+    parse_runner_description, parse_runner_output,
+};
 pub use offline_artifact_import::{ArtifactImportError, import_reviewed_artifact};
 pub use process_dependency_probe::{
     DEFAULT_PROBE_TIMEOUT, ExplicitProbePaths, ProcessDependencyProbe,
@@ -201,6 +208,10 @@ pub use publisher_artifact_transfer::{
 pub use random_identifiers::RandomIdentifierSource;
 pub use request_timing::{DeadlineOutcome, run_until_deadline, sleep_unless_cancelled};
 pub use retry_timer::TokioRetryTimer;
+pub use screen_text_index_record::{
+    MAX_SCREEN_TEXT_INDEX_RECORD_BYTES, MAX_SCREEN_TEXT_INDEX_RECORDS,
+    decode_screen_text_index_record, encode_screen_text_index_record,
+};
 pub use session_root::{
     PROVISIONING_WAIT, SessionRootError, SessionRootProvisioning, open_session_root,
     open_session_root_within, platform_session_root,

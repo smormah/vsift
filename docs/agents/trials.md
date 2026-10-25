@@ -945,6 +945,8 @@ state file recorded for another version: `records/`, `state-claude.json`, `state
 `freeze.json` there; nothing in them changed, and `batch-2/` and `batch-3/` hold only the freeze. **No batch has run on `0.2.3-rc.1`;** whether they do, against the published
 `0.2.3-rc.1` (`-Version 0.2.3-rc.1`, batch 3 with `-AllowGraderChange`), or RQ-16 is waived again, is the maintainer's decision at the window (`docs/planning/release-0.2.3.md`).
 
+**0.3.0 development freeze; the final freeze is recorded at the 0.3.0 cut.** On `main`, after the 0.2.3 candidate, the skill's command reference names `ocr` (the on-screen text work, [ADR 0030](../decisions/0030-on-screen-text.md), decision 11), so `freeze write` gave a new `skill` digest (`e9fb4dc1a1097a0e20b36048adc1686668107c682368ae2a28bb3e70751cb315`, where it was `bd205d6c...`) and a new whole-freeze digest (`6d42bc6f6912e23253fcf682a874aaabfb0fba28663a496395e837a773768fdb`, where it was `30293090...`); the other six components are unchanged, and `committed_freeze` pins the new value with a comment that says why. It is a development freeze: later 0.3.0 changes to the skill move it again, and the batches for `0.2.3` run from `release/0.2.x` under the freeze above, not this one. No batch has run under it.
+
 ## Usage capture (P14)
 
 P12 recorded no tokens. Each record now carries `reported_usage`: input, output, cached and cache-write tokens,

@@ -138,6 +138,8 @@ fn render_value(
         CommandName::TranscriptRetranscribe => transcript::retranscription(&envelope(value)?),
         CommandName::Search => transcript::search(&envelope(value)?),
         CommandName::Candidates => evidence::candidates(&envelope(value)?),
+        CommandName::Ocr => evidence::screen_text(&envelope(value)?),
+        CommandName::OcrSearch => transcript::ocr_search(&envelope(value)?),
         CommandName::FrameGet
         | CommandName::FrameNeighbours
         | CommandName::FrameBurst

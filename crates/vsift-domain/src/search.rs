@@ -49,6 +49,7 @@
 //! records.
 
 mod coverage;
+mod screen_text;
 
 #[cfg(test)]
 mod tests;
@@ -57,6 +58,9 @@ use std::{error::Error, fmt};
 
 pub(crate) use coverage::carried_untranscribed_for;
 pub use coverage::{CoverageBasis, SearchCoverage};
+pub use screen_text::{
+    ScreenTextOccurrence, ScreenTextSlice, screen_text_occurrences, search_screen_text,
+};
 
 use crate::{PageLimit, TimeRange, TranscriptRevision, TranscriptSegment};
 

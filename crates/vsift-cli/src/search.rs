@@ -3,9 +3,10 @@
 //! The engine searches; this module maps its typed page into the
 //! `vsift-contract` result or evidence stream and formats the session expiry.
 
-use vsift::{Engine, FailureCode, SearchRange, SearchRequest, SearchResults};
+use vsift::{Engine, FailureCode, ScreenTextSearch, SearchRange, SearchRequest, SearchResults};
 use vsift_contract::{
-    LifecycleResponse, OperationResponse, ResultView, SearchEvidenceStream, SearchPresentation,
+    LifecycleResponse, OperationResponse, ResultView, ScreenTextHitPresentation,
+    ScreenTextSearchPresentation, SearchEvidenceStream, SearchPresentation,
     search_response_with_view,
 };
 
@@ -42,6 +43,32 @@ fn presentation(results: &SearchResults) -> SearchPresentation<'_> {
             .collect(),
         next_cursor: results.next_cursor(),
         coverage: results.coverage(),
+        screen_text: results.screen_text().map(screen_text_part),
+    }
+}
+
+/// The engine's on-screen text part as the contract presents it, for `search`'s
+/// first page and for `ocr search`.
+pub(crate) fn screen_text_part(part: &ScreenTextSearch) -> ScreenTextSearchPresentation<'_> {
+    ScreenTextSearchPresentation {
+        index: part.index(),
+        hits: part
+            .hits()
+            .iter()
+            .map(|hit| ScreenTextHitPresentation {
+                line: hit.line(),
+                frame: hit.frame(),
+                candidates: hit.candidates(),
+                last_time: hit.last_time(),
+                frames: hit.frames(),
+                tier: hit.tier(),
+            })
+            .collect(),
+        total_hits: part.total_hits(),
+        coverage: part.coverage(),
+        candidates_complete: part.candidates_complete(),
+        period_micros: part.period_micros(),
+        unavailable: part.unavailable(),
     }
 }
 

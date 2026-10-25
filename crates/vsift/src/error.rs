@@ -151,6 +151,8 @@ pub enum EngineError {
     /// Visual analysis stopped (deadline, busy admission or cancellation)
     /// before it indexed anything of the requested range.
     VisualAnalysisStopped(VisualExtensionStop),
+    /// Reading on-screen text failed (`ocr`, ADR 0030); nothing was committed.
+    Ocr(crate::screen_text::OcrError),
     /// Building the visual index failed; nothing was committed.
     VisualIndexBuild(VisualIndexBuildError),
     /// No displayed frame satisfies the requested time, policy and tolerance
@@ -456,6 +458,7 @@ impl EngineError {
             | Self::Executable(ExecutableRejection::NotFound) => FailureCode::MissingCapability,
             Self::VisualAnalysisStopped(stop) => visual_stop_failure_code(*stop),
             Self::VisualIndexBuild(error) => visual_index_failure_code(*error),
+            Self::Ocr(error) => error.failure_code(),
             Self::SessionIndexInconsistent
             | Self::ReviewedPolicyInvalid
             | Self::Clock(_)
@@ -817,6 +820,7 @@ impl fmt::Display for EngineError {
                 }
             },
             Self::VisualIndexBuild(error) => error.fmt(formatter),
+            Self::Ocr(error) => error.fmt(formatter),
             Self::FrameNotSelected(error) => error.fmt(formatter),
             Self::EvidenceNotFound => {
                 formatter.write_str("the session has no evidence item with that identity")
@@ -909,6 +913,7 @@ impl Error for EngineError {
             Self::SearchQueryRejected(error) => Some(error),
             Self::CandidateQuery(error) => Some(error),
             Self::VisualIndexBuild(error) => Some(error),
+            Self::Ocr(error) => Some(error),
             Self::FrameNotSelected(error) => Some(error),
             Self::InvalidNavigation(error) => Some(error),
             Self::EvidenceMedia(error) => Some(error),

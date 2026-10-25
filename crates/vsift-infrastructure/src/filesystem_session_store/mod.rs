@@ -1213,6 +1213,7 @@ enum StoredArtifactKind {
     VisualIndexRecord,
     AudioWav,
     EvidenceRecord,
+    ScreenTextIndexRecord,
 }
 
 impl StoredArtifactKind {
@@ -1224,6 +1225,7 @@ impl StoredArtifactKind {
             SessionArtifactKind::VisualIndexRecord => Self::VisualIndexRecord,
             SessionArtifactKind::AudioWav => Self::AudioWav,
             SessionArtifactKind::EvidenceRecord => Self::EvidenceRecord,
+            SessionArtifactKind::ScreenTextIndexRecord => Self::ScreenTextIndexRecord,
         }
     }
 
@@ -1239,7 +1241,10 @@ impl StoredArtifactKind {
             Self::FramePng => "png",
             Self::AudioPcm => "pcm",
             Self::AudioWav => "wav",
-            Self::TranscriptRecord | Self::VisualIndexRecord | Self::EvidenceRecord => "json",
+            Self::TranscriptRecord
+            | Self::VisualIndexRecord
+            | Self::EvidenceRecord
+            | Self::ScreenTextIndexRecord => "json",
         }
     }
 
@@ -1248,7 +1253,7 @@ impl StoredArtifactKind {
     const fn is_evidence(self) -> bool {
         match self {
             Self::FramePng | Self::AudioPcm | Self::AudioWav | Self::EvidenceRecord => true,
-            Self::TranscriptRecord | Self::VisualIndexRecord => false,
+            Self::TranscriptRecord | Self::VisualIndexRecord | Self::ScreenTextIndexRecord => false,
         }
     }
 
@@ -1261,6 +1266,7 @@ impl StoredArtifactKind {
             Self::VisualIndexRecord => crate::MAX_VISUAL_INDEX_RECORD_BYTES,
             Self::AudioWav => crate::MAX_AUDIO_WAV_BYTES,
             Self::EvidenceRecord => crate::MAX_EVIDENCE_RECORD_BYTES,
+            Self::ScreenTextIndexRecord => crate::MAX_SCREEN_TEXT_INDEX_RECORD_BYTES,
         }
     }
 }

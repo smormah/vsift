@@ -2029,6 +2029,7 @@ async fn a_read_over_a_gap_is_partial_and_names_the_gap() -> TestResult {
             hits: Vec::new(),
             next_cursor: None,
             coverage: &search_coverage,
+            screen_text: None,
         },
         LifecycleResponse::ephemeral(EXPIRES_AT.to_owned()),
     )?)?;
@@ -2364,6 +2365,7 @@ async fn a_read_and_a_search_agree_on_every_range() -> TestResult {
                 hits: Vec::new(),
                 next_cursor: None,
                 coverage: &coverage,
+                screen_text: None,
             },
             LifecycleResponse::ephemeral(EXPIRES_AT.to_owned()),
         )?)?;

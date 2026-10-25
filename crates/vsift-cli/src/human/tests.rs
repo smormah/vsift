@@ -1042,10 +1042,41 @@ fn part_two_examples_render_as_readable_text() -> TestResult {
             "job-run-replayed",
         ),
         (CommandName::JobBatch, "job-batch.json", "job-batch"),
+        (CommandName::Ocr, "ocr.json", "ocr"),
+        (CommandName::Ocr, "ocr.partial.json", "ocr-partial"),
+        (CommandName::OcrSearch, "ocr-search.json", "ocr-search"),
+        (
+            CommandName::OcrSearch,
+            "ocr-search.not-run.json",
+            "ocr-search-not-run",
+        ),
+        (
+            CommandName::Search,
+            "search.screen-text.json",
+            "search-screen-text",
+        ),
+        (
+            CommandName::Search,
+            "search.screen-text-unavailable.json",
+            "search-screen-text-unavailable",
+        ),
     ] {
         let text = render(command, &example(file)?)?;
         check_snapshot(snapshot, &text)?;
     }
+    Ok(())
+}
+
+/// On-screen text is quoted as untrusted evidence like transcript text: a
+/// hidden character in a hit reaches the terminal as visible notation.
+#[test]
+fn on_screen_hits_are_quoted_inertly() -> TestResult {
+    let mut value = example("search.screen-text.json")?;
+    value["data"]["screen_text"]["hits"][0]["display_text"] = json!("Dialog <U+202E>71-R");
+    value["data"]["screen_text"]["hits"][0]["text"] = json!("Dialog \u{202e}71-R");
+    let text = render(CommandName::Search, &value)?;
+    assert_terminal_safe(&text);
+    assert!(text.contains("  | Dialog <U+202E>71-R"), "{text}");
     Ok(())
 }
 
@@ -1098,6 +1129,8 @@ fn only_setup_check_and_rejected_command_lines_have_no_result_renderer() -> Test
         CommandName::JobStatus,
         CommandName::JobRun,
         CommandName::JobBatch,
+        CommandName::Ocr,
+        CommandName::OcrSearch,
     ] {
         assert!(render_value(command, &json!({})).is_err(), "{command:?}");
     }
