@@ -8,11 +8,11 @@ terminal, or you let an AI assistant on your machine use it. Nothing is uploaded
 
 This guide teaches you to do things with it. It is written for anyone with a video, not only for programmers.
 
-**Checked against vsift 0.2.3**: the release candidate `0.2.3-rc.1` and the release that follows it are built from
+**Checked against vsift 0.2.3**: the release `0.2.3` and the release candidate `0.2.3-rc.1` it was built from have
 the same code, so this guide names the release, not a candidate. Where this guide says what a command prints, that
 is real output of that build on practice recordings from the repository, and the examples are re-run whenever the
-code changes ([how](#how-this-guide-is-kept-true)). The release `0.2.2`, which `npm install vsift-cli` installs until
-`0.2.3` is published, and the candidate `0.2.2-rc.1` it was built from have the same commands and options as `0.2.3`
+code changes ([how](#how-this-guide-is-kept-true)). The release `0.2.2`, which `npm install vsift-cli` installed before
+`0.2.3`, and the candidate `0.2.2-rc.1` it was built from have the same commands and options as `0.2.3`
 and fewer fixes: on Windows a long per-user folder or session root made every media command fail with
 `MISSING_CAPABILITY`; a recogniser's repeated sentence could hide the next chunk's words where two chunks meet, and the
 rule that removes repeated words at a join could keep a word twice or leave a stretch with no segment; a recogniser
