@@ -1,0 +1,303 @@
+name: P16 OCR runner
+
+# The OCR runner's hosted checks for 0.3.0 (ADR 0030; tools/p16_ocr_runner.py).
+# The runner, ONNX Runtime and the models are staged on the runner only, each
+# download held to its pinned size and SHA-256; nothing is published.
+#
+# - `linux` (Ubuntu): stages the runner folder and records its inventory (the
+#   managed catalogue's file data), checks `describe` against the pins, then on
+#   the evaluation's frames (synthetic screens with known text, and RM01, RM04
+#   and RM10 from the test-media release, held to their pins) compares the
+#   runner line by line with RapidOCR's reference pipeline on the same models
+#   (parity), and runs `vsift ocr` to complete coverage and `vsift ocr search`
+#   over what the screens showed (end to end), on sessions without a transcript,
+#   one of them a synthetic video with a silent audio track. The real recordings' frames and
+#   recognised text stay on the runner: only numbers and which interface labels
+#   were found leave it, as in `P16 OCR evaluation`.
+# - `platforms` (Windows, macOS): builds and stages the runner there and reads
+#   the synthetic frames Linux read, holding the text to Linux's.
+#
+# Advisory: a pull request that changes the runner, the OCR adapter or these
+# checks runs them, so that the pull request carries its own evidence; a manual
+# dispatch runs them on any ref. `contents: read` only, no secret.
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/p16-ocr-runner.yml
+      - crates/vsift-ocr-runner/**
+      - crates/vsift-infrastructure/src/ocr_runner.rs
+      - crates/vsift-infrastructure/src/ocr_runner/**
+      - crates/vsift/src/screen_text.rs
+      - crates/vsift/src/search.rs
+      - crates/vsift-application/src/screen_text.rs
+      - crates/vsift-application/src/screen_text/**
+      - crates/vsift-application/src/screen_text_search.rs
+      - crates/vsift-application/src/screen_text_search/**
+      - crates/vsift-cli/src/ocr.rs
+      - tools/p16_ocr_runner.py
+      - tools/test_p16_ocr_runner.py
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: p16-ocr-runner-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  NODE_VERSION: "22.23.3"
+  RAPIDOCR_VERSION: "3.10.0"
+  ONNXRUNTIME_VERSION: "1.31.0"
+
+jobs:
+  tooling-tests:
+    name: Tooling tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Test the runner checks and the evaluation tool they reuse
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tools -p test_p16_ocr_runner.py
+          python3 -m unittest discover -s tools -p test_p16_ocr_evaluation.py
+
+  linux:
+    name: Parity and end to end (ubuntu-24.04)
+    needs: tooling-tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up the pinned Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          package-manager-cache: false
+
+      - name: Install the synthesis tools (Ubuntu's FFmpeg draws the synthetic text; vsift uses the pinned one)
+        run: |
+          set -euo pipefail
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends ffmpeg fonts-dejavu-core fonts-liberation2
+          echo "CPU: $(nproc) logical CPUs, $(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2-)"
+
+      - name: Fetch RM01, RM04 and RM10 and cross-check their pins
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/real-media"
+          node tools/p14-campaigns/real-media.cjs cross-check "$RUNNER_TEMP/real-media" --item RM01 --item RM04 --item RM10
+
+      - name: Stage the pinned FFmpeg and FFprobe for vsift
+        run: python3 tools/p16_ocr_evaluation.py stage-ffmpeg --out "$RUNNER_TEMP/vsift-tools"
+
+      - name: Build the commit's vsift and OCR runner
+        run: cargo build --release --locked -p vsift-cli -p vsift-ocr-runner
+
+      - name: Stage the runner folder with the pinned ONNX Runtime and models
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/report"
+          python3 tools/p16_ocr_runner.py stage --out "$RUNNER_TEMP/runner" --platform linux-x64 \
+            --runner target/release/vsift-ocr-runner --inventory "$RUNNER_TEMP/report/inventory-linux-x64.json"
+          python3 tools/p16_ocr_runner.py describe --runner "$RUNNER_TEMP/runner/vsift-ocr-runner" | tee "$RUNNER_TEMP/report/describe-linux-x64.json"
+
+      - name: Install RapidOCR and ONNX Runtime into a virtual environment (the reference pipeline only)
+        run: |
+          set -euo pipefail
+          python3 -m venv "$RUNNER_TEMP/venv"
+          "$RUNNER_TEMP/venv/bin/pip" install --quiet "rapidocr==$RAPIDOCR_VERSION" "onnxruntime==$ONNXRUNTIME_VERSION"
+          # Whether the recogniser carries its dictionary, which the runner reads from it.
+          "$RUNNER_TEMP/venv/bin/python" -c "import onnxruntime,sys; m=onnxruntime.InferenceSession(sys.argv[1]).get_modelmeta().custom_metadata_map; print('recogniser metadata keys:', sorted(m)); print('character entries:', len(m.get('character','').splitlines()))" "$RUNNER_TEMP/runner/models/latin_PP-OCRv5_rec_mobile.onnx"
+
+      - name: Render the synthetic screens and encode them
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/work"
+          python3 tools/p16_ocr_evaluation.py synthesize --out "$RUNNER_TEMP/synthetic" \
+            --control "$RUNNER_TEMP/work/synthetic-source" \
+            --ffmpeg /usr/bin/ffmpeg \
+            --font /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf \
+            --font /usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf
+
+      - name: Extract the frames with vsift (ingest, candidates, frame get)
+        run: |
+          set -euo pipefail
+          extract() {
+            python3 tools/p16_ocr_evaluation.py extract --vsift "$GITHUB_WORKSPACE/target/release/vsift" \
+              --ffmpeg "$VSIFT_EVAL_FFMPEG" --ffprobe "$VSIFT_EVAL_FFPROBE" --work "$RUNNER_TEMP/vsift-work" \
+              --video "$1" --duration-us "$2" --out "$RUNNER_TEMP/work/$3" "${@:4}"
+          }
+          middles=()
+          for screen in $(seq 0 15); do middles+=(--at-us "$((screen * 3000000 + 1500000))"); done
+          extract "$RUNNER_TEMP/synthetic/synthetic-h264.mp4" 48000000 synthetic-h264 "${middles[@]}"
+          extract "$RUNNER_TEMP/synthetic/synthetic-vp9.webm" 48000000 synthetic-vp9 "${middles[@]}"
+          extract "$RUNNER_TEMP/synthetic/synthetic-h264-jitter.mp4" 48000000 synthetic-h264-jitter "${middles[@]}"
+          for item in RM01 RM04 RM10; do
+            file="$(node -e "const m=require('./tools/p14-campaigns/real-media/manifest.json');const i=m.items.find((x)=>x.id===process.argv[1]);process.stdout.write(i.file_name)" "$item")"
+            duration="$(node -e "const m=require('./tools/p14-campaigns/real-media/manifest.json');const i=m.items.find((x)=>x.id===process.argv[1]);process.stdout.write(String(Math.ceil(i.media.duration_s*1e6)))" "$item")"
+            extract "$RUNNER_TEMP/real-media/$item/$file" "$duration" "$item"
+            echo "REAL_$item=$RUNNER_TEMP/real-media/$item/$file" >> "$GITHUB_ENV"
+          done
+
+      - name: Read every frame with the reference pipeline and with the runner
+        run: |
+          set -euo pipefail
+          frames=()
+          for folder in synthetic-source synthetic-h264 synthetic-h264-jitter synthetic-vp9 RM01 RM04 RM10; do
+            frames+=(--frames "$RUNNER_TEMP/work/$folder")
+          done
+          PYTHONPATH="$GITHUB_WORKSPACE/tools" "$RUNNER_TEMP/venv/bin/python" tools/p16_ocr_evaluation.py recognise \
+            --engine ppocr-v5-mobile-latin "${frames[@]}" \
+            --scratch "$RUNNER_TEMP/ocr-scratch" --describe "$RUNNER_TEMP/report/reference-engine.json"
+          python3 tools/p16_ocr_runner.py recognise --runner "$RUNNER_TEMP/runner/vsift-ocr-runner" "${frames[@]}"
+
+      - name: Compare the runner with the reference (parity)
+        run: |
+          set -euo pipefail
+          python3 tools/p16_ocr_runner.py parity --work "$RUNNER_TEMP/work" --synthetic "$RUNNER_TEMP/synthetic" \
+            --report "$RUNNER_TEMP/report/parity.json" \
+            --frames synthetic-source --frames synthetic-h264 --frames synthetic-h264-jitter --frames synthetic-vp9 \
+            --frames RM01 --frames RM04 --frames RM10
+          { echo '## Parity'; echo; echo '```json'; cat "$RUNNER_TEMP/report/parity.json"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Where the runner and the reference differ (counts and kinds only)
+        run: |
+          set -euo pipefail
+          python3 tools/p16_ocr_runner.py diagnose --work "$RUNNER_TEMP/work" --report "$RUNNER_TEMP/report/differences.json" \
+            --frames synthetic-h264 --frames RM01 --frames RM04 --frames RM10
+
+      - name: The reference's recogniser on the runner's boxes (counts only)
+        run: |
+          set -euo pipefail
+          PYTHONPATH="$GITHUB_WORKSPACE/tools" "$RUNNER_TEMP/venv/bin/python" tools/p16_ocr_runner.py crosscheck \
+            --work "$RUNNER_TEMP/work" --report "$RUNNER_TEMP/report/crosscheck.json" \
+            --frames synthetic-h264 --frames RM01 --frames RM04 --frames RM10
+
+      - name: vsift ocr and ocr search, end to end (no transcript; one video without audio, one with a silent track)
+        run: |
+          set -euo pipefail
+          /usr/bin/ffmpeg -hide_banner -loglevel error -i "$RUNNER_TEMP/synthetic/synthetic-h264.mp4" \
+            -f lavfi -i anullsrc=r=48000:cl=stereo -shortest -map 0:v -map 1:a -c:v copy -c:a aac \
+            "$RUNNER_TEMP/synthetic/synthetic-h264-silent.mp4"
+          python3 tools/p16_ocr_runner.py end-to-end --vsift "$GITHUB_WORKSPACE/target/release/vsift" \
+            --ffmpeg "$VSIFT_EVAL_FFMPEG" --ffprobe "$VSIFT_EVAL_FFPROBE" --work "$RUNNER_TEMP/e2e-work" \
+            --runner "$RUNNER_TEMP/runner/vsift-ocr-runner" --synthetic "$RUNNER_TEMP/synthetic" \
+            --report "$RUNNER_TEMP/report/end-to-end.json" \
+            --synthetic-video "$RUNNER_TEMP/synthetic/synthetic-h264.mp4" \
+            --synthetic-video "$RUNNER_TEMP/synthetic/synthetic-h264-silent.mp4" \
+            --real "RM01=$REAL_RM01" --real "RM04=$REAL_RM04" --real "RM10=$REAL_RM10"
+          { echo '## End to end'; echo; echo '```json'; python3 -c "import json,sys; r=json.load(open(sys.argv[1])); r.pop('steps', None); print(json.dumps(r, indent=1, ensure_ascii=False))" "$RUNNER_TEMP/report/end-to-end.json"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Keep the synthetic frames and the runner's reading of them for the other platforms
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/handover"
+          cp "$RUNNER_TEMP/work/synthetic-h264"/frames.json "$RUNNER_TEMP/work/synthetic-h264"/frame-*.png "$RUNNER_TEMP/handover/"
+          cp "$RUNNER_TEMP/work/synthetic-h264/ocr-vsift-ocr-runner.jsonl" "$RUNNER_TEMP/handover/linux-reading.jsonl"
+
+      - name: Upload the synthetic handover (our own screens only)
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: p16-ocr-runner-synthetic
+          path: ${{ runner.temp }}/handover
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Keep the synthetic readings in the report (never a real recording's)
+        if: always()
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/report/synthetic"
+          for folder in synthetic-source synthetic-h264 synthetic-h264-jitter synthetic-vp9; do
+            mkdir -p "$RUNNER_TEMP/report/synthetic/$folder"
+            cp "$RUNNER_TEMP/work/$folder"/ocr-*.jsonl "$RUNNER_TEMP/report/synthetic/$folder/" 2>/dev/null || true
+          done
+          find "$RUNNER_TEMP/report" -type f -exec sed -e "s|$RUNNER_TEMP|<runner temp>|g" -e "s|$HOME|<home>|g" -i {} \;
+
+      - name: Upload the report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: p16-ocr-runner-linux
+          path: ${{ runner.temp }}/report
+          if-no-files-found: warn
+          retention-days: 90
+
+  platforms:
+    name: Runner on ${{ matrix.os }}
+    # Staging and `describe` run whatever Linux's job did; reading Linux's frames needs them.
+    needs: [tooling-tests, linux]
+    if: ${{ !cancelled() && needs.tooling-tests.result == 'success' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-2025
+            platform: win-x64
+            executable: vsift-ocr-runner.exe
+          - os: macos-15
+            platform: osx-arm64
+            executable: vsift-ocr-runner
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build the OCR runner
+        run: cargo build --release --locked -p vsift-ocr-runner
+
+      - name: Stage the runner folder with the pinned ONNX Runtime and models
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/report"
+          python tools/p16_ocr_runner.py stage --out "$RUNNER_TEMP/runner" --platform "${{ matrix.platform }}" \
+            --runner "target/release/${{ matrix.executable }}" --inventory "$RUNNER_TEMP/report/inventory-${{ matrix.platform }}.json"
+          python tools/p16_ocr_runner.py describe --runner "$RUNNER_TEMP/runner/${{ matrix.executable }}" | tee "$RUNNER_TEMP/report/describe-${{ matrix.platform }}.json"
+
+      - name: Fetch the synthetic frames Linux read
+        if: needs.linux.result == 'success'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: p16-ocr-runner-synthetic
+          path: ${{ runner.temp }}/synthetic-h264
+
+      - name: Read them here and hold the text to Linux's
+        if: needs.linux.result == 'success'
+        run: |
+          set -euo pipefail
+          python tools/p16_ocr_runner.py recognise --runner "$RUNNER_TEMP/runner/${{ matrix.executable }}" --frames "$RUNNER_TEMP/synthetic-h264"
+          python tools/p16_ocr_runner.py compare --linux "$RUNNER_TEMP/synthetic-h264/linux-reading.jsonl" \
+            --other "$RUNNER_TEMP/synthetic-h264/ocr-vsift-ocr-runner.jsonl" | tee "$RUNNER_TEMP/report/agreement-${{ matrix.platform }}.json"
+
+      - name: Upload the report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: p16-ocr-runner-${{ matrix.platform }}
+          path: ${{ runner.temp }}/report
+          if-no-files-found: warn
+          retention-days: 90

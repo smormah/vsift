@@ -22,6 +22,10 @@ use crate::{
 };
 
 const CONFIG_FILE: &str = "dependencies-v1.json";
+/// The OCR runner's selection (ADR 0030), in a file of its own: the
+/// dependencies record rejects unknown members, so a member added there would
+/// make the whole file unreadable to an earlier release.
+const OCR_RUNNER_FILE: &str = "ocr-runner-v1.json";
 const LOCK_FILE: &str = "dependencies.lock";
 const MAX_CONFIG_BYTES: u64 = 4096;
 
@@ -190,6 +194,45 @@ impl UserDependencyConfigStore {
         self.update_record(|record| record.model = Some(selected))
     }
 
+    /// Reads the user-selected OCR runner executable (ADR 0030), if any, without running it.
+    ///
+    /// # Errors
+    ///
+    /// Fails closed on an unsafe root, malformed record or storage failure.
+    pub fn read_ocr_runner(&self) -> Result<Option<PathBuf>, UserDependencyConfigError> {
+        let Some(root) = self.open_root(false)? else {
+            return Ok(None);
+        };
+        Ok(read_ocr_record(&root)?.executable)
+    }
+
+    /// Atomically records the canonical path of a user-selected OCR runner.
+    ///
+    /// This validates the file's present identity only; the runner is probed
+    /// (`describe`) by the calls that use it.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed validation, storage, integrity or contention failure.
+    pub fn configure_ocr_runner(&self, executable: &Path) -> Result<(), UserDependencyConfigError> {
+        let selected = TrustedExecutable::explicit(executable)
+            .map_err(|_| UserDependencyConfigError::InvalidExecutable)?;
+        if selected.path().to_str().is_none() {
+            return Err(UserDependencyConfigError::InvalidExecutable);
+        }
+        let root = self
+            .open_root(true)?
+            .ok_or(UserDependencyConfigError::Unavailable)?;
+        let _lock = lock_configuration(&root)?;
+        let record = StoredOcrRunner {
+            schema_version: 1,
+            executable: Some(selected.path().to_path_buf()),
+        };
+        let bytes =
+            serde_json::to_vec(&record).map_err(|_| UserDependencyConfigError::InvalidRecord)?;
+        replace_record(&root, OCR_RUNNER_FILE, &bytes)
+    }
+
     /// Opens the private media-tool verification state kept beside the
     /// selections, creating the per-user root and the state directory when
     /// missing.
@@ -221,57 +264,12 @@ impl UserDependencyConfigStore {
         let root = self
             .open_root(true)?
             .ok_or(UserDependencyConfigError::Unavailable)?;
-        let mut lock_options = OpenOptions::new();
-        lock_options
-            .read(true)
-            .write(true)
-            .create(true)
-            .follow(FollowSymlinks::No);
-        let lock = root
-            .open_with(LOCK_FILE, &lock_options)
-            .map_err(|_| UserDependencyConfigError::Io)?;
-        let metadata = lock.metadata().map_err(|_| UserDependencyConfigError::Io)?;
-        if !metadata.is_file() || metadata.nlink() != 1 {
-            return Err(UserDependencyConfigError::UnsafeStorage);
-        }
-        let _lock = HeldFileLock::try_exclusive(lock.into_std()).map_err(|error| match error {
-            std::fs::TryLockError::WouldBlock => UserDependencyConfigError::Busy,
-            std::fs::TryLockError::Error(_) => UserDependencyConfigError::Io,
-        })?;
+        let _lock = lock_configuration(&root)?;
         let mut record = read_record(&root)?;
         change(&mut record);
         let bytes =
             serde_json::to_vec(&record).map_err(|_| UserDependencyConfigError::InvalidRecord)?;
-        if bytes.len() as u64 > MAX_CONFIG_BYTES {
-            return Err(UserDependencyConfigError::InvalidRecord);
-        }
-        let mut random = [0_u8; 16];
-        getrandom::fill(&mut random).map_err(|_| UserDependencyConfigError::Io)?;
-        let temporary = format!("dependencies-{}.pending", hex(&random));
-        let mut options = OpenOptions::new();
-        options
-            .write(true)
-            .create_new(true)
-            .follow(FollowSymlinks::No);
-        #[cfg(unix)]
-        options.mode(0o600);
-        let mut file = root
-            .open_with(&temporary, &options)
-            .map_err(|_| UserDependencyConfigError::Io)?;
-        if let Err(error) = file.write_all(&bytes).and_then(|()| file.sync_all()) {
-            let _ = root.remove_file(&temporary);
-            return Err(if error.kind() == std::io::ErrorKind::PermissionDenied {
-                UserDependencyConfigError::UnsafeStorage
-            } else {
-                UserDependencyConfigError::Io
-            });
-        }
-        drop(file);
-        if root.rename(&temporary, &root, CONFIG_FILE).is_err() {
-            let _ = root.remove_file(&temporary);
-            return Err(UserDependencyConfigError::Io);
-        }
-        Ok(())
+        replace_record(&root, CONFIG_FILE, &bytes)
     }
 
     fn open_root(&self, create: bool) -> Result<Option<Dir>, UserDependencyConfigError> {
@@ -283,6 +281,113 @@ impl UserDependencyConfigStore {
             PrivateRootError::Io => UserDependencyConfigError::Io,
         })
     }
+}
+
+/// Takes the configuration's exclusive lock, refusing a lock file that is a link.
+fn lock_configuration(root: &Dir) -> Result<HeldFileLock, UserDependencyConfigError> {
+    let mut lock_options = OpenOptions::new();
+    lock_options
+        .read(true)
+        .write(true)
+        .create(true)
+        .follow(FollowSymlinks::No);
+    let lock = root
+        .open_with(LOCK_FILE, &lock_options)
+        .map_err(|_| UserDependencyConfigError::Io)?;
+    let metadata = lock.metadata().map_err(|_| UserDependencyConfigError::Io)?;
+    if !metadata.is_file() || metadata.nlink() != 1 {
+        return Err(UserDependencyConfigError::UnsafeStorage);
+    }
+    HeldFileLock::try_exclusive(lock.into_std()).map_err(|error| match error {
+        std::fs::TryLockError::WouldBlock => UserDependencyConfigError::Busy,
+        std::fs::TryLockError::Error(_) => UserDependencyConfigError::Io,
+    })
+}
+
+/// Replaces `name` with `bytes` atomically: a new private file, synced, renamed over it.
+fn replace_record(root: &Dir, name: &str, bytes: &[u8]) -> Result<(), UserDependencyConfigError> {
+    if bytes.len() as u64 > MAX_CONFIG_BYTES {
+        return Err(UserDependencyConfigError::InvalidRecord);
+    }
+    let mut random = [0_u8; 16];
+    getrandom::fill(&mut random).map_err(|_| UserDependencyConfigError::Io)?;
+    let temporary = format!("dependencies-{}.pending", hex(&random));
+    let mut options = OpenOptions::new();
+    options
+        .write(true)
+        .create_new(true)
+        .follow(FollowSymlinks::No);
+    #[cfg(unix)]
+    options.mode(0o600);
+    let mut file = root
+        .open_with(&temporary, &options)
+        .map_err(|_| UserDependencyConfigError::Io)?;
+    if let Err(error) = file.write_all(bytes).and_then(|()| file.sync_all()) {
+        let _ = root.remove_file(&temporary);
+        return Err(if error.kind() == std::io::ErrorKind::PermissionDenied {
+            UserDependencyConfigError::UnsafeStorage
+        } else {
+            UserDependencyConfigError::Io
+        });
+    }
+    drop(file);
+    if root.rename(&temporary, root, name).is_err() {
+        let _ = root.remove_file(&temporary);
+        return Err(UserDependencyConfigError::Io);
+    }
+    Ok(())
+}
+
+#[derive(Default, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct StoredOcrRunner {
+    schema_version: u8,
+    executable: Option<PathBuf>,
+}
+
+fn read_ocr_record(root: &Dir) -> Result<StoredOcrRunner, UserDependencyConfigError> {
+    let Some(bytes) = read_bounded(root, OCR_RUNNER_FILE)? else {
+        return Ok(StoredOcrRunner {
+            schema_version: 1,
+            executable: None,
+        });
+    };
+    let record: StoredOcrRunner =
+        serde_json::from_slice(&bytes).map_err(|_| UserDependencyConfigError::InvalidRecord)?;
+    if record.schema_version != 1
+        || record
+            .executable
+            .as_ref()
+            .is_some_and(|path| !path.is_absolute())
+    {
+        return Err(UserDependencyConfigError::InvalidRecord);
+    }
+    Ok(record)
+}
+
+/// A regular, unlinked configuration file's bytes, at most [`MAX_CONFIG_BYTES`]; `None` when absent.
+fn read_bounded(root: &Dir, name: &str) -> Result<Option<Vec<u8>>, UserDependencyConfigError> {
+    let mut options = OpenOptions::new();
+    options.read(true).follow(FollowSymlinks::No);
+    let Ok(file) = root.open_with(name, &options) else {
+        return match root.symlink_metadata(name) {
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Ok(_) => Err(UserDependencyConfigError::UnsafeStorage),
+            Err(_) => Err(UserDependencyConfigError::Io),
+        };
+    };
+    let metadata = file.metadata().map_err(|_| UserDependencyConfigError::Io)?;
+    if !metadata.is_file() || metadata.nlink() != 1 || metadata.len() > MAX_CONFIG_BYTES {
+        return Err(UserDependencyConfigError::UnsafeStorage);
+    }
+    let mut bytes = Vec::new();
+    file.take(MAX_CONFIG_BYTES + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|_| UserDependencyConfigError::Io)?;
+    if bytes.len() as u64 > MAX_CONFIG_BYTES {
+        return Err(UserDependencyConfigError::InvalidRecord);
+    }
+    Ok(Some(bytes))
 }
 
 #[derive(Default, Deserialize, Serialize)]
@@ -402,6 +507,41 @@ mod tests {
         })();
         fs::remove_dir_all(&parent)?;
         result
+    }
+
+    #[test]
+    fn the_ocr_runner_is_recorded_apart_and_leaves_the_dependencies_record_alone()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let parent = fixture_root()?;
+        let config = UserDependencyConfigStore::at(parent.join("config"))?;
+        assert_eq!(config.read_ocr_runner()?, None);
+        let ffmpeg = parent.join("ffmpeg");
+        let runner = parent.join("vsift-ocr-runner");
+        fs::write(&ffmpeg, b"not executed")?;
+        fs::write(&runner, b"not executed either")?;
+        config.configure(RuntimeDependency::Ffmpeg, &ffmpeg)?;
+        let dependencies = fs::read(parent.join("config").join("dependencies-v1.json"))?;
+        config.configure_ocr_runner(&runner)?;
+        assert_eq!(config.read_ocr_runner()?, Some(fs::canonicalize(&runner)?));
+        // An earlier release reads the dependencies record unchanged.
+        assert_eq!(
+            fs::read(parent.join("config").join("dependencies-v1.json"))?,
+            dependencies
+        );
+        assert_eq!(config.read()?.ffmpeg, Some(fs::canonicalize(&ffmpeg)?));
+        assert_eq!(
+            config.configure_ocr_runner(Path::new("relative")),
+            Err(UserDependencyConfigError::InvalidExecutable)
+        );
+        fs::write(
+            parent.join("config").join("ocr-runner-v1.json"),
+            br#"{"schema_version":1,"executable":"relative"}"#,
+        )?;
+        assert_eq!(
+            config.read_ocr_runner(),
+            Err(UserDependencyConfigError::InvalidRecord)
+        );
+        Ok(())
     }
 
     #[test]

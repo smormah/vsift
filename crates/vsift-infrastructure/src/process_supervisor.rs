@@ -278,6 +278,20 @@ impl ProcessRequest {
         Ok(self)
     }
 
+    /// Shortens the deadline to at most `limit`: a run started late in a
+    /// bounded call then ends within the call's own bound (RV-2 finding 4).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ProcessRequestError::DeadlineMustBePositive`] when `limit` is zero.
+    pub fn with_deadline_at_most(mut self, limit: Duration) -> Result<Self, ProcessRequestError> {
+        if limit.is_zero() {
+            return Err(ProcessRequestError::DeadlineMustBePositive);
+        }
+        self.deadline = self.deadline.min(limit);
+        Ok(self)
+    }
+
     /// Changes the required isolation level; unsupported requirements fail before spawn.
     #[must_use]
     pub const fn requiring_isolation(mut self, isolation: IsolationRequirement) -> Self {

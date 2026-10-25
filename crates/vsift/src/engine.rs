@@ -11,7 +11,7 @@ use std::{
 
 use vsift_application::{
     Clock, IdentifierSource, LocalAsrVerifier, MAX_WINDOWS_PER_EXTENSION, MediaToolVerification,
-    MediaToolVerifier, SpeechRecognizer,
+    MediaToolVerifier, ScreenTextReader, SpeechRecognizer,
 };
 use vsift_domain::{OperationId, SessionId};
 use vsift_infrastructure::{
@@ -23,6 +23,7 @@ use vsift_infrastructure::{
 use crate::{
     asr::{HostAsr, HostLocalAsrVerifier, HostVerifierRef},
     error::{EngineError, SessionRootError},
+    screen_text::{HostScreenTextReader, HostScreenTextRef},
 };
 
 /// Where the engine keeps disposable investigation sessions.
@@ -101,6 +102,7 @@ pub struct EnginePorts {
     media_tool_verifier: Option<Box<dyn HostMediaToolVerifier>>,
     local_asr_verifier: Option<Box<dyn HostLocalAsrVerifier>>,
     speech_recognizer: Option<HostAsr>,
+    screen_text_reader: Option<Box<dyn HostScreenTextReader>>,
     visual_window_budget: NonZeroUsize,
     session_root_wait: Duration,
     failed_open_removal_wait: Duration,
@@ -137,6 +139,7 @@ impl EnginePorts {
             media_tool_verifier: None,
             local_asr_verifier: None,
             speech_recognizer: None,
+            screen_text_reader: None,
             visual_window_budget: DEFAULT_VISUAL_WINDOW_BUDGET,
             session_root_wait: PROVISIONING_WAIT,
             failed_open_removal_wait: DEFAULT_FAILED_OPEN_REMOVAL_WAIT,
@@ -216,6 +219,17 @@ impl EnginePorts {
         self
     }
 
+    /// Replaces the OCR runner with the host's own screen-text reader (ADR 0030).
+    ///
+    /// `ocr` then resolves no runner and takes the reader's reported identity
+    /// as the index's engine. `FFmpeg` and `FFprobe` still extract the frames.
+    /// Intended for tests and hosts that embed their own engine.
+    #[must_use]
+    pub fn with_screen_text_reader(mut self, reader: impl ScreenTextReader + 'static) -> Self {
+        self.screen_text_reader = Some(Box::new(reader));
+        self
+    }
+
     /// Replaces the reviewed fixture verifier that the automatic media-tool
     /// preflight runs.
     ///
@@ -290,6 +304,14 @@ impl Engine {
     /// The host-supplied media-tool verifier, when one replaced the fixture.
     pub(crate) fn host_media_tool_verifier(&self) -> Option<HostVerifier<'_>> {
         self.ports.media_tool_verifier.as_deref().map(HostVerifier)
+    }
+
+    /// The host-supplied screen-text reader, when one replaced the OCR runner.
+    pub(crate) fn host_screen_text_reader(&self) -> Option<HostScreenTextRef<'_>> {
+        self.ports
+            .screen_text_reader
+            .as_deref()
+            .map(HostScreenTextRef)
     }
 
     /// The host-supplied local-ASR verifier, when one replaced the fixture.

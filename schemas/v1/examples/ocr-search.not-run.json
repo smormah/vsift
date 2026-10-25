@@ -1,0 +1,46 @@
+{
+  "command": "ocr.search",
+  "coverage": {
+    "gaps": [],
+    "reasons": [
+      "not_run"
+    ],
+    "truncated": true
+  },
+  "data": {
+    "coverage": {
+      "awaiting_analysis": 0,
+      "candidates_complete": false,
+      "failed": 0,
+      "pending": 0,
+      "period_us": null,
+      "planned": 0,
+      "read": 0,
+      "scope": "screen_text",
+      "unresolved": 0
+    },
+    "hits": [],
+    "index": null,
+    "next_cursor": null,
+    "query": {
+      "terms": [
+        "r17"
+      ]
+    },
+    "range": null,
+    "session_id": "ses_0123456789abcdef0123456789abcdef",
+    "state": "not_run",
+    "total_hits": 0
+  },
+  "error": null,
+  "lifecycle": {
+    "expires_at": "2026-09-25T00:00:00Z",
+    "mode": "ephemeral"
+  },
+  "operation_id": null,
+  "schema_version": "1",
+  "status": "partial",
+  "warnings": [
+    "Not every planned frame of the searched range has been read, so text shown there may not be found: coverage counts the frames read, failed and still pending, and says whether the range's candidates are all known (state not_run: ocr has not read this session). Run ocr for the range, then search again."
+  ]
+}

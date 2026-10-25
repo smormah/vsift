@@ -1,0 +1,12 @@
+On-screen text of session ses_0123456789abcdef0123456789abcdef
+Range: 00:00:00.000000 to 00:00:15.000000 (--from 0 --to 15000000)
+Index: sti_6acf6ced07743f5711fb499cdd6d43b7 (revision 1, ppocrv5-latin-v1, runner 0.1.0, ONNX Runtime 1.31.0): 2 frames, 1 lines
+Read by this call: 2 frames, stopped: frame_limit
+Plan: 4 frames (the candidates and one every 00:00:05.000000): 2 read, 0 failed, 0 with no frame, 2 pending
+The range's candidates are not all known yet:
+  00:00:12.000000 to 00:00:15.000000 (--from 12000000 --to 15000000): deadline_exceeded
+Run vsift ocr again for the same range to continue.
+
+Status: partial (the warnings below say what is missing)
+Lifecycle: ephemeral, expires 2026-09-25T00:00:00Z
+Warning: Not every planned frame of the range has been read: coverage counts the frames read, failed and still pending, and says whether the range's candidates are all known. Run ocr again for the same range to continue; it reads only what is pending.

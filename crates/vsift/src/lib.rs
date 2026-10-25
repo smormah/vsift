@@ -110,6 +110,7 @@ mod lifecycle;
 mod local_asr_check;
 mod managed;
 mod progress;
+mod screen_text;
 mod search;
 mod sessions;
 mod setup;
@@ -144,7 +145,14 @@ pub use jobs::{
 pub use lifecycle::{InstallCleanup, ManagedListing, ManagedRepairDiagnosis};
 pub use local_asr_check::DEFAULT_LOCAL_ASR_CHECK_BUDGET;
 pub use progress::{AdmissionWaiting, JobProgress, ProgressObserver};
-pub use search::{SearchRange, SearchRequest, SearchResultHit, SearchResults};
+pub use screen_text::{
+    DEFAULT_OCR_THREADS, OCR_RUNNER_NAME, OcrError, ScreenTextRange, ScreenTextRequest,
+    ScreenTextResults, ScreenTextWindows,
+};
+pub use search::{
+    ScreenTextResultHit, ScreenTextSearch, ScreenTextSearchRequest, ScreenTextSearchResults,
+    SearchRange, SearchRequest, SearchResultHit, SearchResults,
+};
 pub use sessions::{
     BundleSummary, CleanDecision, CleanEntry, CleanMode, CleanPage, CleanRequest, CleanScope,
     FreeSpaceReserveCheck, IngestOutcome, IngestRequest, SessionListEntry, SessionPage,
@@ -192,6 +200,12 @@ pub use vsift_application::{
     ManagedVersionState, PreviousSelection, RETAINED_MANAGED_VERSIONS, RemovalReport,
     RepairFinding, RepairFindingKind, RepairFix, RepairPlan, RepairStatus, RollbackOutcome,
     SelectionRecord, SelectionStatus, StageSweep, VersionRemovalReport, VersionRemovalStatus,
+};
+/// On-screen text values that appear in this API (OCR, ADR 0030).
+pub use vsift_application::{
+    DEFAULT_SCREEN_TEXT_FRAMES_PER_CALL, EngineLine, EngineReading,
+    MAX_SCREEN_TEXT_FRAMES_PER_CALL, ScreenTextImage, ScreenTextReadError, ScreenTextReader,
+    ScreenTextStop,
 };
 /// Evidence-navigation values that appear in this API (P09).
 pub use vsift_application::{

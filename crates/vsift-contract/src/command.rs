@@ -81,6 +81,10 @@ pub enum CommandName {
     /// `handoff check` (P13 PR 5): check an agent's draft report against the
     /// skill's handoff schema and rules.
     HandoffCheck,
+    /// `ocr` (ADR 0030): read on-screen text off a session's frames.
+    Ocr,
+    /// `ocr search` (ADR 0030 decision 13): page the on-screen hits of one session.
+    OcrSearch,
 }
 
 impl CommandName {
@@ -89,7 +93,7 @@ impl CommandName {
     /// Contract tests iterate this list to prove each identifier satisfies the
     /// published schemas. An exhaustive private `ordinal` match and a
     /// compile-time assertion keep it in step with the variants.
-    pub const ALL: [Self; 34] = [
+    pub const ALL: [Self; 36] = [
         Self::Parse,
         Self::SetupCheck,
         Self::SetupPlan,
@@ -124,6 +128,8 @@ impl CommandName {
         Self::JobCancel,
         Self::SessionInitWorkspace,
         Self::HandoffCheck,
+        Self::Ocr,
+        Self::OcrSearch,
     ];
 
     /// Returns the stable identifier written to the envelope's `command` field.
@@ -164,6 +170,8 @@ impl CommandName {
             Self::JobCancel => "job.cancel",
             Self::SessionInitWorkspace => "session.init-workspace",
             Self::HandoffCheck => "handoff.check",
+            Self::Ocr => "ocr",
+            Self::OcrSearch => "ocr.search",
         }
     }
 
@@ -211,6 +219,8 @@ impl CommandName {
             Self::JobCancel => 31,
             Self::SessionInitWorkspace => 32,
             Self::HandoffCheck => 33,
+            Self::Ocr => 34,
+            Self::OcrSearch => 35,
         }
     }
 }

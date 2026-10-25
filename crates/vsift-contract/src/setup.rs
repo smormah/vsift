@@ -1242,6 +1242,17 @@ impl ConfiguredSelectionResponse {
             next_step: "Run setup check to probe the selected executable; model and provider compatibility remain unverified.",
         }
     }
+
+    /// Describes a newly saved OCR runner selection (ADR 0030).
+    #[must_use]
+    pub const fn ocr_runner() -> Self {
+        Self {
+            dependency: "ocr_runner",
+            source: "configured_user_path",
+            validation: "canonical_file_only",
+            next_step: "Run ocr on a session to use it; the runner is identified (describe) when it runs, and its runtime and models must sit beside it.",
+        }
+    }
 }
 
 /// Data of a successful `setup configure-model` result.

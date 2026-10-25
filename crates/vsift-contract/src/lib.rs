@@ -122,6 +122,7 @@ mod local_asr;
 mod navigation;
 mod optional_component;
 mod request;
+mod screen_text;
 mod search;
 mod session;
 mod setup;
@@ -228,6 +229,15 @@ pub use navigation::{
 pub use optional_component::{
     OptionalComponentText, SITE_TERMS_NOTICE, include_command_arguments, optional_check_step,
     optional_component_text,
+};
+pub use screen_text::{
+    CANDIDATES_INCOMPLETE_REASON, FRAMES_AWAITING_ANALYSIS_REASON, FRAMES_FAILED_REASON,
+    FRAMES_PENDING_REASON, NOT_RUN_REASON, OCR_FAILED_REMEDIATION, OCR_INDEX_FULL_REMEDIATION,
+    OCR_RUNNER_REMEDIATION, OCR_SEARCH_CURSOR_REMEDIATION, OCR_SEARCH_PARTIAL_WARNING,
+    SCREEN_TEXT_PARTIAL_WARNING, SCREEN_TEXT_SCOPE, ScreenTextData, ScreenTextHitPresentation,
+    ScreenTextPresentation, ScreenTextSearchData, ScreenTextSearchPageData,
+    ScreenTextSearchPagePresentation, ScreenTextSearchPresentation, ScreenTextUnavailable,
+    UnreadableIndex, UnreadableReason, screen_text_response, screen_text_search_response,
 };
 pub use search::{
     MAX_COVERAGE_RANGES, SearchBriefData, SearchData, SearchEvidenceStream, SearchPresentation,
