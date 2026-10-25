@@ -79,6 +79,12 @@ The steps and their exact command lines are [`release.md`](../operations/release
 
 **Why only RQ-16 was set to `planned`.** A `waived` item names no version, so the check passes it for every version ([L-179](known-limits.md#l-179)). Of the three waived items, RQ-16's waiver (the Claude compact cold usefulness on `0.2.2-rc.1`, issue 454) was decided for `0.2.2` only and its run belongs to this window, so it is `planned`, with the waiver kept in `prior`. RQ-14 and RQ-17 are standing waivers that no run in the window can replace; they stay `waived` and are listed for the maintainer. **A cost of this choice:** an item holds one status, so `--complete-for 0.2.2` now also names RQ-16.
 
+## The macOS journeys and the noisy-speech set (#520, 2026-10-25)
+
+`P14 journeys` on `0.2.3-rc.1` failed twice on hosted macOS in `p07_asr_gates`. The product did not change; the test did: the noisy-speech set of [L-198](known-limits.md#l-198) adds about 2,300 to 2,400 s per model profile on a runner that is about 11 times slower than Ubuntu and Windows, its 28 s noise-only clips land at roughly 80 to 140 s against the unchanged 120 s chunk deadline (both attempts stopped exactly 120 s after the first), and the gates would need about 143 minutes of the step's 130.
+
+**The macOS journeys' ASR gates exclude the noisy set from `0.2.3`** ([L-230](known-limits.md#l-230)): the checkpoint sets `VSIFT_TEST_SKIP_NOISY_SET=hosted-macos`, and the test says so in its log and its report. `P07 local ASR` measures and gates the set on Ubuntu and Windows (it passed on `v0.2.3-rc.1`). The test's thread count now follows the product's rule (at most four, no more than the cores) instead of a fixed four on the runner's three cores. This is a change to the test driver on `main`, not to the candidate: the journeys are run again with `tests_from=workflow-ref` against the published `v0.2.3-rc.1`, so the binary under test is the candidate's and only the test driver is newer (the maintainer agrees to that evidence route before the run counts for RQ-05).
+
 ## Open decisions for this candidate
 
 - **RQ-14 and RQ-17 for `0.2.3`:** carry the standing waivers or not (the check will not ask). RQ-14 is required for `1.0.0`.

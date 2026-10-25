@@ -343,6 +343,15 @@ class CheckpointListTests(unittest.TestCase):
             self.assertTrue(journeys.NOT_RUN_ELSEWHERE[system])
             self.assertIn(system, journeys.SYSTEM_LABELS)
 
+    def test_the_macos_gates_leave_the_noisy_set_out_by_a_named_setting_and_say_so(self) -> None:
+        gates = next(c for c in journeys.CHECKPOINTS if c.key == "p07_asr_gates")
+        self.assertEqual(gates.systems, ("macos",))
+        self.assertEqual(gates.environment, {"VSIFT_TEST_SKIP_NOISY_SET": "hosted-macos"})
+        others = [c for c in journeys.CHECKPOINTS if c.key != "p07_asr_gates"]
+        self.assertTrue(all("VSIFT_TEST_SKIP_NOISY_SET" not in c.environment for c in others))
+        listed = " ".join(name for name, _ in journeys.NOT_RUN_ELSEWHERE["macos"])
+        self.assertIn("noisy-speech set", listed)
+
     def test_a_checkpoint_can_be_skipped_by_name(self) -> None:
         arguments = journeys.build_parser().parse_args(["run", "--skip", "p07_asr_gates"])
         self.assertEqual(arguments.skip, ["p07_asr_gates"])

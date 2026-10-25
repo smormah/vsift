@@ -111,9 +111,16 @@ CHECKPOINTS = (
     # The weekly `P07 local ASR` workflow runs this on Ubuntu and Windows with the pinned
     # tools; macOS has no reviewed whisper.cpp build, so the gates are measured here, on
     # Homebrew's build. It drives the engine library, not the installed binary.
+    # The noisy-speech set is left out here (issue #520, known limit L-230): the hosted
+    # macOS runner is about 11 times slower than Ubuntu and Windows, which does not fit
+    # the set's noise-only clips in the 120 s chunk deadline or the step's time limit;
+    # `P07 local ASR` measures and gates it on Ubuntu and Windows. The test says so in its
+    # log and in its report.
     Checkpoint("p07_asr_gates", "p07_asr_qualification", True,
                "the T-04 accuracy, timing and memory gates of the recognizer, in process "
-               "through the engine library (NOT the installed binary: a gate on the tools)",
+               "through the engine library (NOT the installed binary: a gate on the tools); "
+               "the noisy-speech set is not run on hosted macOS (#520)",
+               {"VSIFT_TEST_SKIP_NOISY_SET": "hosted-macos"},
                package="vsift-infrastructure", systems=("macos",)),
 )
 
@@ -140,6 +147,10 @@ NOT_RUN_ELSEWHERE = {
         ("p13_install_e2e / p13_managed_install_real",
          "not applicable: managed installation exists on Ubuntu 24.04 x64 only "
          "(ADR 0023 decision E)"),
+        ("p07_asr_qualification: the noisy-speech set",
+         "not run on hosted macOS (#520, known limit L-230): the runner is too slow for the "
+         "set's 120 s chunk deadline and the step's time limit; measured and gated weekly on "
+         "Ubuntu and Windows by `P07 local ASR`"),
     ],
 }
 
