@@ -258,5 +258,13 @@ On 2026-10-22 the maintainer approved three things in slice 2, in a comment on p
 module, and the widening of rule 4 (`id-token: write` is also allowed in the engine workflow's `attest` job) and of
 rule 9 (the engine workflow may have no LOKI job). The approval covers the files as reviewed at the head of that day;
 the tag ruleset and the `release` environment's allowed refs for the engine tags remain the maintainer's to set before
-the first publish. The branch was rebased onto `main` at `0a9e4c18` (slice 1 merged) for the merge, keeping only
+the first publish. The branch was rebased onto `main` at `2a683b0c` (slice 1 merged) for the merge, keeping only
 slice 2's own commits; only the records conflicted, and nothing in the design changed.
+
+## Implementation note, 2026-10-25 (slice 3, first part: the maintainer's acceptance and the merge rebase)
+
+On 2026-10-22 the maintainer accepted Windows FFmpeg as a managed pin (decision A1e), in a comment on pull request
+#506: BtbN's `win64-lgpl-9.0.zip` of the release the Ubuntu pin comes from, with the same retention and the same
+review rule as the Ubuntu pin ([ADR 0023](0023-r0-distribution-managed-installation-and-handoff-check.md), note of
+2026-10-04). The branch was rebased onto `main` at `b4172359` (slices 1 and 2 merged) for the merge, keeping only
+slice 3's own commits; only the records conflicted, and nothing in the design changed.

@@ -1417,3 +1417,11 @@ extends managed installation to Windows x86-64 and macOS arm64 beside Ubuntu 24.
 (`setup plan --include <name>`, installed after the core as parts of their own, a failure of one leaving the result
 `partial`), and readers for zip and bzip2/tar archives. Section 3's transaction, guard, smoke and lookup are
 unchanged for the core components; the refresh rule of the note of 2026-10-04 applies to every new pin.
+
+## Note, 2026-10-25 (ADR 0032, slice 3: Windows FFmpeg accepted as a managed pin)
+
+Status: **Accepted**; this note changes no accepted decision. On 2026-10-22 the maintainer accepted the Windows x86-64
+FFmpeg as a managed pin (decision A1e of [ADR 0032](0032-managed-installs-on-every-platform-and-the-engine-release-workflow.md)):
+BtbN's LGPL `win64-lgpl-9.0.zip` of the release the Ubuntu pin comes from (`ffmpeg-n9.0.1-11-ge47273f4d9`, catalogue
+revision `windows-x86_64-2026-10-21-r1`). It is held to the same rule as the Ubuntu pin: the retention and the review
+of the note of 2026-10-04 apply, and a refresh is a new pin with its own review.
