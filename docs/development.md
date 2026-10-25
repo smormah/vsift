@@ -281,7 +281,7 @@ replay tests refuse a seed whose origin is not listed in `fuzz/tests/replay.rs`)
 ADR 0032 (managed installs on Windows and macOS) adds two archive targets: `zip_inventory` (a zip through
 `inspect_zip_inventory`, then its first regular file through `inspect_zip_selected_files` with a digest no
 content has, which must never pass) and `bzip2_tar_inventory` (sherpa-onnx's `.tar.bz2` through
-`inspect_bzip2_tar_inventory`, run as the gzip and XZ targets are). That makes 33 targets.
+`inspect_bzip2_tar_inventory`, run as the gzip and XZ targets are). With the two on-screen text targets above, that makes 35 targets.
 
 The `Fuzz` workflow takes at most 14,400 s a target (`seconds`, default 300; the P14 campaign asks for
 3,600) and keeps each target's log, corpus and a coverage-plateau line

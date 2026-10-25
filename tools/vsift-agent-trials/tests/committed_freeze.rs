@@ -60,11 +60,11 @@ fn the_committed_freezes_still_hold() -> TestResult {
 /// visible: changing this constant is the decision to cut another candidate and write a new freeze
 /// (`docs/operations/release.md` section 6.8), and it shows in the diff of a test, not only of a data file.
 ///
-/// The freeze of 2026-10-22 is a **draft freeze, rewritten at the merge rebase** (0.3.0 development freeze; the final
-/// freeze is recorded at the 0.3.0 cut). The OCR pull request changed the skill, `bd205d6c...` to `e9fb4dc1...`, so
-/// this digest moved `30293090...` to the value below; the other six components are unchanged. The supervisor allowed
-/// drafts to rewrite the freeze provisionally on 2026-10-21 so that CI runs every test; it is written again on the new
-/// `main` when the pull request is rebased to merge. No batch has run under it.
+/// The freeze of 2026-10-25 is the **0.3.0 development freeze; the final freeze is recorded at the 0.3.0 cut**. The
+/// OCR pull request changed the skill (`references/commands.md` names `ocr`), `bd205d6c...` to `e9fb4dc1...`, so this
+/// digest moved `30293090...` to the value below; the other six components are unchanged. It was written on the
+/// `main` the pull request was rebased onto to merge, and later 0.3.0 changes to the skill move it again. The batches
+/// for `0.2.3` run from `release/0.2.x` under `30293090...`. No batch has run under it.
 ///
 /// The freeze of 2026-10-19 is new on purpose (#468, the toolchain re-pin to Rust 1.99.1), and this time the
 /// `grader` component changed, `57507fad...` to `9ecd1121...`: the new pedantic lint `clippy::assert_is_empty`
