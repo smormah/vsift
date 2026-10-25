@@ -2149,7 +2149,8 @@ This note records decisions of the maintainer, made on 2026-10-25 in the planner
 1. **RQ-14 and RQ-17 carry to `0.2.3`** (decision E, option 4, until #188 in R1; decision H, until the try-out with LOKI in cycle 3).
 2. **RQ-15 and RQ-16 are waived for `0.2.3`:** the skill is byte-identical to the one that agent-trial batches 2 and 3 tested on `0.2.2-rc.1`, the freeze of 2026-10-19 is kept, and the batches run at the `0.3.0` cut. The waivers name `0.2.3` only (L-179).
 3. **#519 is a known issue of `0.2.3`** (a stress repetition that failed on a timing bound, the refusal itself being correct); RQ-08 is recorded `waived` for `0.2.3` on that decision, not passed. #519 stays open for `0.3.0`; its register entry is L-231.
-4. **"I accept the RQ-13 reading at the gate" is not recorded as an acceptance yet.** The reading of 2026-10-25 names the Node.js pins as older than the security releases of 2026-10-20 (#526, filed after the sentence was said); RQ-13 waits for the maintainer's answer on the pins.
-5. **Only `0.2.3-rc.1` is deprecated** when the stable is published.
+4. **"I accept the RQ-13 reading at the gate"** was said before the Node.js finding was filed (#526), so it was put to him again, with the next item.
+5. **The answers that followed, as quoted:** "Yes to both: I waive RQ-08 for 0.2.3, scoped to #519's single repetition (outcome correct, timing assertion only, L-231). I accept #526 for 0.2.3 with L-232: F12 moves the Node pins on main, 0.2.4 on release/0.2.x, no rc.2. RQ-13 passes with that." RQ-08 is `waived` for `0.2.3`, scoped to #519's single repetition (L-231); #526 (the pinned Node.js versions are older than the security releases of 2026-10-20; tooling only) is accepted for `0.2.3` with L-232, the pins moving on `main` (F12) and on `release/0.2.x` with `0.2.4`, and RQ-13 is `passed` on that.
+6. **Only `0.2.3-rc.1` is deprecated** when the stable is published.
 
 **What is weaker than it sounds.** Five of the twenty items are `waived` for `0.2.3` (RQ-08, RQ-14, RQ-15, RQ-16, RQ-17) and none of them is a pass; the completeness check passes a waived item for any version, so each decision's text, not the check, limits it.
