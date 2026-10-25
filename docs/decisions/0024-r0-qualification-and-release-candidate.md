@@ -2148,8 +2148,8 @@ This note records decisions of the maintainer, made on 2026-10-25 in the planner
 
 1. **RQ-14 and RQ-17 carry to `0.2.3`** (decision E, option 4, until #188 in R1; decision H, until the try-out with LOKI in cycle 3).
 2. **RQ-15 and RQ-16 are waived for `0.2.3`:** the skill is byte-identical to the one that agent-trial batches 2 and 3 tested on `0.2.2-rc.1`, the freeze of 2026-10-19 is kept, and the batches run at the `0.3.0` cut. The waivers name `0.2.3` only (L-179).
-3. **#519 is a known issue of `0.2.3`** (a stress repetition that failed on a timing bound, the refusal itself being correct); RQ-08 is recorded `waived` for `0.2.3` on that decision, not passed. #519 stays open for `0.3.0`.
-4. **The RQ-13 reading of 2026-10-25 is accepted at the gate.** It names the Node.js pins as older than the security releases of 2026-10-20 (#526, filed after the acceptance was given); that is put to the maintainer separately and is not decided here.
+3. **#519 is a known issue of `0.2.3`** (a stress repetition that failed on a timing bound, the refusal itself being correct); RQ-08 is recorded `waived` for `0.2.3` on that decision, not passed. #519 stays open for `0.3.0`; its register entry is L-231.
+4. **"I accept the RQ-13 reading at the gate" is not recorded as an acceptance yet.** The reading of 2026-10-25 names the Node.js pins as older than the security releases of 2026-10-20 (#526, filed after the sentence was said); RQ-13 waits for the maintainer's answer on the pins.
 5. **Only `0.2.3-rc.1` is deprecated** when the stable is published.
 
 **What is weaker than it sounds.** Five of the twenty items are `waived` for `0.2.3` (RQ-08, RQ-14, RQ-15, RQ-16, RQ-17) and none of them is a pass; the completeness check passes a waived item for any version, so each decision's text, not the check, limits it.
