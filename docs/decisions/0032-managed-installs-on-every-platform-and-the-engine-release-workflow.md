@@ -230,3 +230,13 @@ On 2026-10-23 the maintainer approved three things in slice 1: the `bzip2-1.0.6`
 workflow, and the wording of rule D3 in `cli-v1.md` (the catalogue-content fields may gain values; new components
 appear only behind `--include`). The branch was rebased onto `main` at `f1af235c` (the release candidate
 `0.2.3-rc.1` and the plan records) for the merge; only the records conflicted, and nothing in the design changed.
+
+## Implementation note, 2026-10-25 (slice 2: the maintainer's approvals and the merge rebase)
+
+On 2026-10-22 the maintainer approved three things in slice 2, in a comment on pull request #505: the new workflow
+`.github/workflows/engines.yml`, rule 10 of the governance workflow lint (`workflows/engines.rs`) and its guard
+module, and the widening of rule 4 (`id-token: write` is also allowed in the engine workflow's `attest` job) and of
+rule 9 (the engine workflow may have no LOKI job). The approval covers the files as reviewed at the head of that day;
+the tag ruleset and the `release` environment's allowed refs for the engine tags remain the maintainer's to set before
+the first publish. The branch was rebased onto `main` at `0a9e4c18` (slice 1 merged) for the merge, keeping only
+slice 2's own commits; only the records conflicted, and nothing in the design changed.
