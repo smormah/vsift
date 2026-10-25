@@ -1399,7 +1399,7 @@ checksum = "accd4ea62f7bb7a82fe23066fb0957d48ef677f6eeb8215f372f52e48bb32426"
 
 [[package]]
 name = "vsift-application"
-version = "0.2.3-rc.1"
+version = "0.2.3"
 dependencies = [
  "sha2",
  "vsift-domain",
@@ -1407,7 +1407,7 @@ dependencies = [
 
 [[package]]
 name = "vsift-contract"
-version = "0.2.3-rc.1"
+version = "0.2.3"
 dependencies = [
  "regex",
  "serde",
@@ -1419,7 +1419,7 @@ dependencies = [
 
 [[package]]
 name = "vsift-domain"
-version = "0.2.3-rc.1"
+version = "0.2.3"
 
 [[package]]
 name = "vsift-fuzz"
@@ -1439,7 +1439,7 @@ dependencies = [
 
 [[package]]
 name = "vsift-infrastructure"
-version = "0.2.3-rc.1"
+version = "0.2.3"
 dependencies = [
  "cap-fs-ext",
  "cap-std",
@@ -1465,7 +1465,7 @@ dependencies = [
 
 [[package]]
 name = "vsift-windows-security"
-version = "0.2.3-rc.1"
+version = "0.2.3"
 dependencies = [
  "windows-sys 0.61.2",
 ]

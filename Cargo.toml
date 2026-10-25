@@ -18,7 +18,7 @@ exclude = ["fuzz"]
 resolver = "3"
 
 [workspace.package]
-version = "0.2.3-rc.1"
+version = "0.2.3"
 edition = "2024"
 rust-version = "1.99"
 authors = ["VSift contributors"]
@@ -60,12 +60,12 @@ sha2 = { version = "0.11", default-features = false }
 tar = { version = "=0.4.46", default-features = false }
 time = { version = "0.3", features = ["formatting"] }
 tokio = { version = "1.48", features = ["fs", "io-util", "macros", "process", "rt-multi-thread", "signal", "sync", "time"] }
-vsift = { version = "0.2.3-rc.1", path = "crates/vsift" }
-vsift-application = { version = "0.2.3-rc.1", path = "crates/vsift-application" }
-vsift-contract = { version = "0.2.3-rc.1", path = "crates/vsift-contract" }
-vsift-domain = { version = "0.2.3-rc.1", path = "crates/vsift-domain" }
-vsift-infrastructure = { version = "0.2.3-rc.1", path = "crates/vsift-infrastructure" }
-vsift-windows-security = { version = "0.2.3-rc.1", path = "crates/vsift-windows-security" }
+vsift = { version = "0.2.3", path = "crates/vsift" }
+vsift-application = { version = "0.2.3", path = "crates/vsift-application" }
+vsift-contract = { version = "0.2.3", path = "crates/vsift-contract" }
+vsift-domain = { version = "0.2.3", path = "crates/vsift-domain" }
+vsift-infrastructure = { version = "0.2.3", path = "crates/vsift-infrastructure" }
+vsift-windows-security = { version = "0.2.3", path = "crates/vsift-windows-security" }
 windows-acl = "=0.3.0"
 # Windows only, in the one crate allowed `unsafe` (ADR 0026): CreateDirectoryW
 # with a security descriptor, and the SDDL conversion and LocalFree it needs.
