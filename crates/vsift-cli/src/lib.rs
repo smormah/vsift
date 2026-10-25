@@ -323,6 +323,8 @@ where
                     *report.local_asr(),
                     setup::ManagedSetupFacts {
                         availability: report.managed_install(),
+                        by_dependency: vsift::RuntimeDependency::ALL
+                            .map(|dependency| report.managed_install_for(dependency)),
                         updates: report.managed_updates(),
                         optional: report.optional_components(),
                     },

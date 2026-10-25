@@ -196,6 +196,26 @@ group-generic `optional_groups` and `optional_components`).
 - **Nothing is published by this slice.** The first publishes need the maintainer's tag ruleset for the engine tags,
   the engine tag patterns in the `release` environment's allowed refs, a tag and an approval each.
 
+## Implementation note, 2026-10-21 (slice 3, first part: catalogues per target, Windows FFmpeg)
+
+- **Catalogues per target.** `accepted_catalogue(target)` gives each target's catalogue (`accepted_host_catalogue()`
+  the host's): Ubuntu 24.04 x86-64 as before, and **Windows x86-64, revision `windows-x86_64-2026-10-21-r1`:**
+  FFmpeg and FFprobe from BtbN's `win64-lgpl-9.0.zip` of the release the Ubuntu pin comes from (147,007,942 bytes,
+  48 entries; inventory and imports read on hosted run 39604340709) and the same model. macOS has none until its
+  engines are published and pinned.
+- **A catalogue may offer only some core components.** A dependency whose component the host's catalogue does not
+  offer stays the user's (`manual_selection_required`), and `setup check`'s `managed_install` for it is
+  `unavailable_target`; the model is planned only where a whisper.cpp can smoke it (the managed one or one that
+  already works). So on Windows today `setup plan` installs FFmpeg and FFprobe, and the model beside a user's
+  whisper.cpp.
+- **Authority across targets.** An action receives publisher authority only when it equals a compiled entry of some
+  target's catalogue and its URL is one of the reviewed routes (`REVIEWED_ROUTES`), as before for Ubuntu alone.
+- **Proof:** the real-tool smoke and the real CLI install now run on any host with a catalogue; `P13 managed smoke`
+  gains their Windows jobs on a dispatch.
+- **Left for the second part (after the first engine publishes):** whisper.cpp for Windows (VSift's build, with
+  P07's accuracy check), the macOS catalogue (VSift's FFmpeg and whisper.cpp, the model), the OCR runner's entries
+  (with the flat-layout question of slice 2), and the hosted proof on macOS.
+
 ## Review note, 2026-10-22 (RV-3 on the engine release workflow)
 
 A read-only review found the workflow sound and the lint short of what the maintainer is asked to rely on. Changes
@@ -238,5 +258,13 @@ On 2026-10-22 the maintainer approved three things in slice 2, in a comment on p
 module, and the widening of rule 4 (`id-token: write` is also allowed in the engine workflow's `attest` job) and of
 rule 9 (the engine workflow may have no LOKI job). The approval covers the files as reviewed at the head of that day;
 the tag ruleset and the `release` environment's allowed refs for the engine tags remain the maintainer's to set before
-the first publish. The branch was rebased onto `main` at `0a9e4c18` (slice 1 merged) for the merge, keeping only
+the first publish. The branch was rebased onto `main` at `2a683b0c` (slice 1 merged) for the merge, keeping only
 slice 2's own commits; only the records conflicted, and nothing in the design changed.
+
+## Implementation note, 2026-10-25 (slice 3, first part: the maintainer's acceptance and the merge rebase)
+
+On 2026-10-22 the maintainer accepted Windows FFmpeg as a managed pin (decision A1e), in a comment on pull request
+#506: BtbN's `win64-lgpl-9.0.zip` of the release the Ubuntu pin comes from, with the same retention and the same
+review rule as the Ubuntu pin ([ADR 0023](0023-r0-distribution-managed-installation-and-handoff-check.md), note of
+2026-10-04). The branch was rebased onto `main` at `b4172359` (slices 1 and 2 merged) for the merge, keeping only
+slice 3's own commits; only the records conflicted, and nothing in the design changed.

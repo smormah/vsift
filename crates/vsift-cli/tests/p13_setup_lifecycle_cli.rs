@@ -24,10 +24,10 @@ use assert_cmd::Command;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use tar::{Builder, Header};
-use vsift_domain::{ArtifactIntegrity, ManagedComponent, ManagedTarget};
+use vsift_domain::{ArtifactIntegrity, ManagedComponent};
 use vsift_infrastructure::{
     ArchiveInventoryBounds, ManagedArtifactStore, ManagedRuntimeIdentity, ReviewedArchiveFile,
-    ReviewedPayloadArchive, ReviewedRuntimeLayout, StagedManagedCandidate, detect_managed_target,
+    ReviewedPayloadArchive, ReviewedRuntimeLayout, StagedManagedCandidate,
 };
 
 type TestResult = Result<(), Box<dyn Error>>;
@@ -102,7 +102,8 @@ impl Drop for Base {
 }
 
 fn qualified() -> bool {
-    detect_managed_target() == ManagedTarget::Ubuntu2404X86_64
+    // ADR 0032: Ubuntu 24.04 and Windows x86-64 have a catalogue.
+    vsift_infrastructure::accepted_host_catalogue().is_ok_and(|catalogue| catalogue.is_some())
 }
 
 fn json(output: &Output) -> Result<Value, Box<dyn Error>> {

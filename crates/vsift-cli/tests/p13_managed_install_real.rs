@@ -1,5 +1,8 @@
-//! Opt-in P13 checkpoint: a real managed installation on Ubuntu 24.04 x86-64
-//! through the compiled binary (D-02, D-03, D-06, D-07; ADR 0023 §3).
+//! Opt-in P13 checkpoint: a real managed installation through the compiled
+//! binary on a host with a catalogue (D-02, D-03, D-06, D-07; ADR 0023 §3;
+//! ADR 0032: Ubuntu 24.04 x86-64 and Windows x86-64). On a host whose catalogue
+//! offers fewer components (Windows until `VSift`'s whisper.cpp is pinned) it
+//! installs and checks what the plan offers, and the local-ASR part waits.
 //!
 //! From a fresh per-user base with an empty `PATH`, it runs `setup plan`,
 //! accepts the plan with `setup install --events jsonl` (which downloads the
@@ -35,8 +38,7 @@ use std::{
 
 use assert_cmd::Command;
 use serde_json::Value;
-use vsift_domain::ManagedTarget;
-use vsift_infrastructure::detect_managed_target;
+use vsift_infrastructure::accepted_host_catalogue;
 
 type TestResult = Result<(), Box<dyn Error>>;
 
@@ -55,6 +57,7 @@ impl Base {
             .env("XDG_CONFIG_HOME", self.0.join("config"))
             .env("XDG_DATA_HOME", self.0.join("data"))
             .env("XDG_CACHE_HOME", self.0.join("cache"))
+            .env("LOCALAPPDATA", self.0.join("local"))
             .timeout(INSTALL_DEADLINE)
             .write_stdin("");
         Ok(command)
@@ -84,13 +87,13 @@ fn statuses(result: &Value) -> Vec<String> {
 }
 
 #[test]
-#[ignore = "opt-in real managed installation; set VSIFT_P13_REAL_INSTALL=1 on Ubuntu 24.04 x86-64 and run --release (a development build reaches no publisher)"]
+#[ignore = "opt-in real managed installation; set VSIFT_P13_REAL_INSTALL=1 on a host with a managed catalogue and run --release (a development build reaches no publisher)"]
 fn real_managed_install_selects_every_tool_and_a_rerun_is_current() -> TestResult {
     if env::var_os(OPT_IN).is_none() {
         return Err(format!("set {OPT_IN}=1 to run the real managed installation").into());
     }
-    if detect_managed_target() != ManagedTarget::Ubuntu2404X86_64 {
-        return Err("the real managed installation runs only on Ubuntu 24.04 x86-64".into());
+    if accepted_host_catalogue()?.is_none() {
+        return Err("the real managed installation runs only on a host with a catalogue".into());
     }
     println!("binary under test: {}", published_binary::report()?);
     let stamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
@@ -107,11 +110,23 @@ fn real_managed_install_selects_every_tool_and_a_rerun_is_current() -> TestResul
         .as_str()
         .ok_or("the plan has no digest")?
         .to_owned();
+    let actions = plan_value["data"]["actions"].as_array().map_or(0, Vec::len);
+    let planned: Vec<&str> = plan_value["data"]["actions"]
+        .as_array()
+        .map(|actions| {
+            actions
+                .iter()
+                .filter_map(|action| action["component"].as_str())
+                .collect()
+        })
+        .unwrap_or_default();
+    // Every core component, or (Windows) what the catalogue offers.
+    let complete = planned.contains(&"whisper_cli");
     println!(
-        "plan: {} actions, catalogue {}",
-        plan_value["data"]["actions"].as_array().map_or(0, Vec::len),
+        "plan: {actions} actions ({planned:?}), catalogue {}",
         plan_value["data"]["catalogue_revision"]
     );
+    assert!(actions >= 1, "the plan installs nothing");
     let plan_path = base.0.join("plan.json");
     fs::write(&plan_path, &plan.stdout)?;
 
@@ -135,7 +150,7 @@ fn real_managed_install_selects_every_tool_and_a_rerun_is_current() -> TestResul
     println!("{}", serde_json::to_string_pretty(&result["data"])?);
     assert_eq!(install.status.code(), Some(0), "{}", result["error"]);
     assert_eq!(result["status"], "complete");
-    assert_eq!(statuses(result), ["activated", "activated", "activated"]);
+    assert_eq!(statuses(result), vec![String::from("activated"); actions]);
     assert!(
         progress
             .iter()
@@ -145,27 +160,11 @@ fn real_managed_install_selects_every_tool_and_a_rerun_is_current() -> TestResul
     assert!(
         progress
             .iter()
-            .any(|event| event["stage"] == "installing_components" && event["completed"] == 3),
+            .any(|event| event["stage"] == "installing_components" && event["completed"] == actions),
         "the component progress did not finish"
     );
 
-    let check = base.vsift()?.args(["setup", "check", "--json"]).output()?;
-    let check_value: Value = serde_json::from_slice(&check.stdout)?;
-    println!("{}", serde_json::to_string_pretty(&check_value)?);
-    assert_eq!(check.status.code(), Some(0));
-    assert_eq!(check_value["status"], "ready");
-    for dependency in check_value["dependencies"]
-        .as_array()
-        .ok_or("no dependencies")?
-    {
-        assert_eq!(dependency["lookup"], "managed_version", "{dependency}");
-        assert_eq!(dependency["status"], "available", "{dependency}");
-    }
-    assert_eq!(check_value["local_asr"]["model"]["status"], "known_pinned");
-    assert_eq!(
-        check_value["local_asr"]["verification"]["status"],
-        "verified"
-    );
+    assert_checked(&base, complete)?;
 
     let started = Instant::now();
     let rerun = base
@@ -182,21 +181,55 @@ fn real_managed_install_selects_every_tool_and_a_rerun_is_current() -> TestResul
     assert_eq!(rerun.status.code(), Some(0));
     assert_eq!(
         statuses(&rerun_value),
-        ["already_current", "already_current", "already_current"]
+        vec![String::from("already_current"); actions]
     );
 
-    assert_installed(&base, &digest)?;
+    assert_installed(&base, &digest, actions, complete)?;
     time_managed_use(&base)
+}
+
+/// `setup check` after the install resolves every installed tool as the
+/// managed version, and with whisper.cpp installed passes the local-ASR
+/// verification.
+fn assert_checked(base: &Base, complete: bool) -> TestResult {
+    let check = base.vsift()?.args(["setup", "check", "--json"]).output()?;
+    let check_value: Value = serde_json::from_slice(&check.stdout)?;
+    println!("{}", serde_json::to_string_pretty(&check_value)?);
+    assert_eq!(check.status.code(), Some(0));
+    for dependency in check_value["dependencies"]
+        .as_array()
+        .ok_or("no dependencies")?
+    {
+        if dependency["dependency"] == "whisper" && !complete {
+            continue;
+        }
+        assert_eq!(dependency["lookup"], "managed_version", "{dependency}");
+        assert_eq!(dependency["status"], "available", "{dependency}");
+    }
+    if complete {
+        assert_eq!(check_value["status"], "ready");
+        assert_eq!(check_value["local_asr"]["model"]["status"], "known_pinned");
+        assert_eq!(
+            check_value["local_asr"]["verification"]["status"],
+            "verified"
+        );
+    }
+
+    Ok(())
 }
 
 /// After the install, `setup check` shows every tool as the managed version
 /// and `setup plan` shows every component current with nothing to install,
 /// under the accepted digest.
-fn assert_installed(base: &Base, digest: &str) -> TestResult {
+fn assert_installed(base: &Base, digest: &str, actions: usize, complete: bool) -> TestResult {
     let human = base.vsift()?.args(["setup", "check"]).output()?;
     let text = String::from_utf8(human.stdout)?;
     println!("{text}");
-    assert_eq!(text.matches("[managed version]").count(), 3);
+    // FFmpeg and FFprobe, and whisper.cpp when the plan installed it.
+    assert_eq!(
+        text.matches("[managed version]").count(),
+        if complete { 3 } else { 2 }
+    );
 
     let replanned = base
         .vsift()?
@@ -206,9 +239,13 @@ fn assert_installed(base: &Base, digest: &str) -> TestResult {
     let data = &replanned["data"];
     assert_eq!(data["plan_digest"].as_str(), Some(digest));
     assert_eq!(data["install_needed"], false);
-    assert_eq!(data["readiness"], "ready");
-    assert_eq!(data["local_asr_model"]["status"], "managed_current");
-    for action in data["actions"].as_array().ok_or("no actions")? {
+    if complete {
+        assert_eq!(data["readiness"], "ready");
+        assert_eq!(data["local_asr_model"]["status"], "managed_current");
+    }
+    let replanned_actions = data["actions"].as_array().ok_or("no actions")?;
+    assert_eq!(replanned_actions.len(), actions);
+    for action in replanned_actions {
         assert_eq!(action["state"], "current", "{action}");
     }
     Ok(())

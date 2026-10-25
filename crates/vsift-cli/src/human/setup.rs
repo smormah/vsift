@@ -40,7 +40,8 @@ where
     L: Fn(RuntimeDependency) -> DependencyLookup,
 {
     let ManagedSetupFacts {
-        availability: managed_install,
+        availability: _,
+        by_dependency,
         updates: managed_updates,
         optional,
     } = managed;
@@ -95,7 +96,11 @@ where
         match &status.state {
             DependencyState::Available { .. } => {}
             DependencyState::Missing | DependencyState::Unhealthy { .. } => {
-                push_missing_tool_advice(&mut text, status.dependency, managed_install);
+                push_missing_tool_advice(
+                    &mut text,
+                    status.dependency,
+                    by_dependency[crate::setup::dependency_slot(status.dependency)],
+                );
             }
             DependencyState::TimedOut(timeout) => push_timeout_advice(&mut text, *timeout),
         }

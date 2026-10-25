@@ -1068,6 +1068,11 @@ pub fn plan_managed_setup_including(
     let whisper_missing = diagnosis.dependencies.iter().any(|status| {
         status.dependency == RuntimeDependency::Whisper && status.state.is_unusable()
     });
+    let CoreOffer {
+        media: media_offered,
+        whisper: whisper_offered,
+        model: model_offered,
+    } = CoreOffer::of(catalogue.as_ref().filter(|_| qualified), &diagnosis);
 
     let dependencies = diagnosis
         .dependencies
@@ -1076,8 +1081,11 @@ pub fn plan_managed_setup_including(
             let needs_media = matches!(
                 status.dependency,
                 RuntimeDependency::Ffmpeg | RuntimeDependency::Ffprobe
-            ) && media_missing;
-            let needs_whisper = status.dependency == RuntimeDependency::Whisper && whisper_missing;
+            ) && media_missing
+                && media_offered;
+            let needs_whisper = status.dependency == RuntimeDependency::Whisper
+                && whisper_missing
+                && whisper_offered;
             let disposition = if status.state.is_available() {
                 SetupDependencyDisposition::ExistingProbeOnly
             } else if qualified && status.state.is_unusable() && (needs_media || needs_whisper) {
@@ -1091,31 +1099,21 @@ pub fn plan_managed_setup_including(
 
     let model = if selection_state.model.is_some() {
         SetupModelDisposition::ConfiguredProbeOnly
-    } else if qualified {
+    } else if model_offered {
         SetupModelDisposition::ManagedInstall
     } else {
         SetupModelDisposition::ManualSelection
     };
 
-    let mut actions = Vec::new();
-    if let Some(entry) = catalogue.as_ref().filter(|_| qualified) {
-        for artifact in &entry.artifacts {
-            let required = match artifact.component {
-                ManagedComponent::MediaTools => media_missing,
-                ManagedComponent::WhisperCli => whisper_missing,
-                ManagedComponent::WhisperModel => selection_state.model.is_none(),
-                // The core list holds no optional component (the catalogue
-                // check refuses one); optional ones are planned below.
-                ManagedComponent::JsRuntimeDeno | ManagedComponent::YtDlp => false,
-            };
-            if required {
-                actions.push(ManagedSetupAction {
-                    id: format!("install-{}", artifact.component.identifier()),
-                    artifact: artifact.clone(),
-                });
-            }
-        }
-    }
+    let wanted = |component: ManagedComponent| match component {
+        ManagedComponent::MediaTools => media_missing,
+        ManagedComponent::WhisperCli => whisper_missing,
+        ManagedComponent::WhisperModel => selection_state.model.is_none() && model_offered,
+        // The core list holds no optional component (the catalogue check
+        // refuses one); optional ones are planned below.
+        ManagedComponent::JsRuntimeDeno | ManagedComponent::YtDlp => false,
+    };
+    let actions = core_actions(catalogue.as_ref().filter(|_| qualified), wanted);
 
     let optional =
         plan_optional_components(profile, include, catalogue.as_ref().filter(|_| qualified));
@@ -1149,6 +1147,61 @@ pub fn plan_managed_setup_including(
         plan.digest = Some(plan_digest(&plan));
     }
     plan
+}
+
+/// The actions that install the core components `wanted` accepts, in the
+/// catalogue's order.
+fn core_actions(
+    catalogue: Option<&AcceptedManagedCatalogue>,
+    wanted: impl Fn(ManagedComponent) -> bool,
+) -> Vec<ManagedSetupAction> {
+    catalogue
+        .map(|entry| {
+            entry
+                .artifacts
+                .iter()
+                .filter(|artifact| wanted(artifact.component))
+                .map(|artifact| ManagedSetupAction {
+                    id: format!("install-{}", artifact.component.identifier()),
+                    artifact: artifact.clone(),
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Which core components a plan may install on this host.
+struct CoreOffer {
+    media: bool,
+    whisper: bool,
+    model: bool,
+}
+
+impl CoreOffer {
+    /// What `catalogue` (`None` when managed installation is not qualified)
+    /// offers. A target's catalogue may offer only some core components
+    /// (ADR 0032: one whose reviewed build is not pinned yet stays the
+    /// user's to supply), and the model is smoked with a whisper.cpp, the
+    /// managed one or one that already works here.
+    fn of(catalogue: Option<&AcceptedManagedCatalogue>, diagnosis: &RuntimeDiagnosis) -> Self {
+        let offers = |component: ManagedComponent| {
+            catalogue.is_some_and(|entry| {
+                entry
+                    .artifacts
+                    .iter()
+                    .any(|artifact| artifact.component == component)
+            })
+        };
+        let whisper_available = diagnosis.dependencies.iter().any(|status| {
+            status.dependency == RuntimeDependency::Whisper && status.state.is_available()
+        });
+        let whisper = offers(ManagedComponent::WhisperCli);
+        Self {
+            media: offers(ManagedComponent::MediaTools),
+            whisper,
+            model: offers(ManagedComponent::WhisperModel) && (whisper || whisper_available),
+        }
+    }
 }
 
 /// The optional part of a plan: an entry per optional component the plan
@@ -1225,17 +1278,23 @@ fn catalogue_is_complete(entry: &AcceptedManagedCatalogue) -> bool {
                     .optional_banner(artifact.component)
                     .is_some_and(|banner| !banner.is_empty())
         });
-    entry.artifacts.len() == 3
+    // The core components a target's catalogue offers, in plan order, each
+    // once: all three, or fewer while a target's reviewed build of one is
+    // not pinned yet (ADR 0032).
+    let order = [
+        ManagedComponent::MediaTools,
+        ManagedComponent::WhisperCli,
+        ManagedComponent::WhisperModel,
+    ];
+    let ranks: Vec<usize> = entry
+        .artifacts
+        .iter()
+        .filter_map(|artifact| order.iter().position(|core| *core == artifact.component))
+        .collect();
+    !entry.artifacts.is_empty()
+        && ranks.len() == entry.artifacts.len()
+        && ranks.windows(2).all(|pair| pair[0] < pair[1])
         && compatibility_is_complete(&entry.compatibility)
-        && entry
-            .artifacts
-            .iter()
-            .map(|artifact| artifact.component)
-            .eq([
-                ManagedComponent::MediaTools,
-                ManagedComponent::WhisperCli,
-                ManagedComponent::WhisperModel,
-            ])
         && entry.artifacts.iter().all(artifact_is_complete)
         && optional_complete
 }
@@ -1750,24 +1809,90 @@ mod tests {
     }
 
     #[test]
-    fn incomplete_catalogue_cannot_produce_actions_or_digest()
+    fn an_inconsistent_core_catalogue_cannot_produce_actions_or_digest()
     -> Result<(), Box<dyn std::error::Error>> {
-        let mut incomplete = catalogue()?;
-        incomplete.artifacts.pop();
+        let mut reversed = catalogue()?;
+        reversed.artifacts.reverse();
+        let mut twice = catalogue()?;
+        let first = twice.artifacts[0].clone();
+        twice.artifacts.push(first);
+        let mut empty = catalogue()?;
+        empty.artifacts.clear();
+        for invalid in [reversed, twice, empty] {
+            let plan = plan_managed_setup(
+                SetupProfile::Desktop,
+                diagnosis(&RuntimeDependency::ALL),
+                ManagedTarget::Ubuntu2404X86_64,
+                SetupSelectionState::default(),
+                1_000,
+                Some(invalid),
+            );
+            assert_eq!(plan.availability, ManagedPlanAvailability::CatalogueInvalid);
+            assert_eq!(
+                plan.actions,
+                [] as [crate::provisioning::ManagedSetupAction; 0]
+            );
+            assert!(plan.digest.is_none());
+        }
+        Ok(())
+    }
+
+    /// ADR 0032: a target's catalogue may offer only some core components
+    /// while the reviewed build of another is not pinned yet. The plan
+    /// installs what it offers, leaves the rest to the user, and plans the
+    /// model only when a whisper.cpp can smoke it.
+    #[test]
+    fn a_partial_core_catalogue_plans_what_it_offers_and_leaves_the_rest()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let mut partial = catalogue()?;
+        partial
+            .artifacts
+            .retain(|artifact| artifact.component != ManagedComponent::WhisperCli);
         let plan = plan_managed_setup(
             SetupProfile::Desktop,
             diagnosis(&RuntimeDependency::ALL),
             ManagedTarget::Ubuntu2404X86_64,
             SetupSelectionState::default(),
             1_000,
-            Some(incomplete),
+            Some(partial.clone()),
         );
-        assert_eq!(plan.availability, ManagedPlanAvailability::CatalogueInvalid);
+        assert_eq!(plan.availability, ManagedPlanAvailability::Qualified);
+        let planned: Vec<ManagedComponent> = plan
+            .actions
+            .iter()
+            .map(|action| action.artifact.component)
+            .collect();
+        // Nothing can smoke the model: no managed or working whisper.cpp.
+        assert_eq!(planned, [ManagedComponent::MediaTools]);
+        for (status, disposition) in &plan.dependencies {
+            let expected = if status.dependency == RuntimeDependency::Whisper {
+                SetupDependencyDisposition::ManualSelection
+            } else {
+                SetupDependencyDisposition::ManagedInstall
+            };
+            assert_eq!(*disposition, expected, "{:?}", status.dependency);
+        }
+        assert_eq!(plan.model, super::SetupModelDisposition::ManualSelection);
+
+        // With the user's own whisper.cpp working, the model is planned.
+        let plan = plan_managed_setup(
+            SetupProfile::Desktop,
+            diagnosis(&[RuntimeDependency::Ffmpeg, RuntimeDependency::Ffprobe]),
+            ManagedTarget::Ubuntu2404X86_64,
+            SetupSelectionState::default(),
+            1_000,
+            Some(partial),
+        );
+        let planned: Vec<ManagedComponent> = plan
+            .actions
+            .iter()
+            .map(|action| action.artifact.component)
+            .collect();
         assert_eq!(
-            plan.actions,
-            [] as [crate::provisioning::ManagedSetupAction; 0]
+            planned,
+            [ManagedComponent::MediaTools, ManagedComponent::WhisperModel]
         );
-        assert!(plan.digest.is_none());
+        assert_eq!(plan.model, super::SetupModelDisposition::ManagedInstall);
         Ok(())
     }
 

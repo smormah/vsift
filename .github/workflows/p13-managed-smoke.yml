@@ -145,6 +145,53 @@ jobs:
             echo "A failure here with an unchanged binary means a publisher's file or route moved (L-099): open an issue before rerunning."
           } >> "$GITHUB_STEP_SUMMARY"
 
+  # ADR 0032: the same two checkpoints on Windows x64, built from this ref
+  # (a dispatch only; the published mode and the weekly schedule stay on
+  # Ubuntu). The Windows catalogue offers FFmpeg and the model, and the model
+  # only beside a whisper.cpp, so until VSift's own whisper.cpp is pinned the
+  # plan installs FFmpeg and FFprobe and the checks cover them and a frame.
+  managed-smoke-windows:
+    name: Managed smoke on pinned tools (Windows x64)
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: windows-2025
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Smoke the pinned Windows tools before activation
+        env:
+          VSIFT_P13_REAL_TOOL_SMOKE: "1"
+        run: >-
+          cargo test --release --locked -p vsift-infrastructure
+          --test p13_managed_smoke_real_tools -- --ignored --exact --nocapture
+
+  managed-install-windows:
+    name: Managed install through the CLI (Windows x64)
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: windows-2025
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Plan, install, check, rerun and take a frame with the managed tools
+        env:
+          VSIFT_P13_REAL_INSTALL: "1"
+        run: >-
+          cargo test --release --locked -p vsift-cli
+          --test p13_managed_install_real -- --ignored --exact --nocapture
+
   # P13 PR 7: the P13 stage of the end-to-end spine. From a fresh per-user
   # base with an empty PATH it kills the accepted install (SIGKILL) during a
   # download and during a smoke, checks setup repair and setup list after
