@@ -888,6 +888,10 @@ fn every_seed_replays_without_a_violation() -> TestResult {
 /// The well-formed seeds are accepted, so the targets' invariants are exercised
 /// from the first run rather than only once the fuzzer finds a valid input.
 #[test]
+#[allow(
+    clippy::too_many_lines,
+    reason = "One entry for each well-formed seed keeps the whole list in one place"
+)]
 fn well_formed_seeds_are_accepted() -> TestResult {
     let accepted = [
         (Target::TranscriptSrt, "F10.srt"),
