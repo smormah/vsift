@@ -168,6 +168,61 @@ and Deno 2.9.7 pins on Ubuntu (catalogue revision `ubuntu-24.04-x86_64-2026-10-2
 hosted review; replaced: its one-entry zip reader (by the general one) and its online-video-only members (by the
 group-generic `optional_groups` and `optional_components`).
 
+## Implementation note, 2026-10-21 (slice 2: the engine release workflow)
+
+- **D2 measured.** The hosted inventory of `b5454/whisper-bin-x64.zip` (run 39604340709, `tools/p06_archive_inventory.py`,
+  which now reads what each PE file imports) shows `whisper-cli.exe`, `whisper.dll` and the ggml DLLs importing
+  `msvcp140.dll`, `vcruntime140.dll`, `vcruntime140_1.dll` and, for ggml, `vcomp140.dll`: the Visual C++
+  redistributable a clean Windows need not have. The same run shows FFmpeg's Windows build importing only the
+  universal C runtime and system DLLs, and both zips using only what the zip reader accepts (deflate, with stored in
+  FFmpeg's; no Zip64, comments or backslash names). So VSift builds whisper.cpp for Windows too: one executable with
+  the static C runtime, no OpenMP and the AVX2, FMA and F16C instructions every processor Windows 11 accepts has;
+  P07's accuracy check is rerun on it before the catalogue pins it.
+- **The workflow** (`.github/workflows/engines.yml`, runbook [`engines.md`](../operations/engines.md)) has the jobs
+  `guard`, `build` (a literal matrix of three legs on `macos-15`, `windows-2025` and `macos-15`; a dispatch builds only
+  the chosen engine's leg), `plan`, `attest` and `publish`. Recipes and build scripts are in `tools/engines/`; each
+  build fetches the pinned commit, builds twice, compares byte for byte and packages deterministically with an
+  inventory the catalogue pins from.
+- **Rule 10 of the workflow lint** (`workflows/engines.rs`) holds it to the release workflow's standard, with 55
+  broken copies of the real file each refused (28 at first, 27 added by the review of 2026-10-22 below); rules 4 and 9 now name the engine workflow too (its `attest` job is
+  the only other one with `id-token`, and it has no LOKI job).
+- **The OCR runner** (the coordinator's request of 2026-10-21) is a fourth engine with three targets: VSift's own
+  crate built as VSift is, its folder assembled by the OCR story's stage tool (the runtime library and the models
+  by pinned size and SHA-256, republished unchanged), and `describe` checked. Open: the managed store keeps a
+  component's files flat, and the runner looks in `onnxruntime/` and `models/`; the recommendation is that the
+  runner also accepts them beside itself.
+- **Dry runs:** `Engines` run 39610758455 built every upstream engine twice, byte for byte the same (the first run,
+  39607212953, found the macOS FFprobe builds different until `ZERO_AR_DATE=1`).
+- **Nothing is published by this slice.** The first publishes need the maintainer's tag ruleset for the engine tags,
+  the engine tag patterns in the `release` environment's allowed refs, a tag and an approval each.
+
+## Review note, 2026-10-22 (RV-3 on the engine release workflow)
+
+A read-only review found the workflow sound and the lint short of what the maintainer is asked to rely on. Changes
+in the same pull request; the design is as above.
+
+- **The lint holds the tag guard (finding 16).** The guard's checks (the ref is the engine's tag and never `v*`, the
+  tag still names the run's commit, the commit is on `main`, no release, no draft) had been shell text only, so
+  deleting any left every rule green. Each is now a required whole command in the guard's script, in front of the
+  line that sets `mode=publish`; the accepted engine names are exactly the dispatch input's options and none starts
+  with `v`; `publish` repeats the ref, tag and draft checks after the approval; and `ENGINE_TAG`, `GIT_REF`,
+  `SOURCE_COMMIT` and `REPOSITORY` are bound only to the guard's output or the `github` context fields, never
+  `github.ref_name`. Fifteen broken copies pin it.
+- **A draft is a release (10).** GitHub answers 404 to a tag lookup for a draft, so the guard lists the releases as
+  well and refuses with "a draft exists; delete it first"; `publish` checks again with its write token. Whether a
+  read-only job token lists drafts is not something the review could confirm, which is why the second check
+  exists.
+- **The plan names the targets (12).** The guard reads the recipe's `TARGETS` into an output; `plan` fails unless
+  exactly those targets' sums files are present; and the lint compares the build matrix with the recipes.
+- **Spellings (13, 14).** `gh` with global flags before `release`, `-XDELETE`, `-fkey=value` and `-Fkey=value` are
+  refused; `secrets` is refused as a word in any form.
+- **One publish group for each engine tag (15):** `engines-publish-${{ needs.guard.outputs.tag }}`, still never
+  cancelled, so a queued publish of one engine is not replaced by another's.
+- **Accepted, not changed (11).** `attest` signs the planned files before the maintainer's approval at `publish`. A
+  rejected publish leaves a provenance statement for files that were never released: it says what was built, not
+  that it was released, and the catalogue pins only a release's assets. Moving `attest` into the `release`
+  environment would mean two approvals for each publish, so it stays where it is.
+
 ## Implementation note, 2026-10-25 (slice 1: the maintainer's approvals and the merge rebase)
 
 On 2026-10-23 the maintainer approved three things in slice 1: the `bzip2-1.0.6` licence exception for
@@ -175,3 +230,13 @@ On 2026-10-23 the maintainer approved three things in slice 1: the `bzip2-1.0.6`
 workflow, and the wording of rule D3 in `cli-v1.md` (the catalogue-content fields may gain values; new components
 appear only behind `--include`). The branch was rebased onto `main` at `f1af235c` (the release candidate
 `0.2.3-rc.1` and the plan records) for the merge; only the records conflicted, and nothing in the design changed.
+
+## Implementation note, 2026-10-25 (slice 2: the maintainer's approvals and the merge rebase)
+
+On 2026-10-22 the maintainer approved three things in slice 2, in a comment on pull request #505: the new workflow
+`.github/workflows/engines.yml`, rule 10 of the governance workflow lint (`workflows/engines.rs`) and its guard
+module, and the widening of rule 4 (`id-token: write` is also allowed in the engine workflow's `attest` job) and of
+rule 9 (the engine workflow may have no LOKI job). The approval covers the files as reviewed at the head of that day;
+the tag ruleset and the `release` environment's allowed refs for the engine tags remain the maintainer's to set before
+the first publish. The branch was rebased onto `main` at `0a9e4c18` (slice 1 merged) for the merge, keeping only
+slice 2's own commits; only the records conflicted, and nothing in the design changed.
