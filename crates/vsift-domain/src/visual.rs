@@ -1250,6 +1250,14 @@ impl CoverageGapReason {
             Self::CandidateBudgetExhausted => "candidate_budget_exhausted",
         }
     }
+
+    /// Whether a later `candidates` call can still fill the gap: a window not
+    /// analysed yet, or one whose decode timed out. The other reasons are
+    /// final for the index's profile.
+    #[must_use]
+    pub const fn is_retryable(self) -> bool {
+        matches!(self, Self::NotAnalyzed | Self::DeadlineExceeded)
+    }
 }
 
 /// One honest gap in the visual coverage of a range.

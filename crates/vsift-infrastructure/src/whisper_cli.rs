@@ -563,13 +563,13 @@ impl WhisperCli {
 /// `STATUS_NO_MEMORY` or an access violation), which an exit call never
 /// produces for whisper-cli.
 #[cfg(unix)]
-fn ended_abnormally(status: std::process::ExitStatus) -> bool {
+pub(crate) fn ended_abnormally(status: std::process::ExitStatus) -> bool {
     status.code().is_none()
 }
 
 /// See the Unix variant.
 #[cfg(windows)]
-fn ended_abnormally(status: std::process::ExitStatus) -> bool {
+pub(crate) fn ended_abnormally(status: std::process::ExitStatus) -> bool {
     const NTSTATUS_ERROR: u32 = 0xC000_0000;
     status
         .code()

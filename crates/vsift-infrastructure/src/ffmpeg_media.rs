@@ -4,7 +4,7 @@ use std::{
     error::Error,
     fmt,
     num::{NonZeroU16, NonZeroUsize},
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use serde::Deserialize;
@@ -121,6 +121,7 @@ pub struct FfmpegMedia<'a> {
     host_isolation: HostIsolation,
     store: &'a FilesystemSessionStore,
     admission: AdmissionScope,
+    call_deadline: Option<Instant>,
 }
 
 /// Whose admission covers an operation's provider run (X-07).
@@ -146,7 +147,18 @@ impl<'a> FfmpegMedia<'a> {
             host_isolation,
             store,
             admission: AdmissionScope::PerOperation,
+            call_deadline: None,
         }
+    }
+
+    /// The same adapter bounded by the call it serves: every provider run gets
+    /// at most the time left until `deadline` (its own deadline otherwise), and
+    /// none starts once it has passed ([`MediaError::Deadline`]). `ocr` bounds
+    /// its frame listings and extractions so (RV-2 finding 4).
+    #[must_use]
+    pub const fn with_call_deadline(mut self, deadline: Instant) -> Self {
+        self.call_deadline = Some(deadline);
+        self
     }
 
     /// The same adapter for a caller whose own admission reservation covers
@@ -162,6 +174,7 @@ impl<'a> FfmpegMedia<'a> {
             host_isolation: self.host_isolation,
             store: self.store,
             admission: AdmissionScope::HeldByCaller,
+            call_deadline: self.call_deadline,
         }
     }
 
@@ -664,6 +677,12 @@ impl<'a> FfmpegMedia<'a> {
         stderr_limit: usize,
         cancellation: ProcessCancellation,
     ) -> Result<ProcessOutcome, MediaError> {
+        let request = match self.call_deadline {
+            None => request,
+            Some(call) => request
+                .with_deadline_at_most(call.saturating_duration_since(Instant::now()))
+                .map_err(|_| MediaError::Deadline)?,
+        };
         let stdout = NonZeroUsize::new(stdout_limit).unwrap_or(NonZeroUsize::MIN);
         let stderr = NonZeroUsize::new(stderr_limit).unwrap_or(NonZeroUsize::MIN);
         let policy = SupervisorPolicy::default().with_stream_limits(stdout, stderr);

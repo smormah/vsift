@@ -24,6 +24,9 @@ libfuzzer = ["dep:libfuzzer-sys"]
 
 [dependencies]
 libfuzzer-sys = { version = "0.4.13", optional = true }
+# The `ocr_runner_output` target checks the readings the runner's output parser
+# hands the application (0.3.0, ADR 0030).
+vsift-application = { version = "0.2.2", path = "../crates/vsift-application" }
 # The `handoff_check` target reads the published form of a check (P13 PR 5).
 serde_json = "1.0.151"
 # The `bundle_manifest` target (P14 PR 4) names each artifact it invents by its
@@ -45,6 +48,22 @@ lzma-rust2 = { version = "=0.22.0", default-features = false, features = ["std",
 tar = { version = "=0.4.46", default-features = false }
 # ADR 0032: the bzip2 seeds are built with the workspace's pinned encoder.
 bzip2 = { version = "=0.6.1" }
+
+[[bin]]
+name = "ocr_runner_output"
+path = "fuzz_targets/ocr_runner_output.rs"
+test = false
+doc = false
+bench = false
+required-features = ["libfuzzer"]
+
+[[bin]]
+name = "screen_text_index_record"
+path = "fuzz_targets/screen_text_index_record.rs"
+test = false
+doc = false
+bench = false
+required-features = ["libfuzzer"]
 
 [[bin]]
 name = "request_record"

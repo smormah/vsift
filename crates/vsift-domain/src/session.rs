@@ -12,7 +12,8 @@ pub enum SessionPhase {
 }
 
 /// Artifact kinds a session publishes: P04 media evidence, P07 transcript
-/// records, P08 visual-index records and P09 evidence clips and records.
+/// records, P08 visual-index records, P09 evidence clips and records, and
+/// on-screen text index records (ADR 0030).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SessionArtifactKind {
     /// A source-grounded extracted frame encoded as PNG.
@@ -30,6 +31,10 @@ pub enum SessionArtifactKind {
     /// The lineage of one evidence call: its request, the frames or clip it
     /// selected and the items it extracted, stored as versioned JSON (P09).
     EvidenceRecord,
+    /// One immutable on-screen text index revision: text read off frames by
+    /// the OCR engine, stored as versioned JSON (ADR 0030). Each revision of an
+    /// index is a superset of the one before it.
+    ScreenTextIndexRecord,
 }
 
 impl SessionArtifactKind {
@@ -43,6 +48,7 @@ impl SessionArtifactKind {
             Self::VisualIndexRecord => "visual_index_record",
             Self::AudioWav => "audio_wav",
             Self::EvidenceRecord => "evidence_record",
+            Self::ScreenTextIndexRecord => "screen_text_index_record",
         }
     }
 
@@ -53,7 +59,10 @@ impl SessionArtifactKind {
             Self::FramePng => "png",
             Self::AudioPcm => "pcm",
             Self::AudioWav => "wav",
-            Self::TranscriptRecord | Self::VisualIndexRecord | Self::EvidenceRecord => "json",
+            Self::TranscriptRecord
+            | Self::VisualIndexRecord
+            | Self::EvidenceRecord
+            | Self::ScreenTextIndexRecord => "json",
         }
     }
 }

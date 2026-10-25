@@ -22,8 +22,8 @@ use vsift_domain::{
 
 use crate::{
     CommandName, CoverageResponse, EvidenceEventResponse, LifecycleResponse, OperationResponse,
-    ResultView, TerminalEventResponse, TranscriptRevisionData, TranscriptSegmentData,
-    sanitize_untrusted_text,
+    ResultView, ScreenTextSearchData, ScreenTextSearchPresentation, TerminalEventResponse,
+    TranscriptRevisionData, TranscriptSegmentData, sanitize_untrusted_text,
     stream::EvidenceStream,
     transcript::{BriefTranscriptSegmentData, RangeData},
     view::BRIEF_VIEW,
@@ -107,16 +107,19 @@ pub struct SearchPresentation<'a> {
     pub next_cursor: Option<&'a str>,
     /// Coverage of the searched range.
     pub coverage: &'a SearchCoverage,
+    /// The on-screen text part of a first page (ADR 0030); `None` on a page a
+    /// cursor continues, which leaves the member out.
+    pub screen_text: Option<ScreenTextSearchPresentation<'a>>,
 }
 
 /// How the query was read: its normalised words, in query order.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-struct SearchQueryData {
+pub(crate) struct SearchQueryData {
     terms: Vec<String>,
 }
 
 impl SearchQueryData {
-    fn new(query: &SearchQuery) -> Self {
+    pub(crate) fn new(query: &SearchQuery) -> Self {
         Self {
             terms: query
                 .terms()
@@ -186,6 +189,8 @@ pub struct SearchData {
     hits: Vec<SearchHitData>,
     next_cursor: Option<String>,
     transcript_coverage: TranscriptCoverageData,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    screen_text: Option<ScreenTextSearchData>,
 }
 
 impl SearchData {
@@ -205,6 +210,7 @@ impl SearchData {
             hits: hit_data(page),
             next_cursor: page.next_cursor.map(str::to_owned),
             transcript_coverage: TranscriptCoverageData::new(page.coverage),
+            screen_text: page.screen_text.as_ref().map(ScreenTextSearchData::new),
         }
     }
 }
@@ -228,6 +234,8 @@ pub struct SearchBriefData {
     hits: Vec<SearchHitData>,
     next_cursor: Option<String>,
     transcript_coverage: TranscriptCoverageData,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    screen_text: Option<ScreenTextSearchData>,
 }
 
 impl SearchBriefData {
@@ -255,6 +263,7 @@ impl From<&SearchData> for SearchBriefData {
             hits: full.hits.clone(),
             next_cursor: full.next_cursor.clone(),
             transcript_coverage: full.transcript_coverage.clone(),
+            screen_text: full.screen_text.clone(),
         }
     }
 }
@@ -272,6 +281,8 @@ pub struct SearchStreamData {
     record_count: usize,
     next_cursor: Option<String>,
     transcript_coverage: TranscriptCoverageData,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    screen_text: Option<ScreenTextSearchData>,
 }
 
 fn hit_data(page: &SearchPresentation<'_>) -> Vec<SearchHitData> {
@@ -406,6 +417,7 @@ impl SearchEvidenceStream {
             record_count: records.len(),
             next_cursor: page.next_cursor.map(str::to_owned),
             transcript_coverage: TranscriptCoverageData::new(page.coverage),
+            screen_text: page.screen_text.as_ref().map(ScreenTextSearchData::new),
         };
         let result = finish(
             OperationResponse::complete(command.identifier(), &data)?,

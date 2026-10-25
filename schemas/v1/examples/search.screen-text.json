@@ -1,0 +1,193 @@
+{
+  "command": "search",
+  "coverage": {
+    "gaps": [],
+    "reasons": [],
+    "truncated": false
+  },
+  "data": {
+    "hits": [
+      {
+        "match": "phrase",
+        "segment_id": "tsg_3ad1fb8dac8f037c489a0d665c5f4487"
+      }
+    ],
+    "items": [
+      {
+        "alignment": {
+          "cue_end_us": 8500000,
+          "cue_start_us": 4500000,
+          "offset_us": 0,
+          "origin": "imported_srt"
+        },
+        "confidence": {
+          "origin": "unavailable",
+          "value_basis_points": null
+        },
+        "cue": {
+          "line": 1,
+          "ordinal": 1
+        },
+        "display_text": "Dialog R-17 is displayed now.",
+        "end_us": 8500000,
+        "language": null,
+        "markup": "none",
+        "original_text": null,
+        "revision_id": "trv_00cd4f50df50765742ed93de33afecb6",
+        "segment_id": "tsg_3ad1fb8dac8f037c489a0d665c5f4487",
+        "source_id": "src_sha256_d7ccece71288c5ff35d7b16c871a93a8ed48bbb7380617899575069b4d6545f4",
+        "source_segment_id": "sgm_813c2dbd740e3afc0f67a52278553bf6",
+        "speaker": null,
+        "start_us": 4500000,
+        "text": "Dialog R-17 is displayed now."
+      }
+    ],
+    "next_cursor": null,
+    "query": {
+      "terms": [
+        "r17"
+      ]
+    },
+    "range": null,
+    "revision": {
+      "alignment": {
+        "offset_us": 0,
+        "origin": "imported_srt"
+      },
+      "language": null,
+      "revision": 1,
+      "revision_id": "trv_00cd4f50df50765742ed93de33afecb6",
+      "segment_count": 1,
+      "sidecar": {
+        "bytes": 64,
+        "format": "srt",
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "source_id": "src_sha256_d7ccece71288c5ff35d7b16c871a93a8ed48bbb7380617899575069b4d6545f4",
+      "source_segments": [
+        {
+          "end_us": 15000000,
+          "index": 0,
+          "source_segment_id": "sgm_813c2dbd740e3afc0f67a52278553bf6",
+          "start_us": 0,
+          "state": "closed"
+        }
+      ],
+      "warnings": []
+    },
+    "screen_text": {
+      "coverage": {
+        "awaiting_analysis": 0,
+        "candidates_complete": true,
+        "failed": 0,
+        "pending": 0,
+        "period_us": 5000000,
+        "planned": 4,
+        "read": 4,
+        "scope": "screen_text",
+        "unresolved": 0
+      },
+      "hits": [
+        {
+          "candidate_ids": [],
+          "confidence": {
+            "origin": "provider_uncalibrated",
+            "value_basis_points": 9731
+          },
+          "display_text": "Dialog R-17",
+          "frame": {
+            "height": 720,
+            "pts": 150,
+            "stream_index": 0,
+            "time_base_denominator": 30,
+            "time_base_numerator": 1,
+            "time_us": 5000000,
+            "width": 1280
+          },
+          "frames": 2,
+          "last_time_us": 6000000,
+          "line_id": "stl_00c6d6d00917be8b0ddef115cd4fb948",
+          "match": "phrase",
+          "region": {
+            "height": 32,
+            "width": 360,
+            "x": 420,
+            "y": 300
+          },
+          "text": "Dialog R-17"
+        },
+        {
+          "candidate_ids": [],
+          "confidence": {
+            "origin": "provider_uncalibrated",
+            "value_basis_points": 8412
+          },
+          "display_text": "Close R-17",
+          "frame": {
+            "height": 720,
+            "pts": 300,
+            "stream_index": 0,
+            "time_base_denominator": 30,
+            "time_base_numerator": 1,
+            "time_us": 10000000,
+            "width": 1280
+          },
+          "frames": 1,
+          "last_time_us": 10000000,
+          "line_id": "stl_753b928bc179339a56ca42a71dcf7416",
+          "match": "phrase",
+          "region": {
+            "height": 24,
+            "width": 200,
+            "x": 1000,
+            "y": 660
+          },
+          "text": "Close R-17"
+        }
+      ],
+      "index": {
+        "engine": {
+          "detector_sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+          "profile": "ppocrv5-latin-v1",
+          "recognizer_sha256": "3333333333333333333333333333333333333333333333333333333333333333",
+          "runner_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+          "runner_version": "0.1.0",
+          "runtime_version": "1.31.0"
+        },
+        "frames": 4,
+        "index_id": "sti_6acf6ced07743f5711fb499cdd6d43b7",
+        "lines": 4,
+        "revision": 1
+      },
+      "state": "complete",
+      "total_hits": 2
+    },
+    "session_id": "ses_0123456789abcdef0123456789abcdef",
+    "transcript_coverage": {
+      "basis": "supplied_transcript",
+      "no_speech_ranges": [],
+      "ranges_truncated": false,
+      "scope": "transcript_text",
+      "searched_range": {
+        "from_us": 0,
+        "to_us": 15000000
+      },
+      "transcribed_ranges": [
+        {
+          "from_us": 0,
+          "to_us": 15000000
+        }
+      ],
+      "untranscribed_ranges": []
+    }
+  },
+  "error": null,
+  "lifecycle": {
+    "expires_at": "2026-09-25T00:00:00Z",
+    "mode": "ephemeral"
+  },
+  "operation_id": null,
+  "schema_version": "1",
+  "status": "complete",
+  "warnings": []
+}

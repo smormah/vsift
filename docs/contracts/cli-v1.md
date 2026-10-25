@@ -42,12 +42,12 @@ kernel attests the strict worker controls, and otherwise the command answers
 and isolation").
 
 **Interruption (P10 PR 3).** While a long command runs (`ingest`, `transcript
-retranscribe`, `candidates`, `frame get/neighbours/burst`, `crop`, `audio`, `job
+retranscribe`, `candidates`, `ocr`, `frame get/neighbours/burst`, `crop`, `audio`, `job
 resume`), the first `SIGINT` or `SIGTERM` (Unix) or console Ctrl-C or Ctrl-Break
 (Windows) cancels it: it stops at its next boundary (a provider process is stopped, on
 Unix with `SIGTERM` to its process group and a kill after 5 s, on Windows at once) and
 writes its one documented terminal result: `CANCELLED` (exit 6), or the `partial`
-result of `candidates` and the evidence commands, which commit what they finished. A
+result of `candidates`, `ocr` and the evidence commands, which commit what they finished. A
 second interruption kills running providers without the graceful wait; either way the
 process exits only after every provider it started has been reaped, within the
 supervisor's 5 s + 5 s budget. An `ingest` copy is checked every 64 KiB; a
@@ -65,7 +65,7 @@ stopped between two provider calls answers `CANCELLED`, never that a tool could 
 | Command | Contract purpose | Implementation packet |
 | --- | --- | --- |
 | `setup check` | Read-only dependency diagnosis | Implemented |
-| `setup configure` | Persist an explicit user-managed executable path without running it | Partial P06 |
+| `setup configure` | Persist an explicit user-managed executable path without running it (`ffmpeg`, `ffprobe`, `whisper`; `ocr-runner` since 0.3.0) | Partial P06 |
 | `setup configure-model` | Persist an explicit user-managed model file path without parsing it | Partial P06 |
 | `setup plan` | Read-only diagnosis plus exact reviewed Ubuntu 24.04 x86-64 catalogue actions and digest; manual guidance on unaccepted targets | Partial P06 |
 | `setup install` | Apply an accepted Ubuntu 24.04 x86-64 plan: download (or import from `--artifact-dir`), verify, stage, smoke and activate each managed component | Implemented in P13 PR 4 |
@@ -78,6 +78,7 @@ stopped between two provider calls answers `CANCELLED`, never that a tool could 
 | `transcript retranscribe` | New local-ASR transcript revision, whole source or one range; a recoverable job since P10 PR 2 | Implemented in P07 increment 3b |
 | `search` | Bounded, ranked literal transcript search with honest coverage | Implemented in P08 PR 1 |
 | `candidates` | Bounded visual-candidate retrieval with honest coverage; analyses missing windows first | Implemented in P08 PR 4 |
+| `ocr`, `ocr search` | Opt-in, bounded, resumable reading of on-screen text off the candidates' frames and one frame a period, with the optional OCR runner; `ocr search` pages it with frame, time and region, with or without a transcript, and `search`'s first page shows it beside the transcript | 0.3.0 (ADR 0030); the runner's hosted parity run and its managed install are in progress |
 | `frame get/neighbours/burst` | Exact source frames, their neighbours and bursts, with requested and actual time, lineage and reuse | Implemented in P09 PR 3 |
 | `crop`, `audio` | Native crops of frames and crops; bounded WAV clips of the source audio | Implemented in P09 PR 4 |
 | `bundle validate` | Bounded data-only bundle validation | Implemented in P05 |
@@ -1534,7 +1535,7 @@ query is data only, never a pattern or regular expression; a query that starts w
 hyphen is written `--query=-17`. `--from` and `--to` go together and restrict the search
 to segments intersecting the half-open range; without them the whole revision is
 searched. It is computed from the immutable revision on each call, never runs a
-provider and writes nothing. It searches transcript text only, never on-screen text.
+provider and writes nothing. Its items, hits, cursor and coverage are transcript text only; since `0.3.0` a first page also carries `screen_text`, the query's occurrences in on-screen text that `ocr` has read (see "0.3.0 on-screen text").
 
 **Matching.** Query and segment text are normalised the same way: lowercase; a comma
 thousands separator is removed (`2,048` is `2048`); a hyphen between letters or digits
@@ -1745,6 +1746,147 @@ the same answer as the evidence commands' (see "P09 frames", below). `RESOURCE_L
 for a record over 8 MiB or a 65th index record. `INTEGRITY_FAILURE` or
 `UNSUPPORTED_SCHEMA` for a stored record that fails verification or a source copy that
 changed during the call.
+
+### 0.3.0 on-screen text (`ocr`)
+
+```console
+vsift setup configure ocr-runner --executable /opt/vsift-ocr/vsift-ocr-runner
+vsift ocr ses_0123456789abcdef --json
+vsift ocr ses_0123456789abcdef --from 0 --to 600000000 --period-us 5000000 --max-frames 100 --json
+vsift search ses_0123456789abcdef --query "invoice 4407" --json
+```
+
+`ocr <session> [--from <us> --to <us>] [--period-us 1000000..600000000] [--max-frames 1..200]
+[--runner <path>] [--threads 1..8]` reads the text shown on the session's video with the
+optional OCR runner and commits what it read to the session's screen-text index
+([ADR 0030](../decisions/0030-on-screen-text.md)). It is opt-in: nothing else runs it, and
+nothing else needs the runner. `ocr search` then pages the text, with or without a transcript, and
+`search`'s first page shows it beside the transcript (below).
+
+**What is read.** The plan of a range is the representative frame of every visual candidate in
+it (as `candidates` lists them; the call analyses missing windows first, exactly as
+`candidates` does, at most 30 minutes of video) and one frame every `--period-us` from the
+period's first multiple at or after the range's start: 10 s by default, 1 s to 10 min. The
+candidates catch the moments the screen changed; the period catches text that changes inside a
+screen that looks the same to the candidate rule, such as a counter or a clock. Text that appears
+and goes between two planned frames is not read. Without `--from` and `--to` the whole video is
+the range. Each planned read is resolved to the first displayed frame at or after its time, within
+the evidence commands' tolerance (a candidate's read exactly to its representative frame); reads
+that resolve to the same frame share one reading, and a read that resolves to no decodable
+frame is `unresolved`. The frame is extracted to the session's private work folder as PNG and
+handed to the runner; no pixels are kept.
+
+**Bounded and resumable.** A call reads at most `--max-frames` frames (default 40) of the plan's
+pending reads, in time order, within 300 s, then commits them as one new revision of the index and
+stops: every media and runner process of the call is given at most the time the call has left, so
+the bound holds however late a batch starts. Running `ocr` again for the same range continues:
+reads the index has attempted are never read again by the same engine build. The budget is first
+clipped to the room the session's index has left (4,096 frames; 200,000 lines, counted as 256 a
+frame): a call that fills it stops as `index_full`, and a call with no room, or on a session that
+already holds 64 index revisions, reads nothing and fails with `RESOURCE_LIMIT` before the runner
+reads a frame. A session's index so holds at most 64 calls' frames (L-202). `--threads` (default 2) is the runner's inference threads,
+taken from the session root's admission capacity like a transcription's.
+
+**The runner.** `vsift-ocr-runner` is VSift's own small program, built from this repository
+(`crates/vsift-ocr-runner`), that runs PP-OCRv5 mobile detection and the Latin-script recognizer
+on Microsoft's ONNX Runtime; it is never linked into `vsift`. The call uses `--runner` if given,
+else the runner `setup configure ocr-runner --executable <path>` recorded (in a file of its own,
+so older releases' configuration is untouched), else `vsift-ocr-runner` on the filtered `PATH`.
+It is run as an external tool with a closed argument list, an empty environment, its own folder as
+its directory (the frames are handed over by absolute path in the session's private work folder)
+and no shell, first as `describe` (its version, the ONNX Runtime version and that library's
+SHA-256, and its two models' SHA-256) and then as `read` on at most eight images at a time; its
+answer is bounded JSON Lines (at most 4 MiB) that VSift checks strictly. The engine build is the
+runner's digest and version, the runtime's version and the two model digests. **Every `read`
+proves its build:** VSift hashes the executable again first, and the runner's first record names
+the runtime and models it hashed itself before loading them; a batch by any other build (a runner
+folder updated during the call) is refused, its frames stay pending, and when nothing was read the
+call fails with `INTEGRITY_FAILURE`. **A different build starts a new index**: text read by two
+builds is never mixed, and `search` reads the newest index only.
+Only Latin script is read (`ppocrv5-latin-v1`); other scripts are later work.
+
+**Result.** `data` ([`screen-text-data.schema.json`](../../schemas/v1/screen-text-data.schema.json),
+examples [`ocr.json`](../../schemas/v1/examples/ocr.json) and
+[`ocr.partial.json`](../../schemas/v1/examples/ocr.partial.json)) holds `session_id`, the `range`
+read (clipped to the video), `index` (the newest revision's `index_id`, `revision`, `engine` and
+its `frames` and `lines` counts; null while nothing has been attempted), `read_now` (the frames this
+call attempted), `stopped` (why it ended with reads pending: `frame_limit`, `deadline_exceeded`,
+`cancelled`, `engine_failed`, `media_failed`, or `index_full` when the index had room for no more;
+null otherwise), `coverage` and `candidate_gaps`.
+`coverage` (scope `screen_text`) counts the range's planned reads once each: `planned` = `read` +
+`failed` (the runner rejected the image or failed on it; not retried by the same build) +
+`unresolved` + `pending`, with `awaiting_analysis` (reads not planned yet because their visual window is not analysed: always 0 for `vsift ocr`, which analyses missing windows itself; counted by the engine's analysed-windows-only calls for ADR 0033's background `prepare` job), `period_us` and `candidates_complete` (false while a visual window
+of the range can still be analysed, `not_analyzed` or `deadline_exceeded`, so its candidates are not
+yet in the plan; `candidate_gaps` lists every visual gap as `candidates` reports them, the final ones,
+`undecodable`, `no_decoded_frame` and `candidate_budget_exhausted`, included). **Coverage is never hidden:** the envelope `coverage` is
+`truncated`, and the status `partial` with the fixed warning `Not every planned frame of the range
+has been read: ...`, exactly while a read is pending or failed or the candidates are not all known;
+its `gaps` are the candidate gaps that can still be filled, as `"<from_us>-<to_us>"`, and its
+`reasons` name `frames_pending`, `frames_failed`, `frames_awaiting_analysis` and each of those gaps' reasons. A partial result exits 0.
+
+**Search.** Since `0.3.0` a `search` first page has a `screen_text` member
+([`search.screen-text.json`](../../schemas/v1/examples/search.screen-text.json); the definition is
+`screen-text-data.schema.json#/$defs/search_part`) in the full, brief and stream views alike. It
+lists the query's occurrences in the newest screen-text index within the searched range, matched by
+the transcript's rule (`phrase`, then `all_terms`, each by time), at most `--limit`, with
+`total_hits` counting them all. A line read on consecutive read frames with the same words in the
+same place (at least half of the smaller region overlapping) is one hit: its first `frame` (stream,
+time base, `pts`, `time_us`, size), its `region` in that frame's displayed pixels, its `text` and
+`display_text`, the runner's uncalibrated `confidence`, `last_time_us` and `frames` (how long it
+stayed), and the `candidate_ids` whose representative frame the first frame is. `state` is
+`not_run` before `ocr` has read the session, `partial` while its coverage of the searched range is
+not complete and `complete` otherwise; `coverage` is the same block as `ocr`'s. The member never
+changes the search's status or envelope coverage, which stay the transcript's, and it is absent on
+a page a `--cursor` continues: on-screen hits are not paged. **On-screen text never fails a
+search:** an index the member cannot read is named in an `unavailable` member (`index`
+`screen_text` or `visual`; `reason` `integrity_failure`, `unsupported_version` or `unreadable`,
+example [`search.screen-text-unavailable.json`](../../schemas/v1/examples/search.screen-text-unavailable.json)).
+An unreadable screen-text index makes the state `unavailable`, with nothing known (as for
+`not_run`); an unreadable visual index leaves the hits listed but nothing planned (`partial`). An absent hit is not evidence that the
+text was not on screen: only planned frames are read. On-screen text is untrusted evidence, like a
+transcript: quote `display_text`, and check the frame (`frame get --at <time_us>`) before relying on
+a value.
+
+**`ocr search` (0.3.0, ADR 0030 decision 13).** `ocr search <session> --query <text> [--from <us>
+--to <us>] [--limit 1..100] [--cursor <token>]` pages every occurrence of the query in the session's
+screen-text index, **with or without a transcript**: a silent recording is searched like any other.
+Matching, grouping and ranking are those of `search`'s `screen_text` member (phrase, then
+`all_terms`, each by first appearance; a line held in one place over consecutive read frames is one
+hit). `data` ([`ocr-search-data.schema.json`](../../schemas/v1/ocr-search-data.schema.json), examples
+[`ocr-search.json`](../../schemas/v1/examples/ocr-search.json) and
+[`ocr-search.not-run.json`](../../schemas/v1/examples/ocr-search.not-run.json)) holds `session_id`,
+`query.terms`, `range`, `state` (`not_run`, `partial`, `complete`), `index`, `hits` (20 by default),
+`total_hits` (the whole search, on every page), `next_cursor` and the screen-text `coverage` of the
+searched range. While the state is not `complete` the envelope `coverage` is `truncated` with reasons
+`not_run`, or `frames_pending`, `frames_failed`, `frames_awaiting_analysis` and `candidates_incomplete`, and the status `partial`
+with the fixed warning `Not every planned frame of the searched range has been read, ...`; it exits 0.
+The cursor is bound to the session, the index revision, the range and the normalised query, and the
+session's expiry; once `ocr` commits a new revision, or for any other search, it is `INVALID_ARGUMENT`
+with the remediation `The cursor cannot continue this on-screen search: ...`. It runs no tool and
+writes nothing. A rejected query, an empty range and a closed or expired session fail as for `search`.
+
+**Storage.** Each call that attempts a frame commits one `screen_text_index_record` artifact
+(strict versioned JSON, at most 48 MiB, at most 64 per session; the shape is
+[`bundle-screen-text-index-record.schema.json`](../../schemas/v1/bundle-screen-text-index-record.schema.json),
+example [`bundle-screen-text-index-record.json`](../../schemas/v1/examples/bundle-screen-text-index-record.json)).
+It holds what was read and where, never pixels. It is removed with the session and carried by
+`session retain`; `bundle validate` re-checks every record's frames, regions, bounds and identities.
+A release before `0.3.0` does not know the artifact kind and refuses a session or bundle that holds
+one (L-203).
+
+**Failures** commit nothing: `MISSING_CAPABILITY` when no runner is given, configured or found
+(remediation `On-screen text is read by the OCR runner, vsift-ocr-runner, ...`, which says to ask
+the user rather than search folders), when the runner cannot describe itself, load its runtime or
+models, or answer in its protocol (remediation `The OCR runner could not read the frames: ...`), and
+when FFmpeg or FFprobe is missing, as for `candidates`; `INVALID_ARGUMENT` for an empty or reversed
+range, a video without a video stream and a closed or expired session, and, as parse errors, a
+value of `--period-us`, `--max-frames` or `--threads` outside its bounds or a lone `--from` or
+`--to`; `BUSY` when the admission capacity is in use; `DEADLINE_EXCEEDED` or `CANCELLED` only when
+the call read nothing (otherwise the result is `partial`); `RESOURCE_LIMIT` for a 65th record, a
+record over 48 MiB, an index over its bounds (4,096 frames, 256 lines a frame, 200,000 lines) or a
+runner that answered beyond its bounds or ended abnormally; `INTEGRITY_FAILURE` or
+`UNSUPPORTED_SCHEMA` for a stored record that fails verification or a source copy that changed
+during the call.
 
 ### Views of a read (`--view`, 0.2.1)
 
@@ -3198,7 +3340,7 @@ producer emits it every time, and a test pins that.
 | C-05 | bounded/sanitized output and broken stdout/stderr behavior |
 | C-06 | strict bounded JSON decoding and schema/identifier rejection, including the P11 job request (`vsift-contract` `request` tests, `worker_contract`, fuzz targets `job_request` and `job_batch_line`), the recorded steps and results of a request record (`recorded_steps_and_results_read_back_exactly`, fuzz target `request_record`) and `handoff check` (P13 PR 5: the `handoff` unit tests, `handoff_contract`, `handoff_differential` against `jsonschema`, `handoff_cli_contract` through the binary, fuzz target `handoff_check`) |
 | C-07 | checked time/range/crop invariants and property tests |
-| C-08 | schema examples and old-reader/additive-v1 compatibility, including the `setup check` `local_asr` object (`setup_local_asr_contract`, `engine_setup_local_asr`), a segment's `display_text` and `display_label` (`vsift-contract` `text` tests, `display_text_makes_hidden_characters_visible_and_keeps_text_raw`, and SEC-T02's `sec_t02_adversarial_evidence` through the binary), the failure remediation of an `ingest` path that names no file, a folder or a file that may not be read (`storage_contract`, `source_path_cli_contract`, #369) and the P11 event kinds (`worker_events_contract`: a reader that knows only `evidence` and `terminal` skips `progress`, `lifecycle` and `result` and still sees a contiguous sequence), the `0.2.1` views and coverage of a read (the brief answers are a projection of the full ones and match their frozen examples: `transcript_contract`, `local_asr_contract`, `search_contract`, `candidates_contract`; a complete read and a stream are what `0.1.0` published but for `transcript_coverage`: `a_complete_read_is_what_was_published_but_for_the_new_member`, `a_stream_is_what_was_published_but_for_the_new_terminal_member`; the brief view is refused for a stream before anything is read or analysed, through the binary: `transcript_cli_contract`, `search_cli_contract`, `candidates_cli_contract`; a read over a gap is `partial` as a search is: `a_read_over_a_gap_is_partial_and_names_the_gap`, `a_read_and_a_search_agree_on_every_range`, `a_read_over_a_gap_is_partial_as_a_search_over_it_is`); and `setup check`'s `managed_updates` (`0.2.3`: always present, empty when nothing is superseded, valid without it: `setup_managed_update_contract`; through the binary on every platform: `setup_check_names_a_superseded_managed_whisper_and_the_step`; on real bytes: `p13_managed_upgrade_real`) |
+| C-08 | schema examples and old-reader/additive-v1 compatibility, including the `setup check` `local_asr` object (`setup_local_asr_contract`, `engine_setup_local_asr`), a segment's `display_text` and `display_label` (`vsift-contract` `text` tests, `display_text_makes_hidden_characters_visible_and_keeps_text_raw`, and SEC-T02's `sec_t02_adversarial_evidence` through the binary), the failure remediation of an `ingest` path that names no file, a folder or a file that may not be read (`storage_contract`, `source_path_cli_contract`, #369) and the P11 event kinds (`worker_events_contract`: a reader that knows only `evidence` and `terminal` skips `progress`, `lifecycle` and `result` and still sees a contiguous sequence), the `0.2.1` views and coverage of a read (the brief answers are a projection of the full ones and match their frozen examples: `transcript_contract`, `local_asr_contract`, `search_contract`, `candidates_contract`; a complete read and a stream are what `0.1.0` published but for `transcript_coverage`: `a_complete_read_is_what_was_published_but_for_the_new_member`, `a_stream_is_what_was_published_but_for_the_new_terminal_member`; the brief view is refused for a stream before anything is read or analysed, through the binary: `transcript_cli_contract`, `search_cli_contract`, `candidates_cli_contract`; a read over a gap is `partial` as a search is: `a_read_over_a_gap_is_partial_and_names_the_gap`, `a_read_and_a_search_agree_on_every_range`, `a_read_over_a_gap_is_partial_as_a_search_over_it_is`); the `0.3.0` on-screen text (`screen_text_contract`: the `ocr` results and a search's `screen_text` member against their schemas and frozen examples, older pages without the member still valid; `ocr_cli_contract` through the binary; `screen_text_index_store` for the stored record and retained bundles); and `setup check`'s `managed_updates` (`0.2.3`: always present, empty when nothing is superseded, valid without it: `setup_managed_update_contract`; through the binary on every platform: `setup_check_names_a_superseded_managed_whisper_and_the_step`; on real bytes: `p13_managed_upgrade_real`) |
 | C-09 | legal job and cancellation terminal transitions (`vsift-domain` `job` tests over the whole state graph; `job` use-case tests of cancellation serialized with the commit); the public job commands, `--operation-id` and interruptions through the binary (`job_cli_contract`, `interrupt_cli_contract`, the job examples in `local_asr_contract`); `job run` through the binary: results and events against their schemas, replay, conflict, busy, refusals, sentinels and shutdown (`job_run_cli_contract`), and the request path through the engine (`engine_worker`); `job batch` through the binary: events, summary, limits, O-02, O-03, X-08 and O-04 (`job_batch_cli_contract`), and the batch through the engine (`engine_batch`, opt-in `engine_batch_tools`) |
 | C-10 | unknown confidence, speaker metadata, time normalization, requested/actual timing, imported-transcript offset conversion, local-ASR provenance and carried segments (`local_asr_contract`, `local_asr_store`), and that an id of a superseded revision still resolves in a read, a handoff check and a retained bundle (`superseded_ids_cli_contract`) |
 

@@ -1,0 +1,8 @@
+{"record":"runner","protocol":1,"runner_version":"0.1.0","runtime_version":"1.31.0","runtime_sha256":"469849977cb60744ea160927e1a3a0643fd4c55c0aff743251c6d293402e334e","detector_sha256":"4d97c44a20d30a81aad087d6a396b08f786c4635742afc391f6621f5c6ae78ae","recognizer_sha256":"b20bd37c168a570f583afbc8cd7925603890efbcdc000a59e22c269d160b5f5a"}
+{"record":"line","image":0,"x":4,"y":5,"width":60,"height":12,"text":"Total","text_cut":false,"confidence":0.9877}
+{"record":"line","image":0,"x":70,"y":5,"width":96,"height":12,"text":"4,731,145","text_cut":false,"confidence":0.9311}
+{"record":"image","image":0,"width":1280,"height":720,"lines":2,"truncated":false}
+{"record":"error","image":1,"code":"image_invalid"}
+{"record":"line","image":2,"x":0,"y":700,"width":1280,"height":20,"text":"Página principal","text_cut":true,"confidence":0.5}
+{"record":"image","image":2,"width":1280,"height":720,"lines":1,"truncated":false}
+{"record":"error","image":3,"code":"inference_failed"}
