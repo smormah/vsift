@@ -63,7 +63,7 @@ env:
   CARGO_TERM_COLOR: never
   # The pins of the P13 npm qualification (release.yml `env`); see
   # tools/p14-published/test/pins.test.cjs.
-  NODE_VERSION: "22.23.3"
+  NODE_VERSION: "22.23.4"
   VERDACCIO_VERSION: "6.10.4"
   # The throwaway version the pull request's build is published under, to the
   # loopback registry only. It is higher than any real version.

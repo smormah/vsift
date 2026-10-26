@@ -47,7 +47,7 @@ opens. Use `winget` or the publisher's own installer; both check the publisher's
 | --- | --- | --- | --- |
 | Git for Windows | `actions/checkout` needs Git | `winget install --exact --id Git.Git` | `git --version` |
 | PowerShell 7 | the workflow's steps run in `pwsh` | `winget install --exact --id Microsoft.PowerShell` | `pwsh --version` |
-| Node.js 22 (LTS), machine-wide in `C:\Program Files\nodejs` | the job-started hook runs `C:\Program Files\nodejs\node.exe`; the workflow itself pins its own Node.js 22.23.3 | `winget install --exact --id OpenJS.NodeJS.22` | `& 'C:\Program Files\nodejs\node.exe' --version` prints `v22.` and more |
+| Node.js 22 (LTS), machine-wide in `C:\Program Files\nodejs` | the job-started hook runs `C:\Program Files\nodejs\node.exe`; the workflow itself pins its own Node.js 22.23.4 | `winget install --exact --id OpenJS.NodeJS.22` | `& 'C:\Program Files\nodejs\node.exe' --version` prints `v22.` and more |
 | Visual Studio 2022 Build Tools with the C++ workload | Rust's linker and the Windows SDK on Windows | `winget install --exact --id Microsoft.VisualStudio.2022.BuildTools --override "--add Microsoft.VisualStudio.Workload.VCTools --includeRecommended --passive --wait"` | `Test-Path 'C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC'` |
 | Python 3 (optional) | none of today's suites; the Python tools under `tools/` if a later suite runs one | `winget install --exact --id Python.Python.3.12` | `py --version` |
 

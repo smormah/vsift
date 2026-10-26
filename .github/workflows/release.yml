@@ -139,11 +139,11 @@ env:
   # The npm qualification's pinned tools (P13 PR 9, reviewed 2026-09-30):
   # the minimum runtimes ADR 0023 decision H6 supports (Node.js 22, Bun 1.2),
   # the current pnpm and Yarn, and the local registry.
-  NODE_VERSION: "22.23.3"
+  NODE_VERSION: "22.23.4"
   # The publish job's Node.js (P13 PR 10, reviewed 2026-10-01): npm trusted
   # publishing needs npm 11.5.1 or later, and Node.js 22 ships npm 10;
-  # Node.js 24.21.0 ships npm 11.19.0.
-  PUBLISH_NODE_VERSION: "24.21.0"
+  # Node.js 24.22.1 ships npm 11.19.1.
+  PUBLISH_NODE_VERSION: "24.22.1"
   BUN_VERSION: "1.2.23"
   PNPM_VERSION: "12.8.1"
   YARN_VERSION: "4.18.1"
