@@ -13,8 +13,8 @@ mod handoff;
 mod human;
 mod job;
 mod json_input;
-mod ocr;
 mod live_line;
+mod ocr;
 mod output;
 mod parse_failure;
 mod progress;
@@ -183,11 +183,38 @@ const fn operation_name(command: &Command) -> Option<CommandName> {
     })
 }
 
+/// Runs one command line. The dispatch below holds the state of every
+/// command's future at once, so it grows with each command the CLI gains and
+/// would sit on the caller's stack; it is boxed here, once, so that growth
+/// stays on the heap (`clippy::large_futures`).
+async fn execute_with<Arguments, Argument, StandardOutput, StandardError>(
+    arguments: Arguments,
+    standard_output: StandardOutput,
+    standard_error: StandardError,
+    ports: EnginePorts,
+    interruption: Interruption,
+) -> ProcessExit
+where
+    Arguments: IntoIterator<Item = Argument>,
+    Argument: Into<OsString> + Clone,
+    StandardOutput: Write,
+    StandardError: Write,
+{
+    Box::pin(dispatch(
+        arguments,
+        standard_output,
+        standard_error,
+        ports,
+        interruption,
+    ))
+    .await
+}
+
 #[allow(
     clippy::too_many_lines,
     reason = "Keep top-level command composition in one exhaustive dispatch"
 )]
-async fn execute_with<Arguments, Argument, StandardOutput, StandardError>(
+async fn dispatch<Arguments, Argument, StandardOutput, StandardError>(
     arguments: Arguments,
     standard_output: StandardOutput,
     standard_error: StandardError,
