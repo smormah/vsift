@@ -228,6 +228,7 @@ async fn session() -> Built<Session> {
             key: &key,
             progress: &NoProgress,
             observer: &cuts,
+            stopwatch: &vsift_application::StoppedStopwatch,
         },
         &Audio,
         &Recogniser,

@@ -324,6 +324,31 @@ unknown, which the skill says. **Agents ran this text once, in batch 2 on `0.2.2
 20-second recordings, and a long recording was not exercised**; the trial freeze ([trials.md](trials.md), "The freeze (P14)") is
 `skill` `bd205d6c...`, whole freeze `10180cd8...`.
 
+## The change for 0.3.0: transcriptions in the background (ADR 0033; draft, 2026-10-21)
+
+- **PREPARE starts the whole-video transcription with `vsift job start <session> --json`.** VSift answers when
+  done for a recording under 10 minutes and at once for a longer one, which it transcribes in the background
+  (`data.start.runner` `background`). A VSift before 0.3.0 refuses `job start` (`command` `parse`); the skill
+  then runs `transcript retranscribe` with an operation id as before, so the operation-id rule and its example
+  stay in PREPARE.
+- **`references/resume.md` gains "A transcription in the background":** go on with the next states at once;
+  check `vsift job status <job> --json` between steps and tell the user each time how far it is (`media`:
+  `done_us` of `total_us`, `percent`, `speed`, `estimate.remaining_ms`, an estimate); `search` and
+  `transcript get` answer over the published part, `partial` with `transcription_pending`; `--since` with an
+  answer's `data.since.since_token` reads only what is new; never call the transcript complete before the job
+  succeeded; out of budget, report `partial` with a resume card naming the job. In "A transcription that is
+  still running", a `prepare` job is no longer a reason to stop media work: it leaves room for frames.
+- **`references/commands.md`** classes `vsift job start` `free` and allows `job start` and the two `--since`
+  forms (`search` and `transcript get`). The skill guard has a placeholder `<since-token>`.
+- **What moved, so that `SKILL.md` stays at 300 lines:** the PREPARE paragraph after a timeout lost its
+  parenthesis on `session status`, `job status` and `job resume` (resume.md says it), and the follow-up of a
+  background job is in resume.md, as above. Four paragraphs were rewrapped to the widest line the file
+  already had (116 characters) with no word changed (`git diff --word-diff` shows it). The fuzz seed copy is the
+  same bytes.
+- **Untried:** no trial has run the background path. The trial freeze of batches 2 and 3 is the 0.3.0
+  development freeze (`docs/agents/trials.md`), written on the `main` this pull request was rebased onto to merge;
+  the final freeze is recorded at the 0.3.0 cut.
+
 ## Keeping it in step with the CLI
 
 `crates/vsift-cli/src/skill_contract.rs` (unit tests of the CLI crate, run by `cargo

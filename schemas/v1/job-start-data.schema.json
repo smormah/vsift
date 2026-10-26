@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vsift.dev/schemas/v1/job-start-data.schema.json",
+  "title": "VSift job.start data v1",
+  "description": "The data member of a complete (or partial) job.start result (0.3.0, ADR 0033): job is the session's prepare job (job-data.schema.json) as it stands, start what the call did, and outcome, for a job that ran in the foreground, the retranscription it committed, exactly as transcript.retranscribe reports it (null otherwise). start.state is created (a new job), waiting (the same request's job, interrupted or not started, taken up again), restarted (a failed or cancelled one, started again from nothing), running (a runner holds it already; nothing was started) or done (it had succeeded; nothing was started). start.mode is quick (in the foreground: the call answers when the job is done, its revision sealed in one generation) or watched (in the background: a runner publishes the revision as it goes and leaves one unit of the root's admission capacity free), and mode_basis why: requested with --mode, short_recording (under ten minutes), long_recording, or length_unknown (no transcript yet, so watched). start.runner is foreground, background (a runner was started and holds the job; detachment says how far it is detached from its caller: process_group on Unix, left_callers_job on Windows, or in_callers_job when the caller's job object forbids leaving it, so that whatever ends that job ends the runner) or none. Follow a background job with job.status; job.cancel or session.close stops it, and what it published stays. Validate the envelope with operation-response.schema.json.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["job", "start", "outcome"],
+  "properties": {
+    "job": { "$ref": "job-data.schema.json" },
+    "start": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state", "mode", "mode_basis", "runner", "detachment"],
+      "properties": {
+        "state": { "enum": ["created", "waiting", "restarted", "running", "done"] },
+        "mode": { "enum": ["quick", "watched"] },
+        "mode_basis": { "enum": ["requested", "short_recording", "long_recording", "length_unknown"] },
+        "runner": { "enum": ["foreground", "background", "none"] },
+        "detachment": {
+          "oneOf": [
+            { "type": "null" },
+            { "enum": ["process_group", "left_callers_job", "in_callers_job"] }
+          ]
+        }
+      }
+    },
+    "outcome": {
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "transcript-retranscribe-data.schema.json" }
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "start": { "properties": { "runner": { "const": "background" } } } } },
+      "then": { "properties": { "start": { "properties": { "detachment": { "type": "string" } } } } },
+      "else": { "properties": { "start": { "properties": { "detachment": { "type": "null" } } } } }
+    },
+    {
+      "if": { "properties": { "start": { "properties": { "runner": { "const": "foreground" } } } } },
+      "then": { "properties": { "outcome": { "type": "object" } } },
+      "else": { "properties": { "outcome": { "type": "null" } } }
+    }
+  ]
+}

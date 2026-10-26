@@ -733,6 +733,7 @@ impl Engine {
                             // A worker's step publishes only at its seal, so a
                             // supervisor's request result is what it was.
                             publication: crate::RetranscribePublication::AtTheSeal,
+                            share: crate::RecognitionShare::Whole,
                         })
                         .await
                         .map_err(|error| StepError {
@@ -1315,6 +1316,7 @@ fn report_steps(observer: &ProgressObserver, completed: usize, total: u64) {
             stage: ProgressStage::RunningRequest,
             completed: u64::try_from(completed).unwrap_or(u64::MAX),
             total: Some(total),
+            media: None,
         },
     });
 }

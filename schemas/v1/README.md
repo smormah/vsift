@@ -116,10 +116,18 @@ These files are the machine-readable public v1 boundary:
   `live_owner`, `resumable` and `resumable_reason`, the `operation_id` a retry should
   carry, `request.range`, `progress` (`chunks_total`, `chunks_checkpointed`),
   `attempts`, `result` (`revision_id`, `generation`) and `failure` (`code`,
-  `retryable`). It never names a path, transcript text or provider output;
+  `retryable`). It never names a path, transcript text or provider output. Since 0.3.0
+  (ADR 0033) a `prepare` job (`kind`) adds `request.mode` and `streams`, each stream
+  with its own job, state, chunks, `published_until_us` and `media` (`$defs.media_progress`:
+  `done_us`, `total_us`, `elapsed_ms`, `speed`, `percent` and an `estimate` with its
+  `basis`), which `progress-event.schema.json` holds an equal copy of for its `media` member;
 - `job-resume-data.schema.json` â the `data` member of a complete `job.resume` result
   (P10 PR 3): `job` (job data after the run) and `outcome` (exactly the
   `transcript.retranscribe` data);
+- `job-start-data.schema.json` â the `data` member of a complete `job.start` result
+  (0.3.0, ADR 0033): `job` (the `prepare` job's data), `start` (`state`, `mode`,
+  `mode_basis`, `runner`, `detachment`) and `outcome` (the `transcript.retranscribe`
+  data of a job that ran in the foreground, else `null`);
 - `transcript-get-stream-data.schema.json` â the `data` member of the terminal
   event that ends a `transcript.get --events jsonl` stream: the page without its
   items, with `record_count`, the continuation cursor (P07) and, since 0.2.1, the

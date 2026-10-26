@@ -433,6 +433,7 @@ fn a_retranscription_stream_matches_the_frozen_example() -> TestResult {
                     stage: ProgressStage::RecognisingSpeech,
                     completed,
                     total: Some(1),
+                    media: None,
                 },
                 job: Some(&job),
                 request: None,
@@ -1505,6 +1506,8 @@ fn f01_job(
         attempts: 1,
         result,
         failure,
+        mode: None,
+        streams: &[],
     }))
 }
 

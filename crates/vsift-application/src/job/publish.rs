@@ -23,45 +23,24 @@ use vsift_domain::{
 
 use super::{JobKeyError, RetranscriptionRun, RetryTimer, RevisionStore};
 use crate::{
-    AsrRevisionRequest, RevisionSplice, RunObserver, RunSoFar, SessionStorageError,
+    AsrRevisionRequest, RevisionSplice, RunObserver, RunSoFar, SessionStorageError, Stopwatch,
     TranscriptBuildError, build_open_asr_revision, build_stopped_asr_revision,
     transcript::derived_identity,
 };
 
-/// Reads a monotonic clock: how long the process has run, for the interval
-/// between two parts. Injected, like every clock a use case reads.
-pub trait Stopwatch: Send + Sync {
-    /// Time since an origin fixed for the process.
-    fn elapsed(&self) -> Duration;
-}
-
 /// How a run publishes its revision before it ends (ADR 0033).
-#[derive(Clone, Copy)]
-pub enum Publication<'a> {
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Publication {
     /// Only when it ends: the revision is sealed in one generation, as before
     /// ADR 0033 (the quick and queued modes, a worker's step).
     AtTheSeal,
-    /// As it goes: a part at most once every `interval` (read on
-    /// `stopwatch`), and seldom enough that the revision has at most
+    /// As it goes: a part at most once every `interval` (read on the run's
+    /// stopwatch), and seldom enough that the revision has at most
     /// [`MAX_TRANSCRIPT_PARTS`] parts.
     AsItGoes {
         /// The least time between two parts.
         interval: Duration,
-        /// The clock the interval is read on.
-        stopwatch: &'a dyn Stopwatch,
     },
-}
-
-impl std::fmt::Debug for Publication<'_> {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::AtTheSeal => formatter.write_str("AtTheSeal"),
-            Self::AsItGoes { interval, .. } => formatter
-                .debug_struct("AsItGoes")
-                .field("interval", interval)
-                .finish_non_exhaustive(),
-        }
-    }
 }
 
 /// Why a run stopped publishing; it goes on, and its revision appears at the
@@ -148,7 +127,8 @@ struct State {
 pub(super) struct Publisher<'a, S> {
     run: &'a RetranscriptionRun<'a>,
     store: &'a S,
-    publication: Publication<'a>,
+    publication: Publication,
+    stopwatch: &'a dyn Stopwatch,
     epoch: u32,
     attempt: u32,
     state: Mutex<State>,
@@ -160,7 +140,8 @@ impl<'a, S: RevisionStore> Publisher<'a, S> {
     pub(super) fn new(
         run: &'a RetranscriptionRun<'a>,
         store: &'a S,
-        publication: Publication<'a>,
+        publication: Publication,
+        stopwatch: &'a dyn Stopwatch,
         epoch: u32,
         attempt: u32,
     ) -> Self {
@@ -191,6 +172,7 @@ impl<'a, S: RevisionStore> Publisher<'a, S> {
             run,
             store,
             publication,
+            stopwatch,
             epoch,
             attempt,
             state: Mutex::new(State {
@@ -240,11 +222,7 @@ impl<'a, S: RevisionStore> Publisher<'a, S> {
 
     /// Builds and commits the next part, if it is due; see the module.
     fn publish(&self, so_far: &RunSoFar<'_>, state: &mut State) -> Result<(), PublishingStopped> {
-        let Publication::AsItGoes {
-            interval,
-            stopwatch,
-        } = self.publication
-        else {
+        let Publication::AsItGoes { interval } = self.publication else {
             return Ok(());
         };
         if !so_far.all_checkpointed() {
@@ -253,7 +231,7 @@ impl<'a, S: RevisionStore> Publisher<'a, S> {
         if !so_far.audio_began_in_time(MAX_EARLY_AUDIO_MICROS) {
             return Err(PublishingStopped::AudioTooEarly);
         }
-        let now = stopwatch.elapsed();
+        let now = self.stopwatch.elapsed();
         let per_part = so_far.planned().div_ceil(MAX_TRANSCRIPT_PARTS).max(1);
         if let Some(last) = state.last_at
             && (now.saturating_sub(last) < interval

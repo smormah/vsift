@@ -75,6 +75,8 @@ const JOB_STAGED_FILE: &str = "job.json.tmp";
 const OWNER_LOCK_FILE: &str = "owner.lock";
 const STATE_LOCK_FILE: &str = "state.lock";
 const CHUNKS_DIRECTORY: &str = "chunks";
+const PROGRESS_FILE: &str = "progress.json";
+const PROGRESS_STAGED_FILE: &str = "progress.json.tmp";
 const JOB_INDEX_DIRECTORY: &str = "job-index";
 /// Most operation bindings one session keeps.
 const MAX_SESSION_BINDINGS: usize = 256;
@@ -222,7 +224,7 @@ impl FilesystemSessionStore {
                     if record.request_digest != spec.request_digest
                         || record.operation_key != spec.operation_key
                         || record.recognition_key != spec.recognition_key
-                        || record.request != spec.request
+                        || !record.request.same_work(spec.request)
                     {
                         return Err(SessionStorageError::IntegrityFailure.into());
                     }
@@ -467,6 +469,76 @@ impl FilesystemSessionStore {
             liveness: liveness(&job)?,
             checkpoints: count_checkpoints(&job)?,
         }))
+    }
+}
+
+impl vsift_application::JobProgressLog for FilesystemSessionStore {
+    fn record_progress(
+        &self,
+        session_id: &SessionId,
+        job_id: &JobId,
+        progress: &vsift_application::PrepareProgress,
+    ) -> Result<(), SessionStorageError> {
+        let opened = self
+            .session_jobs_directory(session_id, false)
+            .map_err(job_storage_error)?
+            .ok_or(SessionStorageError::StateConflict)?;
+        let jobs = opened.jobs.ok_or(SessionStorageError::StateConflict)?;
+        let job = jobs
+            .open_dir_nofollow(job_id.as_str())
+            .map_err(map_committed_io)?;
+        let bytes = super::job_records::encode_progress(progress)?;
+        // Advisory and rewritten every second: never synchronised to disk.
+        replace_file(
+            &job,
+            PROGRESS_FILE,
+            PROGRESS_STAGED_FILE,
+            &bytes,
+            StoredDurability::Ephemeral,
+            None,
+        )
+    }
+
+    fn read_progress(
+        &self,
+        session_id: &SessionId,
+        job_id: &JobId,
+    ) -> Result<Option<vsift_application::PrepareProgress>, SessionStorageError> {
+        let Some(opened) = self
+            .session_jobs_directory(session_id, false)
+            .map_err(job_storage_error)?
+        else {
+            return Ok(None);
+        };
+        let Some(jobs) = &opened.jobs else {
+            return Ok(None);
+        };
+        if !jobs.try_exists(job_id.as_str()).map_err(map_storage_io)? {
+            return Ok(None);
+        }
+        let job = jobs
+            .open_dir_nofollow(job_id.as_str())
+            .map_err(map_committed_io)?;
+        let file = match open_replaced_file(&job, PROGRESS_FILE, false) {
+            Ok(file) => file,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(_) => return Ok(None),
+        };
+        let Ok(bytes) = super::read_bounded_to(file, super::job_records::MAX_PROGRESS_BYTES) else {
+            return Ok(None);
+        };
+        // A damaged record is read as none: progress is advisory.
+        Ok(super::job_records::decode_progress(&bytes).ok())
+    }
+}
+
+/// The storage failure behind a job store failure.
+const fn job_storage_error(error: JobStoreError) -> SessionStorageError {
+    match error {
+        JobStoreError::Storage(storage) => storage,
+        JobStoreError::NotFound | JobStoreError::Transition(_) | JobStoreError::StaleOwner => {
+            SessionStorageError::StateConflict
+        }
     }
 }
 

@@ -37,6 +37,7 @@
 //! if the manifest chain holds that operation above that generation, the job
 //! succeeded, whatever its record says; the chain is the source of truth.
 
+mod prepare;
 mod publish;
 mod run;
 #[cfg(test)]
@@ -45,9 +46,9 @@ mod tests;
 use std::{error::Error, fmt, time::Duration};
 
 use vsift_domain::{
-    AttemptFailure, ChunkCheckpoint, ChunkPlan, JobId, JobKind, JobState, JobTransitionError,
-    OperationId, OperationKey, RecognitionKey, SessionId, Sha256Hex, SourceId, StorageGeneration,
-    TimeRange, TranscriptRevisionId,
+    AttemptFailure, ChunkCheckpoint, ChunkPlan, JobId, JobKind, JobMode, JobState,
+    JobTransitionError, OperationId, OperationKey, RecognitionKey, RecognitionShare, SessionId,
+    Sha256Hex, SourceId, StorageGeneration, TimeRange, TranscriptRevisionId,
 };
 
 use crate::{
@@ -55,8 +56,12 @@ use crate::{
     transcript::{derived_identity, sha256_hex},
 };
 
+pub use prepare::{
+    JobProgressLog, PrepareError, PrepareOutcome, PrepareProgress, PrepareStreams, StreamProgress,
+    StreamStop, prepare_operation_key, prepare_request_digest, prepare_spec, run_prepare,
+};
 pub use publish::{
-    Publication, PublishingStopped, Stopwatch, part_operation_id, seal_stopped, seal_stopped_now,
+    Publication, PublishingStopped, part_operation_id, seal_stopped, seal_stopped_now,
     stop_operation_id,
 };
 pub use run::{
@@ -304,6 +309,14 @@ pub enum JobRequest {
     Retranscribe {
         /// The requested range, before it is widened to whole segments.
         range: Option<TimeRange>,
+        /// The share of the root's capacity it recognises with (ADR 0033,
+        /// D4): part of its recognition key, so a resume uses it again.
+        share: RecognitionShare,
+    },
+    /// `job start`: the preparation of a session (ADR 0033).
+    Prepare {
+        /// How it runs.
+        mode: JobMode,
     },
 }
 
@@ -313,6 +326,53 @@ impl JobRequest {
     pub const fn kind(self) -> JobKind {
         match self {
             Self::Retranscribe { .. } => JobKind::Retranscribe,
+            Self::Prepare { .. } => JobKind::Prepare,
+        }
+    }
+
+    /// The range a retranscription was asked for (`None` for the whole
+    /// source, and for every other kind).
+    #[must_use]
+    pub const fn range(self) -> Option<TimeRange> {
+        match self {
+            Self::Retranscribe { range, .. } => range,
+            Self::Prepare { .. } => None,
+        }
+    }
+
+    /// Whether `other` asks for the same work as this request, which a job
+    /// created by either may then run. The share is left out: it is part of
+    /// the recognition key already, and two shares that give the recognizer
+    /// the same threads (a root of one unit, or a host's recognizer, which
+    /// reports its own) name the same job, which keeps the share it was
+    /// created with.
+    #[must_use]
+    pub fn same_work(self, other: Self) -> bool {
+        match (self, other) {
+            (Self::Retranscribe { range, .. }, Self::Retranscribe { range: other, .. }) => {
+                range == other
+            }
+            (Self::Prepare { mode }, Self::Prepare { mode: other }) => mode == other,
+            _ => false,
+        }
+    }
+
+    /// The share of the root's capacity a retranscription recognises with;
+    /// `None` for every other kind.
+    #[must_use]
+    pub const fn share(self) -> Option<RecognitionShare> {
+        match self {
+            Self::Retranscribe { share, .. } => Some(share),
+            Self::Prepare { .. } => None,
+        }
+    }
+
+    /// The mode a `prepare` job runs in; `None` for every other kind.
+    #[must_use]
+    pub const fn mode(self) -> Option<JobMode> {
+        match self {
+            Self::Prepare { mode } => Some(mode),
+            Self::Retranscribe { .. } => None,
         }
     }
 }
