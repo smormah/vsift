@@ -1223,6 +1223,14 @@ The data member of a complete or partial search result asked for with --view bri
 | `transcript_coverage.no_speech_ranges[].from_us` | integer | yes | at least 0 |
 | `transcript_coverage.no_speech_ranges[].to_us` | integer | yes | at least 1 |
 | `transcript_coverage.ranges_truncated` | boolean | yes | True when a range list held more than 100 ranges and only its first 100, in start order, are listed. |
+| `transcript_coverage.pending_ranges` | array of object | no | Since 0.3.0 (ADR 0033): the part of untranscribed_ranges that an open revision will still publish; absent when nothing is pending. A word said there cannot be found yet; that does not mean none was said.; 1 to 100 items |
+| `transcript_coverage.pending_ranges[].from_us` | integer | yes | at least 0 |
+| `transcript_coverage.pending_ranges[].to_us` | integer | yes | at least 1 |
+| `transcript_coverage.pending_covered_by` | object | no | Since 0.3.0 (ADR 0033): the earlier, sealed revision (the one the open revision supersedes) that still holds text over part of the pending ranges, and those parts; read them with --revision. Absent when there is none. |
+| `transcript_coverage.pending_covered_by.revision_id` | string | yes | pattern `^trv_[a-z0-9]{16,64}$` |
+| `transcript_coverage.pending_covered_by.ranges` | array of object | yes | 1 to 100 items |
+| `transcript_coverage.pending_covered_by.ranges[].from_us` | integer | yes | at least 0 |
+| `transcript_coverage.pending_covered_by.ranges[].to_us` | integer | yes | at least 1 |
 | `screen_text` | object | no | Since 0.3.0 (ADR 0030), on a first page only: the query's occurrences in on-screen text read by ocr, with each hit's frame, time and region, and how much of the searched range's plan is read. Absent on a page a cursor continues and from releases before 0.3.0. It never changes the envelope's status or coverage. |
 | `screen_text.state` | "not_run" \| "partial" \| "complete" \| "unavailable" | yes |  |
 | `screen_text.unavailable` | object | no | Present only when an index the member needs could not be read (0.3.0, RV-2 finding 2); the search itself is unchanged. index screen_text: the screen-text index, so state is unavailable and nothing about the screen is known (index null, every count 0). index visual: the visual index, so the hits are listed but nothing is planned and candidates_complete is false (state partial). reason: integrity_failure (its record failed verification), unsupported_version (a newer release wrote it) or unreadable (any other storage failure). |
@@ -1275,6 +1283,10 @@ The data member of a complete or partial search result asked for with --view bri
 | `screen_text.coverage.pending` | integer | yes | at least 0 |
 | `screen_text.coverage.awaiting_analysis` | integer | yes | Periodic reads of the range left out of the plan, not counted in planned, because their visual window is not analysed yet: always 0 when the call analyses missing windows itself, as vsift ocr does; counted by the engine's analysed-windows-only calls (ADR 0033's background prepare job). Coverage is not complete while it is above 0, and the envelope reason is frames_awaiting_analysis.; at least 0 |
 | `screen_text.coverage.candidates_complete` | boolean | yes | True when no visual window of the range is still to be analysed or tried again (not_analyzed, deadline_exceeded), so the plan holds every candidate the range will have. |
+| `since` | object | no | Since 0.3.0 (ADR 0033): present in every answer to --since, and over an open revision in the answer that ends the read (one without next_cursor; a paged read has it on its last page only). since_token is passed back with --since to read (or search) only what the revision publishes after this answer, in start order; it follows the one revision this answer read until it is sealed or stopped, and expires with the session. revision_state is that revision's state now; more is true when this answer stopped at its limit with more already published after it. |
+| `since.since_token` | string | yes | 1 to 512 characters |
+| `since.revision_state` | "open" \| "sealed" \| "stopped" | yes |  |
+| `since.more` | boolean | yes |  |
 
 ### search-data.schema.json
 
@@ -1312,6 +1324,14 @@ The data member of a complete or partial search result: one bounded page of the 
 | `transcript_coverage.no_speech_ranges[].from_us` | integer | yes | at least 0 |
 | `transcript_coverage.no_speech_ranges[].to_us` | integer | yes | at least 1 |
 | `transcript_coverage.ranges_truncated` | boolean | yes | True when a range list held more than 100 ranges and only its first 100, in start order, are listed. |
+| `transcript_coverage.pending_ranges` | array of object | no | Since 0.3.0 (ADR 0033): the part of untranscribed_ranges that an open revision will still publish; absent when nothing is pending. A word said there cannot be found yet; that does not mean none was said.; 1 to 100 items |
+| `transcript_coverage.pending_ranges[].from_us` | integer | yes | at least 0 |
+| `transcript_coverage.pending_ranges[].to_us` | integer | yes | at least 1 |
+| `transcript_coverage.pending_covered_by` | object | no | Since 0.3.0 (ADR 0033): the earlier, sealed revision (the one the open revision supersedes) that still holds text over part of the pending ranges, and those parts; read them with --revision. Absent when there is none. |
+| `transcript_coverage.pending_covered_by.revision_id` | string | yes | pattern `^trv_[a-z0-9]{16,64}$` |
+| `transcript_coverage.pending_covered_by.ranges` | array of object | yes | 1 to 100 items |
+| `transcript_coverage.pending_covered_by.ranges[].from_us` | integer | yes | at least 0 |
+| `transcript_coverage.pending_covered_by.ranges[].to_us` | integer | yes | at least 1 |
 | `screen_text` | object | no | Since 0.3.0 (ADR 0030), on a first page only: the query's occurrences in on-screen text read by ocr, with each hit's frame, time and region, and how much of the searched range's plan is read. Absent on a page a cursor continues and from releases before 0.3.0. It never changes the envelope's status or coverage. |
 | `screen_text.state` | "not_run" \| "partial" \| "complete" \| "unavailable" | yes |  |
 | `screen_text.unavailable` | object | no | Present only when an index the member needs could not be read (0.3.0, RV-2 finding 2); the search itself is unchanged. index screen_text: the screen-text index, so state is unavailable and nothing about the screen is known (index null, every count 0). index visual: the visual index, so the hits are listed but nothing is planned and candidates_complete is false (state partial). reason: integrity_failure (its record failed verification), unsupported_version (a newer release wrote it) or unreadable (any other storage failure). |
@@ -1364,6 +1384,10 @@ The data member of a complete or partial search result: one bounded page of the 
 | `screen_text.coverage.pending` | integer | yes | at least 0 |
 | `screen_text.coverage.awaiting_analysis` | integer | yes | Periodic reads of the range left out of the plan, not counted in planned, because their visual window is not analysed yet: always 0 when the call analyses missing windows itself, as vsift ocr does; counted by the engine's analysed-windows-only calls (ADR 0033's background prepare job). Coverage is not complete while it is above 0, and the envelope reason is frames_awaiting_analysis.; at least 0 |
 | `screen_text.coverage.candidates_complete` | boolean | yes | True when no visual window of the range is still to be analysed or tried again (not_analyzed, deadline_exceeded), so the plan holds every candidate the range will have. |
+| `since` | object | no | Since 0.3.0 (ADR 0033): present in every answer to --since, and over an open revision in the answer that ends the read (one without next_cursor; a paged read has it on its last page only). since_token is passed back with --since to read (or search) only what the revision publishes after this answer, in start order; it follows the one revision this answer read until it is sealed or stopped, and expires with the session. revision_state is that revision's state now; more is true when this answer stopped at its limit with more already published after it. |
+| `since.since_token` | string | yes | 1 to 512 characters |
+| `since.revision_state` | "open" \| "sealed" \| "stopped" | yes |  |
+| `since.more` | boolean | yes |  |
 
 ### search-stream-data.schema.json
 
@@ -1401,6 +1425,14 @@ The data member of the complete or partial terminal result that ends a search --
 | `transcript_coverage.no_speech_ranges[].from_us` | integer | yes | at least 0 |
 | `transcript_coverage.no_speech_ranges[].to_us` | integer | yes | at least 1 |
 | `transcript_coverage.ranges_truncated` | boolean | yes | True when a range list held more than 100 ranges and only its first 100, in start order, are listed. |
+| `transcript_coverage.pending_ranges` | array of object | no | Since 0.3.0 (ADR 0033): the part of untranscribed_ranges that an open revision will still publish; absent when nothing is pending. A word said there cannot be found yet; that does not mean none was said.; 1 to 100 items |
+| `transcript_coverage.pending_ranges[].from_us` | integer | yes | at least 0 |
+| `transcript_coverage.pending_ranges[].to_us` | integer | yes | at least 1 |
+| `transcript_coverage.pending_covered_by` | object | no | Since 0.3.0 (ADR 0033): the earlier, sealed revision (the one the open revision supersedes) that still holds text over part of the pending ranges, and those parts; read them with --revision. Absent when there is none. |
+| `transcript_coverage.pending_covered_by.revision_id` | string | yes | pattern `^trv_[a-z0-9]{16,64}$` |
+| `transcript_coverage.pending_covered_by.ranges` | array of object | yes | 1 to 100 items |
+| `transcript_coverage.pending_covered_by.ranges[].from_us` | integer | yes | at least 0 |
+| `transcript_coverage.pending_covered_by.ranges[].to_us` | integer | yes | at least 1 |
 | `screen_text` | object | no | Since 0.3.0 (ADR 0030), on a first page only: the query's occurrences in on-screen text read by ocr, with each hit's frame, time and region, and how much of the searched range's plan is read. Absent on a page a cursor continues and from releases before 0.3.0. It never changes the envelope's status or coverage. |
 | `screen_text.state` | "not_run" \| "partial" \| "complete" \| "unavailable" | yes |  |
 | `screen_text.unavailable` | object | no | Present only when an index the member needs could not be read (0.3.0, RV-2 finding 2); the search itself is unchanged. index screen_text: the screen-text index, so state is unavailable and nothing about the screen is known (index null, every count 0). index visual: the visual index, so the hits are listed but nothing is planned and candidates_complete is false (state partial). reason: integrity_failure (its record failed verification), unsupported_version (a newer release wrote it) or unreadable (any other storage failure). |
@@ -1453,6 +1485,10 @@ The data member of the complete or partial terminal result that ends a search --
 | `screen_text.coverage.pending` | integer | yes | at least 0 |
 | `screen_text.coverage.awaiting_analysis` | integer | yes | Periodic reads of the range left out of the plan, not counted in planned, because their visual window is not analysed yet: always 0 when the call analyses missing windows itself, as vsift ocr does; counted by the engine's analysed-windows-only calls (ADR 0033's background prepare job). Coverage is not complete while it is above 0, and the envelope reason is frames_awaiting_analysis.; at least 0 |
 | `screen_text.coverage.candidates_complete` | boolean | yes | True when no visual window of the range is still to be analysed or tried again (not_analyzed, deadline_exceeded), so the plan holds every candidate the range will have. |
+| `since` | object | no | Since 0.3.0 (ADR 0033): present in every answer to --since, and over an open revision in the answer that ends the read (one without next_cursor; a paged read has it on its last page only). since_token is passed back with --since to read (or search) only what the revision publishes after this answer, in start order; it follows the one revision this answer read until it is sealed or stopped, and expires with the session. revision_state is that revision's state now; more is true when this answer stopped at its limit with more already published after it. |
+| `since.since_token` | string | yes | 1 to 512 characters |
+| `since.revision_state` | "open" \| "sealed" \| "stopped" | yes |  |
+| `since.more` | boolean | yes |  |
 
 ### setup-check-response.schema.json
 

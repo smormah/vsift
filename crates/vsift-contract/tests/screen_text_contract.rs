@@ -473,6 +473,7 @@ fn search_with(
         next_cursor: next_cursor.as_deref(),
         coverage: &page.coverage,
         screen_text: Some(screen_text),
+        growth: vsift_contract::ReadGrowth::default(),
     };
     let json = serde_json::to_value(search_response(&presentation, lifecycle())?)?;
     let brief = serde_json::to_value(search_response_with_view(

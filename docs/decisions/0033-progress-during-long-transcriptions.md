@@ -339,7 +339,7 @@ The background start, the status, the modes and the skill follow in the third.
   record while one is open, and seals it with `SealTranscript`, which retires its parts in the sealing
   generation; a session read rebuilds the open revision as the newest; a bundle is retained only once it
   is sealed. A stopped revision is a version-2 record with `published_until_us`. Fuzz target
-  `transcript_part` (32 targets) with seeds pinned by `open_transcript_store`.
+  `transcript_part` (36 targets with the archive and OCR targets of `main`) with seeds pinned by `open_transcript_store`.
 - **Engine and CLI.** An open newest revision is not a base: the revision it supersedes is, and only its
   own job continues it (another request is `TranscriptionRunning`). `transcript retranscribe` and
   `job resume` publish as they go (`PUBLICATION_INTERVAL`, 10 s); `transcript get --since` and
@@ -351,6 +351,10 @@ The background start, the status, the modes and the skill follow in the third.
   (`open_transcript_store`); the contract (`growing_transcript_contract`, with the frozen examples
   `transcript-get.open.json` and `search.open.json`); and, opt-in with `FFmpeg`, `engine_growth`: a run
   read while it holds, followed with its token and sealed, and a run cancelled while it holds.
+- **Accepted by the maintainer (2026-10-23): `INTEGRITY_FAILURE` for a resume under other merge rules.**
+  A resume that finds an open revision written under another `MERGE_RULES_VERSION` seals it as stopped
+  and fails with the existing code `INTEGRITY_FAILURE`; no new failure code is added. It can happen only
+  across releases.
 - **Not in this pull request:** the background runner, the status in seconds, the live line, the modes,
   the skill, the visual stream (sections 4 to 7); the crash campaign's workload still publishes at the
   seal only, and a workload with parts is added with the background runner.

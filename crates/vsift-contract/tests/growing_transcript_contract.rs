@@ -533,6 +533,7 @@ async fn since_reads_answer_what_was_published_after_the_token() -> TestResult {
         hits: search_hits,
         next_cursor: None,
         coverage: &coverage,
+        screen_text: None,
         growth: open_growth(&token, None),
     };
     for view in [ResultView::Full, ResultView::Brief] {

@@ -1936,6 +1936,7 @@ fn a_complete_read_is_what_was_published_but_for_the_new_member() -> TestResult 
 /// not a read of silence. Both views, the page and the stream say the same,
 /// and `transcript get` and `search` report the same coverage for the range.
 #[tokio::test]
+#[allow(clippy::too_many_lines)] // One read over a gap, checked in each view and as a stream.
 async fn a_read_over_a_gap_is_partial_and_names_the_gap() -> TestResult {
     let revision = unusable_chunk_revision().await?;
     let window = range(0, 55 * SECOND)?;

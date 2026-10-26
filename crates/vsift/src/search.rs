@@ -714,6 +714,9 @@ fn search_since(
         hits,
         next_cursor: None,
         coverage,
+        // A since read follows the transcript only; the on-screen part is a
+        // first page's (ADR 0030).
+        screen_text: None,
         growth,
     })
 }
