@@ -905,6 +905,24 @@ pub enum TranscriptProvenance {
 }
 
 impl TranscriptProvenance {
+    /// Whether a local-ASR run holds a pending chunk, and whether it holds a
+    /// chunk a stopped run never reached (ADR 0033); `(false, false)` for an
+    /// import.
+    #[must_use]
+    pub fn growth(&self) -> (bool, bool) {
+        match self {
+            Self::LocalAsr(run) => (
+                run.chunks()
+                    .iter()
+                    .any(|record| record.outcome() == AsrChunkOutcome::Pending),
+                run.chunks()
+                    .iter()
+                    .any(|record| record.outcome() == AsrChunkOutcome::NotReached),
+            ),
+            Self::Imported { .. } => (false, false),
+        }
+    }
+
     /// How the revision's timestamps were placed on the source timeline.
     #[must_use]
     pub const fn alignment_origin(&self) -> AlignmentOrigin {
@@ -1185,6 +1203,35 @@ pub struct TranscriptRevision {
     language: Option<LanguageTag>,
     segments: Vec<TranscriptSegment>,
     warnings: TranscriptWarnings,
+    published_until: Option<MediaTime>,
+}
+
+/// Whether a revision is still growing, and how it ended (ADR 0033).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum RevisionState {
+    /// The run that makes the revision is publishing it as it goes: its
+    /// segments are final, and more may follow after
+    /// [`TranscriptRevision::published_until`].
+    Open,
+    /// Complete: every chunk of its run finished. Every revision made before
+    /// 0.3.0, and every import, is sealed.
+    Sealed,
+    /// Sealed early: the run stopped (it was cancelled, or failed in a way it
+    /// could not resume from) after it had published part of the revision. The
+    /// chunks it did not reach are [`AsrChunkOutcome::NotReached`].
+    Stopped,
+}
+
+impl RevisionState {
+    /// Stable lowercase identifier used in contracts.
+    #[must_use]
+    pub const fn identifier(self) -> &'static str {
+        match self {
+            Self::Open => "open",
+            Self::Sealed => "sealed",
+            Self::Stopped => "stopped",
+        }
+    }
 }
 
 impl TranscriptRevision {
@@ -1209,6 +1256,68 @@ impl TranscriptRevision {
     ///
     /// Returns the first violated [`TranscriptRevisionError`].
     pub fn new(parts: TranscriptRevisionParts) -> Result<Self, TranscriptRevisionError> {
+        if parts.provenance.growth() != (false, false) {
+            return Err(TranscriptRevisionError::InvalidGrowth);
+        }
+        Self::validated(parts, None)
+    }
+
+    /// Validates an **open** local-ASR revision (ADR 0033): the part of a
+    /// revision that its run has published so far, which every later
+    /// publication and the sealed revision extend and never change.
+    ///
+    /// Every rule of [`Self::new`] applies, and more: the run holds at least
+    /// one [`AsrChunkOutcome::Pending`] chunk (what it has not published yet)
+    /// and no [`AsrChunkOutcome::NotReached`] one; no segment starts after
+    /// `published_until` and no unplaced stretch ends after it. Coverage counts
+    /// nothing of the run's own reading from `published_until` on
+    /// ([`crate::SearchCoverage::of`]).
+    ///
+    /// # Errors
+    ///
+    /// Returns the first violated [`TranscriptRevisionError`];
+    /// [`TranscriptRevisionError::InvalidGrowth`] for the rules above and for
+    /// an import, which never grows.
+    pub fn new_open(
+        parts: TranscriptRevisionParts,
+        published_until: MediaTime,
+    ) -> Result<Self, TranscriptRevisionError> {
+        if parts.provenance.growth() != (true, false) {
+            return Err(TranscriptRevisionError::InvalidGrowth);
+        }
+        validate_growth(&parts, published_until, false)?;
+        Self::validated(parts, Some(published_until))
+    }
+
+    /// Validates a **stopped** local-ASR revision (ADR 0033, D1): the open
+    /// revision a run had published until `stopped_at` when it was cancelled,
+    /// or failed in a way it could not resume from, sealed with the earlier
+    /// text it did not reach.
+    ///
+    /// The run holds at least one [`AsrChunkOutcome::NotReached`] chunk and no
+    /// pending one; none of its own segments starts after `stopped_at`; and the
+    /// earlier text it keeps is what [`EarlierTextRule::stopped_at`] keeps.
+    /// Coverage counts nothing of the run's own reading from `stopped_at` on;
+    /// the text kept there covers itself.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::new_open`].
+    pub fn new_stopped(
+        parts: TranscriptRevisionParts,
+        stopped_at: MediaTime,
+    ) -> Result<Self, TranscriptRevisionError> {
+        if parts.provenance.growth() != (false, true) {
+            return Err(TranscriptRevisionError::InvalidGrowth);
+        }
+        validate_growth(&parts, stopped_at, true)?;
+        Self::validated(parts, Some(stopped_at))
+    }
+
+    fn validated(
+        parts: TranscriptRevisionParts,
+        published_until: Option<MediaTime>,
+    ) -> Result<Self, TranscriptRevisionError> {
         if parts.segments.is_empty()
             && !matches!(parts.provenance, TranscriptProvenance::LocalAsr(_))
         {
@@ -1228,16 +1337,23 @@ impl TranscriptRevision {
         // What the run could not read and wrote nothing over keeps the text the
         // superseded revision had there, so a carried segment may lie in the
         // replaced range (#353).
+        let stopped = parts.provenance.growth().1;
         let rule = match (&parts.provenance, parts.replaced_range) {
-            (TranscriptProvenance::LocalAsr(run), Some(replaced)) => Some(EarlierTextRule::new(
-                replaced,
-                run,
-                parts
-                    .segments
-                    .iter()
-                    .filter(|segment| segment.carried_from.is_none())
-                    .map(|segment| segment.range),
-            )),
+            (TranscriptProvenance::LocalAsr(run), Some(replaced)) => {
+                let rule = EarlierTextRule::new(
+                    replaced,
+                    run,
+                    parts
+                        .segments
+                        .iter()
+                        .filter(|segment| segment.carried_from.is_none())
+                        .map(|segment| segment.range),
+                );
+                Some(match published_until {
+                    Some(stopped_at) if stopped => rule.stopped_at(stopped_at),
+                    _ => rule,
+                })
+            }
             _ => None,
         };
         let mut identities = HashSet::with_capacity(parts.segments.len());
@@ -1302,7 +1418,27 @@ impl TranscriptRevision {
             language: parts.language,
             segments: parts.segments,
             warnings: parts.warnings,
+            published_until,
         })
+    }
+
+    /// Whether the revision is still growing, sealed, or sealed early.
+    #[must_use]
+    pub fn state(&self) -> RevisionState {
+        match self.provenance.growth() {
+            (true, _) => RevisionState::Open,
+            (false, true) => RevisionState::Stopped,
+            (false, false) => RevisionState::Sealed,
+        }
+    }
+
+    /// For an open revision, the time before which it is final: no segment
+    /// that its run will still publish starts before it. For a stopped one, the
+    /// time its run had published until when it stopped: its own reading counts
+    /// only before it. `None` for a sealed revision.
+    #[must_use]
+    pub const fn published_until(&self) -> Option<MediaTime> {
+        self.published_until
     }
 
     /// Revision identity.
@@ -1583,6 +1719,28 @@ fn validate_inherited(parts: &TranscriptRevisionParts) -> Result<(), TranscriptR
 /// What a spliced revision records as untranscribed outside its replaced range
 /// is in order, merged, inside the source, outside the replaced range and no
 /// longer than [`MAX_CARRIED_UNTRANSCRIBED`]; only a spliced revision has any.
+/// The rules an open (`stopped` false) or stopped revision adds: none of the
+/// run's own segments starts after `until`, no unplaced stretch ends after it,
+/// and it lies in the source segment; an open revision carries nothing that
+/// starts after it either.
+fn validate_growth(
+    parts: &TranscriptRevisionParts,
+    until: MediaTime,
+    stopped: bool,
+) -> Result<(), TranscriptRevisionError> {
+    if until > parts.source_segment.range().end()
+        || parts
+            .segments
+            .iter()
+            .filter(|segment| !stopped || segment.carried_from.is_none())
+            .any(|segment| segment.range.start() > until)
+        || parts.unplaced.iter().any(|stretch| stretch.end() > until)
+    {
+        return Err(TranscriptRevisionError::InvalidGrowth);
+    }
+    Ok(())
+}
+
 fn validate_carried_untranscribed(
     parts: &TranscriptRevisionParts,
     bounds: TimeRange,
@@ -1944,6 +2102,12 @@ pub enum TranscriptRevisionError {
     /// unreferenced, or present on a revision that is not a spliced local-ASR
     /// revision.
     InvalidCarriedSegment,
+    /// A sealed revision holds a pending or not-reached chunk; an open revision
+    /// holds no pending chunk or a not-reached one, a stopped revision no
+    /// not-reached chunk or a pending one; or an open or stopped revision is an
+    /// import, or has a segment of its own run that starts, or an unplaced
+    /// stretch that ends, after the time it is published until (ADR 0033).
+    InvalidGrowth,
 }
 
 impl fmt::Display for TranscriptRevisionError {
@@ -1970,6 +2134,7 @@ impl fmt::Display for TranscriptRevisionError {
             Self::InvalidCarriedSegment => {
                 "carried transcript segment does not match its inherited provenance"
             }
+            Self::InvalidGrowth => "transcript revision's growth state is inconsistent",
         })
     }
 }

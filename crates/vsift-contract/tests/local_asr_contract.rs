@@ -326,6 +326,8 @@ fn job_failures_validate_with_their_hints() -> TestResult {
     }
     for prose in [
         CANCELLATION_TOO_LATE_WARNING,
+        vsift_contract::REVISION_LEFT_OPEN_WARNING,
+        vsift_contract::REVISION_LEFT_OPEN_REMEDIATION,
         RESUMED_FROM_CHECKPOINT_WARNING,
         CHECKPOINT_DISCARDED_WARNING,
         IDEMPOTENCY_CONFLICT_REMEDIATION,
@@ -376,6 +378,7 @@ fn page_response(revision: &TranscriptRevision) -> Built<OperationResponse<Value
             segments: &segments,
             next_cursor: None,
             coverage: &coverage,
+            growth: vsift_contract::ReadGrowth::default(),
         }),
     )?
     .with_lifecycle(LifecycleResponse::ephemeral(EXPIRES_AT.to_owned())))
@@ -506,6 +509,7 @@ fn a_spliced_revision_streams_schema_valid_evidence() -> TestResult {
             segments: &segments,
             next_cursor: None,
             coverage: &coverage,
+            growth: vsift_contract::ReadGrowth::default(),
         },
         LifecycleResponse::ephemeral(EXPIRES_AT.to_owned()),
     )?;
@@ -540,6 +544,7 @@ fn local_asr_revisions_and_segments_satisfy_their_schemas() -> TestResult {
             segments: &segments,
             next_cursor: None,
             coverage: &coverage,
+            growth: vsift_contract::ReadGrowth::default(),
         }),
     )?)?;
     let item = &response["data"]["items"][0];
@@ -1785,6 +1790,7 @@ fn get(revision: &TranscriptRevision, window: TimeRange, view: ResultView) -> Bu
             segments: &segments,
             next_cursor: None,
             coverage: &coverage,
+            growth: vsift_contract::ReadGrowth::default(),
         },
         LifecycleResponse::ephemeral(EXPIRES_AT.to_owned()),
         view,
@@ -1930,6 +1936,7 @@ fn a_complete_read_is_what_was_published_but_for_the_new_member() -> TestResult 
 /// not a read of silence. Both views, the page and the stream say the same,
 /// and `transcript get` and `search` report the same coverage for the range.
 #[tokio::test]
+#[allow(clippy::too_many_lines)] // One read over a gap, checked in each view and as a stream.
 async fn a_read_over_a_gap_is_partial_and_names_the_gap() -> TestResult {
     let revision = unusable_chunk_revision().await?;
     let window = range(0, 55 * SECOND)?;
@@ -1992,6 +1999,7 @@ async fn a_read_over_a_gap_is_partial_and_names_the_gap() -> TestResult {
             segments: &segments,
             next_cursor: None,
             coverage: &coverage,
+            growth: vsift_contract::ReadGrowth::default(),
         },
         LifecycleResponse::ephemeral(EXPIRES_AT.to_owned()),
     )?;
@@ -2030,6 +2038,7 @@ async fn a_read_over_a_gap_is_partial_and_names_the_gap() -> TestResult {
             next_cursor: None,
             coverage: &search_coverage,
             screen_text: None,
+            growth: vsift_contract::ReadGrowth::default(),
         },
         LifecycleResponse::ephemeral(EXPIRES_AT.to_owned()),
     )?)?;
@@ -2366,6 +2375,7 @@ async fn a_read_and_a_search_agree_on_every_range() -> TestResult {
                 next_cursor: None,
                 coverage: &coverage,
                 screen_text: None,
+                growth: vsift_contract::ReadGrowth::default(),
             },
             LifecycleResponse::ephemeral(EXPIRES_AT.to_owned()),
         )?)?;

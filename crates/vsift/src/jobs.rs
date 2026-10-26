@@ -220,6 +220,9 @@ pub struct JobResumeRequest {
     /// How the resumed run waits for admission, as
     /// [`RetranscribeRequest::admission`] does.
     pub admission: AdmissionWait,
+    /// When the resumed run publishes, as
+    /// [`RetranscribeRequest::publication`] says.
+    pub publication: crate::RetranscribePublication,
 }
 
 /// A resumed job's result and the job as it stands afterwards.
@@ -248,6 +251,21 @@ impl JobResumeReport {
 pub struct JobCancelReport {
     outcome: JobCancelOutcome,
     status: JobStatusReport,
+    seal: StoppedSeal,
+}
+
+/// What a cancellation did with the revision its job published as it went
+/// (ADR 0033, D1).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum StoppedSeal {
+    /// Nothing to seal here: the job published no open revision, or a live
+    /// owner seals its own when it sees the request.
+    NotHere,
+    /// The open revision is sealed as stopped.
+    Sealed,
+    /// The stopped seal did not land (a busy session, for example), so the
+    /// revision is still open; cancelling again seals it.
+    LeftOpen,
 }
 
 impl JobCancelReport {
@@ -276,6 +294,16 @@ impl JobCancelReport {
     #[must_use]
     pub const fn too_late(&self) -> bool {
         matches!(self.outcome, CancelOutcome::TooLate(_))
+    }
+
+    /// Whether the job is cancelled but the revision it published as it went
+    /// is still open, because its stopped seal did not land (RV-1 finding 7).
+    /// Until it is sealed, every other transcription and retention of the
+    /// session is refused ([`EngineError::RevisionLeftOpen`]); cancelling the
+    /// job again seals it.
+    #[must_use]
+    pub const fn revision_left_open(&self) -> bool {
+        matches!(self.seal, StoppedSeal::LeftOpen)
     }
 }
 
@@ -402,6 +430,7 @@ impl Engine {
                 cancellation: request.cancellation,
                 progress: request.progress,
                 admission: request.admission,
+                publication: request.publication,
             })
             .await?;
         let status = self.job_status(outcome.job().job_id())?;
@@ -424,9 +453,38 @@ impl Engine {
     pub fn job_cancel(&self, job: &JobId) -> Result<JobCancelReport, EngineError> {
         let (store, session, now) = self.job_session(job)?;
         let outcome = cancel_job(&store, &session, job, now)?;
+        // A job no process runs is cancelled here, so its open revision, if it
+        // published one, is sealed as stopped here too (ADR 0033, D1); a live
+        // owner seals its own when it sees the request. A session busy now
+        // keeps the revision open: the report says so, and cancelling again
+        // seals it.
+        let seal = if matches!(
+            outcome,
+            CancelOutcome::Cancelled | CancelOutcome::AlreadyEnded(JobState::Cancelled)
+        ) {
+            let view = job_status_query(&store, &session, job, now)?;
+            match vsift_application::seal_stopped_now(
+                &store,
+                &session,
+                job,
+                view.record.epoch,
+                view.record.attempt,
+                now,
+            ) {
+                Ok(None) => StoppedSeal::NotHere,
+                Ok(Some(_)) => StoppedSeal::Sealed,
+                Err(_) => StoppedSeal::LeftOpen,
+            }
+        } else {
+            StoppedSeal::NotHere
+        };
         drop(store);
         let status = self.job_status(job)?;
-        Ok(JobCancelReport { outcome, status })
+        Ok(JobCancelReport {
+            outcome,
+            status,
+            seal,
+        })
     }
 
     /// The newest jobs of a session, as `session status` lists them.
@@ -524,4 +582,33 @@ fn session_open(
 ) -> Result<bool, EngineError> {
     let status = crate::sessions::published_status(store, session)?;
     Ok(status.phase() == SessionPhase::Open && !status.lifetime().expired(now))
+}
+
+/// The refusal for a write to `session` while its open revision, published by
+/// `job`, is open (ADR 0033): the job runs, or can still be resumed, so the
+/// caller follows it ([`EngineError::TranscriptionRunning`]); or the job has
+/// ended without sealing it, so cancelling it again seals it
+/// ([`EngineError::RevisionLeftOpen`], RV-1 finding 7). A job whose record
+/// cannot be read is reported as running, which names it all the same.
+pub(crate) fn open_revision_refusal(
+    store: &FilesystemSessionStore,
+    session: &SessionId,
+    job: JobId,
+    now: u64,
+) -> EngineError {
+    let ended = job_status_query(store, session, &job, now)
+        .ok()
+        .and_then(|view| observed_state(&view, store).ok())
+        .is_some_and(JobState::is_terminal);
+    if ended {
+        EngineError::RevisionLeftOpen {
+            session: session.clone(),
+            job,
+        }
+    } else {
+        EngineError::TranscriptionRunning {
+            session: session.clone(),
+            job,
+        }
+    }
 }

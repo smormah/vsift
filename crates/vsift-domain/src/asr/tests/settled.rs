@@ -356,3 +356,82 @@ fn the_first_and_last_cuts_settle_nothing_and_everything() -> Built<()> {
     assert_eq!(after.segments, merge_chunks(&[only]).segments);
     Ok(())
 }
+
+/// The digest of what the merge makes of a fixed sweep of runs: each kept
+/// segment's chunk, times and text, and each run's unplaced stretches.
+fn merge_rules_digest() -> Built<u64> {
+    // FNV-1a, 64 bits: stable across Rust releases, unlike the standard
+    // library's hasher.
+    let mut digest = 0xcbf2_9ce4_8422_2325_u64;
+    let mut feed = |bytes: &[u8]| {
+        for byte in bytes {
+            digest ^= u64::from(*byte);
+            digest = digest.wrapping_mul(0x0000_0100_0000_01b3);
+        }
+    };
+    let mut state = 0x9e37_79b9_7f4a_7c15_u64;
+    let mut next = |bound: u64| {
+        state ^= state << 13;
+        state ^= state >> 7;
+        state ^= state << 17;
+        state % bound
+    };
+    for round in 0..400_u32 {
+        let total_ms = 31_000 + next(99_000);
+        let answers: Vec<ChunkAnswer> = (0..5)
+            .map(|_| {
+                let delay =
+                    [0, 300, 450, 500, 600, next(4_000)][usize::try_from(next(6)).unwrap_or(0)];
+                let shape = (0..next(7))
+                    .map(|_| (200 + next(13_800), next(3_000)))
+                    .collect();
+                let junk = (0..next(3)).map(|_| next(30_000)).collect();
+                (delay, shape, junk)
+            })
+            .collect();
+        let seeds: Vec<u8> = (0..40)
+            .map(|_| u8::try_from(next(16)).unwrap_or(0))
+            .collect();
+        let words = if round % 2 == 0 {
+            Words::Unique
+        } else {
+            Words::Repeated(&seeds)
+        };
+        let Some(layout) = generated_with_plan(ChunkPlan::R0, 0, total_ms, &answers, 0, words)?
+        else {
+            continue;
+        };
+        let merged = merge_chunks(&layout.chunks);
+        for segment in &merged.segments {
+            feed(&segment.chunk.to_le_bytes());
+            feed(&segment.segment.range().start().as_micros().to_le_bytes());
+            feed(&segment.segment.range().end().as_micros().to_le_bytes());
+            feed(segment.segment.text().text().as_bytes());
+            feed(&[0]);
+        }
+        for stretch in &merged.unplaced {
+            feed(&stretch.start().as_micros().to_le_bytes());
+            feed(&stretch.end().as_micros().to_le_bytes());
+        }
+        feed(&[0xff]);
+    }
+    Ok(digest)
+}
+
+/// The merge rules version of a run's open revision (ADR 0033) names what the
+/// merge makes. **When this fails because the merge rules changed, bump
+/// `MERGE_RULES_VERSION` and record the new digest here together**: an open
+/// revision published under the old rules is then sealed as stopped by a
+/// resume under the new ones instead of being extended with text the old rules
+/// would not have settled.
+#[test]
+fn the_merge_rules_version_names_what_the_merge_makes() -> TestResult {
+    const VERSION_1_DIGEST: u64 = 17_970_290_831_488_679_141;
+    assert_eq!(crate::asr::MERGE_RULES_VERSION, 1);
+    assert_eq!(
+        merge_rules_digest()?,
+        VERSION_1_DIGEST,
+        "the merge rules changed: bump MERGE_RULES_VERSION and record the new digest"
+    );
+    Ok(())
+}

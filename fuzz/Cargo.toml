@@ -311,6 +311,14 @@ doc = false
 bench = false
 required-features = ["libfuzzer"]
 
+[[bin]]
+name = "transcript_part"
+path = "fuzz_targets/transcript_part.rs"
+test = false
+doc = false
+bench = false
+required-features = ["libfuzzer"]
+
 # The workspace lints, repeated because this package cannot inherit them.
 [lints.rust]
 missing_docs = "warn"

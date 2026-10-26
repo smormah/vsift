@@ -788,6 +788,7 @@ async fn transcript_reads_are_typed_for_bad_ranges_and_sessions_without_one() ->
         to_micros: to,
         limit,
         cursor: None,
+        since: None,
     };
     let unknown = SessionId::parse("ses_00000000000000000000000000000001")?;
     assert_eq!(
@@ -886,6 +887,7 @@ async fn f10_import_pages_and_cites_the_dialog_window() -> TestResult {
             to_micros: 12_000_000,
             limit: Some(1),
             cursor: cursor.take(),
+            since: None,
         })?;
         seen.extend(page.segments().iter().map(|segment| {
             (
@@ -917,6 +919,7 @@ async fn f10_import_pages_and_cites_the_dialog_window() -> TestResult {
         to_micros: 9_000_000,
         limit: None,
         cursor: None,
+        since: None,
     })?;
     assert_eq!(cited.segments().len(), 1);
     assert_eq!(cited.segments()[0].text().markup(), CueMarkup::None);
@@ -931,6 +934,7 @@ async fn f10_import_pages_and_cites_the_dialog_window() -> TestResult {
         to_micros: 12_000_000,
         limit: Some(1),
         cursor: None,
+        since: None,
     })?;
     let continuation = first.next_cursor().ok_or("expected a cursor")?.to_owned();
     harness.clock.set(T0 + 60);
@@ -942,6 +946,7 @@ async fn f10_import_pages_and_cites_the_dialog_window() -> TestResult {
         to_micros: 12_000_000,
         limit: Some(1),
         cursor: Some(continuation),
+        since: None,
     })?;
     assert_eq!(cue_ordinal(&resumed.segments()[0]), Some(2));
     let expiry = harness
@@ -960,6 +965,7 @@ async fn f10_import_pages_and_cites_the_dialog_window() -> TestResult {
                 to_micros: 12_000_000,
                 limit: None,
                 cursor: None,
+                since: None,
             })
             .map_err(|error| error.failure_code())
             .map(|_| ()),

@@ -56,14 +56,15 @@ use vsift_contract::{
     MEDIA_TOOLS_FOR_TRANSCRIPT_REMEDIATION, NO_AUDIO_STREAM_REMEDIATION, NO_TRANSCRIPT_REMEDIATION,
     NO_VIDEO_STREAM_REMEDIATION, OCR_FAILED_REMEDIATION, OCR_INDEX_FULL_REMEDIATION,
     OCR_RUNNER_REMEDIATION, OCR_SEARCH_CURSOR_REMEDIATION, OperationResponse,
-    SESSION_NOT_PUBLISHED_REMEDIATION, SESSION_ROOT_NAME_REMEDIATION,
-    SESSION_ROOT_OWN_ACCESS_REMEDIATION, SOURCE_ACCESS_DENIED_REMEDIATION,
-    SOURCE_COPY_TOO_SLOW_REMEDIATION, SOURCE_COPY_WOULD_BE_TOO_SLOW_REMEDIATION,
-    SOURCE_IS_FOLDER_REMEDIATION, SOURCE_IS_LINK_REMEDIATION, SOURCE_NO_ROOM_REMEDIATION,
-    SOURCE_NOT_FOUND_REMEDIATION, SOURCE_SPECIAL_FILE_REMEDIATION, STALE_PLAN_REMEDIATION,
-    SUPERSEDED_REMEDIATION, TRANSCRIPTION_RUNNING_REMEDIATION, TerminalEventResponse,
-    UNKNOWN_JOB_REMEDIATION, UNKNOWN_REVISION_REMEDIATION, UNOWNED_SESSION_ROOT_REMEDIATION,
-    UNPINNED_MODEL_REMEDIATION, VISUAL_TOOLS_REMEDIATION, WORKSPACE_NOT_DURABLE_REMEDIATION,
+    REVISION_LEFT_OPEN_REMEDIATION, SESSION_NOT_PUBLISHED_REMEDIATION,
+    SESSION_ROOT_NAME_REMEDIATION, SESSION_ROOT_OWN_ACCESS_REMEDIATION,
+    SOURCE_ACCESS_DENIED_REMEDIATION, SOURCE_COPY_TOO_SLOW_REMEDIATION,
+    SOURCE_COPY_WOULD_BE_TOO_SLOW_REMEDIATION, SOURCE_IS_FOLDER_REMEDIATION,
+    SOURCE_IS_LINK_REMEDIATION, SOURCE_NO_ROOM_REMEDIATION, SOURCE_NOT_FOUND_REMEDIATION,
+    SOURCE_SPECIAL_FILE_REMEDIATION, STALE_PLAN_REMEDIATION, SUPERSEDED_REMEDIATION,
+    TRANSCRIPTION_RUNNING_REMEDIATION, TerminalEventResponse, UNKNOWN_JOB_REMEDIATION,
+    UNKNOWN_REVISION_REMEDIATION, UNOWNED_SESSION_ROOT_REMEDIATION, UNPINNED_MODEL_REMEDIATION,
+    VISUAL_TOOLS_REMEDIATION, WORKSPACE_NOT_DURABLE_REMEDIATION,
     WORKSPACE_POLICY_MISMATCH_REMEDIATION, WORKSPACE_ROOT_REMEDIATION, local_asr_failure_summary,
     local_asr_verification_summary, managed_lifecycle_remediation, media_tool_verification_summary,
     non_private_folder_summary, search_query_rejection_summary, transcript_rejection_summary,
@@ -734,6 +735,15 @@ impl From<EngineError> for CommandFailure {
                     job.as_str().to_owned(),
                 ]
             }
+            // RV-1 finding 7: the job has ended, so only cancelling it again
+            // seals its revision.
+            EngineError::RevisionLeftOpen { job, .. } => {
+                vec![
+                    "job".to_owned(),
+                    "cancel".to_owned(),
+                    job.as_str().to_owned(),
+                ]
+            }
             EngineError::ManagedLifecycle(refusal) => managed_lifecycle_remediation(*refusal)
                 .1
                 .iter()
@@ -786,6 +796,7 @@ fn local_asr_remediation(error: &EngineError) -> Option<String> {
         EngineError::TranscriptionRunning { .. } => {
             Some(TRANSCRIPTION_RUNNING_REMEDIATION.to_owned())
         }
+        EngineError::RevisionLeftOpen { .. } => Some(REVISION_LEFT_OPEN_REMEDIATION.to_owned()),
         EngineError::IdempotencyConflict { .. } => {
             Some(IDEMPOTENCY_CONFLICT_REMEDIATION.to_owned())
         }

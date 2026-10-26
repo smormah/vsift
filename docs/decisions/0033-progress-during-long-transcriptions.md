@@ -94,8 +94,9 @@ chunks and keeps the segments that no unfinished chunk can change.
   what lies in it.
 - **The cut.** No segment of the first unfinished chunk, or of any later one, starts before that chunk's
   window start less the **early-audio bound** (`MAX_EARLY_AUDIO_MICROS`, 5 s for a recorded file: a
-  decoder's first sample may lie before the window it was asked for, at a frame boundary; a run refuses
-  audio that begins earlier). Call that time the reach. Every stretch of the finished chunks' union that
+  decoder's first sample may lie before the window it was asked for, at a frame boundary; a run stops
+  publishing at a chunk whose audio began earlier, and its seal is checked against what it published).
+  Call that time the reach. Every stretch of the finished chunks' union that
   ends before the reach is final, and the last finished chunk's right edge and core lie past it. The
   **settled time** is the start of the first stretch that ends at or after the reach, or the reach itself.
   The settled part is every merged segment that ends at or before the settled time, and it is a prefix of
@@ -134,9 +135,11 @@ All of this is additive to JSON v1.
 - **The revision block** gains `state` (`open`, `sealed` or `stopped`) and `published_until_us`.
 - **"Since" reads.** `transcript get --since <token>` and `search --since <token>` answer what was
   published after the token, in time order, with the next `since_token`. A token is bound to the
-  session, one revision and its watermark (the published segment count and the settled time), and always
+  session, one revision and its watermark (how many of its segments the reader has been given), and always
   reads that revision; once it is sealed or stopped the answer says so and names any successor. `--cursor`
-  still pages inside one since query.
+  still pages inside one since query. A plain read of an open revision gives its token only on the answer
+  that ends the read (no `next_cursor`), so a reader who follows it never skips a page (review RV-1,
+  2026-10-22).
 
 ### 4. The important part first
 
@@ -308,6 +311,53 @@ grounded evidence fast enough to judge. Future work, not built in 0.3.0:
 The on-screen-text stream follows #499 and its bounded call; `candidates --since`, visual publication per
 window rather than per batch, compaction mid-stream and the chunk cache across jobs are staged for 1.0 or
 R1.
+
+## Implementation notes: the second pull request (2026-10-21)
+
+The second pull request implements sections 1 to 3: the growing revision, its storage and its readers.
+The background start, the status, the modes and the skill follow in the third.
+
+- **Domain.** `AsrChunkOutcome::Pending` and `NotReached`; `TranscriptRevision::new_open` and
+  `new_stopped` beside `new`, each holding its state to its own chunks (`InvalidGrowth` otherwise),
+  `RevisionState` and `published_until`; `EarlierTextRule::stopped_at`; `SearchCoverage::pending` and the
+  cut of an open or stopped revision (its run's reading counts only before the time it is published
+  until; its segments cover themselves); `MERGE_RULES_VERSION`, held to a digest of what the merge makes
+  of a fixed sweep (`the_merge_rules_version_names_what_the_merge_makes`); `MAX_TRANSCRIPT_PARTS` (64).
+- **Application.** `RunObserver` and `RunSoFar` (what a run has after each chunk; `open` settles it),
+  `build_open_asr_revision` (the sealed revision's assembly, cut at the first segment a later part could
+  precede or change: a segment of the run past the settled time, or earlier text inside the replaced range
+  that reaches past it), `build_stopped_asr_revision`, the job's `Publication` (`AtTheSeal` or
+  `AsItGoes` with an interval on an injected `Stopwatch`) and its `Publisher`, which publishes only while
+  every finished chunk is checkpointed and its audio began within the bound, and whose seal is checked
+  against what it published (`PublishedDiffers` otherwise, sealed stopped). `seal_stopped` on a
+  cancellation or a failure that ends the job; `job cancel` of a job no process runs seals it too.
+  The since reads (`since_token`, `page_since`) are scoped cursors bound to the revision's number and a
+  digest of its identity.
+- **Storage.** The part record (`vsift.transcript_part` version 1: the revision as it stands with only
+  the segments it adds, its part number, first ordinal, merge-rules version and job); the store
+  continues an open revision only from its own job and its own segments, refuses another transcript
+  record while one is open, and seals it with `SealTranscript`, which retires its parts in the sealing
+  generation; a session read rebuilds the open revision as the newest; a bundle is retained only once it
+  is sealed. A stopped revision is a version-2 record with `published_until_us`. Fuzz target
+  `transcript_part` (36 targets with the archive and OCR targets of `main`) with seeds pinned by `open_transcript_store`.
+- **Engine and CLI.** An open newest revision is not a base: the revision it supersedes is, and only its
+  own job continues it (another request is `TranscriptionRunning`). `transcript retranscribe` and
+  `job resume` publish as they go (`PUBLICATION_INTERVAL`, 10 s); `transcript get --since` and
+  `search --since`; `ReadGrowth` names the revision over what is pending.
+- **Tests.** The cut matrix of the first pull request; every chain of `chain_tests` watched at every cut
+  (`Watched::seal`: each open revision a prefix of the sealed one, ids included, covering nothing the
+  sealed one does not, and its stopped revision keeping it); the job's publication, cancellation and
+  resume over the in-memory store; the part record, the store and the stopped record
+  (`open_transcript_store`); the contract (`growing_transcript_contract`, with the frozen examples
+  `transcript-get.open.json` and `search.open.json`); and, opt-in with `FFmpeg`, `engine_growth`: a run
+  read while it holds, followed with its token and sealed, and a run cancelled while it holds.
+- **Accepted by the maintainer (2026-10-23): `INTEGRITY_FAILURE` for a resume under other merge rules.**
+  A resume that finds an open revision written under another `MERGE_RULES_VERSION` seals it as stopped
+  and fails with the existing code `INTEGRITY_FAILURE`; no new failure code is added. It can happen only
+  across releases.
+- **Not in this pull request:** the background runner, the status in seconds, the live line, the modes,
+  the skill, the visual stream (sections 4 to 7); the crash campaign's workload still publishes at the
+  seal only, and a workload with parts is added with the background runner.
 
 ## Decisions for the maintainer
 

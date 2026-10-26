@@ -10,7 +10,7 @@ use vsift::{
 };
 use vsift_contract::{
     CANCELLATION_TOO_LATE_WARNING, CommandName, JobData, JobPresentation, JobResumeData,
-    OperationResponse, finish_retranscription,
+    OperationResponse, REVISION_LEFT_OPEN_WARNING, finish_retranscription,
 };
 
 use crate::{CommandFailure, command::JobIdentityArguments, session::retranscription};
@@ -56,7 +56,9 @@ pub(crate) fn status(
 
 /// Cancels one job, or asks its running owner to stop, and reports the job
 /// afterwards. A job that had committed (or was committing) keeps its
-/// result, with the warning `cancellation_too_late`.
+/// result, with the warning `cancellation_too_late`. A cancelled job whose
+/// published revision could not be sealed now has the warning
+/// `revision_left_open` (RV-1 finding 7).
 pub(crate) fn cancel(
     engine: &Engine,
     arguments: &JobIdentityArguments,
@@ -65,6 +67,8 @@ pub(crate) fn cancel(
     let response = complete(CommandName::JobCancel, &job_data(report.status()))?;
     Ok(if report.too_late() {
         response.with_warnings(&[CANCELLATION_TOO_LATE_WARNING])
+    } else if report.revision_left_open() {
+        response.with_warnings(&[REVISION_LEFT_OPEN_WARNING])
     } else {
         response
     })
@@ -86,6 +90,10 @@ pub(crate) async fn resume(
             progress,
             // Interactive: contention keeps P10's two bounded retries.
             admission: vsift::AdmissionWait::Immediate,
+            // A resumed run continues what it published as it goes (ADR 0033).
+            publication: vsift::RetranscribePublication::AsItGoes {
+                interval: vsift::PUBLICATION_INTERVAL,
+            },
         })
         .await?;
     let presented = retranscription(report.outcome())?;

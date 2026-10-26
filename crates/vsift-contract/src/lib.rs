@@ -113,6 +113,7 @@ mod delivered_path;
 mod envelope;
 mod events;
 mod evidence;
+mod growth;
 mod handoff;
 mod input;
 mod install;
@@ -140,6 +141,10 @@ pub use events::{
     LifecycleEventResponse, LifecycleKind, LifecycleReason, MAX_EVENT_LINE_BYTES,
     MAX_PROGRESS_EVENTS, PROGRESS_INTERVAL_MS, ProgressEventResponse, ProgressReport, Readiness,
     RequestEnd, RequestRef, ResultEventResponse,
+};
+pub use growth::{
+    PendingCover, ReadGrowth, SinceRead, TRANSCRIPTION_PENDING_REASON,
+    TRANSCRIPTION_PENDING_WARNING,
 };
 pub use input::{JsonLimits, StrictJsonError, decode_strict_json};
 pub use request::{
@@ -211,9 +216,9 @@ pub use lifecycle::{
 pub use local_asr::{
     CANCELLATION_TOO_LATE_WARNING, CHECKPOINT_DISCARDED_WARNING, IDEMPOTENCY_CONFLICT_REMEDIATION,
     JOB_BUSY_REMEDIATION, LOCAL_ASR_MODEL_REMEDIATION, LOCAL_ASR_TOOLS_REMEDIATION,
-    NO_AUDIO_STREAM_REMEDIATION, RESUMED_FROM_CHECKPOINT_WARNING, SUPERSEDED_REMEDIATION,
-    UNKNOWN_REVISION_REMEDIATION, UNPINNED_MODEL_REMEDIATION, job_warning_messages,
-    local_asr_failure_summary, local_asr_verification_summary,
+    NO_AUDIO_STREAM_REMEDIATION, RESUMED_FROM_CHECKPOINT_WARNING, REVISION_LEFT_OPEN_WARNING,
+    SUPERSEDED_REMEDIATION, UNKNOWN_REVISION_REMEDIATION, UNPINNED_MODEL_REMEDIATION,
+    job_warning_messages, local_asr_failure_summary, local_asr_verification_summary,
 };
 pub use navigation::{
     AUDIO_RANGE_REMEDIATION, AUDIO_RANGE_START_REMEDIATION, AUDIO_RANGE_TOO_SHORT_REMEDIATION,
@@ -222,9 +227,9 @@ pub use navigation::{
     EVIDENCE_KIND_REMEDIATION, EVIDENCE_PATH_REMEDIATION, EVIDENCE_TOOLS_REMEDIATION,
     EvidencePresentation, EvidencePresentationError, FrameData, FrameEvidenceData,
     FrameEvidenceStream, FrameStreamData, MEDIA_BUSY_REMEDIATION, NO_AUDIO_CLIP_REMEDIATION,
-    NO_FRAMES_REMEDIATION, TRANSCRIPTION_RUNNING_REMEDIATION, UNDECODABLE_EVIDENCE_REMEDIATION,
-    UNKNOWN_CANDIDATE_REMEDIATION, UNKNOWN_EVIDENCE_REMEDIATION, audio_response, frame_response,
-    frame_selection_summary, partial_evidence_warning,
+    NO_FRAMES_REMEDIATION, REVISION_LEFT_OPEN_REMEDIATION, TRANSCRIPTION_RUNNING_REMEDIATION,
+    UNDECODABLE_EVIDENCE_REMEDIATION, UNKNOWN_CANDIDATE_REMEDIATION, UNKNOWN_EVIDENCE_REMEDIATION,
+    audio_response, frame_response, frame_selection_summary, partial_evidence_warning,
 };
 pub use optional_component::{
     OptionalComponentText, SITE_TERMS_NOTICE, include_command_arguments, optional_check_step,

@@ -31,8 +31,11 @@
 //! None of its segments, nor any later chunk's, starts before
 //! `next.window().start()` less the early-audio bound (the audio a decoder
 //! returns may begin before the window it was asked for, at an earlier frame
-//! boundary, and a run refuses audio that begins earlier than its bound,
-//! [`MAX_EARLY_AUDIO_MICROS`] for a recorded file). Call
+//! boundary; [`MAX_EARLY_AUDIO_MICROS`] for a recorded file). A run stops
+//! publishing at a chunk whose audio began earlier than its bound, and the
+//! revision it seals is checked against what it published, so a source that
+//! breaks the bound stops the publication rather than changing what was
+//! published. Call
 //! that time the reach. Every stretch of the finished chunks' union that ends
 //! before the reach is final: no later segment can join it, overlap it or touch
 //! it, and the last finished chunk's right edge and core lie past the reach (its
@@ -53,9 +56,20 @@
 //! A counterexample makes the cut more conservative; the merge rules are never
 //! changed to suit it.
 
-use crate::{MediaTime, TimeRange, spans::merged, spans::span};
+use crate::{MediaTime, TimeRange, TranscriptWarnings, spans::merged, spans::span};
 
 use super::{ChunkSegments, MergedSegment, PlannedChunk, merge_chunks};
+
+/// The version of the merge rules ([`merge_chunks`] and the validation of a
+/// chunk's output), recorded in every part of an open revision (ADR 0033).
+///
+/// A run resumed by a `VSift` whose rules are another version could settle a
+/// published stretch differently, so it seals the open revision as stopped at
+/// what it published instead of publishing more. The version is bumped with
+/// every change to what the merge makes of the same chunks; the test
+/// `the_merge_rules_version_names_what_the_merge_makes` holds a digest of the
+/// merge of a fixed sweep of runs and fails when the rules change without it.
+pub const MERGE_RULES_VERSION: u32 = 1;
 
 /// The most that a chunk's decoded audio, and so any segment of it, may begin
 /// before the window the chunk planned: five seconds.
@@ -64,9 +78,10 @@ use super::{ChunkSegments, MergedSegment, PlannedChunk, merge_chunks};
 /// for real audio is milliseconds away. The bound is the same slack a stored
 /// chunk checkpoint is allowed ([`crate::ChunkCheckpoint::belongs_to`] accepts
 /// audio no longer than its window plus five seconds that overlaps it). A run
-/// that publishes as it goes refuses audio that starts earlier, because
-/// [`settled_merge`] relies on it: a segment that began further back could
-/// reach a stretch already published.
+/// that publishes as it goes stops publishing at a chunk whose audio began
+/// earlier, because [`settled_merge`] relies on the bound: a segment that began
+/// further back could reach a stretch already published (and the seal checks
+/// what was published, so it is never changed).
 pub const MAX_EARLY_AUDIO_MICROS: u64 = 5_000_000;
 
 /// The part of a run's merge that no unfinished chunk can change.
@@ -84,6 +99,10 @@ pub struct SettledTranscript {
     /// will report them, unless that merge has to join stretches to stay within
     /// [`crate::MAX_UNPLACED_STRETCHES`].
     pub unplaced: Vec<TimeRange>,
+    /// The seam duplicates the merge of the finished chunks removed: what the
+    /// run's warning counts are so far, not a settled figure (the last finished
+    /// chunk's seam with the next is not judged yet).
+    pub warnings: TranscriptWarnings,
 }
 
 /// The settled part of a run of which `finished` are the first chunks, in plan
@@ -116,6 +135,7 @@ pub fn settled_merge(
             settled_until,
             segments: merged_run.segments,
             unplaced: merged_run.unplaced,
+            warnings: merged_run.warnings,
         };
     };
     let reach = next
@@ -151,5 +171,6 @@ pub fn settled_merge(
         settled_until,
         segments,
         unplaced,
+        warnings: merged_run.warnings,
     }
 }

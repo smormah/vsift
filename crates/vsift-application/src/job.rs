@@ -37,6 +37,7 @@
 //! if the manifest chain holds that operation above that generation, the job
 //! succeeded, whatever its record says; the chain is the source of truth.
 
+mod publish;
 mod run;
 #[cfg(test)]
 mod tests;
@@ -54,9 +55,14 @@ use crate::{
     transcript::{derived_identity, sha256_hex},
 };
 
+pub use publish::{
+    Publication, PublishingStopped, Stopwatch, part_operation_id, seal_stopped, seal_stopped_now,
+    stop_operation_id,
+};
 pub use run::{
-    CommitGuard, JobReport, JobRunError, RetranscriptionOutcome, RetranscriptionPorts,
-    RetranscriptionRun, RetryTimer, RevisionStore, SessionHead, run_retranscription,
+    CommitGuard, JobReport, JobRunError, PublishedOpenRevision, RetranscriptionOutcome,
+    RetranscriptionPorts, RetranscriptionRun, RetryTimer, RevisionStore, SessionHead,
+    run_retranscription,
 };
 
 /// Command name bound into a retranscription's request digest.

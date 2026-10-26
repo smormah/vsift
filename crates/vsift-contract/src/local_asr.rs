@@ -39,6 +39,12 @@ pub const CHECKPOINT_DISCARDED_WARNING: &str = "checkpoint_discarded: A stored c
 /// committing, when cancellation was requested, so its result stands.
 pub const CANCELLATION_TOO_LATE_WARNING: &str = "cancellation_too_late: The job was already committing or had committed when cancellation was requested, so its result stands and nothing was cancelled.";
 
+/// Warning `revision_left_open` (ADR 0033, RV-1 finding 7): the job is
+/// cancelled, but the revision it published as it went could not be sealed as
+/// stopped (the session was busy), so it is still open and every other
+/// transcription of the session is refused until it is.
+pub const REVISION_LEFT_OPEN_WARNING: &str = "revision_left_open: The job is cancelled, but the revision it published as it went could not be sealed now (the session was busy), so it is still open and other transcriptions of this session are refused. Run the same job cancel again to seal it as stopped; nothing it published is lost.";
+
 /// Remediation when an operation id is reused for a different request.
 pub const IDEMPOTENCY_CONFLICT_REMEDIATION: &str = "The operation id was used earlier in this session for a different request, whose result is kept. Nothing was changed. Retry the original request with that id, or send this request with a new operation id.";
 

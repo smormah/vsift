@@ -23,7 +23,12 @@ use vsift_domain::{
 use crate::{
     CommandName, CoverageResponse, EvidenceEventResponse, LifecycleResponse, OperationResponse,
     ResultView, ScreenTextSearchData, ScreenTextSearchPresentation, TerminalEventResponse,
-    TranscriptRevisionData, TranscriptSegmentData, sanitize_untrusted_text,
+    TranscriptRevisionData, TranscriptSegmentData,
+    growth::{
+        PendingCoverData, ReadGrowth, SinceData, TRANSCRIPTION_PENDING_REASON,
+        TRANSCRIPTION_PENDING_WARNING,
+    },
+    sanitize_untrusted_text,
     stream::EvidenceStream,
     transcript::{BriefTranscriptSegmentData, RangeData},
     view::BRIEF_VIEW,
@@ -110,6 +115,9 @@ pub struct SearchPresentation<'a> {
     /// The on-screen text part of a first page (ADR 0030); `None` on a page a
     /// cursor continues, which leaves the member out.
     pub screen_text: Option<ScreenTextSearchPresentation<'a>>,
+    /// What a search of a growing transcript adds (ADR 0033); [`Default`] for
+    /// a sealed revision searched without `--since`.
+    pub growth: ReadGrowth<'a>,
 }
 
 /// How the query was read: its normalised words, in query order.
@@ -152,9 +160,24 @@ pub(crate) struct TranscriptCoverageData {
     untranscribed_ranges: Vec<RangeData>,
     no_speech_ranges: Vec<RangeData>,
     ranges_truncated: bool,
+    /// What an open revision will still publish (ADR 0033); absent when
+    /// nothing is pending, so every other answer is presented as before.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pending_ranges: Vec<RangeData>,
+    /// The earlier revision that holds text over part of the pending ranges.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pending_covered_by: Option<PendingCoverData>,
 }
 
 impl TranscriptCoverageData {
+    /// The coverage of a read, with what a growing transcript adds.
+    pub(crate) fn with_growth(coverage: &SearchCoverage, growth: ReadGrowth<'_>) -> Self {
+        let mut data = Self::new(coverage);
+        data.pending_ranges = bounded(coverage.pending());
+        data.pending_covered_by = growth.pending_covered_by.and_then(PendingCoverData::new);
+        data
+    }
+
     pub(crate) fn new(coverage: &SearchCoverage) -> Self {
         let lists = [
             coverage.transcribed(),
@@ -170,6 +193,8 @@ impl TranscriptCoverageData {
             untranscribed_ranges: bounded(coverage.untranscribed()),
             no_speech_ranges: bounded(coverage.no_speech()),
             ranges_truncated,
+            pending_ranges: Vec::new(),
+            pending_covered_by: None,
         }
     }
 }
@@ -191,6 +216,11 @@ pub struct SearchData {
     transcript_coverage: TranscriptCoverageData,
     #[serde(skip_serializing_if = "Option::is_none")]
     screen_text: Option<ScreenTextSearchData>,
+    /// What to search on from (ADR 0033): present for a `--since` search, and
+    /// over an open revision on the page that ends the search (no
+    /// `next_cursor`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    since: Option<SinceData>,
 }
 
 impl SearchData {
@@ -209,8 +239,9 @@ impl SearchData {
                 .collect(),
             hits: hit_data(page),
             next_cursor: page.next_cursor.map(str::to_owned),
-            transcript_coverage: TranscriptCoverageData::new(page.coverage),
+            transcript_coverage: TranscriptCoverageData::with_growth(page.coverage, page.growth),
             screen_text: page.screen_text.as_ref().map(ScreenTextSearchData::new),
+            since: page.growth.since.map(SinceData::new),
         }
     }
 }
@@ -236,6 +267,8 @@ pub struct SearchBriefData {
     transcript_coverage: TranscriptCoverageData,
     #[serde(skip_serializing_if = "Option::is_none")]
     screen_text: Option<ScreenTextSearchData>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    since: Option<SinceData>,
 }
 
 impl SearchBriefData {
@@ -264,6 +297,7 @@ impl From<&SearchData> for SearchBriefData {
             next_cursor: full.next_cursor.clone(),
             transcript_coverage: full.transcript_coverage.clone(),
             screen_text: full.screen_text.clone(),
+            since: full.since.clone(),
         }
     }
 }
@@ -283,6 +317,8 @@ pub struct SearchStreamData {
     transcript_coverage: TranscriptCoverageData,
     #[serde(skip_serializing_if = "Option::is_none")]
     screen_text: Option<ScreenTextSearchData>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    since: Option<SinceData>,
 }
 
 fn hit_data(page: &SearchPresentation<'_>) -> Vec<SearchHitData> {
@@ -308,9 +344,20 @@ pub(crate) fn bounded(ranges: &[TimeRange]) -> Vec<RangeData> {
 /// range has no transcript (`gaps`, merged and in start order), with the
 /// gaps as `<from_us>-<to_us>`.
 pub(crate) fn envelope_coverage(gaps: &[TimeRange]) -> CoverageResponse {
+    envelope_coverage_with(gaps, &[])
+}
+
+/// [`envelope_coverage`] of a read of an open revision (ADR 0033): the reason
+/// `transcription_pending` follows `untranscribed_range`.
+pub(crate) fn envelope_coverage_pending(gaps: &[TimeRange]) -> CoverageResponse {
+    envelope_coverage_with(gaps, &[TRANSCRIPTION_PENDING_REASON])
+}
+
+fn envelope_coverage_with(gaps: &[TimeRange], more: &[&str]) -> CoverageResponse {
     let mut reasons = Vec::new();
     if !gaps.is_empty() {
         reasons.push(UNTRANSCRIBED_REASON.to_owned());
+        reasons.extend(more.iter().map(|&reason| reason.to_owned()));
     }
     if gaps.len() > MAX_COVERAGE_RANGES {
         reasons.push(GAPS_TRUNCATED_REASON.to_owned());
@@ -333,13 +380,26 @@ fn finish(
     coverage: &SearchCoverage,
     lifecycle: LifecycleResponse,
 ) -> OperationResponse<serde_json::Value> {
+    let pending = !coverage.pending().is_empty();
     let response = response
         .with_lifecycle(lifecycle)
-        .with_coverage(envelope_coverage(coverage.untranscribed()));
+        .with_coverage(if pending {
+            envelope_coverage_pending(coverage.untranscribed())
+        } else {
+            envelope_coverage(coverage.untranscribed())
+        });
     if coverage.is_complete() {
         response
-    } else {
+    } else if !pending {
         response.with_warnings(&[untranscribed_search_warning(revision, coverage)])
+    } else if coverage.untranscribed() == coverage.pending() {
+        // An open revision (ADR 0033) whose only gap is what is pending.
+        response.with_warnings(&[TRANSCRIPTION_PENDING_WARNING])
+    } else {
+        response.with_warnings(&[
+            untranscribed_search_warning(revision, coverage),
+            TRANSCRIPTION_PENDING_WARNING,
+        ])
     }
 }
 
@@ -416,8 +476,9 @@ impl SearchEvidenceStream {
             hits: hit_data(page),
             record_count: records.len(),
             next_cursor: page.next_cursor.map(str::to_owned),
-            transcript_coverage: TranscriptCoverageData::new(page.coverage),
+            transcript_coverage: TranscriptCoverageData::with_growth(page.coverage, page.growth),
             screen_text: page.screen_text.as_ref().map(ScreenTextSearchData::new),
+            since: page.growth.since.map(SinceData::new),
         };
         let result = finish(
             OperationResponse::complete(command.identifier(), &data)?,
