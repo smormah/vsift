@@ -267,6 +267,7 @@ pub struct SearchBriefData {
     transcript_coverage: TranscriptCoverageData,
     #[serde(skip_serializing_if = "Option::is_none")]
     screen_text: Option<ScreenTextSearchData>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     since: Option<SinceData>,
 }
 
@@ -316,6 +317,7 @@ pub struct SearchStreamData {
     transcript_coverage: TranscriptCoverageData,
     #[serde(skip_serializing_if = "Option::is_none")]
     screen_text: Option<ScreenTextSearchData>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     since: Option<SinceData>,
 }
 
