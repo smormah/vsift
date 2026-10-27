@@ -4,7 +4,25 @@
 
 ### Point it at a video. Get back what was said, what changed on screen, and the proof.
 
-VSift turns a video on your machine into **timestamped speech**, **the moments the screen changed** and **the exact frames that prove them**. Use it yourself to get a transcript and jump to the moment you need, or let the AI assistant you run locally use it to work out what a recording shows, without anyone transcribing or screenshotting it by hand. VSift itself uploads nothing.
+VSift turns a video on your machine into **timestamped speech**, **the moments the screen changed** and **the exact frames that prove them**, for you or for your AI assistant, without anyone transcribing or screenshotting it by hand. VSift itself uploads nothing.
+
+</div>
+
+## Install
+
+You need Node.js 22 or later. For video VSift uses FFmpeg, and for speech whisper.cpp with a speech model; the second command tells you which of them you still need.
+
+```console
+npm install --global vsift-cli
+vsift setup check
+vsift ingest ./your-video.mp4
+```
+
+`vsift setup check` tells you what is missing and exactly how to fix it. On Ubuntu 24.04 x64 VSift can install them for you (`vsift setup plan`, then `vsift setup install`) and installs nothing until you accept its plan; on Windows, macOS and other systems you install them yourself and register them once with `vsift setup configure`.
+
+[**Install the tools yourself**](#install-the-tools-yourself) · [**Use it with your AI assistant**](#use-it-with-your-ai-assistant) · [**Already have a transcript?**](#already-have-a-transcript) · [**Without Node.js**](#without-nodejs)
+
+<div align="center">
 
 [![CI](https://github.com/smormah/vsift/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/smormah/vsift/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/vsift-cli?label=vsift-cli&color=cb3837)](https://www.npmjs.com/package/vsift-cli)
@@ -13,7 +31,7 @@ VSift turns a video on your machine into **timestamped speech**, **the moments t
 [![Licence](https://img.shields.io/badge/licence-MIT%20OR%20Apache--2.0-blue)](#licence)
 ![Status](https://img.shields.io/badge/status-early%20(0.x)-orange)
 
-[**See it work**](#see-it-work) · [**Quick start**](#quick-start) · [**With your AI assistant**](#use-it-with-your-ai-assistant) · [**How it works**](#how-it-works) · [**Built in the open**](#built-in-the-open) · [**Status**](#honest-status)
+[**Install**](#install) · [**AI assistant**](#use-it-with-your-ai-assistant) · [**How it works**](#how-it-works) · [**Status**](#honest-status) · [**Help**](#help-and-reference)
 
 <br>
 
@@ -24,6 +42,50 @@ VSift turns a video on your machine into **timestamped speech**, **the moments t
 </div>
 
 ---
+
+## Other ways to set up
+
+### Install the tools yourself
+
+VSift needs two things besides itself, and finds them on your `PATH` or wherever you register them:
+
+- **Video:** [FFmpeg](https://ffmpeg.org/download.html), which comes with FFprobe. Any video work needs it.
+- **Speech:** [whisper.cpp](https://github.com/ggml-org/whisper.cpp)'s `whisper-cli` and a speech model, for local speech recognition. A transcript you already have needs neither.
+
+Install them with whatever you normally use, then register any that are not on your `PATH`, with absolute paths, and check again:
+
+```console
+vsift setup configure ffmpeg --executable /absolute/path/to/ffmpeg
+vsift setup configure ffprobe --executable /absolute/path/to/ffprobe
+vsift setup configure whisper --executable /absolute/path/to/whisper-cli
+vsift setup configure-model --file /absolute/path/to/ggml-base.bin
+vsift setup check
+```
+
+whisper.cpp publishes no macOS command-line build, so on a Mac you build it from its source or take it from a package manager. The [installation guide](docs/operations/install.md#52-windows-macos-and-other-machines-bring-your-own) names the reviewed model and shows Windows paths.
+
+### Use it with your AI assistant
+
+VSift ships an **agent skill** that takes an AI assistant from a local video to a grounded, cited handoff: it knows the method, the evidence budgets and the safety rules, such as never installing tools on its own, and it reads with the brief view. Copy `skills/vsift` into your assistant's skill folder (Claude Code: `~/.claude/skills/vsift/`; Codex: `~/.agents/skills/vsift/`) and ask about a recording:
+
+```text
+Please look at ./team-sync.mp4 and tell me what was decided about the release date,
+with the times and frames that show it. Use the VSift skill.
+```
+
+The skill has been trialled with Claude Code and Codex; other assistants that can run local commands can call the same CLI, but they have not been tried. In the named-client trials on this repository's synthetic recordings, the smaller models passed 26 of 28 (Claude Sonnet 5.5) and 28 of 28 (GPT-6-Sol; 23 of 28 as run, before the maintainer's reading of one command) full trials, and no run installed anything, leaked a secret or acted on injected text. The later rounds on the 0.2.1 skill gave mixed results for the smaller models; on the 0.2.2 skill the round with the skill met every gate, and without the skill a smaller Claude model often left out the identifiers behind its facts ([#454](https://github.com/smormah/vsift/issues/454)). These are small trials on synthetic video: the [qualification record](docs/planning/p12-agent-qualification.md) and the [changelog](CHANGELOG.md) list the misses and the limits. Setup and details: [using the skill](docs/agents/skill.md).
+
+### Already have a transcript?
+
+Then you only need the video tools. Give VSift your SRT or WebVTT file and it skips local speech recognition altogether:
+
+```console
+vsift ingest ./your-video.mp4 --transcript ./your-video.vtt
+```
+
+### Without Node.js
+
+Bun 1.2 or later installs it too (`bun add --global vsift-cli`). Prefer no JavaScript runtime at all? Every release has native archives for Windows 11 x64, macOS 15 on Apple silicon and Linux x64 on [GitHub Releases](https://github.com/smormah/vsift/releases), with checksums and Sigstore build-provenance attestations. The [installation guide](docs/operations/install.md) covers every route, upgrading, uninstalling, proxies and how to verify what you downloaded.
 
 ## Why
 
@@ -159,41 +221,6 @@ Each frame records the time you asked for and the time you got, and carries a ha
 | 🔒 **Local and disposable** | Nothing is uploaded. Investigation sessions expire unless you retain them; cleanup is explicit and contained. |
 | ♻️ **Recoverable long jobs** | Long transcriptions survive interruptions; durable sessions survive an OS crash on Ubuntu 24.04 with local ext4. |
 
-## Quick start
-
-> VSift **0.2.2** is on npm as `vsift-cli`. You need Node.js 22 or later (or Bun 1.2 or later) to install it, and FFmpeg and FFprobe to process video.
-
-```console
-npm install --global vsift-cli
-vsift setup check
-vsift ingest ./recording.mp4
-```
-
-`vsift setup check` tells you what is missing and exactly how to fix it. If you already have a transcript, `vsift ingest ./recording.mp4 --transcript ./recording.vtt` skips local speech recognition altogether. On Ubuntu 24.04 x64, `vsift setup install` can install the reviewed FFmpeg, whisper.cpp and model after you accept a plan; on other systems you point VSift at your own tools.
-
-Prefer no JavaScript runtime? Every release has native archives for Windows 11 x64, macOS 15 on Apple silicon and Linux x64 on [GitHub Releases](https://github.com/smormah/vsift/releases), with checksums and Sigstore build-provenance attestations. The [installation guide](docs/operations/install.md) covers every route, upgrading, uninstalling, proxies and how to verify what you downloaded.
-
-<details>
-<summary><b>Upgrading from 0.2.1 or earlier?</b> What 0.2.2 fixes, what 0.2.1 fixed, and why there is no way back.</summary>
-<br>
-
-**From 0.2.1** ([the changelog](CHANGELOG.md) has every change):
-
-- **A worker host stopped while it recognises speech** ([#404](https://github.com/smormah/vsift/issues/404)): up to 0.2.1 a program that runs `vsift job run` or `vsift job batch` and stops it could see the stopped request recorded as a failure that says a tool is missing, and delivering it again replayed that failure. In 0.2.2 the stopped request is cancelled and resumable, and on Windows each tool VSift starts runs in a console of its own.
-- **Smaller fixes:** on Windows the free space is checked before a video is copied; a copy that clearly cannot finish in time stops early; a named pipe, a device or a socket given as the video is refused without being opened; refusals and the advice for a missing tool say why and what to do. `candidates --omit periodic` is a new, opt-in option.
-
-**A worker's request record written by 0.2.2 can be read as damaged by 0.2.1**, so going back to 0.2.1 can cost such a request.
-
-**From 0.2.0 or earlier,** three more problems were fixed in 0.2.1:
-
-- **`setup check` after a restart** ([#391](https://github.com/smormah/vsift/issues/391)): up to 0.2.0 the check could answer `[timeout]` for an FFmpeg or FFprobe that was installed and healthy, call the setup `blocked` and advise installing a tool you have. 0.2.1 waits 30 seconds, not 5, and tells a tool that was slow from one that is missing.
-- **A long pause in a recording** ([#353](https://github.com/smormah/vsift/issues/353)): in 0.2.0, one 30-second stretch with very little recognised speech could fail a whole local transcription with `MISSING_CAPABILITY` and keep nothing. In 0.2.1 that stretch is recorded as a gap: the run finishes `partial`, names it, and `vsift search` reports it as not transcribed.
-- **Speech lost where two pieces meet** ([#359](https://github.com/smormah/vsift/issues/359)): VSift transcribes long recordings in overlapping 30-second pieces, and in 0.2.0 up to a few seconds of speech could go missing at a seam with nothing saying so. 0.2.1 keeps such a piece, at the price of some repeated words, and lists the stretches where words could not be placed. Up to about half a second at the end of a piece can still be missing without a sign ([the limit](docs/planning/known-limits.md#l-156)).
-
-The fixes of 0.2.1 are shown on stand-in recordings, not yet on the real recordings that found them. **A session written by 0.2.1 or later can be read as damaged by 0.2.0**, so going back to 0.2.0 after using 0.2.1 can lose that session; the [installation guide](docs/operations/install.md) says how to upgrade and what each version has.
-
-</details>
-
 ## Just want a transcript?
 
 No AI needed. Open a session, let VSift transcribe it locally, then read it back or search it (times are in microseconds):
@@ -206,17 +233,6 @@ vsift search <session> --query "budget"
 ```
 
 Local transcription needs whisper.cpp and a model; `vsift setup check` says whether they are in place, and on systems other than Ubuntu 24.04 x64 you point VSift at your own copy. Add `--json` for output a program can read. The [user guide](docs/guide/index.md) walks through a first investigation step by step.
-
-## Use it with your AI assistant
-
-VSift ships an **agent skill** that takes an AI assistant from a local video to a grounded, cited handoff: it knows the method, the evidence budgets and the safety rules, such as never installing tools on its own, and it reads with the brief view. Copy `skills/vsift` into your assistant's skill folder (Claude Code: `~/.claude/skills/vsift/`; Codex: `~/.agents/skills/vsift/`) and ask about a recording:
-
-```text
-Please look at ./team-sync.mp4 and tell me what was decided about the release date,
-with the times and frames that show it. Use the VSift skill.
-```
-
-The skill has been trialled with Claude Code and Codex; other assistants that can run local commands can call the same CLI, but they have not been tried. In the named-client trials on this repository's synthetic recordings, the smaller models passed 26 of 28 (Claude Sonnet 5.5) and 28 of 28 (GPT-6-Sol; 23 of 28 as run, before the maintainer's reading of one command) full trials, and no run installed anything, leaked a secret or acted on injected text. The later rounds on the 0.2.1 skill gave mixed results for the smaller models; on the 0.2.2 skill the round with the skill met every gate, and without the skill a smaller Claude model often left out the identifiers behind its facts ([#454](https://github.com/smormah/vsift/issues/454)). These are small trials on synthetic video: the [qualification record](docs/planning/p12-agent-qualification.md) and the [changelog](CHANGELOG.md) list the misses and the limits. Setup and details: [using the skill](docs/agents/skill.md).
 
 ## How it works
 
@@ -277,7 +293,11 @@ VSift is at **0.2.2**, a patch release of R0, its first release line, and it is 
 
 The roadmap comes from the [delivery ledger](docs/planning/delivery-ledger.json), [ADR 0024](docs/decisions/0024-r0-qualification-and-release-candidate.md) for the release steps, the [cycle map](docs/planning/backlog-iterations.md) for the 0.2.x line and the [R1 plan](docs/planning/r1-industrial-capability-expansion.md).
 
-## Documentation
+## Help and reference
+
+[**Something went wrong**](docs/guide/troubleshooting.md) · [**Upgrading**](docs/operations/install.md#7-upgrade) · [**User guide**](docs/guide/index.md) · [**Installation guide**](docs/operations/install.md) · [**Known limits**](docs/planning/known-limits.md) · [**Changelog**](CHANGELOG.md) · [**Data lifecycle**](#data-lifecycle) · [**Build from source**](#build-from-source) · [**Licence**](#licence)
+
+### Documentation
 
 | I want to… | Read |
 |---|---|
@@ -293,7 +313,7 @@ The roadmap comes from the [delivery ledger](docs/planning/delivery-ledger.json)
 | Check a release | [Release runbook](docs/operations/release.md) |
 | Report a vulnerability | [Security policy](SECURITY.md) |
 
-## Data lifecycle
+### Data lifecycle
 
 VSift keeps three storage lifecycles apart:
 
@@ -301,7 +321,7 @@ VSift keeps three storage lifecycles apart:
 2. **Portable evidence bundles**, retained only where you choose.
 3. **A future opt-in persistent catalogue** for cross-video indexing. No one-off recording is ever silently added to a permanent global index.
 
-## Build from source
+### Build from source
 
 Install the stable Rust toolchain, including `rustfmt` and Clippy, then:
 
@@ -313,6 +333,6 @@ cargo test --workspace --locked
 
 Repository conventions are in [Development](docs/development.md). Contributions are welcome; please read [Contributing](CONTRIBUTING.md) and the [Security policy](SECURITY.md) first.
 
-## Licence
+### Licence
 
 Licensed under either the Apache License, Version 2.0 or the MIT licence, at your option.
