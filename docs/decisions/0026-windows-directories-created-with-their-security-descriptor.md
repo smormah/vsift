@@ -245,7 +245,11 @@ the CLI does not change.
   forbids leaving it (`process-wrap`'s, as the process supervisor uses) gets `in_callers_job`, is not
   held up, and its runner ends when the job is closed: L-220's documented behaviour (the planner's
   second condition).
-- The CLI-level test of the defect (`job start` answering within seconds while a queued job's runner
-  waits behind a live one) needs the queued mode, ADR 0033's fifth pull request (#512), and comes with
-  whichever of the two lands second.
+- At the CLI (`crates/vsift-cli/tests/job_cli_contract.rs`,
+  `a_captured_queued_job_start_answers_while_its_runner_waits`, on every platform): a caller that
+  captures the output of `job start --mode queued` and reads it to its end hears the answer within
+  seconds while the queued job's runner waits behind a live job; the job is still `queued`, at queue
+  position 1, with a live owner. It needs the queued mode (ADR 0033's fifth pull request, #512, on
+  `main` before this fix), and it waited for the runner's end on Windows before the fix (the evidence
+  is in the pull request).
 - The existing `job start`, runner and L-220 tests do not change.

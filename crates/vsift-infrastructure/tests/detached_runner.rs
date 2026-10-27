@@ -10,9 +10,9 @@
 //! soon as the test creates the `stop` file, so no test leaves it behind.
 //!
 //! The CLI-level test of the same defect (`job start` answering within
-//! seconds while a queued job's runner waits behind a live one) needs the
-//! queued mode, and comes with whichever of this fix and the queued mode
-//! lands second.
+//! seconds while a queued job's runner waits behind a live one) is
+//! `a_captured_queued_job_start_answers_while_its_runner_waits` in
+//! `vsift-cli`'s `job_cli_contract`.
 
 use std::{
     env,

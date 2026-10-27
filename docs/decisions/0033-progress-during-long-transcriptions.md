@@ -537,10 +537,10 @@ through `vsift-windows-security`'s `start_detached` ([ADR 0026](0026-windows-dir
 amendment of 2026-10-27): the same executable, arguments, working folder, environment and creation
 flags, with one `NUL` handle as its standard streams and that handle as the only one it inherits.
 The handshake, the owner lock, the kill on a handshake timeout and `detachment` (including
-`in_callers_job`, L-220) do not change; Unix keeps the standard library. The CLI-level test of the
-defect needs the queued mode and comes with whichever of this fix and the fifth pull request (#512)
-lands second; `crates/vsift-infrastructure/tests/detached_runner.rs` pins it through
-`launch_detached` meanwhile.
+`in_callers_job`, L-220) do not change; Unix keeps the standard library. It is pinned through
+`launch_detached` (`crates/vsift-infrastructure/tests/detached_runner.rs`) and at the CLI, with the
+fifth pull request's queued mode: a captured `job start --mode queued` answers within seconds while
+its runner waits behind a live job (`a_captured_queued_job_start_answers_while_its_runner_waits`).
 
 ## Decisions for the maintainer
 
