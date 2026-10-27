@@ -26,39 +26,46 @@ $ vsift setup check
 ```
 
 This is the first command to run on any machine, and the one to run again whenever something
-does not work. It looks for the tools and says what it found. On a machine with FFmpeg and
-FFprobe but no speech recognition it prints something like this (your tool versions will differ,
-and so will the end of the advice under a missing tool, which depends on your system):
+does not work. It looks for the tools and says where you stand: a small table of what works,
+one sentence, and the one next step. On a machine with FFmpeg and FFprobe but no speech
+recognition it prints something like this (the last lines depend on your system):
 
 ```text
 VSift setup check
-Profile: desktop
-Status: degraded
-[ok] FFmpeg (media_processing): ffmpeg version 9.0-full_build-www.gyan.dev Copyright (c) 2000-2026 the FFmpeg developers [filtered PATH]
-[ok] FFprobe (media_processing): ffprobe version 9.0-full_build-www.gyan.dev Copyright (c) 2007-2026 the FFmpeg developers [filtered PATH]
-[missing] Whisper (transcription): not found on PATH [filtered PATH]
-  Install a trusted build or register a working one with setup configure whisper --executable <absolute-path>, then rerun setup check (or try a path once with setup check --whisper <absolute-path>). Managed installation is not available for this target.
-  No need to search folders: ask the user where it is.
-Local ASR model: not registered (setup configure-model --file <path>)
-Local ASR check: not run: the whisper.cpp CLI is not available
-Executable probes only show that each tool responds. The local ASR check transcribes a short speech clip built into VSift with the selected tools and model. A supplied transcript can avoid local ASR.
+
+  Part        Status         Uses         What it's for
+  Video       ready          FFmpeg       reading videos, taking frames
+  Speech      not set up     whisper.cpp  turning speech into text
+  Web videos  not available  yt-dlp       web page videos (optional)
+
+Your setup isn't complete: speech is missing.
+Speech needs two things, whisper.cpp and its model, and neither is set up yet.
+Video works, so a transcript you already have can still be used.
+The installation guide shows where to get it: https://github.com/smormah/vsift/blob/main/docs/operations/install.md
+Next: vsift setup configure whisper --executable <full-path-to-whisper-cli>
 ```
 
-*This output is from a Windows 11 machine, with the advice as it reads after `0.2.1` (`0.2.1` and earlier say
-"Install or locate this trusted tool" there). It is shown as an example, not checked, because it names the tools on the
-machine that ran it.*
+*This is the form VSift prints, taken from its own tests. The last line depends on your system: where VSift can
+install a part for you, it is `vsift setup plan` instead. Versions before `0.3.0` print a longer, technical
+answer ("Status: degraded" and a line for each tool).*
 
-What the status means:
+What the table means:
 
-- **ready**: everything VSift can use is in place.
-- **degraded**: the tools for reading video are there, and something optional is missing. Here it is
-  speech recognition, which this page does not need.
-- **blocked**: FFmpeg or FFprobe is missing, or did not answer, so VSift cannot read video yet. The
-  lines under `[missing]` say what to do. If you do not have the tools, [the install guide](../operations/install.md#5-install-ffmpeg-ffprobe-whispercpp-and-the-speech-model)
-  explains how to get them on each system. A line that starts `[timeout]` is different: the tool
-  is there, and VSift had no answer from it in time or did not get to it before the time ran
-  out. That can happen on the first run after an install or a restart. Run the command again;
-  if it keeps happening, see [troubleshooting](troubleshooting.md#missing_capability-a-tool-or-model-is-missing).
+- **Video** is `ready` when FFmpeg and FFprobe answer. That is all this page needs.
+- **Speech** is `ready` only when whisper.cpp answers, its model is one VSift knows and a short speech
+  test passes. Tools with no model say `model missing`, because they cannot recognise speech yet.
+- **Web videos** is an optional extra. It does not change whether your setup is complete.
+- **Setup complete** appears only when video and speech both work. Until then the sentence below the
+  table names what is missing, and the last line is the one thing to do next.
+- **`no answer`** is different from `not set up`: the tool is there, and VSift had no answer from it in
+  time or did not get to it before the time ran out. That can happen on the first run after an install
+  or a restart. Run the command again; if it keeps happening, see
+  [troubleshooting](troubleshooting.md#missing_capability-a-tool-or-model-is-missing). If you do not have the
+  tools, [the install guide](../operations/install.md#5-install-ffmpeg-ffprobe-whispercpp-and-the-speech-model)
+  explains how to get them on each system.
+
+With `--json` the answer is for a program: its `status` is `ready`, `degraded` or `blocked` (`blocked` when
+FFmpeg or FFprobe is missing or did not answer), and each tool carries its own advice.
 
 VSift never installs anything on its own. On Ubuntu 24.04 it can install the tools for you
 after you read and accept a plan; everywhere else you install them yourself.

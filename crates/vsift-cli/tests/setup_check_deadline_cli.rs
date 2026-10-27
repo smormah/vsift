@@ -66,10 +66,6 @@ const INSTALL_ADVICE: [&str; 10] = [
     "absolute path",
 ];
 
-/// The readable answer's row for an optional component (ADR 0032): it follows
-/// the tool rows and is not about them.
-const OPTIONAL_ROW: &str = "Optional component ";
-
 const AFTER_WHAT_HAPPENED: &str = " A first run after an install or restart can be slow. Run setup check again, or allow more time with --timeout-seconds (up to 60).";
 
 fn main() -> ExitCode {
@@ -194,43 +190,17 @@ fn schema() -> TestResult<Value> {
 }
 
 /// The readable answer must not advise getting a tool, as the module
-/// documentation says, apart from an optional component's own row.
+/// documentation says, and must not call a tool that was found "not set up".
 fn ensure_no_missing_tool_advice(text: &str, tool_text: &str) -> TestResult {
-    // The rule is about the three tools. An optional component that is
-    // genuinely not installed (ADR 0032, offered on Ubuntu only) keeps its own
-    // row after the local ASR lines, and its hint is the right advice for that
-    // component: `vsift setup plan --include online_links`. So the tool advice
-    // is checked on everything before that block, and the block itself must
-    // say nothing about the tools or the deadline.
-    let (tools_part, optional_part) = match text.find(OPTIONAL_ROW) {
-        Some(start) => text.split_at(start),
-        None => (text, ""),
-    };
     for phrase in
         INSTALL_ADVICE
             .into_iter()
-            .chain(["[missing]", "[unhealthy]", "not found", tool_text])
+            .chain(["not set up", "is missing", "not found", tool_text])
     {
-        ensure(!tools_part.contains(phrase), || {
+        ensure(!text.contains(phrase), || {
             format!("the readable answer says {phrase:?}: {text}")
         })?;
     }
-    for tool_word in [
-        "FFmpeg", "FFprobe", "Whisper", "whisper", "timeout", "deadline",
-    ] {
-        ensure(!optional_part.contains(tool_word), || {
-            format!("the optional component block mentions {tool_word:?}: {text}")
-        })?;
-    }
-    ensure(
-        optional_part
-            .lines()
-            .filter(|line| !line.starts_with(' '))
-            .all(|line| {
-                line.starts_with(OPTIONAL_ROW) || line.starts_with("Executable probes only")
-            }),
-        || format!("something other than optional components follows the tools: {text}"),
-    )?;
     Ok(())
 }
 
@@ -249,24 +219,18 @@ fn run() -> TestResult {
         format!("standard error: {}", String::from_utf8_lossy(&human.stderr))
     })?;
     for expected in [
-        "Status: blocked\n",
-        "[timeout] FFmpeg (media_processing): found, but it did not answer in time [per-call path]\n  It was started and had not answered when the deadline passed: 1 second, which the three tool checks share.",
-        "[timeout] FFprobe (media_processing): found, but not started before the deadline passed [per-call path]\n  It was not started, because the deadline had already passed: 1 second, which the three tool checks share. Nothing is known about it yet.",
-        "[timeout] Whisper (transcription): found, but not started before the deadline passed [per-call path]\n  It was not started, because the deadline had already passed: 1 second, which the three tool checks share. Nothing is known about it yet.",
-        "Local ASR check: not run: no model is registered\n",
+        "Your setup isn't complete: video and speech did not answer in time.\n",
+        "FFmpeg was found but did not answer within 1 second, the time all three tool checks share.\n",
+        "FFprobe and whisper.cpp were found but not tried: the time ran out first.\n",
+        "To allow more time, add --timeout-seconds (up to 60).\n",
     ] {
         ensure(text.contains(expected), || {
             format!("the readable answer lacks {expected:?}: {text}")
         })?;
     }
-    ensure(
-        text.matches(
-            "Run setup check again, or allow more time with --timeout-seconds (up to 60).\n",
-        )
-        .count()
-            == 3,
-        || format!("each tool has the timeout advice once: {text}"),
-    )?;
+    ensure(text.ends_with("Next: vsift setup check\n"), || {
+        format!("the last line is not the one step: {text}")
+    })?;
     ensure_no_missing_tool_advice(&text, &tool_text)?;
 
     // The JSON answer.

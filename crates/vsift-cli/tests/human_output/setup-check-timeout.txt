@@ -1,15 +1,13 @@
 VSift setup check
-Profile: desktop
-Status: blocked
-[timeout] FFmpeg (media_processing): found, but it did not answer in time [filtered PATH]
-  It was started and had not answered when the deadline passed: 30 seconds, which the three tool checks share. A first run after installing a tool or restarting the machine can be slow, for example while a virus scanner reads a large program for the first time. Run setup check again, or allow more time with --timeout-seconds (up to 60).
-[timeout] FFprobe (media_processing): found, but not started before the deadline passed [filtered PATH]
-  It was not started, because the deadline had already passed: 30 seconds, which the three tool checks share. Nothing is known about it yet. A first run after installing a tool or restarting the machine can be slow, for example while a virus scanner reads a large program for the first time. Run setup check again, or allow more time with --timeout-seconds (up to 60).
-[timeout] Whisper (transcription): found, but not started before the deadline passed [filtered PATH]
-  It was not started, because the deadline had already passed: 30 seconds, which the three tool checks share. Nothing is known about it yet. A first run after installing a tool or restarting the machine can be slow, for example while a virus scanner reads a large program for the first time. Run setup check again, or allow more time with --timeout-seconds (up to 60).
-Media executable probes are blocked until FFmpeg and FFprobe respond.
-Local ASR model: not registered (setup configure-model --file <path>)
-Local ASR check: not run: no model is registered
-Optional component online_links: unavailable
-  A managed yt-dlp is offered on Ubuntu 24.04 x86-64 only. Direct HTTPS video links (ingest --url) work without it, as does every local file.
-Executable probes only show that each tool responds. The local ASR check transcribes a short speech clip built into VSift with the selected tools and model. A supplied transcript can avoid local ASR.
+
+  Part        Status         Uses         What it's for
+  Video       no answer      FFmpeg       reading videos, taking frames
+  Speech      no answer      whisper.cpp  turning speech into text
+  Web videos  not available  yt-dlp       web page videos (optional)
+
+Your setup isn't complete: video and speech did not answer in time.
+FFmpeg was found but did not answer within 30 seconds, the time all three tool checks share.
+FFprobe and whisper.cpp were found but not tried: the time ran out first.
+A first run after installing a tool or restarting the machine can be slow, for example while a virus scanner reads a large program for the first time.
+To allow more time, add --timeout-seconds (up to 60).
+Next: vsift setup check

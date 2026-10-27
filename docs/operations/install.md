@@ -333,7 +333,7 @@ after every change below. It starts each tool once, one after another, and waits
 answer (FFmpeg and FFprobe are asked for their version, whisper.cpp for its help text), and
 allows the three of them 30 seconds in all (`--timeout-seconds` takes 1 to 60). The first
 check after you install a tool or restart the machine can be slow, because each program is
-started for the first time; a line that starts `[timeout]` means the tool was found and
+started for the first time; a status of `no answer` means the tool was found and
 VSift had no answer from it in time, not that it is missing: run the check again
 ([troubleshooting](../guide/troubleshooting.md#missing_capability-a-tool-or-model-is-missing);
 every version before `0.2.1` is different, see [section 12](#12-problems)).
@@ -348,7 +348,7 @@ vsift setup check
 vsift setup plan --profile desktop                 # read it: what, from where, how big
 vsift setup plan --profile desktop --json > plan.json
 vsift setup install --plan plan.json --accept-plan <the plan digest>
-vsift setup check                                  # each tool now reports [managed version]
+vsift setup check                                  # video and speech now say ready
 ```
 
 - **The plan** is read-only and lists, for each component still needed, the publisher, the
@@ -466,7 +466,9 @@ On Windows use paths such as `"C:\tools\ffmpeg\bin\ffmpeg.exe"`. The reviewed mo
 multilingual `base` model, `ggml-base.bin`, 147,951,465 bytes, SHA-256
 `60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe`; `setup check` reports
 a file with that size and hash as the pinned model, and a different model as a different
-model. `setup check` reports `ready` when the tools answer; the first media operation that
+model. `setup check` says speech is `ready` only when whisper.cpp answers, the model is a
+reviewed one and a short built-in speech test passes (tools that answer with no model
+registered say `model missing`); the first media operation that
 needs them (today `ingest --transcript`) then runs a small built-in video through FFmpeg and
 FFprobe once and refuses a pair that fails.
 VSift never deletes a tool you registered.
@@ -495,9 +497,9 @@ folder.
    registry signatures and 4 with verified attestations); npmjs.com shows each version as
    built and signed on GitHub Actions.
 3. **The archive is the released one** (archive installs): section 3, steps 2 and 3.
-4. **Your setup is ready.** `vsift setup check` reports each tool, how it was found
-   (`managed version`, your configured path, or `PATH`) and whether local speech
-   recognition works here. After section 5.1, `vsift setup list` reports each component
+4. **Your setup is ready.** `vsift setup check` shows a table that says whether video and
+   speech work here; `vsift setup check --json` reports each tool and how it was found
+   (`managed_version`, your configured path, or `PATH`). After section 5.1, `vsift setup list` reports each component
    `verified`.
 5. **A first run** on a short video you may share (a supplied transcript needs no speech
    recognition): `vsift ingest ./clip.mp4 --transcript ./clip.vtt`, then `vsift session
@@ -518,15 +520,15 @@ folder.
   the checks of section 3.
 - **Managed tools** do not change with VSift. A newer VSift can carry a newer reviewed
   catalogue, and since `0.2.3` `vsift setup check` says so: a line such as
-  `[update, security] whisper_cli: the selected managed version is whisper.cpp-v1.9.2-ubuntu-x64`
-  (and `managed_updates` in its JSON), with `security` when the new pin carries security fixes
+  `Update available (security fixes): whisper_cli is on whisper.cpp-v1.9.2-ubuntu-x64`
+  (`[update, security] whisper_cli: ...` in `0.2.3` itself; and `managed_updates` in its JSON), with `security` when the new pin carries security fixes
   the old version lacks. `0.2.3` is such a case: a managed install made by `0.2.2` or earlier has
   whisper.cpp v1.9.2, and `0.2.3` pins v1.9.5. To move to the new pins:
 
   ```console
   vsift setup plan --profile desktop --json > plan.json   # read it; components already current are skipped
   vsift setup install --plan plan.json --accept-plan <the plan digest>
-  vsift setup check                                        # the whisper line now says v1.9.5, and no update line is left
+  vsift setup check                                        # the update line is gone
   ```
 
   Only what changed is downloaded (for `0.2.3`, the 10.4 MB whisper.cpp build). The old version
