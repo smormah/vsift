@@ -94,14 +94,16 @@ const PLACEHOLDERS: [(&str, &str); 24] = [
 /// read-only `setup list` and `setup repair` to `free` (ADR 0023's open
 /// detail, decided by the supervisor on 2026-09-30: repair only diagnoses and
 /// plans); `setup remove` and `setup rollback` change the managed tools and
-/// stay here with `setup install`.
-const NEVER: [&str; 6] = [
+/// stay here with `setup install`. ADR 0037 adds `watch` (`vsift <video>`),
+/// which writes files into the person's own folder (the planner, 2026-10-27).
+const NEVER: [&str; 7] = [
     "setup.install",
     "setup.remove",
     "setup.rollback",
     "session.init-workspace",
     "job.run",
     "job.batch",
+    "watch",
 ];
 
 /// Commands the skill runs only on the user's explicit instruction.
