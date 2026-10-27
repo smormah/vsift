@@ -515,6 +515,9 @@ The fifth pull request implements the queued mode of section 6.
   queued work to make room (at most 2 min)` on the live line. A session write, an evidence capture, a visual
   window and a watched job's background runner still wait inside the store without saying so (L-223). The visual windows of a queued job
   take their capacity window by window, as `candidates` does, so they free it between windows anyway.
+- **Accepted by the maintainer (2026-10-23): the other waits for queued work stay a residual for 0.3.0.** A session
+  write, an evidence capture, a visual window and a watched job's background runner keep waiting inside the store
+  without saying so (L-223). They are shown in 1.0 if trials show that people or agents are confused by them.
 - **Not in 0.3.0:** priorities between queued jobs, and a host that runs the queue without a runner a job
   (1.0). After a restart a waiting job needs `job start` or `job resume` to run again (L-222).
 - **Tests.** The queue's order across sessions, a job entered again keeping its place, a restart, one turn
@@ -544,6 +547,8 @@ All are taken (2026-10-21):
 - **The three modes** (section 6). *Chosen by who is waiting.* (The maintainer.)
 - **`session close` stops the session's running jobs** (section 5): it cancels them, waits up to 10 s, then closes.
   *Closing a session ends its work.* (The maintainer, 2026-10-21.)
+- **The other waits for queued work** (section 6, L-223) stay a residual for 0.3.0 and are shown in 1.0 if trials
+  show confusion. (The maintainer, 2026-10-23.)
 - **The ten-minute threshold** (section 6) stands for now; the hosted `P14 real media` check on RM03 and RM09
   measures it and the estimate's error once the stack is on `main`, and a follow-up adjusts it if the data says
   so. (The maintainer, 2026-10-21.)
