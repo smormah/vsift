@@ -23,10 +23,9 @@ use std::{
 
 use vsift_contract::render_hidden_characters;
 use vsift_domain::{
-    JobMode, MAX_VISUAL_INDEX_DURATION_MICROS, MAX_WATCH_FRAMES, MediaTime,
-    SearchCoverage, SessionId, TimeRange, TranscriptRevision, TranscriptRevisionId,
-    VisualCandidate, VisualCandidateId, VisualIndexId, WatchOutputNames, frame_file_name,
-    spread_evenly,
+    JobMode, MAX_VISUAL_INDEX_DURATION_MICROS, MAX_WATCH_FRAMES, MediaTime, SearchCoverage,
+    SessionId, TimeRange, TranscriptRevision, TranscriptRevisionId, VisualCandidate,
+    VisualCandidateId, VisualIndexId, WatchOutputNames, frame_file_name, spread_evenly,
 };
 use vsift_infrastructure::{
     ManagedArtifactStore, ScreenChangeEntry, ScreenChangeSummary, TranscriptEntry, WatchClaim,
@@ -300,16 +299,7 @@ impl Engine {
         let (frames, listed) = self
             .watch_frames(session, &changes, claim, &request.cancellation)
             .await?;
-        let provenance = WatchProvenance {
-            video_name: render_hidden_characters(&file_name.to_string_lossy()),
-            made_by: format!("VSift {}", env!("CARGO_PKG_VERSION")),
-            made_at: self.watch_made_at()?,
-            video_sha256: source_id
-                .as_str()
-                .trim_start_matches("src_sha256_")
-                .to_owned(),
-            session_id: session.as_str().to_owned(),
-        };
+        let provenance = self.watch_provenance(file_name, source_id, session)?;
         let revision_id = revision.as_ref().map(TranscriptRevision::id);
         let transcript_sha256 = claim
             .write_transcript(&render_transcript(
@@ -607,6 +597,25 @@ impl Engine {
             evidence_id: file.evidence_id().clone(),
             path,
             sha256,
+        })
+    }
+
+    /// What every output names about the run that made it.
+    fn watch_provenance(
+        &self,
+        file_name: &OsStr,
+        source_id: &vsift_domain::SourceId,
+        session: &SessionId,
+    ) -> Result<WatchProvenance, EngineError> {
+        Ok(WatchProvenance {
+            video_name: render_hidden_characters(&file_name.to_string_lossy()),
+            made_by: format!("VSift {}", env!("CARGO_PKG_VERSION")),
+            made_at: self.watch_made_at()?,
+            video_sha256: source_id
+                .as_str()
+                .trim_start_matches("src_sha256_")
+                .to_owned(),
+            session_id: session.as_str().to_owned(),
         })
     }
 

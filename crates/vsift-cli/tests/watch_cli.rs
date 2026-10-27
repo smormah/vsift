@@ -76,7 +76,10 @@ fn a_folder_named_as_the_video_gets_ingests_own_answer() -> TestResult {
     let ingested = base.run(&["ingest", text(&folder)?])?;
     let (watched_value, ingested_value) = (json(&watched)?, json(&ingested)?);
     assert_eq!(watched_value["command"], "watch", "{watched_value}");
-    assert_eq!(watched_value["error"], ingested_value["error"], "{watched_value}");
+    assert_eq!(
+        watched_value["error"], ingested_value["error"],
+        "{watched_value}"
+    );
     assert_eq!(watched.status.code(), ingested.status.code());
     Ok(())
 }
@@ -88,7 +91,10 @@ fn a_missing_video_is_not_found_and_a_mistyped_command_is_unknown() -> TestResul
     let value = json(&missing)?;
     assert_eq!(value["command"], "watch", "{value}");
     assert_eq!(value["error"]["code"], "STORAGE_IO", "{value}");
-    assert_eq!(value["error"]["remediation"][0]["summary"], SOURCE_NOT_FOUND_REMEDIATION);
+    assert_eq!(
+        value["error"]["remediation"][0]["summary"],
+        SOURCE_NOT_FOUND_REMEDIATION
+    );
 
     let mistyped = base.run(&["serach"])?;
     let value = json(&mistyped)?;
