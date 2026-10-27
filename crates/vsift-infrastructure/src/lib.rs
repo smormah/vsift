@@ -76,6 +76,7 @@ mod user_dependency_config;
 mod verified_artifact_transfer;
 mod visual_index_record;
 mod visual_sampler;
+mod watch_output;
 mod whisper_build;
 mod whisper_cli;
 mod xz_tar_inventory;
@@ -243,6 +244,11 @@ pub use visual_index_record::{
     encode_visual_index_record,
 };
 pub use visual_sampler::FfmpegVisualSampler;
+pub use watch_output::{
+    SCREEN_CHANGES_FILE, ScreenChangeEntry, ScreenChangeSummary, TranscriptEntry, WatchClaim,
+    WatchOutputError, WatchOutputKind, WatchProvenance, WrittenFrame, render_screen_changes,
+    render_subrip, render_transcript,
+};
 pub use whisper_build::{
     MAX_WHISPER_EXECUTABLE_BYTES, WhisperBuildError, WhisperBuildIdentity, WhisperBuildRecognition,
     identify_whisper_build,
