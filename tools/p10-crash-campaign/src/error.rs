@@ -48,6 +48,10 @@ pub enum CampaignError {
     MalformedAcks(Vec<usize>),
     /// An acknowledgement mark is missing from the write log.
     MissingMark(u64),
+    /// A session's open revision belongs to a job no growing run of the
+    /// workload makes (ADR 0033): only whole-source growing runs publish
+    /// parts.
+    ForeignOpenRevision,
 }
 
 impl fmt::Display for CampaignError {
@@ -83,6 +87,8 @@ impl fmt::Display for CampaignError {
                     "acknowledgement {seq} has no mark in the write log"
                 )
             }
+            Self::ForeignOpenRevision => formatter
+                .write_str("a session's open revision belongs to a job the workload did not run"),
         }
     }
 }

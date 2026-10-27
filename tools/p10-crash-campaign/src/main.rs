@@ -19,6 +19,7 @@
 
 mod assess;
 mod error;
+mod grow;
 mod logwrites;
 mod managed;
 mod protocol;
@@ -293,7 +294,12 @@ fn verify_step(
     if !events.malformed.is_empty() {
         return Err(CampaignError::MalformedAcks(events.malformed));
     }
-    let findings = verify::verify(root, &events.acks, unix_seconds()?);
+    let findings = verify::verify(
+        root,
+        &events.acks,
+        unix_seconds()?,
+        vsift_domain::PublicationGuarantee::OsCrashDurable,
+    );
     let mut text = findings.lines(prefix).join("\n");
     text.push('\n');
     print!("{text}");

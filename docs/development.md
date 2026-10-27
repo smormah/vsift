@@ -418,7 +418,9 @@ Do not create a general-purpose `utils` or `helpers` module. Name modules after 
   `vsift-crash-campaign` tool in `tools/p10-crash-campaign/` (a workload, a verifier,
   a dm-log-writes replay and a write-error assessor; `cargo test -p
   vsift-crash-campaign` runs its unit tests anywhere) and the `P10 durability campaign`
-  workflow, which runs layers A (power loss at every flush), B (QEMU kills of the
+  workflow (since 0.3.0 its workload also publishes revisions part by part, stops some
+  and continues those a crash left open, ADR 0033; the unit tests kill a growing run at
+  each commit point in child processes), which runs layers A (power loss at every flush), B (QEMU kills of the
   pinned Ubuntu 24.04 cloud image) and C (dm-flakey write errors) on hosted
   `ubuntu-24.04` runners, manually and weekly. Its negative control is built with
   `--profile campaign --features campaign` (the development-only
