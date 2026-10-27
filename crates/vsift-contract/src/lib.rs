@@ -184,7 +184,7 @@ pub use candidates::{
 pub use command::CommandName;
 pub use envelope::{
     CONTRACT_VERSION, CoverageResponse, ErrorResponse, LifecycleResponse, MAX_AFFECTED_IDS,
-    OperationResponse, TerminalEventResponse,
+    OperationResponse, TerminalEventResponse, utc_seconds_rfc3339,
 };
 pub use evidence::{ConfidenceResponse, FrameTimingResponse};
 pub use handoff::{

@@ -120,6 +120,8 @@ pub enum EngineError {
     ArtifactDirectoryNotAbsolute,
     /// The injected clock could not report the current time.
     Clock(ClockError),
+    /// `vsift <video>` could not write its outputs (ADR 0037).
+    Watch(crate::WatchFailure),
     /// The injected identifier source could not issue a fresh identifier.
     Identifier(IdentifierGenerationError),
     /// The automatic preflight could not verify the selected `FFmpeg` and
@@ -438,6 +440,10 @@ impl EngineError {
     /// The mapping is the single authority for every host, so the same failure
     /// is reported with the same code by the CLI and by any later host.
     #[must_use]
+    #[allow(
+        clippy::too_many_lines,
+        reason = "One exhaustive mapping is the single authority for every code"
+    )]
     pub const fn failure_code(&self) -> FailureCode {
         match self {
             Self::SessionRoot(error) => error.failure_code(),
@@ -507,6 +513,7 @@ impl EngineError {
             Self::VisualAnalysisStopped(stop) => visual_stop_failure_code(*stop),
             Self::VisualIndexBuild(error) => visual_index_failure_code(*error),
             Self::Ocr(error) => error.failure_code(),
+            Self::Watch(failure) => failure.failure_code(),
             Self::SessionIndexInconsistent
             | Self::ReviewedPolicyInvalid
             | Self::Clock(_)
@@ -809,6 +816,7 @@ impl fmt::Display for EngineError {
                 formatter.write_str("the artifact directory must be an absolute path")
             }
             Self::Clock(error) => error.fmt(formatter),
+            Self::Watch(failure) => failure.fmt(formatter),
             Self::Identifier(error) => error.fmt(formatter),
             Self::MediaToolVerificationFailed(failure) => write!(
                 formatter,
@@ -965,6 +973,7 @@ impl Error for EngineError {
             Self::SessionRoot(error) => Some(error),
             Self::Storage(error) => Some(error),
             Self::OpenSession(error) => Some(error),
+            Self::Watch(failure) => Some(failure),
             Self::UserConfiguration(error) => Some(error),
             Self::Executable(error) => Some(error),
             Self::Clock(error) => Some(error),

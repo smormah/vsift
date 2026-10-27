@@ -118,6 +118,7 @@ mod sessions;
 mod setup;
 mod transcripts;
 mod verification;
+mod watch;
 mod worker;
 mod workspace;
 
@@ -181,6 +182,7 @@ pub use vsift_application::StreamPhase;
 /// Starting the background runner of `job start` (ADR 0033): the host gives
 /// the executable and its arguments, and the runner outlives it.
 pub use vsift_infrastructure::{DetachedRunner, Detachment, launch_detached};
+pub use watch::{WatchFailure, WatchFile, WatchFrame, WatchOutcome, WatchOutputKind, WatchRequest};
 pub use worker::{MAX_CANDIDATE_CALLS, WorkOutcome, WorkRequestRun};
 pub use workspace::{WorkspaceInit, WorkspaceInitOutcome, WorkspaceInitRequest};
 
