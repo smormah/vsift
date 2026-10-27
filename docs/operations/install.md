@@ -1,6 +1,6 @@
 # Installing VSift
 
-Status: user guide, updated 2026-10-22 (the cut of the first release candidate of 0.2.3, `0.2.3-rc.1`: the candidates of 0.2.3) and 2026-10-18 (the release 0.2.2) and 2026-10-17 (the cut of the first release candidate of 0.2.2, `0.2.2-rc.1`: the candidates of 0.2.2 and the fix of #404) and 2026-10-16 (0.2.1 is published; its known issues and what was run against it) and 2026-10-15 (the release 0.2.1) and 2026-10-10 (section 7 on upgrading from a candidate of a later release: the cut of the patch release's candidate) and 2026-10-09 (P14 PR 12, the release 0.2.0; P14 PR 10 repeated again, the third candidate; P14 PR 11c;
+Status: user guide, updated 2026-10-27 (the upgrade notes moved here from the README: section 7.1) and 2026-10-22 (the cut of the first release candidate of 0.2.3, `0.2.3-rc.1`: the candidates of 0.2.3) and 2026-10-18 (the release 0.2.2) and 2026-10-17 (the cut of the first release candidate of 0.2.2, `0.2.2-rc.1`: the candidates of 0.2.2 and the fix of #404) and 2026-10-16 (0.2.1 is published; its known issues and what was run against it) and 2026-10-15 (the release 0.2.1) and 2026-10-10 (section 7 on upgrading from a candidate of a later release: the cut of the patch release's candidate) and 2026-10-09 (P14 PR 12, the release 0.2.0; P14 PR 10 repeated again, the third candidate; P14 PR 11c;
 P14 PR 9a; written by P13 PR 11 and PR 12 for the published pre-release;
 [ADR 0023](../decisions/0023-r0-distribution-managed-installation-and-handoff-check.md)).
 **VSift 0.2.2 is the patch release after 0.2.1**, and `npm install vsift-cli` with no tag installs it (it
@@ -333,7 +333,7 @@ after every change below. It starts each tool once, one after another, and waits
 answer (FFmpeg and FFprobe are asked for their version, whisper.cpp for its help text), and
 allows the three of them 30 seconds in all (`--timeout-seconds` takes 1 to 60). The first
 check after you install a tool or restart the machine can be slow, because each program is
-started for the first time; a line that starts `[timeout]` means the tool was found and
+started for the first time; a status of `no answer` means the tool was found and
 VSift had no answer from it in time, not that it is missing: run the check again
 ([troubleshooting](../guide/troubleshooting.md#missing_capability-a-tool-or-model-is-missing);
 every version before `0.2.1` is different, see [section 12](#12-problems)).
@@ -348,7 +348,7 @@ vsift setup check
 vsift setup plan --profile desktop                 # read it: what, from where, how big
 vsift setup plan --profile desktop --json > plan.json
 vsift setup install --plan plan.json --accept-plan <the plan digest>
-vsift setup check                                  # each tool now reports [managed version]
+vsift setup check                                  # video and speech now say ready
 ```
 
 - **The plan** is read-only and lists, for each component still needed, the publisher, the
@@ -466,7 +466,9 @@ On Windows use paths such as `"C:\tools\ffmpeg\bin\ffmpeg.exe"`. The reviewed mo
 multilingual `base` model, `ggml-base.bin`, 147,951,465 bytes, SHA-256
 `60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe`; `setup check` reports
 a file with that size and hash as the pinned model, and a different model as a different
-model. `setup check` reports `ready` when the tools answer; the first media operation that
+model. `setup check` says speech is `ready` only when whisper.cpp answers, the model is a
+reviewed one and a short built-in speech test passes (tools that answer with no model
+registered say `model missing`); the first media operation that
 needs them (today `ingest --transcript`) then runs a small built-in video through FFmpeg and
 FFprobe once and refuses a pair that fails.
 VSift never deletes a tool you registered.
@@ -495,9 +497,9 @@ folder.
    registry signatures and 4 with verified attestations); npmjs.com shows each version as
    built and signed on GitHub Actions.
 3. **The archive is the released one** (archive installs): section 3, steps 2 and 3.
-4. **Your setup is ready.** `vsift setup check` reports each tool, how it was found
-   (`managed version`, your configured path, or `PATH`) and whether local speech
-   recognition works here. After section 5.1, `vsift setup list` reports each component
+4. **Your setup is ready.** `vsift setup check` shows a table that says whether video and
+   speech work here; `vsift setup check --json` reports each tool and how it was found
+   (`managed_version`, your configured path, or `PATH`). After section 5.1, `vsift setup list` reports each component
    `verified`.
 5. **A first run** on a short video you may share (a supplied transcript needs no speech
    recognition): `vsift ingest ./clip.mp4 --transcript ./clip.vtt`, then `vsift session
@@ -518,15 +520,15 @@ folder.
   the checks of section 3.
 - **Managed tools** do not change with VSift. A newer VSift can carry a newer reviewed
   catalogue, and since `0.2.3` `vsift setup check` says so: a line such as
-  `[update, security] whisper_cli: the selected managed version is whisper.cpp-v1.9.2-ubuntu-x64`
-  (and `managed_updates` in its JSON), with `security` when the new pin carries security fixes
+  `Update available (security fixes): whisper_cli is on whisper.cpp-v1.9.2-ubuntu-x64`
+  (`[update, security] whisper_cli: ...` in `0.2.3` itself; and `managed_updates` in its JSON), with `security` when the new pin carries security fixes
   the old version lacks. `0.2.3` is such a case: a managed install made by `0.2.2` or earlier has
   whisper.cpp v1.9.2, and `0.2.3` pins v1.9.5. To move to the new pins:
 
   ```console
   vsift setup plan --profile desktop --json > plan.json   # read it; components already current are skipped
   vsift setup install --plan plan.json --accept-plan <the plan digest>
-  vsift setup check                                        # the whisper line now says v1.9.5, and no update line is left
+  vsift setup check                                        # the update line is gone
   ```
 
   Only what changed is downloaded (for `0.2.3`, the 10.4 MB whisper.cpp build). The old version
@@ -547,6 +549,25 @@ folder.
   37611381117), and on 2026-10-08 the published 0.1.0 and the published 0.2.0-rc.2 to the published 0.2.0-rc.3 (runs
   37748859247 and 37752825599). On 2026-10-09, after its publish, the same run upgraded the published 0.1.0 and the published
   0.2.0-rc.3 to the published 0.2.0 on the three systems with the same result (runs 37999883603 and 38000209110). On 2026-10-15, after its publish, the same run upgraded the published 0.2.0 and the published 0.2.1-rc.3 to the published 0.2.1 on the three systems with the same result (runs 38765075608 and 38765697122). On 2026-10-18, after its publish, the same run upgraded the published 0.2.1 and the published 0.2.1-rc.3 to the published 0.2.2-rc.1 (runs 39082002714 and 39086086198); the runs for 0.2.2 itself happen after its publish.
+
+### 7.1 Upgrading from 0.2.1 or earlier
+
+What 0.2.2 fixes, what 0.2.1 fixed, and why there is no way back. (These notes moved here from the README on 2026-10-27.)
+
+**From 0.2.1** ([the changelog](../../CHANGELOG.md) has every change):
+
+- **A worker host stopped while it recognises speech** ([#404](https://github.com/smormah/vsift/issues/404)): up to 0.2.1 a program that runs `vsift job run` or `vsift job batch` and stops it could see the stopped request recorded as a failure that says a tool is missing, and delivering it again replayed that failure. In 0.2.2 the stopped request is cancelled and resumable, and on Windows each tool VSift starts runs in a console of its own.
+- **Smaller fixes:** on Windows the free space is checked before a video is copied; a copy that clearly cannot finish in time stops early; a named pipe, a device or a socket given as the video is refused without being opened; refusals and the advice for a missing tool say why and what to do. `candidates --omit periodic` is a new, opt-in option.
+
+**A worker's request record written by 0.2.2 can be read as damaged by 0.2.1**, so going back to 0.2.1 can cost such a request.
+
+**From 0.2.0 or earlier,** three more problems were fixed in 0.2.1:
+
+- **`setup check` after a restart** ([#391](https://github.com/smormah/vsift/issues/391)): up to 0.2.0 the check could answer `[timeout]` for an FFmpeg or FFprobe that was installed and healthy, call the setup `blocked` and advise installing a tool you have. 0.2.1 waits 30 seconds, not 5, and tells a tool that was slow from one that is missing.
+- **A long pause in a recording** ([#353](https://github.com/smormah/vsift/issues/353)): in 0.2.0, one 30-second stretch with very little recognised speech could fail a whole local transcription with `MISSING_CAPABILITY` and keep nothing. In 0.2.1 that stretch is recorded as a gap: the run finishes `partial`, names it, and `vsift search` reports it as not transcribed.
+- **Speech lost where two pieces meet** ([#359](https://github.com/smormah/vsift/issues/359)): VSift transcribes long recordings in overlapping 30-second pieces, and in 0.2.0 up to a few seconds of speech could go missing at a seam with nothing saying so. 0.2.1 keeps such a piece, at the price of some repeated words, and lists the stretches where words could not be placed. Up to about half a second at the end of a piece can still be missing without a sign ([the limit](../planning/known-limits.md#l-156)).
+
+The fixes of 0.2.1 are shown on stand-in recordings, not yet on the real recordings that found them. **A session written by 0.2.1 or later can be read as damaged by 0.2.0**, so going back to 0.2.0 after using 0.2.1 can lose that session; section 7 says how to upgrade, and section 12 has the details of each known issue.
 
 ## 8. Uninstall
 

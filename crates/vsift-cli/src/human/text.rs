@@ -76,7 +76,9 @@ pub(crate) struct DisplayText(String);
 impl DisplayText {
     /// Renders raw untrusted text with `display_text`'s rule, after bounding
     /// it (at most 4 KiB of it is read) and replacing its control
-    /// characters, line breaks included.
+    /// characters, line breaks included. Only the tests use it now: the
+    /// readable `setup check` shows no provider text.
+    #[cfg(test)]
     pub(crate) fn render(raw: &str) -> Self {
         Self(render_hidden_characters(&sanitize_untrusted_text(
             raw,

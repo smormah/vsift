@@ -37,6 +37,7 @@ mod handoff;
 mod job;
 mod session;
 mod setup;
+mod setup_check;
 mod text;
 mod time;
 mod transcript;
@@ -46,7 +47,7 @@ use serde::Deserialize;
 use vsift_contract::{CommandName, OperationResponse};
 
 pub(crate) use failure::{HumanDetail, failure};
-pub(crate) use setup::setup_check;
+pub(crate) use setup_check::setup_check;
 use text::TerminalText;
 pub(crate) use text::{DisplayText, RenderedText};
 

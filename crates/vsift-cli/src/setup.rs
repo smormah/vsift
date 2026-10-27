@@ -400,13 +400,13 @@ mod tests {
         );
 
         assert_eq!(exit, ProcessExit::Success);
-        assert!(String::from_utf8_lossy(&stdout).contains("Profile: desktop"));
+        assert!(String::from_utf8_lossy(&stdout).starts_with("VSift setup check\n"));
         assert!(!stdout.contains(&0x1b));
         assert!(!stdout.contains(&0x07));
     }
 
     #[test]
-    fn human_output_names_where_each_probed_executable_came_from() {
+    fn human_output_says_when_a_path_that_was_given_is_not_found() {
         let mut stdout = Vec::new();
         let mut writer = OutputWriter::new(&mut stdout, Vec::<u8>::new());
 
@@ -433,23 +433,30 @@ mod tests {
         );
         let text = String::from_utf8_lossy(&stdout);
 
-        assert!(text.contains("explicit path not found [per-call path]"));
-        assert!(text.contains("explicit path not found [configured user path]"));
-        assert!(text.contains("not found on PATH [filtered PATH]"));
+        assert!(
+            text.contains("The path given for FFmpeg was not found.\n"),
+            "{text}"
+        );
+        assert!(
+            text.contains("The path given for FFprobe was not found.\n"),
+            "{text}"
+        );
+        assert!(!text.contains("The path given for whisper.cpp"), "{text}");
+        assert!(!text.contains("[per-call path]") && !text.contains("[filtered PATH]"));
     }
 
-    /// D4: the human report names the model profile and the verification
-    /// outcome with typed identifiers only, and a failed verification does
-    /// not change the probe-based exit status.
+    /// The human report shows where speech stands from the model and the
+    /// verification, in plain words, and a failed verification does not
+    /// change the probe-based exit status.
     #[test]
-    fn human_output_reports_the_local_asr_model_and_verification() {
+    fn human_output_reports_the_speech_model_and_verification() {
         let ready = diagnosis(
             RuntimeReadiness::Ready,
             &DependencyState::Available {
                 version: String::from("fixture 1"),
             },
         );
-        for (local_asr, model, verification) in [
+        for (local_asr, row, verdict) in [
             (
                 LocalAsrSetupStatus {
                     model: LocalAsrModelStatus::KnownPinned(ReviewedAsrModel::BaseQ5_1),
@@ -457,8 +464,8 @@ mod tests {
                         LocalAsrVerificationSource::Recorded,
                     ),
                 },
-                "Local ASR model: reviewed base_q5_1 profile",
-                "Local ASR check: verified (recorded pass)",
+                "  Speech      ready ",
+                "Setup complete: video and speech both work.",
             ),
             (
                 LocalAsrSetupStatus {
@@ -470,8 +477,8 @@ mod tests {
                         }),
                     )),
                 },
-                "Local ASR model: reviewed base profile",
-                "Local ASR check: failed at the recognition step (deadline)",
+                "  Speech      test failed ",
+                "Your setup isn't complete: speech failed its test.",
             ),
             (
                 LocalAsrSetupStatus {
@@ -480,8 +487,8 @@ mod tests {
                         LocalAsrNotRunReason::ModelNotPinned,
                     ),
                 },
-                "not a reviewed model",
-                "Local ASR check: not run: the registered model is not a reviewed pinned profile",
+                "  Speech      unknown model ",
+                "Your setup isn't complete: the speech model is not one VSift knows.",
             ),
         ] {
             let mut stdout = Vec::new();
@@ -505,8 +512,8 @@ mod tests {
             );
             let text = String::from_utf8_lossy(&stdout);
             assert_eq!(exit, ProcessExit::Success);
-            assert!(text.contains(model), "{text}");
-            assert!(text.contains(verification), "{text}");
+            assert!(text.contains(row), "{text}");
+            assert!(text.contains(verdict), "{text}");
         }
     }
 }

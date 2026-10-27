@@ -2536,7 +2536,7 @@ tools after it, and the whole check can take longer than the figure by at most t
 the last tool it starts (on a busy Windows desktop a start takes 0.35 s or more,
 [L-170](../planning/known-limits.md#l-170)). A tool that is slow to start or to answer leaves
 less for the ones after it, and a probe whose turn comes after the deadline is **not started**. Both are reported with the one published value `timed_out`
-(`status`, and `remediation.reason`; the readable marker is `[timeout]`), the aggregate
+(`status`, and `remediation.reason`; the readable status is `no answer`, since `0.3.0`; before it the marker was `[timeout]`), the aggregate
 `status` is `blocked` when it is FFmpeg or FFprobe, and the exit status is unchanged. A tool is
 looked for before the deadline is looked at, so a tool that is not installed is `missing` even
 then, and `timed_out` always means the executable was found.
@@ -2564,7 +2564,7 @@ host that passes a deadline which is not a whole number of seconds gets millisec
 over an hour gets `over an hour`). The two timed-out texts differ because they are different
 facts; a reader that needs to tell them apart in a program reads the words `but not started`,
 since v1 has no member for it. The text fits the schema's 240 characters, which is why it is
-shorter than the readable form: the readable output says the same under each `[timeout]` line,
+shorter than the readable form: the readable output says the same in sentences under its table,
 with the example of a virus scanner reading a large program for the first time. Neither form
 says to install or locate the tool, and the readable output offers no managed installation for
 it. `remediation.managed_install` and `remediation.explicit_path_option` are still present for
@@ -2598,7 +2598,7 @@ names the commands that make a tool known to VSift and says that no folder searc
 | `setup check` `remediation.next_step` and `setup plan` `next_step` (`manual_selection_required`), FFmpeg | `Install a trusted FFmpeg or register a working one with setup configure ffmpeg --executable <absolute-path>, then run setup check. No need to search folders: ask the user where it is.` |
 | the same, FFprobe | the same with `FFprobe` and `ffprobe` |
 | the same, whisper.cpp | `Install a trusted whisper.cpp CLI or register a working one with setup configure whisper --executable <absolute-path>, then run setup check. No need to search folders: ask the user where it is. A supplied transcript can skip local ASR.` |
-| readable `setup check`, under the tool | `Install a trusted build or register a working one with setup configure ffmpeg --executable <absolute-path>, then rerun setup check (or try a path once with setup check --ffmpeg <absolute-path>).`, then the managed sentence as before (`Or let VSift install the reviewed build: review setup plan, then accept it with setup install.` where this target has it, `Managed installation is not available for this target.` where not), and on a line of its own `No need to search folders: ask the user where it is.` |
+| readable `setup check`, under the tool (until `0.2.3`) | `Install a trusted build or register a working one with setup configure ffmpeg --executable <absolute-path>, then rerun setup check (or try a path once with setup check --ffmpeg <absolute-path>).`, then the managed sentence as before (`Or let VSift install the reviewed build: review setup plan, then accept it with setup install.` where this target has it, `Managed installation is not available for this target.` where not), and on a line of its own `No need to search folders: ask the user where it is.` Since `0.3.0` the readable view does not print this advice: it is for an assistant, so it stays in the JSON; see "The readable `setup check`" under "Human-readable text". |
 | `MISSING_CAPABILITY` remediations of `candidates`, the evidence commands, `ingest --transcript` and local ASR | their first sentences as before, then `Install trusted builds or register working ones with setup configure ffmpeg\|ffprobe --executable <path>, then run setup check. No need to search folders: ask the user where each one is.` (`ffmpeg\|ffprobe\|whisper` for local ASR) |
 
 The `setup check` and `setup plan` steps are one text since this change (the plan's said "Install or
@@ -3210,6 +3210,32 @@ retranscribe` shows it). PR 5 renders `handoff check` (the verdict, the session
 check, then each finding's pointer or line, rule, fixed prose and allowed values; a
 finding holds no draft text). PR 6 renders `setup list` (each component's selection and versions), `setup rollback`, `setup remove` (each version handled, the sweep) and `setup repair` (each finding's fixed prose and a `Run:` line with its command), and `setup install` also shows its cleanup. A command that completes without a renderer is a defect
 and fails `INTERNAL`; human mode never prints the JSON document.
+
+**The readable `setup check` (since `0.3.0`).** The readable answer is written for a person opening VSift for
+the first time; the JSON is unchanged, and so are the exit statuses. It has a header, then a table with one row
+for video (FFmpeg and FFprobe, named together), one for speech (whisper.cpp with its model) and one for each
+optional component, always shown, with the columns *Part*, *Status*, *Uses* and *What it's for*. Under it come
+the updates the catalogue offers (`Update available: <component> is on <version>`, then the same step as the
+JSON's `managed_updates[].next_step`), one sentence on where the person stands, the sentences that explain a
+tool that is not simply missing, and last the line `Next: ...` with the one step.
+
+- **Ready means the work can be done.** Video is `ready` when FFmpeg and FFprobe answer. Speech is `ready` only
+  when whisper.cpp answers, the registered model is a reviewed one and the local-ASR check passed. The answer
+  says `Setup complete: video and speech both work.` only then; otherwise it says `Your setup isn't complete:`
+  and names what is missing. Tools that answer with no model registered are `model missing`.
+- **Statuses:** `ready`, `not set up` (not found), `not working` (found, failed its probe), `no answer` (found,
+  and no answer in time or not tried before the deadline), `model missing`, `model unreadable`, `unknown model`,
+  `test failed`, `waiting for video`; an optional component is `added`, `none added` or `not available`.
+- **The step** is `vsift setup plan` where managed installation offers the missing part; otherwise the one
+  `setup configure` or `setup configure-model` command that registers it, with a link to the installation guide on
+  the line above; after a timeout, `vsift setup check`; when everything works, `vsift ingest ./your-video.mp4`.
+- **Left out of the readable view, and kept in the JSON:** advice written for an assistant (who knows the path,
+  the per-call options, folder-search advice), where each tool was found (`lookup`), the profile, the version
+  line of each tool and the local-ASR lines. The only provenance the view mentions is a path the person gave
+  that was not found.
+- It is ASCII only. The ticks and colour of the first-run design come with the setup door (`vsift setup`, ADR 0036),
+  which knows whether a terminal is there. Like all readable text it is unstable and not for parsing.
+
 
 **Worker hosts.** In human mode `job run` prints its job result (status, attempt,
 digest, session, controls, then each step's status, times, typed outputs, uncovered

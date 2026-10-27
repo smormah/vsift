@@ -411,17 +411,6 @@ pub(crate) enum ExecutionProfile {
     Worker,
 }
 
-impl ExecutionProfile {
-    /// Returns the stable machine-readable profile name.
-    #[must_use]
-    pub(crate) const fn identifier(self) -> &'static str {
-        match self {
-            Self::Desktop => "desktop",
-            Self::Worker => "worker",
-        }
-    }
-}
-
 impl From<ExecutionProfile> for SetupProfile {
     fn from(value: ExecutionProfile) -> Self {
         match value {
