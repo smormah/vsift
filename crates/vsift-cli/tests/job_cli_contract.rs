@@ -771,6 +771,112 @@ fn a_live_job_is_busy_and_cancel_only_asks_its_owner() -> TestResult {
     Ok(())
 }
 
+/// #517: a read of a session with no transcript yet, while a transcription of
+/// it is running, waiting or interrupted, keeps the published failure code but
+/// names the job: the job in `affected_ids`, the matching suggested command,
+/// and a remediation that never suggests starting another transcription. With
+/// no such job the answer is the plain one, which still does.
+#[test]
+fn a_read_with_no_transcript_names_the_job_that_will_publish_one() -> TestResult {
+    let root = OwnedRoot::new()?;
+    let session = seed_session(&root)?;
+    let store = store(&root)?;
+    let command_of = |arguments: &[&str]| {
+        if arguments[0] == "search" {
+            "search"
+        } else {
+            "transcript.get"
+        }
+    };
+    let to = SOURCE_MICROS.to_string();
+    let reads: [&[&str]; 2] = [
+        &[
+            "transcript",
+            "get",
+            SESSION,
+            "--from",
+            "0",
+            "--to",
+            &to,
+            "--json",
+        ],
+        &["search", SESSION, "--query", "words", "--json"],
+    ];
+
+    for arguments in reads {
+        let plain = assert_failure(
+            &vsift(&root, arguments)?,
+            command_of(arguments),
+            "INVALID_ARGUMENT",
+            2,
+        )?;
+        assert_eq!(plain["error"]["affected_ids"], json!([]));
+        let text = plain["error"]["remediation"][0]["summary"].to_string();
+        assert!(text.contains("transcript retranscribe"), "{text}");
+    }
+
+    let resolved = resolve(&store, &session, None)?;
+    let job = resolved.spec.job_id.clone();
+    let (owner, created) = store.open_or_create(&resolved.spec, now()?)?;
+    assert!(created);
+    let mut owner = Some(owner);
+    // Queued, then running (the owner is held), then interrupted.
+    for (state, command) in [
+        ("queued", "status"),
+        ("running", "status"),
+        ("interrupted", "resume"),
+    ] {
+        match state {
+            "running" => {
+                if let Some(owner) = owner.as_mut() {
+                    owner.apply(&JobChange::Start, now()?)?;
+                }
+            }
+            // The attempt stops and its owner goes: nobody holds the job.
+            "interrupted" => {
+                if let Some(mut gone) = owner.take() {
+                    gone.apply(&JobChange::Interrupt(None), now()?)?;
+                }
+            }
+            _ => {}
+        }
+        for arguments in reads {
+            let named = assert_failure(
+                &vsift(&root, arguments)?,
+                command_of(arguments),
+                "INVALID_ARGUMENT",
+                2,
+            )?;
+            let error = &named["error"];
+            assert_eq!(error["retryable"], false, "{state}: {named}");
+            assert_eq!(
+                error["affected_ids"],
+                json!([SESSION, job.as_str()]),
+                "{state}"
+            );
+            let remediation = error["remediation"][0]["summary"].to_string();
+            assert!(
+                !remediation.contains("retranscribe"),
+                "{state}: {remediation}"
+            );
+            assert!(
+                remediation.contains("affected_ids"),
+                "{state}: {remediation}"
+            );
+            assert_eq!(
+                error["remediation"][0]["command"],
+                json!({
+                    "executable": "vsift",
+                    "arguments": ["job", command, job.as_str()],
+                }),
+                "{state}: {named}"
+            );
+        }
+    }
+    drop(owner);
+    Ok(())
+}
+
 /// X-06 while committing: a cancel that loses to the commit is too late;
 /// the job keeps committing under its owner and nothing is cancelled.
 #[test]

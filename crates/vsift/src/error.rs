@@ -34,6 +34,18 @@ use vsift_infrastructure::{
     SessionStoreOpenError, UserDependencyConfigError,
 };
 
+/// What a transcription that has not published a readable transcript yet is
+/// doing (#517): the three states in which a read should follow the job.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PendingTranscription {
+    /// A process owns the job and is transcribing.
+    Running,
+    /// The job is recorded and waiting for its turn to start.
+    Queued,
+    /// The job stopped before it finished and `job resume` continues it.
+    Interrupted,
+}
+
 /// Why an engine operation did not complete.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum EngineError {
@@ -55,6 +67,21 @@ pub enum EngineError {
     MediaToolUnavailable(RuntimeDependency),
     /// The session has no transcript revision.
     TranscriptUnavailable,
+    /// The session has no transcript revision to read yet, but a transcription
+    /// of it is running, waiting its turn or interrupted (#517).
+    ///
+    /// It is [`EngineError::TranscriptUnavailable`] with the job named, so
+    /// that the remediation follows the job and does not point at a new
+    /// transcription, which would be refused as `BUSY` while this one runs.
+    /// It keeps the failure code of `TranscriptUnavailable`.
+    TranscriptPending {
+        /// The session whose transcript was read.
+        session: SessionId,
+        /// The transcription job that will publish it.
+        job: JobId,
+        /// What the job is doing.
+        progress: PendingTranscription,
+    },
     /// A requested source range is empty or reversed.
     InvalidTimeRange,
     /// A requested page size is outside 1 to 100.
@@ -444,6 +471,7 @@ impl EngineError {
             | Self::JobNotFound
             | Self::PlanAcceptance(_)
             | Self::TranscriptUnavailable
+            | Self::TranscriptPending { .. }
             | Self::InvalidTimeRange
             | Self::InvalidPageLimit
             | Self::TranscriptQuery(_)
@@ -730,6 +758,17 @@ impl fmt::Display for EngineError {
                 dependency.display_name()
             ),
             Self::TranscriptUnavailable => formatter.write_str("session has no transcript"),
+            Self::TranscriptPending { progress, .. } => formatter.write_str(match progress {
+                PendingTranscription::Running => {
+                    "session has no transcript to read yet; a transcription of it is running"
+                }
+                PendingTranscription::Queued => {
+                    "session has no transcript to read yet; a transcription of it is waiting its turn"
+                }
+                PendingTranscription::Interrupted => {
+                    "session has no transcript to read yet; a transcription of it was interrupted"
+                }
+            }),
             Self::InvalidTimeRange => {
                 formatter.write_str("time range must have a positive duration")
             }
@@ -970,6 +1009,7 @@ impl Error for EngineError {
             | Self::MediaToolUnavailable(_)
             | Self::MediaToolVerificationFailed(_)
             | Self::TranscriptUnavailable
+            | Self::TranscriptPending { .. }
             | Self::InvalidTimeRange
             | Self::InvalidPageLimit
             | Self::UnrestrictedCleanRejected
@@ -1011,6 +1051,7 @@ impl EngineError {
         match self {
             Self::JobBusy { job }
             | Self::TranscriptionRunning { job, .. }
+            | Self::TranscriptPending { job, .. }
             | Self::RevisionLeftOpen { job, .. }
             | Self::IdempotencyConflict { job }
             | Self::JobCancelled { job }
@@ -1032,6 +1073,7 @@ impl EngineError {
             Self::JobInterrupted { session, .. }
             | Self::JobSessionNotOpen { session, .. }
             | Self::TranscriptionRunning { session, .. }
+            | Self::TranscriptPending { session, .. }
             | Self::RevisionLeftOpen { session, .. } => Some(session),
             _ => None,
         }

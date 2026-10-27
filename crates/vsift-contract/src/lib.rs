@@ -280,10 +280,12 @@ pub use text::{
 pub use transcript::{
     MEDIA_TOOLS_FOR_TRANSCRIPT_REMEDIATION, NO_TRANSCRIPT_REMEDIATION,
     PROVIDER_CHUNKS_REJECTED_WARNING, PROVIDER_SEGMENTS_UNPLACED_WARNING, RetranscribeJob,
-    SourceSegmentData, TranscriptBriefPageData, TranscriptPageData, TranscriptPresentation,
-    TranscriptRetranscribeData, TranscriptRevisionData, TranscriptSegmentData,
-    UNTRANSCRIBED_READ_WARNING, finish_retranscription, retranscription_gaps,
-    transcript_get_response, transcript_rejection_summary, transcript_warning_messages,
+    SourceSegmentData, TRANSCRIPT_INTERRUPTED_REMEDIATION, TRANSCRIPT_QUEUED_REMEDIATION,
+    TRANSCRIPT_RUNNING_REMEDIATION, TranscriptBriefPageData, TranscriptPageData,
+    TranscriptPresentation, TranscriptRetranscribeData, TranscriptRevisionData,
+    TranscriptSegmentData, UNTRANSCRIBED_READ_WARNING, finish_retranscription,
+    retranscription_gaps, transcript_get_response, transcript_rejection_summary,
+    transcript_warning_messages,
 };
 pub use verification::media_tool_verification_summary;
 pub use view::{BRIEF_VIEW_STREAM_REMEDIATION, ResultView};

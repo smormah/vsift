@@ -456,6 +456,12 @@ request holds the session or the root's share of the machine's capacity (#342): 
 2000 where it had an empty `remediation` and a null hint; no field is added (the failure shape
 already has both). `crop`, `audio` and `candidates` answer the same way. It is checked by
 `navigation_contract` and by a unit test of the CLI, which builds it from the typed cause.
+`transcript-get.pending-transcription.json` is the `transcript get` (and `search`) failure of a session with
+no transcript to read yet while a transcription job of it is running (#517, since 0.3.0): the same code
+(`INVALID_ARGUMENT`), `retryable` and message as the plain answer, with the session and the job in
+`affected_ids`, a remediation that says not to start another transcription, and the job's `job status` as its
+command (`job resume` for an interrupted job, which has its own remediation text); no field is added. It is
+checked by `navigation_contract`, by a unit test of the CLI and by `engine_jobs` and `job_cli_contract`.
 `frame-get.busy-transcription.json` is the same refusal when a transcription of the same session is
 running (#370, since 0.2.2): the same code, `retryable`, message and `retry_after_ms`, with the session
 and the job in `affected_ids`, a remediation that says the transcription holds the root's capacity

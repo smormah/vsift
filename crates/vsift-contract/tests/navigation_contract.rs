@@ -43,8 +43,10 @@ use vsift_application::{
 use vsift_contract::{
     AudioEvidenceStream, CommandName, DeliveredEvidenceFile, EvidencePresentation,
     EvidencePresentationError, EvidenceStream, FrameEvidenceStream, LifecycleResponse,
-    MEDIA_BUSY_REMEDIATION, OperationResponse, TRANSCRIPTION_RUNNING_REMEDIATION,
-    TerminalEventResponse, audio_response, frame_response, partial_evidence_warning,
+    MEDIA_BUSY_REMEDIATION, OperationResponse, TRANSCRIPT_INTERRUPTED_REMEDIATION,
+    TRANSCRIPT_QUEUED_REMEDIATION, TRANSCRIPT_RUNNING_REMEDIATION,
+    TRANSCRIPTION_RUNNING_REMEDIATION, TerminalEventResponse, audio_response, frame_response,
+    partial_evidence_warning,
 };
 use vsift_domain::{
     AudioRange, BurstCount, BurstRange, CropRect, EvidenceMediaKind, EvidenceProfile,
@@ -1018,5 +1020,57 @@ fn a_media_command_during_a_transcription_names_the_job() -> TestResult {
         );
     }
     assert!(TRANSCRIPTION_RUNNING_REMEDIATION.chars().count() <= 480);
+    Ok(())
+}
+
+/// #517: a read of a session with no transcript yet, while a transcription of
+/// it runs, is the plain `INVALID_ARGUMENT` of a session with none (the code,
+/// `retryable` and message do not change), naming the session and the job in
+/// `affected_ids` with the job's `job status` (`job resume` when it was
+/// interrupted) as the command, and a remediation that never points at a new
+/// transcription. The running answer is the published example.
+#[test]
+fn a_read_with_no_transcript_while_one_runs_names_the_job() -> TestResult {
+    let session = "ses_0123456789abcdef0123456789abcdef";
+    let job = "job_0123456789abcdef0123456789abcdef";
+    let response = OperationResponse::<Value>::failure_with_suggested_command(
+        CommandName::TranscriptGet.identifier(),
+        FailureCode::InvalidArgument,
+        TRANSCRIPT_RUNNING_REMEDIATION.to_owned(),
+        &["job", "status", job],
+    )
+    .with_affected_ids(&[session, job]);
+    let value = serde_json::to_value(&response)?;
+    validate("operation-response.schema.json", &value)?;
+    assert_eq!(
+        value,
+        load("examples/transcript-get.pending-transcription.json")?
+    );
+    assert_eq!(value["error"]["code"], "INVALID_ARGUMENT");
+    assert_eq!(value["error"]["retryable"], false);
+    assert_eq!(
+        value["error"]["message"],
+        load("examples/parse-failure.json")?["error"]["message"]
+    );
+    let event = serde_json::to_value(TerminalEventResponse::new(response))?;
+    validate("terminal-event.schema.json", &event)?;
+    for remediation in [
+        TRANSCRIPT_RUNNING_REMEDIATION,
+        TRANSCRIPT_QUEUED_REMEDIATION,
+        TRANSCRIPT_INTERRUPTED_REMEDIATION,
+    ] {
+        for needle in [
+            "no transcript to read yet",
+            "affected_ids",
+            "Do not start another",
+        ] {
+            assert!(remediation.contains(needle), "{needle}: {remediation}");
+        }
+        assert!(!remediation.contains("retranscribe"), "{remediation}");
+        assert!(remediation.chars().count() <= 480);
+    }
+    assert!(TRANSCRIPT_INTERRUPTED_REMEDIATION.contains("job resume"));
+    assert!(TRANSCRIPT_RUNNING_REMEDIATION.contains("job status"));
+    assert!(TRANSCRIPT_QUEUED_REMEDIATION.contains("job status"));
     Ok(())
 }

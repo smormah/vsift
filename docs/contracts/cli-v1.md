@@ -425,7 +425,19 @@ keeps it valid), the range and the session expiry, and any other use is
 `INVALID_ARGUMENT`. A session without a transcript, a closed or expired session, an
 empty range, or a `--revision` the session does not hold is `INVALID_ARGUMENT`; the
 first carries a fixed remediation naming `ingest --transcript` and `transcript
-retranscribe`, the last one naming where revision identities come from. A malformed
+retranscribe`, the last one naming where revision identities come from. **Since `0.3.0`
+(#517):** when a session has no transcript to read yet but a transcription job of it is
+running, waiting to start or interrupted and resumable (`job resume` continues it), the
+same read (`transcript get` and `search`) keeps the code, `retryable` and message, and
+changes the remediation: it names the job in `error.affected_ids` (the session first, then
+the job), says not to start another transcription (which would be refused as `BUSY`), and
+suggests `vsift job status <job>` (`vsift job resume <job>` for an interrupted job) as its
+command. A running or queued job is looked up first among the session's `prepare` jobs
+(the one `job start` returned), else the newest; a job that failed, was cancelled or
+succeeded does not count, and with none the fixed remediation above is unchanged (the
+library reports the former as `EngineError::TranscriptPending`). No field is added; the
+example is [`transcript-get.pending-transcription.json`](../../schemas/v1/examples/transcript-get.pending-transcription.json).
+A job waiting in the root's queue is reported as waiting; its place in the queue is not in the fixed text: the suggested `job status` shows it as `queue_position`. A malformed
 `--revision` is a parse error. `transcript get` never runs a provider. With `--events
 jsonl` the page is streamed as one evidence event per segment followed by one
 terminal event (below). Since `0.2.1` the page also takes `--view brief` ("Views of a
