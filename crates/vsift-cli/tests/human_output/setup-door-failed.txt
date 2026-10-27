@@ -1,0 +1,38 @@
+VSift 0.0.0-test setup
+
+  Part        Status      Uses         What it's for
+  Video       not set up  FFmpeg       reading videos, taking frames
+  Speech      not set up  whisper.cpp  turning speech into text
+  Web videos  none added  yt-dlp       web page videos (optional)
+
+Your setup isn't complete: video and speech are missing.
+Speech needs two things, whisper.cpp and its model, and neither is set up yet.
+
+VSift can install video and speech for you:
+
+  FFmpeg        from BtbN      about 113 MB  MIT
+  whisper.cpp   from ggml-org  about 9 MB    MIT
+  speech model  from ggml-org  about 60 MB   MIT
+
+That is about 182 MB to download, which can take a few minutes.
+Each download is checked against a fixed fingerprint before it is used,
+and it is installed for your user only.
+To see the exact addresses and fingerprints first: vsift setup plan
+
+Install video and speech now? [y/N] 
+Installing video and speech: 3 downloads, about 182 MB
+Ctrl-C stops it and keeps what has finished.
+
+  Video   FFmpeg        ready
+  Speech  whisper.cpp   the download stopped: no connection
+          speech model  not tried
+
+  Part        Status      Uses         What it's for
+  Video       ready       FFmpeg       reading videos, taking frames
+  Speech      not set up  whisper.cpp  turning speech into text
+  Web videos  none added  yt-dlp       web page videos (optional)
+
+Your setup isn't complete: speech is missing.
+Speech needs two things, whisper.cpp and its model, and neither is set up yet.
+Video works, so a transcript you already have can still be used.
+Next: check your connection, then run  vsift setup

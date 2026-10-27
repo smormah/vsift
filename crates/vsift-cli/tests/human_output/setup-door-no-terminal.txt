@@ -1,0 +1,11 @@
+VSift 0.0.0-test setup
+
+  Part        Status      Uses         What it's for
+  Video       not set up  FFmpeg       reading videos, taking frames
+  Speech      not set up  whisper.cpp  turning speech into text
+  Web videos  none added  yt-dlp       web page videos (optional)
+
+Your setup isn't complete: video and speech are missing.
+Speech needs two things, whisper.cpp and its model, and neither is set up yet.
+Nobody is at a terminal to answer, so nothing was installed.
+Run vsift setup in a terminal, or see vsift setup install --help to install without questions.

@@ -357,6 +357,18 @@ unknown, which the skill says. **Agents ran this text once, in batch 2 on `0.2.2
   development freeze (`docs/agents/trials.md`), written on the `main` this pull request was rebased onto to merge;
   the final freeze is recorded at the 0.3.0 cut.
 
+## The change for 0.3.0: the setup door is never the skill's (ADR 0036; draft, 2026-10-27)
+
+- **`references/commands.md`** classes plain `vsift setup` as `never`: it is the setup door for a person at a
+  terminal, which asks a question and installs on the answer. The skill keeps `setup check` and `setup plan`
+  (free) and leaves `setup install` (never) to the user, as before; `SKILL.md` and the fuzz seed copy are
+  unchanged. The policy test's never set gains the `setup` operation (the CLI's skill-contract tests).
+- **Why it is safe as well as forbidden:** the door never asks without a terminal on standard input and
+  standard output, and with `--json` or `--events` it refuses with `INVALID_ARGUMENT`, so an assistant that runs
+  it by mistake gets a typed answer, never a question it cannot answer.
+- **The freeze:** a skill text change moves the trial freeze's `skill` component; the draft rewrites it, and it is
+  rewritten again at the merge rebase (`v030` rules).
+
 ## Keeping it in step with the CLI
 
 `crates/vsift-cli/src/skill_contract.rs` (unit tests of the CLI crate, run by `cargo

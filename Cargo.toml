@@ -29,6 +29,10 @@ homepage = "https://github.com/smormah/vsift"
 readme = "README.md"
 
 [workspace.dependencies]
+# Already in the lock through clap. The setup door asks it whether a terminal
+# takes colour (NO_COLOR, TERM=dumb) and turns on a Windows console's virtual
+# terminal sequences (ADR 0036 section 8).
+anstyle-query = "1.1.5"
 assert_cmd = "2.1"
 # sherpa-onnx publishes every prebuilt archive as .tar.bz2 (ADR 0031, ADR 0032).
 # The default back end is libbz2-rs-sys, a Rust port of libbzip2 (no C build),

@@ -11,12 +11,15 @@
 //!   run and the local-ASR check all pass, so a tool that responds without a
 //!   usable model is "model missing", never "ready". The setup is complete
 //!   only when video and speech are both ready.
-//! - **The last line is the one next step.** Until the setup door ships, it
-//!   names the concrete command; [`Next`] is the single place that changes
-//!   when `vsift setup` takes over.
+//! - **The last line is the one next step.** For a person that is the setup
+//!   door, `vsift setup` (ADR 0036), whenever the setup is not complete; a
+//!   worker host's operator gets the concrete command ([`Next`]), which is
+//!   also the door's own last line when it has nothing to offer.
 //!
-//! The words and the table use ASCII only: the symbols and colour of the
-//! design note belong to the door, which knows whether a terminal is there.
+//! The table, the verdict and the details are one renderer,
+//! [`push_overview`], shared with the door, so the two cannot drift. Here
+//! the words use ASCII only; the door adds symbols and colour when a
+//! terminal takes them.
 
 use vsift::{
     DependencyState, LocalAsrCheckOutcome, LocalAsrModelStatus, LocalAsrNotRunReason,
@@ -27,7 +30,7 @@ use vsift_contract::{
     DependencyLookup, ProbeTimeHeadroom, managed_update_next_step, probe_deadline_text,
 };
 
-use super::text::{RenderedText, TerminalText, TooLarge};
+use super::text::{RenderedText, Styling, TerminalText, Tone, TooLarge};
 use crate::{command::ExecutionProfile, setup::ManagedSetupFacts};
 
 /// Where a person finds the tools to install themselves.
@@ -69,6 +72,13 @@ impl VideoState {
             Self::NoAnswer
         } else {
             Self::Ready
+        }
+    }
+
+    const fn tone(self) -> Tone {
+        match self {
+            Self::Ready => Tone::Good,
+            Self::Missing | Self::NotWorking | Self::NoAnswer => Tone::Bad,
         }
     }
 
@@ -127,6 +137,14 @@ impl SpeechState {
         }
     }
 
+    const fn tone(self) -> Tone {
+        match self {
+            Self::Ready => Tone::Good,
+            Self::WaitingForVideo => Tone::Quiet,
+            _ => Tone::Bad,
+        }
+    }
+
     const fn status(self) -> &'static str {
         match self {
             Self::Ready => "ready",
@@ -142,9 +160,10 @@ impl SpeechState {
     }
 }
 
-/// The one next step, until `vsift setup` takes the walk-through over.
+/// The one concrete next step: the door's last line when it has nothing to
+/// offer, and a worker host's in `setup check`.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum Next {
+pub(super) enum Next {
     /// Everything works.
     TryAVideo,
     /// The checks ran out of time: run them again.
@@ -160,24 +179,16 @@ enum Next {
 }
 
 impl Next {
-    fn of(
-        states: [&DependencyState; 3],
-        speech: SpeechState,
-        complete: bool,
-        managed: ManagedSetupFacts<'_>,
-    ) -> Self {
-        if complete {
+    pub(super) fn of(standing: Standing<'_>, managed: ManagedSetupFacts<'_>) -> Self {
+        if standing.complete() {
             return Self::TryAVideo;
         }
-        if states
-            .iter()
-            .any(|state| matches!(state, DependencyState::TimedOut(_)))
-        {
+        if standing.timed_out() {
             return Self::CheckAgain;
         }
         let needs_a_tool = RuntimeDependency::ALL
             .into_iter()
-            .zip(states)
+            .zip(standing.states)
             .find(|(_, state)| {
                 matches!(
                     state,
@@ -193,7 +204,7 @@ impl Next {
                 Self::RegisterTool(dependency)
             };
         }
-        match speech {
+        match standing.speech {
             SpeechState::ModelMissing
                 if managed.availability == ManagedPlanAvailability::Qualified =>
             {
@@ -205,6 +216,60 @@ impl Next {
             SpeechState::TestFailed => Self::LookAgain,
             _ => Self::CheckAgain,
         }
+    }
+}
+
+/// Where a setup stands: each tool's state, and video and speech as a
+/// person meets them. Worked out once, for `setup check` and the door.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Standing<'report> {
+    states: [&'report DependencyState; 3],
+    video: VideoState,
+    speech: SpeechState,
+}
+
+impl<'report> Standing<'report> {
+    /// The standing a check reports.
+    pub(crate) fn of(diagnosis: &'report RuntimeDiagnosis, local_asr: LocalAsrSetupStatus) -> Self {
+        let states = RuntimeDependency::ALL.map(|dependency| {
+            diagnosis
+                .dependencies
+                .iter()
+                .find(|status| status.dependency == dependency)
+                .map_or(&NOT_PROBED, |status| &status.state)
+        });
+        let [ffmpeg, ffprobe, whisper] = states;
+        Self {
+            states,
+            video: VideoState::of(ffmpeg, ffprobe),
+            speech: SpeechState::of(whisper, local_asr),
+        }
+    }
+
+    /// Video and speech both work.
+    pub(crate) fn complete(&self) -> bool {
+        self.video == VideoState::Ready && self.speech == SpeechState::Ready
+    }
+
+    /// Video needs something done.
+    pub(crate) fn video_missing(&self) -> bool {
+        self.video != VideoState::Ready
+    }
+
+    /// Speech needs something done of its own: speech that is only waiting
+    /// for video is not missing.
+    pub(crate) fn speech_missing(&self) -> bool {
+        !matches!(
+            self.speech,
+            SpeechState::Ready | SpeechState::WaitingForVideo
+        )
+    }
+
+    /// A tool check ran out of time, so what is missing is not known.
+    pub(crate) fn timed_out(&self) -> bool {
+        self.states
+            .iter()
+            .any(|state| matches!(state, DependencyState::TimedOut(_)))
     }
 }
 
@@ -224,65 +289,86 @@ pub(crate) fn setup_check<L>(
 where
     L: Fn(RuntimeDependency) -> DependencyLookup,
 {
-    let states = RuntimeDependency::ALL.map(|dependency| {
-        diagnosis
-            .dependencies
-            .iter()
-            .find(|status| status.dependency == dependency)
-            .map_or(&NOT_PROBED, |status| &status.state)
-    });
-    let [ffmpeg, ffprobe, whisper] = states;
-    let video = VideoState::of(ffmpeg, ffprobe);
-    let speech = SpeechState::of(whisper, local_asr);
-    let complete = video == VideoState::Ready && speech == SpeechState::Ready;
-
+    let standing = Standing::of(diagnosis, local_asr);
     let mut text = TerminalText::result();
     text.push_fixed("VSift setup check").end_line().blank_line();
-    push_table(&mut text, video, speech, managed.optional);
+    push_overview(&mut text, standing, managed, Styling::Plain, lookup);
+    if standing.complete() {
+        push_extras_line(&mut text, managed.optional, profile);
+    }
+    let next = Next::of(standing, managed);
+    push_guide(&mut text, next);
+    // A person's way on is the setup door (ADR 0036); a worker host is set
+    // up by its operator, who gets the concrete step.
+    if profile == ExecutionProfile::Desktop && !standing.complete() && next != Next::CheckAgain {
+        text.push_fixed("Next: vsift setup").end_line();
+    } else {
+        push_next(&mut text, next, Door::Absent);
+    }
+    text.finish()
+}
+
+/// The table, any updates, the line on where the person stands, what
+/// happened to a tool that did not simply go missing and, when only speech
+/// is missing, that video still works: everything `setup check` and the
+/// door share.
+pub(super) fn push_overview<L>(
+    text: &mut TerminalText,
+    standing: Standing<'_>,
+    managed: ManagedSetupFacts<'_>,
+    styling: Styling,
+    lookup: &L,
+) where
+    L: Fn(RuntimeDependency) -> DependencyLookup,
+{
+    push_table(
+        text,
+        standing.video,
+        standing.speech,
+        managed.optional,
+        styling,
+    );
     text.blank_line();
     for update in managed.updates {
-        push_update(&mut text, update);
+        push_update(text, update);
     }
     text.blank_line();
-    push_verdict(&mut text, video, speech);
-    push_details(&mut text, states, speech, lookup);
-    if complete {
-        push_extras_hint(&mut text, managed.optional, profile);
-    } else if video == VideoState::Ready {
+    push_verdict(text, standing.video, standing.speech);
+    push_details(text, standing.states, standing.speech, lookup);
+    if !standing.complete() && standing.video == VideoState::Ready {
         text.push_fixed("Video works, so a transcript you already have can still be used.")
             .end_line();
     }
-    let next = Next::of(states, speech, complete, managed);
-    push_guide(&mut text, next);
-    push_next(&mut text, next);
-    text.finish()
 }
 
 /// One row of the table. Every cell is `VSift`'s own fixed word.
 struct Row {
     part: &'static str,
-    status: &'static str,
+    status: (&'static str, Tone),
     uses: &'static str,
     purpose: &'static str,
 }
 
-/// The table: video, speech, then each optional extra, always shown.
+/// The table: video, speech, then each optional extra, always shown. With
+/// [`Styling::Rich`] each status has its symbol and colour; the words are
+/// the same either way, so the plain table is the styled one without them.
 fn push_table(
     text: &mut TerminalText,
     video: VideoState,
     speech: SpeechState,
     optional: &[(OptionalComponent, OptionalCapability)],
+    styling: Styling,
 ) {
     let mut rows = vec![
         Row {
             part: "Video",
-            status: video.status(),
+            status: (video.status(), video.tone()),
             uses: "FFmpeg",
             purpose: "reading videos, taking frames",
         },
         Row {
             part: "Speech",
-            status: speech.status(),
+            status: (speech.status(), speech.tone()),
             uses: "whisper.cpp",
             purpose: "turning speech into text",
         },
@@ -292,38 +378,46 @@ fn push_table(
         rows.push(Row {
             part: "Web videos",
             status: match capability {
-                OptionalCapability::Installed(_) => "added",
-                OptionalCapability::NotInstalled => "none added",
-                OptionalCapability::Unavailable => "not available",
+                OptionalCapability::Installed(_) => ("added", Tone::Good),
+                OptionalCapability::NotInstalled => ("none added", Tone::Quiet),
+                OptionalCapability::Unavailable => ("not available", Tone::Quiet),
             },
             uses: "yt-dlp",
             purpose: "web page videos (optional)",
         });
     }
-    let header = Row {
-        part: "Part",
-        status: "Status",
-        uses: "Uses",
-        purpose: "What it's for",
+    // A styled status is two columns wider: its symbol and a space.
+    let symbol_columns = match styling {
+        Styling::Plain => 0,
+        Styling::Rich => 2,
     };
     let width = |cell: fn(&Row) -> &'static str| {
         rows.iter()
-            .chain(std::iter::once(&header))
-            .map(|row| cell(row).len())
+            .map(|row| cell(row).chars().count())
             .max()
             .unwrap_or(0)
     };
-    let widths = [
-        width(|row| row.part),
-        width(|row| row.status),
-        width(|row| row.uses),
-    ];
-    for row in std::iter::once(&header).chain(rows.iter()) {
-        text.push_fixed("  ");
-        for (cell, width) in [row.part, row.status, row.uses].into_iter().zip(widths) {
-            text.push_fixed(cell)
-                .push_value(&" ".repeat(width - cell.len() + 2));
-        }
+    let part_width = width(|row| row.part).max("Part".len());
+    let status_width = (width(|row| row.status.0) + symbol_columns).max("Status".len());
+    let uses_width = width(|row| row.uses).max("Uses".len());
+    let pad = |text: &mut TerminalText, used: usize, width: usize| {
+        text.push_value(&" ".repeat(width.saturating_sub(used) + 2));
+    };
+    text.push_fixed("  Part");
+    pad(text, "Part".len(), part_width);
+    text.push_fixed("Status");
+    pad(text, "Status".len(), status_width);
+    text.push_fixed("Uses");
+    pad(text, "Uses".len(), uses_width);
+    text.push_fixed("What it's for").end_line();
+    for row in &rows {
+        text.push_fixed("  ").push_fixed(row.part);
+        pad(text, row.part.chars().count(), part_width);
+        let (words, tone) = row.status;
+        let used = text.push_status(words, tone, styling);
+        pad(text, used, status_width);
+        text.push_fixed(row.uses);
+        pad(text, row.uses.chars().count(), uses_width);
         text.push_fixed(row.purpose).end_line();
     }
 }
@@ -520,8 +614,10 @@ fn push_details<L>(
     }
 }
 
-/// On a complete setup, the optional extras that are not added yet.
-fn push_extras_hint(
+/// On a complete setup, the optional extras that could be added here and
+/// are not yet, with the door's command for adding one. A worker host is
+/// set up by its operator, so it gets no such line.
+pub(super) fn push_extras_line(
     text: &mut TerminalText,
     optional: &[(OptionalComponent, OptionalCapability)],
     profile: ExecutionProfile,
@@ -529,20 +625,21 @@ fn push_extras_hint(
     if profile == ExecutionProfile::Worker {
         return;
     }
-    for (component, capability) in optional {
-        if *capability == OptionalCapability::NotInstalled {
-            let OptionalComponent::OnlineLinks = component;
-            text.push_fixed(
-                "Optional extra: web videos. To see what it would add: vsift setup plan --include \
-                 online_links",
-            )
-            .end_line();
-        }
+    let addable = optional
+        .iter()
+        .any(|(_, capability)| *capability == OptionalCapability::NotInstalled);
+    if addable {
+        // Web videos are the only extra a catalogue has so far; the others
+        // join this line as their groups land (ADR 0036 section 7).
+        text.push_fixed(
+            "Optional extras: web videos. Add one with: vsift setup --include web-videos",
+        )
+        .end_line();
     }
 }
 
 /// Where to read more, on its own line before the step.
-fn push_guide(text: &mut TerminalText, next: Next) {
+pub(super) fn push_guide(text: &mut TerminalText, next: Next) {
     match next {
         Next::RegisterTool(_) | Next::RegisterModel => {
             text.push_fixed("The installation guide shows where to get it: ")
@@ -558,11 +655,26 @@ fn push_guide(text: &mut TerminalText, next: Next) {
     }
 }
 
+/// Whether the step is written for the setup door, which checks again
+/// itself, or for `setup check`.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum Door {
+    /// The door: looking again means running it again.
+    Present,
+    /// `setup check` for a worker host.
+    Absent,
+}
+
 /// The last line: the one step to take.
-fn push_next(text: &mut TerminalText, next: Next) {
+pub(super) fn push_next(text: &mut TerminalText, next: Next, door: Door) {
     text.push_fixed("Next: ");
     match next {
         Next::TryAVideo => text.push_fixed("vsift ingest ./your-video.mp4"),
+        // A check that ran out of time is run again as `setup check`, where
+        // `--timeout-seconds` allows more time.
+        Next::LookAgain | Next::ReviewThePlan if door == Door::Present => {
+            text.push_fixed("vsift setup")
+        }
         Next::CheckAgain | Next::LookAgain => text.push_fixed("vsift setup check"),
         Next::ReviewThePlan => text.push_fixed(
             "vsift setup plan   (shows what VSift can install for you, and changes nothing)",

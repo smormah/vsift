@@ -38,6 +38,7 @@ mod job;
 mod session;
 mod setup;
 mod setup_check;
+mod setup_door;
 mod text;
 mod time;
 mod transcript;
@@ -47,9 +48,14 @@ use serde::Deserialize;
 use vsift_contract::{CommandName, OperationResponse};
 
 pub(crate) use failure::{HumanDetail, failure};
-pub(crate) use setup_check::setup_check;
+pub(crate) use setup_check::{Standing, setup_check};
+pub(crate) use setup_door::{
+    DoorOffer, door_after_install, door_declined, door_install_results, door_installing,
+    door_no_terminal, door_nothing_to_offer, door_offer, door_opening, door_question,
+};
 use text::TerminalText;
-pub(crate) use text::{DisplayText, RenderedText};
+pub(crate) use text::{DisplayText, RenderedText, Styling, TooLarge};
+pub(crate) use view::{InstallComponent, SetupInstall, SetupPlan};
 
 use crate::output::OutputError;
 
@@ -153,9 +159,10 @@ fn render_value(
         CommandName::JobRun => job::run(&envelope(value)?),
         CommandName::JobBatch => job::batch(&envelope(value)?),
         CommandName::HandoffCheck => handoff::check(&envelope(value)?),
-        // `setup check` renders from its typed report (`setup_check`), and a
+        // `setup check` renders from its typed report (`setup_check`), the
+        // setup door writes its own conversation (`setup_door`), and a
         // rejected command line only ever fails.
-        CommandName::SetupCheck | CommandName::Parse => return Ok(None),
+        CommandName::SetupCheck | CommandName::Setup | CommandName::Parse => return Ok(None),
     };
     rendered.map(Some).map_err(|_| OutputError::TooLarge)
 }
@@ -210,4 +217,4 @@ where
 }
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;

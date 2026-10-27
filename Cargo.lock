@@ -2239,6 +2239,7 @@ dependencies = [
 name = "vsift-cli"
 version = "0.2.3-rc.1"
 dependencies = [
+ "anstyle-query",
  "assert_cmd",
  "clap",
  "getrandom 0.4.3",

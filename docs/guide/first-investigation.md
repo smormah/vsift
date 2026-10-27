@@ -20,15 +20,28 @@ listen instead.
 
 ## 1. Check that VSift can find its tools
 
+```console
+$ vsift setup
+```
+
+In a terminal, this is the first command to run on any machine, and the one to come back to
+whenever something does not work. It looks for the tools and shows where you stand: a small
+table of what works, one sentence, and the one next step. When something is missing that VSift
+can install on your computer, it lists what it would download, with each piece's source, size
+and licence, and asks once, for example `Install speech now? [y/N]`. Nothing is installed unless
+you type `y`. Where VSift cannot install a part, it says so and gives the one command that
+registers a copy you install yourself. (`vsift setup` arrived in `0.3.0`; before it, use the
+command below.)
+
+To look without being asked anything, run its read-only view:
+
 <!-- check -->
 ```console
 $ vsift setup check
 ```
 
-This is the first command to run on any machine, and the one to run again whenever something
-does not work. It looks for the tools and says where you stand: a small table of what works,
-one sentence, and the one next step. On a machine with FFmpeg and FFprobe but no speech
-recognition it prints something like this (the last lines depend on your system):
+It shows the same table and never asks or changes anything. On a machine with FFmpeg and FFprobe
+but no speech recognition it prints something like this (the last lines depend on your system):
 
 ```text
 VSift setup check
@@ -42,12 +55,12 @@ Your setup isn't complete: speech is missing.
 Speech needs two things, whisper.cpp and its model, and neither is set up yet.
 Video works, so a transcript you already have can still be used.
 The installation guide shows where to get it: https://github.com/smormah/vsift/blob/main/docs/operations/install.md
-Next: vsift setup configure whisper --executable <full-path-to-whisper-cli>
+Next: vsift setup
 ```
 
-*This is the form VSift prints, taken from its own tests. The last line depends on your system: where VSift can
-install a part for you, it is `vsift setup plan` instead. Versions before `0.3.0` print a longer, technical
-answer ("Status: degraded" and a line for each tool).*
+*This is the form VSift prints, taken from its own tests. The installation guide line appears only where VSift
+cannot install the missing part for you. Versions before `0.3.0` print a longer, technical answer ("Status:
+degraded" and a line for each tool).*
 
 What the table means:
 
@@ -67,8 +80,9 @@ What the table means:
 With `--json` the answer is for a program: its `status` is `ready`, `degraded` or `blocked` (`blocked` when
 FFmpeg or FFprobe is missing or did not answer), and each tool carries its own advice.
 
-VSift never installs anything on its own. On Ubuntu 24.04 it can install the tools for you
-after you read and accept a plan; everywhere else you install them yourself.
+VSift never installs anything on its own. Where its reviewed catalogue has the tools (Ubuntu 24.04
+for all of them today), `vsift setup` installs them after you say yes; everywhere else you install
+them yourself and register them with the command it gives.
 
 ## 2. Get the practice files
 

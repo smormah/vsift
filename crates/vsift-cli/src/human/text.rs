@@ -10,6 +10,9 @@
 //!   sequence (an OSC-8 link, a colour) nor a forged line can be written.
 //!   Line breaks come only from [`TerminalText::end_line`] and from the line
 //!   structure of a quoted block, each of which starts with its quote prefix.
+//!   The one exception is the colour of a status word of `VSift`'s own
+//!   ([`TerminalText::push_status`], ADR 0036): a fixed sequence chosen by a
+//!   closed enum, never by pushed text.
 //! - **No hidden character.** Every character of `display_text`'s hidden set
 //!   ([`vsift_contract::is_hidden_character`]) is written as `<U+XXXX>`, with
 //!   [`vsift_contract::terminal_safe_text`], so nothing can reorder or hide
@@ -57,6 +60,34 @@ pub(crate) const MAX_UNTRUSTED_LINE_BYTES: usize = 4_000;
 /// Largest raw text [`DisplayText::render`] reads before rendering; the
 /// rendered form can grow by up to `HIDDEN_CHARACTER_GROWTH`.
 const MAX_RENDERED_SOURCE_BYTES: usize = 4_096;
+
+/// The only escape sequences [`TerminalText::push_status`] writes: select
+/// green, red or dim, and reset.
+const GREEN: &str = "\u{1b}[32m";
+const RED: &str = "\u{1b}[31m";
+const DIM: &str = "\u{1b}[2m";
+const RESET: &str = "\u{1b}[0m";
+
+/// How a status word looks on the person's screen.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum Styling {
+    /// Words only: not a terminal, `NO_COLOR`, a dumb terminal, or a
+    /// console that takes no colour (ADR 0036 section 8).
+    Plain,
+    /// A symbol and a colour before the word.
+    Rich,
+}
+
+/// What a status word says about the part, which picks its symbol and colour.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum Tone {
+    /// It works: a green tick.
+    Good,
+    /// It is missing or broken: a red cross.
+    Bad,
+    /// Nothing to act on now (none added, waiting): a dim dash.
+    Quiet,
+}
 
 /// Written after inline untrusted text that did not fit on its line.
 const CUT_MARKER: &str = " [cut]";
@@ -314,6 +345,54 @@ impl TerminalText {
             Err(TooLarge)
         } else {
             Ok(RenderedText(self.text))
+        }
+    }
+
+    /// Finishes a question: the text ends where the person types the
+    /// answer, on the question's own line, with no line break after it.
+    ///
+    /// # Errors
+    ///
+    /// [`TooLarge`] when the text exceeded its budget.
+    pub(crate) fn finish_question(self) -> Result<RenderedText, TooLarge> {
+        if self.exceeded {
+            Err(TooLarge)
+        } else {
+            Ok(RenderedText(self.text))
+        }
+    }
+
+    /// Writes a status word of `VSift`'s own, with its symbol and colour when
+    /// `styling` is [`Styling::Rich`], and returns how many columns it took.
+    ///
+    /// This is the one place escape sequences are written, and only the
+    /// fixed colour sequences below, so the rule that no pushed text can
+    /// drive the terminal still holds: nothing pushed decides what is
+    /// written here but the closed [`Tone`].
+    pub(crate) fn push_status(
+        &mut self,
+        words: &'static str,
+        tone: Tone,
+        styling: Styling,
+    ) -> usize {
+        match styling {
+            Styling::Plain => {
+                self.push_checked(words);
+                words.chars().count()
+            }
+            Styling::Rich => {
+                let (colour, symbol) = match tone {
+                    Tone::Good => (GREEN, "\u{2713}"),
+                    Tone::Bad => (RED, "\u{2717}"),
+                    Tone::Quiet => (DIM, "\u{2013}"),
+                };
+                self.push_raw(colour);
+                self.push_checked(symbol);
+                self.push_checked(" ");
+                self.push_checked(words);
+                self.push_raw(RESET);
+                words.chars().count() + 2
+            }
         }
     }
 

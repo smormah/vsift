@@ -7,4 +7,4 @@ VSift setup check
 
 Your setup isn't complete: video and speech are missing.
 Speech needs two things, whisper.cpp and its model, and neither is set up yet.
-Next: vsift setup plan   (shows what VSift can install for you, and changes nothing)
+Next: vsift setup

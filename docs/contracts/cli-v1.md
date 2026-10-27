@@ -64,6 +64,7 @@ stopped between two provider calls answers `CANCELLED`, never that a tool could 
 
 | Command | Contract purpose | Implementation packet |
 | --- | --- | --- |
+| `setup` (plain) | The setup door for a person at a terminal: the check, one offer and one question, and an install only on a typed yes (ADR 0036). Readable only; with `--json` or `--events` it answers `INVALID_ARGUMENT` | Since 0.3.0 (ADR 0036, first pull request) |
 | `setup check` | Read-only dependency diagnosis | Implemented |
 | `setup configure` | Persist an explicit user-managed executable path without running it (`ffmpeg`, `ffprobe`, `whisper`; `ocr-runner` since 0.3.0) | Partial P06 |
 | `setup configure-model` | Persist an explicit user-managed model file path without parsing it | Partial P06 |
@@ -2529,8 +2530,10 @@ A damaged or cut-short part of a source is `INVALID_SOURCE` with nothing committ
 a remediation that names `candidates` for finding undecodable parts; the decodable
 parts stay usable.
 
-Running `vsift` or `vsift setup` without a leaf command prints help and performs no
-dependency probe or mutation. `setup check` defaults to the `desktop` profile and a
+Running `vsift` without a command prints help and performs no dependency probe or
+mutation; so does `vsift setup --help`. Plain `vsift setup` is the setup door (since
+`0.3.0`, ADR 0036; see "The setup door" under "Human-readable text"): it probes like
+`setup check`, and installs nothing unless a person at a terminal types yes. `setup check` defaults to the `desktop` profile and a
 thirty-second total operation deadline (five seconds before `0.2.1`); `--profile worker` and
 `--timeout-seconds 1..60` are explicit overrides. `--ffmpeg`, `--ffprobe` and
 `--whisper` select existing absolute executables for this check only. An invalid
@@ -3238,15 +3241,43 @@ tool that is not simply missing, and last the line `Next: ...` with the one step
 - **Statuses:** `ready`, `not set up` (not found), `not working` (found, failed its probe), `no answer` (found,
   and no answer in time or not tried before the deadline), `model missing`, `model unreadable`, `unknown model`,
   `test failed`, `waiting for video`; an optional component is `added`, `none added` or `not available`.
-- **The step** is `vsift setup plan` where managed installation offers the missing part; otherwise the one
-  `setup configure` or `setup configure-model` command that registers it, with a link to the installation guide on
-  the line above; after a timeout, `vsift setup check`; when everything works, `vsift ingest ./your-video.mp4`.
+- **The step** is `vsift setup`, the setup door, whenever the setup is not complete, with a link to the
+  installation guide on the line above where VSift cannot install the missing part here; after a timeout,
+  `vsift setup check`; when everything works, `vsift ingest ./your-video.mp4`. With `--profile worker` the step is
+  the concrete one: `vsift setup plan` where managed installation offers the missing part, otherwise the one
+  `setup configure` or `setup configure-model` command. On a complete setup an extra that can be added here is
+  named: `Optional extras: web videos. Add one with: vsift setup --include web-videos`.
 - **Left out of the readable view, and kept in the JSON:** advice written for an assistant (who knows the path,
   the per-call options, folder-search advice), where each tool was found (`lookup`), the profile, the version
   line of each tool and the local-ASR lines. The only provenance the view mentions is a path the person gave
   that was not found.
-- It is ASCII only. The ticks and colour of the first-run design come with the setup door (`vsift setup`, ADR 0036),
-  which knows whether a terminal is there. Like all readable text it is unstable and not for parsing.
+- It is ASCII only. The ticks and colour of the first-run design are the setup door's, which knows whether a
+  terminal is there. Like all readable text it is unstable and not for parsing.
+
+**The setup door, plain `vsift setup` (since `0.3.0`, ADR 0036).** A conversation with a person, not a result:
+it has no JSON form, and with `--json` or `--events` it answers `INVALID_ARGUMENT` under the operation identifier
+`setup`, before it probes anything, with a remediation that names `setup check --json` and the plan route. A
+person is there when standard input and standard output are both terminals. Then it shows the heading `VSift
+<version> setup` and `setup check`'s table, verdict and details (one renderer), and:
+
+- when the setup is complete: the extras line and `Setup complete. Try it: vsift ingest ./your-video.mp4`;
+- after a timeout: `Next: vsift setup check`, where `--timeout-seconds` allows more time;
+- where something core is missing and the reviewed catalogue has it: the plan `setup plan --profile desktop`
+  builds (with any `--include web-videos`), shown as one offer (each piece with its publisher, size and licence,
+  the total, that each download is checked against a fixed fingerprint and installed for the user only, and that
+  `vsift setup plan` shows the exact addresses), then one question, `Install <parts> now? [y/N]`. Only `y` or
+  `yes`, in any case, is yes; Enter, any other answer, a closed input, Ctrl-C or ten minutes without an answer is
+  no, and nothing is installed. On yes it installs through `setup install`'s transaction, accepting the plan it
+  showed by that plan's own digest, then prints one line per piece and the table again, ending with the one step;
+- where VSift cannot install a missing part here: `VSift can't install <part> on this computer yet.`, the
+  installation guide, and the one `setup configure` or `setup configure-model` command.
+
+Without a terminal it never asks or waits: it writes the table and verdict, says nobody was there to answer, and
+exits with `setup check`'s status. Symbols (`✓`, `✗`, `–`) and colour appear only when standard output is a
+terminal, `NO_COLOR` is not set, `TERM` is not `dumb` and, on Windows, the console accepts virtual terminal
+sequences; the words are the same either way. Its exit status is `setup check`'s for where the setup ends, or that
+of the install's failure code when a piece failed. The skill classes it as never: an assistant uses `setup check`,
+`setup plan` and the user's own `setup install`.
 
 
 **Worker hosts.** In human mode `job run` prints its job result (status, attempt,
