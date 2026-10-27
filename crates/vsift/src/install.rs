@@ -5,17 +5,19 @@
 //! held guard is [`EngineError::ManagedInstallBusy`]). The plan is then
 //! rebuilt from the machine as it is now and must equal the saved plan the
 //! user reviewed, and the supplied digest must accept it; only then does the
-//! application transaction install the plan's components, one at a time,
-//! each fetched from its reviewed publisher (or the user's artifact folder),
-//! verified by exact size and SHA-256, staged, smoked and activated on its
-//! own. The compiled catalogue is the only trust anchor: the saved plan and
+//! application transaction install the plan's components, video and
+//! speech side by side (ADR 0036 section 4), each fetched from its reviewed
+//! publisher (or the user's artifact folder, or a download an earlier run
+//! kept), verified by exact size and SHA-256, staged, smoked and activated
+//! on its own. The compiled catalogue is the only trust anchor: the saved plan and
 //! the artifact folder supply no URL, digest or file name.
 
 use std::{path::PathBuf, time::Duration};
 
 use vsift_application::{
-    ManagedInstallReport, ManagedPlanAvailability, ManagedSetupAction, PlanAcceptanceError,
-    ProgressSink, install_managed_plan,
+    CorePartSet, InstallObserver, ManagedInstallReport, ManagedPlanAvailability,
+    ManagedSetupAction, PieceProgress, PlanAcceptanceError, ProgressSink,
+    install_observed_managed_plan,
 };
 use vsift_contract::{InstallSource, SavedSetupPlan};
 use vsift_domain::{FailureCode, ProgressUpdate, RuntimeDependency};
@@ -43,6 +45,10 @@ pub struct SetupInstallRequest {
     pub saved_plan: SavedSetupPlan,
     /// The digest the user accepted it by.
     pub accepted_digest: String,
+    /// The core parts the saved plan was built for: [`CorePartSet::ALL`]
+    /// for `setup install`, those an unattended setup named for the door
+    /// (ADR 0036 section 6). The plan is rebuilt for these parts.
+    pub parts: CorePartSet,
     /// An absolute folder holding the plan's artifact files, for an offline
     /// install; `None` downloads each from its reviewed publisher.
     pub artifact_directory: Option<PathBuf>,
@@ -148,6 +154,7 @@ impl Engine {
             .plan_setup_intent(SetupPlanRequest {
                 profile,
                 include,
+                parts: request.parts,
                 probe_timeout: request.probe_timeout,
             })
             .await?;
@@ -160,6 +167,15 @@ impl Engine {
         // No stage can be live while the guard is held, and nothing is staged
         // yet: every stage found now was abandoned by an earlier run.
         let stages = sweep_before_install(&store, &guard);
+        // A download kept by an earlier run (ADR 0036 section 4) stays only
+        // while this plan still installs exactly those bytes.
+        let wanted: Vec<_> = plan
+            .actions
+            .iter()
+            .chain(plan.optional_actions())
+            .map(|action| action.artifact.integrity)
+            .collect();
+        let _removed = store.sweep_kept_downloads(&guard, &wanted);
         let install_source = match source {
             ManagedArtifactSource::Publisher => InstallSource::Publisher,
             ManagedArtifactSource::Directory(_) => InstallSource::ArtifactDirectory,
@@ -177,10 +193,16 @@ impl Engine {
                 cancellation: cancellation.0.clone(),
             },
             &guard,
-            &sink,
         );
         let optional: Vec<ManagedSetupAction> = plan.optional_actions().cloned().collect();
-        let report = install_managed_plan(&installer, &plan.actions, &optional, &sink).await;
+        let report = install_observed_managed_plan(
+            &installer,
+            &plan.actions,
+            &optional,
+            &sink,
+            &OperationPieces(&progress),
+        )
+        .await;
         drop(installer);
         let versions = clean_up_after_install(&store, &guard);
         drop(guard);
@@ -199,6 +221,15 @@ struct OperationProgress<'observer>(&'observer ProgressObserver);
 impl ProgressSink for OperationProgress<'_> {
     fn report(&self, update: ProgressUpdate) {
         self.0.report(&JobProgress { job: None, update });
+    }
+}
+
+/// The observer of one operation as the transaction's piece observer.
+struct OperationPieces<'observer>(&'observer ProgressObserver);
+
+impl InstallObserver for OperationPieces<'_> {
+    fn piece(&self, progress: PieceProgress) {
+        self.0.install_piece(&progress);
     }
 }
 

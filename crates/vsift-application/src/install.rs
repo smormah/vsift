@@ -1,25 +1,31 @@
-//! The guarded managed-install transaction (P13, ADR 0023 §3 step 3).
+//! The guarded managed-install transaction (P13, ADR 0023 §3 step 3; ADR
+//! 0036 section 4).
 //!
-//! An accepted plan's actions are installed one component at a time, in the
-//! plan's dependency order (media tools, then the whisper.cpp CLI, then the
-//! model). For each component the transaction fetches the reviewed bytes
-//! (from the publisher, or from a user's folder of the same files), stages
-//! them privately, prepares the runtime, runs the compatibility smoke and
-//! only then publishes and selects it. Each component activates atomically
-//! on its own, so a failure leaves every earlier component active and a
-//! rerun of the same accepted plan continues where this one stopped: a
-//! component whose reviewed version is already selected is reported
-//! `already_current` and not fetched again.
+//! For each component of an accepted plan the transaction fetches the
+//! reviewed bytes (from the publisher, from a user's folder of the same
+//! files, or a verified download an earlier run kept), verifies them by
+//! size and SHA-256, stages them privately, prepares the runtime, runs the
+//! compatibility smoke and only then publishes and selects it. Each
+//! component activates atomically on its own, so a failure leaves every
+//! component activated before it active, and a rerun of the same accepted
+//! plan continues: a component whose reviewed version is already selected
+//! is reported `already_current` and not fetched again.
+//!
+//! The core is two independent parts: video (the media tools) and speech
+//! (the whisper.cpp program and its model). Their downloads run side by
+//! side, and one failing does not stop the other's download. Activation is
+//! in a fixed order, video first, because the speech smoke decodes its
+//! fixture with video tools: when video failed and none are selected,
+//! speech is reported `blocked` and its verified download is kept, so the
+//! rerun after video is fixed verifies it again instead of downloading it.
+//! Within a part, the first failure stops the part.
 //!
 //! The recognizer and its model need each other to be smoked: when the plan
 //! installs both, they are staged together and smoked together (the model
 //! is smoked with the staged whisper.cpp), then activated one after the
 //! other. Every other component is smoked with the providers already
-//! selected on the machine as companions.
-//!
-//! The first component that fails stops the transaction; the components
-//! after it are reported `blocked`, never attempted. Nothing here decides
-//! how bytes are fetched, staged or published: infrastructure does, behind
+//! selected on the machine as companions. Nothing here decides how bytes
+//! are fetched, staged or published: infrastructure does, behind
 //! [`ManagedComponentInstaller`].
 //!
 //! A plan may also include optional components (ADR 0032), each a named
@@ -31,12 +37,16 @@
 //! videos and says so. The parts of one group that still need installing
 //! are staged and smoked together, like the recognizer and its model.
 
-use std::future::Future;
+use std::{
+    future::{Future, poll_fn},
+    pin::pin,
+    task::Poll,
+};
 
 use vsift_domain::{FailureCode, ManagedComponent, ProgressStage, ProgressUpdate};
 
 use crate::{
-    CompatibilitySmoke, CompatibilitySmokeFailure, CompatibilitySmokeFailureReason,
+    CompatibilitySmoke, CompatibilitySmokeFailure, CompatibilitySmokeFailureReason, CorePart,
     ManagedSetupAction, OptionalComponent, ProgressSink, SmokeStageOutcome, StageDisposal,
     StagedManagedComponent, smoke_before_activation,
 };
@@ -385,6 +395,69 @@ pub struct ActivationFailure {
     pub stage: StageDisposal,
 }
 
+/// What became of a verified download the transaction could not use yet.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum DownloadKeeping {
+    /// It is kept for the next run, which verifies it again by its reviewed
+    /// size and SHA-256 before it is used.
+    Kept,
+    /// It could not be kept, and cleanup did this with it instead.
+    NotKept(StageDisposal),
+}
+
+/// The stage one piece of a plan has reached (ADR 0036 section 5): what a
+/// person's progress line shows for it.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PieceStage {
+    /// Not started yet.
+    Waiting,
+    /// Its reviewed bytes are arriving; [`PieceProgress::received`] counts
+    /// them.
+    Downloading,
+    /// Its verified bytes are unpacked and checked against the review.
+    Checking,
+    /// Its compatibility smoke runs.
+    Testing,
+    /// Published and selected.
+    Ready,
+    /// Its reviewed version was already selected; nothing was fetched.
+    AlreadyCurrent,
+    /// Speech is downloaded and verified, and waits for working video tools
+    /// to be tested with; its download is kept for the next run.
+    WaitingForVideo,
+    /// Not activated, for this reason.
+    Failed(ComponentInstallFailure),
+}
+
+/// One observation of one piece of the plan.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct PieceProgress {
+    /// The piece.
+    pub component: ManagedComponent,
+    /// The stage it has reached.
+    pub stage: PieceStage,
+    /// The bytes of it received so far, of [`Self::total`].
+    pub received: u64,
+    /// Its reviewed size.
+    pub total: u64,
+}
+
+/// Where the transaction reports each piece's stage and bytes (ADR 0036
+/// section 5). It is a library-level observer for a person's progress
+/// lines, beside the [`ProgressSink`] whose counts `--events jsonl` emits.
+pub trait InstallObserver: Send + Sync {
+    /// Receives one observation; called from the transaction's own task.
+    fn piece(&self, progress: PieceProgress);
+}
+
+/// An observer that discards every observation.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct NoInstallObserver;
+
+impl InstallObserver for NoInstallObserver {
+    fn piece(&self, _progress: PieceProgress) {}
+}
+
 /// The infrastructure that fetches, stages, smokes and activates one
 /// reviewed managed component.
 ///
@@ -393,6 +466,8 @@ pub struct ActivationFailure {
 /// is extracted, and publish only a candidate the smoke passed. None of them
 /// decides the order or what a failure means for the rest of the plan.
 pub trait ManagedComponentInstaller: Send + Sync {
+    /// A component's verified bytes, not yet unpacked.
+    type Download: StagedManagedComponent;
     /// A staged, unactivated component.
     type Candidate: StagedManagedComponent;
     /// The compatibility smoke for candidates.
@@ -401,12 +476,34 @@ pub trait ManagedComponentInstaller: Send + Sync {
     /// Whether `action`'s exact reviewed version is the one selected now.
     fn is_current(&self, action: &ManagedSetupAction) -> bool;
 
-    /// Fetches `action`'s reviewed bytes, verifies them and stages them as
-    /// an unactivated candidate with its private runtime prepared.
-    fn stage(
+    /// Fetches `action`'s reviewed bytes and verifies them against its
+    /// reviewed size and SHA-256: a download kept by an earlier run, verified
+    /// again, or else a fresh download or import. `progress` receives the
+    /// `fetching_artifact` observations of this one artifact.
+    fn fetch(
         &self,
         action: &ManagedSetupAction,
-    ) -> impl Future<Output = Result<Self::Candidate, StageFailure>> + Send;
+        progress: &dyn ProgressSink,
+    ) -> impl Future<Output = Result<Self::Download, StageFailure>> + Send;
+
+    /// Unpacks a verified download and stages it as an unactivated
+    /// candidate with its private runtime prepared.
+    ///
+    /// # Errors
+    ///
+    /// The step and reason staging failed, with what cleanup did.
+    fn stage(
+        &self,
+        download: Self::Download,
+        action: &ManagedSetupAction,
+    ) -> Result<Self::Candidate, StageFailure>;
+
+    /// Keeps a verified download for a later run of the same plan.
+    fn keep(&self, download: Self::Download, action: &ManagedSetupAction) -> DownloadKeeping;
+
+    /// Whether working video tools are selected on the machine now, as the
+    /// speech smoke needs them for its companion.
+    fn has_media_tools(&self) -> bool;
 
     /// The smoke for the next candidates, with the providers selected on
     /// the machine at this moment as companions.
@@ -428,8 +525,8 @@ pub trait ManagedComponentInstaller: Send + Sync {
     fn is_cancelled(&self) -> bool;
 }
 
-/// Installs the accepted plan's core `actions` in their order and reports
-/// each; the plan includes no optional component.
+/// Installs the accepted plan's core `actions` and reports each; the plan
+/// includes no optional component.
 ///
 /// The caller holds the install guard and has revalidated the plan against
 /// the current machine and the supplied acceptance digest immediately
@@ -446,17 +543,9 @@ where
     install_managed_plan(installer, actions, &[], progress).await
 }
 
-/// Installs an accepted plan: every core action first, in order, then each
-/// optional component's actions as a part of its own (ADR 0032).
-///
-/// A core failure stops the transaction and reports every optional action
-/// `blocked`. An optional component's failure stops only its own part: the
-/// core and every other optional component are installed whatever happens
-/// to it, and [`ManagedInstallReport::failure_code`] stays that of the
-/// core. The components of one optional component that still need
-/// installing are staged, smoked and activated as one unit. `optional` is
-/// in plan order, each optional component's actions together; `progress`
-/// counts every action.
+/// Installs an accepted plan: the core first, then each optional
+/// component's actions as a part of its own (ADR 0032); see
+/// [`install_observed_managed_plan`].
 pub async fn install_managed_plan<I>(
     installer: &I,
     core: &[ManagedSetupAction],
@@ -466,22 +555,52 @@ pub async fn install_managed_plan<I>(
 where
     I: ManagedComponentInstaller,
 {
+    install_observed_managed_plan(installer, core, optional, progress, &NoInstallObserver).await
+}
+
+/// Installs an accepted plan, reporting each piece to `observer`.
+///
+/// The core is two independent parts (ADR 0036 section 4): video (the media
+/// tools) and speech (the whisper.cpp program and its model). Their
+/// downloads run side by side, one download per part at a time, and one
+/// failing never stops the other's download and verification. Activation
+/// stays one atomic step per component, video first, so that speech is
+/// smoked with the video just activated. When video failed and no working
+/// video tools are selected, speech cannot be tested: it is reported
+/// `blocked` and its verified download is kept for the next run.
+///
+/// Optional components are installed only once the core is complete, each
+/// as a part of its own: one failing stops only its own part, and
+/// [`ManagedInstallReport::failure_code`] stays that of the core. The
+/// components of one optional component that still need installing are
+/// staged, smoked and activated as one unit. `optional` is in plan order,
+/// each optional component's actions together; `progress` counts every
+/// action as it finishes.
+pub async fn install_observed_managed_plan<I>(
+    installer: &I,
+    core: &[ManagedSetupAction],
+    optional: &[ManagedSetupAction],
+    progress: &dyn ProgressSink,
+    observer: &dyn InstallObserver,
+) -> ManagedInstallReport
+where
+    I: ManagedComponentInstaller,
+{
     let mut core_reports = blocked_reports(core);
     let mut optional_reports = blocked_reports(optional);
     let total = u64::try_from(core.len().saturating_add(optional.len())).unwrap_or(u64::MAX);
-    let mut finished = 0_u64;
-    report_components(progress, finished, total);
-
-    let core_installed = install_part(
-        installer,
-        core,
-        &mut core_reports,
-        Grouping::Core,
+    let mut counter = Counter {
         progress,
-        &mut finished,
+        finished: 0,
         total,
-    )
-    .await;
+    };
+    counter.report();
+    for action in core.iter().chain(optional) {
+        observe(observer, action, PieceStage::Waiting);
+    }
+
+    let core_installed =
+        install_core(installer, core, &mut core_reports, observer, &mut counter).await;
     if core_installed {
         let mut start = 0;
         while start < optional.len() {
@@ -491,16 +610,20 @@ where
                 .take_while(|action| OptionalComponent::of(action.artifact.component) == group)
                 .count();
             let end = start + length.max(1);
-            install_part(
-                installer,
-                &optional[start..end],
-                &mut optional_reports[start..end],
-                Grouping::Together,
-                progress,
-                &mut finished,
-                total,
-            )
-            .await;
+            let mut part = Part::of(&optional[start..end], &mut optional_reports[start..end]);
+            let pending = part.mark_current(installer, observer, &mut counter);
+            let fetched = fetch_all(installer, part.actions, &pending, progress, observer).await;
+            let downloads = part.settle_fetch(fetched, observer, &mut counter);
+            if let Some(downloads) = downloads {
+                part.install_downloads(
+                    installer,
+                    downloads,
+                    Grouping::Together,
+                    observer,
+                    &mut counter,
+                )
+                .await;
+            }
             start = end;
         }
     }
@@ -508,6 +631,67 @@ where
         components: core_reports,
         optional: optional_reports,
     }
+}
+
+/// Installs the core's video and speech parts; `true` when every core
+/// component is active.
+async fn install_core<I: ManagedComponentInstaller>(
+    installer: &I,
+    core: &[ManagedSetupAction],
+    reports: &mut [ComponentInstallReport],
+    observer: &dyn InstallObserver,
+    counter: &mut Counter<'_>,
+) -> bool {
+    let split = core
+        .iter()
+        .position(|action| CorePart::of(action.artifact.component) == Some(CorePart::Speech))
+        .unwrap_or(core.len());
+    let (video_actions, speech_actions) = core.split_at(split);
+    let (video_reports, speech_reports) = reports.split_at_mut(split);
+    let mut video = Part::of(video_actions, video_reports);
+    let mut speech = Part::of(speech_actions, speech_reports);
+    let video_pending = video.mark_current(installer, observer, counter);
+    let speech_pending = speech.mark_current(installer, observer, counter);
+
+    let progress = counter.progress;
+    let (video_fetched, speech_fetched) = join(
+        fetch_all(installer, video.actions, &video_pending, progress, observer),
+        fetch_all(
+            installer,
+            speech.actions,
+            &speech_pending,
+            progress,
+            observer,
+        ),
+    )
+    .await;
+
+    let video_installed = match video.settle_fetch(video_fetched, observer, counter) {
+        Some(downloads) => {
+            video
+                .install_downloads(installer, downloads, Grouping::Core, observer, counter)
+                .await
+        }
+        None => false,
+    };
+    let Some(downloads) = speech.settle_fetch(speech_fetched, observer, counter) else {
+        return false;
+    };
+    if downloads.is_empty() {
+        return video_installed;
+    }
+    if !video_installed && !installer.has_media_tools() {
+        if installer.is_cancelled() {
+            speech.fail_downloads(downloads, cancelled(), observer, counter);
+        } else {
+            speech.keep_downloads(installer, downloads, observer);
+        }
+        return false;
+    }
+    speech
+        .install_downloads(installer, downloads, Grouping::Core, observer, counter)
+        .await
+        && video_installed
 }
 
 /// How a part's pending components are grouped into units.
@@ -533,173 +717,422 @@ fn blocked_reports(actions: &[ManagedSetupAction]) -> Vec<ComponentInstallReport
         .collect()
 }
 
-/// Installs one part of a plan in order; `false` when a failure stopped it.
-async fn install_part<I: ManagedComponentInstaller>(
-    installer: &I,
-    actions: &[ManagedSetupAction],
-    reports: &mut [ComponentInstallReport],
-    grouping: Grouping,
-    progress: &dyn ProgressSink,
-    finished: &mut u64,
+/// The `installing_components` count, reported as each component finishes.
+struct Counter<'sink> {
+    progress: &'sink dyn ProgressSink,
+    finished: u64,
     total: u64,
-) -> bool {
-    for unit in install_units(installer, actions, reports, grouping) {
-        *finished = finished.saturating_add(count(&unit.already_current));
-        if unit.pending.is_empty() {
-            report_components(progress, *finished, total);
-            continue;
-        }
-        let unit_installed = install_unit(installer, actions, &unit.pending, reports).await;
-        *finished = finished.saturating_add(count(&unit.pending));
-        report_components(progress, *finished, total);
-        if !unit_installed {
-            return false;
-        }
-    }
-    true
 }
 
-/// Components installed together: the ones already current, and the ones
-/// to fetch, stage, smoke together and activate in order.
-struct InstallUnit {
-    already_current: Vec<usize>,
-    pending: Vec<usize>,
+impl Counter<'_> {
+    fn finish(&mut self, components: usize) {
+        self.finished = self
+            .finished
+            .saturating_add(u64::try_from(components).unwrap_or(u64::MAX));
+        self.report();
+    }
+
+    fn report(&self) {
+        self.progress.report(ProgressUpdate {
+            stage: ProgressStage::InstallingComponents,
+            completed: self.finished.min(self.total),
+            total: Some(self.total),
+            media: None,
+        });
+    }
 }
 
-/// Groups a part into units, marking every already current component, as
-/// `grouping` says.
-fn install_units<I: ManagedComponentInstaller>(
-    installer: &I,
-    actions: &[ManagedSetupAction],
-    reports: &mut [ComponentInstallReport],
-    grouping: Grouping,
-) -> Vec<InstallUnit> {
-    let mut pending = Vec::with_capacity(actions.len());
-    let mut units: Vec<InstallUnit> = Vec::with_capacity(actions.len());
-    for (index, action) in actions.iter().enumerate() {
-        if installer.is_current(action) {
-            reports[index].outcome = ComponentInstallOutcome::AlreadyCurrent;
-            units.push(InstallUnit {
-                already_current: vec![index],
-                pending: Vec::new(),
-            });
-        } else {
-            pending.push(index);
-            units.push(InstallUnit {
-                already_current: Vec::new(),
-                pending: vec![index],
-            });
-        }
+/// One part of a plan: its actions and their reports, in plan order.
+struct Part<'plan, 'report> {
+    actions: &'plan [ManagedSetupAction],
+    reports: &'report mut [ComponentInstallReport],
+}
+
+/// A part's fetches: every pending component's verified download, or the
+/// first that failed, with the downloads made before it.
+type Fetched<D> = Result<Vec<(usize, D)>, FetchFailure<D>>;
+
+struct FetchFailure<D> {
+    index: usize,
+    failure: StageFailure,
+    fetched: Vec<(usize, D)>,
+}
+
+impl<'plan> Part<'plan, '_> {
+    fn of<'report>(
+        actions: &'plan [ManagedSetupAction],
+        reports: &'report mut [ComponentInstallReport],
+    ) -> Part<'plan, 'report> {
+        Part { actions, reports }
     }
-    let joined: Vec<usize> = match grouping {
-        Grouping::Together => pending.clone(),
-        Grouping::Core => {
-            let pending_index = |component| {
-                pending
-                    .iter()
-                    .copied()
-                    .find(|&index| actions[index].artifact.component == component)
-            };
-            match (
-                pending_index(ManagedComponent::WhisperCli),
-                pending_index(ManagedComponent::WhisperModel),
-            ) {
-                (Some(whisper), Some(model)) => vec![whisper, model],
-                _ => Vec::new(),
+
+    /// Marks every already current component and returns the others.
+    fn mark_current<I: ManagedComponentInstaller>(
+        &mut self,
+        installer: &I,
+        observer: &dyn InstallObserver,
+        counter: &mut Counter<'_>,
+    ) -> Vec<usize> {
+        let mut pending = Vec::with_capacity(self.actions.len());
+        for (index, action) in self.actions.iter().enumerate() {
+            if installer.is_current(action) {
+                self.reports[index].outcome = ComponentInstallOutcome::AlreadyCurrent;
+                observe(observer, action, PieceStage::AlreadyCurrent);
+                counter.finish(1);
+            } else {
+                pending.push(index);
             }
         }
-    };
-    if let [first, rest @ ..] = joined.as_slice() {
-        units.retain(|unit| !rest.iter().any(|index| unit.pending == [*index]));
-        if let Some(unit) = units.iter_mut().find(|unit| unit.pending == [*first]) {
-            unit.pending.extend_from_slice(rest);
+        pending
+    }
+
+    /// Records a part's fetches: on a failure, the failed component's
+    /// report, the downloads made before it discarded, and `None`.
+    fn settle_fetch<D: StagedManagedComponent>(
+        &mut self,
+        fetched: Fetched<D>,
+        observer: &dyn InstallObserver,
+        counter: &mut Counter<'_>,
+    ) -> Option<Vec<(usize, D)>> {
+        match fetched {
+            Ok(downloads) => Some(downloads),
+            Err(FetchFailure {
+                index,
+                failure,
+                fetched,
+            }) => {
+                self.record_failure(index, failure.failure, failure.stage, observer);
+                counter.finish(1);
+                for (fetched_index, download) in fetched {
+                    self.reports[fetched_index].stage = Some(download.discard());
+                }
+                None
+            }
         }
     }
-    units
+
+    fn record_failure(
+        &mut self,
+        index: usize,
+        failure: ComponentInstallFailure,
+        stage: Option<StageDisposal>,
+        observer: &dyn InstallObserver,
+    ) {
+        self.reports[index].outcome = ComponentInstallOutcome::Failed(failure);
+        self.reports[index].stage = stage;
+        observe(observer, &self.actions[index], PieceStage::Failed(failure));
+    }
+
+    /// Fails every download with `failure`, discarding each.
+    fn fail_downloads<D: StagedManagedComponent>(
+        &mut self,
+        downloads: Vec<(usize, D)>,
+        failure: ComponentInstallFailure,
+        observer: &dyn InstallObserver,
+        counter: &mut Counter<'_>,
+    ) {
+        let count = downloads.len();
+        for (index, download) in downloads {
+            let disposal = download.discard();
+            self.record_failure(index, failure, Some(disposal), observer);
+        }
+        counter.finish(count);
+    }
+
+    /// Keeps every download for the next run; each stays `blocked`.
+    fn keep_downloads<I: ManagedComponentInstaller>(
+        &mut self,
+        installer: &I,
+        downloads: Vec<(usize, I::Download)>,
+        observer: &dyn InstallObserver,
+    ) {
+        for (index, download) in downloads {
+            let action = &self.actions[index];
+            match installer.keep(download, action) {
+                DownloadKeeping::Kept => {
+                    observe(observer, action, PieceStage::WaitingForVideo);
+                }
+                DownloadKeeping::NotKept(disposal) => {
+                    self.reports[index].stage = Some(disposal);
+                    observe(
+                        observer,
+                        action,
+                        PieceStage::Failed(ComponentInstallFailure::blocked()),
+                    );
+                }
+            }
+        }
+    }
+
+    /// Stages, smokes and activates the part's downloads, unit by unit, in
+    /// order; `false` when a failure stopped the part.
+    async fn install_downloads<I: ManagedComponentInstaller>(
+        &mut self,
+        installer: &I,
+        downloads: Vec<(usize, I::Download)>,
+        grouping: Grouping,
+        observer: &dyn InstallObserver,
+        counter: &mut Counter<'_>,
+    ) -> bool {
+        let mut units = units_of(self.actions, downloads, grouping).into_iter();
+        while let Some(unit) = units.next() {
+            let count = unit.len();
+            let installed = self.install_unit(installer, unit, observer).await;
+            counter.finish(count);
+            if !installed {
+                for rest in units {
+                    for (index, download) in rest {
+                        self.reports[index].stage = Some(download.discard());
+                    }
+                }
+                return false;
+            }
+        }
+        true
+    }
+
+    /// Stages, smokes and activates one unit; `false` when it failed.
+    async fn install_unit<I: ManagedComponentInstaller>(
+        &mut self,
+        installer: &I,
+        unit: Vec<(usize, I::Download)>,
+        observer: &dyn InstallObserver,
+    ) -> bool {
+        let mut candidates = Vec::with_capacity(unit.len());
+        let mut remaining = unit.into_iter();
+        while let Some((index, download)) = remaining.next() {
+            let action = &self.actions[index];
+            let staged = if installer.is_cancelled() {
+                Err(StageFailure {
+                    failure: cancelled(),
+                    stage: Some(download.discard()),
+                })
+            } else {
+                observe(observer, action, PieceStage::Checking);
+                installer.stage(download, action)
+            };
+            match staged {
+                Ok(candidate) => candidates.push((index, candidate)),
+                Err(failure) => {
+                    self.record_failure(index, failure.failure, failure.stage, observer);
+                    for (staged_index, candidate) in candidates {
+                        self.reports[staged_index].stage = Some(candidate.discard());
+                    }
+                    for (rest, download) in remaining {
+                        self.reports[rest].stage = Some(download.discard());
+                    }
+                    return false;
+                }
+            }
+        }
+
+        let (indices, candidates): (Vec<usize>, Vec<I::Candidate>) = candidates.into_iter().unzip();
+        for index in &indices {
+            observe(observer, &self.actions[*index], PieceStage::Testing);
+        }
+        let smoke = installer.smoke();
+        let passed = match smoke_before_activation(&smoke, candidates).await {
+            SmokeStageOutcome::Passed(passed) => passed,
+            SmokeStageOutcome::Failed { failure, stages } => {
+                for (index, (_, disposal)) in indices.iter().zip(stages) {
+                    self.record_failure(
+                        *index,
+                        ComponentInstallFailure::at(
+                            InstallStep::Smoke,
+                            InstallFailureReason::Smoke(failure),
+                        ),
+                        Some(disposal),
+                        observer,
+                    );
+                }
+                return false;
+            }
+        };
+
+        let mut remaining = indices.into_iter().zip(passed);
+        while let Some((index, candidate)) = remaining.next() {
+            let action = &self.actions[index];
+            match installer.activate(candidate, action) {
+                Ok(disposal) => {
+                    self.reports[index].outcome = ComponentInstallOutcome::Activated;
+                    self.reports[index].stage = Some(disposal);
+                    observe(observer, action, PieceStage::Ready);
+                }
+                Err(failure) => {
+                    self.record_failure(
+                        index,
+                        ComponentInstallFailure::at(InstallStep::Activate, failure.reason),
+                        Some(failure.stage),
+                        observer,
+                    );
+                    for (blocked, candidate) in remaining {
+                        self.reports[blocked].stage = Some(candidate.discard());
+                    }
+                    return false;
+                }
+            }
+        }
+        true
+    }
 }
 
-/// Stages, smokes and activates one unit; `false` when it stopped the
-/// transaction.
-async fn install_unit<I: ManagedComponentInstaller>(
+/// Groups a part's downloads into units, in order, as `grouping` says.
+fn units_of<D>(
+    actions: &[ManagedSetupAction],
+    downloads: Vec<(usize, D)>,
+    grouping: Grouping,
+) -> Vec<Vec<(usize, D)>> {
+    match grouping {
+        Grouping::Together if downloads.is_empty() => Vec::new(),
+        Grouping::Together => vec![downloads],
+        Grouping::Core => {
+            let has = |component| {
+                downloads
+                    .iter()
+                    .any(|(index, _)| actions[*index].artifact.component == component)
+            };
+            let joined = has(ManagedComponent::WhisperCli) && has(ManagedComponent::WhisperModel);
+            let mut units: Vec<Vec<(usize, D)>> = Vec::with_capacity(downloads.len());
+            for (index, download) in downloads {
+                let component = actions[index].artifact.component;
+                let speech = matches!(
+                    component,
+                    ManagedComponent::WhisperCli | ManagedComponent::WhisperModel
+                );
+                match units.last_mut() {
+                    Some(unit)
+                        if joined
+                            && speech
+                            && unit.iter().any(|(first, _)| {
+                                actions[*first].artifact.component == ManagedComponent::WhisperCli
+                            }) =>
+                    {
+                        unit.push((index, download));
+                    }
+                    _ => units.push(vec![(index, download)]),
+                }
+            }
+            units
+        }
+    }
+}
+
+/// Fetches each pending component of a part in order, one at a time,
+/// stopping at the first failure.
+async fn fetch_all<I: ManagedComponentInstaller>(
     installer: &I,
     actions: &[ManagedSetupAction],
-    unit: &[usize],
-    reports: &mut [ComponentInstallReport],
-) -> bool {
-    let mut candidates = Vec::with_capacity(unit.len());
-    for &index in unit {
-        let staged = if installer.is_cancelled() {
+    pending: &[usize],
+    progress: &dyn ProgressSink,
+    observer: &dyn InstallObserver,
+) -> Fetched<I::Download> {
+    let mut fetched = Vec::with_capacity(pending.len());
+    for &index in pending {
+        let action = &actions[index];
+        let result = if installer.is_cancelled() {
             Err(StageFailure {
-                failure: ComponentInstallFailure {
-                    step: None,
-                    reason: InstallFailureReason::Cancelled,
-                },
+                failure: cancelled(),
                 stage: None,
             })
         } else {
-            installer.stage(&actions[index]).await
+            observe(observer, action, PieceStage::Downloading);
+            let sink = PieceSink {
+                progress,
+                observer,
+                component: action.artifact.component,
+            };
+            installer.fetch(action, &sink).await
         };
-        match staged {
-            Ok(candidate) => candidates.push((index, candidate)),
+        match result {
+            Ok(download) => fetched.push((index, download)),
             Err(failure) => {
-                reports[index].outcome = ComponentInstallOutcome::Failed(failure.failure);
-                reports[index].stage = failure.stage;
-                for (staged_index, candidate) in candidates {
-                    reports[staged_index].stage = Some(candidate.discard());
-                }
-                return false;
+                return Err(FetchFailure {
+                    index,
+                    failure,
+                    fetched,
+                });
             }
         }
     }
+    Ok(fetched)
+}
 
-    let (indices, candidates): (Vec<usize>, Vec<I::Candidate>) = candidates.into_iter().unzip();
-    let smoke = installer.smoke();
-    let passed = match smoke_before_activation(&smoke, candidates).await {
-        SmokeStageOutcome::Passed(passed) => passed,
-        SmokeStageOutcome::Failed { failure, stages } => {
-            for (index, (_, disposal)) in indices.iter().zip(stages) {
-                reports[*index].outcome =
-                    ComponentInstallOutcome::Failed(ComponentInstallFailure::at(
-                        InstallStep::Smoke,
-                        InstallFailureReason::Smoke(failure),
-                    ));
-                reports[*index].stage = Some(disposal);
-            }
-            return false;
+/// The progress port one fetch reports to: its `fetching_artifact`
+/// observations go to the caller's port unchanged, and to the observer as
+/// the piece's bytes.
+struct PieceSink<'run> {
+    progress: &'run dyn ProgressSink,
+    observer: &'run dyn InstallObserver,
+    component: ManagedComponent,
+}
+
+impl ProgressSink for PieceSink<'_> {
+    fn report(&self, update: ProgressUpdate) {
+        if update.stage == ProgressStage::FetchingArtifact {
+            self.observer.piece(PieceProgress {
+                component: self.component,
+                stage: PieceStage::Downloading,
+                received: update.completed,
+                total: update.total.unwrap_or(update.completed),
+            });
         }
+        self.progress.report(update);
+    }
+}
+
+fn observe(observer: &dyn InstallObserver, action: &ManagedSetupAction, stage: PieceStage) {
+    let total = action.artifact.integrity.bytes();
+    let received = match stage {
+        PieceStage::Waiting | PieceStage::Downloading | PieceStage::Failed(_) => 0,
+        PieceStage::Checking
+        | PieceStage::Testing
+        | PieceStage::Ready
+        | PieceStage::AlreadyCurrent
+        | PieceStage::WaitingForVideo => total,
     };
-
-    let mut remaining = indices.into_iter().zip(passed);
-    while let Some((index, candidate)) = remaining.next() {
-        match installer.activate(candidate, &actions[index]) {
-            Ok(disposal) => {
-                reports[index].outcome = ComponentInstallOutcome::Activated;
-                reports[index].stage = Some(disposal);
-            }
-            Err(failure) => {
-                reports[index].outcome = ComponentInstallOutcome::Failed(
-                    ComponentInstallFailure::at(InstallStep::Activate, failure.reason),
-                );
-                reports[index].stage = Some(failure.stage);
-                for (blocked, candidate) in remaining {
-                    reports[blocked].stage = Some(candidate.discard());
-                }
-                return false;
-            }
-        }
-    }
-    true
-}
-
-fn count(indices: &[usize]) -> u64 {
-    u64::try_from(indices.len()).unwrap_or(u64::MAX)
-}
-
-fn report_components(progress: &dyn ProgressSink, finished: u64, total: u64) {
-    progress.report(ProgressUpdate {
-        stage: ProgressStage::InstallingComponents,
-        completed: finished.min(total),
-        total: Some(total),
-        media: None,
+    observer.piece(PieceProgress {
+        component: action.artifact.component,
+        stage,
+        received,
+        total,
     });
+}
+
+const fn cancelled() -> ComponentInstallFailure {
+    ComponentInstallFailure {
+        step: None,
+        reason: InstallFailureReason::Cancelled,
+    }
+}
+
+/// Runs two futures side by side on the caller's task and returns both
+/// outputs. The application stays free of an async runtime, so this is the
+/// whole of the concurrency: each future is polled whenever the task wakes,
+/// and neither is polled again once it is ready.
+async fn join<A: Future, B: Future>(first: A, second: B) -> (A::Output, B::Output) {
+    let mut first = pin!(first);
+    let mut second = pin!(second);
+    let mut first_output = None;
+    let mut second_output = None;
+    poll_fn(|context| {
+        if first_output.is_none()
+            && let Poll::Ready(output) = first.as_mut().poll(context)
+        {
+            first_output = Some(output);
+        }
+        if second_output.is_none()
+            && let Poll::Ready(output) = second.as_mut().poll(context)
+        {
+            second_output = Some(output);
+        }
+        if first_output.is_some() && second_output.is_some() {
+            match (first_output.take(), second_output.take()) {
+                (Some(first), Some(second)) => Poll::Ready((first, second)),
+                _ => Poll::Pending,
+            }
+        } else {
+            Poll::Pending
+        }
+    })
+    .await
 }

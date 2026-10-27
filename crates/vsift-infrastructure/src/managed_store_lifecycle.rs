@@ -20,6 +20,12 @@
 //! sweep still recognises. Selection, removal and publication live in
 //! `managed_artifact_store`.
 //!
+//! A verified download kept for a later run (ADR 0036 section 4, a folder
+//! named `kept-` and its reviewed SHA-256) is not abandoned: the sweep
+//! leaves it, inspection checks its shape, and
+//! [`ManagedArtifactStore::sweep_kept_downloads`] removes it once the plan of
+//! an installation no longer needs it.
+//!
 //! [`ManagedStoreInspector`] and [`GuardedManagedStore`] are the adapters of
 //! the application's [`ManagedStoreReader`] and [`ManagedStoreMaintenance`]
 //! ports.
@@ -34,7 +40,7 @@ use vsift_application::{
     PreviousSelection, SelectionFailure, SelectionRecord, StageRetentionReason, StageSweep,
     VersionRemovalStatus,
 };
-use vsift_domain::ManagedComponent;
+use vsift_domain::{ArtifactIntegrity, ManagedComponent};
 
 use crate::{
     ManagedArtifactError, ManagedArtifactStore, ManagedInstallGuard, ManagedRuntimeIdentity,
@@ -43,13 +49,13 @@ use crate::{
     file_lock::HeldFileLock,
     managed_artifact_store::{
         ARTIFACT, CURRENT, CURRENT_IDENTITY, ContentCheck, DIRECTORY_MARKER, INSTALL_LOCK,
-        MAX_VERSION_METADATA_BYTES, PAYLOAD, ROOT_MARKER, RUNTIME, SMOKE, STAGE_IDENTITY,
-        STAGE_MARKER, VERSION_MANIFEST, VERSION_REMOVING, VERSIONS, VERSIONS_IDENTITY,
-        canonical_managed_key, check_marker, flush_directory, open_readable_managed_directory,
-        open_version_use_lock, parse_version_manifest, partial_marker, read_current_pointer,
-        read_private_regular_file, remove_known_regular_file_if_present, sha256_hex,
-        validate_install_guard, validate_owned_regular_file, validate_private_regular_metadata,
-        validate_version_contents,
+        KEPT_DOWNLOAD_PREFIX, MAX_VERSION_METADATA_BYTES, PAYLOAD, ROOT_MARKER, RUNTIME, SMOKE,
+        STAGE_IDENTITY, STAGE_MARKER, VERSION_MANIFEST, VERSION_REMOVING, VERSIONS,
+        VERSIONS_IDENTITY, canonical_managed_key, check_marker, flush_directory,
+        open_readable_managed_directory, open_version_use_lock, parse_version_manifest,
+        partial_marker, read_current_pointer, read_private_regular_file,
+        remove_known_regular_file_if_present, sha256_hex, validate_install_guard,
+        validate_owned_regular_file, validate_private_regular_metadata, validate_version_contents,
     },
     private_user_root::{validate_private_root, validate_same_held_directory},
 };
@@ -71,6 +77,21 @@ fn is_stage_name(name: &str) -> bool {
     name.strip_prefix(STAGE_PREFIX).is_some_and(|random| {
         random.len() == 32
             && random
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    })
+}
+
+/// Whether `name` is the name a kept download is given: the prefix and 64
+/// lowercase hexadecimal digits.
+fn is_kept_download_name(name: &str) -> bool {
+    kept_download_digest(name).is_some()
+}
+
+fn kept_download_digest(name: &str) -> Option<&str> {
+    name.strip_prefix(KEPT_DOWNLOAD_PREFIX).filter(|digest| {
+        digest.len() == 64
+            && digest
                 .bytes()
                 .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
     })
@@ -157,6 +178,19 @@ impl ManagedArtifactStore {
                     ) {
                         Ok(()) => inventory.stale_stages += 1,
                         Err(reason) => inventory.retained_stages.push(reason),
+                    }
+                }
+                // A kept download is the next installation's to use or
+                // remove; only one of the wrong shape is reported.
+                kept if is_kept_download_name(kept) => {
+                    if let Err(reason) = sweep_stage(
+                        &root,
+                        self.root_path(),
+                        kept,
+                        SweepAction::Inspect,
+                        self.faults(),
+                    ) {
+                        inventory.retained_stages.push(reason);
                     }
                 }
                 _ => inventory.unexpected_entries += 1,
@@ -344,6 +378,51 @@ impl ManagedArtifactStore {
             }
         }
         Ok(sweep)
+    }
+
+    /// Removes every kept download whose bytes `wanted` does not name: the
+    /// plan of the installation holding `guard` no longer needs them. Each
+    /// is removed only when its every entry is positively identified, as a
+    /// stage is; returns how many were removed.
+    #[must_use]
+    pub fn sweep_kept_downloads(
+        &self,
+        guard: &ManagedInstallGuard,
+        wanted: &[ArtifactIntegrity],
+    ) -> usize {
+        let Ok(Some(root)) = self.open_existing_root() else {
+            return 0;
+        };
+        if validate_install_guard(guard, &root, self.root_path()).is_err() {
+            return 0;
+        }
+        let Ok(entries) = root.entries() else {
+            return 0;
+        };
+        let wanted: Vec<String> = wanted
+            .iter()
+            .map(|integrity| integrity.sha256_hex())
+            .collect();
+        let mut unwanted = Vec::new();
+        for entry in entries.flatten() {
+            if let Some(name) = entry.file_name().to_str()
+                && let Some(digest) = kept_download_digest(name)
+                && !wanted.iter().any(|wanted| wanted == digest)
+            {
+                unwanted.push(name.to_owned());
+            }
+        }
+        let faults = self.faults();
+        unwanted
+            .iter()
+            .filter(|name| {
+                sweep_stage(&root, self.root_path(), name, SweepAction::Inspect, faults)
+                    .and_then(|()| {
+                        sweep_stage(&root, self.root_path(), name, SweepAction::Remove, faults)
+                    })
+                    .is_ok()
+            })
+            .count()
     }
 
     /// After a selection pointer (or a pending one) is removed: flushes the

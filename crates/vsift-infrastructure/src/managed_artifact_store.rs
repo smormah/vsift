@@ -827,6 +827,58 @@ impl ManagedArtifactStore {
         Ok(staged)
     }
 
+    /// Takes the download an earlier run kept for `integrity` (ADR 0036
+    /// section 4), verified again: `None` when none is kept, or when the
+    /// kept file no longer matches its reviewed size and SHA-256 (it is then
+    /// discarded, and the caller downloads it again).
+    ///
+    /// The kept folder is renamed to a fresh stage name first, so from then
+    /// on it is an ordinary stage: used and removed by this run, or found
+    /// and removed by the next run's stale-stage sweep if this one is
+    /// killed. The bytes are read in full against the review before the
+    /// stage is handed out; nothing is extracted or run from it before.
+    #[must_use]
+    pub fn take_kept_download(
+        &self,
+        guard: &ManagedInstallGuard,
+        integrity: ArtifactIntegrity,
+    ) -> Option<StagedManagedArtifact> {
+        let root = self.open_root().ok()?;
+        validate_install_guard(guard, &root, &self.root_path).ok()?;
+        let kept_name = kept_download_name(integrity);
+        match root.symlink_metadata(&kept_name) {
+            Ok(metadata) if metadata.is_dir() && !metadata.file_type().is_symlink() => {}
+            _ => return None,
+        }
+        let mut random = [0_u8; 16];
+        getrandom::fill(&mut random).ok()?;
+        let stage_name = format!("stage-{}", hex(&random));
+        rename_retrying_transient_refusals(
+            TRANSIENT_RENAME_WAIT,
+            is_transient_rename_refusal,
+            || root.rename(&kept_name, &root, &stage_name),
+        )
+        .ok()?;
+        flush_directory(&root, ManagedFolder::Root, &self.faults).ok()?;
+        let stage = root.open_dir_nofollow(&stage_name).ok()?;
+        let stage_path = self.root_path.join(&stage_name);
+        validate_private_root(&stage_path, &stage).ok()?;
+        check_marker(&stage, STAGE_MARKER, STAGE_IDENTITY).ok()?;
+        let staged = StagedManagedArtifact {
+            root,
+            stage,
+            stage_name,
+            stage_path,
+            integrity,
+            faults: SharedFaultPlan::clone(&self.faults),
+        };
+        if staged.only_artifact().is_err() || staged.open_artifact().is_err() {
+            let _disposal = staged.dispose();
+            return None;
+        }
+        Some(staged)
+    }
+
     fn open_root(&self) -> Result<Dir, ManagedArtifactError> {
         let (root, created) = open_private_root_with_creation(&self.root_path, true)
             .map_err(map_private_error)?
@@ -1322,6 +1374,89 @@ impl StagedManagedArtifact {
         root.remove_dir(&stage_name)
             .map_err(|_| ManagedArtifactError::Io)
     }
+}
+
+impl StagedManagedArtifact {
+    /// Keeps this verified, unextracted download for a later run of the same
+    /// plan (ADR 0036 section 4), under a name made of its reviewed
+    /// SHA-256. A later run takes it with
+    /// [`ManagedArtifactStore::take_kept_download`], which verifies it again.
+    ///
+    /// # Errors
+    ///
+    /// The stage cannot be proved `VSift`'s own, holds anything but its
+    /// marker and verified artifact (it was already unpacked), a download of
+    /// the same bytes is already kept, or the rename fails. The stage is
+    /// handed back unchanged, for the caller to discard.
+    pub fn keep(self) -> Result<(), (Self, ManagedArtifactError)> {
+        if let Err(error) = self.prove_ownership().and_then(|()| self.only_artifact()) {
+            return Err((self, error));
+        }
+        if let Err(error) = self.open_artifact() {
+            return Err((self, error));
+        }
+        let kept_name = kept_download_name(self.integrity);
+        if self.root.symlink_metadata(&kept_name).is_ok() {
+            return Err((self, ManagedArtifactError::Busy));
+        }
+        let Self {
+            root,
+            stage,
+            stage_name,
+            stage_path,
+            integrity,
+            faults,
+        } = self;
+        // Windows refuses to rename a folder while a handle to it is open.
+        drop(stage);
+        let renamed = rename_retrying_transient_refusals(
+            TRANSIENT_RENAME_WAIT,
+            is_transient_rename_refusal,
+            || root.rename(&stage_name, &root, &kept_name),
+        );
+        if renamed.is_err() {
+            return match root.open_dir_nofollow(&stage_name) {
+                Ok(stage) => Err((
+                    Self {
+                        root,
+                        stage,
+                        stage_name,
+                        stage_path,
+                        integrity,
+                        faults,
+                    },
+                    ManagedArtifactError::Io,
+                )),
+                // Nothing to hand back: the next run's sweep finds the stage.
+                Err(_) => Ok(()),
+            };
+        }
+        // The rename stands even when its flush fails: a kept download lost
+        // to a power loss is only downloaded again.
+        let _flushed = flush_directory(&root, ManagedFolder::Root, &faults);
+        Ok(())
+    }
+
+    /// Whether the stage holds only its marker and its verified artifact.
+    fn only_artifact(&self) -> Result<(), ManagedArtifactError> {
+        for entry in self.stage.entries().map_err(|_| ManagedArtifactError::Io)? {
+            let entry = entry.map_err(|_| ManagedArtifactError::Io)?;
+            let name = entry.file_name();
+            if name != STAGE_MARKER && name != ARTIFACT {
+                return Err(ManagedArtifactError::UnsafeStorage);
+            }
+        }
+        Ok(())
+    }
+}
+
+/// The prefix of a kept download's folder (ADR 0036 section 4); the 64
+/// lowercase hexadecimal digits of its reviewed SHA-256 follow it.
+pub(crate) const KEPT_DOWNLOAD_PREFIX: &str = "kept-";
+
+/// The folder name a verified download of `integrity` is kept under.
+fn kept_download_name(integrity: ArtifactIntegrity) -> String {
+    format!("{KEPT_DOWNLOAD_PREFIX}{}", integrity.sha256_hex())
 }
 
 struct SelectedPayloadFile {
@@ -5004,5 +5139,106 @@ mod tests {
         })();
         fs::remove_dir_all(parent)?;
         result
+    }
+
+    /// ADR 0036 section 4: a verified download kept by one run is taken by
+    /// the next only after it verifies again, and leaves no kept folder.
+    #[test]
+    fn a_kept_download_is_verified_again_before_it_is_taken() -> Result<(), Box<dyn Error>> {
+        let parent = fixture_root()?;
+        let store = ManagedArtifactStore::at(parent.join("managed"))?;
+        let guard = store.try_install_guard()?;
+        let integrity = abc_integrity()?;
+        let staged = store.import_verified(Cursor::new(b"abc"), integrity)?;
+        staged.keep().map_err(|(_, error)| error)?;
+        let kept = parent
+            .join("managed")
+            .join(format!("kept-{}", integrity.sha256_hex()));
+        assert!(kept.is_dir());
+
+        let taken = store
+            .take_kept_download(&guard, integrity)
+            .ok_or("the kept download was taken")?;
+        let mut bytes = Vec::new();
+        taken.open_artifact()?.read_to_end(&mut bytes)?;
+        assert_eq!(bytes, b"abc");
+        assert!(!kept.exists());
+        assert!(store.take_kept_download(&guard, integrity).is_none());
+        taken.discard()?;
+        Ok(())
+    }
+
+    /// A kept file that no longer matches its reviewed bytes is discarded,
+    /// never handed out, so the caller downloads it again.
+    #[test]
+    fn a_changed_kept_download_is_discarded() -> Result<(), Box<dyn Error>> {
+        let parent = fixture_root()?;
+        let store = ManagedArtifactStore::at(parent.join("managed"))?;
+        let guard = store.try_install_guard()?;
+        let integrity = abc_integrity()?;
+        let staged = store.import_verified(Cursor::new(b"abc"), integrity)?;
+        staged.keep().map_err(|(_, error)| error)?;
+        let kept = parent
+            .join("managed")
+            .join(format!("kept-{}", integrity.sha256_hex()));
+        fs::write(kept.join(super::ARTIFACT), b"abd")?;
+
+        assert!(store.take_kept_download(&guard, integrity).is_none());
+        assert!(!kept.exists());
+        let leftovers = fs::read_dir(parent.join("managed"))?
+            .filter_map(Result::ok)
+            .filter(|entry| entry.file_name().to_string_lossy().starts_with("stage-"))
+            .count();
+        assert_eq!(leftovers, 0);
+        Ok(())
+    }
+
+    /// Only a download whose bytes a plan still installs survives the sweep
+    /// of kept downloads; inspection reports neither as unexpected.
+    #[test]
+    fn kept_downloads_a_plan_no_longer_needs_are_swept() -> Result<(), Box<dyn Error>> {
+        let parent = fixture_root()?;
+        let store = ManagedArtifactStore::at(parent.join("managed"))?;
+        let guard = store.try_install_guard()?;
+        let abc = abc_integrity()?;
+        let (tar, tar_integrity) = reviewed_tar()?;
+        store
+            .import_verified(Cursor::new(b"abc"), abc)?
+            .keep()
+            .map_err(|(_, error)| error)?;
+        store
+            .import_verified(Cursor::new(tar), tar_integrity)?
+            .keep()
+            .map_err(|(_, error)| error)?;
+        let inventory = store.inspect()?.ok_or("the store exists")?;
+        assert_eq!(inventory.unexpected_entries, 0);
+        assert!(inventory.retained_stages.is_empty());
+
+        assert_eq!(store.sweep_kept_downloads(&guard, &[abc]), 1);
+        let managed = parent.join("managed");
+        assert!(managed.join(format!("kept-{}", abc.sha256_hex())).is_dir());
+        assert!(
+            !managed
+                .join(format!("kept-{}", tar_integrity.sha256_hex()))
+                .exists()
+        );
+        Ok(())
+    }
+
+    /// An unpacked stage is never kept: only verified, unextracted bytes are.
+    #[test]
+    fn a_stage_with_more_than_its_artifact_is_not_kept() -> Result<(), Box<dyn Error>> {
+        let parent = fixture_root()?;
+        let store = ManagedArtifactStore::at(parent.join("managed"))?;
+        let _guard = store.try_install_guard()?;
+        let staged = store.import_verified(Cursor::new(b"abc"), abc_integrity()?)?;
+        fs::write(staged.stage_path.join("extra"), b"x")?;
+        let Err((staged, error)) = staged.keep() else {
+            return Err("an unpacked stage was kept".into());
+        };
+        assert!(matches!(error, ManagedArtifactError::UnsafeStorage));
+        fs::remove_file(staged.stage_path.join("extra"))?;
+        staged.discard()?;
+        Ok(())
     }
 }

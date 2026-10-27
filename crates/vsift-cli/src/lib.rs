@@ -40,12 +40,12 @@ use config::{ConfigLayer, EffectiveConfig, HostPolicy};
 use human::HumanDetail;
 use output::{JsonLines, OutputError, OutputMode, OutputWriter, ProcessExit};
 use vsift::{
-    ADMISSION_RETRY_AFTER, Cancellation, DEFAULT_LOCAL_ASR_CHECK_BUDGET, Engine, EngineConfig,
-    EngineError, EnginePorts, EvaluatedSetupPlan, ExecutableSelections, FailureCode, HostIsolation,
-    IsolationProfile, ManagedRootLocation, OcrError, OpenSessionError, OptionalComponentSet,
-    PendingTranscription, PlanAcceptanceError, ProgressObserver, ScreenTextStop, SessionRootError,
-    SessionRootLocation, SetupCheckRequest, SetupPlanRequest, SourcePathFault,
-    TranscriptSourceError, UserConfigurationLocation, attest_host_isolation,
+    ADMISSION_RETRY_AFTER, Cancellation, CorePartSet, DEFAULT_LOCAL_ASR_CHECK_BUDGET, Engine,
+    EngineConfig, EngineError, EnginePorts, EvaluatedSetupPlan, ExecutableSelections, FailureCode,
+    HostIsolation, IsolationProfile, ManagedRootLocation, OcrError, OpenSessionError,
+    OptionalComponentSet, PendingTranscription, PlanAcceptanceError, ProgressObserver,
+    ScreenTextStop, SessionRootError, SessionRootLocation, SetupCheckRequest, SetupPlanRequest,
+    SourcePathFault, TranscriptSourceError, UserConfigurationLocation, attest_host_isolation,
 };
 use vsift_contract::{
     ADMISSION_BUSY_REMEDIATION, ADMISSION_CAPACITY_REMEDIATION, ARTIFACT_DIRECTORY_REMEDIATION,
@@ -419,6 +419,7 @@ where
                 let result = current_setup_plan(
                     &engine,
                     arguments.profile,
+                    CorePartSet::ALL,
                     OptionalComponentArgument::set(&arguments.include),
                 )
                 .await
@@ -695,6 +696,7 @@ const SETUP_DOOR_NEEDS_A_PERSON: &str = "vsift setup is for a person at a termin
 pub(crate) async fn current_setup_plan(
     engine: &Engine,
     profile: ExecutionProfile,
+    parts: CorePartSet,
     include: OptionalComponentSet,
 ) -> Result<EvaluatedSetupPlan, CommandFailure> {
     let config = EffectiveConfig::resolve(
@@ -711,6 +713,7 @@ pub(crate) async fn current_setup_plan(
         .plan_setup(SetupPlanRequest {
             profile: config.profile.into(),
             include,
+            parts,
             probe_timeout: config.probe_timeout,
         })
         .await?)

@@ -14,10 +14,11 @@ use std::{
 
 use serde_json::{Value, json};
 use vsift::{
-    Cancellation, DependencyState, DependencyStatus, FailureCode, LocalAsrCheckOutcome,
-    LocalAsrModelStatus, LocalAsrNotRunReason, LocalAsrSetupStatus, ManagedPlanAvailability,
-    OptionalCapability, OptionalComponent, OptionalComponentSet, ProbeTimeout, ProbeTimeoutKind,
-    ProgressObserver, ReviewedAsrModel, RuntimeDependency, RuntimeDiagnosis, RuntimeReadiness,
+    Cancellation, CorePartSet, DependencyState, DependencyStatus, FailureCode,
+    LocalAsrCheckOutcome, LocalAsrModelStatus, LocalAsrNotRunReason, LocalAsrSetupStatus,
+    ManagedPlanAvailability, OptionalCapability, OptionalComponent, OptionalComponentSet,
+    ProbeTimeout, ProbeTimeoutKind, ProgressObserver, ReviewedAsrModel, RuntimeDependency,
+    RuntimeDiagnosis, RuntimeReadiness,
 };
 use vsift_contract::DependencyLookup;
 
@@ -99,6 +100,7 @@ struct ScriptedSteps {
     plan: Option<Value>,
     install: RefCell<Option<Result<InstallResults, CommandFailure>>>,
     planned: Cell<u32>,
+    planned_parts: Cell<Option<CorePartSet>>,
     installed: Cell<u32>,
 }
 
@@ -109,6 +111,7 @@ impl ScriptedSteps {
             plan: None,
             install: RefCell::new(None),
             planned: Cell::new(0),
+            planned_parts: Cell::new(None),
             installed: Cell::new(0),
         }
     }
@@ -136,14 +139,16 @@ impl SetupSteps for ScriptedSteps {
 
     fn plan(
         &self,
+        parts: CorePartSet,
         _include: OptionalComponentSet,
     ) -> impl Future<Output = Result<ReviewedPlan, CommandFailure>> {
         self.planned.set(self.planned.get() + 1);
+        self.planned_parts.set(Some(parts));
         ready(
             self.plan
                 .clone()
                 .ok_or_else(|| CommandFailure::from(FailureCode::Internal))
-                .and_then(ReviewedPlan::from_envelope),
+                .and_then(|envelope| ReviewedPlan::from_envelope(envelope, parts)),
         )
     }
 

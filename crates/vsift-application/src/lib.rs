@@ -47,9 +47,10 @@ pub use evidence::{
 pub use identifiers::{IdentifierGenerationError, IdentifierSource};
 pub use install::{
     ActivationFailure, ComponentInstallFailure, ComponentInstallOutcome, ComponentInstallReport,
-    DownloadFailureReason, InstallFailureReason, InstallStep, ManagedComponentInstaller,
-    ManagedInstallReport, OptionalGroupOutcome, StageFailure, install_managed_components,
-    install_managed_plan,
+    DownloadFailureReason, DownloadKeeping, InstallFailureReason, InstallObserver, InstallStep,
+    ManagedComponentInstaller, ManagedInstallReport, NoInstallObserver, OptionalGroupOutcome,
+    PieceProgress, PieceStage, StageFailure, install_managed_components, install_managed_plan,
+    install_observed_managed_plan,
 };
 pub use job::{
     CancelOutcome, CancelRequest, CheckpointRead, CheckpointStoreError, ChunkCheckpoints,
@@ -103,15 +104,15 @@ pub use local_asr_setup::{
 pub use provisioning::{
     AcceptedManagedArtifact, AcceptedManagedCatalogue, CompatibilitySmoke, CompatibilitySmokeCheck,
     CompatibilitySmokeFailure, CompatibilitySmokeFailureReason, CompatibilitySmokeVerdict,
-    ManagedPlanAvailability, ManagedPlanObservation, ManagedSetupAction, ManagedSetupPlan,
-    ManagedUpdate, ObservedModel, OptionalCapability, OptionalComponent,
+    CorePart, CorePartSet, ManagedPlanAvailability, ManagedPlanObservation, ManagedSetupAction,
+    ManagedSetupPlan, ManagedUpdate, ObservedModel, OptionalCapability, OptionalComponent,
     OptionalComponentDisposition, OptionalComponentPlan, OptionalComponentSet, PlanAcceptanceError,
     PlannedSupply, ReviewedArchiveLimits, ReviewedArchiveLink, ReviewedArchiveSelection,
     ReviewedBanner, ReviewedCompatibilityPolicy, ReviewedManagedFile, ReviewedRuntimeCopy,
     SetupDependencyDisposition, SetupModelDisposition, SetupProfile, SetupSelectionState,
     SmokeStageOutcome, StageDisposal, StageRetentionReason, StagedManagedComponent,
     SupersededManagedVersion, SupersessionReason, plan_managed_setup, plan_managed_setup_including,
-    smoke_before_activation,
+    plan_managed_setup_of_parts, smoke_before_activation,
 };
 pub use storage::{
     AuthorizedSessionGenerationPublication, AuthorizedSessionStorageInitialization,

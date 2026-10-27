@@ -23,10 +23,10 @@ use std::{
 };
 
 use vsift::{
-    Cancellation, DEFAULT_LOCAL_ASR_CHECK_BUDGET, Engine, ExecutableSelections, FailureCode,
-    LocalAsrSetupStatus, ManagedPlanAvailability, ManagedUpdate, OptionalCapability,
+    Cancellation, CorePartSet, DEFAULT_LOCAL_ASR_CHECK_BUDGET, Engine, ExecutableSelections,
+    FailureCode, LocalAsrSetupStatus, ManagedPlanAvailability, ManagedUpdate, OptionalCapability,
     OptionalComponent, OptionalComponentSet, ProgressObserver, RuntimeDependency, RuntimeDiagnosis,
-    SetupCheckRequest,
+    SetupCheckRequest, SetupInstallRequest,
 };
 use vsift_contract::{CommandName, DependencyLookup, OperationResponse, SavedSetupPlan};
 
@@ -225,13 +225,17 @@ impl CheckedSetup {
 }
 
 /// The plan the door offers: its `setup plan --json` result, exactly as a
-/// person would save it, and its published data.
+/// person would save it, its published data, and the core parts it was
+/// built for.
 #[derive(Debug)]
 pub(crate) struct ReviewedPlan {
     /// The whole `setup.plan` result, accepted as the saved plan.
     pub(crate) envelope: serde_json::Value,
     /// Its `data`, read as the readable views read it.
     pub(crate) plan: SetupPlan,
+    /// The core parts the plan may install; the engine rebuilds it for
+    /// these to accept it.
+    pub(crate) parts: CorePartSet,
 }
 
 impl ReviewedPlan {
@@ -240,7 +244,10 @@ impl ReviewedPlan {
     /// # Errors
     ///
     /// `INTERNAL` when the result does not read back as a plan.
-    pub(crate) fn from_envelope(envelope: serde_json::Value) -> Result<Self, CommandFailure> {
+    pub(crate) fn from_envelope(
+        envelope: serde_json::Value,
+        parts: CorePartSet,
+    ) -> Result<Self, CommandFailure> {
         let plan = envelope
             .get("data")
             .cloned()
@@ -249,7 +256,11 @@ impl ReviewedPlan {
                 serde_json::from_value(data)
                     .map_err(|_| CommandFailure::from(FailureCode::Internal))
             })?;
-        Ok(Self { envelope, plan })
+        Ok(Self {
+            envelope,
+            plan,
+            parts,
+        })
     }
 }
 
@@ -283,8 +294,13 @@ pub(crate) trait SetupSteps {
     /// `setup check` with the desktop profile and the default deadline.
     async fn check(&self) -> Result<CheckedSetup, CommandFailure>;
 
-    /// `setup plan --profile desktop`, with the included extras.
-    async fn plan(&self, include: OptionalComponentSet) -> Result<ReviewedPlan, CommandFailure>;
+    /// `setup plan --profile desktop` for the core `parts`, with the
+    /// included extras.
+    async fn plan(
+        &self,
+        parts: CorePartSet,
+        include: OptionalComponentSet,
+    ) -> Result<ReviewedPlan, CommandFailure>;
 
     /// `setup install`, accepting `plan` by its own digest. A component
     /// that fails is a result; a refusal before anything is installed (a
@@ -347,9 +363,14 @@ impl SetupSteps for EngineSteps<'_> {
         })
     }
 
-    async fn plan(&self, include: OptionalComponentSet) -> Result<ReviewedPlan, CommandFailure> {
+    async fn plan(
+        &self,
+        parts: CorePartSet,
+        include: OptionalComponentSet,
+    ) -> Result<ReviewedPlan, CommandFailure> {
         let plan =
-            crate::current_setup_plan(self.engine, ExecutionProfile::Desktop, include).await?;
+            crate::current_setup_plan(self.engine, ExecutionProfile::Desktop, parts, include)
+                .await?;
         let envelope =
             OperationResponse::complete(CommandName::SetupPlan.identifier(), plan.presentation())
                 .map_err(|_| CommandFailure::from(FailureCode::Internal))
@@ -357,7 +378,7 @@ impl SetupSteps for EngineSteps<'_> {
                     serde_json::to_value(&response)
                         .map_err(|_| CommandFailure::from(FailureCode::Internal))
                 })?;
-        ReviewedPlan::from_envelope(envelope)
+        ReviewedPlan::from_envelope(envelope, parts)
     }
 
     async fn install(
@@ -381,10 +402,13 @@ impl SetupSteps for EngineSteps<'_> {
         let config = Self::config()?;
         match setup::install_saved(
             self.engine,
-            saved,
-            digest,
-            None,
-            config.probe_timeout,
+            SetupInstallRequest {
+                saved_plan: saved,
+                accepted_digest: digest,
+                artifact_directory: None,
+                probe_timeout: config.probe_timeout,
+                parts: plan.parts,
+            },
             cancellation,
             progress,
         )
@@ -525,7 +549,7 @@ where
         return Ok(check_exit);
     }
 
-    let plan = steps.plan(include).await?;
+    let plan = steps.plan(CorePartSet::ALL, include).await?;
     let offer = human::DoorOffer::of(&plan.plan, standing);
     if offer.is_empty() {
         show(writer, human::door_nothing_to_offer(&checked, include))?;

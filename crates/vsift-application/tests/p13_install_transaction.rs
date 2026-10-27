@@ -21,13 +21,13 @@ use vsift_application::{
     AcceptedManagedArtifact, AcceptedManagedCatalogue, ActivationFailure, CompatibilitySmoke,
     CompatibilitySmokeCheck, CompatibilitySmokeFailure, CompatibilitySmokeFailureReason,
     CompatibilitySmokeVerdict, ComponentInstallFailure, ComponentInstallOutcome,
-    DownloadFailureReason, InstallFailureReason, InstallStep, ManagedComponentInstaller,
-    ManagedPlanAvailability, ManagedSetupAction, ManagedSetupPlan, OptionalComponent,
-    OptionalComponentDisposition, OptionalComponentSet, ProgressSink, ReviewedBanner,
-    ReviewedCompatibilityPolicy, ReviewedManagedFile, RuntimeDiagnosis, SetupProfile,
-    SetupSelectionState, StageDisposal, StageFailure, StageRetentionReason, StagedManagedComponent,
-    install_managed_components, install_managed_plan, plan_managed_setup,
-    plan_managed_setup_including,
+    DownloadFailureReason, DownloadKeeping, InstallFailureReason, InstallObserver, InstallStep,
+    ManagedComponentInstaller, ManagedPlanAvailability, ManagedSetupAction, ManagedSetupPlan,
+    OptionalComponent, OptionalComponentDisposition, OptionalComponentSet, PieceProgress,
+    PieceStage, ProgressSink, ReviewedBanner, ReviewedCompatibilityPolicy, ReviewedManagedFile,
+    RuntimeDiagnosis, SetupProfile, SetupSelectionState, StageDisposal, StageFailure,
+    StageRetentionReason, StagedManagedComponent, install_managed_components, install_managed_plan,
+    install_observed_managed_plan, plan_managed_setup, plan_managed_setup_including,
 };
 use vsift_domain::{
     ArtifactIntegrity, DependencyState, DependencyStatus, FailureCode, ManagedArtifactFormat,
@@ -48,6 +48,8 @@ struct Journal {
     smoked: Vec<Vec<ManagedComponent>>,
     discarded: Vec<ManagedComponent>,
     activated: Vec<ManagedComponent>,
+    fetched: Vec<ManagedComponent>,
+    kept: Vec<ManagedComponent>,
 }
 
 #[derive(Debug)]
@@ -96,6 +98,9 @@ struct FakeInstaller {
     smoke_verdicts: Mutex<Vec<CompatibilitySmokeVerdict>>,
     cancelled: AtomicBool,
     cancel_after_staging: Option<ManagedComponent>,
+    /// Video tools selected outside this plan, for example an older
+    /// version that stays selected when the new one fails.
+    media_selected: bool,
 }
 
 impl FakeInstaller {
@@ -108,6 +113,7 @@ impl FakeInstaller {
             smoke_verdicts: Mutex::new(Vec::new()),
             cancelled: AtomicBool::new(false),
             cancel_after_staging: None,
+            media_selected: false,
         }
     }
 
@@ -126,7 +132,17 @@ const fn key(component: ManagedComponent) -> u8 {
     }
 }
 
+/// Whether a failure set for a component belongs to its fetch rather than
+/// its staging.
+const fn fails_fetching(failure: &StageFailure) -> bool {
+    matches!(
+        failure.failure.step,
+        None | Some(InstallStep::Download | InstallStep::Import)
+    )
+}
+
 impl ManagedComponentInstaller for FakeInstaller {
+    type Download = FakeCandidate;
     type Candidate = FakeCandidate;
     type Smoke = FakeSmoke;
 
@@ -134,24 +150,56 @@ impl ManagedComponentInstaller for FakeInstaller {
         self.current.contains(&action.artifact.component)
     }
 
-    fn stage(
+    fn fetch(
         &self,
         action: &ManagedSetupAction,
-    ) -> impl Future<Output = Result<Self::Candidate, StageFailure>> + Send {
+        _progress: &dyn ProgressSink,
+    ) -> impl Future<Output = Result<Self::Download, StageFailure>> + Send {
         let component = action.artifact.component;
-        let result = if let Some(failure) = self.stage_failures.get(&key(component)) {
-            Err(*failure)
-        } else {
-            self.journal().staged.push(component);
-            if self.cancel_after_staging == Some(component) {
-                self.cancelled.store(true, Ordering::SeqCst);
+        let result = match self.stage_failures.get(&key(component)) {
+            Some(failure) if fails_fetching(failure) => Err(*failure),
+            _ => {
+                self.journal().fetched.push(component);
+                Ok(FakeCandidate {
+                    component,
+                    journal: Arc::clone(&self.journal),
+                })
             }
-            Ok(FakeCandidate {
-                component,
-                journal: Arc::clone(&self.journal),
-            })
         };
         std::future::ready(result)
+    }
+
+    fn stage(
+        &self,
+        download: Self::Download,
+        action: &ManagedSetupAction,
+    ) -> Result<Self::Candidate, StageFailure> {
+        let component = action.artifact.component;
+        assert_eq!(download.component, component);
+        match self.stage_failures.get(&key(component)) {
+            Some(failure) if !fails_fetching(failure) => {
+                let _discarded = download.discard();
+                Err(*failure)
+            }
+            _ => {
+                self.journal().staged.push(component);
+                if self.cancel_after_staging == Some(component) {
+                    self.cancelled.store(true, Ordering::SeqCst);
+                }
+                Ok(download)
+            }
+        }
+    }
+
+    fn keep(&self, download: Self::Download, _action: &ManagedSetupAction) -> DownloadKeeping {
+        self.journal().kept.push(download.component);
+        DownloadKeeping::Kept
+    }
+
+    fn has_media_tools(&self) -> bool {
+        self.media_selected
+            || self.current.contains(&MEDIA)
+            || self.journal().activated.contains(&MEDIA)
     }
 
     fn smoke(&self) -> Self::Smoke {
@@ -1133,5 +1181,311 @@ async fn a_rerun_skips_optional_components_already_current() -> TestResult {
         ]
     );
     assert_eq!(installer.journal().smoked, [vec![YT_DLP]]);
+    Ok(())
+}
+
+/// Every observation of every piece, in order.
+#[derive(Default)]
+struct RecordedPieces {
+    pieces: Mutex<Vec<PieceProgress>>,
+}
+
+impl RecordedPieces {
+    fn stages_of(&self, component: ManagedComponent) -> Vec<PieceStage> {
+        let mut stages: Vec<PieceStage> = Vec::new();
+        for piece in lock(&self.pieces).iter() {
+            if piece.component == component && stages.last() != Some(&piece.stage) {
+                stages.push(piece.stage);
+            }
+        }
+        stages
+    }
+}
+
+impl InstallObserver for RecordedPieces {
+    fn piece(&self, progress: PieceProgress) {
+        lock(&self.pieces).push(progress);
+    }
+}
+
+fn media_download_failure() -> StageFailure {
+    StageFailure {
+        failure: ComponentInstallFailure::at(
+            InstallStep::Download,
+            InstallFailureReason::Download(DownloadFailureReason::Offline),
+        ),
+        stage: None,
+    }
+}
+
+/// ADR 0036 section 4: a video download that fails no longer stops speech's.
+/// With no working video tools selected, speech cannot be tested, so it is
+/// reported blocked, nothing of it is staged or activated, and its verified
+/// downloads are kept for the next run; the command fails with video's code.
+#[tokio::test]
+async fn a_video_failure_keeps_the_verified_speech_downloads_for_the_next_run() -> TestResult {
+    let actions = accepted_actions(&RuntimeDependency::ALL)?;
+    let mut installer = FakeInstaller::new();
+    installer
+        .stage_failures
+        .insert(key(MEDIA), media_download_failure());
+    let pieces = RecordedPieces::default();
+
+    let report = install_observed_managed_plan(
+        &installer,
+        &actions,
+        &[],
+        &RecordedProgress::default(),
+        &pieces,
+    )
+    .await;
+
+    assert_eq!(
+        outcomes(&report),
+        [
+            failed(
+                Some(InstallStep::Download),
+                InstallFailureReason::Download(DownloadFailureReason::Offline)
+            ),
+            BLOCKED,
+            BLOCKED,
+        ]
+    );
+    assert_eq!(report.failure_code(), Some(FailureCode::DownloadFailed));
+    let journal = installer.journal();
+    assert_eq!(journal.fetched, [WHISPER, MODEL]);
+    assert_eq!(journal.kept, [WHISPER, MODEL]);
+    assert!(journal.staged.is_empty());
+    assert!(journal.activated.is_empty());
+    assert!(journal.discarded.is_empty());
+    for component in [WHISPER, MODEL] {
+        assert_eq!(
+            pieces.stages_of(component),
+            [
+                PieceStage::Waiting,
+                PieceStage::Downloading,
+                PieceStage::WaitingForVideo
+            ]
+        );
+    }
+    Ok(())
+}
+
+/// When the new video tools fail but working ones stay selected, speech is
+/// tested with those and activated.
+#[tokio::test]
+async fn speech_installs_when_video_fails_and_older_video_tools_stay_selected() -> TestResult {
+    let actions = accepted_actions(&RuntimeDependency::ALL)?;
+    let mut installer = FakeInstaller::new();
+    installer
+        .stage_failures
+        .insert(key(MEDIA), media_download_failure());
+    installer.media_selected = true;
+
+    let report =
+        install_managed_components(&installer, &actions, &RecordedProgress::default()).await;
+
+    assert_eq!(
+        outcomes(&report),
+        [
+            failed(
+                Some(InstallStep::Download),
+                InstallFailureReason::Download(DownloadFailureReason::Offline)
+            ),
+            ComponentInstallOutcome::Activated,
+            ComponentInstallOutcome::Activated,
+        ]
+    );
+    assert_eq!(report.failure_code(), Some(FailureCode::DownloadFailed));
+    let journal = installer.journal();
+    assert_eq!(journal.smoked, [vec![WHISPER, MODEL]]);
+    assert_eq!(journal.activated, [WHISPER, MODEL]);
+    assert!(journal.kept.is_empty());
+    Ok(())
+}
+
+/// A failure while video is tested also leaves speech downloaded and kept.
+#[tokio::test]
+async fn a_video_smoke_failure_keeps_the_speech_downloads() -> TestResult {
+    let actions = accepted_actions(&RuntimeDependency::ALL)?;
+    let installer = FakeInstaller::new();
+    lock(&installer.smoke_verdicts).push(CompatibilitySmokeVerdict::Failed(
+        CompatibilitySmokeFailure {
+            check: CompatibilitySmokeCheck::MediaFixture,
+            reason: CompatibilitySmokeFailureReason::FixtureMismatch,
+        },
+    ));
+
+    let report =
+        install_managed_components(&installer, &actions, &RecordedProgress::default()).await;
+
+    assert_eq!(outcomes(&report)[1..], [BLOCKED, BLOCKED]);
+    assert_eq!(report.failure_code(), Some(FailureCode::MissingCapability));
+    let journal = installer.journal();
+    assert_eq!(journal.kept, [WHISPER, MODEL]);
+    assert_eq!(journal.discarded, [MEDIA]);
+    Ok(())
+}
+
+/// A cancellation while video fails discards speech's downloads instead of
+/// keeping them.
+#[tokio::test]
+async fn a_cancelled_run_keeps_no_speech_download() -> TestResult {
+    let actions = accepted_actions(&RuntimeDependency::ALL)?;
+    let mut installer = FakeInstaller::new();
+    installer.cancel_after_staging = Some(MEDIA);
+    lock(&installer.smoke_verdicts).push(CompatibilitySmokeVerdict::Failed(
+        CompatibilitySmokeFailure {
+            check: CompatibilitySmokeCheck::MediaFixture,
+            reason: CompatibilitySmokeFailureReason::Cancelled,
+        },
+    ));
+
+    let report =
+        install_managed_components(&installer, &actions, &RecordedProgress::default()).await;
+
+    let cancelled = failed(None, InstallFailureReason::Cancelled);
+    assert_eq!(outcomes(&report)[1..], [cancelled, cancelled]);
+    let journal = installer.journal();
+    assert!(journal.kept.is_empty());
+    assert_eq!(journal.discarded, [MEDIA, WHISPER, MODEL]);
+    Ok(())
+}
+
+/// Each piece goes from waiting through downloading, checking and testing
+/// to ready, and the bytes it reports end at its reviewed size.
+#[tokio::test]
+async fn every_piece_reports_its_stages_in_order() -> TestResult {
+    let actions = accepted_actions(&RuntimeDependency::ALL)?;
+    let installer = FakeInstaller::new();
+    let pieces = RecordedPieces::default();
+
+    let report = install_observed_managed_plan(
+        &installer,
+        &actions,
+        &[],
+        &RecordedProgress::default(),
+        &pieces,
+    )
+    .await;
+
+    assert_eq!(report.failure_code(), None);
+    for component in [MEDIA, WHISPER, MODEL] {
+        assert_eq!(
+            pieces.stages_of(component),
+            [
+                PieceStage::Waiting,
+                PieceStage::Downloading,
+                PieceStage::Checking,
+                PieceStage::Testing,
+                PieceStage::Ready
+            ],
+            "{component:?}"
+        );
+    }
+    let last = lock(&pieces.pieces)
+        .iter()
+        .rev()
+        .find(|piece| piece.component == MODEL)
+        .copied()
+        .ok_or("the model was observed")?;
+    assert_eq!((last.received, last.total), (10, 10));
+    Ok(())
+}
+
+/// A fetch of the media tools that finishes only once speech's fetch has
+/// started, so the test times out unless the two run side by side.
+struct WaitingFetches {
+    inner: FakeInstaller,
+    speech_started: Arc<AtomicBool>,
+}
+
+impl ManagedComponentInstaller for WaitingFetches {
+    type Download = FakeCandidate;
+    type Candidate = FakeCandidate;
+    type Smoke = FakeSmoke;
+
+    fn is_current(&self, action: &ManagedSetupAction) -> bool {
+        self.inner.is_current(action)
+    }
+
+    fn fetch(
+        &self,
+        action: &ManagedSetupAction,
+        progress: &dyn ProgressSink,
+    ) -> impl Future<Output = Result<Self::Download, StageFailure>> + Send {
+        let component = action.artifact.component;
+        if component != MEDIA {
+            self.speech_started.store(true, Ordering::SeqCst);
+        }
+        let started = Arc::clone(&self.speech_started);
+        let fetched = self.inner.fetch(action, progress);
+        async move {
+            if component == MEDIA {
+                std::future::poll_fn(|context| {
+                    if started.load(Ordering::SeqCst) {
+                        std::task::Poll::Ready(())
+                    } else {
+                        context.waker().wake_by_ref();
+                        std::task::Poll::Pending
+                    }
+                })
+                .await;
+            }
+            fetched.await
+        }
+    }
+
+    fn stage(
+        &self,
+        download: Self::Download,
+        action: &ManagedSetupAction,
+    ) -> Result<Self::Candidate, StageFailure> {
+        self.inner.stage(download, action)
+    }
+
+    fn keep(&self, download: Self::Download, action: &ManagedSetupAction) -> DownloadKeeping {
+        self.inner.keep(download, action)
+    }
+
+    fn has_media_tools(&self) -> bool {
+        self.inner.has_media_tools()
+    }
+
+    fn smoke(&self) -> Self::Smoke {
+        self.inner.smoke()
+    }
+
+    fn activate(
+        &self,
+        candidate: Self::Candidate,
+        action: &ManagedSetupAction,
+    ) -> Result<StageDisposal, ActivationFailure> {
+        self.inner.activate(candidate, action)
+    }
+
+    fn is_cancelled(&self) -> bool {
+        self.inner.is_cancelled()
+    }
+}
+
+/// ADR 0036 section 4: video's and speech's downloads run side by side, and
+/// activation still runs video first.
+#[tokio::test]
+async fn video_and_speech_download_side_by_side() -> TestResult {
+    let actions = accepted_actions(&RuntimeDependency::ALL)?;
+    let installer = WaitingFetches {
+        inner: FakeInstaller::new(),
+        speech_started: Arc::new(AtomicBool::new(false)),
+    };
+
+    let report = tokio::time::timeout(
+        std::time::Duration::from_secs(10),
+        install_managed_components(&installer, &actions, &RecordedProgress::default()),
+    )
+    .await?;
+
+    assert_eq!(report.failure_code(), None);
+    assert_eq!(installer.inner.journal().activated, [MEDIA, WHISPER, MODEL]);
     Ok(())
 }
