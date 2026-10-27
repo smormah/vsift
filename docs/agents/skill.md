@@ -350,6 +350,9 @@ unknown, which the skill says. **Agents ran this text once, in batch 2 on `0.2.2
   `SKILL.md` at 300 lines: "nothing else" and "that timeout" went, and "read its last line" replaces the
   sentence on the terminal event, which `commands.md` states); `resume.md` says `candidates` answers without
   analysing once the `visual` stream has succeeded; `commands.md` allows the `--first` form.
+- **The fifth pull request (the queued mode):** `resume.md` starts each of several recordings, or one the user
+  says there is no rush for, with `--mode queued`, and reports a waiting job's `queue_position`; `commands.md`
+  allows the form. `SKILL.md` is unchanged.
 - **Untried:** no trial has run the background path. The trial freeze of batches 2 and 3 is the 0.3.0
   development freeze (`docs/agents/trials.md`), written on the `main` this pull request was rebased onto to merge;
   the final freeze is recorded at the 0.3.0 cut.

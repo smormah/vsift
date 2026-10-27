@@ -82,6 +82,7 @@ pub(crate) fn job_data(report: &JobStatusReport) -> JobData {
         failure: report.last_failure(),
         mode: report.mode(),
         first: report.first(),
+        queue_position: report.queue_position(),
         streams: &streams,
     })
 }
@@ -206,7 +207,7 @@ pub(crate) async fn start(
                 report.outcome().revision(),
             ))
         }
-        JobMode::Watched => {
+        JobMode::Watched | JobMode::Queued => {
             let detachment =
                 start_runner(engine, plan.job_id(), plan.status().state(), runner).await?;
             let status = engine.job_status(plan.job_id())?;

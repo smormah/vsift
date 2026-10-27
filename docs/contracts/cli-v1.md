@@ -1054,7 +1054,9 @@ run, and in `session status`. The job commands take the job id only: the job's s
 is found through the session root's job index. They are grammar-checked first (one
 `job_...` identity; a malformed one is a `parse` failure). `--events jsonl` writes the
 one terminal event, like every command without evidence records; `job resume` first
-writes the resumed run's chunk progress, as `transcript retranscribe` does (P11 PR 1).
+writes the resumed run's chunk progress, as `transcript retranscribe` does (P11 PR 1), and
+both write a `lifecycle` `admission_waiting` event (`reason` `queued_work`) when the run waits
+for queued work to give back the capacity (0.3.0, ADR 0033 section 6).
 
 - `job status <job>` reports one job
   ([`job-data.schema.json`](../../schemas/v1/job-data.schema.json), example
@@ -1213,6 +1215,27 @@ vsift job status job_0123456789abcdef0123456789abcdef --json
   root's admission capacity free, so `frame get`, crops and audio clips are admitted while
   it runs. The call answers once the runner holds the job, or has ended it already, within
   10 s; a job that was interrupted before is not taken until a runner holds it.
+- **queued** (only with `--mode queued`: several recordings, or no rush): a runner in the
+  background that waits its turn in the root's queue (first in, first out, one queued job a
+  root at a time, across sessions), then runs at the root's whole capacity and publishes at
+  its seal. While it waits, `job status` shows it `queued`, held by a live runner, with
+  `queue_position` (0 for the next to run), counting the jobs ahead of it that a runner
+  waits for: a queued job nobody runs (its runner was killed, or the machine restarted)
+  keeps its place but does not hold up the jobs behind it, and runs in its place again
+  once `job start` or `job resume` gives it a runner. Jobs entered in the same second keep
+  the order they arrived in. **It never blocks someone waiting:** an
+  interactive command or a watched job that finds the capacity taken by queued work is not
+  refused, but waits (up to 120 s) while the queued run gives the capacity back at its next
+  chunk boundary, and takes it back once nobody waits. A transcription that waits so says so at once: with `--events jsonl`, a `lifecycle`
+  `admission_waiting` event with `reason` `queued_work` (`line` and `request_operation_id`
+  `null`; a worker request's carries its own), and in readable text on a terminal the live
+  line `Waiting for queued work to make room (at most 2 min)` until the recognition
+  reports. The 120 s are counted over the whole run, its retries included. A session
+  write, an evidence capture, a visual window or a watched job's background runner waits
+  the same way without saying so (L-223). The queue is kept on disk
+  (`job-queue/` of the root) and survives a restart: its jobs keep their order, and `job start`
+  (or `job resume`) of a waiting one starts a runner that takes its turn again; nothing runs the
+  queue on its own (L-222).
 
 `--mode quick|watched` overrides the choice.
 
@@ -1635,7 +1658,10 @@ event names a path or carries text. Each line is at most 64 KiB.
 - `lifecycle` ([`lifecycle-event.schema.json`](../../schemas/v1/lifecycle-event.schema.json)):
   `kind` `started` (with `readiness`: `publication`, `isolation`,
   `admission_capacity`, `concurrency`), `request_admitted`, `admission_waiting`
-  (`reason` `admission_capacity`), `request_finished` (`status`, `code`, `rejection`,
+  (`reason` `admission_capacity`, or since 0.3.0 `queued_work`: queued work holds the
+  capacity and gives it back at its next chunk boundary, waited for up to 120 s; that one is
+  written by `transcript retranscribe`, `job resume` and `job start` too, with `line` and
+  `request_operation_id` `null`), `request_finished` (`status`, `code`, `rejection`,
   `progress_dropped`), `draining` (`reason` `shutdown` or `drain_timeout`) and
   `stopped` (`reason` `end_of_input`, `shutdown`, `line_limit` or `input_error`), with
   the request's `line` and `request_operation_id` where it concerns one.

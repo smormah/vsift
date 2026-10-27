@@ -477,6 +477,56 @@ The fourth pull request implements section 4 (`--first`, D5) and the visual stre
 - **Planned for a sixth pull request:** the crash campaign's workload with open revisions (its verifier must
   accept an open revision and a part-by-part publication) and the visual stream's kill points.
 
+## Implementation notes: the fifth pull request (2026-10-21)
+
+The fifth pull request implements the queued mode of section 6.
+
+- **The mode.** `JobMode::Queued` (`--mode queued`), never chosen by length. Its runner starts like a watched
+  one; its transcripts run with `AdmissionWait::Queued`, at the whole capacity, publishing at the seal.
+- **The queue.** `job-queue/` of the root: one entry a job, named by when it was entered and its id, so a
+  listing in name order is first in, first out across sessions and survives a restart; `job start` enters
+  a queued job (one already in keeps its place), and the job leaves the queue when it ends (and `job
+  cancel` of one no process runs takes it out). One queued job of a root runs at a time: its runner holds
+  `coordination/queue-turn.lock` for the whole job. A waiting job is still `queued` (a wait is no attempt):
+  `run_prepare` asks `PrepareStreams::before_start` before it starts, and a cancellation meanwhile cancels
+  it. `job status` reports `queue_position`, counting only entries whose job has not ended (an ended one's
+  entry is removed as it is found). **Review RV-1 (2026-10-22):** the position, and so the turn, counts only
+  the entries ahead whose job a runner holds or that were entered less than 30 s ago (their runner may
+  still be starting); an entry nobody runs keeps its place without holding up the live jobs behind it
+  (finding 1). An entry's name holds a stamp, the second times 10^9 raised past the newest entry's under
+  `coordination/job-queue.lock`, so jobs entered in one second keep their arrival order (finding 8).
+- **Fairness.** Queued work holds its permit marked by an exclusive lock on
+  `coordination/admission-queued.lock`. An ordinary caller (an interactive command, a watched job) that
+  finds the slots taken while that marker is held holds a shared lock on
+  `coordination/admission-demand.lock` and waits up to `QUEUED_YIELD_WAIT` (120 s) for the slots, instead
+  of being refused. Before every chunk but the first, the queued run's `ChunkGate` looks at the demand lock:
+  while someone demands capacity it gives its permit back, polls every `QUEUED_ADMISSION_POLL`, and takes
+  the capacity back once nobody does. A queued run never takes capacity someone waits for. Every lock is an
+  operating-system lock, so a process that dies releases what it held.
+- **The wait is shown** (the supervisor's condition of 2026-10-21 for accepting the 120 s). A recognition's
+  own admission no longer waits inside the store: `RevisionStore::admit` takes the slots or answers `Busy` at
+  once, and the run's `admit_waiting` waits for queued work itself, on its own timer (so no thread blocks),
+  demanding the capacity through `RevisionStore::demand_capacity` and polling every `QUEUED_YIELD_POLL`
+  (50 ms) until it is given back, it goes to someone else or `QUEUED_YIELD_WAIT` is spent, counted over the
+  whole run, its retries included. When the wait starts, the progress port hears it once
+  (`ProgressSink::queued_work_waiting`), and the engine's `AdmissionWaiting` carries the cause `QueuedWork`.
+  The CLI writes a `lifecycle` `admission_waiting` event with `reason` `queued_work` under `--events jsonl`
+  (`transcript retranscribe`, `job resume`, `job start`, and a worker's request) and shows `Waiting for
+  queued work to make room (at most 2 min)` on the live line. A session write, an evidence capture, a visual
+  window and a watched job's background runner still wait inside the store without saying so (L-223). The visual windows of a queued job
+  take their capacity window by window, as `candidates` does, so they free it between windows anyway.
+- **Accepted by the maintainer (2026-10-23): the other waits for queued work stay a residual for 0.3.0.** A session
+  write, an evidence capture, a visual window and a watched job's background runner keep waiting inside the store
+  without saying so (L-223). They are shown in 1.0 if trials show that people or agents are confused by them.
+- **Not in 0.3.0:** priorities between queued jobs, and a host that runs the queue without a runner a job
+  (1.0). After a restart a waiting job needs `job start` or `job resume` to run again (L-222).
+- **Tests.** The queue's order across sessions, a job entered again keeping its place, a restart, one turn
+  at a time, and an ordinary caller waiting for queued work and admitted when it yields (storage); a queued
+  run yielding at a chunk boundary and committing what an ordinary run commits, and a waiting job staying
+  queued, cancelled by a cancellation (application); a queued `job start` through the binary; opt-in with
+  `FFmpeg`, a queued job holding the whole root and a `frame get` waiting for it and admitted at its next
+  chunk (`engine_growth`).
+
 ## Decisions for the maintainer
 
 All are taken (2026-10-21):
@@ -497,6 +547,8 @@ All are taken (2026-10-21):
 - **The three modes** (section 6). *Chosen by who is waiting.* (The maintainer.)
 - **`session close` stops the session's running jobs** (section 5): it cancels them, waits up to 10 s, then closes.
   *Closing a session ends its work.* (The maintainer, 2026-10-21.)
+- **The other waits for queued work** (section 6, L-223) stay a residual for 0.3.0 and are shown in 1.0 if trials
+  show confusion. (The maintainer, 2026-10-23.)
 - **The ten-minute threshold** (section 6) stands for now; the hosted `P14 real media` check on RM03 and RM09
   measures it and the estimate's error once the stack is on `main`, and a follow-up adjusts it if the data says
   so. (The maintainer, 2026-10-21.)

@@ -252,6 +252,16 @@ pub trait PrepareStreams: Send + Sync {
         first: Option<TimeRange>,
     ) -> impl Future<Output = Result<StreamEnd, StreamStop>> + Send;
 
+    /// Waits until the job may start (ADR 0033 section 6): a queued job waits
+    /// its turn in the root's queue; every other job starts at once. The
+    /// `prepare` job is still queued meanwhile.
+    ///
+    /// # Errors
+    ///
+    /// [`StreamStop::Cancelled`] when the job is cancelled while it waits, and
+    /// [`StreamStop::Interrupted`] when its runner is stopped.
+    fn before_start(&self, mode: JobMode) -> impl Future<Output = Result<(), StreamStop>> + Send;
+
     /// Cancels a stream's job that stopped while the `prepare` job was asked
     /// to stop, so that what it published is sealed as stopped (ADR 0033,
     /// D1) rather than left open. Best effort.
@@ -356,7 +366,14 @@ where
                 state,
             });
         }
-        JobState::Queued | JobState::Interrupted => owner.apply(&JobChange::Start, started)?,
+        JobState::Queued | JobState::Interrupted => {
+            if let Some(mode) = owner.record().request.mode()
+                && let Err(stop) = streams.before_start(mode).await
+            {
+                return settle_wait(&mut owner, stop, now()).map(PrepareOutcome::Stopped);
+            }
+            owner.apply(&JobChange::Start, now())?;
+        }
         // Reconciliation moved every owner-claiming state on.
         JobState::Running | JobState::Committing | JobState::Cancelling => {
             return Err(PrepareError::Job(JobStoreError::Storage(
@@ -388,6 +405,20 @@ where
     owner.apply(&JobChange::Commit(commit.clone()), now())?;
     owner.apply(&JobChange::Succeed, now())?;
     Ok(PrepareOutcome::Succeeded(commit))
+}
+
+/// Records how a wait for the job's turn ended without a start: a cancelled
+/// job is cancelled, and anything else leaves it as it was, waiting.
+fn settle_wait<O: JobOwner>(
+    owner: &mut O,
+    stop: StreamStop,
+    now: u64,
+) -> Result<StreamStop, PrepareError> {
+    if stop == StreamStop::Cancelled || owner.cancel_requested() {
+        owner.apply(&JobChange::Cancel, now)?;
+        return Ok(StreamStop::Cancelled);
+    }
+    Ok(stop)
 }
 
 /// Records how a stream stopped on the `prepare` job.

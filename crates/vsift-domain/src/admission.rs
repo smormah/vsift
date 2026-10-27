@@ -188,7 +188,24 @@ pub enum AdmissionWait {
     /// Poll with a full-jitter backoff until capacity frees or the budget
     /// is spent, then report `BUSY` with a retry hint (job commands, P11).
     Bounded(AdmissionBudget),
+    /// Queued work (ADR 0033 section 6): poll every [`QUEUED_ADMISSION_POLL`]
+    /// for as long as it takes, since nobody waits for it, and yield the
+    /// capacity at every chunk boundary to anyone who waits for it.
+    Queued,
 }
+
+/// How often queued work asks for capacity again while it waits.
+pub const QUEUED_ADMISSION_POLL: Duration = Duration::from_millis(500);
+
+/// How long an ordinary caller waits for queued work to give back the
+/// capacity it holds (ADR 0033 section 6): queued work yields at its next
+/// chunk boundary, and a chunk takes well under this on any machine `VSift`
+/// supports. Past it, the caller is answered `BUSY` as before.
+pub const QUEUED_YIELD_WAIT: Duration = Duration::from_secs(120);
+
+/// How often an ordinary caller that waits for queued work to give back the
+/// capacity looks at it again.
+pub const QUEUED_YIELD_POLL: Duration = Duration::from_millis(50);
 
 /// What follows one busy admission attempt.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -216,8 +233,10 @@ impl AdmissionWait {
         let busy = AdmissionDecision::Busy {
             retry_after: ADMISSION_RETRY_AFTER,
         };
-        let Self::Bounded(budget) = self else {
-            return busy;
+        let budget = match self {
+            Self::Bounded(budget) => budget,
+            Self::Queued => return AdmissionDecision::PollAfter(QUEUED_ADMISSION_POLL),
+            Self::Immediate => return busy,
         };
         let Some(remaining) = budget
             .duration()

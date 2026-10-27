@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://vsift.dev/schemas/v1/lifecycle-event.schema.json",
   "title": "VSift JSONL lifecycle event v1",
-  "description": "A worker host's own state in a job.run or job.batch --events jsonl stream (P11, ADR 0021; O-03): started (with its readiness: the sessions' publication guarantee, isolation, admission capacity and request concurrency), request_admitted, admission_waiting (reason admission_capacity), request_finished (the request's status, failure code, rejection and dropped progress), draining (reason shutdown or drain_timeout) and stopped (reason end_of_input, shutdown, line_limit or input_error). Members that do not apply to a kind are null. Never dropped; at most 64 KiB per line.",
+  "description": "A worker host's own state in a job.run or job.batch --events jsonl stream (P11, ADR 0021; O-03): started (with its readiness: the sessions' publication guarantee, isolation, admission capacity and request concurrency), request_admitted, admission_waiting (reason admission_capacity, or since 0.3.0 queued_work: queued work holds the capacity and gives it back at its next chunk boundary, waited for up to 120 s; transcript.retranscribe, job.resume and job.start write this kind too, with line and request_operation_id null), request_finished (the request's status, failure code, rejection and dropped progress), draining (reason shutdown or drain_timeout) and stopped (reason end_of_input, shutdown, line_limit or input_error). Members that do not apply to a kind are null. Never dropped; at most 64 KiB per line.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -93,7 +93,8 @@
             "drain_timeout",
             "line_limit",
             "input_error",
-            "admission_capacity"
+            "admission_capacity",
+            "queued_work"
           ]
         }
       ]

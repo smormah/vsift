@@ -230,6 +230,7 @@ async fn session() -> Built<Session> {
             observer: &cuts,
             stopwatch: &vsift_application::StoppedStopwatch,
             seed: None,
+            gate: None,
         },
         &Audio,
         &Recogniser,

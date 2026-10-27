@@ -1045,6 +1045,9 @@ pub(crate) struct RecoverableJob {
     /// A `prepare` job's streams (ADR 0033); absent for every other kind.
     #[serde(default)]
     pub(crate) streams: Option<Vec<JobStream>>,
+    /// Where a queued `prepare` job stands in the root's queue.
+    #[serde(default)]
+    pub(crate) queue_position: Option<u64>,
 }
 
 /// What a job was asked to do.

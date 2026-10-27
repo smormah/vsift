@@ -221,10 +221,10 @@ impl Engine {
             .map(|revision| revision.source_segment().range().end().as_micros());
         let (mode, basis) = match (request.mode, length) {
             (Some(mode), _) => (mode, ModeBasis::Requested),
-            (None, Some(length)) => match JobMode::for_duration(Some(length)) {
-                JobMode::Quick => (JobMode::Quick, ModeBasis::ShortRecording),
-                JobMode::Watched => (JobMode::Watched, ModeBasis::LongRecording),
-            },
+            (None, Some(length)) if JobMode::for_duration(Some(length)) == JobMode::Quick => {
+                (JobMode::Quick, ModeBasis::ShortRecording)
+            }
+            (None, Some(_)) => (JobMode::Watched, ModeBasis::LongRecording),
             (None, None) => (JobMode::for_duration(None), ModeBasis::LengthUnknown),
         };
         // The newest revision is the commit of a `prepare` job that succeeded:
@@ -298,6 +298,11 @@ impl Engine {
             )) => JobStartState::Running,
             Err(error) => return Err(error.into()),
         };
+        // A queued job takes its place at the end of the root's queue (ADR
+        // 0033 section 6); one already in it keeps its place.
+        if mode == JobMode::Queued && start.needs_runner() {
+            store.enqueue_job(session, &spec.job_id, now)?;
+        }
         drop(store);
         Ok(JobStartPlan {
             status: self.job_status(&spec.job_id)?,
@@ -327,10 +332,20 @@ impl Engine {
             admission: request.admission,
             recorded: Arc::new(Mutex::new(Vec::new())),
             seed: RecognitionSeed::new(),
+            turn: Mutex::new(None),
             outcome: Mutex::new(None),
             error: Mutex::new(None),
         };
         let ran = Box::pin(run_prepare(&store, &session, &job, self.clock(), &streams)).await;
+        // A queued job that ended leaves the queue, and gives the turn to the
+        // next one; an interrupted or waiting one keeps its place.
+        drop(streams.turn.lock().map(|mut turn| turn.take()));
+        if mode == JobMode::Queued
+            && let Ok(Some(view)) = store.job(&session, &job)
+            && view.record.state.is_terminal()
+        {
+            store.dequeue_job(&job);
+        }
         match ran {
             Ok(PrepareOutcome::Succeeded(_)) => {
                 let outcome = streams
@@ -377,6 +392,8 @@ struct EngineStreams<'e> {
     recorded: Arc<Mutex<Vec<StreamProgress>>>,
     /// The first window's chunk answers, for the whole transcript (D5).
     seed: RecognitionSeed,
+    /// The root's queue turn, held while a queued job runs.
+    turn: Mutex<Option<vsift_infrastructure::QueueTurn>>,
     /// The whole transcript's retranscription, once it committed.
     outcome: Mutex<Option<RetranscribeOutcome>>,
     /// The error that stopped a stream, answered for the whole job.
@@ -466,26 +483,20 @@ impl EngineStreams<'_> {
         range: Option<RetranscribeRange>,
         publication: RetranscribePublication,
     ) -> Result<RetranscribeOutcome, EngineError> {
-        let recorded = Arc::clone(&self.recorded);
-        let host = self.progress.clone();
-        // The callback only keeps the latest update (it must not block); the
-        // loop of `watched` writes it out.
-        let progress = ProgressObserver::new(move |seen: &JobProgress| {
-            host.report(seen);
-            if let Ok(mut streams) = recorded.lock()
-                && let Some(entry) = streams.iter_mut().find(|entry| entry.stream == stream)
-            {
-                entry.job.clone_from(&seen.job);
-                entry.update = Some(seen.update);
-            }
-        });
+        let progress = stream_observer(&self.progress, &self.recorded, stream);
         let run = Box::pin(self.engine.retranscribe(RetranscribeRequest {
             session: self.session.clone(),
             range,
             operation_id: None,
             cancellation: self.cancellation.clone(),
             progress,
-            admission: self.admission,
+            // Queued work waits for capacity as long as it takes, and yields
+            // it at every chunk boundary to anyone who waits (section 6).
+            admission: if self.mode == JobMode::Queued {
+                AdmissionWait::Queued
+            } else {
+                self.admission
+            },
             publication,
             share: if self.mode == JobMode::Watched {
                 RecognitionShare::LeavingOneFree
@@ -726,7 +737,174 @@ impl PrepareStreams for EngineStreams<'_> {
         ended
     }
 
+    async fn before_start(&self, mode: JobMode) -> Result<(), StreamStop> {
+        if mode != JobMode::Queued {
+            return Ok(());
+        }
+        loop {
+            if matches!(
+                self.store.recorded_job_state(&self.session, &self.prepare),
+                Ok(Some(JobState::Cancelling))
+            ) {
+                return Err(StreamStop::Cancelled);
+            }
+            if self.cancellation.is_cancelled() {
+                return Err(StreamStop::Interrupted {
+                    job: None,
+                    failure: None,
+                });
+            }
+            let now = self.engine.now_unix_seconds().unwrap_or_default();
+            let position = queue_position(self.store, &self.prepare, now);
+            if position == Some(0)
+                && let Ok(Some(turn)) = self.store.try_take_queue_turn()
+            {
+                if let Ok(mut held) = self.turn.lock() {
+                    *held = Some(turn);
+                }
+                return Ok(());
+            }
+            if position.is_none() {
+                // Not in the queue (it was removed, or the queue is full when
+                // it was started): it takes its place now.
+                if self
+                    .store
+                    .enqueue_job(&self.session, &self.prepare, now)
+                    .is_err()
+                {
+                    return Err(StreamStop::Failed { failure: None });
+                }
+            }
+            tokio::time::sleep(QUEUE_TURN_POLL).await;
+        }
+    }
+
     async fn cancel(&self, job: &JobId) {
         let _ = self.engine.job_cancel(job);
+    }
+}
+
+/// How often a queued job waiting its turn looks at the queue.
+const QUEUE_TURN_POLL: Duration = Duration::from_secs(2);
+
+/// How long an entry counts in the queue without a live runner: its runner
+/// may still be starting (`job start` waits up to 10 s for it to hold the
+/// job).
+const QUEUE_START_GRACE_SECONDS: u64 = 30;
+
+/// Where `job` stands in the root's queue at `now_unix_seconds` (0 for the
+/// next to run), among the entries ahead of it that wait for their turn: an
+/// entry whose job a runner holds, or one entered less than
+/// [`QUEUE_START_GRACE_SECONDS`] ago. An entry that no process runs (its runner
+/// was killed, or the machine restarted) keeps its place but does not hold up
+/// the live jobs behind it (RV-1 finding 1); once its job runs again, it is
+/// ahead of them. An ended job's entry is removed as it is found. `None` when
+/// the job is not in the queue or the queue cannot be read.
+pub(crate) fn queue_position(
+    store: &FilesystemSessionStore,
+    job: &JobId,
+    now_unix_seconds: u64,
+) -> Option<usize> {
+    let entries = store.job_queue().ok()?;
+    let mut position = 0;
+    for entry in entries {
+        let view = store.job(&entry.session_id, &entry.job_id).ok().flatten();
+        let Some(view) = view.filter(|view| !view.record.state.is_terminal()) else {
+            store.dequeue_job(&entry.job_id);
+            continue;
+        };
+        if entry.job_id == *job {
+            return Some(position);
+        }
+        let starting = now_unix_seconds.saturating_sub(entry.entered_at_unix_seconds)
+            < QUEUE_START_GRACE_SECONDS;
+        if view.liveness == vsift_application::JobLiveness::Owned || starting {
+            position += 1;
+        }
+    }
+    None
+}
+
+/// The observer of one transcript stream: every observation reaches the host
+/// and is kept as the stream's latest (the callback must not block; the loop
+/// of `watched` writes it out), and a wait for capacity reaches the host as it
+/// is (ADR 0033 section 6).
+fn stream_observer(
+    host: &ProgressObserver,
+    recorded: &Arc<Mutex<Vec<StreamProgress>>>,
+    stream: PrepareStream,
+) -> ProgressObserver {
+    let recorded = Arc::clone(recorded);
+    let reporting = host.clone();
+    let waiting = host.clone();
+    ProgressObserver::new(move |seen: &JobProgress| {
+        reporting.report(seen);
+        if let Ok(mut streams) = recorded.lock()
+            && let Some(entry) = streams.iter_mut().find(|entry| entry.stream == stream)
+        {
+            entry.job.clone_from(&seen.job);
+            entry.update = Some(seen.update);
+        }
+    })
+    .with_admission_waiting(move |seen| waiting.admission_waiting(seen))
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::{Arc, Mutex};
+
+    use vsift_application::{StreamPhase, StreamProgress};
+    use vsift_domain::{PrepareStream, ProgressStage, ProgressUpdate};
+
+    use super::stream_observer;
+    use crate::{AdmissionWaitCause, AdmissionWaiting, JobProgress, ProgressObserver};
+
+    /// ADR 0033 section 6: a transcript stream of a `prepare` job passes a
+    /// wait for queued work on to the host as it is, so `job start` and `job
+    /// resume` show it, and keeps passing on and recording its progress.
+    #[test]
+    fn a_stream_passes_its_waits_and_progress_to_the_host() -> Result<(), Box<dyn std::error::Error>>
+    {
+        let waits: Arc<Mutex<Vec<AdmissionWaiting>>> = Arc::default();
+        let reports: Arc<Mutex<Vec<JobProgress>>> = Arc::default();
+        let (seen_waits, seen_reports) = (Arc::clone(&waits), Arc::clone(&reports));
+        let host = ProgressObserver::new(move |progress| {
+            if let Ok(mut seen) = seen_reports.lock() {
+                seen.push(progress.clone());
+            }
+        })
+        .with_admission_waiting(move |waiting| {
+            if let Ok(mut seen) = seen_waits.lock() {
+                seen.push(waiting.clone());
+            }
+        });
+        let recorded = Arc::new(Mutex::new(vec![StreamProgress {
+            stream: PrepareStream::Transcript,
+            job: None,
+            phase: StreamPhase::Running,
+            update: None,
+        }]));
+        let observer = stream_observer(&host, &recorded, PrepareStream::Transcript);
+        let waiting = AdmissionWaiting {
+            job: None,
+            weight: std::num::NonZeroU16::MIN,
+            cause: AdmissionWaitCause::QueuedWork,
+        };
+        observer.admission_waiting(&waiting);
+        let update = ProgressUpdate {
+            stage: ProgressStage::RecognisingSpeech,
+            completed: 1,
+            total: Some(3),
+            media: None,
+        };
+        observer.report(&JobProgress { job: None, update });
+        assert_eq!(*waits.lock().map_err(|_| "poisoned")?, [waiting]);
+        assert_eq!(reports.lock().map_err(|_| "poisoned")?.len(), 1);
+        let recorded = recorded.lock().map_err(|_| "poisoned")?;
+        assert_eq!(
+            recorded.first().and_then(|entry| entry.update),
+            Some(update)
+        );
+        Ok(())
     }
 }
