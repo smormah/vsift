@@ -37,6 +37,7 @@ use crate::{
     human::{self, InstallComponent, SetupInstall, SetupPlan, Standing, Styling},
     live_line::{self, LiveLine},
     output::{OutputMode, OutputWriter, ProcessExit, setup_exit},
+    piece_lines::{self, PieceDisplay},
     setup::{self, ManagedSetupFacts},
     signal,
 };
@@ -264,12 +265,14 @@ impl ReviewedPlan {
     }
 }
 
-/// What one install did to each piece, in plan order, and the failure code
-/// the transaction ended with, when it did not install everything core.
+/// What one install did to each piece, in plan order, the failure code the
+/// transaction ended with, when it did not install everything core, and its
+/// `setup.install` data, which the unattended result carries.
 #[derive(Debug, Default)]
 pub(crate) struct InstallResults {
     pub(crate) components: Vec<InstallComponent>,
     pub(crate) failure: Option<FailureCode>,
+    pub(crate) data: Option<serde_json::Value>,
 }
 
 impl InstallResults {
@@ -278,13 +281,14 @@ impl InstallResults {
         data: serde_json::Value,
         failure: Option<FailureCode>,
     ) -> Result<Self, CommandFailure> {
-        let install: SetupInstall = serde_json::from_value(data)
+        let install: SetupInstall = serde_json::from_value(data.clone())
             .map_err(|_| CommandFailure::from(FailureCode::Internal))?;
         let mut components = install.components;
         components.extend(install.optional_components);
         Ok(Self {
             components,
             failure,
+            data: Some(data),
         })
     }
 }
@@ -438,7 +442,7 @@ pub(crate) struct DoorOptions {
 
 impl DoorOptions {
     /// The included extras as the plan request takes them.
-    fn include_set(&self) -> OptionalComponentSet {
+    pub(crate) fn include_set(&self) -> OptionalComponentSet {
         self.include
             .iter()
             .fold(OptionalComponentSet::EMPTY, |set, extra| match extra {
@@ -571,13 +575,23 @@ where
     }
 
     show(writer, human::door_installing(&offer))?;
-    let installed = live_line::with_live_line_saying(
-        writer,
-        console.live_line(),
-        live_line::install_line,
-        |observer| steps.install(&plan, cancellation, observer),
-    )
-    .await?;
+    // Bars need a terminal that takes symbols and colour (ADR 0036 section
+    // 8); without one, the count of pieces done is the live line on
+    // standard error, as in the first release of the door.
+    let installed = if styling == Styling::Rich {
+        piece_lines::with_piece_display(writer, PieceDisplay::Bars, |observer| {
+            steps.install(&plan, cancellation, observer)
+        })
+        .await?
+    } else {
+        live_line::with_live_line_saying(
+            writer,
+            console.live_line(),
+            live_line::install_line,
+            |observer| steps.install(&plan, cancellation, observer),
+        )
+        .await?
+    };
     show(writer, human::door_install_results(&installed, styling))?;
 
     let after = steps.check().await?;
@@ -602,6 +616,8 @@ pub(crate) fn extra_capability(
         .find(|(component, _)| *component == extra)
         .map(|(_, capability)| capability)
 }
+
+pub(crate) mod unattended;
 
 #[cfg(test)]
 mod tests;

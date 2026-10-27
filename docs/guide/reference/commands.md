@@ -202,6 +202,19 @@ Options:
           Possible values:
           - web-videos: Videos from public web pages: `online_links` in the JSON results
 
+      --unattended
+          Plain `vsift setup` only: nobody is there to answer. Installs the parts named with --install without asking, and reports pass, fail or error; --json gives the `setup` result
+
+      --install <PART>
+          With --unattended only: the core parts to install, `video`, `speech` or both (`video,speech`). Naming them accepts the plan for them; every download stays pinned and checked
+
+          Possible values:
+          - video:  `FFmpeg` with `FFprobe`: reading videos and taking frames
+          - speech: whisper.cpp and its model: turning speech into text
+
+      --accept-plan <DIGEST>
+          With --unattended only: install only when the plan built for the named parts has exactly this digest (`plan_digest`)
+
   -h, --help
           Print help (see a summary with '-h')
 ```

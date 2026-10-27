@@ -877,9 +877,9 @@ impl<'plan> Part<'plan, '_> {
         let mut units = units_of(self.actions, downloads, grouping).into_iter();
         while let Some(unit) = units.next() {
             let count = unit.len();
-            let installed = self.install_unit(installer, unit, observer).await;
+            let unit_installed = self.install_unit(installer, unit, observer).await;
             counter.finish(count);
-            if !installed {
+            if !unit_installed {
                 for rest in units {
                     for (index, download) in rest {
                         self.reports[index].stage = Some(download.discard());

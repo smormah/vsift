@@ -1255,9 +1255,9 @@ async fn a_video_failure_keeps_the_verified_speech_downloads_for_the_next_run() 
     let journal = installer.journal();
     assert_eq!(journal.fetched, [WHISPER, MODEL]);
     assert_eq!(journal.kept, [WHISPER, MODEL]);
-    assert!(journal.staged.is_empty());
-    assert!(journal.activated.is_empty());
-    assert!(journal.discarded.is_empty());
+    assert_eq!(journal.staged, [] as [ManagedComponent; 0]);
+    assert_eq!(journal.activated, [] as [ManagedComponent; 0]);
+    assert_eq!(journal.discarded, [] as [ManagedComponent; 0]);
     for component in [WHISPER, MODEL] {
         assert_eq!(
             pieces.stages_of(component),
@@ -1300,7 +1300,7 @@ async fn speech_installs_when_video_fails_and_older_video_tools_stay_selected() 
     let journal = installer.journal();
     assert_eq!(journal.smoked, [vec![WHISPER, MODEL]]);
     assert_eq!(journal.activated, [WHISPER, MODEL]);
-    assert!(journal.kept.is_empty());
+    assert_eq!(journal.kept, [] as [ManagedComponent; 0]);
     Ok(())
 }
 
@@ -1347,7 +1347,7 @@ async fn a_cancelled_run_keeps_no_speech_download() -> TestResult {
     let cancelled = failed(None, InstallFailureReason::Cancelled);
     assert_eq!(outcomes(&report)[1..], [cancelled, cancelled]);
     let journal = installer.journal();
-    assert!(journal.kept.is_empty());
+    assert_eq!(journal.kept, [] as [ManagedComponent; 0]);
     assert_eq!(journal.discarded, [MEDIA, WHISPER, MODEL]);
     Ok(())
 }

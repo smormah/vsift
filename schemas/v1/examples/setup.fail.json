@@ -1,0 +1,78 @@
+{
+  "command": "setup",
+  "coverage": null,
+  "data": {
+    "install": {
+      "catalogue_revision": "ubuntu-24.04-x86_64-2026-09-22-r2",
+      "cleanup": {
+        "stale_stages_removed": 0,
+        "stale_stages_retained": 0,
+        "versions": []
+      },
+      "components": [
+        {
+          "component": "ffmpeg_ffprobe",
+          "failure_code": null,
+          "reason": null,
+          "retention_reason": null,
+          "smoke_check": null,
+          "stage": null,
+          "status": "already_current",
+          "step": null,
+          "version": "n9.0.1-11-ge47273f4d9-20260831"
+        },
+        {
+          "component": "whisper_cli",
+          "failure_code": "DOWNLOAD_FAILED",
+          "reason": "offline",
+          "retention_reason": null,
+          "smoke_check": null,
+          "stage": null,
+          "status": "failed",
+          "step": "download",
+          "version": "whisper.cpp-v1.9.2-ubuntu-x64"
+        },
+        {
+          "component": "whisper_model",
+          "failure_code": null,
+          "reason": "blocked",
+          "retention_reason": null,
+          "smoke_check": null,
+          "stage": null,
+          "status": "failed",
+          "step": null,
+          "version": "whisper-base-multilingual-80da2d8"
+        }
+      ],
+      "next_step": "Components reported activated or already_current are installed. Fix the failure the error names, then run the same setup install again: it continues from the first component not yet installed.",
+      "source": "publisher"
+    },
+    "outcome": "fail",
+    "parts": [
+      {
+        "next_step": null,
+        "part": "video",
+        "requested": true,
+        "status": "ready"
+      },
+      {
+        "next_step": "Check the network connection and any proxy, then run the same command again.",
+        "part": "speech",
+        "requested": true,
+        "status": "not_set_up"
+      },
+      {
+        "next_step": "Run the same command again; if it fails again, see the troubleshooting guide: https://github.com/smormah/vsift/blob/main/docs/guide/troubleshooting.md",
+        "part": "web_videos",
+        "requested": true,
+        "status": "not_added"
+      }
+    ]
+  },
+  "error": null,
+  "lifecycle": null,
+  "operation_id": null,
+  "schema_version": "1",
+  "status": "complete",
+  "warnings": []
+}

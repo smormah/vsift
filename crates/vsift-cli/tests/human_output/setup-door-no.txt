@@ -20,4 +20,5 @@ and it is installed for your user only.
 To see the exact addresses and fingerprints first: vsift setup plan
 
 Install speech now? [y/N] 
+
 Nothing was installed. Run vsift setup again when you're ready.

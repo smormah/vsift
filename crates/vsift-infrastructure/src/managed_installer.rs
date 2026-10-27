@@ -271,7 +271,7 @@ where
     ) -> DownloadKeeping {
         match download.artifact.keep() {
             Ok(()) => DownloadKeeping::Kept,
-            Err((artifact, _)) => DownloadKeeping::NotKept(artifact.dispose()),
+            Err(refused) => DownloadKeeping::NotKept(refused.0.dispose()),
         }
     }
 

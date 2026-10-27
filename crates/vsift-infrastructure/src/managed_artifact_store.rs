@@ -1387,17 +1387,18 @@ impl StagedManagedArtifact {
     /// The stage cannot be proved `VSift`'s own, holds anything but its
     /// marker and verified artifact (it was already unpacked), a download of
     /// the same bytes is already kept, or the rename fails. The stage is
-    /// handed back unchanged, for the caller to discard.
-    pub fn keep(self) -> Result<(), (Self, ManagedArtifactError)> {
+    /// handed back unchanged, for the caller to discard (boxed: a stage
+    /// holds its open folders).
+    pub fn keep(self) -> Result<(), Box<(Self, ManagedArtifactError)>> {
         if let Err(error) = self.prove_ownership().and_then(|()| self.only_artifact()) {
-            return Err((self, error));
+            return Err(Box::new((self, error)));
         }
         if let Err(error) = self.open_artifact() {
-            return Err((self, error));
+            return Err(Box::new((self, error)));
         }
         let kept_name = kept_download_name(self.integrity);
         if self.root.symlink_metadata(&kept_name).is_ok() {
-            return Err((self, ManagedArtifactError::Busy));
+            return Err(Box::new((self, ManagedArtifactError::Busy)));
         }
         let Self {
             root,
@@ -1416,7 +1417,7 @@ impl StagedManagedArtifact {
         );
         if renamed.is_err() {
             return match root.open_dir_nofollow(&stage_name) {
-                Ok(stage) => Err((
+                Ok(stage) => Err(Box::new((
                     Self {
                         root,
                         stage,
@@ -1426,7 +1427,7 @@ impl StagedManagedArtifact {
                         faults,
                     },
                     ManagedArtifactError::Io,
-                )),
+                ))),
                 // Nothing to hand back: the next run's sweep finds the stage.
                 Err(_) => Ok(()),
             };
@@ -5150,7 +5151,7 @@ mod tests {
         let guard = store.try_install_guard()?;
         let integrity = abc_integrity()?;
         let staged = store.import_verified(Cursor::new(b"abc"), integrity)?;
-        staged.keep().map_err(|(_, error)| error)?;
+        staged.keep().map_err(|refused| refused.1)?;
         let kept = parent
             .join("managed")
             .join(format!("kept-{}", integrity.sha256_hex()));
@@ -5177,7 +5178,7 @@ mod tests {
         let guard = store.try_install_guard()?;
         let integrity = abc_integrity()?;
         let staged = store.import_verified(Cursor::new(b"abc"), integrity)?;
-        staged.keep().map_err(|(_, error)| error)?;
+        staged.keep().map_err(|refused| refused.1)?;
         let kept = parent
             .join("managed")
             .join(format!("kept-{}", integrity.sha256_hex()));
@@ -5205,14 +5206,17 @@ mod tests {
         store
             .import_verified(Cursor::new(b"abc"), abc)?
             .keep()
-            .map_err(|(_, error)| error)?;
+            .map_err(|refused| refused.1)?;
         store
             .import_verified(Cursor::new(tar), tar_integrity)?
             .keep()
-            .map_err(|(_, error)| error)?;
+            .map_err(|refused| refused.1)?;
         let inventory = store.inspect()?.ok_or("the store exists")?;
         assert_eq!(inventory.unexpected_entries, 0);
-        assert!(inventory.retained_stages.is_empty());
+        assert_eq!(
+            inventory.retained_stages,
+            [] as [vsift_application::StageRetentionReason; 0]
+        );
 
         assert_eq!(store.sweep_kept_downloads(&guard, &[abc]), 1);
         let managed = parent.join("managed");
@@ -5233,9 +5237,10 @@ mod tests {
         let _guard = store.try_install_guard()?;
         let staged = store.import_verified(Cursor::new(b"abc"), abc_integrity()?)?;
         fs::write(staged.stage_path.join("extra"), b"x")?;
-        let Err((staged, error)) = staged.keep() else {
+        let Err(refused) = staged.keep() else {
             return Err("an unpacked stage was kept".into());
         };
+        let (staged, error) = *refused;
         assert!(matches!(error, ManagedArtifactError::UnsafeStorage));
         fs::remove_file(staged.stage_path.join("extra"))?;
         staged.discard()?;

@@ -20,6 +20,7 @@ and it is installed for your user only.
 To see the exact addresses and fingerprints first: vsift setup plan
 
 Install video and speech now? [y/N] 
+
 Installing video and speech: 3 downloads, about 182 MB
 Ctrl-C stops it and keeps what has finished.
 

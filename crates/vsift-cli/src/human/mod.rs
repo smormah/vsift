@@ -53,6 +53,8 @@ pub(crate) use setup_check::{Standing, setup_check};
 pub(crate) use setup_door::{
     DoorOffer, door_after_install, door_declined, door_install_results, door_installing,
     door_no_terminal, door_nothing_to_offer, door_offer, door_opening, door_question,
+    door_unattended_installing, door_unattended_result, piece_bars, piece_finished,
+    piece_finished_line,
 };
 use text::TerminalText;
 pub(crate) use text::{DisplayText, RenderedText, Styling, TooLarge};

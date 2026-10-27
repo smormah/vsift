@@ -20,6 +20,7 @@ and it is installed for your user only.
 To see the exact addresses and fingerprints first: vsift setup plan
 
 Install speech now? [y/N] 
+
 Installing speech: 2 downloads, about 69 MB
 Ctrl-C stops it and keeps what has finished.
 
@@ -33,4 +34,4 @@ Ctrl-C stops it and keeps what has finished.
 
 Setup complete: video and speech both work.
 Optional extras: web videos. Add one with: vsift setup --include web-videos
-Setup complete. Try it: vsift ingest ./your-video.mp4
+Try it: vsift ingest ./your-video.mp4

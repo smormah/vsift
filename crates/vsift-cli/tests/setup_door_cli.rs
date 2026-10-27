@@ -7,7 +7,9 @@
 //! deadline. What must hold: without a terminal the door reports where the
 //! setup stands, read-only, and never asks or installs; with `--json` or
 //! `--events` it refuses with a typed failure an assistant can read, and
-//! nothing runs.
+//! nothing runs. The unattended form (`--unattended --install …`) asks
+//! nothing either; its runs here never reach the network, which a debug
+//! build refuses unless a variable this test removes allows it.
 
 use std::{
     env,
@@ -73,6 +75,7 @@ fn vsift(root: &OwnedRoot, arguments: &[&str]) -> Result<Output, Box<dyn Error>>
         .env("XDG_CACHE_HOME", base.join("cache"))
         .env("HOME", &base)
         .env("PATH", "")
+        .env_remove("VSIFT_DEV_PUBLISHER_NETWORK")
         .write_stdin("y\n")
         .timeout(CLI_DEADLINE)
         .output()?)
@@ -109,7 +112,10 @@ fn without_a_terminal_the_door_reports_and_installs_nothing() -> TestResult {
             "{stdout}"
         );
         assert!(
-            stdout.contains("Nobody is at a terminal to answer, so nothing was installed.\n"),
+            stdout.contains(
+                "Nobody is here to answer, so nothing was installed.\nTo install without \
+                 questions: vsift setup --unattended --install video,speech\n"
+            ),
             "{stdout}"
         );
         assert!(
@@ -145,7 +151,10 @@ fn json_and_events_are_refused_with_a_typed_failure() -> TestResult {
         .as_str()
         .ok_or("no remediation")?;
     assert!(remediation.contains("setup check --json"), "{remediation}");
-    assert!(remediation.contains("setup install"), "{remediation}");
+    assert!(
+        remediation.contains("setup --unattended --install <parts> --json"),
+        "{remediation}"
+    );
 
     let output = vsift(&root, &["--events", "jsonl", "setup"])?;
     let stdout = String::from_utf8(output.stdout)?;
@@ -169,5 +178,79 @@ fn the_door_options_do_not_reach_the_subcommands() -> TestResult {
 
     assert_eq!(output.status.code(), Some(2));
     assert_eq!(value["command"], "parse");
+    Ok(())
+}
+
+/// `--unattended` needs the parts it installs, and `--install` and
+/// `--accept-plan` belong to `--unattended`: each alone is a parse failure,
+/// before anything runs.
+#[test]
+fn the_unattended_options_need_each_other() -> TestResult {
+    let root = OwnedRoot::new()?;
+    for arguments in [
+        vec!["--json", "setup", "--unattended"],
+        vec!["--json", "setup", "--install", "video"],
+        vec!["--json", "setup", "--accept-plan", "abc"],
+        vec!["--json", "setup", "--unattended", "--install", "audio"],
+    ] {
+        let output = vsift(&root, &arguments)?;
+        let value: Value = serde_json::from_slice(&output.stdout)?;
+        assert_eq!(output.status.code(), Some(2), "{arguments:?}");
+        assert_eq!(value["command"], "parse", "{arguments:?}");
+    }
+    let output = vsift(
+        &root,
+        &[
+            "--events",
+            "jsonl",
+            "setup",
+            "--unattended",
+            "--install",
+            "video",
+        ],
+    )?;
+    let stdout = String::from_utf8(output.stdout)?;
+    assert_eq!(output.status.code(), Some(2));
+    assert!(stdout.contains("INVALID_ARGUMENT"), "{stdout}");
+    assert!(!root.0.join("user").join("vsift").exists());
+    Ok(())
+}
+
+/// Speech has no reviewed catalogue on Windows and macOS yet: naming it is
+/// an error, `MISSING_CAPABILITY` under `setup` with the do-it-yourself
+/// step, and nothing is created. On Ubuntu, where it can be installed, the
+/// run reaches the install, which the debug build's refused network stops:
+/// a `setup` result with `outcome` `fail`, valid against its schema.
+#[test]
+fn an_unattended_run_never_asks_and_reports_pass_fail_or_error() -> TestResult {
+    let root = OwnedRoot::new()?;
+    let output = vsift(
+        &root,
+        &["--json", "setup", "--unattended", "--install", "speech"],
+    )?;
+    let value: Value = serde_json::from_slice(&output.stdout)?;
+    validate("operation-response.schema.json", &value)?;
+    assert_eq!(value["command"], "setup");
+    if value["status"] == "failed" {
+        assert_eq!(value["error"]["code"], "MISSING_CAPABILITY", "{value}");
+        assert_eq!(output.status.code(), Some(2));
+        let remediation = value["error"]["remediation"][0]["summary"]
+            .as_str()
+            .ok_or("no remediation")?;
+        assert!(remediation.contains("install.md"), "{remediation}");
+        assert!(
+            !root
+                .0
+                .join("user")
+                .join("vsift")
+                .join("managed-v1")
+                .exists()
+        );
+    } else {
+        assert_eq!(value["data"]["outcome"], "fail", "{value}");
+        assert_eq!(value["data"]["parts"][1]["part"], "speech", "{value}");
+        assert_eq!(value["data"]["parts"][1]["status"], "not_set_up", "{value}");
+        assert_ne!(output.status.code(), Some(0));
+    }
     Ok(())
 }
