@@ -1,11 +1,11 @@
 # ADR 0037: The action: `vsift <video>` (explicitly `vsift watch <video>`), files beside the video
 
-- Status: **Proposed, 2026-10-27**, for the planner's review before any code. The shape of the action
-  (the name, the bare-argument rule, the default outputs, the two flags, progress and the finish screen)
-  is the maintainer's design of 2026-10-27; the name was ruled again the same day (decision 1). Every
-  other choice is this record's proposal, listed with a recommendation under "Decisions for the planner
-  and the maintainer". It is built in up to three pull requests (section 13); until each lands, what it
-  describes is a plan, not a feature.
+- Status: **Accepted by the planner, 2026-10-27**, at `44ca5102`, relayed by the coordinator:
+  decisions 2 to 10 as recommended, with three conditions written into sections 2, 7 and 8 (marked
+  "planner's condition"). Decision 1, the name, is the maintainer's and has been put to him again. The
+  shape of the action (the name, the bare-argument rule, the default outputs, the two flags, progress
+  and the finish screen) is the maintainer's design of 2026-10-27. It is built in up to three pull
+  requests (section 13); until each lands, what it describes is a plan, not a feature.
 - Date: 2026-10-27
 - Refines: [ADR 0002](0002-disposable-investigation-sessions.md) (sessions are disposable; persistence
   needs explicit intent), [ADR 0008](0008-cli-and-json-contract.md) (the command namespace),
@@ -16,7 +16,11 @@
   `--include` vocabulary, the colour rules and the door's "Try it" line. Their text stays as accepted;
   section 12 says what this record changes in each.
 - Tracking: the 0.3.0 story W6g, a late slice by the maintainer's ruling of 2026-10-27. Register
-  entries: numbers to be assigned by the supervisor (section 14 lists the limitations).
+  entries [L-234](../planning/known-limits.md#l-234) (the frame bound),
+  [L-235](../planning/known-limits.md#l-235) (screen changes for the first four hours only),
+  [L-236](../planning/known-limits.md#l-236) (ids that name a closed session) and
+  [L-237](../planning/known-limits.md#l-237) (a file held open on Windows), each added by the pull
+  request that builds what it limits.
 
 ## Context
 
@@ -87,9 +91,10 @@ Before the parser runs, the CLI looks at the first argument that is not a global
    always wins, so a file named `setup` in the current folder is watched with `vsift watch setup` or
    `vsift ./setup`.
 2. It starts with `-`: parsed as today (an option, or `--help`/`--version`).
-3. It names something that exists and is a file (by `symlink_metadata`, so a link is not followed here;
-   `ingest` refuses it later with its existing `SOURCE_IS_LINK` remediation): the line is parsed as if
-   `watch` stood before that argument.
+3. It names something that exists (by `symlink_metadata`, so a link is not followed here): a file, a
+   folder or a link. The line is parsed as if `watch` stood before that argument, so `ingest`'s existing
+   refusals answer: a folder is "a folder, not a video" (`SOURCE_IS_FOLDER`), a link `SOURCE_IS_LINK`
+   (a folder: the planner's condition C, 2026-10-27, so that it is never "unknown command").
 4. It does not exist but **looks like a path**: it contains a path separator (`/`, and `\` on Windows),
    or ends in a dot and one to five letters or digits (`meeting.mp4`, `talk.webm`). Parsed as `watch`
    too, so `ingest`'s existing source-not-found answer names the real mistake (decision 2).
@@ -160,7 +165,7 @@ With no option, beside the video; with `--output <folder>`, in that folder. For 
 so even the first run shows that VSift's output can be checked:
 
 ```
-meeting.mp4: transcript by VSift 0.3.0, 2026-11-20 (local speech recognition, model base.en).
+meeting.mp4: transcript by VSift 0.3.0, 2026-11-20 14:05 UTC (local speech recognition, model base.en).
 A machine transcription: check it against the recording before you rely on it.
 
 Video SHA-256    3f9a0c...e21c   (all 64 characters in the file)
@@ -180,6 +185,8 @@ Time        Frame                   Change          Frame evidence   Frame SHA-2
 00:04:55    00-04-55.040.png        vcd_a81d55...   evd_02f6de...    41c0a9...
 ```
 
+- **The header's time is UTC**, to the minute, and says so: a file shared with colleagues in other
+  places must not carry a time whose zone the reader has to guess.
 - **Hashes outlive the session; ids do not.** The video's SHA-256 and each frame's SHA-256 can be
   checked by anyone, any time, with any hashing tool: the PNG beside the list is byte for byte the
   session's evidence artifact. The `trv_`, `vix_`, `vcd_` and `evd_` ids name items of the session,
@@ -241,9 +248,13 @@ and the frame count, on the hosted real-media workflow (section 13).
 So that nobody is left in the dark on a long video, `meeting.txt` and `meeting.srt` grow as the
 revision is published, and a person can open them any time:
 
-- **Each update is a whole snapshot**, written to a temporary file in the same folder
-  (`.meeting.txt.vsift-partial`) and moved over the claimed file, so a reader or a crash only ever sees
-  a complete, valid file. Updates follow the published part (`--since` reads of the open revision), at
+- **Each update is a whole snapshot**, written to a temporary file in the same folder and moved over
+  the claimed file, so a reader or a crash only ever sees a complete, valid file. **The temporary file
+  is created exclusively (create-new), with a random part in its name**
+  (`.meeting.txt.<random>.vsift-partial`), and is never opened through a link: an existing name or a
+  link there fails the update rather than writing through it. The replace targets the claimed name
+  only, never a name read back from the folder (the planner's condition B, 2026-10-27; tested with a
+  name taken in advance and with a link planted at the temporary name). Updates follow the published part (`--since` reads of the open revision), at
   most once every ten seconds.
 - **While unfinished, each file says so.** `meeting.txt` starts with `IN PROGRESS: transcribed up to
   00:12:30 of 00:48:00. VSift is still working; this file is replaced when it finishes.`
@@ -269,9 +280,12 @@ ADR 0033 is the progress.
   for an open session of that source with an unfinished `watch` job whose claimed outputs are exactly
   this run's names. The job keeps those names in its own record, in the session, so the decision never
   depends on reading a file in the person's folder. If one exists, it resumes that job (`job_resume`
-  reuses every finished chunk) and keeps writing to the same files. If the session has expired, the
-  unfinished files are replaced only when they still carry this VSift's in-progress marker; any other
-  existing file is refused as in section 5.
+  reuses every finished chunk) and keeps writing to the same files. **If the session has expired, the
+  files are refused as in section 5**, never replaced because their text carries the in-progress
+  marker: anyone can write that text, and the decision must never depend on reading a file in the
+  person's folder (the planner's condition A, 2026-10-27, the planner's recommendation of the two
+  options it gave). The remediation then says these look like an unfinished VSift run, names the files
+  to move away, and suggests `--output`.
 
 ### 9. What the person sees
 
@@ -363,7 +377,8 @@ An extra that is not set up refuses before any work, `MISSING_CAPABILITY`, with 
 - **ADR 0033.** The watched mode now also runs in the caller's own process, for `watch`. The engine
   allows it already (a runner is `job resume`); only the documentation of the modes gains the case.
 - **ADR 0036.** The door's "Try it" line becomes `Setup complete. Try it: vsift ./your-video.mp4`, as
-  that record anticipates, in the first pull request here.
+  that record anticipates, in the first pull request here. ADR 0036's second pull request touches the
+  same line; whichever lands second keeps the other's change.
 - **ADR 0022.** One more never-class command.
 
 ### 13. Delivery, and the deadline rule
@@ -396,22 +411,25 @@ end-of-run files and the live line.
   continuing an unfinished run; the frame bound and its even spread.
 - **Infrastructure**: exclusive claims, snapshot-and-replace (and a replace refused because the target
   is held open, on Windows), the writers against golden files, frames checked against their SHA-256.
-- **CLI**: the bare-argument rule (each of section 2's five cases, global options before the video,
-  `--name=value`, a file named like a command), golden files for the terminal views (complete, partial,
+- **CLI**: the bare-argument rule (each of section 2's five cases, an existing folder answering
+  `SOURCE_IS_FOLDER`, global options before the video, `--name=value`, a file named like a command), golden files for the terminal views (complete, partial,
   refused, interrupted, no terminal, `NO_COLOR`), and the JSON contract test for `watch`.
 - **Binary**: on the synthetic fixtures (the 14-second clip and the screen-change fixtures), on all
   three systems: `vsift <video>` writes the three outputs beside a copy of the fixture, a second run is
   refused, `--output` works, and no session is left open.
 - **Policy**: the skill-policy test with `watch` in the never class (a skill text change: a draft freeze
   in the pull request, rewritten at the merge rebase, `v030-rules.md`).
-- **Limitations to register** (numbers from the supervisor): the frame bound (section 6); screen changes
-  only for the first four hours; ids that name a closed session (section 4); a file held open on Windows
-  (section 7).
+- **Limitations to register:** L-234 the frame bound (section 6); L-235 screen changes only for the
+  first four hours; L-236 ids that name a closed session (section 4); L-237 a file held open on Windows
+  (section 7, with the second pull request).
 
 ## Decisions for the planner and the maintainer
 
-Each has a recommendation. Decision 1 is the maintainer's and already ruled; the others are proposed for
-the planner, none changing an existing JSON v1 field, failure code or safety rule.
+Each has a recommendation. Decision 1 is the maintainer's; the others were proposed for the planner, none
+changing an existing JSON v1 field, failure code or safety rule. **Outcome (the planner, 2026-10-27,
+relayed by the coordinator): decisions 2 to 10 as recommended**, with conditions A to C (sections 8, 7
+and 2). Decision 1 has been put to the maintainer again; until he answers, his ruling of 2026-10-27
+(keep `watch`) stands.
 
 1. **The name `vsift watch`.** The messaging guide's tension: the group VSift must not be filed with
    includes plugins literally called `watch`, and "watch" is on its list of words to avoid as a lead.
