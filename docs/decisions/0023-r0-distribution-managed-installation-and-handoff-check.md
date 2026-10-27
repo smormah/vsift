@@ -1430,7 +1430,9 @@ of the note of 2026-10-04 apply, and a refresh is a new pin with its own review.
 *Note, 2026-10-27 ([ADR 0036](0036-the-setup-door.md), the setup door):* `setup install` still accepts a plan only
 with its digest quoted back. Plain `vsift setup` adds a second acceptance for a person at a terminal: their typed yes
 to the plan they were shown, which the door passes to the same transaction with that plan's own digest, so the engine
-still rebuilds the plan and refuses one the machine no longer gives. A third, naming the parts of an unattended run,
-changes this record's safety decision and waits for the maintainer (ADR 0036, decision 1). ADR 0036 also makes video
+still rebuilds the plan and refuses one the machine no longer gives. A third, naming the parts of an unattended run
+(`vsift setup --unattended --install video,speech`), was ratified by the maintainer on 2026-10-27 and is recorded in
+ADR 0036 (decision 1, section 6) as superseding, for the unattended door only, this record's rule that a plan is
+accepted only by its quoted digest; the text above stays as accepted, and every download stays pinned and verified. ADR 0036 also makes video
 and speech independent parts of the transaction; until its second pull request lands, the transaction's order and
 its first-failure rule are as described here.

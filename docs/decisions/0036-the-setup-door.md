@@ -1,11 +1,14 @@
 # ADR 0036: The setup door: plain `vsift setup`, attended by default, unattended on request
 
-- Status: **Proposed, 2026-10-27; the design accepted by the planner the same day**, except decision 1 (the
-  unattended acceptance), which changes ADR 0023's safety decision and waits for the maintainer. The shape of the
-  door (sections 1 to 8) is the maintainer's design of 2026-10-27. The outcome of each open decision is under
+- Status: **Proposed, 2026-10-27; the design accepted by the planner the same day, and decision 1 (the unattended
+  acceptance) ratified by the maintainer the same day**, superseding that part of ADR 0023 (section 6). The shape of
+  the door (sections 1 to 8) is the maintainer's design of 2026-10-27. The outcome of each open decision is under
   "Decisions for the planner and the maintainer". It is built in two pull requests (section 12); until each lands,
   what it describes is a plan, not a feature.
 - Date: 2026-10-27
+- Supersedes: the part of [ADR 0023](0023-r0-distribution-managed-installation-and-handoff-check.md) that accepts a
+  managed plan only by its quoted digest, for the unattended setup door alone (section 6, the maintainer's ratification
+  of 2026-10-27). `setup install` keeps that rule.
 - Refines: [ADR 0023](0023-r0-distribution-managed-installation-and-handoff-check.md) (a plan is
   installed only with its digest quoted back), [ADR 0032](0032-managed-installs-on-every-platform-and-the-engine-release-workflow.md)
   (managed installs and optional components), [ADR 0008](0008-cli-and-json-contract.md) (bare
@@ -184,7 +187,7 @@ Third-party detail appears at three moments only: before the yes (the offer), du
   the do-it-yourself remediation), timed-out checks, a busy install guard (`BUSY`), or an
   `--accept-plan` digest that does not match (the existing stale-plan failure).
 
-**Naming the parts is the acceptance (the maintainer's decision, 2026-10-27).** ADR 0023 accepts a
+**Naming the parts is the acceptance (the maintainer's decision, 2026-10-27, ratified the same day:** "Ratify it: in unattended vsift setup, naming the parts (for example --install video,speech) counts as my yes, with the pinned and verified downloads unchanged; record it in ADR 0036 as superseding that part of ADR 0023."**)** ADR 0023 accepts a
 plan only when its digest is quoted back, so a caller has reviewed exactly what will arrive. Here
 naming `video` or `speech` accepts the plan the run builds for those parts. This is safe for the
 same reason a reviewed digest is: every artifact the plan can contain is pinned in VSift's own
@@ -293,8 +296,10 @@ The planner answered on 2026-10-27, relayed by the coordinator. Decisions 3 to 7
 recommendation, on the condition that none changes the meaning of a JSON v1 field or a safety rule.
 
 1. **The unattended acceptance (section 6)** changes an accepted safety decision of ADR 0023, so it is the
-   maintainer's. **Outcome: waiting for the maintainer's answer**, which the planner is asking for; nothing of
-   section 6 is built until it comes.
+   maintainer's. **Outcome: ratified by the maintainer on 2026-10-27**, relayed by the planner, in his words:
+   "Ratify it: in unattended vsift setup, naming the parts (for example --install video,speech) counts as my yes, with the pinned and verified downloads unchanged; record it in ADR 0036 as superseding that part of ADR 0023." This record therefore supersedes, for the unattended door only, ADR 0023's rule that a managed plan is
+   accepted only by its digest quoted back; `setup install --accept-plan` and the attended door's yes keep it.
+   Built in the second pull request, beside the transaction changes it shares the plan and install code with.
 2. **Speech's verified download when video fails.** Proposed: discard it and download it again on the rerun.
    **Outcome (the planner): keep it**, as the design said, and verify it again by size and SHA-256 against the
    plan before activation, discarding it only if it no longer matches (section 4). Built in the second pull request.
@@ -326,7 +331,7 @@ What the first pull request built, and where it differs in detail from the secti
   (section 2, step 8): the advice above it is to add `--timeout-seconds`, which `setup check` has and the door,
   by section 1, does not.
 - **Without a terminal** (section 3) the last lines name `setup install --help` for installing without questions,
-  until the unattended form exists.
+  until the unattended form exists (the second pull request).
 - **`setup check`** ends `Next: vsift setup` whenever a desktop setup is not complete (except after a timeout),
   and its extras line names `vsift setup --include web-videos`. A worker profile keeps the concrete step.
 - **While it installs**, the live line on standard error says how many pieces are done, from the transaction's
