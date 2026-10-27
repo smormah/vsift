@@ -87,6 +87,14 @@ fn names_a_video(argument: &OsString) -> bool {
     let Some(text) = argument.to_str() else {
         return false;
     };
+    // A path a person typed never holds a control or hidden character; text
+    // that does stays the parser's to reject, inert (SEC-T02).
+    if text
+        .chars()
+        .any(|character| character.is_control() || vsift_contract::is_hidden_character(character))
+    {
+        return false;
+    }
     let separator = text.contains('/') || (cfg!(windows) && text.contains('\\'));
     let extension = text.rsplit_once('.').is_some_and(|(stem, extension)| {
         !stem.is_empty()

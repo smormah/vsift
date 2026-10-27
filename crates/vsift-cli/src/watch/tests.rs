@@ -83,6 +83,8 @@ fn a_missing_video_that_looks_like_a_path_becomes_watch() {
 fn a_mistyped_command_stays_a_mistyped_command() {
     assert_eq!(routed(&["vsift", "serach", "x"]), ["vsift", "serach", "x"]);
     assert_eq!(routed(&["vsift", "transcrpt"]), ["vsift", "transcrpt"]);
+    let hostile = "x\u{202E}/y.mp4";
+    assert_eq!(routed(&["vsift", hostile]), ["vsift", hostile]);
 }
 
 #[test]
