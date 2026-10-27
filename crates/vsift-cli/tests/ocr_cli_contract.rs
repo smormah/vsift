@@ -209,6 +209,7 @@ async fn seed(root: &OwnedRoot, with_transcript: bool) -> Built<Seeded> {
             &activation,
             StorageGeneration::INITIAL,
             now,
+            &vsift_domain::TimeAnchors::none(),
             &revision,
         )?
     } else {
