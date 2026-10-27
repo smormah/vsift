@@ -20,7 +20,7 @@ use vsift_infrastructure::FilesystemSessionStore;
 use crate::{
     asr::{RetranscribeOutcome, RetranscribeRange, RetranscribeRequest},
     engine::Engine,
-    error::EngineError,
+    error::{EngineError, PendingTranscription},
     progress::ProgressObserver,
     verification::Cancellation,
 };
@@ -677,6 +677,44 @@ impl Engine {
             .map_or(error, |view| EngineError::TranscriptionRunning {
                 session: session.clone(),
                 job: view.record.job_id,
+            })
+    }
+
+    /// #517: the answer for a read that found no transcript in `session`.
+    ///
+    /// When the session has a transcription that is running, waiting its turn
+    /// or interrupted and resumable, the answer is
+    /// [`EngineError::TranscriptPending`], which names the job so that the
+    /// caller follows it and does not start a second transcription. The job
+    /// is the one `job start` returned when the session has one (a `prepare`
+    /// job, whose transcript is a sub-job of its own), else the newest.
+    /// Without such a job, or when the jobs cannot be listed, it is the
+    /// plain [`EngineError::TranscriptUnavailable`]: looking the job up is
+    /// best effort, and the published answer is already correct.
+    pub(crate) fn no_transcript_error(&self, session: &SessionId) -> EngineError {
+        let Ok(jobs) = self.session_jobs(session) else {
+            return EngineError::TranscriptUnavailable;
+        };
+        jobs.entries()
+            .iter()
+            .filter_map(|entry| {
+                let progress = match entry.resumability() {
+                    Resumability::LiveOwner => PendingTranscription::Running,
+                    Resumability::NotStarted => PendingTranscription::Queued,
+                    Resumability::Interrupted => PendingTranscription::Interrupted,
+                    _ => return None,
+                };
+                Some((entry, progress))
+            })
+            // Entries are newest first, and `min_by_key` keeps the first of
+            // equal keys: a `prepare` job ahead of its sub-jobs, then the newest.
+            .min_by_key(|(entry, _)| entry.kind() != JobKind::Prepare)
+            .map_or(EngineError::TranscriptUnavailable, |(entry, progress)| {
+                EngineError::TranscriptPending {
+                    session: session.clone(),
+                    job: entry.job_id().clone(),
+                    progress,
+                }
             })
     }
 

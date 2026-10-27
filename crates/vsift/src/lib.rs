@@ -132,8 +132,8 @@ pub use engine::{
     SessionRootLocation, UserConfigurationLocation,
 };
 pub use error::{
-    EngineError, ExecutableRejection, MANAGED_INSTALL_RETRY_AFTER_MS, SessionRootError,
-    TranscriptSourceError, UserConfigurationError, WorkerFailure,
+    EngineError, ExecutableRejection, MANAGED_INSTALL_RETRY_AFTER_MS, PendingTranscription,
+    SessionRootError, TranscriptSourceError, UserConfigurationError, WorkerFailure,
 };
 pub use evidence::{
     AudioClipRequest, CropEvidenceRequest, CropRectangle, DEFAULT_BURST_FRAMES,

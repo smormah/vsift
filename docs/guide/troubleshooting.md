@@ -75,6 +75,10 @@ Error: The command line arguments are invalid. (INVALID_ARGUMENT)
 Fix: This session has no transcript yet. Open the video again with ingest --transcript to import a SubRip or WebVTT file, or run transcript retranscribe with this session to transcribe its speech locally with whisper.cpp.
 ```
 
+If a transcription of the session is already running, waiting or interrupted, the fix names that job instead
+(`job status <job>`, or `job resume <job>` for an interrupted one): do not start another transcription; read again
+as its parts are published.
+
 **A time past the end of the video:**
 
 <!-- check: exit 2 -->

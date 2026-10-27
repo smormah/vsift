@@ -315,7 +315,7 @@ impl Engine {
         let (revision, status) = match &request.revision {
             None => store
                 .read_transcript(&request.session, now)?
-                .ok_or(EngineError::TranscriptUnavailable)?,
+                .ok_or_else(|| self.no_transcript_error(&request.session))?,
             Some(revision) => store
                 .read_transcript_revision(&request.session, revision, now)?
                 .ok_or(EngineError::TranscriptRevisionNotFound)?,
