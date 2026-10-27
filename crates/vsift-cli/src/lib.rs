@@ -25,6 +25,7 @@ mod setup;
 mod signal;
 #[cfg(test)]
 mod skill_contract;
+mod watch;
 mod worker;
 
 use std::{ffi::OsString, io, io::Write, path::PathBuf, process::ExitCode, time::Duration};
@@ -106,6 +107,7 @@ enum Interruption {
 const fn is_long_running(command: &Command) -> bool {
     match command {
         Command::Ingest(_)
+        | Command::Watch(_)
         | Command::Candidates(_)
         | Command::Ocr(_)
         | Command::Frame(_)
@@ -167,6 +169,7 @@ const fn operation_name(command: &Command) -> Option<CommandName> {
             None => return None,
         },
         Command::Ingest(_) => CommandName::Ingest,
+        Command::Watch(_) => CommandName::Watch,
         Command::Session(arguments) => arguments.command.operation_name(),
         Command::Transcript(arguments) => arguments.command.operation_name(),
         Command::Search(_) => CommandName::Search,
@@ -228,7 +231,9 @@ where
     StandardOutput: Write,
     StandardError: Write,
 {
-    let arguments: Vec<OsString> = arguments.into_iter().map(Into::into).collect();
+    // `vsift <video>` is `vsift watch <video>` (ADR 0037 section 2).
+    let arguments: Vec<OsString> =
+        watch::route_bare_video(arguments.into_iter().map(Into::into).collect());
     let requested_mode = detect_requested_mode(&arguments);
     let mut writer = OutputWriter::new(standard_output, standard_error);
     let cli = match Cli::try_parse_from(&arguments) {
@@ -465,6 +470,19 @@ where
         Command::Ingest(arguments) => {
             let result = session::ingest(&engine, arguments, &cancellation).await;
             write_session_result(&mut writer, mode, CommandName::Ingest, result)
+        }
+        Command::Watch(arguments) if mode == OutputMode::JsonLines => {
+            progress::stream_with_progress(&mut writer, CommandName::Watch, |observer| {
+                Box::pin(watch::watch(&engine, &arguments, &cancellation, observer))
+            })
+            .await
+        }
+        Command::Watch(arguments) => {
+            let result = live_line::with_live_line(&mut writer, line, |observer| {
+                Box::pin(watch::watch(&engine, &arguments, &cancellation, observer))
+            })
+            .await;
+            write_session_result(&mut writer, mode, CommandName::Watch, result)
         }
         Command::Transcript(arguments) => {
             let operation = arguments.command.operation_name();
@@ -793,7 +811,11 @@ impl From<EngineError> for CommandFailure {
                     .search_query_rejection()
                     .map(search_query_rejection_summary)
             })
-            .or_else(|| local_asr_remediation(&error));
+            .or_else(|| local_asr_remediation(&error))
+            .or_else(|| match &error {
+                EngineError::Watch(failure) => Some(watch::remediation(*failure).to_owned()),
+                _ => None,
+            });
         // The session first, then the job: the order an agent resolves them.
         let affected_ids = error
             .affected_session()

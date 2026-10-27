@@ -156,6 +156,29 @@ pub(crate) enum Command {
     Job(JobArguments),
     /// Check an agent's draft handoff report before it is sent.
     Handoff(HandoffArguments),
+    /// Make a transcript, subtitles and the screen changes of a video, beside
+    /// it (the same as  vsift <video>).
+    ///
+    /// Writes <name>.txt (a readable transcript), <name>.srt (subtitles most
+    /// video players pick up) and <name>-vsift/ (the screen changes, with a
+    /// frame for each and their list) beside the video, or into --output. It
+    /// never replaces a file: a name that is taken is refused before any work.
+    /// Each file names the video's SHA-256 and the ids of the run; every
+    /// frame's SHA-256 is in the list. Video tools and speech recognition must
+    /// be set up first (vsift setup check). Not for AI assistants: they use the
+    /// session commands.
+    Watch(WatchArguments),
+}
+
+/// `watch` arguments (ADR 0037).
+#[derive(Args, Debug)]
+pub(crate) struct WatchArguments {
+    /// The video.
+    pub source: PathBuf,
+    /// The folder to write into, instead of beside the video: an existing
+    /// folder, or a new one whose parent exists.
+    #[arg(long, value_name = "FOLDER")]
+    pub output: Option<PathBuf>,
 }
 
 /// Setup namespace arguments.

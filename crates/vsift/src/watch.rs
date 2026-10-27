@@ -23,7 +23,7 @@ use std::{
 
 use vsift_contract::render_hidden_characters;
 use vsift_domain::{
-    JobMode, MAX_VISUAL_INDEX_DURATION_MICROS, MAX_WATCH_FRAMES, MediaTime, OutputNameError,
+    JobMode, MAX_VISUAL_INDEX_DURATION_MICROS, MAX_WATCH_FRAMES, MediaTime,
     SearchCoverage, SessionId, TimeRange, TranscriptRevision, TranscriptRevisionId,
     VisualCandidate, VisualCandidateId, VisualIndexId, WatchOutputNames, frame_file_name,
     spread_evenly,
@@ -34,6 +34,7 @@ use vsift_infrastructure::{
     render_transcript,
 };
 
+pub use vsift_domain::OutputNameError;
 pub use vsift_infrastructure::WatchOutputKind;
 
 use crate::{
@@ -129,6 +130,8 @@ impl From<WatchOutputError> for WatchFailure {
 pub struct WatchFile {
     /// Its absolute path.
     pub path: PathBuf,
+    /// The SHA-256 of a file's bytes; `None` for the folder.
+    pub sha256: Option<String>,
 }
 
 /// A frame `watch` wrote for a screen change.
@@ -199,8 +202,15 @@ impl Engine {
     /// when video tools or speech recognition are not set up, and every error
     /// of ingest, the `prepare` job, the reads and `frame get`.
     pub async fn watch(&self, request: WatchRequest) -> Result<WatchOutcome, EngineError> {
-        self.watch_preflight()?;
         let source = absolute(&request.source)?;
+        if !std::fs::symlink_metadata(&source).is_ok_and(|metadata| metadata.is_file()) {
+            // Nothing there, a folder or a link: `ingest`'s own refusal names
+            // the mistake before anything else is checked or claimed (ADR 0037
+            // section 2, the planner's condition C).
+            let opened = self.watch_ingest(&source, &request.cancellation).await?;
+            drop(self.close_session(&opened.session_id));
+        }
+        self.watch_preflight()?;
         let file_name = source
             .file_name()
             .ok_or(EngineError::Watch(WatchFailure::UnusableName(
@@ -212,16 +222,8 @@ impl Engine {
         let folder = self.output_folder(&source, request.output.as_deref())?;
         let mut claim =
             WatchClaim::claim(&folder, &names).map_err(|error| EngineError::Watch(error.into()))?;
-        let ingested = self
-            .ingest(IngestRequest {
-                source,
-                transcript: None,
-                cancellation: request.cancellation.clone(),
-                durability: DurabilityRequirement::Ephemeral,
-            })
-            .await;
-        let session = match ingested {
-            Ok(outcome) => outcome.session,
+        let session = match self.watch_ingest(&source, &request.cancellation).await {
+            Ok(session) => session,
             Err(error) => {
                 claim.release();
                 return Err(error);
@@ -309,7 +311,7 @@ impl Engine {
             session_id: session.as_str().to_owned(),
         };
         let revision_id = revision.as_ref().map(TranscriptRevision::id);
-        claim
+        let transcript_sha256 = claim
             .write_transcript(&render_transcript(
                 &provenance,
                 revision_id.map(TranscriptRevisionId::as_str),
@@ -317,11 +319,12 @@ impl Engine {
             ))
             .map_err(watch_error)?;
         let subtitles = if revision.is_some() {
-            claim
+            let sha256 = claim
                 .write_subtitles(&render_subrip(&entries))
                 .map_err(watch_error)?;
             Some(WatchFile {
                 path: claim.subtitles_path().to_path_buf(),
+                sha256: Some(sha256),
             })
         } else {
             claim.discard_subtitles();
@@ -333,7 +336,7 @@ impl Engine {
                 .map_or_else(|| "none".to_owned(), |(id, _)| id.as_str().to_owned()),
             beyond_index_bound: beyond_visual_bound,
         };
-        let list = claim
+        let (list, list_sha256) = claim
             .write_screen_changes(&render_screen_changes(&provenance, &summary, &listed))
             .map_err(watch_error)?;
         Ok(WatchOutcome {
@@ -347,17 +350,39 @@ impl Engine {
             not_transcribed,
             transcript: WatchFile {
                 path: claim.transcript_path().to_path_buf(),
+                sha256: Some(transcript_sha256),
             },
             subtitles,
             folder: WatchFile {
                 path: claim.folder_path().to_path_buf(),
+                sha256: None,
             },
-            screen_changes: WatchFile { path: list },
+            screen_changes: WatchFile {
+                path: list,
+                sha256: Some(list_sha256),
+            },
             changes_found: changes.len(),
             frames,
             beyond_visual_bound,
             names_shortened: names.shortened(),
         })
+    }
+
+    /// Opens the session of the video, as `ingest` does.
+    async fn watch_ingest(
+        &self,
+        source: &Path,
+        cancellation: &Cancellation,
+    ) -> Result<vsift_application::OpenSessionOutcome, EngineError> {
+        Ok(self
+            .ingest(IngestRequest {
+                source: source.to_path_buf(),
+                transcript: None,
+                cancellation: cancellation.clone(),
+                durability: DurabilityRequirement::Ephemeral,
+            })
+            .await?
+            .session)
     }
 
     /// Video tools and speech recognition must be configured. Resolving them

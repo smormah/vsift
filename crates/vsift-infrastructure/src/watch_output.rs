@@ -133,21 +133,23 @@ impl WatchClaim {
         &self.folder_path
     }
 
-    /// Writes the readable transcript, once, and flushes it to the disk.
+    /// Writes the readable transcript, once, flushes it to the disk and
+    /// returns the SHA-256 of what it wrote.
     ///
     /// # Errors
     ///
     /// [`WatchOutputError::Refused`] when the write fails.
-    pub fn write_transcript(&mut self, text: &str) -> Result<(), WatchOutputError> {
+    pub fn write_transcript(&mut self, text: &str) -> Result<String, WatchOutputError> {
         write_once(&mut self.transcript, text, WatchOutputKind::Transcript)
     }
 
-    /// Writes the subtitles, once, and flushes them to the disk.
+    /// Writes the subtitles, once, flushes them to the disk and returns the
+    /// SHA-256 of what it wrote.
     ///
     /// # Errors
     ///
     /// [`WatchOutputError::Refused`] when the write fails.
-    pub fn write_subtitles(&mut self, text: &str) -> Result<(), WatchOutputError> {
+    pub fn write_subtitles(&mut self, text: &str) -> Result<String, WatchOutputError> {
         write_once(&mut self.subtitles, text, WatchOutputKind::Subtitles)
     }
 
@@ -185,13 +187,18 @@ impl WatchClaim {
         Ok(path)
     }
 
-    /// Writes the screen-change list into the folder, once.
+    /// Writes the screen-change list into the folder, once, and returns its
+    /// path and the SHA-256 of what it wrote.
     ///
     /// # Errors
     ///
     /// [`WatchOutputError::Exists`] or [`WatchOutputError::Refused`].
-    pub fn write_screen_changes(&mut self, text: &str) -> Result<PathBuf, WatchOutputError> {
-        self.write_in_folder(SCREEN_CHANGES_FILE, text.as_bytes())
+    pub fn write_screen_changes(
+        &mut self,
+        text: &str,
+    ) -> Result<(PathBuf, String), WatchOutputError> {
+        let path = self.write_in_folder(SCREEN_CHANGES_FILE, text.as_bytes())?;
+        Ok((path, hex_sha256(text.as_bytes())))
     }
 
     /// Gives the claim up after a failure: removes every file this claim
@@ -249,13 +256,14 @@ fn write_once(
     handle: &mut Option<File>,
     text: &str,
     kind: WatchOutputKind,
-) -> Result<(), WatchOutputError> {
+) -> Result<String, WatchOutputError> {
     let mut file = handle
         .take()
         .ok_or(WatchOutputError::Refused(kind, io::ErrorKind::Other))?;
     file.write_all(text.as_bytes())
         .and_then(|()| file.sync_all())
-        .map_err(|error| classify(&error, kind))
+        .map_err(|error| classify(&error, kind))?;
+    Ok(hex_sha256(text.as_bytes()))
 }
 
 /// Removes a file this run created, only while it is still empty, so a
