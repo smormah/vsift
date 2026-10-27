@@ -153,13 +153,20 @@ struct HeldRecogniser {
     released: Arc<AtomicBool>,
     /// Chunks it was asked to recognise.
     calls: Arc<AtomicU64>,
+    /// The threads it says it runs, and so its admission weight (one when
+    /// `None`).
+    threads: Option<NonZeroU16>,
 }
 
 impl SpeechRecognizer for HeldRecogniser {
     fn identity(
         &self,
     ) -> impl Future<Output = Result<RecognizerIdentity, SpeechRecognitionError>> + Send {
-        std::future::ready(identity())
+        let threads = self.threads;
+        std::future::ready(identity().map(|identity| RecognizerIdentity {
+            threads: threads.unwrap_or(identity.threads),
+            ..identity
+        }))
     }
 
     fn recognize(
@@ -664,5 +671,67 @@ async fn a_source_without_video_skips_the_visual_stream() -> TestResult {
             (PrepareStream::Transcript, vsift::StreamPhase::Done),
         ]
     );
+    Ok(())
+}
+
+/// ADR 0033 section 6: a queued job holds the root's whole capacity, and an
+/// interactive `frame get` that needs some of it is not refused: it waits, and
+/// is admitted at the queued run's next chunk boundary, where the run gives the
+/// capacity back; the queued job then takes it back and seals as before.
+#[tokio::test(flavor = "multi_thread", worker_threads = 3)]
+#[ignore = "requires FFmpeg and FFprobe on PATH"]
+async fn a_queued_job_gives_way_to_a_frame_at_its_next_chunk() -> TestResult {
+    let root = OwnedRoot::new()?;
+    let recogniser = HeldRecogniser {
+        threads: NonZeroU16::new(4),
+        ..HeldRecogniser::default()
+    };
+    let runner = Arc::new(engine(&root, &recogniser));
+    let clip = looped_clip(&root)?;
+    let session_id = session(&runner, &clip).await?;
+    let plan = runner.job_start(&JobStartRequest {
+        session: session_id.clone(),
+        mode: Some(JobMode::Queued),
+        first: None,
+    })?;
+    assert_eq!(plan.mode(), JobMode::Queued);
+    let job = plan.job_id().clone();
+    assert_eq!(runner.job_status(&job)?.queue_position(), Some(0));
+    let running = {
+        let runner = Arc::clone(&runner);
+        let request = resumed(&job);
+        tokio::spawn(async move { runner.job_resume(request).await })
+    };
+    until_held(&recogniser).await?;
+    // The queued run holds every unit: a frame waits for it instead of failing.
+    let framing = {
+        let other = engine(&root, &recogniser);
+        let session_id = session_id.clone();
+        tokio::spawn(async move {
+            other
+                .frame_get(vsift::FrameGetRequest {
+                    session: session_id,
+                    target: vsift::FrameTarget::At {
+                        at_micros: 5_000_000,
+                        selection: vsift::FrameSelection::AtOrAfter,
+                        tolerance_micros: None,
+                    },
+                    cancellation: Cancellation::new(),
+                })
+                .await
+        })
+    };
+    tokio::time::sleep(Duration::from_secs(1)).await;
+    assert!(
+        !framing.is_finished(),
+        "the frame did not wait for the queued run"
+    );
+    // The held chunk ends; at the boundary the queued run gives way.
+    recogniser.released.store(true, Ordering::SeqCst);
+    let frame = framing.await?;
+    assert!(frame.is_ok(), "{frame:?}");
+    let report = running.await??;
+    assert_eq!(report.status().state(), JobState::Succeeded);
+    assert_eq!(report.outcome().revision().state(), RevisionState::Sealed);
     Ok(())
 }

@@ -122,7 +122,8 @@ These files are the machine-readable public v1 boundary:
   run; `skipped` for a source without video), each stream with its own job (none for
   `visual`), state, chunks, `published_until_us` and `media` (`$defs.media_progress`:
   `done_us`, `total_us`, `elapsed_ms`, `speed`, `percent` and an `estimate` with its
-  `basis`), which `progress-event.schema.json` holds an equal copy of for its `media` member;
+  `basis`), which `progress-event.schema.json` holds an equal copy of for its `media` member, and a
+  queued `prepare` job that has not started `queue_position`;
 - `job-resume-data.schema.json` â the `data` member of a complete `job.resume` result
   (P10 PR 3): `job` (job data after the run) and `outcome` (exactly the
   `transcript.retranscribe` data);

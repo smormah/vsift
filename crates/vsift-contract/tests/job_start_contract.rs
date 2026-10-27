@@ -115,6 +115,7 @@ fn prepare_job(state: JobState, live: bool, streams: &[StreamPresentation<'_>]) 
         mode: Some(JobMode::Watched),
         streams,
         first: None,
+        queue_position: None,
     }))
 }
 
@@ -214,6 +215,7 @@ fn a_running_prepare_job_reports_its_stream_in_media_time() -> TestResult {
         mode: None,
         streams: &[],
         first: None,
+        queue_position: None,
     }))?;
     validate("job-data.schema.json", &plain)?;
     assert!(plain.get("streams").is_none());

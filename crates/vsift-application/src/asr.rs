@@ -350,7 +350,7 @@ pub struct AsrFailure {
 }
 
 impl AsrFailure {
-    const fn at(stage: AsrStage, reason: AsrFailureReason) -> Self {
+    pub(crate) const fn at(stage: AsrStage, reason: AsrFailureReason) -> Self {
         Self { stage, reason }
     }
 }
@@ -503,6 +503,13 @@ pub trait ProgressSink: Send + Sync {
     /// so a worker host can emit its `admission_waiting` lifecycle event.
     /// Most sinks ignore it.
     fn admission_waiting(&self, _weight: std::num::NonZeroU16) {}
+
+    /// Told once when the run starts waiting, for up to
+    /// [`vsift_domain::QUEUED_YIELD_WAIT`], for queued work to give back the
+    /// `weight` units it holds (ADR 0033 section 6), whatever the run's
+    /// [`vsift_domain::AdmissionWait`]: a host shows the person or agent
+    /// waiting that it waits, and why. Most sinks ignore it.
+    fn queued_work_waiting(&self, _weight: std::num::NonZeroU16) {}
 }
 
 /// A sink that reports nowhere, for runs nobody watches.
@@ -534,6 +541,25 @@ pub struct CheckpointScope<'a, K> {
     /// same window (ADR 0033 section 4, D5), and where this run keeps its
     /// own; `None` when the run shares nothing.
     pub seed: Option<SeedPort<'a>>,
+    /// Awaited before every chunk but the first: queued work gives its
+    /// capacity back there to anyone who waits for it (ADR 0033 section 6);
+    /// `None` for every other run.
+    pub gate: Option<&'a dyn ChunkGate>,
+}
+
+/// A chunk boundary of a run (ADR 0033 section 6): where queued work yields
+/// the root's capacity to someone who waits for it, and takes it back once
+/// nobody does.
+pub trait ChunkGate: Send + Sync {
+    /// Awaited before every chunk but the first.
+    ///
+    /// # Errors
+    ///
+    /// [`AsrFailure`] when the run is cancelled while it waits, or capacity
+    /// cannot be taken back.
+    fn before_chunk(
+        &self,
+    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), AsrFailure>> + Send + '_>>;
 }
 
 /// Raw chunk answers one run hands to a later run of the same recognition
@@ -866,7 +892,6 @@ where
     };
     report(0, meter.as_ref());
     let mut completed = 0_u64;
-
     let mut usage = CheckpointUse::default();
     let planned = u32::try_from(chunks.len()).unwrap_or(u32::MAX);
     let mut gathered = Gathered::with_capacity(chunks.len());
@@ -874,12 +899,10 @@ where
     // publish (ADR 0033): see [`RunSoFar::all_checkpointed`].
     let mut all_checkpointed = scope.is_some();
     for chunk in chunks.iter().cloned() {
-        let index = chunk.index();
-        let at_chunk = |failure: AsrFailure| AsrRunFailure {
-            failure,
-            chunk: Some(index),
-        };
-        stop_if_cancelled(cancellation, AsrStage::AudioExtraction).map_err(at_chunk)?;
+        let at_chunk = failure_at(chunk.index());
+        ready_for_chunk(scope.as_ref(), cancellation, completed)
+            .await
+            .map_err(at_chunk)?;
         let reused = scope
             .as_ref()
             .and_then(|scope| reuse_checkpoint(scope, &chunk, bounds, &mut usage));
@@ -1070,6 +1093,29 @@ fn reuse_checkpoint<K: ChunkCheckpoints>(
         usage.discarded = usage.discarded.saturating_add(1);
     }
     result
+}
+
+/// A failure of the run at chunk `index`, for the poison rule.
+const fn failure_at(index: u32) -> impl Fn(AsrFailure) -> AsrRunFailure + Copy {
+    move |failure| AsrRunFailure {
+        failure,
+        chunk: Some(index),
+    }
+}
+
+/// Whether the run may go on to its next chunk: it is not cancelled, and,
+/// after its first chunk, its gate lets it through (queued work gives its
+/// capacity back there to anyone who waits, ADR 0033 section 6).
+async fn ready_for_chunk<K, C: AsrCancellation>(
+    scope: Option<&CheckpointScope<'_, K>>,
+    cancellation: &C,
+    completed: u64,
+) -> Result<(), AsrFailure> {
+    stop_if_cancelled(cancellation, AsrStage::AudioExtraction)?;
+    match scope.and_then(|scope| scope.gate) {
+        Some(gate) if completed > 0 => gate.before_chunk().await,
+        _ => Ok(()),
+    }
 }
 
 /// Keeps a finished chunk's answer in the run's seed, if it has one (D5).

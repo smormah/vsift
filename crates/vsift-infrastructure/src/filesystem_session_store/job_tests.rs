@@ -590,7 +590,7 @@ fn a_prepare_job_and_its_progress_record_read_back_strictly() -> TestResult {
         ("no mode", original.replace(",\"mode\":\"watched\"", "")),
         (
             "an unknown mode",
-            original.replace("\"watched\"", "\"queued\""),
+            original.replace("\"watched\"", "\"batch\""),
         ),
         (
             "a first window over its bound",

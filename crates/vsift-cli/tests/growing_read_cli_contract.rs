@@ -236,6 +236,7 @@ async fn seed(root: &OwnedRoot) -> Built<Seeded> {
             progress: &NoProgress,
             stopwatch: &vsift_application::StoppedStopwatch,
             seed: None,
+            gate: None,
             observer: &cuts,
         },
         &Audio,

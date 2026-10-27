@@ -421,6 +421,27 @@ async fn committed_through_the_use_case(
     range: Option<TimeRange>,
     operation: &OperationId,
 ) -> Built<(JobId, TranscriptRevision)> {
+    committed_watched(
+        store,
+        session,
+        range,
+        operation,
+        &vsift_application::NoProgress,
+        &Instant0,
+    )
+    .await
+}
+
+/// [`committed_through_the_use_case`], reporting to `progress` and waiting on
+/// `timer`.
+async fn committed_watched<T: RetryTimer>(
+    store: &FilesystemSessionStore,
+    session: &SessionId,
+    range: Option<TimeRange>,
+    operation: &OperationId,
+    progress: &dyn vsift_application::ProgressSink,
+    timer: &T,
+) -> Built<(JobId, TranscriptRevision)> {
     let now = Wall.now_unix_seconds()?;
     let status = store.session_status(session)?;
     let segment =
@@ -471,9 +492,9 @@ async fn committed_through_the_use_case(
             audio: &Audio,
             recognizer: &Recognizer::default(),
             cancellation: &Never,
-            timer: &Instant0,
+            timer,
             classify: |_| FailureCode::Internal,
-            progress: &vsift_application::NoProgress,
+            progress,
             publication: vsift_application::Publication::AtTheSeal,
             stopwatch: &vsift_application::StoppedStopwatch,
             seed: None,
@@ -482,6 +503,81 @@ async fn committed_through_the_use_case(
     )
     .await?;
     Ok((outcome.report.job_id, outcome.revision))
+}
+
+/// Sleeps for real, so a wait on the store's locks can end.
+struct Sleeping;
+
+impl RetryTimer for Sleeping {
+    fn jitter(&self) -> Jitter {
+        Jitter::NONE
+    }
+
+    fn sleep(&self, delay: Duration) -> impl Future<Output = ()> + Send {
+        tokio::time::sleep(delay)
+    }
+}
+
+/// Tells the test when the run says it waits for queued work.
+#[derive(Default)]
+struct QueuedWaitSeen(tokio::sync::Notify, AtomicUsize);
+
+impl vsift_application::ProgressSink for QueuedWaitSeen {
+    fn report(&self, _update: vsift::ProgressUpdate) {}
+
+    fn queued_work_waiting(&self, _weight: NonZeroU16) {
+        self.1.fetch_add(1, Ordering::SeqCst);
+        self.0.notify_one();
+    }
+}
+
+/// ADR 0033 section 6, on the real store: a transcription that finds the
+/// root's capacity held by queued work says at once that it waits for it,
+/// demands it (so the queued work gives it back at its next chunk boundary),
+/// and commits once the capacity is given back, instead of waiting in the
+/// dark inside the store or being refused.
+#[tokio::test]
+async fn a_transcription_says_it_waits_for_queued_work_then_commits() -> TestResult {
+    let harness = Harness::new(Recognizer::default())?;
+    let engine = harness.engine();
+    harness.stand_in_tools(&engine)?;
+    let source = harness.root.path("placeholder.mp4");
+    fs::write(&source, PLACEHOLDER_SOURCE)?;
+    let session = harness.session(&engine, source).await?;
+    let store = harness.store()?;
+    let queued = store.try_admit_queued(vsift_infrastructure::DEFAULT_ADMISSION_CAPACITY)?;
+
+    let seen = Arc::new(QueuedWaitSeen::default());
+    let watcher = Arc::clone(&seen);
+    let run_store = harness.store()?;
+    let run_session = session.clone();
+    let run = tokio::spawn(async move {
+        let operation = OperationId::parse(OPERATION).map_err(|error| error.to_string())?;
+        committed_watched(
+            &run_store,
+            &run_session,
+            None,
+            &operation,
+            watcher.as_ref(),
+            &Sleeping,
+        )
+        .await
+        .map_err(|error| error.to_string())
+    });
+    tokio::time::timeout(Duration::from_secs(10), seen.0.notified())
+        .await
+        .map_err(|_| "the run never said it waits for queued work")?;
+    assert!(
+        store.capacity_demanded(),
+        "the run does not demand capacity"
+    );
+    assert!(!run.is_finished(), "admitted while queued work held it");
+    drop(queued);
+    let (_job, revision) = tokio::time::timeout(Duration::from_secs(30), run).await???;
+    assert_eq!(revision.number(), 1);
+    assert_eq!(seen.1.load(Ordering::SeqCst), 1);
+    assert!(!store.capacity_demanded());
+    Ok(())
 }
 
 /// A host recognizer that holds its first chunk until the test releases it,
@@ -752,6 +848,9 @@ enum JobAtRead {
     Running,
     /// Recorded, never started, no owner.
     Queued,
+    /// Recorded in the root's queue, and held by the runner that waits for
+    /// its turn: still `queued`, with an owner.
+    QueuedWithRunner,
     /// Its attempt stopped before it committed; no owner.
     Interrupted,
     /// It failed for good: nothing will publish a transcript.
@@ -801,7 +900,7 @@ async fn reads_with_a_job_at(at: JobAtRead) -> Built<(EngineError, EngineError, 
     // `Running` keeps its owner for the reads; the others release it.
     match at {
         JobAtRead::Running => owner.apply(&JobChange::Start, now)?,
-        JobAtRead::Queued => {}
+        JobAtRead::Queued | JobAtRead::QueuedWithRunner => {}
         JobAtRead::Interrupted => {
             owner.apply(&JobChange::Start, now)?;
             owner.apply(&JobChange::Interrupt(None), now)?;
@@ -811,7 +910,7 @@ async fn reads_with_a_job_at(at: JobAtRead) -> Built<(EngineError, EngineError, 
             owner.apply(&JobChange::Fail(None), now)?;
         }
     }
-    if !matches!(at, JobAtRead::Running) {
+    if !matches!(at, JobAtRead::Running | JobAtRead::QueuedWithRunner) {
         drop(owner);
     }
 
@@ -877,6 +976,25 @@ async fn a_read_with_no_transcript_names_the_queued_job() -> TestResult {
             }
         );
         assert_eq!(refused.failure_code(), FailureCode::InvalidArgument);
+    }
+    Ok(())
+}
+
+/// #517: a job in the root's queue that its runner holds is still waiting,
+/// not running.
+#[tokio::test]
+async fn a_read_with_no_transcript_names_a_job_waiting_with_its_runner_as_queued() -> TestResult {
+    let (transcript, search, session, job) =
+        reads_with_a_job_at(JobAtRead::QueuedWithRunner).await?;
+    for refused in [transcript, search] {
+        assert_eq!(
+            refused,
+            EngineError::TranscriptPending {
+                session: session.clone(),
+                job: job.clone(),
+                progress: PendingTranscription::Queued,
+            }
+        );
     }
     Ok(())
 }

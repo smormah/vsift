@@ -162,8 +162,6 @@ impl JobKind {
 
 /// How a job runs, chosen by who is waiting (ADR 0033 section 6). The modes
 /// are parameters of one path, never separate code paths.
-///
-/// The third mode the record names, queued, comes with the root's queue.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum JobMode {
     /// Someone waits for a short recording: the call runs in the foreground
@@ -173,11 +171,16 @@ pub enum JobMode {
     /// publishes the revision as it goes, reports its progress and leaves one
     /// unit of the root's admission capacity free for evidence.
     Watched,
+    /// Nobody waits: the job waits its turn in the root's queue (first in,
+    /// first out, one at a time a root), then runs at the root's whole
+    /// capacity and publishes at its seal, yielding its capacity at every
+    /// chunk boundary to anyone else who waits for it.
+    Queued,
 }
 
 impl JobMode {
     /// Every mode.
-    pub const ALL: [Self; 2] = [Self::Quick, Self::Watched];
+    pub const ALL: [Self; 3] = [Self::Quick, Self::Watched, Self::Queued];
 
     /// The recordings shorter than this are quick by default; longer ones are
     /// watched (ADR 0033 section 6): ten minutes of media.
@@ -194,6 +197,7 @@ impl JobMode {
         match self {
             Self::Quick => "quick",
             Self::Watched => "watched",
+            Self::Queued => "queued",
         }
     }
 
@@ -209,6 +213,7 @@ impl JobMode {
     /// `duration_micros` (`None` when its length is not known yet): quick
     /// under [`Self::QUICK_LIMIT_MICROS`], watched from it on and when the
     /// length is unknown, so a long recording never keeps a caller waiting.
+    /// Queued is never chosen: it is asked for.
     #[must_use]
     pub const fn for_duration(duration_micros: Option<u64>) -> Self {
         match duration_micros {
@@ -326,7 +331,8 @@ mod tests {
             assert_eq!(PrepareStream::parse(stream.identifier()), Some(stream));
         }
         assert_eq!(JobKind::parse("prepare"), Some(JobKind::Prepare));
-        assert_eq!(JobMode::parse("queued"), None);
+        assert_eq!(JobMode::parse("queued"), Some(JobMode::Queued));
+        assert_eq!(JobMode::parse("batch"), None);
     }
 
     /// C-09: the whole graph, edge by edge. Anything not listed is illegal.

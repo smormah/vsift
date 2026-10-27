@@ -1031,10 +1031,14 @@ pub const NO_TRANSCRIPT_REMEDIATION: &str = "This session has no transcript yet.
 pub const TRANSCRIPT_RUNNING_REMEDIATION: &str = "This session has no transcript to read yet, but a transcription of it is running (the job in affected_ids). Do not start another one. Run the suggested job status command to see its progress, and read again as its parts are published or when it has finished.";
 
 /// Remediation when a session has no transcript to read yet, but a
-/// transcription of it is recorded and waiting for its turn (#517, ADR 0033).
+/// transcription of it is recorded and waiting for its turn, in the root's
+/// queue or not yet started (#517, ADR 0033).
+///
+/// The place in the queue is not in the text, which is fixed prose: `job
+/// status` reports it as `queue_position`.
 ///
 /// Fixed prose; it names no path, session, job or time.
-pub const TRANSCRIPT_QUEUED_REMEDIATION: &str = "This session has no transcript to read yet, but a transcription of it is waiting for its turn (the job in affected_ids). Do not start another one. Run the suggested job status command to see where it is, and read again when it has finished.";
+pub const TRANSCRIPT_QUEUED_REMEDIATION: &str = "This session has no transcript to read yet, but a transcription of it is waiting for its turn in the queue (the job in affected_ids). Do not start another one. Run the suggested job status command to see its place in the queue, and read again when it has finished.";
 
 /// Remediation when a session has no transcript to read yet, but a
 /// transcription of it was interrupted and can be continued (#517, ADR 0033).
