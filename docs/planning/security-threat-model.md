@@ -141,6 +141,22 @@ the entry back or delete the folder; VSift never changes it itself. The earlier
 residual, a window between creation and the DACL replacement in which a principal the
 parent trusted could open the empty directory (L-005), is gone with ADR 0026.
 
+**The `unsafe` crate's second function (2026-10-27, ADR 0026's amendment, L-229).** On
+Windows, `job start`'s background runner (ADR 0033) is started by
+`vsift-windows-security`'s `start_detached`, not by the standard library, because the
+standard library passes a new process every inheritable handle of its caller: the
+runner held its caller's output pipe, and could have held any other inheritable handle
+a library host had open. Now its one inherited handle is a `NUL` handle opened for it,
+named in an explicit inheritance list (`PROC_THREAD_ATTRIBUTE_HANDLE_LIST`). The
+executable is passed by its absolute path (no `PATH` search), batch files are refused
+(Windows would run them through `cmd.exe`, with other quoting rules), arguments are
+quoted as the standard library quotes them, and no raw handle leaves the crate. The
+crate holds thirteen `unsafe` blocks, each one Win32 call with its `// SAFETY:`
+comment, under the governance check's bound and the ADR's review rule. Residual:
+while the `NUL` handle is inheritable, a process another thread starts with the
+standard library at that moment can inherit it too; it is a handle to `NUL`, not to a
+pipe or file.
+
 No-shell execution addresses one injection route. It does not confine a vulnerable
 decoder. Unix process groups aid termination; Windows Job Objects group processes;
 neither should be presented as a complete filesystem/network security boundary.

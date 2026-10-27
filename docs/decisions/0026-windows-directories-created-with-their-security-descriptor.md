@@ -138,3 +138,114 @@ adds no dependency beyond `windows-sys`. Raising the bound of three is such a ch
 - Load: the race test's rate before and after is to be measured on a separate machine (the pull
   request lists the command and the load shape); the deterministic tests above are the
   regression evidence.
+
+## Amendment, 2026-10-27: a second function, starting the background runner with only the handles it may inherit (L-229)
+
+The accepted text above stands unchanged. This note adds one function to the crate, under the review
+rule above, for one recorded decision.
+
+**Status of this note:** checked by the planner on 2026-10-27 against the review rule above
+(accepted, with the two conditions on the environment and on a job object that forbids leaving it,
+covered below); the maintainer reviews the pull request. L-229 is deleted from the register by the
+same change.
+
+**The decision it serves.** On 2026-10-23 the maintainer decided that known limit
+L-229 is fixed with one narrowly scoped function in this crate
+that starts a process with an explicit list of the handles it may inherit, recorded as an amendment
+to this ADR, and not with a third-party crate or by shipping the limit. L-229: `launch_detached`
+(`crates/vsift-infrastructure/src/detached_runner.rs`, [ADR 0033](0033-progress-during-long-transcriptions.md)
+section 5) starts `job start`'s background runner with its standard streams set to null, but the
+standard library's `CreateProcessW` call asks for handle inheritance without a list, so Windows
+passes the runner every inheritable handle of its caller. When the caller's own standard output and
+error are pipes, as they are for an AI assistant's tool call, a test harness or a script's command
+substitution, the runner holds the write end of the pipe its caller's parent reads, and that parent
+waits for end-of-file until the transcription ends. Unix is not affected.
+
+**The function.** `start_detached(executable, arguments, working_directory, job_object)` (Windows
+only), returning a `DetachedProcess`:
+
+- It starts `executable`, by its absolute path given as `lpApplicationName` (no search of `PATH` or
+  of the current folder), with `arguments` quoted as the standard library quotes them (the program
+  name always in quotes; an argument in quotes when it is empty or holds a space or a tab; a run of
+  backslashes doubled before a quote or before the closing quote; a quote escaped). The quoting is
+  plain Rust and tested on every platform. A NUL in any value, a relative path, a quote in the
+  program name, and a `.bat` or `.cmd` executable (which Windows would run through `cmd.exe`, with
+  other quoting rules) are refused with `InvalidInput` before anything is started.
+- Its working folder is `working_directory`, given explicitly as `lpCurrentDirectory`, and its
+  environment is inherited (`lpEnvironment` null), which is exactly what `std::process::Command`
+  gave the runner before (it passes no environment block when none is set). So the runner sees the
+  same folder and environment on every platform as before: Unix keeps the standard library.
+- Its creation flags are fixed inside the crate: `CREATE_NO_WINDOW`, `CREATE_NEW_PROCESS_GROUP` and
+  `EXTENDED_STARTUPINFO_PRESENT`, plus `CREATE_BREAKAWAY_FROM_JOB` when `job_object` is
+  `JobObject::Leave` (`JobObject::Stay` leaves it out). The caller cannot pass any other flag. The
+  infrastructure keeps today's order: leave the job, and on `ERROR_ACCESS_DENIED` start again
+  inside it, reporting `in_callers_job` (L-220, unchanged).
+- Its standard input, output and error are one handle to the `NUL` device, opened by the function
+  with the standard library and marked inheritable, and **that handle is the only entry of the
+  process's inheritance list** (`PROC_THREAD_ATTRIBUTE_HANDLE_LIST`). Windows passes the runner no
+  other handle of the caller, whatever its inherit flag. The function closes its own copy of the
+  `NUL` handle and the new thread's handle before it returns.
+- `DetachedProcess` owns the process handle (closed when it drops; dropping never ends the process)
+  and offers what `DetachedRunner` already promises, with the standard library's types: `id()`,
+  `try_wait() -> io::Result<Option<ExitStatus>>`, `kill()` (ends a process that is still running)
+  and `wait()`. No raw handle is ever returned.
+
+**The Win32 calls,** each in its own `unsafe` block with its `// SAFETY:` comment: `SetHandleInformation`
+(the function's own `NUL` handle becomes inheritable), `InitializeProcThreadAttributeList` twice
+(the size of a list of one attribute, then the list in a buffer of that size, aligned for pointers),
+`UpdateProcThreadAttribute` (the handle list; the one-element array it points to is borrowed by the
+list, so it outlives every use), `CreateProcessW` (with `bInheritHandles` true, which the list then
+restricts), `DeleteProcThreadAttributeList` (in the list's `Drop`, once), `OwnedHandle::from_raw_handle`
+(one helper that takes ownership of the process and thread handles `CreateProcessW` returns, so the
+standard library closes each exactly once), `WaitForSingleObject` (one helper, with a zero timeout for
+`try_wait` and an infinite one for `wait`), `GetExitCodeProcess` and `TerminateProcess`. That is ten
+new blocks.
+
+**The bound.** The governance check's bound on `unsafe` blocks in this crate rises **from three to
+thirteen**, by the ten above and no more; its broken-copy tests cover the new bound. The dependency
+stays `windows-sys` 0.61.2, already in the lock; it gains the one feature `Win32_System_Threading`
+(the process and attribute-list functions and types). No crate is added to the lock.
+
+**The infrastructure side.** `launch_detached` keeps its signature and its promises (the handshake,
+the owner lock, the kill on a handshake timeout, `detachment`). `DetachedRunner` holds a
+`std::process::Child` on Unix, started as today, and a `DetachedProcess` on Windows; both answer the
+same three calls (`try_wait`, `kill`, `wait`), so `vsift-infrastructure` stays free of `unsafe` and
+the CLI does not change.
+
+**Alternatives rejected.**
+
+- **Clearing `HANDLE_FLAG_INHERIT` on the caller's standard handles before the launch** (the finding's
+  second option). It changes process-wide state that belongs to the caller: a library host that later
+  starts a child of its own, expecting its standard streams to be passed on, would find them not
+  inherited; and another thread starting a process at the same moment would see the flags half
+  changed. Restoring them afterwards cannot be made atomic. It would also cover only the three
+  standard handles, not any other inheritable handle the host holds.
+- **`bInheritHandles` false.** No handle at all would be inherited, with fewer calls. But the
+  standard handles named in `STARTUPINFO` are then not valid in the runner, so the runner's standard
+  streams would no longer be connected to nothing: they would be its hidden console's, a change for
+  the runner and for every provider that takes its streams, and the maintainer's decision names an
+  explicit list.
+- **A third-party crate** that starts processes with a handle list: the maintainer's decision rules
+  it out, and none in the lock offers it.
+
+**Tests.**
+
+- In this crate, on Windows (`src/detached/tests.rs`): a test process starts a stand-in caller (the
+  test executable again) whose standard output is a pipe the test created, and so inheritable in the
+  caller; the caller starts a long-lived child with `start_detached` and exits; the test sees
+  end-of-file while the child is still alive. A control in the same shape, with the child started by
+  the standard library, sees no end-of-file until the child ends, so the test can tell. A child
+  started each way records its working folder, environment and arguments, and the two records are
+  equal (the planner's first condition), with awkward arguments that exercise the quoting. `kill`,
+  `wait` and `try_wait`, and the refusals, are covered too. The quoting and the batch-file rule run on
+  every platform (`src/command_line.rs`).
+- In `vsift-infrastructure` (`tests/detached_runner.rs`), through `launch_detached`: the same
+  three-process shape on every platform, which waited for the runner's end on Windows before the fix
+  (the evidence is in the pull request); and on Windows a caller started inside a job object that
+  forbids leaving it (`process-wrap`'s, as the process supervisor uses) gets `in_callers_job`, is not
+  held up, and its runner ends when the job is closed: L-220's documented behaviour (the planner's
+  second condition).
+- The CLI-level test of the defect (`job start` answering within seconds while a queued job's runner
+  waits behind a live one) needs the queued mode, ADR 0033's fifth pull request (#512), and comes with
+  whichever of the two lands second.
+- The existing `job start`, runner and L-220 tests do not change.

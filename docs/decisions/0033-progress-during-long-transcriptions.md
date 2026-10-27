@@ -527,6 +527,21 @@ The fifth pull request implements the queued mode of section 6.
   `FFmpeg`, a queued job holding the whole root and a `frame get` waiting for it and admitted at its next
   chunk (`engine_growth`).
 
+## Note, 2026-10-27: on Windows the runner inherits no handle of its caller (L-229, fix F8)
+
+Section 5's runner had its standard streams connected to nothing, but on Windows the standard library
+starts a process with every inheritable handle of its caller, so the runner held the caller's own
+output pipe when the caller's parent gave it one, and a parent that captured `job start`'s output
+waited until the transcription ended (L-229). Since this note `launch_detached` starts it on Windows
+through `vsift-windows-security`'s `start_detached` ([ADR 0026](0026-windows-directories-created-with-their-security-descriptor.md),
+amendment of 2026-10-27): the same executable, arguments, working folder, environment and creation
+flags, with one `NUL` handle as its standard streams and that handle as the only one it inherits.
+The handshake, the owner lock, the kill on a handshake timeout and `detachment` (including
+`in_callers_job`, L-220) do not change; Unix keeps the standard library. The CLI-level test of the
+defect needs the queued mode and comes with whichever of this fix and the fifth pull request (#512)
+lands second; `crates/vsift-infrastructure/tests/detached_runner.rs` pins it through
+`launch_detached` meanwhile.
+
 ## Decisions for the maintainer
 
 All are taken (2026-10-21):

@@ -19,9 +19,17 @@ use std::{fs, path::Path};
 
 /// The one crate allowed `unsafe` code (ADR 0026).
 pub(crate) const UNSAFE_CRATE: &str = "crates/vsift-windows-security";
-/// How many `unsafe` blocks ADR 0026 accepted in [`UNSAFE_CRATE`]: building the
-/// security descriptor, creating the directory, and freeing the descriptor.
-const MAX_UNSAFE_BLOCKS: usize = 3;
+/// How many `unsafe` blocks ADR 0026 accepted in [`UNSAFE_CRATE`].
+///
+/// - Three for its decision (2026-10-19): building the security descriptor,
+///   creating the directory, and freeing the descriptor.
+/// - Ten for its amendment of 2026-10-27 (L-229), starting the background
+///   runner with only its null handle inherited: marking that handle
+///   inheritable, sizing and initialising the attribute list, naming the
+///   handle in it, creating the process, deleting the list, owning the
+///   returned handles, waiting for the process, reading its exit code, and
+///   ending it.
+const MAX_UNSAFE_BLOCKS: usize = 13;
 /// The folders whose Rust sources are checked.
 const SOURCE_DIRECTORIES: [&str; 3] = ["crates", "tools", "fuzz"];
 /// The folders whose packages must take the workspace's lints.
@@ -530,6 +538,8 @@ mod tests {
         let exception_root = read(&format!("{UNSAFE_CRATE}/src/lib.rs"))?;
         let exception_create = read(&format!("{UNSAFE_CRATE}/src/create.rs"))?;
         let create_path = format!("{UNSAFE_CRATE}/src/create.rs");
+        let exception_detached = read(&format!("{UNSAFE_CRATE}/src/detached.rs"))?;
+        let detached_path = format!("{UNSAFE_CRATE}/src/detached.rs");
 
         let mut messages = Vec::new();
         check_workspace_manifest(&mut messages, &workspace);
@@ -537,10 +547,11 @@ mod tests {
         check_crate_root(&mut messages, "r", &infrastructure_root);
         check_unsafe_crate_manifest(&mut messages, "e", &exception_manifest, &workspace);
         check_unsafe_crate_root(&mut messages, "e", &exception_root);
-        let count = check_source(&mut messages, &create_path, &exception_create);
-        check_unsafe_block_count(&mut messages, count);
+        let create_count = check_source(&mut messages, &create_path, &exception_create);
+        let detached_count = check_source(&mut messages, &detached_path, &exception_detached);
+        check_unsafe_block_count(&mut messages, create_count + detached_count);
         assert!(messages.is_empty(), "the real files: {messages:#?}");
-        assert_eq!(count, 3);
+        assert_eq!((create_count, detached_count), (3, 10));
 
         let cases: Vec<(&str, Vec<String>)> = vec![
             ("an unsafe block in another crate", {
@@ -587,13 +598,24 @@ mod tests {
                 check_source(&mut found, &create_path, &broken);
                 found
             }),
-            ("a fourth unsafe block in the exception", {
+            ("a fourteenth unsafe block in the exception", {
                 let mut found = Vec::new();
                 let broken = format!(
-                    "{exception_create}\n// SAFETY: a new block.\nfn extra() {{ unsafe {{ g() }} }}\n"
+                    "{exception_detached}\n// SAFETY: a new block.\nfn extra() {{ unsafe {{ g() }} }}\n"
                 );
-                let count = check_source(&mut found, &create_path, &broken);
+                let count = check_source(&mut found, &create_path, &exception_create)
+                    + check_source(&mut found, &detached_path, &broken);
                 check_unsafe_block_count(&mut found, count);
+                found
+            }),
+            ("the runner's launch without its SAFETY comment", {
+                let mut found = Vec::new();
+                let broken = mutate(
+                    &exception_detached,
+                    "    // SAFETY: `application` and `directory`",
+                    "    // `application` and `directory`",
+                )?;
+                check_source(&mut found, &detached_path, &broken);
                 found
             }),
             ("the exception without the undocumented-block lint", {

@@ -14,18 +14,36 @@
 //!
 //! The crate exposes one safe function, `create_directory` (Windows only),
 //! and the descriptor it takes, [`PrivateDirectoryDescriptor`] (every
-//! platform, plain Rust, so it is tested everywhere). Its `unsafe` blocks are
-//! three, each one operation with a `// SAFETY:` comment; the lints deny any
-//! other, and the governance check refuses `unsafe` in every other crate. Any
-//! change here needs the review ADR 0026 sets out.
+//! platform, plain Rust, so it is tested everywhere).
+//!
+//! Its amendment of 2026-10-27 (known limit L-229) adds a second,
+//! `start_detached` (Windows only), with the process it returns,
+//! `DetachedProcess`, and its one choice, `CallersJob`. It starts the
+//! background runner of `job start` so that the runner inherits no handle of
+//! its caller but its own null standard streams, through an explicit
+//! inheritance list: the standard library passes a new process every
+//! inheritable handle, and a runner that held its caller's output pipe kept
+//! the caller's parent waiting for end-of-file until the transcription ended.
+//! Its command-line quoting is plain Rust, tested everywhere.
+//!
+//! The `unsafe` blocks are thirteen, each one operation with a `// SAFETY:`
+//! comment; the lints deny any other, and the governance check bounds their
+//! number and refuses `unsafe` in every other crate. Any change here needs
+//! the review ADR 0026 sets out.
 
 #![deny(unsafe_op_in_unsafe_fn)]
 #![deny(clippy::undocumented_unsafe_blocks)]
 
+#[cfg(any(windows, test))]
+mod command_line;
 #[cfg(windows)]
 mod create;
 mod descriptor;
+#[cfg(windows)]
+mod detached;
 
 #[cfg(windows)]
 pub use create::create_directory;
 pub use descriptor::{ADMINISTRATORS_SID, DescriptorError, PrivateDirectoryDescriptor, SYSTEM_SID};
+#[cfg(windows)]
+pub use detached::{CallersJob, DetachedProcess, start_detached};
