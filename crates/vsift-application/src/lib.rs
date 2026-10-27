@@ -27,11 +27,12 @@ mod visual;
 
 pub use asr::{
     AsrCancellation, AsrFailure, AsrFailureReason, AsrRevisionRequest, AsrRunFailure, AsrStage,
-    AsrTranscription, CheckpointScope, CheckpointUse, NoObserver, NoProgress, ProgressSink,
-    RecognizerIdentity, RevisionSplice, RunObserver, RunSoFar, SpeechAudioError, SpeechAudioSource,
-    SpeechPcm, SpeechRecognitionError, SpeechRecognizer, TranscribeRangeRequest, UnusableChunk,
-    UnusableChunks, build_asr_revision, build_open_asr_revision, build_stopped_asr_revision,
-    retranscription_range, transcribe_range, transcribe_range_checkpointed,
+    AsrTranscription, CheckpointScope, CheckpointUse, ChunkSeed, NoObserver, NoProgress,
+    ProgressSink, RecognizerIdentity, RevisionSplice, RunObserver, RunSoFar, SeedPort,
+    SpeechAudioError, SpeechAudioSource, SpeechPcm, SpeechRecognitionError, SpeechRecognizer,
+    TranscribeRangeRequest, UnusableChunk, UnusableChunks, build_asr_revision,
+    build_open_asr_revision, build_stopped_asr_revision, retranscription_range, transcribe_range,
+    transcribe_range_checkpointed,
 };
 pub use clock::{Clock, ClockError, StoppedStopwatch, Stopwatch};
 pub use evidence::{
@@ -58,12 +59,12 @@ pub use job::{
     MAX_SESSION_JOBS, NoCheckpoints, OperationLookup, PrepareError, PrepareOutcome,
     PrepareProgress, PrepareStreams, Publication, PublishedOpenRevision, PublishingStopped,
     RecognitionScope, Reconciled, RequestDigest, Resumability, RetranscriptionOutcome,
-    RetranscriptionPorts, RetranscriptionRun, RetryTimer, RevisionStore, SessionHead,
-    StreamProgress, StreamStop, cancel_job, commit_operation_id, job_id, job_status,
+    RetranscriptionPorts, RetranscriptionRun, RetryTimer, RevisionStore, SessionHead, StreamEnd,
+    StreamPhase, StreamProgress, StreamStop, cancel_job, commit_operation_id, job_id, job_status,
     lookup_operation, observed_state, part_operation_id, prepare_operation_key,
     prepare_request_digest, prepare_spec, recognition_key, reconcile, resumable_request,
     retranscribe_operation_key, retranscribe_request_digest, run_prepare, run_retranscription,
-    seal_stopped, seal_stopped_now, stop_operation_id, worker_step_operation_id,
+    seal_stopped, seal_stopped_now, seed_key, stop_operation_id, worker_step_operation_id,
 };
 pub use screen_text::{
     AnalysedPlanError, AnalysedWindowsPlan, DEFAULT_SCREEN_TEXT_FRAMES_PER_CALL, EngineLine,

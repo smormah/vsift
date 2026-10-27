@@ -301,6 +301,7 @@ async fn run(
             progress: &NoProgress,
             publication: vsift_application::Publication::AtTheSeal,
             stopwatch: &vsift_application::StoppedStopwatch,
+            seed: None,
         },
         &mut Unchanged,
     )
@@ -546,6 +547,10 @@ fn a_retranscriptions_share_is_recorded_when_it_is_not_the_whole() -> TestResult
 /// ADR 0033: a `prepare` job's record keeps its mode and only its mode, and
 /// its progress record reads back strictly, a damaged one as none.
 #[test]
+#[allow(
+    clippy::too_many_lines,
+    reason = "One record's round trip and every damage it refuses, side by side"
+)]
 fn a_prepare_job_and_its_progress_record_read_back_strictly() -> TestResult {
     use vsift_application::{JobProgressLog, PrepareProgress, StreamProgress};
     use vsift_domain::{JobMode, MediaProgress, PrepareStream, ProgressStage, ProgressUpdate};
@@ -553,14 +558,16 @@ fn a_prepare_job_and_its_progress_record_read_back_strictly() -> TestResult {
     let fixture = Fixture::new()?;
     let store = open_session(&fixture, StoredDurability::Ephemeral)?;
     let session = session_id()?;
-    let spec = vsift_application::prepare_spec(&session, JobMode::Watched, None)?;
+    let first = range(25 * SECOND, 85 * SECOND)?;
+    let spec = vsift_application::prepare_spec(&session, JobMode::Watched, Some(first), None)?;
     let job = spec.job_id.clone();
     drop(store.open_or_create(&spec, now()?)?);
     let view = store.job(&session, &job)?.ok_or("no view")?;
     assert_eq!(
         view.record.request,
         JobRequest::Prepare {
-            mode: JobMode::Watched
+            mode: JobMode::Watched,
+            first: Some(first)
         }
     );
     assert_eq!(view.record.planned_chunks, None);
@@ -569,7 +576,9 @@ fn a_prepare_job_and_its_progress_record_read_back_strictly() -> TestResult {
     // with a mode, is damaged.
     let path = job_path(&fixture, &job).join("job.json");
     let original = fs::read_to_string(&path)?;
-    assert!(original.contains("\"request\":{\"range\":null,\"mode\":\"watched\"}"));
+    assert!(original.contains(
+        "\"request\":{\"range\":null,\"mode\":\"watched\",\"first\":{\"from_us\":25000000,\"to_us\":85000000}}"
+    ));
     for (label, damaged) in [
         (
             "a range",
@@ -582,6 +591,14 @@ fn a_prepare_job_and_its_progress_record_read_back_strictly() -> TestResult {
         (
             "an unknown mode",
             original.replace("\"watched\"", "\"queued\""),
+        ),
+        (
+            "a first window over its bound",
+            original.replace("\"to_us\":85000000", "\"to_us\":2000000000"),
+        ),
+        (
+            "an empty first window",
+            original.replace("\"to_us\":85000000", "\"to_us\":25000000"),
         ),
         (
             "another kind",
@@ -604,6 +621,7 @@ fn a_prepare_job_and_its_progress_record_read_back_strictly() -> TestResult {
         streams: vec![StreamProgress {
             stream: PrepareStream::Transcript,
             job: Some(JobId::parse("job_0123456789abcdef0123456789abcdef")?),
+            phase: vsift_application::StreamPhase::Running,
             update: Some(ProgressUpdate {
                 stage: ProgressStage::RecognisingSpeech,
                 completed: 3,
@@ -638,7 +656,11 @@ fn a_prepare_job_and_its_progress_record_read_back_strictly() -> TestResult {
         ),
         (
             "an unknown stream",
-            stored.replace("\"transcript\"", "\"visual\""),
+            stored.replace("\"transcript\"", "\"audio\""),
+        ),
+        (
+            "an unknown phase",
+            stored.replace("\"running\"", "\"paused\""),
         ),
     ] {
         fs::write(&record, &damaged)?;

@@ -1196,6 +1196,7 @@ and fails `INTEGRITY_FAILURE`; retranscribe the rest with `--from` and `--to`.
 ```console
 vsift job start ses_0123456789abcdef --json
 vsift job start ses_0123456789abcdef --mode watched --json
+vsift job start ses_0123456789abcdef --first 600000000:660000000 --json
 vsift job status job_0123456789abcdef0123456789abcdef --json
 ```
 
@@ -1213,8 +1214,30 @@ vsift job status job_0123456789abcdef0123456789abcdef --json
   it runs. The call answers once the runner holds the job, or has ended it already, within
   10 s; a job that was interrupted before is not taken until a runner holds it.
 
-`--mode quick|watched` overrides the choice. The job derives from the session, the mode and
-the sealed revision it starts from: asked again while it runs, `job start` finds it
+`--mode quick|watched` overrides the choice.
+
+**Its steps, in order (the `streams` of `job status`):**
+
+1. **`first`**, with `--first <from_us>:<to_us>` (at most 30 minutes; an empty, reversed or
+   longer window is a `parse` failure): the range the caller named, widened to whole chunks of
+   the whole run's chunk plan (from the start of the chunk at or before it to the end of the chunk
+   that reaches its end) and retranscribed as a range, sealed at once as a revision of its own,
+   whose id is in that stream's job's result. Its chunks' answers are kept in the runner's memory
+   for the whole transcript (D5).
+2. **`visual`**: the source's visual-candidate index, analysed in batches of 10 windows (10
+   minutes of video), each committed as an index revision, until every window is indexed;
+   `candidates` is then a warm read. A source without video skips it (`state` `skipped`). It has
+   no job of its own: its `state` is `running` while the runner works on it, `succeeded` once every
+   window is indexed, and the `prepare` job's otherwise; a resume analyses only the windows still
+   missing. Its `media` counts windows of video (`published_until_us` is how far it is indexed).
+3. **`transcript`**: the whole-source retranscription. It takes the first window's answers for
+   the chunks with the same window instead of recognising them again (`outcome.job.chunks_reused`
+   counts them), so its revision is the one a run without `--first` makes. While it runs, a read of
+   the window names the first window's revision in `pending_covered_by` for what it has not
+   published yet.
+
+The job derives from the session, the mode, the first window and the sealed revision it starts
+from: asked again while it runs, `job start` finds it
 (`start.state` `running`); once it succeeded, the session is prepared and `job start`
 answers `done` with the same job; a failed or cancelled one starts again (`restarted`), as
 does one left `cancelling` by a runner that died before it finished cancelling; an
@@ -1228,7 +1251,7 @@ same share and continues the same job.
 
 **The answer** ([`job-start-data.schema.json`](../../schemas/v1/job-start-data.schema.json),
 example [`job-start.watched.json`](../../schemas/v1/examples/job-start.watched.json)):
-`job` (the `prepare` job, `job-data`), `start` (`state`, `mode`, `mode_basis`: `requested`,
+`job` (the `prepare` job, `job-data`, with `request.first` when one was named), `start` (`state`, `mode`, `mode_basis`: `requested`,
 `short_recording`, `long_recording` or `length_unknown`; `runner`: `foreground`,
 `background` or `none`; and for a background runner its `detachment`) and `outcome`, for a
 quick job the retranscription it committed, exactly as `transcript retranscribe` reports

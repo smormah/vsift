@@ -860,7 +860,7 @@ The data member of the terminal job.batch result (P11, ADR 0021): per-status cou
 
 **VSift job data v1** ([the schema](../../../schemas/v1/job-data.schema.json))
 
-The data member of a complete job.status or job.cancel result: one recoverable job (P10, ADR 0020). Validate the envelope with operation-response.schema.json. state is what a reader observes: a job whose process ended without recording it is reported interrupted (or succeeded, when its commit is in the session's manifest chain), never running. live_owner says a process holds the job right now. resumable says whether job resume would run it now, and resumable_reason why (interrupted, not_started) or why not (live_owner, succeeded, failed, cancelled, session_not_open). operation_id is the id a retry should carry: the first one a caller bound with --operation-id, or for a succeeded job the one its commit is recorded under. request.range is the range the caller asked for (null for the whole source). progress.chunks_total is how many chunks the recognised range is cut into (null for a job created before P10 PR 3) and chunks_checkpointed how many chunk checkpoints the job keeps now (a succeeded, failed or cancelled job keeps none). attempts counts attempts in the job's current epoch. result names the revision and generation a succeeded job committed; failure the public code that ended the last attempt of an interrupted or failed job. A job never names a path, transcript text or provider output. Since 0.3.0 (ADR 0033) a job of kind prepare, started by job.start, prepares a session: request.mode says how it runs (quick in the foreground, watched in the background by a runner), its progress counts are null and zero, and streams lists its started streams, each a job of its own (transcript: a whole-source retranscription): state is that job's (not_started before it has one), stage, chunks_done and chunks_total as the stream last reported them, published_until_us how far its revision is published (an open revision of the stream's job, or the whole range once it succeeded), and media how far it has come in media time ($defs.media_progress). streams appears for a prepare job only.
+The data member of a complete job.status or job.cancel result: one recoverable job (P10, ADR 0020). Validate the envelope with operation-response.schema.json. state is what a reader observes: a job whose process ended without recording it is reported interrupted (or succeeded, when its commit is in the session's manifest chain), never running. live_owner says a process holds the job right now. resumable says whether job resume would run it now, and resumable_reason why (interrupted, not_started) or why not (live_owner, succeeded, failed, cancelled, session_not_open). operation_id is the id a retry should carry: the first one a caller bound with --operation-id, or for a succeeded job the one its commit is recorded under. request.range is the range the caller asked for (null for the whole source). progress.chunks_total is how many chunks the recognised range is cut into (null for a job created before P10 PR 3) and chunks_checkpointed how many chunk checkpoints the job keeps now (a succeeded, failed or cancelled job keeps none). attempts counts attempts in the job's current epoch. result names the revision and generation a succeeded job committed; failure the public code that ended the last attempt of an interrupted or failed job. A job never names a path, transcript text or provider output. Since 0.3.0 (ADR 0033) a job of kind prepare, started by job.start, prepares a session: request.mode says how it runs (quick in the foreground, watched in the background by a runner) and request.first the window it transcribes first, when one was named (--first), its progress counts are null and zero, and streams lists its started streams in the order they run (first: the window named with --first, retranscribed as a range on the whole run's chunk grid; visual: the visual-candidate index of the source, in batches of windows, with no job of its own; transcript: a whole-source retranscription): state is the stream's job's (not_started before it has one; for visual, running while the runner works on it, succeeded once every window is indexed, and skipped for a source without video), stage, chunks_done and chunks_total as the stream last reported them, published_until_us how far its revision is published (an open revision of the stream's job, or the whole range once it succeeded), and media how far it has come in media time ($defs.media_progress). streams appears for a prepare job only.
 
 | Member | Type | Required | Notes |
 | --- | --- | --- | --- |
@@ -874,6 +874,9 @@ The data member of a complete job.status or job.cancel result: one recoverable j
 | `operation_id` | string or null | yes | pattern `^op_[a-z0-9]{16,64}$` |
 | `request` | object | yes |  |
 | `request.mode` | "quick" \| "watched" | no |  |
+| `request.first` | object | no |  |
+| `request.first.from_us` | integer | yes | at least 0 |
+| `request.first.to_us` | integer | yes | at least 1 |
 | `request.range` | object or null | yes |  |
 | `request.range.from_us` | integer | yes | at least 0 |
 | `request.range.to_us` | integer | yes | at least 1 |
@@ -881,10 +884,10 @@ The data member of a complete job.status or job.cancel result: one recoverable j
 | `progress.chunks_total` | integer or null | yes | 1 to 1024 |
 | `progress.chunks_checkpointed` | integer | yes | 0 to 1024 |
 | `attempts` | integer | yes | 0 to 16 |
-| `streams` | array of object | no | at most 4 items |
-| `streams[].stream` | "transcript" | yes |  |
+| `streams` | array of object | no | at most 3 items |
+| `streams[].stream` | "first" \| "visual" \| "transcript" | yes |  |
 | `streams[].job_id` | string or null | yes | pattern `^job_[a-z0-9]{16,64}$` |
-| `streams[].state` | "not_started" \| "queued" \| "running" \| "cancelling" \| "committing" \| "interrupted" \| "succeeded" \| "failed" \| "cancelled" | yes |  |
+| `streams[].state` | "not_started" \| "skipped" \| "queued" \| "running" \| "cancelling" \| "committing" \| "interrupted" \| "succeeded" \| "failed" \| "cancelled" | yes |  |
 | `streams[].stage` | "copying_source" \| "recognising_speech" \| "analysing_video" \| "running_request" \| "fetching_artifact" \| "installing_components" or null | yes |  |
 | `streams[].chunks_done` | integer or null | yes | at least 0 |
 | `streams[].chunks_total` | integer or null | yes | at least 0 |

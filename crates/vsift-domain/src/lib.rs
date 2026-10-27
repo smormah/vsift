@@ -41,7 +41,7 @@ pub use asr::{
     PROVIDER_END_TOLERANCE_MICROS, PlannedChunk, ProviderChunkOutput, ProviderOutputError,
     ProviderSegment, ProviderToken, ProviderTokenKind, ReviewedAsrModel,
     SEAM_COVERAGE_TOLERANCE_MICROS, SPEECH_SAMPLE_RATE, SettledTranscript, Sha256Hex,
-    UNUSABLE_CHUNK_SHARE_DENOMINATOR, ValidatedChunk, decoded_audio_range,
+    UNUSABLE_CHUNK_SHARE_DENOMINATOR, ValidatedChunk, align_to_chunk_grid, decoded_audio_range,
     is_below_recognition_floor, is_silent_pcm, merge_chunks, plan_chunks, rounds_to_no_pcm_sample,
     settled_merge, unusable_chunks_end_the_run, validate_chunk_output,
 };
@@ -64,7 +64,9 @@ pub use identity::{
     ScreenTextLineId, SessionId, SourceId, SourceSegmentId, TranscriptRevisionId,
     TranscriptSegmentId, VisualCandidateId, VisualIndexId,
 };
-pub use job::{JobKind, JobMode, JobState, JobTransitionError, PrepareStream};
+pub use job::{
+    JobKind, JobMode, JobState, JobTransitionError, MAX_FIRST_WINDOW_MICROS, PrepareStream,
+};
 pub use media::{
     DisplayRotation, MediaDecodeSupport, MediaDescription, MediaSelection, MediaSelectionError,
     MediaStream, MediaStreamKind, VisualStreamError,

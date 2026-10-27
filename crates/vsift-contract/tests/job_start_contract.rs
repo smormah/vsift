@@ -114,6 +114,7 @@ fn prepare_job(state: JobState, live: bool, streams: &[StreamPresentation<'_>]) 
         failure: None,
         mode: Some(JobMode::Watched),
         streams,
+        first: None,
     }))
 }
 
@@ -128,6 +129,7 @@ fn running_stream(stream_job: &JobId, live: bool) -> StreamPresentation<'_> {
         published_until_us: Some(395 * SECOND),
         media: Some(media()),
         live,
+        phase: vsift_application::StreamPhase::Running,
     }
 }
 
@@ -211,6 +213,7 @@ fn a_running_prepare_job_reports_its_stream_in_media_time() -> TestResult {
         failure: None,
         mode: None,
         streams: &[],
+        first: None,
     }))?;
     validate("job-data.schema.json", &plain)?;
     assert!(plain.get("streams").is_none());

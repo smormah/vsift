@@ -60,7 +60,12 @@ fn the_committed_freezes_still_hold() -> TestResult {
 /// visible: changing this constant is the decision to cut another candidate and write a new freeze
 /// (`docs/operations/release.md` section 6.8), and it shows in the diff of a test, not only of a data file.
 ///
-/// The freeze of 2026-10-26 is the **0.3.0 development freeze; the final freeze is recorded at the 0.3.0 cut**. The
+/// The freeze of 2026-10-27 is the **0.3.0 development freeze; the final freeze is recorded at the 0.3.0 cut**. The
+/// progress story's fourth pull request changed the skill again (PREPARE adds `--first` when the user named a moment,
+/// `references/resume.md` says `candidates` answers without analysing once the `visual` stream has succeeded,
+/// `references/commands.md` allows the `--first` form), so the `skill` component moved `e9158295...` to `bef93e2b...`
+/// and this digest `ac04d1f2...` to the value below; the other six components are unchanged. It was written on the
+/// `main` the pull request was rebased onto to merge. The freeze of 2026-10-26 is the one before it: the
 /// progress story's third pull request changed the skill (PREPARE starts the transcription with `job start`,
 /// `references/resume.md` follows one in the background, `references/commands.md` classes `job start`), so the
 /// `skill` component moved `e9fb4dc1...` to `e9158295...` and this digest `6d42bc6f...` to the value below; the other
@@ -108,7 +113,7 @@ fn the_committed_freezes_still_hold() -> TestResult {
 /// in `batch-2-rc.3/` and `batch-3-rc.3/`); the first two candidates' was
 /// `1e89b5cc488e7245d1a6d63ec8809c1f8a5c137ee87f5ed05f9b692c2af6e392` (copies in `batch-2-rc.1/` and
 /// `batch-2-rc.2/`).
-const CUT_FREEZE_SHA256: &str = "ac04d1f2da6ed5d002c5ec9658626d235bbaaee726c056ce6969aa89c60aef55";
+const CUT_FREEZE_SHA256: &str = "2cda9657eb0efa7013957a0efc47e2434730929366406abfbfece8e84fd49e85";
 
 #[test]
 fn the_committed_freezes_are_the_ones_written_at_the_cut() -> TestResult {

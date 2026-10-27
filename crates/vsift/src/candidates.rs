@@ -44,6 +44,8 @@ use vsift_infrastructure::{
     MediaProviderConformance, SessionStatus, encode_visual_index_record,
 };
 
+use std::num::NonZeroUsize;
+
 use crate::{
     asr::{open_status, probe_error, snapshot_storage_error},
     engine::Engine,
@@ -190,6 +192,20 @@ impl CandidatesResults {
     }
 }
 
+/// What one batch of a `prepare` job's visual stream did, and where the
+/// session's index stands after it.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct VisualBatch {
+    /// Windows this batch analysed and committed.
+    pub(crate) analysed_now: usize,
+    /// Windows the newest index holds.
+    pub(crate) indexed: usize,
+    /// Windows of the source still missing.
+    pub(crate) missing: usize,
+    /// The source's length.
+    pub(crate) duration: MediaTime,
+}
+
 /// What the analysis part of a call produced.
 struct Analysis {
     newest: VisualIndex,
@@ -262,7 +278,16 @@ impl Engine {
             Some(index) if warm => (index, status, None, 0),
             newest => {
                 let analysis = self
-                    .analyse_missing(&store, &request, requested, newest, status, now)
+                    .analyse_missing(
+                        &store,
+                        &request.session,
+                        &request.cancellation,
+                        requested,
+                        newest,
+                        status,
+                        now,
+                        self.visual_window_budget(),
+                    )
                     .await?;
                 (
                     analysis.newest,
@@ -289,16 +314,22 @@ impl Engine {
         clippy::too_many_lines,
         reason = "The stage order is the contract; keep it visible in one place"
     )]
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "One analysis's inputs, shared by a candidates call and a prepare job's batch"
+    )]
     async fn analyse_missing(
         &self,
         store: &FilesystemSessionStore,
-        request: &CandidatesRequest,
+        session: &SessionId,
+        cancellation: &Cancellation,
         requested: TimeRange,
         mut newest: Option<VisualIndex>,
         mut status: SessionStatus,
         now: u64,
+        budget: NonZeroUsize,
     ) -> Result<Analysis, EngineError> {
-        let cancellation = request.cancellation.0.clone();
+        let cancellation = cancellation.0.clone();
         // A visual window's FFmpeg pass runs two decoder threads and reserves
         // two units of the root's capacity (X-07); a root too small for it
         // is refused before any tool is resolved or run.
@@ -306,7 +337,7 @@ impl Engine {
         let tools = self.visual_media_tools()?;
         self.ensure_media_tools_verified_with(&tools, &cancellation)
             .await?;
-        let bound = BoundSource::open_committed(store, &request.session, now)
+        let bound = BoundSource::open_committed(store, session, now)
             .map_err(|error| EngineError::Storage(snapshot_storage_error(&error)))?;
         let media = FfmpegMedia::new(
             tools,
@@ -328,7 +359,7 @@ impl Engine {
             .map_err(|_| EngineError::RangeOutsideSource)?;
         let source_id = bound.snapshot().id().clone();
         let scope = VisualIndexScope {
-            session_id: &request.session,
+            session_id: session,
             source_id: &source_id,
             stream_index,
             displayed_dimensions,
@@ -352,7 +383,7 @@ impl Engine {
                 range: requested,
             },
             &sampler,
-            self.visual_window_budget(),
+            budget,
         )
         .await;
         drop(sampler);
@@ -417,9 +448,9 @@ impl Engine {
                 committed = newest.take();
                 break;
             };
-            let record = encode_visual_index_record(&request.session, &revision)?;
+            let record = encode_visual_index_record(session, &revision)?;
             match store.publish_artifact(
-                &request.session,
+                session,
                 &self.new_operation_id()?,
                 status.generation(),
                 SessionArtifactKind::VisualIndexRecord,
@@ -435,12 +466,12 @@ impl Engine {
                     // revision, a renewal, a transcript), or the session
                     // closed: re-read, which fails for a closed session.
                     let now = self.now_unix_seconds()?;
-                    match store.read_visual_index(&request.session, now)? {
+                    match store.read_visual_index(session, now)? {
                         Some((index, current)) => {
                             newest = Some(index);
                             status = current;
                         }
-                        None => status = open_status(store, &request.session, now)?,
+                        None => status = open_status(store, session, now)?,
                     }
                 }
                 Err(error) => return Err(EngineError::Storage(error)),
@@ -448,12 +479,69 @@ impl Engine {
         }
         drop(snapshot);
         let newest = committed.ok_or(EngineError::Storage(SessionStorageError::Busy))?;
-        let status = crate::sessions::published_status(store, &request.session)?;
+        let status = crate::sessions::published_status(store, session)?;
         Ok(Analysis {
             newest,
             status,
             stop,
             recorded: recorded.len(),
+        })
+    }
+
+    /// Analyses at most `budget` of the windows of the whole source the
+    /// session's newest index lacks, and commits them as one index revision
+    /// (the visual stream of a `prepare` job, ADR 0033, D6). The steps and
+    /// failures are those of a `candidates` call that misses windows; nothing
+    /// is paged. A session whose index already holds every window answers at
+    /// once, without a tool.
+    ///
+    /// # Errors
+    ///
+    /// As [`Engine::candidates`], before a refusal for contention is given a
+    /// transcription's name.
+    pub(crate) async fn analyse_visual_batch(
+        &self,
+        session: &SessionId,
+        cancellation: &Cancellation,
+        budget: NonZeroUsize,
+    ) -> Result<VisualBatch, EngineError> {
+        let whole = TimeRange::new(
+            MediaTime::from_micros(0),
+            MediaTime::from_micros(u64::MAX / 2),
+        )
+        .map_err(|_| EngineError::InvalidTimeRange)?;
+        let (store, now) = self.existing_store()?;
+        let store = store.ok_or(EngineError::SessionRoot(SessionRootError::Missing))?;
+        let (newest, status) = match store.read_visual_index(session, now)? {
+            Some((index, status)) => (Some(index), status),
+            None => (None, open_status(&store, session, now)?),
+        };
+        let (index, analysed_now) = match newest {
+            Some(index) if missing_windows(Some(&index), index.duration(), whole).is_empty() => {
+                (index, 0)
+            }
+            newest => {
+                let analysis = self
+                    .analyse_missing(
+                        &store,
+                        session,
+                        cancellation,
+                        whole,
+                        newest,
+                        status,
+                        now,
+                        budget,
+                    )
+                    .await?;
+                (analysis.newest, analysis.recorded)
+            }
+        };
+        let missing = missing_windows(Some(&index), index.duration(), whole).len();
+        Ok(VisualBatch {
+            analysed_now,
+            indexed: index.windows().len(),
+            missing,
+            duration: index.duration(),
         })
     }
 

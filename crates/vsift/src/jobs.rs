@@ -8,7 +8,8 @@
 
 use vsift_application::{
     CancelOutcome, JobLiveness, JobProgressLog as _, JobRecord, JobRequest, JobStore, JobView,
-    Resumability, cancel_job, job_status as job_status_query, observed_state, resumable_request,
+    Resumability, StreamPhase, cancel_job, job_status as job_status_query, observed_state,
+    resumable_request,
 };
 use vsift_domain::{
     AdmissionWait, AttemptFailure, JobId, JobKind, JobMode, JobState, MediaProgress, OperationId,
@@ -51,6 +52,7 @@ pub struct JobStatusReport {
     resumability: Resumability,
     last_failure: Option<AttemptFailure>,
     mode: Option<JobMode>,
+    first: Option<TimeRange>,
     streams: Vec<StreamStatus>,
 }
 
@@ -67,6 +69,7 @@ pub struct StreamStatus {
     media: Option<MediaProgress>,
     published_until_us: Option<u64>,
     live: bool,
+    phase: StreamPhase,
 }
 
 impl StreamStatus {
@@ -126,6 +129,13 @@ impl StreamStatus {
     pub const fn live(&self) -> bool {
         self.live
     }
+
+    /// Where the runner recorded the stream to be; [`StreamPhase::Skipped`]
+    /// for a stream that had nothing to do (a source without video).
+    #[must_use]
+    pub const fn phase(&self) -> StreamPhase {
+        self.phase
+    }
 }
 
 impl JobStatusReport {
@@ -168,6 +178,7 @@ impl JobStatusReport {
             resumability,
             last_failure,
             mode: record.request.mode(),
+            first: record.request.first(),
             streams: Vec::new(),
         }
     }
@@ -177,6 +188,12 @@ impl JobStatusReport {
     #[must_use]
     pub const fn mode(&self) -> Option<JobMode> {
         self.mode
+    }
+
+    /// The window a `prepare` job transcribes first, when one was named.
+    #[must_use]
+    pub const fn first(&self) -> Option<TimeRange> {
+        self.first
     }
 
     /// Where each started stream of a `prepare` job is; empty for every
@@ -486,7 +503,8 @@ impl Engine {
         let kind = view.record.request.kind();
         let mut report = JobStatusReport::from_view(view, state, open);
         if kind == JobKind::Prepare {
-            report.streams = stream_statuses(&store, &session, job, now)?;
+            let prepare = (report.state(), report.live());
+            report.streams = stream_statuses(&store, &session, job, prepare, now)?;
         }
         Ok(report)
     }
@@ -699,6 +717,7 @@ fn stream_statuses(
     store: &FilesystemSessionStore,
     session: &SessionId,
     job: &JobId,
+    (prepare_state, prepare_live): (JobState, bool),
     now: u64,
 ) -> Result<Vec<StreamStatus>, EngineError> {
     let Some(progress) = store.read_progress(session, job)? else {
@@ -711,16 +730,34 @@ fn stream_statuses(
             Some(id) => store.job(session, id)?,
             None => None,
         };
-        let state = view
+        let job_state = view
             .as_ref()
             .map(|view| observed_state(view, store))
             .transpose()?;
-        let live = view
-            .as_ref()
-            .is_some_and(|view| view.liveness == JobLiveness::Owned);
+        // A stream with no job of its own (the visual stream) is in the state
+        // its runner recorded, while the `prepare` job runs, and in the
+        // `prepare` job's otherwise.
+        let (state, live) = match (job_state, stream.phase) {
+            (Some(state), _) => (
+                Some(state),
+                view.as_ref()
+                    .is_some_and(|view| view.liveness == JobLiveness::Owned),
+            ),
+            (None, StreamPhase::Done) => (Some(JobState::Succeeded), false),
+            (None, StreamPhase::Running) if prepare_live => (Some(JobState::Running), true),
+            // A stream that reported nothing before its runner stopped never
+            // got going: it is shown as not started.
+            (None, StreamPhase::Running) if stream.update.is_some() => (Some(prepare_state), false),
+            // Skipped, or a stream that never got going.
+            (None, StreamPhase::Skipped | StreamPhase::Running) => (None, false),
+        };
         let media = stream.update.and_then(|update| update.media);
         let published_until_us = match (&stream.job, state) {
             (_, Some(JobState::Succeeded)) => media.and_then(|media| media.to_us),
+            // The visual stream commits every batch it analysed.
+            (None, _) if stream.stream == PrepareStream::Visual => {
+                media.map(|media| media.done_until_us)
+            }
             (Some(id), _) => open
                 .as_ref()
                 .filter(|open| open.job_id == *id && open.revision.state() == RevisionState::Open)
@@ -738,6 +775,7 @@ fn stream_statuses(
             media,
             published_until_us,
             live,
+            phase: stream.phase,
         });
     }
     Ok(streams)
@@ -806,6 +844,7 @@ fn resumed_retranscription(
         admission: request.admission,
         publication: request.publication,
         share: record.request.share().unwrap_or_default(),
+        seed: None,
     }
 }
 

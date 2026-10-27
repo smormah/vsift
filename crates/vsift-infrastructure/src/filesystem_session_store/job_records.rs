@@ -68,6 +68,10 @@ struct StoredJobRequest {
     /// so every record written before it reads as before.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     share: Option<String>,
+    /// The window a `prepare` job transcribes first (ADR 0033, D5); absent
+    /// without one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    first: Option<StoredRange>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -142,6 +146,7 @@ pub(super) fn encode_job(record: &JobRecord) -> Result<Vec<u8>, SessionStorageEr
                 .share()
                 .filter(|share| *share != RecognitionShare::Whole)
                 .map(|share| share.identifier().to_owned()),
+            first: record.request.first().map(StoredRange::of),
         },
         planned_chunks: record.planned_chunks,
         operation_ids: record
@@ -199,18 +204,20 @@ fn validate_job(stored: StoredJob, job_id: &JobId, session_id: &SessionId) -> Op
     }
     let kind = JobKind::parse(&stored.kind)?;
     let request = match (kind, stored.request.mode) {
-        (JobKind::Retranscribe, None) => JobRequest::Retranscribe {
-            range: match stored.request.range {
-                Some(range) => Some(range.range()?),
-                None => None,
-            },
-            // Only a share other than the whole is written.
-            share: match stored.request.share.as_deref() {
-                None => RecognitionShare::Whole,
-                Some(identifier) => RecognitionShare::parse(identifier)
-                    .filter(|share| *share != RecognitionShare::Whole)?,
-            },
-        },
+        (JobKind::Retranscribe, None) if stored.request.first.is_none() => {
+            JobRequest::Retranscribe {
+                range: match stored.request.range {
+                    Some(range) => Some(range.range()?),
+                    None => None,
+                },
+                // Only a share other than the whole is written.
+                share: match stored.request.share.as_deref() {
+                    None => RecognitionShare::Whole,
+                    Some(identifier) => RecognitionShare::parse(identifier)
+                        .filter(|share| *share != RecognitionShare::Whole)?,
+                },
+            }
+        }
         // A `prepare` job prepares the whole session and plans no chunks.
         (JobKind::Prepare, Some(mode))
             if stored.request.range.is_none()
@@ -219,6 +226,14 @@ fn validate_job(stored: StoredJob, job_id: &JobId, session_id: &SessionId) -> Op
         {
             JobRequest::Prepare {
                 mode: JobMode::parse(&mode)?,
+                first: match stored.request.first {
+                    // A first window longer than the bound is damage, not a
+                    // window to drop.
+                    Some(first) => Some(Some(first.range()?).filter(|first| {
+                        first.duration_micros() <= vsift_domain::MAX_FIRST_WINDOW_MICROS
+                    })?),
+                    None => None,
+                },
             }
         }
         _ => return None,
@@ -778,6 +793,7 @@ struct StoredUpdate {
 struct StoredStream {
     stream: String,
     job_id: Option<String>,
+    phase: String,
     update: Option<StoredUpdate>,
 }
 
@@ -814,6 +830,7 @@ pub(super) fn encode_progress(progress: &PrepareProgress) -> Result<Vec<u8>, Ses
             .map(|stream| StoredStream {
                 stream: stream.stream.identifier().to_owned(),
                 job_id: stream.job.as_ref().map(|job| job.as_str().to_owned()),
+                phase: stream.phase.identifier().to_owned(),
                 update: stream.update.map(|update| StoredUpdate {
                     stage: update.stage.identifier().to_owned(),
                     completed: update.completed,
@@ -868,6 +885,7 @@ fn validate_progress(stored: StoredProgress) -> Option<PrepareProgress> {
         streams.push(StreamProgress {
             stream: kind,
             job,
+            phase: vsift_application::StreamPhase::parse(&stream.phase)?,
             update,
         });
     }

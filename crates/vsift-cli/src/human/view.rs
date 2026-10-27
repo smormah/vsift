@@ -1054,6 +1054,9 @@ pub(crate) struct JobRequest {
     /// A `prepare` job's mode.
     #[serde(default)]
     pub(crate) mode: Option<String>,
+    /// A `prepare` job's first window.
+    #[serde(default)]
+    pub(crate) first: Option<Range>,
 }
 
 /// One stream of a `prepare` job.

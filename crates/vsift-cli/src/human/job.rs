@@ -159,6 +159,11 @@ fn push_job(text: &mut TerminalText, heading: &'static str, job: &RecoverableJob
     if let Some(mode) = &job.request.mode {
         text.push_fixed("Mode: ").push_value(mode).end_line();
     }
+    if let Some(first) = job.request.first {
+        text.push_fixed("First window: ");
+        push_range(text, first);
+        text.end_line();
+    }
     text.push_fixed("Range: ");
     match job.request.range {
         Some(range) => push_range(text, range),
