@@ -158,7 +158,7 @@ Check what is installed and set up what is missing (run it any time).
 ```text
 Check what is installed and set up what is missing (run it any time).
 
-Plain `vsift setup`, in a terminal, shows what works and what is missing, offers to install what VSift can install here, with each download's source, size and licence, and installs nothing until you type yes. Without a terminal it only reports. The commands below are what AI assistants and scripts use; they never ask anything.
+Plain `vsift setup`, in a terminal, shows what works and what is missing, offers to install what can be installed here, with each download's source, size and licence, and installs nothing until you type yes. Without a terminal it only reports. The commands below are what AI assistants and scripts use; they never ask anything.
 
 Usage: vsift setup [OPTIONS]
        vsift setup <COMMAND>
