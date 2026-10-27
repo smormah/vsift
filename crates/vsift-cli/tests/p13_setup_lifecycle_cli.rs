@@ -567,7 +567,7 @@ fn setup_check_names_a_superseded_managed_whisper_and_the_step() -> TestResult {
     let text = String::from_utf8(human.stdout)?;
     assert!(
         text.contains(
-            "[update, security] whisper_cli: the selected managed version is whisper.cpp-v1.9.2-ubuntu-x64"
+            "Update available (security fixes): whisper_cli is on whisper.cpp-v1.9.2-ubuntu-x64"
         ),
         "{text}"
     );

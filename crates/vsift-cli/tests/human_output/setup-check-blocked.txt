@@ -1,17 +1,10 @@
 VSift setup check
-Profile: desktop
-Status: blocked
-[missing] FFmpeg (media_processing): not found on PATH [filtered PATH]
-  Install a trusted build or register a working one with setup configure ffmpeg --executable <absolute-path>, then rerun setup check (or try a path once with setup check --ffmpeg <absolute-path>). <MANAGED INSTALLATION>
-  No need to search folders: ask the user where it is.
-[missing] FFprobe (media_processing): not found on PATH [filtered PATH]
-  Install a trusted build or register a working one with setup configure ffprobe --executable <absolute-path>, then rerun setup check (or try a path once with setup check --ffprobe <absolute-path>). <MANAGED INSTALLATION>
-  No need to search folders: ask the user where it is.
-[missing] Whisper (transcription): not found on PATH [filtered PATH]
-  Install a trusted build or register a working one with setup configure whisper --executable <absolute-path>, then rerun setup check (or try a path once with setup check --whisper <absolute-path>). <MANAGED INSTALLATION>
-  No need to search folders: ask the user where it is.
-Media executable probes are blocked until FFmpeg and FFprobe respond.
-Local ASR model: not registered (setup configure-model --file <path>)
-Local ASR check: not run: FFmpeg and FFprobe are needed and must pass their own check
-<ONLINE VIDEOS>
-Executable probes only show that each tool responds. The local ASR check transcribes a short speech clip built into VSift with the selected tools and model. A supplied transcript can avoid local ASR.
+
+  Part Status Uses What it's for
+  Video not set up FFmpeg reading videos, taking frames
+  Speech not set up whisper.cpp turning speech into text
+<WEB VIDEOS ROW>
+
+Your setup isn't complete: video and speech are missing.
+Speech needs two things, whisper.cpp and its model, and neither is set up yet.
+Next: <NEXT STEP>
