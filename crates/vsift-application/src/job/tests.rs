@@ -1044,6 +1044,7 @@ impl Harness {
                 progress: &NoProgress,
                 publication: self.publication(),
                 stopwatch: &crate::StoppedStopwatch,
+                seed: None,
             },
             &mut guard,
         )
@@ -1209,6 +1210,7 @@ async fn a_cancel_after_published_parts_seals_a_stopped_revision() -> TestResult
             progress: &NoProgress,
             publication: harness.publication(),
             stopwatch: &crate::StoppedStopwatch,
+            seed: None,
         },
         &mut guard,
     )
@@ -1318,6 +1320,7 @@ async fn a_run_over_its_own_checkpoints_decodes_and_recognises_nothing() -> Test
         progress: &progress,
         observer: &crate::NoObserver,
         stopwatch: &crate::StoppedStopwatch,
+        seed: None,
     };
     let every_chunk = [(0, Some(3)), (1, Some(3)), (2, Some(3)), (3, Some(3))];
     let never = Flag(Arc::new(AtomicBool::new(false)));
@@ -1379,6 +1382,7 @@ async fn progress_reports_media_time_and_a_speed_of_fresh_chunks_only() -> TestR
         progress: &progress,
         observer: &crate::NoObserver,
         stopwatch: &stopwatch,
+        seed: None,
     };
     let never = Flag(Arc::new(AtomicBool::new(false)));
     let media = |progress: &RecordedProgress| -> Built<Vec<vsift_domain::MediaProgress>> {
@@ -1418,6 +1422,180 @@ async fn progress_reports_media_time_and_a_speed_of_fresh_chunks_only() -> TestR
     Ok(())
 }
 
+/// A recognizer that, like a real one, hears only the chunk's audio: its
+/// answer depends on the window, never on the chunk's place in a plan.
+#[derive(Default)]
+struct WindowRecognizer {
+    calls: AtomicUsize,
+}
+
+impl SpeechRecognizer for WindowRecognizer {
+    fn identity(
+        &self,
+    ) -> impl Future<Output = Result<RecognizerIdentity, SpeechRecognitionError>> + Send {
+        std::future::ready(identity().map_err(|_| SpeechRecognitionError::Io))
+    }
+
+    fn recognize(
+        &self,
+        chunk: &PlannedChunk,
+        _pcm: &SpeechPcm,
+    ) -> impl Future<Output = Result<ProviderChunkOutput, SpeechRecognitionError>> + Send {
+        self.calls.fetch_add(1, Ordering::SeqCst);
+        let start_ms = chunk.window().start().as_micros() / 1_000;
+        let answer = (|| {
+            let text = format!("words heard from {start_ms} ms");
+            let text = CueText::new(text.clone(), text).map_err(|_| SpeechRecognitionError::Io)?;
+            let third = chunk.window().duration_micros() / 3_000;
+            let start = if start_ms == 0 { 10_000 } else { 6_000 }.min(third);
+            let length = 2_000.min(third);
+            Ok(ProviderChunkOutput {
+                language: LanguageTag::parse("en").ok(),
+                segments: vec![ProviderSegment {
+                    start: ChunkTime::from_millis(start).ok_or(SpeechRecognitionError::Io)?,
+                    end: ChunkTime::from_millis(start + length)
+                        .ok_or(SpeechRecognitionError::Io)?,
+                    text: Some(text),
+                    tokens: vec![ProviderToken {
+                        kind: ProviderTokenKind::Text,
+                        #[allow(
+                            clippy::cast_precision_loss,
+                            reason = "a start of at most minutes, in seconds, is exact in an f64"
+                        )]
+                        probability: 0.1 + (start_ms / 1_000) as f64 / 700.0,
+                    }],
+                }],
+            })
+        })();
+        std::future::ready(answer)
+    }
+}
+
+/// A seed held in memory, as the engine's is.
+#[derive(Default)]
+struct MemorySeed(
+    Mutex<
+        Vec<(
+            vsift_domain::RecognitionKey,
+            TimeRange,
+            vsift_domain::CheckpointOutcome,
+        )>,
+    >,
+);
+
+impl crate::ChunkSeed for MemorySeed {
+    fn keep(
+        &self,
+        key: &vsift_domain::RecognitionKey,
+        window: TimeRange,
+        outcome: &vsift_domain::CheckpointOutcome,
+    ) {
+        if let Ok(mut answers) = self.0.lock() {
+            answers.push((key.clone(), window, outcome.clone()));
+        }
+    }
+
+    fn find(
+        &self,
+        key: &vsift_domain::RecognitionKey,
+        window: TimeRange,
+    ) -> Option<vsift_domain::CheckpointOutcome> {
+        self.0.lock().ok().and_then(|answers| {
+            answers
+                .iter()
+                .find(|(kept, kept_window, _)| kept == key && *kept_window == window)
+                .map(|(_, _, outcome)| outcome.clone())
+        })
+    }
+}
+
+/// D5: a whole run takes the answers a first-window run of the same
+/// recognition kept, for the chunks of the same window, and recognises only
+/// the others; what it makes is what it makes recognising every chunk itself.
+/// A run under another seed key takes nothing.
+#[tokio::test]
+async fn a_whole_run_takes_the_first_windows_answers_and_makes_the_same_transcript() -> TestResult {
+    let harness = Harness::new()?;
+    let source_end = harness.source.range().end();
+    let window = vsift_domain::align_to_chunk_grid(
+        range(25 * SECOND, 85 * SECOND)?,
+        ChunkPlan::R0,
+        source_end,
+    )
+    .ok_or("no grid range")?;
+    assert_eq!(window, range(25 * SECOND, 105 * SECOND)?);
+    let seed = MemorySeed::default();
+    let seed_key = crate::seed_key(&RecognitionScope {
+        session_id: &session()?,
+        source_id: &harness.source_id,
+        audio_stream: 1,
+        replaced_range: window,
+        plan: ChunkPlan::R0,
+        recognizer: &harness.identity,
+        verification: None,
+    })?;
+    let never = Flag(Arc::new(AtomicBool::new(false)));
+    let recognizer = WindowRecognizer::default();
+    let request = |range: TimeRange| TranscribeRangeRequest {
+        source_segment: &harness.source,
+        range,
+        plan: ChunkPlan::R0,
+        audio_stream: 1,
+        expected: &harness.identity,
+    };
+
+    // The first window: three chunks recognised and kept in the seed.
+    let first = harness.resolve(Some(window))?;
+    let (first_owner, _) = harness.store.open_or_create(&first.spec, NOW)?;
+    let scope = |owner, key| CheckpointScope {
+        checkpoints: owner,
+        key,
+        progress: &NoProgress,
+        observer: &crate::NoObserver,
+        stopwatch: &crate::StoppedStopwatch,
+        seed: Some(crate::SeedPort {
+            seed: &seed,
+            key: &seed_key,
+        }),
+    };
+    transcribe_range_checkpointed(
+        request(window),
+        scope(&first_owner, &first.spec.recognition_key),
+        &harness.audio,
+        &recognizer,
+        &never,
+    )
+    .await?;
+    assert_eq!(recognizer.calls.load(Ordering::SeqCst), 3);
+
+    // The whole run recognises only the two chunks outside the window.
+    let whole = harness.resolve(None)?;
+    let (whole_owner, _) = harness.store.open_or_create(&whole.spec, NOW)?;
+    let before = recognizer.calls.load(Ordering::SeqCst);
+    let (seeded, used) = transcribe_range_checkpointed(
+        request(whole.replaced),
+        scope(&whole_owner, &whole.spec.recognition_key),
+        &harness.audio,
+        &recognizer,
+        &never,
+    )
+    .await?;
+    assert_eq!(recognizer.calls.load(Ordering::SeqCst) - before, 2);
+    assert_eq!(used.reused, 3);
+    // The answers it took are its own checkpoints now: a resume needs no seed.
+    assert_eq!(harness.checkpoints(&whole.spec.job_id)?, 5);
+
+    // It is what the whole run makes recognising every chunk itself.
+    let plain =
+        transcribe_range(request(whole.replaced), &harness.audio, &recognizer, &never).await?;
+    assert_eq!(seeded, plain);
+
+    // Under another seed key (another recognizer, say) nothing is taken.
+    let other_key = vsift_domain::RecognitionKey::new(Sha256Hex::parse(DIGEST)?);
+    assert!(crate::ChunkSeed::find(&seed, &other_key, range(25 * SECOND, 55 * SECOND)?).is_none());
+    Ok(())
+}
+
 /// S-08 at the use-case level: a checkpoint of another run, one whose audio
 /// cannot be the chunk's and one whose output the domain rejects are all
 /// removed and redone, never used.
@@ -1440,6 +1618,7 @@ async fn foreign_or_invalid_checkpoints_are_discarded_and_redone() -> TestResult
         progress: &NoProgress,
         observer: &crate::NoObserver,
         stopwatch: &crate::StoppedStopwatch,
+        seed: None,
     };
     let (control, _) =
         transcribe_range_checkpointed(request, scope, &harness.audio, &harness.recognizer, &never)
@@ -1519,6 +1698,7 @@ async fn a_checkpoint_stored_for_a_window_under_the_floor_is_not_reused_as_speec
         progress: &NoProgress,
         observer: &crate::NoObserver,
         stopwatch: &crate::StoppedStopwatch,
+        seed: None,
     };
     let chunks = vsift_domain::plan_chunks(harness.source.id(), request.range, ChunkPlan::R0)?;
     let [chunk] = chunks.as_slice() else {
@@ -1815,6 +1995,7 @@ impl Harness {
                 progress,
                 publication: crate::Publication::AtTheSeal,
                 stopwatch: &crate::StoppedStopwatch,
+                seed: None,
             },
             &mut guard,
         )
@@ -2125,6 +2306,7 @@ async fn a_range_cut_mid_speech_commits_its_overrunning_segment_cut_at_the_range
         progress: &NoProgress,
         observer: &crate::NoObserver,
         stopwatch: &crate::StoppedStopwatch,
+        seed: None,
     };
     let never = Flag(Arc::new(AtomicBool::new(false)));
     let (fresh, _) =
@@ -2480,6 +2662,7 @@ async fn a_cancel_requested_during_the_run_wins_before_the_commit() -> TestResul
             progress: &NoProgress,
             publication: crate::Publication::AtTheSeal,
             stopwatch: &crate::StoppedStopwatch,
+            seed: None,
         },
         &mut guard,
     )

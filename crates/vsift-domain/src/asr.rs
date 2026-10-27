@@ -506,6 +506,39 @@ impl ChunkPlan {
     }
 }
 
+/// `window` widened to whole chunks of the plan a whole-source run of
+/// `source_end` makes (ADR 0033 section 4, D5): from the start of the last
+/// chunk that starts at or before the window's start to the end of the first
+/// chunk that reaches its end, clipped to the source. Every chunk a range
+/// retranscription of the result plans then has the window of the whole run's
+/// chunk at the same time, so the whole run can take its answers. `None` when
+/// the window starts at or after the end of the source.
+#[must_use]
+pub fn align_to_chunk_grid(
+    window: TimeRange,
+    plan: ChunkPlan,
+    source_end: MediaTime,
+) -> Option<TimeRange> {
+    let source_end = source_end.as_micros();
+    let stride = plan.stride_us();
+    if window.start().as_micros() >= source_end || stride == 0 {
+        return None;
+    }
+    let first = window.start().as_micros() / stride;
+    let reach = window.end().as_micros().min(source_end);
+    // The first chunk index whose window reaches `reach`.
+    let last = reach
+        .saturating_sub(plan.window_us)
+        .div_ceil(stride)
+        .max(first);
+    let start = first.saturating_mul(stride);
+    let end = last
+        .saturating_mul(stride)
+        .saturating_add(plan.window_us)
+        .min(source_end);
+    TimeRange::new(MediaTime::from_micros(start), MediaTime::from_micros(end)).ok()
+}
+
 /// Why a chunk plan could not be made.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ChunkPlanError {

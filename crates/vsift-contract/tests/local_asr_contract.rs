@@ -1508,6 +1508,7 @@ fn f01_job(
         failure,
         mode: None,
         streams: &[],
+        first: None,
     }))
 }
 

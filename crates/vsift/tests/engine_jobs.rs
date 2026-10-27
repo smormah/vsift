@@ -324,6 +324,7 @@ fn request(
         admission: vsift::AdmissionWait::Immediate,
         publication: vsift::RetranscribePublication::AtTheSeal,
         share: vsift::RecognitionShare::Whole,
+        seed: None,
     }
 }
 
@@ -475,6 +476,7 @@ async fn committed_through_the_use_case(
             progress: &vsift_application::NoProgress,
             publication: vsift_application::Publication::AtTheSeal,
             stopwatch: &vsift_application::StoppedStopwatch,
+            seed: None,
         },
         &mut Unchanged,
     )
@@ -705,6 +707,7 @@ async fn a_frame_during_a_transcription_of_its_session_is_busy_and_names_the_job
             progress: &vsift_application::NoProgress,
             publication: vsift_application::Publication::AtTheSeal,
             stopwatch: &vsift_application::StoppedStopwatch,
+            seed: None,
         },
         &mut unchanged,
     );

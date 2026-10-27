@@ -1,19 +1,22 @@
 //! `job start`: the `prepare` job (ADR 0033 sections 5 and 6).
 //!
 //! A `prepare` job is the preparation of one session, run step by step, in
-//! the foreground (quick) or by a runner in the background (watched). It runs
-//! each of its streams as a job of its own: the transcript is an ordinary
-//! whole-source retranscribe job, so its checkpoints, its resume and its
-//! commit do not change. The `prepare` job holds no checkpoints and commits
-//! nothing itself: it records the commit its last stream made, so the
-//! manifest chain stays the only authority on what was published and a
-//! `prepare` job whose runner died while committing is reconciled like any
-//! other ([`super::reconcile`]).
+//! the foreground (quick) or by a runner in the background (watched). Its
+//! streams run in the order of [`PrepareStream::ALL`]: the window the caller
+//! named first, when one was (`--first`, D5), then the visual-candidate index
+//! (D6), then the transcript. The transcripts are ordinary retranscribe jobs,
+//! so their checkpoints, resume and commit do not change; the visual index is
+//! published in batches of windows, each an index revision, and a resume
+//! analyses only the windows still missing. The `prepare` job holds no
+//! checkpoints and commits nothing itself: it records the commit of its
+//! transcript, so the manifest chain stays the only authority on what was
+//! published and a `prepare` job whose runner died while committing is
+//! reconciled like any other ([`super::reconcile`]).
 //!
-//! **Identity.** A `prepare` job derives from the session, the mode and the
-//! sealed revision it starts from. `job start` asked again while the job runs
-//! finds the same job; once its transcript is sealed, the base has changed and
-//! a new request is new work.
+//! **Identity.** A `prepare` job derives from the session, the mode, the first
+//! window and the sealed revision it starts from. `job start` asked again
+//! while the job runs finds the same job; once its transcript is sealed, the
+//! base has changed and a new request is new work.
 //!
 //! **Progress.** The runner records where each stream is, at most once a
 //! second, in a small record of the job ([`JobProgressLog`]); `job status`
@@ -24,7 +27,7 @@ use std::future::Future;
 
 use vsift_domain::{
     AttemptFailure, JobId, JobMode, JobState, OperationKey, PrepareStream, ProgressUpdate,
-    RecognitionKey, SessionId, TranscriptRevisionId,
+    RecognitionKey, SessionId, TimeRange, TranscriptRevisionId,
 };
 
 use super::{
@@ -37,7 +40,7 @@ use crate::{Clock, SessionStorageError};
 const PREPARE_COMMAND: &str = "job.start";
 
 /// The request digest of `job start` (`vsift.prepare-request.v1`): the
-/// session and the mode.
+/// session, the mode and the first window.
 ///
 /// # Errors
 ///
@@ -45,13 +48,25 @@ const PREPARE_COMMAND: &str = "job.start";
 pub fn prepare_request_digest(
     session_id: &SessionId,
     mode: JobMode,
+    first: Option<TimeRange>,
 ) -> Result<RequestDigest, JobKeyError> {
+    let first = first.map_or_else(
+        || "first=none".to_owned(),
+        |first| {
+            format!(
+                "first={}-{}",
+                first.start().as_micros(),
+                first.end().as_micros()
+            )
+        },
+    );
     digest_lines(
         "vsift.prepare-request.v1",
         &[
             session_id.as_str(),
             PREPARE_COMMAND,
             &format!("mode={}", mode.identifier()),
+            &first,
         ],
     )
     .map(RequestDigest)
@@ -78,7 +93,8 @@ pub fn prepare_operation_key(
 }
 
 /// Everything that identifies the `prepare` job of `session_id` in `mode`,
-/// starting from the sealed revision `base`.
+/// transcribing `first` first when it is given, starting from the sealed
+/// revision `base`.
 ///
 /// The record's recognition key derives from the operation key
 /// (`vsift.prepare-recognition.v1`): a `prepare` job recognises nothing
@@ -90,9 +106,10 @@ pub fn prepare_operation_key(
 pub fn prepare_spec(
     session_id: &SessionId,
     mode: JobMode,
+    first: Option<TimeRange>,
     base: Option<&TranscriptRevisionId>,
 ) -> Result<JobSpec, JobKeyError> {
-    let request_digest = prepare_request_digest(session_id, mode)?;
+    let request_digest = prepare_request_digest(session_id, mode, first)?;
     let operation_key = prepare_operation_key(&request_digest, base)?;
     let recognition_key = RecognitionKey::new(digest_lines(
         "vsift.prepare-recognition.v1",
@@ -104,9 +121,43 @@ pub fn prepare_spec(
         request_digest,
         operation_key,
         recognition_key,
-        request: JobRequest::Prepare { mode },
+        request: JobRequest::Prepare { mode, first },
         planned_chunks: None,
     })
+}
+
+/// Where a stream of a `prepare` job is, as its runner recorded it.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum StreamPhase {
+    /// The runner is working on it (or was, when it stopped).
+    Running,
+    /// It ended with what it had to do done.
+    Done,
+    /// It had nothing to do: the source has no video to analyse.
+    Skipped,
+}
+
+impl StreamPhase {
+    /// Every phase.
+    pub const ALL: [Self; 3] = [Self::Running, Self::Done, Self::Skipped];
+
+    /// Stable lowercase identifier used in stored records.
+    #[must_use]
+    pub const fn identifier(self) -> &'static str {
+        match self {
+            Self::Running => "running",
+            Self::Done => "done",
+            Self::Skipped => "skipped",
+        }
+    }
+
+    /// Parses a stable identifier.
+    #[must_use]
+    pub fn parse(identifier: &str) -> Option<Self> {
+        Self::ALL
+            .into_iter()
+            .find(|phase| phase.identifier() == identifier)
+    }
 }
 
 /// Where one stream of a `prepare` job is, as its runner last recorded it.
@@ -114,8 +165,11 @@ pub fn prepare_spec(
 pub struct StreamProgress {
     /// The stream.
     pub stream: PrepareStream,
-    /// The stream's own job, once it is known.
+    /// The stream's own job, once it is known (the transcripts; the visual
+    /// stream has none).
     pub job: Option<JobId>,
+    /// Where the runner is with it.
+    pub phase: StreamPhase,
     /// The stream's last progress update, if it reported one.
     pub update: Option<ProgressUpdate>,
 }
@@ -177,13 +231,26 @@ pub enum StreamStop {
     },
 }
 
+/// How one stream's run ended with its work done.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum StreamEnd {
+    /// A transcript stream committed its revision.
+    Committed(JobCommit),
+    /// The visual stream indexed every window of the source.
+    Indexed,
+    /// The stream had nothing to do (a source without video).
+    Skipped,
+}
+
 /// The streams a `prepare` job runs, supplied by the engine.
 pub trait PrepareStreams: Send + Sync {
-    /// Runs `stream` to its end: the commit its job made, or how it stopped.
+    /// Runs `stream` to its end: what it did, or how it stopped. The first
+    /// window is given for [`PrepareStream::FirstWindow`].
     fn run(
         &self,
         stream: PrepareStream,
-    ) -> impl Future<Output = Result<JobCommit, StreamStop>> + Send;
+        first: Option<TimeRange>,
+    ) -> impl Future<Output = Result<StreamEnd, StreamStop>> + Send;
 
     /// Cancels a stream's job that stopped while the `prepare` job was asked
     /// to stop, so that what it published is sealed as stopped (ADR 0033,
@@ -297,10 +364,17 @@ where
             )));
         }
     }
+    let first = owner.record().request.first();
     let mut last = None;
     for stream in PrepareStream::ALL {
-        match streams.run(stream).await {
-            Ok(commit) => last = Some(commit),
+        if stream == PrepareStream::FirstWindow && first.is_none() {
+            continue;
+        }
+        match streams.run(stream, first).await {
+            // The job records its transcript's commit: the whole one, which
+            // runs last and supersedes the first window's.
+            Ok(StreamEnd::Committed(commit)) => last = Some(commit),
+            Ok(StreamEnd::Indexed | StreamEnd::Skipped) => {}
             Err(stop) => return settle_stop(&mut owner, streams, stop, now()).await,
         }
     }

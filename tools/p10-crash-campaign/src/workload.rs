@@ -724,6 +724,7 @@ async fn retranscribe(
             progress: &vsift_application::NoProgress,
             publication: vsift_application::Publication::AtTheSeal,
             stopwatch: &vsift_application::StoppedStopwatch,
+            seed: None,
         },
         &mut SourceUnchanged,
     )

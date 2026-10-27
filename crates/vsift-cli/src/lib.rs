@@ -480,13 +480,23 @@ where
                 }
                 TranscriptCommand::Retranscribe(arguments) if mode == OutputMode::JsonLines => {
                     progress::stream_with_progress(&mut writer, operation, |observer| {
-                        session::retranscribe(&engine, arguments, &cancellation, observer)
+                        Box::pin(session::retranscribe(
+                            &engine,
+                            arguments,
+                            &cancellation,
+                            observer,
+                        ))
                     })
                     .await
                 }
                 TranscriptCommand::Retranscribe(arguments) => {
                     let result = live_line::with_live_line(&mut writer, line, |observer| {
-                        session::retranscribe(&engine, arguments, &cancellation, observer)
+                        Box::pin(session::retranscribe(
+                            &engine,
+                            arguments,
+                            &cancellation,
+                            observer,
+                        ))
                     })
                     .await;
                     write_session_result(&mut writer, mode, operation, result)
@@ -578,13 +588,13 @@ where
                 JobCommand::Cancel(arguments) => job::cancel(&engine, arguments),
                 JobCommand::Resume(arguments) if mode == OutputMode::JsonLines => {
                     return progress::stream_with_progress(&mut writer, operation, |observer| {
-                        job::resume(&engine, arguments, &cancellation, observer)
+                        Box::pin(job::resume(&engine, arguments, &cancellation, observer))
                     })
                     .await;
                 }
                 JobCommand::Resume(arguments) => {
                     live_line::with_live_line(&mut writer, line, |observer| {
-                        job::resume(&engine, arguments, &cancellation, observer)
+                        Box::pin(job::resume(&engine, arguments, &cancellation, observer))
                     })
                     .await
                 }

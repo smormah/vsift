@@ -425,6 +425,7 @@ fn run_publishing(
             progress: &vsift_application::NoProgress,
             publication,
             stopwatch: &vsift_application::StoppedStopwatch,
+            seed: None,
         },
         &mut Unchanged,
     ))?;
@@ -1249,10 +1250,12 @@ fn job_start_hands_a_watched_job_to_a_background_runner() -> TestResult {
     assert_eq!(status["data"]["state"], "failed", "{status}");
     assert_eq!(status["data"]["failure"]["code"], "MISSING_CAPABILITY");
     let streams = status["data"]["streams"].as_array().ok_or("no streams")?;
+    // The visual stream runs first (D6) and failed before it analysed anything:
+    // the transcript never started.
     assert_eq!(streams.len(), 1);
-    assert_eq!(streams[0]["stream"], "transcript");
-    // The stream failed before its retranscription had a job.
+    assert_eq!(streams[0]["stream"], "visual");
     assert_eq!(streams[0]["state"], "not_started");
+    assert_eq!(streams[0]["job_id"], Value::Null);
 
     let again = start_result(&vsift(
         &root,
@@ -1270,7 +1273,8 @@ fn started_prepare(
     root: &OwnedRoot,
     session: &SessionId,
 ) -> Built<(vsift_infrastructure::FilesystemJobOwner, JobId)> {
-    let spec = vsift_application::prepare_spec(session, vsift_domain::JobMode::Watched, None)?;
+    let spec =
+        vsift_application::prepare_spec(session, vsift_domain::JobMode::Watched, None, None)?;
     let job = spec.job_id.clone();
     let (mut owner, created) = store(root)?.open_or_create(&spec, now()?)?;
     assert!(created);
@@ -1388,7 +1392,58 @@ fn a_quick_job_start_runs_in_the_foreground() -> TestResult {
     let shown = String::from_utf8(text.stdout)?;
     assert!(shown.contains("(prepare)"), "{shown}");
     assert!(shown.contains("Mode: quick"), "{shown}");
-    assert!(shown.contains("Stream transcript: not_started"), "{shown}");
+    assert!(shown.contains("Stream visual: not_started"), "{shown}");
     assert!(!String::from_utf8(text.stderr)?.contains('\r'));
+    Ok(())
+}
+
+/// D5: `--first <from_us>:<to_us>` is checked before anything is read (an
+/// empty, reversed, malformed or over-long window is a parse failure) and a
+/// valid one is recorded on the job, which a later start finds again.
+#[test]
+fn a_first_window_is_checked_and_recorded() -> TestResult {
+    let root = OwnedRoot::new()?;
+    let session = seed_session(&root)?;
+    for bad in ["10:5", "5:5", "five:ten", "0:1800000001", "100"] {
+        let output = vsift(
+            &root,
+            &["job", "start", session.as_str(), "--first", bad, "--json"],
+        )?;
+        let value = assert_failure(&output, "parse", "INVALID_ARGUMENT", 2)?;
+        assert_no_path(&value, &root.0);
+    }
+    let output = vsift(
+        &root,
+        &[
+            "job",
+            "start",
+            session.as_str(),
+            "--mode",
+            "quick",
+            "--first",
+            "60000000:70000000",
+            "--json",
+        ],
+    )?;
+    // Without media tools the quick run fails; the job keeps its window.
+    assert_failure(&output, "job.start", "MISSING_CAPABILITY", 2)?;
+    let listed = json(&vsift(
+        &root,
+        &["session", "status", session.as_str(), "--json"],
+    )?)?;
+    let job = listed["data"]["jobs"]
+        .as_array()
+        .and_then(|jobs| jobs.iter().find(|job| job["kind"] == "prepare"))
+        .and_then(|job| job["job_id"].as_str())
+        .ok_or("no prepare job")?
+        .to_owned();
+    let status = job_result(
+        &vsift(&root, &["job", "status", &job, "--json"])?,
+        "job.status",
+    )?;
+    assert_eq!(
+        status["data"]["request"]["first"],
+        json!({"from_us": 60_000_000, "to_us": 70_000_000})
+    );
     Ok(())
 }

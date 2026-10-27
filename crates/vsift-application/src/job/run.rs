@@ -236,6 +236,9 @@ pub struct RetranscriptionPorts<'a, S, A, R, C, T> {
     /// The clock the run's publication interval and its speed are read on
     /// ([`crate::StoppedStopwatch`] for a host that needs neither).
     pub stopwatch: &'a dyn crate::Stopwatch,
+    /// Answers shared with other runs of the same recognition (ADR 0033,
+    /// D5); `None` for a run that shares nothing.
+    pub seed: Option<crate::SeedPort<'a>>,
 }
 
 /// What a run tells its caller about the job behind it.
@@ -774,6 +777,7 @@ where
                 progress: ports.progress,
                 observer: &publisher,
                 stopwatch: ports.stopwatch,
+                seed: ports.seed,
             },
             ports.audio,
             ports.recognizer,

@@ -47,7 +47,7 @@
 - [vsift job status](#vsift-job-status): Report one job: state, resumability, progress, result or failure
 - [vsift job resume](#vsift-job-resume): Continue one interrupted job from its checkpoints
 - [vsift job cancel](#vsift-job-cancel): Cancel one job, or ask the process running it to stop
-- [vsift job start](#vsift-job-start): Prepare a session's transcript as one job and follow it with job status: in the background for a recording of ten minutes or more, in the foreground for a shorter one
+- [vsift job start](#vsift-job-start): Prepare a session as one job and follow it with job status: index its video for candidates, then transcribe it; in the background for a recording of ten minutes or more, in the foreground for a shorter one
 - [vsift handoff](#vsift-handoff): Check an agent's draft handoff report before it is sent
 - [vsift handoff check](#vsift-handoff-check): Check a draft report and its vsift-handoff block against the skill's handoff schema and rules; reads the draft from standard input unless --file names it
 
@@ -1765,7 +1765,7 @@ Commands:
   status  Report one job: state, resumability, progress, result or failure
   resume  Continue one interrupted job from its checkpoints
   cancel  Cancel one job, or ask the process running it to stop
-  start   Prepare a session's transcript as one job and follow it with job status: in the background for a recording of ten minutes or more, in the foreground for a shorter one
+  start   Prepare a session as one job and follow it with job status: index its video for candidates, then transcribe it; in the background for a recording of ten minutes or more, in the foreground for a shorter one
 
 Options:
       --json
@@ -2025,12 +2025,12 @@ Options:
 
 ## vsift job start
 
-Prepare a session's transcript as one job and follow it with job status: in the background for a recording of ten minutes or more, in the foreground for a shorter one.
+Prepare a session as one job and follow it with job status: index its video for candidates, then transcribe it; in the background for a recording of ten minutes or more, in the foreground for a shorter one.
 
 ```text
-Prepare a session's transcript as one job and follow it with job status: in the background for a recording of ten minutes or more, in the foreground for a shorter one.
+Prepare a session as one job and follow it with job status: index its video for candidates, then transcribe it; in the background for a recording of ten minutes or more, in the foreground for a shorter one.
 
-A background job publishes the transcript as it goes: search and transcript get answer over the finished part, marked partial, while it runs. job status reports how far it has come in seconds of the recording, its speed and an estimate of the time left. job cancel or session close stops it, and what it published stays.
+A background job publishes the transcript as it goes: search and transcript get answer over the finished part, marked partial, while it runs. job status reports how far each step has come in seconds of the recording, its speed and an estimate of the time left. With --first, the range named is transcribed before everything else. job cancel or session close stops it, and what it published stays.
 
 Usage: vsift job start [OPTIONS] <SESSION>
 
@@ -2054,6 +2054,9 @@ Options:
 
           Possible values:
           - jsonl: One bounded JSON object per line
+
+      --first <FROM_US:TO_US>
+          The window to transcribe first: its start and end in microseconds of the recording joined by a colon (60000000:70000000), at most 30 minutes long. When the user named a moment, it is ready within about one window's recognition, before the rest
 
       --session-root <SESSION_ROOT>
           For operators who run a worker host; an agent leaves it out. Explicit private disposable-session root; defaults to the per-user cache

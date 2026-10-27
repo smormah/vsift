@@ -63,6 +63,7 @@ pub(crate) fn job_data(report: &JobStatusReport) -> JobData {
             published_until_us: stream.published_until_us(),
             media: stream.media(),
             live: stream.live(),
+            phase: stream.phase(),
         })
         .collect();
     JobData::new(&JobPresentation {
@@ -80,6 +81,7 @@ pub(crate) fn job_data(report: &JobStatusReport) -> JobData {
         result: report.revision_id().zip(report.committed_generation()),
         failure: report.last_failure(),
         mode: report.mode(),
+        first: report.first(),
         streams: &streams,
     })
 }
@@ -167,6 +169,10 @@ pub(crate) async fn start(
     let plan = engine.job_start(&JobStartRequest {
         session: arguments.session.clone(),
         mode: arguments.mode.map(Into::into),
+        first: arguments.first.map(|first| vsift::RetranscribeRange {
+            from_micros: first.from_us,
+            to_micros: first.to_us,
+        }),
     })?;
     if !plan.start().needs_runner() {
         return started(&plan, plan.status(), JobRunner::None);
