@@ -1,8 +1,10 @@
 # ADR 0036: The setup door: plain `vsift setup`, attended by default, unattended on request
 
-- Status: **Proposed, 2026-10-27.** For the planner's review before any code is written. The
-  shape of the door (sections 1 to 8) is the maintainer's design of 2026-10-27; the open points are
-  listed under "Decisions for the planner and the maintainer".
+- Status: **Proposed, 2026-10-27; the design accepted by the planner the same day**, except decision 1 (the
+  unattended acceptance), which changes ADR 0023's safety decision and waits for the maintainer. The shape of the
+  door (sections 1 to 8) is the maintainer's design of 2026-10-27. The outcome of each open decision is under
+  "Decisions for the planner and the maintainer". It is built in two pull requests (section 12); until each lands,
+  what it describes is a plan, not a feature.
 - Date: 2026-10-27
 - Refines: [ADR 0023](0023-r0-distribution-managed-installation-and-handoff-check.md) (a plan is
   installed only with its digest quoted back), [ADR 0032](0032-managed-installs-on-every-platform-and-the-engine-release-workflow.md)
@@ -138,9 +140,11 @@ staged and smoked together as today). The proposal:
   video failure no longer stops speech's download and verification. If no working video tools are
   selected when speech is ready to test, speech is reported "waiting for video" in the readable
   view and `blocked` in the JSON (an existing value, whose meaning, not activated because another
-  component did not install, is unchanged), and its verified download is discarded. A rerun after
-  video is fixed downloads speech again and finishes it. Keeping the verified download for the
-  rerun is a decision below.
+  component did not install, is unchanged), and **its verified download is kept** (the planner's
+  decision 2). A rerun after video is fixed verifies the kept file again by its reviewed size and
+  SHA-256 against the plan before it is used, discards it only if it no longer matches, and then
+  tests and activates speech without downloading it again. The rule that a partial download is
+  never resumed is unchanged: a complete, verified file is not a partial one.
 - **Optional extras** keep ADR 0032's rule: installed after the core, each a part of its own, and
   never able to fail the core.
 
@@ -217,8 +221,8 @@ exactly the `setup check` table, when standard output is not a terminal, `NO_COL
 anything, or `TERM` is `dumb`. On Windows, colour is used only when the console accepts virtual
 terminal sequences; the symbols are written as Unicode through the console's wide-character API,
 which Rust's standard output already uses for a console. The colour decision and the Windows
-console handling come from `anstream` and `anstyle` (already in `Cargo.lock` through `clap`; a
-direct dependency needs the AGENTS.md review and `cargo deny` in the pull request). A status word is
+console handling come from `anstyle-query` (already in `Cargo.lock` through `clap`; a direct
+dependency needs the AGENTS.md review and `cargo deny` in the pull request). A status word is
 always present, so meaning never depends on colour.
 
 ### 9. What the door never does, and why agents are unaffected
@@ -285,21 +289,55 @@ the limitation is registered as L-233.
 
 ## Decisions for the planner and the maintainer
 
-1. **The unattended acceptance (section 6)** changes an accepted safety decision of ADR 0023. The
-   maintainer decided it on 2026-10-27 ("decided, as recommended"); the planner's review ratifies
-   the wording here.
-2. **Speech's verified download when video fails**: discarded, and downloaded again on the rerun
-   (proposed, simpler, no new storage lifecycle), or kept in the managed root and reused after its
-   SHA-256 is verified again (saves about 160 MB on a rerun, but needs a lifecycle beside the
-   stale-stage sweep). The design said "speech is kept"; this record reads that as "reported as
-   waiting, not as failed" and proposes the first.
-3. **Two pull requests or one** (section 12). Proposed: two.
-4. **`--json` without `--unattended`**: refused (proposed), or treated as `setup check --json`.
-5. **The new `setup` JSON result** for the unattended form (proposed), or the unattended form
-   printing the `setup.install` result and nothing when no install was needed.
-6. **The answer timeout** at the question: ten minutes, then no (proposed), or none.
-7. **A direct dependency on `anstream`/`anstyle`** for colour and the Windows console (proposed),
-   or colour off on Windows.
+The planner answered on 2026-10-27, relayed by the coordinator. Decisions 3 to 7 were left to this record's
+recommendation, on the condition that none changes the meaning of a JSON v1 field or a safety rule.
+
+1. **The unattended acceptance (section 6)** changes an accepted safety decision of ADR 0023, so it is the
+   maintainer's. **Outcome: waiting for the maintainer's answer**, which the planner is asking for; nothing of
+   section 6 is built until it comes.
+2. **Speech's verified download when video fails.** Proposed: discard it and download it again on the rerun.
+   **Outcome (the planner): keep it**, as the design said, and verify it again by size and SHA-256 against the
+   plan before activation, discarding it only if it no longer matches (section 4). Built in the second pull request.
+3. **Two pull requests or one** (section 12). **Outcome: two**, as proposed.
+4. **`--json` without `--unattended`.** **Outcome: refused**, as proposed: `INVALID_ARGUMENT` under the new
+   `setup` command identifier, whose remediation names `setup check --json` and the plan route. `--events` is
+   refused the same way. Additive: a new command identifier the schemas' pattern already admits.
+5. **The new `setup` JSON result for the unattended form.** **Outcome: as proposed**, with section 6, so it waits
+   for decision 1.
+6. **The answer timeout.** **Outcome: ten minutes, then no**, as proposed.
+7. **The colour dependency.** **Outcome: a direct dependency, narrower than proposed**: `anstyle-query` alone
+   (MIT or Apache-2.0, already in `Cargo.lock` through `clap`, no new crate in the lock). It reads `NO_COLOR` and
+   `TERM` and turns on a Windows console's virtual terminal sequences; the door writes its three colours itself,
+   from fixed sequences (section 8 and the implementation note).
+
+## Implementation note, 2026-10-27 (the first pull request: the door, attended)
+
+What the first pull request built, and where it differs in detail from the sections above:
+
+- **The door** (`crates/vsift-cli/src/door/`): the `Console` and `SetupSteps` ports, the engine and system
+  implementations, and the conversation of section 2. `crates/vsift-cli/src/human/setup_door.rs` writes its text;
+  `setup_check.rs` gives both views one `push_overview` (the table, updates, verdict and details) and one
+  `Standing` (video and speech as a person meets them).
+- **One install path.** The door passes the plan to the engine by serialising the evaluated plan's `setup.plan`
+  result and reading it back through the strict saved-plan reader (`SavedSetupPlan`, `validate_envelope`), then
+  `setup::install_saved`, which `setup install` now also calls. So no contract constructor was needed (section 4
+  proposed one), and the engine's acceptance is exactly the one `setup install --plan` meets.
+- **Timed-out checks** end `Next: vsift setup check`, in the door and in `setup check`, not `vsift setup`
+  (section 2, step 8): the advice above it is to add `--timeout-seconds`, which `setup check` has and the door,
+  by section 1, does not.
+- **Without a terminal** (section 3) the last lines name `setup install --help` for installing without questions,
+  until the unattended form exists.
+- **`setup check`** ends `Next: vsift setup` whenever a desktop setup is not complete (except after a timeout),
+  and its extras line names `vsift setup --include web-videos`. A worker profile keeps the concrete step.
+- **While it installs**, the live line on standard error says how many pieces are done, from the transaction's
+  existing `installing_components` counts; one line per piece follows when it finishes. The bars and stages of
+  section 5 come with the second pull request.
+- **Colour** (section 8): `TerminalText::push_status` is the one place an escape sequence is written, chosen by a
+  closed `Tone`, so the builder's rule that no pushed text can drive the terminal still holds.
+- **Ctrl-C** is trapped from the question on, so at the question it is a no, and during the install it cancels
+  through the existing cancellation. Before the question it ends the process, as for any short command.
+- **The skill** classes `vsift setup` as never in `references/commands.md`, and the policy test's never set has
+  `setup`. That moved the trial freeze; the draft rewrites it, to be rewritten again at the merge rebase.
 
 ## Consequences
 

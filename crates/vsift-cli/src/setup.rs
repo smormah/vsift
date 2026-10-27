@@ -4,7 +4,11 @@
 //! result as v1 JSON or, through `human::setup_check`, as human text, and
 //! reads the saved plan a user supplies back.
 
-use std::{io::Write, path::Path};
+use std::{
+    io::Write,
+    path::{Path, PathBuf},
+    time::Duration,
+};
 
 use vsift::{
     Cancellation, Engine, FailureCode, LocalAsrSetupStatus, MANAGED_INSTALL_RETRY_AFTER_MS,
@@ -150,13 +154,37 @@ pub(crate) async fn install(
         &HostPolicy::local_r0(),
     )
     .map_err(|_| CommandFailure::from(FailureCode::InvalidArgument))?;
+    install_saved(
+        engine,
+        saved,
+        arguments.accept_plan,
+        arguments.artifact_dir,
+        config.probe_timeout,
+        cancellation,
+        progress,
+    )
+    .await
+}
+
+/// Installs a saved plan accepted by `accepted_digest`: the one install
+/// path, shared by `setup install` and the setup door (ADR 0036), which
+/// accepts the plan it showed by that plan's own digest.
+pub(crate) async fn install_saved(
+    engine: &Engine,
+    saved: SavedSetupPlan,
+    accepted_digest: String,
+    artifact_directory: Option<PathBuf>,
+    probe_timeout: Duration,
+    cancellation: &Cancellation,
+    progress: ProgressObserver,
+) -> Result<OperationResponse<serde_json::Value>, CommandFailure> {
     let outcome = engine
         .install_setup(
             SetupInstallRequest {
                 saved_plan: saved,
-                accepted_digest: arguments.accept_plan,
-                artifact_directory: arguments.artifact_dir,
-                probe_timeout: config.probe_timeout,
+                accepted_digest,
+                artifact_directory,
+                probe_timeout,
             },
             cancellation,
             progress,

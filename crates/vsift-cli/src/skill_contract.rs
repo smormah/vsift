@@ -94,8 +94,11 @@ const PLACEHOLDERS: [(&str, &str); 24] = [
 /// read-only `setup list` and `setup repair` to `free` (ADR 0023's open
 /// detail, decided by the supervisor on 2026-09-30: repair only diagnoses and
 /// plans); `setup remove` and `setup rollback` change the managed tools and
-/// stay here with `setup install`.
-const NEVER: [&str; 6] = [
+/// stay here with `setup install`. Plain `setup`, the setup door for a
+/// person (ADR 0036), asks a question and installs on the answer, so it is
+/// never an assistant's to run.
+const NEVER: [&str; 7] = [
+    "setup",
     "setup.install",
     "setup.remove",
     "setup.rollback",

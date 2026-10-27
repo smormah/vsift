@@ -153,6 +153,12 @@ where
             .map_err(OutputError::Io)
     }
 
+    /// Flushes standard output, so a question is on the screen before the
+    /// answer is read.
+    pub(crate) fn flush_stdout(&mut self) -> Result<(), OutputError> {
+        self.standard_output.flush().map_err(OutputError::Io)
+    }
+
     /// Writes a human failure built by the `TerminalText` builder to
     /// stderr, best effort: a closed stderr never fails a command.
     pub(crate) fn write_rendered_stderr(&mut self, text: &RenderedText) {

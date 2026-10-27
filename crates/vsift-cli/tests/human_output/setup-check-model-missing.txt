@@ -8,4 +8,4 @@ VSift setup check
 Your setup isn't complete: the speech model is missing.
 Video works, so a transcript you already have can still be used.
 The installation guide shows where to get it: https://github.com/smormah/vsift/blob/main/docs/operations/install.md
-Next: vsift setup configure-model --file <full-path-to-model>
+Next: vsift setup

@@ -78,6 +78,8 @@ pub enum CommandName {
     /// `job start` (0.3.0, ADR 0033): prepare a session as one job, in the
     /// foreground or in the background.
     JobStart,
+    /// Plain `setup`, the setup door for a person (ADR 0036, since `0.3.0`).
+    Setup,
     /// `session init-workspace` (P11): create a worker workspace with an
     /// operator policy.
     SessionInitWorkspace,
@@ -96,7 +98,7 @@ impl CommandName {
     /// Contract tests iterate this list to prove each identifier satisfies the
     /// published schemas. An exhaustive private `ordinal` match and a
     /// compile-time assertion keep it in step with the variants.
-    pub const ALL: [Self; 37] = [
+    pub const ALL: [Self; 38] = [
         Self::Parse,
         Self::SetupCheck,
         Self::SetupPlan,
@@ -134,6 +136,7 @@ impl CommandName {
         Self::Ocr,
         Self::OcrSearch,
         Self::JobStart,
+        Self::Setup,
     ];
 
     /// Returns the stable identifier written to the envelope's `command` field.
@@ -177,6 +180,7 @@ impl CommandName {
             Self::Ocr => "ocr",
             Self::OcrSearch => "ocr.search",
             Self::JobStart => "job.start",
+            Self::Setup => "setup",
         }
     }
 
@@ -227,6 +231,7 @@ impl CommandName {
             Self::Ocr => 34,
             Self::OcrSearch => 35,
             Self::JobStart => 36,
+            Self::Setup => 37,
         }
     }
 }
