@@ -250,7 +250,7 @@ fn assert_superseded_before_the_upgrade(base: &Base) -> TestResult {
     println!("{text}");
     assert!(
         text.contains(&format!(
-            "[update, security] whisper_cli: the selected managed version is {EARLIER_WHISPER}"
+            "Update available (security fixes): whisper_cli is on {EARLIER_WHISPER}"
         )),
         "{text}"
     );

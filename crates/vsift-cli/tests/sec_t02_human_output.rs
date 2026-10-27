@@ -531,6 +531,31 @@ fn rejected_command_lines_with_hostile_arguments_are_inert() -> TestResult {
     Ok(())
 }
 
+/// The host-dependent parts of the readable `setup check` replaced by
+/// placeholders: see the call.
+fn normalise_setup_check(text: &str) -> String {
+    let mut lines = Vec::new();
+    for line in text.lines() {
+        if line.starts_with("The installation guide shows where to get it: ") {
+            continue;
+        }
+        if line.starts_with("  Web videos") {
+            lines.push(String::from("<WEB VIDEOS ROW>"));
+        } else if line.starts_with("Next: ") {
+            lines.push(String::from("Next: <NEXT STEP>"));
+        } else if line.starts_with("  ") && line.trim_start().contains("  ") {
+            lines.push(format!(
+                "  {}",
+                line.split_whitespace().collect::<Vec<_>>().join(" ")
+            ));
+        } else {
+            lines.push(line.to_owned());
+        }
+    }
+    lines.push(String::new());
+    lines.join("\n")
+}
+
 /// `setup check`, `setup configure` and `setup configure-model` without
 /// `--json`, with no tools on `PATH`.
 #[test]
@@ -539,45 +564,12 @@ fn setup_commands_render_readable_text() -> TestResult {
     let blocked = vsift(&root, &["setup", "check"])?;
     assert_eq!(blocked.status.code(), Some(2));
     let text = assert_terminal_safe(&blocked.stdout, "setup check")?;
-    // Whether managed installation is offered depends on the host; the
-    // snapshot records the one line both hosts share around it.
-    let text = text
-        .replace(
-            ". Or let VSift install the reviewed build: review setup plan, then accept it with setup install.",
-            ". <MANAGED INSTALLATION>",
-        )
-        .replace(
-            ". Managed installation is not available for this target.",
-            ". <MANAGED INSTALLATION>",
-        );
-    // So does whether the optional online-video component is offered (#409).
-    let mut text = text;
-    for (status, capability) in [
-        (
-            "not_installed",
-            vsift_application::OptionalCapability::NotInstalled,
-        ),
-        (
-            "unavailable",
-            vsift_application::OptionalCapability::Unavailable,
-        ),
-    ] {
-        let line = format!(
-            "Optional component online_links: {status}
-  {}
-",
-            vsift_contract::optional_check_step(
-                vsift_application::OptionalComponent::OnlineLinks,
-                &capability,
-                vsift_application::SetupProfile::Desktop
-            )
-        );
-        text = text.replace(
-            &line,
-            "<ONLINE VIDEOS>
-",
-        );
-    }
+    // Whether managed installation is offered depends on the host, and so
+    // does whether the optional web-video extra is offered (#409). The
+    // snapshot records what both hosts share: the table with its cells
+    // joined by single spaces (the column widths follow the longest cell),
+    // the optional row and the step as placeholders.
+    let text = normalise_setup_check(&text);
     check_snapshot("setup-check-blocked", &text)?;
 
     let tool = root.write("stand-in-ffprobe", b"not a real tool")?;

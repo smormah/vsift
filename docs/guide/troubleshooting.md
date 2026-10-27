@@ -186,28 +186,23 @@ Fix: Importing a supplied transcript needs FFmpeg and FFprobe to measure the vid
 ```console
 $ vsift setup check
 VSift setup check
-Profile: desktop
-Status: blocked
-[missing] FFmpeg (media_processing): not found on PATH [filtered PATH]
-  Install a trusted build or register a working one with setup configure ffmpeg --executable <absolute-path>, then rerun setup check (or try a path once with setup check --ffmpeg <absolute-path>). Managed installation is not available for this target.
-  No need to search folders: ask the user where it is.
-[missing] FFprobe (media_processing): not found on PATH [filtered PATH]
-  Install a trusted build or register a working one with setup configure ffprobe --executable <absolute-path>, then rerun setup check (or try a path once with setup check --ffprobe <absolute-path>). Managed installation is not available for this target.
-  No need to search folders: ask the user where it is.
-[missing] Whisper (transcription): not found on PATH [filtered PATH]
-  Install a trusted build or register a working one with setup configure whisper --executable <absolute-path>, then rerun setup check (or try a path once with setup check --whisper <absolute-path>). Managed installation is not available for this target.
-  No need to search folders: ask the user where it is.
-Media executable probes are blocked until FFmpeg and FFprobe respond.
-Local ASR model: not registered (setup configure-model --file <path>)
-Local ASR check: not run: FFmpeg and FFprobe are needed and must pass their own check
-Executable probes only show that each tool responds. The local ASR check transcribes a short speech clip built into VSift with the selected tools and model. A supplied transcript can avoid local ASR.
+
+  Part        Status         Uses         What it's for
+  Video       not set up     FFmpeg       reading videos, taking frames
+  Speech      not set up     whisper.cpp  turning speech into text
+  Web videos  not available  yt-dlp       web page videos (optional)
+
+Your setup isn't complete: video and speech are missing.
+Speech needs two things, whisper.cpp and its model, and neither is set up yet.
+The installation guide shows where to get it: https://github.com/smormah/vsift/blob/main/docs/operations/install.md
+Next: vsift setup configure ffmpeg --executable <full-path-to-ffmpeg>
 ```
 
-*Both blocks are output from a Windows 11 machine whose `PATH` had no media tools, with the advice as it reads after
-`0.2.1` ([#396](https://github.com/smormah/vsift/issues/396)); they are not checked automatically because they depend
-on the machine.* In `0.2.1` and earlier the advice begins "Install or locate this trusted tool" (or "Install or locate
-trusted builds"); it asks for the same thing, and nobody needs to search folders for the tool. The fix is the same
-everywhere: install the tool, or tell VSift where it is:
+*The error is from a Windows 11 machine whose `PATH` had no media tools; the table is the form VSift prints, taken from its
+own tests. Neither is checked automatically here, because they depend on the machine.* The last line names the one thing to
+do next: where VSift can install a part for you (Ubuntu 24.04), it is `vsift setup plan`; otherwise it is the `setup configure`
+command for the first part that is missing, and `setup check` then names the next. The fix is the same everywhere: install
+the tool, or tell VSift where it is:
 
 ```console
 vsift setup configure ffmpeg --executable /absolute/path/to/ffmpeg
@@ -215,37 +210,50 @@ vsift setup configure ffprobe --executable /absolute/path/to/ffprobe
 vsift setup check
 ```
 
+(The `Error:` line above, and the JSON, still carry the advice written for an assistant; versions before `0.3.0` print
+that advice, and "Install or locate this trusted tool" before `0.2.1`, in the readable `setup check` too. Nobody needs to
+search folders for the tool.)
+
 On Ubuntu 24.04 `vsift setup plan --profile desktop` lets VSift install reviewed builds itself, after you read
 and accept the plan. A tool that is present but "failed VSift's media-tool check" is a different problem: it is
 an FFmpeg that starts and does the wrong thing, so install a standard build. [Install guide, section 5](../operations/install.md#5-install-ffmpeg-ffprobe-whispercpp-and-the-speech-model).
 
-**`setup check` says `[timeout]` for a tool you have.** A `[timeout]` line is not a `[missing]` line: VSift found the
+**`setup check` says `no answer` for a tool you have.** `no answer` is not `not set up`: VSift found the
 tool and got no answer in time. `setup check` starts FFmpeg, FFprobe and whisper.cpp one after another and waits for each to
 answer (the first two are asked for their version, whisper.cpp for its help text), and the three share one time limit, 30 seconds in all. The first time a program runs after you installed it or restarted the
 machine it can take seconds to start, for example while a virus scanner reads a large program for the first time, and a
-slow first tool leaves less time for the next ones. The lines under `[timeout]` say which of two things happened:
+slow first tool leaves less time for the next ones. The sentences under the table say which of two things happened:
 
 ```text
-[timeout] FFmpeg (media_processing): found, but it did not answer in time [filtered PATH]
-  It was started and had not answered when the deadline passed: 30 seconds, which the three tool checks share. A first run after installing a tool or restarting the machine can be slow, for example while a virus scanner reads a large program for the first time. Run setup check again, or allow more time with --timeout-seconds (up to 60).
-[timeout] FFprobe (media_processing): found, but not started before the deadline passed [filtered PATH]
-  It was not started, because the deadline had already passed: 30 seconds, which the three tool checks share. Nothing is known about it yet. A first run after installing a tool or restarting the machine can be slow, for example while a virus scanner reads a large program for the first time. Run setup check again, or allow more time with --timeout-seconds (up to 60).
+VSift setup check
+
+  Part        Status         Uses         What it's for
+  Video       no answer      FFmpeg       reading videos, taking frames
+  Speech      no answer      whisper.cpp  turning speech into text
+  Web videos  not available  yt-dlp       web page videos (optional)
+
+Your setup isn't complete: video and speech did not answer in time.
+FFmpeg was found but did not answer within 30 seconds, the time all three tool checks share.
+FFprobe and whisper.cpp were found but not tried: the time ran out first.
+A first run after installing a tool or restarting the machine can be slow, for example while a virus scanner reads a large program for the first time.
+To allow more time, add --timeout-seconds (up to 60).
+Next: vsift setup check
 ```
 
-*These lines are the fixed form VSift prints, taken from its own tests, where stand-in tools never answer; they are not
+*This is the fixed form VSift prints, taken from its own tests, where stand-in tools never answer; it is not
 checked automatically here because a real tool that times out depends on the machine.* What to do:
 
 1. **Run `vsift setup check` again.** A second run right after the first is normally much quicker.
-2. If it still says `[timeout]`, allow the most time there is: `vsift setup check --timeout-seconds 60`.
+2. If it still says `no answer`, allow the most time there is: `vsift setup check --timeout-seconds 60`.
 3. If it still does, the tool itself hangs or does not start, and VSift says so instead of offering more time. Run
    the tool yourself and see what it does: `ffmpeg -version` and `ffprobe -version` should each print a version at once,
    and `whisper-cli --help` its options. A tool that prints nothing, or waits, is the problem, not VSift: repair or
    replace that tool. This is the only place that says so; the answer of `setup check` stops at "the tool itself hangs".
 
-While FFmpeg or FFprobe is `[timeout]` the status is `blocked` and the exit status is 2, as for a missing tool, because
-VSift could not confirm the tool; nothing is wrong with your setup if the next run says `[ok]`. The answer never tells you
-to install a tool it found. The line `Local ASR check:` further down is worked out separately and can say `verified` in the
-same answer: both are true (the tool gave that check no answer in time, and the tools worked a moment later).
+While FFmpeg or FFprobe says `no answer` the JSON status is `blocked` and the exit status is 2, as for a missing tool, because
+VSift could not confirm the tool; nothing is wrong with your setup if the next run says `ready`. The answer never tells you
+to install a tool it found. The speech test is worked out separately and can pass in the same
+run: both are true (the tool gave the check no answer in time, and the tools worked a moment later).
 `vsift setup plan` uses the same 30 seconds and has no option to change it; for a tool that did not answer it says so and
 proposes nothing because of it, so run `setup check` until the tool answers and then the plan again. Two things to know
 about the plan. It can take up to twice as long on a machine where VSift has installed a tool, because it looks at the

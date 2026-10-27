@@ -280,8 +280,248 @@ fn setup_check_text(
     Ok(text)
 }
 
+/// What `setup check` prints for these probe results and local-ASR report.
+fn setup_check_report(
+    states: [DependencyState; 3],
+    local_asr: LocalAsrSetupStatus,
+    managed_install: ManagedPlanAvailability,
+    online_links: vsift::OptionalCapability,
+) -> Result<String, Box<dyn std::error::Error>> {
+    let diagnosis = RuntimeDiagnosis {
+        readiness: RuntimeReadiness::Degraded,
+        dependencies: RuntimeDependency::ALL
+            .into_iter()
+            .zip(states)
+            .map(|(dependency, state)| DependencyStatus { dependency, state })
+            .collect(),
+    };
+    let rendered = setup_check(
+        &diagnosis,
+        local_asr,
+        crate::setup::ManagedSetupFacts {
+            availability: managed_install,
+            by_dependency: [managed_install; 3],
+            updates: &[],
+            optional: &[(vsift::OptionalComponent::OnlineLinks, online_links)],
+        },
+        ExecutionProfile::Desktop,
+        &|_| DependencyLookup::FilteredPath,
+    )
+    .map_err(|_| "the setup check is too large to render")?;
+    let text = rendered.as_str().to_owned();
+    assert_terminal_safe(&text);
+    Ok(text)
+}
+
+fn found() -> DependencyState {
+    DependencyState::Available {
+        version: String::from("fixture 1"),
+    }
+}
+
+const SPEECH_WORKS: LocalAsrSetupStatus = LocalAsrSetupStatus {
+    model: LocalAsrModelStatus::KnownPinned(vsift::ReviewedAsrModel::BaseQ5_1),
+    verification: LocalAsrCheckOutcome::Verified(vsift::LocalAsrVerificationSource::Recorded),
+};
+
+/// The first-run design note (C3, C4): video works and speech is missing.
+/// The table shows it, the next line says what is missing, and the last line
+/// is the one step. Nothing says "ready" about the setup as a whole.
+#[test]
+fn video_ready_and_speech_missing_reads_as_a_table_a_sentence_and_one_step() -> TestResult {
+    let text = setup_check_report(
+        [found(), found(), DependencyState::Missing],
+        LocalAsrSetupStatus {
+            model: LocalAsrModelStatus::NotSelected,
+            verification: LocalAsrCheckOutcome::NotRun(LocalAsrNotRunReason::WhisperUnavailable),
+        },
+        ManagedPlanAvailability::TargetUnavailable,
+        vsift::OptionalCapability::Unavailable,
+    )?;
+    check_snapshot("setup-check-video-ready", &text)?;
+    assert!(
+        text.contains("Your setup isn't complete: speech is missing.\n"),
+        "{text}"
+    );
+    assert!(!text.contains("Setup complete") && !text.contains("Status:"));
+    Ok(())
+}
+
+/// A person who has installed nothing sees every part missing and is sent
+/// to the plan where `VSift` can install the tools.
+#[test]
+fn nothing_yet_says_everything_is_missing_and_points_to_the_plan() -> TestResult {
+    let text = setup_check_report(
+        [
+            DependencyState::Missing,
+            DependencyState::Missing,
+            DependencyState::Missing,
+        ],
+        LocalAsrSetupStatus {
+            model: LocalAsrModelStatus::NotSelected,
+            verification: LocalAsrCheckOutcome::NotRun(LocalAsrNotRunReason::MediaToolsUnavailable),
+        },
+        ManagedPlanAvailability::Qualified,
+        vsift::OptionalCapability::NotInstalled,
+    )?;
+    check_snapshot("setup-check-nothing-yet", &text)?;
+    assert!(
+        text.contains("Your setup isn't complete: video and speech are missing.\n"),
+        "{text}"
+    );
+    Ok(())
+}
+
+/// Only video and speech both working is "complete", and the step is to try
+/// a video.
+#[test]
+fn everything_ready_is_complete_and_says_to_try_a_video() -> TestResult {
+    let text = setup_check_report(
+        [found(), found(), found()],
+        SPEECH_WORKS,
+        ManagedPlanAvailability::Qualified,
+        vsift::OptionalCapability::NotInstalled,
+    )?;
+    check_snapshot("setup-check-ready", &text)?;
+    assert!(
+        text.ends_with("Next: vsift ingest ./your-video.mp4\n"),
+        "{text}"
+    );
+    Ok(())
+}
+
+/// The second run of 0.2.3 on Windows: `FFmpeg`, `FFprobe` and whisper.cpp were
+/// found, no model was registered, and the readable view said "Status:
+/// ready" while a transcription could not run. Video is ready, speech is
+/// not, and the view says which piece is missing.
+#[test]
+fn tools_found_without_a_model_is_not_ready_to_transcribe() -> TestResult {
+    let text = setup_check_report(
+        [found(), found(), found()],
+        LocalAsrSetupStatus {
+            model: LocalAsrModelStatus::NotSelected,
+            verification: LocalAsrCheckOutcome::NotRun(LocalAsrNotRunReason::ModelNotSelected),
+        },
+        ManagedPlanAvailability::TargetUnavailable,
+        vsift::OptionalCapability::Unavailable,
+    )?;
+    check_snapshot("setup-check-model-missing", &text)?;
+    assert!(text.contains("  Video       ready "), "{text}");
+    assert!(text.contains("  Speech      model missing "), "{text}");
+    assert!(
+        text.contains("Your setup isn't complete: the speech model is missing.\n"),
+        "{text}"
+    );
+    assert!(!text.contains("Setup complete"), "{text}");
+    Ok(())
+}
+
+/// "Complete" appears exactly when video and speech both work, whatever
+/// else is in place.
+#[test]
+fn setup_is_complete_only_when_video_and_speech_both_work() -> TestResult {
+    let not_run = |reason| LocalAsrSetupStatus {
+        model: LocalAsrModelStatus::KnownPinned(vsift::ReviewedAsrModel::BaseQ5_1),
+        verification: LocalAsrCheckOutcome::NotRun(reason),
+    };
+    for (states, local_asr, complete) in [
+        ([found(), found(), found()], SPEECH_WORKS, true),
+        (
+            [found(), found(), found()],
+            not_run(LocalAsrNotRunReason::MediaToolsUnavailable),
+            false,
+        ),
+        (
+            [DependencyState::Missing, found(), found()],
+            not_run(LocalAsrNotRunReason::MediaToolsUnavailable),
+            false,
+        ),
+        (
+            [found(), DependencyState::Missing, found()],
+            not_run(LocalAsrNotRunReason::MediaToolsUnavailable),
+            false,
+        ),
+        (
+            [found(), found(), DependencyState::Missing],
+            not_run(LocalAsrNotRunReason::WhisperUnavailable),
+            false,
+        ),
+        (
+            [found(), found(), found()],
+            LocalAsrSetupStatus {
+                model: LocalAsrModelStatus::Unreadable,
+                verification: LocalAsrCheckOutcome::NotRun(LocalAsrNotRunReason::ModelNotPinned),
+            },
+            false,
+        ),
+    ] {
+        let text = setup_check_report(
+            states,
+            local_asr,
+            ManagedPlanAvailability::Qualified,
+            vsift::OptionalCapability::NotInstalled,
+        )?;
+        assert_eq!(text.contains("Setup complete"), complete, "{text}");
+        assert_eq!(
+            text.contains("Your setup isn't complete"),
+            !complete,
+            "{text}"
+        );
+    }
+    Ok(())
+}
+
+/// Wording meant for an assistant, and internal labels, are not in the view
+/// a person reads in any of the states: they stay in the JSON remediation.
+#[test]
+fn the_readable_view_has_no_wording_meant_only_for_an_assistant() -> TestResult {
+    for (states, local_asr) in [
+        ([found(), found(), found()], SPEECH_WORKS),
+        (
+            [
+                DependencyState::Missing,
+                DependencyState::Missing,
+                DependencyState::Missing,
+            ],
+            LocalAsrSetupStatus {
+                model: LocalAsrModelStatus::NotSelected,
+                verification: LocalAsrCheckOutcome::NotRun(
+                    LocalAsrNotRunReason::MediaToolsUnavailable,
+                ),
+            },
+        ),
+    ] {
+        for managed in [
+            ManagedPlanAvailability::Qualified,
+            ManagedPlanAvailability::TargetUnavailable,
+        ] {
+            let text = setup_check_report(
+                states.clone(),
+                local_asr,
+                managed,
+                vsift::OptionalCapability::NotInstalled,
+            )?;
+            for agent_only in [
+                "ask the user",
+                "Ask the operator",
+                "[filtered PATH]",
+                "[per-call path]",
+                "Profile:",
+                "Status:",
+                "Local ASR",
+                "media_processing",
+                "Executable probes only",
+                "<absolute-path>",
+            ] {
+                assert!(!text.contains(agent_only), "{agent_only:?}: {text}");
+            }
+        }
+    }
+    Ok(())
+}
+
 /// A superseded managed version is a line of its own with the reason in its
-/// marker, and the step under it in the JSON `next_step`'s words; nothing is
+/// label, and the step under it in the JSON `next_step`'s words; nothing is
 /// printed when the list is empty.
 #[test]
 fn a_superseded_managed_version_gets_a_marked_line_and_the_step() -> TestResult {
@@ -302,8 +542,11 @@ fn a_superseded_managed_version_gets_a_marked_line_and_the_step() -> TestResult 
         verification: LocalAsrCheckOutcome::NotRun(LocalAsrNotRunReason::ModelNotSelected),
     };
     for (reason, marker) in [
-        (SupersessionReason::SecurityFixes, "[update, security] "),
-        (SupersessionReason::Maintenance, "[update] "),
+        (
+            SupersessionReason::SecurityFixes,
+            "Update available (security fixes): ",
+        ),
+        (SupersessionReason::Maintenance, "Update available: "),
     ] {
         let update = ManagedUpdate {
             component: ManagedComponent::WhisperCli,
@@ -331,7 +574,7 @@ fn a_superseded_managed_version_gets_a_marked_line_and_the_step() -> TestResult 
         assert_terminal_safe(text);
         assert!(
             text.contains(&format!(
-                "{marker}whisper_cli: the selected managed version is whisper.cpp-v1.9.2-ubuntu-x64
+                "{marker}whisper_cli is on whisper.cpp-v1.9.2-ubuntu-x64
   {}
 ",
                 vsift_contract::managed_update_next_step(&update)
@@ -355,7 +598,7 @@ fn a_superseded_managed_version_gets_a_marked_line_and_the_step() -> TestResult 
         &|_| DependencyLookup::ManagedVersion,
     )
     .map_err(|_| "the setup check is too large to render")?;
-    assert!(!quiet.as_str().contains("[update"));
+    assert!(!quiet.as_str().contains("Update available"));
     Ok(())
 }
 
@@ -423,49 +666,49 @@ fn a_tool_whose_probe_timed_out_is_not_told_to_install_or_locate_it() -> TestRes
     for phrase in INSTALL_ADVICE {
         assert!(!text.contains(phrase), "says {phrase:?}: {text}");
     }
-    assert!(!text.contains("[missing]") && !text.contains("not found"));
-    assert!(text.contains("Status: blocked\n"), "{text}");
-    assert_eq!(text.matches("[timeout] ").count(), 3, "{text}");
-    assert_eq!(
-        text.matches(
-            "Run setup check again, or allow more time with --timeout-seconds (up to 60).\n"
-        )
-        .count(),
-        3,
+    assert!(!text.contains("not set up") && !text.contains("is missing"));
+    assert!(
+        text.contains("Your setup isn't complete: video and speech did not answer in time.\n"),
         "{text}"
     );
     assert!(
         text.contains(
-            "[timeout] FFmpeg (media_processing): found, but it did not answer in time [filtered PATH]\n  It was started and had not answered when the deadline passed: 30 seconds, which the three tool checks share."
+            "FFmpeg was found but did not answer within 30 seconds, the time all three tool checks share.\n"
         ),
         "{text}"
     );
     assert!(
         text.contains(
-            "[timeout] FFprobe (media_processing): found, but not started before the deadline passed [filtered PATH]\n  It was not started, because the deadline had already passed: 30 seconds, which the three tool checks share. Nothing is known about it yet."
+            "FFprobe and whisper.cpp were found but not tried: the time ran out first.\n"
         ),
         "{text}"
     );
+    assert!(
+        text.contains("To allow more time, add --timeout-seconds (up to 60).\n"),
+        "{text}"
+    );
+    assert!(text.ends_with("Next: vsift setup check\n"), "{text}");
     Ok(())
 }
 
 /// The same for each tool on its own and each kind of timeout, with the
 /// deadline the command line applied named as it was given; and a tool that
-/// is missing, or was found and failed, keeps the advice it had.
+/// is missing, or was found and failed, is sent to the plan or the
+/// registration instead.
 #[test]
 fn each_tool_and_each_kind_of_timeout_gets_the_timeout_advice_only() -> TestResult {
     let available = || DependencyState::Available {
         version: String::from("fixture 1"),
     };
-    for index in 0..3 {
+    for (index, name) in ["FFmpeg", "FFprobe", "whisper.cpp"].into_iter().enumerate() {
         for (kind, said) in [
             (
                 ProbeTimeoutKind::NoAnswer,
-                "found, but it did not answer in time",
+                " was found but did not answer within 1 second, the time all three tool checks share.\n",
             ),
             (
                 ProbeTimeoutKind::NotStarted,
-                "found, but not started before the deadline passed",
+                " was found but not tried: the time ran out first.\n",
             ),
         ] {
             let mut states = [available(), available(), available()];
@@ -481,12 +724,9 @@ fn each_tool_and_each_kind_of_timeout_gets_the_timeout_advice_only() -> TestResu
                     "{index} {kind:?}: {phrase:?}: {text}"
                 );
             }
-            assert_eq!(text.matches("[timeout] ").count(), 1, "{text}");
-            assert!(text.contains(said), "{text}");
-            assert!(
-                text.contains(": 1 second, which the three tool checks share."),
-                "{text}"
-            );
+            assert!(text.contains(&format!("{name}{said}")), "{text}");
+            assert_eq!(text.matches("no answer").count(), 1, "{text}");
+            assert!(text.ends_with("Next: vsift setup check\n"), "{text}");
         }
         for state in [
             DependencyState::Missing,
@@ -501,39 +741,30 @@ fn each_tool_and_each_kind_of_timeout_gets_the_timeout_advice_only() -> TestResu
                 RuntimeReadiness::Degraded,
                 ManagedPlanAvailability::Qualified,
             )?;
-            assert!(
-                text.contains(
-                    "  Install a trusted build or register a working one with setup configure "
-                ),
-                "{text}"
-            );
-            assert!(
-                text.contains(
-                    "
-  No need to search folders: ask the user where it is.
-"
-                ),
-                "{text}"
-            );
+            assert!(text.contains("Next: vsift setup plan"), "{text}");
             assert!(!text.contains("--timeout-seconds"), "{text}");
         }
     }
     Ok(())
 }
 
-/// Issue #396: under a missing tool `setup check` said "Install or locate
+/// Issue #396: the advice for a missing tool once said "install or locate
 /// this trusted tool", and a cold agent read "locate" as leave to search the
-/// machine. For each tool, missing or found and failing, with and without
-/// managed installation, the advice now names the commands that make the tool
-/// known to `VSift` (`setup configure` with an absolute path, the per-call
-/// option, and `setup plan` with `setup install` only where they are offered)
-/// and says on a line of its own that no folder search is needed.
+/// machine. The readable view is for a person and says none of that: for each
+/// tool, missing or found and failing, it sends them to `setup plan` where
+/// `VSift` can install the tool, and otherwise to the one `setup configure`
+/// command that registers it, with the installation guide above. The advice
+/// for an assistant stays in the JSON.
 #[test]
-fn a_missing_tool_is_told_how_to_register_it_and_that_no_search_is_needed() -> TestResult {
+fn a_missing_tool_is_sent_to_the_plan_or_to_its_one_registration_command() -> TestResult {
     let available = || DependencyState::Available {
         version: String::from("fixture 1"),
     };
-    for (index, dependency) in RuntimeDependency::ALL.into_iter().enumerate() {
+    for (index, (dependency, placeholder)) in RuntimeDependency::ALL
+        .into_iter()
+        .zip(["ffmpeg", "ffprobe", "whisper-cli"])
+        .enumerate()
+    {
         let identifier = dependency.identifier();
         for state in [
             DependencyState::Missing,
@@ -548,29 +779,28 @@ fn a_missing_tool_is_told_how_to_register_it_and_that_no_search_is_needed() -> T
                 let mut states = [available(), available(), available()];
                 states[index] = state.clone();
                 let text = setup_check_text(states, RuntimeReadiness::Degraded, managed_install)?;
-                let managed = if managed_install == ManagedPlanAvailability::Qualified {
-                    "Or let VSift install the reviewed build: review setup plan, then accept it with setup install."
+                let expected_end = if managed_install == ManagedPlanAvailability::Qualified {
+                    "\nNext: vsift setup plan   (shows what VSift can install for you, and changes nothing)\n".to_owned()
                 } else {
-                    "Managed installation is not available for this target."
+                    format!(
+                        "\nThe installation guide shows where to get it: https://github.com/smormah/vsift/blob/main/docs/operations/install.md\nNext: vsift setup configure {identifier} --executable <full-path-to-{placeholder}>\n"
+                    )
                 };
-                let expected = format!(
-                    "\n  Install a trusted build or register a working one with setup configure {identifier} --executable <absolute-path>, then rerun setup check (or try a path once with setup check --{identifier} <absolute-path>). {managed}\n  No need to search folders: ask the user where it is.\n"
-                );
                 assert!(
-                    text.contains(&expected),
+                    text.ends_with(&expected_end),
                     "{identifier} {managed_install:?}: {text}"
                 );
-                assert_eq!(
-                    text.matches("No need to search folders").count(),
-                    1,
-                    "{text}"
-                );
-                assert_eq!(
-                    text.contains("setup plan"),
-                    managed_install == ManagedPlanAvailability::Qualified,
-                    "{text}"
-                );
-                assert!(!text.to_lowercase().contains("locate"), "{text}");
+                for agent_only in [
+                    "ask the user",
+                    "No need to search folders",
+                    "[filtered PATH]",
+                    "Profile:",
+                    "Status:",
+                    "locate",
+                    "Local ASR",
+                ] {
+                    assert!(!text.contains(agent_only), "{agent_only:?}: {text}");
+                }
             }
         }
     }
@@ -579,9 +809,9 @@ fn a_missing_tool_is_told_how_to_register_it_and_that_no_search_is_needed() -> T
 
 /// "Allow more time with --timeout-seconds (up to 60)" is no advice for
 /// someone who ran `setup check --timeout-seconds 60`. After the longest
-/// deadline the text says the option cannot extend it, to run the check
-/// again, and what a tool that never answers means; it still never says to
-/// install or locate the tool. One second less still offers more time.
+/// deadline the text says it was the longest wait and what a tool that never
+/// answers means; it still never says to install or locate the tool. One
+/// second less still offers more time.
 #[test]
 fn after_the_longest_deadline_the_readable_advice_does_not_offer_more_time() -> TestResult {
     let text = setup_check_text(
@@ -595,19 +825,17 @@ fn after_the_longest_deadline_the_readable_advice_does_not_offer_more_time() -> 
     )?;
     assert!(
         text.contains(
-            "[timeout] FFmpeg (media_processing): found, but it did not answer in time [filtered PATH]\n  It was started and had not answered when the deadline passed: 60 seconds, which the three tool checks share and --timeout-seconds cannot extend. Run setup check again. If it never answers, the tool itself hangs: run it yourself to see what it does.\n"
+            "FFmpeg was found but did not answer within 60 seconds, the time all three tool checks share.\n"
         ),
         "{text}"
     );
-    assert_eq!(
-        text.matches(
-            "  It was not started, because the deadline had already passed: 60 seconds, which the three tool checks share and --timeout-seconds cannot extend. Nothing is known about it yet. Run setup check again. If a tool never answers, that tool hangs: run it yourself to see what it does.\n"
-        )
-        .count(),
-        2,
+    assert!(
+        text.contains(
+            "That was the longest wait allowed. If a tool never answers, the tool itself hangs: run it yourself to see what it does.\n"
+        ),
         "{text}"
     );
-    assert!(!text.contains("allow more time"), "{text}");
+    assert!(!text.contains("To allow more time"), "{text}");
     assert!(!text.contains("up to 60"), "{text}");
     for phrase in INSTALL_ADVICE {
         assert!(!text.contains(phrase), "says {phrase:?}: {text}");
@@ -624,9 +852,9 @@ fn after_the_longest_deadline_the_readable_advice_does_not_offer_more_time() -> 
     )?;
     assert_eq!(
         one_second_less
-            .matches("or allow more time with --timeout-seconds (up to 60).\n")
+            .matches("To allow more time, add --timeout-seconds (up to 60).\n")
             .count(),
-        3,
+        1,
         "{one_second_less}"
     );
     Ok(())
