@@ -60,13 +60,11 @@ fn the_committed_freezes_still_hold() -> TestResult {
 /// visible: changing this constant is the decision to cut another candidate and write a new freeze
 /// (`docs/operations/release.md` section 6.8), and it shows in the diff of a test, not only of a data file.
 ///
-/// **Draft freeze, rewritten at the merge rebase (the setup door, ADR 0036, 2026-10-27).** The setup door's first pull
-/// request classes plain `vsift setup` as never in `references/commands.md`, so the `skill` component moved
-/// `abbc2e96...` to `ec575190...` and this digest `6b2744db...` to the value below; the other six components are
-/// unchanged. It was written on the draft's head, rebased onto `main` after the progress story's fifth pull request,
-/// and is written again on the `main` the pull request is rebased onto to merge. The freeze of 2026-10-27 before it is
-/// the **0.3.0 development freeze; the final freeze is recorded at the 0.3.0 cut**. The
-/// progress story's fifth pull request changed the skill again (`references/resume.md` starts each of several
+/// **0.3.0 development freeze; the final freeze is recorded at the 0.3.0 cut.** The setup door's first pull request
+/// (ADR 0036, 2026-10-27) classes plain `vsift setup` as never in `references/commands.md`, so the `skill` component
+/// moved `abbc2e96...` to `ec575190...` and this digest `6b2744db...` to the value below; the other six components are
+/// unchanged. It was written on the `main` the pull request was rebased onto to merge. The freeze before it, also of
+/// 2026-10-27: the progress story's fifth pull request changed the skill again (`references/resume.md` starts each of several
 /// recordings, or one with no rush, with `--mode queued` and reports a waiting job's `queue_position`;
 /// `references/commands.md` allows the form), so the `skill` component moved `bef93e2b...` to `abbc2e96...` and this
 /// digest `2cda9657...` to the value below; the other six components are unchanged. It was written on the `main`

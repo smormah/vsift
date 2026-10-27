@@ -342,7 +342,7 @@ What the first pull request built, and where it differs in detail from the secti
 - **Ctrl-C** is trapped from the question on, so at the question it is a no, and during the install it cancels
   through the existing cancellation. Before the question it ends the process, as for any short command.
 - **The skill** classes `vsift setup` as never in `references/commands.md`, and the policy test's never set has
-  `setup`. That moved the trial freeze; the draft rewrites it, to be rewritten again at the merge rebase.
+  `setup`. That moved the trial freeze, written again on the `main` the pull request was rebased onto to merge.
 
 ## Consequences
 
