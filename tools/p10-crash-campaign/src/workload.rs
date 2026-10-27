@@ -1,7 +1,8 @@
 //! The durable workload: opens durable sessions through the engine, commits
 //! evidence, runs checkpointed retranscription jobs, renews sessions and
-//! runs worker requests (P11 PR 3), and acknowledges every operation that
-//! succeeded.
+//! runs worker requests (P11 PR 3), runs retranscriptions that publish as they
+//! go and stop or seal (ADR 0033, [`crate::grow`]), and acknowledges every
+//! operation that succeeded and every part it committed.
 //!
 //! The root is a durable worker workspace (ADR 0021 section 3), created by
 //! the first run: worker requests run only in one, and every session of a
@@ -50,6 +51,7 @@ use vsift_infrastructure::{
 
 use crate::{
     error::CampaignError,
+    grow::{Continuation, Ending, continue_open, grow},
     protocol::{Ack, OperationKind, RequestAck, parse_events},
     rng::SplitMix64,
     standins::{
@@ -106,7 +108,7 @@ pub enum Mix {
 }
 
 /// Why one operation did not acknowledge.
-enum OperationStop {
+pub enum OperationStop {
     /// `VSift` answered with a typed failure; the operation is not acknowledged.
     Failed(FailureCode),
     /// The harness itself failed.
@@ -119,7 +121,7 @@ impl From<CampaignError> for OperationStop {
     }
 }
 
-fn storage(error: SessionStorageError) -> OperationStop {
+pub(crate) fn storage(error: SessionStorageError) -> OperationStop {
     OperationStop::Failed(FailureCode::from(EngineError::Storage(error)))
 }
 
@@ -128,7 +130,7 @@ fn engine(error: EngineError) -> OperationStop {
 }
 
 /// The engine's single public mapping of a job failure.
-fn job_failure(error: &JobRunError) -> FailureCode {
+pub(crate) fn job_failure(error: &JobRunError) -> FailureCode {
     FailureCode::from(EngineError::from(error.clone()))
 }
 
@@ -190,6 +192,58 @@ fn drain(_file: &File) -> Result<(), CampaignError> {
     })
 }
 
+/// Writes the protocol lines and marks, and hands out sequence numbers: one
+/// an operation, and one each part a growing run commits.
+pub struct Acknowledger<'a> {
+    channel: &'a mut Channel,
+    mark: Option<(&'a Path, &'a str)>,
+    next_seq: u64,
+}
+
+impl<'a> Acknowledger<'a> {
+    /// Acknowledges on `channel` from sequence number `first_seq`, marking
+    /// `device` through `dmsetup` after each acknowledgement when there is
+    /// one.
+    pub(crate) fn new(
+        channel: &'a mut Channel,
+        mark: Option<(&'a Path, &'a str)>,
+        first_seq: u64,
+    ) -> Self {
+        Self {
+            channel,
+            mark,
+            next_seq: first_seq,
+        }
+    }
+
+    /// The next free sequence number.
+    pub(crate) const fn next_seq(&mut self) -> u64 {
+        let seq = self.next_seq;
+        self.next_seq += 1;
+        seq
+    }
+
+    /// Writes any other protocol line.
+    pub(crate) fn line(&mut self, text: &str) -> Result<(), CampaignError> {
+        self.channel.line(text)
+    }
+
+    /// Says that operation `seq` starts.
+    pub(crate) fn start(&mut self, seq: u64, kind: OperationKind) -> Result<(), CampaignError> {
+        self.channel
+            .line(&format!("START {seq} {} {kind}", unix_nanos()?))
+    }
+
+    /// Acknowledges `ack` and, for the power-loss layer, marks the log.
+    pub(crate) fn acknowledge(&mut self, ack: &Ack) -> Result<(), CampaignError> {
+        self.channel.line(&ack.line())?;
+        if let Some((dmsetup, device)) = self.mark {
+            mark(dmsetup, device, &ack.mark())?;
+        }
+        Ok(())
+    }
+}
+
 pub(crate) fn unix_seconds() -> Result<u64, CampaignError> {
     Ok(SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -245,35 +299,47 @@ pub async fn run(config: &WorkloadConfig) -> Result<u64, CampaignError> {
     ensure_workspace(&engine, config)?;
     let mut rng = SplitMix64::new(config.seed);
     let mut failures_in_a_row = 0_u32;
-    channel.line(&format!("WORKLOAD-START seq={}", config.first_seq))?;
+    let mut acks = Acknowledger::new(
+        &mut channel,
+        config
+            .mark_device
+            .as_deref()
+            .map(|device| (config.dmsetup.as_path(), device)),
+        config.first_seq,
+    );
+    acks.line(&format!("WORKLOAD-START seq={}", config.first_seq))?;
     let mut done = 0_u64;
     while config.max_ops.is_none_or(|max| done < max) {
-        let seq = config.first_seq + done;
+        let seq = acks.next_seq();
         done += 1;
         let (kind, target) = choose(&mut rng, &active, config.mix);
-        channel.line(&format!("START {seq} {} {kind}", unix_nanos()?))?;
+        acks.start(seq, kind)?;
         let outcome = match (kind, active.get(target)) {
             (OperationKind::Ingest, _) | (_, None) => ingest(&engine, config, &mut rng, seq).await,
             (OperationKind::Evidence, Some(session)) => {
                 evidence(config, &session.id, &mut rng, seq).await
             }
             (OperationKind::Retranscribe, Some(session)) => {
-                retranscribe(config, &session.id, &mut rng, seq).await
+                retranscribe_or_continue(config, &session.id, &mut rng, seq, &mut acks).await
             }
             (OperationKind::Renew, Some(session)) => renew(config, &session.id, &mut rng, seq),
             (OperationKind::Request, _) => request(&engine, config, &mut rng, seq).await,
+            (OperationKind::Grow | OperationKind::Part, Some(session)) => {
+                growing(config, &session.id, &mut rng, seq, &mut acks, Ending::Seal).await
+            }
+            (OperationKind::Stop, Some(session)) => {
+                let ending = Ending::StopAfterFirstPart;
+                growing(config, &session.id, &mut rng, seq, &mut acks, ending).await
+            }
         };
         match outcome {
             Ok(ack) => {
                 failures_in_a_row = 0;
-                channel.line(&ack.line())?;
-                if let Some(device) = &config.mark_device {
-                    mark(&config.dmsetup, device, &ack.mark())?;
-                }
+                acks.acknowledge(&ack)?;
                 advance(&mut active, &ack, config.rotate_after);
             }
             Err(OperationStop::Failed(code)) => {
-                channel.line(&format!(
+                acks.line(&format!(
                     "FAIL {seq} {} {kind} {}",
                     unix_nanos()?,
                     code.identifier()
@@ -289,8 +355,31 @@ pub async fn run(config: &WorkloadConfig) -> Result<u64, CampaignError> {
             Err(OperationStop::Harness(error)) => return Err(error),
         }
     }
-    channel.line(&format!("WORKLOAD-END operations={done}"))?;
+    acks.line(&format!("WORKLOAD-END operations={done}"))?;
     Ok(done)
+}
+
+/// A retranscription that publishes as it goes and ends as `ending` says, or
+/// the continuation of an open revision a crash left ([`crate::grow`]).
+async fn growing(
+    config: &WorkloadConfig,
+    session: &SessionId,
+    rng: &mut SplitMix64,
+    seq: u64,
+    acks: &mut Acknowledger<'_>,
+    ending: Ending,
+) -> Result<Ack, OperationStop> {
+    let store = open_store(&config.root)?;
+    grow(
+        &store,
+        session,
+        config.recognizer_delay,
+        rng,
+        seq,
+        acks,
+        ending,
+    )
+    .await
 }
 
 /// The sessions earlier acknowledgements opened that still take work.
@@ -314,8 +403,9 @@ fn known_sessions(config: &WorkloadConfig) -> Result<Vec<ActiveSession>, Campaig
 }
 
 /// The next operation and the active session it works on: mostly evidence
-/// and retranscriptions, some renewals, and a new session now and then
-/// (always while fewer than two sessions take work).
+/// and retranscriptions (some of them published as they go, a few of those
+/// stopped), some renewals, and a new session now and then (always while
+/// fewer than two sessions take work).
 fn choose(rng: &mut SplitMix64, active: &[ActiveSession], mix: Mix) -> (OperationKind, usize) {
     let kind = if active.is_empty() || (active.len() < 2 && rng.below(4) == 0) {
         OperationKind::Ingest
@@ -324,7 +414,9 @@ fn choose(rng: &mut SplitMix64, active: &[ActiveSession], mix: Mix) -> (Operatio
             (0..6, _) => OperationKind::Ingest,
             (6..12, _) => OperationKind::Request,
             (12..56, _) | (56..84, Mix::NoJobs) => OperationKind::Evidence,
-            (56..84, Mix::All) => OperationKind::Retranscribe,
+            (56..72, Mix::All) => OperationKind::Retranscribe,
+            (72..80, Mix::All) => OperationKind::Grow,
+            (80..84, Mix::All) => OperationKind::Stop,
             _ => OperationKind::Renew,
         }
     };
@@ -332,8 +424,9 @@ fn choose(rng: &mut SplitMix64, active: &[ActiveSession], mix: Mix) -> (Operatio
     (kind, target)
 }
 
-/// Follows an acknowledgement: its session takes work until it reaches
-/// `rotate_after` generations, and at most four sessions take work at once.
+/// Follows an operation's acknowledgement: its session takes work until it
+/// reaches `rotate_after` generations, and at most four sessions take work at
+/// once.
 fn advance(active: &mut Vec<ActiveSession>, ack: &Ack, rotate_after: u64) {
     match active.iter_mut().find(|session| session.id == ack.session) {
         Some(session) => session.generation = ack.generation,
@@ -398,7 +491,7 @@ fn open_store(root: &Path) -> Result<FilesystemSessionStore, OperationStop> {
 
 /// The committed head's generation and manifest digest, read back after a
 /// commit (the workload is the only writer).
-fn committed(
+pub(crate) fn committed(
     store: &FilesystemSessionStore,
     session: &SessionId,
     generation: StorageGeneration,
@@ -641,14 +734,33 @@ fn retranscription(range: Option<TimeRange>) -> JobRequest {
     }
 }
 
-async fn retranscribe(
+/// A retranscription of a random range, or, while the session holds an open
+/// revision a crash left, its continuation: the session takes no other
+/// transcription while it is open (ADR 0033).
+pub(crate) async fn retranscribe_or_continue(
     config: &WorkloadConfig,
     session: &SessionId,
     rng: &mut SplitMix64,
     seq: u64,
+    acks: &mut Acknowledger<'_>,
 ) -> Result<Ack, OperationStop> {
     let store = open_store(&config.root)?;
     let now = unix_seconds()?;
+    if let Some(open) = store.read_open_transcript(session, now).map_err(storage)? {
+        let (delay, continuation) = (config.recognizer_delay, Continuation::drawn(rng));
+        return continue_open(&store, session, &open, delay, continuation, seq, acks).await;
+    }
+    retranscribe(config, &store, session, rng, seq, now).await
+}
+
+async fn retranscribe(
+    config: &WorkloadConfig,
+    store: &FilesystemSessionStore,
+    session: &SessionId,
+    rng: &mut SplitMix64,
+    seq: u64,
+    now: u64,
+) -> Result<Ack, OperationStop> {
     let status = store.session_status(session).map_err(storage)?;
     let segment =
         whole_file_source_segment(status.source_id(), MediaTime::from_micros(SPEECH_MICROS))
@@ -713,7 +825,7 @@ async fn retranscribe(
             admission: vsift_domain::AdmissionWait::Immediate,
         },
         RetranscriptionPorts {
-            store: &store,
+            store,
             audio: &StandInAudio,
             recognizer: &StandInRecognizer {
                 delay: config.recognizer_delay,
@@ -731,7 +843,7 @@ async fn retranscribe(
     .await
     .map_err(|error| OperationStop::Failed(job_failure(&error)))?;
     let generation = store.session_status(session).map_err(storage)?.generation();
-    let (generation, manifest) = committed(&store, session, generation)?;
+    let (generation, manifest) = committed(store, session, generation)?;
     Ok(Ack {
         seq,
         unix_ns: unix_nanos()?,

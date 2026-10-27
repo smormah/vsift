@@ -424,6 +424,10 @@ refines the design:
   requires: a durable workspace raises an ephemeral request to durable, and a durable
   request in an ephemeral workspace is refused (`INVALID_ARGUMENT`), never weakened.
   The commit path itself is unchanged, so the crash campaign's evidence still applies.
+- **Open revisions (2026-10-22, ADR 0033).** The campaign's workload also publishes revisions part by
+  part, stops some, and continues those a crash left open; each part is acknowledged when committed, and
+  the verifier holds every newest revision to a seal-only run (ADR 0033, the sixth pull request's notes).
+  The hosted layers have not run this workload yet.
 - **Admission weights.** A recognition attempt (section 4) now reserves its recognizer
   threads of the root's capacity instead of one slot, and that reservation covers the
   chunk decoding between recognitions; the threads are capped at the root's capacity,
