@@ -314,6 +314,26 @@ fn page_omitting(
     stop: Option<VisualExtensionStop>,
     omission: CandidateOmission,
 ) -> Built<Page> {
+    anchored_page(
+        session,
+        index,
+        requested,
+        limit,
+        stop,
+        omission,
+        &vsift_domain::TimeAnchors::none(),
+    )
+}
+
+fn anchored_page(
+    session: &SessionId,
+    index: &VisualIndex,
+    requested: TimeRange,
+    limit: u16,
+    stop: Option<VisualExtensionStop>,
+    omission: CandidateOmission,
+    time_anchors: &vsift_domain::TimeAnchors,
+) -> Built<Page> {
     let page = page_candidates(
         session,
         index,
@@ -346,6 +366,7 @@ fn page_omitting(
         gaps: &gaps,
         omission,
         omitted: page.omitted,
+        time_anchors,
     };
     let lifecycle = || LifecycleResponse::ephemeral(EXPIRES_AT.to_owned());
     let json = serde_json::to_value(candidates_response(&presentation, lifecycle())?)?;
@@ -374,6 +395,62 @@ fn partial_page() -> Built<Page> {
     let session = SessionId::parse(SESSION)?;
     let index = partial_index(&session)?;
     page(&session, &index, range(0, 200 * SECOND)?, 2, None)
+}
+
+/// Time anchoring (ADR 0029): with a session anchor every candidate, full,
+/// brief and streamed, carries the clock times of its span and its
+/// representative frame; the schemas accept them.
+#[test]
+fn candidates_carry_the_clock_times_of_their_span_and_frame() -> TestResult {
+    let session = SessionId::parse(SESSION)?;
+    let index = f02_index(&session)?;
+    let anchors = vsift_domain::TimeAnchors::new(vec![vsift_domain::TimeAnchor::new(
+        vsift_domain::AnchorSource::ContainerCreationTime,
+        MediaTime::from_micros(0),
+        vsift_domain::ClockReading::parse("2026-10-21T13:00:00Z")?,
+    )])?;
+    let page = anchored_page(
+        &session,
+        &index,
+        range(0, 12 * SECOND)?,
+        20,
+        None,
+        CandidateOmission::Nothing,
+        &anchors,
+    )?;
+    validate("candidates-data.schema.json", &page.json["data"])?;
+    validate("candidates-brief-data.schema.json", &page.brief["data"])?;
+    let items = page.json["data"]["items"].as_array().ok_or("no items")?;
+    assert_ne!(*items, [] as [Value; 0]);
+    for item in items {
+        let clock = &item["clock_time"];
+        assert_eq!(clock["source"], "container_creation_time");
+        assert_eq!(clock["confidence"], "medium");
+        let at = item["representative_us"].as_u64().ok_or("no time")?;
+        assert_eq!(
+            clock["at"]["utc"],
+            format!("2026-10-21T13:00:{:02}.{:06}Z", at / SECOND, at % SECOND),
+            "{item}"
+        );
+        assert_eq!(clock["at"]["local"], Value::Null);
+        assert!(clock["start"].is_object() && clock["end"].is_object());
+    }
+    for (brief, full) in page.brief["data"]["items"]
+        .as_array()
+        .ok_or("no brief items")?
+        .iter()
+        .zip(items)
+    {
+        assert_eq!(brief["clock_time"], full["clock_time"]);
+    }
+    for line in &page.lines {
+        let value: Value = serde_json::from_str(line)?;
+        if value["event"] == "evidence" {
+            validate("visual-candidate.schema.json", &value["record"])?;
+            assert!(value["record"]["clock_time"].is_object());
+        }
+    }
+    Ok(())
 }
 
 #[test]

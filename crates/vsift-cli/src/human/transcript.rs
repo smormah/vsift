@@ -1,7 +1,7 @@
 //! `transcript get`, `transcript retranscribe` and `search`.
 
 use super::{
-    push_outcome,
+    clock, push_outcome,
     text::{Placement, RenderedText, TerminalText, TooLarge},
     time::{push_range, push_span},
     view::{
@@ -425,6 +425,7 @@ fn push_segments<'segment>(
         }
         text.end_line();
         push_segment_details(text, segment);
+        clock::push_segment_clock(text, segment.clock_time.as_ref());
         text.push_untrusted(&segment.display_text, Placement::Quoted);
     }
     text.blank_line();

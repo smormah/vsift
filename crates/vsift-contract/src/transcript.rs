@@ -27,11 +27,12 @@ use vsift_domain::{
     TranscriptOffset, TranscriptProvenance, TranscriptRejection, TranscriptRevision,
     TranscriptSegment, TranscriptWarningKind,
 };
+use vsift_domain::{MediaTime, TimeAnchors};
 
 use crate::growth::{ReadGrowth, SinceData, TRANSCRIPTION_PENDING_WARNING};
 use crate::{
-    CommandName, ConfidenceResponse, CoverageResponse, LifecycleResponse, OperationResponse,
-    ResultView, render_hidden_characters, sanitize_untrusted_text,
+    ClockTimeData, CommandName, ConfidenceResponse, CoverageResponse, LifecycleResponse,
+    OperationResponse, ResultView, render_hidden_characters, sanitize_untrusted_text,
     search::{TranscriptCoverageData, bounded, envelope_coverage},
     view::BRIEF_VIEW,
 };
@@ -295,9 +296,26 @@ pub struct TranscriptSegmentData {
     cue: Option<CueData>,
     #[serde(skip_serializing_if = "Option::is_none")]
     carried_from: Option<CarriedFromData>,
+    /// The item's real-world clock time (ADR 0029); absent when the session
+    /// has no time anchor.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    clock_time: Option<ClockTimeData>,
 }
 
 impl TranscriptSegmentData {
+    /// Adds the clock times of the segment's start and end from the
+    /// session's anchors (ADR 0029); without an anchor the item is unchanged.
+    #[must_use]
+    pub fn with_clock_time(mut self, anchors: &TimeAnchors) -> Self {
+        self.clock_time = TimeRange::new(
+            MediaTime::from_micros(self.start_us),
+            MediaTime::from_micros(self.end_us),
+        )
+        .ok()
+        .and_then(|range| ClockTimeData::range(anchors, range));
+        self
+    }
+
     /// Presents one segment of `revision`.
     ///
     /// The alignment and language are those of the provenance that produced
@@ -394,6 +412,7 @@ impl TranscriptSegmentData {
                 revision_id: carried.revision().as_str().to_owned(),
                 segment_id: carried.segment().as_str().to_owned(),
             }),
+            clock_time: None,
         }
     }
 }
@@ -428,6 +447,9 @@ pub(crate) struct BriefTranscriptSegmentData {
     /// Present only on a carried segment, as in the full item.
     #[serde(skip_serializing_if = "Option::is_none")]
     carried_from: Option<CarriedFromData>,
+    /// As in the full item.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    clock_time: Option<ClockTimeData>,
 }
 
 /// A speaker without its raw label: the label to quote and where it came from.
@@ -449,6 +471,7 @@ impl From<&TranscriptSegmentData> for BriefTranscriptSegmentData {
                 origin: speaker.origin,
             }),
             carried_from: full.carried_from.clone(),
+            clock_time: full.clock_time.clone(),
         }
     }
 }
@@ -535,8 +558,8 @@ struct CueData {
 /// The requested half-open source range of a page.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 pub(crate) struct RangeData {
-    from_us: u64,
-    to_us: u64,
+    pub(crate) from_us: u64,
+    pub(crate) to_us: u64,
 }
 
 impl RangeData {
@@ -710,7 +733,10 @@ impl TranscriptPageData {
             items: page
                 .segments
                 .iter()
-                .map(|segment| TranscriptSegmentData::new(page.revision, segment))
+                .map(|segment| {
+                    TranscriptSegmentData::new(page.revision, segment)
+                        .with_clock_time(page.time_anchors)
+                })
                 .collect(),
             next_cursor: page.next_cursor.map(str::to_owned),
             transcript_coverage: TranscriptCoverageData::with_growth(page.coverage, page.growth),
@@ -800,6 +826,9 @@ pub struct TranscriptPresentation<'a> {
     /// What a read of a growing transcript adds (ADR 0033); [`Default`] for a
     /// sealed revision read without `--since`.
     pub growth: ReadGrowth<'a>,
+    /// The session's clock-time anchors, from which every item's
+    /// `clock_time` is derived (ADR 0029).
+    pub time_anchors: &'a TimeAnchors,
 }
 
 /// Fixed warning of a transcript read whose range is not fully transcribed

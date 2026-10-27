@@ -7,6 +7,10 @@
   "additionalProperties": false,
   "required": ["segment_id", "start_us", "end_us", "display_text"],
   "properties": {
+    "clock_time": {
+      "description": "As in the full segment: its clock times, start and end; absent when the session has no time anchor.",
+      "$ref": "time-anchor.schema.json#/$defs/clock_time"
+    },
     "segment_id": { "type": "string", "pattern": "^tsg_[a-z0-9]{16,64}$" },
     "start_us": { "type": "integer", "minimum": 0 },
     "end_us": { "type": "integer", "minimum": 1 },

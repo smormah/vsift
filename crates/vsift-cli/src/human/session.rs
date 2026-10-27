@@ -3,7 +3,7 @@
 use vsift_contract::CommandName;
 
 use super::{
-    push_outcome,
+    clock, push_outcome,
     text::{RenderedText, TerminalText, TooLarge},
     view::{Bundle, CleanPage, Envelope, Opened, SessionPage, SessionStatus, Workspace},
 };
@@ -47,6 +47,7 @@ pub(super) fn ingest(envelope: &Envelope<Opened>) -> Result<RenderedText, TooLar
             text.push_fixed("Transcript: none imported").end_line();
         }
     }
+    clock::push_recording_time(&mut text, data.time_anchor.as_ref());
     push_outcome(&mut text, envelope);
     text.finish()
 }
@@ -236,6 +237,7 @@ fn push_status_lines(text: &mut TerminalText, status: &SessionStatus) {
     text.push_fixed("Generation: ")
         .push_unsigned(status.generation)
         .end_line();
+    clock::push_recording_time(text, status.time_anchor.as_ref());
 }
 
 /// Writes a source identity and its size.

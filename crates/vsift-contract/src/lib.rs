@@ -18,6 +18,9 @@
 //! - **Session:** [`OpenData`], [`StatusData`], [`PageData`], [`CleanData`],
 //!   [`BundleData`] and their item types; `session status` adds its newest
 //!   jobs through [`SessionStatusData`].
+//! - **Time anchoring (ADR 0029):** the session's [`TimeAnchorData`] summary
+//!   and the [`ClockTimeData`] (`clock_time`) of every timestamped item, both
+//!   absent when the session has no anchor.
 //! - **Jobs:** [`JobData`] for `job status` and `job cancel`, built from a
 //!   host's [`JobPresentation`], [`JobResumeData`] for `job resume`, and the
 //!   fixed-prose remediation for interrupted, unknown, ended and session-less
@@ -108,6 +111,7 @@
 
 mod batch;
 mod candidates;
+mod clock;
 mod command;
 mod delivered_path;
 mod envelope;
@@ -181,6 +185,7 @@ pub use candidates::{
     VISUAL_COVERAGE_WARNING, VISUAL_TOOLS_REMEDIATION, VisualCandidateData, candidates_response,
     candidates_response_with_view,
 };
+pub use clock::{ClockData, ClockTimeData, TimeAnchorData};
 pub use command::CommandName;
 pub use envelope::{
     CONTRACT_VERSION, CoverageResponse, ErrorResponse, LifecycleResponse, MAX_AFFECTED_IDS,

@@ -19,6 +19,7 @@ mod search;
 mod session;
 mod spans;
 mod storage;
+mod time_anchor;
 mod timeline;
 mod transcript;
 mod visual;
@@ -108,6 +109,12 @@ pub use session::{
 };
 pub use storage::{
     DurabilityRequirement, GenerationError, PublicationGuarantee, StorageGeneration,
+};
+pub use time_anchor::{
+    ANCHOR_AGREEMENT_MICROS, AnchorConfidence, AnchorConsistency, AnchorSource, CivilDateTime,
+    ClockReading, ClockTime, EARLIEST_TAGGED_RECORDING_UNIX_SECONDS, MAX_CLOCK_TEXT_BYTES,
+    MAX_TIME_ANCHORS, TAG_FUTURE_ALLOWANCE_SECONDS, TimeAnchor, TimeAnchorError, TimeAnchors,
+    UtcOffset,
 };
 pub use timeline::{
     CropParseError, CropRect, FrameDimensions, FrameTiming, GeometryError, MediaTime, StreamTime,

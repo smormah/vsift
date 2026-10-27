@@ -106,8 +106,51 @@ vsift session clean --expired --json
 `ingest` stages and hashes one local source, returning its session/source IDs,
 source bytes, committed generation, `process_crash_consistent` publication (or
 `os_crash_durable` in a durable worker workspace, P11) and an RFC 3339 expiry.
-Without `--transcript` it does not start FFmpeg, setup, transcription or indexing;
-supplied-transcript import is described in the next section. The source must be an
+Without `--transcript` it does not start setup, transcription or indexing, and it starts
+FFprobe only once, to read the source's two recording-time tags (time anchoring, below),
+and only when the media tools are set up and a recorded verification pass already covers
+them (`setup check` and every media command record one); it never starts a verification
+and never fails because of the tags (until `0.3.0` a plain ingest started no FFmpeg at
+all). Supplied-transcript import is described in the next section.
+
+**Time anchoring (`0.3.0`, [ADR 0029](../decisions/0029-time-anchoring.md)).** Every
+timestamped result can say when, by the real-world clock, its moment happened, so a
+remark can be matched with server logs. `ingest --recorded-at <TIME>` states the
+recording's start in RFC 3339: with an offset (`2026-10-21T14:03:12+01:00`, an exact
+instant and the local time), with `Z` (an instant whose local zone is not stated), or with
+no zone (`2026-10-21T14:03:12`, a local time whose zone is unknown, which names no
+instant); fractions past six digits are dropped, `-00:00` means UTC with the local offset
+unknown, and anything else is `INVALID_ARGUMENT` before anything is read. The session's
+clock times come from the first of its anchors, in this order: the operator's statement
+(`operator`, confidence `exact`), the recording app's own local-time tag
+`com.apple.quicktime.creationdate` (`quicktime_creationdate`, `high`), and the container's
+UTC `creation_time` (an MP4 movie header or Matroska's `DateUTC`;
+`container_creation_time`, `medium`: many tools write the time they encoded or remuxed
+the file, and some devices the end of the recording). A tag earlier than 1995 or more
+than a day after the ingesting host's clock is no recording's time and is dropped; a tag
+that does not parse is left out. **A file's modification time is never used**: for most
+files a person is sent it is the time of a copy, a download or an unpacking, and nothing
+in the file says which. The anchors are stored with the session when it opens (an older
+release reads such a session as damaged, as for every additive lifecycle member, known
+limit L-044) and are reported, only when there is one, as `time_anchor` in the data of
+`ingest` and `session status` (`renew`, `close` and `session list` items too):
+`consistency` (`single`; `consistent`, every two anchors that name an instant agree within
+two seconds; `conflicting`, two disagree and clock times still come from the first; a local
+time whose zone is unknown is never compared, ADR 0029 decision 9),
+`source` and `confidence` of the anchor clock times come from, `recording_start`, and
+every anchor with its `media_time_us` and reading
+([`time-anchor.schema.json`](../../schemas/v1/time-anchor.schema.json), example
+[`ingest.time-anchor.json`](../../schemas/v1/examples/ingest.time-anchor.json)). Every
+timestamped item then carries `clock_time`: a transcript segment (full, brief and
+streamed) its `start` and `end`; a visual candidate its span's `start` and `end` and its
+representative frame `at`; a frame or crop `at` the delivered frame; an audio clip its
+planned range and `at` its first decoded sample (example
+[`transcript-get.clock-time.json`](../../schemas/v1/examples/transcript-get.clock-time.json)).
+A reading is always `utc`, `local` and `utc_offset`, each a string or `null`: an instant
+with its local time and offset, an instant whose local zone is unknown, or a local time
+whose zone is unknown. A session without an anchor answers exactly as before. A later
+release adds sources (clocks visible on screen, at other positions of the timeline) to the
+same list. The source must be an
 absolute local path to a regular file (a relative path is read from the folder the command
 was run in). **A named pipe (FIFO), a device file or a UNIX socket is refused without being opened**
 (since `0.2.2`, #264): its directory entry says what it is, and nothing opens it, because opening a pipe
@@ -3550,7 +3593,9 @@ every request that resolves to one frame names one item. Source and operation id
 They cannot contain paths, options, whitespace, or control characters.
 
 All public media positions are non-negative source-timeline microseconds. Ranges are
-half-open `[from, to)` and require `from < to`. Provider stream time bases are
+half-open `[from, to)` and require `from < to`. A real-world clock time (`clock_time`,
+`time_anchor`, since `0.3.0`) is never a media position: it is derived from the session's
+time anchor and stated with its source and confidence (see `ingest` above). Provider stream time bases are
 normalized with checked rational arithmetic. Frame results keep requested and actual
 times separate and expose their signed delta.
 
@@ -3616,8 +3661,9 @@ contract says it is written only when it has something to say** (it is then opti
 the schema, and absent otherwise, so a response with nothing to say is exactly what it was
 before); a reader written against an older copy of the schema ignores it. The optional
 members so far are `local_asr.unusable_chunks` and the `untranscribed_ranges` of a
-retranscription (0.2.1, #353), and `local_asr.unplaced_ranges` (the second candidate of
-0.2.1, #359); in the stored record, `carried_untranscribed` (#353) and `unplaced_ranges`
+retranscription (0.2.1, #353), `local_asr.unplaced_ranges` (the second candidate of
+0.2.1, #359), and, in `0.3.0`, `time_anchor` (ingest and session data) and `clock_time`
+(every timestamped item), present only when the session has a time anchor (ADR 0029); in the stored record, `carried_untranscribed` (#353) and `unplaced_ranges`
 (#359), which an older release reads as damage. A member added after the published
 `0.1.0` to an answer that release already wrote (`transcript_coverage` of `transcript
 get`) is a declared property but not `required`: `published_compatibility` holds the
@@ -3635,7 +3681,7 @@ producer emits it every time, and a test pins that.
 | C-05 | bounded/sanitized output and broken stdout/stderr behavior |
 | C-06 | strict bounded JSON decoding and schema/identifier rejection, including the P11 job request (`vsift-contract` `request` tests, `worker_contract`, fuzz targets `job_request` and `job_batch_line`), the recorded steps and results of a request record (`recorded_steps_and_results_read_back_exactly`, fuzz target `request_record`) and `handoff check` (P13 PR 5: the `handoff` unit tests, `handoff_contract`, `handoff_differential` against `jsonschema`, `handoff_cli_contract` through the binary, fuzz target `handoff_check`) |
 | C-07 | checked time/range/crop invariants and property tests |
-| C-08 | schema examples and old-reader/additive-v1 compatibility, including the `setup check` `local_asr` object (`setup_local_asr_contract`, `engine_setup_local_asr`), a segment's `display_text` and `display_label` (`vsift-contract` `text` tests, `display_text_makes_hidden_characters_visible_and_keeps_text_raw`, and SEC-T02's `sec_t02_adversarial_evidence` through the binary), the failure remediation of an `ingest` path that names no file, a folder or a file that may not be read (`storage_contract`, `source_path_cli_contract`, #369) and the P11 event kinds (`worker_events_contract`: a reader that knows only `evidence` and `terminal` skips `progress`, `lifecycle` and `result` and still sees a contiguous sequence), the `0.2.1` views and coverage of a read (the brief answers are a projection of the full ones and match their frozen examples: `transcript_contract`, `local_asr_contract`, `search_contract`, `candidates_contract`; a complete read and a stream are what `0.1.0` published but for `transcript_coverage`: `a_complete_read_is_what_was_published_but_for_the_new_member`, `a_stream_is_what_was_published_but_for_the_new_terminal_member`; the brief view is refused for a stream before anything is read or analysed, through the binary: `transcript_cli_contract`, `search_cli_contract`, `candidates_cli_contract`; a read over a gap is `partial` as a search is: `a_read_over_a_gap_is_partial_and_names_the_gap`, `a_read_and_a_search_agree_on_every_range`, `a_read_over_a_gap_is_partial_as_a_search_over_it_is`); the `0.3.0` on-screen text (`screen_text_contract`: the `ocr` results and a search's `screen_text` member against their schemas and frozen examples, older pages without the member still valid; `ocr_cli_contract` through the binary; `screen_text_index_store` for the stored record and retained bundles); and `setup check`'s `managed_updates` (`0.2.3`: always present, empty when nothing is superseded, valid without it: `setup_managed_update_contract`; through the binary on every platform: `setup_check_names_a_superseded_managed_whisper_and_the_step`; on real bytes: `p13_managed_upgrade_real`) |
+| C-08 | schema examples and old-reader/additive-v1 compatibility, including the `setup check` `local_asr` object (`setup_local_asr_contract`, `engine_setup_local_asr`), a segment's `display_text` and `display_label` (`vsift-contract` `text` tests, `display_text_makes_hidden_characters_visible_and_keeps_text_raw`, and SEC-T02's `sec_t02_adversarial_evidence` through the binary), the failure remediation of an `ingest` path that names no file, a folder or a file that may not be read (`storage_contract`, `source_path_cli_contract`, #369) and the P11 event kinds (`worker_events_contract`: a reader that knows only `evidence` and `terminal` skips `progress`, `lifecycle` and `result` and still sees a contiguous sequence), the `0.2.1` views and coverage of a read (the brief answers are a projection of the full ones and match their frozen examples: `transcript_contract`, `local_asr_contract`, `search_contract`, `candidates_contract`; a complete read and a stream are what `0.1.0` published but for `transcript_coverage`: `a_complete_read_is_what_was_published_but_for_the_new_member`, `a_stream_is_what_was_published_but_for_the_new_terminal_member`; the brief view is refused for a stream before anything is read or analysed, through the binary: `transcript_cli_contract`, `search_cli_contract`, `candidates_cli_contract`; a read over a gap is `partial` as a search is: `a_read_over_a_gap_is_partial_and_names_the_gap`, `a_read_and_a_search_agree_on_every_range`, `a_read_over_a_gap_is_partial_as_a_search_over_it_is`); the `0.3.0` on-screen text (`screen_text_contract`: the `ocr` results and a search's `screen_text` member against their schemas and frozen examples, older pages without the member still valid; `ocr_cli_contract` through the binary; `screen_text_index_store` for the stored record and retained bundles); and `setup check`'s `managed_updates` (`0.2.3`: always present, empty when nothing is superseded, valid without it: `setup_managed_update_contract`; through the binary on every platform: `setup_check_names_a_superseded_managed_whisper_and_the_step`; on real bytes: `p13_managed_upgrade_real`); and time anchoring (`0.3.0`, ADR 0029: the domain's `time_anchor` tests, the stored form `filesystem_session_store::time_anchors` and `time_anchor_store`, the contract's `clock` tests, `anchored_results_match_their_examples`, `candidates_carry_the_clock_times_of_their_span_and_frame`, `a_frame_carries_the_clock_time_of_the_delivered_frame`, through the binary `time_anchor_cli_contract`, and on real tags written by the pinned FFmpeg the opt-in `time_anchor_real_tags` in `P07 local ASR`) |
 | C-09 | legal job and cancellation terminal transitions (`vsift-domain` `job` tests over the whole state graph; `job` use-case tests of cancellation serialized with the commit); the public job commands, `--operation-id` and interruptions through the binary (`job_cli_contract`, `interrupt_cli_contract`, the job examples in `local_asr_contract`); `job run` through the binary: results and events against their schemas, replay, conflict, busy, refusals, sentinels and shutdown (`job_run_cli_contract`), and the request path through the engine (`engine_worker`); `job batch` through the binary: events, summary, limits, O-02, O-03, X-08 and O-04 (`job_batch_cli_contract`), and the batch through the engine (`engine_batch`, opt-in `engine_batch_tools`) |
 | C-10 | unknown confidence, speaker metadata, time normalization, requested/actual timing, imported-transcript offset conversion, local-ASR provenance and carried segments (`local_asr_contract`, `local_asr_store`), and that an id of a superseded revision still resolves in a read, a handoff check and a retained bundle (`superseded_ids_cli_contract`) |
 

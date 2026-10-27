@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vsift.dev/schemas/v1/time-anchor.schema.json",
+  "title": "VSift time anchor v1",
+  "description": "Time anchoring (0.3.0, ADR 0029): the time_anchor member of ingest and session status data, which says when the recording happened by the real-world clock and on what authority. It is present only when the session has an anchor; a session without one omits it, and every timestamped item then omits clock_time. An anchor ties one position of the timeline (media_time_us) to one clock reading from one source. The sources, in the order clock times are taken from them: operator (ingest --recorded-at, confidence exact), quicktime_creationdate (the recording app's own local-time tag, high) and container_creation_time (the container's UTC creation time, medium: many tools write the time they encoded or remuxed the file, and some devices the end of the recording). A file's modification time is never a source, and an online provider's upload date is not a recording time. consistency says whether the anchors agree: single (one anchor, or no two that name an instant), consistent (every two that name an instant agree within two seconds) or conflicting (two disagree; clock times still come from the first source, and a reader should say they are disputed). Only anchors that name an instant are compared: a local time whose zone is unknown (a clock face, or a statement without an offset) is never compared with another reading. Later releases may add sources (for example clocks visible on screen, at other positions of the timeline) and consistency values; a reader treats an unknown value as a reason to check the anchors list.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["consistency", "source", "confidence", "recording_start", "anchors"],
+  "properties": {
+    "consistency": { "enum": ["single", "consistent", "conflicting"] },
+    "source": {
+      "description": "The anchor every clock time of the session comes from: the first of anchors.",
+      "$ref": "#/$defs/source"
+    },
+    "confidence": { "$ref": "#/$defs/confidence" },
+    "recording_start": {
+      "description": "The clock time of the start of the timeline (media time 0) by the selected anchor.",
+      "$ref": "#/$defs/clock"
+    },
+    "anchors": {
+      "description": "Every anchor, in the order clock times are taken from them.",
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 16,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["source", "confidence", "media_time_us", "time"],
+        "properties": {
+          "source": { "$ref": "#/$defs/source" },
+          "confidence": { "$ref": "#/$defs/confidence" },
+          "media_time_us": {
+            "description": "The timeline position, in microseconds, whose clock reading this is. 0 for every source of 0.3.0.",
+            "type": "integer",
+            "minimum": 0
+          },
+          "time": { "$ref": "#/$defs/clock" }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "source": { "enum": ["operator", "quicktime_creationdate", "container_creation_time"] },
+    "confidence": { "enum": ["exact", "high", "medium"] },
+    "clock": {
+      "description": "One clock reading. utc is the exact instant, when the reading names one: RFC 3339 in UTC with six fraction digits and Z. local is what the local clock showed, when the source said so: the date and time with six fraction digits and no zone. utc_offset is the local clock's offset from UTC (+HH:MM or -HH:MM), present only when both are. utc without local: the instant is known, the local zone is not. local without utc: a local time whose zone is not known, which names no instant; matching it with UTC logs needs the zone from elsewhere.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["utc", "local", "utc_offset"],
+      "properties": {
+        "utc": {
+          "type": ["string", "null"],
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{6}Z$"
+        },
+        "local": {
+          "type": ["string", "null"],
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{6}$"
+        },
+        "utc_offset": { "type": ["string", "null"], "pattern": "^[+-][0-9]{2}:[0-9]{2}$" }
+      },
+      "anyOf": [
+        { "properties": { "utc": { "type": "string" } } },
+        { "properties": { "local": { "type": "string" } } }
+      ],
+      "if": { "properties": { "utc_offset": { "type": "string" } } },
+      "then": { "properties": { "utc": { "type": "string" }, "local": { "type": "string" } } }
+    },
+    "clock_time": {
+      "description": "The clock_time member of a timestamped item: the real-world clock time of the item's position on the timeline, from the session's selected anchor (see time_anchor in ingest and session status for whether the anchors agree). at is a point's time (a frame, a candidate's representative frame, an audio clip's first decoded sample); start and end are a range's ends (a transcript segment, a candidate's span, an audio clip's planned range). Absent members do not apply to the item. The whole member is absent when the session has no anchor.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "confidence"],
+      "properties": {
+        "source": { "$ref": "#/$defs/source" },
+        "confidence": { "$ref": "#/$defs/confidence" },
+        "at": { "$ref": "#/$defs/clock" },
+        "start": { "$ref": "#/$defs/clock" },
+        "end": { "$ref": "#/$defs/clock" }
+      },
+      "anyOf": [{ "required": ["at"] }, { "required": ["start", "end"] }]
+    }
+  }
+}

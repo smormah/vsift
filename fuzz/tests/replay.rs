@@ -492,6 +492,11 @@ const SEEDS: &[Seed] = &[
         Origin::InlineIn("crates/vsift-infrastructure/src/ffmpeg_media.rs"),
     ),
     seed(
+        Target::FfprobeMetadata,
+        "recorder-tags.json",
+        Origin::InlineIn("crates/vsift-infrastructure/src/ffmpeg_media.rs"),
+    ),
+    seed(
         Target::TranscriptCursor,
         "transcript-get-next-cursor.txt",
         Origin::InlineIn("schemas/v1/examples/transcript-get.json"),
@@ -930,6 +935,7 @@ fn well_formed_seeds_are_accepted() -> TestResult {
         (Target::TranscriptPart, "two-parts.bin"),
         (Target::FfprobeMetadata, "two-streams-rotated.json"),
         (Target::FfprobeMetadata, "audio-only-unknown-codec.json"),
+        (Target::FfprobeMetadata, "recorder-tags.json"),
         (Target::TranscriptCursor, "transcript-get-next-cursor.txt"),
         (Target::VisualSamples, "F01-showinfo.bin"),
         (Target::VisualSamples, "F09-showinfo.bin"),

@@ -636,6 +636,9 @@ Options:
       --transcript-offset <MICROSECONDS>
           Signed microseconds added to every transcript timestamp to reach source time (for example 500000 or -250000); defaults to 0
 
+      --recorded-at <TIME>
+          When the recording started, for clock times on every result (time anchoring): RFC 3339, for example 2026-10-21T14:03:12+01:00 (local time with its UTC offset), 2026-10-21T13:03:12Z (UTC), or 2026-10-21T14:03:12 (local time, zone unknown). It is taken as exact and preferred over the time the video file itself records
+
       --session-root <SESSION_ROOT>
           For operators who run a worker host; an agent leaves it out. Explicit private disposable-session root; defaults to the per-user cache
 

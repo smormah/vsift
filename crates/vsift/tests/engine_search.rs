@@ -256,6 +256,7 @@ async fn seed(
         &OperationId::parse("op_2222222222222222")?,
         StorageGeneration::INITIAL,
         T0,
+        &vsift_domain::TimeAnchors::none(),
         &revision,
     )?;
     Ok(session_id)

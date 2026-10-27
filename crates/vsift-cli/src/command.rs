@@ -4,10 +4,10 @@ use std::path::PathBuf;
 
 use clap::{ArgGroup, Args, Parser, Subcommand, ValueEnum};
 use vsift::{
-    CropRectangle, DurabilityRequirement, EvidenceId, FrameSelection, IsolationProfile, JobId,
-    ManagedComponent, ManagedVersionKey, ManagedVersionKeyError, OperationId, OptionalComponent,
-    OptionalComponentSet, RuntimeDependency, SessionId, SetupProfile, TranscriptRevisionId,
-    VisualCandidateId,
+    ClockReading, CropRectangle, DurabilityRequirement, EvidenceId, FrameSelection,
+    IsolationProfile, JobId, ManagedComponent, ManagedVersionKey, ManagedVersionKeyError,
+    OperationId, OptionalComponent, OptionalComponentSet, RuntimeDependency, SessionId,
+    SetupProfile, TimeAnchorError, TranscriptRevisionId, VisualCandidateId,
 };
 use vsift_contract::{CommandName, ResultView};
 
@@ -469,6 +469,17 @@ pub(crate) struct IngestArguments {
         value_name = "MICROSECONDS"
     )]
     pub transcript_offset: Option<i64>,
+    /// When the recording started, for clock times on every result (time
+    /// anchoring): RFC 3339, for example 2026-10-21T14:03:12+01:00 (local time
+    /// with its UTC offset), 2026-10-21T13:03:12Z (UTC), or
+    /// 2026-10-21T14:03:12 (local time, zone unknown). It is taken as exact
+    /// and preferred over the time the video file itself records.
+    #[arg(long, value_name = "TIME", value_parser = parse_recorded_at)]
+    pub recorded_at: Option<ClockReading>,
+}
+
+fn parse_recorded_at(value: &str) -> Result<ClockReading, TimeAnchorError> {
+    ClockReading::parse(value)
 }
 
 /// Session namespace arguments.
