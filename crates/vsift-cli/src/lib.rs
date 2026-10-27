@@ -42,9 +42,9 @@ use vsift::{
     ADMISSION_RETRY_AFTER, Cancellation, DEFAULT_LOCAL_ASR_CHECK_BUDGET, Engine, EngineConfig,
     EngineError, EnginePorts, EvaluatedSetupPlan, ExecutableSelections, FailureCode, HostIsolation,
     IsolationProfile, ManagedRootLocation, OcrError, OpenSessionError, OptionalComponentSet,
-    PlanAcceptanceError, ProgressObserver, ScreenTextStop, SessionRootError, SessionRootLocation,
-    SetupCheckRequest, SetupPlanRequest, SourcePathFault, TranscriptSourceError,
-    UserConfigurationLocation, attest_host_isolation,
+    PendingTranscription, PlanAcceptanceError, ProgressObserver, ScreenTextStop, SessionRootError,
+    SessionRootLocation, SetupCheckRequest, SetupPlanRequest, SourcePathFault,
+    TranscriptSourceError, UserConfigurationLocation, attest_host_isolation,
 };
 use vsift_contract::{
     ADMISSION_BUSY_REMEDIATION, ADMISSION_CAPACITY_REMEDIATION, ARTIFACT_DIRECTORY_REMEDIATION,
@@ -63,9 +63,10 @@ use vsift_contract::{
     SOURCE_COPY_WOULD_BE_TOO_SLOW_REMEDIATION, SOURCE_IS_FOLDER_REMEDIATION,
     SOURCE_IS_LINK_REMEDIATION, SOURCE_NO_ROOM_REMEDIATION, SOURCE_NOT_FOUND_REMEDIATION,
     SOURCE_SPECIAL_FILE_REMEDIATION, STALE_PLAN_REMEDIATION, SUPERSEDED_REMEDIATION,
-    TRANSCRIPTION_RUNNING_REMEDIATION, TerminalEventResponse, UNKNOWN_JOB_REMEDIATION,
-    UNKNOWN_REVISION_REMEDIATION, UNOWNED_SESSION_ROOT_REMEDIATION, UNPINNED_MODEL_REMEDIATION,
-    VISUAL_TOOLS_REMEDIATION, WORKSPACE_NOT_DURABLE_REMEDIATION,
+    TRANSCRIPT_INTERRUPTED_REMEDIATION, TRANSCRIPT_QUEUED_REMEDIATION,
+    TRANSCRIPT_RUNNING_REMEDIATION, TRANSCRIPTION_RUNNING_REMEDIATION, TerminalEventResponse,
+    UNKNOWN_JOB_REMEDIATION, UNKNOWN_REVISION_REMEDIATION, UNOWNED_SESSION_ROOT_REMEDIATION,
+    UNPINNED_MODEL_REMEDIATION, VISUAL_TOOLS_REMEDIATION, WORKSPACE_NOT_DURABLE_REMEDIATION,
     WORKSPACE_POLICY_MISMATCH_REMEDIATION, WORKSPACE_ROOT_REMEDIATION, local_asr_failure_summary,
     local_asr_verification_summary, managed_lifecycle_remediation, media_tool_verification_summary,
     non_private_folder_summary, search_query_rejection_summary, transcript_rejection_summary,
@@ -816,6 +817,19 @@ impl From<EngineError> for CommandFailure {
                     job.as_str().to_owned(),
                 ]
             }
+            // #517: a read with no transcript yet follows the job that will
+            // publish one (an interrupted job is continued).
+            EngineError::TranscriptPending { job, progress, .. } => {
+                vec![
+                    "job".to_owned(),
+                    match progress {
+                        PendingTranscription::Interrupted => "resume",
+                        PendingTranscription::Running | PendingTranscription::Queued => "status",
+                    }
+                    .to_owned(),
+                    job.as_str().to_owned(),
+                ]
+            }
             // RV-1 finding 7: the job has ended, so only cancelling it again
             // seals its revision.
             EngineError::RevisionLeftOpen { job, .. } => {
@@ -861,6 +875,14 @@ fn local_asr_remediation(error: &EngineError) -> Option<String> {
         }
         EngineError::NoAudioStream => Some(NO_AUDIO_STREAM_REMEDIATION.to_owned()),
         EngineError::TranscriptUnavailable => Some(NO_TRANSCRIPT_REMEDIATION.to_owned()),
+        EngineError::TranscriptPending { progress, .. } => Some(
+            match progress {
+                PendingTranscription::Running => TRANSCRIPT_RUNNING_REMEDIATION,
+                PendingTranscription::Queued => TRANSCRIPT_QUEUED_REMEDIATION,
+                PendingTranscription::Interrupted => TRANSCRIPT_INTERRUPTED_REMEDIATION,
+            }
+            .to_owned(),
+        ),
         EngineError::TranscriptRevisionNotFound => Some(UNKNOWN_REVISION_REMEDIATION.to_owned()),
         EngineError::VisualToolUnavailable(_) => Some(VISUAL_TOOLS_REMEDIATION.to_owned()),
         EngineError::NoVideoStream => Some(NO_VIDEO_STREAM_REMEDIATION.to_owned()),
@@ -1308,15 +1330,16 @@ where
 #[cfg(test)]
 mod tests {
     use vsift::{
-        EngineError, EnginePorts, FailureCode, JobId, OpenSessionError, SourcePathFault,
-        SpecialFileKind, TranscriptSourceError,
+        EngineError, EnginePorts, FailureCode, JobId, OpenSessionError, PendingTranscription,
+        SourcePathFault, SpecialFileKind, TranscriptSourceError,
     };
     use vsift_contract::{
         CommandName, IDEMPOTENCY_CONFLICT_REMEDIATION, JOB_BUSY_REMEDIATION,
         SOURCE_ACCESS_DENIED_REMEDIATION, SOURCE_COPY_TOO_SLOW_REMEDIATION,
         SOURCE_COPY_WOULD_BE_TOO_SLOW_REMEDIATION, SOURCE_IS_FOLDER_REMEDIATION,
         SOURCE_NO_ROOM_REMEDIATION, SOURCE_NOT_FOUND_REMEDIATION, SOURCE_SPECIAL_FILE_REMEDIATION,
-        TRANSCRIPTION_RUNNING_REMEDIATION,
+        TRANSCRIPT_INTERRUPTED_REMEDIATION, TRANSCRIPT_QUEUED_REMEDIATION,
+        TRANSCRIPT_RUNNING_REMEDIATION, TRANSCRIPTION_RUNNING_REMEDIATION,
     };
 
     use super::{
@@ -1603,6 +1626,61 @@ mod tests {
             assert_eq!(
                 value["error"]["remediation"][0]["command"],
                 serde_json::json!({"executable": "vsift", "arguments": ["job", "status", job.as_str()]})
+            );
+        }
+        Ok(())
+    }
+
+    /// #517: a read of a session with no transcript yet, while a transcription
+    /// of it is pending, keeps `INVALID_ARGUMENT` and names the job, with the
+    /// remediation of its state and `job status` (`job resume` when it was
+    /// interrupted), never `transcript retranscribe`.
+    #[test]
+    fn a_read_with_no_transcript_names_the_pending_job() -> Result<(), Box<dyn std::error::Error>> {
+        let session = vsift::SessionId::parse("ses_0123456789abcdef0123456789abcdef")?;
+        let job = JobId::parse("job_0123456789abcdef0123456789abcdef")?;
+        for (progress, remediation, verb) in [
+            (
+                PendingTranscription::Running,
+                TRANSCRIPT_RUNNING_REMEDIATION,
+                "status",
+            ),
+            (
+                PendingTranscription::Queued,
+                TRANSCRIPT_QUEUED_REMEDIATION,
+                "status",
+            ),
+            (
+                PendingTranscription::Interrupted,
+                TRANSCRIPT_INTERRUPTED_REMEDIATION,
+                "resume",
+            ),
+        ] {
+            let mut stdout = Vec::new();
+            let mut stderr = Vec::new();
+            let mut writer = OutputWriter::new(&mut stdout, &mut stderr);
+            write_command_failure(
+                &mut writer,
+                OutputMode::Json,
+                CommandName::TranscriptGet,
+                CommandFailure::from(EngineError::TranscriptPending {
+                    session: session.clone(),
+                    job: job.clone(),
+                    progress,
+                }),
+            );
+            let value: serde_json::Value = serde_json::from_slice(&stdout)?;
+            assert_eq!(value["error"]["code"], "INVALID_ARGUMENT");
+            assert_eq!(value["error"]["retryable"], false);
+            assert_eq!(
+                value["error"]["affected_ids"],
+                serde_json::json!([session.as_str(), job.as_str()])
+            );
+            assert_eq!(value["error"]["remediation"][0]["summary"], remediation);
+            assert!(!remediation.contains("retranscribe"));
+            assert_eq!(
+                value["error"]["remediation"][0]["command"],
+                serde_json::json!({"executable": "vsift", "arguments": ["job", verb, job.as_str()]})
             );
         }
         Ok(())

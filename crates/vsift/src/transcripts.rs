@@ -138,7 +138,7 @@ impl Engine {
         let (revision, status) = match &query.revision {
             None => store
                 .read_transcript(&query.session, now)?
-                .ok_or(EngineError::TranscriptUnavailable)?,
+                .ok_or_else(|| self.no_transcript_error(&query.session))?,
             Some(revision) => store
                 .read_transcript_revision(&query.session, revision, now)?
                 .ok_or(EngineError::TranscriptRevisionNotFound)?,

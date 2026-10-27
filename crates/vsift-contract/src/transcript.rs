@@ -1020,6 +1020,33 @@ pub const MEDIA_TOOLS_FOR_TRANSCRIPT_REMEDIATION: &str = "Importing a supplied t
 /// Remediation when a session has no transcript to read.
 pub const NO_TRANSCRIPT_REMEDIATION: &str = "This session has no transcript yet. Open the video again with ingest --transcript to import a SubRip or WebVTT file, or run transcript retranscribe with this session to transcribe its speech locally with whisper.cpp.";
 
+/// Remediation when a session has no transcript to read yet, but a
+/// transcription of it is running (#517, ADR 0033).
+///
+/// The failure code stays the one of [`NO_TRANSCRIPT_REMEDIATION`]. Starting
+/// another transcription would be refused as `BUSY` while this one runs, so the
+/// remediation names the job (in `affected_ids`, after the session) and its
+/// `job status` command instead. Fixed prose; it names no path, session, job
+/// or time.
+pub const TRANSCRIPT_RUNNING_REMEDIATION: &str = "This session has no transcript to read yet, but a transcription of it is running (the job in affected_ids). Do not start another one. Run the suggested job status command to see its progress, and read again as its parts are published or when it has finished.";
+
+/// Remediation when a session has no transcript to read yet, but a
+/// transcription of it is recorded and waiting for its turn, in the root's
+/// queue or not yet started (#517, ADR 0033).
+///
+/// The place in the queue is not in the text, which is fixed prose: `job
+/// status` reports it as `queue_position`.
+///
+/// Fixed prose; it names no path, session, job or time.
+pub const TRANSCRIPT_QUEUED_REMEDIATION: &str = "This session has no transcript to read yet, but a transcription of it is waiting for its turn in the queue (the job in affected_ids). Do not start another one. Run the suggested job status command to see its place in the queue, and read again when it has finished.";
+
+/// Remediation when a session has no transcript to read yet, but a
+/// transcription of it was interrupted and can be continued (#517, ADR 0033).
+///
+/// The job keeps the chunks it finished, so `job resume` continues it. Fixed
+/// prose; it names no path, session, job or time.
+pub const TRANSCRIPT_INTERRUPTED_REMEDIATION: &str = "This session has no transcript to read yet: a transcription of it (the job in affected_ids) was interrupted and keeps the chunks it finished. Do not start another one. Run the suggested job resume command to continue it, then read again.";
+
 fn sanitize_lines(text: &str) -> String {
     text.split('\n')
         .map(|line| sanitize_untrusted_text(line, MAX_PRESENTED_TEXT_BYTES))

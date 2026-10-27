@@ -38,17 +38,18 @@ use vsift::{
     FrameTarget, HostIsolation, IdentifierGenerationError, IdentifierSource, IngestRequest,
     JobCancelOutcome, JobId, JobProgress, JobResumeRequest, JobState, LanguageTag,
     LocalAsrVerification, LocalAsrVerifier, ManagedRootLocation, MediaToolVerification,
-    MediaToolVerifier, OperationId, PlannedChunk, ProgressObserver, ProgressStage,
-    ProviderChunkOutput, ProviderSegment, ProviderToken, ProviderTokenKind, RecognizerIdentity,
-    RetranscribeRange, RetranscribeRequest, RuntimeDependency, SessionId, SessionRootLocation,
-    Sha256Hex, SpeechPcm, SpeechRecognitionError, SpeechRecognizer, UserConfigurationLocation,
+    MediaToolVerifier, OperationId, PendingTranscription, PlannedChunk, ProgressObserver,
+    ProgressStage, ProviderChunkOutput, ProviderSegment, ProviderToken, ProviderTokenKind,
+    RecognizerIdentity, RetranscribeRange, RetranscribeRequest, RuntimeDependency, SearchRequest,
+    SessionId, SessionRootLocation, Sha256Hex, SpeechPcm, SpeechRecognitionError, SpeechRecognizer,
+    TranscriptQuery, UserConfigurationLocation,
 };
 use vsift_application::{
-    AsrCancellation, CommitGuard, JobRequest, JobSpec, RecognitionScope, RetranscriptionPorts,
-    RetranscriptionRun, RetryTimer, RevisionStore, SessionStorageError, SpeechAudioError,
-    SpeechAudioSource, TranscribeRangeRequest, job_id, recognition_key, retranscribe_operation_key,
-    retranscribe_request_digest, retranscription_range, run_retranscription,
-    whole_file_source_segment,
+    AsrCancellation, CommitGuard, JobChange, JobOwner as _, JobRequest, JobSpec, JobStore as _,
+    RecognitionScope, RetranscriptionPorts, RetranscriptionRun, RetryTimer, RevisionStore,
+    SessionStorageError, SpeechAudioError, SpeechAudioSource, TranscribeRangeRequest, job_id,
+    recognition_key, retranscribe_operation_key, retranscribe_request_digest,
+    retranscription_range, run_retranscription, whole_file_source_segment,
 };
 use vsift_domain::{ChunkPlan, Jitter, MediaTime, TimeRange, TranscriptRevision};
 use vsift_infrastructure::FilesystemSessionStore;
@@ -837,6 +838,192 @@ async fn a_frame_during_a_transcription_of_its_session_is_busy_and_names_the_job
         .err()
         .ok_or("the stand-in tools extracted a frame")?;
     assert_ne!(after.failure_code(), FailureCode::Busy, "{after:?}");
+    Ok(())
+}
+
+/// How the job of the session in the #517 tests stands when it is read.
+#[derive(Clone, Copy)]
+enum JobAtRead {
+    /// A process owns it and has started its attempt.
+    Running,
+    /// Recorded, never started, no owner.
+    Queued,
+    /// Recorded in the root's queue, and held by the runner that waits for
+    /// its turn: still `queued`, with an owner.
+    QueuedWithRunner,
+    /// Its attempt stopped before it committed; no owner.
+    Interrupted,
+    /// It failed for good: nothing will publish a transcript.
+    Failed,
+}
+
+/// #517: a read of a session with no transcript while a transcription job of
+/// it stands in `at`. Returns what `transcript get` and `search` answered, and
+/// the job.
+async fn reads_with_a_job_at(at: JobAtRead) -> Built<(EngineError, EngineError, SessionId, JobId)> {
+    let harness = Harness::new(Recognizer::default())?;
+    let engine = harness.engine();
+    harness.stand_in_tools(&engine)?;
+    let source = harness.root.path("original.mp4");
+    fs::write(&source, PLACEHOLDER_SOURCE)?;
+    let session = harness.session(&engine, source).await?;
+
+    let store = harness.store()?;
+    let identity = HeldRecognizer::identity().map_err(|_| "no identity")?;
+    let now = Wall.now_unix_seconds()?;
+    let status = store.session_status(&session)?;
+    let segment =
+        whole_file_source_segment(status.source_id(), MediaTime::from_micros(60 * SECOND))?;
+    let head = store.head(&session, now)?;
+    let replaced = retranscription_range(head.newest.as_ref(), None, segment.range());
+    let key = recognition_key(&RecognitionScope {
+        session_id: &session,
+        source_id: status.source_id(),
+        audio_stream: 1,
+        replaced_range: replaced,
+        plan: ChunkPlan::R0,
+        recognizer: &identity,
+        verification: None,
+    })?;
+    let operation_key =
+        retranscribe_operation_key(&key, head.newest.as_ref().map(TranscriptRevision::id))?;
+    let spec = JobSpec {
+        session_id: session.clone(),
+        job_id: job_id(&session, &operation_key)?,
+        request_digest: retranscribe_request_digest(&session, None)?,
+        operation_key,
+        recognition_key: key,
+        request: retranscription(None),
+        planned_chunks: None,
+    };
+    let (mut owner, _) = store.open_or_create(&spec, now)?;
+    // `Running` keeps its owner for the reads; the others release it.
+    match at {
+        JobAtRead::Running => owner.apply(&JobChange::Start, now)?,
+        JobAtRead::Queued | JobAtRead::QueuedWithRunner => {}
+        JobAtRead::Interrupted => {
+            owner.apply(&JobChange::Start, now)?;
+            owner.apply(&JobChange::Interrupt(None), now)?;
+        }
+        JobAtRead::Failed => {
+            owner.apply(&JobChange::Start, now)?;
+            owner.apply(&JobChange::Fail(None), now)?;
+        }
+    }
+    if !matches!(at, JobAtRead::Running | JobAtRead::QueuedWithRunner) {
+        drop(owner);
+    }
+
+    let transcript = engine
+        .transcript(TranscriptQuery {
+            session: session.clone(),
+            revision: None,
+            from_micros: 0,
+            to_micros: 60 * SECOND,
+            limit: None,
+            cursor: None,
+            since: None,
+        })
+        .err()
+        .ok_or("a transcript was read from a session with none")?;
+    let search = engine
+        .search(SearchRequest {
+            session: session.clone(),
+            query: "words".to_owned(),
+            revision: None,
+            range: None,
+            limit: None,
+            cursor: None,
+            since: None,
+        })
+        .err()
+        .ok_or("a search found a transcript in a session with none")?;
+    Ok((transcript, search, session, spec.job_id))
+}
+
+/// #517: with a transcription running, the read of a session with no
+/// transcript yet names the job, keeping the code of the plain answer.
+#[tokio::test]
+async fn a_read_with_no_transcript_names_the_running_job() -> TestResult {
+    let (transcript, search, session, job) = reads_with_a_job_at(JobAtRead::Running).await?;
+    for refused in [transcript, search] {
+        assert_eq!(
+            refused,
+            EngineError::TranscriptPending {
+                session: session.clone(),
+                job: job.clone(),
+                progress: PendingTranscription::Running,
+            }
+        );
+        assert_eq!(refused.failure_code(), FailureCode::InvalidArgument);
+        assert_eq!(refused.affected_session(), Some(&session));
+        assert_eq!(refused.affected_job(), Some(&job));
+    }
+    Ok(())
+}
+
+/// #517: a recorded job that has not started is reported as waiting.
+#[tokio::test]
+async fn a_read_with_no_transcript_names_the_queued_job() -> TestResult {
+    let (transcript, search, session, job) = reads_with_a_job_at(JobAtRead::Queued).await?;
+    for refused in [transcript, search] {
+        assert_eq!(
+            refused,
+            EngineError::TranscriptPending {
+                session: session.clone(),
+                job: job.clone(),
+                progress: PendingTranscription::Queued,
+            }
+        );
+        assert_eq!(refused.failure_code(), FailureCode::InvalidArgument);
+    }
+    Ok(())
+}
+
+/// #517: a job in the root's queue that its runner holds is still waiting,
+/// not running.
+#[tokio::test]
+async fn a_read_with_no_transcript_names_a_job_waiting_with_its_runner_as_queued() -> TestResult {
+    let (transcript, search, session, job) =
+        reads_with_a_job_at(JobAtRead::QueuedWithRunner).await?;
+    for refused in [transcript, search] {
+        assert_eq!(
+            refused,
+            EngineError::TranscriptPending {
+                session: session.clone(),
+                job: job.clone(),
+                progress: PendingTranscription::Queued,
+            }
+        );
+    }
+    Ok(())
+}
+
+/// #517: an interrupted job is named as one `job resume` continues.
+#[tokio::test]
+async fn a_read_with_no_transcript_names_the_interrupted_job() -> TestResult {
+    let (transcript, search, session, job) = reads_with_a_job_at(JobAtRead::Interrupted).await?;
+    for refused in [transcript, search] {
+        assert_eq!(
+            refused,
+            EngineError::TranscriptPending {
+                session: session.clone(),
+                job: job.clone(),
+                progress: PendingTranscription::Interrupted,
+            }
+        );
+        assert_eq!(refused.failure_code(), FailureCode::InvalidArgument);
+    }
+    Ok(())
+}
+
+/// #517: a job that failed for good will publish nothing, so the plain answer
+/// stays and may point at a new transcription.
+#[tokio::test]
+async fn a_read_with_no_transcript_ignores_a_job_that_failed() -> TestResult {
+    let (transcript, search, _, _) = reads_with_a_job_at(JobAtRead::Failed).await?;
+    assert_eq!(transcript, EngineError::TranscriptUnavailable);
+    assert_eq!(search, EngineError::TranscriptUnavailable);
     Ok(())
 }
 
