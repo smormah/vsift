@@ -160,6 +160,21 @@ The operator often knows the start exactly. VSift read none of this before `0.3.
 - Worker job requests carry no `recorded_at` in stage 1; their ingests read the tags as a
   plain ingest does.
 
+## The maintainer's answers of 2026-10-23
+
+The four questions this pull request left open were answered at the merge rebase:
+
+- **A plain `ingest` runs FFprobe once: accepted.** The change to the CLI contract's
+  promise that a plain `ingest` starts no FFmpeg stands as decision 3 describes it (only
+  with verified tools, never failing because of the tags).
+- **The handoff cites clock times through one skill change at the `0.3.0` freeze, after
+  stage 2.** Decision 8 stays: no skill change in stage 1. The agent reads clock times
+  from the JSON until then.
+- **Anchors in bundles and worker requests come with stage 2.** Retained bundles keep
+  carrying none and worker job requests keep carrying no `recorded_at` until then;
+  [L-210](../planning/known-limits.md#l-210) stays open for that.
+- **The confidence labels `exact`, `high` and `medium` are accepted** as they are.
+
 ## Verification
 
 - Domain: the grammar, offsets, leap years, round trips through Unix time, the ladder, the

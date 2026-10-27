@@ -30,17 +30,17 @@ use vsift_contract::{
     decode_strict_json, decode_work_request, validate_steps,
 };
 use vsift_domain::{
-    AnchorSource, ArtifactId, CropRect, CursorToken, EvidenceId, FrameDimensions, JobId, LanguageTag,
-    ListingTail, MAX_CUE_TEXT_BYTES, MAX_LISTED_FRAMES, MAX_MANAGED_KEY_BYTES, MAX_RECORD_ITEMS,
-    MAX_RECORD_SELECTIONS, MAX_SCREEN_TEXT_CHARS, MAX_SCREEN_TEXT_FRAMES, MAX_SCREEN_TEXT_LINES,
-    MAX_SCREEN_TEXT_LINES_PER_FRAME, MAX_SEARCH_QUERY_BYTES, MAX_SEARCH_TERMS, MAX_TRANSCRIPT_CUES,
-    MAX_WINDOW_CANDIDATES, ManagedVersionKey, MediaStreamKind, MediaTime, OperationId,
-    OperationKey, PlannedChunk, SearchMatch, SearchQuery, SessionId, Sha256Hex, SourceId,
-    SourceSegmentId, SpeakerLabel, TimeRange, TranscriptFormat, TranscriptRevisionId,
-    TranscriptSegmentId, VISUAL_FRAME_BYTES, VisualCandidate, VisualCandidateId,
-    VisualChangePolicy, VisualHash, VisualIndexId, VisualIndexWindow, VisualSample, VisualWindow,
-    VisualWindowOutcome, analyse_window, is_canonical_managed_key, normalise_search_text,
-    validate_chunk_output,
+    AnchorSource, ArtifactId, CropRect, CursorToken, EvidenceId, FrameDimensions, JobId,
+    LanguageTag, ListingTail, MAX_CUE_TEXT_BYTES, MAX_LISTED_FRAMES, MAX_MANAGED_KEY_BYTES,
+    MAX_RECORD_ITEMS, MAX_RECORD_SELECTIONS, MAX_SCREEN_TEXT_CHARS, MAX_SCREEN_TEXT_FRAMES,
+    MAX_SCREEN_TEXT_LINES, MAX_SCREEN_TEXT_LINES_PER_FRAME, MAX_SEARCH_QUERY_BYTES,
+    MAX_SEARCH_TERMS, MAX_TRANSCRIPT_CUES, MAX_WINDOW_CANDIDATES, ManagedVersionKey,
+    MediaStreamKind, MediaTime, OperationId, OperationKey, PlannedChunk, SearchMatch, SearchQuery,
+    SessionId, Sha256Hex, SourceId, SourceSegmentId, SpeakerLabel, TimeRange, TranscriptFormat,
+    TranscriptRevisionId, TranscriptSegmentId, VISUAL_FRAME_BYTES, VisualCandidate,
+    VisualCandidateId, VisualChangePolicy, VisualHash, VisualIndexId, VisualIndexWindow,
+    VisualSample, VisualWindow, VisualWindowOutcome, analyse_window, is_canonical_managed_key,
+    normalise_search_text, validate_chunk_output,
 };
 use vsift_infrastructure::{
     ArchiveEntry, ArchiveEntryKind, ArchiveInventoryBounds, BatchFileError, BatchLine as FileLine,

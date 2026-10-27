@@ -7,8 +7,7 @@ use vsift::{
     ClockReading, CropRectangle, DurabilityRequirement, EvidenceId, FrameSelection,
     IsolationProfile, JobId, ManagedComponent, ManagedVersionKey, ManagedVersionKeyError,
     OperationId, OptionalComponent, OptionalComponentSet, RuntimeDependency, SessionId,
-    SetupProfile, TimeAnchorError, TranscriptRevisionId,
-    VisualCandidateId,
+    SetupProfile, TimeAnchorError, TranscriptRevisionId, VisualCandidateId,
 };
 use vsift_contract::{CommandName, ResultView};
 
