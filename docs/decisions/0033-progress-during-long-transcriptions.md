@@ -470,6 +470,10 @@ The fourth pull request implements section 4 (`--first`, D5) and the visual stre
   first, whose video is indexed before the transcript (a warm `candidates` read), and whose whole run
   recognises the window's chunk not again, and a source without video skipping the visual stream
   (`engine_growth`).
+- **Accepted by the maintainer (2026-10-23).** The first window's extra FFprobe (the runner needs the
+  source's end before the window runs) and its extra transcript revision (the window is sealed as a range
+  revision of its own), and the seed kept in the runner's memory (a runner that dies loses it, and the whole
+  run then recognises the window again, which is correct but slower).
 - **Planned for a sixth pull request:** the crash campaign's workload with open revisions (its verifier must
   accept an open revision and a part-by-part publication) and the visual stream's kill points.
 
