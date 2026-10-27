@@ -614,3 +614,8 @@ All are taken (2026-10-21):
   exactly what a seal-only run makes, and a stopped run keeps what it published.
 - **Not yet run:** the hosted `P10 durability campaign` (layers A, B and C) with this workload. Its
   workflow is unchanged, but it can only be dispatched from `main`.
+- **Accepted by the maintainer (2026-10-23).** The stand-in speech is four chunks (105 s) instead of three,
+  which changes the existing operations' sequence for a given seed and lengthens each retranscription by one
+  chunk. The maintainer also approved one full hosted `P10 durability campaign` (layers A, B and C) with this
+  workload, and one more with the negative control, after this pull request merges; the coordinator
+  dispatches both from `main`. No campaign runs on the development machine.
