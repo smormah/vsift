@@ -72,7 +72,7 @@ pub fn create_directory(path: &Path, descriptor: &PrivateDirectoryDescriptor) ->
 
 /// `text` as UTF-16 with a terminating NUL, refusing a NUL inside it (which
 /// Windows would read as the end of the string).
-fn nul_terminated(text: &OsStr) -> io::Result<Vec<u16>> {
+pub(crate) fn nul_terminated(text: &OsStr) -> io::Result<Vec<u16>> {
     let mut wide: Vec<u16> = text.encode_wide().collect();
     if wide.contains(&0) {
         return Err(io::Error::new(
