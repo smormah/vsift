@@ -577,6 +577,92 @@ function investigate(item, file, run, where) {
   return report;
 }
 
+/** The frames `vsift <video>` writes at most (ADR 0037 section 6, L-234). */
+const WATCH_MAX_FRAMES = 200;
+const VIDEO_SHA256_LINE = /^Video SHA-256 +([0-9a-f]{64})$/m;
+
+/**
+ * `vsift <video>` (ADR 0037) over a copy of a public item, in a folder of its
+ * own: the bare form, run by the binary's absolute path with a session root of
+ * its own. It checks that the three outputs are beside the copy and are the
+ * bytes the answer hashed, that the transcript's header names the item's pinned
+ * SHA-256, that the frames are min(changes, 200) and each is the bytes its
+ * SHA-256 says (and is listed), and that the session was closed; it records the
+ * wall time, the screen changes and the frames written. A private item is not
+ * watched: its files would hold the recording's words in the work folder.
+ * Findings are fixed phrases with numbers only.
+ */
+function watchItem(item, file, run, where) {
+  const readFile = where.readFile || fs.readFileSync;
+  const copyFile = where.copyFile || fs.copyFileSync;
+  const exists = where.exists || fs.existsSync;
+  const folder = path.join(where.folder, 'watch');
+  fs.mkdirSync(folder);
+  const video = path.join(folder, path.basename(file));
+  copyFile(file, video);
+  const answer = run('vsift <video>', [video], { root: path.join(where.folder, 'watch-root') });
+  const failure = checks.failureFinding(answer);
+  const data = answer.json && answer.json.data;
+  if (failure || !data || answer.json.command !== 'watch') {
+    return { measurements: { seconds: answer.seconds }, check: { passed: false, findings: [failure || 'the answer is not a watch result'] } };
+  }
+  const findings = [];
+  const digest = (target) => crypto.createHash('sha256').update(readFile(target)).digest('hex');
+  // VSift names the folder it canonicalised, which a work folder reached through a link is not.
+  const homes = new Set([folder, fs.realpathSync.native(folder)]);
+  const besideTheCopy = (output) => homes.has(path.dirname(output.path)) || homes.has(path.dirname(path.dirname(output.path)));
+  const outputs = [['transcript', data.outputs.transcript], ['subtitles', data.outputs.subtitles], ['screen-change list', data.outputs.screen_changes]];
+  for (const [label, output] of outputs) {
+    if (output === null) {
+      if (label === 'subtitles') continue;
+      findings.push(`the ${label} is missing from the answer`);
+      continue;
+    }
+    if (!besideTheCopy(output)) findings.push(`the ${label} is not beside the video`);
+    if (!exists(output.path)) findings.push(`the ${label} was not written`);
+    else if (digest(output.path) !== output.sha256) findings.push(`the ${label}'s bytes differ from its SHA-256 in the answer`);
+  }
+  if (!exists(data.outputs.folder.path)) findings.push('the screen-change folder was not written');
+  const pinned = item.sha256 || null;
+  if (pinned && data.source_id !== `src_sha256_${pinned}`) findings.push("the answer's source id is not the item's pinned SHA-256");
+  if (exists(data.outputs.transcript.path)) {
+    const header = VIDEO_SHA256_LINE.exec(readFile(data.outputs.transcript.path, 'utf8'));
+    if (!header) findings.push("the transcript's header names no video SHA-256");
+    else if (pinned && header[1] !== pinned) findings.push("the transcript's header does not name the item's pinned SHA-256");
+  }
+  const expectedFrames = Math.min(data.changes_found, WATCH_MAX_FRAMES);
+  if (data.frames.length !== expectedFrames) findings.push(`${data.frames.length} frames were written for ${data.changes_found} changes, not ${expectedFrames}`);
+  const list = exists(data.outputs.screen_changes.path) ? readFile(data.outputs.screen_changes.path, 'utf8') : '';
+  let mismatched = 0;
+  let unlisted = 0;
+  let frameBytes = 0;
+  for (const frame of data.frames) {
+    if (!exists(frame.path)) {
+      mismatched += 1;
+      continue;
+    }
+    const bytes = readFile(frame.path);
+    frameBytes += bytes.length;
+    if (crypto.createHash('sha256').update(bytes).digest('hex') !== frame.sha256) mismatched += 1;
+    if (!list.includes(frame.sha256)) unlisted += 1;
+  }
+  if (mismatched > 0) findings.push(`${mismatched} frame(s) missing or differing from their SHA-256`);
+  if (unlisted > 0) findings.push(`${unlisted} frame(s) not in the screen-change list`);
+  if (data.session_closed !== true) findings.push('the session was not closed');
+  return {
+    measurements: {
+      seconds: answer.seconds,
+      real_time_factor: data.duration_us > 0 ? answer.seconds / (data.duration_us / SECOND) : null,
+      outcome: data.outcome,
+      not_transcribed_ranges: data.not_transcribed.length,
+      changes_found: data.changes_found,
+      frames_written: data.frames.length,
+      frame_bytes: frameBytes,
+    },
+    check: { passed: findings.length === 0, findings },
+  };
+}
+
 /**
  * Check 9's measurement (#173, L-018): each frame cut into a grid of crops of
  * at most 480x120, each crop read back from the PNG VSift wrote and checked to
@@ -726,6 +812,14 @@ function markdown(run) {
       : (item.verdict.findings.length === 0 ? 'none' : item.verdict.findings.join('<br>'));
     lines.push(`| ${item.id} | ${item.verdict.passed ? 'pass' : '**fail**'} | ${t ? `${t.seconds.toFixed(0)} s (${t.real_time_factor.toFixed(2)})` : 'n/a'} | ${s ? `${fmt(s.seam_recall)} / ${fmt(s.control_recall)}` : 'n/a'} | ${m.seam_repeats ? m.seam_repeats.count : 'n/a'} | ${m.timing_differences && m.timing_differences.start.p95_us !== null ? `${(m.timing_differences.start.p95_us / 1000).toFixed(0)} ms` : 'n/a'} | ${m.candidates ? fmt(m.candidates.per_minute) : 'n/a'} | ${m.small_text && m.small_text.line_heights.lines > 0 ? `${m.small_text.line_heights.min_px} / ${m.small_text.line_heights.median_px} px (${m.small_text.line_heights.lines})` : 'n/a'} | ${findings} |`);
   }
+  const watched = run.items.filter((item) => item.measurements && item.measurements.watch);
+  if (watched.length > 0) {
+    lines.push('', '## `vsift <video>`', '', '| Item | Wall time (RTF) | Outcome | Screen changes | Frames written (bytes) |', '| --- | --- | --- | --- | --- |');
+    for (const item of watched) {
+      const w = item.measurements.watch;
+      lines.push(`| ${item.id} | ${w.seconds.toFixed(0)} s${typeof w.real_time_factor === 'number' ? ` (${w.real_time_factor.toFixed(2)})` : ''} | ${w.outcome || 'failed'} | ${w.changes_found ?? 'n/a'} | ${w.frames_written ?? 'n/a'}${typeof w.frame_bytes === 'number' ? ` (${w.frame_bytes})` : ''} |`);
+    }
+  }
   const attributed = run.items.filter((item) => !item.private && !item.not_yet_mirrored);
   if (attributed.length > 0) {
     lines.push('', '## Attribution', '');
@@ -736,4 +830,4 @@ function markdown(run) {
   return lines.join('\n');
 }
 
-module.exports = { KEPT_CROPS_PER_ITEM, KEPT_CROPS_PER_RUN, MAX_KEPT_SEGMENT_US, MAX_KEPT_SEGMENT_RANGES, RECORDED_CPU_FLAGS, mayKeepCrops, mayKeepSegments, parseKeepSegments, SECOND, setup, investigate, privateReport, markdown, measurementsOnly, shiftPoint, mediaState, runnerIdentity, segmentFingerprints };
+module.exports = { WATCH_MAX_FRAMES, watchItem, KEPT_CROPS_PER_ITEM, KEPT_CROPS_PER_RUN, MAX_KEPT_SEGMENT_US, MAX_KEPT_SEGMENT_RANGES, RECORDED_CPU_FLAGS, mayKeepCrops, mayKeepSegments, parseKeepSegments, SECOND, setup, investigate, privateReport, markdown, measurementsOnly, shiftPoint, mediaState, runnerIdentity, segmentFingerprints };

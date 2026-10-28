@@ -6,7 +6,8 @@
 // the real-media set that real-media.cjs fetched, and checks properties of the
 // answers, not words: no failure on valid speech, coverage that adds up, words not
 // lost where chunks meet, repeats at seams, how far two chunk plans disagree,
-// candidates, frames, a crop, an audio clip, the handoff check, and timings.
+// candidates, frames, a crop, an audio clip, the handoff check, timings, and
+// `vsift <video>` over a copy of each public item (ADR 0037).
 //
 //   node real-media-campaign.cjs --vsift <exe> --media <dir> --work <dir>
 //     --ffmpeg <exe> --ffprobe <exe> --whisper <exe> --model <file>
@@ -184,6 +185,10 @@ function main() {
       result.items.push(kept);
       log(`  ${item.id}: ${kept.verdict.passed ? 'pass' : `FAIL in ${kept.verdict.failed_checks.map((entry) => entry.check).join(', ')}`}`);
     } else {
+      // ADR 0037: `vsift <video>` over a copy of the item, the bare form.
+      const watched = campaign.watchItem(item, file, run, { folder });
+      report.measurements.watch = watched.measurements;
+      report.checks.watch = watched.check;
       report.sha256 = item.sha256;
       report.verdict = require('./lib/real-media-checks.cjs').itemVerdict(report.checks);
       result.items.push(report);
