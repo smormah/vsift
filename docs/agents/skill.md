@@ -369,6 +369,23 @@ unknown, which the skill says. **Agents ran this text once, in batch 2 on `0.2.2
 - **The freeze:** a skill text change moves the trial freeze's `skill` component; the draft rewrites it, and it is
   rewritten again at the merge rebase (`v030` rules).
 
+## The change for 0.3.0: a handoff skeleton instead of a template (ADR 0038 slice 1; draft, 2026-10-28)
+
+- **Why.** In the maintainer's try-out, an agent in a client the skill did not reach filled a JSON template
+  with PowerShell's case-insensitive `-replace`; the replace also rewrote member names and corrupted the
+  handoff without any error. The fix lives in the CLI, where an agent without the skill finds it.
+- **`references/commands.md`** classes `vsift handoff skeleton` `free` and allows the form
+  `vsift handoff skeleton <session> --question "<question>" --json`. It prints a valid handoff that states
+  nothing yet: VSift's ids, the transcript basis, an empty claim list, image access `unavailable` and the
+  session left open; `data.fill` lists what only the agent adds ([`cli-v1.md`](../contracts/cli-v1.md),
+  "0.3.0 `handoff skeleton`").
+- **`references/handoff.md`** says to write the JSON whole or start from the skeleton, and never to build
+  it by search-and-replace on a template. `SKILL.md` and the fuzz seed copy are unchanged: an agent with the
+  skill writes the JSON in its message and has no template to fill.
+- **The guard** gains the placeholder `<question>`. `vsift --help` names the command in step 6.
+- **The freeze:** the `skill` component moves; the draft rewrites it, and it is rewritten again at the merge
+  rebase (`v030` rules). **Untried:** no trial scenario runs the skeleton.
+
 ## Keeping it in step with the CLI
 
 `crates/vsift-cli/src/skill_contract.rs` (unit tests of the CLI crate, run by `cargo

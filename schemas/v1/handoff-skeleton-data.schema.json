@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vsift.dev/schemas/v1/handoff-skeleton-data.schema.json",
+  "title": "VSift handoff.skeleton data v1",
+  "description": "The data member of a complete handoff.skeleton result (0.3.0, ADR 0038 section 1): a handoff that is valid but states nothing yet, written by VSift from one open session's committed records so that an agent never builds the handoff JSON from a text template. handoff is a complete handoff v1 that validates against the skill-owned skills/vsift/handoff.schema.json and passes handoff check, also with --session naming the same session: status insufficient_evidence, the question as given, capabilities.image_access unavailable and transcript_basis from the session's newest committed transcript revision (none without one), session with session_id, source_id and, when the session has a transcript, revision_id, empty claims, citations, gaps and untrusted_instructions, and lifecycle.action left_open. fill lists, as RFC 6901 pointers into handoff, the members only the agent can supply, in the order it fills them. The command reads the session read-only and never renews it.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["handoff_version", "handoff", "fill"],
+  "properties": {
+    "handoff_version": { "const": "1" },
+    "handoff": {
+      "description": "A complete handoff v1 (skills/vsift/handoff.schema.json) that states nothing yet.",
+      "type": "object",
+      "required": ["handoff_version", "status", "question", "capabilities", "session", "claims", "citations", "gaps", "untrusted_instructions", "lifecycle"],
+      "properties": {
+        "handoff_version": { "const": "1" },
+        "status": { "const": "insufficient_evidence" },
+        "claims": { "type": "array", "maxItems": 0 },
+        "citations": { "type": "array", "maxItems": 0 },
+        "gaps": { "type": "array", "maxItems": 0 },
+        "untrusted_instructions": { "type": "array", "maxItems": 0 }
+      }
+    },
+    "fill": {
+      "type": "array",
+      "items": {
+        "enum": ["/capabilities", "/claims", "/citations", "/gaps", "/untrusted_instructions", "/status", "/lifecycle"]
+      },
+      "minItems": 1,
+      "uniqueItems": true
+    }
+  }
+}

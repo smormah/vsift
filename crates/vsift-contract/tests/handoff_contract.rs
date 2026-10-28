@@ -1,5 +1,5 @@
-//! The `handoff.check` data against its published schema and frozen example
-//! (P13 PR 5). Set `VSIFT_REGENERATE_CONTRACT_EXAMPLES=1` to rewrite the
+//! The `handoff.check` data (P13 PR 5) and the `handoff.skeleton` data (ADR
+//! 0038) against their published schemas and frozen examples. Set `VSIFT_REGENERATE_CONTRACT_EXAMPLES=1` to rewrite the
 //! example after an intended change, and review the diff.
 
 use std::{collections::BTreeSet, env, fs, io, path::PathBuf};
@@ -7,7 +7,8 @@ use std::{collections::BTreeSet, env, fs, io, path::PathBuf};
 use serde_json::{Value, json};
 use vsift_contract::{
     CommandName, HandoffCheckData, HandoffChecker, HandoffEvidenceKind, HandoffRule,
-    HandoffSessionGap, HandoffSessionRecords, OperationResponse,
+    HandoffSessionGap, HandoffSessionRecords, HandoffSkeletonFacts, HandoffTranscriptBasis,
+    OperationResponse,
 };
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -135,5 +136,47 @@ fn a_forged_verdict_is_refused_by_the_schema() -> TestResult {
     value["valid"] = json!(true);
     let schema = load("handoff-check-data.schema.json")?;
     assert!(!jsonschema::validator_for(&schema)?.is_valid(&value));
+    Ok(())
+}
+
+/// `handoff.skeleton` (ADR 0038): the data against its schema and frozen
+/// example, and the handoff in it against the skill's handoff schema.
+#[test]
+fn a_skeleton_matches_its_frozen_example_and_the_handoff_schema() -> TestResult {
+    let checker = HandoffChecker::new()?;
+    let facts = HandoffSkeletonFacts::new(
+        SESSION.to_owned(),
+        "src_sha256_0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef".to_owned(),
+        Some("trv_0123456789abcdef0123456789abcdef".to_owned()),
+        HandoffTranscriptBasis::SuppliedTranscript,
+    );
+    let data = checker
+        .skeleton("What does the dialog show after Save is pressed?", &facts)
+        .map_err(|error| format!("{error:?}"))?;
+    let value = serde_json::to_value(&data)?;
+    validate("handoff-skeleton-data.schema.json", &value)?;
+    let skill_schema: Value = serde_json::from_str(&fs::read_to_string(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../skills/vsift/handoff.schema.json"),
+    )?)?;
+    jsonschema::validator_for(&skill_schema)?
+        .validate(&value["handoff"])
+        .map_err(|error| io::Error::other(format!("handoff.schema.json: {error}")))?;
+    let mut check = checker.check_value(value["handoff"].clone());
+    check.resolve_in_session(SESSION, &HandoffSessionRecords::new());
+    assert!(check.is_valid(), "{:?}", check.errors());
+
+    let response = serde_json::to_value(OperationResponse::complete(
+        CommandName::HandoffSkeleton.identifier(),
+        &data,
+    )?)?;
+    validate("operation-response.schema.json", &response)?;
+    let path = schema_root().join("examples/handoff-skeleton.json");
+    if regenerate() {
+        fs::write(
+            &path,
+            format!("{}\n", serde_json::to_string_pretty(&response)?),
+        )?;
+    }
+    assert_eq!(response, load("examples/handoff-skeleton.json")?);
     Ok(())
 }

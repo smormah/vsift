@@ -86,6 +86,9 @@ These files are the machine-readable public v1 boundary:
   findings (each a pointer, a line, a closed `rule`, the schema's `allowed` values and
   fixed prose, never text from the draft), `truncated` and, with `--session`, how the
   session was used (`resolved`, a `gap`, `identities_checked`);
+- `handoff-skeleton-data.schema.json` — the `data` of a complete `handoff.skeleton`
+  result (0.3.0, ADR 0038): a valid handoff that states nothing yet, with one open
+  session's ids filled in, and `fill`, the members only the agent can supply;
 - `config.schema.json` â strict explicit configuration document reserved for P06;
 - `ingest-data.schema.json` â the `data` member of a complete `ingest` result; its
   optional `transcript` member is present only when a supplied transcript was

@@ -1,8 +1,9 @@
 # ADR 0038: AI integration without MCP: workflows, the skill everywhere, and the CLI alone
 
-- Status: **Proposed, 2026-10-28.** Nothing it describes is built. The decisions in
-  [Decisions for the planner and the maintainer](#decisions-for-the-planner-and-the-maintainer)
-  are open. Each is marked with whose call it is.
+- Status: **Accepted by the planner, 2026-10-28**, at `9f563bc2`, relayed by the coordinator, with
+  the conditions recorded in [Outcome](#outcome-the-planners-rulings-of-2026-10-28). D1 is the
+  maintainer's and is open: the meeting-notes and workshop-spec workflows wait for it. Each slice is
+  built in its own pull request; until each lands, what it describes is a plan, not a feature.
 - Date: 2026-10-28
 - Refines: [ADR 0022](0022-agent-skill-and-named-client-qualification.md) (the skill, its command policy
   and its home at `skills/vsift/`), [ADR 0023](0023-r0-distribution-managed-installation-and-handoff-check.md)
@@ -369,3 +370,57 @@ Cut the first item first:
 - **A symbolic link for the plugin's skill.** Rejected (D6): it breaks Windows checkouts.
 - **A second schema for workflow findings.** Rejected (D2): the handoff schema with one optional member
   already does the job, and `handoff check` already runs it.
+
+## Outcome: the planner's rulings of 2026-10-28
+
+Relayed by the coordinator. Slices 1, 3, 4 and 5 may start (slice 1 first), and slice 2's bug-report,
+findings, demo-backlog and logs-by-clock files. The meeting-notes and workshop-spec files wait for D1.
+
+- **D2, yes**, `handoff_version` stays `1`. Before slice 2 is built this record must say exactly how an
+  inferred priority is shown. The planner prefers no third member: the claim's statement says "inferred",
+  and `handoff check` refuses `priority` without `category` `backlog_item`. The CHANGELOG says an older
+  `handoff check` refuses the new members.
+- **D3, yes:** `INVALID_ARGUMENT`, as ADR 0037's refusal of an existing output is. Each folder's typed
+  outcome is in `data`, and the remediation names `--replace`.
+- **D4, D5 (the planner's call: it is packaging), D7 and D9, yes.**
+- **D6, yes.** The exact syntax for pinning a marketplace to a tag is confirmed from Claude Code's own
+  documentation before it is written into ours. No person's details go in `marketplace.json` or
+  `plugin.json`. The governance test refusing `hooks/`, `bin/`, `.mcp.json` and `package.json` stays.
+- **D8: the eight clients** (the planner's call), named in docs only, never in the README's pitch (W6a's).
+
+Conditions:
+
+1. **`--replace` is a swap, never delete-then-copy.** Stage and verify; move the old folder aside under a
+   VSift-made name; rename the staged folder into place; only then remove the old one; on any failure, put
+   the old one back. Never follow a link or junction at any step. `--project` is canonicalised and must
+   already exist.
+2. **`skill show` takes a manifest entry name, not a path.** Anything not in the embedded manifest is
+   refused, tested with `../` and with absolute paths.
+3. **`logs-by-clock` privacy.** Log lines are untrusted data, and instructions found in them go to
+   `untrusted_instructions`. Quote the least text that makes the match; never quote secrets, tokens or
+   personal data from a log. Stated in the workflow file and in `references/safety.md`.
+4. **Register:** L-238 to L-242 are this story's, each added by the pull request that builds what it
+   limits; the next free number is L-243.
+5. **Slice 1's contract tests:** the skeleton validates against `handoff.schema.json`, and `handoff check
+   --session` accepts it before it is filled in.
+
+## Implementation note, 2026-10-28 (slice 1: `handoff skeleton`)
+
+Built as section 1 says, with one narrowing: the skeleton's `capabilities` holds `image_access`
+(`unavailable`) and `transcript_basis` only. `media_tools` and `local_asr` are what `setup check` reports,
+not what the session records, and running the tool probes from this command would make it slow and
+write nothing the agent cannot read from `setup check` itself, so they are left to the agent (they are
+optional in the schema). The basis is the one `search` reports for the session's newest committed
+revision (`SearchCoverage`), or `none` without one; a revision a background transcription is still
+writing is not named. A closed, expired or unknown session fails as a transcript read of it does.
+
+- **Layers:** `vsift-contract` builds the skeleton (`HandoffChecker::skeleton`) and checks it with the
+  same checker a draft gets, so it cannot ship a shape the check refuses; the engine reads the facts
+  (`Engine::handoff_skeleton_facts`); the CLI composes and renders (the human form is the fenced block).
+- **The skill:** `references/commands.md` (the `free` row and the form) and `references/handoff.md` (one
+  paragraph). `SKILL.md` and its fuzz seed copy are unchanged. The guard gains the placeholder
+  `<question>`. The trial freeze is a draft freeze, rewritten at the merge rebase.
+- **Tests:** see `cli-v1.md`, "0.3.0 `handoff skeleton`". Condition 5 is
+  `a_skeleton_names_the_session_and_passes_the_check_unfilled` (through the binary) and
+  `a_skeleton_matches_its_frozen_example_and_the_handoff_schema`.
+- **No register entry:** none of L-238 to L-242 limits this slice.

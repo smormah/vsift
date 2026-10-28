@@ -1,4 +1,5 @@
-//! `vsift handoff check` (P13 PR 5, ADR 0023 decisions G and H).
+//! `vsift handoff check` (P13 PR 5, ADR 0023 decisions G and H) and
+//! `vsift handoff skeleton` (ADR 0038).
 //!
 //! The draft arrives on standard input (the skill's quoted heredoc or
 //! single-quoted here-string) or from `--file`. It is read bounded to
@@ -17,11 +18,15 @@ use std::{
 use vsift::{Engine, FailureCode, HandoffSessionLookup};
 use vsift_contract::{
     CommandName, HANDOFF_DRAFT_NOT_UTF8_REMEDIATION, HANDOFF_DRAFT_TOO_LARGE_REMEDIATION,
-    HANDOFF_FILE_REMEDIATION, HandoffCheckData, HandoffChecker, MAX_HANDOFF_REPORT_BYTES,
-    OperationResponse,
+    HANDOFF_FILE_REMEDIATION, HANDOFF_SKELETON_QUESTION_REMEDIATION, HandoffCheckData,
+    HandoffChecker, HandoffSkeletonError, MAX_HANDOFF_REPORT_BYTES, OperationResponse,
 };
 
-use crate::{CommandFailure, command::HandoffCheckArguments, complete};
+use crate::{
+    CommandFailure,
+    command::{HandoffCheckArguments, HandoffSkeletonArguments},
+    complete,
+};
 
 /// Checks the draft named by `arguments`, reading `standard_input` when no
 /// file is named.
@@ -51,6 +56,26 @@ pub(crate) fn check(
         CommandName::HandoffCheck,
         &HandoffCheckData::new(check),
     )?)
+}
+
+/// Writes the skeleton handoff for the session and question `arguments`
+/// name: `VSift` fills in what its records hold, and the agent adds the rest.
+pub(crate) fn skeleton(
+    engine: &Engine,
+    arguments: &HandoffSkeletonArguments,
+) -> Result<OperationResponse<serde_json::Value>, CommandFailure> {
+    let facts = engine.handoff_skeleton_facts(&arguments.session)?;
+    let checker = HandoffChecker::new().map_err(|_| FailureCode::Internal)?;
+    let data = checker
+        .skeleton(&arguments.question, &facts)
+        .map_err(|error| match error {
+            HandoffSkeletonError::QuestionRefused => CommandFailure::with_remediation(
+                FailureCode::InvalidArgument,
+                HANDOFF_SKELETON_QUESTION_REMEDIATION.to_owned(),
+            ),
+            HandoffSkeletonError::NotValid => CommandFailure::from(FailureCode::Internal),
+        })?;
+    Ok(complete(CommandName::HandoffSkeleton, &data)?)
 }
 
 /// The draft's bytes, at most one more than the limit so an oversized draft
