@@ -332,7 +332,11 @@ fn a_proxy_demanding_authentication_fails_the_download_without_leaking_credentia
         assert_eq!(components.len(), 3);
         assert_eq!(components[0]["reason"], "proxy_auth");
         assert_eq!(components[0]["step"], "download");
-        assert_eq!(components[1]["reason"], "blocked");
+        // ADR 0036 section 4: speech downloads beside video, so the proxy
+        // stops its first download too; the model after it is not tried.
+        assert_eq!(components[1]["reason"], "proxy_auth");
+        assert_eq!(components[1]["step"], "download");
+        assert_eq!(components[2]["reason"], "blocked");
         assert!(summary(&terminal).contains("--artifact-dir"));
     }
     let root = base.managed_root();
