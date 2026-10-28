@@ -182,6 +182,7 @@ pub(crate) async fn watch(
             screen_changes: output(&outcome.screen_changes)?,
         },
         changes_found: u64::try_from(outcome.changes_found).unwrap_or(u64::MAX),
+        changes_listed: u64::try_from(outcome.changes_listed).unwrap_or(u64::MAX),
         frames,
     };
     OperationResponse::complete(CommandName::Watch.identifier(), &data)

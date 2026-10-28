@@ -122,8 +122,12 @@ pub struct WatchData {
     pub names_shortened: bool,
     /// The run's outputs.
     pub outputs: WatchOutputsData,
-    /// How many screen changes were found.
+    /// How many screen changes the visual stream found.
     pub changes_found: u64,
+    /// How many of them the screen-change list shows: the settled screens
+    /// (the first frame, each screen once motion settles, and a change at
+    /// least 5 s after the one listed before it).
+    pub changes_listed: u64,
     /// The frames written, at most 180 (known limit L-234).
     pub frames: Vec<WatchFrameData>,
 }

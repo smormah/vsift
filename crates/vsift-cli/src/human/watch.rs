@@ -29,9 +29,15 @@ pub(super) fn finished(envelope: &Envelope<Watched>) -> Result<RenderedText, Too
     text.push_fixed("  ")
         .push_value(&data.outputs.folder.name)
         .push_fixed("/   ")
-        .push_unsigned(data.changes_found)
-        .push_fixed(" screen changes");
-    if frames == data.changes_found {
+        .push_unsigned(data.changes_listed);
+    if data.changes_listed < data.changes_found {
+        text.push_fixed(" settled screens of ")
+            .push_unsigned(data.changes_found)
+            .push_fixed(" changes");
+    } else {
+        text.push_fixed(" screen changes");
+    }
+    if frames == data.changes_listed {
         text.push_fixed(" with their frames");
     } else {
         text.push_fixed(", ")
@@ -50,7 +56,7 @@ pub(super) fn finished(envelope: &Envelope<Watched>) -> Result<RenderedText, Too
     }
     if data.frames_stopped_for_room {
         text.push_fixed(
-            "VSift's private copy ran out of room for frames, so they stop early; every change is listed.",
+            "VSift's private copy ran out of room for frames, so they stop early; every settled screen is listed.",
         )
         .end_line();
     }

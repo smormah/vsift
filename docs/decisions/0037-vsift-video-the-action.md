@@ -610,3 +610,28 @@ pull request). Section 3's layering now holds as written:
   without a sound track; 576 changes with 180 frames spread evenly and every change listed; the frames fitted
   to a small room; the backstop), the folder port on real temporary folders, and the engine's opt-in runs
   through `Engine::watch` unchanged.
+
+## Amendment, 2026-10-28: the list holds settled screens (the second pull request, ruling 3)
+
+**What changes.** Section 6 said every screen change the visual stream finds is listed. The first pull request's "before"
+run (40595722898) found about 30 changes a minute on both RM03 (a 19-minute talk, mostly camera movement: 576 changes,
+466 of them `visual_change` and 55 `motion_start`) and RM10 (a screen recording: 106), which is the per-window candidate
+budget's ceiling: a list that long hides the screens a person would look at. From the second pull request:
+
+- **Every change found is counted** (`changes_found`, as before), and **the list shows the settled screens** among them
+  (`changes_listed`, additive to `watch-data`): a `first_frame` and each `settled_after_motion` always; a `visual_change`
+  only when it comes at least 5 s after the last listed entry, whatever that entry's reason; a `motion_start` and
+  `periodic_coverage` never, because a person reads the screen once it holds still. The rule is a pure domain function
+  (`settled_screens`, `SETTLED_SCREEN_SPACING_MICROS`), applied by the use case before the frames.
+- **Each line names its reason** in plain words (`first frame`, `settled after motion`, `visual change`), and the header
+  says `N settled screens of M changes found` and states the rule when it left changes out. The finish screen says
+  `N settled screens of M changes` in that case.
+- **Frames** are taken for listed changes only: still at most 180, spread evenly over the listed ones and fitted to the
+  measured evidence room (section 6 and its correction). **The 180 bound stays until the measurement is in.**
+- No failure code changes; `changes_found` keeps its meaning.
+
+**The measurement** (the second pull request's one hosted `P14 real media` run, RM01, RM03, RM04 and RM10): the
+campaign's `watchItem` records `changes_found` (today's rule), `changes_listed` (this one) and the listed changes by
+reason for each item, and checks that the frames are min(listed, 180), that no in-progress marker or temporary file is
+left, and that the session was closed. The numbers, and whether the full list was useful on footage like RM03, are
+written here when the run is in. The five choices above were sent to the planner on 2026-10-28 for confirmation.

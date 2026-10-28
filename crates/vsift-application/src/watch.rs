@@ -16,6 +16,10 @@
 //! claim, a failure releases it (the port removes only what it created, never
 //! a written file) and the session is closed either way.
 //!
+//! **The list holds the settled screens** ([`settled_screens`]): every change
+//! found is counted, and the first frame, each screen after motion settles
+//! and a change at least 5 s after the last listed one are listed.
+//!
 //! **Frames fit the session's room.** The session's evidence room is measured
 //! before the first frame and at most [`frames_that_fit`] frames are asked
 //! for, spread evenly over the changes; should the session still refuse a
@@ -29,9 +33,10 @@ use std::{
 };
 
 use vsift_domain::{
-    EvidenceId, JobId, MAX_VISUAL_INDEX_DURATION_MICROS, MediaTime, OutputNameError, SessionId,
-    SourceId, TimeRange, TranscriptRevisionId, VisualCandidateId, VisualIndexId, WatchOutputNames,
-    frame_file_name, frames_that_fit, spread_evenly,
+    CandidateReason, EvidenceId, JobId, MAX_VISUAL_INDEX_DURATION_MICROS, MediaTime,
+    OutputNameError, SessionId, SourceId, TimeRange, TranscriptRevisionId, VisualCandidateId,
+    VisualIndexId, WatchOutputNames, frame_file_name, frames_that_fit, settled_screens,
+    spread_evenly,
 };
 
 /// Why a stated gap was not transcribed, in plain words (ADR 0037 section 4).
@@ -85,6 +90,8 @@ pub struct ScreenChange {
     pub id: VisualCandidateId,
     /// Its representative time.
     pub time: MediaTime,
+    /// Why the visual stream proposed it.
+    pub reason: CandidateReason,
 }
 
 /// Every screen change of the analysed video.
@@ -339,6 +346,8 @@ pub struct ScreenChangeEntry {
     pub time: MediaTime,
     /// The visual candidate's id.
     pub candidate_id: String,
+    /// Why the visual stream proposed it.
+    pub reason: CandidateReason,
     /// The frame written for it, when one was.
     pub frame: Option<WrittenFrame>,
 }
@@ -359,6 +368,9 @@ pub struct WrittenFrame {
 pub struct ScreenChangeSummary {
     /// The visual index revision's id.
     pub index_id: String,
+    /// How many screen changes the visual stream found; the list holds the
+    /// settled screens among them.
+    pub changes_found: usize,
     /// Whether the video runs past the part the visual index covers.
     pub beyond_index_bound: bool,
     /// Whether the session ran out of evidence room before every selected
@@ -378,7 +390,7 @@ pub struct WatchDocuments {
     pub entries: Vec<TranscriptEntry>,
     /// The screen-change list's summary.
     pub summary: ScreenChangeSummary,
-    /// Every screen change, in time order, with the frames written.
+    /// The settled screens, in time order, with the frames written.
     pub changes: Vec<ScreenChangeEntry>,
 }
 
@@ -499,8 +511,11 @@ pub struct WatchOutcome {
     pub folder: WatchFile,
     /// The screen-change list in the folder.
     pub screen_changes: WatchFile,
-    /// How many screen changes were found.
+    /// How many screen changes the visual stream found.
     pub changes_found: usize,
+    /// How many of them the list shows: the settled screens
+    /// ([`settled_screens`]).
+    pub changes_listed: usize,
     /// The frames written, at most
     /// [`MAX_WATCH_FRAMES`](vsift_domain::MAX_WATCH_FRAMES).
     pub frames: Vec<WatchFrame>,
@@ -628,7 +643,15 @@ impl<S: WatchSteps> WatchRun<'_, S> {
             .map(|changes| changes.changes.clone())
             .unwrap_or_default();
         found.sort_by_key(|change| change.time);
-        let taken = self.take_frames(outputs, &found).await?;
+        let reasons: Vec<(MediaTime, CandidateReason)> = found
+            .iter()
+            .map(|change| (change.time, change.reason))
+            .collect();
+        let settled: Vec<ScreenChange> = settled_screens(&reasons)
+            .into_iter()
+            .filter_map(|position| found.get(position).cloned())
+            .collect();
+        let taken = self.take_frames(outputs, &settled).await?;
         let provenance = self
             .steps
             .provenance(self.file_name, &self.session.source_id, session)
@@ -646,6 +669,7 @@ impl<S: WatchSteps> WatchRun<'_, S> {
                     || "none".to_owned(),
                     |changes| changes.index.as_str().to_owned(),
                 ),
+                changes_found: found.len(),
                 beyond_index_bound: beyond_visual_bound,
                 stopped_for_room: taken.stopped_for_room,
             },
@@ -672,6 +696,7 @@ impl<S: WatchSteps> WatchRun<'_, S> {
             },
             screen_changes: finalised.screen_changes,
             changes_found: found.len(),
+            changes_listed: settled.len(),
             frames: taken.frames,
             beyond_visual_bound,
             names_shortened: self.names.shortened(),
@@ -716,7 +741,7 @@ impl<S: WatchSteps> WatchRun<'_, S> {
         Ok(entries)
     }
 
-    /// The frames of the selected changes, at most [`frames_that_fit`] the
+    /// The frames of the listed changes, at most [`frames_that_fit`] the
     /// room measured before the first, spread evenly, and every change as
     /// the list shows it.
     async fn take_frames<O: WatchOutputs>(
@@ -730,6 +755,7 @@ impl<S: WatchSteps> WatchRun<'_, S> {
             .map(|change| ScreenChangeEntry {
                 time: change.time,
                 candidate_id: change.id.as_str().to_owned(),
+                reason: change.reason,
                 frame: None,
             })
             .collect();

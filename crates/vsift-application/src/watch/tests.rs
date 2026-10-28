@@ -9,8 +9,8 @@ use std::{
 };
 
 use vsift_domain::{
-    EvidenceId, IdentifierError, JobId, MAX_WATCH_FRAMES, MediaTime, SessionId, SourceId,
-    TimeRange, TranscriptRevisionId, VisualCandidateId, VisualIndexId, WatchOutputNames,
+    CandidateReason, EvidenceId, IdentifierError, JobId, MAX_WATCH_FRAMES, MediaTime, SessionId,
+    SourceId, TimeRange, TranscriptRevisionId, VisualCandidateId, VisualIndexId, WatchOutputNames,
     spread_evenly,
 };
 
@@ -45,6 +45,7 @@ fn change(position: usize) -> Result<ScreenChange, IdentifierError> {
     Ok(ScreenChange {
         id: VisualCandidateId::parse(format!("vcd_{position:032}"))?,
         time: seconds(u64::try_from(position).unwrap_or(u64::MAX)),
+        reason: CandidateReason::SettledAfterMotion,
     })
 }
 
@@ -576,6 +577,64 @@ async fn any_other_frame_failure_ends_the_run_and_releases_the_claim() -> TestRe
     assert_eq!(
         steps.calls().last().map(String::as_str),
         Some("close_session")
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn the_list_holds_the_settled_screens_and_only_they_get_frames() -> TestResult {
+    let mut steps = FakeSteps::new()?;
+    let reasons = [
+        CandidateReason::FirstFrame,
+        CandidateReason::MotionStart,
+        CandidateReason::VisualChange,
+        CandidateReason::SettledAfterMotion,
+        CandidateReason::VisualChange,
+        CandidateReason::VisualChange,
+    ];
+    let times = [0, 1, 2, 4, 7, 9];
+    steps.changes = reasons
+        .iter()
+        .zip(times)
+        .enumerate()
+        .map(|(position, (&reason, time))| {
+            change(position).map(|change| ScreenChange {
+                time: seconds(time),
+                reason,
+                ..change
+            })
+        })
+        .collect::<Result<_, _>>()?;
+    let mut outputs = FakeOutputs::default();
+    let outcome = run_watch(&steps, &mut outputs, Path::new(VIDEO), None)
+        .await
+        .map_err(|error| format!("{error:?}"))?;
+    assert_eq!(outcome.changes_found, 6, "every change found is counted");
+    assert_eq!(
+        outcome.changes_listed, 3,
+        "the first frame, the settled screen and the change 5 s after it"
+    );
+    assert_eq!(
+        steps.frames_asked(),
+        vec![
+            "vcd_00000000000000000000000000000000",
+            "vcd_00000000000000000000000000000003",
+            "vcd_00000000000000000000000000000005",
+        ]
+    );
+    let documents = outputs.documents.ok_or("the files were finished")?;
+    assert_eq!(documents.summary.changes_found, 6);
+    assert_eq!(
+        documents
+            .changes
+            .iter()
+            .map(|entry| entry.reason)
+            .collect::<Vec<_>>(),
+        vec![
+            CandidateReason::FirstFrame,
+            CandidateReason::SettledAfterMotion,
+            CandidateReason::VisualChange,
+        ]
     );
     Ok(())
 }

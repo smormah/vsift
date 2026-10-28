@@ -8,7 +8,7 @@
 
 use std::fmt;
 
-use crate::MediaTime;
+use crate::{CandidateReason, MediaTime};
 
 /// The most bytes an output's file name may take, suffix included.
 ///
@@ -206,6 +206,42 @@ pub fn spread_evenly(count: usize, bound: usize) -> Vec<usize> {
     }
 }
 
+/// How long after the last listed screen a plain visual change must come to
+/// be listed itself (ADR 0037, the settled-screens amendment): 5 s.
+pub const SETTLED_SCREEN_SPACING_MICROS: u64 = 5_000_000;
+
+/// Which of the screen changes, given in time order with their reasons, the
+/// list shows: the settled screens (ADR 0037, the settled-screens amendment).
+///
+/// A first frame and each screen after motion settles are always listed; a
+/// plain visual change is listed only when it comes at least
+/// [`SETTLED_SCREEN_SPACING_MICROS`] after the last listed entry, whatever
+/// that entry's reason; the start of motion and periodic coverage are never
+/// listed, because a person reads the screen once it holds still. Footage
+/// with a moving camera proposes a change every two seconds or so (the
+/// real-media run's RM03, a talk, had 576 in 19 minutes), most of them
+/// motion, so the full list hides the screens a person would look at. The
+/// positions are ascending and distinct.
+#[must_use]
+pub fn settled_screens(changes: &[(MediaTime, CandidateReason)]) -> Vec<usize> {
+    let mut listed = Vec::new();
+    let mut last: Option<MediaTime> = None;
+    for (position, &(time, reason)) in changes.iter().enumerate() {
+        let keep = match reason {
+            CandidateReason::FirstFrame | CandidateReason::SettledAfterMotion => true,
+            CandidateReason::VisualChange => last.is_none_or(|last| {
+                time.as_micros().saturating_sub(last.as_micros()) >= SETTLED_SCREEN_SPACING_MICROS
+            }),
+            CandidateReason::MotionStart | CandidateReason::PeriodicCoverage => false,
+        };
+        if keep {
+            listed.push(position);
+            last = Some(time);
+        }
+    }
+    listed
+}
+
 /// A subtitle cue's text from a segment's display text: one line, holding
 /// neither a blank line, which would end the cue, nor the `-->` arrow, which
 /// would read as a timing line. Line breaks become spaces and the arrow
@@ -336,5 +372,39 @@ mod tests {
         assert_eq!(subrip_cue_text("a ---> b"), "a -> b");
         assert_eq!(subrip_cue_text("  plain  "), "plain");
         assert!(!subrip_cue_text("x\r\n\r\ny").contains('\n'));
+    }
+
+    fn at(seconds: u64, reason: CandidateReason) -> (MediaTime, CandidateReason) {
+        (MediaTime::from_micros(seconds * 1_000_000), reason)
+    }
+
+    #[test]
+    fn settled_screens_keep_still_screens_and_spaced_changes() {
+        use CandidateReason::{
+            FirstFrame, MotionStart, PeriodicCoverage, SettledAfterMotion, VisualChange,
+        };
+        let changes = [
+            at(0, FirstFrame),
+            at(2, VisualChange),
+            at(5, VisualChange),
+            at(6, MotionStart),
+            at(8, SettledAfterMotion),
+            at(9, VisualChange),
+            at(12, VisualChange),
+            at(13, VisualChange),
+            at(20, PeriodicCoverage),
+            at(30, VisualChange),
+        ];
+        assert_eq!(
+            settled_screens(&changes),
+            vec![0, 2, 4, 7, 9],
+            "a change 5 s after the last listed entry is listed, one sooner is not; motion's start and coverage never are"
+        );
+        assert_eq!(settled_screens(&[]), Vec::<usize>::new());
+        assert_eq!(
+            settled_screens(&[at(3, VisualChange), at(4, SettledAfterMotion)]),
+            vec![0, 1],
+            "a change with nothing listed before it is listed, and a settled screen always is"
+        );
     }
 }

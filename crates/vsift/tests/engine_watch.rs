@@ -234,8 +234,9 @@ async fn one_run_writes_the_three_outputs_beside_the_video_and_closes_its_sessio
     assert!(list.contains(&format!("Video SHA-256    {video_sha256}\n")));
     assert_eq!(
         outcome.frames.len(),
-        outcome.changes_found.min(vsift::MAX_WATCH_FRAMES)
+        outcome.changes_listed.min(vsift::MAX_WATCH_FRAMES)
     );
+    assert!(outcome.changes_listed <= outcome.changes_found);
     for frame in &outcome.frames {
         assert_eq!(
             hex(&fs::read(&frame.path)?),
@@ -362,13 +363,24 @@ async fn more_changes_than_the_session_has_room_for_still_finish() -> TestResult
         outcome.changes_found > 192,
         "the video must find more changes than 384 evidence slots hold frames for"
     );
-    assert_eq!(outcome.frames.len(), vsift::MAX_WATCH_FRAMES);
+    assert!(
+        outcome.changes_listed < outcome.changes_found,
+        "a new picture every two seconds lists the settled screens, not every change"
+    );
+    assert_eq!(
+        outcome.frames.len(),
+        outcome.changes_listed.min(vsift::MAX_WATCH_FRAMES)
+    );
     let list = fs::read_to_string(
         video
             .with_file_name("busy screen-vsift")
             .join("screen-changes.txt"),
     )?;
-    assert!(list.contains("(not written)"));
+    assert!(list.contains("settled screens of"));
+    assert_eq!(
+        list.contains("(not written)"),
+        outcome.changes_listed > vsift::MAX_WATCH_FRAMES
+    );
     for frame in &outcome.frames {
         assert_eq!(hex(&fs::read(&frame.path)?), frame.sha256);
     }

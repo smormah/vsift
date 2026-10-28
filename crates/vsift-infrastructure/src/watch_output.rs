@@ -27,7 +27,9 @@ use vsift_application::{
     TranscriptEntry, WatchDocuments, WatchFile, WatchOutputError, WatchOutputKind, WatchOutputs,
     WatchProvenance,
 };
-use vsift_domain::{WatchOutputNames, readable_time, subrip_cue_text, subrip_time};
+use vsift_domain::{
+    CandidateReason, WatchOutputNames, readable_time, subrip_cue_text, subrip_time,
+};
 
 /// The outputs of one run, claimed in one folder.
 #[derive(Debug)]
@@ -472,12 +474,19 @@ pub fn render_screen_changes(
     let mut text = String::new();
     let _ = writeln!(
         text,
-        "Screen changes in {}, found by {}, {}: {} changes, {frames} frames.",
+        "Screen changes in {}, found by {}, {}: {} settled screens of {} changes found, {frames} frames.",
         provenance.video_name,
         provenance.made_by,
         provenance.made_at,
-        changes.len()
+        changes.len(),
+        summary.changes_found
     );
+    if changes.len() < summary.changes_found {
+        text.push_str(
+            "Listed: the first frame, each screen once motion settles, and a change at least 5 s after the one listed before it; the others are left out.
+",
+        );
+    }
     if frames < changes.len() {
         let _ = writeln!(
             text,
@@ -487,7 +496,7 @@ pub fn render_screen_changes(
     }
     if summary.stopped_for_room {
         text.push_str(
-            "VSift's private copy of the video ran out of room for frames, so the frames stop early; every change is still listed.\n",
+            "VSift's private copy of the video ran out of room for frames, so the frames stop early; every settled screen is still listed.\n",
         );
     }
     if summary.beyond_index_bound {
@@ -503,8 +512,8 @@ pub fn render_screen_changes(
     text.push('\n');
     let _ = writeln!(
         text,
-        "{:<10}  {:<18}  {:<36}  {:<36}  Frame SHA-256",
-        "Time", "Frame", "Change", "Frame evidence"
+        "{:<10}  {:<20}  {:<18}  {:<36}  {:<36}  Frame SHA-256",
+        "Time", "Reason", "Frame", "Change", "Frame evidence"
     );
     for change in changes {
         let (file, evidence, sha256) =
@@ -520,12 +529,24 @@ pub fn render_screen_changes(
                 });
         let _ = writeln!(
             text,
-            "{:<10}  {file:<18}  {:<36}  {evidence:<36}  {sha256}",
+            "{:<10}  {:<20}  {file:<18}  {:<36}  {evidence:<36}  {sha256}",
             readable_time(change.time),
+            reason_words(change.reason),
             change.candidate_id
         );
     }
     text
+}
+
+/// A change's reason in plain words, as the list shows it.
+const fn reason_words(reason: CandidateReason) -> &'static str {
+    match reason {
+        CandidateReason::FirstFrame => "first frame",
+        CandidateReason::VisualChange => "visual change",
+        CandidateReason::MotionStart => "motion starts",
+        CandidateReason::SettledAfterMotion => "settled after motion",
+        CandidateReason::PeriodicCoverage => "periodic coverage",
+    }
 }
 
 #[cfg(test)]

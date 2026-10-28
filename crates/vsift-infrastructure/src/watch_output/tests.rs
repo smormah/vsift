@@ -4,7 +4,7 @@ use vsift_application::{
     ScreenChangeEntry, ScreenChangeSummary, TranscriptEntry, WatchDocuments, WatchOutputError,
     WatchOutputKind, WatchOutputs as _, WatchProvenance, WrittenFrame,
 };
-use vsift_domain::{MediaTime, TranscriptRevisionId, WatchOutputNames};
+use vsift_domain::{CandidateReason, MediaTime, TranscriptRevisionId, WatchOutputNames};
 
 use super::{
     FolderWatchOutputs, WatchClaim, hex_sha256, render_screen_changes, render_subrip,
@@ -184,6 +184,7 @@ fn the_screen_change_list_gives_every_id_and_hash() {
         ScreenChangeEntry {
             time: MediaTime::from_micros(72_480_000),
             candidate_id: "vcd_7f20".to_owned(),
+            reason: CandidateReason::FirstFrame,
             frame: Some(WrittenFrame {
                 file_name: "00-01-12.480.png".to_owned(),
                 evidence_id: "evd_c19a".to_owned(),
@@ -193,25 +194,28 @@ fn the_screen_change_list_gives_every_id_and_hash() {
         ScreenChangeEntry {
             time: MediaTime::from_micros(295_040_000),
             candidate_id: "vcd_a81d".to_owned(),
+            reason: CandidateReason::SettledAfterMotion,
             frame: None,
         },
     ];
     let summary = ScreenChangeSummary {
         index_id: "vix_02b7".to_owned(),
+        changes_found: 9,
         beyond_index_bound: true,
         stopped_for_room: true,
     };
     let text = render_screen_changes(&provenance(), &summary, &changes);
     assert!(text.starts_with(
-        "Screen changes in meeting.mp4, found by VSift 0.3.0, 2026-11-20 14:05 UTC: 2 changes, 1 frames.\n\
+        "Screen changes in meeting.mp4, found by VSift 0.3.0, 2026-11-20 14:05 UTC: 2 settled screens of 9 changes found, 1 frames.\n\
+         Listed: the first frame, each screen once motion settles, and a change at least 5 s after the one listed before it; the others are left out.\n\
          1 of 2 frames written, spread evenly over the video; the others are listed without one.\n\
-         VSift's private copy of the video ran out of room for frames, so the frames stop early; every change is still listed.\n\
+         VSift's private copy of the video ran out of room for frames, so the frames stop early; every settled screen is still listed.\n\
          Screen changes are found in the first four hours of a video only.\n"
     ));
     assert!(text.contains("Visual index     vix_02b7   in session ses_0123456789abcdef"));
-    assert!(text.contains("00:01:12    00-01-12.480.png    vcd_7f20"));
+    assert!(text.contains("00:01:12    first frame           00-01-12.480.png    vcd_7f20"));
     assert!(text.contains(&format!("evd_c19a{}  {}", " ".repeat(28), "b".repeat(64))));
-    assert!(text.contains("00:04:55    (not written)       vcd_a81d"));
+    assert!(text.contains("00:04:55    settled after motion  (not written)       vcd_a81d"));
 }
 
 fn documents(revision: bool) -> Result<WatchDocuments, Box<dyn Error>> {
@@ -227,6 +231,7 @@ fn documents(revision: bool) -> Result<WatchDocuments, Box<dyn Error>> {
         entries: vec![line(1, 4, "Good morning.")],
         summary: ScreenChangeSummary {
             index_id: "none".to_owned(),
+            changes_found: 0,
             beyond_index_bound: false,
             stopped_for_room: false,
         },

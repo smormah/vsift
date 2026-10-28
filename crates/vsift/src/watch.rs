@@ -318,6 +318,7 @@ impl Engine {
             changes.extend(page.candidates().iter().map(|candidate| ScreenChange {
                 id: candidate.id().clone(),
                 time: candidate.representative(),
+                reason: candidate.reason(),
             }));
             match page.next_cursor() {
                 Some(next) => cursor = Some(next.to_owned()),

@@ -437,7 +437,7 @@ test('a private report keeps the kind of each missing run, from the closed set o
  * `changes` screen changes, frames for at most 180 of them; `spoil` changes one
  * thing so a check can see it.
  */
-function watchStandIn({ videoSha256, changes, spoil = null }) {
+function watchStandIn({ videoSha256, changes, listed = changes, spoil = null }) {
   const calls = [];
   const hash = (bytes) => require('node:crypto').createHash('sha256').update(bytes).digest('hex');
   const run = (step, args, { root }) => {
@@ -454,7 +454,7 @@ function watchStandIn({ videoSha256, changes, spoil = null }) {
     fs.writeFileSync(transcript, header);
     fs.writeFileSync(subtitles, '1\n00:00:01,000 --> 00:00:02,000\nHello.\n\n');
     const written = [];
-    const count = Math.min(changes, campaign.WATCH_MAX_FRAMES) - (spoil === 'frames' ? 1 : 0);
+    const count = Math.min(listed, campaign.WATCH_MAX_FRAMES) - (spoil === 'frames' ? 1 : 0);
     for (let index = 0; index < count; index += 1) {
       const file = path.join(frames, `00-00-${String(index % 60).padStart(2, '0')}.${String(index).padStart(3, '0')}.png`);
       const bytes = Buffer.from(`frame ${index}`);
@@ -462,7 +462,13 @@ function watchStandIn({ videoSha256, changes, spoil = null }) {
       written.push({ time_us: index * SECOND, candidate_id: `vcd_${index}`, evidence_id: `evd_${index}`, path: file, sha256: hash(bytes) });
     }
     if (spoil === 'frame bytes' && written.length > 0) fs.writeFileSync(written[0].path, 'replaced');
-    fs.writeFileSync(list, `Video SHA-256    ${videoSha256}\n${written.map((frame) => frame.sha256).join('\n')}\n`);
+    const reasons = ['first frame', 'settled after motion', 'visual change'];
+    const lines = Array.from({ length: listed }, (_, index) => {
+      const frame = written[index];
+      return `00:00:${String(index % 60).padStart(2, '0')}    ${reasons[Math.min(index, 2)].padEnd(20)}  ${frame ? path.basename(frame.path) : '(not written)'}  vcd_${index}  ${frame ? frame.sha256 : '-'}`;
+    });
+    fs.writeFileSync(list, `Video SHA-256    ${videoSha256}\n\n${lines.join('\n')}\n`);
+    if (spoil === 'partial') fs.writeFileSync(path.join(folder, `.${stem}.txt.1234.vsift-partial`), '');
     const output = (file) => ({ path: file, name: path.basename(file), sha256: hash(fs.readFileSync(file)) });
     return {
       step,
@@ -477,7 +483,7 @@ function watchStandIn({ videoSha256, changes, spoil = null }) {
           transcript_revision_id: 'trv_1', visual_index_revision_id: 'vix_1', outcome: 'complete', not_transcribed: [],
           screen_changes_beyond_bound: false, names_shortened: false,
           outputs: { transcript: output(transcript), subtitles: output(subtitles), folder: { path: frames, name: path.basename(frames), sha256: null }, screen_changes: output(list) },
-          changes_found: changes, frames: written,
+          changes_found: changes, changes_listed: listed, frames: written,
         },
       },
     };
@@ -500,7 +506,7 @@ function watchedSource(t) {
 
 test('vsift <video> runs the bare form on a copy, and its outputs, header, frames and hashes are checked (ADR 0037)', (t) => {
   const { file, item } = watchedSource(t);
-  const { run, calls } = watchStandIn({ videoSha256: WATCHED_ITEM.sha256, changes: 576 });
+  const { run, calls } = watchStandIn({ videoSha256: WATCHED_ITEM.sha256, changes: 576, listed: 200 });
   const watched = campaign.watchItem(WATCHED_ITEM, file, run, { folder: item });
   assert.deepEqual(watched.check, { passed: true, findings: [] });
   assert.equal(calls.length, 1);
@@ -508,18 +514,21 @@ test('vsift <video> runs the bare form on a copy, and its outputs, header, frame
   assert.equal(calls[0].root, path.join(item, 'watch-root'), 'a session root of its own');
   assert.ok(fs.existsSync(file), 'the item itself is never touched');
   assert.equal(watched.measurements.changes_found, 576);
+  assert.equal(watched.measurements.changes_listed, 200, 'the settled screens');
+  assert.deepEqual(watched.measurements.listed_by_reason, { 'first frame': 1, 'settled after motion': 1, 'visual change': 198 });
   assert.equal(watched.measurements.frames_written, 180, 'the bound of L-234');
   assert.equal(watched.measurements.seconds, 42);
   assert.ok(watched.measurements.frame_bytes > 0);
   const summary = campaign.markdown({ binary: { version: 'vsift 0.0.0', sha256: '0'.repeat(64) }, started: 's', finished: 'f', platform: 'p',
     setup: { passed: true, findings: [] }, items: [{ id: 'RM10', measurements: { watch: watched.measurements }, verdict: { passed: true, findings: [] } }] });
-  assert.match(summary, /\| RM10 \| 42 s \(0\.35\) \| complete \| 576 \| 180 \(\d+\) \|/);
+  assert.match(summary, /\| RM10 \| 42 s \(0\.35\) \| complete \| 576 \| 200 \| 180 \(\d+\) \|/);
 });
 
-test('vsift <video> findings: a wrong header hash, a missing frame, changed frame bytes, an open session, a failure', (t) => {
+test('vsift <video> findings: a wrong header hash, a missing frame, changed frame bytes, a temporary file left, an open session, a failure', (t) => {
   const cases = [
     ['header', /does not name the item's pinned SHA-256/],
-    ['frames', /179 frames were written for 576 changes, not 180/],
+    ['frames', /179 frames were written for 576 listed changes, not 180/],
+    ['partial', /1 temporary file\(s\) left beside the video/],
     ['frame bytes', /1 frame\(s\) missing or differing from their SHA-256/],
     ['session', /the session was not closed/],
   ];

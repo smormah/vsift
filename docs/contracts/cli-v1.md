@@ -3362,8 +3362,10 @@ status `complete`, and `data` with `source_id`, `session_id`, `session_closed`, 
 `screen_changes_beyond_bound` or `frames_stopped_for_room` is true), `not_transcribed` (half-open
 ranges in time order), `screen_changes_beyond_bound`, `frames_stopped_for_room`, `names_shortened`, `outputs` (`transcript`, `subtitles`, `folder` and
 `screen_changes`, each with its absolute `path`, its `name` in display form and its `sha256`, `null`
-only for the folder), `changes_found`, and `frames` (each with `time_us`, `candidate_id`,
-`evidence_id`, `path` and `sha256`, at most 180). With `--events jsonl` the stream carries the
+only for the folder), `changes_found` (every screen change the visual stream found), `changes_listed`
+(the settled screens `screen-changes.txt` lists, each with its reason: the first frame, each screen once
+motion settles, and a change at least 5 s after the one listed before it), and `frames` (each with
+`time_us`, `candidate_id`, `evidence_id`, `path` and `sha256`, at most 180, for listed changes only). With `--events jsonl` the stream carries the
 `prepare` job's progress events, then the terminal event with the same data.
 
 **The readable view** writes ADR 0033's live line on standard error while it works (terminal only),
