@@ -2,7 +2,8 @@
 
 - Status: **Accepted by the planner, 2026-10-27**, at `44ca5102`, relayed by the coordinator:
   decisions 2 to 10 as recommended, with three conditions written into sections 2, 7 and 8 (marked
-  "planner's condition"). Decision 1, the name, is the maintainer's and has been put to him again. The
+  "planner's condition"). Decision 1, the name, is the maintainer's: their ruling of 2026-10-27 keeps
+  `watch`. The
   shape of the action (the name, the bare-argument rule, the default outputs, the two flags, progress
   and the finish screen) is the maintainer's design of 2026-10-27. It is built in up to three pull
   requests (section 13); until each lands, what it describes is a plan, not a feature.
@@ -12,7 +13,7 @@
   [ADR 0013](0013-retained-bundle-publication.md) (the one export that exists today),
   [ADR 0022](0022-agent-skill-and-named-client-qualification.md) (the skill's command policy) and
   [ADR 0033](0033-progress-during-long-transcriptions.md) (the `prepare` job, its modes, status and
-  live line). It meets ADR 0036 (the setup door, W6f, pull request #537, not yet on `main`) at the
+  live line). It meets ADR 0036 (the setup door, W6f, pull requests #537 and #538, both on `main`) at the
   `--include` vocabulary, the colour rules and the door's "Try it" line. Their text stays as accepted;
   section 12 says what this record changes in each.
 - Tracking: the 0.3.0 story W6g, a late slice by the maintainer's ruling of 2026-10-27. Register
@@ -435,8 +436,7 @@ end-of-run files and the live line.
 Each has a recommendation. Decision 1 is the maintainer's; the others were proposed for the planner, none
 changing an existing JSON v1 field, failure code or safety rule. **Outcome (the planner, 2026-10-27,
 relayed by the coordinator): decisions 2 to 10 as recommended**, with conditions A to C (sections 8, 7
-and 2). Decision 1 has been put to the maintainer again; until he answers, his ruling of 2026-10-27
-(keep `watch`) stands.
+and 2). Decision 1 is the maintainer's ruling of 2026-10-27: keep `watch`.
 
 1. **The name `vsift watch`.** The messaging guide's tension: the group VSift must not be filed with
    includes plugins literally called `watch`, and "watch" is on its list of words to avoid as a lead.
