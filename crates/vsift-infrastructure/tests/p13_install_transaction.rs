@@ -746,10 +746,23 @@ impl Run<'_> {
                 cancellation: self.cancellation,
             },
             &guard,
-            self.progress,
         );
-        Ok(install_managed_components(&installer, actions, &NoProgress).await)
+        Ok(install_managed_components(&installer, actions, self.progress).await)
     }
+}
+
+/// How many verified downloads the store keeps for a later run.
+fn kept_downloads(root: &TestRoot) -> TestResult<usize> {
+    if !root.root().exists() {
+        return Ok(0);
+    }
+    let mut kept = 0;
+    for entry in fs::read_dir(root.root())? {
+        if entry?.file_name().to_string_lossy().starts_with("kept-") {
+            kept += 1;
+        }
+    }
+    Ok(kept)
 }
 
 fn statuses(report: &ManagedInstallReport) -> Vec<&'static str> {
@@ -995,12 +1008,15 @@ async fn partial_altered_and_wrongly_sized_responses_are_refused() -> TestResult
         assert_eq!(statuses(&report), ["failed"; 3]);
         assert!(root.stages()?.is_empty(), "{reply:?}");
         assert!(!root.root().join("versions-v1").exists(), "{reply:?}");
+        // ADR 0036 section 4: speech downloads beside video, and with no
+        // video tools to test it with, its verified downloads are kept.
         assert!(
             server
                 .requests()
                 .iter()
-                .all(|request| !request.target.ends_with(WHISPER_FILE))
+                .any(|request| request.target.ends_with(WHISPER_FILE))
         );
+        assert_eq!(kept_downloads(&root)?, 2, "{reply:?}");
     }
     Ok(())
 }
@@ -1093,7 +1109,8 @@ async fn a_full_disk_keeps_the_previous_version_selected_and_usable() -> TestRes
 }
 
 /// D-03: cancelling during a download stops it, discards the stage and
-/// reports the component cancelled and the rest blocked.
+/// reports the component cancelled; speech, downloading beside it (ADR 0036
+/// section 4), is cancelled too, and nothing of it is kept.
 #[tokio::test]
 async fn cancellation_during_a_download_discards_the_stage() -> TestResult {
     let fixture = Fixture::new("fixture-media-1")?;
@@ -1128,8 +1145,9 @@ async fn cancellation_during_a_download_discards_the_stage() -> TestResult {
         ComponentInstallFailure::at(InstallStep::Download, InstallFailureReason::Cancelled)
     );
     assert_eq!(report.failure_code(), Some(FailureCode::Cancelled));
-    assert_eq!(failure(&report, 1)?.reason, InstallFailureReason::Blocked);
+    assert_eq!(failure(&report, 1)?.reason, InstallFailureReason::Cancelled);
     assert_eq!(root.stages()?, [] as [std::path::PathBuf; 0]);
+    assert_eq!(kept_downloads(&root)?, 0);
     assert!(!root.root().join("versions-v1").exists());
     Ok(())
 }

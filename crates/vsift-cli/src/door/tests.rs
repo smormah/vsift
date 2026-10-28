@@ -5,6 +5,9 @@
 //!
 //! The snapshots in `crates/vsift-cli/tests/human_output/setup-door-*.txt`
 //! are what a person reads; `VSIFT_UPDATE_HUMAN_SNAPSHOTS=1` rewrites them.
+//! They hold standard output only: on a real terminal the typed answer and
+//! its Enter, echoed by the terminal, sit between the question and what
+//! follows it.
 
 use std::{
     cell::{Cell, RefCell},
@@ -14,26 +17,27 @@ use std::{
 
 use serde_json::{Value, json};
 use vsift::{
-    Cancellation, DependencyState, DependencyStatus, FailureCode, LocalAsrCheckOutcome,
-    LocalAsrModelStatus, LocalAsrNotRunReason, LocalAsrSetupStatus, ManagedPlanAvailability,
-    OptionalCapability, OptionalComponent, OptionalComponentSet, ProbeTimeout, ProbeTimeoutKind,
+    Cancellation, CorePart, CorePartSet, DependencyState, DependencyStatus, FailureCode,
+    LocalAsrCheckOutcome, LocalAsrModelStatus, LocalAsrNotRunReason, LocalAsrSetupStatus,
+    ManagedComponent, ManagedPlanAvailability, OptionalCapability, OptionalComponent,
+    OptionalComponentSet, PieceProgress, PieceStage, ProbeTimeout, ProbeTimeoutKind,
     ProgressObserver, ReviewedAsrModel, RuntimeDependency, RuntimeDiagnosis, RuntimeReadiness,
 };
 use vsift_contract::DependencyLookup;
 
 use super::{
-    Answer, CheckedSetup, Console, DoorOptions, DoorRun, InstallResults, ReviewedPlan, SetupSteps,
-    run,
+    Answer, CheckedSetup, Console, DoorOptions, DoorRun, InstallResults, QuestionLine, Reply,
+    ReviewedPlan, SetupSteps, run,
 };
 use crate::{
     CommandFailure,
     command::DoorExtra,
     human::{
-        Styling,
+        self, Styling,
         tests::{check_snapshot, example},
     },
     live_line::LiveLine,
-    output::{OutputWriter, ProcessExit},
+    output::{OutputMode, OutputWriter, ProcessExit},
 };
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -45,7 +49,7 @@ const VERSION: &str = "0.0.0-test";
 struct ScriptedConsole {
     present: bool,
     styling: Styling,
-    answer: Answer,
+    reply: Reply,
     /// Presses Ctrl-C while the question waits: the cancellation fires,
     /// whatever was typed.
     interrupts: bool,
@@ -53,11 +57,15 @@ struct ScriptedConsole {
 }
 
 impl ScriptedConsole {
+    /// A person who types `answer` and presses Enter.
     fn person(answer: Answer) -> Self {
         Self {
             present: true,
             styling: Styling::Plain,
-            answer,
+            reply: Reply {
+                answer,
+                line: QuestionLine::Ended,
+            },
             interrupts: false,
             asked: Cell::new(0),
         }
@@ -84,12 +92,12 @@ impl Console for ScriptedConsole {
         LiveLine::Hidden
     }
 
-    fn answer(&mut self, cancellation: &Cancellation) -> impl Future<Output = Answer> {
+    fn answer(&mut self, cancellation: &Cancellation) -> impl Future<Output = Reply> {
         self.asked.set(self.asked.get() + 1);
         if self.interrupts {
             cancellation.cancel();
         }
-        ready(self.answer)
+        ready(self.reply)
     }
 }
 
@@ -99,7 +107,10 @@ struct ScriptedSteps {
     plan: Option<Value>,
     install: RefCell<Option<Result<InstallResults, CommandFailure>>>,
     planned: Cell<u32>,
+    planned_parts: Cell<Option<CorePartSet>>,
     installed: Cell<u32>,
+    /// What the install reports of its pieces, in order.
+    pieces: Vec<PieceProgress>,
 }
 
 impl ScriptedSteps {
@@ -109,8 +120,15 @@ impl ScriptedSteps {
             plan: None,
             install: RefCell::new(None),
             planned: Cell::new(0),
+            planned_parts: Cell::new(None),
             installed: Cell::new(0),
+            pieces: Vec::new(),
         }
+    }
+
+    fn with_pieces(mut self, pieces: Vec<PieceProgress>) -> Self {
+        self.pieces = pieces;
+        self
     }
 
     fn with_plan(mut self, plan: Value) -> Self {
@@ -136,14 +154,16 @@ impl SetupSteps for ScriptedSteps {
 
     fn plan(
         &self,
+        parts: CorePartSet,
         _include: OptionalComponentSet,
     ) -> impl Future<Output = Result<ReviewedPlan, CommandFailure>> {
         self.planned.set(self.planned.get() + 1);
+        self.planned_parts.set(Some(parts));
         ready(
             self.plan
                 .clone()
                 .ok_or_else(|| CommandFailure::from(FailureCode::Internal))
-                .and_then(ReviewedPlan::from_envelope),
+                .and_then(|envelope| ReviewedPlan::from_envelope(envelope, parts)),
         )
     }
 
@@ -151,9 +171,12 @@ impl SetupSteps for ScriptedSteps {
         &self,
         _plan: &ReviewedPlan,
         _cancellation: &Cancellation,
-        _progress: ProgressObserver,
+        progress: ProgressObserver,
     ) -> impl Future<Output = Result<InstallResults, CommandFailure>> {
         self.installed.set(self.installed.get() + 1);
+        for piece in &self.pieces {
+            progress.install_piece(piece);
+        }
         ready(
             self.install
                 .borrow_mut()
@@ -376,7 +399,7 @@ async fn yes_installs_what_was_offered_and_ends_complete() -> TestResult {
     assert_eq!((console.asked.get(), steps.installed.get()), (1, 1));
     assert!(stdout.contains("Install speech now? [y/N] "), "{stdout}");
     assert!(
-        stdout.ends_with("Setup complete. Try it: vsift ingest ./your-video.mp4\n"),
+        stdout.ends_with("Try it: vsift ingest ./your-video.mp4\n"),
         "{stdout}"
     );
     assert!(stderr.is_empty(), "{stderr}");
@@ -402,6 +425,42 @@ async fn no_installs_nothing_and_says_how_to_come_back() -> TestResult {
         stdout.ends_with("Nothing was installed. Run vsift setup again when you're ready.\n"),
         "{stdout}"
     );
+    Ok(())
+}
+
+/// A typed answer's Enter is the only break after the question; with no
+/// typed answer (the time limit, Ctrl-C, a closed input) the door breaks the
+/// line itself, so the close never sits on the question's line.
+#[tokio::test]
+async fn the_close_starts_on_the_line_after_the_question() -> TestResult {
+    const QUESTION: &str = "Install speech now? [y/N] ";
+    const CLOSE: &str = "Nothing was installed.";
+    for (reply, between) in [
+        (
+            Reply {
+                answer: Answer::No,
+                line: QuestionLine::Ended,
+            },
+            "",
+        ),
+        (Reply::UNANSWERED, "\n"),
+    ] {
+        let steps = ScriptedSteps::new(vec![video_ready_speech_missing(
+            ManagedPlanAvailability::Qualified,
+        )])
+        .with_plan(speech_plan()?);
+        let mut console = ScriptedConsole {
+            reply,
+            ..ScriptedConsole::person(Answer::No)
+        };
+
+        let (_, stdout, _) = converse(&mut console, &steps, Vec::new()).await?;
+
+        assert!(
+            stdout.contains(&format!("{QUESTION}{between}{CLOSE}")),
+            "{reply:?}: {stdout:?}"
+        );
+    }
     Ok(())
 }
 
@@ -751,4 +810,224 @@ async fn symbols_and_colour_only_when_the_terminal_takes_them() -> TestResult {
     let squeeze = |text: &str| text.split_whitespace().collect::<Vec<_>>().join(" ");
     assert_eq!(squeeze(&stripped), squeeze(&unstyled));
     Ok(())
+}
+
+/// Runs the unattended door and returns its exit status and what it wrote.
+async fn unattended(
+    steps: &ScriptedSteps,
+    parts: CorePartSet,
+    accept_plan: Option<&str>,
+    mode: OutputMode,
+) -> Result<(ProcessExit, String, String), Box<dyn std::error::Error>> {
+    let mut stdout = Vec::new();
+    let mut stderr = Vec::new();
+    let cancellation = Cancellation::new();
+    let exit = {
+        let mut writer = OutputWriter::new(&mut stdout, &mut stderr);
+        super::unattended::run(
+            super::unattended::UnattendedRun {
+                steps,
+                parts,
+                include: OptionalComponentSet::EMPTY,
+                accept_plan: accept_plan.map(str::to_owned),
+                version: VERSION,
+                cancellation: &cancellation,
+                mode,
+                trap_interruptions: false,
+            },
+            &mut writer,
+        )
+        .await
+    };
+    Ok((exit, String::from_utf8(stdout)?, String::from_utf8(stderr)?))
+}
+
+const SPEECH: CorePartSet = CorePartSet::EMPTY.with(CorePart::Speech);
+
+fn piece(component: ManagedComponent, stage: PieceStage) -> PieceProgress {
+    PieceProgress {
+        component,
+        stage,
+        received: 10,
+        total: 10,
+    }
+}
+
+/// ADR 0036 section 6: naming the parts installs the plan built for them,
+/// with no question; one plain line per piece as it finishes, then the
+/// table and `Result: pass`, exit 0.
+#[tokio::test]
+async fn unattended_installs_the_named_parts_and_passes() -> TestResult {
+    let steps = ScriptedSteps::new(vec![
+        video_ready_speech_missing(ManagedPlanAvailability::Qualified),
+        all_ready(),
+    ])
+    .with_plan(speech_plan()?)
+    .with_pieces(vec![
+        piece(ManagedComponent::WhisperCli, PieceStage::Waiting),
+        piece(ManagedComponent::WhisperCli, PieceStage::Ready),
+        piece(ManagedComponent::WhisperModel, PieceStage::Ready),
+    ])
+    .with_install(Ok(install_results(
+        json!([
+            component("whisper_cli", "activated", None, None),
+            component("whisper_model", "activated", None, None),
+        ]),
+        None,
+    )?));
+
+    let (exit, stdout, stderr) = unattended(&steps, SPEECH, None, OutputMode::Human).await?;
+
+    check_snapshot("setup-door-unattended", &stdout)?;
+    assert_plain(&stdout);
+    assert_eq!(exit, ProcessExit::Success);
+    assert_eq!(steps.planned_parts.get(), Some(SPEECH));
+    assert_eq!(steps.installed.get(), 1);
+    assert!(stdout.ends_with("Result: pass\n"), "{stdout}");
+    assert!(stderr.is_empty(), "{stderr}");
+    Ok(())
+}
+
+/// With `--json` the result is the `setup` command's, and a speech part
+/// that waits for video is a fail with its next step; the exit status is
+/// the install's.
+#[tokio::test]
+async fn unattended_json_reports_a_fail_with_each_parts_next_step() -> TestResult {
+    let nothing = checked(
+        [
+            DependencyState::Missing,
+            DependencyState::Missing,
+            DependencyState::Missing,
+        ],
+        NOTHING_YET,
+        ManagedPlanAvailability::Qualified,
+        OptionalCapability::NotInstalled,
+    );
+    let steps = ScriptedSteps::new(vec![nothing.clone(), nothing])
+        .with_plan(plan(vec![
+            action("ffmpeg_ffprobe", "n9.0.1", "BtbN", 112_640_000),
+            action("whisper_cli", "whisper.cpp-v1.9.2", "ggml-org", 9_412_000),
+        ])?)
+        .with_install(Ok(install_results(
+            json!([
+                component(
+                    "ffmpeg_ffprobe",
+                    "failed",
+                    Some("download"),
+                    Some("offline")
+                ),
+                component("whisper_cli", "failed", None, Some("blocked")),
+            ]),
+            Some(FailureCode::DownloadFailed),
+        )?));
+
+    let (exit, stdout, _) = unattended(&steps, CorePartSet::ALL, None, OutputMode::Json).await?;
+
+    let result: Value = serde_json::from_str(&stdout)?;
+    assert_eq!(result["command"], "setup");
+    assert_eq!(result["data"]["outcome"], "fail");
+    assert_eq!(result["data"]["parts"][0]["status"], "not_set_up");
+    assert_eq!(
+        result["data"]["parts"][0]["next_step"],
+        vsift_contract::SETUP_NEXT_CONNECTION
+    );
+    assert_eq!(
+        result["data"]["parts"][1]["next_step"],
+        vsift_contract::SETUP_NEXT_AFTER_VIDEO
+    );
+    assert_eq!(
+        result["data"]["install"]["components"][0]["reason"],
+        "offline"
+    );
+    assert_eq!(exit, ProcessExit::from(FailureCode::DownloadFailed.class()));
+    Ok(())
+}
+
+/// Nothing to do is a pass, with no plan built and `install` null.
+#[tokio::test]
+async fn unattended_with_nothing_to_do_passes_without_a_plan() -> TestResult {
+    let steps = ScriptedSteps::new(vec![all_ready()]);
+
+    let (exit, stdout, _) = unattended(&steps, CorePartSet::ALL, None, OutputMode::Json).await?;
+
+    let result: Value = serde_json::from_str(&stdout)?;
+    assert_eq!(result["data"]["outcome"], "pass");
+    assert_eq!(result["data"]["install"], Value::Null);
+    assert_eq!(exit, ProcessExit::Success);
+    assert_eq!((steps.planned.get(), steps.installed.get()), (0, 0));
+    Ok(())
+}
+
+/// A named part `VSift` cannot install here, timed-out checks, and a plan
+/// whose digest is not the one given are errors, refused before anything
+/// is installed.
+#[tokio::test]
+async fn unattended_errors_refuse_before_anything_is_installed() -> TestResult {
+    let unavailable = ScriptedSteps::new(vec![video_ready_speech_missing(
+        ManagedPlanAvailability::TargetUnavailable,
+    )]);
+    let (exit, stdout, _) = unattended(&unavailable, SPEECH, None, OutputMode::Json).await?;
+    let failure: Value = serde_json::from_str(&stdout)?;
+    assert_eq!(failure["command"], "setup");
+    assert_eq!(failure["error"]["code"], "MISSING_CAPABILITY");
+    assert_eq!(
+        exit,
+        ProcessExit::from(FailureCode::MissingCapability.class())
+    );
+    assert_eq!(unavailable.planned.get(), 0);
+
+    let mismatch = ScriptedSteps::new(vec![video_ready_speech_missing(
+        ManagedPlanAvailability::Qualified,
+    )])
+    .with_plan(speech_plan()?);
+    let (_, stdout, _) =
+        unattended(&mismatch, SPEECH, Some(&"b".repeat(64)), OutputMode::Json).await?;
+    let failure: Value = serde_json::from_str(&stdout)?;
+    assert_eq!(failure["error"]["code"], "INVALID_ARGUMENT");
+    assert_eq!(mismatch.installed.get(), 0);
+
+    let matching = ScriptedSteps::new(vec![
+        video_ready_speech_missing(ManagedPlanAvailability::Qualified),
+        all_ready(),
+    ])
+    .with_plan(speech_plan()?)
+    .with_install(Ok(install_results(json!([]), None)?));
+    let (exit, _, _) =
+        unattended(&matching, SPEECH, Some(&"a".repeat(64)), OutputMode::Json).await?;
+    assert_eq!(exit, ProcessExit::Success);
+    assert_eq!(matching.installed.get(), 1);
+    Ok(())
+}
+
+/// The bars name each piece, fill with its bytes and end with its stage.
+#[test]
+fn each_piece_has_a_bar_its_megabytes_and_its_stage() {
+    let lines = human::piece_bars(&[
+        PieceProgress {
+            component: ManagedComponent::MediaTools,
+            stage: PieceStage::Downloading,
+            received: 56_000_000,
+            total: 112_000_000,
+        },
+        PieceProgress {
+            component: ManagedComponent::WhisperModel,
+            stage: PieceStage::WaitingForVideo,
+            received: 60_000_000,
+            total: 60_000_000,
+        },
+    ]);
+    assert_eq!(
+        lines,
+        [
+            format!(
+                "  FFmpeg        {}{}    56 of 112 MB  downloading",
+                "\u{2588}".repeat(10),
+                "\u{2591}".repeat(10)
+            ),
+            format!(
+                "  speech model  {}    60 of 60 MB  waiting for video",
+                "\u{2588}".repeat(20)
+            ),
+        ]
+    );
 }

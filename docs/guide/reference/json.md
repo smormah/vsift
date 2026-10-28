@@ -66,6 +66,7 @@ The `error.code` of a failed result is one of these (the schema's own list). Wha
 - [setup-remove.schema.json](#setup-removeschemajson): VSift setup remove data v1
 - [setup-repair.schema.json](#setup-repairschemajson): VSift setup repair data v1
 - [setup-rollback.schema.json](#setup-rollbackschemajson): VSift setup rollback data v1
+- [setup.schema.json](#setupschemajson): VSift setup data v1
 - [terminal-event.schema.json](#terminal-eventschemajson): VSift JSONL terminal event v1
 - [time-anchor.schema.json](#time-anchorschemajson): VSift time anchor v1
 - [transcript-get-brief-data.schema.json](#transcript-get-brief-dataschemajson): VSift transcript.get data, brief view v1
@@ -1631,7 +1632,7 @@ The data member of the complete or partial terminal result that ends a search --
 
 **VSift setup install data v1** ([the schema](../../../schemas/v1/setup-install.schema.json))
 
-The data of a setup.install result (P13, ADR 0023): every component of the accepted plan, in plan order (ffmpeg_ffprobe, whisper_cli, whisper_model), with what the transaction did to it. A successful result carries it as data; a failed or cancelled one carries the same object as data beside its error, whose code is the first failed component's failure_code. Each component activates atomically on its own: activated and already_current components are installed and selected; a rerun of the same accepted plan continues from the first component not yet current. A failed component names the step that stopped it and a typed reason; blocked means an earlier component stopped the transaction first. stage says what cleanup did with the component's private stage (retained only when its ownership or content could not be proved). Every string is a closed identifier or a reviewed version; no path, URL, server text or credential.
+The data of a setup.install result (P13, ADR 0023): every component of the accepted plan, in plan order (ffmpeg_ffprobe, whisper_cli, whisper_model), with what the transaction did to it. A successful result carries it as data; a failed or cancelled one carries the same object as data beside its error, whose code is the first failed component's failure_code. Each component activates atomically on its own: activated and already_current components are installed and selected; a rerun of the same accepted plan continues from the first component not yet current. A failed component names the step that stopped it and a typed reason; blocked means not activated because another component did not install: an earlier component of its part stopped it, or, since 0.3.0 (ADR 0036 section 4), video did not install and speech, downloaded and verified beside it, could not be tested; its verified download is then kept for the next run. stage says what cleanup did with the component's private stage (retained only when its ownership or content could not be proved). Every string is a closed identifier or a reviewed version; no path, URL, server text or credential.
 
 | Member | Type | Required | Notes |
 | --- | --- | --- | --- |
@@ -1932,6 +1933,22 @@ The data of a complete setup.rollback result (P13 PR 6, ADR 0023). Without --ver
 | `selected_version` | string | yes | pattern `^[a-z0-9]([a-z0-9._-]{0,62}[a-z0-9])?$` |
 | `replaced_version` | string or null | yes | pattern `^[a-z0-9]([a-z0-9._-]{0,62}[a-z0-9])?$` |
 | `next_step` | string | yes | 1 to 512 characters |
+
+### setup.schema.json
+
+**VSift setup data v1** ([the schema](../../../schemas/v1/setup.schema.json))
+
+The data of a setup result: one unattended run of the setup door, vsift setup --unattended --install <parts> --json (ADR 0036 section 6). Naming the parts accepts the plan built for them; every artifact stays pinned and verified. outcome is pass when every named core part works after the run, also when nothing needed installing (exit 0), and fail when the install ran and a named part does not work (the exit status setup install gives the same failure). parts holds video, speech, then each included extra, with whether it was named, where it stands now and the one thing to do about it. install is the setup.install data of the install the run made, exactly as setup install reports it, or null when nothing needed installing. A run that could not start (a part VSift cannot install here, checks that ran out of time, a busy install, an --accept-plan digest that does not match) is the ordinary failure envelope, never this object.
+
+| Member | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `outcome` | "pass" \| "fail" | yes |  |
+| `parts` | array of object | yes | 2 to 8 items |
+| `parts[].part` | "video" \| "speech" \| "web_videos" | yes |  |
+| `parts[].requested` | boolean | yes |  |
+| `parts[].status` | "ready" \| "not_set_up" \| "added" \| "not_added" \| "not_available_here" | yes |  |
+| `parts[].next_step` | string or null | yes | 1 to 512 characters |
+| `install` | object, see [setup-install.schema.json](#setup-installschemajson) or null | yes |  |
 
 ### terminal-event.schema.json
 

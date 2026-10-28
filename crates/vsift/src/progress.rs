@@ -10,7 +10,7 @@
 
 use std::{fmt, num::NonZeroU16, sync::Arc};
 
-use vsift_application::ProgressSink;
+use vsift_application::{PieceProgress, ProgressSink};
 use vsift_domain::{JobId, ProgressUpdate};
 
 /// One observation a host receives: the update and the job doing the work.
@@ -32,7 +32,12 @@ type ProgressCallback = dyn Fn(&JobProgress) + Send + Sync;
 pub struct ProgressObserver {
     progress: Option<Arc<ProgressCallback>>,
     admission: Option<Arc<AdmissionCallback>>,
+    pieces: Option<Arc<PieceCallback>>,
 }
+
+/// The callback told each stage and byte count of each piece of a managed
+/// install (ADR 0036 section 5).
+type PieceCallback = dyn Fn(&PieceProgress) + Send + Sync;
 
 /// The callback told when a run starts waiting for admission capacity.
 type AdmissionCallback = dyn Fn(&AdmissionWaiting) + Send + Sync;
@@ -70,6 +75,7 @@ impl ProgressObserver {
         Self {
             progress: None,
             admission: None,
+            pieces: None,
         }
     }
 
@@ -79,6 +85,7 @@ impl ProgressObserver {
         Self {
             progress: Some(Arc::new(callback)),
             admission: None,
+            pieces: None,
         }
     }
 
@@ -106,6 +113,26 @@ impl ProgressObserver {
     pub fn admission_waiting(&self, waiting: &AdmissionWaiting) {
         if let Some(callback) = &self.admission {
             callback(waiting);
+        }
+    }
+
+    /// Also tells `callback`, which must not block, the stage and bytes of
+    /// each piece of a managed install as it goes (ADR 0036 section 5): the
+    /// setup door draws its progress lines from it. It is never part of
+    /// `--events jsonl`.
+    #[must_use]
+    pub fn with_install_pieces(
+        mut self,
+        callback: impl Fn(&PieceProgress) + Send + Sync + 'static,
+    ) -> Self {
+        self.pieces = Some(Arc::new(callback));
+        self
+    }
+
+    /// Tells the piece callback, if there is one, about one piece.
+    pub fn install_piece(&self, piece: &PieceProgress) {
+        if let Some(callback) = &self.pieces {
+            callback(piece);
         }
     }
 

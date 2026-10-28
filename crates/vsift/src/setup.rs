@@ -7,10 +7,10 @@ use std::{
 };
 
 use vsift_application::{
-    DiagnoseRuntime, LocalAsrSetupStatus, ManagedPlanAvailability, ManagedPlanObservation,
-    ManagedSetupPlan, ManagedUpdate, ObservedModel, OptionalCapability, OptionalComponent,
-    OptionalComponentSet, RuntimeDiagnosis, SetupProfile, SetupSelectionState,
-    plan_managed_setup_including,
+    CorePartSet, DiagnoseRuntime, LocalAsrSetupStatus, ManagedPlanAvailability,
+    ManagedPlanObservation, ManagedSetupPlan, ManagedUpdate, ObservedModel, OptionalCapability,
+    OptionalComponent, OptionalComponentSet, RuntimeDiagnosis, SetupProfile, SetupSelectionState,
+    plan_managed_setup_of_parts,
 };
 use vsift_contract::{DependencyLookup, SavedSetupPlan, SetupPlanResponse};
 use vsift_domain::{ManagedComponent, RuntimeDependency};
@@ -201,6 +201,10 @@ pub struct SetupPlanRequest {
     /// The optional components to include (`setup plan --include`, #409);
     /// [`OptionalComponentSet::EMPTY`] for the default plan.
     pub include: OptionalComponentSet,
+    /// The core parts the plan may install: [`CorePartSet::ALL`] for `setup
+    /// plan`, fewer for an unattended setup that names them (ADR 0036
+    /// section 6).
+    pub parts: CorePartSet,
     /// Total deadline shared by the dependency probes of one look at the
     /// tools; hosts normally pass [`DEFAULT_PROBE_TIMEOUT`]. A probe that
     /// times out causes no managed action, and the plan says so.
@@ -508,11 +512,12 @@ impl Engine {
         };
         let probe =
             ProcessDependencyProbe::with_explicit_paths(request.probe_timeout, configured.clone());
-        let plan = plan_managed_setup_including(
+        let plan = plan_managed_setup_of_parts(
             request.profile,
             DiagnoseRuntime::new(probe).execute().await,
             detect_managed_target(),
             selections,
+            request.parts,
             request.include,
             now_unix_seconds,
             catalogue,

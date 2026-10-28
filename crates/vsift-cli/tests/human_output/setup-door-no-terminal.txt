@@ -7,5 +7,5 @@ VSift 0.0.0-test setup
 
 Your setup isn't complete: video and speech are missing.
 Speech needs two things, whisper.cpp and its model, and neither is set up yet.
-Nobody is at a terminal to answer, so nothing was installed.
-Run vsift setup in a terminal, or see vsift setup install --help to install without questions.
+Nobody is here to answer, so nothing was installed.
+To install without questions: vsift setup --unattended --install video,speech

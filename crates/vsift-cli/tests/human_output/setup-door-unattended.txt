@@ -1,0 +1,13 @@
+VSift 0.0.0-test setup
+
+Installing speech without questions:
+  whisper.cpp   ready
+  speech model  ready
+
+  Part        Status      Uses         What it's for
+  Video       ready       FFmpeg       reading videos, taking frames
+  Speech      ready       whisper.cpp  turning speech into text
+  Web videos  none added  yt-dlp       web page videos (optional)
+
+Setup complete: video and speech both work.
+Result: pass

@@ -268,3 +268,9 @@ On 2026-10-22 the maintainer accepted Windows FFmpeg as a managed pin (decision 
 review rule as the Ubuntu pin ([ADR 0023](0023-r0-distribution-managed-installation-and-handoff-check.md), note of
 2026-10-04). The branch was rebased onto `main` at `b4172359` (slices 1 and 2 merged) for the merge, keeping only
 slice 3's own commits; only the records conflicted, and nothing in the design changed.
+
+*Note, 2026-10-27 ([ADR 0036](0036-the-setup-door.md), section 4, its second pull request):* the core of the
+transaction is now two independent parts, video and speech, like the optional groups here. Their downloads run side
+by side, "the first failure stops the transaction" holds within a part, and speech's verified download is kept when
+video does not install. Optional components keep this record's rule: installed after a complete core, each a part of
+its own.

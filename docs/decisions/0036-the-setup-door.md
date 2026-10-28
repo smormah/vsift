@@ -3,8 +3,8 @@
 - Status: **Proposed, 2026-10-27; the design accepted by the planner the same day, and decision 1 (the unattended
   acceptance) ratified by the maintainer the same day**, superseding that part of ADR 0023 (section 6). The shape of
   the door (sections 1 to 8) is the maintainer's design of 2026-10-27. The outcome of each open decision is under
-  "Decisions for the planner and the maintainer". It is built in two pull requests (section 12); until each lands,
-  what it describes is a plan, not a feature.
+  "Decisions for the planner and the maintainer". It is built in two pull requests (section 12): the first (#537)
+  is merged; the second builds sections 4 to 6 (the implementation notes below say where each differs in detail).
 - Date: 2026-10-27
 - Supersedes: the part of [ADR 0023](0023-r0-distribution-managed-installation-and-handoff-check.md) that accepts a
   managed plan only by its quoted digest, for the unattended setup door alone (section 6, the maintainer's ratification
@@ -343,6 +343,41 @@ What the first pull request built, and where it differs in detail from the secti
   through the existing cancellation. Before the question it ends the process, as for any short command.
 - **The skill** classes `vsift setup` as never in `references/commands.md`, and the policy test's never set has
   `setup`. That moved the trial freeze, written again on the `main` the pull request was rebased onto to merge.
+
+## Implementation note, 2026-10-27 (the second pull request: independent parts, live progress, unattended)
+
+What the second pull request built, and where it differs in detail from the sections above:
+
+- **The transaction** (`crates/vsift-application/src/install.rs`): the installer port splits fetching (download,
+  import or a kept download, verified by size and SHA-256) from staging (unpacking and preparing the runtime). The
+  core is two parts, video and speech; their fetches run side by side on the command's own task (a two-future join,
+  so the application stays free of an async runtime), one fetch per part at a time. Activation is video first. When
+  video did not install and the installer reports no working video tools, speech's verified downloads are kept
+  (`DownloadKeeping`) and its components stay `blocked`; a cancellation discards them instead. Optional parts are
+  unchanged: after a complete core, each a part of its own.
+- **Kept downloads** (`crates/vsift-infrastructure/src/managed_artifact_store.rs`): a verified, unextracted stage is
+  renamed to `kept-<reviewed SHA-256>` in the managed root. The next run renames it back to a fresh stage name, so a
+  killed run leaves an ordinary stage for the sweep, and reads it in full against its reviewed size and SHA-256
+  before it is used; one that no longer matches is discarded and downloaded again. The stale-stage sweep leaves kept
+  downloads; `setup install` removes those whose bytes its plan no longer installs, and inspection checks their
+  shape (`setup repair` reports one it cannot prove).
+- **The observer** (section 5) is `InstallObserver` in the application and `ProgressObserver::with_install_pieces`
+  in the engine: per piece, its stage (`PieceStage`) and bytes. `--events jsonl` is unchanged except that the
+  `fetching_artifact` events of the two parts can alternate.
+- **The bars** need a terminal that takes symbols and colour (`Styling::Rich`). With plain words on a terminal the
+  door keeps the first pull request's live count on standard error; section 8 keeps bars to the rich terminal.
+- **The plan request** gains the core parts (`CorePartSet`; `SetupPlanRequest::parts`, `SetupInstallRequest::parts`):
+  a part left out is offered nothing. A plan of both parts is `setup plan`'s, with the same digest.
+- **Unattended** (`crates/vsift-cli/src/door/unattended.rs`): it refuses, before anything changes, timed-out checks
+  (`DEADLINE_EXCEEDED`), a named part with no reviewed catalogue here and an included extra unavailable here (both
+  `MISSING_CAPABILITY`), and an `--accept-plan` digest that is not the plan's (`INVALID_ARGUMENT` with the
+  stale-plan remediation, compared in the door before the install guard is taken). An extra that fails never makes
+  the outcome a fail; its entry names the next step. A `--json` fail is a `complete` result with a non-zero exit, as
+  a blocked `setup check` is. The `setup` result carries the install's `setup.install` data unchanged.
+- **The planner's two wording changes:** the close says `Setup complete: video and speech both work.` once, then
+  `Try it: vsift ingest ./your-video.mp4`. After the `[y/N]` question the door breaks the line only when nobody
+  typed an answer (the time limit, Ctrl-C, a closed input); a typed answer's Enter is the only break, so a
+  person never sees an empty line there, and what follows never sits on the question's line.
 
 ## Consequences
 
