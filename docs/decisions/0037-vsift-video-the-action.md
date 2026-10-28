@@ -578,3 +578,35 @@ complete in code; the "after" real-media run is its qualification evidence.
   without real media (a generated video with a new picture every two seconds) and passes with the fix; the test
   `the_frame_cap_fits_a_fresh_sessions_evidence_room` pins the relation.
 - **Register:** L-234, L-235 and L-236 added by this pull request; L-237 comes with the second.
+
+## Implementation note, 2026-10-28 (the second pull request: the use case)
+
+The first pull request's departure "there is no application use case and no `WatchOutputs` port" is
+**closed** (the planner's ruling of 2026-10-28: required for 0.3.0, and the first commit of the second
+pull request). Section 3's layering now holds as written:
+
+- **application** (`crates/vsift-application/src/watch.rs`): `run_watch`, the use case. It checks the source
+  and the capabilities, derives the names, claims them, opens the session, runs the `prepare` job, states the
+  untranscribed ranges as gaps in time order, measures the evidence room before the first frame and takes at
+  most `frames_that_fit` frames spread evenly (a refusal for room ends the frames, not the run), finalises the
+  files and closes the session; after the claim, a failure releases it. It reaches the existing operations
+  through a second port, `WatchSteps`, which the engine supplies, as `PrepareStreams` supplies the `prepare`
+  job's streams: one method per existing operation (the source's `ingest` refusal, the configuration check,
+  `ingest`, the watched `prepare` job in this process, the transcript and candidate reads, the evidence room,
+  `frame get`, the provenance, closing the session), none with a rule of its own. The port data and the
+  outcome (`WatchOutcome`, `WatchFile`, `WatchFrame`, `WatchOutputKind`) moved here from the engine and the
+  infrastructure; the engine re-exports them under the same names, so no host changes.
+- **`WatchOutputs`** covers claim (which also resolves the folder: the video's own, or `--output`, created
+  without its parents, canonicalised and never inside VSift's roots), copying a frame checked against its
+  SHA-256, finalise and release. Writing a snapshot of a file that grows joins it with section 7.
+- **infrastructure**: `FolderWatchOutputs`, the port's folder implementation over `WatchClaim` and the three
+  renderers (`crates/vsift-infrastructure/src/watch_output.rs`).
+- **engine**: `Engine::watch` is the facade: it makes the paths absolute, builds the two ports and maps the
+  use case's error back to `EngineError`. The first pull request's `FrameTaker` seam is gone; the backstop is
+  the use case's, tested over the fake steps.
+- **Tests:** the use case over fakes of both ports (the order of the steps; a missing capability, a source
+  that is not a file, an unusable name and a taken name each refused with nothing claimed or no session
+  opened; a failure after the claim released and the session closed; a stated gap in time order; no subtitles
+  without a sound track; 576 changes with 180 frames spread evenly and every change listed; the frames fitted
+  to a small room; the backstop), the folder port on real temporary folders, and the engine's opt-in runs
+  through `Engine::watch` unchanged.

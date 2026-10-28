@@ -24,6 +24,7 @@ mod storage;
 mod transcript;
 mod verification;
 mod visual;
+mod watch;
 
 pub use asr::{
     AsrCancellation, AsrFailure, AsrFailureReason, AsrRevisionRequest, AsrRunFailure, AsrStage,
@@ -142,6 +143,13 @@ pub use visual::{
     extend_visual_index_within, indexes_any_of, merge_visual_extension, missing_windows,
     page_candidates, verify_visual_index_identities, visual_candidate_id, visual_coverage_gaps,
     visual_index_id,
+};
+pub use watch::{
+    ClaimedOutputs, FinalisedOutputs, FrameRefusal, OpenedWatchSession, PreparedRun,
+    PreparedTranscript, ScreenChange, ScreenChangeEntry, ScreenChangeSummary, ScreenChanges,
+    SessionFrame, TranscriptEntry, TranscriptLine, WatchDocuments, WatchError, WatchFile,
+    WatchFrame, WatchOutcome, WatchOutputError, WatchOutputKind, WatchOutputs, WatchProvenance,
+    WatchSteps, WrittenFrame, run_watch,
 };
 
 /// Port used to inspect one specialist runtime dependency.

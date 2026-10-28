@@ -1,11 +1,14 @@
 use std::{error::Error, ffi::OsStr, fs};
 
-use vsift_domain::{MediaTime, WatchOutputNames};
+use vsift_application::{
+    ScreenChangeEntry, ScreenChangeSummary, TranscriptEntry, WatchDocuments, WatchOutputError,
+    WatchOutputKind, WatchOutputs as _, WatchProvenance, WrittenFrame,
+};
+use vsift_domain::{MediaTime, TranscriptRevisionId, WatchOutputNames};
 
 use super::{
-    ScreenChangeEntry, ScreenChangeSummary, TranscriptEntry, WatchClaim, WatchOutputError,
-    WatchOutputKind, WatchProvenance, WrittenFrame, hex_sha256, render_screen_changes,
-    render_subrip, render_transcript,
+    FolderWatchOutputs, WatchClaim, hex_sha256, render_screen_changes, render_subrip,
+    render_transcript,
 };
 use crate::test_folder::TestFolder;
 
@@ -209,4 +212,110 @@ fn the_screen_change_list_gives_every_id_and_hash() {
     assert!(text.contains("00:01:12    00-01-12.480.png    vcd_7f20"));
     assert!(text.contains(&format!("evd_c19a{}  {}", " ".repeat(28), "b".repeat(64))));
     assert!(text.contains("00:04:55    (not written)       vcd_a81d"));
+}
+
+fn documents(revision: bool) -> Result<WatchDocuments, Box<dyn Error>> {
+    Ok(WatchDocuments {
+        provenance: provenance(),
+        transcript_revision: if revision {
+            Some(TranscriptRevisionId::parse(
+                "trv_1f2e3d4c5b6a79880f1e2d3c4b5a6978",
+            )?)
+        } else {
+            None
+        },
+        entries: vec![line(1, 4, "Good morning.")],
+        summary: ScreenChangeSummary {
+            index_id: "none".to_owned(),
+            beyond_index_bound: false,
+            stopped_for_room: false,
+        },
+        changes: Vec::new(),
+    })
+}
+
+#[test]
+fn the_folder_port_writes_beside_the_video_and_finishes_every_file() -> TestResult {
+    let folder = TestFolder::new("vsift-watch-port")?;
+    let video = folder.join("meeting.mp4");
+    let mut outputs = FolderWatchOutputs::new(Vec::new());
+    let claimed = outputs.claim(&video, None, &names()?)?;
+    assert_eq!(
+        claimed.transcript.file_name(),
+        Some(OsStr::new("meeting.txt"))
+    );
+    let finished = outputs.finalise(&documents(true)?)?;
+    let text = fs::read_to_string(&finished.transcript.path)?;
+    assert!(text.contains("[00:00:01] Good morning."), "{text}");
+    assert_eq!(
+        finished.transcript.sha256.as_deref(),
+        Some(hex_sha256(text.as_bytes()).as_str())
+    );
+    assert!(finished.subtitles.is_some());
+    assert!(finished.screen_changes.path.is_file());
+    outputs.release();
+    assert!(
+        finished.screen_changes.path.is_file(),
+        "a release after the files are finished removes nothing"
+    );
+    Ok(())
+}
+
+#[test]
+fn a_video_with_no_sound_track_leaves_no_subtitles_file() -> TestResult {
+    let folder = TestFolder::new("vsift-watch-port-silent")?;
+    let mut outputs = FolderWatchOutputs::new(Vec::new());
+    outputs.claim(&folder.join("meeting.mp4"), None, &names()?)?;
+    let finished = outputs.finalise(&documents(false)?)?;
+    assert!(finished.subtitles.is_none());
+    assert!(!folder.join("meeting.srt").exists());
+    Ok(())
+}
+
+#[test]
+fn an_output_folder_is_created_once_and_never_inside_vsifts_roots() -> TestResult {
+    let folder = TestFolder::new("vsift-watch-port-output")?;
+    let root = fs::canonicalize(&*folder)?.join("sessions");
+    fs::create_dir(&root)?;
+    let video = folder.join("meeting.mp4");
+    let mut outputs = FolderWatchOutputs::new(vec![root.clone()]);
+    assert!(matches!(
+        outputs.claim(&video, Some(&root.join("inside")), &names()?),
+        Err(WatchOutputError::InsideVsift)
+    ));
+    assert!(matches!(
+        outputs.claim(
+            &video,
+            Some(&folder.join("no-parent").join("out")),
+            &names()?
+        ),
+        Err(WatchOutputError::FolderUnusable)
+    ));
+    fs::write(folder.join("a-file"), "")?;
+    assert!(matches!(
+        outputs.claim(&video, Some(&folder.join("a-file")), &names()?),
+        Err(WatchOutputError::FolderUnusable)
+    ));
+    let claimed = outputs.claim(&video, Some(&folder.join("out")), &names()?)?;
+    assert!(
+        claimed
+            .transcript
+            .starts_with(fs::canonicalize(folder.join("out"))?)
+    );
+    Ok(())
+}
+
+#[test]
+fn a_release_after_a_failure_leaves_only_what_was_there() -> TestResult {
+    let folder = TestFolder::new("vsift-watch-port-release")?;
+    let mut outputs = FolderWatchOutputs::new(Vec::new());
+    outputs.claim(&folder.join("meeting.mp4"), None, &names()?)?;
+    outputs.release();
+    let left: Vec<_> = fs::read_dir(&*folder)?.collect::<Result<_, _>>()?;
+    assert!(left.is_empty(), "{left:?}");
+    assert!(matches!(
+        outputs.finalise(&documents(true)?),
+        Err(WatchOutputError::Refused(WatchOutputKind::FolderContent, _))
+    ));
+    Ok(())
 }

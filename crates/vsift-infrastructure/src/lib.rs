@@ -249,9 +249,8 @@ pub use visual_index_record::{
 };
 pub use visual_sampler::FfmpegVisualSampler;
 pub use watch_output::{
-    SCREEN_CHANGES_FILE, ScreenChangeEntry, ScreenChangeSummary, TranscriptEntry, WatchClaim,
-    WatchOutputError, WatchOutputKind, WatchProvenance, WrittenFrame, render_screen_changes,
-    render_subrip, render_transcript,
+    FolderWatchOutputs, SCREEN_CHANGES_FILE, WatchClaim, render_screen_changes, render_subrip,
+    render_transcript,
 };
 pub use whisper_build::{
     MAX_WHISPER_EXECUTABLE_BYTES, WhisperBuildError, WhisperBuildIdentity, WhisperBuildRecognition,

@@ -3,17 +3,16 @@
 //! changes with their frames, written beside it or into a folder the caller
 //! names.
 //!
-//! [`Engine::watch`] is a composition of the engine's own operations, never a
-//! second pipeline: it checks what it needs without running a tool, claims
-//! the output names, ingests the video, runs the session's `prepare` job in
-//! the watched mode in this process (ADR 0033), reads the sealed transcript
-//! and the screen changes, copies the frames out of the session, writes the
-//! files and closes the session.
+//! The orchestration is the application's [`run_watch`] use case; this module
+//! is its facade, [`Engine::watch`], and supplies the use case's two ports:
+//! [`WatchSteps`] over the engine's own operations (ingest, the `prepare` job
+//! in the watched mode in this process, the transcript and candidate reads,
+//! `frame get` and closing the session), and the infrastructure's
+//! [`FolderWatchOutputs`] for the person's folder.
 //!
-//! The first pull request (ADR 0037 section 13) writes every file once, when
-//! the job has ended, and writes the frames after the job; the files that
-//! grow while it runs, frames written during the transcription and continuing
-//! an interrupted run come with the second.
+//! Every file is written once, when the job has ended; the files that grow
+//! while it runs, frames written during the transcription and continuing an
+//! interrupted run are the second pull request's (ADR 0037 section 13).
 
 use std::{
     ffi::OsStr,
@@ -21,25 +20,25 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use vsift_application::{
+    FrameRefusal, OpenedWatchSession, PreparedRun, PreparedTranscript, ScreenChange, ScreenChanges,
+    SessionFrame, TranscriptLine, WatchError, WatchOutputError, WatchProvenance, WatchSteps,
+    run_watch,
+};
 use vsift_contract::render_hidden_characters;
 use vsift_domain::{
-    JobMode, MAX_VISUAL_INDEX_DURATION_MICROS, MediaTime, SearchCoverage, SessionId, TimeRange,
-    TranscriptRevision, TranscriptRevisionId, VisualCandidate, VisualCandidateId, VisualIndexId,
-    WatchOutputNames, frame_file_name, frames_that_fit, spread_evenly,
+    JobMode, MAX_VISUAL_INDEX_DURATION_MICROS, SearchCoverage, SessionId, SourceId, TimeRange,
+    TranscriptRevisionId, VisualCandidateId,
 };
-use vsift_infrastructure::{
-    ManagedArtifactStore, ScreenChangeEntry, ScreenChangeSummary, TranscriptEntry, WatchClaim,
-    WatchOutputError, WatchProvenance, WrittenFrame, render_screen_changes, render_subrip,
-    render_transcript,
-};
+use vsift_infrastructure::{FolderWatchOutputs, ManagedArtifactStore};
 
+pub use vsift_application::{WatchFile, WatchFrame, WatchOutcome, WatchOutputKind};
 pub use vsift_domain::OutputNameError;
-pub use vsift_infrastructure::WatchOutputKind;
 
 use crate::{
     AdmissionWait, Cancellation, CandidateOmission, CandidatesRange, CandidatesRequest,
-    DurabilityRequirement, EvidenceId, FrameGetRequest, FrameTarget, IngestRequest,
-    JobResumeRequest, JobStartRequest, ProgressObserver, RetranscribePublication, TranscriptQuery,
+    DurabilityRequirement, FrameGetRequest, FrameTarget, IngestRequest, JobResumeRequest,
+    JobStartRequest, ProgressObserver, RetranscribePublication, TranscriptQuery,
     engine::{Engine, ManagedRootLocation},
     error::EngineError,
 };
@@ -120,80 +119,16 @@ impl From<WatchOutputError> for WatchFailure {
             WatchOutputError::Exists(kind) => Self::OutputExists(kind),
             WatchOutputError::Refused(kind, _) => Self::OutputRefused(kind),
             WatchOutputError::FrameMismatch => Self::FrameMismatch,
+            WatchOutputError::FolderUnusable => Self::OutputFolderUnusable,
+            WatchOutputError::InsideVsift => Self::OutputInsideVsift,
         }
     }
 }
 
-/// A file `watch` wrote.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct WatchFile {
-    /// Its absolute path.
-    pub path: PathBuf,
-    /// The SHA-256 of a file's bytes; `None` for the folder.
-    pub sha256: Option<String>,
-}
-
-/// A frame `watch` wrote for a screen change.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct WatchFrame {
-    /// The change's representative time.
-    pub time: MediaTime,
-    /// The visual candidate.
-    pub candidate_id: VisualCandidateId,
-    /// The frame's evidence item, in the session the run closed.
-    pub evidence_id: EvidenceId,
-    /// The frame file's absolute path.
-    pub path: PathBuf,
-    /// The PNG's SHA-256, 64 lowercase hexadecimal digits.
-    pub sha256: String,
-}
-
-/// What one `watch` run wrote.
-#[allow(clippy::struct_excessive_bools)] // Independent facts the run reports, not switches.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct WatchOutcome {
-    /// The video's content identity (`src_sha256_` and its SHA-256).
-    pub source_id: vsift_domain::SourceId,
-    /// The session the run used, closed when it finished.
-    pub session_id: SessionId,
-    /// Whether the session was closed.
-    pub session_closed: bool,
-    /// The `prepare` job.
-    pub job_id: vsift_domain::JobId,
-    /// The transcript revision; `None` for a video with no sound track.
-    pub transcript_revision: Option<TranscriptRevisionId>,
-    /// The visual index revision; `None` when the video has no picture.
-    pub visual_index: Option<VisualIndexId>,
-    /// The video's length.
-    pub duration: MediaTime,
-    /// The ranges that were not transcribed, in time order.
-    pub not_transcribed: Vec<TimeRange>,
-    /// The readable transcript.
-    pub transcript: WatchFile,
-    /// The subtitles; `None` for a video with no sound track.
-    pub subtitles: Option<WatchFile>,
-    /// The screen-change folder.
-    pub folder: WatchFile,
-    /// The screen-change list in the folder.
-    pub screen_changes: WatchFile,
-    /// How many screen changes were found.
-    pub changes_found: usize,
-    /// The frames written, at most [`MAX_WATCH_FRAMES`](crate::MAX_WATCH_FRAMES).
-    pub frames: Vec<WatchFrame>,
-    /// Whether the video runs past the part the visual index covers.
-    pub beyond_visual_bound: bool,
-    /// Whether the names were shortened, so the subtitles no longer share
-    /// the video's name.
-    pub names_shortened: bool,
-    /// Whether the session ran out of evidence room before every selected
-    /// change had its frame: the run stopped taking frames, listed the rest
-    /// without one, and is partial (known limit L-234).
-    pub frames_stopped_for_room: bool,
-}
-
 impl Engine {
     /// Watches one video (ADR 0037): writes `<stem>.txt`, `<stem>.srt` and
-    /// `<stem>-vsift/` beside it or into `request.output`.
+    /// `<stem>-vsift/` beside it or into `request.output`, through the
+    /// application's [`run_watch`].
     ///
     /// Nothing is copied or written before every output name is claimed, and
     /// nothing that exists is ever replaced. A failure or cancellation after
@@ -206,163 +141,38 @@ impl Engine {
     /// when video tools or speech recognition are not set up, and every error
     /// of ingest, the `prepare` job, the reads and `frame get`.
     pub async fn watch(&self, request: WatchRequest) -> Result<WatchOutcome, EngineError> {
-        let source = absolute(&request.source)?;
-        if !std::fs::symlink_metadata(&source).is_ok_and(|metadata| metadata.is_file()) {
-            // Nothing there, a folder or a link: `ingest`'s own refusal names
-            // the mistake before anything else is checked or claimed (ADR 0037
-            // section 2, the planner's condition C).
-            let opened = self.watch_ingest(&source, &request.cancellation).await?;
-            drop(self.close_session(&opened.session_id));
-        }
-        self.watch_preflight()?;
-        let file_name = source
-            .file_name()
-            .ok_or(EngineError::Watch(WatchFailure::UnusableName(
-                OutputNameError::Empty,
-            )))?
-            .to_os_string();
-        let names = WatchOutputNames::from_video_name(&file_name)
-            .map_err(|error| EngineError::Watch(WatchFailure::UnusableName(error)))?;
-        let folder = self.output_folder(&source, request.output.as_deref())?;
-        let mut claim =
-            WatchClaim::claim(&folder, &names).map_err(|error| EngineError::Watch(error.into()))?;
-        let session = match self.watch_ingest(&source, &request.cancellation).await {
-            Ok(session) => session,
-            Err(error) => {
-                claim.release();
-                return Err(error);
-            }
+        let video = absolute(&request.source)?;
+        let output = request.output.as_deref().map(absolute).transpose()?;
+        let steps = EngineWatchSteps {
+            engine: self,
+            cancellation: &request.cancellation,
+            progress: &request.progress,
         };
-        let session_id = session.session_id.clone();
-        let source_id = session.source_id.clone();
-        let written = Box::pin(self.watch_session(
-            &request,
-            &session_id,
-            &source_id,
-            &file_name,
-            &names,
-            &mut claim,
-        ))
-        .await;
-        let closed = self.close_session(&session_id).is_ok();
-        match written {
-            Ok(mut outcome) => {
-                outcome.session_closed = closed;
-                Ok(outcome)
-            }
-            Err(error) => {
-                claim.release();
-                Err(error)
-            }
-        }
+        let mut outputs = FolderWatchOutputs::new(self.vsift_roots());
+        Box::pin(run_watch(&steps, &mut outputs, &video, output.as_deref()))
+            .await
+            .map_err(|error| match error {
+                WatchError::Step(error) => error,
+                WatchError::UnusableName(error) => {
+                    EngineError::Watch(WatchFailure::UnusableName(error))
+                }
+                WatchError::Output(error) => EngineError::Watch(error.into()),
+            })
     }
 
-    async fn watch_session(
-        &self,
-        request: &WatchRequest,
-        session: &SessionId,
-        source_id: &vsift_domain::SourceId,
-        file_name: &OsStr,
-        names: &WatchOutputNames,
-        claim: &mut WatchClaim,
-    ) -> Result<WatchOutcome, EngineError> {
-        let plan = self.job_start(&JobStartRequest {
-            session: session.clone(),
-            mode: Some(JobMode::Watched),
-            first: None,
-        })?;
-        let job_id = plan.job_id().clone();
-        let resumed = self
-            .job_resume(JobResumeRequest {
-                job: job_id.clone(),
-                cancellation: request.cancellation.clone(),
-                progress: request.progress.clone(),
-                admission: AdmissionWait::Immediate,
-                publication: RetranscribePublication::AsItGoes {
-                    interval: crate::PUBLICATION_INTERVAL,
-                },
-            })
-            .await;
-        let revision = match resumed {
-            Ok(report) => Some(report.outcome().revision().clone()),
-            Err(EngineError::NoAudioStream) => None,
-            Err(error) => return Err(error),
+    /// The canonical session and managed roots that exist.
+    fn vsift_roots(&self) -> Vec<PathBuf> {
+        let managed = match &self.config().managed_root {
+            ManagedRootLocation::PlatformDefault => ManagedArtifactStore::default_location()
+                .ok()
+                .map(|store| store.root_path().to_path_buf()),
+            ManagedRootLocation::Explicit(path) => Some(path.clone()),
         };
-        let SealedTranscript {
-            entries,
-            gaps: not_transcribed,
-            duration,
-        } = match &revision {
-            Some(revision) => self.watch_transcript(session, revision)?,
-            None => SealedTranscript::default(),
-        };
-        let (changes, index) = self.watch_changes(session, &request.cancellation).await?;
-        let duration = duration
-            .or_else(|| index.as_ref().map(|(_, end)| *end))
-            .unwrap_or(MediaTime::from_micros(0));
-        let beyond_visual_bound = duration.as_micros() > MAX_VISUAL_INDEX_DURATION_MICROS;
-        let (frames, listed, frames_stopped_for_room) = self
-            .watch_frames(session, &changes, claim, &request.cancellation)
-            .await?;
-        let provenance = self.watch_provenance(file_name, source_id, session)?;
-        let revision_id = revision.as_ref().map(TranscriptRevision::id);
-        let transcript_sha256 = claim
-            .write_transcript(&render_transcript(
-                &provenance,
-                revision_id.map(TranscriptRevisionId::as_str),
-                &entries,
-            ))
-            .map_err(watch_error)?;
-        let subtitles = if revision.is_some() {
-            let sha256 = claim
-                .write_subtitles(&render_subrip(&entries))
-                .map_err(watch_error)?;
-            Some(WatchFile {
-                path: claim.subtitles_path().to_path_buf(),
-                sha256: Some(sha256),
-            })
-        } else {
-            claim.discard_subtitles();
-            None
-        };
-        let summary = ScreenChangeSummary {
-            index_id: index
-                .as_ref()
-                .map_or_else(|| "none".to_owned(), |(id, _)| id.as_str().to_owned()),
-            beyond_index_bound: beyond_visual_bound,
-            stopped_for_room: frames_stopped_for_room,
-        };
-        let (list, list_sha256) = claim
-            .write_screen_changes(&render_screen_changes(&provenance, &summary, &listed))
-            .map_err(watch_error)?;
-        Ok(WatchOutcome {
-            source_id: source_id.clone(),
-            session_id: session.clone(),
-            session_closed: false,
-            job_id,
-            transcript_revision: revision_id.cloned(),
-            visual_index: index.map(|(id, _)| id),
-            duration,
-            not_transcribed,
-            transcript: WatchFile {
-                path: claim.transcript_path().to_path_buf(),
-                sha256: Some(transcript_sha256),
-            },
-            subtitles,
-            folder: WatchFile {
-                path: claim.folder_path().to_path_buf(),
-                sha256: None,
-            },
-            screen_changes: WatchFile {
-                path: list,
-                sha256: Some(list_sha256),
-            },
-            changes_found: changes.len(),
-            frames,
-            beyond_visual_bound,
-            names_shortened: names.shortened(),
-            frames_stopped_for_room,
-        })
+        [self.session_root_path().ok(), managed]
+            .into_iter()
+            .flatten()
+            .filter_map(|root| std::fs::canonicalize(root).ok())
+            .collect()
     }
 
     /// Opens the session of the video, as `ingest` does.
@@ -401,72 +211,66 @@ impl Engine {
         Ok(())
     }
 
-    /// The folder to write into: the video's own, or `output` (an existing
-    /// folder, or a new one whose parent exists), never inside `VSift`'s
-    /// session or managed root.
-    fn output_folder(&self, source: &Path, output: Option<&Path>) -> Result<PathBuf, EngineError> {
-        let unusable = EngineError::Watch(WatchFailure::OutputFolderUnusable);
-        let folder = match output {
-            None => source.parent().map(Path::to_path_buf).ok_or(unusable)?,
-            Some(output) => {
-                let output = absolute(output)?;
-                match std::fs::symlink_metadata(&output) {
-                    Ok(metadata) if metadata.is_dir() => output,
-                    Ok(_) => return Err(unusable),
-                    Err(_) => {
-                        std::fs::create_dir(&output)
-                            .map_err(|_| EngineError::Watch(WatchFailure::OutputFolderUnusable))?;
-                        output
-                    }
-                }
+    /// Starts the session's `prepare` job in the watched mode and runs it in
+    /// this process (ADR 0037 section 3, step 4).
+    async fn watch_prepare(
+        &self,
+        session: &SessionId,
+        cancellation: &Cancellation,
+        progress: &ProgressObserver,
+    ) -> Result<PreparedRun, EngineError> {
+        let plan = self.job_start(&JobStartRequest {
+            session: session.clone(),
+            mode: Some(JobMode::Watched),
+            first: None,
+        })?;
+        let job_id = plan.job_id().clone();
+        let resumed = self
+            .job_resume(JobResumeRequest {
+                job: job_id.clone(),
+                cancellation: cancellation.clone(),
+                progress: progress.clone(),
+                admission: AdmissionWait::Immediate,
+                publication: RetranscribePublication::AsItGoes {
+                    interval: crate::PUBLICATION_INTERVAL,
+                },
+            })
+            .await;
+        let transcript = match resumed {
+            Ok(report) => {
+                let revision = report.outcome().revision();
+                Some(PreparedTranscript {
+                    revision: revision.id().clone(),
+                    range: revision.source_segment().range(),
+                    untranscribed: SearchCoverage::of(revision, None).untranscribed().to_vec(),
+                })
             }
+            Err(EngineError::NoAudioStream) => None,
+            Err(error) => return Err(error),
         };
-        let folder = std::fs::canonicalize(&folder)
-            .map_err(|_| EngineError::Watch(WatchFailure::OutputFolderUnusable))?;
-        for root in self.vsift_roots() {
-            if folder.starts_with(&root) {
-                return Err(EngineError::Watch(WatchFailure::OutputInsideVsift));
-            }
-        }
-        Ok(folder)
+        Ok(PreparedRun { job_id, transcript })
     }
 
-    /// The canonical session and managed roots that exist.
-    fn vsift_roots(&self) -> Vec<PathBuf> {
-        let managed = match &self.config().managed_root {
-            ManagedRootLocation::PlatformDefault => ManagedArtifactStore::default_location()
-                .ok()
-                .map(|store| store.root_path().to_path_buf()),
-            ManagedRootLocation::Explicit(path) => Some(path.clone()),
-        };
-        [self.session_root_path().ok(), managed]
-            .into_iter()
-            .flatten()
-            .filter_map(|root| std::fs::canonicalize(root).ok())
-            .collect()
-    }
-
-    /// The sealed transcript as entries in time order, its untranscribed
-    /// ranges and the video's length.
+    /// Every segment of `revision` within `range`, its text in display form.
     fn watch_transcript(
         &self,
         session: &SessionId,
-        revision: &TranscriptRevision,
-    ) -> Result<SealedTranscript, EngineError> {
-        let source = revision.source_segment().range();
-        let mut entries = Vec::new();
+        revision: &TranscriptRevisionId,
+        range: TimeRange,
+    ) -> Result<Vec<TranscriptLine>, EngineError> {
+        let mut lines = Vec::new();
         let mut cursor = None;
         loop {
             let page = self.transcript(TranscriptQuery {
                 session: session.clone(),
-                revision: Some(revision.id().clone()),
-                from_micros: source.start().as_micros(),
-                to_micros: source.end().as_micros(),
+                revision: Some(revision.clone()),
+                from_micros: range.start().as_micros(),
+                to_micros: range.end().as_micros(),
                 limit: Some(READ_PAGE),
                 cursor: cursor.take(),
                 since: None,
             })?;
-            entries.extend(page.segments().iter().map(|segment| TranscriptEntry::Line {
+            lines.extend(page.segments().iter().map(|segment| TranscriptLine {
                 start: segment.range().start(),
                 end: segment.range().end(),
                 text: render_hidden_characters(segment.text().text()),
@@ -476,30 +280,16 @@ impl Engine {
                 None => break,
             }
         }
-        let coverage = SearchCoverage::of(revision, None);
-        let gaps = coverage.untranscribed().to_vec();
-        entries.extend(gaps.iter().map(|gap| TranscriptEntry::Gap {
-            start: gap.start(),
-            end: gap.end(),
-            reason: "the speech tool could not transcribe this part".to_owned(),
-        }));
-        entries.sort_by_key(|entry| match entry {
-            TranscriptEntry::Line { start, .. } | TranscriptEntry::Gap { start, .. } => *start,
-        });
-        Ok(SealedTranscript {
-            entries,
-            gaps,
-            duration: Some(source.end()),
-        })
+        Ok(lines)
     }
 
-    /// Every screen change of the analysed video, and the index revision with
+    /// Every screen change of the analysed video, with the index revision and
     /// the end of the range it covers; nothing when the video has no picture.
     async fn watch_changes(
         &self,
         session: &SessionId,
         cancellation: &Cancellation,
-    ) -> Result<(Vec<VisualCandidate>, Option<(VisualIndexId, MediaTime)>), EngineError> {
+    ) -> Result<Option<ScreenChanges>, EngineError> {
         let mut changes = Vec::new();
         let mut index;
         let mut cursor = None;
@@ -520,95 +310,57 @@ impl Engine {
             {
                 Ok(page) => page,
                 Err(EngineError::VisualToolUnavailable(_) | EngineError::NoVideoStream) => {
-                    return Ok((Vec::new(), None));
+                    return Ok(None);
                 }
                 Err(error) => return Err(error),
             };
             index = Some((page.index().id().clone(), page.range().end()));
-            changes.extend(page.candidates().iter().cloned());
+            changes.extend(page.candidates().iter().map(|candidate| ScreenChange {
+                id: candidate.id().clone(),
+                time: candidate.representative(),
+            }));
             match page.next_cursor() {
                 Some(next) => cursor = Some(next.to_owned()),
                 None => break,
             }
         }
-        changes.sort_by_key(VisualCandidate::representative);
-        Ok((changes, index))
+        Ok(index.map(|(index, covered_to)| ScreenChanges {
+            index,
+            covered_to,
+            changes,
+        }))
     }
 
-    /// The frames of the selected changes (at most [`MAX_WATCH_FRAMES`](crate::MAX_WATCH_FRAMES), and
-    /// never more than the session has evidence room for, measured before
-    /// the first: [`frames_that_fit`](vsift_domain::frames_that_fit)), spread evenly, and every change as
-    /// the list shows it.
-    async fn watch_frames(
-        &self,
-        session: &SessionId,
-        changes: &[VisualCandidate],
-        claim: &mut WatchClaim,
-        cancellation: &Cancellation,
-    ) -> Result<(Vec<WatchFrame>, Vec<ScreenChangeEntry>, bool), EngineError> {
-        let room = frames_that_fit(self.evidence_slots_left(session)?);
-        let selected = spread_evenly(changes.len(), room);
-        let mut listed: Vec<ScreenChangeEntry> = changes
-            .iter()
-            .map(|change| ScreenChangeEntry {
-                time: change.representative(),
-                candidate_id: change.id().as_str().to_owned(),
-                frame: None,
-            })
-            .collect();
-        let mut session_frames = SessionFrames {
-            engine: self,
-            session,
-            claim,
-            cancellation,
-        };
-        let (taken, stopped_for_room) =
-            take_frames(&mut session_frames, changes, &selected).await?;
-        let mut frames = Vec::with_capacity(taken.len());
-        for (position, frame) in taken {
-            if let Some(entry) = listed.get_mut(position) {
-                entry.frame = Some(WrittenFrame {
-                    file_name: frame_file_name(frame.time),
-                    evidence_id: frame.evidence_id.as_str().to_owned(),
-                    sha256: frame.sha256.clone(),
-                });
-            }
-            frames.push(frame);
-        }
-        Ok((frames, listed, stopped_for_room))
-    }
-
-    /// One change's frame, copied out of the session into the folder and
-    /// checked against its digest.
+    /// One change's frame, stored in the session by `frame get`. A session
+    /// whose evidence is full answers [`FrameRefusal::NoRoom`], which ends
+    /// the frames, not the run (known limit L-234).
     async fn watch_frame(
         &self,
         session: &SessionId,
-        change: &VisualCandidate,
-        claim: &mut WatchClaim,
+        change: &VisualCandidateId,
         cancellation: &Cancellation,
-    ) -> Result<WatchFrame, EngineError> {
+    ) -> Result<SessionFrame, FrameRefusal<EngineError>> {
         let results = self
             .frame_get(FrameGetRequest {
                 session: session.clone(),
-                target: FrameTarget::Candidate(change.id().clone()),
+                target: FrameTarget::Candidate(change.clone()),
                 cancellation: cancellation.clone(),
             })
-            .await?;
+            .await
+            .map_err(|error| match error {
+                EngineError::EvidenceBudgetExhausted => FrameRefusal::NoRoom,
+                error => FrameRefusal::Failed(error),
+            })?;
         let file = results
             .files()
             .first()
-            .ok_or(EngineError::Watch(WatchFailure::FrameMismatch))?;
-        let time = change.representative();
-        let sha256 = file.sha256().as_str().to_owned();
-        let path = claim
-            .copy_frame(file.path(), &frame_file_name(time), &sha256)
-            .map_err(watch_error)?;
-        Ok(WatchFrame {
-            time,
-            candidate_id: change.id().clone(),
+            .ok_or(FrameRefusal::Failed(EngineError::Watch(
+                WatchFailure::FrameMismatch,
+            )))?;
+        Ok(SessionFrame {
             evidence_id: file.evidence_id().clone(),
-            path,
-            sha256,
+            path: file.path().to_path_buf(),
+            sha256: file.sha256().as_str().to_owned(),
         })
     }
 
@@ -616,7 +368,7 @@ impl Engine {
     fn watch_provenance(
         &self,
         file_name: &OsStr,
-        source_id: &vsift_domain::SourceId,
+        source_id: &SourceId,
         session: &SessionId,
     ) -> Result<WatchProvenance, EngineError> {
         Ok(WatchProvenance {
@@ -645,19 +397,91 @@ impl Engine {
     }
 }
 
-/// The sealed transcript as `watch` writes it.
-#[derive(Default)]
-struct SealedTranscript {
-    /// Segments and gaps, in time order.
-    entries: Vec<TranscriptEntry>,
-    /// The ranges that were not transcribed.
-    gaps: Vec<TimeRange>,
-    /// The video's length, from the transcript's source segment.
-    duration: Option<MediaTime>,
+/// The engine's operations as the `watch` use case composes them, for one
+/// run: they carry its cancellation and progress observer.
+struct EngineWatchSteps<'a> {
+    engine: &'a Engine,
+    cancellation: &'a Cancellation,
+    progress: &'a ProgressObserver,
 }
 
-fn watch_error(error: WatchOutputError) -> EngineError {
-    EngineError::Watch(error.into())
+impl WatchSteps for EngineWatchSteps<'_> {
+    type Error = EngineError;
+
+    async fn check_source(&self, video: &Path) -> Result<(), EngineError> {
+        if std::fs::symlink_metadata(video).is_ok_and(|metadata| metadata.is_file()) {
+            return Ok(());
+        }
+        // Nothing there, a folder or a link: `ingest`'s own refusal names the
+        // mistake before anything else is checked or claimed (ADR 0037
+        // section 2, the planner's condition C).
+        let opened = self.engine.watch_ingest(video, self.cancellation).await?;
+        drop(self.engine.close_session(&opened.session_id));
+        Ok(())
+    }
+
+    fn check_capabilities(&self) -> Result<(), EngineError> {
+        self.engine.watch_preflight()
+    }
+
+    async fn open_session(&self, video: &Path) -> Result<OpenedWatchSession, EngineError> {
+        let opened = self.engine.watch_ingest(video, self.cancellation).await?;
+        Ok(OpenedWatchSession {
+            session_id: opened.session_id,
+            source_id: opened.source_id,
+        })
+    }
+
+    async fn prepare(&self, session: &SessionId) -> Result<PreparedRun, EngineError> {
+        Box::pin(
+            self.engine
+                .watch_prepare(session, self.cancellation, self.progress),
+        )
+        .await
+    }
+
+    fn transcript_lines(
+        &self,
+        session: &SessionId,
+        revision: &TranscriptRevisionId,
+        range: TimeRange,
+    ) -> Result<Vec<TranscriptLine>, EngineError> {
+        self.engine.watch_transcript(session, revision, range)
+    }
+
+    async fn screen_changes(
+        &self,
+        session: &SessionId,
+    ) -> Result<Option<ScreenChanges>, EngineError> {
+        self.engine.watch_changes(session, self.cancellation).await
+    }
+
+    fn evidence_slots_left(&self, session: &SessionId) -> Result<usize, EngineError> {
+        self.engine.evidence_slots_left(session)
+    }
+
+    async fn take_frame(
+        &self,
+        session: &SessionId,
+        change: &VisualCandidateId,
+    ) -> Result<SessionFrame, FrameRefusal<EngineError>> {
+        self.engine
+            .watch_frame(session, change, self.cancellation)
+            .await
+    }
+
+    fn provenance(
+        &self,
+        video_name: &OsStr,
+        source: &SourceId,
+        session: &SessionId,
+    ) -> Result<WatchProvenance, EngineError> {
+        self.engine.watch_provenance(video_name, source, session)
+    }
+
+    fn close_session(&self, session: &SessionId) -> bool {
+        self.engine.close_session(session).is_ok()
+    }
 }
 
 /// `path` made absolute against the working directory, without resolving
@@ -665,57 +489,3 @@ fn watch_error(error: WatchOutputError) -> EngineError {
 fn absolute(path: &Path) -> Result<PathBuf, EngineError> {
     std::path::absolute(path).map_err(|_| EngineError::WorkingDirectoryUnavailable)
 }
-
-/// Takes one change's frame. The engine's is a `frame get` copied out of the
-/// session ([`SessionFrames`]); the tests' runs out of room on cue.
-trait FrameTaker<C> {
-    fn take(&mut self, change: &C) -> impl Future<Output = Result<WatchFrame, EngineError>> + Send;
-}
-
-/// The engine's frames: each a `frame get` in the run's session.
-struct SessionFrames<'a> {
-    engine: &'a Engine,
-    session: &'a SessionId,
-    claim: &'a mut WatchClaim,
-    cancellation: &'a Cancellation,
-}
-
-impl FrameTaker<VisualCandidate> for SessionFrames<'_> {
-    fn take(
-        &mut self,
-        change: &VisualCandidate,
-    ) -> impl Future<Output = Result<WatchFrame, EngineError>> + Send {
-        self.engine
-            .watch_frame(self.session, change, self.claim, self.cancellation)
-    }
-}
-
-/// Takes the frames of the `selected` positions of `changes`, in order, with
-/// their positions, and whether the session ran out of evidence room first.
-///
-/// The room is measured before the first frame ([`frames_that_fit`]), so this
-/// is a backstop, not the plan: should the session still refuse a frame for
-/// room (`EvidenceBudgetExhausted`), the run keeps the frames it has and ends
-/// partial rather than failing (ADR 0037 section 6, known limit L-234). Any
-/// other failure ends the run.
-async fn take_frames<C, T: FrameTaker<C>>(
-    source: &mut T,
-    changes: &[C],
-    selected: &[usize],
-) -> Result<(Vec<(usize, WatchFrame)>, bool), EngineError> {
-    let mut taken = Vec::with_capacity(selected.len());
-    for &position in selected {
-        let Some(change) = changes.get(position) else {
-            continue;
-        };
-        match source.take(change).await {
-            Ok(frame) => taken.push((position, frame)),
-            Err(EngineError::EvidenceBudgetExhausted) => return Ok((taken, true)),
-            Err(error) => return Err(error),
-        }
-    }
-    Ok((taken, false))
-}
-
-#[cfg(test)]
-mod tests;
