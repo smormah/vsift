@@ -718,3 +718,38 @@ Hosted run 39486605862 kept the same range on the fixed branch:
   the maintainer's decision of 2026-10-20 (#486) a before-and-after comparison counts only a pair on the same CPU model. The
   shifted runs started at different points (283 s before, 66 s after), which happens on different CPUs (section 14.4), so the
   rest of the two reports is not compared. The seam above is read from the kept segments themselves.
+
+### 14.6 RM03's three seam findings (#539, hosted, 2026-10-28)
+
+RM03's first campaign runs fail on three seam findings. Two hosted runs of RM03 give **the same three, at the same times and
+with the same word counts**: run 40654763827 on `35a991f6` (`main` before the progress stack, #508 to #513; both revisions sealed
+at the end, AMD EPYC 9V45) and run 40595722898 on `98565a40` (both revisions published as they go, which `transcript
+retranscribe` does on `main`; AMD EPYC 7763). So the progress stack did not cause them, and they are not the variation by CPU of
+section 14.4. The first run kept the segments over 65 to 95 s, 752 to 790 s and 815 to 842 s (`kept-segments/RM03/segments.json`;
+RM03 is CC BY-SA 3.0).
+
+1. **The whole run's seam at 75 to 80 s, 15 words (about 76.9 to 82.7 s): a chunk heard as another language, looping.** Chunk 3
+   (audio 75 to 105 s) wrote one segment over its whole window, 75.00 to 105.00 s: 56 Turkish words, 50 of them one word
+   repeated. whisper.cpp detects the language per chunk (`-l auto`), and this chunk of English speech came out as Turkish; the
+   whole revision's `language` is `null` (VSift's value when the chunks disagree) and the shifted revision's `en`. The loop owns
+   the time of chunk 2's last words in the overlap, so chunk 2 is kept only up to 76.68 s, and the guard sees no hole because the
+   loop covers it. The shifted run heard those words mid-chunk ("administrative measure taken by the government and then it was
+   backed up with a judicial one"). The same loop is behind a 7-word run at the next seam (about 97.1 to 99.9 s). In all, about 25 s
+   of English has no English text in the whole revision. **This is L-188's limit with the loop L-201 leaves**, not a new fault of
+   the merge. The campaign named it as neither: the language check compares writing systems, and Turkish is in Latin script like
+   English (`language_flips` 0); the run is classified `loss` because the loop is in the revision that lacks the words.
+2. **The whole run's seam at 825 to 830 s, 10 words (about 825.7 to 829.7 s): the same speech worded differently.** Chunk 32
+   (audio 800 to 830 s) wrote its last segment over 825.00 to 829.88 s, in the final five seconds of its window, and chunk 33
+   starts at 829.96 s. The shifted run heard the stretch mid-chunk with other words ("cities" where the whole run has
+   "universities", "1,000" where it has "1000"), which break the word triples the check matches. Both revisions have text over
+   the whole stretch.
+3. **The shifted run's seam at 761.08 to 766.08 s, 10 words (about 760.9 to 763.9 s): the same, the other way.** Chunk 28 of the
+   shifted run (audio 736.08 to 766.08 s) wrote its last full segment over 761.28 to 765.76 s with other words than the whole run
+   heard there mid-chunk.
+
+**Over the recording, seams lose no more than two cuts of one chunk disagree anyway:** the whole run's seam recall is 0.897
+against 0.894 at the control stretches inside one chunk, and the shifted run's 0.933 (explained runs counted as found) against
+0.877. Which wording of findings 2 and 3 is right needs a listener. **For the maintainer's decision (#539):** L-188's design for
+`1.0.0` would remove finding 1; a narrow merge rule of L-201's kind (a segment whose own words loop claims no time) would keep chunk
+2's last 3.3 s beside the loop; and the campaign could report each chunk's detected language (to see a flip in the same script)
+and classify a run as `repetition` when the revision lacking it holds a loop there. The check's threshold is unchanged.
