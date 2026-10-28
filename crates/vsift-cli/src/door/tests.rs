@@ -5,6 +5,9 @@
 //!
 //! The snapshots in `crates/vsift-cli/tests/human_output/setup-door-*.txt`
 //! are what a person reads; `VSIFT_UPDATE_HUMAN_SNAPSHOTS=1` rewrites them.
+//! They hold standard output only: on a real terminal the typed answer and
+//! its Enter, echoed by the terminal, sit between the question and what
+//! follows it.
 
 use std::{
     cell::{Cell, RefCell},
@@ -23,8 +26,8 @@ use vsift::{
 use vsift_contract::DependencyLookup;
 
 use super::{
-    Answer, CheckedSetup, Console, DoorOptions, DoorRun, InstallResults, ReviewedPlan, SetupSteps,
-    run,
+    Answer, CheckedSetup, Console, DoorOptions, DoorRun, InstallResults, QuestionLine, Reply,
+    ReviewedPlan, SetupSteps, run,
 };
 use crate::{
     CommandFailure,
@@ -46,7 +49,7 @@ const VERSION: &str = "0.0.0-test";
 struct ScriptedConsole {
     present: bool,
     styling: Styling,
-    answer: Answer,
+    reply: Reply,
     /// Presses Ctrl-C while the question waits: the cancellation fires,
     /// whatever was typed.
     interrupts: bool,
@@ -54,11 +57,15 @@ struct ScriptedConsole {
 }
 
 impl ScriptedConsole {
+    /// A person who types `answer` and presses Enter.
     fn person(answer: Answer) -> Self {
         Self {
             present: true,
             styling: Styling::Plain,
-            answer,
+            reply: Reply {
+                answer,
+                line: QuestionLine::Ended,
+            },
             interrupts: false,
             asked: Cell::new(0),
         }
@@ -85,12 +92,12 @@ impl Console for ScriptedConsole {
         LiveLine::Hidden
     }
 
-    fn answer(&mut self, cancellation: &Cancellation) -> impl Future<Output = Answer> {
+    fn answer(&mut self, cancellation: &Cancellation) -> impl Future<Output = Reply> {
         self.asked.set(self.asked.get() + 1);
         if self.interrupts {
             cancellation.cancel();
         }
-        ready(self.answer)
+        ready(self.reply)
     }
 }
 
@@ -418,6 +425,42 @@ async fn no_installs_nothing_and_says_how_to_come_back() -> TestResult {
         stdout.ends_with("Nothing was installed. Run vsift setup again when you're ready.\n"),
         "{stdout}"
     );
+    Ok(())
+}
+
+/// A typed answer's Enter is the only break after the question; with no
+/// typed answer (the time limit, Ctrl-C, a closed input) the door breaks the
+/// line itself, so the close never sits on the question's line.
+#[tokio::test]
+async fn the_close_starts_on_the_line_after_the_question() -> TestResult {
+    const QUESTION: &str = "Install speech now? [y/N] ";
+    const CLOSE: &str = "Nothing was installed.";
+    for (reply, between) in [
+        (
+            Reply {
+                answer: Answer::No,
+                line: QuestionLine::Ended,
+            },
+            "",
+        ),
+        (Reply::UNANSWERED, "\n"),
+    ] {
+        let steps = ScriptedSteps::new(vec![video_ready_speech_missing(
+            ManagedPlanAvailability::Qualified,
+        )])
+        .with_plan(speech_plan()?);
+        let mut console = ScriptedConsole {
+            reply,
+            ..ScriptedConsole::person(Answer::No)
+        };
+
+        let (_, stdout, _) = converse(&mut console, &steps, Vec::new()).await?;
+
+        assert!(
+            stdout.contains(&format!("{QUESTION}{between}{CLOSE}")),
+            "{reply:?}: {stdout:?}"
+        );
+    }
     Ok(())
 }
 

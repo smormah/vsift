@@ -58,6 +58,42 @@ pub(crate) enum Answer {
     No,
 }
 
+/// Whether the question's line was ended by the person's Enter.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum QuestionLine {
+    /// A typed answer: the terminal moved to the next line with the Enter,
+    /// so what follows starts there.
+    Ended,
+    /// Nothing was typed (Ctrl-C, a closed input, no answer in time): the
+    /// cursor still sits after the question, so what follows breaks the
+    /// line first.
+    Open,
+}
+
+/// What the person did at the question: the answer, and where it left the
+/// cursor.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct Reply {
+    pub(crate) answer: Answer,
+    pub(crate) line: QuestionLine,
+}
+
+impl Reply {
+    /// No typed line: a no that leaves the cursor after the question.
+    pub(crate) const UNANSWERED: Self = Self {
+        answer: Answer::No,
+        line: QuestionLine::Open,
+    };
+
+    /// A line the person typed and ended with Enter.
+    pub(crate) fn typed(line: &str) -> Self {
+        Self {
+            answer: Answer::of(line),
+            line: QuestionLine::Ended,
+        }
+    }
+}
+
 impl Answer {
     /// Reads a typed line: only `y` and `yes` are yes.
     pub(crate) fn of(line: &str) -> Self {
@@ -82,7 +118,7 @@ pub(crate) trait Console {
     fn live_line(&self) -> LiveLine;
 
     /// Waits for one answer; a cancellation (Ctrl-C) is a no.
-    async fn answer(&mut self, cancellation: &Cancellation) -> Answer;
+    async fn answer(&mut self, cancellation: &Cancellation) -> Reply;
 }
 
 /// The real terminal of the process.
@@ -116,7 +152,7 @@ impl Console for SystemConsole {
         }
     }
 
-    async fn answer(&mut self, cancellation: &Cancellation) -> Answer {
+    async fn answer(&mut self, cancellation: &Cancellation) -> Reply {
         // Reading a terminal blocks, so one thread reads the line and the
         // door waits for it, the cancellation or the time limit, whichever
         // comes first. A thread still waiting when the door moves on ends
@@ -133,15 +169,20 @@ impl Console for SystemConsole {
                 let _ignored = sender.send(read.map(|_| line));
             });
         if reader.is_err() {
-            return Answer::No;
+            return Reply::UNANSWERED;
         }
         tokio::select! {
             read = receiver => match read {
-                Ok(Ok(line)) => Answer::of(&line),
-                _ => Answer::No,
+                // A line ended by Enter, or one so long the read stopped
+                // before its end; a closed input (Ctrl-D, even after a few
+                // characters) never moved the cursor off the question.
+                Ok(Ok(line)) if line.ends_with('\n') || line.len() as u64 == MAX_ANSWER_BYTES => {
+                    Reply::typed(&line)
+                }
+                _ => Reply::UNANSWERED,
             },
-            () = cancellation.cancelled() => Answer::No,
-            () = tokio::time::sleep(ANSWER_WAIT) => Answer::No,
+            () = cancellation.cancelled() => Reply::UNANSWERED,
+            () = tokio::time::sleep(ANSWER_WAIT) => Reply::UNANSWERED,
         }
     }
 }
@@ -165,8 +206,8 @@ impl Console for Nobody {
         LiveLine::Hidden
     }
 
-    fn answer(&mut self, _cancellation: &Cancellation) -> impl Future<Output = Answer> {
-        std::future::ready(Answer::No)
+    fn answer(&mut self, _cancellation: &Cancellation) -> impl Future<Output = Reply> {
+        std::future::ready(Reply::UNANSWERED)
     }
 }
 
@@ -568,13 +609,13 @@ where
     let _interrupts = trap_interruptions
         .then(|| signal::listen(cancellation.clone()).ok())
         .flatten();
-    let answer = console.answer(cancellation).await;
-    if answer == Answer::No || cancellation.is_cancelled() {
-        show(writer, human::door_declined())?;
+    let reply = console.answer(cancellation).await;
+    if reply.answer == Answer::No || cancellation.is_cancelled() {
+        show(writer, human::door_declined(reply.line))?;
         return Ok(check_exit);
     }
 
-    show(writer, human::door_installing(&offer))?;
+    show(writer, human::door_installing(&offer, reply.line))?;
     // Bars need a terminal that takes symbols and colour (ADR 0036 section
     // 8); without one, the count of pieces done is the live line on
     // standard error, as in the first release of the door.

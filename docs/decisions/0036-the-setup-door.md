@@ -375,7 +375,9 @@ What the second pull request built, and where it differs in detail from the sect
   the outcome a fail; its entry names the next step. A `--json` fail is a `complete` result with a non-zero exit, as
   a blocked `setup check` is. The `setup` result carries the install's `setup.install` data unchanged.
 - **The planner's two wording changes:** the close says `Setup complete: video and speech both work.` once, then
-  `Try it: vsift ingest ./your-video.mp4`; and a blank line follows the `[y/N]` question.
+  `Try it: vsift ingest ./your-video.mp4`. After the `[y/N]` question the door breaks the line only when nobody
+  typed an answer (the time limit, Ctrl-C, a closed input); a typed answer's Enter is the only break, so a
+  person never sees an empty line there, and what follows never sits on the question's line.
 
 ## Consequences
 

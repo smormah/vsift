@@ -22,7 +22,7 @@ use super::{
 };
 use crate::{
     command::ExecutionProfile,
-    door::{CheckedSetup, InstallResults, extra_capability},
+    door::{CheckedSetup, InstallResults, QuestionLine, extra_capability},
 };
 
 /// Where a person sets up a part `VSift` cannot install here.
@@ -460,20 +460,31 @@ pub(crate) fn door_question(offer: &DoorOffer) -> Result<RenderedText, TooLarge>
     text.finish_question()
 }
 
+/// Moves off the question's line when the person's Enter has not; a typed
+/// answer's own line break is the only break after the question.
+fn leave_question(text: &mut TerminalText, line: QuestionLine) {
+    if line == QuestionLine::Open {
+        text.end_line();
+    }
+}
+
 /// The close after a no.
-pub(crate) fn door_declined() -> Result<RenderedText, TooLarge> {
+pub(crate) fn door_declined(line: QuestionLine) -> Result<RenderedText, TooLarge> {
     let mut text = TerminalText::result();
-    text.end_line()
-        .blank_line()
-        .push_fixed("Nothing was installed. Run vsift setup again when you're ready.")
+    leave_question(&mut text, line);
+    text.push_fixed("Nothing was installed. Run vsift setup again when you're ready.")
         .end_line();
     text.finish()
 }
 
 /// The heading of the install.
-pub(crate) fn door_installing(offer: &DoorOffer) -> Result<RenderedText, TooLarge> {
+pub(crate) fn door_installing(
+    offer: &DoorOffer,
+    line: QuestionLine,
+) -> Result<RenderedText, TooLarge> {
     let mut text = TerminalText::result();
-    text.end_line().blank_line().push_fixed("Installing ");
+    leave_question(&mut text, line);
+    text.push_fixed("Installing ");
     push_parts(&mut text, &offer.parts);
     text.push_fixed(": ")
         .push_unsigned(offer.pieces.len() as u64);
