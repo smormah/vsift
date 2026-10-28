@@ -31,6 +31,11 @@ pub struct ErrorResponse {
     retry_after_ms: Option<u64>,
     affected_ids: Vec<String>,
     remediation: Vec<RemediationResponse>,
+    /// The typed reason of a failure whose code has reasons
+    /// (`SOURCE_FETCH_FAILED`, ADR 0028); absent otherwise, so every other
+    /// failure is written exactly as before.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reason: Option<&'static str>,
 }
 
 impl ErrorResponse {
@@ -44,6 +49,7 @@ impl ErrorResponse {
             retry_after_ms: None,
             affected_ids: Vec::new(),
             remediation: Vec::new(),
+            reason: None,
         }
     }
 
@@ -315,6 +321,16 @@ impl OperationResponse<serde_json::Value> {
         response
     }
 
+    /// Adds the failure's typed reason (`error.reason`), a fixed identifier
+    /// such as `address_refused`; a complete result is unchanged.
+    #[must_use]
+    pub fn with_error_reason(mut self, reason: &'static str) -> Self {
+        if let Some(error) = self.error.as_mut() {
+            error.reason = Some(reason);
+        }
+        self
+    }
+
     /// Creates a failure whose remediation also suggests one `vsift`
     /// command, as the executable `vsift` and an argument array a caller
     /// runs without a shell (for example `job resume <job>`).
@@ -506,6 +522,9 @@ const fn safe_message(code: FailureCode) -> &'static str {
         }
         FailureCode::DownloadFailed => {
             "A managed download from the reviewed publisher did not complete."
+        }
+        FailureCode::SourceFetchFailed => {
+            "The video link could not be fetched; local video files are not affected."
         }
     }
 }

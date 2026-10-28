@@ -72,7 +72,8 @@ use vsift_contract::{
     UNPINNED_MODEL_REMEDIATION, VISUAL_TOOLS_REMEDIATION, WORKSPACE_NOT_DURABLE_REMEDIATION,
     WORKSPACE_POLICY_MISMATCH_REMEDIATION, WORKSPACE_ROOT_REMEDIATION, local_asr_failure_summary,
     local_asr_verification_summary, managed_lifecycle_remediation, media_tool_verification_summary,
-    non_private_folder_summary, search_query_rejection_summary, transcript_rejection_summary,
+    non_private_folder_summary, search_query_rejection_summary, source_fetch_remediation,
+    transcript_rejection_summary,
 };
 
 /// Parses the process arguments, executes one command, and returns its documented exit status.
@@ -800,6 +801,9 @@ pub(crate) struct CommandFailure {
     /// What the command did before it failed, in its published JSON form,
     /// written as the failure's `data` (`setup install`: every component).
     data: Option<Box<serde_json::Value>>,
+    /// The typed reason of a code that has reasons, written as
+    /// `error.reason` (`SOURCE_FETCH_FAILED`, ADR 0028).
+    reason: Option<&'static str>,
 }
 
 impl CommandFailure {
@@ -812,6 +816,7 @@ impl CommandFailure {
             affected_ids: Vec::new(),
             suggested_command: Vec::new(),
             data: None,
+            reason: None,
         }
     }
 
@@ -843,6 +848,7 @@ impl CommandFailure {
             affected_ids: Vec::new(),
             suggested_command,
             data: None,
+            reason: None,
         }
     }
 
@@ -881,6 +887,7 @@ impl From<FailureCode> for CommandFailure {
             affected_ids: Vec::new(),
             suggested_command: Vec::new(),
             data: None,
+            reason: None,
         }
     }
 }
@@ -906,11 +913,23 @@ impl From<EngineError> for CommandFailure {
                     .search_query_rejection()
                     .map(search_query_rejection_summary)
             })
+            .or_else(|| match &error {
+                EngineError::OpenSession(OpenSessionError::SourceFetch(reason)) => {
+                    Some(source_fetch_remediation(*reason).to_owned())
+                }
+                _ => None,
+            })
             .or_else(|| local_asr_remediation(&error))
             .or_else(|| match &error {
                 EngineError::Watch(failure) => Some(watch::remediation(*failure).to_owned()),
                 _ => None,
             });
+        let reason = match &error {
+            EngineError::OpenSession(OpenSessionError::SourceFetch(reason)) => {
+                Some(reason.identifier())
+            }
+            _ => None,
+        };
         // The session first, then the job: the order an agent resolves them.
         let affected_ids = error
             .affected_session()
@@ -970,6 +989,7 @@ impl From<EngineError> for CommandFailure {
             affected_ids,
             suggested_command,
             data: None,
+            reason,
         }
     }
 }
@@ -1406,6 +1426,9 @@ fn failure_response(
     }
     if let Some(data) = failure.data {
         response = response.with_failure_value(*data);
+    }
+    if let Some(reason) = failure.reason {
+        response = response.with_error_reason(reason);
     }
     response
 }

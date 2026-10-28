@@ -113,6 +113,9 @@ A typical investigation (every command takes --json):
        file is never changed. If the user gave you a transcript file (.srt or .vtt), add
          --transcript <file>   (and --transcript-offset <microseconds> if its times are
                                 shifted from the video's)
+       For a direct https:// link to a video file, put --url <link> in place of <video>
+       (--url - reads the link from standard input). VSift fetches it once, with limits,
+       and nothing after that uses the network. A web page is not a video file.
        Without one, speech is found only when local speech recognition is set up (setup
        check says); then run:
          vsift job start <session> --json
@@ -629,18 +632,18 @@ Prepare a local video investigation session.
 ```text
 Prepare a local video investigation session
 
-Usage: vsift ingest [OPTIONS] <SOURCE>
+Usage: vsift ingest [OPTIONS] <SOURCE|--url <LINK>>
 
 Arguments:
-  <SOURCE>
+  [SOURCE]
           Local source media path
 
 Options:
       --json
           Emit one versioned JSON terminal result
 
-      --transcript <TRANSCRIPT>
-          Optional local `SubRip` (.srt) or `WebVTT` (.vtt) transcript sidecar
+      --url <LINK>
+          Instead of a local file, a direct https:// link to a video file (MP4, MOV, MKV or WebM): it is fetched once into the session (port 443, no sign-in, public addresses only), then everything works offline as for a local file. `-` reads the link from standard input, which keeps a signed link out of the process list and the shell history. The link itself is never stored or printed
 
       --events <EVENTS>
           Emit versioned evidence, progress and terminal records as JSON Lines
@@ -648,11 +651,11 @@ Options:
           Possible values:
           - jsonl: One bounded JSON object per line
 
-      --transcript-offset <MICROSECONDS>
-          Signed microseconds added to every transcript timestamp to reach source time (for example 500000 or -250000); defaults to 0
+      --max-download-bytes <BYTES>
+          Largest download for --url, in bytes (1 to 21474836480, 20 GiB); defaults to 4294967296 (4 GiB)
 
-      --recorded-at <TIME>
-          When the recording started, for clock times on every result (time anchoring): RFC 3339, for example 2026-10-21T14:03:12+01:00 (local time with its UTC offset), 2026-10-21T13:03:12Z (UTC), or 2026-10-21T14:03:12 (local time, zone unknown). It is taken as exact and preferred over the time the video file itself records
+      --max-download-seconds <SECONDS>
+          Longest download for --url, in seconds (1 to 14400, 4 hours); defaults to 1800 (30 minutes)
 
       --session-root <SESSION_ROOT>
           For operators who run a worker host; an agent leaves it out. Explicit private disposable-session root; defaults to the per-user cache
@@ -665,6 +668,15 @@ Options:
           - strict-linux: The strict Linux worker boundary: accepted only when the kernel attests a cgroup v2 with CPU, memory and process limits, a read-only root and no network but loopback; otherwise `ISOLATION_UNAVAILABLE` before any work
 
           [default: process-only]
+
+      --transcript <TRANSCRIPT>
+          Optional local `SubRip` (.srt) or `WebVTT` (.vtt) transcript sidecar
+
+      --transcript-offset <MICROSECONDS>
+          Signed microseconds added to every transcript timestamp to reach source time (for example 500000 or -250000); defaults to 0
+
+      --recorded-at <TIME>
+          When the recording started, for clock times on every result (time anchoring): RFC 3339, for example 2026-10-21T14:03:12+01:00 (local time with its UTC offset), 2026-10-21T13:03:12Z (UTC), or 2026-10-21T14:03:12 (local time, zone unknown). It is taken as exact and preferred over the time the video file itself records
 
   -h, --help
           Print help (see a summary with '-h')

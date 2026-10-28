@@ -101,6 +101,7 @@ fn status(state: SessionState) -> StatusData {
         generation: 3,
         expires_at: String::from(EXPIRES_AT),
         time_anchor: None,
+        origin: None,
     }
 }
 

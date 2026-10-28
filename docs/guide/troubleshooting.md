@@ -42,6 +42,7 @@ The exit status is the command's own, so a script can tell the classes apart. Th
 | `COMMAND_NOT_IMPLEMENTED` | 2 | A command this version reserves but does not have. No command answers it in this release. | Nothing to fix; a page that names the command is ahead of your version. |
 | `IDEMPOTENCY_CONFLICT` | 2 | A worker request reused an operation id for a different request. | Use a new operation id. Operators only: [runbook](../operations/worker-host.md). |
 | `INVALID_SOURCE` | 3 | VSift cannot use the video or the transcript you named. | [Below](#invalid_source-the-video-or-the-transcript-cannot-be-used). |
+| `SOURCE_FETCH_FAILED` | 3 | From 0.3.0: a link given with `vsift ingest --url` could not be fetched. Nothing was opened; local video files are not affected. | Read `reason` and the `Fix:` line. [Below](#source_fetch_failed-a-video-link-could-not-be-fetched). |
 | `BUSY` | 4 | Another VSift process is using the same session or the machine's share of capacity. It is meant to be retried. | Wait for the `Retry after:` time and run the same command again. If it is still busy, a transcription or a visual analysis may hold the capacity (for minutes): wait for it to end. Running the commands for one session one at a time avoids it. Since 0.2.2, when a transcription of the same session is what holds it, the answer says so, names the job (`Affected:`) and gives `Run: vsift job status <job>`: run that, and ask again once the job is no longer running. |
 | `DEADLINE_EXCEEDED` | 5 | The command ran past its time limit. | Ask for a smaller range of the video and run it again. Work that was already finished, such as the chunks of a transcription, is kept. |
 | `RESOURCE_LIMIT` | 5 | The request is larger than a built-in limit: too many frames or results, a file over a size bound, a recogniser that ran out of memory. | Ask for less: a shorter range, fewer frames, a smaller file. [Limits](limits.md) lists the numbers. |
@@ -306,6 +307,31 @@ under `local_asr.unplaced_ranges` (in the readable text, under a line that begin
 recogniser wrote words there whose times could not be placed, so VSift dropped them and says
 where they may lie, as an upper bound. Transcribing just that stretch again cuts the audio at other points and may cover
 it, but may give the same stretch; a transcript file you supply is the sure remedy (`vsift ingest <video> --transcript <file>`).
+
+## `SOURCE_FETCH_FAILED`: a video link could not be fetched
+
+From 0.3.0, `vsift ingest --url <link>` fetches one video from a direct `https://` link to the file (MP4, MOV,
+MKV or WebM) into a new session. When it cannot, nothing is opened, no partial file is kept, local video files
+work as before, and the answer's `reason` says why. The link itself is never printed or stored.
+
+| `reason` | What happened | What to do |
+| --- | --- | --- |
+| `not_https`, `credentials_in_link`, `port_not_allowed` | The link is not `https://`, carries a user name or password, or names another port than 443. | Ask for a plain `https://` link to the file, or for the file. |
+| `address_refused` | The link, or a redirect, points at a private, local or internal address. VSift never fetches those. | If the video is on your own network, download it and open the file. |
+| `web_page`, `not_a_video` | The link is a web page (such as a video site's page), or what it serves is not a video file. | Use the link to the video file itself, or download the video and open the file. |
+| `tls`, `proxy_auth`, `offline`, `stalled`, `truncated` | The network: a certificate that is not trusted, a proxy that wants credentials, no connection, no data for 30 seconds, a connection that ended early. | Check the network and run the command again. Proxy settings come from `HTTPS_PROXY` (or `ALL_PROXY`) and `NO_PROXY` (see below). |
+| `proxy_unusable` | `HTTPS_PROXY` or `ALL_PROXY` is set, but not to a proxy VSift can use. VSift does not go around a proxy you set. | Set it to the proxy's URL (`http://proxy.example:3128`) or to `host:port`, or unset it to connect directly. |
+| `size`, `deadline` | The video is larger than the download limit (4 GiB by default) or took longer than the time limit (30 minutes). | `--max-download-bytes` (up to 20 GiB) and `--max-download-seconds` (up to 4 hours) raise them. |
+| `http_status`, `partial`, `compressed`, `redirect_policy` | The server did not send the whole video: an error, a part of it, a compressed body, or too many or unsafe redirects. | Check the link; a link that needs a sign-in does not work, because VSift never signs in. |
+| `strict_isolation` | This host allows no network for VSift. | Fetch the video elsewhere and give this host the file. |
+
+**Proxies.** VSift reads `HTTPS_PROXY` (or `https_proxy`), else `ALL_PROXY` (or `all_proxy`), as a proxy URL or as
+`host:port`. VSift uses `http` and `https` proxies only. `NO_PROXY` (or `no_proxy`) is a comma-separated list
+matched by host name only: an entry is a host (`videos.example.org`), a domain whose hosts it covers (`example.org` or
+`.example.org`), or `*` for every host. Other forms that some tools accept are not read: a wildcard inside an entry
+(`*.example.org`), an IP address or a CIDR range, and an entry with a port. A host they were meant to exclude is sent
+through the proxy. Through a proxy, VSift cannot see the address a name resolves to, so it refuses internal-looking
+names (one label, `localhost`, `.local`, `.internal`, `.corp` and the like), on the link and on every redirect.
 
 ## `INTEGRITY_FAILURE`: what is stored is not what VSift wrote
 

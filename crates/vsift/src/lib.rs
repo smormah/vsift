@@ -166,8 +166,8 @@ pub use search::{
 };
 pub use sessions::{
     BundleSummary, CleanDecision, CleanEntry, CleanMode, CleanPage, CleanRequest, CleanScope,
-    FreeSpaceReserveCheck, IngestOutcome, IngestRequest, SESSION_CLOSE_JOB_WAIT, SessionListEntry,
-    SessionPage, SessionSnapshot, SourceRetention, SuppliedTranscriptRequest,
+    FreeSpaceReserveCheck, IngestOutcome, IngestRequest, LinkIngestRequest, SESSION_CLOSE_JOB_WAIT,
+    SessionListEntry, SessionPage, SessionSnapshot, SourceRetention, SuppliedTranscriptRequest,
 };
 pub use setup::{
     DEFAULT_PROBE_TIMEOUT, EvaluatedSetupPlan, ExecutableSelections, SetupCheckReport,
@@ -244,6 +244,11 @@ pub use vsift_domain::{
     PublicationGuarantee, QUEUED_YIELD_WAIT, RuntimeCapability, RuntimeDependency,
     RuntimeReadiness, SessionId, SessionLifetime, SessionLifetimePolicy, SessionPhase, SourceId,
     StorageGeneration, WorkspacePolicy, WorkspacePolicyError, WorkspaceRetention,
+};
+/// Online-source values that appear in this API (ADR 0028).
+pub use vsift_domain::{
+    AddressCheck, DirectLinkOrigin, DownloadLimits, DownloadLimitsError, HostName,
+    SourceFetchReason, SourceLink, SourceOrigin,
 };
 /// Transcript evidence values that appear in this API.
 pub use vsift_domain::{

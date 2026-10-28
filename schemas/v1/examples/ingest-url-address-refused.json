@@ -1,0 +1,25 @@
+{
+  "command": "ingest",
+  "coverage": null,
+  "data": null,
+  "error": {
+    "affected_ids": [],
+    "code": "SOURCE_FETCH_FAILED",
+    "message": "The video link could not be fetched; local video files are not affected.",
+    "reason": "address_refused",
+    "remediation": [
+      {
+        "command": null,
+        "required_authority": "none",
+        "summary": "Fetching the video link failed; nothing was opened and local video files are not affected. The link, or a redirect, points at a private, local or internal address, which VSift never fetches (reason address_refused). If the video is on the user's own network, ask the user to download it and give you the file; do not look for another way to reach the address."
+      }
+    ],
+    "retry_after_ms": null,
+    "retryable": false
+  },
+  "lifecycle": null,
+  "operation_id": null,
+  "schema_version": "1",
+  "status": "failed",
+  "warnings": []
+}

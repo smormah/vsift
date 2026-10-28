@@ -1,0 +1,31 @@
+{
+  "command": "ingest",
+  "coverage": null,
+  "data": {
+    "expires_at": "2026-09-25T00:00:00Z",
+    "generation": 1,
+    "origin": {
+      "address_check": "direct",
+      "bytes": 72873726,
+      "final_host": "images-assets.nasa.gov",
+      "kind": "direct_https",
+      "link_sha256": "6c1f0e3b7a5d9e2c4b8a7f6e5d4c3b2a19087f6e5d4c3b2a1908f7e6d5c4b3a2",
+      "redirects": 0,
+      "requested_host": "images-assets.nasa.gov",
+      "retrieved_at": "2026-09-24T00:00:00Z"
+    },
+    "publication": "process_crash_consistent",
+    "session_id": "ses_0123456789abcdef0123456789abcdef",
+    "source_bytes": 72873726,
+    "source_id": "src_sha256_d7ccece71288c5ff35d7b16c871a93a8ed48bbb7380617899575069b4d6545f4"
+  },
+  "error": null,
+  "lifecycle": {
+    "expires_at": "2026-09-25T00:00:00Z",
+    "mode": "ephemeral"
+  },
+  "operation_id": null,
+  "schema_version": "1",
+  "status": "complete",
+  "warnings": []
+}
