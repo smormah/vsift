@@ -101,6 +101,13 @@ Before the parser runs, the CLI looks at the first argument that is not a global
 5. Anything else: parsed as today, so `vsift serach` stays an unknown command with the parser's nearest
    suggestion, never "file not found".
 
+**Implementation note, the first pull request (2026-10-28, the planner's ruling):** rule 4 never applies to
+text that holds a control or hidden character; such an argument falls to rule 5 and stays the parser's to
+reject, inert. SEC-T02's hostile-argument test of the readable output (`sec_t02_human_output`) found that its
+sentinel, given as an unknown command, holds a terminal link to `https://...`, whose `/` would otherwise have
+made it a `watch` of a missing file. A person never types a path with such a character. Pinned by the CLI
+routing test `a_mistyped_command_stays_a_mistyped_command` and by `sec_t02_human_output` through the binary.
+
 The rule only inserts the word; it never reorders, rewrites or echoes an argument, and JSON keeps
 reporting a rejected line as `command` `parse`. A public video link joins rule 3 when online links ship
 (ADR 0028, #407), and is out of scope here.
