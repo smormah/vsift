@@ -50,6 +50,7 @@
 - [vsift job start](#vsift-job-start): Prepare a session as one job and follow it with job status: index its video for candidates, then transcribe it; in the background for a recording of ten minutes or more, in the foreground for a shorter one
 - [vsift handoff](#vsift-handoff): Check an agent's draft handoff report before it is sent
 - [vsift handoff check](#vsift-handoff-check): Check a draft report and its vsift-handoff block against the skill's handoff schema and rules; reads the draft from standard input unless --file names it
+- [vsift watch](#vsift-watch): Make a transcript, subtitles and the screen changes of a video, beside it (the same as  vsift <video>)
 
 ## vsift
 
@@ -74,6 +75,7 @@ Commands:
   bundle      Validate portable evidence bundles
   job         Execute or inspect recoverable worker jobs
   handoff     Check an agent's draft handoff report before it is sent
+  watch       Make a transcript, subtitles and the screen changes of a video, beside it (the same as  vsift <video>)
 
 Options:
       --json
@@ -2149,6 +2151,50 @@ Options:
 
       --session <SESSION>
           Open session whose records every cited segment and evidence id must resolve in; read only, never renewed
+
+      --session-root <SESSION_ROOT>
+          For operators who run a worker host; an agent leaves it out. Explicit private disposable-session root; defaults to the per-user cache
+
+      --host-isolation <HOST_ISOLATION>
+          For operators who run a worker host; an agent leaves it out. Isolation to run under; strict-linux is attested before any work
+
+          Possible values:
+          - process-only: Per-process containment only; no strict boundary is claimed
+          - strict-linux: The strict Linux worker boundary: accepted only when the kernel attests a cgroup v2 with CPU, memory and process limits, a read-only root and no network but loopback; otherwise `ISOLATION_UNAVAILABLE` before any work
+
+          [default: process-only]
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
+## vsift watch
+
+Make a transcript, subtitles and the screen changes of a video, beside it (the same as  vsift <video>).
+
+```text
+Make a transcript, subtitles and the screen changes of a video, beside it (the same as  vsift <video>).
+
+Writes <name>.txt (a readable transcript), <name>.srt (subtitles most video players pick up) and <name>-vsift/ (the screen changes, with a frame for each and their list) beside the video, or into --output. It never replaces a file: a name that is taken is refused before any work. Each file names the video's SHA-256 and the ids of the run; every frame's SHA-256 is in the list. Video tools and speech recognition must be set up first (vsift setup check). Not for AI assistants: they use the session commands.
+
+Usage: vsift watch [OPTIONS] <SOURCE>
+
+Arguments:
+  <SOURCE>
+          The video
+
+Options:
+      --json
+          Emit one versioned JSON terminal result
+
+      --output <FOLDER>
+          The folder to write into, instead of beside the video: an existing folder, or a new one whose parent exists
+
+      --events <EVENTS>
+          Emit versioned evidence, progress and terminal records as JSON Lines
+
+          Possible values:
+          - jsonl: One bounded JSON object per line
 
       --session-root <SESSION_ROOT>
           For operators who run a worker host; an agent leaves it out. Explicit private disposable-session root; defaults to the per-user cache

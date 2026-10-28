@@ -1,0 +1,67 @@
+{
+  "command": "watch",
+  "coverage": null,
+  "data": {
+    "changes_found": 2,
+    "duration_us": 2880000000,
+    "frames": [
+      {
+        "candidate_id": "vcd_7f20c40123456789abcdef0123456789",
+        "evidence_id": "evd_c19a3b0123456789abcdef0123456789",
+        "path": "/home/example/videos/meeting-vsift/00-01-12.480.png",
+        "sha256": "9b1f2e0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+        "time_us": 72480000
+      },
+      {
+        "candidate_id": "vcd_7f20c4fedcba9876543210fedcba9876",
+        "evidence_id": "evd_c19a3bfedcba9876543210fedcba9876",
+        "path": "/home/example/videos/meeting-vsift/00-04-55.040.png",
+        "sha256": "41c0a90123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+        "time_us": 295040000
+      }
+    ],
+    "job_id": "job_0123456789abcdef0123456789abcdef",
+    "names_shortened": false,
+    "not_transcribed": [
+      {
+        "from_us": 720000000,
+        "to_us": 750000000
+      }
+    ],
+    "outcome": "partial",
+    "outputs": {
+      "folder": {
+        "name": "meeting-vsift",
+        "path": "/home/example/videos/meeting-vsift",
+        "sha256": null
+      },
+      "screen_changes": {
+        "name": "screen-changes.txt",
+        "path": "/home/example/videos/meeting-vsift/screen-changes.txt",
+        "sha256": "e1d3c5b7a9f1e3d5c7b9a1f3e5d7c9b1a3f5e7d9c1b3a5f7e9d1c3b5a7f9e1d3"
+      },
+      "subtitles": {
+        "name": "meeting.srt",
+        "path": "/home/example/videos/meeting.srt",
+        "sha256": "0c2e4a6b8d0f2a4c6e8b0d2f4a6c8e0b2d4f6a8c0e2b4d6f8a0c2e4b6d8f0a2c"
+      },
+      "transcript": {
+        "name": "meeting.txt",
+        "path": "/home/example/videos/meeting.txt",
+        "sha256": "5b0e7c2f9a1d3e5b7c9f1a3d5e7b9c1f3a5d7e9b1c3f5a7d9e1b3c5f7a9d1e3b"
+      }
+    },
+    "screen_changes_beyond_bound": false,
+    "session_closed": true,
+    "session_id": "ses_51d2a70123456789abcdef0123456789",
+    "source_id": "src_sha256_3f9a0c5d1e7b2a4c6f8e0d2b4a6c8e0f1a3b5c7d9e1f2a4b6c8d0e2f4a6be21c",
+    "transcript_revision_id": "trv_8c41f00123456789abcdef0123456789",
+    "visual_index_revision_id": "vix_02b7e10123456789abcdef0123456789"
+  },
+  "error": null,
+  "lifecycle": null,
+  "operation_id": null,
+  "schema_version": "1",
+  "status": "complete",
+  "warnings": []
+}

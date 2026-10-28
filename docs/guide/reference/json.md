@@ -77,6 +77,7 @@ The `error.code` of a failed result is one of these (the schema's own list). Wha
 - [transcript-segment.schema.json](#transcript-segmentschemajson): VSift transcript segment evidence record v1
 - [visual-candidate-brief.schema.json](#visual-candidate-briefschemajson): VSift visual candidate, brief view v1
 - [visual-candidate.schema.json](#visual-candidateschemajson): VSift visual candidate v1
+- [watch-data.schema.json](#watch-dataschemajson): VSift watch data v1
 - [workspace-data.schema.json](#workspace-dataschemajson): VSift session.init-workspace data v1
 
 ## Schemas
@@ -2394,6 +2395,54 @@ One visual candidate, a published evidence record (P08, ADR 0018): a moment at w
 | `analysis.profile` | constant "r0-visual-v1" | yes |  |
 | `analysis.width` | constant 128 | yes |  |
 | `analysis.height` | constant 72 | yes |  |
+
+### watch-data.schema.json
+
+**VSift watch data v1** ([the schema](../../../schemas/v1/watch-data.schema.json))
+
+The data member of a complete watch result, from vsift <video> or vsift watch <video> (0.3.0, ADR 0037): what the run wrote, where, and the ids and hashes every output names. source_id is the video's content identity; the SHA-256 after src_sha256_ is the one the transcript's header gives, and anyone can check it against the video with any hashing tool. session_id, job_id, transcript_revision_id, visual_index_revision_id, and each frame's candidate_id and evidence_id name items of the session the run used, which it closes when everything is written (session_closed): they say which run made the files, and the same video watched again gives a new session and new ids (known limit L-236). The hashes outlive the session: each file's sha256 is the SHA-256 of its bytes as written, and each frame's sha256 is the SHA-256 of the PNG beside the list, byte for byte the session's evidence artifact. outcome is partial when part of the video was not transcribed (not_transcribed, half-open ranges in time order) or when the video runs past the first four hours, the part screen changes are found in (screen_changes_beyond_bound, known limit L-235); the envelope's status is complete either way. Every screen change found (changes_found) is listed in the screen_changes file; frames are written for at most 200 of them, spread evenly over the video when there are more (known limit L-234). subtitles is null for a video with no sound track, transcript_revision_id too; visual_index_revision_id is null for a video with no picture. names_shortened says a name was shortened to fit the system's limit, so the subtitles no longer share the video's name. Paths are absolute, delivered as frame.get delivers its files; name members are file names in display form, hidden characters made visible, because they derive from the video's untrusted name. Validate the envelope with operation-response.schema.json.
+
+| Member | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `source_id` | string | yes | pattern `^src_sha256_[0-9a-f]{64}$` |
+| `session_id` | string | yes | pattern `^ses_[a-z0-9]{16,64}$` |
+| `session_closed` | boolean | yes |  |
+| `job_id` | string | yes | pattern `^job_[a-z0-9]{16,64}$` |
+| `duration_us` | integer | yes | at least 0 |
+| `transcript_revision_id` | string or null | yes | pattern `^trv_[a-z0-9]{16,64}$` |
+| `visual_index_revision_id` | string or null | yes | pattern `^vix_[a-z0-9]{16,64}$` |
+| `outcome` | "complete" \| "partial" | yes |  |
+| `not_transcribed` | array of object | yes |  |
+| `not_transcribed[].from_us` | integer | yes | at least 0 |
+| `not_transcribed[].to_us` | integer | yes | at least 0 |
+| `screen_changes_beyond_bound` | boolean | yes |  |
+| `names_shortened` | boolean | yes |  |
+| `outputs` | object | yes |  |
+| `outputs.transcript` | object | yes |  |
+| `outputs.transcript.path` | string | yes | 1 to 4096 characters |
+| `outputs.transcript.name` | string | yes | at least 1 characters |
+| `outputs.transcript.sha256` | string | yes | pattern `^[0-9a-f]{64}$` |
+| `outputs.subtitles` | object or null | yes |  |
+| `outputs.subtitles.path` | string | yes | 1 to 4096 characters |
+| `outputs.subtitles.name` | string | yes | at least 1 characters |
+| `outputs.subtitles.sha256` | string | yes | pattern `^[0-9a-f]{64}$` |
+| `outputs.folder` | object | yes |  |
+| `outputs.folder.path` | string | yes | 1 to 4096 characters |
+| `outputs.folder.name` | string | yes | at least 1 characters |
+| `outputs.folder.sha256` | null | yes |  |
+| `outputs.screen_changes` | object | yes |  |
+| `outputs.screen_changes.path` | string | yes | 1 to 4096 characters |
+| `outputs.screen_changes.name` | string | yes | at least 1 characters |
+| `outputs.screen_changes.sha256` | string | yes | pattern `^[0-9a-f]{64}$` |
+| `changes_found` | integer | yes | at least 0 |
+| `frames` | array of object | yes | at most 200 items |
+| `frames[].time_us` | integer | yes | at least 0 |
+| `frames[].candidate_id` | string | yes | pattern `^vcd_[a-z0-9]{16,64}$` |
+| `frames[].evidence_id` | string | yes | pattern `^evd_[a-z0-9]{16,64}$` |
+| `frames[].path` | string | yes | 1 to 4096 characters |
+| `frames[].sha256` | string | yes | pattern `^[0-9a-f]{64}$` |
+
+This schema also holds 2 conditional rules (a member that is required, or fixed, when another has a given value); read [the schema](../../../schemas/v1/watch-data.schema.json) for them.
 
 ### workspace-data.schema.json
 

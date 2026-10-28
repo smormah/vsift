@@ -499,3 +499,53 @@ and 2). Decision 1 has been put to the maintainer again; until he answers, his r
   the caller's process.
 - **Overwriting with a confirmation question.** Rejected: `watch` never prompts, and VSift never
   replaces a person's file.
+
+## Implementation note, 2026-10-28 (the first pull request: the action)
+
+What the first pull request built, and where it differs from the sections above. Section 13's first slice is
+complete in code; the "after" real-media run is its qualification evidence.
+
+- **Where the code lives.** The domain holds the output names, the readable and SubRip times, the frame file
+  names, the even spread and the SubRip cue-text rule (`crates/vsift-domain/src/watch.rs`, `MAX_WATCH_FRAMES` =
+  200). The infrastructure holds `WatchClaim` (the exclusive claim, write-once handles that return each file's
+  SHA-256, frame copies checked against their digest, and a release that removes only what it created, never a
+  written file) and the three renderers (`crates/vsift-infrastructure/src/watch_output.rs`). **The orchestration
+  lives in the engine** (`Engine::watch` in `crates/vsift/src/watch.rs`), composing the engine's own `ingest`,
+  `job_start`, `job_resume`, transcript, candidate and frame methods and calling the folder writer directly:
+  **there is no application use case and no `WatchOutputs` port** (section 3 proposed both). Every step it composes
+  is already an application use case behind its own ports; the one new effect, writing the person's folder, has
+  a single implementation, and the engine tests run it on real temporary folders. The second pull request, whose
+  growing files need a snapshot-and-replace that tests want to fake, is where a port earns its place.
+- **Frames are written after the job,** not while the transcription runs (section 3, step 5 moves to the second
+  pull request with the growing files).
+- **Ctrl-C** releases the claimed names and **closes** the session; continuing an interrupted run (section 8) is
+  the second pull request's.
+- **The envelope is always `complete`;** `data.outcome` says `partial` when a range was not transcribed or the
+  video runs past four hours. Deciding `partial` from those two facts is done where the result is built.
+- **A refusal names the output's kind** (`.txt`, `.srt`, `-vsift`) in fixed prose, never the file's name: a
+  remediation never echoes text derived from the untrusted video name (L-071). The readable view does not name
+  the file either, in this pull request.
+- **The finish screen** has no elapsed time and no `Next: vsift setup` line (the missing-capability wording stays
+  the existing remediation's). It says that each file names the video's SHA-256 and ends `More: vsift watch
+  --help`; the "More" line names no extra until the third pull request.
+- **A video whose name is not Unicode text is refused** before any work (`INVALID_ARGUMENT`, "Rename the video"),
+  as is one with nothing before its extension: output names are derived from Unicode names only.
+- **Rule 4 of section 2 never applies to text with a control or hidden character.** SEC-T02's hostile-argument
+  test for the readable output (`sec_t02_human_output`) found that its sentinel, given as an unknown command, holds
+  a terminal link to `https://...` among control and hidden characters, so its `/` made it look like a path and it
+  would have become a `watch` of a missing file; such text now stays the parser's to reject, inert, as before. A
+  person never types a path with a control or hidden character.
+- **A source that is not a regular file goes to `ingest` first,** before the preflight, so condition C holds
+  without FFmpeg configured: a folder is `SOURCE_IS_FOLDER`, a link `SOURCE_IS_LINK`, a missing file `ingest`'s
+  "not found".
+- **The header's provenance is "local speech recognition"**; the model's name is not written (section 4's example
+  shows it), because the sealed revision's read does not carry it in a form fit for a person.
+- **The door's "Try it" line** is `Setup complete. Try it: vsift ./your-video.mp4` (section 12): ADR 0036's
+  first pull request reached `main` first, so this one changed it.
+- **The command's ordinal is 38,** after `setup` (37), and the skill's never list holds both.
+- **Measured before the code** (the hosted `P14 real media` run 40595722898 on `e317271c`, main plus this record):
+  RM03 (a 19:16 talk) has 576 screen changes and RM10 (a 3:21 screen recording) 106, about 30 a minute; finding
+  them took about 1.7 s a minute of video against about 17 s a minute of transcription, which confirms section 6's
+  care point (they are cheap enough to run by default). The 200-frame bound is reached by a 19-minute talk (L-234).
+  The visual-measurement step did not run, because RM03's advisory seam findings failed the campaign first.
+- **Register:** L-234, L-235 and L-236 added by this pull request; L-237 comes with the second.

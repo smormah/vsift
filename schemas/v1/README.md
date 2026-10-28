@@ -140,6 +140,13 @@ These files are the machine-readable public v1 boundary:
   (0.3.0, ADR 0033): `job` (the `prepare` job's data), `start` (`state`, `mode`,
   `mode_basis`, `runner`, `detachment`) and `outcome` (the `transcript.retranscribe`
   data of a job that ran in the foreground, else `null`);
+- `watch-data.schema.json` — the `data` member of a complete `watch` result, from
+  `vsift <video>` or `vsift watch <video>` (0.3.0, ADR 0037): the run's ids (`source_id`,
+  `session_id` and `session_closed`, `job_id`, `transcript_revision_id`,
+  `visual_index_revision_id`), `outcome` (`complete` or `partial`, with `not_transcribed`
+  and `screen_changes_beyond_bound`), `names_shortened`, `outputs` (each file's absolute
+  `path`, display `name` and `sha256`; the folder's `sha256` is `null`), `changes_found`
+  and at most 200 `frames` (`time_us`, `candidate_id`, `evidence_id`, `path`, `sha256`);
 - `transcript-get-stream-data.schema.json` â the `data` member of the terminal
   event that ends a `transcript.get --events jsonl` stream: the page without its
   items, with `record_count`, the continuation cursor (P07) and, since 0.2.1, the
