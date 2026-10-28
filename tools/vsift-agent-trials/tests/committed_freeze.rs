@@ -60,7 +60,11 @@ fn the_committed_freezes_still_hold() -> TestResult {
 /// visible: changing this constant is the decision to cut another candidate and write a new freeze
 /// (`docs/operations/release.md` section 6.8), and it shows in the diff of a test, not only of a data file.
 ///
-/// **0.3.0 development freeze; the final freeze is recorded at the 0.3.0 cut.** The online links pull request
+/// **Draft freeze, rewritten at the merge rebase** (W6g, ADR 0037, 2026-10-28): `references/commands.md` classes
+/// `vsift watch` as never, so the `skill` component moved `07ba130f...` to `0c25b263...` and this digest `c4a241e3...`
+/// to the value below; the other six components are unchanged.
+///
+/// The freeze before it, also a **0.3.0 development freeze; the final freeze is recorded at the 0.3.0 cut.** The online links pull request
 /// (ADR 0028, 2026-10-28) adds the failure code `SOURCE_FETCH_FAILED` to the handoff's `gaps[].code` list
 /// (`skills/vsift/handoff.schema.json` and `references/handoff.md`), so the `skill` component moved `ec575190...` to
 /// `07ba130f...` and this digest `70f3e04e...` to the value below; the other six components are unchanged. It was
@@ -125,7 +129,7 @@ fn the_committed_freezes_still_hold() -> TestResult {
 /// in `batch-2-rc.3/` and `batch-3-rc.3/`); the first two candidates' was
 /// `1e89b5cc488e7245d1a6d63ec8809c1f8a5c137ee87f5ed05f9b692c2af6e392` (copies in `batch-2-rc.1/` and
 /// `batch-2-rc.2/`).
-const CUT_FREEZE_SHA256: &str = "c4a241e3687d4958683e3b9840c9e2bcff5463f65a762aa7a4cf1c2d4c259649";
+const CUT_FREEZE_SHA256: &str = "f6835cb53b56a38a7b4ba72e6aba0a5b15aab705316fab9ca05c33f0d459d6ce";
 
 #[test]
 fn the_committed_freezes_are_the_ones_written_at_the_cut() -> TestResult {
