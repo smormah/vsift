@@ -481,7 +481,7 @@ where
                 }
                 .include_set();
                 let steps = door::EngineSteps { engine: &engine };
-                door::unattended::run(
+                Box::pin(door::unattended::run(
                     door::unattended::UnattendedRun {
                         steps: &steps,
                         parts: core_parts,
@@ -493,7 +493,7 @@ where
                         trap_interruptions: interruption == Interruption::Trapped,
                     },
                     &mut writer,
-                )
+                ))
                 .await
             }
             // The attended door talks to a person; a caller that asked for
