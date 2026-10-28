@@ -148,6 +148,86 @@ impl OptionalComponentSet {
     }
 }
 
+/// A core part of the setup, as a person names it (ADR 0036 section 4):
+/// each managed core component belongs to one.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CorePart {
+    /// The media tools, `FFmpeg` with `FFprobe`.
+    Video,
+    /// The whisper.cpp program and its model.
+    Speech,
+}
+
+impl CorePart {
+    /// Both parts, video first: the order a plan installs them.
+    pub const ALL: [Self; 2] = [Self::Video, Self::Speech];
+
+    /// The part a core component belongs to; `None` for an optional one.
+    #[must_use]
+    pub const fn of(component: ManagedComponent) -> Option<Self> {
+        match component {
+            ManagedComponent::MediaTools => Some(Self::Video),
+            ManagedComponent::WhisperCli | ManagedComponent::WhisperModel => Some(Self::Speech),
+            ManagedComponent::JsRuntimeDeno | ManagedComponent::YtDlp => None,
+        }
+    }
+
+    /// Stable machine-readable identifier: `video` or `speech`.
+    #[must_use]
+    pub const fn identifier(self) -> &'static str {
+        match self {
+            Self::Video => "video",
+            Self::Speech => "speech",
+        }
+    }
+
+    const fn bit(self) -> u8 {
+        match self {
+            Self::Video => 1,
+            Self::Speech => 2,
+        }
+    }
+}
+
+/// The core parts a plan may install (ADR 0036 section 6): both, unless an
+/// unattended setup names fewer. A plan of both is the plan `setup plan`
+/// builds, with the same intent and digest as before parts existed.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct CorePartSet(u8);
+
+impl CorePartSet {
+    /// Both parts.
+    pub const ALL: Self = Self(3);
+
+    /// No part.
+    pub const EMPTY: Self = Self(0);
+
+    /// This set with `part` added.
+    #[must_use]
+    pub const fn with(self, part: CorePart) -> Self {
+        Self(self.0 | part.bit())
+    }
+
+    /// Whether `part` is in the set.
+    #[must_use]
+    pub const fn contains(self, part: CorePart) -> bool {
+        self.0 & part.bit() != 0
+    }
+
+    /// The parts, video first.
+    pub fn iter(self) -> impl Iterator<Item = CorePart> {
+        CorePart::ALL
+            .into_iter()
+            .filter(move |part| self.contains(*part))
+    }
+}
+
+impl Default for CorePartSet {
+    fn default() -> Self {
+        Self::ALL
+    }
+}
+
 /// One exact regular file or regular-file alias accepted into a runtime layout.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ReviewedManagedFile {
@@ -1039,6 +1119,37 @@ pub fn plan_managed_setup_including(
     now_unix_seconds: u64,
     catalogue: Option<AcceptedManagedCatalogue>,
 ) -> ManagedSetupPlan {
+    plan_managed_setup_of_parts(
+        profile,
+        diagnosis,
+        target,
+        selection_state,
+        CorePartSet::ALL,
+        include,
+        now_unix_seconds,
+        catalogue,
+    )
+}
+
+/// [`plan_managed_setup_including`] limited to the core `parts` (ADR 0036
+/// section 6): a part left out is offered nothing, so its tools are
+/// planned as for a host with no catalogue for them. A plan of
+/// [`CorePartSet::ALL`] is exactly the plan `setup plan` builds.
+#[allow(
+    clippy::too_many_arguments,
+    reason = "the inputs of one plan, each a distinct observation or choice"
+)]
+#[must_use]
+pub fn plan_managed_setup_of_parts(
+    profile: SetupProfile,
+    diagnosis: RuntimeDiagnosis,
+    target: ManagedTarget,
+    selection_state: SetupSelectionState,
+    parts: CorePartSet,
+    include: OptionalComponentSet,
+    now_unix_seconds: u64,
+    catalogue: Option<AcceptedManagedCatalogue>,
+) -> ManagedSetupPlan {
     let applicable = catalogue.filter(|entry| entry.target == target);
     let (availability, catalogue) = match applicable {
         Some(entry) if !catalogue_is_complete(&entry) => {
@@ -1073,6 +1184,9 @@ pub fn plan_managed_setup_including(
         whisper: whisper_offered,
         model: model_offered,
     } = CoreOffer::of(catalogue.as_ref().filter(|_| qualified), &diagnosis);
+    let media_offered = media_offered && parts.contains(CorePart::Video);
+    let whisper_offered = whisper_offered && parts.contains(CorePart::Speech);
+    let model_offered = model_offered && parts.contains(CorePart::Speech);
 
     let dependencies = diagnosis
         .dependencies
@@ -1106,8 +1220,8 @@ pub fn plan_managed_setup_including(
     };
 
     let wanted = |component: ManagedComponent| match component {
-        ManagedComponent::MediaTools => media_missing,
-        ManagedComponent::WhisperCli => whisper_missing,
+        ManagedComponent::MediaTools => media_missing && media_offered,
+        ManagedComponent::WhisperCli => whisper_missing && whisper_offered,
         ManagedComponent::WhisperModel => selection_state.model.is_none() && model_offered,
         // The core list holds no optional component (the catalogue check
         // refuses one); optional ones are planned below.

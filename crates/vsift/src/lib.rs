@@ -209,10 +209,11 @@ pub use vsift_application::{
 /// Managed-installation values that appear in this API (P13).
 pub use vsift_application::{
     CompatibilitySmokeCheck, CompatibilitySmokeFailure, CompatibilitySmokeFailureReason,
-    ComponentInstallFailure, ComponentInstallOutcome, ComponentInstallReport,
-    DownloadFailureReason, InstallFailureReason, InstallStep, ManagedInstallReport,
+    ComponentInstallFailure, ComponentInstallOutcome, ComponentInstallReport, CorePart,
+    CorePartSet, DownloadFailureReason, InstallFailureReason, InstallStep, ManagedInstallReport,
     ManagedPlanAvailability, ManagedUpdate, OptionalCapability, OptionalComponent,
-    OptionalComponentSet, StageDisposal, StageRetentionReason, SupersessionReason,
+    OptionalComponentSet, PieceProgress, PieceStage, StageDisposal, StageRetentionReason,
+    SupersessionReason,
 };
 /// Managed-lifecycle values that appear in this API (P13 PR 6).
 pub use vsift_application::{

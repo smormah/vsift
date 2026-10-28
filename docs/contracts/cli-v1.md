@@ -64,7 +64,7 @@ stopped between two provider calls answers `CANCELLED`, never that a tool could 
 
 | Command | Contract purpose | Implementation packet |
 | --- | --- | --- |
-| `setup` (plain) | The setup door for a person at a terminal: the check, one offer and one question, and an install only on a typed yes (ADR 0036). Readable only; with `--json` or `--events` it answers `INVALID_ARGUMENT` | Since 0.3.0 (ADR 0036, first pull request) |
+| `setup` (plain) | The setup door for a person at a terminal: the check, one offer and one question, and an install only on a typed yes (ADR 0036). With `--unattended --install <parts>` it installs the named parts without asking and reports pass, fail or error; `--json` gives the `setup` result ([`setup.schema.json`](../../schemas/v1/setup.schema.json)). Attended, `--json` and `--events` answer `INVALID_ARGUMENT`; unattended, `--events` does | Since 0.3.0 (ADR 0036; the unattended form with the second pull request) |
 | `setup check` | Read-only dependency diagnosis | Implemented |
 | `setup configure` | Persist an explicit user-managed executable path without running it (`ffmpeg`, `ffprobe`, `whisper`; `ocr-runner` since 0.3.0) | Partial P06 |
 | `setup configure-model` | Persist an explicit user-managed model file path without parsing it | Partial P06 |
@@ -3070,6 +3070,24 @@ the system proxy settings and send only the neutral user agent `VSift/0.1 manage
 setup`. With `--events jsonl`, `progress` events come before the terminal event:
 `fetching_artifact` (bytes of the artifact being downloaded or imported, with its
 reviewed total) and `installing_components` (components of the plan finished).
+Since `0.3.0` video and speech download side by side (ADR 0036 section 4), so the
+`fetching_artifact` events of two artifacts can alternate; each event's `total` is
+the reviewed size of the artifact it counts.
+
+**Video and speech are independent parts** (since `0.3.0`, ADR 0036 section 4). The
+media tools are one part; the whisper.cpp program and its model the other. Their
+downloads and verifications run at the same time, one download per part at a time,
+under the one install guard; activation stays one atomic step per component, video
+first. A failure stops only its own part: a speech failure leaves video activated, and
+a video failure no longer stops speech's download. When no working video tools are
+selected once speech is downloaded, speech cannot be tested (its smoke decodes with
+video tools): its components are reported `blocked` (unchanged meaning: not activated
+because another component did not install), and its verified download is kept in the
+managed root. The next install verifies the kept file again by its reviewed size and
+SHA-256 before using it, discards it only if it no longer matches, and then tests and
+activates speech without downloading it again; a kept download whose bytes the plan no
+longer installs is removed by that install. The command's failure code stays that of
+the first failed core component in plan order.
 
 **Lookup** of every tool since P13 PR 4: a per-call path (`setup check --ffmpeg`
 etc.), then the configured path, then the managed version `setup install` selected,
@@ -3419,7 +3437,7 @@ it has no JSON form, and with `--json` or `--events` it answers `INVALID_ARGUMEN
 person is there when standard input and standard output are both terminals. Then it shows the heading `VSift
 <version> setup` and `setup check`'s table, verdict and details (one renderer), and:
 
-- when the setup is complete: the extras line and `Setup complete. Try it: vsift ./your-video.mp4`;
+- when the setup is complete: the verdict `Setup complete: video and speech both work.`, the extras line and `Try it: vsift ./your-video.mp4`;
 - after a timeout: `Next: vsift setup check`, where `--timeout-seconds` allows more time;
 - where something core is missing and the reviewed catalogue has it: the plan `setup plan --profile desktop`
   builds (with any `--include web-videos`), shown as one offer (each piece with its publisher, size and licence,
@@ -3431,12 +3449,46 @@ person is there when standard input and standard output are both terminals. Then
 - where VSift cannot install a missing part here: `VSift can't install <part> on this computer yet.`, the
   installation guide, and the one `setup configure` or `setup configure-model` command.
 
-Without a terminal it never asks or waits: it writes the table and verdict, says nobody was there to answer, and
-exits with `setup check`'s status. Symbols (`✓`, `✗`, `–`) and colour appear only when standard output is a
+Without a terminal it never asks or waits: it writes the table and verdict, says nobody is here to answer, names
+`vsift setup --unattended --install <the missing parts>`, and exits with `setup check`'s status. While it installs,
+a terminal that takes symbols and colour shows one line per piece (FFmpeg, whisper.cpp, speech model, and any
+extra), each with a bar, the megabytes so far of its reviewed size and a stage word (waiting, downloading,
+checking, testing, ready, already there, waiting for video, or the failure in plain words), redrawn on standard
+output at most four times a second and cleared before the results; otherwise the count of pieces done is a live
+line on standard error. Symbols (`✓`, `✗`, `–`) and colour appear only when standard output is a
 terminal, `NO_COLOR` is not set, `TERM` is not `dumb` and, on Windows, the console accepts virtual terminal
 sequences; the words are the same either way. Its exit status is `setup check`'s for where the setup ends, or that
 of the install's failure code when a piece failed. The skill classes it as never: an assistant uses `setup check`,
 `setup plan` and the user's own `setup install`.
+
+**The unattended setup door (since `0.3.0`, ADR 0036 section 6).** `vsift setup --unattended --install
+video,speech [--include web-videos] [--accept-plan <digest>] [--json]` runs once and asks nothing. Naming the
+parts is the acceptance (the maintainer's decision of 2026-10-27, superseding that part of ADR 0023 for this form
+only): it installs the plan it builds for the named parts (`setup plan`'s plan limited to them; a plan of both
+parts is exactly `setup plan`'s, digest included), and every artifact stays pinned by URL, size and SHA-256 in the
+reviewed catalogue and verified before use. `--accept-plan` is the stricter form: the plan must have exactly that
+digest, or nothing is installed. `--unattended` needs `--install`, and `--install` and `--accept-plan` need
+`--unattended` (a parse failure otherwise). It reports one of three outcomes:
+
+- **pass** (exit 0): every named part works after the run, also when nothing needed installing;
+- **fail** (the exit status `setup install` gives the same failure): the install ran and a named part does not
+  work; each part's entry says what to do next;
+- **error** (the failure code's exit status, the ordinary failure envelope under `setup`): it could not start: a
+  named part VSift cannot install on this computer (`MISSING_CAPABILITY`, with the do-it-yourself step), an
+  included extra it cannot add here (`MISSING_CAPABILITY`), checks that ran out of time (`DEADLINE_EXCEEDED`), a
+  busy install (`BUSY`), or an `--accept-plan` digest that is not the plan's (`INVALID_ARGUMENT`, the stale-plan
+  remediation). Each is refused before anything is installed.
+
+With `--json` the result is the `setup` command's
+([`setup.schema.json`](../../schemas/v1/setup.schema.json), examples
+[`setup.pass.json`](../../schemas/v1/examples/setup.pass.json) and
+[`setup.fail.json`](../../schemas/v1/examples/setup.fail.json)): `outcome` (`pass`, `fail`), `parts` (video,
+speech, then each included extra: `part`, `requested`, `status` one of `ready`, `not_set_up`, `added`,
+`not_added`, `not_available_here`, and a fixed-prose `next_step` or `null`), and `install`, the `setup.install`
+data of the install it ran, or `null` when nothing needed installing. A fail is a `complete` result with a
+non-zero exit status, as a blocked `setup check` is. `--events` is refused (`INVALID_ARGUMENT`); a script that
+wants progress events uses `setup install --events jsonl`. Without `--json` it writes the heading, one plain line
+per piece as it finishes, the table and verdict, `Result: pass` or `Result: fail`, and each part's next step.
 
 
 **Worker hosts.** In human mode `job run` prints its job result (status, attempt,

@@ -174,6 +174,38 @@ where
             .and_then(|()| self.standard_error.flush());
     }
 
+    /// Draws the setup door's progress lines (ADR 0036 section 5) on
+    /// standard output in place of the `previous` lines drawn before: the
+    /// cursor goes back to the first of them, and each line is erased and
+    /// written again. Best effort. The lines are built from fixed words and
+    /// figures only.
+    pub(crate) fn write_live_block(&mut self, lines: &[String], previous: usize) {
+        let mut block = String::new();
+        if previous > 0 {
+            block.push_str("\x1b[");
+            block.push_str(&previous.to_string());
+            block.push('F');
+        }
+        for line in lines {
+            block.push_str("\x1b[2K");
+            block.push_str(&terminal_safe_text(line, MAX_DIAGNOSTIC_BYTES));
+            block.push('\n');
+        }
+        let _ignored = self
+            .standard_output
+            .write_all(block.as_bytes())
+            .and_then(|()| self.standard_output.flush());
+    }
+
+    /// Erases the `previous` progress lines before the results are written.
+    pub(crate) fn clear_live_block(&mut self, previous: usize) {
+        if previous == 0 {
+            return;
+        }
+        let _ignored = write!(self.standard_output, "\x1b[{previous}F\x1b[J")
+            .and_then(|()| self.standard_output.flush());
+    }
+
     /// Clears the live progress line before the result is written.
     pub(crate) fn clear_live_line(&mut self) {
         let _ignored = self

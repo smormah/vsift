@@ -540,8 +540,9 @@ complete in code; the "after" real-media run is its qualification evidence.
   "not found".
 - **The header's provenance is "local speech recognition"**; the model's name is not written (section 4's example
   shows it), because the sealed revision's read does not carry it in a form fit for a person.
-- **The door's "Try it" line** is `Setup complete. Try it: vsift ./your-video.mp4` (section 12): ADR 0036's
-  first pull request reached `main` first, so this one changed it.
+- **The door's "Try it" line** is `Try it: vsift ./your-video.mp4` (section 12), after the door's own verdict
+  line `Setup complete: video and speech both work.`: both of ADR 0036's pull requests reached `main` first, so
+  this one changed only the command and kept their wording.
 - **The command's ordinal is 38,** after `setup` (37), and the skill's never list holds both.
 - **Measured before the code** (the hosted `P14 real media` run 40595722898 on `e317271c`, main plus this record):
   RM03 (a 19:16 talk) has 576 screen changes and RM10 (a 3:21 screen recording) 106, about 30 a minute; finding

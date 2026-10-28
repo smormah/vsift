@@ -9,7 +9,11 @@
 //! piece after the install, and the table again. Exact addresses and
 //! fingerprints stay in `setup plan`.
 
-use vsift::{OptionalCapability, OptionalComponent, OptionalComponentSet};
+use vsift::{
+    CorePartSet, InstallFailureReason, OptionalCapability, OptionalComponent, OptionalComponentSet,
+    PieceProgress, PieceStage,
+};
+use vsift_contract::{SetupOutcome, SetupPartName, SetupResponse};
 
 use super::{
     setup_check::{Door, Next, Standing, push_extras_line, push_guide, push_next, push_overview},
@@ -18,7 +22,7 @@ use super::{
 };
 use crate::{
     command::ExecutionProfile,
-    door::{CheckedSetup, InstallResults, extra_capability},
+    door::{CheckedSetup, InstallResults, QuestionLine, extra_capability},
 };
 
 /// Where a person sets up a part `VSift` cannot install here.
@@ -29,8 +33,15 @@ const DO_IT_YOURSELF_GUIDE: &str =
 const TROUBLESHOOTING_GUIDE: &str =
     "https://github.com/smormah/vsift/blob/main/docs/guide/troubleshooting.md";
 
-/// The first command to try once setup is complete.
-const TRY_IT: &str = "Setup complete. Try it: vsift ./your-video.mp4";
+/// The first command to try once setup is complete; the verdict line above
+/// it already says the setup is complete.
+const TRY_IT: &str = "Try it: vsift ./your-video.mp4";
+
+/// The columns of the longest piece name, `speech model`.
+const PIECE_NAME_COLUMNS: usize = 12;
+
+/// The cells of a progress bar.
+const BAR_CELLS: u64 = 20;
 
 /// A part of the setup, as a person meets it.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -260,13 +271,28 @@ pub(crate) fn door_no_terminal(
         Styling::Plain,
         &|dependency| checked.lookup(dependency),
     );
-    text.push_fixed("Nobody is at a terminal to answer, so nothing was installed.")
-        .end_line()
-        .push_fixed(
-            "Run vsift setup in a terminal, or see vsift setup install --help to install \
-             without questions.",
-        )
+    text.push_fixed("Nobody is here to answer, so nothing was installed.")
         .end_line();
+    let standing = checked.standing();
+    let missing = [
+        (Part::Video, standing.video_missing()),
+        (Part::Speech, standing.speech_missing()),
+    ];
+    let missing: Vec<Part> = missing
+        .into_iter()
+        .filter(|(_, missing)| *missing)
+        .map(|(part, _)| part)
+        .collect();
+    if !missing.is_empty() && !standing.timed_out() {
+        text.push_fixed("To install without questions: vsift setup --unattended --install ");
+        for (index, part) in missing.iter().enumerate() {
+            if index > 0 {
+                text.push_fixed(",");
+            }
+            text.push_fixed(part.in_a_sentence());
+        }
+        text.end_line();
+    }
     text.finish()
 }
 
@@ -434,19 +460,31 @@ pub(crate) fn door_question(offer: &DoorOffer) -> Result<RenderedText, TooLarge>
     text.finish_question()
 }
 
+/// Moves off the question's line when the person's Enter has not; a typed
+/// answer's own line break is the only break after the question.
+fn leave_question(text: &mut TerminalText, line: QuestionLine) {
+    if line == QuestionLine::Open {
+        text.end_line();
+    }
+}
+
 /// The close after a no.
-pub(crate) fn door_declined() -> Result<RenderedText, TooLarge> {
+pub(crate) fn door_declined(line: QuestionLine) -> Result<RenderedText, TooLarge> {
     let mut text = TerminalText::result();
-    text.end_line()
-        .push_fixed("Nothing was installed. Run vsift setup again when you're ready.")
+    leave_question(&mut text, line);
+    text.push_fixed("Nothing was installed. Run vsift setup again when you're ready.")
         .end_line();
     text.finish()
 }
 
 /// The heading of the install.
-pub(crate) fn door_installing(offer: &DoorOffer) -> Result<RenderedText, TooLarge> {
+pub(crate) fn door_installing(
+    offer: &DoorOffer,
+    line: QuestionLine,
+) -> Result<RenderedText, TooLarge> {
     let mut text = TerminalText::result();
-    text.end_line().push_fixed("Installing ");
+    leave_question(&mut text, line);
+    text.push_fixed("Installing ");
     push_parts(&mut text, &offer.parts);
     text.push_fixed(": ")
         .push_unsigned(offer.pieces.len() as u64);
@@ -504,6 +542,157 @@ pub(crate) fn door_install_results(
         let (words, tone) = piece_outcome(component, part, video_failed);
         text.push_status(words, tone, styling);
         text.end_line();
+    }
+    text.finish()
+}
+
+/// What a piece's stage says, in plain words.
+fn stage_words(stage: PieceStage) -> &'static str {
+    match stage {
+        PieceStage::Waiting => "waiting",
+        PieceStage::Downloading => "downloading",
+        PieceStage::Checking => "checking",
+        PieceStage::Testing => "testing",
+        PieceStage::Ready => "ready",
+        PieceStage::AlreadyCurrent => "already there",
+        PieceStage::WaitingForVideo => "waiting for video",
+        PieceStage::Failed(failure) => match failure.reason {
+            InstallFailureReason::Blocked => "not tried",
+            InstallFailureReason::Cancelled => "stopped",
+            reason => failure_words(reason.identifier()),
+        },
+    }
+}
+
+/// Whether a piece has reached the end of this run.
+pub(crate) const fn piece_finished(stage: PieceStage) -> bool {
+    matches!(
+        stage,
+        PieceStage::Ready
+            | PieceStage::AlreadyCurrent
+            | PieceStage::WaitingForVideo
+            | PieceStage::Failed(_)
+    )
+}
+
+/// Megabytes, rounded, as a progress line counts them.
+fn megabytes(bytes: u64) -> u64 {
+    bytes.saturating_add(500_000) / 1_000_000
+}
+
+/// One live progress line per piece while the door installs (ADR 0036
+/// section 5): the name, a bar, the megabytes so far of the reviewed size,
+/// and the stage. Built from fixed words and figures only.
+pub(crate) fn piece_bars(pieces: &[PieceProgress]) -> Vec<String> {
+    pieces
+        .iter()
+        .map(|piece| {
+            let filled = piece
+                .received
+                .min(piece.total)
+                .saturating_mul(BAR_CELLS)
+                .checked_div(piece.total)
+                .unwrap_or(BAR_CELLS);
+            let bar: String = (0..BAR_CELLS)
+                .map(|cell| {
+                    if cell < filled {
+                        '\u{2588}'
+                    } else {
+                        '\u{2591}'
+                    }
+                })
+                .collect();
+            format!(
+                "  {:<width$}  {bar}  {:>4} of {} MB  {}",
+                piece_name(piece),
+                megabytes(piece.received),
+                megabytes(piece.total),
+                stage_words(piece.stage),
+                width = PIECE_NAME_COLUMNS,
+            )
+        })
+        .collect()
+}
+
+fn piece_name(progress: &PieceProgress) -> &'static str {
+    piece(progress.component.identifier())
+        .map_or_else(|| progress.component.identifier(), |(_, name)| name)
+}
+
+/// The plain line of a piece that finished, written when there are no bars
+/// (the unattended form).
+pub(crate) fn piece_finished_line(progress: &PieceProgress) -> Result<RenderedText, TooLarge> {
+    let mut text = TerminalText::result();
+    text.push_fixed("  ");
+    let name = piece_name(progress);
+    text.push_fixed(name);
+    pad(&mut text, name.chars().count(), PIECE_NAME_COLUMNS);
+    text.push_fixed(stage_words(progress.stage)).end_line();
+    text.finish()
+}
+
+/// The heading of an unattended run that installs.
+pub(crate) fn door_unattended_installing(
+    version: &str,
+    parts: CorePartSet,
+    include: OptionalComponentSet,
+) -> Result<RenderedText, TooLarge> {
+    let mut text = TerminalText::result();
+    push_heading(&mut text, version);
+    let mut named: Vec<Part> = parts
+        .iter()
+        .map(|part| match part {
+            vsift::CorePart::Video => Part::Video,
+            vsift::CorePart::Speech => Part::Speech,
+        })
+        .collect();
+    if include.contains(OptionalComponent::OnlineLinks) {
+        named.push(Part::WebVideos);
+    }
+    text.push_fixed("Installing ");
+    push_parts(&mut text, &named);
+    text.push_fixed(" without questions:").end_line();
+    text.finish()
+}
+
+/// The close of an unattended run: the table, the outcome, and each
+/// part's next step.
+pub(crate) fn door_unattended_result(
+    after: &CheckedSetup,
+    response: &SetupResponse,
+    heading: Option<&str>,
+) -> Result<RenderedText, TooLarge> {
+    let mut text = TerminalText::result();
+    match heading {
+        Some(version) => push_heading(&mut text, version),
+        None => {
+            text.end_line();
+        }
+    }
+    push_overview(
+        &mut text,
+        after.standing(),
+        after.managed(),
+        Styling::Plain,
+        &|dependency| after.lookup(dependency),
+    );
+    text.push_fixed(match response.outcome {
+        SetupOutcome::Pass => "Result: pass",
+        SetupOutcome::Fail => "Result: fail",
+    })
+    .end_line();
+    for part in &response.parts {
+        if let Some(next) = &part.next_step {
+            text.push_fixed("Next for ")
+                .push_fixed(match part.part {
+                    SetupPartName::Video => "video",
+                    SetupPartName::Speech => "speech",
+                    SetupPartName::WebVideos => "web videos",
+                })
+                .push_fixed(": ")
+                .push_value(next)
+                .end_line();
+        }
     }
     text.finish()
 }

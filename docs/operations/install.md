@@ -340,6 +340,12 @@ every version before `0.2.1` is different, see [section 12](#12-problems)).
 
 ### 5.1 Ubuntu 24.04 x64: let VSift install them
 
+To install without a question, for example from a script, name the parts:
+`vsift setup --unattended --install video,speech` (add `--json` for a result a script reads,
+and `--accept-plan <digest>` to install only the exact plan you reviewed). Naming the parts is
+the yes; every download is still pinned and checked. It reports pass, fail or error and never
+asks anything.
+
 `vsift setup install` applies a plan you have read and accepted. It works per user, needs no
 `sudo`, never elevates and never prompts.
 

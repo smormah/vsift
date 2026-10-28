@@ -18,6 +18,7 @@ mod live_line;
 mod ocr;
 mod output;
 mod parse_failure;
+mod piece_lines;
 mod progress;
 mod read_view;
 mod search;
@@ -41,12 +42,12 @@ use config::{ConfigLayer, EffectiveConfig, HostPolicy};
 use human::HumanDetail;
 use output::{JsonLines, OutputError, OutputMode, OutputWriter, ProcessExit};
 use vsift::{
-    ADMISSION_RETRY_AFTER, Cancellation, DEFAULT_LOCAL_ASR_CHECK_BUDGET, Engine, EngineConfig,
-    EngineError, EnginePorts, EvaluatedSetupPlan, ExecutableSelections, FailureCode, HostIsolation,
-    IsolationProfile, ManagedRootLocation, OcrError, OpenSessionError, OptionalComponentSet,
-    PendingTranscription, PlanAcceptanceError, ProgressObserver, ScreenTextStop, SessionRootError,
-    SessionRootLocation, SetupCheckRequest, SetupPlanRequest, SourcePathFault,
-    TranscriptSourceError, UserConfigurationLocation, attest_host_isolation,
+    ADMISSION_RETRY_AFTER, Cancellation, CorePartSet, DEFAULT_LOCAL_ASR_CHECK_BUDGET, Engine,
+    EngineConfig, EngineError, EnginePorts, EvaluatedSetupPlan, ExecutableSelections, FailureCode,
+    HostIsolation, IsolationProfile, ManagedRootLocation, OcrError, OpenSessionError,
+    OptionalComponentSet, PendingTranscription, PlanAcceptanceError, ProgressObserver,
+    ScreenTextStop, SessionRootError, SessionRootLocation, SetupCheckRequest, SetupPlanRequest,
+    SourcePathFault, TranscriptSourceError, UserConfigurationLocation, attest_host_isolation,
 };
 use vsift_contract::{
     ADMISSION_BUSY_REMEDIATION, ADMISSION_CAPACITY_REMEDIATION, ARTIFACT_DIRECTORY_REMEDIATION,
@@ -424,6 +425,7 @@ where
                 let result = current_setup_plan(
                     &engine,
                     arguments.profile,
+                    CorePartSet::ALL,
                     OptionalComponentArgument::set(&arguments.include),
                 )
                 .await
@@ -461,7 +463,45 @@ where
                 let result = setup::remove(&engine, arguments);
                 write_result_with_failure_data(&mut writer, mode, CommandName::SetupRemove, result)
             }
-            // The setup door talks to a person; a caller that asked for
+            // The unattended door answers in text or JSON, never events.
+            None if arguments.unattended && mode == OutputMode::JsonLines => write_command_failure(
+                &mut writer,
+                mode,
+                CommandName::Setup,
+                CommandFailure::with_remediation(
+                    FailureCode::InvalidArgument,
+                    SETUP_DOOR_NO_EVENTS.to_owned(),
+                ),
+            ),
+            None if arguments.unattended => {
+                let core_parts = arguments
+                    .install
+                    .iter()
+                    .fold(CorePartSet::EMPTY, |set, part| match part {
+                        command::DoorPart::Video => set.with(vsift::CorePart::Video),
+                        command::DoorPart::Speech => set.with(vsift::CorePart::Speech),
+                    });
+                let include = door::DoorOptions {
+                    include: arguments.include,
+                }
+                .include_set();
+                let steps = door::EngineSteps { engine: &engine };
+                Box::pin(door::unattended::run(
+                    door::unattended::UnattendedRun {
+                        steps: &steps,
+                        parts: core_parts,
+                        include,
+                        accept_plan: arguments.accept_plan,
+                        version: env!("CARGO_PKG_VERSION"),
+                        cancellation: &cancellation,
+                        mode,
+                        trap_interruptions: interruption == Interruption::Trapped,
+                    },
+                    &mut writer,
+                ))
+                .await
+            }
+            // The attended door talks to a person; a caller that asked for
             // JSON or events gets a typed refusal, never a question.
             None if mode != OutputMode::Human => write_command_failure(
                 &mut writer,
@@ -479,7 +519,7 @@ where
                 let steps = door::EngineSteps { engine: &engine };
                 match interruption {
                     Interruption::Trapped => {
-                        door::run(
+                        Box::pin(door::run(
                             door::DoorRun {
                                 console: &mut door::SystemConsole,
                                 steps: &steps,
@@ -489,14 +529,14 @@ where
                                 trap_interruptions: true,
                             },
                             &mut writer,
-                        )
+                        ))
                         .await
                     }
                     // In-process tests never read the test runner's own
                     // terminal: nobody is there to answer.
                     #[cfg(test)]
                     Interruption::Default => {
-                        door::run(
+                        Box::pin(door::run(
                             door::DoorRun {
                                 console: &mut door::Nobody,
                                 steps: &steps,
@@ -506,7 +546,7 @@ where
                                 trap_interruptions: false,
                             },
                             &mut writer,
-                        )
+                        ))
                         .await
                     }
                 }
@@ -704,15 +744,19 @@ where
 }
 
 /// The remediation of plain `vsift setup` with `--json` or `--events`.
-const SETUP_DOOR_NEEDS_A_PERSON: &str = "vsift setup is for a person at a terminal and never \
-    answers in JSON. To read the setup, run setup check --json; to install, review setup plan \
-    --json and accept it with setup install.";
+const SETUP_DOOR_NEEDS_A_PERSON: &str = "vsift setup is for a person at a terminal; use setup \
+    check --json to read the setup, or setup --unattended --install <parts> --json to install.";
+
+/// The remediation of `vsift setup --unattended` with `--events`.
+const SETUP_DOOR_NO_EVENTS: &str = "vsift setup --unattended reports one result and no events; \
+    use --json for the result, or setup install --events jsonl for an install's progress events.";
 
 /// Resolves the effective probe deadline for `profile`, then asks the engine
 /// for the current plan.
 pub(crate) async fn current_setup_plan(
     engine: &Engine,
     profile: ExecutionProfile,
+    parts: CorePartSet,
     include: OptionalComponentSet,
 ) -> Result<EvaluatedSetupPlan, CommandFailure> {
     let config = EffectiveConfig::resolve(
@@ -729,6 +773,7 @@ pub(crate) async fn current_setup_plan(
         .plan_setup(SetupPlanRequest {
             profile: config.profile.into(),
             include,
+            parts,
             probe_timeout: config.probe_timeout,
         })
         .await?)

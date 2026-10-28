@@ -199,6 +199,36 @@ pub(crate) struct SetupArguments {
     /// x86-64 only for now).
     #[arg(long = "include", value_enum, value_name = "EXTRA")]
     pub include: Vec<DoorExtra>,
+    /// Plain `vsift setup` only: nobody is there to answer. Installs the
+    /// parts named with --install without asking, and reports pass, fail or
+    /// error; --json gives the `setup` result.
+    #[arg(long = "unattended", requires = "install")]
+    pub unattended: bool,
+    /// With --unattended only: the core parts to install, `video`, `speech`
+    /// or both (`video,speech`). Naming them accepts the plan for them;
+    /// every download stays pinned and checked.
+    #[arg(
+        long = "install",
+        value_enum,
+        value_delimiter = ',',
+        value_name = "PART",
+        requires = "unattended"
+    )]
+    pub install: Vec<DoorPart>,
+    /// With --unattended only: install only when the plan built for the
+    /// named parts has exactly this digest (`plan_digest`).
+    #[arg(long = "accept-plan", value_name = "DIGEST", requires = "unattended")]
+    pub accept_plan: Option<String>,
+}
+
+/// A core part the unattended setup door installs, by the name a person
+/// reads in its table (ADR 0036 section 6).
+#[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
+pub(crate) enum DoorPart {
+    /// `FFmpeg` with `FFprobe`: reading videos and taking frames.
+    Video,
+    /// whisper.cpp and its model: turning speech into text.
+    Speech,
 }
 
 /// An optional extra the setup door adds, by the name a person reads in its

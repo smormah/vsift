@@ -40,6 +40,11 @@ These files are the machine-readable public v1 boundary:
   `setup-repair.json`). The reserved-command examples `operation-error.json` and
   `terminal-event.json` (`setup.repair` answering `COMMAND_NOT_IMPLEMENTED`) stay as frozen
   v1 envelopes; since PR 6 no command answers that code;
+- `setup.schema.json` — the `data` of a `setup` result, one unattended run of the setup
+  door (`vsift setup --unattended --install <parts> --json`, ADR 0036 section 6, since
+  `0.3.0`): `outcome` (`pass`, `fail`), each core part and included extra with whether it
+  was named, its `status` and its `next_step`, and the `setup.install` data of the install
+  it ran, or `null` (examples `setup.pass.json` and `setup.fail.json`);
 - `setup-plan-unqualified.schema.json` â historical P06 check-first response
   before catalogue acceptance, retained for v1 compatibility evidence;
 - `operation-response.schema.json` â terminal result for new operations;

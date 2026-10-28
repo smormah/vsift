@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vsift.dev/schemas/v1/setup.schema.json",
+  "title": "VSift setup data v1",
+  "description": "The data of a setup result: one unattended run of the setup door, vsift setup --unattended --install <parts> --json (ADR 0036 section 6). Naming the parts accepts the plan built for them; every artifact stays pinned and verified. outcome is pass when every named core part works after the run, also when nothing needed installing (exit 0), and fail when the install ran and a named part does not work (the exit status setup install gives the same failure). parts holds video, speech, then each included extra, with whether it was named, where it stands now and the one thing to do about it. install is the setup.install data of the install the run made, exactly as setup install reports it, or null when nothing needed installing. A run that could not start (a part VSift cannot install here, checks that ran out of time, a busy install, an --accept-plan digest that does not match) is the ordinary failure envelope, never this object.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["outcome", "parts", "install"],
+  "properties": {
+    "outcome": { "enum": ["pass", "fail"] },
+    "parts": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 8,
+      "items": { "$ref": "#/$defs/part" }
+    },
+    "install": {
+      "oneOf": [{ "type": "null" }, { "$ref": "setup-install.schema.json" }]
+    }
+  },
+  "$defs": {
+    "part": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["part", "requested", "status", "next_step"],
+      "properties": {
+        "part": { "enum": ["video", "speech", "web_videos"] },
+        "requested": { "type": "boolean" },
+        "status": {
+          "enum": ["ready", "not_set_up", "added", "not_added", "not_available_here"]
+        },
+        "next_step": {
+          "oneOf": [{ "type": "null" }, { "type": "string", "minLength": 1, "maxLength": 512 }]
+        }
+      }
+    }
+  }
+}

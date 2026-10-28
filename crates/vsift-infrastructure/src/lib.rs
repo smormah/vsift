@@ -172,7 +172,7 @@ pub use managed_catalogue::{
 };
 pub use managed_installer::{
     ActionAuthority, ManagedArtifactSource, ManagedInstallerConfig, ReviewedManagedInstaller,
-    SmokeCompanionSource,
+    SmokeCompanionSource, VerifiedManagedDownload,
 };
 pub use managed_smoke::{
     MediaSmokeRequest, ReviewedFixtureVerifiers, SmokeCompanions, SmokeFixtureVerifiers,
