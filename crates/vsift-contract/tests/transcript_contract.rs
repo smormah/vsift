@@ -180,6 +180,7 @@ fn anchored_ingest_response(
         publication: PublicationGuarantee::ProcessCrashConsistent,
         lifetime: SessionLifetime::open(1_790_208_000)?,
         time_anchors,
+        origin: None,
     };
     Ok(OperationResponse::complete(
         "ingest",
@@ -382,6 +383,7 @@ fn plain_ingest_data_is_unchanged_and_schema_valid() -> TestResult {
         publication: PublicationGuarantee::ProcessCrashConsistent,
         lifetime: SessionLifetime::open(1_000)?,
         time_anchors: vsift_domain::TimeAnchors::none(),
+        origin: None,
     };
     let data = serde_json::to_value(OpenData::new(&opened, EXPIRES_AT.to_owned()))?;
 

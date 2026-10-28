@@ -29,6 +29,7 @@ mod job_records;
 mod job_tests;
 mod jobs;
 mod lifecycle;
+mod origin;
 #[cfg(test)]
 mod p10_tests;
 mod publication;
@@ -62,8 +63,8 @@ use sha2::{Digest, Sha256};
 use vsift_application::{SessionStorageError, StorageCapabilities};
 use vsift_domain::{
     DurabilityRequirement, EvidenceMediaKind, EvidenceRecord, OperationId, SessionArtifactKind,
-    SessionId, SessionLifetime, SessionLifetimePolicy, SessionPhase, SourceId, StorageGeneration,
-    TimeAnchors, WorkspacePolicy, WorkspaceRetention,
+    SessionId, SessionLifetime, SessionLifetimePolicy, SessionPhase, SourceId, SourceOrigin,
+    StorageGeneration, TimeAnchors, WorkspacePolicy, WorkspaceRetention,
 };
 
 use crate::{VerifiedSourceIdentity, file_lock::HeldFileLock};
@@ -73,6 +74,8 @@ pub use job_records::{
 };
 pub use jobs::{FilesystemJobOwner, JOB_CANCEL_POLL};
 pub use queue::{MAX_QUEUED_JOBS, QueueTurn, QueuedEntry};
+#[cfg(any(test, feature = "install-test-hooks"))]
+pub(crate) use root::decide_copy_room;
 pub use root::{FREE_SPACE_RESERVE_BYTES, FreeSpaceCheck};
 pub(crate) use root::{RootProvisioningState, root_provisioning_state};
 pub use worker_requests::{
@@ -393,6 +396,7 @@ pub struct SessionStatus {
     artifact_count: usize,
     artifact_bytes: u64,
     time_anchors: TimeAnchors,
+    origin: Option<SourceOrigin>,
 }
 
 /// Explicit portability requested for a user-selected retained bundle.
@@ -595,6 +599,13 @@ impl SessionStatus {
     pub const fn time_anchors(&self) -> &TimeAnchors {
         &self.time_anchors
     }
+
+    /// Where the source was fetched from (ADR 0028); `None` for a local
+    /// file's copy.
+    #[must_use]
+    pub const fn origin(&self) -> Option<&SourceOrigin> {
+        self.origin.as_ref()
+    }
 }
 
 enum LifecycleUpdate {
@@ -609,6 +620,8 @@ enum LifecycleUpdate {
         lifetime: SessionLifetimePolicy,
         /// The source's time anchors, stored once (ADR 0029).
         time_anchors: Vec<time_anchors::StoredTimeAnchor>,
+        /// Where a fetched source came from (ADR 0028).
+        origin: Option<origin::StoredOrigin>,
     },
     Renew {
         now: u64,
@@ -1230,6 +1243,11 @@ struct StoredLifecycle {
     /// session without them is recorded exactly as before.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     time_anchors: Vec<time_anchors::StoredTimeAnchor>,
+    /// Where a fetched source came from (ADR 0028), written at activation
+    /// and carried unchanged; absent for a local file's copy, so such a
+    /// session is recorded exactly as before.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    origin: Option<origin::StoredOrigin>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

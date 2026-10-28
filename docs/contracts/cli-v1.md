@@ -150,7 +150,54 @@ A reading is always `utc`, `local` and `utc_offset`, each a string or `null`: an
 with its local time and offset, an instant whose local zone is unknown, or a local time
 whose zone is unknown. A session without an anchor answers exactly as before. A later
 release adds sources (clocks visible on screen, at other positions of the timeline) to the
-same list. The source must be an
+same list.
+
+**`ingest --url <link>` (`0.3.0`, [ADR 0028](../decisions/0028-online-sources.md), #407)** fetches one video
+from a direct `https://` link to a video file into a new session, in place of the path (exactly one of the two;
+`--url -` reads the link from standard input, so a signed link stays out of the process list and the shell
+history). It is the only command that uses the network for a video, and only for the link it is given: a link
+found in a transcript, a frame or a page is never fetched, and everything after the fetch (transcription, search,
+evidence, retention, cleanup) is the ordinary local pipeline, offline. The rules: HTTPS on port 443 only; no user
+name or password in the link; at most three redirects, each held to the same rules; every name resolved by VSift
+and connected to only when every address it resolves to is public (loopback, private, link-local, the cloud
+metadata addresses, carrier-grade NAT, documentation, multicast, reserved, IPv6 unique-local and link-local, and
+IPv4-mapped, 6to4, Teredo and NAT64 forms of those are refused), so the address checked is the address connected
+to; a host written as an address is checked too. Through a proxy named by `HTTPS_PROXY` or `ALL_PROXY` (and not
+excluded by `NO_PROXY`) the proxy resolves the name, so VSift refuses only internal-looking names (one label,
+`localhost`, `.local`, `.localhost`, `.internal`, `.lan`, `.home.arpa`, `.corp`, `.intranet`) and addresses, on the
+link and on every redirect, and the origin says `proxy_resolved` (known limit L-208). A proxy value is read as curl
+reads it (a URL, or `host:port` for an HTTP proxy); a value that is set but is not a usable `http` or `https` proxy
+is refused with `proxy_unusable` and never ignored, so a fetch never goes direct past a proxy the user set.
+`NO_PROXY` is matched by host name only: an entry is the host, a domain it is under (with or without a leading
+`.`), or `*`. One `GET` with `Accept-Encoding: identity`, a `User-Agent` of
+`VSift/<version> link-ingest` and nothing personal: no cookie, no `Authorization`, no `Referer`. Only a complete
+`200 OK` identity body is accepted; a text content type stops at once as a web page, and the first 12 bytes must be
+an MP4/MOV (`ftyp`) or Matroska/WebM file. `--max-download-bytes` (default 4 GiB, at most 20 GiB) and
+`--max-download-seconds` (default 1800, at most 14400) bound it; bytes are counted as they arrive, a declared length
+over the limit is refused before the body, and a transfer with no byte for 30 seconds stops. Free space is checked
+for a declared length before the body, and for a body without one 64 MiB at a time as it arrives, so a small video
+sent without a length needs room for itself, not for the download limit; a shortage is `STORAGE_IO` (exit 7), as for
+a copy. The body is written
+straight into the session's own private source slot, so a fetched video is a session artifact like a copied one
+(closed, expired and cleaned with the session; retained only with `session retain --include-source`); a fetch that
+fails leaves no file and no session. **The link is never stored, printed or logged**: `ingest` and `session status`
+data (and `renew`, `close` and list items) carry an `origin` (`kind` `direct_https`, `link_sha256` of the link as
+parsed, `requested_host`, `final_host`, `redirects`, `address_check` `direct` or `proxy_resolved`, `retrieved_at`
+and `bytes`; example [`ingest.url.json`](../../schemas/v1/examples/ingest.url.json)), absent for a local file. A
+link that cannot be fetched answers the new code `SOURCE_FETCH_FAILED` (exit 3) with `error.reason` (`not_https`,
+`credentials_in_link`, `port_not_allowed`, `address_refused`, `tls`, `redirect_policy`, `http_status`,
+`proxy_auth`, `proxy_unusable`, `offline`, `stalled`, `deadline`, `size`, `partial`, `compressed`, `web_page`,
+`not_a_video`, `truncated`, `strict_isolation`) and a fixed remediation that names the online step and says local
+files are not affected; it never echoes the link, the server's text or proxy credentials (example
+[`ingest-url-address-refused.json`](../../schemas/v1/examples/ingest-url-address-refused.json)).
+**`SOURCE_FETCH_FAILED` is `retryable: false` as a code, whatever its reason:** nothing retries it automatically.
+The reasons `offline`, `stalled`, `truncated` and `deadline` describe a transfer that may succeed if the caller
+runs the command again (with a longer `--max-download-seconds` for `deadline`), as their remediations say; that
+retry is the caller's decision, not the envelope's. With
+`--host-isolation strict-linux`, which allows no network, it answers `strict_isolation` before anything is fetched,
+and a worker job request takes no link. A development build resolves no name (the P13 network guard), so it
+answers `offline` for any public name unless `VSIFT_DEV_PUBLISHER_NETWORK=allow`. `DOWNLOAD_FAILED` stays the code
+of `setup install`'s publisher downloads. The source must be an
 absolute local path to a regular file (a relative path is read from the folder the command
 was run in). **A named pipe (FIFO), a device file or a UNIX socket is refused without being opened**
 (since `0.2.2`, #264): its directory entry says what it is, and nothing opens it, because opening a pipe
@@ -3558,7 +3605,7 @@ against `operation-response.schema.json`; evidence events validate against
 | 0 | complete or supported partial/degraded result | none |
 | 1 | unexpected internal failure | `INTERNAL` |
 | 2 | usage, unsupported schema, missing capability, unavailable isolation, or an operation id reused for another request | `INVALID_ARGUMENT`, `UNSUPPORTED_SCHEMA`, `MISSING_CAPABILITY`, `ISOLATION_UNAVAILABLE`, `COMMAND_NOT_IMPLEMENTED`, `IDEMPOTENCY_CONFLICT` |
-| 3 | invalid or unsupported source | `INVALID_SOURCE` |
+| 3 | invalid or unsupported source, or a video link that could not be fetched (`0.3.0`) | `INVALID_SOURCE`, `SOURCE_FETCH_FAILED` |
 | 4 | retryable condition | `BUSY` |
 | 5 | deadline or resource limit | `DEADLINE_EXCEEDED`, `RESOURCE_LIMIT` |
 | 6 | cancellation | `CANCELLED` |
@@ -3715,7 +3762,9 @@ before); a reader written against an older copy of the schema ignores it. The op
 members so far are `local_asr.unusable_chunks` and the `untranscribed_ranges` of a
 retranscription (0.2.1, #353), `local_asr.unplaced_ranges` (the second candidate of
 0.2.1, #359), and, in `0.3.0`, `time_anchor` (ingest and session data) and `clock_time`
-(every timestamped item), present only when the session has a time anchor (ADR 0029); in the stored record, `carried_untranscribed` (#353) and `unplaced_ranges`
+(every timestamped item), present only when the session has a time anchor (ADR 0029); the `origin` of ingest and session data and `error.reason`
+(present for `SOURCE_FETCH_FAILED`, ADR 0028; the code `SOURCE_FETCH_FAILED` itself is
+added to the v1 code list, which a reader that predates it treats as an unknown failure); in the stored record, `carried_untranscribed` (#353) and `unplaced_ranges`
 (#359), which an older release reads as damage. A member added after the published
 `0.1.0` to an answer that release already wrote (`transcript_coverage` of `transcript
 get`) is a declared property but not `required`: `published_compatibility` holds the
@@ -3733,7 +3782,7 @@ producer emits it every time, and a test pins that.
 | C-05 | bounded/sanitized output and broken stdout/stderr behavior |
 | C-06 | strict bounded JSON decoding and schema/identifier rejection, including the P11 job request (`vsift-contract` `request` tests, `worker_contract`, fuzz targets `job_request` and `job_batch_line`), the recorded steps and results of a request record (`recorded_steps_and_results_read_back_exactly`, fuzz target `request_record`) and `handoff check` (P13 PR 5: the `handoff` unit tests, `handoff_contract`, `handoff_differential` against `jsonschema`, `handoff_cli_contract` through the binary, fuzz target `handoff_check`) |
 | C-07 | checked time/range/crop invariants and property tests |
-| C-08 | schema examples and old-reader/additive-v1 compatibility, including the `setup check` `local_asr` object (`setup_local_asr_contract`, `engine_setup_local_asr`), a segment's `display_text` and `display_label` (`vsift-contract` `text` tests, `display_text_makes_hidden_characters_visible_and_keeps_text_raw`, and SEC-T02's `sec_t02_adversarial_evidence` through the binary), the failure remediation of an `ingest` path that names no file, a folder or a file that may not be read (`storage_contract`, `source_path_cli_contract`, #369) and the P11 event kinds (`worker_events_contract`: a reader that knows only `evidence` and `terminal` skips `progress`, `lifecycle` and `result` and still sees a contiguous sequence), the `0.2.1` views and coverage of a read (the brief answers are a projection of the full ones and match their frozen examples: `transcript_contract`, `local_asr_contract`, `search_contract`, `candidates_contract`; a complete read and a stream are what `0.1.0` published but for `transcript_coverage`: `a_complete_read_is_what_was_published_but_for_the_new_member`, `a_stream_is_what_was_published_but_for_the_new_terminal_member`; the brief view is refused for a stream before anything is read or analysed, through the binary: `transcript_cli_contract`, `search_cli_contract`, `candidates_cli_contract`; a read over a gap is `partial` as a search is: `a_read_over_a_gap_is_partial_and_names_the_gap`, `a_read_and_a_search_agree_on_every_range`, `a_read_over_a_gap_is_partial_as_a_search_over_it_is`); the `0.3.0` on-screen text (`screen_text_contract`: the `ocr` results and a search's `screen_text` member against their schemas and frozen examples, older pages without the member still valid; `ocr_cli_contract` through the binary; `screen_text_index_store` for the stored record and retained bundles); and `setup check`'s `managed_updates` (`0.2.3`: always present, empty when nothing is superseded, valid without it: `setup_managed_update_contract`; through the binary on every platform: `setup_check_names_a_superseded_managed_whisper_and_the_step`; on real bytes: `p13_managed_upgrade_real`); and time anchoring (`0.3.0`, ADR 0029: the domain's `time_anchor` tests, the stored form `filesystem_session_store::time_anchors` and `time_anchor_store`, the contract's `clock` tests, `anchored_results_match_their_examples`, `candidates_carry_the_clock_times_of_their_span_and_frame`, `a_frame_carries_the_clock_time_of_the_delivered_frame`, through the binary `time_anchor_cli_contract`, and on real tags written by the pinned FFmpeg the opt-in `time_anchor_real_tags` in `P07 local ASR`) |
+| C-08 | schema examples and old-reader/additive-v1 compatibility, including the `setup check` `local_asr` object (`setup_local_asr_contract`, `engine_setup_local_asr`), a segment's `display_text` and `display_label` (`vsift-contract` `text` tests, `display_text_makes_hidden_characters_visible_and_keeps_text_raw`, and SEC-T02's `sec_t02_adversarial_evidence` through the binary), the failure remediation of an `ingest` path that names no file, a folder or a file that may not be read (`storage_contract`, `source_path_cli_contract`, #369) and the P11 event kinds (`worker_events_contract`: a reader that knows only `evidence` and `terminal` skips `progress`, `lifecycle` and `result` and still sees a contiguous sequence), the `0.2.1` views and coverage of a read (the brief answers are a projection of the full ones and match their frozen examples: `transcript_contract`, `local_asr_contract`, `search_contract`, `candidates_contract`; a complete read and a stream are what `0.1.0` published but for `transcript_coverage`: `a_complete_read_is_what_was_published_but_for_the_new_member`, `a_stream_is_what_was_published_but_for_the_new_terminal_member`; the brief view is refused for a stream before anything is read or analysed, through the binary: `transcript_cli_contract`, `search_cli_contract`, `candidates_cli_contract`; a read over a gap is `partial` as a search is: `a_read_over_a_gap_is_partial_and_names_the_gap`, `a_read_and_a_search_agree_on_every_range`, `a_read_over_a_gap_is_partial_as_a_search_over_it_is`); the `0.3.0` on-screen text (`screen_text_contract`: the `ocr` results and a search's `screen_text` member against their schemas and frozen examples, older pages without the member still valid; `ocr_cli_contract` through the binary; `screen_text_index_store` for the stored record and retained bundles); and `setup check`'s `managed_updates` (`0.2.3`: always present, empty when nothing is superseded, valid without it: `setup_managed_update_contract`; through the binary on every platform: `setup_check_names_a_superseded_managed_whisper_and_the_step`; on real bytes: `p13_managed_upgrade_real`); and time anchoring (`0.3.0`, ADR 0029: the domain's `time_anchor` tests, the stored form `filesystem_session_store::time_anchors` and `time_anchor_store`, the contract's `clock` tests, `anchored_results_match_their_examples`, `candidates_carry_the_clock_times_of_their_span_and_frame`, `a_frame_carries_the_clock_time_of_the_delivered_frame`, through the binary `time_anchor_cli_contract`, and on real tags written by the pinned FFmpeg the opt-in `time_anchor_real_tags` in `P07 local ASR`); and `ingest --url` (`0.3.0`, ADR 0028: the examples and every reason, `link_contract`; through the binary with no network, `link_ingest_cli_contract`; the fetch against a local HTTPS server, `link_transfer`; the address policy, `link_acquisition` unit tests) |
 | C-09 | legal job and cancellation terminal transitions (`vsift-domain` `job` tests over the whole state graph; `job` use-case tests of cancellation serialized with the commit); the public job commands, `--operation-id` and interruptions through the binary (`job_cli_contract`, `interrupt_cli_contract`, the job examples in `local_asr_contract`); `job run` through the binary: results and events against their schemas, replay, conflict, busy, refusals, sentinels and shutdown (`job_run_cli_contract`), and the request path through the engine (`engine_worker`); `job batch` through the binary: events, summary, limits, O-02, O-03, X-08 and O-04 (`job_batch_cli_contract`), and the batch through the engine (`engine_batch`, opt-in `engine_batch_tools`) |
 | C-10 | unknown confidence, speaker metadata, time normalization, requested/actual timing, imported-transcript offset conversion, local-ASR provenance and carried segments (`local_asr_contract`, `local_asr_store`), and that an id of a superseded revision still resolves in a read, a handoff check and a retained bundle (`superseded_ids_cli_contract`) |
 

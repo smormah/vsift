@@ -431,6 +431,8 @@ pub(crate) struct Opened {
     pub(crate) transcript: Option<TranscriptRevision>,
     #[serde(default)]
     pub(crate) time_anchor: Option<TimeAnchor>,
+    #[serde(default)]
+    pub(crate) origin: Option<Origin>,
 }
 
 /// A session's `time_anchor` summary (ADR 0029), without its anchor list.
@@ -461,6 +463,17 @@ pub(crate) struct ClockTime {
     pub(crate) end: Option<Clock>,
 }
 
+/// Where a fetched source came from (ADR 0028): hosts and a digest, never
+/// the link.
+#[derive(Debug, Deserialize)]
+pub(crate) struct Origin {
+    pub(crate) requested_host: String,
+    pub(crate) final_host: String,
+    pub(crate) redirects: u64,
+    pub(crate) address_check: String,
+    pub(crate) retrieved_at: String,
+}
+
 /// A session's committed status (`session status`, `renew`, `close`).
 #[derive(Debug, Deserialize)]
 pub(crate) struct SessionStatus {
@@ -479,6 +492,8 @@ pub(crate) struct SessionStatus {
     pub(crate) jobs_truncated: bool,
     #[serde(default)]
     pub(crate) time_anchor: Option<TimeAnchor>,
+    #[serde(default)]
+    pub(crate) origin: Option<Origin>,
 }
 
 /// One job of `session status`.

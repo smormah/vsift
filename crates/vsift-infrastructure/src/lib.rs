@@ -43,6 +43,7 @@ mod filesystem_session_store;
 mod gzip_tar_inventory;
 mod host_attestation;
 mod input_root;
+mod link_acquisition;
 mod local_asr_verification;
 mod managed_artifact_store;
 mod managed_catalogue;
@@ -151,6 +152,9 @@ pub use input_root::{
     ContainedFile, ContainedPathError, InputRoot, InputRootError, MAX_INPUT_PATH_BYTES,
     MAX_INPUT_PATH_COMPONENTS,
 };
+#[cfg(any(test, feature = "install-test-hooks"))]
+pub use link_acquisition::{LinkTestRoute, TestAnswers};
+pub use link_acquisition::{is_internal_name, is_public_address};
 pub use local_asr_verification::{
     FixtureAsrVerifier, LOCAL_ASR_VERIFICATION_PROFILE, LocalAsrFiles, local_asr_fingerprint,
     local_asr_fixture_sha256, run_within_budget,

@@ -26,7 +26,8 @@ fault-injection = []
 durability-campaign = []
 # P13 managed-install test hooks: a loopback publisher route (a local test
 # server on 127.0.0.1, optionally through an explicit proxy) and an injected
-# stage-write failure for the disk-full case. The route bypasses the
+# stage-write failure for the disk-full case; since ADR 0028 also the link
+# test route (a local HTTPS server signed by a test root, a test resolver). The route bypasses the
 # reviewed catalogue's trust anchor, so it is development only, like
 # fault-injection: the crate refuses to compile it without debug assertions,
 # and the governance check refuses it anywhere but a development dependency.
@@ -64,6 +65,12 @@ bench = false
 # `cargo test -p vsift-infrastructure --features install-test-hooks --test p13_install_transaction`.
 [[test]]
 name = "p13_install_transaction"
+required-features = ["install-test-hooks"]
+
+# ADR 0028: the direct-link fetch against a local HTTPS server through the
+# development-only link test route (install-test-hooks), as above.
+[[test]]
+name = "link_transfer"
 required-features = ["install-test-hooks"]
 
 [dependencies]

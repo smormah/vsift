@@ -8,11 +8,12 @@ use std::{
 
 use vsift_application::{
     ForegroundSessionPort, NoSourceProbe, OpenSession, OpenSessionError, OpenSessionOutcome,
-    OpenSessionRequest, SessionStorageError, TranscriptImportRequest,
+    OpenSessionRequest, SessionSource, SessionStorageError, TranscriptImportRequest,
 };
 use vsift_domain::{
-    ClockReading, DurabilityRequirement, OperationId, SessionId, SessionLifetime, SessionPhase,
-    SourceId, StorageGeneration, TimeAnchors, TranscriptRevision, WorkspacePolicy,
+    ClockReading, DownloadLimits, DurabilityRequirement, OperationId, SessionId, SessionLifetime,
+    SessionPhase, SourceFetchReason, SourceId, SourceLink, SourceOrigin, StorageGeneration,
+    TimeAnchors, TranscriptRevision, WorkspacePolicy,
 };
 use vsift_infrastructure::{
     BundleSourcePolicy, BundleStatus, CleanOutcome, ContainedFile, ContainedSourceStore,
@@ -57,12 +58,45 @@ pub struct IngestRequest {
     pub durability: DurabilityRequirement,
 }
 
+/// A request to open a video from a direct HTTPS link as a new disposable
+/// session (`ingest --url`, ADR 0028): the video is fetched once into the
+/// session, within `limits`, and everything after is the ordinary local
+/// pipeline, offline.
+#[derive(Clone, Debug)]
+pub struct LinkIngestRequest {
+    /// The link; it is never printed, logged or stored (only a digest of it
+    /// and the hosts it reached are recorded).
+    pub link: SourceLink,
+    /// The fetch's size and time bounds.
+    pub limits: DownloadLimits,
+    /// Optional supplied `SubRip` or `WebVTT` transcript to import with it.
+    pub transcript: Option<SuppliedTranscriptRequest>,
+    /// The recording's start as the caller states it (`ingest --recorded-at`),
+    /// the first rung of the time-anchor ladder (ADR 0029); the fetched
+    /// file's own recording-time tags follow it.
+    pub recorded_at: Option<ClockReading>,
+    /// Signal that stops the fetch within 200 ms while it waits for the
+    /// network (a chunk being written, and the final flush, finish first)
+    /// and the transcript's duration probe; a cancelled ingest opens no
+    /// session.
+    pub cancellation: Cancellation,
+    /// How the session publishes, as for [`IngestRequest::durability`].
+    pub durability: DurabilityRequirement,
+}
+
 /// The source an ingest copies: a path the caller selected, or a file a
 /// worker request named inside the operator's input root, already opened
-/// there following no link (P11, ADR 0021 section 9).
+/// there following no link (P11, ADR 0021 section 9), or a link to fetch.
 pub(crate) enum IngestSource {
     /// An absolute path, opened by the staging itself.
     Path(PathBuf),
+    /// A direct HTTPS link, fetched into the session (ADR 0028).
+    Link {
+        /// The link.
+        link: SourceLink,
+        /// The fetch's bounds.
+        limits: DownloadLimits,
+    },
     /// A file opened inside the input root, and the copy's admission when
     /// the caller already holds it.
     Contained {
@@ -147,6 +181,7 @@ pub struct SessionSnapshot {
     artifact_bytes: u64,
     observed_at_unix_seconds: u64,
     time_anchors: TimeAnchors,
+    origin: Option<SourceOrigin>,
 }
 
 impl SessionSnapshot {
@@ -162,6 +197,7 @@ impl SessionSnapshot {
             artifact_bytes: status.artifact_bytes(),
             observed_at_unix_seconds,
             time_anchors: status.time_anchors().clone(),
+            origin: status.origin().cloned(),
         }
     }
 
@@ -171,6 +207,13 @@ impl SessionSnapshot {
     #[must_use]
     pub const fn time_anchors(&self) -> &TimeAnchors {
         &self.time_anchors
+    }
+
+    /// Where the session's source was fetched from (ADR 0028); `None` for a
+    /// local file's copy.
+    #[must_use]
+    pub const fn origin(&self) -> Option<&SourceOrigin> {
+        self.origin.as_ref()
     }
 
     /// Session identity.
@@ -541,6 +584,49 @@ impl Engine {
         .await
     }
 
+    /// Fetches one video from a direct HTTPS link into a new disposable
+    /// session, then opens it exactly as [`Self::ingest`] opens a local file
+    /// (ADR 0028, #407).
+    ///
+    /// This is the only operation that uses the network for a video, and
+    /// only for the link the caller gave. HTTPS on port 443, no credentials,
+    /// at most three redirects, public addresses only (checked where the
+    /// connection is made), the bounds of `request.limits`, one complete
+    /// identity body whose first bytes are an MP4/MOV or Matroska/WebM file.
+    /// The body goes straight into the session's own source slot; a failure
+    /// leaves no file and no session. The outcome's
+    /// [`OpenSessionOutcome::origin`] records a digest of the link and the
+    /// hosts it reached, never the link.
+    ///
+    /// # Errors
+    ///
+    /// `SOURCE_FETCH_FAILED` ([`OpenSessionError::SourceFetch`]) with its
+    /// typed reason, including [`SourceFetchReason::StrictIsolation`] before
+    /// anything is fetched on a strict worker host; otherwise as
+    /// [`Self::ingest`].
+    pub async fn ingest_link(
+        &self,
+        request: LinkIngestRequest,
+    ) -> Result<IngestOutcome, EngineError> {
+        if self.config().host_isolation != crate::engine::HostIsolation::ProcessOnly {
+            return Err(EngineError::OpenSession(OpenSessionError::SourceFetch(
+                SourceFetchReason::StrictIsolation,
+            )));
+        }
+        self.ingest_prepared(PreparedIngest {
+            source: IngestSource::Link {
+                link: request.link,
+                limits: request.limits,
+            },
+            transcript: request.transcript.map(IngestTranscript::Path),
+            cancellation: request.cancellation,
+            durability: request.durability,
+            session_id: None,
+            recorded_at: request.recorded_at,
+        })
+        .await
+    }
+
     /// [`Self::ingest`] of a resolved request: a worker request's step
     /// passes its contained source and its recorded session id here.
     pub(crate) async fn ingest_prepared(
@@ -568,6 +654,8 @@ impl Engine {
                 std::fs::metadata(source).map_or(0, |metadata| metadata.len())
             }
             IngestSource::Contained { file, .. } => file.len(),
+            // A fetch checks the room itself once it knows the length.
+            IngestSource::Link { .. } => 0,
         };
         let free_space = free_space_reserve(&store, incoming)?;
         let now = self.now_unix_seconds()?;
@@ -575,16 +663,18 @@ impl Engine {
             Some(session_id) => session_id,
             None => self.new_session_id()?,
         };
-        let (source_path, contained) = match request.source {
-            IngestSource::Path(path) => (path, None),
+        let (source, contained) = match request.source {
+            IngestSource::Path(path) => (SessionSource::Local(path), None),
             // The contained adapter stages the opened file; the use case's
             // path is not read.
-            IngestSource::Contained { file, admission } => {
-                (PathBuf::new(), Some((file, admission)))
-            }
+            IngestSource::Contained { file, admission } => (
+                SessionSource::Local(PathBuf::new()),
+                Some((file, admission)),
+            ),
+            IngestSource::Link { link, limits } => (SessionSource::Link { link, limits }, None),
         };
         let open = OpenSessionRequest {
-            source: source_path,
+            source,
             session_id,
             initialize_operation_id: self.new_operation_id()?,
             stage_operation_id: self.new_operation_id()?,

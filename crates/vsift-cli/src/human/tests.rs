@@ -173,6 +173,7 @@ fn many_unplaced_stretches_are_cut_where_a_search_cuts_its_ranges() -> TestResul
 fn frozen_examples_render_as_readable_text() -> TestResult {
     for (command, file, snapshot) in [
         (CommandName::Ingest, "ingest.transcript.json", "ingest"),
+        (CommandName::Ingest, "ingest.url.json", "ingest-url"),
         (
             CommandName::Ingest,
             "ingest.time-anchor.json",
@@ -1066,6 +1067,10 @@ fn frozen_failures_render_as_message_remediation_and_command() -> TestResult {
         ("storage-not-private.json", "failure-storage-not-private"),
         ("session-root-unowned.json", "failure-session-root-unowned"),
         ("ingest-copy-too-slow.json", "failure-ingest-copy-too-slow"),
+        (
+            "ingest-url-address-refused.json",
+            "failure-ingest-url-address-refused",
+        ),
         (
             "ingest-source-not-found.json",
             "failure-ingest-source-not-found",
