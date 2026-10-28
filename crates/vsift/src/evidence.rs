@@ -477,6 +477,16 @@ impl Engine {
         .await
     }
 
+    /// The evidence artifacts `session` can still take: the smaller of what is
+    /// left of its evidence sub-budget and of its artifact slots. `watch`
+    /// fits its frames to it before taking the first (ADR 0037 section 6).
+    pub(crate) fn evidence_slots_left(&self, session: &SessionId) -> Result<usize, EngineError> {
+        let (store, now) = self.evidence_store()?;
+        Ok(store
+            .read_evidence_records(session, now)?
+            .evidence_slots_left())
+    }
+
     fn evidence_store(&self) -> Result<(FilesystemSessionStore, u64), EngineError> {
         let (store, now) = self.existing_store()?;
         Ok((

@@ -150,8 +150,9 @@ pub use visual::{
     WindowAnalysis, analyse_window, visual_window_count,
 };
 pub use watch::{
-    MAX_OUTPUT_NAME_BYTES, MAX_WATCH_FRAMES, OutputNameError, WatchOutputNames, frame_file_name,
-    readable_time, spread_evenly, subrip_cue_text, subrip_time,
+    EVIDENCE_ARTIFACTS_PER_FRAME, MAX_OUTPUT_NAME_BYTES, MAX_WATCH_FRAMES, OutputNameError,
+    WatchOutputNames, frame_file_name, frames_that_fit, readable_time, spread_evenly,
+    subrip_cue_text, subrip_time,
 };
 pub use worker::{
     MIN_STEP_BUDGET, RecordedRequest, RequestAdmission, StepRetry, admit_request, ends_request,

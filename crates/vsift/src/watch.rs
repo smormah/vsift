@@ -23,9 +23,9 @@ use std::{
 
 use vsift_contract::render_hidden_characters;
 use vsift_domain::{
-    JobMode, MAX_VISUAL_INDEX_DURATION_MICROS, MAX_WATCH_FRAMES, MediaTime, SearchCoverage,
-    SessionId, TimeRange, TranscriptRevision, TranscriptRevisionId, VisualCandidate,
-    VisualCandidateId, VisualIndexId, WatchOutputNames, frame_file_name, spread_evenly,
+    JobMode, MAX_VISUAL_INDEX_DURATION_MICROS, MediaTime, SearchCoverage, SessionId, TimeRange,
+    TranscriptRevision, TranscriptRevisionId, VisualCandidate, VisualCandidateId, VisualIndexId,
+    WatchOutputNames, frame_file_name, frames_that_fit, spread_evenly,
 };
 use vsift_infrastructure::{
     ManagedArtifactStore, ScreenChangeEntry, ScreenChangeSummary, TranscriptEntry, WatchClaim,
@@ -149,6 +149,7 @@ pub struct WatchFrame {
 }
 
 /// What one `watch` run wrote.
+#[allow(clippy::struct_excessive_bools)] // Independent facts the run reports, not switches.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct WatchOutcome {
     /// The video's content identity (`src_sha256_` and its SHA-256).
@@ -177,13 +178,17 @@ pub struct WatchOutcome {
     pub screen_changes: WatchFile,
     /// How many screen changes were found.
     pub changes_found: usize,
-    /// The frames written, at most [`MAX_WATCH_FRAMES`].
+    /// The frames written, at most [`MAX_WATCH_FRAMES`](crate::MAX_WATCH_FRAMES).
     pub frames: Vec<WatchFrame>,
     /// Whether the video runs past the part the visual index covers.
     pub beyond_visual_bound: bool,
     /// Whether the names were shortened, so the subtitles no longer share
     /// the video's name.
     pub names_shortened: bool,
+    /// Whether the session ran out of evidence room before every selected
+    /// change had its frame: the run stopped taking frames, listed the rest
+    /// without one, and is partial (known limit L-234).
+    pub frames_stopped_for_room: bool,
 }
 
 impl Engine {
@@ -296,7 +301,7 @@ impl Engine {
             .or_else(|| index.as_ref().map(|(_, end)| *end))
             .unwrap_or(MediaTime::from_micros(0));
         let beyond_visual_bound = duration.as_micros() > MAX_VISUAL_INDEX_DURATION_MICROS;
-        let (frames, listed) = self
+        let (frames, listed, frames_stopped_for_room) = self
             .watch_frames(session, &changes, claim, &request.cancellation)
             .await?;
         let provenance = self.watch_provenance(file_name, source_id, session)?;
@@ -325,6 +330,7 @@ impl Engine {
                 .as_ref()
                 .map_or_else(|| "none".to_owned(), |(id, _)| id.as_str().to_owned()),
             beyond_index_bound: beyond_visual_bound,
+            stopped_for_room: frames_stopped_for_room,
         };
         let (list, list_sha256) = claim
             .write_screen_changes(&render_screen_changes(&provenance, &summary, &listed))
@@ -355,6 +361,7 @@ impl Engine {
             frames,
             beyond_visual_bound,
             names_shortened: names.shortened(),
+            frames_stopped_for_room,
         })
     }
 
@@ -528,17 +535,19 @@ impl Engine {
         Ok((changes, index))
     }
 
-    /// The frames of the selected changes (at most [`MAX_WATCH_FRAMES`],
-    /// spread evenly), and every change as the list shows it.
+    /// The frames of the selected changes (at most [`MAX_WATCH_FRAMES`](crate::MAX_WATCH_FRAMES), and
+    /// never more than the session has evidence room for, measured before
+    /// the first: [`frames_that_fit`](vsift_domain::frames_that_fit)), spread evenly, and every change as
+    /// the list shows it.
     async fn watch_frames(
         &self,
         session: &SessionId,
         changes: &[VisualCandidate],
         claim: &mut WatchClaim,
         cancellation: &Cancellation,
-    ) -> Result<(Vec<WatchFrame>, Vec<ScreenChangeEntry>), EngineError> {
-        let selected = spread_evenly(changes.len(), MAX_WATCH_FRAMES);
-        let mut frames = Vec::with_capacity(selected.len());
+    ) -> Result<(Vec<WatchFrame>, Vec<ScreenChangeEntry>, bool), EngineError> {
+        let room = frames_that_fit(self.evidence_slots_left(session)?);
+        let selected = spread_evenly(changes.len(), room);
         let mut listed: Vec<ScreenChangeEntry> = changes
             .iter()
             .map(|change| ScreenChangeEntry {
@@ -547,13 +556,16 @@ impl Engine {
                 frame: None,
             })
             .collect();
-        for position in selected {
-            let Some(change) = changes.get(position) else {
-                continue;
-            };
-            let frame = self
-                .watch_frame(session, change, claim, cancellation)
-                .await?;
+        let mut session_frames = SessionFrames {
+            engine: self,
+            session,
+            claim,
+            cancellation,
+        };
+        let (taken, stopped_for_room) =
+            take_frames(&mut session_frames, changes, &selected).await?;
+        let mut frames = Vec::with_capacity(taken.len());
+        for (position, frame) in taken {
             if let Some(entry) = listed.get_mut(position) {
                 entry.frame = Some(WrittenFrame {
                     file_name: frame_file_name(frame.time),
@@ -563,7 +575,7 @@ impl Engine {
             }
             frames.push(frame);
         }
-        Ok((frames, listed))
+        Ok((frames, listed, stopped_for_room))
     }
 
     /// One change's frame, copied out of the session into the folder and
@@ -653,3 +665,57 @@ fn watch_error(error: WatchOutputError) -> EngineError {
 fn absolute(path: &Path) -> Result<PathBuf, EngineError> {
     std::path::absolute(path).map_err(|_| EngineError::WorkingDirectoryUnavailable)
 }
+
+/// Takes one change's frame. The engine's is a `frame get` copied out of the
+/// session ([`SessionFrames`]); the tests' runs out of room on cue.
+trait FrameTaker<C> {
+    fn take(&mut self, change: &C) -> impl Future<Output = Result<WatchFrame, EngineError>> + Send;
+}
+
+/// The engine's frames: each a `frame get` in the run's session.
+struct SessionFrames<'a> {
+    engine: &'a Engine,
+    session: &'a SessionId,
+    claim: &'a mut WatchClaim,
+    cancellation: &'a Cancellation,
+}
+
+impl FrameTaker<VisualCandidate> for SessionFrames<'_> {
+    fn take(
+        &mut self,
+        change: &VisualCandidate,
+    ) -> impl Future<Output = Result<WatchFrame, EngineError>> + Send {
+        self.engine
+            .watch_frame(self.session, change, self.claim, self.cancellation)
+    }
+}
+
+/// Takes the frames of the `selected` positions of `changes`, in order, with
+/// their positions, and whether the session ran out of evidence room first.
+///
+/// The room is measured before the first frame ([`frames_that_fit`]), so this
+/// is a backstop, not the plan: should the session still refuse a frame for
+/// room (`EvidenceBudgetExhausted`), the run keeps the frames it has and ends
+/// partial rather than failing (ADR 0037 section 6, known limit L-234). Any
+/// other failure ends the run.
+async fn take_frames<C, T: FrameTaker<C>>(
+    source: &mut T,
+    changes: &[C],
+    selected: &[usize],
+) -> Result<(Vec<(usize, WatchFrame)>, bool), EngineError> {
+    let mut taken = Vec::with_capacity(selected.len());
+    for &position in selected {
+        let Some(change) = changes.get(position) else {
+            continue;
+        };
+        match source.take(change).await {
+            Ok(frame) => taken.push((position, frame)),
+            Err(EngineError::EvidenceBudgetExhausted) => return Ok((taken, true)),
+            Err(error) => return Err(error),
+        }
+    }
+    Ok((taken, false))
+}
+
+#[cfg(test)]
+mod tests;

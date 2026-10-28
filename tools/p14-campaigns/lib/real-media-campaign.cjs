@@ -578,7 +578,7 @@ function investigate(item, file, run, where) {
 }
 
 /** The frames `vsift <video>` writes at most (ADR 0037 section 6, L-234). */
-const WATCH_MAX_FRAMES = 200;
+const WATCH_MAX_FRAMES = 180;
 const VIDEO_SHA256_LINE = /^Video SHA-256 +([0-9a-f]{64})$/m;
 
 /**
@@ -586,7 +586,7 @@ const VIDEO_SHA256_LINE = /^Video SHA-256 +([0-9a-f]{64})$/m;
  * own: the bare form, run by the binary's absolute path with a session root of
  * its own. It checks that the three outputs are beside the copy and are the
  * bytes the answer hashed, that the transcript's header names the item's pinned
- * SHA-256, that the frames are min(changes, 200) and each is the bytes its
+ * SHA-256, that the frames are min(changes, 180) and each is the bytes its
  * SHA-256 says (and is listed), and that the session was closed; it records the
  * wall time, the screen changes and the frames written. A private item is not
  * watched: its files would hold the recording's words in the work folder.

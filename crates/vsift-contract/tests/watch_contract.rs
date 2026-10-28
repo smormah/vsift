@@ -2,7 +2,7 @@
 //! 9): the result validates against the published schema, the frozen example
 //! is what the code gives, and the schema refuses what the action never
 //! reports (a hash on the folder, a partial run called complete, more frames
-//! than the bound).
+//! than the bound of 180).
 
 use std::{fs, io, path::PathBuf};
 
@@ -115,6 +115,7 @@ fn meeting() -> WatchData {
             to_us: 750 * SECOND,
         }],
         screen_changes_beyond_bound: false,
+        frames_stopped_for_room: false,
         names_shortened: false,
         outputs: WatchOutputsData {
             transcript: file(
@@ -215,10 +216,20 @@ fn the_schema_refuses_what_watch_never_reports() -> TestResult {
     broken["outcome"] = Value::from("complete");
     assert!(validate(SCHEMA, &broken).is_err());
 
-    // At most 200 frames (known limit L-234).
+    // Frames that stopped for room make the run partial.
+    let mut broken = valid.clone();
+    broken["not_transcribed"] = serde_json::json!([]);
+    broken["outcome"] = Value::from("complete");
+    validate(SCHEMA, &broken)?;
+    broken["frames_stopped_for_room"] = Value::Bool(true);
+    assert!(validate(SCHEMA, &broken).is_err());
+    broken["outcome"] = Value::from("partial");
+    validate(SCHEMA, &broken)?;
+
+    // At most 180 frames (known limit L-234).
     let mut broken = valid.clone();
     let one = valid["frames"][0].clone();
-    broken["frames"] = Value::Array(vec![one; 201]);
+    broken["frames"] = Value::Array(vec![one; 181]);
     assert!(validate(SCHEMA, &broken).is_err());
 
     // No member is optional, and none is added.

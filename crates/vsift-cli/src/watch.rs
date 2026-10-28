@@ -142,7 +142,9 @@ pub(crate) async fn watch(
             })
         })
         .collect::<Result<Vec<_>, CommandFailure>>()?;
-    let partial = !outcome.not_transcribed.is_empty() || outcome.beyond_visual_bound;
+    let partial = !outcome.not_transcribed.is_empty()
+        || outcome.beyond_visual_bound
+        || outcome.frames_stopped_for_room;
     let data = WatchData {
         source_id: outcome.source_id.as_str().to_owned(),
         session_id: outcome.session_id.as_str().to_owned(),
@@ -171,6 +173,7 @@ pub(crate) async fn watch(
             })
             .collect(),
         screen_changes_beyond_bound: outcome.beyond_visual_bound,
+        frames_stopped_for_room: outcome.frames_stopped_for_room,
         names_shortened: outcome.names_shortened,
         outputs: WatchOutputsData {
             transcript: output(&outcome.transcript)?,

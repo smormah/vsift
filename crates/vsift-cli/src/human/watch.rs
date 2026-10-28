@@ -48,6 +48,12 @@ pub(super) fn finished(envelope: &Envelope<Watched>) -> Result<RenderedText, Too
             .push_fixed(" (the transcript says so in place)")
             .end_line();
     }
+    if data.frames_stopped_for_room {
+        text.push_fixed(
+            "VSift's private copy ran out of room for frames, so they stop early; every change is listed.",
+        )
+        .end_line();
+    }
     if data.screen_changes_beyond_bound {
         text.push_fixed("Screen changes were found in the first four hours only.")
             .end_line();

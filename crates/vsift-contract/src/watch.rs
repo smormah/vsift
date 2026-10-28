@@ -81,12 +81,14 @@ pub enum WatchCompleteness {
     /// The whole video was transcribed (or has no sound track) and its screen
     /// changes found.
     Complete,
-    /// Part of the video was not transcribed, or runs past the part screen
-    /// changes are found in; the outputs say which.
+    /// Part of the video was not transcribed, runs past the part screen
+    /// changes are found in, or the frames stopped for room; the outputs say
+    /// which.
     Partial,
 }
 
 /// `data` of a `watch` result.
+#[allow(clippy::struct_excessive_bools)] // Independent facts of the published JSON v1 shape, not switches.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct WatchData {
     /// The video's content identity, `src_sha256_` and its SHA-256.
@@ -112,6 +114,9 @@ pub struct WatchData {
     /// Whether the video runs past the first four hours, the part screen
     /// changes are found in (known limit L-235).
     pub screen_changes_beyond_bound: bool,
+    /// Whether the session ran out of evidence room before every selected
+    /// change had its frame, so the frames stopped early (known limit L-234).
+    pub frames_stopped_for_room: bool,
     /// Whether the names were shortened, so the subtitles no longer share the
     /// video's name.
     pub names_shortened: bool,
@@ -119,7 +124,7 @@ pub struct WatchData {
     pub outputs: WatchOutputsData,
     /// How many screen changes were found.
     pub changes_found: u64,
-    /// The frames written, at most 200 (known limit L-234).
+    /// The frames written, at most 180 (known limit L-234).
     pub frames: Vec<WatchFrameData>,
 }
 

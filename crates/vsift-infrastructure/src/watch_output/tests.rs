@@ -196,11 +196,13 @@ fn the_screen_change_list_gives_every_id_and_hash() {
     let summary = ScreenChangeSummary {
         index_id: "vix_02b7".to_owned(),
         beyond_index_bound: true,
+        stopped_for_room: true,
     };
     let text = render_screen_changes(&provenance(), &summary, &changes);
     assert!(text.starts_with(
         "Screen changes in meeting.mp4, found by VSift 0.3.0, 2026-11-20 14:05 UTC: 2 changes, 1 frames.\n\
          1 of 2 frames written, spread evenly over the video; the others are listed without one.\n\
+         VSift's private copy of the video ran out of room for frames, so the frames stop early; every change is still listed.\n\
          Screen changes are found in the first four hours of a video only.\n"
     ));
     assert!(text.contains("Visual index     vix_02b7   in session ses_0123456789abcdef"));

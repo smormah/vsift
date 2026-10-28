@@ -3312,8 +3312,11 @@ after it releases every name it claimed, never a file it did not create.
 
 - **Text is written in display form**, hidden and control characters made visible, as the readable
   views show it: transcript text and the video's name are untrusted.
-- **Frames:** at most 200 (L-234); above that, the 200 written are spread evenly over the video and the
-  list marks the rest. Each frame is copied from the session's content-addressed artifact and checked
+- **Frames:** at most 180 (L-234), and never more than the session has room for: each frame is a `frame
+  get`, which takes two of the session's 384 evidence slots, and the room is measured before the first
+  frame. Above that, the frames written are spread evenly over the video and the list marks the rest.
+  Should the session still refuse a frame for room, the frames stop there, every change stays listed, and the
+  run ends `partial` with `frames_stopped_for_room` (it never fails for lack of room). Each frame is copied from the session's content-addressed artifact and checked
   against its SHA-256 (`INTEGRITY_FAILURE` if it differs; nothing is kept). The list holds the changes
   `candidates` returns, so a change its per-window budget left out is not listed.
 - **Four hours:** screen changes are found in the first four hours only (L-235); the list and the
@@ -3356,11 +3359,11 @@ sections 7 and 8).
 status `complete`, and `data` with `source_id`, `session_id`, `session_closed`, `job_id`,
 `duration_us`, `transcript_revision_id` (`null` with no sound track), `visual_index_revision_id`
 (`null` with no picture), `outcome` (`complete`, or `partial` when `not_transcribed` holds a range or
-`screen_changes_beyond_bound` is true), `not_transcribed` (half-open ranges in time order),
-`screen_changes_beyond_bound`, `names_shortened`, `outputs` (`transcript`, `subtitles`, `folder` and
+`screen_changes_beyond_bound` or `frames_stopped_for_room` is true), `not_transcribed` (half-open
+ranges in time order), `screen_changes_beyond_bound`, `frames_stopped_for_room`, `names_shortened`, `outputs` (`transcript`, `subtitles`, `folder` and
 `screen_changes`, each with its absolute `path`, its `name` in display form and its `sha256`, `null`
 only for the folder), `changes_found`, and `frames` (each with `time_us`, `candidate_id`,
-`evidence_id`, `path` and `sha256`, at most 200). With `--events jsonl` the stream carries the
+`evidence_id`, `path` and `sha256`, at most 180). With `--events jsonl` the stream carries the
 `prepare` job's progress events, then the terminal event with the same data.
 
 **The readable view** writes ADR 0033's live line on standard error while it works (terminal only),

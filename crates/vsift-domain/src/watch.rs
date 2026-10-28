@@ -19,7 +19,16 @@ use crate::MediaTime;
 pub const MAX_OUTPUT_NAME_BYTES: usize = 200;
 
 /// The most frames one run writes (ADR 0037 section 6, known limit L-234).
-pub const MAX_WATCH_FRAMES: usize = 200;
+///
+/// Each frame is a `frame get`, which stores two evidence artifacts in the
+/// session (the PNG and its record), and a session holds at most 384: 180
+/// frames take 360 of them. A run still writes fewer when the session has
+/// less room ([`frames_that_fit`]).
+pub const MAX_WATCH_FRAMES: usize = 180;
+
+/// The evidence artifacts one frame takes in the session: its PNG and its
+/// record.
+pub const EVIDENCE_ARTIFACTS_PER_FRAME: usize = 2;
 
 /// The readable transcript's suffix.
 const TRANSCRIPT_SUFFIX: &str = ".txt";
@@ -165,6 +174,21 @@ pub fn frame_file_name(time: MediaTime) -> String {
     )
 }
 
+/// How many frames a run may take from a session with `evidence_slots_left`
+/// evidence slots: as many as fit, never more than [`MAX_WATCH_FRAMES`]. The
+/// room is measured before the first frame, so a run never asks the session
+/// for more than it holds (the real-media run's RM03, 576 changes, failed on
+/// its 193rd frame with a bound of 200).
+#[must_use]
+pub const fn frames_that_fit(evidence_slots_left: usize) -> usize {
+    let fit = evidence_slots_left / EVIDENCE_ARTIFACTS_PER_FRAME;
+    if fit < MAX_WATCH_FRAMES {
+        fit
+    } else {
+        MAX_WATCH_FRAMES
+    }
+}
+
 /// Which of `count` screen changes, in time order, get a frame: all of them
 /// up to `bound`; above it, `bound` of them spread evenly from the first to
 /// the last (ADR 0037 section 6). The positions are ascending and distinct.
@@ -289,6 +313,18 @@ mod tests {
         assert_eq!(spread.first(), Some(&0));
         assert_eq!(spread.last(), Some(&339));
         assert!(spread.windows(2).all(|pair| pair[0] < pair[1]));
+    }
+
+    #[test]
+    fn the_frames_never_need_more_room_than_the_session_has() {
+        assert_eq!(frames_that_fit(384), MAX_WATCH_FRAMES);
+        assert_eq!(frames_that_fit(usize::MAX), MAX_WATCH_FRAMES);
+        assert_eq!(frames_that_fit(201), 100);
+        assert_eq!(frames_that_fit(1), 0);
+        assert_eq!(frames_that_fit(0), 0);
+        for slots in 0..=400 {
+            assert!(frames_that_fit(slots) * EVIDENCE_ARTIFACTS_PER_FRAME <= slots);
+        }
     }
 
     #[test]

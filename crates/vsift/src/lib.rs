@@ -179,7 +179,9 @@ pub use verification::{
 };
 /// Where a stream of a `prepare` job is (`job status`, ADR 0033).
 pub use vsift_application::StreamPhase;
-pub use vsift_domain::{MAX_WATCH_FRAMES, readable_time};
+pub use vsift_domain::{
+    EVIDENCE_ARTIFACTS_PER_FRAME, MAX_WATCH_FRAMES, frames_that_fit, readable_time,
+};
 /// Starting the background runner of `job start` (ADR 0033): the host gives
 /// the executable and its arguments, and the runner outlives it.
 pub use vsift_infrastructure::{DetachedRunner, Detachment, launch_detached};

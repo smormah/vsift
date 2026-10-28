@@ -135,8 +135,8 @@ real meetings, accents or noisy rooms, so every accuracy figure below says what 
 
 ## The files `vsift <video>` writes (new in 0.3.0)
 
-- **Frames for at most 200 screen changes** ([L-234](../planning/known-limits.md#l-234)). Every change is listed in
-  `<name>-vsift/screen-changes.txt`; with more than 200, the 200 frames are spread evenly over the video and the others
+- **Frames for at most 180 screen changes** ([L-234](../planning/known-limits.md#l-234)). Every change is listed in
+  `<name>-vsift/screen-changes.txt`; with more than 180, the frames are spread evenly over the video and the others
   are listed without one. A 19-minute talk already has more: about one frame every 6 seconds. The list holds the
   changes `candidates` would give you, so a change its per-window limit leaves out is not listed either.
 - **Screen changes in the first four hours only** ([L-235](../planning/known-limits.md#l-235)). The transcript covers

@@ -232,7 +232,10 @@ async fn one_run_writes_the_three_outputs_beside_the_video_and_closes_its_sessio
 
     let list = fs::read_to_string(folder.join("team meeting-vsift/screen-changes.txt"))?;
     assert!(list.contains(&format!("Video SHA-256    {video_sha256}\n")));
-    assert_eq!(outcome.frames.len(), outcome.changes_found.min(200));
+    assert_eq!(
+        outcome.frames.len(),
+        outcome.changes_found.min(vsift::MAX_WATCH_FRAMES)
+    );
     for frame in &outcome.frames {
         assert_eq!(
             hex(&fs::read(&frame.path)?),
@@ -304,4 +307,85 @@ async fn an_output_folder_is_created_and_never_inside_the_session_root() -> Test
         EngineError::Watch(WatchFailure::OutputInsideVsift)
     ));
     Ok(())
+}
+
+/// A generated video that shows a new still picture every two seconds for
+/// eight minutes, so
+/// the visual stream finds more screen changes than one session has evidence
+/// room to take frames for, with a tone so the stand-in recogniser has audio.
+/// No real media: `FFmpeg` makes it from its own test sources.
+fn busy_video(root: &OwnedRoot) -> Built<PathBuf> {
+    let folder = root.path("videos");
+    fs::create_dir(&folder)?;
+    let video = folder.join("busy screen.mp4");
+    let status = std::process::Command::new("ffmpeg")
+        .args([
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            "nullsrc=s=160x96:r=0.5:d=480,geq=lum='random(1)*255':cb=128:cr=128,fps=2",
+            "-f",
+            "lavfi",
+            "-i",
+            "sine=frequency=440:sample_rate=16000:duration=480",
+            "-c:v",
+            "libx264",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            "-shortest",
+        ])
+        .arg(&video)
+        .status()?;
+    if !status.success() {
+        return Err("FFmpeg could not generate the busy video".into());
+    }
+    Ok(video)
+}
+
+/// Each frame takes two of the session's evidence slots (the PNG and its
+/// record), so a video with more changes than the session has room for must
+/// get the frames that fit, every change listed, and never `RESOURCE_LIMIT`
+/// (the real-media run's RM03, 576 changes, reproduced without real media).
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "requires FFmpeg and FFprobe on PATH"]
+async fn more_changes_than_the_session_has_room_for_still_finish() -> TestResult {
+    let root = OwnedRoot::new()?;
+    let engine = engine(&root);
+    let video = busy_video(&root)?;
+    let outcome = engine.watch(request(&video, None)).await?;
+    assert!(
+        outcome.changes_found > 192,
+        "the video must find more changes than 384 evidence slots hold frames for: {}",
+        outcome.changes_found
+    );
+    assert_eq!(outcome.frames.len(), vsift::MAX_WATCH_FRAMES);
+    let list = fs::read_to_string(
+        video
+            .with_file_name("busy screen-vsift")
+            .join("screen-changes.txt"),
+    )?;
+    assert!(list.contains("(not written)"));
+    for frame in &outcome.frames {
+        assert_eq!(hex(&fs::read(&frame.path)?), frame.sha256);
+    }
+    assert!(outcome.session_closed);
+    Ok(())
+}
+
+/// The frame cap fits a fresh session's evidence room by design: each frame
+/// takes `EVIDENCE_ARTIFACTS_PER_FRAME` of the `MAX_EVIDENCE_ARTIFACTS` slots
+/// (known limit L-234). Raising either side breaks this, not a run on RM03.
+#[test]
+fn the_frame_cap_fits_a_fresh_sessions_evidence_room() {
+    // `frames_that_fit` never gives more than half the room, so the whole cap
+    // from a fresh session's evidence budget means two slots a frame fit it.
+    assert_eq!(
+        vsift::frames_that_fit(vsift_infrastructure::MAX_EVIDENCE_ARTIFACTS),
+        vsift::MAX_WATCH_FRAMES
+    );
 }

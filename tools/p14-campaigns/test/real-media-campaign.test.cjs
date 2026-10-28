@@ -434,7 +434,7 @@ test('a private report keeps the kind of each missing run, from the closed set o
 /**
  * A stand-in `vsift <video>` (ADR 0037): it writes the three outputs beside the
  * video it is given and answers with their hashes, as the binary does.
- * `changes` screen changes, frames for at most 200 of them; `spoil` changes one
+ * `changes` screen changes, frames for at most 180 of them; `spoil` changes one
  * thing so a check can see it.
  */
 function watchStandIn({ videoSha256, changes, spoil = null }) {
@@ -508,18 +508,18 @@ test('vsift <video> runs the bare form on a copy, and its outputs, header, frame
   assert.equal(calls[0].root, path.join(item, 'watch-root'), 'a session root of its own');
   assert.ok(fs.existsSync(file), 'the item itself is never touched');
   assert.equal(watched.measurements.changes_found, 576);
-  assert.equal(watched.measurements.frames_written, 200, 'the bound of L-234');
+  assert.equal(watched.measurements.frames_written, 180, 'the bound of L-234');
   assert.equal(watched.measurements.seconds, 42);
   assert.ok(watched.measurements.frame_bytes > 0);
   const summary = campaign.markdown({ binary: { version: 'vsift 0.0.0', sha256: '0'.repeat(64) }, started: 's', finished: 'f', platform: 'p',
     setup: { passed: true, findings: [] }, items: [{ id: 'RM10', measurements: { watch: watched.measurements }, verdict: { passed: true, findings: [] } }] });
-  assert.match(summary, /\| RM10 \| 42 s \(0\.35\) \| complete \| 576 \| 200 \(\d+\) \|/);
+  assert.match(summary, /\| RM10 \| 42 s \(0\.35\) \| complete \| 576 \| 180 \(\d+\) \|/);
 });
 
 test('vsift <video> findings: a wrong header hash, a missing frame, changed frame bytes, an open session, a failure', (t) => {
   const cases = [
     ['header', /does not name the item's pinned SHA-256/],
-    ['frames', /199 frames were written for 576 changes, not 200/],
+    ['frames', /179 frames were written for 576 changes, not 180/],
     ['frame bytes', /1 frame\(s\) missing or differing from their SHA-256/],
     ['session', /the session was not closed/],
   ];

@@ -240,10 +240,20 @@ Time        Frame                   Change          Frame evidence   Frame SHA-2
 ### 6. Screen changes and their frames
 
 Every screen change the visual stream finds is listed in `screen-changes.txt`. Frames are written for
-at most **200** of them (decision 7); above that, the 200 written are spread evenly over the video, the
-list marks each change whose frame was not written, and the finish screen says "200 of 340 frames
-written". The bound keeps the folder within a few hundred megabytes and the session within its 512
-artifacts. Frames are named by their time (`00-01-12.480.png`, which sorts and has no `:` for Windows),
+at most **180** of them (decision 7, lowered from 200 by the first pull request's implementation note); above
+that, the frames written are spread evenly over the video, the list marks each change whose frame was not
+written, and the finish screen says how many were written. Each frame is a `frame get`, which takes two of
+the session's 384 evidence slots (the PNG and its record), within its 512 artifacts: 180 frames take 360, and
+the room is measured before the first frame, so a run never asks for more than the session holds.
+
+**Correction, 2026-10-28 (the first pull request's "after" run).** This section said the bound of 200
+kept the session "within its 512 artifacts". That was wrong: evidence has its own cap of 384 artifacts
+(`MAX_EVIDENCE_ARTIFACTS`, ADR 0019 D4 and ADR 0020 D-2) within the 512, and each frame takes two of them,
+so 200 frames needed 400 and RM03's run failed on its 193rd frame with `RESOURCE_LIMIT`. The bound is 180,
+fitted to the measured room; should the session still refuse a frame for room, the frames stop there and
+the run ends `partial` (`frames_stopped_for_room`), never failed. **For the third pull request:** if
+`--include on-screen-text` stores evidence, it counts against the same 384, so that pull request reserves
+its room before any work starts, beside the frames'. Frames are named by their time (`00-01-12.480.png`, which sorts and has no `:` for Windows),
 and copied from the session's content-addressed artifact, then checked against its SHA-256.
 
 Whether screen changes are cheap enough to run by default was a care point of the design note. By ADR
@@ -468,7 +478,8 @@ and 2). Decision 1 is the maintainer's ruling of 2026-10-27: keep `watch`.
    only and say speech was skipped. **Recommendation: (a)** for 0.3.0: the person asked for the text,
    and a run that silently lacks it is worse than a clear "set up speech first". A screen-changes-only
    run can be a later flag if trial feedback asks for it.
-7. **The frame bound** (section 6): **Recommendation: 200 frames, spread evenly over the video when
+7. **The frame bound** (section 6): **Recommendation: 200 frames** (180 since the first pull request's
+   implementation note), **spread evenly over the video when
    there are more**, every change listed, the figure confirmed or changed by the first pull request's
    measurement on the screen recordings.
 8. **`--include` for `watch`** (section 10): **Recommendation: the third pull request, droppable at the
@@ -527,8 +538,9 @@ complete in code; the "after" real-media run is its qualification evidence.
   pull request with the growing files).
 - **Ctrl-C** releases the claimed names and **closes** the session; continuing an interrupted run (section 8) is
   the second pull request's.
-- **The envelope is always `complete`;** `data.outcome` says `partial` when a range was not transcribed or the
-  video runs past four hours. Deciding `partial` from those two facts is done where the result is built.
+- **The envelope is always `complete`;** `data.outcome` says `partial` when a range was not transcribed, the
+  video runs past four hours, or the frames stopped for room (`frames_stopped_for_room`). Deciding `partial`
+  from those facts is done where the result is built.
 - **A refusal names the output's kind** (`.txt`, `.srt`, `-vsift`) in fixed prose, never the file's name: a
   remediation never echoes text derived from the untrusted video name (L-071). The readable view does not name
   the file either, in this pull request.
@@ -554,6 +566,15 @@ complete in code; the "after" real-media run is its qualification evidence.
 - **Measured before the code** (the hosted `P14 real media` run 40595722898 on `e317271c`, main plus this record):
   RM03 (a 19:16 talk) has 576 screen changes and RM10 (a 3:21 screen recording) 106, about 30 a minute; finding
   them took about 1.7 s a minute of video against about 17 s a minute of transcription, which confirms section 6's
-  care point (they are cheap enough to run by default). The 200-frame bound is reached by a 19-minute talk (L-234).
+  care point (they are cheap enough to run by default). The frame bound is reached by a 19-minute talk (L-234).
   The visual-measurement step did not run, because RM03's advisory seam findings failed the campaign first.
+- **The frame bound is 180, fitted to the session's room (the "after" run, 2026-10-28).** The "after" `P14
+  real media` run 40677125255 on `67a058e4` failed RM03 with `RESOURCE_LIMIT` after 482.7 s; RM10 passed. Each
+  frame is a `frame get`, which stores two evidence artifacts (the PNG and its record), and a session holds at
+  most 384 (`MAX_EVIDENCE_ARTIFACTS`) within its 512 artifacts, so 200 frames needed 400 slots and the 193rd
+  frame was refused. The bound is now 180 (360 slots), and `watch` measures the session's evidence room before
+  the first frame and writes at most half of it (`frames_that_fit`), so it never asks for more than the session
+  holds. The opt-in engine test `more_changes_than_the_session_has_room_for_still_finish` reproduced the failure
+  without real media (a generated video with a new picture every two seconds) and passes with the fix; the test
+  `the_frame_cap_fits_a_fresh_sessions_evidence_room` pins the relation.
 - **Register:** L-234, L-235 and L-236 added by this pull request; L-237 comes with the second.

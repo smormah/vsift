@@ -428,6 +428,9 @@ pub struct ScreenChangeSummary {
     pub index_id: String,
     /// Whether the video runs past the part the visual index covers.
     pub beyond_index_bound: bool,
+    /// Whether the session ran out of evidence room before every selected
+    /// change had its frame (known limit L-234).
+    pub stopped_for_room: bool,
 }
 
 /// Renders `screen-changes.txt`.
@@ -455,6 +458,11 @@ pub fn render_screen_changes(
             text,
             "{frames} of {} frames written, spread evenly over the video; the others are listed without one.",
             changes.len()
+        );
+    }
+    if summary.stopped_for_room {
+        text.push_str(
+            "VSift's private copy of the video ran out of room for frames, so the frames stop early; every change is still listed.\n",
         );
     }
     if summary.beyond_index_bound {
