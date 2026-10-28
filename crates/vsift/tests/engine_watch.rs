@@ -360,8 +360,7 @@ async fn more_changes_than_the_session_has_room_for_still_finish() -> TestResult
     let outcome = engine.watch(request(&video, None)).await?;
     assert!(
         outcome.changes_found > 192,
-        "the video must find more changes than 384 evidence slots hold frames for: {}",
-        outcome.changes_found
+        "the video must find more changes than 384 evidence slots hold frames for"
     );
     assert_eq!(outcome.frames.len(), vsift::MAX_WATCH_FRAMES);
     let list = fs::read_to_string(
