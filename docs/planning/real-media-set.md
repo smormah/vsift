@@ -754,3 +754,20 @@ against 0.894 at the control stretches inside one chunk, and the shifted run's 0
 `1.0.0` would remove finding 1; a narrow merge rule of L-201's kind (a segment whose own words loop claims no time) would keep chunk
 2's last 3.3 s beside the loop; and the campaign could report each chunk's detected language (to see a flip in the same script)
 and classify a run as `repetition` when the revision lacking it holds a loop there. The check's threshold is unchanged.
+
+### 14.7 The loop rule on RM03 and RM09 (#539, hosted, 2026-10-28)
+
+Run 40761586962 on `138d7cc5` (the loop rule of ADR 0017's 2026-10-28 note; both revisions published as they go; AMD EPYC
+9V74), items RM03 and RM09, mode `campaign`, kept segments over 60 to 120 s of RM03 and 900 to 960 s of RM09.
+
+- **RM03, the seam at 75 to 80 s: no longer a finding.** Chunk 3 still writes its loop over 75.00 to 105.00 s (56 words, 50 of them
+  one Turkish word), and it is still kept. Chunk 2's segments after 76.68 s are now kept beside it: "administrative measure taken
+  by the government." (76.68 to 78.96 s) and "And then it was" (78.96 to 80.00 s), which the shifted run heard mid-chunk. The
+  English the loop covers after 80 s is L-188's limit and stays.
+- **RM03's other two findings are unchanged:** 10 words each at 825 to 830 s (whole run) and 761.08 to 766.08 s (shifted run), the
+  same speech worded differently (section 14.6). Seam recall 0.906 against 0.894 at the controls (0.897 in section 14.6, without the rule).
+- **RM09 is unchanged by the rule:** its seam at 925 to 930 s still lacks 8 words (9 in section 14.5, on another CPU), the stretch
+  chunk 36 heard in Russian (L-188); chunk 37's segment over 925.00 to 927.96 s is kept as since #485. The language check reports 9
+  stretches heard in another writing system by the two plans. Seam recall 0.903 against 0.886.
+- **The campaign still exits 1** on these advisory findings; the check's threshold is unchanged. `vsift <video>` ended `partial`
+  for both items (frames for 180 of 589 and 297 changes; L-234), exit 0.

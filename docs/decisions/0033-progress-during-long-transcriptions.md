@@ -619,3 +619,11 @@ All are taken (2026-10-21):
   chunk. The maintainer also approved one full hosted `P10 durability campaign` (layers A, B and C) with this
   workload, and one more with the negative control, after this pull request merges; the coordinator
   dispatches both from `main`. No campaign runs on the development machine.
+
+## Note, 2026-10-28: merge rules version 2 (#539)
+
+`MERGE_RULES_VERSION` is 2: a segment that loops on its own words claims no time at a seam
+([ADR 0017](0017-local-asr-through-whisper-cpp.md), the 2026-10-28 note). The digest test's sweep and the
+prefix property (`every_cut_of_a_run_settles_a_prefix_of_its_merge`) now include such segments, and the
+prefix claim holds with them. Version 1 shipped in no release, so the rule above (a resume under other
+merge rules seals as stopped) affects no stored revision.

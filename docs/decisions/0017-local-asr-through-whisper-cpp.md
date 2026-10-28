@@ -906,3 +906,21 @@ the sealed revision is the one a run that published nothing seals. A run that is
 a way it cannot resume from, after it published part of its revision seals it as stopped, keeping every
 published segment ([ADR 0033](0033-progress-during-long-transcriptions.md), D1). The text above is
 kept as written.
+
+## 2026-10-28 note: a segment that loops on its own words claims no time (#539)
+
+Amends rules 1 and 2 of `merge_chunks` again, beside the 2026-10-20 note; the guard, rule 3 and the tolerance are unchanged. On RM03
+(hosted runs 40654763827 and 40595722898, `real-media-set.md` section 14.6) chunk 3 heard English as Turkish and wrote one segment over
+its whole window, 75 to 105 s, one word repeated fifty times. The loop owned the time of chunk 2's last words in the overlap, so rule 1
+dropped them, and the guard saw no hole because the loop covered it: 15 words at the seam at 75 to 80 s were in no segment and coverage
+called the stretch transcribed (L-201; the loop itself is L-188's limit). The #485 rule did not see it, because the loop is inside one
+segment. **The decision (the maintainer's, 2026-10-28, the narrow merge rule; the language design of #474 stays in `1.0.0`):** a
+segment in which a unit of one to four normalised words is said at least eight times in a row, the repeats making up at least half of
+its words, also claims no time in rules 1 and 2. As with #485 it is still kept by its own chunk, so the rule removes nothing; where it
+errs on speech that really is repetitive, the cost is a neighbour's copy kept as well, a visible repeat. The thresholds keep a word said
+a few times for emphasis, and a loop that is a small part of a longer segment, out of the rule. `MERGE_RULES_VERSION` goes to 2
+(ADR 0033); no release carried version 1, so no stored open revision is affected. Tests:
+`a_segment_that_loops_on_its_own_words_no_longer_hides_the_chunk_before` (it failed before),
+`only_a_segment_mostly_made_of_one_repeated_unit_loops`, the merge-rules digest sweep and ADR 0033's prefix property, both now with
+looping segments; the properties against the frozen earlier merge, which use unique words, are unchanged. The hosted run on the fix is
+in `real-media-set.md` section 14.7.
