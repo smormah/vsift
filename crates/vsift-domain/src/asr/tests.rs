@@ -1991,7 +1991,7 @@ fn words_of(words: Words<'_>, chunk: u32, number: usize) -> String {
     let seed = match words {
         Words::Unique => return format!("c{chunk}s{number}"),
         Words::Looped(seeds) if seed_of(seeds) & 4 == 0 => return format!("c{chunk}s{number}"),
-        Words::Looped(_) => return vec!["alpha"; 8].join(" "),
+        Words::Looped(_) => return ["alpha"; 8].join(" "),
         Words::Repeated(seeds) => seed_of(seeds),
     };
     let bit = |position: u32| usize::from((seed >> position) & 1);
@@ -3070,7 +3070,7 @@ fn only_a_segment_with_the_same_words_as_the_one_before_is_a_repeat() -> TestRes
 fn a_segment_that_loops_on_its_own_words_no_longer_hides_the_chunk_before() -> TestResult {
     let window_0 = (0, 30 * SECOND);
     let window_1 = (25 * SECOND, 55 * SECOND);
-    let looped = vec!["okay"; 50].join(" ");
+    let looped = ["okay"; 50].join(" ");
     let first = with(
         draft(
             0,
@@ -3133,20 +3133,20 @@ fn only_a_segment_mostly_made_of_one_repeated_unit_loops() -> TestResult {
             .is_some_and(super::loops_on_its_own_words))
     };
     let cases = [
-        (vec!["okay"; 50].join(" "), true),
-        (vec!["thank you"; 10].join(" "), true),
-        (vec!["we will go there"; 8].join(" "), true),
+        (["okay"; 50].join(" "), true),
+        (["thank you"; 10].join(" "), true),
+        (["we will go there"; 8].join(" "), true),
         (
-            format!("we open the file and {}", vec!["now"; 8].join(" ")),
+            format!("we open the file and {}", ["now"; 8].join(" ")),
             true,
         ),
-        (vec!["okay"; 7].join(" "), false),
+        (["okay"; 7].join(" "), false),
         ("no no no no".to_owned(), false),
-        (vec!["we will go there now"; 9].join(" "), false),
+        (["we will go there now"; 9].join(" "), false),
         (
             format!(
                 "we open the settings page and then we choose the second option {}",
-                vec!["now"; 8].join(" ")
+                ["now"; 8].join(" ")
             ),
             false,
         ),
