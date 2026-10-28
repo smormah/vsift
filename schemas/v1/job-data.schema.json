@@ -145,7 +145,8 @@
                 "STORAGE_IO",
                 "INTEGRITY_FAILURE",
                 "IDEMPOTENCY_CONFLICT",
-                "DOWNLOAD_FAILED"
+                "DOWNLOAD_FAILED",
+                "SOURCE_FETCH_FAILED"
               ]
             },
             "retryable": { "type": "boolean" }

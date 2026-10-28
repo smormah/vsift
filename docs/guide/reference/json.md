@@ -23,6 +23,7 @@ The `error.code` of a failed result is one of these (the schema's own list). Wha
 - `INTEGRITY_FAILURE`
 - `IDEMPOTENCY_CONFLICT`
 - `DOWNLOAD_FAILED`
+- `SOURCE_FETCH_FAILED`
 
 ## Contents
 
@@ -853,7 +854,7 @@ This schema also holds 4 conditional rules (a member that is required, or fixed,
 
 **VSift ingest data v1** ([the schema](../../../schemas/v1/ingest-data.schema.json))
 
-The data member of a complete ingest result. transcript is present only when a supplied transcript was imported with the session; a plain ingest omits it. time_anchor is present only when the session has a clock-time anchor. publication is the session's own guarantee: process_crash_consistent, or os_crash_durable for a durable session on the qualified profile (P10 engine API; P11 durable workspaces). Validate the envelope with operation-response.schema.json.
+The data member of a complete ingest result. transcript is present only when a supplied transcript was imported with the session; a plain ingest omits it. time_anchor is present only when the session has a clock-time anchor. origin is present only for a source fetched with ingest --url (0.3.0). publication is the session's own guarantee: process_crash_consistent, or os_crash_durable for a durable session on the qualified profile (P10 engine API; P11 durable workspaces). Validate the envelope with operation-response.schema.json.
 
 | Member | Type | Required | Notes |
 | --- | --- | --- | --- |
@@ -865,6 +866,15 @@ The data member of a complete ingest result. transcript is present only when a s
 | `expires_at` | string | yes | format date-time |
 | `transcript` | object, see [transcript-revision.schema.json](#transcript-revisionschemajson) | no |  |
 | `time_anchor` | object, see [time-anchor.schema.json](#time-anchorschemajson) | no | When the recording happened by the real-world clock, and on what authority (time anchoring, 0.3.0): from ingest --recorded-at, else the container's recording-time tags, which a plain ingest reads with one FFprobe run when the media tools are set up and verified. Absent when no clock time is known. |
+| `origin` | object | no | Where a source fetched with ingest --url came from (0.3.0, ADR 0028); absent for a local file's copy. It never holds the link, which may carry a signed token in its query or its path: link_sha256 is the SHA-256 of the link as given after parsing (query included), so the same link can be recognised but not recovered. requested_host is the link's host and final_host the host the bytes came from after redirects (at most three). address_check is direct when VSift resolved the name and connected only to public addresses it checked, and proxy_resolved when a proxy from the environment resolved it (VSift then refused only internal-looking names and addresses). retrieved_at is when the body was complete; bytes is the source's size. A provider's upload date is not a recording time and is never recorded. |
+| `origin.kind` | "direct_https" | yes |  |
+| `origin.link_sha256` | string | yes | pattern `^[0-9a-f]{64}$` |
+| `origin.requested_host` | string | yes | pattern `^([a-z0-9.-]{1,253}\|\[[0-9a-f:.]{2,45}\])$` |
+| `origin.final_host` | string | yes | pattern `^([a-z0-9.-]{1,253}\|\[[0-9a-f:.]{2,45}\])$` |
+| `origin.redirects` | integer | yes | 0 to 3 |
+| `origin.address_check` | "direct" \| "proxy_resolved" | yes |  |
+| `origin.retrieved_at` | string | yes | format date-time |
+| `origin.bytes` | integer | yes | 1 to 21474836480 |
 
 ### job-batch-data.schema.json
 
@@ -884,7 +894,7 @@ The data member of the terminal job.batch result (P11, ADR 0021): per-status cou
 | `items[].line` | integer | yes | 1 to 1000 |
 | `items[].operation_id` | string or null | yes | pattern `^op_[a-z0-9]{16,64}$` |
 | `items[].status` | "complete" \| "partial" \| "failed" \| "cancelled" \| "rejected" | yes |  |
-| `items[].code` | "INTERNAL" \| "INVALID_ARGUMENT" \| "UNSUPPORTED_SCHEMA" \| "MISSING_CAPABILITY" \| "ISOLATION_UNAVAILABLE" \| "COMMAND_NOT_IMPLEMENTED" \| "INVALID_SOURCE" \| "BUSY" \| "DEADLINE_EXCEEDED" \| "RESOURCE_LIMIT" \| "CANCELLED" \| "STORAGE_IO" \| "INTEGRITY_FAILURE" \| "IDEMPOTENCY_CONFLICT" \| "DOWNLOAD_FAILED" or null | yes |  |
+| `items[].code` | "INTERNAL" \| "INVALID_ARGUMENT" \| "UNSUPPORTED_SCHEMA" \| "MISSING_CAPABILITY" \| "ISOLATION_UNAVAILABLE" \| "COMMAND_NOT_IMPLEMENTED" \| "INVALID_SOURCE" \| "BUSY" \| "DEADLINE_EXCEEDED" \| "RESOURCE_LIMIT" \| "CANCELLED" \| "STORAGE_IO" \| "INTEGRITY_FAILURE" \| "IDEMPOTENCY_CONFLICT" \| "DOWNLOAD_FAILED" \| "SOURCE_FETCH_FAILED" or null | yes |  |
 | `items[].rejection` | "request_too_large" \| "request_too_deep" \| "malformed_request" \| "unsupported_schema_version" \| "invalid_operation_id" \| "invalid_session_id" \| "invalid_path" \| "invalid_transcript_offset" \| "invalid_deadline" \| "invalid_range" \| "invalid_bundle_name" \| "too_many_steps" \| "step_order" \| "no_work" \| "path_outside_input_root" \| "duplicate_operation_id" \| "workspace_not_durable" or null | yes |  |
 | `not_started_from_line` | integer or null | yes | 1 to 1001 |
 | `termination_reason` | "end_of_input" \| "shutdown" \| "line_limit" \| "input_error" | yes |  |
@@ -940,7 +950,7 @@ The data member of a complete job.status or job.cancel result: one recoverable j
 | `result.revision_id` | string | yes | pattern `^trv_[a-z0-9]{16,64}$` |
 | `result.generation` | integer | yes | at least 1 |
 | `failure` | object or null | yes |  |
-| `failure.code` | "INTERNAL" \| "INVALID_ARGUMENT" \| "UNSUPPORTED_SCHEMA" \| "MISSING_CAPABILITY" \| "ISOLATION_UNAVAILABLE" \| "COMMAND_NOT_IMPLEMENTED" \| "INVALID_SOURCE" \| "BUSY" \| "DEADLINE_EXCEEDED" \| "RESOURCE_LIMIT" \| "CANCELLED" \| "STORAGE_IO" \| "INTEGRITY_FAILURE" \| "IDEMPOTENCY_CONFLICT" \| "DOWNLOAD_FAILED" | yes |  |
+| `failure.code` | "INTERNAL" \| "INVALID_ARGUMENT" \| "UNSUPPORTED_SCHEMA" \| "MISSING_CAPABILITY" \| "ISOLATION_UNAVAILABLE" \| "COMMAND_NOT_IMPLEMENTED" \| "INVALID_SOURCE" \| "BUSY" \| "DEADLINE_EXCEEDED" \| "RESOURCE_LIMIT" \| "CANCELLED" \| "STORAGE_IO" \| "INTEGRITY_FAILURE" \| "IDEMPOTENCY_CONFLICT" \| "DOWNLOAD_FAILED" \| "SOURCE_FETCH_FAILED" | yes |  |
 | `failure.retryable` | boolean | yes |  |
 
 ### job-request.schema.json
@@ -1007,11 +1017,11 @@ The answer to one job request (P11, ADR 0021): the data of a job.run result and 
 | `steps[].coverage.gaps` | array of string | yes | at most 100 items; each: at most 41 characters; each: pattern `^[0-9]{1,20}-[0-9]{1,20}$` |
 | `steps[].coverage.reasons` | array of string | yes | at most 100 items; each: at most 64 characters; each: pattern `^[a-z_]{1,64}$` |
 | `steps[].failure` | object or null | yes |  |
-| `steps[].failure.code` | "INTERNAL" \| "INVALID_ARGUMENT" \| "UNSUPPORTED_SCHEMA" \| "MISSING_CAPABILITY" \| "ISOLATION_UNAVAILABLE" \| "COMMAND_NOT_IMPLEMENTED" \| "INVALID_SOURCE" \| "BUSY" \| "DEADLINE_EXCEEDED" \| "RESOURCE_LIMIT" \| "CANCELLED" \| "STORAGE_IO" \| "INTEGRITY_FAILURE" \| "IDEMPOTENCY_CONFLICT" \| "DOWNLOAD_FAILED" | yes |  |
+| `steps[].failure.code` | "INTERNAL" \| "INVALID_ARGUMENT" \| "UNSUPPORTED_SCHEMA" \| "MISSING_CAPABILITY" \| "ISOLATION_UNAVAILABLE" \| "COMMAND_NOT_IMPLEMENTED" \| "INVALID_SOURCE" \| "BUSY" \| "DEADLINE_EXCEEDED" \| "RESOURCE_LIMIT" \| "CANCELLED" \| "STORAGE_IO" \| "INTEGRITY_FAILURE" \| "IDEMPOTENCY_CONFLICT" \| "DOWNLOAD_FAILED" \| "SOURCE_FETCH_FAILED" | yes |  |
 | `steps[].failure.retryable` | boolean | yes |  |
 | `steps[].failure.retry_after_ms` | integer or null | yes | 1 to 86400000 |
 | `failure` | object or null | yes |  |
-| `failure.code` | "INTERNAL" \| "INVALID_ARGUMENT" \| "UNSUPPORTED_SCHEMA" \| "MISSING_CAPABILITY" \| "ISOLATION_UNAVAILABLE" \| "COMMAND_NOT_IMPLEMENTED" \| "INVALID_SOURCE" \| "BUSY" \| "DEADLINE_EXCEEDED" \| "RESOURCE_LIMIT" \| "CANCELLED" \| "STORAGE_IO" \| "INTEGRITY_FAILURE" \| "IDEMPOTENCY_CONFLICT" \| "DOWNLOAD_FAILED" | yes |  |
+| `failure.code` | "INTERNAL" \| "INVALID_ARGUMENT" \| "UNSUPPORTED_SCHEMA" \| "MISSING_CAPABILITY" \| "ISOLATION_UNAVAILABLE" \| "COMMAND_NOT_IMPLEMENTED" \| "INVALID_SOURCE" \| "BUSY" \| "DEADLINE_EXCEEDED" \| "RESOURCE_LIMIT" \| "CANCELLED" \| "STORAGE_IO" \| "INTEGRITY_FAILURE" \| "IDEMPOTENCY_CONFLICT" \| "DOWNLOAD_FAILED" \| "SOURCE_FETCH_FAILED" | yes |  |
 | `failure.retryable` | boolean | yes |  |
 | `failure.retry_after_ms` | integer or null | yes | 1 to 86400000 |
 | `failure.step` | integer or null | yes | 0 to 8 |
@@ -1072,7 +1082,7 @@ A worker host's own state in a job.run or job.batch --events jsonl stream (P11, 
 | `line` | integer or null | yes | 1 to 1000 |
 | `request_operation_id` | string or null | yes | at most 67 characters; pattern `^op_[a-z0-9]{16,64}$` |
 | `status` | "complete" \| "partial" \| "failed" \| "cancelled" \| "rejected" or null | yes |  |
-| `code` | "INTERNAL" \| "INVALID_ARGUMENT" \| "UNSUPPORTED_SCHEMA" \| "MISSING_CAPABILITY" \| "ISOLATION_UNAVAILABLE" \| "COMMAND_NOT_IMPLEMENTED" \| "INVALID_SOURCE" \| "BUSY" \| "DEADLINE_EXCEEDED" \| "RESOURCE_LIMIT" \| "CANCELLED" \| "STORAGE_IO" \| "INTEGRITY_FAILURE" \| "IDEMPOTENCY_CONFLICT" \| "DOWNLOAD_FAILED" or null | yes |  |
+| `code` | "INTERNAL" \| "INVALID_ARGUMENT" \| "UNSUPPORTED_SCHEMA" \| "MISSING_CAPABILITY" \| "ISOLATION_UNAVAILABLE" \| "COMMAND_NOT_IMPLEMENTED" \| "INVALID_SOURCE" \| "BUSY" \| "DEADLINE_EXCEEDED" \| "RESOURCE_LIMIT" \| "CANCELLED" \| "STORAGE_IO" \| "INTEGRITY_FAILURE" \| "IDEMPOTENCY_CONFLICT" \| "DOWNLOAD_FAILED" \| "SOURCE_FETCH_FAILED" or null | yes |  |
 | `rejection` | "request_too_large" \| "request_too_deep" \| "malformed_request" \| "unsupported_schema_version" \| "invalid_operation_id" \| "invalid_session_id" \| "invalid_path" \| "invalid_transcript_offset" \| "invalid_deadline" \| "invalid_range" \| "invalid_bundle_name" \| "too_many_steps" \| "step_order" \| "no_work" \| "path_outside_input_root" \| "duplicate_operation_id" \| "workspace_not_durable" or null | yes |  |
 | `progress_dropped` | integer or null | yes | at least 0 |
 | `readiness` | object or null | yes |  |
@@ -1161,7 +1171,7 @@ The data member of a complete or partial ocr.search result (0.3.0, ADR 0030 deci
 | `data` | object or null | yes |  |
 | `warnings` | array of string | yes | at most 100 items; each: at most 1024 characters |
 | `error` | object or null | yes |  |
-| `error.code` | "INTERNAL" \| "INVALID_ARGUMENT" \| "UNSUPPORTED_SCHEMA" \| "MISSING_CAPABILITY" \| "ISOLATION_UNAVAILABLE" \| "COMMAND_NOT_IMPLEMENTED" \| "INVALID_SOURCE" \| "BUSY" \| "DEADLINE_EXCEEDED" \| "RESOURCE_LIMIT" \| "CANCELLED" \| "STORAGE_IO" \| "INTEGRITY_FAILURE" \| "IDEMPOTENCY_CONFLICT" \| "DOWNLOAD_FAILED" | yes |  |
+| `error.code` | "INTERNAL" \| "INVALID_ARGUMENT" \| "UNSUPPORTED_SCHEMA" \| "MISSING_CAPABILITY" \| "ISOLATION_UNAVAILABLE" \| "COMMAND_NOT_IMPLEMENTED" \| "INVALID_SOURCE" \| "BUSY" \| "DEADLINE_EXCEEDED" \| "RESOURCE_LIMIT" \| "CANCELLED" \| "STORAGE_IO" \| "INTEGRITY_FAILURE" \| "IDEMPOTENCY_CONFLICT" \| "DOWNLOAD_FAILED" \| "SOURCE_FETCH_FAILED" | yes |  |
 | `error.message` | string | yes | 1 to 1024 characters |
 | `error.retryable` | boolean | yes |  |
 | `error.retry_after_ms` | integer or null | yes | 1 to 86400000 |
@@ -1172,6 +1182,7 @@ The data member of a complete or partial ocr.search result (0.3.0, ADR 0030 deci
 | `error.remediation[].command` | object or null | yes |  |
 | `error.remediation[].command.executable` | string | yes | 1 to 4096 characters |
 | `error.remediation[].command.arguments` | array of string | yes | at most 64 items; each: at most 4096 characters |
+| `error.reason` | string | no | The typed reason of a code that has reasons; absent for every other code. SOURCE_FETCH_FAILED (0.3.0, ADR 0028): not_https, credentials_in_link, port_not_allowed, address_refused, tls, redirect_policy, http_status, proxy_auth, proxy_unusable, offline, stalled, deadline, size, partial, compressed, web_page, not_a_video, truncated or strict_isolation. A later release may add reasons; a reader treats an unknown one as the code alone.; pattern `^[a-z][a-z0-9_]{0,63}$` |
 | `coverage` | object or null | yes |  |
 | `coverage.truncated` | boolean | yes |  |
 | `coverage.gaps` | array of string | yes | at most 100 items; each: at most 256 characters |

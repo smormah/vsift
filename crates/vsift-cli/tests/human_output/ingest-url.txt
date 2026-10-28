@@ -1,0 +1,7 @@
+Opened session ses_0123456789abcdef0123456789abcdef
+Source: src_sha256_d7ccece71288c5ff35d7b16c871a93a8ed48bbb7380617899575069b4d6545f4 (72873726 bytes)
+Generation: 1 (process_crash_consistent)
+Transcript: none imported
+Fetched from: images-assets.nasa.gov at 2026-09-24T00:00:00Z
+
+Lifecycle: ephemeral, expires 2026-09-25T00:00:00Z

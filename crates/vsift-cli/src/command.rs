@@ -28,6 +28,9 @@ A typical investigation (every command takes --json):
        file is never changed. If the user gave you a transcript file (.srt or .vtt), add
          --transcript <file>   (and --transcript-offset <microseconds> if its times are
                                 shifted from the video's)
+       For a direct https:// link to a video file, put --url <link> in place of <video>
+       (--url - reads the link from standard input). VSift fetches it once, with limits,
+       and nothing after that uses the network. A web page is not a video file.
        Without one, speech is found only when local speech recognition is set up (setup
        check says); then run:
          vsift job start <session> --json
@@ -482,11 +485,40 @@ impl From<SetupProfile> for ExecutionProfile {
     }
 }
 
-/// Foreground local ingestion request.
+/// Foreground ingestion request: a local file, or a direct link to fetch.
 #[derive(Args, Debug)]
+#[command(group(ArgGroup::new("input").required(true).args(["source", "url"])))]
 pub(crate) struct IngestArguments {
     /// Local source media path.
-    pub source: PathBuf,
+    pub source: Option<PathBuf>,
+    /// Instead of a local file, a direct https:// link to a video file (MP4,
+    /// MOV, MKV or WebM): it is fetched once into the session (port 443, no
+    /// sign-in, public addresses only), then everything works offline as for
+    /// a local file. `-` reads the link from standard input, which keeps a
+    /// signed link out of the process list and the shell history. The link
+    /// itself is never stored or printed.
+    #[arg(long, value_name = "LINK")]
+    pub url: Option<String>,
+    /// Largest download for --url, in bytes (1 to 21474836480, 20 GiB);
+    /// defaults to 4294967296 (4 GiB).
+    #[arg(
+        long,
+        requires = "url",
+        conflicts_with = "source",
+        value_name = "BYTES",
+        value_parser = clap::value_parser!(u64).range(1..=21_474_836_480)
+    )]
+    pub max_download_bytes: Option<u64>,
+    /// Longest download for --url, in seconds (1 to 14400, 4 hours);
+    /// defaults to 1800 (30 minutes).
+    #[arg(
+        long,
+        requires = "url",
+        conflicts_with = "source",
+        value_name = "SECONDS",
+        value_parser = clap::value_parser!(u32).range(1..=14_400)
+    )]
+    pub max_download_seconds: Option<u32>,
     /// Optional local `SubRip` (.srt) or `WebVTT` (.vtt) transcript sidecar.
     #[arg(long)]
     pub transcript: Option<PathBuf>,
@@ -1663,7 +1695,12 @@ mod unix_tests {
         ])?;
 
         match parsed.command {
-            Some(Command::Ingest(arguments)) => assert_eq!(arguments.source.as_os_str(), source),
+            Some(Command::Ingest(arguments)) => {
+                assert_eq!(
+                    arguments.source.as_deref().map(std::path::Path::as_os_str),
+                    Some(source.as_os_str())
+                );
+            }
             _ => return Err("ingest command did not preserve the source path".into()),
         }
         Ok(())
