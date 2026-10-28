@@ -399,7 +399,7 @@ async fn yes_installs_what_was_offered_and_ends_complete() -> TestResult {
     assert_eq!((console.asked.get(), steps.installed.get()), (1, 1));
     assert!(stdout.contains("Install speech now? [y/N] "), "{stdout}");
     assert!(
-        stdout.ends_with("Try it: vsift ingest ./your-video.mp4\n"),
+        stdout.ends_with("Try it: vsift ./your-video.mp4\n"),
         "{stdout}"
     );
     assert!(stderr.is_empty(), "{stderr}");

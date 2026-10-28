@@ -24,6 +24,7 @@ mod time_anchor;
 mod timeline;
 mod transcript;
 mod visual;
+mod watch;
 mod worker;
 
 use std::time::Duration;
@@ -147,6 +148,11 @@ pub use visual::{
     VisualCoverageGap, VisualDelta, VisualHash, VisualIndex, VisualIndexError, VisualIndexParts,
     VisualIndexProfile, VisualIndexWindow, VisualSample, VisualWindow, VisualWindowOutcome,
     WindowAnalysis, analyse_window, visual_window_count,
+};
+pub use watch::{
+    EVIDENCE_ARTIFACTS_PER_FRAME, MAX_OUTPUT_NAME_BYTES, MAX_WATCH_FRAMES, OutputNameError,
+    WatchOutputNames, frame_file_name, frames_that_fit, readable_time, spread_evenly,
+    subrip_cue_text, subrip_time,
 };
 pub use worker::{
     MIN_STEP_BUDGET, RecordedRequest, RequestAdmission, StepRetry, admit_request, ends_request,

@@ -32,4 +32,4 @@ Ctrl-C stops it and keeps what has finished.
 
 Setup complete: video and speech both work.
 Optional extras: web videos. Add one with: vsift setup --include web-videos
-Try it: vsift ingest ./your-video.mp4
+Try it: vsift ./your-video.mp4

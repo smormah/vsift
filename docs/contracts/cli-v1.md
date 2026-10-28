@@ -43,7 +43,7 @@ and isolation").
 
 **Interruption (P10 PR 3).** While a long command runs (`ingest`, `transcript
 retranscribe`, `candidates`, `ocr`, `frame get/neighbours/burst`, `crop`, `audio`, `job
-resume`), the first `SIGINT` or `SIGTERM` (Unix) or console Ctrl-C or Ctrl-Break
+resume`, `watch`), the first `SIGINT` or `SIGTERM` (Unix) or console Ctrl-C or Ctrl-Break
 (Windows) cancels it: it stops at its next boundary (a provider process is stopped, on
 Unix with `SIGTERM` to its process group and a kill after 5 s, on Windows at once) and
 writes its one documented terminal result: `CANCELLED` (exit 6), or the `partial`
@@ -87,6 +87,7 @@ stopped between two provider calls answers `CANCELLED`, never that a tool could 
 | `job run` | One versioned worker request in a worker workspace, recorded under its operation id: replay, conflict, busy and continuation; two-stage shutdown | Implemented in P11 PR 3 |
 | `job batch` | A finite JSON Lines file of worker requests, at most `--concurrency` at once, each line independent; one summary and the D5 exit | Implemented in P11 PR 4 |
 | `handoff check` | Check an agent's draft report against the skill's handoff schema and rules, answering `data.valid` with typed findings that never repeat the draft | Implemented in P13 PR 5 |
+| `watch` (also `vsift <video>`) | A person's action: a readable transcript, subtitles and the screen changes with their frames, written beside the video or into `--output`, never replacing a file; every output names the video's SHA-256, and the frame list every frame's | 0.3.0 (ADR 0037); first pull request: files written once at the end, ADR 0033's live line as progress |
 
 ### P05 disposable sessions and bundles
 
@@ -3253,6 +3254,124 @@ come with their stories.
   optional component names none of them. Every other v1 rule is unchanged (no member is removed or reinterpreted,
   and a published failure code stays).
 
+### `watch`: `vsift <video>` (0.3.0, ADR 0037, first pull request)
+
+```console
+vsift ./meeting.mp4
+vsift watch ./meeting.mp4 --output ./notes
+vsift ./meeting.mp4 --json
+```
+
+**One action for a person with a recording
+([ADR 0037](../decisions/0037-vsift-video-the-action.md)).** `vsift watch <video> [--output
+<folder>]` writes a readable transcript, subtitles and the screen changes of a local video, beside it
+or into `--output`. `vsift <video>` is the same command and the form people are shown. It is a front
+over the engine's own operations (`ingest`, the `prepare` job of ADR 0033 in the watched mode, run in
+this process, the transcript read, `candidates` and `frame get`), with no pipeline of its own. It is
+for a person or a script; the skill classes it **never**, because it writes into the person's own
+folder, and an assistant uses the session commands.
+
+**The bare-argument rule (ADR 0037 section 2).** Before the parser runs, VSift looks at the first
+argument that is not a global option (`--json`, `--events <format>`, `--session-root <path>`,
+`--host-isolation <value>`, as `--name value` or `--name=value`; the value-taking set is read from the
+parser's own definition):
+
+1. a command name (any top-level command, `watch` and `setup` included) is parsed as before: a command
+   name always wins, so a file named `setup` is watched with `vsift watch setup` or `vsift ./setup`;
+2. an argument that starts with `-` is parsed as before;
+3. an argument that names something that exists (by `symlink_metadata`, so a link is not followed
+   here: a file, a folder or a link) is parsed as if `watch` stood before it, so `ingest`'s own
+   refusals answer a folder (`SOURCE_IS_FOLDER`) or a link (`SOURCE_IS_LINK`), never "unknown
+   command";
+4. an argument that does not exist but looks like a path, with a separator (`/`, and `\` on Windows) or
+   a last dot and one to five ASCII letters or digits (`meetng.mp4`), is parsed as `watch` too, so the
+   answer is `ingest`'s "not found" (`STORAGE_IO`). **Text that holds a control or hidden character
+   never looks like a path** and stays the parser's to reject, inert (SEC-T02);
+5. anything else is parsed as before: `vsift serach` stays an unknown command (`INVALID_ARGUMENT`,
+   command `parse`).
+
+The rule only inserts the word: it never reorders, rewrites or echoes an argument, and a rejected line
+is still reported as command `parse`.
+
+**What it does, in order.** It refuses a source that is not a regular file with `ingest`'s own answer
+before anything else. It then checks, without running any tool, that video tools and speech
+recognition are configured (`MISSING_CAPABILITY` and the existing remediation otherwise); derives the
+output names; claims every one of them by exclusive creation; ingests the video into a new session;
+records the session's `prepare` job in the watched mode and runs it in this process, with ADR 0033's
+live line on a terminal; reads the sealed transcript and the screen changes; writes the files and the
+frames; and closes the session. A refusal before the job leaves nothing beside the video, and a failure
+after it releases every name it claimed, never a file it did not create.
+
+**The outputs.** For `meeting.mp4`, the stem is `meeting` (the name without its last extension):
+
+| Output | What it holds |
+| --- | --- |
+| `meeting.txt` | A header (the video's name, VSift's version, the UTC time to the minute, "local speech recognition", a line saying it is a machine transcription to check against the recording, the video's full SHA-256, and the transcript revision and session ids with a note that the run closed the session), then one line per segment, `[HH:MM:SS] text`. A part that was not transcribed appears in time order as `[HH:MM:SS-HH:MM:SS] (not transcribed: <reason>)`; a video with no sound track says so in place of the lines. |
+| `meeting.srt` | SubRip subtitles, one cue per segment, no header and no ids. A cue's text is one line, never holding a blank line or the `-->` arrow. Not written for a video with no sound track. |
+| `meeting-vsift/` | One PNG per written frame, named by its time (`00-01-12.480.png`), and `screen-changes.txt`: a header (the video's SHA-256, the visual index revision and session ids), then every screen change with its time, frame file (or a mark that its frame was not written), candidate id, frame evidence id and the frame's SHA-256. |
+
+- **Text is written in display form**, hidden and control characters made visible, as the readable
+  views show it: transcript text and the video's name are untrusted.
+- **Frames:** at most 180 (L-234), and never more than the session has room for: each frame is a `frame
+  get`, which takes two of the session's 384 evidence slots, and the room is measured before the first
+  frame. Above that, the frames written are spread evenly over the video and the list marks the rest.
+  Should the session still refuse a frame for room, the frames stop there, every change stays listed, and the
+  run ends `partial` with `frames_stopped_for_room` (it never fails for lack of room). Each frame is copied from the session's content-addressed artifact and checked
+  against its SHA-256 (`INTEGRITY_FAILURE` if it differs; nothing is kept). The list holds the changes
+  `candidates` returns, so a change its per-window budget left out is not listed.
+- **Four hours:** screen changes are found in the first four hours only (L-235); the list and the
+  result say so.
+- **Ids and hashes.** The hashes outlive the session: anyone can check the video's SHA-256 and each
+  frame's with any hashing tool. The `trv_`, `vix_`, `vcd_` and `evd_` ids name items of the session the
+  run closes: they say which run made the files, and cannot be looked up afterwards (L-236).
+- **Names.** A name that would exceed the system's component length is shortened at a character
+  boundary (then a player no longer pairs the subtitles with the video, and the finish screen says so);
+  on Windows trailing dots and spaces are trimmed. A video name that is not Unicode text, or that has
+  nothing before its extension, is refused before any work.
+- **Permissions.** The outputs take the folder's ordinary permissions, unlike a retained bundle (ADR
+  0013): a person writes them to share. Beside the video they are as exposed as the video itself.
+
+**Never overwriting.** Each output is claimed by exclusive creation before any work; if a name is taken
+nothing is written or copied. **`--output <folder>`** is an existing folder or a new one whose parent
+exists (created, never with its parents), refused when it lies inside the session root or the managed
+root, which VSift cleans automatically. Refusals reuse existing failure codes; each carries one fixed
+remediation that names the kind of output, never a file name (L-071):
+
+| Refusal | Code | Remediation (summary) |
+| --- | --- | --- |
+| The transcript, subtitles or screen-change folder name is taken | `INVALID_ARGUMENT` | `The transcript file (.txt)` (or `subtitles file (.srt)`, `screen-change folder (-vsift)`) `VSift would write beside the video already exists, and VSift never replaces` it. `Move it away, or write elsewhere with --output <folder>.` |
+| The folder refuses a write | `STORAGE_IO` | `VSift could not write its files into the folder (...). Choose a folder you can write to with --output <folder>.` |
+| `--output` inside VSift's own folders | `INVALID_ARGUMENT` | `--output names a folder inside VSift's own folders, which VSift cleans automatically. Choose another folder.` |
+| `--output` not usable as a folder | `INVALID_ARGUMENT` | `--output takes a folder: an existing one, or a new one whose parent folder exists.` |
+| The video's name is not Unicode, or has nothing before its extension | `INVALID_ARGUMENT` | `... so VSift cannot name its files after it. Rename the video, then run it again.` |
+| A copied frame differs from its SHA-256 | `INTEGRITY_FAILURE` | `... so the run kept nothing. Run it again; if it happens again, report it.` |
+
+Every other failure is the underlying command's, with its code and remediation (`ingest`'s source
+refusals, `MISSING_CAPABILITY`, the `prepare` job's, `frame get`'s). No new failure code is introduced.
+
+**Interruption.** Ctrl-C cancels the job through the existing cancellation (`CANCELLED`, exit 6); in
+this first pull request the run releases the names it claimed and closes the session. Continuing an
+interrupted run, and files that grow while it runs, come with the second pull request (ADR 0037
+sections 7 and 8).
+
+**The answer** ([`watch-data.schema.json`](../../schemas/v1/watch-data.schema.json), example
+[`watch.json`](../../schemas/v1/examples/watch.json)): command `watch` (also for `vsift <video>`),
+status `complete`, and `data` with `source_id`, `session_id`, `session_closed`, `job_id`,
+`duration_us`, `transcript_revision_id` (`null` with no sound track), `visual_index_revision_id`
+(`null` with no picture), `outcome` (`complete`, or `partial` when `not_transcribed` holds a range or
+`screen_changes_beyond_bound` or `frames_stopped_for_room` is true), `not_transcribed` (half-open
+ranges in time order), `screen_changes_beyond_bound`, `frames_stopped_for_room`, `names_shortened`, `outputs` (`transcript`, `subtitles`, `folder` and
+`screen_changes`, each with its absolute `path`, its `name` in display form and its `sha256`, `null`
+only for the folder), `changes_found`, and `frames` (each with `time_us`, `candidate_id`,
+`evidence_id`, `path` and `sha256`, at most 180). With `--events jsonl` the stream carries the
+`prepare` job's progress events, then the terminal event with the same data.
+
+**The readable view** writes ADR 0033's live line on standard error while it works (terminal only),
+then on standard output the finish screen: `Done: HH:MM:SS of video`, one line per output, a line per
+range not transcribed, a line when screen changes stop at four hours or the names were shortened, that
+each file names the video's SHA-256, and last `More: vsift watch --help`. Like all readable text it is
+unstable and not for parsing.
+
 ## Output protocol
 
 Human output (without `--json` or `--events`) is readable terminal text on stdout.
@@ -3368,7 +3487,7 @@ it has no JSON form, and with `--json` or `--events` it answers `INVALID_ARGUMEN
 person is there when standard input and standard output are both terminals. Then it shows the heading `VSift
 <version> setup` and `setup check`'s table, verdict and details (one renderer), and:
 
-- when the setup is complete: the verdict `Setup complete: video and speech both work.`, the extras line and `Try it: vsift ingest ./your-video.mp4`;
+- when the setup is complete: the verdict `Setup complete: video and speech both work.`, the extras line and `Try it: vsift ./your-video.mp4`;
 - after a timeout: `Next: vsift setup check`, where `--timeout-seconds` allows more time;
 - where something core is missing and the reviewed catalogue has it: the plan `setup plan --profile desktop`
   builds (with any `--include web-videos`), shown as one offer (each piece with its publisher, size and licence,

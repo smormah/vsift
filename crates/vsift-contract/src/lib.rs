@@ -139,6 +139,7 @@ mod text;
 mod transcript;
 mod verification;
 mod view;
+mod watch;
 mod work;
 mod workspace;
 
@@ -191,7 +192,7 @@ pub use clock::{ClockData, ClockTimeData, TimeAnchorData};
 pub use command::CommandName;
 pub use envelope::{
     CONTRACT_VERSION, CoverageResponse, ErrorResponse, LifecycleResponse, MAX_AFFECTED_IDS,
-    OperationResponse, TerminalEventResponse,
+    OperationResponse, TerminalEventResponse, utc_seconds_rfc3339,
 };
 pub use evidence::{ConfidenceResponse, FrameTimingResponse};
 pub use handoff::{
@@ -302,3 +303,11 @@ pub use transcript::{
 };
 pub use verification::media_tool_verification_summary;
 pub use view::{BRIEF_VIEW_STREAM_REMEDIATION, ResultView};
+pub use watch::{
+    WATCH_FOLDER_EXISTS_REMEDIATION, WATCH_FRAME_MISMATCH_REMEDIATION,
+    WATCH_NAME_EMPTY_REMEDIATION, WATCH_NAME_NOT_UNICODE_REMEDIATION,
+    WATCH_OUTPUT_FOLDER_REMEDIATION, WATCH_OUTPUT_INSIDE_VSIFT_REMEDIATION,
+    WATCH_OUTPUT_REFUSED_REMEDIATION, WATCH_SUBTITLES_EXISTS_REMEDIATION,
+    WATCH_TRANSCRIPT_EXISTS_REMEDIATION, WatchCompleteness, WatchData, WatchFrameData,
+    WatchOutputData, WatchOutputsData, WatchRangeData,
+};

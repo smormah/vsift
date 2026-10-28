@@ -96,8 +96,9 @@ const PLACEHOLDERS: [(&str, &str); 24] = [
 /// plans); `setup remove` and `setup rollback` change the managed tools and
 /// stay here with `setup install`. Plain `setup`, the setup door for a
 /// person (ADR 0036), asks a question and installs on the answer, so it is
-/// never an assistant's to run.
-const NEVER: [&str; 7] = [
+/// never an assistant's to run. ADR 0037 adds `watch` (`vsift <video>`),
+/// which writes files into the person's own folder (the planner, 2026-10-27).
+const NEVER: [&str; 8] = [
     "setup",
     "setup.install",
     "setup.remove",
@@ -105,6 +106,7 @@ const NEVER: [&str; 7] = [
     "session.init-workspace",
     "job.run",
     "job.batch",
+    "watch",
 ];
 
 /// Commands the skill runs only on the user's explicit instruction.

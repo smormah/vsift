@@ -213,6 +213,7 @@ property checks are pure functions in `lib/real-media-checks.cjs`, tested on han
 | Evidence | `frame get` at three candidates, `crop` of the top-left 480x120 of a frame (the labelled small-text region once labels exist), `audio` around the worst seam loss (or the first seam) | The frames' requested and actual times; the crop's size; the clip, copied to `<item>/listen/` for a listener and never uploaded |
 | Handoff | `handoff check` of a mechanical draft citing the run's own ids | `data.valid` |
 | Close | `session close`, then `session clean --expired` | That the session closes and its folder, with VSift's copy of the recording, is removed |
+| `vsift <video>` (ADR 0037, from 2026-10-28; public items only) | the bare form on a copy of the item in `<item>/watch/`, with a session root of its own | The wall time and real-time factor, the outcome, the screen changes and frames written. Check `watch`: the three outputs are beside the copy and are the bytes the answer hashed, the transcript's header names the item's pinned SHA-256, the frames are min(changes, 180) and each is the bytes its SHA-256 says and is in the list, and the session was closed. A private item is not watched: its files would hold the recording's words in the work folder |
 
 **What it checks are properties, not exact words** (an item has no frozen transcript):
 

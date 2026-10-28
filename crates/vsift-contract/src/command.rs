@@ -80,6 +80,8 @@ pub enum CommandName {
     JobStart,
     /// Plain `setup`, the setup door for a person (ADR 0036, since `0.3.0`).
     Setup,
+    /// `vsift <video>`, explicitly `vsift watch <video>` (ADR 0037).
+    Watch,
     /// `session init-workspace` (P11): create a worker workspace with an
     /// operator policy.
     SessionInitWorkspace,
@@ -98,7 +100,7 @@ impl CommandName {
     /// Contract tests iterate this list to prove each identifier satisfies the
     /// published schemas. An exhaustive private `ordinal` match and a
     /// compile-time assertion keep it in step with the variants.
-    pub const ALL: [Self; 38] = [
+    pub const ALL: [Self; 39] = [
         Self::Parse,
         Self::SetupCheck,
         Self::SetupPlan,
@@ -137,6 +139,7 @@ impl CommandName {
         Self::OcrSearch,
         Self::JobStart,
         Self::Setup,
+        Self::Watch,
     ];
 
     /// Returns the stable identifier written to the envelope's `command` field.
@@ -181,6 +184,7 @@ impl CommandName {
             Self::OcrSearch => "ocr.search",
             Self::JobStart => "job.start",
             Self::Setup => "setup",
+            Self::Watch => "watch",
         }
     }
 
@@ -232,6 +236,7 @@ impl CommandName {
             Self::OcrSearch => 35,
             Self::JobStart => 36,
             Self::Setup => 37,
+            Self::Watch => 38,
         }
     }
 }

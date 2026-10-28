@@ -1,0 +1,143 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vsift.dev/schemas/v1/watch-data.schema.json",
+  "title": "VSift watch data v1",
+  "description": "The data member of a complete watch result, from vsift <video> or vsift watch <video> (0.3.0, ADR 0037): what the run wrote, where, and the ids and hashes every output names. source_id is the video's content identity; the SHA-256 after src_sha256_ is the one the transcript's header gives, and anyone can check it against the video with any hashing tool. session_id, job_id, transcript_revision_id, visual_index_revision_id, and each frame's candidate_id and evidence_id name items of the session the run used, which it closes when everything is written (session_closed): they say which run made the files, and the same video watched again gives a new session and new ids (known limit L-236). The hashes outlive the session: each file's sha256 is the SHA-256 of its bytes as written, and each frame's sha256 is the SHA-256 of the PNG beside the list, byte for byte the session's evidence artifact. outcome is partial when part of the video was not transcribed (not_transcribed, half-open ranges in time order) or when the video runs past the first four hours, the part screen changes are found in (screen_changes_beyond_bound, known limit L-235); the envelope's status is complete either way. Every screen change found (changes_found) is listed in the screen_changes file; frames are written for at most 180 of them, and never more than the session has evidence room for (each frame takes two of its 384 evidence slots), spread evenly over the video when there are more (known limit L-234); should the session still refuse a frame for room, the frames stop there, frames_stopped_for_room is true and outcome is partial. subtitles is null for a video with no sound track, transcript_revision_id too; visual_index_revision_id is null for a video with no picture. names_shortened says a name was shortened to fit the system's limit, so the subtitles no longer share the video's name. Paths are absolute, delivered as frame.get delivers its files; name members are file names in display form, hidden characters made visible, because they derive from the video's untrusted name. Validate the envelope with operation-response.schema.json.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "source_id",
+    "session_id",
+    "session_closed",
+    "job_id",
+    "duration_us",
+    "transcript_revision_id",
+    "visual_index_revision_id",
+    "outcome",
+    "not_transcribed",
+    "screen_changes_beyond_bound",
+    "frames_stopped_for_room",
+    "names_shortened",
+    "outputs",
+    "changes_found",
+    "frames"
+  ],
+  "properties": {
+    "source_id": { "type": "string", "pattern": "^src_sha256_[0-9a-f]{64}$" },
+    "session_id": { "type": "string", "pattern": "^ses_[a-z0-9]{16,64}$" },
+    "session_closed": { "type": "boolean" },
+    "job_id": { "type": "string", "pattern": "^job_[a-z0-9]{16,64}$" },
+    "duration_us": { "type": "integer", "minimum": 0 },
+    "transcript_revision_id": {
+      "oneOf": [
+        { "type": "null" },
+        { "type": "string", "pattern": "^trv_[a-z0-9]{16,64}$" }
+      ]
+    },
+    "visual_index_revision_id": {
+      "oneOf": [
+        { "type": "null" },
+        { "type": "string", "pattern": "^vix_[a-z0-9]{16,64}$" }
+      ]
+    },
+    "outcome": { "enum": ["complete", "partial"] },
+    "not_transcribed": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/range" }
+    },
+    "screen_changes_beyond_bound": { "type": "boolean" },
+    "frames_stopped_for_room": { "type": "boolean" },
+    "names_shortened": { "type": "boolean" },
+    "outputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["transcript", "subtitles", "folder", "screen_changes"],
+      "properties": {
+        "transcript": { "$ref": "#/$defs/file" },
+        "subtitles": {
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/file" }
+          ]
+        },
+        "folder": { "$ref": "#/$defs/folder" },
+        "screen_changes": { "$ref": "#/$defs/file" }
+      }
+    },
+    "changes_found": { "type": "integer", "minimum": 0 },
+    "frames": {
+      "type": "array",
+      "maxItems": 180,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["time_us", "candidate_id", "evidence_id", "path", "sha256"],
+        "properties": {
+          "time_us": { "type": "integer", "minimum": 0 },
+          "candidate_id": { "type": "string", "pattern": "^vcd_[a-z0-9]{16,64}$" },
+          "evidence_id": { "type": "string", "pattern": "^evd_[a-z0-9]{16,64}$" },
+          "path": { "type": "string", "minLength": 1, "maxLength": 4096 },
+          "sha256": { "$ref": "#/$defs/sha256" }
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "not_transcribed": { "minItems": 1 }
+        }
+      },
+      "then": { "properties": { "outcome": { "const": "partial" } } }
+    },
+    {
+      "if": {
+        "properties": {
+          "screen_changes_beyond_bound": { "const": true }
+        }
+      },
+      "then": { "properties": { "outcome": { "const": "partial" } } }
+    },
+    {
+      "if": {
+        "properties": {
+          "frames_stopped_for_room": { "const": true }
+        }
+      },
+      "then": { "properties": { "outcome": { "const": "partial" } } }
+    }
+  ],
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "range": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from_us", "to_us"],
+      "properties": {
+        "from_us": { "type": "integer", "minimum": 0 },
+        "to_us": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "file": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "name", "sha256"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1, "maxLength": 4096 },
+        "name": { "type": "string", "minLength": 1 },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "folder": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "name", "sha256"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1, "maxLength": 4096 },
+        "name": { "type": "string", "minLength": 1 },
+        "sha256": { "type": "null" }
+      }
+    }
+  }
+}

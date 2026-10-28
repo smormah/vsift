@@ -1300,3 +1300,38 @@ pub(crate) struct BatchItem {
     pub(crate) code: Option<String>,
     pub(crate) rejection: Option<String>,
 }
+
+/// One output of `watch` (ADR 0037).
+#[derive(Debug, Deserialize)]
+pub(crate) struct WatchOutput {
+    pub(crate) name: String,
+}
+
+/// The outputs of `watch`.
+#[derive(Debug, Deserialize)]
+pub(crate) struct WatchOutputs {
+    pub(crate) transcript: WatchOutput,
+    #[serde(default)]
+    pub(crate) subtitles: Option<WatchOutput>,
+    pub(crate) folder: WatchOutput,
+}
+
+/// A range `watch` did not transcribe.
+#[derive(Debug, Deserialize)]
+pub(crate) struct WatchRange {
+    pub(crate) from_us: u64,
+    pub(crate) to_us: u64,
+}
+
+/// `watch` data: what the finish screen needs of it.
+#[derive(Debug, Deserialize)]
+pub(crate) struct Watched {
+    pub(crate) duration_us: u64,
+    pub(crate) not_transcribed: Vec<WatchRange>,
+    pub(crate) screen_changes_beyond_bound: bool,
+    pub(crate) frames_stopped_for_room: bool,
+    pub(crate) names_shortened: bool,
+    pub(crate) outputs: WatchOutputs,
+    pub(crate) changes_found: u64,
+    pub(crate) frames: Vec<serde_json::Value>,
+}

@@ -35,7 +35,7 @@ const TROUBLESHOOTING_GUIDE: &str =
 
 /// The first command to try once setup is complete; the verdict line above
 /// it already says the setup is complete.
-const TRY_IT: &str = "Try it: vsift ingest ./your-video.mp4";
+const TRY_IT: &str = "Try it: vsift ./your-video.mp4";
 
 /// The columns of the longest piece name, `speech model`.
 const PIECE_NAME_COLUMNS: usize = 12;

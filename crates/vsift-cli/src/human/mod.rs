@@ -44,6 +44,7 @@ mod text;
 mod time;
 mod transcript;
 mod view;
+mod watch;
 
 use serde::Deserialize;
 use vsift_contract::{CommandName, OperationResponse};
@@ -162,6 +163,7 @@ fn render_value(
         CommandName::JobRun => job::run(&envelope(value)?),
         CommandName::JobBatch => job::batch(&envelope(value)?),
         CommandName::HandoffCheck => handoff::check(&envelope(value)?),
+        CommandName::Watch => watch::finished(&envelope(value)?),
         // `setup check` renders from its typed report (`setup_check`), the
         // setup door writes its own conversation (`setup_door`), and a
         // rejected command line only ever fails.

@@ -77,6 +77,7 @@ whole; do not pipe it into `grep`, `head` or anything else.
 | `vsift job cancel` | explicit | Cancelling removes the job's saved progress; to stop for a budget, leave the job interrupted instead. |
 | `vsift job run` | never | Worker-host command for an operator's supervisor. |
 | `vsift job batch` | never | Worker-host command for an operator's supervisor. |
+| `vsift watch` | never | Also run as vsift followed by a video path. It writes a transcript, subtitles and frames into the user's own folder for a person to read; you use the session commands above. |
 
 Also never, in any state:
 

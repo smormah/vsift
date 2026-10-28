@@ -118,6 +118,7 @@ mod sessions;
 mod setup;
 mod transcripts;
 mod verification;
+mod watch;
 mod worker;
 mod workspace;
 
@@ -178,9 +179,16 @@ pub use verification::{
 };
 /// Where a stream of a `prepare` job is (`job status`, ADR 0033).
 pub use vsift_application::StreamPhase;
+pub use vsift_domain::{
+    EVIDENCE_ARTIFACTS_PER_FRAME, MAX_WATCH_FRAMES, frames_that_fit, readable_time,
+};
 /// Starting the background runner of `job start` (ADR 0033): the host gives
 /// the executable and its arguments, and the runner outlives it.
 pub use vsift_infrastructure::{DetachedRunner, Detachment, launch_detached};
+pub use watch::{
+    OutputNameError, WatchFailure, WatchFile, WatchFrame, WatchOutcome, WatchOutputKind,
+    WatchRequest,
+};
 pub use worker::{MAX_CANDIDATE_CALLS, WorkOutcome, WorkRequestRun};
 pub use workspace::{WorkspaceInit, WorkspaceInitOutcome, WorkspaceInitRequest};
 

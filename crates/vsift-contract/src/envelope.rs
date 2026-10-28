@@ -177,7 +177,8 @@ impl LifecycleResponse {
 
 /// Formats Unix seconds as RFC 3339 UTC with a `Z` offset, the form the
 /// command line's time formatter writes; `None` after 9999-12-31.
-pub(crate) fn utc_seconds_rfc3339(seconds: u64) -> Option<String> {
+#[must_use]
+pub fn utc_seconds_rfc3339(seconds: u64) -> Option<String> {
     const SECONDS_PER_DAY: u64 = 86_400;
     let days = seconds / SECONDS_PER_DAY;
     let of_day = seconds % SECONDS_PER_DAY;

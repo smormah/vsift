@@ -133,6 +133,20 @@ real meetings, accents or noisy rooms, so every accuracy figure below says what 
   against a neighbouring frame (`frame neighbours`) or the transcript.
 - **Candidates are places to look, not findings.**
 
+## The files `vsift <video>` writes (new in 0.3.0)
+
+- **Frames for at most 180 screen changes** ([L-234](../planning/known-limits.md#l-234)). Every change is listed in
+  `<name>-vsift/screen-changes.txt`; with more than 180, the frames are spread evenly over the video and the others
+  are listed without one. A 19-minute talk already has more: about one frame every 6 seconds. The list holds the
+  changes `candidates` would give you, so a change its per-window limit leaves out is not listed either.
+- **Screen changes in the first four hours only** ([L-235](../planning/known-limits.md#l-235)). The transcript covers
+  the whole video; the list and the finish screen say where the screen changes stop.
+- **The ids in the files name a closed session** ([L-236](../planning/known-limits.md#l-236)). They say which run made
+  the files, but the run closes its session, so no command can look them up afterwards. The SHA-256 of the video and
+  of every frame can be checked by anyone, any time, with any hashing tool.
+- **The files take the folder's ordinary permissions**, because you write them to share. Beside the video they are as
+  exposed as the video itself; `--output <folder>` writes them elsewhere.
+
 ## Where and how it was tested
 
 - **Windows 11, macOS 15 on Apple silicon, Ubuntu 24.04 on x64.** VSift is built for these. The published 0.1.0
