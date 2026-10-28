@@ -68,7 +68,8 @@ real meetings, accents or noisy rooms, so every accuracy figure below says what 
   language of each 30-second chunk on its own. On an English briefing with answers in Russian, one chunk heard as Russian
   wrote nothing for about 18 seconds of English, and another wrote a 25-second Russian segment over an English question. On
   a talk in English with a Turkish accent, one chunk heard as Turkish wrote a single 30-second segment, mostly one Turkish
-  word repeated, so about 25 seconds of English has no English text, including 15 words the chunk before it had heard. Where
+  word repeated, so about 20 seconds of English has no English text (until `0.3.0` about 25: it also hid 15 words the chunk
+  before it had heard, which are now kept beside it). Where
   the chunks are cut decides which stretches are affected, and `transcript get` and `search` call them transcribed: VSift
   does not yet flag such a chunk (the revision's `language` is empty when its chunks disagree). If a recording mixes
   languages or is spoken with an accent, check stretches where the text is in another language or repeats one word, listen
@@ -85,8 +86,9 @@ real meetings, accents or noisy rooms, so every accuracy figure below says what 
   is kept covers its time, so a piece that runs on past the one it repeats stays, and its words appear twice; earlier versions
   dropped it, and the stretch it covered then had no segment. VSift judges by time, not by words, so it can still keep a copy
   twice where nothing was lost. **More can be missing where a chunk loops** ([L-201](../planning/known-limits.md#l-201)):
-  since `0.2.3` a piece that repeats the piece just before it no longer hides the next chunk's words, but a loop of another
-  kind, such as one word repeated through a whole piece, still does (15 words at one join of a real talk).
+  since `0.2.3` a piece that repeats the piece just before it no longer hides the next chunk's words, and since `0.3.0` nor
+  does a piece that loops on its own words (one to four words said eight times or more in a row, most of the piece; this kept
+  15 words at one join of a real talk). A loop of another kind still can.
   **The cost of the fix is mostly repeats, not holes; both are in the transcript.** The cause was worked out from the
   times in a report, not from the recogniser's own output of the recordings, and the fix has not been tried on them.
 - **Words the recogniser wrote that VSift could not place are listed, not found (0.2.1 and later, [L-158](../planning/known-limits.md#l-158) and [L-159](../planning/known-limits.md#l-159)).** When
