@@ -163,6 +163,8 @@ pub(crate) struct TranscriptSegment {
     pub(crate) cue: Option<Cue>,
     #[serde(default)]
     pub(crate) carried_from: Option<CarriedFrom>,
+    #[serde(default)]
+    pub(crate) clock_time: Option<ClockTime>,
 }
 
 /// Whether markup was removed from a segment's text.
@@ -427,6 +429,36 @@ pub(crate) struct Opened {
     pub(crate) publication: String,
     #[serde(default)]
     pub(crate) transcript: Option<TranscriptRevision>,
+    #[serde(default)]
+    pub(crate) time_anchor: Option<TimeAnchor>,
+}
+
+/// A session's `time_anchor` summary (ADR 0029), without its anchor list.
+#[derive(Debug, Deserialize)]
+pub(crate) struct TimeAnchor {
+    pub(crate) consistency: String,
+    pub(crate) source: String,
+    pub(crate) confidence: String,
+    pub(crate) recording_start: Clock,
+}
+
+/// One clock reading, in the contract's fixed forms.
+#[derive(Debug, Deserialize)]
+pub(crate) struct Clock {
+    pub(crate) utc: Option<String>,
+    pub(crate) local: Option<String>,
+    pub(crate) utc_offset: Option<String>,
+}
+
+/// An item's `clock_time`.
+#[derive(Debug, Deserialize)]
+pub(crate) struct ClockTime {
+    pub(crate) source: String,
+    pub(crate) confidence: String,
+    #[serde(default)]
+    pub(crate) start: Option<Clock>,
+    #[serde(default)]
+    pub(crate) end: Option<Clock>,
 }
 
 /// A session's committed status (`session status`, `renew`, `close`).
@@ -445,6 +477,8 @@ pub(crate) struct SessionStatus {
     pub(crate) jobs: Option<Vec<SessionJob>>,
     #[serde(default)]
     pub(crate) jobs_truncated: bool,
+    #[serde(default)]
+    pub(crate) time_anchor: Option<TimeAnchor>,
 }
 
 /// One job of `session status`.

@@ -20,9 +20,9 @@ use vsift_contract::{
     BundleData, BundleSourceInclusion, CleanData, CleanItem, CleanItemOutcome, CommandName,
     LifecycleResponse, ListedSession, OpenData, OperationResponse, PageData, RequestDurability,
     ResultView, RetranscribeJob, SessionJobData, SessionState, SessionStatusData, StatusData,
-    TranscriptEvidenceStream, TranscriptPresentation, TranscriptRetranscribeData, WorkspaceData,
-    WorkspaceInitOutcome, finish_retranscription, job_warning_messages, transcript_get_response,
-    transcript_warning_messages,
+    TimeAnchorData, TranscriptEvidenceStream, TranscriptPresentation, TranscriptRetranscribeData,
+    WorkspaceData, WorkspaceInitOutcome, finish_retranscription, job_warning_messages,
+    transcript_get_response, transcript_warning_messages,
 };
 
 use crate::{
@@ -75,6 +75,7 @@ fn status_data(snapshot: &SessionSnapshot) -> Result<StatusData, FailureCode> {
         artifact_bytes: snapshot.artifact_bytes(),
         generation: snapshot.generation().value(),
         expires_at: rfc3339(snapshot.lifetime().expires_at_unix_seconds())?,
+        time_anchor: TimeAnchorData::new(snapshot.time_anchors()),
     })
 }
 
@@ -223,12 +224,15 @@ pub(crate) async fn ingest(
         offset_micros: arguments.transcript_offset.unwrap_or(0),
     });
     let outcome = engine
-        .ingest(IngestRequest {
-            source: arguments.source,
-            transcript,
-            cancellation: cancellation.clone(),
-            durability: vsift::DurabilityRequirement::Ephemeral,
-        })
+        .ingest_recorded_at(
+            IngestRequest {
+                source: arguments.source,
+                transcript,
+                cancellation: cancellation.clone(),
+                durability: vsift::DurabilityRequirement::Ephemeral,
+            },
+            arguments.recorded_at,
+        )
         .await?;
     let expires_at = rfc3339(outcome.session.lifetime.expires_at_unix_seconds())?;
     let mut data = OpenData::new(&outcome.session, expires_at);
@@ -360,6 +364,7 @@ fn presentation(excerpt: &TranscriptExcerpt) -> TranscriptPresentation<'_> {
         next_cursor: excerpt.next_cursor(),
         coverage: excerpt.coverage(),
         growth: read_growth(excerpt.growth()),
+        time_anchors: excerpt.session().time_anchors(),
     }
 }
 

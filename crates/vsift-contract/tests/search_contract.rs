@@ -348,6 +348,7 @@ fn search(
         coverage: &page.coverage,
         screen_text: None,
         growth: vsift_contract::ReadGrowth::default(),
+        time_anchors: &vsift_domain::TimeAnchors::none(),
     };
     let lifecycle = || LifecycleResponse::ephemeral(EXPIRES_AT.to_owned());
     let json = serde_json::to_value(search_response(&presentation, lifecycle())?)?;

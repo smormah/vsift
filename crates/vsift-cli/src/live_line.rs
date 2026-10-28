@@ -61,6 +61,23 @@ where
     Run: FnOnce(ProgressObserver) -> Work,
     Work: Future<Output = Output>,
 {
+    with_live_line_saying(writer, line, line_for, run).await
+}
+
+/// [`with_live_line`] with the sentence `say` makes of each progress
+/// observation: the setup door's install says how many pieces are done.
+pub(crate) async fn with_live_line_saying<StandardOutput, StandardError, Run, Work, Output>(
+    writer: &mut OutputWriter<StandardOutput, StandardError>,
+    line: LiveLine,
+    say: fn(&JobProgress) -> Option<String>,
+    run: Run,
+) -> Output
+where
+    StandardOutput: Write,
+    StandardError: Write,
+    Run: FnOnce(ProgressObserver) -> Work,
+    Work: Future<Output = Output>,
+{
     if line == LiveLine::Hidden {
         return run(ProgressObserver::none()).await;
     }
@@ -87,7 +104,10 @@ where
             result = &mut work => break result,
             _ = tick.tick() => {
                 let taken = newest.lock().ok().and_then(|mut newest| newest.take());
-                if let Some(sentence) = taken.as_ref().and_then(line_for_observed) {
+                if let Some(sentence) = taken
+                    .as_ref()
+                    .and_then(|observed| line_for_observed(observed, say))
+                {
                     writer.write_live_line(&sentence);
                     written = true;
                 }
@@ -110,9 +130,12 @@ enum Observed {
 }
 
 /// The line for the newest observation, or `None` for one it does not show.
-fn line_for_observed(observed: &Observed) -> Option<String> {
+fn line_for_observed(
+    observed: &Observed,
+    say: fn(&JobProgress) -> Option<String>,
+) -> Option<String> {
     match observed {
-        Observed::Progress(progress) => line_for(progress),
+        Observed::Progress(progress) => say(progress),
         Observed::Waiting(cause) => Some(waiting_line(*cause)),
     }
 }
@@ -126,6 +149,19 @@ fn waiting_line(cause: AdmissionWaitCause) -> String {
         ),
         AdmissionWaitCause::CapacityInUse => "Waiting for capacity".to_owned(),
     }
+}
+
+/// The setup door's line while it installs (ADR 0036): how many of the
+/// plan's pieces are done, from the transaction's own counts.
+pub(crate) fn install_line(progress: &JobProgress) -> Option<String> {
+    let update = progress.update;
+    if update.stage != ProgressStage::InstallingComponents {
+        return None;
+    }
+    Some(match update.total {
+        Some(total) => format!("Installing: {} of {total} done", update.completed),
+        None => format!("Installing: {} done", update.completed),
+    })
 }
 
 /// The line for one observation, or `None` for a stage it does not show.

@@ -4,10 +4,10 @@ use std::path::PathBuf;
 
 use clap::{ArgGroup, Args, Parser, Subcommand, ValueEnum};
 use vsift::{
-    CropRectangle, DurabilityRequirement, EvidenceId, FrameSelection, IsolationProfile, JobId,
-    ManagedComponent, ManagedVersionKey, ManagedVersionKeyError, OperationId, OptionalComponent,
-    OptionalComponentSet, RuntimeDependency, SessionId, SetupProfile, TranscriptRevisionId,
-    VisualCandidateId,
+    ClockReading, CropRectangle, DurabilityRequirement, EvidenceId, FrameSelection,
+    IsolationProfile, JobId, ManagedComponent, ManagedVersionKey, ManagedVersionKeyError,
+    OperationId, OptionalComponent, OptionalComponentSet, RuntimeDependency, SessionId,
+    SetupProfile, TimeAnchorError, TranscriptRevisionId, VisualCandidateId,
 };
 use vsift_contract::{CommandName, ResultView};
 
@@ -111,7 +111,13 @@ pub(crate) enum EventFormat {
 /// Stable top-level R0 namespace.
 #[derive(Debug, Subcommand)]
 pub(crate) enum Command {
-    /// Inspect and manage the local `VSift` setup.
+    /// Check what is installed and set up what is missing (run it any time).
+    ///
+    /// Plain `vsift setup`, in a terminal, shows what works and what is
+    /// missing, offers to install what can be installed here, with each
+    /// download's source, size and licence, and installs nothing until you
+    /// type yes. Without a terminal it only reports. The commands below are
+    /// what AI assistants and scripts use; they never ask anything.
     Setup(SetupArguments),
     /// Prepare a local video investigation session.
     Ingest(IngestArguments),
@@ -181,11 +187,28 @@ pub(crate) struct WatchArguments {
     pub output: Option<PathBuf>,
 }
 
-/// Setup namespace arguments.
+/// Setup namespace arguments: plain `vsift setup` is the setup door (ADR
+/// 0036), and each subcommand is one step of it for assistants and scripts.
 #[derive(Args, Debug)]
+#[command(args_conflicts_with_subcommands = true)]
 pub(crate) struct SetupArguments {
     #[command(subcommand)]
     pub command: Option<SetupCommand>,
+    /// Plain `vsift setup` only: also offer an optional extra (repeatable).
+    /// `web-videos` fetches videos from public web pages (Ubuntu 24.04
+    /// x86-64 only for now).
+    #[arg(long = "include", value_enum, value_name = "EXTRA")]
+    pub include: Vec<DoorExtra>,
+}
+
+/// An optional extra the setup door adds, by the name a person reads in its
+/// table (ADR 0036 section 7). Each maps to an optional component group of
+/// the managed catalogue; more join as their groups land.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
+pub(crate) enum DoorExtra {
+    /// Videos from public web pages: `online_links` in the JSON results.
+    #[value(name = "web-videos")]
+    WebVideos,
 }
 
 /// Setup lifecycle operations.
@@ -212,8 +235,8 @@ pub(crate) enum SetupCommand {
 }
 
 impl SetupCommand {
-    /// Returns the public operation identifier. Bare `setup` has none: it only
-    /// prints help.
+    /// Returns the public operation identifier of a setup subcommand; plain
+    /// `setup` is [`CommandName::Setup`].
     pub(crate) const fn operation_name(&self) -> CommandName {
         match self {
             Self::Check(_) => CommandName::SetupCheck,
@@ -469,6 +492,17 @@ pub(crate) struct IngestArguments {
         value_name = "MICROSECONDS"
     )]
     pub transcript_offset: Option<i64>,
+    /// When the recording started, for clock times on every result (time
+    /// anchoring): RFC 3339, for example 2026-10-21T14:03:12+01:00 (local time
+    /// with its UTC offset), 2026-10-21T13:03:12Z (UTC), or
+    /// 2026-10-21T14:03:12 (local time, zone unknown). It is taken as exact
+    /// and preferred over the time the video file itself records.
+    #[arg(long, value_name = "TIME", value_parser = parse_recorded_at)]
+    pub recorded_at: Option<ClockReading>,
+}
+
+fn parse_recorded_at(value: &str) -> Result<ClockReading, TimeAnchorError> {
+    ClockReading::parse(value)
 }
 
 /// Session namespace arguments.
@@ -1301,7 +1335,8 @@ mod tests {
         let mut identifiers = BTreeSet::new();
         for namespace in root.get_subcommands() {
             if namespace.has_subcommands() {
-                // `ocr` both runs itself and has `ocr search`.
+                // `ocr` both runs itself and has `ocr search`; plain `setup`
+                // is the setup door beside its subcommands (ADR 0036).
                 if namespace.is_args_conflicts_with_subcommands_set() {
                     identifiers.insert(namespace.get_name().to_owned());
                 }

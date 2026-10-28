@@ -215,6 +215,7 @@ fn page(
         next_cursor: next_cursor.as_deref(),
         coverage: &page.coverage,
         growth: vsift_contract::ReadGrowth::default(),
+        time_anchors: &vsift_domain::TimeAnchors::none(),
     };
     let json = serde_json::to_value(transcript_get_response(
         &presentation,

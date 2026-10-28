@@ -60,12 +60,11 @@ fn the_committed_freezes_still_hold() -> TestResult {
 /// visible: changing this constant is the decision to cut another candidate and write a new freeze
 /// (`docs/operations/release.md` section 6.8), and it shows in the diff of a test, not only of a data file.
 ///
-/// **Draft freeze, rewritten at the merge rebase** (W6g, ADR 0037, 2026-10-27): `references/commands.md` classes
-/// `vsift watch` as never, so the `skill` component moved `abbc2e96...` to `d2b52131...` and this digest `6b2744db...`
-/// to the value below; the other six components are unchanged.
-///
-/// The freeze of 2026-10-27 is the **0.3.0 development freeze; the final freeze is recorded at the 0.3.0 cut**. The
-/// progress story's fifth pull request changed the skill again (`references/resume.md` starts each of several
+/// **0.3.0 development freeze; the final freeze is recorded at the 0.3.0 cut.** The setup door's first pull request
+/// (ADR 0036, 2026-10-27) classes plain `vsift setup` as never in `references/commands.md`, so the `skill` component
+/// moved `abbc2e96...` to `ec575190...` and this digest `6b2744db...` to the value below; the other six components are
+/// unchanged. It was written on the `main` the pull request was rebased onto to merge. The freeze before it, also of
+/// 2026-10-27: the progress story's fifth pull request changed the skill again (`references/resume.md` starts each of several
 /// recordings, or one with no rush, with `--mode queued` and reports a waiting job's `queue_position`;
 /// `references/commands.md` allows the form), so the `skill` component moved `bef93e2b...` to `abbc2e96...` and this
 /// digest `2cda9657...` to the value below; the other six components are unchanged. It was written on the `main`
@@ -121,7 +120,7 @@ fn the_committed_freezes_still_hold() -> TestResult {
 /// in `batch-2-rc.3/` and `batch-3-rc.3/`); the first two candidates' was
 /// `1e89b5cc488e7245d1a6d63ec8809c1f8a5c137ee87f5ed05f9b692c2af6e392` (copies in `batch-2-rc.1/` and
 /// `batch-2-rc.2/`).
-const CUT_FREEZE_SHA256: &str = "403e0c6a4d8cd2646b3f69941a93e42e5e5a5b9080534c0a335c13d3e6565bae";
+const CUT_FREEZE_SHA256: &str = "70f3e04e16cda7741869946acad9f67a1e889ed85244c86b1e96dc84be4dd337";
 
 #[test]
 fn the_committed_freezes_are_the_ones_written_at_the_cut() -> TestResult {

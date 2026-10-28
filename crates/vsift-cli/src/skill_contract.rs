@@ -94,9 +94,12 @@ const PLACEHOLDERS: [(&str, &str); 24] = [
 /// read-only `setup list` and `setup repair` to `free` (ADR 0023's open
 /// detail, decided by the supervisor on 2026-09-30: repair only diagnoses and
 /// plans); `setup remove` and `setup rollback` change the managed tools and
-/// stay here with `setup install`. ADR 0037 adds `watch` (`vsift <video>`),
+/// stay here with `setup install`. Plain `setup`, the setup door for a
+/// person (ADR 0036), asks a question and installs on the answer, so it is
+/// never an assistant's to run. ADR 0037 adds `watch` (`vsift <video>`),
 /// which writes files into the person's own folder (the planner, 2026-10-27).
-const NEVER: [&str; 7] = [
+const NEVER: [&str; 8] = [
+    "setup",
     "setup.install",
     "setup.remove",
     "setup.rollback",

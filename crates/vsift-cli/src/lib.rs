@@ -8,6 +8,7 @@ mod build_identity;
 mod candidates;
 mod command;
 mod config;
+mod door;
 mod evidence;
 mod handoff;
 mod human;
@@ -160,13 +161,13 @@ fn compose_engine(
     )
 }
 
-/// The public operation a parsed command performs; `None` for bare `setup`,
-/// which only prints help.
-const fn operation_name(command: &Command) -> Option<CommandName> {
-    Some(match command {
+/// The public operation a parsed command performs; plain `setup` is the
+/// setup door (ADR 0036).
+const fn operation_name(command: &Command) -> CommandName {
+    match command {
         Command::Setup(arguments) => match &arguments.command {
             Some(setup) => setup.operation_name(),
-            None => return None,
+            None => CommandName::Setup,
         },
         Command::Ingest(_) => CommandName::Ingest,
         Command::Watch(_) => CommandName::Watch,
@@ -184,7 +185,7 @@ const fn operation_name(command: &Command) -> Option<CommandName> {
         Command::Bundle(arguments) => arguments.command.operation_name(),
         Command::Job(arguments) => arguments.command.operation_name(),
         Command::Handoff(arguments) => arguments.command.operation_name(),
-    })
+    }
 }
 
 /// Runs one command line. The dispatch below holds the state of every
@@ -278,21 +279,16 @@ where
     };
     // A strict boundary is attested before anything else runs: a host that
     // cannot provide it stops here with `ISOLATION_UNAVAILABLE` (exit 2).
-    let isolation = match operation_name(&command) {
-        Some(operation) => {
-            match attest_host_isolation(IsolationProfile::from(cli.host_isolation)) {
-                Ok(isolation) => isolation,
-                Err(error) => {
-                    return write_command_failure(
-                        &mut writer,
-                        mode,
-                        operation,
-                        CommandFailure::from(error),
-                    );
-                }
-            }
+    let isolation = match attest_host_isolation(IsolationProfile::from(cli.host_isolation)) {
+        Ok(isolation) => isolation,
+        Err(error) => {
+            return write_command_failure(
+                &mut writer,
+                mode,
+                operation_name(&command),
+                CommandFailure::from(error),
+            );
         }
-        None => HostIsolation::ProcessOnly,
     };
     // A background runner of `job start` is started with the same operator
     // options (ADR 0033).
@@ -465,7 +461,56 @@ where
                 let result = setup::remove(&engine, arguments);
                 write_result_with_failure_data(&mut writer, mode, CommandName::SetupRemove, result)
             }
-            None => write_setup_help(&mut writer),
+            // The setup door talks to a person; a caller that asked for
+            // JSON or events gets a typed refusal, never a question.
+            None if mode != OutputMode::Human => write_command_failure(
+                &mut writer,
+                mode,
+                CommandName::Setup,
+                CommandFailure::with_remediation(
+                    FailureCode::InvalidArgument,
+                    SETUP_DOOR_NEEDS_A_PERSON.to_owned(),
+                ),
+            ),
+            None => {
+                let options = door::DoorOptions {
+                    include: arguments.include,
+                };
+                let steps = door::EngineSteps { engine: &engine };
+                match interruption {
+                    Interruption::Trapped => {
+                        door::run(
+                            door::DoorRun {
+                                console: &mut door::SystemConsole,
+                                steps: &steps,
+                                options,
+                                version: env!("CARGO_PKG_VERSION"),
+                                cancellation: &cancellation,
+                                trap_interruptions: true,
+                            },
+                            &mut writer,
+                        )
+                        .await
+                    }
+                    // In-process tests never read the test runner's own
+                    // terminal: nobody is there to answer.
+                    #[cfg(test)]
+                    Interruption::Default => {
+                        door::run(
+                            door::DoorRun {
+                                console: &mut door::Nobody,
+                                steps: &steps,
+                                options,
+                                version: env!("CARGO_PKG_VERSION"),
+                                cancellation: &cancellation,
+                                trap_interruptions: false,
+                            },
+                            &mut writer,
+                        )
+                        .await
+                    }
+                }
+            }
         },
         Command::Ingest(arguments) => {
             let result = session::ingest(&engine, arguments, &cancellation).await;
@@ -658,9 +703,14 @@ where
     }
 }
 
+/// The remediation of plain `vsift setup` with `--json` or `--events`.
+const SETUP_DOOR_NEEDS_A_PERSON: &str = "vsift setup is for a person at a terminal and never \
+    answers in JSON. To read the setup, run setup check --json; to install, review setup plan \
+    --json and accept it with setup install.";
+
 /// Resolves the effective probe deadline for `profile`, then asks the engine
 /// for the current plan.
-async fn current_setup_plan(
+pub(crate) async fn current_setup_plan(
     engine: &Engine,
     profile: ExecutionProfile,
     include: OptionalComponentSet,
@@ -1227,25 +1277,6 @@ where
     write_help_or_version(writer, &help)
 }
 
-fn write_setup_help<StandardOutput, StandardError>(
-    writer: &mut OutputWriter<StandardOutput, StandardError>,
-) -> ProcessExit
-where
-    StandardOutput: Write,
-    StandardError: Write,
-{
-    let mut root = Cli::command();
-    let help = root.find_subcommand_mut("setup").map_or_else(
-        || String::from("VSift setup help is unavailable.\n"),
-        |setup| {
-            let mut rendered = setup.render_long_help().to_string();
-            rendered.push('\n');
-            rendered
-        },
-    );
-    write_help_or_version(writer, &help)
-}
-
 /// Writes a failure that may carry a typed remediation.
 fn write_command_failure<StandardOutput, StandardError>(
     writer: &mut OutputWriter<StandardOutput, StandardError>,
@@ -1801,9 +1832,9 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn root_and_setup_without_subcommands_show_help_without_side_effects()
+    async fn root_and_setup_help_show_help_without_side_effects()
     -> Result<(), Box<dyn std::error::Error>> {
-        for arguments in [vec!["vsift"], vec!["vsift", "setup"]] {
+        for arguments in [vec!["vsift"], vec!["vsift", "setup", "--help"]] {
             let mut stdout = Vec::new();
             let mut stderr = Vec::new();
             let exit = execute_with(

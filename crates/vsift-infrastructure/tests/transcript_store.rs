@@ -193,6 +193,7 @@ fn activate(
         &OperationId::parse("op_2222222222222222").map_err(|_| OpenSessionError::InvalidSource)?,
         StorageGeneration::INITIAL,
         OPENED_AT,
+        &vsift_domain::TimeAnchors::none(),
         revision,
     )
 }

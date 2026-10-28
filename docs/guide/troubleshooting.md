@@ -199,14 +199,14 @@ VSift setup check
 Your setup isn't complete: video and speech are missing.
 Speech needs two things, whisper.cpp and its model, and neither is set up yet.
 The installation guide shows where to get it: https://github.com/smormah/vsift/blob/main/docs/operations/install.md
-Next: vsift setup configure ffmpeg --executable <full-path-to-ffmpeg>
+Next: vsift setup
 ```
 
 *The error is from a Windows 11 machine whose `PATH` had no media tools; the table is the form VSift prints, taken from its
 own tests. Neither is checked automatically here, because they depend on the machine.* The last line names the one thing to
-do next: where VSift can install a part for you (Ubuntu 24.04), it is `vsift setup plan`; otherwise it is the `setup configure`
-command for the first part that is missing, and `setup check` then names the next. The fix is the same everywhere: install
-the tool, or tell VSift where it is:
+do next: `vsift setup`, the setup door (since `0.3.0`). Where VSift can install a part for you (Ubuntu 24.04), it offers to
+and installs it on your yes; otherwise it gives the `setup configure` command for the first part that is missing. The fix
+is the same everywhere: install the tool, or tell VSift where it is:
 
 ```console
 vsift setup configure ffmpeg --executable /absolute/path/to/ffmpeg

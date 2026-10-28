@@ -84,7 +84,16 @@ These files are the machine-readable public v1 boundary:
 - `config.schema.json` â strict explicit configuration document reserved for P06;
 - `ingest-data.schema.json` â the `data` member of a complete `ingest` result; its
   optional `transcript` member is present only when a supplied transcript was
-  imported (P07);
+  imported (P07), and its optional `time_anchor` member only when the session has a
+  clock-time anchor (0.3.0);
+- `time-anchor.schema.json` — time anchoring (0.3.0, ADR 0029): the `time_anchor`
+  summary of `ingest` and `session status` (when the recording happened by the
+  real-world clock, from which source, how far the sources agree, every anchor), and
+  under `$defs` the `clock` reading and the `clock_time` member every timestamped item
+  (transcript segment, visual candidate, frame or crop, audio clip) carries when the
+  session has an anchor. Examples: `ingest.time-anchor.json` and
+  `transcript-get.clock-time.json`, checked by `vsift-contract`'s
+  `anchored_results_match_their_examples`;
 - `transcript-get-data.schema.json` â the `data` member of a complete or partial
   `transcript.get` result: one bounded page with its continuation cursor (P07). Since
   0.2.1 it also has `transcript_coverage` (what a transcript covers of the requested

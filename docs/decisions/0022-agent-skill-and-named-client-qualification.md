@@ -1058,3 +1058,8 @@ section in `vsift --help`, a help-text change and not a JSON contract change. Th
 skill's investigation method and safety conventions (never `setup install`, budgets,
 marking unverified claims) are what the CLI alone does not carry, so the variant also
 checks that an agent without the skill does not accept a setup plan on its own.
+
+
+*Note, 2026-10-27 ([ADR 0036](0036-the-setup-door.md)):* the never class gains plain `vsift setup`, the setup door
+for a person, which asks a question and installs on the answer. The skill keeps `setup check` and `setup plan`, and
+the user's own `setup install`.

@@ -23,6 +23,10 @@
     "cue"
   ],
   "properties": {
+    "clock_time": {
+      "description": "The segment's real-world clock times, start and end (time anchoring, 0.3.0); absent when the session has no time anchor. See time-anchor.schema.json.",
+      "$ref": "time-anchor.schema.json#/$defs/clock_time"
+    },
     "segment_id": { "type": "string", "pattern": "^tsg_[a-z0-9]{16,64}$" },
     "revision_id": { "type": "string", "pattern": "^trv_[a-z0-9]{16,64}$" },
     "source_id": { "type": "string", "pattern": "^src_sha256_[0-9a-f]{64}$" },

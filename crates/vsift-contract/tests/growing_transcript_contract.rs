@@ -279,6 +279,7 @@ fn get(
             next_cursor: None,
             coverage: &page.coverage,
             growth,
+            time_anchors: &vsift_domain::TimeAnchors::none(),
         },
         LifecycleResponse::ephemeral(EXPIRES_AT.to_owned()),
         view,
@@ -373,6 +374,7 @@ async fn an_open_revision_is_read_as_partial_with_what_is_pending() -> TestResul
             next_cursor: None,
             coverage: &page.coverage,
             growth: open_growth(&token, None),
+            time_anchors: &vsift_domain::TimeAnchors::none(),
         },
         LifecycleResponse::ephemeral(EXPIRES_AT.to_owned()),
     )?;
@@ -538,6 +540,7 @@ async fn since_reads_answer_what_was_published_after_the_token() -> TestResult {
         coverage: &coverage,
         screen_text: None,
         growth: open_growth(&token, None),
+        time_anchors: &vsift_domain::TimeAnchors::none(),
     };
     for view in [ResultView::Full, ResultView::Brief] {
         let response = serde_json::to_value(search_response_with_view(

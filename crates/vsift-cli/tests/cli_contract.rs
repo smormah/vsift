@@ -184,14 +184,16 @@ fn help_and_version_publish_the_r0_namespace() -> Result<(), Box<dyn std::error:
     Ok(())
 }
 
+/// `setup --help` prints the setup help and probes nothing. Plain `vsift
+/// setup` is the setup door since 0.3.0 (ADR 0036); `setup_door_cli` runs it.
 #[test]
-fn setup_without_a_leaf_displays_help_and_does_not_probe() -> Result<(), Box<dyn std::error::Error>>
-{
-    let output = run(&["setup"])?;
+fn setup_help_displays_help_and_does_not_probe() -> Result<(), Box<dyn std::error::Error>> {
+    let output = run(&["setup", "--help"])?;
     let stdout = String::from_utf8(output.stdout)?;
 
     assert!(output.status.success());
-    assert!(stdout.contains("Usage: setup [COMMAND]"));
+    assert!(stdout.contains(" setup [OPTIONS]\n"), "{stdout}");
+    assert!(stdout.contains("installs nothing until you"), "{stdout}");
     assert!(!stdout.contains("Status:"));
     assert_eq!(output.stderr, [] as [u8; 0]);
     Ok(())

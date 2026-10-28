@@ -215,11 +215,13 @@ pub(super) fn update_lifecycle(
             now,
             artifacts,
             lifetime,
+            time_anchors,
         } => {
             if current.is_some() || source_bytes == 0 || source_bytes > crate::MAX_SOURCE_BYTES {
                 return Err(SessionStorageError::StateConflict);
             }
             validate_source_record(&source_id, &source_name, source_bytes)?;
+            super::time_anchors::decode_time_anchors(&time_anchors)?;
             if artifacts.len() > MAX_SESSION_ARTIFACTS {
                 return Err(SessionStorageError::CapacityExhausted);
             }
@@ -244,6 +246,7 @@ pub(super) fn update_lifecycle(
                 source_bytes,
                 artifacts,
                 verified_source_identity: None,
+                time_anchors,
             }))
         }
         LifecycleUpdate::Renew { now } => {
@@ -270,42 +273,50 @@ pub(super) fn update_lifecycle(
         LifecycleUpdate::SealTranscript { artifact, now } => {
             seal_transcript(current, artifact, now)
         }
-        LifecycleUpdate::AddArtifact { artifact, now } => {
-            let mut record = current.ok_or(SessionStorageError::StateConflict)?;
-            let lifetime = record.validated_lifetime()?;
-            if !matches!(record.phase, StoredSessionPhase::Open) || lifetime.expired(now) {
-                return Err(SessionStorageError::StateConflict);
-            }
-            validate_artifact_record(&artifact)?;
-            refuse_another_record_while_open(&record, &artifact)?;
-            if record.artifacts.len() >= MAX_SESSION_ARTIFACTS
-                || record
-                    .artifacts
-                    .iter()
-                    .any(|existing| existing.name == artifact.name)
-            {
-                return Err(SessionStorageError::CapacityExhausted);
-            }
-            if sub_budget_full(&record.artifacts, artifact.kind) {
-                return Err(SessionStorageError::CapacityExhausted);
-            }
-            let total = record
-                .artifacts
-                .iter()
-                .try_fold(artifact.bytes, |sum, item| sum.checked_add(item.bytes))
-                .ok_or(SessionStorageError::CapacityExhausted)?;
-            if total > MAX_SESSION_ARTIFACT_BYTES {
-                return Err(SessionStorageError::CapacityExhausted);
-            }
-            record.artifacts.push(artifact);
-            Ok(Some(record))
-        }
+        LifecycleUpdate::AddArtifact { artifact, now } => add_artifact(current, artifact, now),
         LifecycleUpdate::AddEvidence {
             artifacts,
             verified_identity,
             now,
         } => add_evidence(current, artifacts, verified_identity, now).map(Some),
     }
+}
+
+/// Adds one artifact to an open, unexpired session within its count and byte
+/// budgets.
+fn add_artifact(
+    current: Option<StoredLifecycle>,
+    artifact: StoredArtifact,
+    now: u64,
+) -> Result<Option<StoredLifecycle>, SessionStorageError> {
+    let mut record = current.ok_or(SessionStorageError::StateConflict)?;
+    let lifetime = record.validated_lifetime()?;
+    if !matches!(record.phase, StoredSessionPhase::Open) || lifetime.expired(now) {
+        return Err(SessionStorageError::StateConflict);
+    }
+    validate_artifact_record(&artifact)?;
+    refuse_another_record_while_open(&record, &artifact)?;
+    if record.artifacts.len() >= MAX_SESSION_ARTIFACTS
+        || record
+            .artifacts
+            .iter()
+            .any(|existing| existing.name == artifact.name)
+    {
+        return Err(SessionStorageError::CapacityExhausted);
+    }
+    if sub_budget_full(&record.artifacts, artifact.kind) {
+        return Err(SessionStorageError::CapacityExhausted);
+    }
+    let total = record
+        .artifacts
+        .iter()
+        .try_fold(artifact.bytes, |sum, item| sum.checked_add(item.bytes))
+        .ok_or(SessionStorageError::CapacityExhausted)?;
+    if total > MAX_SESSION_ARTIFACT_BYTES {
+        return Err(SessionStorageError::CapacityExhausted);
+    }
+    record.artifacts.push(artifact);
+    Ok(Some(record))
 }
 
 /// While a revision is open (ADR 0033) only its own run adds to the

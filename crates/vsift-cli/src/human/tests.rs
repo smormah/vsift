@@ -34,7 +34,7 @@ fn repository(relative: &str) -> PathBuf {
         .join(relative)
 }
 
-fn example(name: &str) -> Result<Value, Box<dyn std::error::Error>> {
+pub(crate) fn example(name: &str) -> Result<Value, Box<dyn std::error::Error>> {
     Ok(serde_json::from_str(&fs::read_to_string(repository(
         &format!("schemas/v1/examples/{name}"),
     ))?)?)
@@ -173,6 +173,16 @@ fn many_unplaced_stretches_are_cut_where_a_search_cuts_its_ranges() -> TestResul
 fn frozen_examples_render_as_readable_text() -> TestResult {
     for (command, file, snapshot) in [
         (CommandName::Ingest, "ingest.transcript.json", "ingest"),
+        (
+            CommandName::Ingest,
+            "ingest.time-anchor.json",
+            "ingest-time-anchor",
+        ),
+        (
+            CommandName::TranscriptGet,
+            "transcript-get.clock-time.json",
+            "transcript-get-clock-time",
+        ),
         (
             CommandName::TranscriptGet,
             "transcript-get.json",
@@ -741,7 +751,7 @@ fn each_tool_and_each_kind_of_timeout_gets_the_timeout_advice_only() -> TestResu
                 RuntimeReadiness::Degraded,
                 ManagedPlanAvailability::Qualified,
             )?;
-            assert!(text.contains("Next: vsift setup plan"), "{text}");
+            assert!(text.ends_with("Next: vsift setup\n"), "{text}");
             assert!(!text.contains("--timeout-seconds"), "{text}");
         }
     }
@@ -751,20 +761,16 @@ fn each_tool_and_each_kind_of_timeout_gets_the_timeout_advice_only() -> TestResu
 /// Issue #396: the advice for a missing tool once said "install or locate
 /// this trusted tool", and a cold agent read "locate" as leave to search the
 /// machine. The readable view is for a person and says none of that: for each
-/// tool, missing or found and failing, it sends them to `setup plan` where
-/// `VSift` can install the tool, and otherwise to the one `setup configure`
-/// command that registers it, with the installation guide above. The advice
-/// for an assistant stays in the JSON.
+/// tool, missing or found and failing, it sends them to the setup door (ADR
+/// 0036), with the installation guide above where `VSift` cannot install the
+/// tool; the door then gives the one `setup configure` command
+/// (`door::tests`). The advice for an assistant stays in the JSON.
 #[test]
 fn a_missing_tool_is_sent_to_the_plan_or_to_its_one_registration_command() -> TestResult {
     let available = || DependencyState::Available {
         version: String::from("fixture 1"),
     };
-    for (index, (dependency, placeholder)) in RuntimeDependency::ALL
-        .into_iter()
-        .zip(["ffmpeg", "ffprobe", "whisper-cli"])
-        .enumerate()
-    {
+    for (index, dependency) in RuntimeDependency::ALL.into_iter().enumerate() {
         let identifier = dependency.identifier();
         for state in [
             DependencyState::Missing,
@@ -780,14 +786,12 @@ fn a_missing_tool_is_sent_to_the_plan_or_to_its_one_registration_command() -> Te
                 states[index] = state.clone();
                 let text = setup_check_text(states, RuntimeReadiness::Degraded, managed_install)?;
                 let expected_end = if managed_install == ManagedPlanAvailability::Qualified {
-                    "\nNext: vsift setup plan   (shows what VSift can install for you, and changes nothing)\n".to_owned()
+                    "\nNext: vsift setup\n"
                 } else {
-                    format!(
-                        "\nThe installation guide shows where to get it: https://github.com/smormah/vsift/blob/main/docs/operations/install.md\nNext: vsift setup configure {identifier} --executable <full-path-to-{placeholder}>\n"
-                    )
+                    "\nThe installation guide shows where to get it: https://github.com/smormah/vsift/blob/main/docs/operations/install.md\nNext: vsift setup\n"
                 };
                 assert!(
-                    text.ends_with(&expected_end),
+                    text.ends_with(expected_end),
                     "{identifier} {managed_install:?}: {text}"
                 );
                 for agent_only in [

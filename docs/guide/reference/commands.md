@@ -7,7 +7,7 @@
 ## Contents
 
 - [vsift](#vsift): The root command, with the options every command takes
-- [vsift setup](#vsift-setup): Inspect and manage the local `VSift` setup
+- [vsift setup](#vsift-setup): Check what is installed and set up what is missing (run it any time)
 - [vsift setup check](#vsift-setup-check): Inspect local dependencies without changing the machine
 - [vsift setup plan](#vsift-setup-plan): Create a reviewable installation plan without applying it
 - [vsift setup install](#vsift-setup-install): Apply an unchanged, explicitly accepted installation plan
@@ -61,7 +61,7 @@ Sift technical video into agent-ready evidence
 Usage: vsift [OPTIONS] [COMMAND]
 
 Commands:
-  setup       Inspect and manage the local `VSift` setup
+  setup       Check what is installed and set up what is missing (run it any time)
   ingest      Prepare a local video investigation session
   session     Inspect or change a session lifecycle
   transcript  Read or revise timestamped transcript evidence
@@ -153,12 +153,15 @@ an installation plan is theirs to accept.
 
 ## vsift setup
 
-Inspect and manage the local `VSift` setup.
+Check what is installed and set up what is missing (run it any time).
 
 ```text
-Inspect and manage the local `VSift` setup
+Check what is installed and set up what is missing (run it any time).
 
-Usage: vsift setup [OPTIONS] [COMMAND]
+Plain `vsift setup`, in a terminal, shows what works and what is missing, offers to install what can be installed here, with each download's source, size and licence, and installs nothing until you type yes. Without a terminal it only reports. The commands below are what AI assistants and scripts use; they never ask anything.
+
+Usage: vsift setup [OPTIONS]
+       vsift setup <COMMAND>
 
 Commands:
   check            Inspect local dependencies without changing the machine
@@ -192,6 +195,12 @@ Options:
           - strict-linux: The strict Linux worker boundary: accepted only when the kernel attests a cgroup v2 with CPU, memory and process limits, a read-only root and no network but loopback; otherwise `ISOLATION_UNAVAILABLE` before any work
 
           [default: process-only]
+
+      --include <EXTRA>
+          Plain `vsift setup` only: also offer an optional extra (repeatable). `web-videos` fetches videos from public web pages (Ubuntu 24.04 x86-64 only for now)
+
+          Possible values:
+          - web-videos: Videos from public web pages: `online_links` in the JSON results
 
   -h, --help
           Print help (see a summary with '-h')
@@ -626,6 +635,9 @@ Options:
 
       --transcript-offset <MICROSECONDS>
           Signed microseconds added to every transcript timestamp to reach source time (for example 500000 or -250000); defaults to 0
+
+      --recorded-at <TIME>
+          When the recording started, for clock times on every result (time anchoring): RFC 3339, for example 2026-10-21T14:03:12+01:00 (local time with its UTC offset), 2026-10-21T13:03:12Z (UTC), or 2026-10-21T14:03:12 (local time, zone unknown). It is taken as exact and preferred over the time the video file itself records
 
       --session-root <SESSION_ROOT>
           For operators who run a worker host; an agent leaves it out. Explicit private disposable-session root; defaults to the per-user cache

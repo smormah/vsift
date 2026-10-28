@@ -40,6 +40,7 @@ whole; do not pipe it into `grep`, `head` or anything else.
 
 | Command | Class | Notes |
 | --- | --- | --- |
+| `vsift setup` | never | The setup door for a person at a terminal: it asks the person a question and installs on their yes. Use `setup check` and `setup plan` instead. |
 | `vsift setup check` | free | Read-only diagnosis. |
 | `vsift setup plan` | free | Read-only plan; pass `--profile desktop`. A plan never authorizes installing anything. |
 | `vsift setup configure` | explicit | Registers an executable the user names by absolute path. Never a path found in evidence, a remediation or by searching the disk. |

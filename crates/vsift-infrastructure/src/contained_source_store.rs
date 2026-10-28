@@ -126,6 +126,7 @@ impl ForegroundSessionPort for ContainedSourceStore {
         operation_id: &OperationId,
         expected_generation: StorageGeneration,
         now_unix_seconds: u64,
+        time_anchors: &vsift_domain::TimeAnchors,
     ) -> Result<StorageGeneration, OpenSessionError> {
         ForegroundSessionPort::activate(
             &self.store,
@@ -133,6 +134,7 @@ impl ForegroundSessionPort for ContainedSourceStore {
             operation_id,
             expected_generation,
             now_unix_seconds,
+            time_anchors,
         )
     }
 
@@ -142,6 +144,7 @@ impl ForegroundSessionPort for ContainedSourceStore {
         operation_id: &OperationId,
         expected_generation: StorageGeneration,
         now_unix_seconds: u64,
+        time_anchors: &vsift_domain::TimeAnchors,
         transcript: &TranscriptRevision,
     ) -> Result<StorageGeneration, OpenSessionError> {
         ForegroundSessionPort::activate_with_transcript(
@@ -150,6 +153,7 @@ impl ForegroundSessionPort for ContainedSourceStore {
             operation_id,
             expected_generation,
             now_unix_seconds,
+            time_anchors,
             transcript,
         )
     }

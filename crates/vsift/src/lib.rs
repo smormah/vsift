@@ -254,6 +254,11 @@ pub use vsift_domain::{
     TranscriptSegment, TranscriptSegmentId, TranscriptWarning, TranscriptWarningKind,
     TranscriptWarnings,
 };
+/// Time-anchoring values that appear in this API (ADR 0029).
+pub use vsift_domain::{
+    AnchorConfidence, AnchorConsistency, AnchorSource, CivilDateTime, ClockReading, ClockTime,
+    TimeAnchor, TimeAnchorError, TimeAnchors, UtcOffset,
+};
 /// Local-ASR provenance values reachable from [`TranscriptProvenance`], and
 /// the values a host-supplied [`SpeechRecognizer`] works with.
 pub use vsift_domain::{
