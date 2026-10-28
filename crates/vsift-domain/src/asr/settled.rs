@@ -69,7 +69,8 @@ use super::{ChunkSegments, MergedSegment, PlannedChunk, merge_chunks};
 /// every change to what the merge makes of the same chunks; the test
 /// `the_merge_rules_version_names_what_the_merge_makes` holds a digest of the
 /// merge of a fixed sweep of runs and fails when the rules change without it.
-pub const MERGE_RULES_VERSION: u32 = 1;
+/// Version 2 (#539): a segment that loops on its own words claims no time.
+pub const MERGE_RULES_VERSION: u32 = 2;
 
 /// The most that a chunk's decoded audio, and so any segment of it, may begin
 /// before the window the chunk planned: five seconds.

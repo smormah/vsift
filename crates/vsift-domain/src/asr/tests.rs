@@ -1976,16 +1976,24 @@ enum Words<'a> {
     /// below 16), so that neighbouring chunks repeat each other and the repeat
     /// rule acts.
     Repeated(&'a [u8]),
+    /// Words of their own, except that the segments these seeds choose (about
+    /// half) loop: one word said eight times, so that the loop rule (#539) acts.
+    Looped(&'a [u8]),
 }
 
 /// The words of segment `number` of chunk `chunk`.
 fn words_of(words: Words<'_>, chunk: u32, number: usize) -> String {
     const VOCABULARY: [&str; 2] = ["alpha", "beta"];
-    let Words::Repeated(seeds) = words else {
-        return format!("c{chunk}s{number}");
+    let seed_of = |seeds: &[u8]| {
+        let place = usize::try_from(chunk).unwrap_or(0) * 8 + number;
+        seeds.get(place % seeds.len().max(1)).copied().unwrap_or(0)
     };
-    let place = usize::try_from(chunk).unwrap_or(0) * 8 + number;
-    let seed = seeds.get(place % seeds.len().max(1)).copied().unwrap_or(0);
+    let seed = match words {
+        Words::Unique => return format!("c{chunk}s{number}"),
+        Words::Looped(seeds) if seed_of(seeds) & 4 == 0 => return format!("c{chunk}s{number}"),
+        Words::Looped(_) => return vec!["alpha"; 8].join(" "),
+        Words::Repeated(seeds) => seed_of(seeds),
+    };
     let bit = |position: u32| usize::from((seed >> position) & 1);
     (0..2 + bit(3))
         .map(|position| {
@@ -3046,6 +3054,110 @@ fn only_a_segment_with_the_same_words_as_the_one_before_is_a_repeat() -> TestRes
         merge_chunks(&chunks).segments,
         previous_merge_as_transcript(&chunks).segments
     );
+    Ok(())
+}
+
+/// #539: a chunk heard in another language that loops one word over its whole
+/// window no longer hides the words the chunk before it heard at their seam.
+///
+/// Modelled on RM03 at 75 to 80 s: chunk 3 wrote one segment over its whole
+/// window, one word repeated fifty times over English speech, and rule 1
+/// dropped chunk 2's last words in the overlap because the loop owned their
+/// time; the guard saw no hole because the loop covered it. Now a segment that
+/// loops on its own words claims no time, so the earlier chunk's words are
+/// kept, and the loop stays, as any segment of its own chunk does.
+#[test]
+fn a_segment_that_loops_on_its_own_words_no_longer_hides_the_chunk_before() -> TestResult {
+    let window_0 = (0, 30 * SECOND);
+    let window_1 = (25 * SECOND, 55 * SECOND);
+    let looped = vec!["okay"; 50].join(" ");
+    let first = with(
+        draft(
+            0,
+            window_0,
+            20 * SECOND,
+            25_500_000,
+            "then we open the settings page",
+        )?,
+        draft(
+            0,
+            window_0,
+            25_500_000,
+            29_600_000,
+            "and we choose the second option there",
+        )?,
+    );
+    let second = draft(1, window_1, 25 * SECOND, 55 * SECOND, &looped)?;
+    let chunks = [first, second];
+    let words = |merged_transcript: &super::MergedTranscript| -> Vec<String> {
+        merged_transcript
+            .segments
+            .iter()
+            .map(|kept| kept.segment.text().text().to_owned())
+            .collect()
+    };
+    // ADR 0033: each cut of this run still settles a prefix of its merge.
+    assert_eq!(
+        settled::every_cut_settles_a_prefix(&chunks).map(|_| ()),
+        Ok(())
+    );
+    let hidden = "and we choose the second option there".to_owned();
+    // The merge before the fix (the earlier merge lost them too) dropped them.
+    assert!(!words(&previous_merge_as_transcript(&chunks)).contains(&hidden));
+    let merged_transcript = merge_chunks(&chunks);
+    let kept_words = words(&merged_transcript);
+    assert!(kept_words.contains(&hidden), "{kept_words:?}");
+    assert!(
+        kept_words.contains(&looped),
+        "the loop is kept: nothing is removed by the rule"
+    );
+    let kept = kept_spans(&merged_transcript.segments);
+    for (start, end) in holes_of_the_union(&chunks, &kept) {
+        assert!(end - start <= SEAM_COVERAGE_TOLERANCE_MICROS);
+    }
+    Ok(())
+}
+
+/// #539: what counts as a segment that loops on its own words. A unit of one to
+/// four words said at least eight times in a row, making up at least half of
+/// the segment's words, is; a word said a few times for emphasis, a loop that
+/// is a small part of a longer segment, and ordinary speech are not.
+#[test]
+fn only_a_segment_mostly_made_of_one_repeated_unit_loops() -> TestResult {
+    let window_0 = (0, 30 * SECOND);
+    let answer = |text: &str| -> Built<bool> {
+        let chunk = draft(0, window_0, 2 * SECOND, 10 * SECOND, text)?;
+        Ok(chunk
+            .segments
+            .first()
+            .is_some_and(super::loops_on_its_own_words))
+    };
+    let cases = [
+        (vec!["okay"; 50].join(" "), true),
+        (vec!["thank you"; 10].join(" "), true),
+        (vec!["we will go there"; 8].join(" "), true),
+        (
+            format!("we open the file and {}", vec!["now"; 8].join(" ")),
+            true,
+        ),
+        (vec!["okay"; 7].join(" "), false),
+        ("no no no no".to_owned(), false),
+        (vec!["we will go there now"; 9].join(" "), false),
+        (
+            format!(
+                "we open the settings page and then we choose the second option {}",
+                vec!["now"; 8].join(" ")
+            ),
+            false,
+        ),
+        ("then we open the settings page".to_owned(), false),
+    ];
+    let mut answers = Vec::new();
+    for (text, _) in &cases {
+        answers.push(answer(text)?);
+    }
+    let expected: Vec<bool> = cases.iter().map(|(_, loops)| *loops).collect();
+    assert_eq!(answers, expected);
     Ok(())
 }
 

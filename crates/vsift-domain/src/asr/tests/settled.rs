@@ -172,7 +172,8 @@ proptest! {
     /// of up to 24 chunks of R0 or a smaller plan, with segments hugging the
     /// window edges, the audio decoded early (by a frame boundary, or by as
     /// much as the bound allows), rejected segments of every kind, and words
-    /// either unique or from a vocabulary of two (so that the repeat rule
+    /// unique, from a vocabulary of two (so that the repeat rule acts), or
+    /// looping in about half the segments (so that the loop rule of #539
     /// acts), **every cut of the run settles exactly a prefix of the whole
     /// run's merge**, with the recorded file's early-audio bound and, where the
     /// audio starts at most 40 ms early, with that tighter bound too.
@@ -183,10 +184,14 @@ proptest! {
         answers in prop::collection::vec(chunk_answer(), 24),
         from_ms in 0_u64..=20_000,
         early_ms in prop_oneof![0_u64..=40, 4_900_u64..=5_000],
-        repeated in proptest::bool::ANY,
+        kind in 0_u8..3,
         seeds in prop::collection::vec(0_u8..16, 64),
     ) {
-        let words = if repeated { Words::Repeated(&seeds) } else { Words::Unique };
+        let words = match kind {
+            0 => Words::Unique,
+            1 => Words::Repeated(&seeds),
+            _ => Words::Looped(&seeds),
+        };
         let Ok(plans) = plans() else {
             return Ok(());
         };
@@ -392,10 +397,10 @@ fn merge_rules_digest() -> Built<u64> {
         let seeds: Vec<u8> = (0..40)
             .map(|_| u8::try_from(next(16)).unwrap_or(0))
             .collect();
-        let words = if round % 2 == 0 {
-            Words::Unique
-        } else {
-            Words::Repeated(&seeds)
+        let words = match round % 3 {
+            0 => Words::Unique,
+            1 => Words::Repeated(&seeds),
+            _ => Words::Looped(&seeds),
         };
         let Some(layout) = generated_with_plan(ChunkPlan::R0, 0, total_ms, &answers, 0, words)?
         else {
@@ -426,11 +431,11 @@ fn merge_rules_digest() -> Built<u64> {
 /// would not have settled.
 #[test]
 fn the_merge_rules_version_names_what_the_merge_makes() -> TestResult {
-    const VERSION_1_DIGEST: u64 = 17_970_290_831_488_679_141;
-    assert_eq!(crate::asr::MERGE_RULES_VERSION, 1);
+    const VERSION_2_DIGEST: u64 = 9_263_716_986_213_698_812;
+    assert_eq!(crate::asr::MERGE_RULES_VERSION, 2);
     assert_eq!(
         merge_rules_digest()?,
-        VERSION_1_DIGEST,
+        VERSION_2_DIGEST,
         "the merge rules changed: bump MERGE_RULES_VERSION and record the new digest"
     );
     Ok(())
