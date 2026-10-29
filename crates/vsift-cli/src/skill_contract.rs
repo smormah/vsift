@@ -2905,6 +2905,7 @@ fn profile_limits(profile: &str) -> Option<vsift_contract::HandoffBudgetLimits> 
     match profile {
         "compact" => Some(vsift_contract::COMPACT_BUDGET),
         "standard" => Some(vsift_contract::STANDARD_BUDGET),
+        "read_through" => Some(vsift_contract::READ_THROUGH_BUDGET),
         _ => None,
     }
 }
@@ -2985,7 +2986,7 @@ fn workflows_stand_alone_use_free_commands_and_state_their_budget() -> Result<()
             .map(|(profile, _)| profile.to_owned())
             .unwrap_or_default();
         match profile_limits(&profile) {
-            Some(limits) if budgets.contains(&format!("| `{profile}` |")) => {
+            Some(limits) if budgets.contains(&format!("| `{profile}` ")) => {
                 let value = |member: &str| {
                     limits
                         .members()
@@ -3004,6 +3005,14 @@ fn workflows_stand_alone_use_free_commands_and_state_their_budget() -> Result<()
                     problems.add(format!(
                         "{name} names `{profile}` but does not state {stated:?}"
                     ));
+                }
+                if let Some(pages) = limits.transcript_pages {
+                    let stated = format!("at most {pages} transcript pages");
+                    if !flat.contains(&stated) {
+                        problems.add(format!(
+                            "{name} names `{profile}` but does not state {stated:?}"
+                        ));
+                    }
                 }
             }
             _ => problems.add(format!(
@@ -3104,10 +3113,12 @@ fn each_workflow_has_one_plugin_command_that_names_it() -> Result<(), String> {
     problems.into_result()
 }
 
-/// ADR 0038 section 2: the bug-report and findings examples are built from
-/// fixture output (`F04-speech` with its supplied transcript) and show the
-/// members their workflows name: a bug report uses no `category`, and every
-/// finding is a claim in section `context` with a finding's category.
+/// ADR 0038 section 2: the bug-report, findings and meeting-notes examples
+/// are built from fixture output (`F04-speech` with its supplied transcript)
+/// and show the members their workflows name: a bug report uses no
+/// `category`, every finding is a claim in section `context` with a finding's
+/// category, and the meeting notes are a `read_through` read whose items are
+/// decisions, actions or open questions.
 /// `example_handoffs_validate_against_the_handoff_schema` validates both.
 #[test]
 fn the_workflow_examples_use_the_members_their_workflows_name() -> Result<(), String> {
@@ -3138,6 +3149,93 @@ fn the_workflow_examples_use_the_members_their_workflows_name() -> Result<(), St
                 claim["id"]
             ));
         }
+    }
+    let notes = read_json(&examples.join("meeting-notes.handoff.json"))?;
+    if notes["budget"]["profile"] != "read_through" {
+        problems.add("meeting-notes.handoff.json is not a read_through read".to_owned());
+    }
+    for claim in notes["claims"].as_array().into_iter().flatten() {
+        let item = matches!(
+            claim["category"].as_str(),
+            Some("decision" | "action_item" | "open_question")
+        );
+        if !item || claim["section"] != "context" {
+            problems.add(format!(
+                "meeting-notes.handoff.json: claim {} is not a meeting item in section context",
+                claim["id"]
+            ));
+        }
+    }
+    problems.into_result()
+}
+
+/// ADR 0038 section 2 (the maintainer's D1): the `read_through` table of
+/// `budgets.md` is the contract's `READ_THROUGH_BUDGET`, in the handoff's
+/// units, row by row; a row that groups limits ("Images per step, in total,
+/// bytes") lists them in that order.
+#[test]
+fn the_read_through_profile_is_budgets_md() -> Result<(), String> {
+    let budgets = read_text(&skill_directory().join("references").join("budgets.md"))?;
+    let section = budgets
+        .split_once("## `read_through`")
+        .map(|(_, rest)| rest)
+        .ok_or("budgets.md has no `read_through` section")?;
+    let quantity = |text: &str| -> Option<u64> {
+        let mut parts = text.split_whitespace();
+        let number: u64 = parts.next()?.parse().ok()?;
+        match parts.next() {
+            None => Some(number),
+            Some("MiB") => number.checked_mul(1024 * 1024),
+            Some("min") => number.checked_mul(60),
+            Some(_) => None,
+        }
+    };
+    let row = |name: &str| -> Option<Vec<u64>> {
+        section.lines().find_map(|line| {
+            let cells: Vec<&str> = line.split('|').map(str::trim).collect();
+            (cells.get(1) == Some(&name)).then(|| {
+                cells
+                    .get(2)?
+                    .split(',')
+                    .map(quantity)
+                    .collect::<Option<Vec<u64>>>()
+            })?
+        })
+    };
+    let limits = vsift_contract::READ_THROUGH_BUDGET;
+    let mut problems = Problems::default();
+    for (name, expected) in [
+        ("Page size", vec![limits.page_limit]),
+        (
+            "Transcript pages",
+            limits.transcript_pages.into_iter().collect(),
+        ),
+        ("Tool calls", vec![limits.tool_calls]),
+        (
+            "Images per step, in total, bytes",
+            vec![
+                limits.images_per_step,
+                limits.images_total,
+                limits.image_bytes,
+            ],
+        ),
+        (
+            "Refinement depth, burst frames",
+            vec![limits.refinement_depth, limits.burst_frames],
+        ),
+        ("Wall time", vec![limits.wall_time_s]),
+    ] {
+        if row(name).as_ref() != Some(&expected) {
+            problems.add(format!(
+                "budgets.md's read_through row {name:?} differs from the contract's {expected:?}"
+            ));
+        }
+    }
+    if limits.transcript_pages.is_none()
+        || vsift_contract::COMPACT_BUDGET.transcript_pages.is_some()
+        || vsift_contract::STANDARD_BUDGET.transcript_pages.is_some()
+    {
+        problems.add("only read_through has a transcript page count".to_owned());
     }
     problems.into_result()
 }

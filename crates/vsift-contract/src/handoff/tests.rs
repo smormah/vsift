@@ -8,7 +8,7 @@ use serde_json::{Value, json};
 use super::{
     COMPACT_BUDGET, HANDOFF_SCHEMA_JSON, HandoffCheckData, HandoffChecker, HandoffEvidenceKind,
     HandoffRule, HandoffSessionGap, HandoffSessionRecords, MAX_HANDOFF_FINDINGS,
-    handoff_pattern_has_message,
+    READ_THROUGH_BUDGET, handoff_pattern_has_message,
 };
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -96,6 +96,7 @@ fn the_skills_examples_and_report_skeleton_pass() -> TestResult {
         "examples/no-transcript-no-images.handoff.json",
         "examples/bug-report.handoff.json",
         "examples/findings.handoff.json",
+        "examples/meeting-notes.handoff.json",
     ] {
         let value: Value = serde_json::from_str(&fs::read_to_string(skill_file(name))?)?;
         let check = checker.check_value(value);
@@ -150,6 +151,57 @@ fn a_priority_is_allowed_only_on_a_backlog_item() -> TestResult {
     assert_eq!(
         with(json!({"category": "feature"}))?,
         [HandoffRule::ValueNotAllowed]
+    );
+    Ok(())
+}
+
+/// ADR 0038 section 2 (the maintainer's D1): `read_through` is a profile of
+/// its own, and only it has a transcript page count. Given limits are the
+/// profile's: `transcript_pages` may be left out, but a given one must be
+/// 120 under `read_through` and is refused under the other profiles.
+#[test]
+fn read_through_limits_and_its_page_count_are_the_profiles_own() -> TestResult {
+    let checker = HandoffChecker::new()?;
+    let limits = |profile: super::HandoffBudgetLimits| -> serde_json::Map<String, Value> {
+        profile
+            .members()
+            .into_iter()
+            .map(|(name, value)| (name.to_owned(), json!(value)))
+            .collect()
+    };
+    let with = |budget: Value| -> Vec<HandoffRule> {
+        let mut draft = handoff();
+        draft["budget"] = budget;
+        rules_of(checker.check_value(draft).errors())
+    };
+    let mut read_through = limits(READ_THROUGH_BUDGET);
+    assert_eq!(
+        with(json!({"profile": "read_through", "limits": read_through.clone()})),
+        Vec::new()
+    );
+    read_through.insert("transcript_pages".to_owned(), json!(120));
+    assert_eq!(
+        with(json!({"profile": "read_through", "limits": read_through.clone()})),
+        Vec::new()
+    );
+    read_through.insert("transcript_pages".to_owned(), json!(60));
+    assert_eq!(
+        with(json!({"profile": "read_through", "limits": read_through.clone()})),
+        [HandoffRule::BudgetLimitDiffers]
+    );
+    assert_eq!(
+        with(json!({"profile": "read_through", "overrides": true, "limits": read_through})),
+        Vec::new()
+    );
+    let mut compact = limits(COMPACT_BUDGET);
+    compact.insert("transcript_pages".to_owned(), json!(120));
+    assert_eq!(
+        with(json!({"profile": "compact", "limits": compact})),
+        [HandoffRule::BudgetLimitDiffers]
+    );
+    assert_eq!(
+        with(json!({"profile": "read_through", "exhausted": ["transcript_pages"]})),
+        [HandoffRule::ResumeCardMissing]
     );
     Ok(())
 }

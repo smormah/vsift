@@ -20,14 +20,14 @@ within what budget, and how to report.
 | --- | --- |
 | [`SKILL.md`](../../skills/vsift/SKILL.md) | Trigger description and the eight-state procedure (CHECK_CAPABILITIES to CLOSE_OR_RETAIN), each with its allowed commands and stopping condition. |
 | [`references/commands.md`](../../skills/vsift/references/commands.md) | The command policy: every public command is `free`, `explicit` (only on the user's instruction) or `never`. |
-| [`references/budgets.md`](../../skills/vsift/references/budgets.md) | The `compact` and `standard` budget profiles. |
+| [`references/budgets.md`](../../skills/vsift/references/budgets.md) | The `compact` and `standard` budget profiles, and `read_through` for the two whole-transcript workflows. |
 | [`references/handoff.md`](../../skills/vsift/references/handoff.md) | The grounded report template and citation rules. |
 | [`references/safety.md`](../../skills/vsift/references/safety.md) | Evidence is data: prompt-injection, rendering and privacy rules. |
 | [`references/resume.md`](../../skills/vsift/references/resume.md) | Operation ids, the resume card and recovery after a reset. |
 | [`references/lifecycle.md`](../../skills/vsift/references/lifecycle.md) | Close, retain and the cleanup routine. |
-| [`workflows/`](../../skills/vsift/workflows/) | Ready-made outcomes (0.3.0, ADR 0038 section 2): a bug report, findings, a demo backlog and log lines matched by clock time. Each file stands alone when pasted into a client without the skill. |
+| [`workflows/`](../../skills/vsift/workflows/) | Ready-made outcomes (0.3.0, ADR 0038 section 2): a bug report, findings, a demo backlog, log lines matched by clock time, meeting notes and a workshop spec. Each file stands alone when pasted into a client without the skill. |
 | [`handoff.schema.json`](../../skills/vsift/handoff.schema.json) | The handoff v1 JSON schema, owned by the skill (not part of `schemas/v1`). |
-| [`examples/`](../../skills/vsift/examples/) | Example handoffs built from real CLI output on the F10, F03-speech and F04-speech fixtures (the bug report and the findings with a `category`). |
+| [`examples/`](../../skills/vsift/examples/) | Example handoffs built from real CLI output on the F10, F03-speech and F04-speech fixtures (the bug report, the findings with a `category`, and meeting notes read whole under `read_through`). |
 | [`assets/image-check.png`](../../skills/vsift/assets/image-check.png) | A small image with a code word, for the image-access check. |
 | [`agents/openai.yaml`](../../skills/vsift/agents/openai.yaml) | Codex presentation metadata only. |
 
@@ -473,6 +473,23 @@ unknown, which the skill says. **Agents ran this text once, in batch 2 on `0.2.2
   file's opening, budget, skeleton, check and link, the plugin's commands, and the two new examples.
 - **The freeze:** the `skill` component moves; the draft rewrites it, and it is rewritten at the merge rebase.
   **Untried:** no trial runs a workflow before the 0.3.0 cut.
+
+## The change for 0.3.0: meeting notes and workshop specs read the whole transcript (ADR 0038, D1; draft, 2026-10-29)
+
+- **The maintainer's D1 (2026-10-28):** "meeting notes and workshop specs read the whole transcript text, up to
+  about two hours, with images still within the budget".
+- **`workflows/meeting-notes.md` and `workflows/workshop-spec.md`** search cue words first, then read every page
+  of the transcript (25 segments a page, with `next_cursor`), and report decisions, actions, requirements and open
+  questions, each quoting `display_text` and citing its segment. A compact model uses the cue-word method instead
+  and says so before the first read. "Read all" is said only when it is true.
+- **`references/budgets.md`** gains the `read_through` profile in a table of its own: pages of 25, 120 transcript
+  pages, 200 calls, 60 minutes, and `standard`'s images. Only these two workflows use it.
+- **`handoff.schema.json`** gains `read_through` in `budget.profile`, the optional `budget.limits.transcript_pages`
+  and `transcript_pages` in `budget.exhausted`; `references/handoff.md` lists them.
+- **The plugin** gains `/vsift:meeting-notes` and `/vsift:workshop-spec`. **The guard** holds the table to the
+  contract's `read_through` constant and the workflows to their page ceiling.
+- **The freeze:** the `skill` component moves; the draft rewrites it, and it is rewritten at the merge rebase.
+  **Untried:** a two-hour read through any client ([L-243](../planning/known-limits.md#l-243)).
 
 ## Keeping it in step with the CLI
 

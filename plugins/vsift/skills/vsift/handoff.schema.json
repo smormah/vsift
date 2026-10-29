@@ -409,7 +409,11 @@
         "tool_calls": { "type": "integer", "minimum": 1, "maximum": 10000 },
         "refinement_depth": { "type": "integer", "minimum": 0, "maximum": 100 },
         "wall_time_s": { "type": "integer", "minimum": 1 },
-        "burst_frames": { "type": "integer", "minimum": 1, "maximum": 100 }
+        "burst_frames": { "type": "integer", "minimum": 1, "maximum": 100 },
+        "transcript_pages": {
+          "description": "Optional (0.3.0): the transcript pages a whole read may take; only the read_through profile has a value.",
+          "oneOf": [{ "type": "null" }, { "type": "integer", "minimum": 1, "maximum": 1000 }]
+        }
       }
     },
     "budget": {
@@ -417,7 +421,7 @@
       "additionalProperties": false,
       "required": ["profile"],
       "properties": {
-        "profile": { "enum": ["compact", "standard"] },
+        "profile": { "enum": ["compact", "standard", "read_through"] },
         "overrides": {
           "description": "Optional (default false): true when the user changed any limit of the profile.",
           "type": ["boolean", "null"]
@@ -446,7 +450,7 @@
           "type": ["array", "null"],
           "uniqueItems": true,
           "items": {
-            "enum": ["images_total", "image_bytes", "tool_calls", "refinement_depth", "wall_time_s"]
+            "enum": ["images_total", "image_bytes", "tool_calls", "refinement_depth", "wall_time_s", "transcript_pages"]
           }
         }
       }

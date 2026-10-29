@@ -636,3 +636,42 @@ planner's ruling on inferred priority (Outcome, D2). The read-through workflows 
   10 s opened and read); both pass `handoff check --session` against that session.
 - **Register:** [L-238](../planning/known-limits.md#l-238) and [L-239](../planning/known-limits.md#l-239).
 - **The trial freeze** is a draft freeze, rewritten at the merge rebase.
+
+## Implementation note, 2026-10-29 (the read-through workflows: meeting notes and workshop spec)
+
+Built as section 2's D1 amendment says, in its own pull request after slice 2 (stacked on it until it merges).
+
+- **The profile.** `read_through` is a contract constant (`vsift_contract::READ_THROUGH_BUDGET`) and a table of its
+  own in `references/budgets.md`, with the values of section 2's table: pages of 25, 120 transcript pages, 200
+  tool calls, 60 minutes, and `standard`'s images, refinement and bursts. The table has its own columns
+  (`read_through` and why), so the `compact`/`standard` table and both of its parsers (the skill guard and the
+  trial harness) are unchanged. `budgets.md` now says the whole-transcript read is for these two workflows only,
+  and that they search first too; SKILL.md's rule 6 (search before any `transcript get`) still holds for them.
+- **The handoff.** `budget.profile` gains `read_through`; `budget.limits` gains the optional `transcript_pages`
+  (null or 1 to 1,000); `budget.exhausted` gains `transcript_pages`, so a read the page ceiling stopped names it
+  and needs the resume card. `handoff check` holds a given `transcript_pages` to the profile: 120 under
+  `read_through`, refused under `compact` and `standard`, any value with `overrides`. `HandoffBudgetLimits` gains
+  `transcript_pages: Option<u64>` (`None` for the other two profiles); its `members()` stays the eight limits
+  every profile has. No new rule identifier or failure code; `handoff_version` stays `1`.
+- **The workflows.** `meeting-notes.md` (items `decision`, `action_item`, `open_question`; speakers by
+  `display_label`, never a name the recording does not say) and `workshop-spec.md` (`requirement`, `decision`,
+  `open_question`). Each says a compact model, or another named profile, uses the cue-word method instead, before
+  the first read; searches cue words first; sizes the read from the `revision` block (`segment_count`, the last
+  `source_segments[].end_us`); reads every page with its `next_cursor`; asks a cut page again with `--limit 5`;
+  follows a background transcription with `job status` and `--since`; and says "read all" only when the last
+  page's cursor was null, no read was `partial` and any job had succeeded. A stretch a running job has not
+  transcribed is a gap with reason `untranscribed_range` and the resume card naming the job, as
+  `references/resume.md` already says. Each has its plugin command.
+- **The example.** `examples/meeting-notes.handoff.json` is a whole-transcript read of the `F04-speech` fixture
+  with its supplied transcript, on this branch's binary: three cue-word searches, one page of 25 whose
+  `next_cursor` was null, one `action_item`, `budget.profile` `read_through` with every limit given. It passes
+  `handoff check --session` against that session. No fixture is a real meeting, so the example shows the shape,
+  not a long read.
+- **Tests.** `the_read_through_profile_is_budgets_md` (the table against the constant, and only `read_through`
+  has a page count); the workflow test also holds "at most 120 transcript pages"; the examples test holds the
+  meeting-notes example to `read_through` and meeting items; the contract's
+  `read_through_limits_and_its_page_count_are_the_profiles_own`; the differential test reads the new example and
+  `transcript_pages`. Each failed on a planted mutation before it was reverted.
+- **Not measured:** a read of two hours through any client (L-243).
+- **Register:** [L-243](../planning/known-limits.md#l-243). **The trial freeze** is a draft freeze, rewritten at
+  the merge rebase.

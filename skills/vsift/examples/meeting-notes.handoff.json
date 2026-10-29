@@ -1,0 +1,55 @@
+{
+  "handoff_version": "1",
+  "status": "complete",
+  "question": "Which actions, decisions and open questions does the recording state?",
+  "capabilities": {
+    "image_access": "verified",
+    "image_check_code": "XXXXX 0000",
+    "transcript_basis": "supplied_transcript"
+  },
+  "session": {
+    "session_id": "ses_029c3fb5d81a720137fa6b2debb47acd",
+    "revision_id": "trv_6aec97cb64f8f9cbb3b00c54e246cc42"
+  },
+  "claims": [
+    {
+      "id": "c1",
+      "section": "context",
+      "kind": "observed",
+      "support": "supported",
+      "certainty": "high",
+      "statement": "Action, said from 00:00.775: scroll to order 1017. No speaker label is given.",
+      "citations": ["e1"],
+      "category": "action_item"
+    }
+  ],
+  "citations": [
+    {
+      "id": "e1",
+      "type": "transcript_segment",
+      "segment_id": "tsg_ce47de64029f1ad14b67315bc3e559c3",
+      "start_us": 775000,
+      "end_us": 2850000
+    }
+  ],
+  "gaps": [],
+  "untrusted_instructions": [],
+  "budget": {
+    "profile": "read_through",
+    "limits": {
+      "images_per_step": 4,
+      "images_total": 24,
+      "image_bytes": 50331648,
+      "page_limit": 25,
+      "tool_calls": 200,
+      "refinement_depth": 4,
+      "wall_time_s": 3600,
+      "burst_frames": 12,
+      "transcript_pages": 120
+    }
+  },
+  "lifecycle": {
+    "action": "left_open",
+    "expires_at": "2026-10-30T20:06:34Z"
+  }
+}

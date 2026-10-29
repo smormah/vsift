@@ -206,9 +206,9 @@ pub use handoff::{
     HandoffRuleScope, HandoffSchemaError, HandoffSessionCheck, HandoffSessionGap,
     HandoffSessionRecords, HandoffSkeletonData, HandoffSkeletonError, HandoffSkeletonFacts,
     HandoffTranscriptBasis, HandoffVocabulary, MAX_HANDOFF_FINDINGS, MAX_HANDOFF_REPORT_BYTES,
-    MAX_RESUME_CARD_BYTES, STANDARD_BUDGET, budget_profile, extract_handoff_block,
-    handoff_is_cut_short, handoff_pattern_has_message, handoff_report_text_findings,
-    handoff_vocabulary,
+    MAX_RESUME_CARD_BYTES, READ_THROUGH_BUDGET, STANDARD_BUDGET, budget_profile,
+    extract_handoff_block, handoff_is_cut_short, handoff_pattern_has_message,
+    handoff_report_text_findings, handoff_vocabulary,
 };
 pub use install::{
     ARTIFACT_DIRECTORY_REMEDIATION, InstallSource, MANAGED_INSTALL_BUSY_REMEDIATION,

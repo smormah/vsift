@@ -89,6 +89,7 @@ fn bases() -> Result<Vec<Value>, Box<dyn std::error::Error>> {
         "examples/no-transcript-no-images.handoff.json",
         "examples/bug-report.handoff.json",
         "examples/findings.handoff.json",
+        "examples/meeting-notes.handoff.json",
     ] {
         bases.push(serde_json::from_str(&fs::read_to_string(skill_file(
             name,
@@ -134,7 +135,7 @@ fn rich() -> Value {
         "budget": {"profile": "compact", "overrides": false,
             "limits": {"images_per_step": 1, "images_total": 6, "image_bytes": 12_582_912,
                 "page_limit": 20, "tool_calls": 30, "refinement_depth": 2, "wall_time_s": 900,
-                "burst_frames": 4},
+                "burst_frames": 4, "transcript_pages": null},
             "used": {"images_total": 1, "image_bytes": 10, "tool_calls": 3, "refinement_depth": 0,
                 "wall_time_s": null},
             "exhausted": ["images_total"]},
@@ -402,7 +403,7 @@ proptest! {
 
     /// A generated value placed at a generated location of a base draft.
     #[test]
-    fn generated_drafts_agree(base in 0_usize..6, location in any::<prop::sample::Index>(), value in arbitrary_value()) {
+    fn generated_drafts_agree(base in 0_usize..7, location in any::<prop::sample::Index>(), value in arbitrary_value()) {
         let oracle = Oracle::new().map_err(|error| TestCaseError::fail(error.to_string()))?;
         let bases = bases().map_err(|error| TestCaseError::fail(error.to_string()))?;
         let mut draft = bases[base % bases.len()].clone();
