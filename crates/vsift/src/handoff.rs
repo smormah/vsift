@@ -103,11 +103,11 @@ impl Engine {
 impl Engine {
     /// Reads, without renewing or writing anything, what a handoff skeleton
     /// states about one open session: its identity, its source and how its
-    /// newest committed transcript revision was made (ADR 0038).
+    /// newest transcript revision was made (ADR 0038).
     ///
-    /// A revision a background transcription is still writing is not
-    /// committed, so it is not named: the skeleton states only what a read
-    /// would cite now.
+    /// The revision is the one a plain transcript read gives: while a
+    /// background transcription runs, its open revision (ADR 0033 D2), so the
+    /// skeleton names the revision the agent's reads cite.
     ///
     /// # Errors
     ///

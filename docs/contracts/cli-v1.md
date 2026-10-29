@@ -3044,11 +3044,12 @@ that spelled the placeholder. The skeleton removes the template. Additive: a new
   against `skills/vsift/handoff.schema.json` and passes `handoff check`, also with `--session`
   naming the same session: `status` `insufficient_evidence`, the `question` as given,
   `capabilities.image_access` `unavailable` (the agent changes it only after its own image check)
-  and `capabilities.transcript_basis` from the session's newest committed transcript revision
+  and `capabilities.transcript_basis` from the session's newest transcript revision
   (`supplied_transcript`, `local_asr`, `mixed`, or `none` without one), `session` with `session_id`,
   `source_id` and, when there is a transcript, `revision_id`, empty `claims`, `citations`, `gaps`
-  and `untrusted_instructions`, and `lifecycle.action` `left_open`. A revision a background
-  transcription is still writing is not committed, so it is not named. `fill` lists, as RFC 6901
+  and `untrusted_instructions`, and `lifecycle.action` `left_open`. The revision is the one a plain
+  `transcript get` reads: while a background transcription runs, its open revision (ADR 0033), so
+  the skeleton names the revision the agent's reads cite. `fill` lists, as RFC 6901
   pointers into `handoff`, the members only the agent can supply. The frozen example is
   `schemas/v1/examples/handoff-skeleton.json`.
 - **Read only.** The session is not renewed and nothing is written. Without `--json` the command
@@ -3060,7 +3061,10 @@ that spelled the placeholder. The skeleton removes the template. Additive: a new
   handoff schema and passes the check), the `skeleton` unit tests of `vsift-contract` (every
   transcript basis; a refused question is the caller's error) and `handoff_cli_contract` through the
   binary (a seeded session's skeleton passes `handoff check --session` unfilled and leaves the
-  session's status unchanged; a refused question; a closed or unknown session; the human block).
+  session's status unchanged; a refused question; a closed or unknown session; the human block) and
+  `growing_read_cli_contract` (while a job publishes an open revision, the skeleton names the revision
+  `transcript get` cites, and a handoff citing that read passes `handoff check --session`, also after
+  the next part).
 
 ### P13 `setup install`
 

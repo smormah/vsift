@@ -2,8 +2,9 @@
 
 - Status: **Accepted by the planner, 2026-10-28**, at `9f563bc2`, relayed by the coordinator, with
   the conditions recorded in [Outcome](#outcome-the-planners-rulings-of-2026-10-28). D1 is the
-  maintainer's, **decided on 2026-10-29** (amended into sections 2, 8 and 9 below; the planner
-  reviews the amendment before the meeting-notes and workshop-spec workflows are built). Each slice is
+  maintainer's, **decided on 2026-10-28** (amended into sections 2, 8 and 9 below; the planner
+  accepted the amendment on 2026-10-29, so the meeting-notes and workshop-spec workflows may be built,
+  in their own pull request). Each slice is
   built in its own pull request; until each lands, what it describes is a plan, not a feature.
 - Date: 2026-10-28
 - Refines: [ADR 0022](0022-agent-skill-and-named-client-qualification.md) (the skill, its command policy
@@ -79,8 +80,12 @@ knows:
   the schema's safe-text rule);
 - `status` `insufficient_evidence`;
 - `capabilities.image_access` `unavailable` (the agent changes it only after its own image check), and
-  `media_tools`, `local_asr` and `transcript_basis` from the session's records;
-- the `session` ids, including the transcript revision when there is one;
+  `transcript_basis` from the session's newest transcript revision. `media_tools` and `local_asr` are
+  left to the agent: they are what `setup check` reports, not what the session records (implementation
+  note below);
+- the `session` ids, including the transcript revision when there is one: the revision a plain
+  `transcript get` reads, which is the open revision while a background transcription runs (ADR 0033
+  D2), so the skeleton names the revision the agent's reads cite;
 - `claims: []`, `citations: []`, `gaps: []` and `untrusted_instructions: []`;
 - `lifecycle.action` `left_open`.
 
@@ -123,7 +128,7 @@ check`, so its result is a checkable handoff. That is the difference from a summ
 segment, frame or crop that `handoff check --session` resolves.
 
 **Long recordings (amended 2026-10-29, D1).** Most meetings, workshops and demos run longer than 5 minutes.
-The maintainer decided D1 on 2026-10-29, in his words: "Yes: meeting notes and workshop specs read the
+The maintainer decided D1 on 2026-10-28, in his words: "Yes: meeting notes and workshop specs read the
 whole transcript text, up to about two hours, with images still within the budget." So:
 
 - **`meeting-notes.md` and `workshop-spec.md` read the whole transcript**, page by page in the brief view,
@@ -405,7 +410,8 @@ Cut the first item first:
 
 - **D1 (the maintainer).** Workflows over a long recording are cue-word sampled within `standard` and end
   `partial` with the unread stretches as gaps. This keeps the #368 ruling. A profile that reads a whole
-  transcript is not in 0.3.0. *Recommended:* yes. **Outcome (2026-10-29), in the maintainer's words: "Yes:
+  transcript is not in 0.3.0. *Recommended:* yes. **Outcome (2026-10-28): not as proposed: the
+  whole-transcript read. In the maintainer's words: "Yes:
   meeting notes and workshop specs read the whole transcript text, up to about two hours, with images still
   within the budget."** The planner's reading: those two workflows read the whole transcript under a
   text-only profile with a page ceiling and a call ceiling sized for two hours, superseding #368 for them
@@ -453,7 +459,8 @@ Cut the first item first:
 ## Outcome: the planner's rulings of 2026-10-28
 
 Relayed by the coordinator. Slices 1, 3, 4 and 5 may start (slice 1 first), and slice 2's bug-report,
-findings, demo-backlog and logs-by-clock files. The meeting-notes and workshop-spec files wait for D1.
+findings, demo-backlog and logs-by-clock files. The meeting-notes and workshop-spec files waited for D1,
+which the maintainer decided on 2026-10-28; the planner accepted its amendment on 2026-10-29.
 
 - **D2, yes**, `handoff_version` stays `1`. Before slice 2 is built this record must say exactly how an
   inferred priority is shown. The planner prefers no third member: the claim's statement says "inferred",
@@ -489,9 +496,13 @@ Built as section 1 says, with one narrowing: the skeleton's `capabilities` holds
 (`unavailable`) and `transcript_basis` only. `media_tools` and `local_asr` are what `setup check` reports,
 not what the session records, and running the tool probes from this command would make it slow and
 write nothing the agent cannot read from `setup check` itself, so they are left to the agent (they are
-optional in the schema). The basis is the one `search` reports for the session's newest committed
-revision (`SearchCoverage`), or `none` without one; a revision a background transcription is still
-writing is not named. A closed, expired or unknown session fails as a transcript read of it does.
+optional in the schema). Section 1 says so (amended 2026-10-29). The basis is the one `search` reports
+for the session's newest revision (`SearchCoverage`), or `none` without one. That revision is the one a
+plain read gives: while a background transcription runs, its open revision (ADR 0033 D2). An earlier
+draft of this note said the open revision was not named; the store's read returns it first, and
+`growing_read_cli_contract`'s `a_skeleton_names_the_open_revision_a_read_cites` holds the skeleton, a
+read and `handoff check --session` to the same revision while a job publishes (corrected 2026-10-29). A
+closed, expired or unknown session fails as a transcript read of it does.
 
 - **Layers:** `vsift-contract` builds the skeleton (`HandoffChecker::skeleton`) and checks it with the
   same checker a draft gets, so it cannot ship a shape the check refuses; the engine reads the facts
