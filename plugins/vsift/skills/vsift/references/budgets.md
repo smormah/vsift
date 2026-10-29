@@ -20,6 +20,27 @@ In the handoff, the limits are written as `images_per_step`, `images_total`,
 `image_bytes`, `page_limit`, `tool_calls`, `refinement_depth`, `wall_time_s` and
 `burst_frames` (bytes and seconds, not MiB and minutes).
 
+## `read_through`: a whole transcript, for meeting notes and workshop specs only
+
+The [meeting-notes](../workflows/meeting-notes.md) and [workshop-spec](../workflows/workshop-spec.md)
+workflows read the whole transcript, page by page, for a recording of up to about two hours. Use
+`read_through` only there, never to read a transcript whole in any other investigation. It is `standard`
+with room for text and nothing more for images:
+
+| Limit | `read_through` | Why |
+| --- | --- | --- |
+| Page size | 25 | With `--view brief` only. A client can cut a long answer (below); 25 segments are about 18,000 to 28,000 characters, mostly under the cut, and 50 are often over it. |
+| Transcript pages | 120 | Every `transcript get` page of the read counts. Two hours are about 58 pages at 5 s a segment, or 116 with 2.5 s subtitle cues. |
+| Tool calls | 200 | The 120 reads, and at most 80 other calls (searches, `job status`, frames, the check), as on `standard`. |
+| Images per step, in total, bytes | 4, 24, 48 MiB | As `standard`. |
+| Refinement depth, burst frames | 4, 12 | As `standard`. |
+| Wall time | 60 min | The host measures and enforces it. |
+
+In the handoff the page count is `transcript_pages` (120), beside the eight limits above; when the
+pages run out, list `transcript_pages` in `budget.exhausted`. Two hours of brief pages are about 0.5 to
+1.4 million characters of tool output: only a model with a long context window can hold them. A
+compact model uses the cue-word method of the other workflows instead.
+
 ## Wall time: the host keeps it, not you
 
 The wall-time limit is measured and enforced by the host that runs you (your client
@@ -47,7 +68,8 @@ the elapsed time. Add
 - A frame whose `image.bytes` would exceed the remaining image bytes is not opened;
   crop it first or report the gap.
 - Never page through the whole transcript or all candidates "to be safe"; search
-  first and read windows around hits.
+  first and read windows around hits. Only the two `read_through` workflows read a whole
+  transcript, and they search first too.
 - Ask for `--view brief` on each `transcript get`, `search` and `candidates`: each item is
   smaller, with the same ids, times, `display_text`, coverage and gaps. Ask for pages of 20
   at most without it, on either profile; with it, `standard` may use 50 (these are what you
@@ -66,7 +88,8 @@ the elapsed time. Add
   after `--from`), and with a transcript only around its spans, not across the video. Without
   a transcript add `--omit periodic`: on a generated 21-minute walkthrough it halved what the
   candidates cost (38,349 to 18,324 characters) and still listed every distinct screen.
-- **A summary or timeline of a whole recording over 5 minutes does not fit these profiles.**
+- **A summary or timeline of a whole recording over 5 minutes does not fit these profiles**
+  (meeting notes and a workshop spec under `read_through` are the two exceptions).
   It needs every transcript segment and more screens than the image budget holds, and can
   need more claims and citations than `handoff.schema.json` allows (50 and 100). If the user
   named a stretch, or what to hand back when the budget runs out, start, spend the budget on

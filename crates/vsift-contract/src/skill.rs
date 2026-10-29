@@ -16,7 +16,7 @@ use vsift_domain::{
 };
 
 /// Every file of `skills/vsift/`, by its name in the skill, as embedded.
-pub const SKILL_FILES: [(&str, &[u8]); 18] = [
+pub const SKILL_FILES: [(&str, &[u8]); 21] = [
     ("SKILL.md", include_bytes!("../../../skills/vsift/SKILL.md")),
     (
         "agents/openai.yaml",
@@ -33,6 +33,10 @@ pub const SKILL_FILES: [(&str, &[u8]); 18] = [
     (
         "examples/findings.handoff.json",
         include_bytes!("../../../skills/vsift/examples/findings.handoff.json"),
+    ),
+    (
+        "examples/meeting-notes.handoff.json",
+        include_bytes!("../../../skills/vsift/examples/meeting-notes.handoff.json"),
     ),
     (
         "examples/no-transcript-no-images.handoff.json",
@@ -85,6 +89,14 @@ pub const SKILL_FILES: [(&str, &[u8]); 18] = [
     (
         "workflows/logs-by-clock.md",
         include_bytes!("../../../skills/vsift/workflows/logs-by-clock.md"),
+    ),
+    (
+        "workflows/meeting-notes.md",
+        include_bytes!("../../../skills/vsift/workflows/meeting-notes.md"),
+    ),
+    (
+        "workflows/workshop-spec.md",
+        include_bytes!("../../../skills/vsift/workflows/workshop-spec.md"),
     ),
 ];
 

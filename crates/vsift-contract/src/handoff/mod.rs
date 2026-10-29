@@ -43,7 +43,9 @@ mod skeleton;
 use serde::Serialize;
 use serde_json::Value;
 
-pub use budget::{COMPACT_BUDGET, HandoffBudgetLimits, STANDARD_BUDGET, budget_profile};
+pub use budget::{
+    COMPACT_BUDGET, HandoffBudgetLimits, READ_THROUGH_BUDGET, STANDARD_BUDGET, budget_profile,
+};
 pub use case::{HandoffVocabulary, handoff_vocabulary};
 pub use rule::{HandoffFinding, HandoffRule, HandoffRuleScope};
 pub use rules::{MAX_RESUME_CARD_BYTES, handoff_is_cut_short};

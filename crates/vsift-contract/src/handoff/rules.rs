@@ -226,4 +226,17 @@ fn budget_findings(handoff: &Value, errors: &mut Vec<HandoffFinding>) {
             ));
         }
     }
+    // Only `read_through` has a page count; it may be left out, but a given
+    // one is the profile's own, and another profile gives none.
+    let pages = &limits["transcript_pages"];
+    if !pages.is_null() && pages.as_u64() != profile.transcript_pages {
+        errors.push(HandoffFinding::at(
+            child_pointer("/budget/limits", "transcript_pages"),
+            HandoffRule::BudgetLimitDiffers,
+            profile
+                .transcript_pages
+                .map(|expected| vec![expected.to_string()]),
+            HandoffRule::BudgetLimitDiffers.message(),
+        ));
+    }
 }

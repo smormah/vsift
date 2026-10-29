@@ -49,7 +49,7 @@ recording over 5 minutes does not fit these budgets.** If the user named a stret
 the budget runs out, start, and end `partial` with the resume card if it runs out; if not, say so, offer a
 stretch or a question and ask before any command (no report is needed for that). After a context reset, or
 given a resume card, read [references/resume.md](references/resume.md) first: a new run has its own budget.
-Asked for one of these outcomes, follow its workflow: [a bug report](workflows/bug-report.md), [findings](workflows/findings.md) (bugs, requests, questions), [a demo backlog](workflows/demo-backlog.md), [log lines matched by clock time](workflows/logs-by-clock.md).
+Asked for one of these outcomes, follow its workflow: [a bug report](workflows/bug-report.md), [findings](workflows/findings.md) (bugs, requests, questions), [a demo backlog](workflows/demo-backlog.md), [log lines matched by clock time](workflows/logs-by-clock.md), [meeting notes](workflows/meeting-notes.md), [a workshop spec](workflows/workshop-spec.md).
 
 ## The procedure
 

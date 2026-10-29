@@ -1,4 +1,4 @@
-//! The skill's two budget profiles, as the handoff writes their limits.
+//! The skill's three budget profiles, as the handoff writes their limits.
 //!
 //! `skills/vsift/references/budgets.md` owns the table; these constants are
 //! its copy for the rule that given `budget.limits` must be the profile's
@@ -25,6 +25,10 @@ pub struct HandoffBudgetLimits {
     pub wall_time_s: u64,
     /// The `--max-frames` of one burst.
     pub burst_frames: u64,
+    /// Transcript pages a whole-transcript read may take; only `read_through`
+    /// has a value (ADR 0038 section 2, the maintainer's D1), the other
+    /// profiles have no page count of their own.
+    pub transcript_pages: Option<u64>,
 }
 
 impl HandoffBudgetLimits {
@@ -55,6 +59,7 @@ pub const COMPACT_BUDGET: HandoffBudgetLimits = HandoffBudgetLimits {
     refinement_depth: 2,
     wall_time_s: 15 * 60,
     burst_frames: 4,
+    transcript_pages: None,
 };
 
 /// The `standard` profile.
@@ -67,14 +72,35 @@ pub const STANDARD_BUDGET: HandoffBudgetLimits = HandoffBudgetLimits {
     refinement_depth: 4,
     wall_time_s: 30 * 60,
     burst_frames: 12,
+    transcript_pages: None,
 };
 
-/// The limits of a profile named in a handoff (`compact` or `standard`).
+/// The `read_through` profile of the meeting-notes and workshop-spec
+/// workflows: `standard` with room to read a whole transcript of about two
+/// hours, page by page, and nothing more for images (ADR 0038 section 2). The
+/// pages are 25 segments, not 50, so that a client that cuts a long tool
+/// answer cuts few of them; 120 such pages hold about two hours, and the 200
+/// calls are those reads plus `standard`'s 80.
+pub const READ_THROUGH_BUDGET: HandoffBudgetLimits = HandoffBudgetLimits {
+    images_per_step: 4,
+    images_total: 24,
+    image_bytes: 48 * 1024 * 1024,
+    page_limit: 25,
+    tool_calls: 200,
+    refinement_depth: 4,
+    wall_time_s: 60 * 60,
+    burst_frames: 12,
+    transcript_pages: Some(120),
+};
+
+/// The limits of a profile named in a handoff (`compact`, `standard` or
+/// `read_through`).
 #[must_use]
 pub fn budget_profile(name: &str) -> Option<HandoffBudgetLimits> {
     match name {
         "compact" => Some(COMPACT_BUDGET),
         "standard" => Some(STANDARD_BUDGET),
+        "read_through" => Some(READ_THROUGH_BUDGET),
         _ => None,
     }
 }
